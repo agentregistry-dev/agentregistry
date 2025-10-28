@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/solo-io/arrt/internal/database"
+	"github.com/agentregistry-dev/agentregistry/internal/database"
 	"github.com/spf13/cobra"
 )
 
@@ -83,7 +83,7 @@ var refreshCmd = &cobra.Command{
 		}
 
 		if len(registries) == 0 {
-			fmt.Println("No registries connected. Use 'arrt connect' to add a registry.")
+			fmt.Println("No registries connected. Use 'arctl connect' to add a registry.")
 			return
 		}
 

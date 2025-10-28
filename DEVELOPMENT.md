@@ -22,7 +22,7 @@ Uses **SQLite** for local storage:
 - `skills` - Skills from registries
 - `installations` - Installed resources
 
-**Location:** `~/.arrt/arrt.db`
+**Location:** `~/.arctl/arctl.db`
 
 The schema is based on the MCP Registry JSON schema provided, supporting the full `ServerDetail` structure.
 
@@ -71,7 +71,7 @@ Business Logic (TODO)
     ↓
 Database Layer (internal/database/)
     ↓
-SQLite (~/.arrt/arrt.db)
+SQLite (~/.arctl/arctl.db)
 ```
 
 ### Web UI Request
@@ -104,7 +104,7 @@ User Interface
    - Go's `embed` directive includes entire `ui/dist/` directory
    - Files become part of the binary
 
-3. **Runtime Phase** (`./bin/arrt ui`):
+3. **Runtime Phase** (`./bin/arctl ui`):
    - Gin serves files from embedded FS
    - No external dependencies needed
 
@@ -126,7 +126,7 @@ This embeds all files in `internal/api/ui/dist/` at compile time.
 make dev-ui
 
 # CLI only (quick iteration)
-go build -o bin/arrt main.go
+go build -o bin/arctl main.go
 ```
 
 ### Production
@@ -135,7 +135,7 @@ go build -o bin/arrt main.go
 # Full build with embedding
 make build
 
-# Creates: ./bin/arrt (single binary with UI embedded)
+# Creates: ./bin/arctl (single binary with UI embedded)
 ```
 
 ## Extension Points
@@ -172,7 +172,7 @@ make build
 
 ### Database
 
-- Stored in user's home directory (`~/.arrt/`)
+- Stored in user's home directory (`~/.arctl/`)
 - No network access
 - File permissions: 0755 (directory), default (file)
 

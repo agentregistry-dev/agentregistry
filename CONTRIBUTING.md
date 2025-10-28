@@ -1,12 +1,12 @@
-# Contributing to arrt
+# Contributing to arctl
 
-Thank you for your interest in contributing to arrt! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to arctl! This document provides guidelines and instructions for contributing.
 
 ## Getting Started
 
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/arrt.git`
-3. Add upstream remote: `git remote add upstream https://github.com/solo-io/arrt.git`
+2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/agentregistry.git`
+3. Add upstream remote: `git remote add upstream https://github.com/agentregistry-dev/agentregistry.git`
 4. Create a branch: `git checkout -b feature/my-feature`
 
 ## Development Setup
@@ -38,10 +38,10 @@ make build
 # Make changes to cmd/*.go or internal/**/*.go
 
 # Build quickly (without UI rebuild)
-go build -o bin/arrt main.go
+go build -o bin/arctl main.go
 
 # Test your changes
-./bin/arrt <command>
+./bin/arctl <command>
 
 # Run tests
 go test ./...
@@ -59,7 +59,7 @@ make dev-ui
 # When ready to test with CLI:
 make build-ui
 make build-go
-./bin/arrt ui
+./bin/arctl ui
 ```
 
 ### Working on Both
@@ -69,12 +69,12 @@ make build-go
 make dev-ui
 
 # Terminal 2: CLI development
-go build -o bin/arrt main.go
-./bin/arrt <command>
+go build -o bin/arctl main.go
+./bin/arctl <command>
 
 # When ready for integration test:
 make build
-./bin/arrt ui
+./bin/arctl ui
 ```
 
 ## Code Style
@@ -278,8 +278,8 @@ refactor(db): simplify query methods
 make all
 
 # Test the binary
-./bin/arrt version
-./bin/arrt ui
+./bin/arctl version
+./bin/arctl ui
 
 # Create release
 git tag -a v1.0.0 -m "Release v1.0.0"

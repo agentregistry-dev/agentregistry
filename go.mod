@@ -1,4 +1,4 @@
-module github.com/solo-io/arrt
+module github.com/agentregistry-dev/agentregistry
 
 go 1.22
 

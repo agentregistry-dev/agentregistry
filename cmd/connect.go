@@ -5,7 +5,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/solo-io/arrt/internal/database"
+	"github.com/agentregistry-dev/agentregistry/internal/database"
 	"github.com/spf13/cobra"
 )
 
@@ -16,7 +16,7 @@ var (
 var connectCmd = &cobra.Command{
 	Use:   "connect <registry-url> <registry-name>",
 	Short: "Connect to a public or private registry",
-	Long:  `Connects an existing public or private registry to arrt. This will fetch the data from the registry and store it locally.`,
+	Long:  `Connects an existing public or private registry to arctl. This will fetch the data from the registry and store it locally.`,
 	Args:  cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		registryURL := args[0]
@@ -55,8 +55,8 @@ var connectCmd = &cobra.Command{
 
 		fmt.Println("✓ Registry connected successfully")
 		fmt.Println("\nNext steps:")
-		fmt.Println("  - Run 'arrt refresh' to fetch registry data")
-		fmt.Println("  - Run 'arrt list mcp' to see available MCP servers")
+		fmt.Println("  - Run 'arctl refresh' to fetch registry data")
+		fmt.Println("  - Run 'arctl list mcp' to see available MCP servers")
 	},
 }
 

@@ -8,9 +8,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/database"
+	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/jedib0t/go-pretty/v6/table"
-	"github.com/solo-io/arrt/internal/database"
-	"github.com/solo-io/arrt/internal/models"
 	"github.com/spf13/cobra"
 )
 
@@ -46,7 +46,7 @@ var listCmd = &cobra.Command{
 			}
 			if len(servers) == 0 {
 				fmt.Println("  No MCP servers available")
-				fmt.Println("  Connect a registry first: arrt connect <url> <name>")
+				fmt.Println("  Connect a registry first: arctl connect <url> <name>")
 			} else {
 				fmt.Printf("  Found %d servers total\n\n", len(servers))
 				displayPaginatedServers(servers, listPageSize, listAll)
@@ -59,7 +59,7 @@ var listCmd = &cobra.Command{
 			}
 			if len(skills) == 0 {
 				fmt.Println("  No skills available")
-				fmt.Println("  Connect a registry first: arrt connect <url> <name>")
+				fmt.Println("  Connect a registry first: arctl connect <url> <name>")
 			} else {
 				fmt.Printf("  Found %d skills total\n\n", len(skills))
 				displayPaginatedSkills(skills, listPageSize, listAll)
@@ -71,7 +71,7 @@ var listCmd = &cobra.Command{
 			}
 			if len(registries) == 0 {
 				fmt.Println("No registries connected")
-				fmt.Println("Connect a registry: arrt connect <url> <name>")
+				fmt.Println("Connect a registry: arctl connect <url> <name>")
 			} else {
 				fmt.Printf("\nConnected Registries (%d)\n\n", len(registries))
 				t := table.NewWriter()

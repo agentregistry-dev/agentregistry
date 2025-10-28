@@ -5,7 +5,7 @@ import "./globals.css"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "arrt - AI Registry and Runtime",
+  title: "arctl - AI Registry and Runtime",
   description: "Manage MCP servers, skills, and registries",
 }
 

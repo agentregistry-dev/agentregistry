@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/agentregistry-dev/agentregistry/internal/models"
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/solo-io/arrt/internal/models"
 )
 
 var DB *sql.DB
@@ -20,14 +20,14 @@ func Initialize() error {
 		return fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	// Create .arrt directory if it doesn't exist
-	arrtDir := filepath.Join(homeDir, ".arrt")
-	if err := os.MkdirAll(arrtDir, 0755); err != nil {
-		return fmt.Errorf("failed to create .arrt directory: %w", err)
+	// Create .arctl directory if it doesn't exist
+	arctlDir := filepath.Join(homeDir, ".arctl")
+	if err := os.MkdirAll(arctlDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .arctl directory: %w", err)
 	}
 
 	// Open database connection
-	dbPath := filepath.Join(arrtDir, "arrt.db")
+	dbPath := filepath.Join(arctlDir, "arctl.db")
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)

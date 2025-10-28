@@ -1,4 +1,4 @@
-# AI Registry and Runtime - arrt
+# AI Registry and Runtime - arctl
 
 A CLI tool for managing MCP (Model Context Protocol) servers, skills, and registries with an embedded web UI.
 
@@ -9,10 +9,10 @@ A CLI tool for managing MCP (Model Context Protocol) servers, skills, and regist
 make build
 
 # Run the CLI
-./bin/arrt --help
+./bin/arctl --help
 
 # Launch the web UI
-./bin/arrt ui
+./bin/arctl ui
 ```
 
 Then open http://localhost:8080 in your browser.
@@ -21,53 +21,53 @@ Then open http://localhost:8080 in your browser.
 ## CLI Commands
 
 ```
-# Connects an existing public or private registry to arrt
+# Connects an existing public or private registry to arctl
 # this will fetch the data from the registry and store it locally
-arrt connect <registry-url> <registry-name>
+arctl connect <registry-url> <registry-name>
 
 # removes the cached data and the registry from the config
-arrt disconnect <registry-name>
+arctl disconnect <registry-name>
 
 # List resources -- this lists the resources across the connected registries
-arrt list <resource-type>
+arctl list <resource-type>
 
 # Lists MCP servers from all connected registries
-arrt list mcp
+arctl list mcp
 
 # Lists skills from all connected registries
-arrt list skill
+arctl list skill
 
 # Lists all connected registries
-arrt list registry
+arctl list registry
 
 # Search for resources from the connected registries
-arrt search <resource-type> <search-term>
+arctl search <resource-type> <search-term>
 
 # Updates/fetches the new data from the connected registries
-arrt refresh
+arctl refresh
 
 # Shows details of a resource
-arrt show <resource-type> <resource-name>
-arrt show mcp <mcp-server-name>
-arrt show skill <skill-name>
-arrt show registry <registry-name>
+arctl show <resource-type> <resource-name>
+arctl show mcp <mcp-server-name>
+arctl show skill <skill-name>
+arctl show registry <registry-name>
 
 # Install/uninstall resources 
-arrt install mcp <mcp-server-name> <version> <config>
-arrt install skill <skill-name> <version>
+arctl install mcp <mcp-server-name> <version> <config>
+arctl install skill <skill-name> <version>
 
-arrt uninstall mcp <mcp-server-name>
-arrt uninstall skill <skill-name>
+arctl uninstall mcp <mcp-server-name>
+arctl uninstall skill <skill-name>
 
-# Client configuration - creates the .json configuration for each client, so it can connect to the arrt
-arrt configure <client-name>
+# Client configuration - creates the .json configuration for each client, so it can connect to the arctl
+arctl configure <client-name>
 
-# Starts/restarts the arrt with the existing configuration
-arrt start
+# Starts/restarts the arctl with the existing configuration
+arctl start
 
 # Launches the UI
-arrt ui
+arctl ui
 
 # shows the version
-arrt version
+arctl version
 ```

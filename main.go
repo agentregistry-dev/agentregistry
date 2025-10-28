@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/solo-io/arrt/cmd"
+	"github.com/agentregistry-dev/agentregistry/cmd"
 )
 
 func main() {

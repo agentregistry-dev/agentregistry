@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Setup script for arrt
+# Setup script for arctl
 # This script helps you get started quickly
 
 set -e
 
-echo "🚀 Setting up arrt..."
+echo "🚀 Setting up arctl..."
 echo ""
 
 # Check prerequisites
@@ -57,18 +57,18 @@ echo ""
 
 # Build Go CLI
 echo "🏗️  Building Go CLI..."
-go build -o bin/arrt main.go
+go build -o bin/arctl main.go
 echo "✓ CLI built successfully"
 echo ""
 
 # Test the binary
 echo "Testing the binary..."
-./bin/arrt version
+./bin/arctl version
 echo ""
 
 echo "✅ Setup complete!"
 echo ""
 echo "Quick start:"
-echo "  ./bin/arrt --help         # Show all commands"
-echo "  ./bin/arrt ui             # Launch web UI"
-echo "  ./bin/arrt version        # Show version"
+echo "  ./bin/arctl --help         # Show all commands"
+echo "  ./bin/arctl ui             # Launch web UI"
+echo "  ./bin/arctl version        # Show version"

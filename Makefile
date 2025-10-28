@@ -38,22 +38,22 @@ build-go:
 	@echo "Downloading Go dependencies..."
 	go mod download
 	@echo "Building binary..."
-	go build -ldflags="-X 'github.com/solo-io/arrt/cmd.Version=$$(git describe --tags --always --dirty)' \
-		-X 'github.com/solo-io/arrt/cmd.GitCommit=$$(git rev-parse HEAD)' \
-		-X 'github.com/solo-io/arrt/cmd.BuildDate=$$(date -u +%Y-%m-%dT%H:%M:%SZ)'" \
-		-o bin/arrt main.go
-	@echo "Binary built successfully: bin/arrt"
+	go build -ldflags="-X 'github.com/agentregistry-dev/agentregistry/cmd.Version=$$(git describe --tags --always --dirty)' \
+		-X 'github.com/agentregistry-dev/agentregistry/cmd.GitCommit=$$(git rev-parse HEAD)' \
+		-X 'github.com/agentregistry-dev/agentregistry/cmd.BuildDate=$$(date -u +%Y-%m-%dT%H:%M:%SZ)'" \
+		-o bin/arctl main.go
+	@echo "Binary built successfully: bin/arctl"
 
 # Build everything (UI + Go)
 build: build-ui build-go
 	@echo "Build complete!"
-	@echo "Run './bin/arrt --help' to get started"
+	@echo "Run './bin/arctl --help' to get started"
 
 # Install the CLI to GOPATH/bin
 install: build
-	@echo "Installing arrt to GOPATH/bin..."
+	@echo "Installing arctl to GOPATH/bin..."
 	go install
-	@echo "Installation complete! Run 'arrt --help' to get started"
+	@echo "Installation complete! Run 'arctl --help' to get started"
 
 # Run Next.js in development mode
 dev-ui:
@@ -79,6 +79,6 @@ all: clean build
 # Quick development build (skips cleaning)
 dev-build: build-ui
 	@echo "Building Go CLI (development mode)..."
-	go build -o bin/arrt main.go
+	go build -o bin/arctl main.go
 	@echo "Development build complete!"
 

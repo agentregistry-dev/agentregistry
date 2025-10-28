@@ -84,7 +84,7 @@ export default function Home() {
     <main className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
         <header className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">arrt</h1>
+          <h1 className="text-4xl font-bold mb-2">arctl</h1>
           <p className="text-muted-foreground">AI Registry and Runtime</p>
         </header>
 
@@ -143,7 +143,7 @@ export default function Home() {
                   <span className="text-sm">
                     Run{" "}
                     <code className="bg-muted px-2 py-1 rounded">
-                      arrt connect &lt;url&gt; &lt;name&gt;
+                      arctl connect &lt;url&gt; &lt;name&gt;
                     </code>
                   </span>
                 </p>

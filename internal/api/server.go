@@ -5,8 +5,8 @@ import (
 	"io/fs"
 	"net/http"
 
+	"github.com/agentregistry-dev/agentregistry/internal/database"
 	"github.com/gin-gonic/gin"
-	"github.com/solo-io/arrt/internal/database"
 )
 
 //go:embed ui/dist/*
@@ -60,7 +60,7 @@ func StartServer(port string) error {
 func healthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "ok",
-		"message": "arrt API is running",
+		"message": "arctl API is running",
 	})
 }
 

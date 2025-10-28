@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/solo-io/arrt/internal/database"
+	"github.com/agentregistry-dev/agentregistry/internal/database"
 	"github.com/spf13/cobra"
 )
 
@@ -36,7 +36,7 @@ var disconnectCmd = &cobra.Command{
 
 		fmt.Println("✓ Registry disconnected successfully")
 		fmt.Println("\nNote: Any installed MCP servers or skills from this registry remain in your client configuration.")
-		fmt.Println("      Use 'arrt uninstall' to remove them if needed.")
+		fmt.Println("      Use 'arctl uninstall' to remove them if needed.")
 	},
 }
 

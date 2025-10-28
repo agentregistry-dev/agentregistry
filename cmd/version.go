@@ -15,9 +15,9 @@ var (
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show version information",
-	Long:  `Displays the version of arrt.`,
+	Long:  `Displays the version of arctl.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("arrt version %s\n", Version)
+		fmt.Printf("arctl version %s\n", Version)
 		fmt.Printf("Git commit: %s\n", GitCommit)
 		fmt.Printf("Build date: %s\n", BuildDate)
 	},

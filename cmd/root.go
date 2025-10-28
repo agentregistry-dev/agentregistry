@@ -8,9 +8,9 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "arrt",
+	Use:   "arctl",
 	Short: "AI Registry and Runtime",
-	Long:  `arrt is a CLI tool for managing MCP servers, skills, and registries.`,
+	Long:  `arctl is a CLI tool for managing MCP servers, skills, and registries.`,
 }
 
 func Execute() {
