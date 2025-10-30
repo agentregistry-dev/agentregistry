@@ -3,9 +3,9 @@ package dockercompose
 import (
 	"context"
 	"fmt"
+	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
 	"github.com/compose-spec/compose-go/v2/types"
 	"log"
-	"mcp-enterprise-registry/internal/runtime/translation/api"
 	"os"
 	"path/filepath"
 	"regexp"

@@ -3,9 +3,9 @@ package runtime
 import (
 	"context"
 	"fmt"
-	"mcp-enterprise-registry/internal/runtime/translation/api"
-	"mcp-enterprise-registry/internal/runtime/translation/dockercompose"
-	"mcp-enterprise-registry/internal/runtime/translation/registry"
+	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
+	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/dockercompose"
+	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
 	"os"
 	"os/exec"
 	"path/filepath"

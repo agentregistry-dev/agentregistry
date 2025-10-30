@@ -3,8 +3,8 @@ package registry
 import (
 	"context"
 	"fmt"
+	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
 	"github.com/modelcontextprotocol/registry/pkg/model"
-	"mcp-enterprise-registry/internal/runtime/translation/api"
 	"net/url"
 	"slices"
 	"strconv"

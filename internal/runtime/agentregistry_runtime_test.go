@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"mcp-enterprise-registry/internal/runtime/translation/dockercompose"
-	"mcp-enterprise-registry/internal/runtime/translation/registry"
+	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/dockercompose"
+	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
 	"time"
 
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
