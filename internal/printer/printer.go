@@ -38,7 +38,7 @@ func (p *Printer) PrintJSON(data interface{}) error {
 
 // PrintSuccess prints a success message with kubectl-style formatting
 func PrintSuccess(message string) {
-	fmt.Fprintf(os.Stdout, "✓ %s\n", message)
+	_, _ = fmt.Fprintf(os.Stdout, "✓ %s\n", message)
 }
 
 // PrintError prints an error message
@@ -48,12 +48,12 @@ func PrintError(message string) {
 
 // PrintWarning prints a warning message
 func PrintWarning(message string) {
-	fmt.Fprintf(os.Stdout, "Warning: %s\n", message)
+	_, _ = fmt.Fprintf(os.Stdout, "Warning: %s\n", message)
 }
 
 // PrintInfo prints an info message
 func PrintInfo(message string) {
-	fmt.Fprintf(os.Stdout, "%s\n", message)
+	_, _ = fmt.Fprintf(os.Stdout, "%s\n", message)
 }
 
 // FormatTimestamp formats a timestamp in kubectl style

@@ -80,7 +80,7 @@ func (c *Client) ValidateRegistry(baseURL string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to registry: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("registry returned status %d (expected 200)", resp.StatusCode)
@@ -177,7 +177,7 @@ func (c *Client) FetchAllServers(baseURL string, opts FetchOptions) ([]ServerEnt
 		allServers = append(allServers, activeServers...)
 
 		if opts.ShowProgress && bar != nil {
-			bar.Add(len(activeServers))
+			_ = bar.Add(len(activeServers))
 		}
 
 		if opts.Verbose && !opts.ShowProgress {
@@ -193,7 +193,7 @@ func (c *Client) FetchAllServers(baseURL string, opts FetchOptions) ([]ServerEnt
 	}
 
 	if opts.ShowProgress && bar != nil {
-		bar.Finish()
+		_ = bar.Finish()
 		fmt.Println() // Add newline after progress bar
 	}
 

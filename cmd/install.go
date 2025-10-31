@@ -309,7 +309,9 @@ func displayServerSummary(server *models.ServerDetail) {
 	t.AddRow("Registry", server.RegistryName)
 	t.AddRow("Has Packages", fmt.Sprintf("%v", hasPackages))
 	t.AddRow("Has Remotes", fmt.Sprintf("%v", hasRemotes))
-	t.Render()
+	if err := t.Render(); err != nil {
+		printer.PrintError(fmt.Sprintf("failed to render table: %v", err))
+	}
 
 	// Show suggestion based on what's available
 	fmt.Fprintf(os.Stderr, "\n")

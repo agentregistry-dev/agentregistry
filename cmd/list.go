@@ -81,11 +81,12 @@ var listCmd = &cobra.Command{
 				}
 			} else {
 				// Handle different output formats
-				if outputFormat == "json" {
+				switch outputFormat {
+				case "json":
 					outputServersJSON(servers)
-				} else if outputFormat == "yaml" {
+				case "yaml":
 					outputServersYAML(servers)
-				} else {
+				default:
 					displayPaginatedServers(servers, listPageSize, listAll)
 				}
 			}
@@ -98,11 +99,12 @@ var listCmd = &cobra.Command{
 				fmt.Println("No skills available")
 			} else {
 				// Handle different output formats
-				if outputFormat == "json" {
+				switch outputFormat {
+				case "json":
 					outputSkillsJSON(skills)
-				} else if outputFormat == "yaml" {
+				case "yaml":
 					outputSkillsYAML(skills)
-				} else {
+				default:
 					displayPaginatedSkills(skills, listPageSize, listAll)
 				}
 			}
@@ -115,11 +117,12 @@ var listCmd = &cobra.Command{
 				fmt.Println("No registries connected")
 			} else {
 				// Handle different output formats
-				if outputFormat == "json" {
+				switch outputFormat {
+				case "json":
 					outputRegistriesJSON(registries)
-				} else if outputFormat == "yaml" {
+				case "yaml":
 					outputRegistriesYAML(registries)
-				} else {
+				default:
 					t := printer.NewTablePrinter(os.Stdout)
 					t.SetHeaders("Name", "URL", "Type", "Age")
 
@@ -132,7 +135,9 @@ var listCmd = &cobra.Command{
 						)
 					}
 
-					t.Render()
+					if err := t.Render(); err != nil {
+						printer.PrintError(fmt.Sprintf("failed to render table: %v", err))
+					}
 				}
 			}
 		default:
@@ -464,7 +469,9 @@ func printServersTable(serverGroups []ServerGroup) {
 		)
 	}
 
-	t.Render()
+	if err := t.Render(); err != nil {
+		printer.PrintError(fmt.Sprintf("failed to render table: %v", err))
+	}
 }
 
 func printSkillsTable(skills []models.Skill) {
@@ -475,14 +482,16 @@ func printSkillsTable(skills []models.Skill) {
 		status := printer.FormatStatus(s.Installed)
 
 		t.AddRow(
-			printer.TruncateString(s.Name, 40),
-			printer.TruncateString(s.Description, 50),
-			s.Version,
-			status,
-		)
-	}
+		printer.TruncateString(s.Name, 40),
+		printer.TruncateString(s.Description, 50),
+		s.Version,
+		status,
+	)
+}
 
-	t.Render()
+if err := t.Render(); err != nil {
+	printer.PrintError(fmt.Sprintf("failed to render table: %v", err))
+}
 }
 
 // filterServersByType filters servers by their registry type
@@ -559,15 +568,17 @@ func listAllResourceTypes() {
 
 		for _, r := range registries {
 			t.AddRow(
-				r.Name,
-				r.URL,
-				r.Type,
-				printer.FormatAge(r.CreatedAt),
-			)
-		}
-
-		t.Render()
+			r.Name,
+			r.URL,
+			r.Type,
+			printer.FormatAge(r.CreatedAt),
+		)
 	}
+
+	if err := t.Render(); err != nil {
+		printer.PrintError(fmt.Sprintf("failed to render table: %v", err))
+	}
+}
 }
 
 // outputServersJSON outputs servers in JSON format

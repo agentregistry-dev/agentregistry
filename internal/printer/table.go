@@ -99,12 +99,12 @@ func (p *TablePrinter) Render() error {
 	// Print headers
 	if !p.noHeaders && len(p.headers) > 0 {
 		headerLine := strings.ToUpper(strings.Join(p.headers, "\t"))
-		fmt.Fprintln(p.writer, headerLine)
+		_, _ = fmt.Fprintln(p.writer, headerLine)
 	}
 
 	// Print rows
 	for _, row := range p.rows {
-		fmt.Fprintln(p.writer, strings.Join(row, "\t"))
+		_, _ = fmt.Fprintln(p.writer, strings.Join(row, "\t"))
 	}
 
 	return p.writer.Flush()
