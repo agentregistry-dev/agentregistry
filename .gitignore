@@ -22,6 +22,9 @@ bin/
 dist/
 arctl
 
+# UI build artifacts
+internal/registry/api/ui/dist/
+
 # Database file
 *.db
 

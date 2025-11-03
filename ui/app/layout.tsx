@@ -5,8 +5,8 @@ import "./globals.css"
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 
 export const metadata: Metadata = {
-  title: "arctl - AI Registry and Runtime",
-  description: "Manage MCP servers, skills, agents, and LLM models across registries",
+  title: "artcl - agent registry admin",
+  description: "Admin interface for managing agent registry",
 }
 
 export default function RootLayout({

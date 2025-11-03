@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"embed"
+	"io/fs"
 	"log"
 	"net/http"
 	"strings"
@@ -17,9 +19,31 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 )
 
+//go:embed all:ui/dist
+var embeddedUI embed.FS
+
+// createUIHandler creates an HTTP handler for serving the embedded UI files
+func createUIHandler() (http.Handler, error) {
+	// Extract the ui/dist subdirectory from the embedded filesystem
+	uiFS, err := fs.Sub(embeddedUI, "ui/dist")
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a file server for the UI
+	return http.FileServer(http.FS(uiFS)), nil
+}
+
 // TrailingSlashMiddleware redirects requests with trailing slashes to their canonical form
+// Excludes /ui paths since the UI needs to handle its own routing
 func TrailingSlashMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip trailing slash handling for UI paths
+		if strings.HasPrefix(r.URL.Path, "/ui") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		// Only redirect if the path is not "/" and ends with a "/"
 		if r.URL.Path != "/" && strings.HasSuffix(r.URL.Path, "/") {
 			// Create a copy of the URL and remove the trailing slash
@@ -48,7 +72,16 @@ func NewServer(cfg *config.Config, registryService service.RegistryService, metr
 	// Create HTTP mux and Huma API
 	mux := http.NewServeMux()
 
-	api := router.NewHumaAPI(cfg, registryService, mux, metrics, versionInfo)
+	// Create UI handler
+	uiHandler, err := createUIHandler()
+	if err != nil {
+		log.Printf("Warning: Failed to create UI handler: %v. UI will not be served.", err)
+		uiHandler = nil
+	} else {
+		log.Println("UI handler initialized - web interface will be available")
+	}
+
+	api := router.NewHumaAPI(cfg, registryService, mux, metrics, versionInfo, uiHandler)
 
 	// Configure CORS with permissive settings for public API
 	corsHandler := cors.New(cors.Options{
@@ -87,6 +120,8 @@ func NewServer(cfg *config.Config, registryService service.RegistryService, metr
 // Start begins listening for incoming HTTP requests
 func (s *Server) Start() error {
 	log.Printf("HTTP server starting on %s", s.config.ServerAddress)
+	log.Printf("Web UI available at http://localhost%s/ui", s.config.ServerAddress)
+	log.Printf("API documentation at http://localhost%s/docs", s.config.ServerAddress)
 	return s.server.ListenAndServe()
 }
 

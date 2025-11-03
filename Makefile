@@ -1,4 +1,4 @@
-.PHONY: help install-ui build-ui clean-ui build-go build install dev-ui test clean api scraper swag fmt lint all build-agentgateway rebuild-agentgateway postgres-start postgres-stop
+.PHONY: help install-ui build-ui clean-ui build-go build install dev dev-ui dev-backend test clean api scraper swag fmt lint all build-agentgateway rebuild-agentgateway postgres-start postgres-stop
 
 # Default target
 help:
@@ -9,6 +9,7 @@ help:
 	@echo "  build-go             - Build the Go CLI"
 	@echo "  build                - Build both UI and Go CLI"
 	@echo "  install              - Install the CLI to GOPATH/bin"
+	@echo "  dev                  - Run backend and UI dev servers together"
 	@echo "  dev-ui               - Run Next.js in development mode"
 	@echo "  test                 - Run Go tests"
 	@echo "  clean                - Clean all build artifacts"
@@ -28,17 +29,17 @@ install-ui:
 	@echo "Installing UI dependencies..."
 	cd ui && npm install
 
-# Build the Next.js UI (outputs to internal/api/ui/dist)
+# Build the Next.js UI (outputs directly to internal/registry/api/ui/dist)
 build-ui: install-ui
 	@echo "Building Next.js UI for embedding..."
 	cd ui && npm run build:export
-	@echo "UI built successfully to internal/api/ui/dist/"
+	@echo "UI built successfully to internal/registry/api/ui/dist/"
 
 # Clean UI build artifacts
 clean-ui:
 	@echo "Cleaning UI build artifacts..."
 	rm -rf ui/.next
-	rm -rf internal/api/ui/dist/*
+	rm -rf internal/registry/api/ui/dist
 	@echo "UI artifacts cleaned"
 
 # Build the Go CLI (with embedded UI)
@@ -63,6 +64,12 @@ install: build
 	@echo "Installing arctl to GOPATH/bin..."
 	go install
 	@echo "Installation complete! Run 'arctl --help' to get started"
+
+# Run backend server only
+dev-backend:
+	@echo "Starting backend server..."
+	@echo "Backend will be available at http://localhost:8080"
+	go run main.go start
 
 # Run Next.js in development mode
 dev-ui:
@@ -134,9 +141,9 @@ postgres-start:
 		postgres:16-alpine || (echo "Container may already exist. Use 'make postgres-stop' first." && exit 1)
 	@echo "✓ PostgreSQL is starting on port 5432"
 	@echo "  Database: mcp-registry"
-	@echo "  User: postgres"
-	@echo "  Password: postgres"
-	@echo "  Connection string: postgres://postgres:postgres@localhost:5432/mcp-registry?sslmode=disable"
+	@echo "  User: mcpregistry"
+	@echo "  Password: mcpregistry"
+	@echo "  Connection string: postgres://mcpregistry:mcpregistry@localhost:5432/mcp-registry?sslmode=disable"
 
 # Stop PostgreSQL database
 postgres-stop:
