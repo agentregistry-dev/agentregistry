@@ -24,6 +24,7 @@ help:
 	@echo "  build-cli             - Build the Go CLI"
 	@echo "  build                - Build both UI and Go CLI"
 	@echo "  install              - Install the CLI to GOPATH/bin"
+	@echo "  dev                  - Run backend and UI dev servers together"
 	@echo "  dev-ui               - Run Next.js in development mode"
 	@echo "  test                 - Run Go tests"
 	@echo "  clean                - Clean all build artifacts"
@@ -86,6 +87,12 @@ install: build
 	@echo "Installing arctl to GOPATH/bin..."
 	go install
 	@echo "Installation complete! Run 'arctl --help' to get started"
+
+# Run backend server only
+dev-backend:
+	@echo "Starting backend server..."
+	@echo "Backend will be available at http://localhost:8080"
+	go run main.go start
 
 # Run Next.js in development mode
 dev-ui:

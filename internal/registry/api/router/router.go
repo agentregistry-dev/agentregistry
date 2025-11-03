@@ -93,7 +93,7 @@ func WithSkipPaths(paths ...string) MiddlewareOption {
 }
 
 // NewHumaAPI creates a new Huma API with all routes registered
-func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.ServeMux, metrics *telemetry.Metrics, versionInfo *v0.VersionBody) huma.API {
+func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.ServeMux, metrics *telemetry.Metrics, versionInfo *v0.VersionBody, uiHandler http.Handler) huma.API {
 	// Create Huma API configuration
 	humaConfig := huma.DefaultConfig("Official MCP Registry", "1.0.0")
 	humaConfig.Info.Description = "A community driven registry service for Model Context Protocol (MCP) servers.\n\n[GitHub repository](https://github.com/modelcontextprotocol/registry) | [Documentation](https://github.com/modelcontextprotocol/registry/tree/main/docs)"
@@ -148,8 +148,36 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 	RegisterV0Routes(api, cfg, registry, metrics, versionInfo)
 	RegisterV0_1Routes(api, cfg, registry, metrics, versionInfo)
 
+	// Register general API routes (non-registry specific)
+	RegisterAPIRoutes(api, versionInfo)
+
 	// Add /metrics for Prometheus metrics using promhttp
 	mux.Handle("/metrics", metrics.PrometheusHandler())
+
+	// Serve UI from /ui path or handle 404 for non-API routes
+	if uiHandler != nil {
+		// Use StripPrefix to properly handle the /ui prefix
+		// This allows http.FileServer to generate correct redirects
+		uiWithPrefix := http.StripPrefix("/ui", uiHandler)
+
+		// Register handler for /ui/ (with trailing slash - matches /ui/* paths)
+		mux.Handle("/ui/", uiWithPrefix)
+
+		// Also register handler for exact /ui path (without trailing slash)
+		mux.Handle("/ui", uiWithPrefix)
+
+	} else {
+		// If no UI handler, redirect to docs and handle 404
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/" {
+				http.Redirect(w, r, "https://github.com/modelcontextprotocol/registry/tree/main/docs", http.StatusTemporaryRedirect)
+				return
+			}
+
+			// Handle 404 for all other routes
+			handle404(w, r)
+		})
+	}
 
 	return api
 }
