@@ -233,6 +233,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
               <div className="flex gap-2">
                 <select
                   value={repositorySource}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   onChange={(e) => setRepositorySource(e.target.value as any)}
                   className="px-3 py-2 border rounded-md bg-background text-foreground border-input focus:outline-none focus:ring-2 focus:ring-ring"
                   disabled={loading}

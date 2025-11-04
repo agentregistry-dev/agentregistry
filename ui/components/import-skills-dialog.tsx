@@ -11,7 +11,7 @@ interface ImportSkillsDialogProps {
   onImportComplete: () => void
 }
 
-export function ImportSkillsDialog({ open, onOpenChange, onImportComplete }: ImportSkillsDialogProps) {
+export function ImportSkillsDialog({ open, onOpenChange }: ImportSkillsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">

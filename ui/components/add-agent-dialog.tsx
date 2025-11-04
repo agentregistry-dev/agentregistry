@@ -12,7 +12,7 @@ interface AddAgentDialogProps {
   onAgentAdded: () => void
 }
 
-export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDialogProps) {
+export function AddAgentDialog({ open, onOpenChange }: AddAgentDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">

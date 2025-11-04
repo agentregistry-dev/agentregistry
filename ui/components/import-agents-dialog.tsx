@@ -11,7 +11,7 @@ interface ImportAgentsDialogProps {
   onImportComplete: () => void
 }
 
-export function ImportAgentsDialog({ open, onOpenChange, onImportComplete }: ImportAgentsDialogProps) {
+export function ImportAgentsDialog({ open, onOpenChange }: ImportAgentsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
