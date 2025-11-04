@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentregistry-dev/agentregistry/internal/database"
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
 	"github.com/spf13/cobra"
@@ -30,15 +29,9 @@ var listCmd = &cobra.Command{
 	Long:  `Lists resources (mcp, skill, registry) across the connected registries. Use -A to list all resource types.`,
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Initialize database
-		if err := database.Initialize(); err != nil {
-			log.Fatalf("Failed to initialize database: %v", err)
+		if APIClient == nil {
+			log.Fatalf("API client not initialized")
 		}
-		defer func() {
-			if err := database.Close(); err != nil {
-				log.Printf("Warning: Failed to close database: %v", err)
-			}
-		}()
 
 		// If -A flag is used and no resource type is specified, list all types
 		if listAllTypes && len(args) == 0 {
@@ -63,7 +56,7 @@ var listCmd = &cobra.Command{
 
 		switch resourceType {
 		case "mcp":
-			servers, err := database.GetServers()
+			servers, err := APIClient.GetServers()
 			if err != nil {
 				log.Fatalf("Failed to get servers: %v", err)
 			}
@@ -91,7 +84,7 @@ var listCmd = &cobra.Command{
 				}
 			}
 		case "skill":
-			skills, err := database.GetSkills()
+			skills, err := APIClient.GetSkills()
 			if err != nil {
 				log.Fatalf("Failed to get skills: %v", err)
 			}
@@ -109,7 +102,7 @@ var listCmd = &cobra.Command{
 				}
 			}
 		case "registry":
-			registries, err := database.GetRegistries()
+			registries, err := APIClient.GetRegistries()
 			if err != nil {
 				log.Fatalf("Failed to get registries: %v", err)
 			}
@@ -524,7 +517,7 @@ func filterServersByType(servers []models.ServerDetail, typeFilter string) []mod
 // listAllResourceTypes lists all resource types (mcp, skill, registry)
 func listAllResourceTypes() {
 	fmt.Println("=== MCP Servers ===")
-	servers, err := database.GetServers()
+	servers, err := APIClient.GetServers()
 	if err != nil {
 		log.Fatalf("Failed to get servers: %v", err)
 	}
@@ -545,7 +538,7 @@ func listAllResourceTypes() {
 	}
 
 	fmt.Println("\n=== Skills ===")
-	skills, err := database.GetSkills()
+	skills, err := APIClient.GetSkills()
 	if err != nil {
 		log.Fatalf("Failed to get skills: %v", err)
 	}
@@ -556,7 +549,7 @@ func listAllResourceTypes() {
 	}
 
 	fmt.Println("\n=== Registries ===")
-	registries, err := database.GetRegistries()
+	registries, err := APIClient.GetRegistries()
 	if err != nil {
 		log.Fatalf("Failed to get registries: %v", err)
 	}

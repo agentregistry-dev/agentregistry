@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/agentregistry-dev/agentregistry/internal/database"
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime"
@@ -27,15 +26,9 @@ var uninstallCmd = &cobra.Command{
 		resourceType := args[0]
 		resourceName := args[1]
 
-		// Initialize database
-		if err := database.Initialize(); err != nil {
-			log.Fatalf("Failed to initialize database: %v", err)
+		if APIClient == nil {
+			log.Fatalf("API client not initialized")
 		}
-		defer func() {
-			if err := database.Close(); err != nil {
-				log.Printf("Warning: Failed to close database: %v", err)
-			}
-		}()
 
 		switch resourceType {
 		case "mcp":
@@ -84,12 +77,12 @@ func uninstallMCPServer(serverName string) error {
 	}
 
 	// Mark as uninstalled in database
-	if err := database.MarkServerInstalled(server.ID, false); err != nil {
+	if err := APIClient.MarkServerInstalled(server.ID, false); err != nil {
 		return fmt.Errorf("failed to mark server as uninstalled: %w", err)
 	}
 
 	// Get all remaining installed servers
-	allServers, err := database.GetServers()
+	allServers, err := APIClient.GetServers()
 	if err != nil {
 		return fmt.Errorf("failed to get servers: %w", err)
 	}
@@ -157,7 +150,7 @@ func uninstallSkill(skillName string) error {
 	fmt.Printf("Uninstalling skill: %s\n", skillName)
 
 	// Fetch skill from database
-	skill, err := database.GetSkillByName(skillName)
+	skill, err := APIClient.GetSkillByName(skillName)
 	if err != nil {
 		return fmt.Errorf("failed to fetch skill: %w", err)
 	}
@@ -171,7 +164,7 @@ func uninstallSkill(skillName string) error {
 	}
 
 	// Mark as uninstalled in database
-	if err := database.MarkSkillInstalled(skill.ID, false); err != nil {
+	if err := APIClient.MarkSkillInstalled(skill.ID, false); err != nil {
 		return fmt.Errorf("failed to mark skill as uninstalled: %w", err)
 	}
 

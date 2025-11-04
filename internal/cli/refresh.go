@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/agentregistry-dev/agentregistry/internal/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry"
 	"github.com/spf13/cobra"
 )
@@ -15,20 +14,14 @@ var refreshCmd = &cobra.Command{
 	Short: "Refresh data from connected registries",
 	Long:  `Updates/fetches the new data from the connected registries.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Initialize database
-		if err := database.Initialize(); err != nil {
-			log.Fatalf("Failed to initialize database: %v", err)
+		if APIClient == nil {
+			log.Fatalf("API client not initialized")
 		}
-		defer func() {
-			if err := database.Close(); err != nil {
-				log.Printf("Warning: Failed to close database: %v", err)
-			}
-		}()
 
 		fmt.Println("Refreshing data from connected registries...")
 
 		// Get all registries
-		registries, err := database.GetRegistries()
+		registries, err := APIClient.GetRegistries()
 		if err != nil {
 			log.Fatalf("Failed to get registries: %v", err)
 		}
@@ -57,7 +50,7 @@ var refreshCmd = &cobra.Command{
 			fmt.Printf("  📦 Total servers fetched: %d\n", len(servers))
 
 			// Clear existing servers for this registry
-			if err := database.ClearRegistryServers(reg.ID); err != nil {
+			if err := APIClient.ClearRegistryServers(reg.ID); err != nil {
 				fmt.Printf("  ⚠ Failed to clear old data: %v\n", err)
 				continue
 			}
@@ -81,7 +74,7 @@ var refreshCmd = &cobra.Command{
 					continue
 				}
 
-				err = database.AddOrUpdateServer(
+				err = APIClient.AddOrUpdateServer(
 					reg.ID,
 					server.Name,
 					server.Title,

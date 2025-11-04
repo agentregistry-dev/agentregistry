@@ -74,7 +74,7 @@ type Database interface {
 
 	// Skills API
 	// CreateSkill inserts a new skill version with official metadata
-	CreateSkill(ctx context.Context, tx pgx.Tx, skillJSON *skillmodels.SkillJSON, officialMeta *skillmodels.RegistryExtensions) (*skillmodels.SkillResponse, error)
+	CreateSkill(ctx context.Context, tx pgx.Tx, skillJSON *skillmodels.SkillJSON, officialMeta *skillmodels.SkillRegistryExtensions) (*skillmodels.SkillResponse, error)
 	// UpdateSkill updates an existing skill record
 	UpdateSkill(ctx context.Context, tx pgx.Tx, skillName, version string, skillJSON *skillmodels.SkillJSON) (*skillmodels.SkillResponse, error)
 	// SetSkillStatus updates the status of a specific skill version
