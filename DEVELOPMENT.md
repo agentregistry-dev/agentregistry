@@ -100,7 +100,7 @@ User Interface
    - Next.js builds static files
    - Output goes to `internal/api/ui/dist/`
 
-2. **Compile Phase** (`make build-go`):
+2. **Compile Phase** (`make build-cli`):
    - Go's `embed` directive includes entire `ui/dist/` directory
    - Files become part of the binary
 

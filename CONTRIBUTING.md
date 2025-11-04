@@ -58,7 +58,7 @@ make dev-ui
 
 # When ready to test with CLI:
 make build-ui
-make build-go
+make build-cli
 ./bin/arctl ui
 ```
 
@@ -310,7 +310,7 @@ Ensure UI is built before Go build:
 
 ```bash
 make build-ui
-make build-go
+make build-cli
 ```
 
 ## Getting Help
