@@ -147,6 +147,10 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 			Description: "Operations for discovering and retrieving MCP servers",
 		},
 		{
+			Name:        "agents",
+			Description: "Operations for discovering and retrieving Agentic agents",
+		},
+		{
 			Name:        "publish",
 			Description: "Operations for publishing MCP servers to the registry",
 		},

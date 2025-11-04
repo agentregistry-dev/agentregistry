@@ -8,6 +8,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	agentmodels "github.com/agentregistry-dev/agentregistry/internal/registry/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
 	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -264,4 +265,122 @@ func (s *registryServiceImpl) validateUpdateRequest(ctx context.Context, req api
 	}
 
 	return nil
+}
+
+// ==============================
+// Agents service implementations
+// ==============================
+
+// ListAgents returns registry entries for agents with pagination and filtering
+func (s *registryServiceImpl) ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*agentmodels.AgentResponse, string, error) {
+	if limit <= 0 {
+		limit = 30
+	}
+	agents, next, err := s.db.ListAgents(ctx, nil, filter, cursor, limit)
+	if err != nil {
+		return nil, "", err
+	}
+	return agents, next, nil
+}
+
+// GetAgentByName retrieves the latest version of an agent by its name
+func (s *registryServiceImpl) GetAgentByName(ctx context.Context, agentName string) (*agentmodels.AgentResponse, error) {
+	return s.db.GetAgentByName(ctx, nil, agentName)
+}
+
+// GetAgentByNameAndVersion retrieves a specific version of an agent by name and version
+func (s *registryServiceImpl) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*agentmodels.AgentResponse, error) {
+	return s.db.GetAgentByNameAndVersion(ctx, nil, agentName, version)
+}
+
+// GetAllVersionsByAgentName retrieves all versions for an agent
+func (s *registryServiceImpl) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*agentmodels.AgentResponse, error) {
+	return s.db.GetAllVersionsByAgentName(ctx, nil, agentName)
+}
+
+// CreateAgent creates a new agent version
+func (s *registryServiceImpl) CreateAgent(ctx context.Context, req *agentmodels.AgentJSON) (*agentmodels.AgentResponse, error) {
+	return database.InTransactionT(ctx, s.db, func(ctx context.Context, tx pgx.Tx) (*agentmodels.AgentResponse, error) {
+		return s.createAgentInTransaction(ctx, tx, req)
+	})
+}
+
+func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx pgx.Tx, req *agentmodels.AgentJSON) (*agentmodels.AgentResponse, error) {
+	// Basic validation: ensure required fields present
+	if req == nil || req.Name == "" || req.Version == "" {
+		return nil, fmt.Errorf("invalid agent payload: name and version are required")
+	}
+
+	publishTime := time.Now()
+	agentJSON := *req
+
+	// Acquire advisory lock per agent name
+	if err := s.db.AcquirePublishLock(ctx, tx, agentJSON.Name); err != nil {
+		return nil, err
+	}
+
+	// Check duplicate remote URLs among agents
+	for _, remote := range agentJSON.Remotes {
+		filter := &database.AgentFilter{RemoteURL: &remote.URL}
+		existing, _, err := s.db.ListAgents(ctx, tx, filter, "", 1000)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check remote URL conflict: %w", err)
+		}
+		for _, e := range existing {
+			if e.Agent.Name != agentJSON.Name {
+				return nil, fmt.Errorf("remote URL %s is already used by agent %s", remote.URL, e.Agent.Name)
+			}
+		}
+	}
+
+	// Enforce maximum versions per agent similar to servers
+	versionCount, err := s.db.CountAgentVersions(ctx, tx, agentJSON.Name)
+	if err != nil && !errors.Is(err, database.ErrNotFound) {
+		return nil, err
+	}
+	if versionCount >= maxServerVersionsPerServer {
+		return nil, database.ErrMaxServersReached
+	}
+
+	// Prevent duplicate version
+	exists, err := s.db.CheckAgentVersionExists(ctx, tx, agentJSON.Name, agentJSON.Version)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return nil, database.ErrInvalidVersion
+	}
+
+	// Determine latest
+	currentLatest, err := s.db.GetCurrentLatestAgentVersion(ctx, tx, agentJSON.Name)
+	if err != nil && !errors.Is(err, database.ErrNotFound) {
+		return nil, err
+	}
+
+	isNewLatest := true
+	if currentLatest != nil {
+		var existingPublishedAt time.Time
+		if currentLatest.Meta.Official != nil {
+			existingPublishedAt = currentLatest.Meta.Official.PublishedAt
+		}
+		// Reuse same version comparison semantics
+		if CompareVersions(agentJSON.Version, currentLatest.Agent.Version, publishTime, existingPublishedAt) <= 0 {
+			isNewLatest = false
+		}
+	}
+
+	if isNewLatest && currentLatest != nil {
+		if err := s.db.UnmarkAgentAsLatest(ctx, tx, agentJSON.Name); err != nil {
+			return nil, err
+		}
+	}
+
+	officialMeta := &agentmodels.AgentRegistryExtensions{
+		Status:      string(model.StatusActive),
+		PublishedAt: publishTime,
+		UpdatedAt:   publishTime,
+		IsLatest:    isNewLatest,
+	}
+
+	return s.db.CreateAgent(ctx, tx, &agentJSON, officialMeta)
 }
