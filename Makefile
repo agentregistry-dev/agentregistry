@@ -13,7 +13,7 @@ LDFLAGS := -s -w -X 'github.com/agentregistry-dev/agentregistry/cmd.Version=$(VE
 # Local architecture detection to build for the current platform
 LOCALARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
 
-.PHONY: help install-ui build-ui clean-ui build-cli build install dev-ui test clean fmt lint all build-agentgateway rebuild-agentgateway postgres-start postgres-stop release-cli
+.PHONY: help install-ui build-ui clean-ui build-cli build install dev-ui test clean fmt lint all build-agentgateway rebuild-agentgateway postgres-start postgres-stop release-cli docker-compose-up docker-compose-down docker-compose-logs
 
 # Default target
 help:
@@ -35,6 +35,9 @@ help:
 	@echo "  postgres-start       - Start PostgreSQL database in Docker"
 	@echo "  postgres-stop        - Stop PostgreSQL database"
 	@echo "  release              - Build and release the CLI"
+	@echo "  docker-compose-up    - Start all services with docker-compose"
+	@echo "  docker-compose-down  - Stop all services and remove containers"
+	@echo "  docker-compose-logs  - Show logs from all services"
 
 # Install UI dependencies
 install-ui:

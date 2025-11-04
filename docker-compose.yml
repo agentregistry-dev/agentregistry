@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: agent-registry-postgres
+    environment:
+      POSTGRES_DB: agent-registry
+      POSTGRES_USER: agentregistry
+      POSTGRES_PASSWORD: agentregistry
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentregistry -d agent-registry"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agentregistry-network
+
+  agentregistry:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        LDFLAGS: "-s -w -X 'github.com/agentregistry-dev/agentregistry/cmd.Version=${VERSION:-v0.0.0-dev}' -X 'github.com/agentregistry-dev/agentregistry/cmd.GitCommit=${GIT_COMMIT:-unknown}' -X 'github.com/agentregistry-dev/agentregistry/cmd.BuildDate=${BUILD_DATE:-unknown}'"
+    container_name: agentregistry-server
+    environment:
+      MCP_REGISTRY_DATABASE_URL: "postgres://agentregistry:agentregistry@postgres:5432/agent-registry?sslmode=disable"
+      MCP_REGISTRY_SERVER_ADDRESS: ":8080"
+      MCP_REGISTRY_AGENT_GATEWAY_PORT: "8081"
+      MCP_REGISTRY_VERSION: "${VERSION:-v0.0.0-dev}"
+      MCP_REGISTRY_ENABLE_ANONYMOUS_AUTH: "false"
+      MCP_REGISTRY_ENABLE_REGISTRY_VALIDATION: "true"
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    volumes:
+      # Mount Docker socket to allow the server to manage containers
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - agentregistry-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  agentregistry-network:
+    driver: bridge
+
