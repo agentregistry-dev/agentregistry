@@ -35,26 +35,23 @@ help:
 	@echo "  postgres-start       - Start PostgreSQL database in Docker"
 	@echo "  postgres-stop        - Stop PostgreSQL database"
 	@echo "  release              - Build and release the CLI"
-	@echo "  docker-compose-up    - Start all services with docker-compose"
-	@echo "  docker-compose-down  - Stop all services and remove containers"
-	@echo "  docker-compose-logs  - Show logs from all services"
 
 # Install UI dependencies
 install-ui:
 	@echo "Installing UI dependencies..."
 	cd ui && npm install
 
-# Build the Next.js UI (outputs to internal/api/ui/dist)
+# Build the Next.js UI (outputs to internal/registry/api/ui/dist)
 build-ui: install-ui
 	@echo "Building Next.js UI for embedding..."
 	cd ui && npm run build:export
-	@echo "UI built successfully to internal/api/ui/dist/"
+	@echo "UI built successfully to internal/registry/api/ui/dist/"
 
 # Clean UI build artifacts
 clean-ui:
 	@echo "Cleaning UI build artifacts..."
 	rm -rf ui/.next
-	rm -rf internal/api/ui/dist/*
+	rm -rf internal/registry/api/ui/dist/*
 	@echo "UI artifacts cleaned"
 
 # Build the Go CLI

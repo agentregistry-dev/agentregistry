@@ -1,3 +1,14 @@
+FROM node:22-alpine AS ui-builder
+# alpine install make
+RUN apk add --no-cache make
+
+WORKDIR /app
+
+COPY Makefile ./
+COPY ui/package.json ui/package-lock.json ./
+COPY ui ui
+RUN make build-ui
+
 ARG BUILDPLATFORM
 FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
 
@@ -11,6 +22,8 @@ RUN go mod download && go mod verify
 
 COPY . .
 
+COPY --from=ui-builder /app/internal/registry/api/ui/dist /app/internal/registry/api/ui/dist
+
 # Build
 # the GOARCH has not a default value to allow the binary be built according to the host where the command
 # was called. For example, if we call make docker-build in a local env which has the Apple Silicon M1 SO
@@ -20,7 +33,6 @@ ARG TARGETARCH
 ARG TARGETPLATFORM
 ARG LDFLAGS
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -ldflags "$LDFLAGS" -o bin/arctl-server cmd/server/main.go
-
 
 FROM ubuntu:22.04 AS runtime
 
@@ -40,7 +52,8 @@ RUN mkdir -p $DOCKER_CONFIG/cli-plugins
 RUN curl -SL https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-x86_64 -o $DOCKER_CONFIG/cli-plugins/docker-compose
 RUN chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
 
-
 COPY --from=builder /app/bin/arctl-server /app/bin/arctl-server
+
+COPY .env.example .env
 
 CMD ["/app/bin/arctl-server"]

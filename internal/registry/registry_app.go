@@ -16,7 +16,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/importer"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/runtime"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 )
@@ -91,12 +90,12 @@ func App(_ context.Context) error {
 	}()
 
 	// Start installed MCP Servers
-	mgr := runtime.NewRuntimeManager(cfg.AgentGatewayPort, true)
-	go func() {
-		if err := mgr.StartMCPServers(); err != nil {
-			log.Printf("Failed to start MCP servers: %v", err)
-		}
-	}()
+	// mgr := runtime.NewRuntimeManager(cfg.AgentGatewayPort, true)
+	// go func() {
+	// 	if err := mgr.StartMCPServers(); err != nil {
+	// 		log.Printf("Failed to start MCP servers: %v", err)
+	// 	}
+	// }()
 
 	// Initialize HTTP server
 	server := api.NewServer(cfg, registryService, metrics, versionInfo)
