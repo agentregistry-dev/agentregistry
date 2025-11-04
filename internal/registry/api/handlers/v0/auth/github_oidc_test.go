@@ -46,7 +46,7 @@ func TestGitHubOIDCHandler_ExchangeToken(t *testing.T) {
 						RegisteredClaims: jwt.RegisteredClaims{
 							Subject:   "repo:octo-org/octo-repo:environment:prod",
 							ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
-							Audience:  jwt.ClaimStrings{"mcp-registry"},
+							Audience:  jwt.ClaimStrings{"agent-registry"},
 						},
 						RepositoryOwner: "octo-org",
 					}, nil
@@ -73,7 +73,7 @@ func TestGitHubOIDCHandler_ExchangeToken(t *testing.T) {
 						RegisteredClaims: jwt.RegisteredClaims{
 							Subject:   "repo:invalid@name/octo-repo:environment:prod",
 							ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
-							Audience:  jwt.ClaimStrings{"mcp-registry"},
+							Audience:  jwt.ClaimStrings{"agent-registry"},
 						},
 						RepositoryOwner: "invalid@name", // invalid character
 					}, nil
@@ -135,7 +135,7 @@ func TestBuildPermissionsFromOIDC(t *testing.T) {
 				RegisteredClaims: jwt.RegisteredClaims{
 					Subject:   "repo:octo-org/octo-repo:environment:prod",
 					ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
-					Audience:  jwt.ClaimStrings{"mcp-registry"},
+					Audience:  jwt.ClaimStrings{"agent-registry"},
 				},
 				RepositoryOwner: "octo-org",
 			},
@@ -152,7 +152,7 @@ func TestBuildPermissionsFromOIDC(t *testing.T) {
 				RegisteredClaims: jwt.RegisteredClaims{
 					Subject:   "repo:invalid@name/octo-repo:environment:prod",
 					ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
-					Audience:  jwt.ClaimStrings{"mcp-registry"},
+					Audience:  jwt.ClaimStrings{"agent-registry"},
 				},
 				RepositoryOwner: "invalid@name", // contains invalid character
 			},
@@ -164,7 +164,7 @@ func TestBuildPermissionsFromOIDC(t *testing.T) {
 				RegisteredClaims: jwt.RegisteredClaims{
 					Subject:   "repo:username/octo-repo:environment:prod",
 					ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
-					Audience:  jwt.ClaimStrings{"mcp-registry"},
+					Audience:  jwt.ClaimStrings{"agent-registry"},
 				},
 				RepositoryOwner: "username",
 			},

@@ -7,16 +7,16 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     
     services:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: mcp-registry
-          POSTGRES_USER: mcpregistry
-          POSTGRES_PASSWORD: mcpregistry
+          POSTGRES_DB: agent-registry
+          POSTGRES_USER: agentregistry
+          POSTGRES_PASSWORD: agentregistry
         ports:
           - 5432:5432
         options: >-
@@ -57,17 +57,17 @@ jobs:
     - name: Download Go dependencies
       run: go mod download
 
-    - name: Install UI dependencies
-      run: cd ui && npm ci
-
     - name: Build UI
-      run: cd ui && npm run build:export
+      run: make build-ui
+
+    - name: Download Go dependencies
+      run: go mod download
+
+    - name: Run Integration Tests
+      run: go test -v -tags=integration ./...
 
     - name: Build Go CLI
       run: go build -v -o bin/arctl main.go
-
-    - name: Test Go (Unit Tests)
-      run: go test -v ./...
 
     - name: Verify binary
       run: ./bin/arctl version
@@ -77,39 +77,6 @@ jobs:
       with:
         name: arctl
         path: bin/arctl
-
-  integration-tests:
-    runs-on: ubuntu-latest
-    
-    # Add PostgreSQL service for database tests
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: mcp-registry
-          POSTGRES_USER: mcpregistry
-          POSTGRES_PASSWORD: mcpregistry
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: 1.22.x
-
-    - name: Download Go dependencies
-      run: go mod download
-
-    - name: Run Integration Tests
-      run: go test -v -tags=integration ./...
 
   lint:
     runs-on: ubuntu-latest
@@ -126,11 +93,8 @@ jobs:
       with:
         node-version: 18.x
 
-    - name: Install UI dependencies
-      run: cd ui && npm ci
-
     - name: Build UI
-      run: cd ui && npm run build:export
+      run: make build-ui
 
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v8

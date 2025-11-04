@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+    - "v*.*.*"
 
 jobs:
   release:
@@ -23,18 +23,15 @@ jobs:
       with:
         node-version: 18.x
 
-    - name: Install UI dependencies
-      run: cd ui && npm ci
+    - name: Build Release Artifacts
+      run: make release
 
-    - name: Build UI
-      run: cd ui && npm run build
-
-    - name: Run GoReleaser
-      uses: goreleaser/goreleaser-action@v5
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      if: startsWith(github.ref, 'refs/tags/')
       with:
-        distribution: goreleaser
-        version: latest
-        args: release --clean
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        generate_release_notes: true
+        files: |
+          bin/arctl-*
+
 

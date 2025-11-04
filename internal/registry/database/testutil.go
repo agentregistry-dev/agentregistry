@@ -43,7 +43,7 @@ func ensureTemplateDB(ctx context.Context, adminConn *pgx.Conn) error {
 	}
 
 	// Connect to template and run migrations
-	templateURI := fmt.Sprintf("postgres://mcpregistry:mcpregistry@localhost:5432/%s?sslmode=disable", templateDBName)
+	templateURI := fmt.Sprintf("postgres://agentregistry:agentregistry@localhost:5432/%s?sslmode=disable", templateDBName)
 	templateDB, err := NewPostgreSQL(ctx, templateURI)
 	if err != nil {
 		return fmt.Errorf("failed to connect to template database: %w", err)
@@ -64,7 +64,7 @@ func NewTestDB(t *testing.T) Database {
 	defer cancel()
 
 	// Connect to postgres database
-	adminURI := "postgres://mcpregistry:mcpregistry@localhost:5432/postgres?sslmode=disable"
+	adminURI := "postgres://agentregistry:agentregistry@localhost:5432/postgres?sslmode=disable"
 	adminConn, err := pgx.Connect(ctx, adminURI)
 	if err != nil {
 		t.Skipf("PostgreSQL not available (this is expected on macOS GitHub runners). Skipping database tests. Error: %v", err)
@@ -102,7 +102,7 @@ func NewTestDB(t *testing.T) Database {
 	})
 
 	// Connect to test database (no migrations needed - copied from template)
-	testURI := fmt.Sprintf("postgres://mcpregistry:mcpregistry@localhost:5432/%s?sslmode=disable", dbName)
+	testURI := fmt.Sprintf("postgres://agentregistry:agentregistry@localhost:5432/%s?sslmode=disable", dbName)
 
 	db, err := NewPostgreSQL(ctx, testURI)
 	require.NoError(t, err, "Failed to connect to test database")
