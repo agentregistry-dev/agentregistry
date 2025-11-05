@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"embed"
+	"io/fs"
 	"log"
 	"net/http"
 	"strings"

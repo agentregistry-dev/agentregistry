@@ -166,18 +166,6 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 		// Also register handler for exact /ui path (without trailing slash)
 		mux.Handle("/ui", uiWithPrefix)
 
-	} else {
-		// If no UI handler, redirect to docs and handle 404
-		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/" {
-				http.Redirect(w, r, "https://github.com/modelcontextprotocol/registry/tree/main/docs", http.StatusTemporaryRedirect)
-				return
-			}
-
-			// Handle 404 for all other routes
-			handle404(w, r)
-		})
 	}
-
 	return api
 }
