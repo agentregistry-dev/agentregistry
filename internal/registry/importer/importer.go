@@ -1,6 +1,7 @@
 package importer
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -33,9 +35,16 @@ type Service struct {
 
 // NewService creates a new importer service with sane defaults
 func NewService(registry service.RegistryService) *Service {
+	// Allow user to override HTTP timeout via environment variable (seconds)
+	timeout := 30 * time.Second
+	if s := strings.TrimSpace(os.Getenv("AR_HTTP_TIMEOUT_SECONDS")); s != "" {
+		if v, err := strconv.Atoi(s); err == nil && v > 0 && v <= 120 {
+			timeout = time.Duration(v) * time.Second
+		}
+	}
 	return &Service{
 		registry:       registry,
-		httpClient:     &http.Client{Timeout: 30 * time.Second},
+		httpClient:     &http.Client{Timeout: timeout},
 		requestHeaders: map[string]string{},
 	}
 }
@@ -318,6 +327,15 @@ func (s *Service) enrichServer(ctx context.Context, server *apiv0.ServerJSON) er
 	// OpenSSF Scorecard (public API)
 	ossfScore, _ := s.fetchOpenSSFScore(ctx, owner, repo)
 
+	var scorecardHighlights []string
+	trimmedToken := strings.TrimSpace(s.githubToken)
+	if score, highlights, err := runScorecardLibrary(ctx, owner, repo, trimmedToken); err == nil && score > 0 {
+		ossfScore = score
+		scorecardHighlights = highlights
+	} else if score, err := runScorecardLocal(ctx, owner, repo); err == nil && score > 0 {
+		ossfScore = score
+	}
+
 	// OSV vulnerability scan (npm, pip, go) via manifests at repo root
 	osvRes, _ := s.runOSVScan(ctx, owner, repo)
 
@@ -395,6 +413,13 @@ func (s *Service) enrichServer(ctx context.Context, server *apiv0.ServerJSON) er
 			}(),
 			"details": func() []interface{} {
 				list := []interface{}{}
+				// include scorecard highlights first (if any)
+				for _, d := range scorecardHighlights {
+					list = append(list, d)
+					if len(list) >= 50 {
+						break
+					}
+				}
 				if osvRes != nil {
 					for _, d := range osvRes.Details {
 						list = append(list, d)
@@ -993,4 +1018,32 @@ func parseLastPageFromLink(link string) (int, bool) {
 		return 0, false
 	}
 	return n, true
+}
+
+// runScorecardLocal invokes the Scorecard CLI against the repo remotely and parses JSON output.
+// It is best-effort and returns 0 if unavailable. It uses a short timeout.
+func runScorecardLocal(ctx context.Context, owner, repo string) (float64, error) {
+	// Check presence
+	if _, err := exec.LookPath("scorecard"); err != nil {
+		return 0, err
+	}
+	cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	// Use remote mode to avoid local clone cost
+	cmd := exec.CommandContext(cctx, "scorecard", "--repo=github.com/"+owner+"/"+repo, "--format=json")
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return 0, fmt.Errorf("scorecard: %v: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	// Parse JSON { "score": number, ... }
+	var payload struct {
+		Score float64 `json:"score"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		return 0, err
+	}
+	return payload.Score, nil
 }
