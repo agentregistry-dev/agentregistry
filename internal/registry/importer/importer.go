@@ -17,11 +17,12 @@ import (
 	"strings"
 	"time"
 
+	"math"
+
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
-	"math"
 )
 
 // Service handles importing seed data into the registry
@@ -336,6 +337,10 @@ func (s *Service) enrichServer(ctx context.Context, server *apiv0.ServerJSON) er
 		ossfScore = score
 	}
 
+	// Additional scans
+	dependencySummary, _ := s.fetchDependencyHealthSummary(ctx, owner, repo)
+	containerSummary, _ := fetchDockerHubSummary(ctx, s.httpClient, owner, repo, server)
+
 	// OSV vulnerability scan (npm, pip, go) via manifests at repo root
 	osvRes, _ := s.runOSVScan(ctx, owner, repo)
 
@@ -404,33 +409,74 @@ func (s *Service) enrichServer(ctx context.Context, server *apiv0.ServerJSON) er
 			"code_scanning_alerts": codeScanningAlerts,
 			"dependabot_alerts":    dependabotAlerts,
 		},
-		"scans": map[string]interface{}{
-			"summary": func() interface{} {
-				if osvRes != nil {
-					return osvRes.Summary
+		"scans": func() map[string]interface{} {
+			summaries := []string{}
+			if osvRes != nil && strings.TrimSpace(osvRes.Summary) != "" {
+				summaries = append(summaries, strings.TrimSpace(osvRes.Summary))
+			}
+			if text := dependencySummary.summaryString(); text != "" {
+				summaries = append(summaries, text)
+			}
+			if text := containerSummary.summaryString(); text != "" {
+				summaries = append(summaries, text)
+			}
+			var summaryValue interface{}
+			if len(summaries) > 0 {
+				summaryValue = strings.Join(summaries, " | ")
+			} else {
+				summaryValue = nil
+			}
+			details := []interface{}{}
+			addDetail := func(text string) {
+				if text == "" {
+					return
 				}
-				return nil
-			}(),
-			"details": func() []interface{} {
-				list := []interface{}{}
-				// include scorecard highlights first (if any)
-				for _, d := range scorecardHighlights {
-					list = append(list, d)
-					if len(list) >= 50 {
-						break
+				if len(details) >= 50 {
+					return
+				}
+				details = append(details, text)
+			}
+			for _, d := range scorecardHighlights {
+				addDetail(d)
+			}
+			addDetail(dependencySummary.detailString())
+			addDetail(containerSummary.detailString())
+			if osvRes != nil {
+				for _, d := range osvRes.Details {
+					addDetail(d)
+				}
+			}
+			return map[string]interface{}{
+				"summary": summaryValue,
+				"details": details,
+				"dependency_health": func() interface{} {
+					if dependencySummary == nil {
+						return nil
 					}
-				}
-				if osvRes != nil {
-					for _, d := range osvRes.Details {
-						list = append(list, d)
-						if len(list) >= 50 {
-							break
-						}
+					return map[string]interface{}{
+						"packages_total":    dependencySummary.TotalPackages,
+						"ecosystems":        dependencySummary.Ecosystems,
+						"copyleft_licenses": dependencySummary.CopyleftCount,
+						"unknown_licenses":  dependencySummary.UnknownLicenseCount,
 					}
-				}
-				return list
-			}(),
-		},
+				}(),
+				"container_images": func() interface{} {
+					if containerSummary == nil {
+						return []interface{}{}
+					}
+					entry := map[string]interface{}{
+						"registry":              containerSummary.Registry,
+						"image":                 containerSummary.Image,
+						"pull_count":            containerSummary.PullCount,
+						"star_count":            containerSummary.StarCount,
+						"last_updated_at":       timePtrToRFC3339(containerSummary.LastUpdatedAt),
+						"latest_tag":            containerSummary.LatestTag,
+						"latest_tag_updated_at": timePtrToRFC3339(containerSummary.LatestTagUpdatedAt),
+					}
+					return []interface{}{entry}
+				}(),
+			}
+		}(),
 	}
 
 	server.Meta.PublisherProvided["agentregistry.solo.io/metadata"] = enterprise
