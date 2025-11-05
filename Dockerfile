@@ -1,4 +1,5 @@
-FROM node:22-alpine AS ui-builder
+ARG BUILDPLATFORM
+FROM --platform=$BUILDPLATFORM node:22-alpine AS ui-builder
 # alpine install make
 RUN apk add --no-cache make
 
@@ -10,7 +11,7 @@ COPY ui ui
 RUN make build-ui
 
 ARG BUILDPLATFORM
-FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
 
 # alpine install make
 RUN apk add --no-cache make
