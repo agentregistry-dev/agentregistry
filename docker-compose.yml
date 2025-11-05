@@ -21,7 +21,7 @@ services:
       - agentregistry-network
 
   agentregistry:
-    image: localhost:5001/agentregistry-dev/agentregistry/server:v0.0.0-8722813
+    image: localhost:5001/agentregistry-dev/agentregistry/server:latest
     container_name: agentregistry-server
     environment:
       AGENT_REGISTRY_DATABASE_URL: "postgres://agentregistry:agentregistry@postgres:5432/agent-registry?sslmode=disable"

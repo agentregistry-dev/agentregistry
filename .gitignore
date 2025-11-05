@@ -19,7 +19,6 @@ go.work
 
 # Build artifacts
 bin/
-dist/
 arctl
 
 # Database file

@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/agentregistry-dev/agentregistry/internal/database"
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime"
@@ -35,15 +34,9 @@ var installCmd = &cobra.Command{
 		resourceType := args[0]
 		resourceName := args[1]
 
-		// Initialize database
-		if err := database.Initialize(); err != nil {
-			log.Fatalf("Failed to initialize database: %v", err)
+		if APIClient == nil {
+			log.Fatalf("API client not initialized")
 		}
-		defer func() {
-			if err := database.Close(); err != nil {
-				log.Printf("Warning: Failed to close database: %v", err)
-			}
-		}()
 
 		switch resourceType {
 		case "mcp":
@@ -203,7 +196,7 @@ func installMCPServer(serverName string) error {
 	}
 
 	// Mark as installed in database
-	if err := database.MarkServerInstalled(server.ID, true); err != nil {
+	if err := APIClient.MarkServerInstalled(server.ID, true); err != nil {
 		return fmt.Errorf("failed to mark server as installed: %w", err)
 	}
 
@@ -214,7 +207,7 @@ func installSkill(skillName string) error {
 	fmt.Printf("Installing skill: %s\n", skillName)
 
 	// Fetch skill from database (using exact match for now)
-	skill, err := database.GetSkillByName(skillName)
+	skill, err := APIClient.GetSkillByName(skillName)
 	if err != nil {
 		return fmt.Errorf("failed to fetch skill: %w", err)
 	}
@@ -228,7 +221,7 @@ func installSkill(skillName string) error {
 	}
 
 	// Mark as installed in database
-	if err := database.MarkSkillInstalled(skill.ID, true); err != nil {
+	if err := APIClient.MarkSkillInstalled(skill.ID, true); err != nil {
 		return fmt.Errorf("failed to mark skill as installed: %w", err)
 	}
 

@@ -4,13 +4,12 @@ import (
 	"log"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/database"
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 )
 
 // findServersByName finds servers by name, checking full name first, then partial name
 func findServersByName(searchName string) []*models.ServerDetail {
-	servers, err := database.GetServers()
+	servers, err := APIClient.GetServers()
 	if err != nil {
 		log.Fatalf("Failed to get servers: %v", err)
 	}

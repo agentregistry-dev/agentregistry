@@ -6,7 +6,6 @@ import (
 	"log"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry"
 	"github.com/spf13/cobra"
 )
@@ -24,15 +23,9 @@ var connectCmd = &cobra.Command{
 		registryName := args[0]
 		registryURL := args[1]
 
-		// Initialize database
-		if err := database.Initialize(); err != nil {
-			log.Fatalf("Failed to initialize database: %v", err)
+		if APIClient == nil {
+			log.Fatalf("API client not initialized")
 		}
-		defer func() {
-			if err := database.Close(); err != nil {
-				log.Printf("Warning: Failed to close database: %v", err)
-			}
-		}()
 
 		fmt.Printf("Connecting to registry: %s (%s)\n", registryName, registryURL)
 
@@ -46,7 +39,7 @@ var connectCmd = &cobra.Command{
 		fmt.Println("✓")
 
 		// Add the registry to database
-		if err := database.AddRegistry(registryName, registryURL, "registry"); err != nil {
+		if err := APIClient.AddRegistry(registryName, registryURL, "registry"); err != nil {
 			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 				log.Fatalf("Registry '%s' already exists", registryName)
 			}
@@ -58,7 +51,7 @@ var connectCmd = &cobra.Command{
 		// Fetch data if --fetch flag is provided
 		if fetchOnConnect {
 			// Get the registry we just added to get its ID
-			reg, err := database.GetRegistryByName(registryName)
+			reg, err := APIClient.GetRegistryByName(registryName)
 			if err != nil || reg == nil {
 				log.Fatalf("Failed to retrieve registry: %v", err)
 			}
@@ -92,7 +85,7 @@ var connectCmd = &cobra.Command{
 					continue
 				}
 
-				err = database.AddOrUpdateServer(
+				err = APIClient.AddOrUpdateServer(
 					reg.ID,
 					server.Name,
 					server.Title,

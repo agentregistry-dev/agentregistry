@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/agentregistry-dev/agentregistry/internal/database"
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
 	"github.com/spf13/cobra"
@@ -26,15 +25,9 @@ var showCmd = &cobra.Command{
 		resourceType := args[0]
 		resourceName := args[1]
 
-		// Initialize database
-		if err := database.Initialize(); err != nil {
-			log.Fatalf("Failed to initialize database: %v", err)
+		if APIClient == nil {
+			log.Fatalf("API client not initialized")
 		}
-		defer func() {
-			if err := database.Close(); err != nil {
-				log.Printf("Warning: Failed to close database: %v", err)
-			}
-		}()
 
 		switch resourceType {
 		case "mcp":
@@ -131,7 +124,7 @@ var showCmd = &cobra.Command{
 			}
 
 		case "skill":
-			skill, err := database.GetSkillByName(resourceName)
+			skill, err := APIClient.GetSkillByName(resourceName)
 			if err != nil {
 				log.Fatalf("Failed to get skill: %v", err)
 			}
@@ -159,7 +152,7 @@ var showCmd = &cobra.Command{
 			}
 
 		case "registry":
-			registry, err := database.GetRegistryByName(resourceName)
+			registry, err := APIClient.GetRegistryByName(resourceName)
 			if err != nil {
 				log.Fatalf("Failed to get registry: %v", err)
 			}

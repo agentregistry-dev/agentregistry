@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	skillmodels "github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
@@ -22,6 +23,16 @@ var (
 // ServerFilter defines filtering options for server queries
 type ServerFilter struct {
 	Name          *string    // for finding versions of same server
+	RemoteURL     *string    // for duplicate URL detection
+	UpdatedSince  *time.Time // for incremental sync filtering
+	SubstringName *string    // for substring search on name
+	Version       *string    // for exact version matching
+	IsLatest      *bool      // for filtering latest versions only
+}
+
+// SkillFilter defines filtering options for skill queries (mirrors ServerFilter)
+type SkillFilter struct {
+	Name          *string    // for finding versions of same skill
 	RemoteURL     *string    // for duplicate URL detection
 	UpdatedSince  *time.Time // for incremental sync filtering
 	SubstringName *string    // for substring search on name
@@ -60,6 +71,30 @@ type Database interface {
 	InTransaction(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error
 	// Close closes the database connection
 	Close() error
+
+	// Skills API
+	// CreateSkill inserts a new skill version with official metadata
+	CreateSkill(ctx context.Context, tx pgx.Tx, skillJSON *skillmodels.SkillJSON, officialMeta *skillmodels.SkillRegistryExtensions) (*skillmodels.SkillResponse, error)
+	// UpdateSkill updates an existing skill record
+	UpdateSkill(ctx context.Context, tx pgx.Tx, skillName, version string, skillJSON *skillmodels.SkillJSON) (*skillmodels.SkillResponse, error)
+	// SetSkillStatus updates the status of a specific skill version
+	SetSkillStatus(ctx context.Context, tx pgx.Tx, skillName, version string, status string) (*skillmodels.SkillResponse, error)
+	// ListSkills retrieve skill entries with optional filtering
+	ListSkills(ctx context.Context, tx pgx.Tx, filter *SkillFilter, cursor string, limit int) ([]*skillmodels.SkillResponse, string, error)
+	// GetSkillByName retrieve a single skill by its name (latest)
+	GetSkillByName(ctx context.Context, tx pgx.Tx, skillName string) (*skillmodels.SkillResponse, error)
+	// GetSkillByNameAndVersion retrieve specific version of a skill by name and version
+	GetSkillByNameAndVersion(ctx context.Context, tx pgx.Tx, skillName string, version string) (*skillmodels.SkillResponse, error)
+	// GetAllVersionsBySkillName retrieve all versions of a skill
+	GetAllVersionsBySkillName(ctx context.Context, tx pgx.Tx, skillName string) ([]*skillmodels.SkillResponse, error)
+	// GetCurrentLatestSkillVersion retrieve current latest version of a skill
+	GetCurrentLatestSkillVersion(ctx context.Context, tx pgx.Tx, skillName string) (*skillmodels.SkillResponse, error)
+	// CountSkillVersions count the number of versions for a skill
+	CountSkillVersions(ctx context.Context, tx pgx.Tx, skillName string) (int, error)
+	// CheckSkillVersionExists check if a specific version exists for a skill
+	CheckSkillVersionExists(ctx context.Context, tx pgx.Tx, skillName, version string) (bool, error)
+	// UnmarkSkillAsLatest marks the current latest version of a skill as no longer latest
+	UnmarkSkillAsLatest(ctx context.Context, tx pgx.Tx, skillName string) error
 }
 
 // InTransactionT is a generic helper that wraps InTransaction for functions returning a value
