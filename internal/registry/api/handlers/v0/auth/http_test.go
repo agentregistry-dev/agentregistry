@@ -27,7 +27,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 )
 
-const wellKnownPath = "/.well-known/mcp-registry-auth"
+const wellKnownPath = "/.well-known/agent-registry-auth"
 
 func newClientForTLSServer(t *testing.T, srv *httptest.Server) *http.Client {
 	t.Helper()

@@ -1,0 +1,4 @@
+# a git keep file to ensure the dist folder is tracked
+# see: https://adamj.eu/tech/2023/09/18/git-dont-create-gitkeep/
+*
+!.gitignore

@@ -252,8 +252,8 @@ func RegisterGitHubOIDCEndpoint(api huma.API, pathPrefix string, cfg *config.Con
 
 // ExchangeToken exchanges a GitHub OIDC token for a Registry JWT token
 func (h *GitHubOIDCHandler) ExchangeToken(ctx context.Context, oidcToken string) (*auth.TokenResponse, error) {
-	// Validate OIDC token with audience "mcp-registry"
-	claims, err := h.validator.ValidateToken(ctx, oidcToken, "mcp-registry")
+	// Validate OIDC token with audience "agent-registry"
+	claims, err := h.validator.ValidateToken(ctx, oidcToken, "agent-registry")
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate OIDC token: %w", err)
 	}

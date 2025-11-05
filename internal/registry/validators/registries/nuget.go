@@ -54,7 +54,7 @@ func ValidateNuGet(ctx context.Context, pkg model.Package, serverName string) er
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("User-Agent", "MCP-Registry-Validator/1.0")
+	req.Header.Set("User-Agent", "agent-registry-Validator/1.0")
 
 	resp, err := client.Do(req)
 	if err != nil {

@@ -56,7 +56,7 @@ Built with:
 - Responsive design
 - Installation status indicators
 
-**Build Output:** Static files exported to `internal/api/ui/dist/`
+**Build Output:** Static files exported to `internal/registry/api/ui/dist/`
 
 ## Data Flow
 
@@ -98,9 +98,9 @@ User Interface
 
 1. **Build Phase** (`make build-ui`):
    - Next.js builds static files
-   - Output goes to `internal/api/ui/dist/`
+   - Output goes to `internal/registry/api/ui/dist/`
 
-2. **Compile Phase** (`make build-go`):
+2. **Compile Phase** (`make build-cli`):
    - Go's `embed` directive includes entire `ui/dist/` directory
    - Files become part of the binary
 
@@ -115,7 +115,7 @@ User Interface
 var embeddedUI embed.FS
 ```
 
-This embeds all files in `internal/api/ui/dist/` at compile time.
+This embeds all files in `internal/registry/api/ui/dist/` at compile time.
 
 ## Build Process
 

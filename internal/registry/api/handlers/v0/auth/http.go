@@ -54,7 +54,7 @@ func NewDefaultHTTPKeyFetcherWithClient(client *http.Client) *DefaultHTTPKeyFetc
 
 // FetchKey fetches the public key from the well-known HTTP endpoint
 func (f *DefaultHTTPKeyFetcher) FetchKey(ctx context.Context, domain string) (string, error) {
-	url := fmt.Sprintf("https://%s/.well-known/mcp-registry-auth", domain)
+	url := fmt.Sprintf("https://%s/.well-known/agent-registry-auth", domain)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -62,7 +62,7 @@ func (f *DefaultHTTPKeyFetcher) FetchKey(ctx context.Context, domain string) (st
 	}
 
 	req.Header.Set("Accept", "text/plain")
-	req.Header.Set("User-Agent", "mcp-registry/1.0")
+	req.Header.Set("User-Agent", "agent-registry/1.0")
 
 	resp, err := f.client.Do(req)
 	if err != nil {

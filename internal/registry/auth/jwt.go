@@ -99,7 +99,7 @@ func (j *JWTManager) GenerateTokenResponse(_ context.Context, claims JWTClaims) 
 		claims.NotBefore = jwt.NewNumericDate(time.Now())
 	}
 	if claims.Issuer == "" {
-		claims.Issuer = "mcp-registry"
+		claims.Issuer = "agent-registry"
 	}
 
 	// Create token with claims

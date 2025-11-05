@@ -60,7 +60,7 @@ func ValidateNPM(ctx context.Context, pkg model.Package, serverName string) erro
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("User-Agent", "MCP-Registry-Validator/1.0")
+	req.Header.Set("User-Agent", "agent-registry-Validator/1.0")
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := client.Do(req)

@@ -51,7 +51,7 @@ func TestJWTManager_GenerateAndVerifyToken(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, auth.MethodGitHubAT, verifiedClaims.AuthMethod)
 		assert.Equal(t, "testuser", verifiedClaims.AuthMethodSubject)
-		assert.Equal(t, "mcp-registry", verifiedClaims.Issuer)
+		assert.Equal(t, "agent-registry", verifiedClaims.Issuer)
 		assert.Len(t, verifiedClaims.Permissions, 1)
 		assert.Equal(t, auth.PermissionActionPublish, verifiedClaims.Permissions[0].Action)
 		assert.Equal(t, "io.github.testuser/*", verifiedClaims.Permissions[0].ResourcePattern)

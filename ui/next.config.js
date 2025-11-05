@@ -18,7 +18,7 @@ const nextConfig = {
 // Only use static export and custom distDir for production builds
 if (process.env.NEXT_BUILD_EXPORT === 'true') {
   nextConfig.output = 'export'
-  nextConfig.distDir = '../internal/api/ui/dist'
+  nextConfig.distDir = '../internal/registry/api/ui/dist'
   // Remove rewrites for static export (not supported)
   delete nextConfig.rewrites
 }

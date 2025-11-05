@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/agentregistry-dev/agentregistry/internal/database"
+	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/dockercompose"
@@ -33,18 +33,13 @@ func NewRuntimeManager(agentGatewayPort uint16, startVerbose bool) RuntimeManage
 }
 
 func (m *runtimeManager) StartMCPServers() error {
-	// Initialize database
-	if err := database.Initialize(); err != nil {
-		return fmt.Errorf("failed to initialize database: %w", err)
+	db, err := client.NewClientFromEnv()
+	if err != nil {
+		return fmt.Errorf("failed to create API client: %w", err)
 	}
-	defer func() {
-		if err := database.Close(); err != nil {
-			log.Printf("Warning: Failed to close database: %v", err)
-		}
-	}()
 
 	// Get all installed servers
-	servers, err := database.GetInstalledServers()
+	servers, err := db.GetInstalledServers()
 	if err != nil {
 		return fmt.Errorf("failed to get installed servers: %w", err)
 	}
@@ -88,7 +83,7 @@ func (m *runtimeManager) StartMCPServers() error {
 		}
 
 		// Get installation config (env vars, args, headers)
-		installation, err := database.GetInstallationByName("mcp", server.Name)
+		installation, err := db.GetInstallationByName("mcp", server.Name)
 		if err != nil {
 			log.Printf("Warning: Failed to get installation config for %s: %v", server.Name, err)
 		}

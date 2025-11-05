@@ -11,7 +11,7 @@ import (
 // See .env.example for more documentation
 type Config struct {
 	ServerAddress            string `env:"SERVER_ADDRESS" envDefault:":8080"`
-	DatabaseURL              string `env:"DATABASE_URL" envDefault:"postgres://localhost:5432/mcp-registry?sslmode=disable"`
+	DatabaseURL              string `env:"DATABASE_URL" envDefault:"postgres://localhost:5432/agent-registry?sslmode=disable"`
 	SeedFrom                 string `env:"SEED_FROM" envDefault:""`
 	Version                  string `env:"VERSION" envDefault:"dev"`
 	GithubClientID           string `env:"GITHUB_CLIENT_ID" envDefault:""`
@@ -40,7 +40,7 @@ func NewConfig() *Config {
 	}
 	var cfg Config
 	err = env.ParseWithOptions(&cfg, env.Options{
-		Prefix: "MCP_REGISTRY_",
+		Prefix: "AGENT_REGISTRY_",
 	})
 	if err != nil {
 		log.Fatalf("failed to parse config: %v", err)
