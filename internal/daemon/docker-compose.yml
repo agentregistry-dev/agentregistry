@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -32,8 +30,8 @@ services:
       # AGENT_REGISTRY_ENABLE_ANONYMOUS_AUTH: "false"
       # AGENT_REGISTRY_ENABLE_REGISTRY_VALIDATION: "true"
     ports:
-      - "8080:8080"
-      - "8081:8081"
+      - "12121:8080"
+      - "21212:8081"
     volumes:
       # Mount Docker socket to allow the server to manage containers
       - /var/run/docker.sock:/var/run/docker.sock

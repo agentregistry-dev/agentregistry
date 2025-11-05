@@ -21,7 +21,8 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download && go mod verify
 
-COPY . .
+COPY cmd cmd
+COPY internal internal
 
 COPY --from=ui-builder /app/internal/registry/api/ui/dist /app/internal/registry/api/ui/dist
 
