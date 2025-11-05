@@ -14,10 +14,11 @@ var rootCmd = &cobra.Command{
 	Long:  `arctl is a CLI tool for managing MCP servers, skills, and registries.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		c, err := client.NewClientFromEnv()
-		if err == nil {
-			APIClient = c
+		if err != nil {
+			return fmt.Errorf("API client not initialized: %w", err)
 		}
-		return fmt.Errorf("API client not initialized: %w", err)
+		APIClient = c
+		return nil
 	},
 }
 
