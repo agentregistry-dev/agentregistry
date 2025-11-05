@@ -2,6 +2,8 @@
 DOCKER_REGISTRY ?= localhost:5001
 BASE_IMAGE_REGISTRY ?= ghcr.io
 DOCKER_REPO ?= agentregistry-dev/agentregistry
+DOCKER_BUILDER ?= docker buildx
+DOCKER_BUILD_ARGS ?= --push --platform linux/$(LOCALARCH)
 BUILD_DATE ?= $(shell date -u '+%Y-%m-%d')
 GIT_COMMIT ?= $(shell git rev-parse --short HEAD || echo "unknown")
 VERSION ?= $(shell git describe --tags --always 2>/dev/null | grep v || echo "v0.0.0-$(GIT_COMMIT)")
@@ -11,7 +13,7 @@ LDFLAGS := -s -w -X 'github.com/agentregistry-dev/agentregistry/cmd.Version=$(VE
 # Local architecture detection to build for the current platform
 LOCALARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
 
-.PHONY: help install-ui build-ui clean-ui build-go build install dev-ui test clean fmt lint all build-agentgateway rebuild-agentgateway postgres-start postgres-stop release
+.PHONY: help install-ui build-ui clean-ui build-cli build install dev-ui test clean fmt lint all build-agentgateway rebuild-agentgateway postgres-start postgres-stop release-cli docker-compose-up docker-compose-down docker-compose-logs
 
 # Default target
 help:
@@ -19,7 +21,7 @@ help:
 	@echo "  install-ui           - Install UI dependencies"
 	@echo "  build-ui             - Build the Next.js UI"
 	@echo "  clean-ui             - Clean UI build artifacts"
-	@echo "  build-go             - Build the Go CLI"
+	@echo "  build-cli             - Build the Go CLI"
 	@echo "  build                - Build both UI and Go CLI"
 	@echo "  install              - Install the CLI to GOPATH/bin"
 	@echo "  dev-ui               - Run Next.js in development mode"
@@ -39,31 +41,43 @@ install-ui:
 	@echo "Installing UI dependencies..."
 	cd ui && npm install
 
-# Build the Next.js UI (outputs to internal/api/ui/dist)
+# Build the Next.js UI (outputs to internal/registry/api/ui/dist)
 build-ui: install-ui
 	@echo "Building Next.js UI for embedding..."
 	cd ui && npm run build:export
-	@echo "UI built successfully to internal/api/ui/dist/"
+# best effort - bring back the gitignore so that dist folder is kept in git (won't work in docker).
+	git checkout -- internal/registry/api/ui/dist/.gitignore || :
+	@echo "UI built successfully to internal/registry/api/ui/dist/"
 
 # Clean UI build artifacts
 clean-ui:
 	@echo "Cleaning UI build artifacts..."
 	rm -rf ui/.next
-	rm -rf internal/api/ui/dist/*
+	git clean -xdf ./internal/registry/api/ui/dist/
 	@echo "UI artifacts cleaned"
 
-# Build the Go CLI (with embedded UI)
-build-go:
+# Build the Go CLI
+build-cli:
 	@echo "Building Go CLI..."
 	@echo "Downloading Go dependencies..."
 	go mod download
 	@echo "Building binary..."
 	go build -ldflags "$(LDFLAGS)" \
-		-o bin/arctl main.go
+		-o bin/arctl cmd/cli/main.go
 	@echo "Binary built successfully: bin/arctl"
 
+# Build the Go server (with embedded UI)
+build-server:
+	@echo "Building Go CLI..."
+	@echo "Downloading Go dependencies..."
+	go mod download
+	@echo "Building binary..."
+	go build -ldflags "$(LDFLAGS)" \
+		-o bin/arctl-server cmd/server/main.go
+	@echo "Binary built successfully: bin/arctl-server"
+
 # Build everything (UI + Go)
-build: build-ui build-go
+build: build-ui build-cli
 	@echo "Build complete!"
 	@echo "Run './bin/arctl --help' to get started"
 
@@ -97,7 +111,7 @@ all: clean build
 # Quick development build (skips cleaning)
 dev-build: build-ui
 	@echo "Building Go CLI (development mode)..."
-	go build -o bin/arctl main.go
+	go build -o bin/arctl cmd/cli/main.go
 	@echo "Development build complete!"
 
 
@@ -110,17 +124,17 @@ lint:
 # Build custom agent gateway image with npx/uvx support
 build-agentgateway:
 	@echo "Building custom agent gateway image..."
-	@if docker image inspect arctl-agentgateway:latest >/dev/null 2>&1; then \
-		echo "Image arctl-agentgateway:latest already exists. Use 'make rebuild-agentgateway' to force rebuild."; \
+	@if docker image inspect $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:latest >/dev/null 2>&1; then \
+		echo "Image $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:latest already exists. Use 'make rebuild-agentgateway' to force rebuild."; \
 	else \
-		docker build -f internal/runtime/agentgateway.Dockerfile -t arctl-agentgateway:latest .; \
+		docker build -f internal/runtime/agentgateway.Dockerfile -t $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:latest .; \
 		echo "✓ Agent gateway image built successfully"; \
 	fi
 
 # Force rebuild custom agent gateway image
 rebuild-agentgateway:
 	@echo "Rebuilding custom agent gateway image..."
-	docker build --no-cache -f internal/runtime/agentgateway.Dockerfile -t arctl-agentgateway:latest .
+	docker build --no-cache -f internal/runtime/agentgateway.Dockerfile -t $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:latest .
 	@echo "✓ Agent gateway image rebuilt successfully"
 
 # Start PostgreSQL database in Docker
@@ -146,40 +160,51 @@ postgres-stop:
 	@docker rm agent-registry-postgres 2>/dev/null || true
 	@echo "✓ PostgreSQL stopped and removed"
 
+docker:
+	@echo "Building Docker image..."
+	$(DOCKER_BUILDER) build $(DOCKER_BUILD_ARGS) -t $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) -f Dockerfile --build-arg LDFLAGS="$(LDFLAGS)"  .
+	@echo "✓ Docker image built successfully"
+
+docker-compose-up: docker
+	@echo "Pulling and tagging as latest..."
+	docker pull $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION)
+	docker tag $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:latest
+	@echo "Starting services with Docker Compose..."
+	docker compose up
+
 
 bin/arctl-linux-amd64:
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bin/arctl-linux-amd64 main.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bin/arctl-linux-amd64 cmd/cli/main.go
 
 bin/arctl-linux-amd64.sha256: bin/arctl-linux-amd64
 	sha256sum bin/arctl-linux-amd64 > bin/arctl-linux-amd64.sha256
 
 bin/arctl-linux-arm64:
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o bin/arctl-linux-arm64 main.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o bin/arctl-linux-arm64 cmd/cli/main.go
 
 bin/arctl-linux-arm64.sha256: bin/arctl-linux-arm64
 	sha256sum bin/arctl-linux-arm64 > bin/arctl-linux-arm64.sha256
 
 bin/arctl-darwin-amd64:
-	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bin/arctl-darwin-amd64 main.go
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bin/arctl-darwin-amd64 cmd/cli/main.go
 
 bin/arctl-darwin-amd64.sha256: bin/arctl-darwin-amd64
 	sha256sum bin/arctl-darwin-amd64 > bin/arctl-darwin-amd64.sha256
 
 bin/arctl-darwin-arm64:
-	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o bin/arctl-darwin-arm64 main.go
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o bin/arctl-darwin-arm64 cmd/cli/main.go
 
 bin/arctl-darwin-arm64.sha256: bin/arctl-darwin-arm64
 	sha256sum bin/arctl-darwin-arm64 > bin/arctl-darwin-arm64.sha256
 
 bin/arctl-windows-amd64.exe:
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bin/arctl-windows-amd64.exe main.go
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bin/arctl-windows-amd64.exe cmd/cli/main.go
 
 bin/arctl-windows-amd64.exe.sha256: bin/arctl-windows-amd64.exe
 	sha256sum bin/arctl-windows-amd64.exe > bin/arctl-windows-amd64.exe.sha256
 
-release: build-ui 
-release: bin/arctl-linux-amd64.sha256  
-release: bin/arctl-linux-arm64.sha256  
-release: bin/arctl-darwin-amd64.sha256  
-release: bin/arctl-darwin-arm64.sha256  
-release: bin/arctl-windows-amd64.exe.sha256
+release-cli: bin/arctl-linux-amd64.sha256  
+release-cli: bin/arctl-linux-arm64.sha256  
+release-cli: bin/arctl-darwin-amd64.sha256  
+release-cli: bin/arctl-darwin-arm64.sha256  
+release-cli: bin/arctl-windows-amd64.exe.sha256

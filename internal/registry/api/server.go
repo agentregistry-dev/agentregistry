@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"embed"
 	"log"
 	"net/http"
 	"strings"
@@ -16,6 +17,9 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 )
+
+//go:embed ui/dist/*
+var embeddedUI embed.FS
 
 // TrailingSlashMiddleware redirects requests with trailing slashes to their canonical form
 func TrailingSlashMiddleware(next http.Handler) http.Handler {
@@ -47,6 +51,9 @@ type Server struct {
 func NewServer(cfg *config.Config, registryService service.RegistryService, metrics *telemetry.Metrics, versionInfo *v0.VersionBody) *Server {
 	// Create HTTP mux and Huma API
 	mux := http.NewServeMux()
+
+	// Serve embedded UI
+	mux.Handle("/", http.FileServer(http.FS(embeddedUI)))
 
 	api := router.NewHumaAPI(cfg, registryService, mux, metrics, versionInfo)
 

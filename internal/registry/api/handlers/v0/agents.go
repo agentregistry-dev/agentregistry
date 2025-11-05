@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	agentmodels "github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	agentmodels "github.com/agentregistry-dev/agentregistry/internal/registry/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -160,4 +160,3 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		}, nil
 	})
 }
-

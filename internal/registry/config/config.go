@@ -40,7 +40,7 @@ func NewConfig() *Config {
 	}
 	var cfg Config
 	err = env.ParseWithOptions(&cfg, env.Options{
-		Prefix: "MCP_REGISTRY_",
+		Prefix: "AGENT_REGISTRY_",
 	})
 	if err != nil {
 		log.Fatalf("failed to parse config: %v", err)

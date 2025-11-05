@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const templateDBName = "mcp_registry_test_template"
+const templateDBName = "AGENT_REGISTRY_test_template"
 
 // ensureTemplateDB creates a template database with migrations applied
 // Multiple processes may call this, so we handle race conditions
