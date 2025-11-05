@@ -318,6 +318,9 @@ func (s *Service) enrichServer(ctx context.Context, server *apiv0.ServerJSON) er
 	// OpenSSF Scorecard (public API)
 	ossfScore, _ := s.fetchOpenSSFScore(ctx, owner, repo)
 
+	// OSV vulnerability scan (npm, pip, go) via manifests at repo root
+	osvRes, _ := s.runOSVScan(ctx, owner, repo)
+
 	// Endpoint health probe (first remote only)
 	var endpointReachable interface{} = nil
 	var endpointResponseMs interface{} = nil
@@ -384,8 +387,24 @@ func (s *Service) enrichServer(ctx context.Context, server *apiv0.ServerJSON) er
 			"dependabot_alerts":    dependabotAlerts,
 		},
 		"scans": map[string]interface{}{
-			"summary": nil,
-			"details": []interface{}{},
+			"summary": func() interface{} {
+				if osvRes != nil {
+					return osvRes.Summary
+				}
+				return nil
+			}(),
+			"details": func() []interface{} {
+				list := []interface{}{}
+				if osvRes != nil {
+					for _, d := range osvRes.Details {
+						list = append(list, d)
+						if len(list) >= 50 {
+							break
+						}
+					}
+				}
+				return list
+			}(),
 		},
 	}
 
