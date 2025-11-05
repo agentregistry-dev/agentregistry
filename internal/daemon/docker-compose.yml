@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -21,7 +19,7 @@ services:
       - agentregistry-network
 
   agentregistry:
-    image: localhost:5001/agentregistry-dev/agentregistry/server:v0.0.0-cdf45bb
+    image: localhost:5001/agentregistry-dev/agentregistry/server:latest
     container_name: agentregistry-server
     environment:
       AGENT_REGISTRY_DATABASE_URL: "postgres://agentregistry:agentregistry@postgres:5432/agent-registry?sslmode=disable"
