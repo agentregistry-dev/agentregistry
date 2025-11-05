@@ -45,8 +45,8 @@ install-ui:
 build-ui: install-ui
 	@echo "Building Next.js UI for embedding..."
 	cd ui && npm run build:export
-# bring back the gitignore so that dist folder is kept in git.
-	git checkout -- internal/registry/api/ui/dist/.gitignore
+# best effort - bring back the gitignore so that dist folder is kept in git (won't work in docker).
+	git checkout -- internal/registry/api/ui/dist/.gitignore || :
 	@echo "UI built successfully to internal/registry/api/ui/dist/"
 
 # Clean UI build artifacts
@@ -164,6 +164,13 @@ docker:
 	@echo "Building Docker image..."
 	$(DOCKER_BUILDER) build $(DOCKER_BUILD_ARGS) -t $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) -f Dockerfile --build-arg LDFLAGS="$(LDFLAGS)"  .
 	@echo "✓ Docker image built successfully"
+
+docker-compose-up: docker
+	@echo "Pulling and tagging as latest..."
+	docker pull $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION)
+	docker tag $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:latest
+	@echo "Starting services with Docker Compose..."
+	docker compose up
 
 
 bin/arctl-linux-amd64:
