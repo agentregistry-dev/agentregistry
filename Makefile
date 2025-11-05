@@ -44,7 +44,7 @@ install-ui:
 # Build the Next.js UI (outputs to internal/registry/api/ui/dist)
 build-ui: install-ui
 	@echo "Building Next.js UI for embedding..."
-	cd ui && npm run 
+	cd ui && npm run build:export
 # bring back the gitignore so that dist folder is kept in git.
 	git checkout -- internal/registry/api/ui/dist/.gitignore
 	@echo "UI built successfully to internal/registry/api/ui/dist/"
