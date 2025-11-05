@@ -34,7 +34,7 @@ const defaultRegistryName = "local"
 func NewClientFromEnv() (*Client, error) {
 	base := os.Getenv("ARCTL_API_BASE_URL")
 	if strings.TrimSpace(base) == "" {
-		base = "http://localhost:8080/v0"
+		base = "http://localhost:12121/v0"
 	}
 	token := os.Getenv("ARCTL_API_TOKEN")
 	c := &Client{

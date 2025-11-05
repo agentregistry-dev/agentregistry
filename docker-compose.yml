@@ -21,7 +21,7 @@ services:
       - agentregistry-network
 
   agentregistry:
-    image: localhost:5001/agentregistry-dev/agentregistry/server:latest
+    image: localhost:5001/agentregistry-dev/agentregistry/server:v0.0.0-cdf45bb
     container_name: agentregistry-server
     environment:
       AGENT_REGISTRY_DATABASE_URL: "postgres://agentregistry:agentregistry@postgres:5432/agent-registry?sslmode=disable"
@@ -32,8 +32,8 @@ services:
       # AGENT_REGISTRY_ENABLE_ANONYMOUS_AUTH: "false"
       # AGENT_REGISTRY_ENABLE_REGISTRY_VALIDATION: "true"
     ports:
-      - "8080:8080"
-      - "8081:8081"
+      - "12121:8080"
+      - "21212:8081"
     volumes:
       # Mount Docker socket to allow the server to manage containers
       - /var/run/docker.sock:/var/run/docker.sock

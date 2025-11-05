@@ -57,31 +57,71 @@ Examples:
 	initCmd.Flags().StringVar(&initCfg.ModelName, "model-name", "gemini-2.0-flash", "Model name (e.g., gpt-4, claude-3-5-sonnet, gemini-2.0-flash)")
 	initCmd.Flags().StringVar(&initCfg.Description, "description", "", "Description for the agent")
 
+	runCfg := &agent.RunCfg{
+		Config: cfg,
+	}
+
 	runCmd := &cobra.Command{
-		Use:   "run",
-		Short: "Run an agent",
-		Long:  "Run an agent",
+		Use:   "run [project-directory]",
+		Short: "Run agent project locally with docker-compose and launch chat interface",
+		Long: `Run an agent project locally using docker-compose and launch an interactive chat session.
+
+Examples:
+  arctl agent run ./my-agent
+  arctl agent run .`,
+		Args: cobra.MaximumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			cfg := &agent.RunCfg{
-				Config: &config.Config{},
+			if len(args) > 0 {
+				runCfg.ProjectDir = args[0]
+			} else {
+				runCfg.ProjectDir = "."
 			}
-			agent.RunCmd(cmd.Context(), cfg)
-			fmt.Println("Running agent...")
+
+			if err := agent.RunCmd(cmd.Context(), runCfg); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
 		},
+		Example: `arctl agent run ./my-agent`,
+	}
+
+	runCmd.Flags().StringVar(&runCfg.ProjectDir, "project-dir", "", "Project directory (default: current directory)")
+
+	buildCfg := &agent.BuildCfg{
+		Config: cfg,
 	}
 
 	buildCmd := &cobra.Command{
-		Use:   "build",
-		Short: "Build an agent",
-		Long:  "Build an agent",
+		Use:   "build [project-directory]",
+		Short: "Build a Docker images for an agent project",
+		Long: `Build Docker images for an agent project created with the init command.
+
+This command will look for a agent.yaml file in the specified project directory and build Docker images using docker build. The images can optionally be pushed to a registry.
+
+Image naming:
+- If --image is provided, it will be used as the full image specification (e.g., ghcr.io/myorg/my-agent:v1.0.0)
+- Otherwise, defaults to localhost:5001/{agentName}:latest where agentName is loaded from agent.yaml
+
+Examples:
+  arctl agent build ./my-agent
+  arctl agent build ./my-agent --image ghcr.io/myorg/my-agent:v1.0.0
+  arctl agent build ./my-agent --image ghcr.io/myorg/my-agent:v1.0.0 --push`,
+		Args: cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			cfg := &agent.BuildCfg{
-				Config: &config.Config{},
+			buildCfg.ProjectDir = args[0]
+
+			if err := agent.BuildCmd(buildCfg); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
 			}
-			agent.BuildCmd(cfg)
-			fmt.Println("Building agent...")
 		},
+		Example: `arctl agent build ./my-agent`,
 	}
+
+	// Add flags for build command
+	buildCmd.Flags().StringVar(&buildCfg.Image, "image", "", "Full image specification (e.g., ghcr.io/myorg/my-agent:v1.0.0)")
+	buildCmd.Flags().BoolVar(&buildCfg.Push, "push", false, "Push the image to the registry")
+	buildCmd.Flags().StringVar(&buildCfg.Platform, "platform", "", "Target platform for Docker build (e.g., linux/amd64, linux/arm64)")
 
 	agentCmd.AddCommand(initCmd, runCmd, buildCmd)
 
