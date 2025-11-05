@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	skillmodels "github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	skillmodels "github.com/agentregistry-dev/agentregistry/internal/registry/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
 	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"

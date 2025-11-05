@@ -74,7 +74,7 @@ build-server:
 	@echo "Building binary..."
 	go build -ldflags "$(LDFLAGS)" \
 		-o bin/arctl-server cmd/server/main.go
-	@echo "Binary built successfully: bin/arctl"
+	@echo "Binary built successfully: bin/arctl-server"
 
 # Build everything (UI + Go)
 build: build-ui build-cli

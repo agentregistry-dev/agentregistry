@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	skillmodels "github.com/agentregistry-dev/agentregistry/internal/registry/models"
+	skillmodels "github.com/agentregistry-dev/agentregistry/internal/models"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 )

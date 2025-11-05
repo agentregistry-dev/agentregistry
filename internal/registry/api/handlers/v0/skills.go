@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	skillmodels "github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	skillmodels "github.com/agentregistry-dev/agentregistry/internal/registry/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/danielgtaylor/huma/v2"
 )

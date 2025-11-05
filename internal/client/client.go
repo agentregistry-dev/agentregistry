@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/models"
-	skillmodels "github.com/agentregistry-dev/agentregistry/internal/registry/models"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
@@ -203,7 +202,7 @@ func (c *Client) GetSkills() ([]models.Skill, error) {
 			return nil, err
 		}
 
-		var resp skillmodels.SkillListResponse
+		var resp models.SkillListResponse
 		if err := c.doJSON(req, &resp); err != nil {
 			return nil, err
 		}
@@ -226,7 +225,7 @@ func (c *Client) GetSkillByName(name string) (*models.Skill, error) {
 	if err != nil {
 		return nil, err
 	}
-	var resp skillmodels.SkillResponse
+	var resp models.SkillResponse
 	if err := c.doJSON(req, &resp); err != nil {
 		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
 			return nil, nil
@@ -410,7 +409,7 @@ func mapServerResponse(sr apiv0.ServerResponse) models.ServerDetail {
 	}
 }
 
-func mapSkillResponse(sk skillmodels.SkillResponse) models.Skill {
+func mapSkillResponse(sk models.SkillResponse) models.Skill {
 	// Store the raw skill response as JSON for potential future use
 	dataBytes, _ := json.Marshal(sk)
 	// Derive category from packages if desired (placeholder empty)

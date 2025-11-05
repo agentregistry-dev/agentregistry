@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	skillmodels "github.com/agentregistry-dev/agentregistry/internal/registry/models"
+	skillmodels "github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
