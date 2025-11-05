@@ -43,7 +43,7 @@ Examples:
 			initCfg.Language = args[1]
 			initCfg.AgentName = args[2]
 
-			if err := agent.InitCmd(initCfg); err != nil {
+			if err := agent.InitCmd(initCfg, "0.7.4"); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
