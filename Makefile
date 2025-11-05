@@ -51,7 +51,7 @@ build-ui: install-ui
 clean-ui:
 	@echo "Cleaning UI build artifacts..."
 	rm -rf ui/.next
-	rm -rf internal/registry/api/ui/dist/*
+	git clean -xdf ./internal/registry/api/ui/dist/
 	@echo "UI artifacts cleaned"
 
 # Build the Go CLI
