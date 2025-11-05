@@ -238,8 +238,67 @@ func (c *Client) GetSkillByName(name string) (*models.Skill, error) {
 
 // GetAgents returns all agents from connected registries
 func (c *Client) GetAgents() ([]models.Agent, error) {
-	// Agents not supported via v0 API yet
-	return []models.Agent{}, nil
+	limit := 100
+	cursor := ""
+	var all []models.Agent
+
+	for {
+		q := fmt.Sprintf("/agents?limit=%d", limit)
+		if cursor != "" {
+			q += "&cursor=" + url.QueryEscape(cursor)
+		}
+		req, err := c.newRequest(http.MethodGet, q)
+		if err != nil {
+			return nil, err
+		}
+
+		var resp models.AgentListResponse
+		if err := c.doJSON(req, &resp); err != nil {
+			return nil, err
+		}
+		for _, ag := range resp.Agents {
+			all = append(all, mapAgentResponse(ag))
+		}
+		if resp.Metadata.NextCursor == "" {
+			break
+		}
+		cursor = resp.Metadata.NextCursor
+	}
+
+	return all, nil
+}
+
+func (c *Client) GetAgentByName(name string) (*models.Agent, error) {
+	encName := url.PathEscape(name)
+	req, err := c.newRequest(http.MethodGet, "/agents/"+encName+"/versions/latest")
+	if err != nil {
+		return nil, err
+	}
+	var resp models.AgentResponse
+	if err := c.doJSON(req, &resp); err != nil {
+		return nil, fmt.Errorf("failed to get agent by name: %w", err)
+	}
+	s := mapAgentResponse(resp)
+	return &s, nil
+}
+
+func mapAgentResponse(ag models.AgentResponse) models.Agent {
+	// Store the raw agent response as JSON for potential future use
+	dataBytes, _ := json.Marshal(ag)
+	// Derive category from packages if desired (placeholder empty)
+	return models.Agent{
+		ID:           0,
+		RegistryID:   0,
+		RegistryName: defaultRegistryName,
+		Name:         ag.Agent.Name,
+		Title:        ag.Agent.Title,
+		Description:  ag.Agent.Description,
+		Version:      ag.Agent.Version,
+		Installed:    false,
+		Data:         string(dataBytes),
+		CreatedAt:    time.Time{},
+		UpdatedAt:    time.Time{},
+	}
 }
 
 // GetInstallations returns all installed resources
