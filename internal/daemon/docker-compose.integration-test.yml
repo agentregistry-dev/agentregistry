@@ -1,0 +1,6 @@
+services:
+  postgres:
+    container_name: agent-registry-postgreszs
+    volumes: !reset []
+    tmpfs:
+      - /var/lib/postgresql/data:size=50m

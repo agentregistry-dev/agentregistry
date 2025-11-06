@@ -146,7 +146,12 @@ docker:
 	$(DOCKER_BUILDER) build $(DOCKER_BUILD_ARGS) -t $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) -f Dockerfile --build-arg LDFLAGS="$(LDFLAGS)"  .
 	@echo "✓ Docker image built successfully"
 
-docker-compose-up: docker
+docker-pull:
+	@echo "Pulling Docker image..."
+	docker pull $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION)
+	@echo "✓ Docker image pulled successfully"
+
+docker-compose-up: docker docker-pull
 	@echo "Pulling and tagging as latest..."
 	docker pull $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION)
 	docker tag $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:latest
