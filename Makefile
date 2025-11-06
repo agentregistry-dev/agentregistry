@@ -151,18 +151,16 @@ docker-registry:
 
 docker:
 	@echo "Building Docker image..."
-	$(DOCKER_BUILDER) build $(DOCKER_BUILD_ARGS) -t $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) -f Dockerfile --build-arg LDFLAGS="$(LDFLAGS)"  .
+	$(DOCKER_BUILDER) build $(DOCKER_BUILD_ARGS) -t $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) -f Dockerfile --build-arg LDFLAGS="$(LDFLAGS)" .
 	@echo "✓ Docker image built successfully"
 
-docker-pull:
-	@echo "Pulling Docker image..."
-	docker pull $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION)
-	@echo "✓ Docker image pulled successfully"
-
-docker-compose-up: docker docker-pull
+docker-pull-as-latest:
 	@echo "Pulling and tagging as latest..."
 	docker pull $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION)
 	docker tag $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:latest
+	@echo "✓ Docker image pulled successfully"
+
+docker-compose-up: docker docker-pull-as-latest
 	@echo "Starting services with Docker Compose..."
 	docker compose -p agentregistry -f internal/daemon/docker-compose.yml up -d --wait
 

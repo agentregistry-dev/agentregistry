@@ -65,7 +65,7 @@ jobs:
 
     - name: Run Integration Tests
       run: |
-        make docker-registry docker docker-pull
+        make docker-registry docker docker-pull-as-latest
         docker compose -f internal/daemon/docker-compose.yml -f internal/daemon/docker-compose.integration-test.yml up --wait --wait-timeout 60
         go test -v -tags=integration ./...
 
