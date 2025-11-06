@@ -50,7 +50,7 @@ func ensureTemplateDB(ctx context.Context, adminConn *pgx.Conn) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to template database: %w", err)
 	}
-	defer templateDB.Close()
+	defer func() { _ = templateDB.Close() }()
 
 	// Migrations run automatically in NewPostgreSQL
 	return nil

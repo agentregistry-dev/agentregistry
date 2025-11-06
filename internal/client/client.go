@@ -112,7 +112,7 @@ func (c *Client) doJSON(req *http.Request, out any) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// read up to 1KB of body for error message
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))

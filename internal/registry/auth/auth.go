@@ -82,7 +82,7 @@ func AuthnMiddleware(authn AuthnProvider) func(ctx huma.Context, next func(huma.
 		session, err := authn.Authenticate(ctx.Context(), ctx.Header, url.Query())
 		if err != nil {
 			ctx.SetStatus(http.StatusUnauthorized)
-			ctx.BodyWriter().Write([]byte("Unauthorized"))
+			_, _ = ctx.BodyWriter().Write([]byte("Unauthorized"))
 			return
 		}
 		if session != nil {

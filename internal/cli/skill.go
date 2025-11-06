@@ -162,7 +162,7 @@ func buildSkillDockerImage(skillPath string) (*models.SkillJSON, error) {
 	}
 
 	// Find frontmatter region
-	var yamlStart, yamlEnd int = -1, -1
+	var yamlStart, yamlEnd = -1, -1
 	for i, l := range lines {
 		if strings.TrimSpace(l) == "---" {
 			if yamlStart == -1 {

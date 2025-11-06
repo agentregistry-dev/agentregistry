@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	agentmodels "github.com/agentregistry-dev/agentregistry/internal/models"
-	skillmodels "github.com/agentregistry-dev/agentregistry/internal/models"
+	models "github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
@@ -192,7 +191,7 @@ func (s *registryServiceImpl) validateNoDuplicateRemoteURLs(ctx context.Context,
 // ==============================
 
 // ListSkills returns registry entries for skills with pagination and filtering
-func (s *registryServiceImpl) ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*skillmodels.SkillResponse, string, error) {
+func (s *registryServiceImpl) ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
 	if limit <= 0 {
 		limit = 30
 	}
@@ -204,28 +203,28 @@ func (s *registryServiceImpl) ListSkills(ctx context.Context, filter *database.S
 }
 
 // GetSkillByName retrieves the latest version of a skill by its name
-func (s *registryServiceImpl) GetSkillByName(ctx context.Context, skillName string) (*skillmodels.SkillResponse, error) {
+func (s *registryServiceImpl) GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error) {
 	return s.db.GetSkillByName(ctx, nil, skillName)
 }
 
 // GetSkillByNameAndVersion retrieves a specific version of a skill by name and version
-func (s *registryServiceImpl) GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*skillmodels.SkillResponse, error) {
+func (s *registryServiceImpl) GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
 	return s.db.GetSkillByNameAndVersion(ctx, nil, skillName, version)
 }
 
 // GetAllVersionsBySkillName retrieves all versions for a skill
-func (s *registryServiceImpl) GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*skillmodels.SkillResponse, error) {
+func (s *registryServiceImpl) GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
 	return s.db.GetAllVersionsBySkillName(ctx, nil, skillName)
 }
 
 // CreateSkill creates a new skill version
-func (s *registryServiceImpl) CreateSkill(ctx context.Context, req *skillmodels.SkillJSON) (*skillmodels.SkillResponse, error) {
-	return database.InTransactionT(ctx, s.db, func(ctx context.Context, tx pgx.Tx) (*skillmodels.SkillResponse, error) {
+func (s *registryServiceImpl) CreateSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error) {
+	return database.InTransactionT(ctx, s.db, func(ctx context.Context, tx pgx.Tx) (*models.SkillResponse, error) {
 		return s.createSkillInTransaction(ctx, tx, req)
 	})
 }
 
-func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx pgx.Tx, req *skillmodels.SkillJSON) (*skillmodels.SkillResponse, error) {
+func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx pgx.Tx, req *models.SkillJSON) (*models.SkillResponse, error) {
 	// Basic validation: ensure required fields present
 	if req == nil || req.Name == "" || req.Version == "" {
 		return nil, fmt.Errorf("invalid skill payload: name and version are required")
@@ -295,7 +294,7 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 		}
 	}
 
-	officialMeta := &skillmodels.SkillRegistryExtensions{
+	officialMeta := &models.SkillRegistryExtensions{
 		Status:      string(model.StatusActive),
 		PublishedAt: publishTime,
 		UpdatedAt:   publishTime,
@@ -391,7 +390,7 @@ func (s *registryServiceImpl) validateUpdateRequest(ctx context.Context, req api
 // ==============================
 
 // ListAgents returns registry entries for agents with pagination and filtering
-func (s *registryServiceImpl) ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*agentmodels.AgentResponse, string, error) {
+func (s *registryServiceImpl) ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
 	if limit <= 0 {
 		limit = 30
 	}
@@ -403,28 +402,28 @@ func (s *registryServiceImpl) ListAgents(ctx context.Context, filter *database.A
 }
 
 // GetAgentByName retrieves the latest version of an agent by its name
-func (s *registryServiceImpl) GetAgentByName(ctx context.Context, agentName string) (*agentmodels.AgentResponse, error) {
+func (s *registryServiceImpl) GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error) {
 	return s.db.GetAgentByName(ctx, nil, agentName)
 }
 
 // GetAgentByNameAndVersion retrieves a specific version of an agent by name and version
-func (s *registryServiceImpl) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*agentmodels.AgentResponse, error) {
+func (s *registryServiceImpl) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
 	return s.db.GetAgentByNameAndVersion(ctx, nil, agentName, version)
 }
 
 // GetAllVersionsByAgentName retrieves all versions for an agent
-func (s *registryServiceImpl) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*agentmodels.AgentResponse, error) {
+func (s *registryServiceImpl) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
 	return s.db.GetAllVersionsByAgentName(ctx, nil, agentName)
 }
 
 // CreateAgent creates a new agent version
-func (s *registryServiceImpl) CreateAgent(ctx context.Context, req *agentmodels.AgentJSON) (*agentmodels.AgentResponse, error) {
-	return database.InTransactionT(ctx, s.db, func(ctx context.Context, tx pgx.Tx) (*agentmodels.AgentResponse, error) {
+func (s *registryServiceImpl) CreateAgent(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error) {
+	return database.InTransactionT(ctx, s.db, func(ctx context.Context, tx pgx.Tx) (*models.AgentResponse, error) {
 		return s.createAgentInTransaction(ctx, tx, req)
 	})
 }
 
-func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx pgx.Tx, req *agentmodels.AgentJSON) (*agentmodels.AgentResponse, error) {
+func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx pgx.Tx, req *models.AgentJSON) (*models.AgentResponse, error) {
 	// Basic validation: ensure required fields present
 	if req == nil || req.Name == "" || req.Version == "" {
 		return nil, fmt.Errorf("invalid agent payload: name and version are required")
@@ -494,7 +493,7 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 		}
 	}
 
-	officialMeta := &agentmodels.AgentRegistryExtensions{
+	officialMeta := &models.AgentRegistryExtensions{
 		Status:      string(model.StatusActive),
 		PublishedAt: publishTime,
 		UpdatedAt:   publishTime,
