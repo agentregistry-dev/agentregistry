@@ -369,8 +369,7 @@ func (s *Service) enrichServer(ctx context.Context, server *apiv0.ServerJSON) er
 	enterprise := map[string]interface{}{
 		"stars": repoSummary.Stars,
 		"downloads": map[string]interface{}{
-			"total":  releasesSummary.TotalDownloads,
-			"weekly": nil, // MVP
+			"total": releasesSummary.TotalDownloads,
 		},
 		"score": score,
 		"repo": map[string]interface{}{
