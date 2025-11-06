@@ -140,6 +140,14 @@ rebuild-agentgateway:
 	docker build --no-cache -f internal/runtime/agentgateway.Dockerfile -t $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:latest .
 	@echo "✓ Agent gateway image rebuilt successfully"
 
+docker-registry:
+	@echo "Building running local Docker registry..."
+	if docker inspect docker-registry >/dev/null 2>&1; then \
+		echo "Registry already running. Skipping build." ; \
+	else \
+		 docker run \
+		-d --restart=always -p "5001:5000" --name docker-registry "docker.io/library/registry:2" ; \
+	fi
 
 docker:
 	@echo "Building Docker image..."
