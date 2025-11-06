@@ -363,6 +363,44 @@ func (s *registryServiceImpl) updateServerInTransaction(ctx context.Context, tx 
 	return updatedServerResponse, nil
 }
 
+func (s *registryServiceImpl) StoreServerReadme(ctx context.Context, serverName, version string, content []byte, contentType string) error {
+	if len(content) == 0 {
+		return nil
+	}
+	if contentType == "" {
+		contentType = "text/markdown"
+	}
+
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		if _, err := s.db.GetServerByNameAndVersion(txCtx, tx, serverName, version); err != nil {
+			return err
+		}
+
+		readme := &database.ServerReadme{
+			ServerName:  serverName,
+			Version:     version,
+			Content:     append([]byte(nil), content...),
+			ContentType: contentType,
+			SizeBytes:   len(content),
+			FetchedAt:   time.Now(),
+		}
+
+		if err := s.db.UpsertServerReadme(txCtx, tx, readme); err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+
+func (s *registryServiceImpl) GetServerReadmeLatest(ctx context.Context, serverName string) (*database.ServerReadme, error) {
+	return s.db.GetLatestServerReadme(ctx, nil, serverName)
+}
+
+func (s *registryServiceImpl) GetServerReadmeByVersion(ctx context.Context, serverName, version string) (*database.ServerReadme, error) {
+	return s.db.GetServerReadme(ctx, nil, serverName, version)
+}
+
 // validateUpdateRequest validates an update request with optional registry validation skipping
 func (s *registryServiceImpl) validateUpdateRequest(ctx context.Context, req apiv0.ServerJSON, skipRegistryValidation bool) error {
 	// Always validate the server JSON structure

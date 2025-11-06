@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -711,6 +712,110 @@ func (db *PostgreSQL) UnmarkAsLatest(ctx context.Context, tx pgx.Tx, serverName 
 	}
 
 	return nil
+}
+
+func (db *PostgreSQL) UpsertServerReadme(ctx context.Context, tx pgx.Tx, readme *ServerReadme) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if readme == nil {
+		return fmt.Errorf("readme is required")
+	}
+	if readme.ServerName == "" || readme.Version == "" {
+		return fmt.Errorf("server name and version are required")
+	}
+	if readme.ContentType == "" {
+		readme.ContentType = "text/markdown"
+	}
+
+	if readme.SizeBytes == 0 {
+		readme.SizeBytes = len(readme.Content)
+	}
+	if len(readme.SHA256) == 0 {
+		sum := sha256.Sum256(readme.Content)
+		readme.SHA256 = sum[:]
+	}
+	if readme.FetchedAt.IsZero() {
+		readme.FetchedAt = time.Now()
+	}
+
+	executor := db.getExecutor(tx)
+	query := `
+        INSERT INTO server_readmes (server_name, version, content, content_type, size_bytes, sha256, fetched_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (server_name, version) DO UPDATE
+        SET content = EXCLUDED.content,
+            content_type = EXCLUDED.content_type,
+            size_bytes = EXCLUDED.size_bytes,
+            sha256 = EXCLUDED.sha256,
+            fetched_at = EXCLUDED.fetched_at
+    `
+
+	if _, err := executor.Exec(ctx, query,
+		readme.ServerName,
+		readme.Version,
+		readme.Content,
+		readme.ContentType,
+		readme.SizeBytes,
+		readme.SHA256,
+		readme.FetchedAt,
+	); err != nil {
+		return fmt.Errorf("failed to upsert server readme: %w", err)
+	}
+
+	return nil
+}
+
+func (db *PostgreSQL) GetServerReadme(ctx context.Context, tx pgx.Tx, serverName, version string) (*ServerReadme, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	executor := db.getExecutor(tx)
+	query := `
+        SELECT server_name, version, content, content_type, size_bytes, sha256, fetched_at
+        FROM server_readmes
+        WHERE server_name = $1 AND version = $2
+        LIMIT 1
+    `
+
+	row := executor.QueryRow(ctx, query, serverName, version)
+	return scanServerReadme(row)
+}
+
+func (db *PostgreSQL) GetLatestServerReadme(ctx context.Context, tx pgx.Tx, serverName string) (*ServerReadme, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	executor := db.getExecutor(tx)
+	query := `
+        SELECT sr.server_name, sr.version, sr.content, sr.content_type, sr.size_bytes, sr.sha256, sr.fetched_at
+        FROM server_readmes sr
+        INNER JOIN servers s ON sr.server_name = s.server_name AND sr.version = s.version
+        WHERE sr.server_name = $1 AND s.is_latest = true
+        LIMIT 1
+    `
+
+	row := executor.QueryRow(ctx, query, serverName)
+	return scanServerReadme(row)
+}
+
+func scanServerReadme(row pgx.Row) (*ServerReadme, error) {
+	var readme ServerReadme
+	if err := row.Scan(
+		&readme.ServerName,
+		&readme.Version,
+		&readme.Content,
+		&readme.ContentType,
+		&readme.SizeBytes,
+		&readme.SHA256,
+		&readme.FetchedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to scan server readme: %w", err)
+	}
+	return &readme, nil
 }
 
 // ==============================

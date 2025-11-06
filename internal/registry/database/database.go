@@ -30,6 +30,17 @@ type ServerFilter struct {
 	IsLatest      *bool      // for filtering latest versions only
 }
 
+// ServerReadme represents a stored README blob for a server version
+type ServerReadme struct {
+	ServerName  string
+	Version     string
+	Content     []byte
+	ContentType string
+	SizeBytes   int
+	SHA256      []byte
+	FetchedAt   time.Time
+}
+
 // SkillFilter defines filtering options for skill queries (mirrors ServerFilter)
 type SkillFilter struct {
 	Name          *string    // for finding versions of same skill
@@ -67,6 +78,12 @@ type Database interface {
 	// AcquirePublishLock acquires an exclusive advisory lock for publishing a server
 	// This prevents race conditions when multiple versions are published concurrently
 	AcquirePublishLock(ctx context.Context, tx pgx.Tx, serverName string) error
+	// UpsertServerReadme stores or updates a README blob for a server version
+	UpsertServerReadme(ctx context.Context, tx pgx.Tx, readme *ServerReadme) error
+	// GetServerReadme retrieves the README blob for a specific server version
+	GetServerReadme(ctx context.Context, tx pgx.Tx, serverName, version string) (*ServerReadme, error)
+	// GetLatestServerReadme retrieves the README blob for the latest server version
+	GetLatestServerReadme(ctx context.Context, tx pgx.Tx, serverName string) (*ServerReadme, error)
 	// InTransaction executes a function within a database transaction
 	InTransaction(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error
 	// Close closes the database connection

@@ -289,6 +289,85 @@ func TestGetServerByNameAndVersion(t *testing.T) {
 	}
 }
 
+func TestStoreAndRetrieveServerReadme(t *testing.T) {
+	ctx := context.Background()
+	testDB := database.NewTestDB(t)
+	svc := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
+
+	serverName := "com.example/readme-server"
+
+	_, err := svc.CreateServer(ctx, &apiv0.ServerJSON{
+		Schema:      model.CurrentSchemaURL,
+		Name:        serverName,
+		Description: "Readme server v1",
+		Version:     "1.0.0",
+	})
+	require.NoError(t, err)
+
+	firstReadme := []byte("# Version 1\nHello world\n")
+	require.NoError(t, svc.StoreServerReadme(ctx, serverName, "1.0.0", firstReadme, ""))
+
+	readmeV1, err := svc.GetServerReadmeByVersion(ctx, serverName, "1.0.0")
+	require.NoError(t, err)
+	require.NotNil(t, readmeV1)
+	assert.Equal(t, "1.0.0", readmeV1.Version)
+	assert.Equal(t, len(firstReadme), readmeV1.SizeBytes)
+	assert.Equal(t, "text/markdown", readmeV1.ContentType)
+	assert.Equal(t, string(firstReadme), string(readmeV1.Content))
+	assert.NotEmpty(t, readmeV1.SHA256)
+
+	latest, err := svc.GetServerReadmeLatest(ctx, serverName)
+	require.NoError(t, err)
+	require.NotNil(t, latest)
+	assert.Equal(t, "1.0.0", latest.Version)
+	assert.Equal(t, string(firstReadme), string(latest.Content))
+
+	_, err = svc.CreateServer(ctx, &apiv0.ServerJSON{
+		Schema:      model.CurrentSchemaURL,
+		Name:        serverName,
+		Description: "Readme server v2",
+		Version:     "2.0.0",
+	})
+	require.NoError(t, err)
+
+	secondReadme := []byte("# Version 2\nUpdated\n")
+	require.NoError(t, svc.StoreServerReadme(ctx, serverName, "2.0.0", secondReadme, "text/markdown"))
+
+	latest, err = svc.GetServerReadmeLatest(ctx, serverName)
+	require.NoError(t, err)
+	require.NotNil(t, latest)
+	assert.Equal(t, "2.0.0", latest.Version)
+	assert.Equal(t, string(secondReadme), string(latest.Content))
+
+	readmeV1Again, err := svc.GetServerReadmeByVersion(ctx, serverName, "1.0.0")
+	require.NoError(t, err)
+	assert.Equal(t, string(firstReadme), string(readmeV1Again.Content))
+}
+
+func TestGetServerReadmeMissing(t *testing.T) {
+	ctx := context.Background()
+	testDB := database.NewTestDB(t)
+	svc := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
+
+	serverName := "com.example/missing-readme"
+
+	_, err := svc.CreateServer(ctx, &apiv0.ServerJSON{
+		Schema:      model.CurrentSchemaURL,
+		Name:        serverName,
+		Description: "Server without readme",
+		Version:     "1.0.0",
+	})
+	require.NoError(t, err)
+
+	_, err = svc.GetServerReadmeByVersion(ctx, serverName, "1.0.0")
+	assert.Error(t, err)
+	assert.Equal(t, database.ErrNotFound, err)
+
+	_, err = svc.GetServerReadmeLatest(ctx, serverName)
+	assert.Error(t, err)
+	assert.Equal(t, database.ErrNotFound, err)
+}
+
 func TestGetAllVersionsByServerName(t *testing.T) {
 	ctx := context.Background()
 	testDB := database.NewTestDB(t)

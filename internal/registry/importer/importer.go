@@ -3,9 +3,11 @@ package importer
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"golang.org/x/sync/errgroup"
 	"io"
 	"log"
 	"net/http"
@@ -90,33 +92,61 @@ func (s *Service) ImportFromPath(ctx context.Context, path string) error {
 	total := len(servers)
 	processed := 0
 
+	wg, ctx := errgroup.WithContext(ctx)
+
+	wg.SetLimit(25) // limit concurrent imports to 10
+
 	for _, server := range servers {
-		processed++
-		log.Printf("Importing %d/%d: %s@%s", processed, total, server.Name, server.Version)
+		wg.Go(func() error {
+			processed++
+			log.Printf("Importing %d/%d: %s@%s", processed, total, server.Name, server.Version)
 
-		// Best-effort enrichment
-		if err := s.enrichServer(ctx, server); err != nil {
-			log.Printf("Warning: enrichment failed for %s@%s: %v", server.Name, server.Version, err)
-		}
+			// Best-effort enrichment
+			if err := s.enrichServer(ctx, server); err != nil {
+				log.Printf("Warning: enrichment failed for %s@%s: %v", server.Name, server.Version, err)
+			}
 
-		_, err := s.registry.CreateServer(ctx, server)
-		if err != nil {
-			// If duplicate version and update is enabled, try update path
-			if s.updateIfExists && errors.Is(err, database.ErrInvalidVersion) {
-				if _, uerr := s.registry.UpdateServer(ctx, server.Name, server.Version, server, nil); uerr != nil {
-					failedCreations = append(failedCreations, fmt.Sprintf("%s: %v", server.Name, uerr))
-					log.Printf("Failed to update existing server %s: %v", server.Name, uerr)
+			readmeContent, readmeContentType, readmeErr := s.downloadReadme(ctx, server)
+			if readmeErr != nil {
+				log.Printf("Warning: downloading README failed for %s@%s: %v", server.Name, server.Version, readmeErr)
+			}
+
+			_, err := s.registry.CreateServer(ctx, server)
+			if err != nil {
+				// If duplicate version and update is enabled, try update path
+				if s.updateIfExists && errors.Is(err, database.ErrInvalidVersion) {
+					if _, uerr := s.registry.UpdateServer(ctx, server.Name, server.Version, server, nil); uerr != nil {
+						failedCreations = append(failedCreations, fmt.Sprintf("%s: %v", server.Name, uerr))
+						log.Printf("Failed to update existing server %s: %v", server.Name, uerr)
+					} else {
+						if len(readmeContent) > 0 {
+							if err := s.registry.StoreServerReadme(ctx, server.Name, server.Version, readmeContent, readmeContentType); err != nil {
+								log.Printf("Warning: storing README failed for %s@%s: %v", server.Name, server.Version, err)
+							}
+						}
+						successfullyCreated = append(successfullyCreated, server.Name)
+						log.Printf("Updated existing server %s@%s", server.Name, server.Version)
+						return nil
+					}
 				} else {
-					successfullyCreated = append(successfullyCreated, server.Name)
-					continue
+					failedCreations = append(failedCreations, fmt.Sprintf("%s: %v", server.Name, err))
+					log.Printf("Failed to create server %s: %v", server.Name, err)
 				}
 			} else {
-				failedCreations = append(failedCreations, fmt.Sprintf("%s: %v", server.Name, err))
-				log.Printf("Failed to create server %s: %v", server.Name, err)
+				if len(readmeContent) > 0 {
+					if err := s.registry.StoreServerReadme(ctx, server.Name, server.Version, readmeContent, readmeContentType); err != nil {
+						log.Printf("Warning: storing README failed for %s@%s: %v", server.Name, server.Version, err)
+					}
+				}
+				successfullyCreated = append(successfullyCreated, server.Name)
 			}
-		} else {
-			successfullyCreated = append(successfullyCreated, server.Name)
-		}
+
+			return nil
+		})
+	}
+
+	if err := wg.Wait(); err != nil {
+		return fmt.Errorf("import process failed: %w", err)
 	}
 
 	// Report import results after actual creation attempts
@@ -1040,6 +1070,69 @@ func (s *Service) fetchAlertCountFromLink(ctx context.Context, rawURL string) (*
 	}
 	n := len(arr)
 	return &n, nil
+}
+
+func (s *Service) fetchRepoContentFile(ctx context.Context, owner, repo, path string) ([]byte, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/%s", owner, repo, path)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if s.githubToken != "" {
+		req.Header.Set("Authorization", "Bearer "+s.githubToken)
+	}
+	if req.Header.Get("Accept") == "" {
+		req.Header.Set("Accept", "application/vnd.github+json")
+	}
+	client := s.httpClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("content %s status %d", path, resp.StatusCode)
+	}
+	var payload struct {
+		Content  string `json:"content"`
+		Encoding string `json:"encoding"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, err
+	}
+	if strings.ToLower(payload.Encoding) == "base64" {
+		data, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(payload.Content, "\n", ""))
+		if err != nil {
+			return nil, err
+		}
+		return data, nil
+	}
+	// fallback: sometimes API may return raw
+	body, _ := io.ReadAll(resp.Body)
+	return body, nil
+}
+
+func (s *Service) downloadReadme(ctx context.Context, server *apiv0.ServerJSON) ([]byte, string, error) {
+	if server.Repository == nil || server.Repository.URL == "" {
+		return nil, "", nil
+	}
+	owner, repo := parseGitHubRepo(server.Repository.URL)
+	if owner == "" || repo == "" {
+		return nil, "", nil
+	}
+
+	content, err := s.fetchRepoContentFile(ctx, owner, repo, "README.md")
+	if err != nil {
+		if strings.Contains(err.Error(), "status 404") {
+			return nil, "", nil
+		}
+		return nil, "", fmt.Errorf("failed to fetch README.md: %w", err)
+	}
+
+	return content, "text/markdown", nil
 }
 
 // parseLastPageFromLink extracts the last page number from a GitHub Link header.

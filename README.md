@@ -74,6 +74,9 @@ arctl import --source https://example.com/seed.json --request-header Authorizati
 arctl import --source https://example.com/v0/servers --timeout 60s
 arctl import --source https://github.com/org/registry-seed.json --github-token $GITHUB_TOKEN --update
 
+# Export servers from the registry database
+arctl export --output ./seed.json
+
 # shows the version
 arctl version
 ```

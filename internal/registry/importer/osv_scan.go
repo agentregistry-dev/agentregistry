@@ -2,10 +2,8 @@ package importer
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -122,49 +120,6 @@ func (s *Service) runOSVScan(ctx context.Context, owner, repo string) (*osvScanR
 		}
 	}
 	return &osvScanResult{Summary: summary, Details: details}, nil
-}
-
-func (s *Service) fetchRepoContentFile(ctx context.Context, owner, repo, path string) ([]byte, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/%s", owner, repo, path)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	if s.githubToken != "" {
-		req.Header.Set("Authorization", "Bearer "+s.githubToken)
-	}
-	if req.Header.Get("Accept") == "" {
-		req.Header.Set("Accept", "application/vnd.github+json")
-	}
-	client := s.httpClient
-	if client == nil {
-		client = http.DefaultClient
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("content %s status %d", path, resp.StatusCode)
-	}
-	var payload struct {
-		Content  string `json:"content"`
-		Encoding string `json:"encoding"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return nil, err
-	}
-	if strings.ToLower(payload.Encoding) == "base64" {
-		data, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(payload.Content, "\n", ""))
-		if err != nil {
-			return nil, err
-		}
-		return data, nil
-	}
-	// fallback: sometimes API may return raw
-	body, _ := io.ReadAll(resp.Body)
-	return body, nil
 }
 
 func parseNPMLockForOSV(data []byte) []osvPackageQuery {

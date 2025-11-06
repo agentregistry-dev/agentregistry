@@ -22,6 +22,12 @@ type RegistryService interface {
 	CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
 	// UpdateServer updates an existing server and optionally its status
 	UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error)
+	// StoreServerReadme stores or updates the README for a server version
+	StoreServerReadme(ctx context.Context, serverName, version string, content []byte, contentType string) error
+	// GetServerReadmeLatest retrieves the README for the latest server version
+	GetServerReadmeLatest(ctx context.Context, serverName string) (*database.ServerReadme, error)
+	// GetServerReadmeByVersion retrieves the README for a specific server version
+	GetServerReadmeByVersion(ctx context.Context, serverName, version string) (*database.ServerReadme, error)
 
 	// Skills APIs
 	// ListSkills retrieve all skills with optional filtering

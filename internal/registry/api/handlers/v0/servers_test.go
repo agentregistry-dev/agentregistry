@@ -300,6 +300,74 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 	}
 }
 
+func TestGetServerReadmeEndpoints(t *testing.T) {
+	ctx := context.Background()
+	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig())
+
+	serverName := "com.example/readme-endpoint"
+	_, err := registryService.CreateServer(ctx, &apiv0.ServerJSON{
+		Schema:      model.CurrentSchemaURL,
+		Name:        serverName,
+		Description: "Server with README",
+		Version:     "1.0.0",
+	})
+	require.NoError(t, err)
+
+	err = registryService.StoreServerReadme(ctx, serverName, "1.0.0", []byte("# Title\nBody"), "text/markdown")
+	require.NoError(t, err)
+
+	mux := http.NewServeMux()
+	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
+	v0.RegisterServersEndpoints(api, "/v0", registryService)
+
+	t.Run("latest readme", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/v0/servers/"+url.PathEscape(serverName)+"/readme", nil)
+		w := httptest.NewRecorder()
+
+		mux.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var resp v0.ServerReadmeResponse
+		require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+		assert.Equal(t, "# Title\nBody", resp.Content)
+		assert.Equal(t, "text/markdown", resp.ContentType)
+		assert.Equal(t, "1.0.0", resp.Version)
+		assert.NotEmpty(t, resp.Sha256)
+	})
+
+	t.Run("version readme", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/v0/servers/"+url.PathEscape(serverName)+"/versions/1.0.0/readme", nil)
+		w := httptest.NewRecorder()
+
+		mux.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp v0.ServerReadmeResponse
+		require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+		assert.Equal(t, "# Title\nBody", resp.Content)
+	})
+
+	t.Run("missing readme", func(t *testing.T) {
+		otherServer := "com.example/no-readme"
+		_, err := registryService.CreateServer(ctx, &apiv0.ServerJSON{
+			Schema:      model.CurrentSchemaURL,
+			Name:        otherServer,
+			Description: "Server without README",
+			Version:     "1.0.0",
+		})
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodGet, "/v0/servers/"+url.PathEscape(otherServer)+"/readme", nil)
+		w := httptest.NewRecorder()
+
+		mux.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.Contains(t, w.Body.String(), "README not found")
+	})
+}
+
 func TestGetAllVersionsEndpoint(t *testing.T) {
 	ctx := context.Background()
 	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig())
