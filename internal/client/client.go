@@ -28,13 +28,16 @@ type Client struct {
 	nextRegID  int
 }
 
-const defaultRegistryName = "local"
+const (
+	defaultRegistryName = "local"
+	defaultBaseURL      = "http://localhost:12121/v0"
+)
 
 // NewClientFromEnv constructs a client using environment variables
 func NewClientFromEnv() (*Client, error) {
 	base := os.Getenv("ARCTL_API_BASE_URL")
 	if strings.TrimSpace(base) == "" {
-		base = "http://localhost:12121/v0"
+		base = defaultBaseURL
 	}
 	token := os.Getenv("ARCTL_API_TOKEN")
 	c := &Client{
@@ -71,6 +74,9 @@ func NewClientFromEnv() (*Client, error) {
 
 // NewClient constructs a client with explicit baseURL and token
 func NewClient(baseURL, token string) *Client {
+	if baseURL == "" {
+		baseURL = defaultBaseURL
+	}
 	return &Client{
 		baseURL: baseURL,
 		token:   token,

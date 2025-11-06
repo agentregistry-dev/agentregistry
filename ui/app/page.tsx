@@ -1,59 +1,82 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { GroupedMCPServerCard } from "@/components/grouped-mcp-server-card"
-import { ServerDetailView } from "@/components/server-detail-view"
-import { InstallDialog } from "@/components/install-dialog"
-import { AddRegistryDialog } from "@/components/add-registry-dialog"
-import { GroupedMCPServer, MCPServerWithStatus } from "@/lib/types"
-import { apiClient, Registry } from "@/lib/api"
-import { transformServerList, groupServersByName } from "@/lib/transforms"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { ServerCard } from "@/components/server-card"
+import { ServerDetail } from "@/components/server-detail"
+import { ImportDialog } from "@/components/import-dialog"
+import { AddServerDialog } from "@/components/add-server-dialog"
+import { ImportSkillsDialog } from "@/components/import-skills-dialog"
+import { AddSkillDialog } from "@/components/add-skill-dialog"
+import { ImportAgentsDialog } from "@/components/import-agents-dialog"
+import { AddAgentDialog } from "@/components/add-agent-dialog"
+import { adminApiClient, ServerResponse, ServerStats } from "@/lib/admin-api"
+import MCPIcon from "@/components/icons/mcp"
 import {
-  Server,
-  Package,
-  Database,
   Search,
-  Plus,
-  HardDrive,
-  Globe,
-  Link as LinkIcon,
-  Trash2,
+  Download,
   RefreshCw,
+  Plus,
+  Zap,
+  Bot,
+  Eye,
 } from "lucide-react"
 
-type ViewMode = "browse" | "installed"
-
-export default function Home() {
-  const [viewMode, setViewMode] = useState<ViewMode>("browse")
-  const [registries, setRegistries] = useState<Registry[]>([])
-  const [servers, setServers] = useState<MCPServerWithStatus[]>([])
-  const [groupedServers, setGroupedServers] = useState<GroupedMCPServer[]>([])
-  const [filteredGroupedServers, setFilteredGroupedServers] = useState<GroupedMCPServer[]>([])
+export default function AdminPage() {
+  const [activeTab, setActiveTab] = useState("servers")
+  const [servers, setServers] = useState<ServerResponse[]>([])
+  const [filteredServers, setFilteredServers] = useState<ServerResponse[]>([])
+  const [stats, setStats] = useState<ServerStats | null>(null)
+  const [skillsCount, setSkillsCount] = useState(0)
+  const [agentsCount, setAgentsCount] = useState(0)
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedServer, setSelectedServer] = useState<MCPServerWithStatus | null>(null)
-  const [installDialogOpen, setInstallDialogOpen] = useState(false)
-  const [addRegistryDialogOpen, setAddRegistryDialogOpen] = useState(false)
-  const [serverToInstall, setServerToInstall] = useState<GroupedMCPServer | null>(null)
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [addServerDialogOpen, setAddServerDialogOpen] = useState(false)
+  const [importSkillsDialogOpen, setImportSkillsDialogOpen] = useState(false)
+  const [addSkillDialogOpen, setAddSkillDialogOpen] = useState(false)
+  const [importAgentsDialogOpen, setImportAgentsDialogOpen] = useState(false)
+  const [addAgentDialogOpen, setAddAgentDialogOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedServer, setSelectedServer] = useState<ServerResponse | null>(null)
 
   // Fetch data from API
   const fetchData = async () => {
     try {
       setLoading(true)
       setError(null)
-      const [registriesData, serversData] = await Promise.all([
-        apiClient.getRegistries(),
-        apiClient.getServers(),
-      ])
-      setRegistries(registriesData || [])
-      const transformedServers = transformServerList(serversData || [])
-      setServers(transformedServers)
-      setGroupedServers(groupServersByName(transformedServers))
+      
+      // Fetch all servers (with pagination if needed)
+      const allServers: ServerResponse[] = []
+      let cursor: string | undefined
+      
+      do {
+        const response = await adminApiClient.listServers({ 
+          cursor, 
+          limit: 100,
+        })
+        allServers.push(...response.servers)
+        cursor = response.metadata.nextCursor
+      } while (cursor)
+      
+      setServers(allServers)
+      
+      // Fake stats for now (until API is implemented)
+      setStats({
+        total_servers: allServers.length,
+        total_server_names: allServers.length,
+        active_servers: allServers.length,
+        deprecated_servers: 0,
+        deleted_servers: 0,
+      })
+      
+      // Mock stats for Skills and Agents (until API is implemented)
+      setSkillsCount(Math.floor(Math.random() * 20) + 5) // Random number between 5-24
+      setAgentsCount(Math.floor(Math.random() * 15) + 3) // Random number between 3-17
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch data")
     } finally {
@@ -65,114 +88,30 @@ export default function Home() {
     fetchData()
   }, [])
 
-  // Filter resources based on view mode and search query
+  // Filter servers based on search query
   useEffect(() => {
-    // Filter grouped servers
-    let filteredGS = groupedServers
-    if (viewMode === "installed") {
-      filteredGS = groupedServers.filter((gs) => gs.hasInstalledVersion)
-    }
+    let filtered = servers
+
+    // Filter by search query
     if (searchQuery) {
-      filteredGS = filteredGS.filter(
-        (gs) =>
-          gs.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          gs.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          gs.description.toLowerCase().includes(searchQuery.toLowerCase())
+      const query = searchQuery.toLowerCase()
+      filtered = filtered.filter(
+        (s) =>
+          s.server.name.toLowerCase().includes(query) ||
+          s.server.title?.toLowerCase().includes(query) ||
+          s.server.description.toLowerCase().includes(query)
       )
     }
-    setFilteredGroupedServers(filteredGS)
-  }, [viewMode, searchQuery, groupedServers])
 
-  const handleInstall = (groupedServer: GroupedMCPServer) => {
-    setServerToInstall(groupedServer)
-    setInstallDialogOpen(true)
-  }
-
-  const handleInstallConfirm = async (server: MCPServerWithStatus, config: Record<string, string>) => {
-    if (!server._dbId) return
-
-    try {
-      await apiClient.installServer(server._dbId, config)
-      
-      // Update local state
-      const updatedServers = servers.map((s) =>
-        s._dbId === server._dbId
-          ? { ...s, installed: true, installedAt: new Date().toISOString() }
-          : s
-      )
-      setServers(updatedServers)
-      setGroupedServers(groupServersByName(updatedServers))
-
-      setServerToInstall(null)
-    } catch (err) {
-      console.error("Failed to install server:", err)
-      alert(err instanceof Error ? err.message : "Failed to install server")
-    }
-  }
-
-  const handleUninstall = async (groupedServer: GroupedMCPServer) => {
-    // Find all installed versions and uninstall them
-    const installedVersions = groupedServer.versions.filter(v => v.installed)
-    
-    try {
-      // Uninstall all installed versions
-      await Promise.all(
-        installedVersions.map(version => 
-          version._dbId ? apiClient.uninstallServer(version._dbId) : Promise.resolve()
-        )
-      )
-      
-      // Update local state
-      const updatedServers = servers.map((s) => {
-        const shouldUninstall = installedVersions.some(v => v._dbId === s._dbId)
-        return shouldUninstall
-          ? { ...s, installed: false, installedAt: undefined }
-          : s
-      })
-      setServers(updatedServers)
-      setGroupedServers(groupServersByName(updatedServers))
-    } catch (err) {
-      console.error("Failed to uninstall server:", err)
-      alert(err instanceof Error ? err.message : "Failed to uninstall server")
-    }
-  }
-
-  const handleAddRegistry = async (name: string, url: string, type: string) => {
-    await apiClient.addRegistry(name, url, type)
-    // Refresh data after adding registry
-    await fetchData()
-  }
-
-  const handleRemoveRegistry = async (id: number) => {
-    if (!confirm("Are you sure you want to remove this registry?")) return
-    
-    try {
-      await apiClient.removeRegistry(id)
-      await fetchData()
-    } catch (err) {
-      console.error("Failed to remove registry:", err)
-      alert(err instanceof Error ? err.message : "Failed to remove registry")
-    }
-  }
-
-  const installedCount = groupedServers.filter((gs) => gs.hasInstalledVersion).length
-  const totalServers = groupedServers.length
-
-  if (selectedServer) {
-    return (
-      <ServerDetailView
-        server={selectedServer}
-        onClose={() => setSelectedServer(null)}
-      />
-    )
-  }
+    setFilteredServers(filtered)
+  }, [searchQuery, servers])
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading...</p>
+          <p className="text-muted-foreground">Loading registry data...</p>
         </div>
       </div>
     )
@@ -183,11 +122,22 @@ export default function Home() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="text-red-500 text-6xl mb-4">⚠️</div>
-          <h2 className="text-xl font-bold mb-2">Error Loading Data</h2>
+          <h2 className="text-xl font-bold mb-2">Error Loading Registry</h2>
           <p className="text-muted-foreground mb-4">{error}</p>
           <Button onClick={fetchData}>Retry</Button>
         </div>
       </div>
+    )
+  }
+
+  // Show server detail view if a server is selected
+  if (selectedServer) {
+    return (
+      <ServerDetail
+        server={selectedServer}
+        onClose={() => setSelectedServer(null)}
+        onServerCopied={fetchData}
+      />
     )
   }
 
@@ -196,9 +146,22 @@ export default function Home() {
       <div className="border-b">
         <div className="container mx-auto px-6 py-6">
           <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-3xl font-bold mb-2">arctl</h1>
-              <p className="text-muted-foreground">AI Registry and Runtime</p>
+            <div className="flex items-center gap-6">
+              <img 
+                src="/ui/arlogo.png" 
+                alt="Agent Registry" 
+                width={200} 
+                height={67}
+              />
+              <div className="flex items-center gap-4 text-sm">
+                <Link href="/" className="text-foreground font-medium">
+                  Admin
+                </Link>
+                <Link href="/registry" className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2">
+                  <Eye className="h-4 w-4" />
+                  View Registry
+                </Link>
+              </div>
             </div>
             <Button
               variant="outline"
@@ -211,224 +174,293 @@ export default function Home() {
           </div>
 
           {/* Stats */}
-          <div className="grid gap-4 md:grid-cols-4 mb-6">
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-primary/10 rounded-lg">
-                  <Database className="h-5 w-5 text-primary" />
+          {stats && (
+            <div className="grid gap-4 md:grid-cols-3 mb-6">
+              <Card className="p-4 hover:shadow-md transition-all duration-200 border hover:border-primary/20">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-lg flex items-center justify-center">
+                    <span className="h-5 w-5 text-primary flex items-center justify-center">
+                      <MCPIcon />
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{stats.total_server_names}</p>
+                    <p className="text-xs text-muted-foreground">Servers</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-2xl font-bold">{registries.length}</p>
-                  <p className="text-xs text-muted-foreground">Registries</p>
-                </div>
-              </div>
-            </Card>
+              </Card>
 
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-primary/10 rounded-lg">
-                  <Server className="h-5 w-5 text-primary" />
+              <Card className="p-4 hover:shadow-md transition-all duration-200 border hover:border-primary/20">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/20 rounded-lg flex items-center justify-center">
+                    <Zap className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{skillsCount}</p>
+                    <p className="text-xs text-muted-foreground">Skills</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-2xl font-bold">{totalServers}</p>
-                  <p className="text-xs text-muted-foreground">Total Servers</p>
-                </div>
-              </div>
-            </Card>
+              </Card>
 
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-600/10 rounded-lg">
-                  <HardDrive className="h-5 w-5 text-green-600" />
+              <Card className="p-4 hover:shadow-md transition-all duration-200 border hover:border-primary/20">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/30 rounded-lg flex items-center justify-center">
+                    <Bot className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{agentsCount}</p>
+                    <p className="text-xs text-muted-foreground">Agents</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-2xl font-bold">{installedCount}</p>
-                  <p className="text-xs text-muted-foreground">Installed</p>
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-600/10 rounded-lg">
-                  <Package className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{totalServers - installedCount}</p>
-                  <p className="text-xs text-muted-foreground">Available</p>
-                </div>
-              </div>
-            </Card>
-          </div>
-
-          {/* Navigation Tabs */}
-          <div className="flex items-center gap-4">
-            <div className="flex gap-2">
-              <Button
-                variant={viewMode === "browse" ? "default" : "outline"}
-                onClick={() => setViewMode("browse")}
-                className="gap-2"
-              >
-                <Globe className="h-4 w-4" />
-                Browse Registry
-              </Button>
-              <Button
-                variant={viewMode === "installed" ? "default" : "outline"}
-                onClick={() => setViewMode("installed")}
-                className="gap-2"
-              >
-                <HardDrive className="h-4 w-4" />
-                Installed
-                {installedCount > 0 && (
-                  <Badge variant="secondary" className="ml-1">
-                    {installedCount}
-                  </Badge>
-                )}
-              </Button>
+              </Card>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
       <div className="container mx-auto px-6 py-8">
-        {/* Search and Filters */}
-        <div className="flex items-center gap-4 mb-8">
-          <div className="relative flex-1 max-w-md">
+        {/* Global Search */}
+        <div className="mb-6">
+          <div className="relative max-w-2xl">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search servers..."
+              placeholder="Search servers, skills, agents..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
             />
           </div>
-          {viewMode === "browse" && (
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={() => setAddRegistryDialogOpen(true)}
-            >
-              <Plus className="h-4 w-4" />
-              Connect Registry
-            </Button>
-          )}
         </div>
 
-        {/* Connected Registries (Browse mode only) */}
-        {viewMode === "browse" && (
-          <div className="mb-8">
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <LinkIcon className="h-5 w-5" />
-              Connected Registries
-            </h2>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {registries && registries.length > 0 ? registries.map((registry) => (
-                <Card key={registry.id} className="p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex-1">
-                      <h3 className="font-semibold">{registry.name}</h3>
-                      <p className="text-sm text-muted-foreground truncate">
-                        {registry.url}
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => handleRemoveRegistry(registry.id)}
-                      title="Remove registry"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="text-xs">
-                      {registry.type}
-                    </Badge>
-                    <Badge variant="default" className="text-xs bg-green-600">
-                      Connected
-                    </Badge>
-                  </div>
-                </Card>
-              )) : (
-                <Card className="p-8 col-span-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="mb-8">
+            <TabsTrigger value="servers" className="gap-2">
+              <span className="h-4 w-4 flex items-center justify-center">
+                <MCPIcon />
+              </span>
+              Servers
+            </TabsTrigger>
+            <TabsTrigger value="skills" className="gap-2">
+              <Zap className="h-4 w-4" />
+              Skills
+            </TabsTrigger>
+            <TabsTrigger value="agents" className="gap-2">
+              <Bot className="h-4 w-4" />
+              Agents
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Servers Tab */}
+          <TabsContent value="servers">
+            {/* Actions */}
+            <div className="flex items-center gap-4 mb-8 justify-end">
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => setAddServerDialogOpen(true)}
+              >
+                <Plus className="h-4 w-4" />
+                Add Server
+              </Button>
+              <Button
+                variant="default"
+                className="gap-2"
+                onClick={() => setImportDialogOpen(true)}
+              >
+                <Download className="h-4 w-4" />
+                Import Servers
+              </Button>
+            </div>
+
+            {/* Server List */}
+            <div>
+              <h2 className="text-lg font-semibold mb-4">
+                Servers
+                <span className="text-muted-foreground ml-2">
+                  ({filteredServers.length})
+                </span>
+              </h2>
+
+              {filteredServers.length === 0 ? (
+                <Card className="p-12">
                   <div className="text-center text-muted-foreground">
-                    <Database className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p className="text-lg font-medium mb-2">No Registries Connected</p>
-                    <p className="text-sm mb-4">Connect to a registry to browse available servers</p>
-                    <Button
-                      variant="outline"
-                      className="gap-2"
-                      onClick={() => setAddRegistryDialogOpen(true)}
-                    >
-                      <Plus className="h-4 w-4" />
-                      Connect Registry
-                    </Button>
+                    <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center">
+                      <MCPIcon />
+                    </div>
+                    <p className="text-lg font-medium mb-2">
+                      {servers.length === 0
+                        ? "No servers in registry"
+                        : "No servers match your filters"}
+                    </p>
+                    <p className="text-sm mb-4">
+                      {servers.length === 0
+                        ? "Import servers from external registries to get started"
+                        : "Try adjusting your search or filter criteria"}
+                    </p>
+                    {servers.length === 0 && (
+                      <Button
+                        variant="outline"
+                        className="gap-2"
+                        onClick={() => setImportDialogOpen(true)}
+                      >
+                        <Download className="h-4 w-4" />
+                        Import Servers
+                      </Button>
+                    )}
                   </div>
                 </Card>
+              ) : (
+                <div className="grid gap-4">
+                  {filteredServers.map((server, index) => (
+                    <ServerCard
+                      key={`${server.server.name}-${server.server.version}-${index}`}
+                      server={server}
+                      onClick={() => setSelectedServer(server)}
+                    />
+                  ))}
+                </div>
               )}
             </div>
-          </div>
-        )}
+          </TabsContent>
 
-        {/* Server List */}
-        <div>
-          <h2 className="text-lg font-semibold mb-4">
-            {viewMode === "installed" ? "Installed Servers" : "Available Servers"}
-            <span className="text-muted-foreground ml-2">
-              ({filteredGroupedServers.length})
-            </span>
-          </h2>
-
-          {filteredGroupedServers.length === 0 ? (
-            <Card className="p-12">
-              <div className="text-center text-muted-foreground">
-                <Server className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p className="text-lg font-medium mb-2">
-                  {viewMode === "installed"
-                    ? "No installed servers"
-                    : "No servers found"}
-                </p>
-                <p className="text-sm">
-                  {viewMode === "installed"
-                    ? "Install servers from the Browse Registry view"
-                    : searchQuery
-                    ? "Try a different search term"
-                    : "Connect a registry to see available servers"}
-                </p>
-              </div>
-            </Card>
-          ) : (
-            <div className="grid gap-4">
-              {filteredGroupedServers.map((groupedServer) => (
-                <GroupedMCPServerCard
-                  key={groupedServer.name}
-                  groupedServer={groupedServer}
-                  onInstall={handleInstall}
-                  onUninstall={handleUninstall}
-                  onClick={(gs) => setSelectedServer(gs.latestVersion)}
-                />
-              ))}
+          {/* Skills Tab */}
+          <TabsContent value="skills">
+            {/* Actions */}
+            <div className="flex items-center gap-4 mb-8 justify-end">
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => setAddSkillDialogOpen(true)}
+              >
+                <Plus className="h-4 w-4" />
+                Add Skill
+              </Button>
+              <Button
+                variant="default"
+                className="gap-2"
+                onClick={() => setImportSkillsDialogOpen(true)}
+              >
+                <Download className="h-4 w-4" />
+                Import Skills
+              </Button>
             </div>
-          )}
-        </div>
+
+            {/* Skills List */}
+            <div>
+              <h2 className="text-lg font-semibold mb-4">
+                Skills
+                <span className="text-muted-foreground ml-2">({skillsCount})</span>
+              </h2>
+
+              <Card className="p-12">
+                <div className="text-center text-muted-foreground">
+                  <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center text-primary">
+                    <Zap className="w-12 h-12" />
+                  </div>
+                  <p className="text-lg font-medium mb-2">Skills view coming soon</p>
+                  <p className="text-sm mb-4">
+                    {skillsCount} skill{skillsCount !== 1 ? 's' : ''} available in registry
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => setImportSkillsDialogOpen(true)}
+                  >
+                    <Download className="h-4 w-4" />
+                    Import Skills
+                  </Button>
+                </div>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* Agents Tab */}
+          <TabsContent value="agents">
+            {/* Actions */}
+            <div className="flex items-center gap-4 mb-8 justify-end">
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => setAddAgentDialogOpen(true)}
+              >
+                <Plus className="h-4 w-4" />
+                Add Agent
+              </Button>
+              <Button
+                variant="default"
+                className="gap-2"
+                onClick={() => setImportAgentsDialogOpen(true)}
+              >
+                <Download className="h-4 w-4" />
+                Import Agents
+              </Button>
+            </div>
+
+            {/* Agents List */}
+            <div>
+              <h2 className="text-lg font-semibold mb-4">
+                Agents
+                <span className="text-muted-foreground ml-2">({agentsCount})</span>
+              </h2>
+
+              <Card className="p-12">
+                <div className="text-center text-muted-foreground">
+                  <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center text-primary">
+                    <Bot className="w-12 h-12" />
+                  </div>
+                  <p className="text-lg font-medium mb-2">Agents view coming soon</p>
+                  <p className="text-sm mb-4">
+                    {agentsCount} agent{agentsCount !== 1 ? 's' : ''} available in registry
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => setImportAgentsDialogOpen(true)}
+                  >
+                    <Download className="h-4 w-4" />
+                    Import Agents
+                  </Button>
+                </div>
+              </Card>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
 
-      {/* Install Dialog */}
-      {serverToInstall && (
-        <InstallDialog
-          open={installDialogOpen}
-          onOpenChange={setInstallDialogOpen}
-          groupedServer={serverToInstall}
-          onConfirm={handleInstallConfirm}
-        />
-      )}
+      {/* Server Dialogs */}
+      <ImportDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        onImportComplete={fetchData}
+      />
+      <AddServerDialog
+        open={addServerDialogOpen}
+        onOpenChange={setAddServerDialogOpen}
+        onServerAdded={fetchData}
+      />
 
-      {/* Add Registry Dialog */}
-      <AddRegistryDialog
-        open={addRegistryDialogOpen}
-        onOpenChange={setAddRegistryDialogOpen}
-        onAdd={handleAddRegistry}
+      {/* Skill Dialogs */}
+      <ImportSkillsDialog
+        open={importSkillsDialogOpen}
+        onOpenChange={setImportSkillsDialogOpen}
+        onImportComplete={() => {}}
+      />
+      <AddSkillDialog
+        open={addSkillDialogOpen}
+        onOpenChange={setAddSkillDialogOpen}
+        onSkillAdded={() => {}}
+      />
+
+      {/* Agent Dialogs */}
+      <ImportAgentsDialog
+        open={importAgentsDialogOpen}
+        onOpenChange={setImportAgentsDialogOpen}
+        onImportComplete={() => {}}
+      />
+      <AddAgentDialog
+        open={addAgentDialogOpen}
+        onOpenChange={setAddAgentDialogOpen}
+        onAgentAdded={() => {}}
       />
     </main>
   )

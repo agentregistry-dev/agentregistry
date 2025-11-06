@@ -215,6 +215,5 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 			handle404(w, r)
 		})
 	}
-
 	return api
 }

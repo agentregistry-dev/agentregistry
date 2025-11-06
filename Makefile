@@ -45,6 +45,8 @@ install-ui:
 build-ui: install-ui
 	@echo "Building Next.js UI for embedding..."
 	cd ui && npm run build:export
+	@echo "Copying built files to internal/registry/api/ui/dist..."
+	cp -r ui/out/* internal/registry/api/ui/dist/
 # best effort - bring back the gitignore so that dist folder is kept in git (won't work in docker).
 	git checkout -- internal/registry/api/ui/dist/.gitignore || :
 	@echo "UI built successfully to internal/registry/api/ui/dist/"
@@ -52,8 +54,9 @@ build-ui: install-ui
 # Clean UI build artifacts
 clean-ui:
 	@echo "Cleaning UI build artifacts..."
-	rm -rf ui/.next
 	git clean -xdf ./internal/registry/api/ui/dist/
+	git clean -xdf ./ui/out/
+	git clean -xdf ./ui/.next/
 	@echo "UI artifacts cleaned"
 
 # Build the Go CLI
@@ -137,28 +140,6 @@ rebuild-agentgateway:
 	docker build --no-cache -f internal/runtime/agentgateway.Dockerfile -t $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:latest .
 	@echo "✓ Agent gateway image rebuilt successfully"
 
-# Start PostgreSQL database in Docker
-postgres-start:
-	@echo "Starting PostgreSQL database..."
-	@docker run -d \
-		--name agent-registry-postgres \
-		-e POSTGRES_DB=agent-registry \
-		-e POSTGRES_USER=agentregistry \
-		-e POSTGRES_PASSWORD=agentregistry \
-		-p 5432:5432 \
-		postgres:16-alpine || (echo "Container may already exist. Use 'make postgres-stop' first." && exit 1)
-	@echo "✓ PostgreSQL is starting on port 5432"
-	@echo "  Database: agent-registry"
-	@echo "  User: postgres"
-	@echo "  Password: postgres"
-	@echo "  Connection string: postgres://postgres:postgres@localhost:5432/agent-registry?sslmode=disable"
-
-# Stop PostgreSQL database
-postgres-stop:
-	@echo "Stopping PostgreSQL database..."
-	@docker stop agent-registry-postgres 2>/dev/null || true
-	@docker rm agent-registry-postgres 2>/dev/null || true
-	@echo "✓ PostgreSQL stopped and removed"
 
 docker:
 	@echo "Building Docker image..."
@@ -170,7 +151,7 @@ docker-compose-up: docker
 	docker pull $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION)
 	docker tag $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:latest
 	@echo "Starting services with Docker Compose..."
-	docker compose -f internal/daemon/docker-compose.yml up 
+	docker compose -p agentregistry -f internal/daemon/docker-compose.yml up -d --wait
 
 bin/arctl-linux-amd64:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bin/arctl-linux-amd64 cmd/cli/main.go

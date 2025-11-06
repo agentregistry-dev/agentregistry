@@ -35,6 +35,7 @@ func createUIHandler() (http.Handler, error) {
 }
 
 // TrailingSlashMiddleware redirects requests with trailing slashes to their canonical form
+// Excludes /ui paths since the UI needs to handle its own routing
 func TrailingSlashMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Skip trailing slash handling for UI paths
@@ -118,6 +119,8 @@ func NewServer(cfg *config.Config, registryService service.RegistryService, metr
 // Start begins listening for incoming HTTP requests
 func (s *Server) Start() error {
 	log.Printf("HTTP server starting on %s", s.config.ServerAddress)
+	log.Printf("Web UI available at http://localhost%s/ui", s.config.ServerAddress)
+	log.Printf("API documentation at http://localhost%s/docs", s.config.ServerAddress)
 	return s.server.ListenAndServe()
 }
 

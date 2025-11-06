@@ -8,6 +8,7 @@ WORKDIR /app
 COPY Makefile ./
 COPY ui/package.json ui/package-lock.json ./
 COPY ui ui
+RUN mkdir -p internal/registry/api/ui/dist
 RUN make build-ui
 
 ARG BUILDPLATFORM

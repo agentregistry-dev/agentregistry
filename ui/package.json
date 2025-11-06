@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "NEXT_PUBLIC_API_URL=http://localhost:12121 next dev",
     "build": "next build",
     "build:export": "NEXT_BUILD_EXPORT=true next build",
     "start": "next start",
@@ -13,7 +13,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "lucide-react": "^0.323.0",
-    "next": "^14.2.33",
+    "next": "^16.0.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tailwind-merge": "^2.2.1"
