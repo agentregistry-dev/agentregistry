@@ -7,6 +7,15 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { RuntimeArgumentsTable } from "@/components/server-detail/runtime-arguments-table"
+import { EnvironmentVariablesTable } from "@/components/server-detail/environment-variables-table"
+import {
   X,
   Package,
   Calendar,
@@ -24,10 +33,12 @@ import {
   CheckCircle2,
   AlertCircle,
   ArrowLeft,
+  History,
+  Check,
 } from "lucide-react"
 
 interface ServerDetailProps {
-  server: ServerResponse
+  server: ServerResponse & { allVersions?: ServerResponse[] }
   onClose: () => void
   onServerCopied?: () => void
 }
@@ -37,8 +48,13 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
   const [copying, setCopying] = useState(false)
   const [copySuccess, setCopySuccess] = useState(false)
   const [copyError, setCopyError] = useState<string | null>(null)
+  const [selectedVersion, setSelectedVersion] = useState<ServerResponse>(server)
+  const [jsonCopied, setJsonCopied] = useState(false)
   
-  const { server: serverData, _meta } = server
+  // Get all versions, defaulting to just the current server if not available
+  const allVersions = server.allVersions || [server]
+  
+  const { server: serverData, _meta } = selectedVersion
   const official = _meta?.['io.modelcontextprotocol.registry/official']
   
   // Extract GitHub stars from metadata
@@ -61,6 +77,14 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [onClose])
+
+  // Handle version change
+  const handleVersionChange = (version: string) => {
+    const newVersion = allVersions.find(v => v.server.version === version)
+    if (newVersion) {
+      setSelectedVersion(newVersion)
+    }
+  }
 
   const handleCopyToPrivateRegistry = async () => {
     setCopying(true)
@@ -85,6 +109,18 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
       setCopyError(err instanceof Error ? err.message : "Failed to copy server")
     } finally {
       setCopying(false)
+    }
+  }
+
+  const handleCopyJson = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(selectedVersion, null, 2))
+      setJsonCopied(true)
+      setTimeout(() => {
+        setJsonCopied(false)
+      }, 2000)
+    } catch (err) {
+      console.error('Failed to copy JSON:', err)
     }
   }
 
@@ -188,12 +224,49 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
           </Card>
         )}
 
+        {/* Version Selector and Quick Info */}
+        {allVersions.length > 1 && (
+          <Card className="p-4 mb-6 bg-accent/50 border-primary/20">
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <History className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">
+                  {allVersions.length} versions available
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Select version:</span>
+                <Select value={selectedVersion.server.version} onValueChange={handleVersionChange}>
+                  <SelectTrigger className="w-[180px] h-8">
+                    <SelectValue placeholder="Select version" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allVersions.map((version) => (
+                      <SelectItem key={version.server.version} value={version.server.version}>
+                        {version.server.version}
+                        {version.server.version === server.server.version && (
+                          <span className="ml-2 text-xs text-primary">(Latest)</span>
+                        )}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </Card>
+        )}
+
         {/* Quick Info */}
         <div className="flex flex-wrap gap-3 mb-6 text-sm">
           <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md">
             <Tag className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="text-muted-foreground">Version:</span>
             <span className="font-medium">{serverData.version}</span>
+            {allVersions.length > 1 && (
+              <Badge variant="secondary" className="ml-2 text-xs">
+                {allVersions.length} total
+              </Badge>
+            )}
           </div>
 
           {official?.publishedAt && (
@@ -370,22 +443,42 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
 
           <TabsContent value="packages" className="space-y-4">
             {serverData.packages && serverData.packages.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {serverData.packages.map((pkg, i) => (
-                  <Card key={i} className="p-4">
-                    <div className="flex items-start justify-between mb-3">
+                  <Card key={i} className="p-6">
+                    <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-2">
                         <Package className="h-5 w-5 text-primary" />
-                        <h4 className="font-semibold">{pkg.identifier}</h4>
+                        <h4 className="font-semibold text-lg">{pkg.identifier}</h4>
                       </div>
                       <Badge variant="outline">{pkg.registryType}</Badge>
                     </div>
-                    <div className="space-y-2 text-sm">
+                    
+                    {/* Basic package info */}
+                    <div className="space-y-2 text-sm mb-4 pb-4 border-b">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Version</span>
                         <span className="font-mono">{pkg.version}</span>
                       </div>
+                      {(pkg as any).runtimeHint && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Runtime</span>
+                          <Badge variant="secondary">{(pkg as any).runtimeHint}</Badge>
+                        </div>
+                      )}
+                      {(pkg as any).transport?.type && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Transport</span>
+                          <Badge variant="secondary">{(pkg as any).transport.type}</Badge>
+                        </div>
+                      )}
                     </div>
+
+                    {/* Runtime Arguments */}
+                    <RuntimeArgumentsTable arguments={(pkg as any).runtimeArguments} />
+
+                    {/* Environment Variables */}
+                    <EnvironmentVariablesTable variables={(pkg as any).environmentVariables} />
                   </Card>
                 ))}
               </div>
@@ -440,9 +533,27 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
                   <Code className="h-5 w-5" />
                   Raw JSON Data
                 </h3>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopyJson}
+                  className="gap-2"
+                >
+                  {jsonCopied ? (
+                    <>
+                      <Check className="h-4 w-4" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4" />
+                      Copy JSON
+                    </>
+                  )}
+                </Button>
               </div>
               <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-xs">
-                {JSON.stringify(server, null, 2)}
+                {JSON.stringify(selectedVersion, null, 2)}
               </pre>
             </Card>
           </TabsContent>

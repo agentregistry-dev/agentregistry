@@ -1,11 +1,18 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { ServerCard } from "@/components/server-card"
 import { ServerDetail } from "@/components/server-detail"
 import { ImportDialog } from "@/components/import-dialog"
@@ -24,16 +31,26 @@ import {
   Zap,
   Bot,
   Eye,
+  ArrowUpDown,
+  X,
 } from "lucide-react"
+
+// Grouped server type
+interface GroupedServer extends ServerResponse {
+  versionCount: number
+  allVersions: ServerResponse[]
+}
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState("servers")
   const [servers, setServers] = useState<ServerResponse[]>([])
-  const [filteredServers, setFilteredServers] = useState<ServerResponse[]>([])
+  const [groupedServers, setGroupedServers] = useState<GroupedServer[]>([])
+  const [filteredServers, setFilteredServers] = useState<GroupedServer[]>([])
   const [stats, setStats] = useState<ServerStats | null>(null)
   const [skillsCount, setSkillsCount] = useState(0)
   const [agentsCount, setAgentsCount] = useState(0)
   const [searchQuery, setSearchQuery] = useState("")
+  const [sortBy, setSortBy] = useState<"name" | "stars" | "date">("name")
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [addServerDialogOpen, setAddServerDialogOpen] = useState(false)
   const [importSkillsDialogOpen, setImportSkillsDialogOpen] = useState(false)
@@ -43,6 +60,62 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedServer, setSelectedServer] = useState<ServerResponse | null>(null)
+  
+  // Track scroll position for restoring after navigation
+  const scrollPositionRef = useRef<number>(0)
+  const shouldRestoreScrollRef = useRef<boolean>(false)
+
+  // Helper function to extract GitHub stars from server metadata
+  const getStars = (server: ServerResponse): number => {
+    const publisherMetadata = server.server._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['agentregistry.solo.io/metadata']
+    return publisherMetadata?.stars ?? 0
+  }
+
+  // Helper function to get published date
+  const getPublishedDate = (server: ServerResponse): Date | null => {
+    const publishedAt = server._meta?.['io.modelcontextprotocol.registry/official']?.publishedAt
+    if (!publishedAt) return null
+    try {
+      return new Date(publishedAt)
+    } catch {
+      return null
+    }
+  }
+
+  // Group servers by name, keeping the latest version as the representative
+  const groupServersByName = (servers: ServerResponse[]): GroupedServer[] => {
+    const grouped = new Map<string, ServerResponse[]>()
+    
+    // Group all versions by server name
+    servers.forEach((server) => {
+      const name = server.server.name
+      if (!grouped.has(name)) {
+        grouped.set(name, [])
+      }
+      grouped.get(name)!.push(server)
+    })
+    
+    // Convert to GroupedServer array, using the latest version as representative
+    return Array.from(grouped.entries()).map(([name, versions]) => {
+      // Sort versions by date (newest first) or version string
+      const sortedVersions = [...versions].sort((a, b) => {
+        const dateA = getPublishedDate(a)
+        const dateB = getPublishedDate(b)
+        if (dateA && dateB) {
+          return dateB.getTime() - dateA.getTime()
+        }
+        // Fallback to version string comparison
+        return b.server.version.localeCompare(a.server.version)
+      })
+      
+      const latestVersion = sortedVersions[0]
+      return {
+        ...latestVersion,
+        versionCount: versions.length,
+        allVersions: sortedVersions,
+      }
+    })
+  }
 
   // Fetch data from API
   const fetchData = async () => {
@@ -65,10 +138,14 @@ export default function AdminPage() {
       
       setServers(allServers)
       
+      // Group servers by name
+      const grouped = groupServersByName(allServers)
+      setGroupedServers(grouped)
+      
       // Fake stats for now (until API is implemented)
       setStats({
         total_servers: allServers.length,
-        total_server_names: allServers.length,
+        total_server_names: grouped.length,
         active_servers: allServers.length,
         deprecated_servers: 0,
         deleted_servers: 0,
@@ -88,9 +165,35 @@ export default function AdminPage() {
     fetchData()
   }, [])
 
-  // Filter servers based on search query
+  // Restore scroll position when returning from server detail
   useEffect(() => {
-    let filtered = servers
+    if (!selectedServer && shouldRestoreScrollRef.current) {
+      // Use setTimeout to ensure DOM has updated
+      setTimeout(() => {
+        window.scrollTo({
+          top: scrollPositionRef.current,
+          behavior: 'instant' as ScrollBehavior
+        })
+        shouldRestoreScrollRef.current = false
+      }, 0)
+    }
+  }, [selectedServer])
+
+  // Handle server card click - save scroll position before navigating
+  const handleServerClick = (server: GroupedServer) => {
+    scrollPositionRef.current = window.scrollY
+    shouldRestoreScrollRef.current = true
+    setSelectedServer(server)
+  }
+
+  // Handle closing server detail - flag for scroll restoration
+  const handleCloseServerDetail = () => {
+    setSelectedServer(null)
+  }
+
+  // Filter and sort servers based on search query and sort option
+  useEffect(() => {
+    let filtered = [...groupedServers]
 
     // Filter by search query
     if (searchQuery) {
@@ -103,8 +206,27 @@ export default function AdminPage() {
       )
     }
 
+    // Sort servers
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case "stars":
+          return getStars(b) - getStars(a)
+        case "date": {
+          const dateA = getPublishedDate(a)
+          const dateB = getPublishedDate(b)
+          if (!dateA && !dateB) return 0
+          if (!dateA) return 1
+          if (!dateB) return -1
+          return dateB.getTime() - dateA.getTime()
+        }
+        case "name":
+        default:
+          return a.server.name.localeCompare(b.server.name)
+      }
+    })
+
     setFilteredServers(filtered)
-  }, [searchQuery, servers])
+  }, [searchQuery, groupedServers, sortBy])
 
   if (loading) {
     return (
@@ -134,8 +256,8 @@ export default function AdminPage() {
   if (selectedServer) {
     return (
       <ServerDetail
-        server={selectedServer}
-        onClose={() => setSelectedServer(null)}
+        server={selectedServer as ServerResponse & { allVersions?: ServerResponse[] }}
+        onClose={handleCloseServerDetail}
         onServerCopied={fetchData}
       />
     )
@@ -227,8 +349,17 @@ export default function AdminPage() {
               placeholder="Search servers, skills, agents..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
+              className="pl-10 pr-10"
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -253,23 +384,38 @@ export default function AdminPage() {
           {/* Servers Tab */}
           <TabsContent value="servers">
             {/* Actions */}
-            <div className="flex items-center gap-4 mb-8 justify-end">
-              <Button
-                variant="outline"
-                className="gap-2"
-                onClick={() => setAddServerDialogOpen(true)}
-              >
-                <Plus className="h-4 w-4" />
-                Add Server
-              </Button>
-              <Button
-                variant="default"
-                className="gap-2"
-                onClick={() => setImportDialogOpen(true)}
-              >
-                <Download className="h-4 w-4" />
-                Import Servers
-              </Button>
+            <div className="flex items-center gap-4 mb-8 justify-between">
+              <div className="flex items-center gap-2">
+                <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+                <Select value={sortBy} onValueChange={(value: "name" | "stars" | "date") => setSortBy(value)}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Sort by..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="name">Name (A-Z)</SelectItem>
+                    <SelectItem value="stars">GitHub Stars</SelectItem>
+                    <SelectItem value="date">Date Published</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-4">
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => setAddServerDialogOpen(true)}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Server
+                </Button>
+                <Button
+                  variant="default"
+                  className="gap-2"
+                  onClick={() => setImportDialogOpen(true)}
+                >
+                  <Download className="h-4 w-4" />
+                  Import Servers
+                </Button>
+              </div>
             </div>
 
             {/* Server List */}
@@ -288,16 +434,16 @@ export default function AdminPage() {
                       <MCPIcon />
                     </div>
                     <p className="text-lg font-medium mb-2">
-                      {servers.length === 0
+                      {groupedServers.length === 0
                         ? "No servers in registry"
                         : "No servers match your filters"}
                     </p>
                     <p className="text-sm mb-4">
-                      {servers.length === 0
+                      {groupedServers.length === 0
                         ? "Import servers from external registries to get started"
                         : "Try adjusting your search or filter criteria"}
                     </p>
-                    {servers.length === 0 && (
+                    {groupedServers.length === 0 && (
                       <Button
                         variant="outline"
                         className="gap-2"
@@ -315,7 +461,8 @@ export default function AdminPage() {
                     <ServerCard
                       key={`${server.server.name}-${server.server.version}-${index}`}
                       server={server}
-                      onClick={() => setSelectedServer(server)}
+                      versionCount={server.versionCount}
+                      onClick={() => handleServerClick(server)}
                     />
                   ))}
                 </div>
