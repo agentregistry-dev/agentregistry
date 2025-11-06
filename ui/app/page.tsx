@@ -14,14 +14,18 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ServerCard } from "@/components/server-card"
+import { SkillCard } from "@/components/skill-card"
+import { AgentCard } from "@/components/agent-card"
 import { ServerDetail } from "@/components/server-detail"
+import { SkillDetail } from "@/components/skill-detail"
+import { AgentDetail } from "@/components/agent-detail"
 import { ImportDialog } from "@/components/import-dialog"
 import { AddServerDialog } from "@/components/add-server-dialog"
 import { ImportSkillsDialog } from "@/components/import-skills-dialog"
 import { AddSkillDialog } from "@/components/add-skill-dialog"
 import { ImportAgentsDialog } from "@/components/import-agents-dialog"
 import { AddAgentDialog } from "@/components/add-agent-dialog"
-import { adminApiClient, ServerResponse, ServerStats } from "@/lib/admin-api"
+import { adminApiClient, ServerResponse, SkillResponse, AgentResponse, ServerStats } from "@/lib/admin-api"
 import MCPIcon from "@/components/icons/mcp"
 import {
   Search,
@@ -45,10 +49,12 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState("servers")
   const [servers, setServers] = useState<ServerResponse[]>([])
   const [groupedServers, setGroupedServers] = useState<GroupedServer[]>([])
+  const [skills, setSkills] = useState<SkillResponse[]>([])
+  const [agents, setAgents] = useState<AgentResponse[]>([])
   const [filteredServers, setFilteredServers] = useState<GroupedServer[]>([])
+  const [filteredSkills, setFilteredSkills] = useState<SkillResponse[]>([])
+  const [filteredAgents, setFilteredAgents] = useState<AgentResponse[]>([])
   const [stats, setStats] = useState<ServerStats | null>(null)
-  const [skillsCount, setSkillsCount] = useState(0)
-  const [agentsCount, setAgentsCount] = useState(0)
   const [searchQuery, setSearchQuery] = useState("")
   const [sortBy, setSortBy] = useState<"name" | "stars" | "date">("name")
   const [importDialogOpen, setImportDialogOpen] = useState(false)
@@ -60,6 +66,8 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedServer, setSelectedServer] = useState<ServerResponse | null>(null)
+  const [selectedSkill, setSelectedSkill] = useState<SkillResponse | null>(null)
+  const [selectedAgent, setSelectedAgent] = useState<AgentResponse | null>(null)
   
   // Track scroll position for restoring after navigation
   const scrollPositionRef = useRef<number>(0)
@@ -125,24 +133,54 @@ export default function AdminPage() {
       
       // Fetch all servers (with pagination if needed)
       const allServers: ServerResponse[] = []
-      let cursor: string | undefined
+      let serverCursor: string | undefined
       
       do {
         const response = await adminApiClient.listServers({ 
-          cursor, 
+          cursor: serverCursor, 
           limit: 100,
         })
         allServers.push(...response.servers)
-        cursor = response.metadata.nextCursor
-      } while (cursor)
+        serverCursor = response.metadata.nextCursor
+      } while (serverCursor)
       
       setServers(allServers)
+
+      // Fetch all skills (with pagination if needed)
+      const allSkills: SkillResponse[] = []
+      let skillCursor: string | undefined
+      
+      do {
+        const response = await adminApiClient.listSkills({ 
+          cursor: skillCursor, 
+          limit: 100,
+        })
+        allSkills.push(...response.skills)
+        skillCursor = response.metadata.nextCursor
+      } while (skillCursor)
+      
+      setSkills(allSkills)
+
+      // Fetch all agents (with pagination if needed)
+      const allAgents: AgentResponse[] = []
+      let agentCursor: string | undefined
+      
+      do {
+        const response = await adminApiClient.listAgents({ 
+          cursor: agentCursor, 
+          limit: 100,
+        })
+        allAgents.push(...response.agents)
+        agentCursor = response.metadata.nextCursor
+      } while (agentCursor)
+      
+      setAgents(allAgents)
       
       // Group servers by name
       const grouped = groupServersByName(allServers)
       setGroupedServers(grouped)
       
-      // Fake stats for now (until API is implemented)
+      // Set stats
       setStats({
         total_servers: allServers.length,
         total_server_names: grouped.length,
@@ -150,10 +188,6 @@ export default function AdminPage() {
         deprecated_servers: 0,
         deleted_servers: 0,
       })
-      
-      // Mock stats for Skills and Agents (until API is implemented)
-      setSkillsCount(Math.floor(Math.random() * 20) + 5) // Random number between 5-24
-      setAgentsCount(Math.floor(Math.random() * 15) + 3) // Random number between 3-17
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch data")
     } finally {
@@ -228,6 +262,34 @@ export default function AdminPage() {
     setFilteredServers(filtered)
   }, [searchQuery, groupedServers, sortBy])
 
+  // Filter skills and agents based on search query
+  useEffect(() => {
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      
+      // Filter skills
+      const filteredSk = skills.filter(
+        (s) =>
+          s.skill.name.toLowerCase().includes(query) ||
+          s.skill.title?.toLowerCase().includes(query) ||
+          s.skill.description.toLowerCase().includes(query)
+      )
+      setFilteredSkills(filteredSk)
+
+      // Filter agents
+      const filteredA = agents.filter(
+        (a) =>
+          a.agent.name.toLowerCase().includes(query) ||
+          a.agent.title?.toLowerCase().includes(query) ||
+          a.agent.description.toLowerCase().includes(query)
+      )
+      setFilteredAgents(filteredA)
+    } else {
+      setFilteredSkills(skills)
+      setFilteredAgents(agents)
+    }
+  }, [searchQuery, skills, agents])
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -259,6 +321,26 @@ export default function AdminPage() {
         server={selectedServer as ServerResponse & { allVersions?: ServerResponse[] }}
         onClose={handleCloseServerDetail}
         onServerCopied={fetchData}
+      />
+    )
+  }
+
+  // Show skill detail view if a skill is selected
+  if (selectedSkill) {
+    return (
+      <SkillDetail
+        skill={selectedSkill}
+        onClose={() => setSelectedSkill(null)}
+      />
+    )
+  }
+
+  // Show agent detail view if an agent is selected
+  if (selectedAgent) {
+    return (
+      <AgentDetail
+        agent={selectedAgent}
+        onClose={() => setSelectedAgent(null)}
       />
     )
   }
@@ -318,7 +400,7 @@ export default function AdminPage() {
                     <Zap className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">{skillsCount}</p>
+                    <p className="text-2xl font-bold">{skills.length}</p>
                     <p className="text-xs text-muted-foreground">Skills</p>
                   </div>
                 </div>
@@ -330,7 +412,7 @@ export default function AdminPage() {
                     <Bot className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">{agentsCount}</p>
+                    <p className="text-2xl font-bold">{agents.length}</p>
                     <p className="text-xs text-muted-foreground">Agents</p>
                   </div>
                 </div>
@@ -496,28 +578,50 @@ export default function AdminPage() {
             <div>
               <h2 className="text-lg font-semibold mb-4">
                 Skills
-                <span className="text-muted-foreground ml-2">({skillsCount})</span>
+                <span className="text-muted-foreground ml-2">
+                  ({filteredSkills.length})
+                </span>
               </h2>
 
-              <Card className="p-12">
-                <div className="text-center text-muted-foreground">
-                  <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center text-primary">
-                    <Zap className="w-12 h-12" />
+              {filteredSkills.length === 0 ? (
+                <Card className="p-12">
+                  <div className="text-center text-muted-foreground">
+                    <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center text-primary">
+                      <Zap className="w-12 h-12" />
+                    </div>
+                    <p className="text-lg font-medium mb-2">
+                      {skills.length === 0
+                        ? "No skills in registry"
+                        : "No skills match your filters"}
+                    </p>
+                    <p className="text-sm mb-4">
+                      {skills.length === 0
+                        ? "Import skills from external sources to get started"
+                        : "Try adjusting your search or filter criteria"}
+                    </p>
+                    {skills.length === 0 && (
+                      <Button
+                        variant="outline"
+                        className="gap-2"
+                        onClick={() => setImportSkillsDialogOpen(true)}
+                      >
+                        <Download className="h-4 w-4" />
+                        Import Skills
+                      </Button>
+                    )}
                   </div>
-                  <p className="text-lg font-medium mb-2">Skills view coming soon</p>
-                  <p className="text-sm mb-4">
-                    {skillsCount} skill{skillsCount !== 1 ? 's' : ''} available in registry
-                  </p>
-                  <Button
-                    variant="outline"
-                    className="gap-2"
-                    onClick={() => setImportSkillsDialogOpen(true)}
-                  >
-                    <Download className="h-4 w-4" />
-                    Import Skills
-                  </Button>
+                </Card>
+              ) : (
+                <div className="grid gap-4">
+                  {filteredSkills.map((skill, index) => (
+                    <SkillCard
+                      key={`${skill.skill.name}-${skill.skill.version}-${index}`}
+                      skill={skill}
+                      onClick={() => setSelectedSkill(skill)}
+                    />
+                  ))}
                 </div>
-              </Card>
+              )}
             </div>
           </TabsContent>
 
@@ -547,28 +651,50 @@ export default function AdminPage() {
             <div>
               <h2 className="text-lg font-semibold mb-4">
                 Agents
-                <span className="text-muted-foreground ml-2">({agentsCount})</span>
+                <span className="text-muted-foreground ml-2">
+                  ({filteredAgents.length})
+                </span>
               </h2>
 
-              <Card className="p-12">
-                <div className="text-center text-muted-foreground">
-                  <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center text-primary">
-                    <Bot className="w-12 h-12" />
+              {filteredAgents.length === 0 ? (
+                <Card className="p-12">
+                  <div className="text-center text-muted-foreground">
+                    <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center text-primary">
+                      <Bot className="w-12 h-12" />
+                    </div>
+                    <p className="text-lg font-medium mb-2">
+                      {agents.length === 0
+                        ? "No agents in registry"
+                        : "No agents match your filters"}
+                    </p>
+                    <p className="text-sm mb-4">
+                      {agents.length === 0
+                        ? "Import agents from external sources to get started"
+                        : "Try adjusting your search or filter criteria"}
+                    </p>
+                    {agents.length === 0 && (
+                      <Button
+                        variant="outline"
+                        className="gap-2"
+                        onClick={() => setImportAgentsDialogOpen(true)}
+                      >
+                        <Download className="h-4 w-4" />
+                        Import Agents
+                      </Button>
+                    )}
                   </div>
-                  <p className="text-lg font-medium mb-2">Agents view coming soon</p>
-                  <p className="text-sm mb-4">
-                    {agentsCount} agent{agentsCount !== 1 ? 's' : ''} available in registry
-                  </p>
-                  <Button
-                    variant="outline"
-                    className="gap-2"
-                    onClick={() => setImportAgentsDialogOpen(true)}
-                  >
-                    <Download className="h-4 w-4" />
-                    Import Agents
-                  </Button>
+                </Card>
+              ) : (
+                <div className="grid gap-4">
+                  {filteredAgents.map((agent, index) => (
+                    <AgentCard
+                      key={`${agent.agent.name}-${agent.agent.version}-${index}`}
+                      agent={agent}
+                      onClick={() => setSelectedAgent(agent)}
+                    />
+                  ))}
                 </div>
-              </Card>
+              )}
             </div>
           </TabsContent>
         </Tabs>

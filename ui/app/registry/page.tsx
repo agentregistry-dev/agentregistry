@@ -6,9 +6,13 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { ServerCard } from "@/components/server-card"
+import { SkillCard } from "@/components/skill-card"
+import { AgentCard } from "@/components/agent-card"
 import { ServerDetail } from "@/components/server-detail"
+import { SkillDetail } from "@/components/skill-detail"
+import { AgentDetail } from "@/components/agent-detail"
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog"
-import { adminApiClient, ServerResponse } from "@/lib/admin-api"
+import { adminApiClient, ServerResponse, SkillResponse, AgentResponse } from "@/lib/admin-api"
 import MCPIcon from "@/components/icons/mcp"
 import { Search, Zap, Bot, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -16,7 +20,11 @@ import { Button } from "@/components/ui/button"
 export default function RegistryPage() {
   const [activeTab, setActiveTab] = useState("servers")
   const [servers, setServers] = useState<ServerResponse[]>([])
+  const [skills, setSkills] = useState<SkillResponse[]>([])
+  const [agents, setAgents] = useState<AgentResponse[]>([])
   const [filteredServers, setFilteredServers] = useState<ServerResponse[]>([])
+  const [filteredSkills, setFilteredSkills] = useState<SkillResponse[]>([])
+  const [filteredAgents, setFilteredAgents] = useState<AgentResponse[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -24,6 +32,8 @@ export default function RegistryPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [serverToDelete, setServerToDelete] = useState<ServerResponse | null>(null)
   const [selectedServer, setSelectedServer] = useState<ServerResponse | null>(null)
+  const [selectedSkill, setSelectedSkill] = useState<SkillResponse | null>(null)
+  const [selectedAgent, setSelectedAgent] = useState<AgentResponse | null>(null)
 
   // Fetch data from API
   const fetchData = async () => {
@@ -33,18 +43,48 @@ export default function RegistryPage() {
       
       // Fetch all servers (with pagination if needed)
       const allServers: ServerResponse[] = []
-      let cursor: string | undefined
+      let serverCursor: string | undefined
       
       do {
         const response = await adminApiClient.listServers({ 
-          cursor, 
+          cursor: serverCursor, 
           limit: 100,
         })
         allServers.push(...response.servers)
-        cursor = response.metadata.nextCursor
-      } while (cursor)
+        serverCursor = response.metadata.nextCursor
+      } while (serverCursor)
       
       setServers(allServers)
+
+      // Fetch all skills (with pagination if needed)
+      const allSkills: SkillResponse[] = []
+      let skillCursor: string | undefined
+      
+      do {
+        const response = await adminApiClient.listSkills({ 
+          cursor: skillCursor, 
+          limit: 100,
+        })
+        allSkills.push(...response.skills)
+        skillCursor = response.metadata.nextCursor
+      } while (skillCursor)
+      
+      setSkills(allSkills)
+
+      // Fetch all agents (with pagination if needed)
+      const allAgents: AgentResponse[] = []
+      let agentCursor: string | undefined
+      
+      do {
+        const response = await adminApiClient.listAgents({ 
+          cursor: agentCursor, 
+          limit: 100,
+        })
+        allAgents.push(...response.agents)
+        agentCursor = response.metadata.nextCursor
+      } while (agentCursor)
+      
+      setAgents(allAgents)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch data")
     } finally {
@@ -56,22 +96,43 @@ export default function RegistryPage() {
     fetchData()
   }, [])
 
-  // Filter servers based on search query
+  // Filter servers, skills, and agents based on search query
   useEffect(() => {
-    let filtered = servers
-
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(
+      
+      // Filter servers
+      const filteredS = servers.filter(
         (s) =>
           s.server.name.toLowerCase().includes(query) ||
           s.server.title?.toLowerCase().includes(query) ||
           s.server.description.toLowerCase().includes(query)
       )
-    }
+      setFilteredServers(filteredS)
 
-    setFilteredServers(filtered)
-  }, [searchQuery, servers])
+      // Filter skills
+      const filteredSk = skills.filter(
+        (s) =>
+          s.skill.name.toLowerCase().includes(query) ||
+          s.skill.title?.toLowerCase().includes(query) ||
+          s.skill.description.toLowerCase().includes(query)
+      )
+      setFilteredSkills(filteredSk)
+
+      // Filter agents
+      const filteredA = agents.filter(
+        (a) =>
+          a.agent.name.toLowerCase().includes(query) ||
+          a.agent.title?.toLowerCase().includes(query) ||
+          a.agent.description.toLowerCase().includes(query)
+      )
+      setFilteredAgents(filteredA)
+    } else {
+      setFilteredServers(servers)
+      setFilteredSkills(skills)
+      setFilteredAgents(agents)
+    }
+  }, [searchQuery, servers, skills, agents])
 
   // Handle server deletion - open dialog
   const handleDeleteServer = (server: ServerResponse) => {
@@ -139,6 +200,26 @@ export default function RegistryPage() {
     )
   }
 
+  // Show skill detail view if a skill is selected
+  if (selectedSkill) {
+    return (
+      <SkillDetail
+        skill={selectedSkill}
+        onClose={() => setSelectedSkill(null)}
+      />
+    )
+  }
+
+  // Show agent detail view if an agent is selected
+  if (selectedAgent) {
+    return (
+      <AgentDetail
+        agent={selectedAgent}
+        onClose={() => setSelectedAgent(null)}
+      />
+    )
+  }
+
   return (
     <main className="min-h-screen bg-background">
       {/* Header */}
@@ -202,7 +283,7 @@ export default function RegistryPage() {
                 <Zap className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <p className="text-3xl font-bold">0</p>
+                <p className="text-3xl font-bold">{skills.length}</p>
                 <p className="text-sm text-muted-foreground">Skills</p>
               </div>
             </div>
@@ -214,7 +295,7 @@ export default function RegistryPage() {
                 <Bot className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <p className="text-3xl font-bold">0</p>
+                <p className="text-3xl font-bold">{agents.length}</p>
                 <p className="text-sm text-muted-foreground">Agents</p>
               </div>
             </div>
@@ -232,11 +313,11 @@ export default function RegistryPage() {
             </TabsTrigger>
             <TabsTrigger value="skills" className="gap-2">
               <Zap className="h-4 w-4" />
-              Skills (0)
+              Skills ({filteredSkills.length})
             </TabsTrigger>
             <TabsTrigger value="agents" className="gap-2">
               <Bot className="h-4 w-4" />
-              Agents (0)
+              Agents ({filteredAgents.length})
             </TabsTrigger>
           </TabsList>
 
@@ -278,32 +359,70 @@ export default function RegistryPage() {
 
           {/* Skills Tab */}
           <TabsContent value="skills">
-            <Card className="p-12">
-              <div className="text-center text-muted-foreground">
-                <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center text-primary">
-                  <Zap className="w-12 h-12" />
+            {filteredSkills.length === 0 ? (
+              <Card className="p-12">
+                <div className="text-center text-muted-foreground">
+                  <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center text-primary">
+                    <Zap className="w-12 h-12" />
+                  </div>
+                  <p className="text-lg font-medium mb-2">
+                    {skills.length === 0
+                      ? "No skills in registry"
+                      : "No skills match your search"}
+                  </p>
+                  <p className="text-sm">
+                    {skills.length === 0
+                      ? "Check back later for new skills"
+                      : "Try adjusting your search criteria"}
+                  </p>
                 </div>
-                <p className="text-lg font-medium mb-2">No skills available yet</p>
-                <p className="text-sm">
-                  Skills will be available soon
-                </p>
+              </Card>
+            ) : (
+              <div className="grid gap-4 max-w-5xl mx-auto">
+                {filteredSkills.map((skill, index) => (
+                  <SkillCard
+                    key={`${skill.skill.name}-${skill.skill.version}-${index}`}
+                    skill={skill}
+                    showExternalLinks={false}
+                    onClick={() => setSelectedSkill(skill)}
+                  />
+                ))}
               </div>
-            </Card>
+            )}
           </TabsContent>
 
           {/* Agents Tab */}
           <TabsContent value="agents">
-            <Card className="p-12">
-              <div className="text-center text-muted-foreground">
-                <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center text-primary">
-                  <Bot className="w-12 h-12" />
+            {filteredAgents.length === 0 ? (
+              <Card className="p-12">
+                <div className="text-center text-muted-foreground">
+                  <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center text-primary">
+                    <Bot className="w-12 h-12" />
+                  </div>
+                  <p className="text-lg font-medium mb-2">
+                    {agents.length === 0
+                      ? "No agents in registry"
+                      : "No agents match your search"}
+                  </p>
+                  <p className="text-sm">
+                    {agents.length === 0
+                      ? "Check back later for new agents"
+                      : "Try adjusting your search criteria"}
+                  </p>
                 </div>
-                <p className="text-lg font-medium mb-2">No agents available yet</p>
-                <p className="text-sm">
-                  Agents will be available soon
-                </p>
+              </Card>
+            ) : (
+              <div className="grid gap-4 max-w-5xl mx-auto">
+                {filteredAgents.map((agent, index) => (
+                  <AgentCard
+                    key={`${agent.agent.name}-${agent.agent.version}-${index}`}
+                    agent={agent}
+                    showExternalLinks={false}
+                    onClick={() => setSelectedAgent(agent)}
+                  />
+                ))}
               </div>
-            </Card>
+            )}
           </TabsContent>
         </Tabs>
       </div>

@@ -82,6 +82,113 @@ export interface ServerStats {
   deleted_servers: number
 }
 
+// Skill types
+export interface SkillRepository {
+  url: string
+  source: string
+}
+
+export interface SkillPackageInfo {
+  registryType: string
+  identifier: string
+  version: string
+  transport: {
+    type: string
+  }
+}
+
+export interface SkillRemoteInfo {
+  url: string
+}
+
+export interface SkillJSON {
+  name: string
+  title?: string
+  description: string
+  version: string
+  status?: string
+  websiteUrl?: string
+  repository?: SkillRepository
+  packages?: SkillPackageInfo[]
+  remotes?: SkillRemoteInfo[]
+}
+
+export interface SkillRegistryExtensions {
+  status: string
+  publishedAt: string
+  updatedAt: string
+  isLatest: boolean
+}
+
+export interface SkillResponse {
+  skill: SkillJSON
+  _meta: {
+    'io.modelcontextprotocol.registry/official'?: SkillRegistryExtensions
+  }
+}
+
+export interface SkillListResponse {
+  skills: SkillResponse[]
+  metadata: {
+    count: number
+    nextCursor?: string
+  }
+}
+
+// Agent types
+export interface AgentRepository {
+  url: string
+  source: string
+}
+
+export interface AgentPackageInfo {
+  registryType: string
+  identifier: string
+  version: string
+  transport: {
+    type: string
+  }
+}
+
+export interface AgentRemoteInfo {
+  url?: string
+  type: string
+}
+
+export interface AgentJSON {
+  name: string
+  title?: string
+  description: string
+  version: string
+  status?: string
+  websiteUrl?: string
+  repository?: AgentRepository
+  packages?: AgentPackageInfo[]
+  remotes?: AgentRemoteInfo[]
+}
+
+export interface AgentRegistryExtensions {
+  status: string
+  publishedAt: string
+  updatedAt: string
+  isLatest: boolean
+}
+
+export interface AgentResponse {
+  agent: AgentJSON
+  _meta: {
+    'io.modelcontextprotocol.registry/official'?: AgentRegistryExtensions
+  }
+}
+
+export interface AgentListResponse {
+  agents: AgentResponse[]
+  metadata: {
+    count: number
+    nextCursor?: string
+  }
+}
+
 class AdminApiClient {
   private baseUrl: string
 
@@ -218,6 +325,98 @@ class AdminApiClient {
     const response = await fetch(`${this.baseUrl}/v0/health`)
     if (!response.ok) {
       throw new Error('Health check failed')
+    }
+    return response.json()
+  }
+
+  // ===== Skills API =====
+
+  // List skills with pagination and filtering
+  async listSkills(params?: {
+    cursor?: string
+    limit?: number
+    search?: string
+    version?: string
+    updated_since?: string
+  }): Promise<SkillListResponse> {
+    const queryParams = new URLSearchParams()
+    if (params?.cursor) queryParams.append('cursor', params.cursor)
+    if (params?.limit) queryParams.append('limit', params.limit.toString())
+    if (params?.search) queryParams.append('search', params.search)
+    if (params?.version) queryParams.append('version', params.version)
+    if (params?.updated_since) queryParams.append('updated_since', params.updated_since)
+
+    const url = `${this.baseUrl}/v0/skills${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error('Failed to fetch skills')
+    }
+    return response.json()
+  }
+
+  // Get a specific skill version
+  async getSkill(skillName: string, version: string = 'latest'): Promise<SkillResponse> {
+    const encodedName = encodeURIComponent(skillName)
+    const encodedVersion = encodeURIComponent(version)
+    const response = await fetch(`${this.baseUrl}/v0/skills/${encodedName}/versions/${encodedVersion}`)
+    if (!response.ok) {
+      throw new Error('Failed to fetch skill')
+    }
+    return response.json()
+  }
+
+  // Get all versions of a skill
+  async getSkillVersions(skillName: string): Promise<SkillListResponse> {
+    const encodedName = encodeURIComponent(skillName)
+    const response = await fetch(`${this.baseUrl}/v0/skills/${encodedName}/versions`)
+    if (!response.ok) {
+      throw new Error('Failed to fetch skill versions')
+    }
+    return response.json()
+  }
+
+  // ===== Agents API =====
+
+  // List agents with pagination and filtering
+  async listAgents(params?: {
+    cursor?: string
+    limit?: number
+    search?: string
+    version?: string
+    updated_since?: string
+  }): Promise<AgentListResponse> {
+    const queryParams = new URLSearchParams()
+    if (params?.cursor) queryParams.append('cursor', params.cursor)
+    if (params?.limit) queryParams.append('limit', params.limit.toString())
+    if (params?.search) queryParams.append('search', params.search)
+    if (params?.version) queryParams.append('version', params.version)
+    if (params?.updated_since) queryParams.append('updated_since', params.updated_since)
+
+    const url = `${this.baseUrl}/v0/agents${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error('Failed to fetch agents')
+    }
+    return response.json()
+  }
+
+  // Get a specific agent version
+  async getAgent(agentName: string, version: string = 'latest'): Promise<AgentResponse> {
+    const encodedName = encodeURIComponent(agentName)
+    const encodedVersion = encodeURIComponent(version)
+    const response = await fetch(`${this.baseUrl}/v0/agents/${encodedName}/versions/${encodedVersion}`)
+    if (!response.ok) {
+      throw new Error('Failed to fetch agent')
+    }
+    return response.json()
+  }
+
+  // Get all versions of an agent
+  async getAgentVersions(agentName: string): Promise<AgentListResponse> {
+    const encodedName = encodeURIComponent(agentName)
+    const response = await fetch(`${this.baseUrl}/v0/agents/${encodedName}/versions`)
+    if (!response.ok) {
+      throw new Error('Failed to fetch agent versions')
     }
     return response.json()
   }
