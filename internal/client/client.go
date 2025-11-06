@@ -194,11 +194,17 @@ func (c *Client) GetServers() ([]models.ServerDetail, error) {
 	return all, nil
 }
 
-// GetServerByName returns a server by name
+// GetServerByName returns a server by name (latest version)
 func (c *Client) GetServerByName(name string) (*models.ServerDetail, error) {
-	// Use the special "latest" version endpoint
+	return c.GetServerByNameAndVersion(name, "latest")
+}
+
+// GetServerByNameAndVersion returns a specific version of a server
+func (c *Client) GetServerByNameAndVersion(name, version string) (*models.ServerDetail, error) {
+	// Use the version endpoint
 	encName := url.PathEscape(name)
-	req, err := c.newRequest(http.MethodGet, "/servers/"+encName+"/versions/latest")
+	encVersion := url.PathEscape(version)
+	req, err := c.newRequest(http.MethodGet, "/servers/"+encName+"/versions/"+encVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -208,10 +214,35 @@ func (c *Client) GetServerByName(name string) (*models.ServerDetail, error) {
 		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to get server by name: %w", err)
+		return nil, fmt.Errorf("failed to get server by name and version: %w", err)
 	}
 	s := mapServerResponse(resp)
 	return &s, nil
+}
+
+// GetServerVersions returns all versions of a server by name
+func (c *Client) GetServerVersions(name string) ([]models.ServerDetail, error) {
+	encName := url.PathEscape(name)
+	req, err := c.newRequest(http.MethodGet, "/servers/"+encName+"/versions")
+	if err != nil {
+		return nil, err
+	}
+
+	var resp apiv0.ServerListResponse
+	if err := c.doJSON(req, &resp); err != nil {
+		// 404 -> not found returns empty list
+		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get server versions: %w", err)
+	}
+
+	versions := make([]models.ServerDetail, 0, len(resp.Servers))
+	for _, sr := range resp.Servers {
+		versions = append(versions, mapServerResponse(sr))
+	}
+
+	return versions, nil
 }
 
 // GetSkills returns all skills from connected registries
@@ -329,11 +360,6 @@ func mapAgentResponse(ag models.AgentResponse) models.Agent {
 	}
 }
 
-// GetInstallations returns all installed resources
-func (c *Client) GetInstallations() ([]models.Installation, error) {
-	return []models.Installation{}, nil
-}
-
 // AddRegistry adds a new registry
 func (c *Client) AddRegistry(name, urlStr, registryType string) error {
 	c.regMu.Lock()
@@ -423,6 +449,13 @@ func (c *Client) MarkServerInstalled(serverID int, installed bool) error { retur
 // MarkSkillInstalled marks a skill as installed or uninstalled
 func (c *Client) MarkSkillInstalled(skillID int, installed bool) error { return nil }
 
+// PublishSkill publishes a skill to the registry
+func (c *Client) PublishSkill(skill *models.SkillJSON) (*models.SkillResponse, error) {
+	var resp models.SkillResponse
+	err := c.doJsonRequest(http.MethodPost, "/skills/publish", skill, &resp)
+	return &resp, err
+}
+
 // GetInstalledServers returns all installed MCP servers
 func (c *Client) GetInstalledServers() ([]models.ServerDetail, error) {
 	return []models.ServerDetail{}, nil
@@ -431,13 +464,6 @@ func (c *Client) GetInstalledServers() ([]models.ServerDetail, error) {
 // GetInstallationByName returns an installation record by resource name
 func (c *Client) GetInstallationByName(resourceType, resourceName string) (*models.Installation, error) {
 	return nil, nil
-}
-
-// PublishSkill publishes a skill to the registry
-func (c *Client) PublishSkill(skill *models.SkillJSON) (*models.SkillResponse, error) {
-	var resp models.SkillResponse
-	err := c.doJsonRequest(http.MethodPost, "/skills/publish", skill, &resp)
-	return &resp, err
 }
 
 // Helpers to convert API errors

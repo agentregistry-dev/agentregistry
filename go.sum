@@ -157,6 +157,8 @@ github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnr
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
 github.com/kagent-dev/kagent/go v0.0.0-20251105163216-b1792c0c29fd h1:yl/eajREqRfeCwVtptwm7+qG5o6z2fVJR+endW+Zb90=
 github.com/kagent-dev/kagent/go v0.0.0-20251105163216-b1792c0c29fd/go.mod h1:HsYenJ7znekfAX46cTTlr/mPLrMss6TILnCrZUti/24=
+github.com/kagent-dev/kagent/go v0.0.0-20251105210944-ce801ba73e0c h1:/vN0Sfzu25XhSI52vv4BZkPOhfETaVDE4DZ4dHvr0RE=
+github.com/kagent-dev/kagent/go v0.0.0-20251105210944-ce801ba73e0c/go.mod h1:HsYenJ7znekfAX46cTTlr/mPLrMss6TILnCrZUti/24=
 github.com/kagent-dev/kmcp v0.1.8 h1:Ed/MSX0WDTB7jLVDPIjIvEGWmscEDHzixeS/5k+CfR8=
 github.com/kagent-dev/kmcp v0.1.8/go.mod h1:aPwM1QtoAackdbQqLrPaNSSg/KZa0fFjbTJyOZFJNK8=
 github.com/kisielk/errcheck v1.5.0/go.mod h1:pFxgyoBC7bSaBwPgfKdkLd5X25qrDl4LWUI2bnpBCr8=

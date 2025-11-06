@@ -193,7 +193,7 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
               ) : (
                 <Copy className="h-4 w-4" />
               )}
-              Copy to Private Registry
+              Publish
             </Button>
             <Button variant="ghost" size="icon" onClick={onClose}>
               <X className="h-5 w-5" />
