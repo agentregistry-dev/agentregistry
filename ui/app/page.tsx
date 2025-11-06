@@ -1,13 +1,13 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import Image from "next/image"
 import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { ServerCard } from "@/components/server-card"
+import { ServerDetail } from "@/components/server-detail"
 import { ImportDialog } from "@/components/import-dialog"
 import { AddServerDialog } from "@/components/add-server-dialog"
 import { ImportSkillsDialog } from "@/components/import-skills-dialog"
@@ -42,6 +42,7 @@ export default function AdminPage() {
   const [addAgentDialogOpen, setAddAgentDialogOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedServer, setSelectedServer] = useState<ServerResponse | null>(null)
 
   // Fetch data from API
   const fetchData = async () => {
@@ -64,9 +65,14 @@ export default function AdminPage() {
       
       setServers(allServers)
       
-      // Fetch stats
-      const statsData = await adminApiClient.getStats()
-      setStats(statsData)
+      // Fake stats for now (until API is implemented)
+      setStats({
+        total_servers: allServers.length,
+        total_server_names: allServers.length,
+        active_servers: allServers.length,
+        deprecated_servers: 0,
+        deleted_servers: 0,
+      })
       
       // Mock stats for Skills and Agents (until API is implemented)
       setSkillsCount(Math.floor(Math.random() * 20) + 5) // Random number between 5-24
@@ -124,18 +130,28 @@ export default function AdminPage() {
     )
   }
 
+  // Show server detail view if a server is selected
+  if (selectedServer) {
+    return (
+      <ServerDetail
+        server={selectedServer}
+        onClose={() => setSelectedServer(null)}
+        onServerCopied={fetchData}
+      />
+    )
+  }
+
   return (
     <main className="min-h-screen bg-background">
       <div className="border-b">
         <div className="container mx-auto px-6 py-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-6">
-              <Image 
-                src="/arlogo.png" 
+              <img 
+                src="/ui/arlogo.png" 
                 alt="Agent Registry" 
                 width={200} 
                 height={67}
-                priority
               />
               <div className="flex items-center gap-4 text-sm">
                 <Link href="/" className="text-foreground font-medium">
@@ -299,6 +315,7 @@ export default function AdminPage() {
                     <ServerCard
                       key={`${server.server.name}-${server.server.version}-${index}`}
                       server={server}
+                      onClick={() => setSelectedServer(server)}
                     />
                   ))}
                 </div>

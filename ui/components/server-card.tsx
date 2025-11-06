@@ -1,6 +1,5 @@
 "use client"
 
-import { useRouter } from "next/navigation"
 import { ServerResponse } from "@/lib/admin-api"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,10 +10,10 @@ interface ServerCardProps {
   onDelete?: (server: ServerResponse) => void
   showDelete?: boolean
   showExternalLinks?: boolean
+  onClick?: () => void
 }
 
-export function ServerCard({ server, onDelete, showDelete = false, showExternalLinks = true }: ServerCardProps) {
-  const router = useRouter()
+export function ServerCard({ server, onDelete, showDelete = false, showExternalLinks = true, onClick }: ServerCardProps) {
   const { server: serverData, _meta } = server
   const official = _meta?.['io.modelcontextprotocol.registry/official']
   
@@ -22,11 +21,10 @@ export function ServerCard({ server, onDelete, showDelete = false, showExternalL
   const publisherMetadata = serverData._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['agentregistry.solo.io/metadata']
   const githubStars = publisherMetadata?.stars
 
-  // Generate the server ID for the URL (name@version)
-  const serverId = encodeURIComponent(`${serverData.name}@${serverData.version}`)
-
   const handleClick = () => {
-    router.push(`/servers/${serverId}`)
+    if (onClick) {
+      onClick()
+    }
   }
 
   // Format date
@@ -72,7 +70,7 @@ export function ServerCard({ server, onDelete, showDelete = false, showExternalL
               className="h-8 w-8"
               onClick={(e) => {
                 e.stopPropagation()
-                window.open(serverData.repository.url, '_blank')
+                window.open(serverData.repository?.url || '', '_blank')
               }}
               title="View on GitHub"
             >

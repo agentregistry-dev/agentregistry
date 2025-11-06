@@ -24,7 +24,6 @@ help:
 	@echo "  build-cli             - Build the Go CLI"
 	@echo "  build                - Build both UI and Go CLI"
 	@echo "  install              - Install the CLI to GOPATH/bin"
-	@echo "  dev                  - Run backend and UI dev servers together"
 	@echo "  dev-ui               - Run Next.js in development mode"
 	@echo "  test                 - Run Go tests"
 	@echo "  clean                - Clean all build artifacts"
@@ -46,6 +45,9 @@ install-ui:
 build-ui: install-ui
 	@echo "Building Next.js UI for embedding..."
 	cd ui && npm run build:export
+	@echo "Copying built files to internal/registry/api/ui/dist..."
+	git clean -xdf ./internal/registry/api/ui/dist/
+	cp -r ui/out/* internal/registry/api/ui/dist/
 # best effort - bring back the gitignore so that dist folder is kept in git (won't work in docker).
 	git checkout -- internal/registry/api/ui/dist/.gitignore || :
 	@echo "UI built successfully to internal/registry/api/ui/dist/"
@@ -53,8 +55,9 @@ build-ui: install-ui
 # Clean UI build artifacts
 clean-ui:
 	@echo "Cleaning UI build artifacts..."
-	rm -rf ui/.next
 	git clean -xdf ./internal/registry/api/ui/dist/
+	git clean -xdf ./ui/out/
+	git clean -xdf ./ui/.next/
 	@echo "UI artifacts cleaned"
 
 # Build the Go CLI
@@ -87,12 +90,6 @@ install: build
 	@echo "Installing arctl to GOPATH/bin..."
 	go install
 	@echo "Installation complete! Run 'arctl --help' to get started"
-
-# Run backend server only
-dev-backend:
-	@echo "Starting backend server..."
-	@echo "Backend will be available at http://localhost:8080"
-	go run main.go start
 
 # Run Next.js in development mode
 dev-ui:

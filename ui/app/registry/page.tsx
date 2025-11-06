@@ -1,12 +1,12 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import Image from "next/image"
 import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { ServerCard } from "@/components/server-card"
+import { ServerDetail } from "@/components/server-detail"
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog"
 import { adminApiClient, ServerResponse } from "@/lib/admin-api"
 import MCPIcon from "@/components/icons/mcp"
@@ -23,6 +23,7 @@ export default function RegistryPage() {
   const [deleting, setDeleting] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [serverToDelete, setServerToDelete] = useState<ServerResponse | null>(null)
+  const [selectedServer, setSelectedServer] = useState<ServerResponse | null>(null)
 
   // Fetch data from API
   const fetchData = async () => {
@@ -127,6 +128,17 @@ export default function RegistryPage() {
     )
   }
 
+  // Show server detail view if a server is selected
+  if (selectedServer) {
+    return (
+      <ServerDetail
+        server={selectedServer}
+        onClose={() => setSelectedServer(null)}
+        onServerCopied={fetchData}
+      />
+    )
+  }
+
   return (
     <main className="min-h-screen bg-background">
       {/* Header */}
@@ -134,12 +146,11 @@ export default function RegistryPage() {
         <div className="container mx-auto px-6 py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-6">
-              <Image 
-                src="/arlogo.png" 
+              <img 
+                src="/ui/arlogo.png" 
                 alt="Agent Registry" 
                 width={200} 
                 height={67}
-                priority
               />
               <div className="flex items-center gap-4 text-sm">
                 <Link href="/registry" className="text-foreground font-medium">
@@ -258,6 +269,7 @@ export default function RegistryPage() {
                     showDelete={true}
                     onDelete={handleDeleteServer}
                     showExternalLinks={false}
+                    onClick={() => setSelectedServer(server)}
                   />
                 ))}
               </div>

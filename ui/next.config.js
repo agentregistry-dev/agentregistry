@@ -17,10 +17,9 @@ const nextConfig = {
   },
 }
 
-// Only use static export and custom distDir for production builds
+// Only use static export for production builds
 if (process.env.NEXT_BUILD_EXPORT === 'true') {
   nextConfig.output = 'export'
-  nextConfig.distDir = '../internal/registry/api/ui/dist'
   // Set basePath so all routes and assets are prefixed with /ui
   nextConfig.basePath = '/ui'
   nextConfig.assetPrefix = '/ui'

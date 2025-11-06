@@ -141,14 +141,6 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2 flex-wrap">
                 <h1 className="text-3xl font-bold">{serverData.title || serverData.name}</h1>
-                {official?.isLatest && (
-                  <Badge variant="default">Latest</Badge>
-                )}
-                {official?.status && (
-                  <Badge variant="secondary" className={getStatusColor(official.status)}>
-                    {official.status}
-                  </Badge>
-                )}
               </div>
               <p className="text-muted-foreground">{serverData.name}</p>
             </div>
