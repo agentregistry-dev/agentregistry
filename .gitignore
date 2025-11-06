@@ -11,6 +11,9 @@
 # Output of the go coverage tool
 *.out
 
+# DLV debug file
+__debug_bin*
+
 # Dependency directories
 vendor/
 

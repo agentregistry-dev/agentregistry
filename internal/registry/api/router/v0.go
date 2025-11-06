@@ -6,13 +6,14 @@ import (
 
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	v0auth "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/auth"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 )
 
 func RegisterV0Routes(
-	api huma.API, cfg *config.Config, registry service.RegistryService, metrics *telemetry.Metrics, versionInfo *v0.VersionBody,
+	api huma.API, authz auth.Authorizer, cfg *config.Config, registry service.RegistryService, metrics *telemetry.Metrics, versionInfo *v0.VersionBody,
 ) {
 	v0.RegisterHealthEndpoint(api, "/v0", cfg, metrics)
 	v0.RegisterPingEndpoint(api, "/v0")
@@ -26,6 +27,7 @@ func RegisterV0Routes(
 	v0.RegisterAgentsEndpoints(api, "/v0", registry)
 	// Skills endpoints (v0 only)
 	v0.RegisterSkillsEndpoints(api, "/v0", registry)
+	v0.RegisterSkillsPublishEndpoint(api, "/v0", registry, authz)
 }
 
 func RegisterV0_1Routes(

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentregistry-dev/agentregistry/internal/registry/auth"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"go.opentelemetry.io/otel/attribute"
@@ -138,7 +139,13 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 	humaConfig.CreateHooks = []func(huma.Config) huma.Config{}
 
 	// Create a new API using humago adapter for standard library
+	jwtManager := auth.NewJWTManager(cfg)
 	api := humago.New(mux, humaConfig)
+	authz := auth.Authorizer{Authz: nil}
+	if false {
+		authz = auth.Authorizer{Authz: jwtManager}
+		api.UseMiddleware(auth.AuthnMiddleware(jwtManager))
+	}
 
 	// Add OpenAPI tag metadata with descriptions
 	api.OpenAPI().Tags = []*huma.Tag{
@@ -186,7 +193,7 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 	))
 
 	// Register routes for all API versions
-	RegisterV0Routes(api, cfg, registry, metrics, versionInfo)
+	RegisterV0Routes(api, authz, cfg, registry, metrics, versionInfo)
 	RegisterV0_1Routes(api, cfg, registry, metrics, versionInfo)
 
 	// Add /metrics for Prometheus metrics using promhttp

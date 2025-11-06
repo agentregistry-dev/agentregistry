@@ -5,10 +5,12 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -115,6 +117,40 @@ func (j *JWTManager) GenerateTokenResponse(_ context.Context, claims JWTClaims) 
 		RegistryToken: tokenString,
 		ExpiresAt:     int(claims.ExpiresAt.Unix()),
 	}, nil
+}
+
+func (j *JWTManager) Check(ctx context.Context, s Session, verb PermissionAction, resource Resource) error {
+	// TODO: also check resource.Type
+	if !j.HasPermission(resource.Name, verb, s.Principal().User.Permissions) {
+		return huma.Error403Forbidden("You do not have permission to perform this action")
+	}
+	return nil
+}
+
+type jwtSession struct {
+	claims *JWTClaims
+}
+
+func (s *jwtSession) Principal() Principal {
+	return Principal{
+		User: User{
+			Permissions: s.claims.Permissions,
+		},
+	}
+}
+func (j *JWTManager) Authenticate(ctx context.Context, reqHeaders func(name string) string, query url.Values) (Session, error) {
+	const bearerPrefix = "Bearer "
+	authHeader := reqHeaders("Authorization")
+	if len(authHeader) < len(bearerPrefix) || !strings.EqualFold(authHeader[:len(bearerPrefix)], bearerPrefix) {
+		return nil, nil
+	}
+	token := authHeader[len(bearerPrefix):]
+
+	claims, err := j.ValidateToken(ctx, token)
+	if err != nil {
+		return nil, huma.Error401Unauthorized("Invalid or expired Registry JWT token", err)
+	}
+	return &jwtSession{claims: claims}, nil
 }
 
 // ValidateToken validates a Registry JWT token and returns the claims

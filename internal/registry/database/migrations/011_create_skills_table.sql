@@ -48,7 +48,7 @@ ALTER TABLE skills ADD CONSTRAINT check_skill_status_valid
 CHECK (status IN ('active', 'deprecated', 'deleted'));
 
 ALTER TABLE skills ADD CONSTRAINT check_skill_name_format
-CHECK (skill_name ~ '^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]/[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]$');
+CHECK (skill_name ~ '^[a-zA-Z0-9_-]+$');
 
 ALTER TABLE skills ADD CONSTRAINT check_skill_version_not_empty
 CHECK (length(trim(version)) > 0);

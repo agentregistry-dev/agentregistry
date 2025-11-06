@@ -1,9 +1,11 @@
 package client
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,7 +20,7 @@ import (
 
 // Client is a lightweight API client replacing the previous SQLite backend
 type Client struct {
-	baseURL    string
+	BaseURL    string
 	httpClient *http.Client
 	token      string
 
@@ -41,7 +43,7 @@ func NewClientFromEnv() (*Client, error) {
 	}
 	token := os.Getenv("ARCTL_API_TOKEN")
 	c := &Client{
-		baseURL: base,
+		BaseURL: base,
 		token:   token,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
@@ -78,7 +80,7 @@ func NewClient(baseURL, token string) *Client {
 		baseURL = defaultBaseURL
 	}
 	return &Client{
-		baseURL: baseURL,
+		BaseURL: baseURL,
 		token:   token,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
@@ -91,7 +93,7 @@ func NewClient(baseURL, token string) *Client {
 func (c *Client) Close() error { return nil }
 
 func (c *Client) newRequest(method, pathWithQuery string) (*http.Request, error) {
-	fullURL := strings.TrimRight(c.baseURL, "/") + pathWithQuery
+	fullURL := strings.TrimRight(c.BaseURL, "/") + pathWithQuery
 	req, err := http.NewRequest(method, fullURL, nil)
 	if err != nil {
 		return nil, err
@@ -99,24 +101,44 @@ func (c *Client) newRequest(method, pathWithQuery string) (*http.Request, error)
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
-	req.Header.Set("Accept", "application/json")
 	return req, nil
 }
 
-func (c *Client) doJSON(req *http.Request, out interface{}) error {
+func (c *Client) doJSON(req *http.Request, out any) error {
+	if out != nil {
+		req.Header.Set("Accept", "application/json")
+	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("unexpected status: %s", resp.Status)
+		// read up to 1KB of body for error message
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("unexpected status: %s, %s", resp.Status, string(errBody))
 	}
 	if out == nil {
 		return nil
 	}
 	dec := json.NewDecoder(resp.Body)
 	return dec.Decode(out)
+}
+
+func (c *Client) doJsonRequest(method, pathWithQuery string, in, out any) error {
+	req, err := c.newRequest(method, pathWithQuery)
+	if err != nil {
+		return err
+	}
+	if in != nil {
+		inBytes, err := json.Marshal(in)
+		if err != nil {
+			return fmt.Errorf("failed to marshal %T: %w", in, err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Body = io.NopCloser(bytes.NewReader(inBytes))
+	}
+	return c.doJSON(req, out)
 }
 
 // Ping checks connectivity to the API
@@ -409,6 +431,13 @@ func (c *Client) GetInstalledServers() ([]models.ServerDetail, error) {
 // GetInstallationByName returns an installation record by resource name
 func (c *Client) GetInstallationByName(resourceType, resourceName string) (*models.Installation, error) {
 	return nil, nil
+}
+
+// PublishSkill publishes a skill to the registry
+func (c *Client) PublishSkill(skill *models.SkillJSON) (*models.SkillResponse, error) {
+	var resp models.SkillResponse
+	err := c.doJsonRequest(http.MethodPost, "/skills/publish", skill, &resp)
+	return &resp, err
 }
 
 // Helpers to convert API errors

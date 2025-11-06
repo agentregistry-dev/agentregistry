@@ -153,6 +153,12 @@ docker-compose-up: docker
 	@echo "Starting services with Docker Compose..."
 	docker compose -p agentregistry -f internal/daemon/docker-compose.yml up -d --wait
 
+docker-compose-down:
+	docker compose -p agentregistry -f internal/daemon/docker-compose.yml down
+
+docker-compose-rm:
+	docker compose -p agentregistry -f internal/daemon/docker-compose.yml rm --volumes --force
+
 bin/arctl-linux-amd64:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bin/arctl-linux-amd64 cmd/cli/main.go
 
