@@ -158,7 +158,7 @@ docker-pull-as-latest:
 	@echo "Pulling and tagging as latest..."
 	docker pull $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION)
 	docker tag $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:latest
-	@echo "✓ Docker image pulled successfully"
+	@echo "✓ Docker image pulled successfully and tagged as latest"
 
 docker-compose-up: docker docker-pull-as-latest
 	@echo "Starting services with Docker Compose..."
