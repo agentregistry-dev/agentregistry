@@ -12,7 +12,6 @@ require (
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/joho/godotenv v1.5.1
 	github.com/kagent-dev/kagent/go v0.0.0-20251105163216-b1792c0c29fd
-	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/modelcontextprotocol/registry v1.3.7
 	github.com/prometheus/client_golang v1.23.2
 	github.com/rs/cors v1.11.1

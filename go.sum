@@ -155,10 +155,6 @@ github.com/josharian/intern v1.0.0 h1:vlS4z54oSdjm0bgjRigI+G1HpF+tI+9rE5LLzOg8Hm
 github.com/josharian/intern v1.0.0/go.mod h1:5DoeVV0s6jJacbCEi61lwdGj/aVlrQvzHFFd8Hwg//Y=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
-github.com/kagent-dev/kagent/go v0.0.0-20251105125349-724f38568a79 h1:BWTKWTQbGj5jeUHGrPQcpPBmITnJeYLhbG+haGEhXi0=
-github.com/kagent-dev/kagent/go v0.0.0-20251105125349-724f38568a79/go.mod h1:HsYenJ7znekfAX46cTTlr/mPLrMss6TILnCrZUti/24=
-github.com/kagent-dev/kagent/go v0.0.0-20251105162621-b509ff060698 h1:a+l4Iotc4xnfONQrdujV9nl9aAg7lpwfbyH2+PcUXLw=
-github.com/kagent-dev/kagent/go v0.0.0-20251105162621-b509ff060698/go.mod h1:HsYenJ7znekfAX46cTTlr/mPLrMss6TILnCrZUti/24=
 github.com/kagent-dev/kagent/go v0.0.0-20251105163216-b1792c0c29fd h1:yl/eajREqRfeCwVtptwm7+qG5o6z2fVJR+endW+Zb90=
 github.com/kagent-dev/kagent/go v0.0.0-20251105163216-b1792c0c29fd/go.mod h1:HsYenJ7znekfAX46cTTlr/mPLrMss6TILnCrZUti/24=
 github.com/kagent-dev/kmcp v0.1.8 h1:Ed/MSX0WDTB7jLVDPIjIvEGWmscEDHzixeS/5k+CfR8=
@@ -202,8 +198,6 @@ github.com/mattn/go-runewidth v0.0.17 h1:78v8ZlW0bP43XfmAfPsdXcoNCelfMHsDmd/pkEN
 github.com/mattn/go-runewidth v0.0.17/go.mod h1:Jdepj2loyihRzMpdS35Xk/zdY8IAYHsh153qUoGf23w=
 github.com/mattn/go-shellwords v1.0.12 h1:M2zGm7EW6UQJvDeQxo4T51eKPurbeFbe8WtebGE2xrk=
 github.com/mattn/go-shellwords v1.0.12/go.mod h1:EZzvwXDESEeg03EKmM+RmDnNOPKG4lLtQsUlTZDWQ8Y=
-github.com/mattn/go-sqlite3 v1.14.22 h1:2gZY6PC6kBnID23Tichd1K+Z0oS6nE/XwU+Vz/5o4kU=
-github.com/mattn/go-sqlite3 v1.14.22/go.mod h1:Uh1q+B4BYcTPb+yiD3kU8Ct7aC0hY9fxUwlHK0RXw+Y=
 github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db h1:62I3jR2EmQ4l5rM/4FEfDWcRD+abF5XlKShorW5LRoQ=
 github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db/go.mod h1:l0dey0ia/Uv7NcFFVbCLtqEBQbrT4OCwCSKTEv6enCw=
 github.com/mitchellh/go-homedir v1.1.0 h1:lukF9ziXFxDFPkA1vsr5zpc1XuPDn/wFntq5mG+4E0Y=

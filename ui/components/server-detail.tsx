@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { ServerResponse, adminApiClient } from "@/lib/admin-api"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -23,6 +23,7 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
+  ArrowLeft,
 } from "lucide-react"
 
 interface ServerDetailProps {
@@ -43,6 +44,23 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
   // Extract GitHub stars from metadata
   const publisherMetadata = serverData._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['agentregistry.solo.io/metadata']
   const githubStars = publisherMetadata?.stars
+
+  // Get the first icon if available
+  const icon = serverData.icons?.[0]
+
+  // Handle ESC key to close
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [onClose])
 
   const handleCopyToPrivateRegistry = async () => {
     setCopying(true)
@@ -100,21 +118,40 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
   return (
     <div className="fixed inset-0 bg-background z-50 overflow-y-auto">
       <div className="container mx-auto px-6 py-6">
+        {/* Back Button */}
+        <Button
+          variant="ghost"
+          onClick={onClose}
+          className="mb-4 gap-2"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Servers
+        </Button>
+
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-3xl font-bold">{serverData.title || serverData.name}</h1>
-              {official?.isLatest && (
-                <Badge variant="default">Latest</Badge>
-              )}
-              {official?.status && (
-                <Badge variant="secondary" className={getStatusColor(official.status)}>
-                  {official.status}
-                </Badge>
-              )}
+          <div className="flex items-start gap-4 flex-1">
+            {icon && (
+              <img 
+                src={icon.src} 
+                alt="Server icon" 
+                className="w-16 h-16 rounded flex-shrink-0 mt-1"
+              />
+            )}
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-2 flex-wrap">
+                <h1 className="text-3xl font-bold">{serverData.title || serverData.name}</h1>
+                {official?.isLatest && (
+                  <Badge variant="default">Latest</Badge>
+                )}
+                {official?.status && (
+                  <Badge variant="secondary" className={getStatusColor(official.status)}>
+                    {official.status}
+                  </Badge>
+                )}
+              </div>
+              <p className="text-muted-foreground">{serverData.name}</p>
             </div>
-            <p className="text-muted-foreground">{serverData.name}</p>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -159,56 +196,43 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
           </Card>
         )}
 
-        {/* Description */}
-        <Card className="p-6 mb-6">
-          <p className="text-lg">{serverData.description}</p>
-        </Card>
-
         {/* Quick Info */}
-        <div className="grid md:grid-cols-4 gap-4 mb-6">
-          <Card className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Tag className="h-4 w-4 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">Version</span>
-            </div>
-            <p className="text-lg font-semibold">{serverData.version}</p>
-          </Card>
+        <div className="flex flex-wrap gap-3 mb-6 text-sm">
+          <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md">
+            <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-muted-foreground">Version:</span>
+            <span className="font-medium">{serverData.version}</span>
+          </div>
 
           {official?.publishedAt && (
-            <Card className="p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Published</span>
-              </div>
-              <p className="text-sm font-semibold">{formatDate(official.publishedAt)}</p>
-            </Card>
+            <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md">
+              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-muted-foreground">Published:</span>
+              <span className="font-medium">{formatDate(official.publishedAt)}</span>
+            </div>
           )}
 
           {official?.updatedAt && (
-            <Card className="p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Updated</span>
-              </div>
-              <p className="text-sm font-semibold">{formatDate(official.updatedAt)}</p>
-            </Card>
+            <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md">
+              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-muted-foreground">Updated:</span>
+              <span className="font-medium">{formatDate(official.updatedAt)}</span>
+            </div>
           )}
 
           {serverData.websiteUrl && (
-            <Card className="p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <Globe className="h-4 w-4 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Website</span>
-              </div>
-              <a
-                href={serverData.websiteUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm font-semibold text-blue-600 hover:underline flex items-center gap-1"
-              >
+            <a
+              href={serverData.websiteUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md hover:bg-muted/80 transition-colors"
+            >
+              <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-muted-foreground">Website:</span>
+              <span className="font-medium text-blue-600 flex items-center gap-1">
                 Visit <ExternalLink className="h-3 w-3" />
-              </a>
-            </Card>
+              </span>
+            </a>
           )}
         </div>
 
@@ -217,24 +241,36 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="score">Score</TabsTrigger>
-            <TabsTrigger value="packages">Packages</TabsTrigger>
-            <TabsTrigger value="remotes">Remotes</TabsTrigger>
+            {serverData.packages && serverData.packages.length > 0 && (
+              <TabsTrigger value="packages">Packages</TabsTrigger>
+            )}
+            {serverData.remotes && serverData.remotes.length > 0 && (
+              <TabsTrigger value="remotes">Remotes</TabsTrigger>
+            )}
             <TabsTrigger value="raw">Raw Data</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
+            {/* Description */}
+            <Card className="p-6">
+              <h3 className="text-lg font-semibold mb-4">Description</h3>
+              <p className="text-base">{serverData.description}</p>
+            </Card>
+
             {/* Repository */}
-            {serverData.repository && (
+            {serverData.repository?.url && (
               <Card className="p-6">
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                   <GitBranch className="h-5 w-5" />
                   Repository
                 </h3>
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Source</span>
-                    <Badge variant="outline">{serverData.repository.source}</Badge>
-                  </div>
+                  {serverData.repository.source && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Source</span>
+                      <Badge variant="outline">{serverData.repository.source}</Badge>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">URL</span>
                     <a
@@ -246,24 +282,6 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
                       {serverData.repository.url} <ExternalLink className="h-3 w-3" />
                     </a>
                   </div>
-                </div>
-              </Card>
-            )}
-
-            {/* Icons */}
-            {serverData.icons && serverData.icons.length > 0 && (
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4">Icons</h3>
-                <div className="flex gap-4">
-                  {serverData.icons.map((icon, i) => (
-                    <div key={i} className="flex flex-col items-center gap-2">
-                      <img src={icon.src} alt="Server icon" className="w-16 h-16 rounded" />
-                      <span className="text-xs text-muted-foreground">{icon.mimeType}</span>
-                      {icon.theme && (
-                        <Badge variant="outline" className="text-xs">{icon.theme}</Badge>
-                      )}
-                    </div>
-                  ))}
                 </div>
               </Card>
             )}

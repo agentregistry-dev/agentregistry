@@ -7,11 +7,11 @@ const nextConfig = {
     return [
       {
         source: '/v0/:path*',
-        destination: 'http://localhost:8080/v0/:path*',
+        destination: 'http://localhost:12121/v0/:path*',
       },
       {
         source: '/api/:path*',
-        destination: 'http://localhost:8080/api/:path*',
+        destination: 'http://localhost:12121/api/:path*',
       },
     ]
   },

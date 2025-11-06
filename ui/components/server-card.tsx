@@ -1,16 +1,20 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import { ServerResponse } from "@/lib/admin-api"
 import { Card } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Package, Calendar, Tag, ExternalLink, GitBranch, Star } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Package, Calendar, Tag, ExternalLink, GitBranch, Star, Github, Globe, Trash2 } from "lucide-react"
 
 interface ServerCardProps {
   server: ServerResponse
-  onClick: (server: ServerResponse) => void
+  onDelete?: (server: ServerResponse) => void
+  showDelete?: boolean
+  showExternalLinks?: boolean
 }
 
-export function ServerCard({ server, onClick }: ServerCardProps) {
+export function ServerCard({ server, onDelete, showDelete = false, showExternalLinks = true }: ServerCardProps) {
+  const router = useRouter()
   const { server: serverData, _meta } = server
   const official = _meta?.['io.modelcontextprotocol.registry/official']
   
@@ -18,18 +22,11 @@ export function ServerCard({ server, onClick }: ServerCardProps) {
   const publisherMetadata = serverData._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['agentregistry.solo.io/metadata']
   const githubStars = publisherMetadata?.stars
 
-  // Get status badge color
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-600'
-      case 'deprecated':
-        return 'bg-yellow-600'
-      case 'deleted':
-        return 'bg-red-600'
-      default:
-        return 'bg-gray-600'
-    }
+  // Generate the server ID for the URL (name@version)
+  const serverId = encodeURIComponent(`${serverData.name}@${serverData.version}`)
+
+  const handleClick = () => {
+    router.push(`/servers/${serverId}`)
   }
 
   // Format date
@@ -45,27 +42,71 @@ export function ServerCard({ server, onClick }: ServerCardProps) {
     }
   }
 
+  // Get the first icon if available
+  const icon = serverData.icons?.[0]
+
   return (
     <Card
-      className="p-4 hover:shadow-lg transition-shadow cursor-pointer"
-      onClick={() => onClick(server)}
+      className="p-4 hover:shadow-md transition-all duration-200 cursor-pointer border hover:border-primary/20"
+      onClick={handleClick}
     >
       <div className="flex items-start justify-between mb-2">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <h3 className="font-semibold text-lg">{serverData.title || serverData.name}</h3>
-            {official?.isLatest && (
-              <Badge variant="default" className="text-xs">
-                Latest
-              </Badge>
-            )}
-            {official?.status && (
-              <Badge variant="secondary" className={`text-xs ${getStatusColor(official.status)}`}>
-                {official.status}
-              </Badge>
-            )}
+        <div className="flex items-start gap-3 flex-1">
+          {icon && (
+            <img 
+              src={icon.src} 
+              alt="Server icon" 
+              className="w-10 h-10 rounded flex-shrink-0 mt-1"
+            />
+          )}
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-lg mb-1">{serverData.title || serverData.name}</h3>
+            <p className="text-sm text-muted-foreground">{serverData.name}</p>
           </div>
-          <p className="text-sm text-muted-foreground">{serverData.name}</p>
+        </div>
+        <div className="flex items-center gap-1 ml-2">
+          {showExternalLinks && serverData.repository?.url && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={(e) => {
+                e.stopPropagation()
+                window.open(serverData.repository.url, '_blank')
+              }}
+              title="View on GitHub"
+            >
+              <Github className="h-4 w-4" />
+            </Button>
+          )}
+          {showExternalLinks && serverData.websiteUrl && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={(e) => {
+                e.stopPropagation()
+                window.open(serverData.websiteUrl, '_blank')
+              }}
+              title="Visit website"
+            >
+              <Globe className="h-4 w-4" />
+            </Button>
+          )}
+          {showDelete && onDelete && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={(e) => {
+                e.stopPropagation()
+                onDelete(server)
+              }}
+              title="Remove from registry"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
 

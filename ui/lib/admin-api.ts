@@ -191,6 +191,19 @@ class AdminApiClient {
     }
   }
 
+  // Delete a server
+  async deleteServer(serverName: string, version: string): Promise<void> {
+    const encodedName = encodeURIComponent(serverName)
+    const encodedVersion = encodeURIComponent(version)
+    const response = await fetch(`${this.baseUrl}/v0/admin/servers/${encodedName}/versions/${encodedVersion}`, {
+      method: 'DELETE',
+    })
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(error || 'Failed to delete server')
+    }
+  }
+
   // Get registry statistics
   async getStats(): Promise<ServerStats> {
     const response = await fetch(`${this.baseUrl}/v0/admin/stats`)

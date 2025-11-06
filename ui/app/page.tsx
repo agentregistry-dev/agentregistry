@@ -1,12 +1,13 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Image from "next/image"
+import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { ServerCard } from "@/components/server-card"
-import { ServerDetail } from "@/components/server-detail"
 import { ImportDialog } from "@/components/import-dialog"
 import { AddServerDialog } from "@/components/add-server-dialog"
 import { ImportSkillsDialog } from "@/components/import-skills-dialog"
@@ -14,14 +15,15 @@ import { AddSkillDialog } from "@/components/add-skill-dialog"
 import { ImportAgentsDialog } from "@/components/import-agents-dialog"
 import { AddAgentDialog } from "@/components/add-agent-dialog"
 import { adminApiClient, ServerResponse, ServerStats } from "@/lib/admin-api"
+import MCPIcon from "@/components/icons/mcp"
 import {
-  Server,
   Search,
   Download,
   RefreshCw,
   Plus,
   Zap,
   Bot,
+  Eye,
 } from "lucide-react"
 
 export default function AdminPage() {
@@ -32,7 +34,6 @@ export default function AdminPage() {
   const [skillsCount, setSkillsCount] = useState(0)
   const [agentsCount, setAgentsCount] = useState(0)
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedServer, setSelectedServer] = useState<ServerResponse | null>(null)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [addServerDialogOpen, setAddServerDialogOpen] = useState(false)
   const [importSkillsDialogOpen, setImportSkillsDialogOpen] = useState(false)
@@ -41,7 +42,6 @@ export default function AdminPage() {
   const [addAgentDialogOpen, setAddAgentDialogOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [statusFilter, setStatusFilter] = useState<string>("all")
 
   // Fetch data from API
   const fetchData = async () => {
@@ -82,16 +82,9 @@ export default function AdminPage() {
     fetchData()
   }, [])
 
-  // Filter servers based on search query and status
+  // Filter servers based on search query
   useEffect(() => {
     let filtered = servers
-
-    // Filter by status
-    if (statusFilter !== "all") {
-      filtered = filtered.filter(
-        (s) => s._meta?.['io.modelcontextprotocol.registry/official']?.status === statusFilter
-      )
-    }
 
     // Filter by search query
     if (searchQuery) {
@@ -105,17 +98,7 @@ export default function AdminPage() {
     }
 
     setFilteredServers(filtered)
-  }, [searchQuery, statusFilter, servers])
-
-  if (selectedServer) {
-    return (
-      <ServerDetail
-        server={selectedServer}
-        onClose={() => setSelectedServer(null)}
-        onServerCopied={fetchData}
-      />
-    )
-  }
+  }, [searchQuery, servers])
 
   if (loading) {
     return (
@@ -146,11 +129,23 @@ export default function AdminPage() {
       <div className="border-b">
         <div className="container mx-auto px-6 py-6">
           <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-3xl font-bold mb-2">agentregistry admin</h1>
-              <p className="text-muted-foreground">
-                Manage your agentregistry
-              </p>
+            <div className="flex items-center gap-6">
+              <Image 
+                src="/arlogo.png" 
+                alt="Agent Registry" 
+                width={200} 
+                height={67}
+                priority
+              />
+              <div className="flex items-center gap-4 text-sm">
+                <Link href="/" className="text-foreground font-medium">
+                  Admin
+                </Link>
+                <Link href="/registry" className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2">
+                  <Eye className="h-4 w-4" />
+                  View Registry
+                </Link>
+              </div>
             </div>
             <Button
               variant="outline"
@@ -165,10 +160,12 @@ export default function AdminPage() {
           {/* Stats */}
           {stats && (
             <div className="grid gap-4 md:grid-cols-3 mb-6">
-              <Card className="p-4">
+              <Card className="p-4 hover:shadow-md transition-all duration-200 border hover:border-primary/20">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-primary/10 rounded-lg">
-                    <Server className="h-5 w-5 text-primary" />
+                  <div className="p-2 bg-primary/10 rounded-lg flex items-center justify-center">
+                    <span className="h-5 w-5 text-primary flex items-center justify-center">
+                      <MCPIcon />
+                    </span>
                   </div>
                   <div>
                     <p className="text-2xl font-bold">{stats.total_server_names}</p>
@@ -177,10 +174,10 @@ export default function AdminPage() {
                 </div>
               </Card>
 
-              <Card className="p-4">
+              <Card className="p-4 hover:shadow-md transition-all duration-200 border hover:border-primary/20">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-600/10 rounded-lg">
-                    <Zap className="h-5 w-5 text-purple-600" />
+                  <div className="p-2 bg-primary/20 rounded-lg flex items-center justify-center">
+                    <Zap className="h-5 w-5 text-primary" />
                   </div>
                   <div>
                     <p className="text-2xl font-bold">{skillsCount}</p>
@@ -189,10 +186,10 @@ export default function AdminPage() {
                 </div>
               </Card>
 
-              <Card className="p-4">
+              <Card className="p-4 hover:shadow-md transition-all duration-200 border hover:border-primary/20">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-600/10 rounded-lg">
-                    <Bot className="h-5 w-5 text-blue-600" />
+                  <div className="p-2 bg-primary/30 rounded-lg flex items-center justify-center">
+                    <Bot className="h-5 w-5 text-primary" />
                   </div>
                   <div>
                     <p className="text-2xl font-bold">{agentsCount}</p>
@@ -206,10 +203,25 @@ export default function AdminPage() {
       </div>
 
       <div className="container mx-auto px-6 py-8">
+        {/* Global Search */}
+        <div className="mb-6">
+          <div className="relative max-w-2xl">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search servers, skills, agents..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+        </div>
+
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="mb-8">
             <TabsTrigger value="servers" className="gap-2">
-              <Server className="h-4 w-4" />
+              <span className="h-4 w-4 flex items-center justify-center">
+                <MCPIcon />
+              </span>
               Servers
             </TabsTrigger>
             <TabsTrigger value="skills" className="gap-2">
@@ -224,68 +236,24 @@ export default function AdminPage() {
 
           {/* Servers Tab */}
           <TabsContent value="servers">
-            {/* Search and Filters */}
-            <div className="flex flex-col md:flex-row items-start md:items-center gap-4 mb-8">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search servers..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-
-              {/* Status Filter */}
-              <div className="flex gap-2">
-                <Button
-                  variant={statusFilter === "all" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setStatusFilter("all")}
-                >
-                  All
-                </Button>
-                <Button
-                  variant={statusFilter === "active" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setStatusFilter("active")}
-                >
-                  Active
-                </Button>
-                <Button
-                  variant={statusFilter === "deprecated" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setStatusFilter("deprecated")}
-                >
-                  Deprecated
-                </Button>
-                <Button
-                  variant={statusFilter === "deleted" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setStatusFilter("deleted")}
-                >
-                  Deleted
-                </Button>
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  className="gap-2"
-                  onClick={() => setAddServerDialogOpen(true)}
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Server
-                </Button>
-                <Button
-                  variant="default"
-                  className="gap-2"
-                  onClick={() => setImportDialogOpen(true)}
-                >
-                  <Download className="h-4 w-4" />
-                  Import Servers
-                </Button>
-              </div>
+            {/* Actions */}
+            <div className="flex items-center gap-4 mb-8 justify-end">
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => setAddServerDialogOpen(true)}
+              >
+                <Plus className="h-4 w-4" />
+                Add Server
+              </Button>
+              <Button
+                variant="default"
+                className="gap-2"
+                onClick={() => setImportDialogOpen(true)}
+              >
+                <Download className="h-4 w-4" />
+                Import Servers
+              </Button>
             </div>
 
             {/* Server List */}
@@ -300,7 +268,9 @@ export default function AdminPage() {
               {filteredServers.length === 0 ? (
                 <Card className="p-12">
                   <div className="text-center text-muted-foreground">
-                    <Server className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center">
+                      <MCPIcon />
+                    </div>
                     <p className="text-lg font-medium mb-2">
                       {servers.length === 0
                         ? "No servers in registry"
@@ -329,7 +299,6 @@ export default function AdminPage() {
                     <ServerCard
                       key={`${server.server.name}-${server.server.version}-${index}`}
                       server={server}
-                      onClick={setSelectedServer}
                     />
                   ))}
                 </div>
@@ -339,34 +308,24 @@ export default function AdminPage() {
 
           {/* Skills Tab */}
           <TabsContent value="skills">
-            {/* Search and Filters */}
-            <div className="flex flex-col md:flex-row items-start md:items-center gap-4 mb-8">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search skills..."
-                  className="pl-10"
-                />
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  className="gap-2"
-                  onClick={() => setAddSkillDialogOpen(true)}
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Skill
-                </Button>
-                <Button
-                  variant="default"
-                  className="gap-2"
-                  onClick={() => setImportSkillsDialogOpen(true)}
-                >
-                  <Download className="h-4 w-4" />
-                  Import Skills
-                </Button>
-              </div>
+            {/* Actions */}
+            <div className="flex items-center gap-4 mb-8 justify-end">
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => setAddSkillDialogOpen(true)}
+              >
+                <Plus className="h-4 w-4" />
+                Add Skill
+              </Button>
+              <Button
+                variant="default"
+                className="gap-2"
+                onClick={() => setImportSkillsDialogOpen(true)}
+              >
+                <Download className="h-4 w-4" />
+                Import Skills
+              </Button>
             </div>
 
             {/* Skills List */}
@@ -378,7 +337,9 @@ export default function AdminPage() {
 
               <Card className="p-12">
                 <div className="text-center text-muted-foreground">
-                  <Zap className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center text-primary">
+                    <Zap className="w-12 h-12" />
+                  </div>
                   <p className="text-lg font-medium mb-2">Skills view coming soon</p>
                   <p className="text-sm mb-4">
                     {skillsCount} skill{skillsCount !== 1 ? 's' : ''} available in registry
@@ -398,34 +359,24 @@ export default function AdminPage() {
 
           {/* Agents Tab */}
           <TabsContent value="agents">
-            {/* Search and Filters */}
-            <div className="flex flex-col md:flex-row items-start md:items-center gap-4 mb-8">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search agents..."
-                  className="pl-10"
-                />
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  className="gap-2"
-                  onClick={() => setAddAgentDialogOpen(true)}
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Agent
-                </Button>
-                <Button
-                  variant="default"
-                  className="gap-2"
-                  onClick={() => setImportAgentsDialogOpen(true)}
-                >
-                  <Download className="h-4 w-4" />
-                  Import Agents
-                </Button>
-              </div>
+            {/* Actions */}
+            <div className="flex items-center gap-4 mb-8 justify-end">
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => setAddAgentDialogOpen(true)}
+              >
+                <Plus className="h-4 w-4" />
+                Add Agent
+              </Button>
+              <Button
+                variant="default"
+                className="gap-2"
+                onClick={() => setImportAgentsDialogOpen(true)}
+              >
+                <Download className="h-4 w-4" />
+                Import Agents
+              </Button>
             </div>
 
             {/* Agents List */}
@@ -437,7 +388,9 @@ export default function AdminPage() {
 
               <Card className="p-12">
                 <div className="text-center text-muted-foreground">
-                  <Bot className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center text-primary">
+                    <Bot className="w-12 h-12" />
+                  </div>
                   <p className="text-lg font-medium mb-2">Agents view coming soon</p>
                   <p className="text-sm mb-4">
                     {agentsCount} agent{agentsCount !== 1 ? 's' : ''} available in registry
