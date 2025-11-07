@@ -9,7 +9,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Package, Calendar, Tag, ExternalLink, GitBranch, Star, Github, Globe, Trash2, Upload } from "lucide-react"
+import { Package, Calendar, Tag, ExternalLink, GitBranch, Star, Github, Globe, Trash2, Upload, ShieldCheck, BadgeCheck } from "lucide-react"
 
 interface ServerCardProps {
   server: ServerResponse
@@ -26,9 +26,10 @@ export function ServerCard({ server, onDelete, onPublish, showDelete = false, sh
   const { server: serverData, _meta } = server
   const official = _meta?.['io.modelcontextprotocol.registry/official']
   
-  // Extract GitHub stars from metadata
+  // Extract metadata
   const publisherMetadata = serverData._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['agentregistry.solo.io/metadata']
   const githubStars = publisherMetadata?.stars
+  const identityData = publisherMetadata?.identity
 
   const handleClick = () => {
     if (onClick) {
@@ -68,7 +69,37 @@ export function ServerCard({ server, onDelete, onPublish, showDelete = false, sh
             />
           )}
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-lg mb-1">{serverData.title || serverData.name}</h3>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="font-semibold text-lg">{serverData.title || serverData.name}</h3>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <ShieldCheck 
+                    className={`h-4 w-4 flex-shrink-0 ${
+                      identityData?.org_is_verified 
+                        ? 'text-blue-600 dark:text-blue-400' 
+                        : 'text-gray-400 dark:text-gray-600 opacity-40'
+                    }`}
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{identityData?.org_is_verified ? 'Verified Organization' : 'Organization Not Verified'}</p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <BadgeCheck 
+                    className={`h-4 w-4 flex-shrink-0 ${
+                      identityData?.publisher_identity_verified_by_jwt 
+                        ? 'text-green-600 dark:text-green-400' 
+                        : 'text-gray-400 dark:text-gray-600 opacity-40'
+                    }`}
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{identityData?.publisher_identity_verified_by_jwt ? 'Verified Publisher' : 'Publisher Not Verified'}</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
             <p className="text-sm text-muted-foreground">{serverData.name}</p>
           </div>
         </div>

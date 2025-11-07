@@ -5,6 +5,8 @@ import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   Select,
@@ -44,6 +46,7 @@ import {
   ArrowUpDown,
   X,
   ChevronDown,
+  Filter,
 } from "lucide-react"
 
 // Grouped server type
@@ -64,6 +67,8 @@ export default function AdminPage() {
   const [stats, setStats] = useState<ServerStats | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [sortBy, setSortBy] = useState<"name" | "stars" | "date">("name")
+  const [filterVerifiedOrg, setFilterVerifiedOrg] = useState(false)
+  const [filterVerifiedPublisher, setFilterVerifiedPublisher] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [addServerDialogOpen, setAddServerDialogOpen] = useState(false)
   const [importSkillsDialogOpen, setImportSkillsDialogOpen] = useState(false)
@@ -247,6 +252,22 @@ export default function AdminPage() {
       )
     }
 
+    // Filter by verified organization
+    if (filterVerifiedOrg) {
+      filtered = filtered.filter((s) => {
+        const identityData = s.server._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['agentregistry.solo.io/metadata']?.identity
+        return identityData?.org_is_verified === true
+      })
+    }
+
+    // Filter by verified publisher
+    if (filterVerifiedPublisher) {
+      filtered = filtered.filter((s) => {
+        const identityData = s.server._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['agentregistry.solo.io/metadata']?.identity
+        return identityData?.publisher_identity_verified_by_jwt === true
+      })
+    }
+
     // Sort servers
     filtered.sort((a, b) => {
       switch (sortBy) {
@@ -267,7 +288,7 @@ export default function AdminPage() {
     })
 
     setFilteredServers(filtered)
-  }, [searchQuery, groupedServers, sortBy])
+  }, [searchQuery, groupedServers, sortBy, filterVerifiedOrg, filterVerifiedPublisher])
 
   // Filter skills and agents based on search query
   useEffect(() => {
@@ -539,19 +560,51 @@ export default function AdminPage() {
 
           {/* Servers Tab */}
           <TabsContent value="servers">
-            {/* Sort controls */}
-            <div className="flex items-center gap-2 mb-6">
-              <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
-              <Select value={sortBy} onValueChange={(value: "name" | "stars" | "date") => setSortBy(value)}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Sort by..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="name">Name (A-Z)</SelectItem>
-                  <SelectItem value="stars">GitHub Stars</SelectItem>
-                  <SelectItem value="date">Date Published</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* Sort and Filter controls */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-2">
+                <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+                <Select value={sortBy} onValueChange={(value: "name" | "stars" | "date") => setSortBy(value)}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Sort by..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="name">Name (A-Z)</SelectItem>
+                    <SelectItem value="stars">GitHub Stars</SelectItem>
+                    <SelectItem value="date">Date Published</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="filter-verified-org" 
+                    checked={filterVerifiedOrg}
+                    onCheckedChange={(checked: boolean) => setFilterVerifiedOrg(checked)}
+                  />
+                  <Label 
+                    htmlFor="filter-verified-org" 
+                    className="text-sm font-normal cursor-pointer"
+                  >
+                    Verified Organization
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="filter-verified-publisher" 
+                    checked={filterVerifiedPublisher}
+                    onCheckedChange={(checked: boolean) => setFilterVerifiedPublisher(checked)}
+                  />
+                  <Label 
+                    htmlFor="filter-verified-publisher" 
+                    className="text-sm font-normal cursor-pointer"
+                  >
+                    Verified Publisher
+                  </Label>
+                </div>
+              </div>
             </div>
 
             {/* Server List */}

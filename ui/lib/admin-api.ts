@@ -35,6 +35,57 @@ export interface ServerJSON {
     'io.modelcontextprotocol.registry/publisher-provided'?: {
       'agentregistry.solo.io/metadata'?: {
         stars?: number
+        score?: number
+        scorecard?: {
+          openssf?: number
+        }
+        repo?: {
+          forks_count?: number
+          watchers_count?: number
+          primary_language?: string
+          tags?: string[]
+          topics?: string[]
+        }
+        endpoint_health?: {
+          last_checked_at?: string
+          reachable?: boolean
+          response_ms?: number
+        }
+        scans?: {
+          container_images?: unknown[]
+          dependency_health?: {
+            copyleft_licenses?: number
+            ecosystems?: Record<string, number>
+            packages_total?: number
+            unknown_licenses?: number
+          }
+          details?: string[]
+          summary?: string
+        }
+        activity?: {
+          created_at?: string
+          pushed_at?: string
+          updated_at?: string
+        }
+        identity?: {
+          org_is_verified?: boolean
+          publisher_identity_verified_by_jwt?: boolean
+        }
+        semver?: {
+          uses_semver?: boolean
+        }
+        security_scanning?: {
+          code_scanning_alerts?: number | null
+          codeql_enabled?: boolean
+          dependabot_alerts?: number | null
+          dependabot_enabled?: boolean
+        }
+        downloads?: {
+          total?: number
+        }
+        releases?: {
+          latest_published_at?: string | null
+        }
       }
     }
   }

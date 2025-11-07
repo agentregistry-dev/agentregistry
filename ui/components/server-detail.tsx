@@ -41,6 +41,14 @@ import {
   ArrowLeft,
   History,
   Check,
+  Shield,
+  GitFork,
+  Eye,
+  Zap,
+  CheckCircle,
+  Clock,
+  ShieldCheck,
+  BadgeCheck,
 } from "lucide-react"
 
 interface ServerDetailProps {
@@ -63,12 +71,31 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
   const { server: serverData, _meta } = selectedVersion
   const official = _meta?.['io.modelcontextprotocol.registry/official']
   
-  // Extract GitHub stars from metadata
+  // Extract metadata
   const publisherMetadata = serverData._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['agentregistry.solo.io/metadata']
   const githubStars = publisherMetadata?.stars
+  const overallScore = publisherMetadata?.score
+  const openSSFScore = publisherMetadata?.scorecard?.openssf
+  const repoData = publisherMetadata?.repo
+  const endpointHealth = publisherMetadata?.endpoint_health
+  const scanData = publisherMetadata?.scans
+  const identityData = publisherMetadata?.identity
+  const semverData = publisherMetadata?.semver
+  const securityScanning = publisherMetadata?.security_scanning
 
   // Get the first icon if available
   const icon = serverData.icons?.[0]
+
+  // Check if there's any score data available
+  const hasScoreData = !!(
+    overallScore !== undefined ||
+    openSSFScore !== undefined ||
+    githubStars !== undefined ||
+    repoData ||
+    endpointHealth ||
+    scanData ||
+    securityScanning
+  )
 
   // Handle ESC key to close
   useEffect(() => {
@@ -184,6 +211,34 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2 flex-wrap">
                 <h1 className="text-3xl font-bold">{serverData.title || serverData.name}</h1>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <ShieldCheck 
+                      className={`h-6 w-6 flex-shrink-0 ${
+                        identityData?.org_is_verified 
+                          ? 'text-blue-600 dark:text-blue-400' 
+                          : 'text-gray-400 dark:text-gray-600 opacity-40'
+                      }`}
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{identityData?.org_is_verified ? 'Verified Organization' : 'Organization Not Verified'}</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <BadgeCheck 
+                      className={`h-6 w-6 flex-shrink-0 ${
+                        identityData?.publisher_identity_verified_by_jwt 
+                          ? 'text-green-600 dark:text-green-400' 
+                          : 'text-gray-400 dark:text-gray-600 opacity-40'
+                      }`}
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{identityData?.publisher_identity_verified_by_jwt ? 'Verified Publisher' : 'Publisher Not Verified'}</p>
+                  </TooltipContent>
+                </Tooltip>
               </div>
               <p className="text-muted-foreground">{serverData.name}</p>
             </div>
@@ -367,92 +422,248 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
           </TabsContent>
 
           <TabsContent value="score" className="space-y-4">
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
-                <TrendingUp className="h-5 w-5" />
-                Server Popularity Score
-              </h3>
-              
-              {/* GitHub Stars */}
-              <div className="space-y-6">
-                <div className="flex items-center justify-between p-6 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-950/20 dark:to-orange-950/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+            {/* Overall Scores */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Overall Score */}
+              {overallScore !== undefined && (
+                <Card className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-blue-200 dark:border-blue-800">
                   <div className="flex items-center gap-4">
-                    <div className="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-full">
-                      <Star className="h-8 w-8 text-yellow-600 dark:text-yellow-400 fill-yellow-600 dark:fill-yellow-400" />
+                    <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full">
+                      <TrendingUp className="h-8 w-8 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground mb-1">GitHub Stars</p>
-                      <p className="text-3xl font-bold">
-                        {githubStars !== undefined ? githubStars.toLocaleString() : 'N/A'}
-                      </p>
+                      <p className="text-sm text-muted-foreground mb-1">Overall Score</p>
+                      <p className="text-4xl font-bold">{overallScore.toFixed(2)}</p>
                     </div>
                   </div>
-                  {serverData.repository?.url && (
+                </Card>
+              )}
+
+              {/* OpenSSF Scorecard */}
+              {openSSFScore !== undefined && (
+                <Card className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border-green-200 dark:border-green-800">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full">
+                      <Shield className="h-8 w-8 text-green-600 dark:text-green-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">OpenSSF Scorecard</p>
+                      <p className="text-4xl font-bold">{openSSFScore.toFixed(1)}/10</p>
+                    </div>
+                  </div>
+                </Card>
+              )}
+            </div>
+
+            {/* GitHub Repository Stats */}
+            {(githubStars !== undefined || repoData) && (
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <GitBranch className="h-5 w-5" />
+                  Repository Statistics
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  {githubStars !== undefined && (
+                    <div className="flex items-center justify-between p-4 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-950/20 dark:to-orange-950/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                      <div className="flex items-center gap-3">
+                        <Star className="h-6 w-6 text-yellow-600 dark:text-yellow-400 fill-yellow-600 dark:fill-yellow-400" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Stars</p>
+                          <p className="text-2xl font-bold">{githubStars.toLocaleString()}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {repoData?.forks_count !== undefined && (
+                    <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <GitFork className="h-6 w-6 text-primary" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Forks</p>
+                          <p className="text-2xl font-bold">{repoData.forks_count.toLocaleString()}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {repoData?.watchers_count !== undefined && (
+                    <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <Eye className="h-6 w-6 text-primary" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Watchers</p>
+                          <p className="text-2xl font-bold">{repoData.watchers_count.toLocaleString()}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {repoData?.primary_language && (
+                    <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <Code className="h-6 w-6 text-primary" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Language</p>
+                          <p className="text-lg font-bold">{repoData.primary_language}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {serverData.repository?.url && (
+                  <div className="mt-4 pt-4 border-t">
                     <a
                       href={serverData.repository.url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-2 text-sm text-blue-600 hover:underline"
                     >
-                      View Repository <ExternalLink className="h-4 w-4" />
+                      <ExternalLink className="h-4 w-4" />
+                      View Repository
                     </a>
+                  </div>
+                )}
+              </Card>
+            )}
+
+            {/* Endpoint Health */}
+            {endpointHealth && (
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Zap className="h-5 w-5" />
+                  Endpoint Health
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="flex items-center gap-3 p-4 bg-muted rounded-lg">
+                    <div className={`p-2 rounded-full ${endpointHealth.reachable ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
+                      <CheckCircle className={`h-5 w-5 ${endpointHealth.reachable ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Status</p>
+                      <p className="text-lg font-bold">
+                        {endpointHealth.reachable ? 'Reachable' : 'Unreachable'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {endpointHealth.response_ms !== undefined && (
+                    <div className="flex items-center gap-3 p-4 bg-muted rounded-lg">
+                      <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-full">
+                        <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Response Time</p>
+                        <p className="text-lg font-bold">{endpointHealth.response_ms}ms</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {endpointHealth.last_checked_at && (
+                    <div className="flex items-center gap-3 p-4 bg-muted rounded-lg">
+                      <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-full">
+                        <Calendar className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Last Checked</p>
+                        <p className="text-sm font-medium">{new Date(endpointHealth.last_checked_at).toLocaleDateString()}</p>
+                      </div>
+                    </div>
                   )}
                 </div>
+              </Card>
+            )}
 
-                {githubStars === undefined && (
-                  <div className="text-center p-8 bg-muted rounded-lg">
-                    <Star className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-                    <p className="text-muted-foreground mb-2">No GitHub stars data available</p>
-                    <p className="text-sm text-muted-foreground">
-                      {serverData.repository 
-                        ? "Star data will be fetched on next import/refresh"
-                        : "This server doesn't have a GitHub repository configured"}
-                    </p>
+            {/* Security & Scanning */}
+            {(scanData || securityScanning) && (
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  Security & Scanning
+                </h3>
+                
+                {/* Dependency Health */}
+                {scanData?.dependency_health && (
+                  <div className="mb-6">
+                    <h4 className="text-sm font-semibold mb-3 text-muted-foreground">Dependency Health</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="p-3 bg-muted rounded-lg text-center">
+                        <p className="text-xs text-muted-foreground mb-1">Total Packages</p>
+                        <p className="text-xl font-bold">{scanData.dependency_health.packages_total}</p>
+                      </div>
+                      <div className="p-3 bg-muted rounded-lg text-center">
+                        <p className="text-xs text-muted-foreground mb-1">Copyleft Licenses</p>
+                        <p className="text-xl font-bold">{scanData.dependency_health.copyleft_licenses}</p>
+                      </div>
+                      <div className="p-3 bg-muted rounded-lg text-center">
+                        <p className="text-xs text-muted-foreground mb-1">Unknown Licenses</p>
+                        <p className="text-xl font-bold">{scanData.dependency_health.unknown_licenses}</p>
+                      </div>
+                      {scanData.dependency_health.ecosystems && (
+                        <div className="p-3 bg-muted rounded-lg text-center">
+                          <p className="text-xs text-muted-foreground mb-1">Ecosystems</p>
+                          <div className="text-sm font-bold space-y-1">
+                            {Object.entries(scanData.dependency_health.ecosystems).map(([key, value]) => (
+                              <div key={key}>{key}: {value}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
-                {githubStars !== undefined && (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Card className="p-4 text-center">
-                      <p className="text-sm text-muted-foreground mb-2">Popularity Tier</p>
-                      <p className="text-xl font-bold">
-                        {githubStars >= 1000 ? '🔥 Very Popular' : 
-                         githubStars >= 100 ? '⭐ Popular' : 
-                         githubStars >= 10 ? '👍 Growing' : 
-                         '🌱 New'}
-                      </p>
-                    </Card>
-                    
-                    <Card className="p-4 text-center">
-                      <p className="text-sm text-muted-foreground mb-2">Community Size</p>
-                      <p className="text-xl font-bold">
-                        {githubStars >= 1000 ? 'Large' : 
-                         githubStars >= 100 ? 'Medium' : 
-                         'Small'}
-                      </p>
-                    </Card>
-                    
-                    <Card className="p-4 text-center">
-                      <p className="text-sm text-muted-foreground mb-2">Trust Level</p>
-                      <p className="text-xl font-bold">
-                        {githubStars >= 500 ? 'High' : 
-                         githubStars >= 50 ? 'Medium' : 
-                         'Building'}
-                      </p>
-                    </Card>
+                {/* Security Scanning */}
+                {securityScanning && (
+                  <div className="mb-6">
+                    <h4 className="text-sm font-semibold mb-3 text-muted-foreground">Security Tools</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+                        <CheckCircle className={`h-4 w-4 ${securityScanning.codeql_enabled ? 'text-green-600' : 'text-gray-400'}`} />
+                        <span className="text-sm">CodeQL</span>
+                      </div>
+                      <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+                        <CheckCircle className={`h-4 w-4 ${securityScanning.dependabot_enabled ? 'text-green-600' : 'text-gray-400'}`} />
+                        <span className="text-sm">Dependabot</span>
+                      </div>
+                    </div>
                   </div>
                 )}
 
-                <div className="text-xs text-muted-foreground p-4 bg-muted rounded-lg">
-                  <p className="font-semibold mb-2">About Score Metrics:</p>
-                  <ul className="space-y-1 ml-4 list-disc">
-                    <li>GitHub stars indicate community interest and adoption</li>
-                    <li>Metrics are updated during import/refresh operations</li>
-                    <li>Higher scores generally indicate more mature and well-maintained servers</li>
-                  </ul>
-                </div>
+                {/* Scan Details */}
+                {scanData?.details && scanData.details.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-semibold mb-3 text-muted-foreground">Scan Details</h4>
+                    <div className="space-y-2">
+                      {scanData.details.map((detail: string, idx: number) => (
+                        <div key={idx} className="text-xs p-2 bg-muted rounded font-mono">
+                          {detail}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Scan Summary */}
+                {scanData?.summary && (
+                  <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <p className="text-xs font-semibold text-muted-foreground mb-1">Summary</p>
+                    <p className="text-sm font-mono">{scanData.summary}</p>
+                  </div>
+                )}
+              </Card>
+            )}
+
+            {/* Info Box */}
+            {!publisherMetadata && (
+              <div className="text-center p-8 bg-muted rounded-lg">
+                <TrendingUp className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+                <p className="text-muted-foreground mb-2">No scoring data available</p>
+                <p className="text-sm text-muted-foreground">
+                  Scoring data will be fetched on next import/refresh from the registry
+                </p>
               </div>
-            </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="packages" className="space-y-4">
