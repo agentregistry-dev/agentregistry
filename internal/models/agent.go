@@ -3,20 +3,20 @@ package models
 import (
 	"time"
 
+	"github.com/kagent-dev/kagent/go/cli/agent/frameworks/common"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 )
 
 // AgentJSON mirrors the ServerJSON shape for now, defined locally
 type AgentJSON struct {
-	Name        string             `json:"name"`
-	Title       string             `json:"title,omitempty"`
-	Description string             `json:"description"`
-	Version     string             `json:"version"`
-	Status      string             `json:"status,omitempty"`
-	WebsiteURL  string             `json:"websiteUrl,omitempty"`
-	Repository  *model.Repository  `json:"repository"`
-	Packages    []AgentPackageInfo `json:"packages,omitempty"`
-	Remotes     []model.Transport  `json:"remotes,omitempty"`
+	common.AgentManifest `json:",inline"`
+	Title                string `json:"title,omitempty"`
+	Version              string `json:"version"`
+	Status               string `json:"status,omitempty"`
+	WebsiteURL           string `json:"websiteUrl,omitempty"`
+	// Repository           *model.Repository  `json:"repository"`
+	Packages []AgentPackageInfo `json:"packages,omitempty"`
+	Remotes  []model.Transport  `json:"remotes,omitempty"`
 }
 
 type AgentPackageInfo struct {

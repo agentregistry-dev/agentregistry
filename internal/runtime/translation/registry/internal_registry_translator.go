@@ -3,12 +3,13 @@ package registry
 import (
 	"context"
 	"fmt"
-	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
-	"github.com/modelcontextprotocol/registry/pkg/model"
 	"net/url"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
+	"github.com/modelcontextprotocol/registry/pkg/model"
 
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
@@ -123,23 +124,39 @@ func translateLocalMCPServer(
 
 	cmd = packageInfo.RunTimeHint
 
+	processedArgs := make(map[string]bool)
+
 	getArgValue := func(arg model.Argument) string {
 		if v, exists := argValues[arg.Name]; exists {
 			return v
 		}
-		return arg.Value
+		if arg.Value != "" {
+			return arg.Value
+		}
+		return arg.Default
 	}
 	addArgs := func(modelArgrs []model.Argument) {
+		// Process positional arguments first
 		for _, arg := range modelArgrs {
 			switch arg.Type {
 			case model.ArgumentTypePositional:
 				args = append(args, getArgValue(arg))
+				processedArgs[arg.Name] = true
 			}
 		}
+		// Then process named arguments
 		for _, arg := range modelArgrs {
 			switch arg.Type {
 			case model.ArgumentTypeNamed:
-				args = append(args, arg.Name, getArgValue(arg))
+				// Always add the argument name (e.g., "--rm", "-e")
+				args = append(args, arg.Name)
+				processedArgs[arg.Name] = true
+
+				// Only add a value if one exists (not all named args have values)
+				argValue := getArgValue(arg)
+				if argValue != "" {
+					args = append(args, argValue)
+				}
 			}
 		}
 	}
@@ -161,7 +178,7 @@ func translateLocalMCPServer(
 		if cmd == "" {
 			cmd = "uvx"
 		}
-		args = []string{packageInfo.Identifier}
+		args = append(args, packageInfo.Identifier)
 	case "oci":
 		image = packageInfo.Identifier
 	default:
@@ -169,6 +186,22 @@ func translateLocalMCPServer(
 	}
 
 	addArgs(packageInfo.PackageArguments)
+
+	var extraArgNames []string
+	for argName := range argValues {
+		if !processedArgs[argName] {
+			extraArgNames = append(extraArgNames, argName)
+		}
+	}
+	slices.Sort(extraArgNames)
+	for _, argName := range extraArgNames {
+		args = append(args, argName)
+		// Only add the value if it's not empty
+		// This allows users to pass flags like --verbose= (empty value means flag only)
+		if argValue := argValues[argName]; argValue != "" {
+			args = append(args, argValue)
+		}
+	}
 
 	for _, envVar := range packageInfo.EnvironmentVariables {
 		if _, exists := envValues[envVar.Name]; !exists {

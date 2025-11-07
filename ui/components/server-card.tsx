@@ -11,9 +11,10 @@ interface ServerCardProps {
   showDelete?: boolean
   showExternalLinks?: boolean
   onClick?: () => void
+  versionCount?: number
 }
 
-export function ServerCard({ server, onDelete, showDelete = false, showExternalLinks = true, onClick }: ServerCardProps) {
+export function ServerCard({ server, onDelete, showDelete = false, showExternalLinks = true, onClick, versionCount }: ServerCardProps) {
   const { server: serverData, _meta } = server
   const official = _meta?.['io.modelcontextprotocol.registry/official']
   
@@ -116,6 +117,11 @@ export function ServerCard({ server, onDelete, showDelete = false, showExternalL
         <div className="flex items-center gap-1">
           <Tag className="h-3 w-3" />
           <span>{serverData.version}</span>
+          {versionCount && versionCount > 1 && (
+            <span className="ml-1 text-primary font-medium">
+              (+{versionCount - 1} more)
+            </span>
+          )}
         </div>
 
         {official?.publishedAt && (
