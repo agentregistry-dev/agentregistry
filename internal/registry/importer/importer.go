@@ -98,7 +98,7 @@ func (s *Service) SetProgressCachePath(path string) {
 // 1. Local file paths (*.json files) - expects ServerJSON array format
 // 2. Direct HTTP URLs to seed.json files - expects ServerJSON array format
 // 3. Registry API endpoints (e.g., /v0/servers, /v0.1/servers) - handles pagination automatically
-func (s *Service) ImportFromPath(ctx context.Context, path string) error {
+func (s *Service) ImportFromPath(ctx context.Context, path string, enrichServerData bool) error {
 	servers, err := s.readSeedFile(ctx, path)
 	if err != nil {
 		return fmt.Errorf("failed to read seed data: %w", err)
@@ -153,7 +153,7 @@ func (s *Service) ImportFromPath(ctx context.Context, path string) error {
 
 			current := atomic.AddInt32(&processed, 1)
 			log.Printf("Importing %d/%d: %s@%s", current, total, srv.Name, srv.Version)
-			s.importServer(ctx, srv, readmeSeeds)
+			s.importServer(ctx, srv, readmeSeeds, enrichServerData)
 		}()
 	}
 
@@ -166,6 +166,7 @@ func (s *Service) importServer(
 	ctx context.Context,
 	srv *apiv0.ServerJSON,
 	readmeSeeds seed.ReadmeFile,
+	enrichServerData bool,
 ) {
 	if srv != nil {
 		defer s.markServerProcessed(srv)
@@ -177,8 +178,10 @@ func (s *Service) importServer(
 	}
 
 	// Best-effort enrichment
-	if err := s.enrichServer(ctx, srv); err != nil {
-		log.Printf("Warning: enrichment failed for %s@%s: %v", srv.Name, srv.Version, err)
+	if enrichServerData {
+		if err := s.enrichServer(ctx, srv); err != nil {
+			log.Printf("Warning: enrichment failed for %s@%s: %v", srv.Name, srv.Version, err)
+		}
 	}
 
 	_, err := s.registry.CreateServer(ctx, srv)
@@ -196,6 +199,10 @@ func (s *Service) importServer(
 		}
 	}
 
+	if !enrichServerData {
+		// Skip README fetch if enrichment is disabled
+		return
+	}
 	readmeContent, readmeContentType := s.readmeFromSeed(readmeSeeds, srv)
 	if len(readmeContent) == 0 {
 		var readmeErr error

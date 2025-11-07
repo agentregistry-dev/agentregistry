@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
 	"log"
 	"net/http"
 	"os"
@@ -57,6 +58,17 @@ func App(_ context.Context) error {
 
 	registryService := service.NewRegistryService(db, cfg)
 
+	// Import builtin seed data unless it is disabled
+	if !cfg.DisableBuiltinSeed {
+		log.Printf("Importing builtin seed data...")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		if err := seed.ImportBuiltinSeedData(ctx, registryService); err != nil {
+			log.Printf("Failed to import builtin seed data: %v", err)
+		}
+	}
+
 	// Import seed data if seed source is provided
 	if cfg.SeedFrom != "" {
 		log.Printf("Importing data from %s...", cfg.SeedFrom)
@@ -64,7 +76,7 @@ func App(_ context.Context) error {
 		defer cancel()
 
 		importerService := importer.NewService(registryService)
-		if err := importerService.ImportFromPath(ctx, cfg.SeedFrom); err != nil {
+		if err := importerService.ImportFromPath(ctx, cfg.SeedFrom, cfg.EnrichServerData); err != nil {
 			log.Printf("Failed to import seed data: %v", err)
 		}
 	}

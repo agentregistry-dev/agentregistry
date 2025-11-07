@@ -25,6 +25,7 @@ var (
 	importUpdate         bool
 	importReadmeSeed     string
 	importProgressCache  string
+	enrichServerData     bool
 )
 
 var importCmd = &cobra.Command{
@@ -83,7 +84,7 @@ var importCmd = &cobra.Command{
 		importerService.SetReadmeSeedPath(importReadmeSeed)
 		importerService.SetProgressCachePath(importProgressCache)
 
-		if err := importerService.ImportFromPath(context.Background(), importSource); err != nil {
+		if err := importerService.ImportFromPath(context.Background(), importSource, enrichServerData); err != nil {
 			// Importer already logged failures and summary; return error to exit non-zero
 			return err
 		}
@@ -101,5 +102,6 @@ func init() {
 	importCmd.Flags().BoolVar(&importUpdate, "update", false, "Update existing entries if name/version already exists")
 	importCmd.Flags().StringVar(&importReadmeSeed, "readme-seed", "", "Optional README seed file path or URL")
 	importCmd.Flags().StringVar(&importProgressCache, "progress-cache", "", "Optional path to store import progress for resuming interrupted runs")
+	importCmd.Flags().BoolVar(&enrichServerData, "enrich-server-data", false, "Enrich server data during import (may increase import time)")
 	_ = importCmd.MarkFlagRequired("source")
 }
