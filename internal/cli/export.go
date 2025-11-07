@@ -15,7 +15,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var exportOutput string
+var (
+    exportOutput      string
+    exportReadmeOutput string
+)
 
 var exportCmd = &cobra.Command{
 	Use:   "export",
@@ -50,7 +53,9 @@ var exportCmd = &cobra.Command{
 			exportCtx = context.Background()
 		}
 
-		count, err := exporterService.ExportToPath(exportCtx, outputPath)
+        exporterService.SetReadmeOutputPath(exportReadmeOutput)
+
+        count, err := exporterService.ExportToPath(exportCtx, outputPath)
 		if err != nil {
 			return fmt.Errorf("failed to export servers: %w", err)
 		}
@@ -63,6 +68,7 @@ var exportCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(exportCmd)
 	exportCmd.Flags().StringVar(&exportOutput, "output", "", "Destination seed file path (required)")
+    exportCmd.Flags().StringVar(&exportReadmeOutput, "readme-output", "", "Optional README seed output path")
 	_ = exportCmd.MarkFlagRequired("output")
 }
 

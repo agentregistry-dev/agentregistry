@@ -3,10 +3,14 @@ package exporter
 import (
     "context"
     "encoding/json"
+    "errors"
     "fmt"
     "os"
     "path/filepath"
+    "strings"
 
+    "github.com/agentregistry-dev/agentregistry/internal/registry/database"
+    "github.com/agentregistry-dev/agentregistry/internal/registry/seed"
     "github.com/agentregistry-dev/agentregistry/internal/registry/service"
     apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
@@ -17,6 +21,7 @@ const defaultPageSize = 100
 type Service struct {
     registryService service.RegistryService
     pageSize        int
+    readmeOutput    string
 }
 
 // NewService creates a new exporter service.
@@ -33,6 +38,11 @@ func (s *Service) SetPageSize(size int) {
     if size > 0 {
         s.pageSize = size
     }
+}
+
+// SetReadmeOutputPath configures an optional README seed file output path.
+func (s *Service) SetReadmeOutputPath(path string) {
+    s.readmeOutput = strings.TrimSpace(path)
 }
 
 // ExportToPath collects all server definitions from the registry database and
@@ -59,6 +69,10 @@ func (s *Service) ExportToPath(ctx context.Context, outputPath string) (int, err
 
     if err := os.WriteFile(outputPath, data, 0o644); err != nil {
         return 0, fmt.Errorf("failed to write export file %s: %w", outputPath, err)
+    }
+
+    if err := s.writeReadmeSeeds(ctx, servers); err != nil {
+        return 0, err
     }
 
     return len(servers), nil
@@ -111,6 +125,63 @@ func ensureDir(outputPath string) error {
     }
 
     return nil
+}
+
+func (s *Service) writeReadmeSeeds(ctx context.Context, servers []*apiv0.ServerJSON) error {
+    if strings.TrimSpace(s.readmeOutput) == "" {
+        return nil
+    }
+
+    readmes, err := s.collectReadmes(ctx, servers)
+    if err != nil {
+        return err
+    }
+
+    if err := ensureDir(s.readmeOutput); err != nil {
+        return err
+    }
+
+    if readmes == nil {
+        readmes = seed.ReadmeFile{}
+    }
+
+    data, err := json.MarshalIndent(readmes, "", "  ")
+    if err != nil {
+        return fmt.Errorf("failed to marshal README seeds: %w", err)
+    }
+
+    if err := os.WriteFile(s.readmeOutput, data, 0o644); err != nil {
+        return fmt.Errorf("failed to write README seed file %s: %w", s.readmeOutput, err)
+    }
+
+    return nil
+}
+
+func (s *Service) collectReadmes(ctx context.Context, servers []*apiv0.ServerJSON) (seed.ReadmeFile, error) {
+    result := make(seed.ReadmeFile)
+
+    for _, server := range servers {
+        readme, err := s.registryService.GetServerReadmeByVersion(ctx, server.Name, server.Version)
+        if err != nil {
+            if errors.Is(err, database.ErrNotFound) {
+                continue
+            }
+            return nil, fmt.Errorf("failed to fetch README for %s@%s: %w", server.Name, server.Version, err)
+        }
+        if readme == nil || len(readme.Content) == 0 {
+            continue
+        }
+
+        contentType := readme.ContentType
+        if contentType == "" {
+            contentType = "text/markdown"
+        }
+
+        entry := seed.EncodeReadme(readme.Content, contentType)
+        result[seed.Key(server.Name, server.Version)] = entry
+    }
+
+    return result, nil
 }
 
 
