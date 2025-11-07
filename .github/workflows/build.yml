@@ -52,7 +52,7 @@ jobs:
       run: |
         make docker-registry docker docker-pull-as-latest
         echo "Starting integration test services..."
-        docker compose -f internal/daemon/docker-compose.yml -f internal/daemon/docker-compose.integration-test.yml up --wait --wait-timeout 60
+        docker compose -f internal/daemon/docker-compose.yml up --wait --wait-timeout 60
         go test -v -tags=integration ./...
 
     - name: Build Go CLI
