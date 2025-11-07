@@ -1,26 +1,28 @@
 package cli
 
 import (
+	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
 	"github.com/spf13/cobra"
+	yaml "gopkg.in/yaml.v3"
 )
 
 var (
 	// Flags for skill publish command
-	dockerRegistry string
-	dockerOrg      string
-	registryName   string
-	pushFlag       bool
-	multiMode      bool
-	dryRunFlag     bool
-	platformFlag   string
-	skillVersion   string
-	dockerTagFlag  string
+	dockerUrl    string
+	dockerTag    string
+	registryName string
+	pushFlag     bool
+	dryRunFlag   bool
 )
 
 var skillCmd = &cobra.Command{
@@ -99,16 +101,29 @@ func runSkillPublish(cmd *cobra.Command, args []string) error {
 	// 3. Push to Docker registry (if --push flag)
 	// 4. Publish to agent registry
 
+	var errs []error
+
 	for _, skill := range skills {
 		printer.PrintInfo(fmt.Sprintf("Processing skill: %s", skill))
-
-		if dryRunFlag {
-			printer.PrintInfo("[DRY RUN] Would publish skill: " + skill)
+		skillJson, err := buildSkillDockerImage(skill)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("failed to build skill '%s': %w", skill, err))
 			continue
 		}
 
-		// TODO: Implement actual build and publish logic
-		printer.PrintWarning("Skill publishing not yet implemented")
+		if dryRunFlag {
+			j, _ := json.Marshal(skillJson)
+			printer.PrintInfo("[DRY RUN] Would publish skill to registry " + APIClient.BaseURL + ": " + string(j))
+		} else {
+			_, err = APIClient.PublishSkill(skillJson)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("failed to publish skill '%s': %w", skill, err))
+			}
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("one or more errors occurred during publishing: %w", errors.Join(errs...))
 	}
 
 	if !dryRunFlag {
@@ -116,6 +131,161 @@ func runSkillPublish(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+func buildSkillDockerImage(skillPath string) (*models.SkillJSON, error) {
+	// 1) Read and parse SKILL.md frontmatter
+	skillMd := filepath.Join(skillPath, "SKILL.md")
+	f, err := os.Open(skillMd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open SKILL.md: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	// Extract YAML frontmatter between leading --- blocks
+	type frontmatter struct {
+		Name        string `yaml:"name"`
+		Description string `yaml:"description"`
+	}
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+	var lines []string
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed reading SKILL.md: %w", err)
+	}
+	if len(lines) == 0 {
+		return nil, fmt.Errorf("SKILL.md is empty")
+	}
+
+	// Find frontmatter region
+	var yamlStart, yamlEnd = -1, -1
+	for i, l := range lines {
+		if strings.TrimSpace(l) == "---" {
+			if yamlStart == -1 {
+				yamlStart = i + 1
+			} else {
+				yamlEnd = i
+				break
+			}
+		}
+	}
+	if yamlStart == -1 || yamlEnd == -1 || yamlEnd <= yamlStart {
+		return nil, fmt.Errorf("SKILL.md missing YAML frontmatter delimited by ---")
+	}
+	yamlContent := strings.Join(lines[yamlStart:yamlEnd], "\n")
+
+	var fm frontmatter
+	if err := yaml.Unmarshal([]byte(yamlContent), &fm); err != nil {
+		return nil, fmt.Errorf("failed to parse SKILL.md frontmatter: %w", err)
+	}
+
+	// Defaults and overrides
+	if fm.Name == "" {
+		// fallback to directory name
+		fm.Name = filepath.Base(skillPath)
+	}
+	ver := dockerTag
+	if ver == "" {
+		ver = "latest"
+	}
+
+	// 2) Determine image reference and build
+	// sanitize name for docker (lowercase, slashes to dashes)
+	repoName := sanitizeRepoName(fm.Name)
+	if dockerUrl == "" {
+		return nil, fmt.Errorf("docker url is required")
+	}
+	// dockerRegistry may be like docker.io or ghcr.io
+
+	imageRef := fmt.Sprintf("%s/%s:%s", strings.TrimSuffix(dockerUrl, "/"), repoName, ver)
+	// Build only if not dry-run
+	if dryRunFlag {
+		printer.PrintInfo("[DRY RUN] Would build Docker image: " + imageRef)
+	} else {
+		// Use classic docker build with Dockerfile provided via stdin (-f -)
+		args := []string{"build", "-t", imageRef, "-f", "-", skillPath}
+
+		printer.PrintInfo("Building Docker image (Dockerfile via stdin): docker " + strings.Join(args, " "))
+		cmd := exec.Command("docker", args...)
+		cmd.Dir = skillPath
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		// Minimal inline Dockerfile; avoids requiring a Dockerfile in the skill folder
+		cmd.Stdin = strings.NewReader("FROM scratch\nCOPY . .\n")
+		if err := cmd.Run(); err != nil {
+			return nil, fmt.Errorf("docker build failed: %w", err)
+		}
+	}
+
+	// Push tags if requested
+	if pushFlag {
+		if dryRunFlag {
+			printer.PrintInfo("[DRY RUN] Would push Docker image: " + imageRef)
+		} else {
+			printer.PrintInfo("Pushing Docker image: docker push " + imageRef)
+			pushCmd := exec.Command("docker", "push", imageRef)
+			pushCmd.Stdout = os.Stdout
+			pushCmd.Stderr = os.Stderr
+			if err := pushCmd.Run(); err != nil {
+				return nil, fmt.Errorf("docker push failed for %s: %w", imageRef, err)
+
+			}
+		}
+	}
+
+	// 3) Construct SkillJSON payload
+	skill := &models.SkillJSON{
+		Name: fm.Name,
+		//		Title:       fm.Title,
+		Description: fm.Description,
+		Version:     ver,
+		//WebsiteURL:  fm.WebsiteURL,
+		//Repository: models.SkillRepository{
+		//	URL:    fm.Repository.URL,
+		//	Source: fm.Repository.Source,
+		//},
+	}
+
+	// package info for docker image
+	pkg := models.SkillPackageInfo{
+		RegistryType: "docker",
+		Identifier:   imageRef,
+		Version:      ver,
+	}
+	pkg.Transport.Type = "docker"
+	skill.Packages = append(skill.Packages, pkg)
+
+	// remotes (optional)
+	//for _, r := range fm.Remotes {
+	//	if strings.TrimSpace(r.URL) == "" {
+	//		continue
+	//	}
+	//	skill.Remotes = append(skill.Remotes, models.SkillRemoteInfo{URL: r.URL})
+	//}
+
+	return skill, nil
+}
+
+// sanitizeRepoName converts a skill name to a docker-friendly repo name
+func sanitizeRepoName(name string) string {
+	n := strings.TrimSpace(strings.ToLower(name))
+	// replace any non-alphanum or separator with dash
+	// also convert path separators to dashes
+	replacer := strings.NewReplacer("/", "-", "\\", "-", " ", "-")
+	n = replacer.Replace(n)
+	// collapse consecutive dashes
+	for strings.Contains(n, "--") {
+		n = strings.ReplaceAll(n, "--", "-")
+	}
+	n = strings.Trim(n, "-")
+	if n == "" {
+		n = "skill"
+	}
+	return n
 }
 
 func runSkillList(cmd *cobra.Command, args []string) error {
@@ -260,17 +430,12 @@ func init() {
 	skillCmd.AddCommand(skillShowCmd)
 
 	// Flags for publish command
-	skillPublishCmd.Flags().StringVar(&dockerRegistry, "docker-registry", "docker.io", "Docker registry URL")
-	skillPublishCmd.Flags().StringVar(&dockerOrg, "docker-org", "", "Docker organization/namespace (required)")
-	skillPublishCmd.Flags().StringVar(&registryName, "registry", "", "Target agent registry name")
+	skillPublishCmd.Flags().StringVar(&dockerUrl, "docker-url", "", "Docker registry URL. For example: docker.io/myorg. The final image name will be <docker-url>/<skill-name>:<tag>")
 	skillPublishCmd.Flags().BoolVar(&pushFlag, "push", false, "Automatically push to Docker and agent registries")
-	skillPublishCmd.Flags().BoolVar(&multiMode, "multi", false, "Auto-detect and process multiple skills in subdirectories")
 	skillPublishCmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Show what would be done without actually doing it")
-	skillPublishCmd.Flags().StringVar(&platformFlag, "platform", "linux/amd64", "Target platform(s) for Docker build (e.g., linux/amd64,linux/arm64)")
-	skillPublishCmd.Flags().StringVar(&skillVersion, "version", "", "Override version from SKILL.md metadata")
-	skillPublishCmd.Flags().StringVar(&dockerTagFlag, "tag", "", "Additional Docker tag (can be specified multiple times)")
+	skillPublishCmd.Flags().StringVar(&dockerTag, "tag", "latest", "Docker image tag to use")
 
-	_ = skillPublishCmd.MarkFlagRequired("docker-org")
+	_ = skillPublishCmd.MarkFlagRequired("docker-url")
 
 	// Flags for list command
 	skillListCmd.Flags().StringVar(&registryName, "registry", "", "Filter by registry name")

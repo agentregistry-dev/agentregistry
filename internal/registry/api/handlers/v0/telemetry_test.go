@@ -75,8 +75,9 @@ func TestPrometheusHandler(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code, "Expected status OK for /metrics endpoint")
 
 	body := w.Body.String()
+	t.Log("metrics:", body)
 	// Check if the response body contains expected metrics
-	assert.Contains(t, body, "AGENT_REGISTRY_http_request_duration_bucket")
-	assert.Contains(t, body, "AGENT_REGISTRY_http_requests_total")
+	assert.Contains(t, body, "agent_registry_http_request_duration_bucket")
+	assert.Contains(t, body, "agent_registry_http_requests_total")
 	assert.Contains(t, body, "path=\"/v0/servers/{serverName}/versions/{version}\"")
 }

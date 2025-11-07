@@ -8,6 +8,7 @@ WORKDIR /app
 COPY Makefile ./
 COPY ui/package.json ui/package-lock.json ./
 COPY ui ui
+RUN mkdir -p internal/registry/api/ui/dist
 RUN make build-ui
 
 ARG BUILDPLATFORM
@@ -44,6 +45,8 @@ RUN apt-get update && apt-get install -y \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
+
+# Use TargetARCH to download the correct Docker binary
 RUN wget https://download.docker.com/linux/static/stable/x86_64/docker-28.5.1.tgz
 RUN tar -xvf docker-28.5.1.tgz
 RUN mv docker/docker /usr/local/bin/docker

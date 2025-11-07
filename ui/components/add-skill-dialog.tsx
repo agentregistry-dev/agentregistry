@@ -1,0 +1,81 @@
+"use client"
+
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+
+interface AddSkillDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSkillAdded: () => void
+}
+
+export function AddSkillDialog({ open, onOpenChange }: AddSkillDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Add Skill</DialogTitle>
+          <DialogDescription>
+            Add a new skill to the registry
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="name">Skill Name</Label>
+            <Input
+              id="name"
+              placeholder="my-skill"
+              disabled
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="title">Title</Label>
+            <Input
+              id="title"
+              placeholder="My Skill"
+              disabled
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              placeholder="A description of what this skill does"
+              rows={3}
+              disabled
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="version">Version</Label>
+            <Input
+              id="version"
+              placeholder="1.0.0"
+              disabled
+            />
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Feature coming soon - manually add skills to the registry
+          </p>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button disabled>
+              Add Skill
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+

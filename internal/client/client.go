@@ -1,9 +1,11 @@
 package client
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,7 +20,7 @@ import (
 
 // Client is a lightweight API client replacing the previous SQLite backend
 type Client struct {
-	baseURL    string
+	BaseURL    string
 	httpClient *http.Client
 	token      string
 
@@ -28,17 +30,20 @@ type Client struct {
 	nextRegID  int
 }
 
-const defaultRegistryName = "local"
+const (
+	defaultRegistryName = "local"
+	defaultBaseURL      = "http://localhost:12121/v0"
+)
 
 // NewClientFromEnv constructs a client using environment variables
 func NewClientFromEnv() (*Client, error) {
 	base := os.Getenv("ARCTL_API_BASE_URL")
 	if strings.TrimSpace(base) == "" {
-		base = "http://localhost:12121/v0"
+		base = defaultBaseURL
 	}
 	token := os.Getenv("ARCTL_API_TOKEN")
 	c := &Client{
-		baseURL: base,
+		BaseURL: base,
 		token:   token,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
@@ -71,8 +76,11 @@ func NewClientFromEnv() (*Client, error) {
 
 // NewClient constructs a client with explicit baseURL and token
 func NewClient(baseURL, token string) *Client {
+	if baseURL == "" {
+		baseURL = defaultBaseURL
+	}
 	return &Client{
-		baseURL: baseURL,
+		BaseURL: baseURL,
 		token:   token,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
@@ -85,7 +93,7 @@ func NewClient(baseURL, token string) *Client {
 func (c *Client) Close() error { return nil }
 
 func (c *Client) newRequest(method, pathWithQuery string) (*http.Request, error) {
-	fullURL := strings.TrimRight(c.baseURL, "/") + pathWithQuery
+	fullURL := strings.TrimRight(c.BaseURL, "/") + pathWithQuery
 	req, err := http.NewRequest(method, fullURL, nil)
 	if err != nil {
 		return nil, err
@@ -93,24 +101,44 @@ func (c *Client) newRequest(method, pathWithQuery string) (*http.Request, error)
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
-	req.Header.Set("Accept", "application/json")
 	return req, nil
 }
 
-func (c *Client) doJSON(req *http.Request, out interface{}) error {
+func (c *Client) doJSON(req *http.Request, out any) error {
+	if out != nil {
+		req.Header.Set("Accept", "application/json")
+	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("unexpected status: %s", resp.Status)
+		// read up to 1KB of body for error message
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("unexpected status: %s, %s", resp.Status, string(errBody))
 	}
 	if out == nil {
 		return nil
 	}
 	dec := json.NewDecoder(resp.Body)
 	return dec.Decode(out)
+}
+
+func (c *Client) doJsonRequest(method, pathWithQuery string, in, out any) error {
+	req, err := c.newRequest(method, pathWithQuery)
+	if err != nil {
+		return err
+	}
+	if in != nil {
+		inBytes, err := json.Marshal(in)
+		if err != nil {
+			return fmt.Errorf("failed to marshal %T: %w", in, err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Body = io.NopCloser(bytes.NewReader(inBytes))
+	}
+	return c.doJSON(req, out)
 }
 
 // Ping checks connectivity to the API
@@ -166,11 +194,17 @@ func (c *Client) GetServers() ([]models.ServerDetail, error) {
 	return all, nil
 }
 
-// GetServerByName returns a server by name
+// GetServerByName returns a server by name (latest version)
 func (c *Client) GetServerByName(name string) (*models.ServerDetail, error) {
-	// Use the special "latest" version endpoint
+	return c.GetServerByNameAndVersion(name, "latest")
+}
+
+// GetServerByNameAndVersion returns a specific version of a server
+func (c *Client) GetServerByNameAndVersion(name, version string) (*models.ServerDetail, error) {
+	// Use the version endpoint
 	encName := url.PathEscape(name)
-	req, err := c.newRequest(http.MethodGet, "/servers/"+encName+"/versions/latest")
+	encVersion := url.PathEscape(version)
+	req, err := c.newRequest(http.MethodGet, "/servers/"+encName+"/versions/"+encVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -180,10 +214,35 @@ func (c *Client) GetServerByName(name string) (*models.ServerDetail, error) {
 		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to get server by name: %w", err)
+		return nil, fmt.Errorf("failed to get server by name and version: %w", err)
 	}
 	s := mapServerResponse(resp)
 	return &s, nil
+}
+
+// GetServerVersions returns all versions of a server by name
+func (c *Client) GetServerVersions(name string) ([]models.ServerDetail, error) {
+	encName := url.PathEscape(name)
+	req, err := c.newRequest(http.MethodGet, "/servers/"+encName+"/versions")
+	if err != nil {
+		return nil, err
+	}
+
+	var resp apiv0.ServerListResponse
+	if err := c.doJSON(req, &resp); err != nil {
+		// 404 -> not found returns empty list
+		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get server versions: %w", err)
+	}
+
+	versions := make([]models.ServerDetail, 0, len(resp.Servers))
+	for _, sr := range resp.Servers {
+		versions = append(versions, mapServerResponse(sr))
+	}
+
+	return versions, nil
 }
 
 // GetSkills returns all skills from connected registries
@@ -238,13 +297,67 @@ func (c *Client) GetSkillByName(name string) (*models.Skill, error) {
 
 // GetAgents returns all agents from connected registries
 func (c *Client) GetAgents() ([]models.Agent, error) {
-	// Agents not supported via v0 API yet
-	return []models.Agent{}, nil
+	limit := 100
+	cursor := ""
+	var all []models.Agent
+
+	for {
+		q := fmt.Sprintf("/agents?limit=%d", limit)
+		if cursor != "" {
+			q += "&cursor=" + url.QueryEscape(cursor)
+		}
+		req, err := c.newRequest(http.MethodGet, q)
+		if err != nil {
+			return nil, err
+		}
+
+		var resp models.AgentListResponse
+		if err := c.doJSON(req, &resp); err != nil {
+			return nil, err
+		}
+		for _, ag := range resp.Agents {
+			all = append(all, mapAgentResponse(ag))
+		}
+		if resp.Metadata.NextCursor == "" {
+			break
+		}
+		cursor = resp.Metadata.NextCursor
+	}
+
+	return all, nil
 }
 
-// GetInstallations returns all installed resources
-func (c *Client) GetInstallations() ([]models.Installation, error) {
-	return []models.Installation{}, nil
+func (c *Client) GetAgentByName(name string) (*models.Agent, error) {
+	encName := url.PathEscape(name)
+	req, err := c.newRequest(http.MethodGet, "/agents/"+encName+"/versions/latest")
+	if err != nil {
+		return nil, err
+	}
+	var resp models.AgentResponse
+	if err := c.doJSON(req, &resp); err != nil {
+		return nil, fmt.Errorf("failed to get agent by name: %w", err)
+	}
+	s := mapAgentResponse(resp)
+	return &s, nil
+}
+
+func mapAgentResponse(ag models.AgentResponse) models.Agent {
+	// Store the raw agent response as JSON for potential future use
+	dataBytes, _ := json.Marshal(ag)
+	// Derive category from packages if desired (placeholder empty)
+	return models.Agent{
+		ID:           0,
+		RegistryID:   0,
+		RegistryName: defaultRegistryName,
+		Name:         ag.Agent.Name,
+		Title:        ag.Agent.Title,
+		Description:  ag.Agent.Description,
+		Version:      ag.Agent.Version,
+		Installed:    false,
+		Data:         string(dataBytes),
+		CreatedAt:    time.Time{},
+		UpdatedAt:    time.Time{},
+	}
 }
 
 // AddRegistry adds a new registry
@@ -335,6 +448,13 @@ func (c *Client) MarkServerInstalled(serverID int, installed bool) error { retur
 
 // MarkSkillInstalled marks a skill as installed or uninstalled
 func (c *Client) MarkSkillInstalled(skillID int, installed bool) error { return nil }
+
+// PublishSkill publishes a skill to the registry
+func (c *Client) PublishSkill(skill *models.SkillJSON) (*models.SkillResponse, error) {
+	var resp models.SkillResponse
+	err := c.doJsonRequest(http.MethodPost, "/skills/publish", skill, &resp)
+	return &resp, err
+}
 
 // GetInstalledServers returns all installed MCP servers
 func (c *Client) GetInstalledServers() ([]models.ServerDetail, error) {

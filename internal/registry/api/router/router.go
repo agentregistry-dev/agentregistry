@@ -2,10 +2,13 @@
 package router
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/agentregistry-dev/agentregistry/internal/registry/auth"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"go.opentelemetry.io/otel/attribute"
@@ -92,8 +95,43 @@ func WithSkipPaths(paths ...string) MiddlewareOption {
 	}
 }
 
+// handle404 returns a helpful 404 error with suggestions for common mistakes
+func handle404(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(http.StatusNotFound)
+
+	path := r.URL.Path
+	detail := "Endpoint not found. See /docs for the API documentation."
+
+	// Provide suggestions for common API endpoint mistakes
+	if !strings.HasPrefix(path, "/v0/") && !strings.HasPrefix(path, "/v0.1/") {
+		detail = fmt.Sprintf(
+			"Endpoint not found. Did you mean '%s' or '%s'? See /docs for the API documentation.",
+			"/v0.1"+path,
+			"/v0"+path,
+		)
+	}
+
+	errorBody := map[string]interface{}{
+		"title":  "Not Found",
+		"status": 404,
+		"detail": detail,
+	}
+
+	// Use JSON marshal to ensure consistent formatting
+	jsonData, err := json.Marshal(errorBody)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	_, err = w.Write(jsonData)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
 // NewHumaAPI creates a new Huma API with all routes registered
-func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.ServeMux, metrics *telemetry.Metrics, versionInfo *v0.VersionBody) huma.API {
+func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.ServeMux, metrics *telemetry.Metrics, versionInfo *v0.VersionBody, uiHandler http.Handler) huma.API {
 	// Create Huma API configuration
 	humaConfig := huma.DefaultConfig("Official MCP Registry", "1.0.0")
 	humaConfig.Info.Description = "A community driven registry service for Model Context Protocol (MCP) servers.\n\n[GitHub repository](https://github.com/modelcontextprotocol/registry) | [Documentation](https://github.com/modelcontextprotocol/registry/tree/main/docs)"
@@ -101,13 +139,23 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 	humaConfig.CreateHooks = []func(huma.Config) huma.Config{}
 
 	// Create a new API using humago adapter for standard library
+	jwtManager := auth.NewJWTManager(cfg)
 	api := humago.New(mux, humaConfig)
+	authz := auth.Authorizer{Authz: nil}
+	if false {
+		authz = auth.Authorizer{Authz: jwtManager}
+		api.UseMiddleware(auth.AuthnMiddleware(jwtManager))
+	}
 
 	// Add OpenAPI tag metadata with descriptions
 	api.OpenAPI().Tags = []*huma.Tag{
 		{
 			Name:        "servers",
 			Description: "Operations for discovering and retrieving MCP servers",
+		},
+		{
+			Name:        "agents",
+			Description: "Operations for discovering and retrieving Agentic agents",
 		},
 		{
 			Name:        "skills",
@@ -145,11 +193,34 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 	))
 
 	// Register routes for all API versions
-	RegisterV0Routes(api, cfg, registry, metrics, versionInfo)
+	RegisterV0Routes(api, authz, cfg, registry, metrics, versionInfo)
 	RegisterV0_1Routes(api, cfg, registry, metrics, versionInfo)
 
 	// Add /metrics for Prometheus metrics using promhttp
 	mux.Handle("/metrics", metrics.PrometheusHandler())
+	// Serve UI from /ui path or handle 404 for non-API routes
+	if uiHandler != nil {
+		// Use StripPrefix to properly handle the /ui prefix
+		// This allows http.FileServer to generate correct redirects
+		uiWithPrefix := http.StripPrefix("/ui", uiHandler)
 
+		// Register handler for /ui/ (with trailing slash - matches /ui/* paths)
+		mux.Handle("/ui/", uiWithPrefix)
+
+		// Also register handler for exact /ui path (without trailing slash)
+		mux.Handle("/ui", uiWithPrefix)
+
+	} else {
+		// If no UI handler, redirect to docs and handle 404
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/" {
+				http.Redirect(w, r, "https://github.com/modelcontextprotocol/registry/tree/main/docs", http.StatusTemporaryRedirect)
+				return
+			}
+
+			// Handle 404 for all other routes
+			handle404(w, r)
+		})
+	}
 	return api
 }

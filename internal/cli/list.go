@@ -52,10 +52,10 @@ var listCmd = &cobra.Command{
 			return
 		}
 
-		resourceType := args[0]
+		resourceType := strings.ToLower(args[0])
 
 		switch resourceType {
-		case "mcp":
+		case "mcp", "mcp-servers", "tools":
 			servers, err := APIClient.GetServers()
 			if err != nil {
 				log.Fatalf("Failed to get servers: %v", err)
@@ -76,14 +76,14 @@ var listCmd = &cobra.Command{
 				// Handle different output formats
 				switch outputFormat {
 				case "json":
-					outputServersJSON(servers)
+					outputDataJson(servers)
 				case "yaml":
-					outputServersYAML(servers)
+					outputDataYaml(servers)
 				default:
 					displayPaginatedServers(servers, listPageSize, listAll)
 				}
 			}
-		case "skill":
+		case "skill", "skills":
 			skills, err := APIClient.GetSkills()
 			if err != nil {
 				log.Fatalf("Failed to get skills: %v", err)
@@ -94,14 +94,32 @@ var listCmd = &cobra.Command{
 				// Handle different output formats
 				switch outputFormat {
 				case "json":
-					outputSkillsJSON(skills)
+					outputDataJson(skills)
 				case "yaml":
-					outputSkillsYAML(skills)
+					outputDataYaml(skills)
 				default:
 					displayPaginatedSkills(skills, listPageSize, listAll)
 				}
 			}
-		case "registry":
+		case "agent", "agents":
+			agents, err := APIClient.GetAgents()
+			if err != nil {
+				log.Fatalf("Failed to get skills: %v", err)
+			}
+			if len(agents) == 0 {
+				fmt.Println("No skills available")
+			} else {
+				// Handle different output formats
+				switch outputFormat {
+				case "json":
+					outputDataJson(agents)
+				case "yaml":
+					outputDataYaml(agents)
+				default:
+					panic("not implemented")
+				}
+			}
+		case "registry", "registries":
 			registries, err := APIClient.GetRegistries()
 			if err != nil {
 				log.Fatalf("Failed to get registries: %v", err)
@@ -112,9 +130,9 @@ var listCmd = &cobra.Command{
 				// Handle different output formats
 				switch outputFormat {
 				case "json":
-					outputRegistriesJSON(registries)
+					outputDataJson(registries)
 				case "yaml":
-					outputRegistriesYAML(registries)
+					outputDataYaml(registries)
 				default:
 					t := printer.NewTablePrinter(os.Stdout)
 					t.SetHeaders("Name", "URL", "Type", "Age")
@@ -574,49 +592,17 @@ func listAllResourceTypes() {
 	}
 }
 
-// outputServersJSON outputs servers in JSON format
-func outputServersJSON(servers []models.ServerDetail) {
+func outputDataJson[T any](data []T) {
 	p := printer.New(printer.OutputTypeJSON, false)
-	if err := p.PrintJSON(servers); err != nil {
+	if err := p.PrintJSON(data); err != nil {
 		log.Fatalf("Failed to output JSON: %v", err)
 	}
 }
 
-// outputServersYAML outputs servers in YAML format
-func outputServersYAML(servers []models.ServerDetail) {
+func outputDataYaml[T any](data []T) {
 	// For now, YAML is not implemented, fallback to JSON
 	fmt.Println("YAML output not yet implemented, using JSON:")
-	outputServersJSON(servers)
-}
-
-// outputSkillsJSON outputs skills in JSON format
-func outputSkillsJSON(skills []models.Skill) {
-	p := printer.New(printer.OutputTypeJSON, false)
-	if err := p.PrintJSON(skills); err != nil {
-		log.Fatalf("Failed to output JSON: %v", err)
-	}
-}
-
-// outputSkillsYAML outputs skills in YAML format
-func outputSkillsYAML(skills []models.Skill) {
-	// For now, YAML is not implemented, fallback to JSON
-	fmt.Println("YAML output not yet implemented, using JSON:")
-	outputSkillsJSON(skills)
-}
-
-// outputRegistriesJSON outputs registries in JSON format
-func outputRegistriesJSON(registries []models.Registry) {
-	p := printer.New(printer.OutputTypeJSON, false)
-	if err := p.PrintJSON(registries); err != nil {
-		log.Fatalf("Failed to output JSON: %v", err)
-	}
-}
-
-// outputRegistriesYAML outputs registries in YAML format
-func outputRegistriesYAML(registries []models.Registry) {
-	// For now, YAML is not implemented, fallback to JSON
-	fmt.Println("YAML output not yet implemented, using JSON:")
-	outputRegistriesJSON(registries)
+	outputDataJson(data)
 }
 
 func init() {

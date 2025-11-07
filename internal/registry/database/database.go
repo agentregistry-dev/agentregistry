@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	skillmodels "github.com/agentregistry-dev/agentregistry/internal/models"
+	models "github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
@@ -51,6 +51,16 @@ type SkillFilter struct {
 	IsLatest      *bool      // for filtering latest versions only
 }
 
+// AgentFilter defines filtering options for agent queries (mirrors ServerFilter)
+type AgentFilter struct {
+	Name          *string    // for finding versions of same agent
+	RemoteURL     *string    // for duplicate URL detection
+	UpdatedSince  *time.Time // for incremental sync filtering
+	SubstringName *string    // for substring search on name
+	Version       *string    // for exact version matching
+	IsLatest      *bool      // for filtering latest versions only
+}
+
 // Database defines the interface for database operations
 type Database interface {
 	// CreateServer inserts a new server version with official metadata
@@ -89,23 +99,47 @@ type Database interface {
 	// Close closes the database connection
 	Close() error
 
+	// Agents API
+	// CreateAgent inserts a new agent version with official metadata
+	CreateAgent(ctx context.Context, tx pgx.Tx, agentJSON *models.AgentJSON, officialMeta *models.AgentRegistryExtensions) (*models.AgentResponse, error)
+	// UpdateAgent updates an existing agent record
+	UpdateAgent(ctx context.Context, tx pgx.Tx, agentName, version string, agentJSON *models.AgentJSON) (*models.AgentResponse, error)
+	// SetAgentStatus updates the status of a specific agent version
+	SetAgentStatus(ctx context.Context, tx pgx.Tx, agentName, version string, status string) (*models.AgentResponse, error)
+	// ListAgents retrieve agent entries with optional filtering
+	ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error)
+	// GetAgentByName retrieve a single agent by its name (latest)
+	GetAgentByName(ctx context.Context, tx pgx.Tx, agentName string) (*models.AgentResponse, error)
+	// GetAgentByNameAndVersion retrieve specific version of an agent by name and version
+	GetAgentByNameAndVersion(ctx context.Context, tx pgx.Tx, agentName string, version string) (*models.AgentResponse, error)
+	// GetAllVersionsByAgentName retrieve all versions of an agent
+	GetAllVersionsByAgentName(ctx context.Context, tx pgx.Tx, agentName string) ([]*models.AgentResponse, error)
+	// GetCurrentLatestAgentVersion retrieve current latest version of an agent
+	GetCurrentLatestAgentVersion(ctx context.Context, tx pgx.Tx, agentName string) (*models.AgentResponse, error)
+	// CountAgentVersions count the number of versions for an agent
+	CountAgentVersions(ctx context.Context, tx pgx.Tx, agentName string) (int, error)
+	// CheckAgentVersionExists check if a specific version exists for an agent
+	CheckAgentVersionExists(ctx context.Context, tx pgx.Tx, agentName, version string) (bool, error)
+	// UnmarkAgentAsLatest marks the current latest version of an agent as no longer latest
+	UnmarkAgentAsLatest(ctx context.Context, tx pgx.Tx, agentName string) error
+
 	// Skills API
 	// CreateSkill inserts a new skill version with official metadata
-	CreateSkill(ctx context.Context, tx pgx.Tx, skillJSON *skillmodels.SkillJSON, officialMeta *skillmodels.SkillRegistryExtensions) (*skillmodels.SkillResponse, error)
+	CreateSkill(ctx context.Context, tx pgx.Tx, skillJSON *models.SkillJSON, officialMeta *models.SkillRegistryExtensions) (*models.SkillResponse, error)
 	// UpdateSkill updates an existing skill record
-	UpdateSkill(ctx context.Context, tx pgx.Tx, skillName, version string, skillJSON *skillmodels.SkillJSON) (*skillmodels.SkillResponse, error)
+	UpdateSkill(ctx context.Context, tx pgx.Tx, skillName, version string, skillJSON *models.SkillJSON) (*models.SkillResponse, error)
 	// SetSkillStatus updates the status of a specific skill version
-	SetSkillStatus(ctx context.Context, tx pgx.Tx, skillName, version string, status string) (*skillmodels.SkillResponse, error)
+	SetSkillStatus(ctx context.Context, tx pgx.Tx, skillName, version string, status string) (*models.SkillResponse, error)
 	// ListSkills retrieve skill entries with optional filtering
-	ListSkills(ctx context.Context, tx pgx.Tx, filter *SkillFilter, cursor string, limit int) ([]*skillmodels.SkillResponse, string, error)
+	ListSkills(ctx context.Context, tx pgx.Tx, filter *SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error)
 	// GetSkillByName retrieve a single skill by its name (latest)
-	GetSkillByName(ctx context.Context, tx pgx.Tx, skillName string) (*skillmodels.SkillResponse, error)
+	GetSkillByName(ctx context.Context, tx pgx.Tx, skillName string) (*models.SkillResponse, error)
 	// GetSkillByNameAndVersion retrieve specific version of a skill by name and version
-	GetSkillByNameAndVersion(ctx context.Context, tx pgx.Tx, skillName string, version string) (*skillmodels.SkillResponse, error)
+	GetSkillByNameAndVersion(ctx context.Context, tx pgx.Tx, skillName string, version string) (*models.SkillResponse, error)
 	// GetAllVersionsBySkillName retrieve all versions of a skill
-	GetAllVersionsBySkillName(ctx context.Context, tx pgx.Tx, skillName string) ([]*skillmodels.SkillResponse, error)
+	GetAllVersionsBySkillName(ctx context.Context, tx pgx.Tx, skillName string) ([]*models.SkillResponse, error)
 	// GetCurrentLatestSkillVersion retrieve current latest version of a skill
-	GetCurrentLatestSkillVersion(ctx context.Context, tx pgx.Tx, skillName string) (*skillmodels.SkillResponse, error)
+	GetCurrentLatestSkillVersion(ctx context.Context, tx pgx.Tx, skillName string) (*models.SkillResponse, error)
 	// CountSkillVersions count the number of versions for a skill
 	CountSkillVersions(ctx context.Context, tx pgx.Tx, skillName string) (int, error)
 	// CheckSkillVersionExists check if a specific version exists for a skill

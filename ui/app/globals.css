@@ -4,26 +4,61 @@
 
 @layer base {
   :root {
-    --background: 0 0% 7%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 210 100% 60%;
+    --background: 0 0% 100%;
+    --foreground: 270 5% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 270 5% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 270 5% 15%;
+    /* Purple primary color */
+    --primary: 270 70% 50%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 13%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 13%;
-    --muted-foreground: 0 0% 60%;
-    --accent: 210 100% 60%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 15%;
-    --input: 0 0% 15%;
-    --ring: 210 100% 60%;
+    --secondary: 270 10% 96%;
+    --secondary-foreground: 270 5% 15%;
+    --muted: 270 10% 96%;
+    --muted-foreground: 270 5% 45%;
+    --accent: 270 20% 94%;
+    --accent-foreground: 270 70% 40%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 270 10% 90%;
+    --input: 270 10% 90%;
+    --ring: 270 70% 50%;
     --radius: 0.5rem;
+    /* Purple-themed charts */
+    --chart-1: 270 70% 50%;
+    --chart-2: 240 60% 55%;
+    --chart-3: 290 65% 60%;
+    --chart-4: 260 55% 45%;
+    --chart-5: 280 60% 65%;
+  }
+  .dark {
+    --background: 270 10% 5%;
+    --foreground: 270 5% 95%;
+    --card: 270 10% 8%;
+    --card-foreground: 270 5% 95%;
+    --popover: 270 10% 8%;
+    --popover-foreground: 270 5% 95%;
+    /* Purple primary color for dark mode */
+    --primary: 270 70% 60%;
+    --primary-foreground: 270 10% 10%;
+    --secondary: 270 10% 15%;
+    --secondary-foreground: 270 5% 95%;
+    --muted: 270 10% 15%;
+    --muted-foreground: 270 5% 65%;
+    --accent: 270 20% 20%;
+    --accent-foreground: 270 70% 70%;
+    --destructive: 0 62% 40%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 270 10% 20%;
+    --input: 270 10% 20%;
+    --ring: 270 70% 60%;
+    /* Purple-themed charts for dark mode */
+    --chart-1: 270 70% 60%;
+    --chart-2: 240 60% 65%;
+    --chart-3: 290 65% 70%;
+    --chart-4: 260 55% 55%;
+    --chart-5: 280 60% 75%;
   }
 }
 
@@ -36,7 +71,7 @@
   }
 }
 
-/* Scrollbar styling for dark theme */
+/* Scrollbar styling */
 @layer utilities {
   .scrollbar-thin::-webkit-scrollbar {
     width: 6px;

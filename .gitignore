@@ -11,6 +11,9 @@
 # Output of the go coverage tool
 *.out
 
+# DLV debug file
+__debug_bin*
+
 # Dependency directories
 vendor/
 
@@ -20,6 +23,9 @@ go.work
 # Build artifacts
 bin/
 arctl
+
+# UI build artifacts
+internal/registry/api/ui/dist/
 
 # Database file
 *.db

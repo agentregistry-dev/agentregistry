@@ -36,7 +36,7 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: 18.x
+        node-version: 20.9.x
 
     - name: Cache Go modules
       uses: actions/cache@v3
@@ -64,7 +64,10 @@ jobs:
       run: go mod download
 
     - name: Run Integration Tests
-      run: go test -v -tags=integration ./...
+      run: |
+        make docker-registry docker docker-pull-as-latest
+        docker compose -f internal/daemon/docker-compose.yml -f internal/daemon/docker-compose.integration-test.yml up --wait --wait-timeout 60
+        go test -v -tags=integration ./...
 
     - name: Build Go CLI
       run: go build -v -o bin/arctl main.go
@@ -91,7 +94,7 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: 18.x
+        node-version: 20.9.x
 
     - name: Build UI
       run: make build-ui

@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	Namespace = "mcp_registry"
+	Namespace = "agent_registry"
 )
 
 type Metrics struct {

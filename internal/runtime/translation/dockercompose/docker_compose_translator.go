@@ -32,12 +32,22 @@ type Translator interface {
 type agentGatewayTranslator struct {
 	composeWorkingDir string
 	agentGatewayPort  uint16
+	projectName       string
 }
 
 func NewAgentGatewayTranslator(composeWorkingDir string, agentGatewayPort uint16) Translator {
 	return &agentGatewayTranslator{
 		composeWorkingDir: composeWorkingDir,
 		agentGatewayPort:  agentGatewayPort,
+		projectName:       "ai_registry",
+	}
+}
+
+func NewAgentGatewayTranslatorWithProjectName(composeWorkingDir string, agentGatewayPort uint16, projectName string) Translator {
+	return &agentGatewayTranslator{
+		composeWorkingDir: composeWorkingDir,
+		agentGatewayPort:  agentGatewayPort,
+		projectName:       projectName,
 	}
 }
 
@@ -73,7 +83,7 @@ func (t *agentGatewayTranslator) TranslateRuntimeConfig(
 	}
 
 	dockerCompose := &DockerComposeConfig{
-		Name:       "ai_registry",
+		Name:       t.projectName,
 		WorkingDir: t.composeWorkingDir,
 		Services:   dockerComposeServices,
 		//Networks:         nil,

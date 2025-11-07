@@ -16,6 +16,7 @@ import (
 
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 )
 
@@ -51,7 +52,7 @@ func TestOpenAPIEndpointCompliance(t *testing.T) {
 	}
 
 	// Register V0 routes exactly like production does
-	router.RegisterV0Routes(api, cfg, nil, nil, versionInfo) // nil service and metrics for schema testing
+	router.RegisterV0Routes(api, auth.Authorizer{}, cfg, nil, nil, versionInfo) // nil service and metrics for schema testing
 
 	// Get the OpenAPI schema
 	req := httptest.NewRequest(http.MethodGet, "/openapi.yaml", nil)

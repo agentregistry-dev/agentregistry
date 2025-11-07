@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	skillmodels "github.com/agentregistry-dev/agentregistry/internal/models"
+	models "github.com/agentregistry-dev/agentregistry/internal/models"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 )
@@ -819,11 +819,453 @@ func scanServerReadme(row pgx.Row) (*ServerReadme, error) {
 }
 
 // ==============================
+// Agents implementations
+// ==============================
+
+// ListAgents returns paginated agents with filtering
+func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if ctx.Err() != nil {
+		return nil, "", ctx.Err()
+	}
+
+	var whereConditions []string
+	args := []any{}
+	argIndex := 1
+
+	if filter != nil {
+		if filter.Name != nil {
+			whereConditions = append(whereConditions, fmt.Sprintf("agent_name = $%d", argIndex))
+			args = append(args, *filter.Name)
+			argIndex++
+		}
+		if filter.RemoteURL != nil {
+			whereConditions = append(whereConditions, fmt.Sprintf("EXISTS (SELECT 1 FROM jsonb_array_elements(value->'remotes') AS remote WHERE remote->>'url' = $%d)", argIndex))
+			args = append(args, *filter.RemoteURL)
+			argIndex++
+		}
+		if filter.UpdatedSince != nil {
+			whereConditions = append(whereConditions, fmt.Sprintf("updated_at > $%d", argIndex))
+			args = append(args, *filter.UpdatedSince)
+			argIndex++
+		}
+		if filter.SubstringName != nil {
+			whereConditions = append(whereConditions, fmt.Sprintf("agent_name ILIKE $%d", argIndex))
+			args = append(args, "%"+*filter.SubstringName+"%")
+			argIndex++
+		}
+		if filter.Version != nil {
+			whereConditions = append(whereConditions, fmt.Sprintf("version = $%d", argIndex))
+			args = append(args, *filter.Version)
+			argIndex++
+		}
+		if filter.IsLatest != nil {
+			whereConditions = append(whereConditions, fmt.Sprintf("is_latest = $%d", argIndex))
+			args = append(args, *filter.IsLatest)
+			argIndex++
+		}
+	}
+
+	if cursor != "" {
+		parts := strings.SplitN(cursor, ":", 2)
+		if len(parts) == 2 {
+			cursorName := parts[0]
+			cursorVersion := parts[1]
+			whereConditions = append(whereConditions, fmt.Sprintf("(agent_name > $%d OR (agent_name = $%d AND version > $%d))", argIndex, argIndex+1, argIndex+2))
+			args = append(args, cursorName, cursorName, cursorVersion)
+			argIndex += 3
+		} else {
+			whereConditions = append(whereConditions, fmt.Sprintf("agent_name > $%d", argIndex))
+			args = append(args, cursor)
+			argIndex++
+		}
+	}
+
+	whereClause := ""
+	if len(whereConditions) > 0 {
+		whereClause = "WHERE " + strings.Join(whereConditions, " AND ")
+	}
+
+	query := fmt.Sprintf(`
+		SELECT agent_name, version, status, published_at, updated_at, is_latest, value
+		FROM agents
+		%s
+		ORDER BY agent_name, version
+		LIMIT $%d
+	`, whereClause, argIndex)
+	args = append(args, limit)
+
+	rows, err := db.getExecutor(tx).Query(ctx, query, args...)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to query agents: %w", err)
+	}
+	defer rows.Close()
+
+	var results []*models.AgentResponse
+	for rows.Next() {
+		var name, version, status string
+		var publishedAt, updatedAt time.Time
+		var isLatest bool
+		var valueJSON []byte
+
+		if err := rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+			return nil, "", fmt.Errorf("failed to scan agent row: %w", err)
+		}
+
+		var agentJSON models.AgentJSON
+		if err := json.Unmarshal(valueJSON, &agentJSON); err != nil {
+			return nil, "", fmt.Errorf("failed to unmarshal agent JSON: %w", err)
+		}
+
+		resp := &models.AgentResponse{
+			Agent: agentJSON,
+			Meta: models.AgentResponseMeta{
+				Official: &models.AgentRegistryExtensions{
+					Status:      status,
+					PublishedAt: publishedAt,
+					UpdatedAt:   updatedAt,
+					IsLatest:    isLatest,
+				},
+			},
+		}
+		results = append(results, resp)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, "", fmt.Errorf("error iterating agent rows: %w", err)
+	}
+
+	nextCursor := ""
+	if len(results) > 0 && len(results) >= limit {
+		last := results[len(results)-1]
+		nextCursor = last.Agent.Name + ":" + last.Agent.Version
+	}
+	return results, nextCursor, nil
+}
+
+func (db *PostgreSQL) GetAgentByName(ctx context.Context, tx pgx.Tx, agentName string) (*models.AgentResponse, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	query := `
+		SELECT agent_name, version, status, published_at, updated_at, is_latest, value
+		FROM agents
+		WHERE agent_name = $1 AND is_latest = true
+		ORDER BY published_at DESC
+		LIMIT 1
+	`
+	var name, version, status string
+	var publishedAt, updatedAt time.Time
+	var isLatest bool
+	var valueJSON []byte
+	if err := db.getExecutor(tx).QueryRow(ctx, query, agentName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get agent by name: %w", err)
+	}
+	var agentJSON models.AgentJSON
+	if err := json.Unmarshal(valueJSON, &agentJSON); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal agent JSON: %w", err)
+	}
+	return &models.AgentResponse{
+		Agent: agentJSON,
+		Meta: models.AgentResponseMeta{
+			Official: &models.AgentRegistryExtensions{
+				Status:      status,
+				PublishedAt: publishedAt,
+				UpdatedAt:   updatedAt,
+				IsLatest:    isLatest,
+			},
+		},
+	}, nil
+}
+
+func (db *PostgreSQL) GetAgentByNameAndVersion(ctx context.Context, tx pgx.Tx, agentName, version string) (*models.AgentResponse, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	query := `
+		SELECT agent_name, version, status, published_at, updated_at, is_latest, value
+		FROM agents
+		WHERE agent_name = $1 AND version = $2
+		LIMIT 1
+	`
+	var name, vers, status string
+	var publishedAt, updatedAt time.Time
+	var isLatest bool
+	var valueJSON []byte
+	if err := db.getExecutor(tx).QueryRow(ctx, query, agentName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get agent by name and version: %w", err)
+	}
+	var agentJSON models.AgentJSON
+	if err := json.Unmarshal(valueJSON, &agentJSON); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal agent JSON: %w", err)
+	}
+	return &models.AgentResponse{
+		Agent: agentJSON,
+		Meta: models.AgentResponseMeta{
+			Official: &models.AgentRegistryExtensions{
+				Status:      status,
+				PublishedAt: publishedAt,
+				UpdatedAt:   updatedAt,
+				IsLatest:    isLatest,
+			},
+		},
+	}, nil
+}
+
+func (db *PostgreSQL) GetAllVersionsByAgentName(ctx context.Context, tx pgx.Tx, agentName string) ([]*models.AgentResponse, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	query := `
+		SELECT agent_name, version, status, published_at, updated_at, is_latest, value
+		FROM agents
+		WHERE agent_name = $1
+		ORDER BY published_at DESC
+	`
+	rows, err := db.getExecutor(tx).Query(ctx, query, agentName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query agent versions: %w", err)
+	}
+	defer rows.Close()
+	var results []*models.AgentResponse
+	for rows.Next() {
+		var name, version, status string
+		var publishedAt, updatedAt time.Time
+		var isLatest bool
+		var valueJSON []byte
+		if err := rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+			return nil, fmt.Errorf("failed to scan agent row: %w", err)
+		}
+		var agentJSON models.AgentJSON
+		if err := json.Unmarshal(valueJSON, &agentJSON); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal agent JSON: %w", err)
+		}
+		results = append(results, &models.AgentResponse{
+			Agent: agentJSON,
+			Meta: models.AgentResponseMeta{
+				Official: &models.AgentRegistryExtensions{
+					Status:      status,
+					PublishedAt: publishedAt,
+					UpdatedAt:   updatedAt,
+					IsLatest:    isLatest,
+				},
+			},
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating agent rows: %w", err)
+	}
+	if len(results) == 0 {
+		return nil, ErrNotFound
+	}
+	return results, nil
+}
+
+func (db *PostgreSQL) CreateAgent(ctx context.Context, tx pgx.Tx, agentJSON *models.AgentJSON, officialMeta *models.AgentRegistryExtensions) (*models.AgentResponse, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	if agentJSON == nil || officialMeta == nil {
+		return nil, fmt.Errorf("agentJSON and officialMeta are required")
+	}
+	if agentJSON.Name == "" || agentJSON.Version == "" {
+		return nil, fmt.Errorf("agent name and version are required")
+	}
+	valueJSON, err := json.Marshal(agentJSON)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal agent JSON: %w", err)
+	}
+	insert := `
+		INSERT INTO agents (agent_name, version, status, published_at, updated_at, is_latest, value)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`
+	if _, err := db.getExecutor(tx).Exec(ctx, insert,
+		agentJSON.Name,
+		agentJSON.Version,
+		officialMeta.Status,
+		officialMeta.PublishedAt,
+		officialMeta.UpdatedAt,
+		officialMeta.IsLatest,
+		valueJSON,
+	); err != nil {
+		return nil, fmt.Errorf("failed to insert agent: %w", err)
+	}
+	return &models.AgentResponse{
+		Agent: *agentJSON,
+		Meta: models.AgentResponseMeta{
+			Official: officialMeta,
+		},
+	}, nil
+}
+
+func (db *PostgreSQL) UpdateAgent(ctx context.Context, tx pgx.Tx, agentName, version string, agentJSON *models.AgentJSON) (*models.AgentResponse, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	if agentJSON == nil {
+		return nil, fmt.Errorf("agentJSON is required")
+	}
+	if agentJSON.Name != agentName || agentJSON.Version != version {
+		return nil, fmt.Errorf("%w: agent name and version in JSON must match parameters", ErrInvalidInput)
+	}
+	valueJSON, err := json.Marshal(agentJSON)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal updated agent: %w", err)
+	}
+	query := `
+		UPDATE agents
+		SET value = $1, updated_at = NOW()
+		WHERE agent_name = $2 AND version = $3
+		RETURNING agent_name, version, status, published_at, updated_at, is_latest
+	`
+	var name, vers, status string
+	var publishedAt, updatedAt time.Time
+	var isLatest bool
+	if err := db.getExecutor(tx).QueryRow(ctx, query, valueJSON, agentName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to update agent: %w", err)
+	}
+	return &models.AgentResponse{
+		Agent: *agentJSON,
+		Meta: models.AgentResponseMeta{
+			Official: &models.AgentRegistryExtensions{
+				Status:      status,
+				PublishedAt: publishedAt,
+				UpdatedAt:   updatedAt,
+				IsLatest:    isLatest,
+			},
+		},
+	}, nil
+}
+
+func (db *PostgreSQL) SetAgentStatus(ctx context.Context, tx pgx.Tx, agentName, version string, status string) (*models.AgentResponse, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	query := `
+		UPDATE agents
+		SET status = $1, updated_at = NOW()
+		WHERE agent_name = $2 AND version = $3
+		RETURNING agent_name, version, status, value, published_at, updated_at, is_latest
+	`
+	var name, vers, currentStatus string
+	var publishedAt, updatedAt time.Time
+	var isLatest bool
+	var valueJSON []byte
+	if err := db.getExecutor(tx).QueryRow(ctx, query, status, agentName, version).Scan(&name, &vers, &currentStatus, &valueJSON, &publishedAt, &updatedAt, &isLatest); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to update agent status: %w", err)
+	}
+	var agentJSON models.AgentJSON
+	if err := json.Unmarshal(valueJSON, &agentJSON); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal agent JSON: %w", err)
+	}
+	return &models.AgentResponse{
+		Agent: agentJSON,
+		Meta: models.AgentResponseMeta{
+			Official: &models.AgentRegistryExtensions{
+				Status:      currentStatus,
+				PublishedAt: publishedAt,
+				UpdatedAt:   updatedAt,
+				IsLatest:    isLatest,
+			},
+		},
+	}, nil
+}
+
+func (db *PostgreSQL) GetCurrentLatestAgentVersion(ctx context.Context, tx pgx.Tx, agentName string) (*models.AgentResponse, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	executor := db.getExecutor(tx)
+	query := `
+		SELECT agent_name, version, status, value, published_at, updated_at, is_latest
+		FROM agents
+		WHERE agent_name = $1 AND is_latest = true
+	`
+	row := executor.QueryRow(ctx, query, agentName)
+	var name, version, status string
+	var publishedAt, updatedAt time.Time
+	var isLatest bool
+	var jsonValue []byte
+	if err := row.Scan(&name, &version, &status, &jsonValue, &publishedAt, &updatedAt, &isLatest); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to scan agent row: %w", err)
+	}
+	var agentJSON models.AgentJSON
+	if err := json.Unmarshal(jsonValue, &agentJSON); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal agent JSON: %w", err)
+	}
+	return &models.AgentResponse{
+		Agent: agentJSON,
+		Meta: models.AgentResponseMeta{
+			Official: &models.AgentRegistryExtensions{
+				PublishedAt: publishedAt,
+				UpdatedAt:   updatedAt,
+				IsLatest:    isLatest,
+				Status:      status,
+			},
+		},
+	}, nil
+}
+
+func (db *PostgreSQL) CountAgentVersions(ctx context.Context, tx pgx.Tx, agentName string) (int, error) {
+	if ctx.Err() != nil {
+		return 0, ctx.Err()
+	}
+	executor := db.getExecutor(tx)
+	query := `SELECT COUNT(*) FROM agents WHERE agent_name = $1`
+	var count int
+	if err := executor.QueryRow(ctx, query, agentName).Scan(&count); err != nil {
+		return 0, fmt.Errorf("failed to count agent versions: %w", err)
+	}
+	return count, nil
+}
+
+func (db *PostgreSQL) CheckAgentVersionExists(ctx context.Context, tx pgx.Tx, agentName, version string) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+	executor := db.getExecutor(tx)
+	query := `SELECT EXISTS(SELECT 1 FROM agents WHERE agent_name = $1 AND version = $2)`
+	var exists bool
+	if err := executor.QueryRow(ctx, query, agentName, version).Scan(&exists); err != nil {
+		return false, fmt.Errorf("failed to check agent version existence: %w", err)
+	}
+	return exists, nil
+}
+
+func (db *PostgreSQL) UnmarkAgentAsLatest(ctx context.Context, tx pgx.Tx, agentName string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	executor := db.getExecutor(tx)
+	query := `UPDATE agents SET is_latest = false WHERE agent_name = $1 AND is_latest = true`
+	if _, err := executor.Exec(ctx, query, agentName); err != nil {
+		return fmt.Errorf("failed to unmark latest agent version: %w", err)
+	}
+	return nil
+}
+
+// ==============================
 // Skills implementations
 // ==============================
 
 // ListSkills returns paginated skills with filtering
-func (db *PostgreSQL) ListSkills(ctx context.Context, tx pgx.Tx, filter *SkillFilter, cursor string, limit int) ([]*skillmodels.SkillResponse, string, error) {
+func (db *PostgreSQL) ListSkills(ctx context.Context, tx pgx.Tx, filter *SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -903,7 +1345,7 @@ func (db *PostgreSQL) ListSkills(ctx context.Context, tx pgx.Tx, filter *SkillFi
 	}
 	defer rows.Close()
 
-	var results []*skillmodels.SkillResponse
+	var results []*models.SkillResponse
 	for rows.Next() {
 		var name, version, status string
 		var publishedAt, updatedAt time.Time
@@ -914,15 +1356,15 @@ func (db *PostgreSQL) ListSkills(ctx context.Context, tx pgx.Tx, filter *SkillFi
 			return nil, "", fmt.Errorf("failed to scan skill row: %w", err)
 		}
 
-		var skillJSON skillmodels.SkillJSON
+		var skillJSON models.SkillJSON
 		if err := json.Unmarshal(valueJSON, &skillJSON); err != nil {
 			return nil, "", fmt.Errorf("failed to unmarshal skill JSON: %w", err)
 		}
 
-		resp := &skillmodels.SkillResponse{
+		resp := &models.SkillResponse{
 			Skill: skillJSON,
-			Meta: skillmodels.SkillResponseMeta{
-				Official: &skillmodels.SkillRegistryExtensions{
+			Meta: models.SkillResponseMeta{
+				Official: &models.SkillRegistryExtensions{
 					Status:      status,
 					PublishedAt: publishedAt,
 					UpdatedAt:   updatedAt,
@@ -944,7 +1386,7 @@ func (db *PostgreSQL) ListSkills(ctx context.Context, tx pgx.Tx, filter *SkillFi
 	return results, nextCursor, nil
 }
 
-func (db *PostgreSQL) GetSkillByName(ctx context.Context, tx pgx.Tx, skillName string) (*skillmodels.SkillResponse, error) {
+func (db *PostgreSQL) GetSkillByName(ctx context.Context, tx pgx.Tx, skillName string) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -965,14 +1407,14 @@ func (db *PostgreSQL) GetSkillByName(ctx context.Context, tx pgx.Tx, skillName s
 		}
 		return nil, fmt.Errorf("failed to get skill by name: %w", err)
 	}
-	var skillJSON skillmodels.SkillJSON
+	var skillJSON models.SkillJSON
 	if err := json.Unmarshal(valueJSON, &skillJSON); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal skill JSON: %w", err)
 	}
-	return &skillmodels.SkillResponse{
+	return &models.SkillResponse{
 		Skill: skillJSON,
-		Meta: skillmodels.SkillResponseMeta{
-			Official: &skillmodels.SkillRegistryExtensions{
+		Meta: models.SkillResponseMeta{
+			Official: &models.SkillRegistryExtensions{
 				Status:      status,
 				PublishedAt: publishedAt,
 				UpdatedAt:   updatedAt,
@@ -982,7 +1424,7 @@ func (db *PostgreSQL) GetSkillByName(ctx context.Context, tx pgx.Tx, skillName s
 	}, nil
 }
 
-func (db *PostgreSQL) GetSkillByNameAndVersion(ctx context.Context, tx pgx.Tx, skillName, version string) (*skillmodels.SkillResponse, error) {
+func (db *PostgreSQL) GetSkillByNameAndVersion(ctx context.Context, tx pgx.Tx, skillName, version string) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -1002,14 +1444,14 @@ func (db *PostgreSQL) GetSkillByNameAndVersion(ctx context.Context, tx pgx.Tx, s
 		}
 		return nil, fmt.Errorf("failed to get skill by name and version: %w", err)
 	}
-	var skillJSON skillmodels.SkillJSON
+	var skillJSON models.SkillJSON
 	if err := json.Unmarshal(valueJSON, &skillJSON); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal skill JSON: %w", err)
 	}
-	return &skillmodels.SkillResponse{
+	return &models.SkillResponse{
 		Skill: skillJSON,
-		Meta: skillmodels.SkillResponseMeta{
-			Official: &skillmodels.SkillRegistryExtensions{
+		Meta: models.SkillResponseMeta{
+			Official: &models.SkillRegistryExtensions{
 				Status:      status,
 				PublishedAt: publishedAt,
 				UpdatedAt:   updatedAt,
@@ -1019,7 +1461,7 @@ func (db *PostgreSQL) GetSkillByNameAndVersion(ctx context.Context, tx pgx.Tx, s
 	}, nil
 }
 
-func (db *PostgreSQL) GetAllVersionsBySkillName(ctx context.Context, tx pgx.Tx, skillName string) ([]*skillmodels.SkillResponse, error) {
+func (db *PostgreSQL) GetAllVersionsBySkillName(ctx context.Context, tx pgx.Tx, skillName string) ([]*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -1034,7 +1476,7 @@ func (db *PostgreSQL) GetAllVersionsBySkillName(ctx context.Context, tx pgx.Tx, 
 		return nil, fmt.Errorf("failed to query skill versions: %w", err)
 	}
 	defer rows.Close()
-	var results []*skillmodels.SkillResponse
+	var results []*models.SkillResponse
 	for rows.Next() {
 		var name, version, status string
 		var publishedAt, updatedAt time.Time
@@ -1043,14 +1485,14 @@ func (db *PostgreSQL) GetAllVersionsBySkillName(ctx context.Context, tx pgx.Tx, 
 		if err := rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
 			return nil, fmt.Errorf("failed to scan skill row: %w", err)
 		}
-		var skillJSON skillmodels.SkillJSON
+		var skillJSON models.SkillJSON
 		if err := json.Unmarshal(valueJSON, &skillJSON); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal skill JSON: %w", err)
 		}
-		results = append(results, &skillmodels.SkillResponse{
+		results = append(results, &models.SkillResponse{
 			Skill: skillJSON,
-			Meta: skillmodels.SkillResponseMeta{
-				Official: &skillmodels.SkillRegistryExtensions{
+			Meta: models.SkillResponseMeta{
+				Official: &models.SkillRegistryExtensions{
 					Status:      status,
 					PublishedAt: publishedAt,
 					UpdatedAt:   updatedAt,
@@ -1068,7 +1510,7 @@ func (db *PostgreSQL) GetAllVersionsBySkillName(ctx context.Context, tx pgx.Tx, 
 	return results, nil
 }
 
-func (db *PostgreSQL) CreateSkill(ctx context.Context, tx pgx.Tx, skillJSON *skillmodels.SkillJSON, officialMeta *skillmodels.SkillRegistryExtensions) (*skillmodels.SkillResponse, error) {
+func (db *PostgreSQL) CreateSkill(ctx context.Context, tx pgx.Tx, skillJSON *models.SkillJSON, officialMeta *models.SkillRegistryExtensions) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -1097,15 +1539,15 @@ func (db *PostgreSQL) CreateSkill(ctx context.Context, tx pgx.Tx, skillJSON *ski
 	); err != nil {
 		return nil, fmt.Errorf("failed to insert skill: %w", err)
 	}
-	return &skillmodels.SkillResponse{
+	return &models.SkillResponse{
 		Skill: *skillJSON,
-		Meta: skillmodels.SkillResponseMeta{
+		Meta: models.SkillResponseMeta{
 			Official: officialMeta,
 		},
 	}, nil
 }
 
-func (db *PostgreSQL) UpdateSkill(ctx context.Context, tx pgx.Tx, skillName, version string, skillJSON *skillmodels.SkillJSON) (*skillmodels.SkillResponse, error) {
+func (db *PostgreSQL) UpdateSkill(ctx context.Context, tx pgx.Tx, skillName, version string, skillJSON *models.SkillJSON) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -1134,10 +1576,10 @@ func (db *PostgreSQL) UpdateSkill(ctx context.Context, tx pgx.Tx, skillName, ver
 		}
 		return nil, fmt.Errorf("failed to update skill: %w", err)
 	}
-	return &skillmodels.SkillResponse{
+	return &models.SkillResponse{
 		Skill: *skillJSON,
-		Meta: skillmodels.SkillResponseMeta{
-			Official: &skillmodels.SkillRegistryExtensions{
+		Meta: models.SkillResponseMeta{
+			Official: &models.SkillRegistryExtensions{
 				Status:      status,
 				PublishedAt: publishedAt,
 				UpdatedAt:   updatedAt,
@@ -1147,7 +1589,7 @@ func (db *PostgreSQL) UpdateSkill(ctx context.Context, tx pgx.Tx, skillName, ver
 	}, nil
 }
 
-func (db *PostgreSQL) SetSkillStatus(ctx context.Context, tx pgx.Tx, skillName, version string, status string) (*skillmodels.SkillResponse, error) {
+func (db *PostgreSQL) SetSkillStatus(ctx context.Context, tx pgx.Tx, skillName, version string, status string) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -1167,14 +1609,14 @@ func (db *PostgreSQL) SetSkillStatus(ctx context.Context, tx pgx.Tx, skillName, 
 		}
 		return nil, fmt.Errorf("failed to update skill status: %w", err)
 	}
-	var skillJSON skillmodels.SkillJSON
+	var skillJSON models.SkillJSON
 	if err := json.Unmarshal(valueJSON, &skillJSON); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal skill JSON: %w", err)
 	}
-	return &skillmodels.SkillResponse{
+	return &models.SkillResponse{
 		Skill: skillJSON,
-		Meta: skillmodels.SkillResponseMeta{
-			Official: &skillmodels.SkillRegistryExtensions{
+		Meta: models.SkillResponseMeta{
+			Official: &models.SkillRegistryExtensions{
 				Status:      currentStatus,
 				PublishedAt: publishedAt,
 				UpdatedAt:   updatedAt,
@@ -1184,7 +1626,7 @@ func (db *PostgreSQL) SetSkillStatus(ctx context.Context, tx pgx.Tx, skillName, 
 	}, nil
 }
 
-func (db *PostgreSQL) GetCurrentLatestSkillVersion(ctx context.Context, tx pgx.Tx, skillName string) (*skillmodels.SkillResponse, error) {
+func (db *PostgreSQL) GetCurrentLatestSkillVersion(ctx context.Context, tx pgx.Tx, skillName string) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -1205,14 +1647,14 @@ func (db *PostgreSQL) GetCurrentLatestSkillVersion(ctx context.Context, tx pgx.T
 		}
 		return nil, fmt.Errorf("failed to scan skill row: %w", err)
 	}
-	var skillJSON skillmodels.SkillJSON
+	var skillJSON models.SkillJSON
 	if err := json.Unmarshal(jsonValue, &skillJSON); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal skill JSON: %w", err)
 	}
-	return &skillmodels.SkillResponse{
+	return &models.SkillResponse{
 		Skill: skillJSON,
-		Meta: skillmodels.SkillResponseMeta{
-			Official: &skillmodels.SkillRegistryExtensions{
+		Meta: models.SkillResponseMeta{
+			Official: &models.SkillRegistryExtensions{
 				PublishedAt: publishedAt,
 				UpdatedAt:   updatedAt,
 				IsLatest:    isLatest,
