@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/models"
+	v0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
 // findServersByName finds servers by name, checking full name first, then partial name
-func findServersByName(searchName string) []*models.ServerDetail {
+func findServersByName(searchName string) []*v0.ServerResponse {
 	servers, err := APIClient.GetServers()
 	if err != nil {
 		log.Fatalf("Failed to get servers: %v", err)
@@ -21,28 +21,28 @@ func findServersByName(searchName string) []*models.ServerDetail {
 
 	// First, try exact match with full name
 	for _, s := range servers {
-		if s.Name == searchName {
-			return []*models.ServerDetail{&s}
+		if s.Server.Name == searchName {
+			return []*v0.ServerResponse{s}
 		}
 	}
 
 	// If no exact match, search for name part (after /)
-	var matches []*models.ServerDetail
+	var matches []*v0.ServerResponse
 	searchLower := strings.ToLower(searchName)
 
 	for _, s := range servers {
 		// Extract name part (after /)
-		parts := strings.Split(s.Name, "/")
+		parts := strings.Split(s.Server.Name, "/")
 		var namePart string
 		if len(parts) == 2 {
 			namePart = strings.ToLower(parts[1])
 		} else {
-			namePart = strings.ToLower(s.Name)
+			namePart = strings.ToLower(s.Server.Name)
 		}
 
 		if namePart == searchLower {
 			serverCopy := s
-			matches = append(matches, &serverCopy)
+			matches = append(matches, serverCopy)
 		}
 	}
 

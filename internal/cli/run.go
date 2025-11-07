@@ -3,7 +3,6 @@ package cli
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -12,7 +11,6 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
@@ -89,7 +87,7 @@ func runMCPServer(resourceName string) {
 		}
 
 		// Server version found, proceed with running it
-		fmt.Printf("✓ Found MCP server: %s (version %s)\n", server.Title, server.Version)
+		fmt.Printf("✓ Found MCP server: %s (version %s)\n", server.Server.Title, server.Server.Version)
 		if err := runMCPServerWithRuntime(server); err != nil {
 			fmt.Printf("Error running MCP server: %v\n", err)
 			return
@@ -123,9 +121,9 @@ func runMCPServer(resourceName string) {
 			if i == 0 {
 				marker = " (latest)"
 			}
-			fmt.Printf("  - %s%s\n", v.Version, marker)
+			fmt.Printf("  - %s%s\n", v.Server.Version, marker)
 		}
-		fmt.Printf("\nDefault: version %s (latest)\n", latestServer.Version)
+		fmt.Printf("\nDefault: version %s (latest)\n", latestServer.Server.Version)
 
 		// Skip prompt if --yes flag is set
 		if !runYes {
@@ -149,7 +147,7 @@ func runMCPServer(resourceName string) {
 		}
 	} else {
 		// Only one version available
-		fmt.Printf("✓ Found MCP server: %s (version %s)\n", latestServer.Title, latestServer.Version)
+		fmt.Printf("✓ Found MCP server: %s (version %s)\n", latestServer.Server.Title, latestServer.Server.Version)
 	}
 
 	// Proceed with running the latest version
@@ -160,21 +158,7 @@ func runMCPServer(resourceName string) {
 }
 
 // runMCPServerWithRuntime starts an MCP server using the runtime
-func runMCPServerWithRuntime(server *models.ServerDetail) error {
-	var combinedData models.CombinedServerData
-	if err := json.Unmarshal([]byte(server.Data), &combinedData); err != nil {
-		return fmt.Errorf("failed to parse server data: %w", err)
-	}
-
-	serverBytes, err := json.Marshal(combinedData.Server)
-	if err != nil {
-		return fmt.Errorf("failed to marshal server data: %w", err)
-	}
-
-	var registryServer apiv0.ServerJSON
-	if err := json.Unmarshal(serverBytes, &registryServer); err != nil {
-		return fmt.Errorf("failed to parse registry server: %w", err)
-	}
+func runMCPServerWithRuntime(server *apiv0.ServerResponse) error {
 
 	// Parse environment variables, arguments, and headers from flags
 	envValues, err := parseKeyValuePairs(runEnvVars)
@@ -193,7 +177,7 @@ func runMCPServerWithRuntime(server *models.ServerDetail) error {
 	}
 
 	runRequest := &registry.MCPServerRunRequest{
-		RegistryServer: &registryServer,
+		RegistryServer: &server.Server,
 		PreferRemote:   false,
 		EnvValues:      envValues,
 		ArgValues:      argValues,
@@ -222,7 +206,7 @@ func runMCPServerWithRuntime(server *models.ServerDetail) error {
 		runVerbose,
 	)
 
-	fmt.Printf("Starting MCP server: %s (version %s)...\n", server.Name, server.Version)
+	fmt.Printf("Starting MCP server: %s (version %s)...\n", server.Server.Name, server.Server.Version)
 
 	// Start the server
 	if err := agentRuntime.ReconcileMCPServers(context.Background(), []*registry.MCPServerRunRequest{runRequest}); err != nil {

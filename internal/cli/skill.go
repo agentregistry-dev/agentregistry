@@ -305,31 +305,27 @@ func runSkillList(cmd *cobra.Command, args []string) error {
 
 	// Create table printer
 	t := printer.NewTablePrinter(os.Stdout)
-	t.SetHeaders("Name", "Title", "Version", "Category", "Registry", "Installed")
+	t.SetHeaders("Name", "Title", "Version", "Category", "Status", "Website")
 
 	for _, skill := range skills {
-		installedStatus := "No"
-		if skill.Installed {
-			installedStatus = "Yes"
-		}
 
-		title := skill.Title
+		title := skill.Skill.Title
 		if title == "" {
 			title = "-"
 		}
 
-		category := skill.Category
+		category := skill.Skill.Category
 		if category == "" {
 			category = "-"
 		}
 
 		t.AddRow(
-			skill.Name,
+			skill.Skill.Name,
 			title,
-			skill.Version,
+			skill.Skill.Version,
 			category,
-			skill.RegistryName,
-			installedStatus,
+			skill.Meta.Official.Status,
+			skill.Skill.WebsiteURL,
 		)
 	}
 
@@ -358,27 +354,16 @@ func runSkillShow(skillName string) error {
 	t := printer.NewTablePrinter(os.Stdout)
 	t.SetHeaders("Property", "Value")
 
-	t.AddRow("Name", skill.Name)
-	t.AddRow("Title", printer.EmptyValueOrDefault(skill.Title, "<none>"))
-	t.AddRow("Description", skill.Description)
-	t.AddRow("Version", skill.Version)
-	t.AddRow("Category", printer.EmptyValueOrDefault(skill.Category, "<none>"))
-	t.AddRow("Registry", skill.RegistryName)
-
-	installedStatus := "No"
-	if skill.Installed {
-		installedStatus = "Yes"
-	}
-	t.AddRow("Installed", installedStatus)
+	t.AddRow("Name", skill.Skill.Name)
+	t.AddRow("Title", printer.EmptyValueOrDefault(skill.Skill.Title, "<none>"))
+	t.AddRow("Description", skill.Skill.Description)
+	t.AddRow("Version", skill.Skill.Version)
+	t.AddRow("Category", printer.EmptyValueOrDefault(skill.Skill.Category, "<none>"))
+	t.AddRow("Status", skill.Meta.Official.Status)
+	t.AddRow("Website", skill.Skill.WebsiteURL)
 
 	if err := t.Render(); err != nil {
 		return fmt.Errorf("failed to render table: %w", err)
-	}
-
-	// Print raw data if available
-	if skill.Data != "" {
-		fmt.Println("\nRaw Data:")
-		fmt.Println(skill.Data)
 	}
 
 	return nil

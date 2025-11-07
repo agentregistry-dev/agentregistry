@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"os/exec"
 
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/kagent-dev/kagent/go/cli/agent/frameworks/common"
@@ -63,27 +64,43 @@ Examples:
 	}
 
 	runCmd := &cobra.Command{
-		Use:   "run [project-directory]",
+		Use:   "run [project-directory-or-agent-name]",
 		Short: "Run agent project locally with docker-compose and launch chat interface",
 		Long: `Run an agent project locally using docker-compose and launch an interactive chat session.
 
+You can provide either a local directory path or an agent name from the registry.
+
 Examples:
-  arctl agent run ./my-agent
-  arctl agent run .`,
-		Args: cobra.MaximumNArgs(1),
+  arctl agent run ./my-agent        # Run from local directory
+  arctl agent run .                 # Run from current directory
+  arctl agent run dice              # Run agent 'dice' from registry`,
+		Args: cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			if len(args) > 0 {
-				runCfg.ProjectDir = args[0]
+
+			link := args[0]
+			if _, err := os.Stat(link); err == nil {
+				if err := agent.RunCmd(cmd.Context(), runCfg); err != nil {
+					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+					os.Exit(1)
+				}
 			} else {
-				runCfg.ProjectDir = "."
+				// Assume this is an agent name from the registry
+				agentModel, err := APIClient.GetAgentByName(link)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+					os.Exit(1)
+				}
+				// manifest := agentModel
+				// runCfg.AgentName = agent.Name
+				if err := agent.RunCmd(cmd.Context(), runCfg); err != nil {
+					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+					os.Exit(1)
+				}
 			}
 
-			if err := agent.RunCmd(cmd.Context(), runCfg); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
-			}
 		},
-		Example: `arctl agent run ./my-agent`,
+		Example: `arctl agent run ./my-agent
+  arctl agent run dice`,
 	}
 
 	runCmd.Flags().StringVar(&runCfg.ProjectDir, "project-dir", "", "Project directory (default: current directory)")
@@ -226,6 +243,27 @@ func publishAgent(cfg *publishAgentCfg) error {
 	fmt.Println("You can now run the agent using the following command:")
 	fmt.Println("arctl run agent " + jsn.Name + " " + jsn.Version)
 
+	return nil
+}
+
+func pullAgentImages(agentJSON *models.AgentJSON) error {
+	for _, pkg := range agentJSON.Packages {
+		if pkg.RegistryType == "oci" {
+			imageRef := pkg.Identifier
+			if pkg.Version != "" {
+				imageRef = imageRef + ":" + pkg.Version
+			}
+
+			fmt.Printf("Pulling image: %s...\n", imageRef)
+			cmd := exec.Command("docker", "pull", imageRef)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("failed to pull image %s: %w", imageRef, err)
+			}
+			fmt.Printf("✓ Image pulled: %s\n", imageRef)
+		}
+	}
 	return nil
 }
 

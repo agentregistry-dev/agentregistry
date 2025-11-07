@@ -6,6 +6,7 @@ import "time"
 type SkillJSON struct {
 	Name        string             `json:"name"`
 	Title       string             `json:"title,omitempty"`
+	Category    string             `json:"category,omitempty"`
 	Description string             `json:"description"`
 	Version     string             `json:"version"`
 	Status      string             `json:"status,omitempty"`
