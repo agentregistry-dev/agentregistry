@@ -1,21 +1,22 @@
 package importer_test
 
 import (
-	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"testing"
+    "context"
+    "encoding/json"
+    "net/http"
+    "net/http/httptest"
+    "os"
+    "testing"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/importer"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
-	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
-	"github.com/modelcontextprotocol/registry/pkg/model"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+    "github.com/agentregistry-dev/agentregistry/internal/registry/config"
+    "github.com/agentregistry-dev/agentregistry/internal/registry/database"
+    "github.com/agentregistry-dev/agentregistry/internal/registry/importer"
+    "github.com/agentregistry-dev/agentregistry/internal/registry/seed"
+    "github.com/agentregistry-dev/agentregistry/internal/registry/service"
+    apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
+    "github.com/modelcontextprotocol/registry/pkg/model"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
 )
 
 func TestImportService_LocalFile(t *testing.T) {
@@ -242,4 +243,48 @@ func TestImportService_ErrorHandling(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestImportService_ReadmeSeed(t *testing.T) {
+    tempDir := t.TempDir()
+
+    serverSeedPath := tempDir + "/servers.json"
+    readmeSeedPath := tempDir + "/readmes.json"
+
+    seedServers := []*apiv0.ServerJSON{
+        {
+            Schema:      model.CurrentSchemaURL,
+            Name:        "com.example/readme-server",
+            Description: "Server with README",
+            Version:     "1.0.0",
+        },
+    }
+
+    serverData, err := json.Marshal(seedServers)
+    require.NoError(t, err)
+    require.NoError(t, os.WriteFile(serverSeedPath, serverData, 0o600))
+
+    readmeContent := []byte("# Readme\nhello world\n")
+    readmeSeeds := seed.ReadmeFile{
+        seed.Key("com.example/readme-server", "1.0.0"): seed.EncodeReadme(readmeContent, "text/markdown"),
+    }
+
+    readmeData, err := json.Marshal(readmeSeeds)
+    require.NoError(t, err)
+    require.NoError(t, os.WriteFile(readmeSeedPath, readmeData, 0o600))
+
+    testDB := database.NewTestDB(t)
+    registryService := service.NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
+
+    importerService := importer.NewService(registryService)
+    importerService.SetReadmeSeedPath(readmeSeedPath)
+
+    err = importerService.ImportFromPath(context.Background(), serverSeedPath)
+    require.NoError(t, err)
+
+    readme, err := registryService.GetServerReadmeByVersion(context.Background(), "com.example/readme-server", "1.0.0")
+    require.NoError(t, err)
+    require.NotNil(t, readme)
+    assert.Equal(t, "text/markdown", readme.ContentType)
+    assert.Equal(t, string(readmeContent), string(readme.Content))
 }

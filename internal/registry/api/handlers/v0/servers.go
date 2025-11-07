@@ -2,6 +2,7 @@ package v0
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"net/url"
@@ -39,6 +40,16 @@ type ServerVersionDetailInput struct {
 // ServerVersionsInput represents the input for listing all versions of a server
 type ServerVersionsInput struct {
 	ServerName string `path:"serverName" doc:"URL-encoded server name" example:"com.example%2Fmy-server"`
+}
+
+// ServerReadmeResponse is the payload for README fetch endpoints
+type ServerReadmeResponse struct {
+	Content     string    `json:"content"`
+	ContentType string    `json:"content_type"`
+	SizeBytes   int       `json:"size_bytes"`
+	Sha256      string    `json:"sha256"`
+	Version     string    `json:"version"`
+	FetchedAt   time.Time `json:"fetched_at"`
 }
 
 // RegisterServersEndpoints registers all server-related endpoints with a custom path prefix
@@ -185,4 +196,82 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			},
 		}, nil
 	})
+
+	// Get latest server README endpoint
+	huma.Register(api, huma.Operation{
+		OperationID: "get-server-readme" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		Method:      http.MethodGet,
+		Path:        pathPrefix + "/servers/{serverName}/readme",
+		Summary:     "Get server README",
+		Description: "Fetch the README markdown document for the latest version of a server",
+		Tags:        []string{"servers"},
+	}, func(ctx context.Context, input *ServerDetailInput) (*Response[ServerReadmeResponse], error) {
+		serverName, err := url.PathUnescape(input.ServerName)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
+		}
+
+		readme, err := registry.GetServerReadmeLatest(ctx, serverName)
+		if err != nil {
+			if errors.Is(err, database.ErrNotFound) {
+				return nil, huma.Error404NotFound("README not found")
+			}
+			return nil, huma.Error500InternalServerError("Failed to fetch server README", err)
+		}
+
+		return &Response[ServerReadmeResponse]{
+			Body: toServerReadmeResponse(readme),
+		}, nil
+	})
+
+	// Get specific version README endpoint
+	huma.Register(api, huma.Operation{
+		OperationID: "get-server-version-readme" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		Method:      http.MethodGet,
+		Path:        pathPrefix + "/servers/{serverName}/versions/{version}/readme",
+		Summary:     "Get server README for a version",
+		Description: "Fetch the README markdown document for a specific server version",
+		Tags:        []string{"servers"},
+	}, func(ctx context.Context, input *ServerVersionDetailInput) (*Response[ServerReadmeResponse], error) {
+		serverName, err := url.PathUnescape(input.ServerName)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
+		}
+		version, err := url.PathUnescape(input.Version)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid version encoding", err)
+		}
+
+		var readme *database.ServerReadme
+		if version == "latest" {
+			readme, err = registry.GetServerReadmeLatest(ctx, serverName)
+		} else {
+			readme, err = registry.GetServerReadmeByVersion(ctx, serverName, version)
+		}
+		if err != nil {
+			if errors.Is(err, database.ErrNotFound) {
+				return nil, huma.Error404NotFound("README not found")
+			}
+			return nil, huma.Error500InternalServerError("Failed to fetch server README", err)
+		}
+
+		return &Response[ServerReadmeResponse]{
+			Body: toServerReadmeResponse(readme),
+		}, nil
+	})
+}
+
+func toServerReadmeResponse(readme *database.ServerReadme) ServerReadmeResponse {
+	shaValue := ""
+	if len(readme.SHA256) > 0 {
+		shaValue = hex.EncodeToString(readme.SHA256)
+	}
+	return ServerReadmeResponse{
+		Content:     string(readme.Content),
+		ContentType: readme.ContentType,
+		SizeBytes:   readme.SizeBytes,
+		Sha256:      shaValue,
+		Version:     readme.Version,
+		FetchedAt:   readme.FetchedAt,
+	}
 }
