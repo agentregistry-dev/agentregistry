@@ -3,18 +3,26 @@
 import { ServerResponse } from "@/lib/admin-api"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Package, Calendar, Tag, ExternalLink, GitBranch, Star, Github, Globe, Trash2 } from "lucide-react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { Package, Calendar, Tag, ExternalLink, GitBranch, Star, Github, Globe, Trash2, Upload } from "lucide-react"
 
 interface ServerCardProps {
   server: ServerResponse
   onDelete?: (server: ServerResponse) => void
+  onPublish?: (server: ServerResponse) => void
   showDelete?: boolean
+  showPublish?: boolean
   showExternalLinks?: boolean
   onClick?: () => void
   versionCount?: number
 }
 
-export function ServerCard({ server, onDelete, showDelete = false, showExternalLinks = true, onClick, versionCount }: ServerCardProps) {
+export function ServerCard({ server, onDelete, onPublish, showDelete = false, showPublish = false, showExternalLinks = true, onClick, versionCount }: ServerCardProps) {
   const { server: serverData, _meta } = server
   const official = _meta?.['io.modelcontextprotocol.registry/official']
   
@@ -45,10 +53,11 @@ export function ServerCard({ server, onDelete, showDelete = false, showExternalL
   const icon = serverData.icons?.[0]
 
   return (
-    <Card
-      className="p-4 hover:shadow-md transition-all duration-200 cursor-pointer border hover:border-primary/20"
-      onClick={handleClick}
-    >
+    <TooltipProvider>
+      <Card
+        className="p-4 hover:shadow-md transition-all duration-200 cursor-pointer border hover:border-primary/20"
+        onClick={handleClick}
+      >
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-start gap-3 flex-1">
           {icon && (
@@ -64,6 +73,26 @@ export function ServerCard({ server, onDelete, showDelete = false, showExternalL
           </div>
         </div>
         <div className="flex items-center gap-1 ml-2">
+          {showPublish && onPublish && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onPublish(server)
+                  }}
+                >
+                  <Upload className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Publish this server to your registry</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
           {showExternalLinks && serverData.repository?.url && (
             <Button
               variant="ghost"
@@ -159,7 +188,8 @@ export function ServerCard({ server, onDelete, showDelete = false, showExternalL
           </div>
         )}
       </div>
-    </Card>
+      </Card>
+    </TooltipProvider>
   )
 }
 

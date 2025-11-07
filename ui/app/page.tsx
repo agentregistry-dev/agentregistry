@@ -13,6 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { ServerCard } from "@/components/server-card"
 import { SkillCard } from "@/components/skill-card"
 import { AgentCard } from "@/components/agent-card"
@@ -37,6 +43,7 @@ import {
   Eye,
   ArrowUpDown,
   X,
+  ChevronDown,
 } from "lucide-react"
 
 // Grouped server type
@@ -347,39 +354,49 @@ export default function AdminPage() {
 
   return (
     <main className="min-h-screen bg-background">
-      <div className="border-b">
-        <div className="container mx-auto px-6 py-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-6">
+      {/* Navigation Bar */}
+      <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
+        <div className="container mx-auto px-6">
+          <div className="flex items-center justify-between h-20">
+            <Link href="/" className="flex items-center">
               <img 
-                src="/ui/arlogo.png" 
+                src="/arlogo.png" 
                 alt="Agent Registry" 
-                width={200} 
-                height={67}
+                width={180} 
+                height={60}
+                className="h-12 w-auto"
               />
-              <div className="flex items-center gap-4 text-sm">
-                <Link href="/" className="text-foreground font-medium">
-                  Admin
-                </Link>
-                <Link href="/registry" className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2">
-                  <Eye className="h-4 w-4" />
-                  View Registry
-                </Link>
-              </div>
+            </Link>
+            
+            <div className="flex items-center gap-6">
+              <Link 
+                href="/" 
+                className="text-sm font-medium text-foreground hover:text-foreground/80 transition-colors border-b-2 border-foreground pb-1"
+              >
+                Admin
+              </Link>
+              <Link 
+                href="/registry" 
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Registry
+              </Link>
+              <Link 
+                href="/deployed" 
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Live View
+              </Link>
             </div>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={fetchData}
-              title="Refresh data"
-            >
-              <RefreshCw className="h-5 w-5" />
-            </Button>
           </div>
+        </div>
+      </nav>
 
-          {/* Stats */}
-          {stats && (
-            <div className="grid gap-4 md:grid-cols-3 mb-6">
+      {/* Stats Section */}
+      {stats && (
+        <div className="bg-muted/30 border-b">
+          <div className="container mx-auto px-6 py-6">
+            <div className="grid gap-4 md:grid-cols-3">
               <Card className="p-4 hover:shadow-md transition-all duration-200 border hover:border-primary/20">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -418,86 +435,123 @@ export default function AdminPage() {
                 </div>
               </Card>
             </div>
-          )}
-        </div>
-      </div>
-
-      <div className="container mx-auto px-6 py-8">
-        {/* Global Search */}
-        <div className="mb-6">
-          <div className="relative max-w-2xl">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search servers, skills, agents..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 pr-10"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Clear search"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
           </div>
         </div>
+      )}
 
+      <div className="container mx-auto px-6 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="mb-8">
-            <TabsTrigger value="servers" className="gap-2">
-              <span className="h-4 w-4 flex items-center justify-center">
-                <MCPIcon />
-              </span>
-              Servers
-            </TabsTrigger>
-            <TabsTrigger value="skills" className="gap-2">
-              <Zap className="h-4 w-4" />
-              Skills
-            </TabsTrigger>
-            <TabsTrigger value="agents" className="gap-2">
-              <Bot className="h-4 w-4" />
-              Agents
-            </TabsTrigger>
-          </TabsList>
+          <div className="flex items-center gap-4 mb-8">
+            <TabsList>
+              <TabsTrigger value="servers" className="gap-2">
+                <span className="h-4 w-4 flex items-center justify-center">
+                  <MCPIcon />
+                </span>
+                Servers
+              </TabsTrigger>
+              <TabsTrigger value="skills" className="gap-2">
+                <Zap className="h-4 w-4" />
+                Skills
+              </TabsTrigger>
+              <TabsTrigger value="agents" className="gap-2">
+                <Bot className="h-4 w-4" />
+                Agents
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Search */}
+            <div className="flex-1 max-w-md">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 h-9"
+                />
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-3 ml-auto">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="default" className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Add
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setAddServerDialogOpen(true)}>
+                    <span className="mr-2 h-4 w-4 flex items-center justify-center">
+                      <MCPIcon />
+                    </span>
+                    Add Server
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setAddSkillDialogOpen(true)}>
+                    <Zap className="mr-2 h-4 w-4" />
+                    Add Skill
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setAddAgentDialogOpen(true)}>
+                    <Bot className="mr-2 h-4 w-4" />
+                    Add Agent
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="gap-2">
+                    <Download className="h-4 w-4" />
+                    Import
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setImportDialogOpen(true)}>
+                    <span className="mr-2 h-4 w-4 flex items-center justify-center">
+                      <MCPIcon />
+                    </span>
+                    Import Servers
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setImportSkillsDialogOpen(true)}>
+                    <Zap className="mr-2 h-4 w-4" />
+                    Import Skills
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setImportAgentsDialogOpen(true)}>
+                    <Bot className="mr-2 h-4 w-4" />
+                    Import Agents
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={fetchData}
+                title="Refresh"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
 
           {/* Servers Tab */}
           <TabsContent value="servers">
-            {/* Actions */}
-            <div className="flex items-center gap-4 mb-8 justify-between">
-              <div className="flex items-center gap-2">
-                <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
-                <Select value={sortBy} onValueChange={(value: "name" | "stars" | "date") => setSortBy(value)}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Sort by..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="name">Name (A-Z)</SelectItem>
-                    <SelectItem value="stars">GitHub Stars</SelectItem>
-                    <SelectItem value="date">Date Published</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center gap-4">
-                <Button
-                  variant="outline"
-                  className="gap-2"
-                  onClick={() => setAddServerDialogOpen(true)}
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Server
-                </Button>
-                <Button
-                  variant="default"
-                  className="gap-2"
-                  onClick={() => setImportDialogOpen(true)}
-                >
-                  <Download className="h-4 w-4" />
-                  Import Servers
-                </Button>
-              </div>
+            {/* Sort controls */}
+            <div className="flex items-center gap-2 mb-6">
+              <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+              <Select value={sortBy} onValueChange={(value: "name" | "stars" | "date") => setSortBy(value)}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Sort by..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name">Name (A-Z)</SelectItem>
+                  <SelectItem value="stars">GitHub Stars</SelectItem>
+                  <SelectItem value="date">Date Published</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Server List */}
@@ -554,26 +608,6 @@ export default function AdminPage() {
 
           {/* Skills Tab */}
           <TabsContent value="skills">
-            {/* Actions */}
-            <div className="flex items-center gap-4 mb-8 justify-end">
-              <Button
-                variant="outline"
-                className="gap-2"
-                onClick={() => setAddSkillDialogOpen(true)}
-              >
-                <Plus className="h-4 w-4" />
-                Add Skill
-              </Button>
-              <Button
-                variant="default"
-                className="gap-2"
-                onClick={() => setImportSkillsDialogOpen(true)}
-              >
-                <Download className="h-4 w-4" />
-                Import Skills
-              </Button>
-            </div>
-
             {/* Skills List */}
             <div>
               <h2 className="text-lg font-semibold mb-4">
@@ -627,26 +661,6 @@ export default function AdminPage() {
 
           {/* Agents Tab */}
           <TabsContent value="agents">
-            {/* Actions */}
-            <div className="flex items-center gap-4 mb-8 justify-end">
-              <Button
-                variant="outline"
-                className="gap-2"
-                onClick={() => setAddAgentDialogOpen(true)}
-              >
-                <Plus className="h-4 w-4" />
-                Add Agent
-              </Button>
-              <Button
-                variant="default"
-                className="gap-2"
-                onClick={() => setImportAgentsDialogOpen(true)}
-              >
-                <Download className="h-4 w-4" />
-                Import Agents
-              </Button>
-            </div>
-
             {/* Agents List */}
             <div>
               <h2 className="text-lg font-semibold mb-4">
@@ -721,7 +735,7 @@ export default function AdminPage() {
       <AddSkillDialog
         open={addSkillDialogOpen}
         onOpenChange={setAddSkillDialogOpen}
-        onSkillAdded={() => {}}
+        onSkillAdded={fetchData}
       />
 
       {/* Agent Dialogs */}

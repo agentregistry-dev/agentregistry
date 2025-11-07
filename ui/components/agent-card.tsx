@@ -3,17 +3,25 @@
 import { AgentResponse } from "@/lib/admin-api"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Package, Calendar, Tag, ExternalLink, GitBranch, Github, Globe, Trash2, Bot } from "lucide-react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { Package, Calendar, Tag, ExternalLink, GitBranch, Github, Globe, Trash2, Bot, Upload } from "lucide-react"
 
 interface AgentCardProps {
   agent: AgentResponse
   onDelete?: (agent: AgentResponse) => void
+  onPublish?: (agent: AgentResponse) => void
   showDelete?: boolean
+  showPublish?: boolean
   showExternalLinks?: boolean
   onClick?: () => void
 }
 
-export function AgentCard({ agent, onDelete, showDelete = false, showExternalLinks = true, onClick }: AgentCardProps) {
+export function AgentCard({ agent, onDelete, onPublish, showDelete = false, showPublish = false, showExternalLinks = true, onClick }: AgentCardProps) {
   const { agent: agentData, _meta } = agent
   const official = _meta?.['io.modelcontextprotocol.registry/official']
 
@@ -37,10 +45,11 @@ export function AgentCard({ agent, onDelete, showDelete = false, showExternalLin
   }
 
   return (
-    <Card
-      className="p-4 hover:shadow-md transition-all duration-200 cursor-pointer border hover:border-primary/20"
-      onClick={handleClick}
-    >
+    <TooltipProvider>
+      <Card
+        className="p-4 hover:shadow-md transition-all duration-200 cursor-pointer border hover:border-primary/20"
+        onClick={handleClick}
+      >
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-start gap-3 flex-1">
           <div className="w-10 h-10 rounded bg-primary/20 flex items-center justify-center flex-shrink-0 mt-1">
@@ -52,6 +61,26 @@ export function AgentCard({ agent, onDelete, showDelete = false, showExternalLin
           </div>
         </div>
         <div className="flex items-center gap-1 ml-2">
+          {showPublish && onPublish && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onPublish(agent)
+                  }}
+                >
+                  <Upload className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Publish this agent to your registry</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
           {showExternalLinks && agentData.repository?.url && (
             <Button
               variant="ghost"
@@ -135,7 +164,8 @@ export function AgentCard({ agent, onDelete, showDelete = false, showExternalLin
           </div>
         )}
       </div>
-    </Card>
+      </Card>
+    </TooltipProvider>
   )
 }
 

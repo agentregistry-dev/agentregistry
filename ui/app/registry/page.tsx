@@ -134,6 +134,39 @@ export default function RegistryPage() {
     }
   }, [searchQuery, servers, skills, agents])
 
+  // Handle server publishing
+  const handlePublishServer = async (server: ServerResponse) => {
+    try {
+      await adminApiClient.createServer(server.server)
+      alert(`Server "${server.server.name}" published successfully!`)
+      await fetchData() // Refresh data
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to publish server")
+    }
+  }
+
+  // Handle skill publishing
+  const handlePublishSkill = async (skill: SkillResponse) => {
+    try {
+      await adminApiClient.publishSkill(skill.skill)
+      alert(`Skill "${skill.skill.name}" published successfully!`)
+      await fetchData() // Refresh data
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to publish skill")
+    }
+  }
+
+  // Handle agent publishing
+  const handlePublishAgent = async (agent: AgentResponse) => {
+    try {
+      await adminApiClient.publishAgent(agent.agent)
+      alert(`Agent "${agent.agent.name}" published successfully!`)
+      await fetchData() // Refresh data
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to publish agent")
+    }
+  }
+
   // Handle server deletion - open dialog
   const handleDeleteServer = (server: ServerResponse) => {
     setServerToDelete(server)
@@ -222,27 +255,85 @@ export default function RegistryPage() {
 
   return (
     <main className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b">
-        <div className="container mx-auto px-6 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
+      {/* Navigation Bar */}
+      <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
+        <div className="container mx-auto px-6">
+          <div className="flex items-center justify-between h-20">
+            <Link href="/" className="flex items-center">
               <img 
-                src="/ui/arlogo.png" 
+                src="/arlogo.png" 
                 alt="Agent Registry" 
-                width={200} 
-                height={67}
+                width={180} 
+                height={60}
+                className="h-12 w-auto"
               />
-              <div className="flex items-center gap-4 text-sm">
-                <Link href="/registry" className="text-foreground font-medium">
-                  Registry
-                </Link>
-                <Link href="/" className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2">
-                  <Settings className="h-4 w-4" />
-                  Admin
-                </Link>
-              </div>
+            </Link>
+            
+            <div className="flex items-center gap-6">
+              <Link 
+                href="/" 
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Admin
+              </Link>
+              <Link 
+                href="/registry" 
+                className="text-sm font-medium text-foreground hover:text-foreground/80 transition-colors border-b-2 border-foreground pb-1"
+              >
+                Registry
+              </Link>
+              <Link 
+                href="/deployed" 
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Live View
+              </Link>
             </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* Stats Section */}
+      <div className="bg-muted/30 border-b">
+        <div className="container mx-auto px-6 py-6">
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card className="p-4 hover:shadow-md transition-all duration-200 border hover:border-primary/20">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg flex items-center justify-center">
+                  <span className="h-5 w-5 text-primary flex items-center justify-center">
+                    <MCPIcon />
+                  </span>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{servers.length}</p>
+                  <p className="text-xs text-muted-foreground">Servers</p>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-4 hover:shadow-md transition-all duration-200 border hover:border-primary/20">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/20 rounded-lg flex items-center justify-center">
+                  <Zap className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{skills.length}</p>
+                  <p className="text-xs text-muted-foreground">Skills</p>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-4 hover:shadow-md transition-all duration-200 border hover:border-primary/20">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/30 rounded-lg flex items-center justify-center">
+                  <Bot className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{agents.length}</p>
+                  <p className="text-xs text-muted-foreground">Agents</p>
+                </div>
+              </div>
+            </Card>
           </div>
         </div>
       </div>
@@ -259,47 +350,6 @@ export default function RegistryPage() {
               className="pl-10 h-12 text-base"
             />
           </div>
-        </div>
-
-        {/* Stats */}
-        <div className="grid gap-4 md:grid-cols-3 mb-12 max-w-4xl mx-auto">
-          <Card className="p-6 text-center hover:shadow-md transition-all duration-200 border hover:border-primary/20">
-            <div className="flex flex-col items-center gap-2">
-              <div className="p-3 bg-primary/10 rounded-lg">
-                <span className="h-6 w-6 text-primary flex items-center justify-center">
-                  <MCPIcon />
-                </span>
-              </div>
-              <div>
-                <p className="text-3xl font-bold">{servers.length}</p>
-                <p className="text-sm text-muted-foreground">MCP Servers</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-6 text-center hover:shadow-md transition-all duration-200 border hover:border-primary/20">
-            <div className="flex flex-col items-center gap-2">
-              <div className="p-3 bg-primary/20 rounded-lg">
-                <Zap className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <p className="text-3xl font-bold">{skills.length}</p>
-                <p className="text-sm text-muted-foreground">Skills</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-6 text-center hover:shadow-md transition-all duration-200 border hover:border-primary/20">
-            <div className="flex flex-col items-center gap-2">
-              <div className="p-3 bg-primary/30 rounded-lg">
-                <Bot className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <p className="text-3xl font-bold">{agents.length}</p>
-                <p className="text-sm text-muted-foreground">Agents</p>
-              </div>
-            </div>
-          </Card>
         </div>
 
         {/* Content Tabs */}
@@ -347,6 +397,8 @@ export default function RegistryPage() {
                   <ServerCard
                     key={`${server.server.name}-${server.server.version}-${index}`}
                     server={server}
+                    showPublish={true}
+                    onPublish={handlePublishServer}
                     showDelete={true}
                     onDelete={handleDeleteServer}
                     showExternalLinks={false}
@@ -383,6 +435,8 @@ export default function RegistryPage() {
                   <SkillCard
                     key={`${skill.skill.name}-${skill.skill.version}-${index}`}
                     skill={skill}
+                    showPublish={true}
+                    onPublish={handlePublishSkill}
                     showExternalLinks={false}
                     onClick={() => setSelectedSkill(skill)}
                   />
@@ -417,6 +471,8 @@ export default function RegistryPage() {
                   <AgentCard
                     key={`${agent.agent.name}-${agent.agent.version}-${index}`}
                     agent={agent}
+                    showPublish={true}
+                    onPublish={handlePublishAgent}
                     showExternalLinks={false}
                     onClick={() => setSelectedAgent(agent)}
                   />

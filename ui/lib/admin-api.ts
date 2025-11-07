@@ -375,6 +375,22 @@ class AdminApiClient {
     return response.json()
   }
 
+  // Publish a new skill
+  async publishSkill(skill: SkillJSON): Promise<SkillResponse> {
+    const response = await fetch(`${this.baseUrl}/v0/skills/publish`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(skill),
+    })
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || 'Failed to publish skill')
+    }
+    return response.json()
+  }
+
   // ===== Agents API =====
 
   // List agents with pagination and filtering
@@ -417,6 +433,22 @@ class AdminApiClient {
     const response = await fetch(`${this.baseUrl}/v0/agents/${encodedName}/versions`)
     if (!response.ok) {
       throw new Error('Failed to fetch agent versions')
+    }
+    return response.json()
+  }
+
+  // Publish an agent to the registry
+  async publishAgent(agent: AgentJSON): Promise<AgentResponse> {
+    const response = await fetch(`${this.baseUrl}/v0/agents/publish`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(agent),
+    })
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || 'Failed to publish agent')
     }
     return response.json()
   }
