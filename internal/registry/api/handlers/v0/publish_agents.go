@@ -26,7 +26,6 @@ func RegisterAgentsPublishEndpoint(api huma.API, pathPrefix string, registry ser
 		Summary:     "Publish Agentic agent",
 		Description: "Publish a new Agentic agent to the registry or update an existing one",
 		Tags:        []string{"publish"},
-		Security:    []map[string][]string{{"bearer": {}}},
 	}, func(ctx context.Context, input *PublishAgentInput) (*Response[agentmodels.AgentResponse], error) {
 
 		if err := authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{Name: input.Body.Name, Type: "agent"}); err != nil {
