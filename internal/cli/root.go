@@ -14,7 +14,6 @@ var rootCmd = &cobra.Command{
 	Short: "AI Registry and Runtime",
 	Long:  `arctl is a CLI tool for managing MCP servers, skills, and registries.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		return nil
 		// Check if docker compose is available
 		if !daemon.IsDockerComposeAvailable() {
 			fmt.Println("Docker compose is not available. Please install docker compose and try again.")
