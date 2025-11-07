@@ -21,6 +21,8 @@ func newAgentCmd() *cobra.Command {
 
 	cfg := &config.Config{}
 
+	agentCmd.PersistentFlags().BoolVar(&cfg.Verbose, "verbose", false, "Verbose output")
+
 	initCfg := &agent.InitCfg{
 		Config: cfg,
 	}
@@ -79,6 +81,8 @@ Examples:
 
 			link := args[0]
 			if _, err := os.Stat(link); err == nil {
+				runCfg.ProjectDir = link
+				fmt.Println("Running agent from local directory: ", link)
 				if err := agent.RunCmd(cmd.Context(), runCfg); err != nil {
 					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 					os.Exit(1)
@@ -90,9 +94,8 @@ Examples:
 					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 					os.Exit(1)
 				}
-				// manifest := agentModel
-				// runCfg.AgentName = agent.Name
-				if err := agent.RunCmd(cmd.Context(), runCfg); err != nil {
+				manifest := agentModel.Agent.AgentManifest
+				if err := agent.RunRemote(cmd.Context(), runCfg.Config, &manifest); err != nil {
 					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 					os.Exit(1)
 				}
@@ -102,7 +105,6 @@ Examples:
 		Example: `arctl agent run ./my-agent
   arctl agent run dice`,
 	}
-
 	runCmd.Flags().StringVar(&runCfg.ProjectDir, "project-dir", "", "Project directory (default: current directory)")
 
 	buildCfg := &agent.BuildCfg{

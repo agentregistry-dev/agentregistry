@@ -48,7 +48,7 @@ ALTER TABLE agents ADD CONSTRAINT check_agent_status_valid
 CHECK (status IN ('active', 'deprecated', 'deleted'));
 
 ALTER TABLE agents ADD CONSTRAINT check_agent_name_format
-CHECK (agent_name ~ '^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]/[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]$');
+CHECK (agent_name ~ '^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$');
 
 ALTER TABLE agents ADD CONSTRAINT check_agent_version_not_empty
 CHECK (length(trim(version)) > 0);

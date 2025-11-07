@@ -11,7 +11,7 @@ require (
 	github.com/google/go-containerregistry v0.20.6
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/joho/godotenv v1.5.1
-	github.com/kagent-dev/kagent/go v0.0.0-20251107190020-d03295b59826
+	github.com/kagent-dev/kagent/go v0.0.0-20251107200645-686008ea62ac
 	github.com/modelcontextprotocol/registry v1.3.7
 	github.com/prometheus/client_golang v1.23.2
 	github.com/rs/cors v1.11.1

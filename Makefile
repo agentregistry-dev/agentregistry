@@ -163,7 +163,7 @@ docker-tag-as-latest:
 
 docker-compose-up: docker docker-tag-as-latest
 	@echo "Starting services with Docker Compose..."
-	docker compose -p agentregistry -f internal/daemon/docker-compose.yml up -d --wait
+	docker compose -p agentregistry -f internal/daemon/docker-compose.yml up -d --wait --pull always
 
 docker-compose-down:
 	docker compose -p agentregistry -f internal/daemon/docker-compose.yml down
