@@ -1,6 +1,6 @@
 "use client"
 
-import { ServerResponse } from "@/lib/admin-api"
+import { AgentResponse } from "@/lib/admin-api"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
@@ -9,26 +9,21 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Package, Calendar, Tag, ExternalLink, GitBranch, Star, Github, Globe, Trash2, Upload } from "lucide-react"
+import { Package, Calendar, Tag, ExternalLink, GitBranch, Github, Globe, Trash2, Bot, Upload } from "lucide-react"
 
-interface ServerCardProps {
-  server: ServerResponse
-  onDelete?: (server: ServerResponse) => void
-  onPublish?: (server: ServerResponse) => void
+interface AgentCardProps {
+  agent: AgentResponse
+  onDelete?: (agent: AgentResponse) => void
+  onPublish?: (agent: AgentResponse) => void
   showDelete?: boolean
   showPublish?: boolean
   showExternalLinks?: boolean
   onClick?: () => void
-  versionCount?: number
 }
 
-export function ServerCard({ server, onDelete, onPublish, showDelete = false, showPublish = false, showExternalLinks = true, onClick, versionCount }: ServerCardProps) {
-  const { server: serverData, _meta } = server
+export function AgentCard({ agent, onDelete, onPublish, showDelete = false, showPublish = false, showExternalLinks = true, onClick }: AgentCardProps) {
+  const { agent: agentData, _meta } = agent
   const official = _meta?.['io.modelcontextprotocol.registry/official']
-  
-  // Extract GitHub stars from metadata
-  const publisherMetadata = serverData._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['agentregistry.solo.io/metadata']
-  const githubStars = publisherMetadata?.stars
 
   const handleClick = () => {
     if (onClick) {
@@ -49,9 +44,6 @@ export function ServerCard({ server, onDelete, onPublish, showDelete = false, sh
     }
   }
 
-  // Get the first icon if available
-  const icon = serverData.icons?.[0]
-
   return (
     <TooltipProvider>
       <Card
@@ -60,16 +52,12 @@ export function ServerCard({ server, onDelete, onPublish, showDelete = false, sh
       >
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-start gap-3 flex-1">
-          {icon && (
-            <img 
-              src={icon.src} 
-              alt="Server icon" 
-              className="w-10 h-10 rounded flex-shrink-0 mt-1"
-            />
-          )}
+          <div className="w-10 h-10 rounded bg-primary/20 flex items-center justify-center flex-shrink-0 mt-1">
+            <Bot className="h-5 w-5 text-primary" />
+          </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-lg mb-1">{serverData.title || serverData.name}</h3>
-            <p className="text-sm text-muted-foreground">{serverData.name}</p>
+            <h3 className="font-semibold text-lg mb-1">{agentData.title || agentData.name}</h3>
+            <p className="text-sm text-muted-foreground">{agentData.name}</p>
           </div>
         </div>
         <div className="flex items-center gap-1 ml-2">
@@ -82,39 +70,39 @@ export function ServerCard({ server, onDelete, onPublish, showDelete = false, sh
                   className="h-8 w-8"
                   onClick={(e) => {
                     e.stopPropagation()
-                    onPublish(server)
+                    onPublish(agent)
                   }}
                 >
                   <Upload className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Publish this server to your registry</p>
+                <p>Publish this agent to your registry</p>
               </TooltipContent>
             </Tooltip>
           )}
-          {showExternalLinks && serverData.repository?.url && (
+          {showExternalLinks && agentData.repository?.url && (
             <Button
               variant="ghost"
               size="icon"
               className="h-8 w-8"
               onClick={(e) => {
                 e.stopPropagation()
-                window.open(serverData.repository?.url || '', '_blank')
+                window.open(agentData.repository?.url || '', '_blank')
               }}
               title="View on GitHub"
             >
               <Github className="h-4 w-4" />
             </Button>
           )}
-          {showExternalLinks && serverData.websiteUrl && (
+          {showExternalLinks && agentData.websiteUrl && (
             <Button
               variant="ghost"
               size="icon"
               className="h-8 w-8"
               onClick={(e) => {
                 e.stopPropagation()
-                window.open(serverData.websiteUrl, '_blank')
+                window.open(agentData.websiteUrl, '_blank')
               }}
               title="Visit website"
             >
@@ -128,7 +116,7 @@ export function ServerCard({ server, onDelete, onPublish, showDelete = false, sh
               className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
               onClick={(e) => {
                 e.stopPropagation()
-                onDelete(server)
+                onDelete(agent)
               }}
               title="Remove from registry"
             >
@@ -139,18 +127,13 @@ export function ServerCard({ server, onDelete, onPublish, showDelete = false, sh
       </div>
 
       <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-        {serverData.description}
+        {agentData.description}
       </p>
 
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
         <div className="flex items-center gap-1">
           <Tag className="h-3 w-3" />
-          <span>{serverData.version}</span>
-          {versionCount && versionCount > 1 && (
-            <span className="ml-1 text-primary font-medium">
-              (+{versionCount - 1} more)
-            </span>
-          )}
+          <span>{agentData.version}</span>
         </div>
 
         {official?.publishedAt && (
@@ -160,31 +143,24 @@ export function ServerCard({ server, onDelete, onPublish, showDelete = false, sh
           </div>
         )}
 
-        {serverData.packages && serverData.packages.length > 0 && (
+        {agentData.packages && agentData.packages.length > 0 && (
           <div className="flex items-center gap-1">
             <Package className="h-3 w-3" />
-            <span>{serverData.packages.length} package{serverData.packages.length !== 1 ? 's' : ''}</span>
+            <span>{agentData.packages.length} package{agentData.packages.length !== 1 ? 's' : ''}</span>
           </div>
         )}
 
-        {serverData.remotes && serverData.remotes.length > 0 && (
+        {agentData.remotes && agentData.remotes.length > 0 && (
           <div className="flex items-center gap-1">
             <ExternalLink className="h-3 w-3" />
-            <span>{serverData.remotes.length} remote{serverData.remotes.length !== 1 ? 's' : ''}</span>
+            <span>{agentData.remotes.length} remote{agentData.remotes.length !== 1 ? 's' : ''}</span>
           </div>
         )}
 
-        {serverData.repository && (
+        {agentData.repository && (
           <div className="flex items-center gap-1">
             <GitBranch className="h-3 w-3" />
-            <span>{serverData.repository.source}</span>
-          </div>
-        )}
-
-        {githubStars !== undefined && (
-          <div className="flex items-center gap-1 text-yellow-600 dark:text-yellow-400">
-            <Star className="h-3 w-3 fill-yellow-600 dark:fill-yellow-400" />
-            <span className="font-medium">{githubStars.toLocaleString()}</span>
+            <span>{agentData.repository.source}</span>
           </div>
         )}
       </div>

@@ -13,6 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { RuntimeArgumentsTable } from "@/components/server-detail/runtime-arguments-table"
 import { EnvironmentVariablesTable } from "@/components/server-detail/environment-variables-table"
 import {
@@ -152,8 +158,9 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
   }
 
   return (
-    <div className="fixed inset-0 bg-background z-50 overflow-y-auto">
-      <div className="container mx-auto px-6 py-6">
+    <TooltipProvider>
+      <div className="fixed inset-0 bg-background z-50 overflow-y-auto">
+        <div className="container mx-auto px-6 py-6">
         {/* Back Button */}
         <Button
           variant="ghost"
@@ -182,19 +189,26 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={handleCopyToPrivateRegistry}
-              disabled={copying}
-              className="gap-2"
-            >
-              {copying ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Copy className="h-4 w-4" />
-              )}
-              Publish
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  onClick={handleCopyToPrivateRegistry}
+                  disabled={copying}
+                  className="gap-2"
+                >
+                  {copying ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                  Publish
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Publish this server to your registry</p>
+              </TooltipContent>
+            </Tooltip>
             <Button variant="ghost" size="icon" onClick={onClose}>
               <X className="h-5 w-5" />
             </Button>
@@ -558,8 +572,9 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
             </Card>
           </TabsContent>
         </Tabs>
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   )
 }
 

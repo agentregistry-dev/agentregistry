@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"os"
-	"os/exec"
 
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/kagent-dev/kagent/go/cli/agent/frameworks/common"
@@ -245,27 +244,6 @@ func publishAgent(cfg *publishAgentCfg) error {
 	fmt.Println("You can now run the agent using the following command:")
 	fmt.Println("arctl run agent " + jsn.Name + " " + jsn.Version)
 
-	return nil
-}
-
-func pullAgentImages(agentJSON *models.AgentJSON) error {
-	for _, pkg := range agentJSON.Packages {
-		if pkg.RegistryType == "oci" {
-			imageRef := pkg.Identifier
-			if pkg.Version != "" {
-				imageRef = imageRef + ":" + pkg.Version
-			}
-
-			fmt.Printf("Pulling image: %s...\n", imageRef)
-			cmd := exec.Command("docker", "pull", imageRef)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("failed to pull image %s: %w", imageRef, err)
-			}
-			fmt.Printf("✓ Image pulled: %s\n", imageRef)
-		}
-	}
 	return nil
 }
 

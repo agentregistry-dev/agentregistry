@@ -13,15 +13,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { ServerCard } from "@/components/server-card"
+import { SkillCard } from "@/components/skill-card"
+import { AgentCard } from "@/components/agent-card"
 import { ServerDetail } from "@/components/server-detail"
+import { SkillDetail } from "@/components/skill-detail"
+import { AgentDetail } from "@/components/agent-detail"
 import { ImportDialog } from "@/components/import-dialog"
 import { AddServerDialog } from "@/components/add-server-dialog"
 import { ImportSkillsDialog } from "@/components/import-skills-dialog"
 import { AddSkillDialog } from "@/components/add-skill-dialog"
 import { ImportAgentsDialog } from "@/components/import-agents-dialog"
 import { AddAgentDialog } from "@/components/add-agent-dialog"
-import { adminApiClient, ServerResponse, ServerStats } from "@/lib/admin-api"
+import { adminApiClient, ServerResponse, SkillResponse, AgentResponse, ServerStats } from "@/lib/admin-api"
 import MCPIcon from "@/components/icons/mcp"
 import {
   Search,
@@ -33,6 +43,7 @@ import {
   Eye,
   ArrowUpDown,
   X,
+  ChevronDown,
 } from "lucide-react"
 
 // Grouped server type
@@ -45,10 +56,12 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState("servers")
   const [servers, setServers] = useState<ServerResponse[]>([])
   const [groupedServers, setGroupedServers] = useState<GroupedServer[]>([])
+  const [skills, setSkills] = useState<SkillResponse[]>([])
+  const [agents, setAgents] = useState<AgentResponse[]>([])
   const [filteredServers, setFilteredServers] = useState<GroupedServer[]>([])
+  const [filteredSkills, setFilteredSkills] = useState<SkillResponse[]>([])
+  const [filteredAgents, setFilteredAgents] = useState<AgentResponse[]>([])
   const [stats, setStats] = useState<ServerStats | null>(null)
-  const [skillsCount, setSkillsCount] = useState(0)
-  const [agentsCount, setAgentsCount] = useState(0)
   const [searchQuery, setSearchQuery] = useState("")
   const [sortBy, setSortBy] = useState<"name" | "stars" | "date">("name")
   const [importDialogOpen, setImportDialogOpen] = useState(false)
@@ -60,6 +73,8 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedServer, setSelectedServer] = useState<ServerResponse | null>(null)
+  const [selectedSkill, setSelectedSkill] = useState<SkillResponse | null>(null)
+  const [selectedAgent, setSelectedAgent] = useState<AgentResponse | null>(null)
   
   // Track scroll position for restoring after navigation
   const scrollPositionRef = useRef<number>(0)
@@ -125,24 +140,54 @@ export default function AdminPage() {
       
       // Fetch all servers (with pagination if needed)
       const allServers: ServerResponse[] = []
-      let cursor: string | undefined
+      let serverCursor: string | undefined
       
       do {
         const response = await adminApiClient.listServers({ 
-          cursor, 
+          cursor: serverCursor, 
           limit: 100,
         })
         allServers.push(...response.servers)
-        cursor = response.metadata.nextCursor
-      } while (cursor)
+        serverCursor = response.metadata.nextCursor
+      } while (serverCursor)
       
       setServers(allServers)
+
+      // Fetch all skills (with pagination if needed)
+      const allSkills: SkillResponse[] = []
+      let skillCursor: string | undefined
+      
+      do {
+        const response = await adminApiClient.listSkills({ 
+          cursor: skillCursor, 
+          limit: 100,
+        })
+        allSkills.push(...response.skills)
+        skillCursor = response.metadata.nextCursor
+      } while (skillCursor)
+      
+      setSkills(allSkills)
+
+      // Fetch all agents (with pagination if needed)
+      const allAgents: AgentResponse[] = []
+      let agentCursor: string | undefined
+      
+      do {
+        const response = await adminApiClient.listAgents({ 
+          cursor: agentCursor, 
+          limit: 100,
+        })
+        allAgents.push(...response.agents)
+        agentCursor = response.metadata.nextCursor
+      } while (agentCursor)
+      
+      setAgents(allAgents)
       
       // Group servers by name
       const grouped = groupServersByName(allServers)
       setGroupedServers(grouped)
       
-      // Fake stats for now (until API is implemented)
+      // Set stats
       setStats({
         total_servers: allServers.length,
         total_server_names: grouped.length,
@@ -150,10 +195,6 @@ export default function AdminPage() {
         deprecated_servers: 0,
         deleted_servers: 0,
       })
-      
-      // Mock stats for Skills and Agents (until API is implemented)
-      setSkillsCount(Math.floor(Math.random() * 20) + 5) // Random number between 5-24
-      setAgentsCount(Math.floor(Math.random() * 15) + 3) // Random number between 3-17
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch data")
     } finally {
@@ -228,6 +269,34 @@ export default function AdminPage() {
     setFilteredServers(filtered)
   }, [searchQuery, groupedServers, sortBy])
 
+  // Filter skills and agents based on search query
+  useEffect(() => {
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      
+      // Filter skills
+      const filteredSk = skills.filter(
+        (s) =>
+          s.skill.name.toLowerCase().includes(query) ||
+          s.skill.title?.toLowerCase().includes(query) ||
+          s.skill.description.toLowerCase().includes(query)
+      )
+      setFilteredSkills(filteredSk)
+
+      // Filter agents
+      const filteredA = agents.filter(
+        (a) =>
+          a.agent.name.toLowerCase().includes(query) ||
+          a.agent.title?.toLowerCase().includes(query) ||
+          a.agent.description.toLowerCase().includes(query)
+      )
+      setFilteredAgents(filteredA)
+    } else {
+      setFilteredSkills(skills)
+      setFilteredAgents(agents)
+    }
+  }, [searchQuery, skills, agents])
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -263,41 +332,71 @@ export default function AdminPage() {
     )
   }
 
+  // Show skill detail view if a skill is selected
+  if (selectedSkill) {
+    return (
+      <SkillDetail
+        skill={selectedSkill}
+        onClose={() => setSelectedSkill(null)}
+      />
+    )
+  }
+
+  // Show agent detail view if an agent is selected
+  if (selectedAgent) {
+    return (
+      <AgentDetail
+        agent={selectedAgent}
+        onClose={() => setSelectedAgent(null)}
+      />
+    )
+  }
+
   return (
     <main className="min-h-screen bg-background">
-      <div className="border-b">
-        <div className="container mx-auto px-6 py-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-6">
+      {/* Navigation Bar */}
+      <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
+        <div className="container mx-auto px-6">
+          <div className="flex items-center justify-between h-20">
+            <Link href="/" className="flex items-center">
               <img 
-                src="/ui/arlogo.png" 
+                src="/arlogo.png" 
                 alt="Agent Registry" 
-                width={200} 
-                height={67}
+                width={180} 
+                height={60}
+                className="h-12 w-auto"
               />
-              <div className="flex items-center gap-4 text-sm">
-                <Link href="/" className="text-foreground font-medium">
-                  Admin
-                </Link>
-                <Link href="/registry" className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2">
-                  <Eye className="h-4 w-4" />
-                  View Registry
-                </Link>
-              </div>
+            </Link>
+            
+            <div className="flex items-center gap-6">
+              <Link 
+                href="/" 
+                className="text-sm font-medium text-foreground hover:text-foreground/80 transition-colors border-b-2 border-foreground pb-1"
+              >
+                Admin
+              </Link>
+              <Link 
+                href="/registry" 
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Registry
+              </Link>
+              <Link 
+                href="/deployed" 
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Live View
+              </Link>
             </div>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={fetchData}
-              title="Refresh data"
-            >
-              <RefreshCw className="h-5 w-5" />
-            </Button>
           </div>
+        </div>
+      </nav>
 
-          {/* Stats */}
-          {stats && (
-            <div className="grid gap-4 md:grid-cols-3 mb-6">
+      {/* Stats Section */}
+      {stats && (
+        <div className="bg-muted/30 border-b">
+          <div className="container mx-auto px-6 py-6">
+            <div className="grid gap-4 md:grid-cols-3">
               <Card className="p-4 hover:shadow-md transition-all duration-200 border hover:border-primary/20">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -318,7 +417,7 @@ export default function AdminPage() {
                     <Zap className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">{skillsCount}</p>
+                    <p className="text-2xl font-bold">{skills.length}</p>
                     <p className="text-xs text-muted-foreground">Skills</p>
                   </div>
                 </div>
@@ -330,92 +429,129 @@ export default function AdminPage() {
                     <Bot className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">{agentsCount}</p>
+                    <p className="text-2xl font-bold">{agents.length}</p>
                     <p className="text-xs text-muted-foreground">Agents</p>
                   </div>
                 </div>
               </Card>
             </div>
-          )}
-        </div>
-      </div>
-
-      <div className="container mx-auto px-6 py-8">
-        {/* Global Search */}
-        <div className="mb-6">
-          <div className="relative max-w-2xl">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search servers, skills, agents..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 pr-10"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Clear search"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
           </div>
         </div>
+      )}
 
+      <div className="container mx-auto px-6 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="mb-8">
-            <TabsTrigger value="servers" className="gap-2">
-              <span className="h-4 w-4 flex items-center justify-center">
-                <MCPIcon />
-              </span>
-              Servers
-            </TabsTrigger>
-            <TabsTrigger value="skills" className="gap-2">
-              <Zap className="h-4 w-4" />
-              Skills
-            </TabsTrigger>
-            <TabsTrigger value="agents" className="gap-2">
-              <Bot className="h-4 w-4" />
-              Agents
-            </TabsTrigger>
-          </TabsList>
+          <div className="flex items-center gap-4 mb-8">
+            <TabsList>
+              <TabsTrigger value="servers" className="gap-2">
+                <span className="h-4 w-4 flex items-center justify-center">
+                  <MCPIcon />
+                </span>
+                Servers
+              </TabsTrigger>
+              <TabsTrigger value="skills" className="gap-2">
+                <Zap className="h-4 w-4" />
+                Skills
+              </TabsTrigger>
+              <TabsTrigger value="agents" className="gap-2">
+                <Bot className="h-4 w-4" />
+                Agents
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Search */}
+            <div className="flex-1 max-w-md">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 h-9"
+                />
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-3 ml-auto">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="default" className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Add
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setAddServerDialogOpen(true)}>
+                    <span className="mr-2 h-4 w-4 flex items-center justify-center">
+                      <MCPIcon />
+                    </span>
+                    Add Server
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setAddSkillDialogOpen(true)}>
+                    <Zap className="mr-2 h-4 w-4" />
+                    Add Skill
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setAddAgentDialogOpen(true)}>
+                    <Bot className="mr-2 h-4 w-4" />
+                    Add Agent
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="gap-2">
+                    <Download className="h-4 w-4" />
+                    Import
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setImportDialogOpen(true)}>
+                    <span className="mr-2 h-4 w-4 flex items-center justify-center">
+                      <MCPIcon />
+                    </span>
+                    Import Servers
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setImportSkillsDialogOpen(true)}>
+                    <Zap className="mr-2 h-4 w-4" />
+                    Import Skills
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setImportAgentsDialogOpen(true)}>
+                    <Bot className="mr-2 h-4 w-4" />
+                    Import Agents
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={fetchData}
+                title="Refresh"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
 
           {/* Servers Tab */}
           <TabsContent value="servers">
-            {/* Actions */}
-            <div className="flex items-center gap-4 mb-8 justify-between">
-              <div className="flex items-center gap-2">
-                <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
-                <Select value={sortBy} onValueChange={(value: "name" | "stars" | "date") => setSortBy(value)}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Sort by..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="name">Name (A-Z)</SelectItem>
-                    <SelectItem value="stars">GitHub Stars</SelectItem>
-                    <SelectItem value="date">Date Published</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center gap-4">
-                <Button
-                  variant="outline"
-                  className="gap-2"
-                  onClick={() => setAddServerDialogOpen(true)}
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Server
-                </Button>
-                <Button
-                  variant="default"
-                  className="gap-2"
-                  onClick={() => setImportDialogOpen(true)}
-                >
-                  <Download className="h-4 w-4" />
-                  Import Servers
-                </Button>
-              </div>
+            {/* Sort controls */}
+            <div className="flex items-center gap-2 mb-6">
+              <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+              <Select value={sortBy} onValueChange={(value: "name" | "stars" | "date") => setSortBy(value)}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Sort by..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name">Name (A-Z)</SelectItem>
+                  <SelectItem value="stars">GitHub Stars</SelectItem>
+                  <SelectItem value="date">Date Published</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Server List */}
@@ -472,103 +608,107 @@ export default function AdminPage() {
 
           {/* Skills Tab */}
           <TabsContent value="skills">
-            {/* Actions */}
-            <div className="flex items-center gap-4 mb-8 justify-end">
-              <Button
-                variant="outline"
-                className="gap-2"
-                onClick={() => setAddSkillDialogOpen(true)}
-              >
-                <Plus className="h-4 w-4" />
-                Add Skill
-              </Button>
-              <Button
-                variant="default"
-                className="gap-2"
-                onClick={() => setImportSkillsDialogOpen(true)}
-              >
-                <Download className="h-4 w-4" />
-                Import Skills
-              </Button>
-            </div>
-
             {/* Skills List */}
             <div>
               <h2 className="text-lg font-semibold mb-4">
                 Skills
-                <span className="text-muted-foreground ml-2">({skillsCount})</span>
+                <span className="text-muted-foreground ml-2">
+                  ({filteredSkills.length})
+                </span>
               </h2>
 
-              <Card className="p-12">
-                <div className="text-center text-muted-foreground">
-                  <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center text-primary">
-                    <Zap className="w-12 h-12" />
+              {filteredSkills.length === 0 ? (
+                <Card className="p-12">
+                  <div className="text-center text-muted-foreground">
+                    <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center text-primary">
+                      <Zap className="w-12 h-12" />
+                    </div>
+                    <p className="text-lg font-medium mb-2">
+                      {skills.length === 0
+                        ? "No skills in registry"
+                        : "No skills match your filters"}
+                    </p>
+                    <p className="text-sm mb-4">
+                      {skills.length === 0
+                        ? "Import skills from external sources to get started"
+                        : "Try adjusting your search or filter criteria"}
+                    </p>
+                    {skills.length === 0 && (
+                      <Button
+                        variant="outline"
+                        className="gap-2"
+                        onClick={() => setImportSkillsDialogOpen(true)}
+                      >
+                        <Download className="h-4 w-4" />
+                        Import Skills
+                      </Button>
+                    )}
                   </div>
-                  <p className="text-lg font-medium mb-2">Skills view coming soon</p>
-                  <p className="text-sm mb-4">
-                    {skillsCount} skill{skillsCount !== 1 ? 's' : ''} available in registry
-                  </p>
-                  <Button
-                    variant="outline"
-                    className="gap-2"
-                    onClick={() => setImportSkillsDialogOpen(true)}
-                  >
-                    <Download className="h-4 w-4" />
-                    Import Skills
-                  </Button>
+                </Card>
+              ) : (
+                <div className="grid gap-4">
+                  {filteredSkills.map((skill, index) => (
+                    <SkillCard
+                      key={`${skill.skill.name}-${skill.skill.version}-${index}`}
+                      skill={skill}
+                      onClick={() => setSelectedSkill(skill)}
+                    />
+                  ))}
                 </div>
-              </Card>
+              )}
             </div>
           </TabsContent>
 
           {/* Agents Tab */}
           <TabsContent value="agents">
-            {/* Actions */}
-            <div className="flex items-center gap-4 mb-8 justify-end">
-              <Button
-                variant="outline"
-                className="gap-2"
-                onClick={() => setAddAgentDialogOpen(true)}
-              >
-                <Plus className="h-4 w-4" />
-                Add Agent
-              </Button>
-              <Button
-                variant="default"
-                className="gap-2"
-                onClick={() => setImportAgentsDialogOpen(true)}
-              >
-                <Download className="h-4 w-4" />
-                Import Agents
-              </Button>
-            </div>
-
             {/* Agents List */}
             <div>
               <h2 className="text-lg font-semibold mb-4">
                 Agents
-                <span className="text-muted-foreground ml-2">({agentsCount})</span>
+                <span className="text-muted-foreground ml-2">
+                  ({filteredAgents.length})
+                </span>
               </h2>
 
-              <Card className="p-12">
-                <div className="text-center text-muted-foreground">
-                  <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center text-primary">
-                    <Bot className="w-12 h-12" />
+              {filteredAgents.length === 0 ? (
+                <Card className="p-12">
+                  <div className="text-center text-muted-foreground">
+                    <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center text-primary">
+                      <Bot className="w-12 h-12" />
+                    </div>
+                    <p className="text-lg font-medium mb-2">
+                      {agents.length === 0
+                        ? "No agents in registry"
+                        : "No agents match your filters"}
+                    </p>
+                    <p className="text-sm mb-4">
+                      {agents.length === 0
+                        ? "Import agents from external sources to get started"
+                        : "Try adjusting your search or filter criteria"}
+                    </p>
+                    {agents.length === 0 && (
+                      <Button
+                        variant="outline"
+                        className="gap-2"
+                        onClick={() => setImportAgentsDialogOpen(true)}
+                      >
+                        <Download className="h-4 w-4" />
+                        Import Agents
+                      </Button>
+                    )}
                   </div>
-                  <p className="text-lg font-medium mb-2">Agents view coming soon</p>
-                  <p className="text-sm mb-4">
-                    {agentsCount} agent{agentsCount !== 1 ? 's' : ''} available in registry
-                  </p>
-                  <Button
-                    variant="outline"
-                    className="gap-2"
-                    onClick={() => setImportAgentsDialogOpen(true)}
-                  >
-                    <Download className="h-4 w-4" />
-                    Import Agents
-                  </Button>
+                </Card>
+              ) : (
+                <div className="grid gap-4">
+                  {filteredAgents.map((agent, index) => (
+                    <AgentCard
+                      key={`${agent.agent.name}-${agent.agent.version}-${index}`}
+                      agent={agent}
+                      onClick={() => setSelectedAgent(agent)}
+                    />
+                  ))}
                 </div>
-              </Card>
+              )}
             </div>
           </TabsContent>
         </Tabs>
@@ -595,7 +735,7 @@ export default function AdminPage() {
       <AddSkillDialog
         open={addSkillDialogOpen}
         onOpenChange={setAddSkillDialogOpen}
-        onSkillAdded={() => {}}
+        onSkillAdded={fetchData}
       />
 
       {/* Agent Dialogs */}
