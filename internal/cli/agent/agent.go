@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/agentregistry-dev/agentregistry/internal/client"
+	"github.com/agentregistry-dev/agentregistry/internal/models"
+	"github.com/kagent-dev/kagent/go/cli/agent/frameworks/common"
 	"github.com/kagent-dev/kagent/go/cli/cli/agent"
 	"github.com/kagent-dev/kagent/go/cli/config"
 	"github.com/spf13/cobra"
@@ -15,7 +18,7 @@ var agentCmd = &cobra.Command{
 	Long:  "Manage agents",
 }
 
-func NewAgentCmd() *cobra.Command {
+func NewAgentCmd(cli *client.Client) *cobra.Command {
 
 	cfg := &config.Config{}
 
@@ -43,7 +46,7 @@ Examples:
 			initCfg.Language = args[1]
 			initCfg.AgentName = args[2]
 
-			if err := agent.InitCmd(initCfg, "0.7.4"); err != nil {
+			if err := agent.InitCmd(initCfg, "arctl agent", "0.7.4"); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
@@ -123,7 +126,71 @@ Examples:
 	buildCmd.Flags().BoolVar(&buildCfg.Push, "push", false, "Push the image to the registry")
 	buildCmd.Flags().StringVar(&buildCfg.Platform, "platform", "", "Target platform for Docker build (e.g., linux/amd64, linux/arm64)")
 
-	agentCmd.AddCommand(initCmd, runCmd, buildCmd)
+	publishCfg := &PublishCfg{
+		Config: cfg,
+	}
+
+	publishCmd := &cobra.Command{
+		Use:   "publish [project-directory]",
+		Short: "Publish an agent project to the registry",
+		Long: `Publish an agent project to the registry.
+
+Examples:
+  arctl agent publish ./my-agent`,
+		Args: cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			publishCfg.ProjectDir = args[0]
+
+			if err := PublishCmd(publishCfg, cli); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+		},
+	}
+
+	agentCmd.AddCommand(initCmd, runCmd, buildCmd, publishCmd)
 
 	return agentCmd
+}
+
+type PublishCfg struct {
+	Config     *config.Config
+	ProjectDir string
+	Version    string
+}
+
+func PublishCmd(cfg *PublishCfg, cli *client.Client) error {
+	// Validate project directory
+	if cfg.ProjectDir == "" {
+		return fmt.Errorf("project directory is required")
+	}
+
+	// Check if project directory exists
+	if _, err := os.Stat(cfg.ProjectDir); os.IsNotExist(err) {
+		return fmt.Errorf("project directory does not exist: %s", cfg.ProjectDir)
+	}
+
+	version := "latest"
+	if cfg.Version != "" {
+		version = cfg.Version
+	}
+
+	mgr := common.NewManifestManager(cfg.ProjectDir)
+	manifest, err := mgr.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load manifest: %w", err)
+	}
+
+	jsn := &models.AgentJSON{
+		Name:        manifest.Name,
+		Version:     version,
+		Description: manifest.Description,
+	}
+
+	_, err = cli.PublishAgent(jsn)
+	if err != nil {
+		return fmt.Errorf("failed to publish agent: %w", err)
+	}
+
+	return nil
 }

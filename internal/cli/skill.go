@@ -60,7 +60,7 @@ var skillShowCmd = &cobra.Command{
 	Long:  `Display detailed information about a specific Claude Skill.`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := runSkillShow(cmd, args); err != nil {
+		if err := runSkillShow(args[0]); err != nil {
 			printer.PrintError(fmt.Sprintf("Failed to show skill: %v", err))
 			os.Exit(1)
 		}
@@ -340,9 +340,7 @@ func runSkillList(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runSkillShow(cmd *cobra.Command, args []string) error {
-	skillName := args[0]
-
+func runSkillShow(skillName string) error {
 	if APIClient == nil {
 		return fmt.Errorf("API client not initialized")
 	}

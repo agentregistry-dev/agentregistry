@@ -5,5 +5,5 @@ import (
 )
 
 func init() {
-	rootCmd.AddCommand(agent.NewAgentCmd())
+	rootCmd.AddCommand(agent.NewAgentCmd(APIClient))
 }

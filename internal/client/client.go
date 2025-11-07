@@ -440,6 +440,13 @@ func (c *Client) PublishSkill(skill *models.SkillJSON) (*models.SkillResponse, e
 	return &resp, err
 }
 
+// PublishAgent publishes an agent to the registry
+func (c *Client) PublishAgent(agent *models.AgentJSON) (*models.AgentResponse, error) {
+	var resp models.AgentResponse
+	err := c.doJsonRequest(http.MethodPost, "/agents/publish", agent, &resp)
+	return &resp, err
+}
+
 // Helpers to convert API errors
 func asHTTPStatus(err error) int {
 	if err == nil {
