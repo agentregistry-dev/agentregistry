@@ -9,18 +9,19 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"math"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
@@ -31,12 +32,15 @@ import (
 
 // Service handles importing seed data into the registry
 type Service struct {
-	registry       service.RegistryService
-	httpClient     *http.Client
-	requestHeaders map[string]string
-	updateIfExists bool
-	githubToken    string
-	readmeSeedPath string
+	registry          service.RegistryService
+	httpClient        *http.Client
+	requestHeaders    map[string]string
+	updateIfExists    bool
+	githubToken       string
+	readmeSeedPath    string
+	progressCachePath string
+	progressMu        sync.RWMutex
+	processedServers  map[string]struct{}
 }
 
 // NewService creates a new importer service with sane defaults
@@ -49,9 +53,10 @@ func NewService(registry service.RegistryService) *Service {
 		}
 	}
 	return &Service{
-		registry:       registry,
-		httpClient:     &http.Client{Timeout: timeout},
-		requestHeaders: map[string]string{},
+		registry:         registry,
+		httpClient:       &http.Client{Timeout: timeout},
+		requestHeaders:   map[string]string{},
+		processedServers: map[string]struct{}{},
 	}
 }
 
@@ -84,6 +89,11 @@ func (s *Service) SetReadmeSeedPath(path string) {
 	s.readmeSeedPath = strings.TrimSpace(path)
 }
 
+// SetProgressCachePath configures a file used to persist import progress between runs.
+func (s *Service) SetProgressCachePath(path string) {
+	s.progressCachePath = strings.TrimSpace(path)
+}
+
 // ImportFromPath imports seed data from various sources:
 // 1. Local file paths (*.json files) - expects ServerJSON array format
 // 2. Direct HTTP URLs to seed.json files - expects ServerJSON array format
@@ -99,15 +109,39 @@ func (s *Service) ImportFromPath(ctx context.Context, path string) error {
 		return err
 	}
 
+	if err := s.loadProgressCache(); err != nil {
+		return fmt.Errorf("failed to load progress cache: %w", err)
+	}
+
+	if count := s.processedCount(); count > 0 {
+		if s.progressCachePath != "" {
+			log.Printf("Progress cache loaded: %d servers already processed", count)
+		}
+	}
+
+	pending := make([]*apiv0.ServerJSON, 0, len(servers))
+	for _, server := range servers {
+		if s.isServerProcessed(server) {
+			log.Printf("Skipping already processed server %s@%s", server.Name, server.Version)
+			continue
+		}
+		pending = append(pending, server)
+	}
+
+	if len(pending) == 0 {
+		log.Printf("All %d servers already processed; nothing to import", len(servers))
+		return nil
+	}
+
 	// Import each server using registry service CreateServer
-	total := len(servers)
+	total := len(pending)
 	var processed int32
 
 	wg := &sync.WaitGroup{}
 	concurrencyLimit := 10
 	sem := make(chan struct{}, concurrencyLimit)
 
-	for _, server := range servers {
+	for _, server := range pending {
 		srv := server
 		sem <- struct{}{}
 		wg.Add(1)
@@ -133,6 +167,9 @@ func (s *Service) importServer(
 	srv *apiv0.ServerJSON,
 	readmeSeeds seed.ReadmeFile,
 ) {
+	if srv != nil {
+		defer s.markServerProcessed(srv)
+	}
 	// check server json (schema validation) before attempting to enrich
 	if err := validators.ValidateServerJSON(srv); err != nil {
 		log.Printf("Skipping invalid server %s@%s: %v", srv.Name, srv.Version, err)
@@ -1259,6 +1296,148 @@ func (s *Service) readmeFromSeed(readmes seed.ReadmeFile, server *apiv0.ServerJS
 		return nil, ""
 	}
 	return content, contentType
+}
+
+func (s *Service) loadProgressCache() error {
+	s.progressMu.Lock()
+	defer s.progressMu.Unlock()
+
+	s.processedServers = make(map[string]struct{})
+
+	if strings.TrimSpace(s.progressCachePath) == "" {
+		return nil
+	}
+
+	data, err := os.ReadFile(s.progressCachePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		key := strings.TrimSpace(line)
+		if key == "" {
+			continue
+		}
+		s.processedServers[key] = struct{}{}
+	}
+
+	return nil
+}
+
+func (s *Service) processedCount() int {
+	s.progressMu.RLock()
+	defer s.progressMu.RUnlock()
+
+	return len(s.processedServers)
+}
+
+func (s *Service) isServerProcessed(server *apiv0.ServerJSON) bool {
+	key := s.progressCacheKey(server)
+	if key == "" {
+		return false
+	}
+
+	s.progressMu.RLock()
+	defer s.progressMu.RUnlock()
+
+	_, ok := s.processedServers[key]
+	return ok
+}
+
+func (s *Service) markServerProcessed(server *apiv0.ServerJSON) {
+	key := s.progressCacheKey(server)
+	if key == "" {
+		return
+	}
+
+	s.progressMu.Lock()
+	defer s.progressMu.Unlock()
+
+	if s.processedServers == nil {
+		s.processedServers = make(map[string]struct{})
+	}
+
+	if _, exists := s.processedServers[key]; exists {
+		return
+	}
+
+	s.processedServers[key] = struct{}{}
+
+	if strings.TrimSpace(s.progressCachePath) == "" {
+		return
+	}
+
+	if err := s.persistProgressCacheLocked(); err != nil {
+		log.Printf("Warning: failed to persist progress cache: %v", err)
+	}
+}
+
+func (s *Service) persistProgressCacheLocked() error {
+	if strings.TrimSpace(s.progressCachePath) == "" {
+		return nil
+	}
+
+	dir := filepath.Dir(s.progressCachePath)
+	if dir == "" {
+		dir = "."
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	tmp, err := os.CreateTemp(dir, filepath.Base(s.progressCachePath)+".tmp-*")
+	if err != nil {
+		return err
+	}
+
+	keys := make([]string, 0, len(s.processedServers))
+	for key := range s.processedServers {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		if _, err := tmp.WriteString(key + "\n"); err != nil {
+			_ = tmp.Close()
+			_ = os.Remove(tmp.Name())
+			return err
+		}
+	}
+
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmp.Name())
+		return err
+	}
+
+	if err := os.Rename(tmp.Name(), s.progressCachePath); err != nil {
+		_ = os.Remove(tmp.Name())
+		return err
+	}
+
+	return nil
+}
+
+func (s *Service) progressCacheKey(server *apiv0.ServerJSON) string {
+	if server == nil {
+		return ""
+	}
+
+	name := strings.TrimSpace(server.Name)
+	version := strings.TrimSpace(server.Version)
+	if name == "" || version == "" {
+		return ""
+	}
+
+	return seed.Key(name, version)
 }
 
 // parseLastPageFromLink extracts the last page number from a GitHub Link header.

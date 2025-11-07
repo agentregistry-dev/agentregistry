@@ -23,7 +23,8 @@ var (
 	importTimeout        time.Duration
 	importGithubToken    string
 	importUpdate         bool
-    importReadmeSeed     string
+	importReadmeSeed     string
+	importProgressCache  string
 )
 
 var importCmd = &cobra.Command{
@@ -79,7 +80,8 @@ var importCmd = &cobra.Command{
 		importerService.SetRequestHeaders(headerMap)
 		importerService.SetUpdateIfExists(importUpdate)
 		importerService.SetGitHubToken(importGithubToken)
-        importerService.SetReadmeSeedPath(importReadmeSeed)
+		importerService.SetReadmeSeedPath(importReadmeSeed)
+		importerService.SetProgressCachePath(importProgressCache)
 
 		if err := importerService.ImportFromPath(context.Background(), importSource); err != nil {
 			// Importer already logged failures and summary; return error to exit non-zero
@@ -97,6 +99,7 @@ func init() {
 	importCmd.Flags().DurationVar(&importTimeout, "timeout", 30*time.Second, "HTTP request timeout")
 	importCmd.Flags().StringVar(&importGithubToken, "github-token", "", "GitHub token for higher rate limits when enriching metadata")
 	importCmd.Flags().BoolVar(&importUpdate, "update", false, "Update existing entries if name/version already exists")
-    importCmd.Flags().StringVar(&importReadmeSeed, "readme-seed", "", "Optional README seed file path or URL")
+	importCmd.Flags().StringVar(&importReadmeSeed, "readme-seed", "", "Optional README seed file path or URL")
+	importCmd.Flags().StringVar(&importProgressCache, "progress-cache", "", "Optional path to store import progress for resuming interrupted runs")
 	_ = importCmd.MarkFlagRequired("source")
 }
