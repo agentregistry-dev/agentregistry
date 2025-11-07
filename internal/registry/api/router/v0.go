@@ -21,8 +21,8 @@ func RegisterV0Routes(
 	v0.RegisterServersEndpoints(api, "/v0", registry)
 	v0.RegisterEditEndpoints(api, "/v0", registry, cfg)
 	v0auth.RegisterAuthEndpoints(api, "/v0", cfg)
-	v0.RegisterPublishEndpoint(api, "/v0", registry, cfg)
-	v0.RegisterAgentsPublishEndpoint(api, "/v0", registry, cfg)
+	v0.RegisterPublishEndpoint(api, "/v0", registry, authz)
+	v0.RegisterAgentsPublishEndpoint(api, "/v0", registry, authz)
 	// Agents endpoints (v0)
 	v0.RegisterAgentsEndpoints(api, "/v0", registry)
 	// Skills endpoints (v0 only)
@@ -31,7 +31,7 @@ func RegisterV0Routes(
 }
 
 func RegisterV0_1Routes(
-	api huma.API, cfg *config.Config, registry service.RegistryService, metrics *telemetry.Metrics, versionInfo *v0.VersionBody,
+	api huma.API, authz auth.Authorizer, cfg *config.Config, registry service.RegistryService, metrics *telemetry.Metrics, versionInfo *v0.VersionBody,
 ) {
 	v0.RegisterHealthEndpoint(api, "/v0.1", cfg, metrics)
 	v0.RegisterPingEndpoint(api, "/v0.1")
@@ -39,5 +39,5 @@ func RegisterV0_1Routes(
 	v0.RegisterServersEndpoints(api, "/v0.1", registry)
 	v0.RegisterEditEndpoints(api, "/v0.1", registry, cfg)
 	v0auth.RegisterAuthEndpoints(api, "/v0.1", cfg)
-	v0.RegisterPublishEndpoint(api, "/v0.1", registry, cfg)
+	v0.RegisterPublishEndpoint(api, "/v0.1", registry, authz)
 }

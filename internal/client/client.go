@@ -449,13 +449,6 @@ func (c *Client) MarkServerInstalled(serverID int, installed bool) error { retur
 // MarkSkillInstalled marks a skill as installed or uninstalled
 func (c *Client) MarkSkillInstalled(skillID int, installed bool) error { return nil }
 
-// PublishSkill publishes a skill to the registry
-func (c *Client) PublishSkill(skill *models.SkillJSON) (*models.SkillResponse, error) {
-	var resp models.SkillResponse
-	err := c.doJsonRequest(http.MethodPost, "/skills/publish", skill, &resp)
-	return &resp, err
-}
-
 // GetInstalledServers returns all installed MCP servers
 func (c *Client) GetInstalledServers() ([]models.ServerDetail, error) {
 	return []models.ServerDetail{}, nil
@@ -464,6 +457,20 @@ func (c *Client) GetInstalledServers() ([]models.ServerDetail, error) {
 // GetInstallationByName returns an installation record by resource name
 func (c *Client) GetInstallationByName(resourceType, resourceName string) (*models.Installation, error) {
 	return nil, nil
+}
+
+// PublishSkill publishes a skill to the registry
+func (c *Client) PublishSkill(skill *models.SkillJSON) (*models.SkillResponse, error) {
+	var resp models.SkillResponse
+	err := c.doJsonRequest(http.MethodPost, "/skills/publish", skill, &resp)
+	return &resp, err
+}
+
+// PublishAgent publishes an agent to the registry
+func (c *Client) PublishAgent(agent *models.AgentJSON) (*models.AgentResponse, error) {
+	var resp models.AgentResponse
+	err := c.doJsonRequest(http.MethodPost, "/agents/publish", agent, &resp)
+	return &resp, err
 }
 
 // Helpers to convert API errors

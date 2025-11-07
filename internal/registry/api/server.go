@@ -35,16 +35,19 @@ func createUIHandler() (http.Handler, error) {
 }
 
 // TrailingSlashMiddleware redirects requests with trailing slashes to their canonical form
-// Excludes /ui paths since the UI needs to handle its own routing
+// Only applies to API routes, not UI routes
 func TrailingSlashMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Skip trailing slash handling for UI paths
-		if strings.HasPrefix(r.URL.Path, "/ui") {
-			next.ServeHTTP(w, r)
-			return
-		}
-		// Only redirect if the path is not "/" and ends with a "/"
-		if r.URL.Path != "/" && strings.HasSuffix(r.URL.Path, "/") {
+		// Only apply trailing slash logic to API routes
+		isAPIRoute := strings.HasPrefix(r.URL.Path, "/v0/") ||
+			strings.HasPrefix(r.URL.Path, "/v0.1/") ||
+			r.URL.Path == "/health" ||
+			r.URL.Path == "/ping" ||
+			r.URL.Path == "/metrics" ||
+			strings.HasPrefix(r.URL.Path, "/docs")
+
+		// Only redirect if it's an API route and ends with a "/"
+		if isAPIRoute && r.URL.Path != "/" && strings.HasSuffix(r.URL.Path, "/") {
 			// Create a copy of the URL and remove the trailing slash
 			newURL := *r.URL
 			newURL.Path = strings.TrimSuffix(r.URL.Path, "/")
@@ -119,7 +122,7 @@ func NewServer(cfg *config.Config, registryService service.RegistryService, metr
 // Start begins listening for incoming HTTP requests
 func (s *Server) Start() error {
 	log.Printf("HTTP server starting on %s", s.config.ServerAddress)
-	log.Printf("Web UI available at http://localhost%s/ui", s.config.ServerAddress)
+	log.Printf("Web UI available at http://localhost%s/", s.config.ServerAddress)
 	log.Printf("API documentation at http://localhost%s/docs", s.config.ServerAddress)
 	return s.server.ListenAndServe()
 }

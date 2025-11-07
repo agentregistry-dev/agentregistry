@@ -194,22 +194,29 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 
 	// Register routes for all API versions
 	RegisterV0Routes(api, authz, cfg, registry, metrics, versionInfo)
-	RegisterV0_1Routes(api, cfg, registry, metrics, versionInfo)
+	RegisterV0_1Routes(api, authz, cfg, registry, metrics, versionInfo)
 
 	// Add /metrics for Prometheus metrics using promhttp
 	mux.Handle("/metrics", metrics.PrometheusHandler())
-	// Serve UI from /ui path or handle 404 for non-API routes
+
+	// Serve UI from root path or handle 404 for non-API routes
 	if uiHandler != nil {
-		// Use StripPrefix to properly handle the /ui prefix
-		// This allows http.FileServer to generate correct redirects
-		uiWithPrefix := http.StripPrefix("/ui", uiHandler)
-
-		// Register handler for /ui/ (with trailing slash - matches /ui/* paths)
-		mux.Handle("/ui/", uiWithPrefix)
-
-		// Also register handler for exact /ui path (without trailing slash)
-		mux.Handle("/ui", uiWithPrefix)
-
+		// Register UI handler for all non-API routes
+		// This must be registered last so API routes take precedence
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			// Check if this is an API route - if so, return 404
+			if strings.HasPrefix(r.URL.Path, "/v0/") ||
+				strings.HasPrefix(r.URL.Path, "/v0.1/") ||
+				r.URL.Path == "/health" ||
+				r.URL.Path == "/ping" ||
+				r.URL.Path == "/metrics" ||
+				strings.HasPrefix(r.URL.Path, "/docs") {
+				handle404(w, r)
+				return
+			}
+			// Serve UI for everything else
+			uiHandler.ServeHTTP(w, r)
+		})
 	} else {
 		// If no UI handler, redirect to docs and handle 404
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

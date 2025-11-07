@@ -11,13 +11,14 @@ require (
 	github.com/google/go-containerregistry v0.20.6
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/joho/godotenv v1.5.1
-	github.com/kagent-dev/kagent/go v0.0.0-20251105210944-ce801ba73e0c
+	github.com/kagent-dev/kagent/go v0.0.0-20251106161932-369ba8630099
 	github.com/modelcontextprotocol/registry v1.3.7
 	github.com/ossf/scorecard/v4 v4.13.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/rs/cors v1.11.1
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/spf13/cobra v1.10.1
+	github.com/stoewer/go-strcase v1.3.1
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.63.0
 	go.opentelemetry.io/otel v1.38.0
@@ -27,6 +28,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.38.0
 	go.yaml.in/yaml/v3 v3.0.4
 	golang.org/x/mod v0.29.0
+	golang.org/x/text v0.29.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -221,7 +223,6 @@ require (
 	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/sys v0.37.0 // indirect
 	golang.org/x/term v0.36.0 // indirect
-	golang.org/x/text v0.29.0 // indirect
 	golang.org/x/time v0.13.0 // indirect
 	golang.org/x/tools v0.37.0 // indirect
 	golang.org/x/vuln v1.0.1 // indirect
