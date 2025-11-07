@@ -146,7 +146,39 @@ Examples:
 		},
 	}
 
-	agentCmd.AddCommand(initCmd, runCmd, buildCmd, publishCmd)
+	addMcpCfg := &agent.AddMcpCfg{
+		Config: cfg,
+	}
+
+	addMcpCmd := &cobra.Command{
+		Use:   "add-mcp [name] [args...]",
+		Short: "Add an MCP server entry to agent.yaml",
+		Long:  `Add an MCP server entry to agent.yaml. Use flags for non-interactive setup or run without flags to open the wizard.`,
+		Args:  cobra.ArbitraryArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			if len(args) > 0 {
+				addMcpCfg.Name = args[0]
+				if len(args) > 1 && addMcpCfg.Command != "" {
+					addMcpCfg.Args = append(addMcpCfg.Args, args[1:]...)
+				}
+			}
+			if err := agent.AddMcpCmd(addMcpCfg); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+		},
+	}
+	// Flags for non-interactive usage
+	addMcpCmd.Flags().StringVar(&addMcpCfg.ProjectDir, "project-dir", "", "Project directory (default: current directory)")
+	addMcpCmd.Flags().StringVar(&addMcpCfg.RemoteURL, "remote", "", "Remote MCP server URL (http/https)")
+	addMcpCmd.Flags().StringSliceVar(&addMcpCfg.Headers, "header", nil, "HTTP header for remote MCP in KEY=VALUE format (repeatable, supports ${VAR} for env vars)")
+	addMcpCmd.Flags().StringVar(&addMcpCfg.Command, "command", "", "Command to run MCP server (e.g., npx, uvx, kmcp, or a binary)")
+	addMcpCmd.Flags().StringSliceVar(&addMcpCfg.Args, "arg", nil, "Command argument (repeatable)")
+	addMcpCmd.Flags().StringSliceVar(&addMcpCfg.Env, "env", nil, "Environment variable in KEY=VALUE format (repeatable)")
+	addMcpCmd.Flags().StringVar(&addMcpCfg.Image, "image", "", "Container image (optional; mutually exclusive with --build)")
+	addMcpCmd.Flags().StringVar(&addMcpCfg.Build, "build", "", "Container build (optional; mutually exclusive with --image)")
+
+	agentCmd.AddCommand(initCmd, runCmd, buildCmd, publishCmd, addMcpCmd)
 
 	return agentCmd
 }
