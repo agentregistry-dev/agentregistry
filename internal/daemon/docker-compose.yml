@@ -24,16 +24,18 @@ services:
     environment:
       AGENT_REGISTRY_DATABASE_URL: "postgres://agentregistry:agentregistry@postgres:5432/agent-registry?sslmode=disable"
       AGENT_REGISTRY_SERVER_ADDRESS: ":8080"
-      AGENT_REGISTRY_AGENT_GATEWAY_PORT: "8081"
+      AGENT_REGISTRY_AGENT_GATEWAY_PORT: "21212"
       AGENT_REGISTRY_JWT_PRIVATE_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      AGENT_REGISTRY_RECONCILE_ON_STARTUP: "true"
       # AGENT_REGISTRY_ENABLE_ANONYMOUS_AUTH: "false"
       # AGENT_REGISTRY_ENABLE_REGISTRY_VALIDATION: "true"
     ports:
       - "12121:8080"
-      - "21212:8081"
     volumes:
       # Mount Docker socket to allow the server to manage containers
       - /var/run/docker.sock:/var/run/docker.sock
+      # Mount /tmp so the registry can write configs accessible to Docker on the host
+      - /tmp:/tmp
     depends_on:
       postgres:
         condition: service_healthy

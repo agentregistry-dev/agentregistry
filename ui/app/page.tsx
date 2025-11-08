@@ -33,6 +33,7 @@ import { ImportSkillsDialog } from "@/components/import-skills-dialog"
 import { AddSkillDialog } from "@/components/add-skill-dialog"
 import { ImportAgentsDialog } from "@/components/import-agents-dialog"
 import { AddAgentDialog } from "@/components/add-agent-dialog"
+import { DeployServerDialog } from "@/components/deploy-server-dialog"
 import { adminApiClient, ServerResponse, SkillResponse, AgentResponse, ServerStats } from "@/lib/admin-api"
 import MCPIcon from "@/components/icons/mcp"
 import {
@@ -80,6 +81,8 @@ export default function AdminPage() {
   const [selectedServer, setSelectedServer] = useState<ServerResponse | null>(null)
   const [selectedSkill, setSelectedSkill] = useState<SkillResponse | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<AgentResponse | null>(null)
+  const [deployDialogOpen, setDeployDialogOpen] = useState(false)
+  const [serverToDeploy, setServerToDeploy] = useState<ServerResponse | null>(null)
   
   // Track scroll position for restoring after navigation
   const scrollPositionRef = useRef<number>(0)
@@ -235,6 +238,12 @@ export default function AdminPage() {
   // Handle closing server detail - flag for scroll restoration
   const handleCloseServerDetail = () => {
     setSelectedServer(null)
+  }
+
+  // Handle server deployment
+  const handleDeploy = (server: ServerResponse) => {
+    setServerToDeploy(server)
+    setDeployDialogOpen(true)
   }
 
   // Filter and sort servers based on search query and sort option
@@ -646,14 +655,21 @@ export default function AdminPage() {
                 </Card>
               ) : (
                 <div className="grid gap-4">
-                  {filteredServers.map((server, index) => (
-                    <ServerCard
-                      key={`${server.server.name}-${server.server.version}-${index}`}
-                      server={server}
-                      versionCount={server.versionCount}
-                      onClick={() => handleServerClick(server)}
-                    />
-                  ))}
+                  {filteredServers.map((server, index) => {
+                    // Only show deploy button for published servers (active status)
+                    const isPublished = server._meta?.['io.modelcontextprotocol.registry/official']?.status === 'active'
+                    
+                    return (
+                      <ServerCard
+                        key={`${server.server.name}-${server.server.version}-${index}`}
+                        server={server}
+                        versionCount={server.versionCount}
+                        onClick={() => handleServerClick(server)}
+                        showDeploy={isPublished}
+                        onDeploy={handleDeploy}
+                      />
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -801,6 +817,14 @@ export default function AdminPage() {
         open={addAgentDialogOpen}
         onOpenChange={setAddAgentDialogOpen}
         onAgentAdded={() => {}}
+      />
+
+      {/* Deploy Dialog */}
+      <DeployServerDialog
+        open={deployDialogOpen}
+        onOpenChange={setDeployDialogOpen}
+        server={serverToDeploy}
+        onDeploySuccess={fetchData}
       />
     </main>
   )

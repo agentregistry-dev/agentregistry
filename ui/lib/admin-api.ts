@@ -503,6 +503,64 @@ class AdminApiClient {
     }
     return response.json()
   }
+
+  // ===== Deployments API =====
+
+  // Deploy a server
+  async deployServer(params: {
+    serverName: string
+    version?: string
+    config?: Record<string, string>
+    preferRemote?: boolean
+  }): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/v0/deployments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        server_name: params.serverName,
+        version: params.version || 'latest',
+        config: params.config || {},
+        prefer_remote: params.preferRemote || false,
+      }),
+    })
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.message || errorData.detail || 'Failed to deploy server')
+    }
+  }
+
+  // Get all deployments
+  async listDeployments(): Promise<Array<{
+    serverName: string
+    version: string
+    deployedAt: string
+    updatedAt: string
+    status: string
+    config: Record<string, string>
+    preferRemote: boolean
+    resourceType: string
+  }>> {
+    const response = await fetch(`${this.baseUrl}/v0/deployments`)
+    if (!response.ok) {
+      throw new Error('Failed to fetch deployments')
+    }
+    const data = await response.json()
+    return data.deployments || []
+  }
+
+  // Remove a deployment
+  async removeDeployment(serverName: string): Promise<void> {
+    const encodedName = encodeURIComponent(serverName)
+    const response = await fetch(`${this.baseUrl}/v0/deployments/${encodedName}`, {
+      method: 'DELETE',
+    })
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.message || errorData.detail || 'Failed to remove deployment')
+    }
+  }
 }
 
 export const adminApiClient = new AdminApiClient()

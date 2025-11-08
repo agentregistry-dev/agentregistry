@@ -1702,6 +1702,209 @@ func (db *PostgreSQL) UnmarkSkillAsLatest(ctx context.Context, tx pgx.Tx, skillN
 	return nil
 }
 
+// CreateDeployment creates a new deployment record
+func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deployment *Deployment) error {
+	executor := db.getExecutor(tx)
+
+	configJSON, err := json.Marshal(deployment.Config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	query := `
+		INSERT INTO deployments (server_name, version, status, config, prefer_remote, resource_type)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`
+
+	// Default to 'mcp' if not specified
+	resourceType := deployment.ResourceType
+	if resourceType == "" {
+		resourceType = "mcp"
+	}
+
+	_, err = executor.Exec(ctx, query,
+		deployment.ServerName,
+		deployment.Version,
+		deployment.Status,
+		configJSON,
+		deployment.PreferRemote,
+		resourceType,
+	)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
+			return ErrAlreadyExists
+		}
+		return fmt.Errorf("failed to create deployment: %w", err)
+	}
+
+	return nil
+}
+
+// GetDeployments retrieves all deployed servers
+func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx) ([]*Deployment, error) {
+	executor := db.getExecutor(tx)
+
+	query := `
+		SELECT server_name, version, deployed_at, updated_at, status, config, prefer_remote, resource_type
+		FROM deployments
+		WHERE status = 'active'
+		ORDER BY deployed_at DESC
+	`
+
+	rows, err := executor.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query deployments: %w", err)
+	}
+	defer rows.Close()
+
+	var deployments []*Deployment
+	for rows.Next() {
+		var d Deployment
+		var configJSON []byte
+
+		err := rows.Scan(
+			&d.ServerName,
+			&d.Version,
+			&d.DeployedAt,
+			&d.UpdatedAt,
+			&d.Status,
+			&configJSON,
+			&d.PreferRemote,
+			&d.ResourceType,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan deployment: %w", err)
+		}
+
+		if len(configJSON) > 0 {
+			if err := json.Unmarshal(configJSON, &d.Config); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+			}
+		}
+		if d.Config == nil {
+			d.Config = make(map[string]string)
+		}
+
+		deployments = append(deployments, &d)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating deployments: %w", err)
+	}
+
+	return deployments, nil
+}
+
+// GetDeploymentByName retrieves a specific deployment
+func (db *PostgreSQL) GetDeploymentByName(ctx context.Context, tx pgx.Tx, serverName string) (*Deployment, error) {
+	executor := db.getExecutor(tx)
+
+	query := `
+		SELECT server_name, version, deployed_at, updated_at, status, config, prefer_remote, resource_type
+		FROM deployments
+		WHERE server_name = $1
+	`
+
+	var d Deployment
+	var configJSON []byte
+
+	err := executor.QueryRow(ctx, query, serverName).Scan(
+		&d.ServerName,
+		&d.Version,
+		&d.DeployedAt,
+		&d.UpdatedAt,
+		&d.Status,
+		&configJSON,
+		&d.PreferRemote,
+		&d.ResourceType,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	if len(configJSON) > 0 {
+		if err := json.Unmarshal(configJSON, &d.Config); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+		}
+	}
+	if d.Config == nil {
+		d.Config = make(map[string]string)
+	}
+
+	return &d, nil
+}
+
+// UpdateDeploymentConfig updates the configuration for a deployment
+func (db *PostgreSQL) UpdateDeploymentConfig(ctx context.Context, tx pgx.Tx, serverName string, config map[string]string) error {
+	executor := db.getExecutor(tx)
+
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	query := `
+		UPDATE deployments
+		SET config = $2
+		WHERE server_name = $1
+	`
+
+	result, err := executor.Exec(ctx, query, serverName, configJSON)
+	if err != nil {
+		return fmt.Errorf("failed to update deployment config: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+// UpdateDeploymentStatus updates the status of a deployment
+func (db *PostgreSQL) UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, serverName, status string) error {
+	executor := db.getExecutor(tx)
+
+	query := `
+		UPDATE deployments
+		SET status = $2
+		WHERE server_name = $1
+	`
+
+	result, err := executor.Exec(ctx, query, serverName, status)
+	if err != nil {
+		return fmt.Errorf("failed to update deployment status: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+// RemoveDeployment removes a deployment
+func (db *PostgreSQL) RemoveDeployment(ctx context.Context, tx pgx.Tx, serverName string) error {
+	executor := db.getExecutor(tx)
+
+	query := `DELETE FROM deployments WHERE server_name = $1`
+
+	result, err := executor.Exec(ctx, query, serverName)
+	if err != nil {
+		return fmt.Errorf("failed to delete deployment: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
 // Close closes the database connection
 func (db *PostgreSQL) Close() error {
 	db.pool.Close()

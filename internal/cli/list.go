@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
 	v0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -60,6 +61,12 @@ var listCmd = &cobra.Command{
 				log.Fatalf("Failed to get servers: %v", err)
 			}
 
+			deployedServers, err := APIClient.GetDeployedServers()
+			if err != nil {
+				log.Printf("Warning: Failed to get deployed servers: %v", err)
+				deployedServers = nil
+			}
+
 			// Filter by type if specified
 			if filterType != "" {
 				servers = filterServersByType(servers, filterType)
@@ -79,7 +86,7 @@ var listCmd = &cobra.Command{
 				case "yaml":
 					outputDataYaml(servers)
 				default:
-					displayPaginatedServers(servers, listPageSize, listAll)
+					displayPaginatedServers(servers, deployedServers, listPageSize, listAll)
 				}
 			}
 		case "skill", "skills":
@@ -125,14 +132,14 @@ var listCmd = &cobra.Command{
 	},
 }
 
-func displayPaginatedServers(servers []*v0.ServerResponse, pageSize int, showAll bool) {
+func displayPaginatedServers(servers []*v0.ServerResponse, deployedServers []*client.DeploymentResponse, pageSize int, showAll bool) {
 	// Group servers by name to handle multiple versions
 	serverGroups := groupServersByName(servers)
 	total := len(serverGroups)
 
 	if showAll || total <= pageSize {
 		// Show all items
-		printServersTable(serverGroups)
+		printServersTable(serverGroups, deployedServers)
 		return
 	}
 
@@ -147,7 +154,7 @@ func displayPaginatedServers(servers []*v0.ServerResponse, pageSize int, showAll
 		}
 
 		// Display current page
-		printServersTable(serverGroups[start:end])
+		printServersTable(serverGroups[start:end], deployedServers)
 
 		// Check if there are more items
 		remaining := total - end
@@ -167,7 +174,7 @@ func displayPaginatedServers(servers []*v0.ServerResponse, pageSize int, showAll
 			case "a", "all":
 				// Show all remaining
 				fmt.Println()
-				printServersTable(serverGroups[end:])
+				printServersTable(serverGroups[end:], deployedServers)
 				return
 			case "q", "quit":
 				// Quit pagination
@@ -367,9 +374,14 @@ func displayPaginatedSkills(skills []*models.SkillResponse, pageSize int, showAl
 		}
 	}
 }
-func printServersTable(serverGroups []ServerGroup) {
+func printServersTable(serverGroups []ServerGroup, deployedServers []*client.DeploymentResponse) {
 	t := printer.NewTablePrinter(os.Stdout)
-	t.SetHeaders("Namespace", "Name", "Version", "Type", "Status", "Updated")
+	t.SetHeaders("Namespace", "Name", "Version", "Type", "Status", "Deployed", "Updated")
+
+	deployedMap := make(map[string]*client.DeploymentResponse)
+	for _, d := range deployedServers {
+		deployedMap[d.ServerName] = d
+	}
 
 	for _, group := range serverGroups {
 		s := group.Server
@@ -404,12 +416,22 @@ func printServersTable(serverGroups []ServerGroup) {
 			namespace = "<none>"
 		}
 
+		deployedStatus := "-"
+		if deployment, ok := deployedMap[s.Server.Name]; ok {
+			if deployment.Version == group.LatestVersion {
+				deployedStatus = "✓"
+			} else {
+				deployedStatus = fmt.Sprintf("✓ (v%s)", deployment.Version)
+			}
+		}
+
 		t.AddRow(
 			printer.TruncateString(namespace, 30),
 			printer.TruncateString(group.Name, 40),
 			versionDisplay,
 			registryType,
 			registryStatus,
+			deployedStatus,
 			updatedAt,
 		)
 	}
@@ -470,6 +492,12 @@ func listAllResourceTypes() {
 		log.Fatalf("Failed to get servers: %v", err)
 	}
 
+	deployedServers, err := APIClient.GetDeployedServers()
+	if err != nil {
+		log.Printf("Warning: Failed to get deployed servers: %v", err)
+		deployedServers = nil
+	}
+
 	// Filter by type if specified
 	if filterType != "" {
 		servers = filterServersByType(servers, filterType)
@@ -482,7 +510,7 @@ func listAllResourceTypes() {
 			fmt.Println("No MCP servers available")
 		}
 	} else {
-		displayPaginatedServers(servers, listPageSize, true) // Always show all when listing all types
+		displayPaginatedServers(servers, deployedServers, listPageSize, true) // Always show all when listing all types
 	}
 
 	fmt.Println("\n=== Skills ===")

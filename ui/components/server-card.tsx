@@ -9,20 +9,22 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Package, Calendar, Tag, ExternalLink, GitBranch, Star, Github, Globe, Trash2, Upload, ShieldCheck, BadgeCheck } from "lucide-react"
+import { Package, Calendar, Tag, ExternalLink, GitBranch, Star, Github, Globe, Trash2, Upload, ShieldCheck, BadgeCheck, Play } from "lucide-react"
 
 interface ServerCardProps {
   server: ServerResponse
   onDelete?: (server: ServerResponse) => void
   onPublish?: (server: ServerResponse) => void
+  onDeploy?: (server: ServerResponse) => void
   showDelete?: boolean
   showPublish?: boolean
+  showDeploy?: boolean
   showExternalLinks?: boolean
   onClick?: () => void
   versionCount?: number
 }
 
-export function ServerCard({ server, onDelete, onPublish, showDelete = false, showPublish = false, showExternalLinks = true, onClick, versionCount }: ServerCardProps) {
+export function ServerCard({ server, onDelete, onPublish, onDeploy, showDelete = false, showPublish = false, showDeploy = false, showExternalLinks = true, onClick, versionCount }: ServerCardProps) {
   const { server: serverData, _meta } = server
   const official = _meta?.['io.modelcontextprotocol.registry/official']
   
@@ -104,6 +106,27 @@ export function ServerCard({ server, onDelete, onPublish, showDelete = false, sh
           </div>
         </div>
         <div className="flex items-center gap-1 ml-2">
+          {showDeploy && onDeploy && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="h-8 gap-1.5"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onDeploy(server)
+                  }}
+                >
+                  <Play className="h-3.5 w-3.5" />
+                  Deploy
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Deploy this server</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
           {showPublish && onPublish && (
             <Tooltip>
               <TooltipTrigger asChild>

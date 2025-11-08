@@ -1,14 +1,12 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/agentregistry-dev/agentregistry/internal/runtime"
@@ -71,87 +69,15 @@ func runMCPServer(resourceName string) {
 		return
 	}
 
-	// If a specific version was requested, try to get that version
-	if runVersion != "" {
-		fmt.Printf("Checking if MCP server '%s' version '%s' exists in registry...\n", resourceName, runVersion)
-		server, err := APIClient.GetServerByNameAndVersion(resourceName, runVersion)
-		if err != nil {
-			fmt.Printf("Error querying registry: %v\n", err)
-			return
-		}
-
-		if server == nil {
-			fmt.Printf("Error: MCP server '%s' version '%s' not found in registry\n", resourceName, runVersion)
-			fmt.Println("Use 'arctl list mcp' to see available servers and versions")
-			return
-		}
-
-		// Server version found, proceed with running it
-		fmt.Printf("✓ Found MCP server: %s (version %s)\n", server.Server.Title, server.Server.Version)
-		if err := runMCPServerWithRuntime(server); err != nil {
-			fmt.Printf("Error running MCP server: %v\n", err)
-			return
-		}
-		return
-	}
-
-	// No specific version requested, check if server exists and handle multiple versions
-	fmt.Printf("Checking if MCP server '%s' exists in registry...\n", resourceName)
-	versions, err := APIClient.GetServerVersions(resourceName)
+	// Use the common server version selection logic
+	server, err := selectServerVersion(resourceName, runVersion, runYes)
 	if err != nil {
-		fmt.Printf("Error querying registry: %v\n", err)
+		fmt.Printf("Error: %v\n", err)
 		return
 	}
 
-	// Check if server was found
-	if len(versions) == 0 {
-		fmt.Printf("Error: MCP server '%s' not found in registry\n", resourceName)
-		fmt.Println("Use 'arctl list mcp' to see available servers")
-		return
-	}
-
-	// Get the latest version (first in the list, as they're ordered by date)
-	latestServer := versions[0]
-
-	// If there are multiple versions, prompt the user (unless --yes is set)
-	if len(versions) > 1 {
-		fmt.Printf("✓ Found %d versions of MCP server '%s':\n", len(versions), resourceName)
-		for i, v := range versions {
-			marker := ""
-			if i == 0 {
-				marker = " (latest)"
-			}
-			fmt.Printf("  - %s%s\n", v.Server.Version, marker)
-		}
-		fmt.Printf("\nDefault: version %s (latest)\n", latestServer.Server.Version)
-
-		// Skip prompt if --yes flag is set
-		if !runYes {
-			// Prompt user for confirmation
-			reader := bufio.NewReader(os.Stdin)
-			fmt.Print("Proceed with the latest version? [Y/n]: ")
-			response, err := reader.ReadString('\n')
-			if err != nil {
-				fmt.Printf("Error reading input: %v\n", err)
-				return
-			}
-
-			response = strings.TrimSpace(strings.ToLower(response))
-			if response != "" && response != "y" && response != "yes" {
-				fmt.Println("Operation cancelled.")
-				fmt.Printf("To run a specific version, use: arctl run mcp %s --version <version>\n", resourceName)
-				return
-			}
-		} else {
-			fmt.Println("Auto-accepting latest version (--yes flag set)")
-		}
-	} else {
-		// Only one version available
-		fmt.Printf("✓ Found MCP server: %s (version %s)\n", latestServer.Server.Title, latestServer.Server.Version)
-	}
-
-	// Proceed with running the latest version
-	if err := runMCPServerWithRuntime(&latestServer); err != nil {
+	// Proceed with running the server
+	if err := runMCPServerWithRuntime(server); err != nil {
 		fmt.Printf("Error running MCP server: %v\n", err)
 		return
 	}

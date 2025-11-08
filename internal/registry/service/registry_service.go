@@ -19,8 +19,9 @@ const maxServerVersionsPerServer = 10000
 
 // registryServiceImpl implements the RegistryService interface using our Database
 type registryServiceImpl struct {
-	db  database.Database
-	cfg *config.Config
+	db         database.Database
+	cfg        *config.Config
+	reconciler Reconciler
 }
 
 // NewRegistryService creates a new registry service with the provided database
@@ -29,6 +30,11 @@ func NewRegistryService(db database.Database, cfg *config.Config) RegistryServic
 		db:  db,
 		cfg: cfg,
 	}
+}
+
+// SetReconciler sets the reconciler for server-side container management
+func (s *registryServiceImpl) SetReconciler(reconciler Reconciler) {
+	s.reconciler = reconciler
 }
 
 // ListServers returns registry entries with cursor-based pagination and optional filtering
@@ -539,4 +545,114 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 	}
 
 	return s.db.CreateAgent(ctx, tx, &agentJSON, officialMeta)
+}
+
+// GetDeployments retrieves all deployed servers
+func (s *registryServiceImpl) GetDeployments(ctx context.Context) ([]*database.Deployment, error) {
+	return s.db.GetDeployments(ctx, nil)
+}
+
+// GetDeploymentByName retrieves a specific deployment
+func (s *registryServiceImpl) GetDeploymentByName(ctx context.Context, serverName string) (*database.Deployment, error) {
+	return s.db.GetDeploymentByName(ctx, nil, serverName)
+}
+
+// DeployServer deploys a server with configuration
+func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool) (*database.Deployment, error) {
+	var serverResp *apiv0.ServerResponse
+	var err error
+
+	if version == "" || version == "latest" {
+		serverResp, err = s.db.GetServerByName(ctx, nil, serverName)
+	} else {
+		serverResp, err = s.db.GetServerByNameAndVersion(ctx, nil, serverName, version)
+	}
+
+	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			return nil, fmt.Errorf("server %s not found in registry: %w", serverName, database.ErrNotFound)
+		}
+		return nil, fmt.Errorf("failed to verify server: %w", err)
+	}
+
+	deployment := &database.Deployment{
+		ServerName:   serverName,
+		Version:      serverResp.Server.Version,
+		Status:       "active",
+		Config:       config,
+		PreferRemote: preferRemote,
+		ResourceType: "mcp",
+		DeployedAt:   time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	if config == nil {
+		deployment.Config = make(map[string]string)
+	}
+
+	err = s.db.CreateDeployment(ctx, nil, deployment)
+	if err != nil {
+		return nil, err
+	}
+
+	// Trigger reconciliation if available (runs in background)
+	if s.reconciler != nil {
+		go func() {
+			if err := s.reconciler.ReconcileAll(context.Background()); err != nil {
+				// Log error but don't fail the deployment
+				// The deployment is in the database and can be reconciled later
+				fmt.Printf("Warning: Failed to reconcile after deployment: %v\n", err)
+			}
+		}()
+	}
+
+	// Return the created deployment
+	return s.db.GetDeploymentByName(ctx, nil, serverName)
+}
+
+// DeployAgent deploys an agent with configuration
+// TODO: Implement agent deployment support
+func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool) (*database.Deployment, error) {
+	return nil, fmt.Errorf("agent deployment is not yet implemented")
+}
+
+// UpdateDeploymentConfig updates the configuration for a deployment
+func (s *registryServiceImpl) UpdateDeploymentConfig(ctx context.Context, serverName string, config map[string]string) (*database.Deployment, error) {
+	_, err := s.db.GetDeploymentByName(ctx, nil, serverName)
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.db.UpdateDeploymentConfig(ctx, nil, serverName, config)
+	if err != nil {
+		return nil, err
+	}
+
+	if s.reconciler != nil {
+		go func() {
+			if err := s.reconciler.ReconcileAll(context.Background()); err != nil {
+				fmt.Printf("Warning: Failed to reconcile after config update: %v\n", err)
+			}
+		}()
+	}
+
+	return s.db.GetDeploymentByName(ctx, nil, serverName)
+}
+
+// RemoveServer removes a deployment
+func (s *registryServiceImpl) RemoveServer(ctx context.Context, serverName string) error {
+	err := s.db.RemoveDeployment(ctx, nil, serverName)
+	if err != nil {
+		return err
+	}
+
+	if s.reconciler != nil {
+		go func() {
+			if err := s.reconciler.ReconcileAll(context.Background()); err != nil {
+				fmt.Printf("Warning: Failed to reconcile after removal: %v\n", err)
+			}
+		}()
+	}
+
+	return nil
 }

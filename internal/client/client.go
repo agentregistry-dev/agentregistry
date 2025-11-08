@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/models"
-	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	v0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
@@ -143,7 +142,7 @@ func (c *Client) GetServers() ([]*v0.ServerResponse, error) {
 			return nil, err
 		}
 
-		var resp apiv0.ServerListResponse
+		var resp v0.ServerListResponse
 		if err := c.doJSON(req, &resp); err != nil {
 			return nil, err
 		}
@@ -175,7 +174,7 @@ func (c *Client) GetServerByNameAndVersion(name, version string) (*v0.ServerResp
 	if err != nil {
 		return nil, err
 	}
-	var resp apiv0.ServerResponse
+	var resp v0.ServerResponse
 	if err := c.doJSON(req, &resp); err != nil {
 		// 404 -> not found returns nil
 		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
@@ -194,7 +193,7 @@ func (c *Client) GetServerVersions(name string) ([]v0.ServerResponse, error) {
 		return nil, err
 	}
 
-	var resp apiv0.ServerListResponse
+	var resp v0.ServerListResponse
 	if err := c.doJSON(req, &resp); err != nil {
 		// 404 -> not found returns empty list
 		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
@@ -326,4 +325,103 @@ func asHTTPStatus(err error) int {
 		return 0
 	}
 	return 0
+}
+
+// DeploymentResponse represents a deployment returned by the API
+type DeploymentResponse struct {
+	ServerName   string            `json:"serverName"`
+	Version      string            `json:"version"`
+	DeployedAt   string            `json:"deployedAt"`
+	UpdatedAt    string            `json:"updatedAt"`
+	Status       string            `json:"status"`
+	Config       map[string]string `json:"config"`
+	PreferRemote bool              `json:"preferRemote"`
+}
+
+// DeploymentsListResponse represents the list of deployments
+type DeploymentsListResponse struct {
+	Deployments []DeploymentResponse `json:"deployments"`
+}
+
+// GetDeployedServers retrieves all deployed servers
+func (c *Client) GetDeployedServers() ([]*DeploymentResponse, error) {
+	req, err := c.newRequest(http.MethodGet, "/deployments")
+	if err != nil {
+		return nil, err
+	}
+
+	var resp DeploymentsListResponse
+	if err := c.doJSON(req, &resp); err != nil {
+		return nil, err
+	}
+
+	// Convert to pointer slice
+	result := make([]*DeploymentResponse, len(resp.Deployments))
+	for i := range resp.Deployments {
+		result[i] = &resp.Deployments[i]
+	}
+
+	return result, nil
+}
+
+// GetDeployedServerByName retrieves a specific deployment
+func (c *Client) GetDeployedServerByName(name string) (*DeploymentResponse, error) {
+	encName := url.PathEscape(name)
+	req, err := c.newRequest(http.MethodGet, "/deployments/"+encName)
+	if err != nil {
+		return nil, err
+	}
+
+	var deployment DeploymentResponse
+	if err := c.doJSON(req, &deployment); err != nil {
+		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	return &deployment, nil
+}
+
+// DeployServer deploys a server with configuration
+func (c *Client) DeployServer(name, version string, config map[string]string, preferRemote bool) (*DeploymentResponse, error) {
+	payload := map[string]interface{}{
+		"serverName":   name,
+		"version":      version,
+		"config":       config,
+		"preferRemote": preferRemote,
+	}
+
+	var deployment DeploymentResponse
+	if err := c.doJsonRequest(http.MethodPost, "/deployments", payload, &deployment); err != nil {
+		return nil, err
+	}
+
+	return &deployment, nil
+}
+
+// UpdateDeploymentConfig updates deployment configuration
+func (c *Client) UpdateDeploymentConfig(name string, config map[string]string) (*DeploymentResponse, error) {
+	encName := url.PathEscape(name)
+	payload := map[string]interface{}{
+		"config": config,
+	}
+
+	var deployment DeploymentResponse
+	if err := c.doJsonRequest(http.MethodPut, "/deployments/"+encName+"/config", payload, &deployment); err != nil {
+		return nil, err
+	}
+
+	return &deployment, nil
+}
+
+// RemoveServer removes a deployment
+func (c *Client) RemoveServer(name string) error {
+	encName := url.PathEscape(name)
+	req, err := c.newRequest(http.MethodDelete, "/deployments/"+encName)
+	if err != nil {
+		return err
+	}
+
+	return c.doJSON(req, nil)
 }
