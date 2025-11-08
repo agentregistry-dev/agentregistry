@@ -1703,7 +1703,7 @@ func (db *PostgreSQL) UnmarkSkillAsLatest(ctx context.Context, tx pgx.Tx, skillN
 }
 
 // CreateDeployment creates a new deployment record
-func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deployment *Deployment) error {
+func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deployment *models.Deployment) error {
 	executor := db.getExecutor(tx)
 
 	configJSON, err := json.Marshal(deployment.Config)
@@ -1742,7 +1742,7 @@ func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deploymen
 }
 
 // GetDeployments retrieves all deployed servers
-func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx) ([]*Deployment, error) {
+func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx) ([]*models.Deployment, error) {
 	executor := db.getExecutor(tx)
 
 	query := `
@@ -1758,9 +1758,9 @@ func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx) ([]*Deploym
 	}
 	defer rows.Close()
 
-	var deployments []*Deployment
+	var deployments []*models.Deployment
 	for rows.Next() {
-		var d Deployment
+		var d models.Deployment
 		var configJSON []byte
 
 		err := rows.Scan(
@@ -1797,7 +1797,7 @@ func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx) ([]*Deploym
 }
 
 // GetDeploymentByName retrieves a specific deployment
-func (db *PostgreSQL) GetDeploymentByName(ctx context.Context, tx pgx.Tx, serverName string) (*Deployment, error) {
+func (db *PostgreSQL) GetDeploymentByName(ctx context.Context, tx pgx.Tx, serverName string) (*models.Deployment, error) {
 	executor := db.getExecutor(tx)
 
 	query := `
@@ -1806,7 +1806,7 @@ func (db *PostgreSQL) GetDeploymentByName(ctx context.Context, tx pgx.Tx, server
 		WHERE server_name = $1
 	`
 
-	var d Deployment
+	var d models.Deployment
 	var configJSON []byte
 
 	err := executor.QueryRow(ctx, query, serverName).Scan(

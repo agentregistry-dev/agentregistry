@@ -59,18 +59,17 @@ type RegistryService interface {
 
 	// Deployments APIs
 	// GetDeployments retrieves all deployed resources (MCP servers, agents)
-	GetDeployments(ctx context.Context) ([]*database.Deployment, error)
+	GetDeployments(ctx context.Context) ([]*models.Deployment, error)
 	// GetDeploymentByName retrieves a specific deployment by resource name
-	GetDeploymentByName(ctx context.Context, resourceName string) (*database.Deployment, error)
+	GetDeploymentByName(ctx context.Context, resourceName string) (*models.Deployment, error)
 	// DeployServer deploys an MCP server with configuration
-	DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool) (*database.Deployment, error)
+	DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool) (*models.Deployment, error)
 	// DeployAgent deploys an agent with configuration (to be implemented)
-	DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool) (*database.Deployment, error)
+	DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool) (*models.Deployment, error)
 	// UpdateDeploymentConfig updates the configuration for a deployment
-	UpdateDeploymentConfig(ctx context.Context, resourceName string, config map[string]string) (*database.Deployment, error)
+	UpdateDeploymentConfig(ctx context.Context, resourceName string, config map[string]string) (*models.Deployment, error)
 	// RemoveServer removes a deployment (works for any resource type)
 	RemoveServer(ctx context.Context, resourceName string) error
 
-	// SetReconciler sets the reconciler for server-side container management
-	SetReconciler(reconciler Reconciler)
+	Reconciler
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/danielgtaylor/huma/v2"
@@ -27,13 +28,13 @@ type DeploymentConfigUpdate struct {
 
 // DeploymentResponse represents a deployment
 type DeploymentResponse struct {
-	Body database.Deployment
+	Body models.Deployment
 }
 
 // DeploymentsListResponse represents a list of deployments
 type DeploymentsListResponse struct {
 	Body struct {
-		Deployments []database.Deployment `json:"deployments" doc:"List of deployed servers"`
+		Deployments []models.Deployment `json:"deployments" doc:"List of deployed servers"`
 	}
 }
 
@@ -64,7 +65,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		}
 
 		resp := &DeploymentsListResponse{}
-		resp.Body.Deployments = make([]database.Deployment, 0, len(deployments))
+		resp.Body.Deployments = make([]models.Deployment, 0, len(deployments))
 		for _, d := range deployments {
 			// Filter by resource type if specified
 			if input.ResourceType != "" && d.ResourceType != input.ResourceType {
@@ -123,7 +124,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			return nil, huma.Error400BadRequest("Invalid resource type. Must be 'mcp' or 'agent'")
 		}
 
-		var deployment *database.Deployment
+		var deployment *models.Deployment
 		var err error
 
 		// Route to appropriate service method based on resource type
@@ -155,7 +156,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 	huma.Register(api, huma.Operation{
 		OperationID: "update-deployment-config",
 		Method:      http.MethodPut,
-		Path:        basePath + "/deployments/{serverName}/config",
+		Path:        basePath + "/deployments/{serverName}",
 		Summary:     "Update deployment configuration",
 		Description: "Update the configuration (env vars, args, headers) for a deployed resource (MCP server or agent)",
 		Tags:        []string{"deployments"},

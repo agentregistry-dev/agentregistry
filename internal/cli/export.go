@@ -16,8 +16,8 @@ import (
 )
 
 var (
-    exportOutput      string
-    exportReadmeOutput string
+	exportOutput       string
+	exportReadmeOutput string
 )
 
 var exportCmd = &cobra.Command{
@@ -53,9 +53,9 @@ var exportCmd = &cobra.Command{
 			exportCtx = context.Background()
 		}
 
-        exporterService.SetReadmeOutputPath(exportReadmeOutput)
+		exporterService.SetReadmeOutputPath(exportReadmeOutput)
 
-        count, err := exporterService.ExportToPath(exportCtx, outputPath)
+		count, err := exporterService.ExportToPath(exportCtx, outputPath)
 		if err != nil {
 			return fmt.Errorf("failed to export servers: %w", err)
 		}
@@ -68,8 +68,6 @@ var exportCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(exportCmd)
 	exportCmd.Flags().StringVar(&exportOutput, "output", "", "Destination seed file path (required)")
-    exportCmd.Flags().StringVar(&exportReadmeOutput, "readme-output", "", "Optional README seed output path")
+	exportCmd.Flags().StringVar(&exportReadmeOutput, "readme-output", "", "Optional README seed output path")
 	_ = exportCmd.MarkFlagRequired("output")
 }
-
-
