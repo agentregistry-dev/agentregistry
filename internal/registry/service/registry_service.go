@@ -25,8 +25,9 @@ const maxServerVersionsPerServer = 10000
 // registryServiceImpl implements the RegistryService interface using our Database
 // It also implements the Reconciler interface for server-side container management
 type registryServiceImpl struct {
-	db  database.Database
-	cfg *config.Config
+	db         database.Database
+	cfg        *config.Config
+	reconciler Reconciler
 }
 
 // NewRegistryService creates a new registry service with the provided database and configuration
@@ -38,6 +39,11 @@ func NewRegistryService(
 		db:  db,
 		cfg: cfg,
 	}
+}
+
+// SetReconciler sets the reconciler for server-side container management
+func (s *registryServiceImpl) SetReconciler(reconciler Reconciler) {
+	s.reconciler = reconciler
 }
 
 // ListServers returns registry entries with cursor-based pagination and optional filtering

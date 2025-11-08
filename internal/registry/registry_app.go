@@ -18,6 +18,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/importer"
+	registryRuntime "github.com/agentregistry-dev/agentregistry/internal/registry/runtime"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 )
@@ -58,6 +59,17 @@ func App(_ context.Context) error {
 	}()
 
 	registryService := service.NewRegistryService(db, cfg)
+
+	// Create reconciler for server-side container management on the host
+	// The server runs in a container but manages Docker containers on the host via mounted socket
+	var reconciler service.Reconciler
+	if cfg.ReconcileOnStartup {
+		runtimeDir := registryRuntime.GetDefaultRuntimeDir()
+		reconciler = registryRuntime.NewReconciler(registryService, runtimeDir, cfg.AgentGatewayPort, false)
+		registryService.SetReconciler(reconciler)
+
+		log.Printf("Server-side reconciliation enabled (runtime dir: %s)", runtimeDir)
+	}
 
 	// Import builtin seed data unless it is disabled
 	if !cfg.DisableBuiltinSeed {
@@ -119,12 +131,42 @@ func App(_ context.Context) error {
 	server := api.NewServer(cfg, registryService, metrics, versionInfo)
 
 	// Start server in a goroutine so it doesn't block signal handling
+	serverStarted := make(chan struct{})
 	go func() {
+		close(serverStarted)
 		if err := server.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Printf("Failed to start server: %v", err)
 			os.Exit(1)
 		}
 	}()
+
+	if cfg.ReconcileOnStartup && reconciler != nil {
+		go func() {
+			<-serverStarted
+
+			maxRetries := 10
+			retryDelay := 500 * time.Millisecond
+
+			log.Println("Waiting for database to be ready before reconciling...")
+			var lastErr error
+			for i := 0; i < maxRetries; i++ {
+				time.Sleep(retryDelay)
+
+				// Try to reconcile using the reconciler we already created
+				if err := reconciler.ReconcileAll(context.Background()); err != nil {
+					lastErr = err
+					log.Printf("Attempt %d/%d: reconciliation failed, retrying in %v...", i+1, maxRetries, retryDelay)
+					retryDelay = time.Duration(float64(retryDelay) * 1.5) // Exponential backoff
+					continue
+				}
+
+				log.Println("Server reconciliation completed successfully")
+				return
+			}
+
+			log.Printf("Warning: Failed to reconcile servers after %d attempts: %v", maxRetries, lastErr)
+		}()
+	}
 
 	// Wait for interrupt signal to gracefully shutdown the server
 	quit := make(chan os.Signal, 1)
