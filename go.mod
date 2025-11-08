@@ -11,7 +11,7 @@ require (
 	github.com/google/go-containerregistry v0.20.6
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/joho/godotenv v1.5.1
-	github.com/kagent-dev/kagent/go v0.0.0-20251106161932-369ba8630099
+	github.com/kagent-dev/kagent/go v0.0.0-20251107200645-686008ea62ac
 	github.com/modelcontextprotocol/registry v1.3.7
 	github.com/ossf/scorecard/v4 v4.13.1
 	github.com/prometheus/client_golang v1.23.2

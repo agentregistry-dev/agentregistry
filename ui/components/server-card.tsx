@@ -9,26 +9,29 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Package, Calendar, Tag, ExternalLink, GitBranch, Star, Github, Globe, Trash2, Upload } from "lucide-react"
+import { Package, Calendar, Tag, ExternalLink, GitBranch, Star, Github, Globe, Trash2, Upload, ShieldCheck, BadgeCheck, Play } from "lucide-react"
 
 interface ServerCardProps {
   server: ServerResponse
   onDelete?: (server: ServerResponse) => void
   onPublish?: (server: ServerResponse) => void
+  onDeploy?: (server: ServerResponse) => void
   showDelete?: boolean
   showPublish?: boolean
+  showDeploy?: boolean
   showExternalLinks?: boolean
   onClick?: () => void
   versionCount?: number
 }
 
-export function ServerCard({ server, onDelete, onPublish, showDelete = false, showPublish = false, showExternalLinks = true, onClick, versionCount }: ServerCardProps) {
+export function ServerCard({ server, onDelete, onPublish, onDeploy, showDelete = false, showPublish = false, showDeploy = false, showExternalLinks = true, onClick, versionCount }: ServerCardProps) {
   const { server: serverData, _meta } = server
   const official = _meta?.['io.modelcontextprotocol.registry/official']
   
-  // Extract GitHub stars from metadata
+  // Extract metadata
   const publisherMetadata = serverData._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['agentregistry.solo.io/metadata']
   const githubStars = publisherMetadata?.stars
+  const identityData = publisherMetadata?.identity
 
   const handleClick = () => {
     if (onClick) {
@@ -68,11 +71,62 @@ export function ServerCard({ server, onDelete, onPublish, showDelete = false, sh
             />
           )}
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-lg mb-1">{serverData.title || serverData.name}</h3>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="font-semibold text-lg">{serverData.title || serverData.name}</h3>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <ShieldCheck 
+                    className={`h-4 w-4 flex-shrink-0 ${
+                      identityData?.org_is_verified 
+                        ? 'text-blue-600 dark:text-blue-400' 
+                        : 'text-gray-400 dark:text-gray-600 opacity-40'
+                    }`}
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{identityData?.org_is_verified ? 'Verified Organization' : 'Organization Not Verified'}</p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <BadgeCheck 
+                    className={`h-4 w-4 flex-shrink-0 ${
+                      identityData?.publisher_identity_verified_by_jwt 
+                        ? 'text-green-600 dark:text-green-400' 
+                        : 'text-gray-400 dark:text-gray-600 opacity-40'
+                    }`}
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{identityData?.publisher_identity_verified_by_jwt ? 'Verified Publisher' : 'Publisher Not Verified'}</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
             <p className="text-sm text-muted-foreground">{serverData.name}</p>
           </div>
         </div>
         <div className="flex items-center gap-1 ml-2">
+          {showDeploy && onDeploy && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="h-8 gap-1.5"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onDeploy(server)
+                  }}
+                >
+                  <Play className="h-3.5 w-3.5" />
+                  Deploy
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Deploy this server</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
           {showPublish && onPublish && (
             <Tooltip>
               <TooltipTrigger asChild>

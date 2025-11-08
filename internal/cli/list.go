@@ -2,15 +2,15 @@ package cli
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"strings"
-	"time"
 
+	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
+	v0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/spf13/cobra"
 )
 
@@ -61,6 +61,12 @@ var listCmd = &cobra.Command{
 				log.Fatalf("Failed to get servers: %v", err)
 			}
 
+			deployedServers, err := APIClient.GetDeployedServers()
+			if err != nil {
+				log.Printf("Warning: Failed to get deployed servers: %v", err)
+				deployedServers = nil
+			}
+
 			// Filter by type if specified
 			if filterType != "" {
 				servers = filterServersByType(servers, filterType)
@@ -80,7 +86,7 @@ var listCmd = &cobra.Command{
 				case "yaml":
 					outputDataYaml(servers)
 				default:
-					displayPaginatedServers(servers, listPageSize, listAll)
+					displayPaginatedServers(servers, deployedServers, listPageSize, listAll)
 				}
 			}
 		case "skill", "skills":
@@ -119,38 +125,6 @@ var listCmd = &cobra.Command{
 					panic("not implemented")
 				}
 			}
-		case "registry", "registries":
-			registries, err := APIClient.GetRegistries()
-			if err != nil {
-				log.Fatalf("Failed to get registries: %v", err)
-			}
-			if len(registries) == 0 {
-				fmt.Println("No registries connected")
-			} else {
-				// Handle different output formats
-				switch outputFormat {
-				case "json":
-					outputDataJson(registries)
-				case "yaml":
-					outputDataYaml(registries)
-				default:
-					t := printer.NewTablePrinter(os.Stdout)
-					t.SetHeaders("Name", "URL", "Type", "Age")
-
-					for _, r := range registries {
-						t.AddRow(
-							r.Name,
-							r.URL,
-							r.Type,
-							printer.FormatAge(r.CreatedAt),
-						)
-					}
-
-					if err := t.Render(); err != nil {
-						printer.PrintError(fmt.Sprintf("failed to render table: %v", err))
-					}
-				}
-			}
 		default:
 			fmt.Printf("Unknown resource type: %s\n", resourceType)
 			fmt.Println("Valid types: mcp, skill, registry")
@@ -158,14 +132,14 @@ var listCmd = &cobra.Command{
 	},
 }
 
-func displayPaginatedServers(servers []models.ServerDetail, pageSize int, showAll bool) {
+func displayPaginatedServers(servers []*v0.ServerResponse, deployedServers []*client.DeploymentResponse, pageSize int, showAll bool) {
 	// Group servers by name to handle multiple versions
 	serverGroups := groupServersByName(servers)
 	total := len(serverGroups)
 
 	if showAll || total <= pageSize {
 		// Show all items
-		printServersTable(serverGroups)
+		printServersTable(serverGroups, deployedServers)
 		return
 	}
 
@@ -180,7 +154,7 @@ func displayPaginatedServers(servers []models.ServerDetail, pageSize int, showAl
 		}
 
 		// Display current page
-		printServersTable(serverGroups[start:end])
+		printServersTable(serverGroups[start:end], deployedServers)
 
 		// Check if there are more items
 		remaining := total - end
@@ -200,7 +174,7 @@ func displayPaginatedServers(servers []models.ServerDetail, pageSize int, showAl
 			case "a", "all":
 				// Show all remaining
 				fmt.Println()
-				printServersTable(serverGroups[end:])
+				printServersTable(serverGroups[end:], deployedServers)
 				return
 			case "q", "quit":
 				// Quit pagination
@@ -221,7 +195,7 @@ func displayPaginatedServers(servers []models.ServerDetail, pageSize int, showAl
 
 // ServerGroup represents a server with potentially multiple versions
 type ServerGroup struct {
-	Server        models.ServerDetail
+	Server        *v0.ServerResponse
 	VersionCount  int
 	LatestVersion string
 	Namespace     string
@@ -229,22 +203,22 @@ type ServerGroup struct {
 }
 
 // groupServersByName groups servers by name and picks the latest version
-func groupServersByName(servers []models.ServerDetail) []ServerGroup {
+func groupServersByName(servers []*v0.ServerResponse) []ServerGroup {
 	groups := make(map[string]*ServerGroup)
 
 	for _, s := range servers {
-		if existing, ok := groups[s.Name]; ok {
+		if existing, ok := groups[s.Server.Name]; ok {
 			existing.VersionCount++
 			// Keep the latest version (assumes servers are sorted by version DESC from DB)
 			// We keep the first one we see since it should be the latest
 		} else {
 			// Split namespace and name
-			namespace, name := splitServerName(s.Name)
+			namespace, name := splitServerName(s.Server.Name)
 
-			groups[s.Name] = &ServerGroup{
+			groups[s.Server.Name] = &ServerGroup{
 				Server:        s,
 				VersionCount:  1,
-				LatestVersion: s.Version,
+				LatestVersion: s.Server.Version,
 				Namespace:     namespace,
 				Name:          name,
 			}
@@ -291,8 +265,8 @@ func sortServerGroups(groups []ServerGroup, column string) {
 		// Sort by registry type
 		for i := 0; i < len(groups); i++ {
 			for j := i + 1; j < len(groups); j++ {
-				typeI := getServerType(groups[i].Server)
-				typeJ := getServerType(groups[j].Server)
+				typeI := groups[i].Server.Server.Packages[0].RegistryType
+				typeJ := groups[j].Server.Server.Packages[0].RegistryType
 				if typeI > typeJ {
 					groups[i], groups[j] = groups[j], groups[i]
 				}
@@ -302,8 +276,8 @@ func sortServerGroups(groups []ServerGroup, column string) {
 		// Sort by status
 		for i := 0; i < len(groups); i++ {
 			for j := i + 1; j < len(groups); j++ {
-				statusI := getServerStatus(groups[i].Server)
-				statusJ := getServerStatus(groups[j].Server)
+				statusI := groups[i].Server.Meta.Official.Status
+				statusJ := groups[j].Server.Meta.Official.Status
 				if statusI > statusJ {
 					groups[i], groups[j] = groups[j], groups[i]
 				}
@@ -313,8 +287,8 @@ func sortServerGroups(groups []ServerGroup, column string) {
 		// Sort by updated time (most recent first)
 		for i := 0; i < len(groups); i++ {
 			for j := i + 1; j < len(groups); j++ {
-				timeI := getServerUpdatedTime(groups[i].Server)
-				timeJ := getServerUpdatedTime(groups[j].Server)
+				timeI := groups[i].Server.Meta.Official.UpdatedAt
+				timeJ := groups[j].Server.Meta.Official.UpdatedAt
 				if timeI.Before(timeJ) {
 					groups[i], groups[j] = groups[j], groups[i]
 				}
@@ -333,37 +307,16 @@ func sortServerGroups(groups []ServerGroup, column string) {
 }
 
 // Helper functions to extract server properties for sorting
-func getServerType(server models.ServerDetail) string {
-	var combinedData models.CombinedServerData
-	if err := json.Unmarshal([]byte(server.Data), &combinedData); err != nil {
-		return ""
-	}
-
-	if len(combinedData.Server.Packages) > 0 {
-		return combinedData.Server.Packages[0].RegistryType
-	} else if len(combinedData.Server.Remotes) > 0 {
-		return combinedData.Server.Remotes[0].Type
+func getServerType(server v0.ServerResponse) string {
+	if len(server.Server.Packages) > 0 {
+		return server.Server.Packages[0].RegistryType
+	} else if len(server.Server.Remotes) > 0 {
+		return server.Server.Remotes[0].Type
 	}
 	return ""
 }
 
-func getServerStatus(server models.ServerDetail) string {
-	var combinedData models.CombinedServerData
-	if err := json.Unmarshal([]byte(server.Data), &combinedData); err != nil {
-		return ""
-	}
-	return combinedData.Meta.Official.Status
-}
-
-func getServerUpdatedTime(server models.ServerDetail) time.Time {
-	var combinedData models.CombinedServerData
-	if err := json.Unmarshal([]byte(server.Data), &combinedData); err != nil {
-		return time.Time{}
-	}
-	return combinedData.Meta.Official.UpdatedAt
-}
-
-func displayPaginatedSkills(skills []models.Skill, pageSize int, showAll bool) {
+func displayPaginatedSkills(skills []*models.SkillResponse, pageSize int, showAll bool) {
 	total := len(skills)
 
 	if showAll || total <= pageSize {
@@ -421,41 +374,34 @@ func displayPaginatedSkills(skills []models.Skill, pageSize int, showAll bool) {
 		}
 	}
 }
-func printServersTable(serverGroups []ServerGroup) {
+func printServersTable(serverGroups []ServerGroup, deployedServers []*client.DeploymentResponse) {
 	t := printer.NewTablePrinter(os.Stdout)
-	t.SetHeaders("Namespace", "Name", "Version", "Type", "Status", "Updated")
+	t.SetHeaders("Namespace", "Name", "Version", "Type", "Status", "Deployed", "Updated")
+
+	deployedMap := make(map[string]*client.DeploymentResponse)
+	for _, d := range deployedServers {
+		deployedMap[d.ServerName] = d
+	}
 
 	for _, group := range serverGroups {
 		s := group.Server
 
 		// Parse the stored combined data
-		var combinedData models.CombinedServerData
 		registryType := "<none>"
 		registryStatus := "<none>"
 		updatedAt := ""
 
-		if err := json.Unmarshal([]byte(s.Data), &combinedData); err == nil {
-			// Extract registry type from packages or remotes
-			if len(combinedData.Server.Packages) > 0 {
-				registryType = combinedData.Server.Packages[0].RegistryType
-			} else if len(combinedData.Server.Remotes) > 0 {
-				registryType = combinedData.Server.Remotes[0].Type
-			}
-
-			// Extract status from _meta
-			registryStatus = combinedData.Meta.Official.Status
-			if !combinedData.Meta.Official.UpdatedAt.IsZero() {
-				updatedAt = printer.FormatAge(combinedData.Meta.Official.UpdatedAt)
-			}
+		// Extract registry type from packages or remotes
+		if len(s.Server.Packages) > 0 {
+			registryType = s.Server.Packages[0].RegistryType
+		} else if len(s.Server.Remotes) > 0 {
+			registryType = s.Server.Remotes[0].Type
 		}
 
-		// Use installed status if registry status is not available
-		if registryStatus == "" || registryStatus == "<none>" {
-			if s.Installed {
-				registryStatus = "installed"
-			} else {
-				registryStatus = "available"
-			}
+		// Extract status from _meta
+		registryStatus = string(s.Meta.Official.Status)
+		if !s.Meta.Official.UpdatedAt.IsZero() {
+			updatedAt = printer.FormatAge(s.Meta.Official.UpdatedAt)
 		}
 
 		// Format version display
@@ -470,12 +416,22 @@ func printServersTable(serverGroups []ServerGroup) {
 			namespace = "<none>"
 		}
 
+		deployedStatus := "-"
+		if deployment, ok := deployedMap[s.Server.Name]; ok {
+			if deployment.Version == group.LatestVersion {
+				deployedStatus = "✓"
+			} else {
+				deployedStatus = fmt.Sprintf("✓ (v%s)", deployment.Version)
+			}
+		}
+
 		t.AddRow(
 			printer.TruncateString(namespace, 30),
 			printer.TruncateString(group.Name, 40),
 			versionDisplay,
 			registryType,
 			registryStatus,
+			deployedStatus,
 			updatedAt,
 		)
 	}
@@ -485,18 +441,18 @@ func printServersTable(serverGroups []ServerGroup) {
 	}
 }
 
-func printSkillsTable(skills []models.Skill) {
+func printSkillsTable(skills []*models.SkillResponse) {
 	t := printer.NewTablePrinter(os.Stdout)
-	t.SetHeaders("Name", "Description", "Version", "Status")
+	t.SetHeaders("Name", "Title", "Version", "Category", "Status", "Website")
 
 	for _, s := range skills {
-		status := printer.FormatStatus(s.Installed)
-
 		t.AddRow(
-			printer.TruncateString(s.Name, 40),
-			printer.TruncateString(s.Description, 50),
-			s.Version,
-			status,
+			printer.TruncateString(s.Skill.Name, 40),
+			printer.TruncateString(s.Skill.Title, 40),
+			s.Skill.Version,
+			printer.EmptyValueOrDefault(s.Skill.Category, "<none>"),
+			s.Meta.Official.Status,
+			s.Skill.WebsiteURL,
 		)
 	}
 
@@ -506,22 +462,18 @@ func printSkillsTable(skills []models.Skill) {
 }
 
 // filterServersByType filters servers by their registry type
-func filterServersByType(servers []models.ServerDetail, typeFilter string) []models.ServerDetail {
+func filterServersByType(servers []*v0.ServerResponse, typeFilter string) []*v0.ServerResponse {
 	typeFilter = strings.ToLower(typeFilter)
-	var filtered []models.ServerDetail
+	var filtered []*v0.ServerResponse
 
 	for _, s := range servers {
-		var combinedData models.CombinedServerData
-		if err := json.Unmarshal([]byte(s.Data), &combinedData); err != nil {
-			continue
-		}
 
 		// Extract registry type from packages or remotes
 		serverType := ""
-		if len(combinedData.Server.Packages) > 0 {
-			serverType = strings.ToLower(combinedData.Server.Packages[0].RegistryType)
-		} else if len(combinedData.Server.Remotes) > 0 {
-			serverType = strings.ToLower(combinedData.Server.Remotes[0].Type)
+		if len(s.Server.Packages) > 0 {
+			serverType = strings.ToLower(s.Server.Packages[0].RegistryType)
+		} else if len(s.Server.Remotes) > 0 {
+			serverType = strings.ToLower(s.Server.Remotes[0].Type)
 		}
 
 		if serverType == typeFilter {
@@ -540,6 +492,12 @@ func listAllResourceTypes() {
 		log.Fatalf("Failed to get servers: %v", err)
 	}
 
+	deployedServers, err := APIClient.GetDeployedServers()
+	if err != nil {
+		log.Printf("Warning: Failed to get deployed servers: %v", err)
+		deployedServers = nil
+	}
+
 	// Filter by type if specified
 	if filterType != "" {
 		servers = filterServersByType(servers, filterType)
@@ -552,7 +510,7 @@ func listAllResourceTypes() {
 			fmt.Println("No MCP servers available")
 		}
 	} else {
-		displayPaginatedServers(servers, listPageSize, true) // Always show all when listing all types
+		displayPaginatedServers(servers, deployedServers, listPageSize, true) // Always show all when listing all types
 	}
 
 	fmt.Println("\n=== Skills ===")
@@ -566,30 +524,6 @@ func listAllResourceTypes() {
 		displayPaginatedSkills(skills, listPageSize, true) // Always show all when listing all types
 	}
 
-	fmt.Println("\n=== Registries ===")
-	registries, err := APIClient.GetRegistries()
-	if err != nil {
-		log.Fatalf("Failed to get registries: %v", err)
-	}
-	if len(registries) == 0 {
-		fmt.Println("No registries connected")
-	} else {
-		t := printer.NewTablePrinter(os.Stdout)
-		t.SetHeaders("Name", "URL", "Type", "Age")
-
-		for _, r := range registries {
-			t.AddRow(
-				r.Name,
-				r.URL,
-				r.Type,
-				printer.FormatAge(r.CreatedAt),
-			)
-		}
-
-		if err := t.Render(); err != nil {
-			printer.PrintError(fmt.Sprintf("failed to render table: %v", err))
-		}
-	}
 }
 
 func outputDataJson[T any](data []T) {

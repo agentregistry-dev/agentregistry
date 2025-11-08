@@ -35,6 +35,57 @@ export interface ServerJSON {
     'io.modelcontextprotocol.registry/publisher-provided'?: {
       'agentregistry.solo.io/metadata'?: {
         stars?: number
+        score?: number
+        scorecard?: {
+          openssf?: number
+        }
+        repo?: {
+          forks_count?: number
+          watchers_count?: number
+          primary_language?: string
+          tags?: string[]
+          topics?: string[]
+        }
+        endpoint_health?: {
+          last_checked_at?: string
+          reachable?: boolean
+          response_ms?: number
+        }
+        scans?: {
+          container_images?: unknown[]
+          dependency_health?: {
+            copyleft_licenses?: number
+            ecosystems?: Record<string, number>
+            packages_total?: number
+            unknown_licenses?: number
+          }
+          details?: string[]
+          summary?: string
+        }
+        activity?: {
+          created_at?: string
+          pushed_at?: string
+          updated_at?: string
+        }
+        identity?: {
+          org_is_verified?: boolean
+          publisher_identity_verified_by_jwt?: boolean
+        }
+        semver?: {
+          uses_semver?: boolean
+        }
+        security_scanning?: {
+          code_scanning_alerts?: number | null
+          codeql_enabled?: boolean
+          dependabot_alerts?: number | null
+          dependabot_enabled?: boolean
+        }
+        downloads?: {
+          total?: number
+        }
+        releases?: {
+          latest_published_at?: string | null
+        }
       }
     }
   }
@@ -451,6 +502,64 @@ class AdminApiClient {
       throw new Error(errorData.detail || 'Failed to publish agent')
     }
     return response.json()
+  }
+
+  // ===== Deployments API =====
+
+  // Deploy a server
+  async deployServer(params: {
+    serverName: string
+    version?: string
+    config?: Record<string, string>
+    preferRemote?: boolean
+  }): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/v0/deployments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        server_name: params.serverName,
+        version: params.version || 'latest',
+        config: params.config || {},
+        prefer_remote: params.preferRemote || false,
+      }),
+    })
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.message || errorData.detail || 'Failed to deploy server')
+    }
+  }
+
+  // Get all deployments
+  async listDeployments(): Promise<Array<{
+    serverName: string
+    version: string
+    deployedAt: string
+    updatedAt: string
+    status: string
+    config: Record<string, string>
+    preferRemote: boolean
+    resourceType: string
+  }>> {
+    const response = await fetch(`${this.baseUrl}/v0/deployments`)
+    if (!response.ok) {
+      throw new Error('Failed to fetch deployments')
+    }
+    const data = await response.json()
+    return data.deployments || []
+  }
+
+  // Remove a deployment
+  async removeDeployment(serverName: string): Promise<void> {
+    const encodedName = encodeURIComponent(serverName)
+    const response = await fetch(`${this.baseUrl}/v0/deployments/${encodedName}`, {
+      method: 'DELETE',
+    })
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.message || errorData.detail || 'Failed to remove deployment')
+    }
   }
 }
 

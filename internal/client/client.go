@@ -9,13 +9,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/models"
-	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
+	v0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
 // Client is a lightweight API client replacing the previous SQLite backend
@@ -23,11 +21,6 @@ type Client struct {
 	BaseURL    string
 	httpClient *http.Client
 	token      string
-
-	// In-memory placeholder registries state (non-persistent)
-	regMu      sync.Mutex
-	registries []models.Registry
-	nextRegID  int
 }
 
 const (
@@ -48,29 +41,12 @@ func NewClientFromEnv() (*Client, error) {
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		nextRegID: 1,
 	}
 	// Verify connectivity
 	if err := c.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to reach API at %s: %w", base, err)
 	}
 	// Seed placeholder registry entry
-	c.regMu.Lock()
-	now := time.Now()
-	if len(c.registries) == 0 {
-		c.registries = []models.Registry{
-			{
-				ID:        c.nextRegID,
-				Name:      defaultRegistryName,
-				URL:       base,
-				Type:      "api",
-				CreatedAt: now,
-				UpdatedAt: now,
-			},
-		}
-		c.nextRegID++
-	}
-	c.regMu.Unlock()
 	return c, nil
 }
 
@@ -85,7 +61,6 @@ func NewClient(baseURL, token string) *Client {
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		nextRegID: 1,
 	}
 }
 
@@ -150,21 +125,12 @@ func (c *Client) Ping() error {
 	return c.doJSON(req, nil)
 }
 
-// GetRegistries returns all connected registries
-func (c *Client) GetRegistries() ([]models.Registry, error) {
-	c.regMu.Lock()
-	defer c.regMu.Unlock()
-	out := make([]models.Registry, len(c.registries))
-	copy(out, c.registries)
-	return out, nil
-}
-
 // GetServers returns all MCP servers from connected registries
-func (c *Client) GetServers() ([]models.ServerDetail, error) {
+func (c *Client) GetServers() ([]*v0.ServerResponse, error) {
 	// Cursor-based pagination to fetch all servers
 	limit := 100
 	cursor := ""
-	var all []models.ServerDetail
+	var all []*v0.ServerResponse
 
 	for {
 		q := fmt.Sprintf("/servers?limit=%d", limit)
@@ -176,13 +142,13 @@ func (c *Client) GetServers() ([]models.ServerDetail, error) {
 			return nil, err
 		}
 
-		var resp apiv0.ServerListResponse
+		var resp v0.ServerListResponse
 		if err := c.doJSON(req, &resp); err != nil {
 			return nil, err
 		}
 
-		for _, sr := range resp.Servers {
-			all = append(all, mapServerResponse(sr))
+		for _, s := range resp.Servers {
+			all = append(all, &s)
 		}
 
 		if resp.Metadata.NextCursor == "" {
@@ -195,12 +161,12 @@ func (c *Client) GetServers() ([]models.ServerDetail, error) {
 }
 
 // GetServerByName returns a server by name (latest version)
-func (c *Client) GetServerByName(name string) (*models.ServerDetail, error) {
+func (c *Client) GetServerByName(name string) (*v0.ServerResponse, error) {
 	return c.GetServerByNameAndVersion(name, "latest")
 }
 
 // GetServerByNameAndVersion returns a specific version of a server
-func (c *Client) GetServerByNameAndVersion(name, version string) (*models.ServerDetail, error) {
+func (c *Client) GetServerByNameAndVersion(name, version string) (*v0.ServerResponse, error) {
 	// Use the version endpoint
 	encName := url.PathEscape(name)
 	encVersion := url.PathEscape(version)
@@ -208,7 +174,7 @@ func (c *Client) GetServerByNameAndVersion(name, version string) (*models.Server
 	if err != nil {
 		return nil, err
 	}
-	var resp apiv0.ServerResponse
+	var resp v0.ServerResponse
 	if err := c.doJSON(req, &resp); err != nil {
 		// 404 -> not found returns nil
 		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
@@ -216,19 +182,18 @@ func (c *Client) GetServerByNameAndVersion(name, version string) (*models.Server
 		}
 		return nil, fmt.Errorf("failed to get server by name and version: %w", err)
 	}
-	s := mapServerResponse(resp)
-	return &s, nil
+	return &resp, nil
 }
 
 // GetServerVersions returns all versions of a server by name
-func (c *Client) GetServerVersions(name string) ([]models.ServerDetail, error) {
+func (c *Client) GetServerVersions(name string) ([]v0.ServerResponse, error) {
 	encName := url.PathEscape(name)
 	req, err := c.newRequest(http.MethodGet, "/servers/"+encName+"/versions")
 	if err != nil {
 		return nil, err
 	}
 
-	var resp apiv0.ServerListResponse
+	var resp v0.ServerListResponse
 	if err := c.doJSON(req, &resp); err != nil {
 		// 404 -> not found returns empty list
 		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
@@ -237,19 +202,14 @@ func (c *Client) GetServerVersions(name string) ([]models.ServerDetail, error) {
 		return nil, fmt.Errorf("failed to get server versions: %w", err)
 	}
 
-	versions := make([]models.ServerDetail, 0, len(resp.Servers))
-	for _, sr := range resp.Servers {
-		versions = append(versions, mapServerResponse(sr))
-	}
-
-	return versions, nil
+	return resp.Servers, nil
 }
 
 // GetSkills returns all skills from connected registries
-func (c *Client) GetSkills() ([]models.Skill, error) {
+func (c *Client) GetSkills() ([]*models.SkillResponse, error) {
 	limit := 100
 	cursor := ""
-	var all []models.Skill
+	var all []*models.SkillResponse
 
 	for {
 		q := fmt.Sprintf("/skills?limit=%d", limit)
@@ -266,7 +226,7 @@ func (c *Client) GetSkills() ([]models.Skill, error) {
 			return nil, err
 		}
 		for _, sk := range resp.Skills {
-			all = append(all, mapSkillResponse(sk))
+			all = append(all, &sk)
 		}
 		if resp.Metadata.NextCursor == "" {
 			break
@@ -278,7 +238,7 @@ func (c *Client) GetSkills() ([]models.Skill, error) {
 }
 
 // GetSkillByName returns a skill by name
-func (c *Client) GetSkillByName(name string) (*models.Skill, error) {
+func (c *Client) GetSkillByName(name string) (*models.SkillResponse, error) {
 	encName := url.PathEscape(name)
 	req, err := c.newRequest(http.MethodGet, "/skills/"+encName+"/versions/latest")
 	if err != nil {
@@ -291,15 +251,14 @@ func (c *Client) GetSkillByName(name string) (*models.Skill, error) {
 		}
 		return nil, fmt.Errorf("failed to get skill by name: %w", err)
 	}
-	s := mapSkillResponse(resp)
-	return &s, nil
+	return &resp, nil
 }
 
 // GetAgents returns all agents from connected registries
-func (c *Client) GetAgents() ([]models.Agent, error) {
+func (c *Client) GetAgents() ([]*models.AgentResponse, error) {
 	limit := 100
 	cursor := ""
-	var all []models.Agent
+	var all []*models.AgentResponse
 
 	for {
 		q := fmt.Sprintf("/agents?limit=%d", limit)
@@ -316,7 +275,7 @@ func (c *Client) GetAgents() ([]models.Agent, error) {
 			return nil, err
 		}
 		for _, ag := range resp.Agents {
-			all = append(all, mapAgentResponse(ag))
+			all = append(all, &ag)
 		}
 		if resp.Metadata.NextCursor == "" {
 			break
@@ -327,7 +286,7 @@ func (c *Client) GetAgents() ([]models.Agent, error) {
 	return all, nil
 }
 
-func (c *Client) GetAgentByName(name string) (*models.Agent, error) {
+func (c *Client) GetAgentByName(name string) (*models.AgentResponse, error) {
 	encName := url.PathEscape(name)
 	req, err := c.newRequest(http.MethodGet, "/agents/"+encName+"/versions/latest")
 	if err != nil {
@@ -337,126 +296,7 @@ func (c *Client) GetAgentByName(name string) (*models.Agent, error) {
 	if err := c.doJSON(req, &resp); err != nil {
 		return nil, fmt.Errorf("failed to get agent by name: %w", err)
 	}
-	s := mapAgentResponse(resp)
-	return &s, nil
-}
-
-func mapAgentResponse(ag models.AgentResponse) models.Agent {
-	// Store the raw agent response as JSON for potential future use
-	dataBytes, _ := json.Marshal(ag)
-	// Derive category from packages if desired (placeholder empty)
-	return models.Agent{
-		ID:           0,
-		RegistryID:   0,
-		RegistryName: defaultRegistryName,
-		Name:         ag.Agent.Name,
-		Title:        ag.Agent.Title,
-		Description:  ag.Agent.Description,
-		Version:      ag.Agent.Version,
-		Installed:    false,
-		Data:         string(dataBytes),
-		CreatedAt:    time.Time{},
-		UpdatedAt:    time.Time{},
-	}
-}
-
-// AddRegistry adds a new registry
-func (c *Client) AddRegistry(name, urlStr, registryType string) error {
-	c.regMu.Lock()
-	defer c.regMu.Unlock()
-	// Placeholder: add to in-memory list
-	for _, r := range c.registries {
-		if r.Name == name {
-			return fmt.Errorf("registry already exists: %s", name)
-		}
-	}
-	now := time.Now()
-	c.registries = append(c.registries, models.Registry{
-		ID:        c.nextRegID,
-		Name:      name,
-		URL:       urlStr,
-		Type:      registryType,
-		CreatedAt: now,
-		UpdatedAt: now,
-	})
-	c.nextRegID++
-	return nil
-}
-
-// GetRegistryByName returns a registry by name
-func (c *Client) GetRegistryByName(name string) (*models.Registry, error) {
-	c.regMu.Lock()
-	defer c.regMu.Unlock()
-	for i := range c.registries {
-		if c.registries[i].Name == name {
-			r := c.registries[i]
-			return &r, nil
-		}
-	}
-	return nil, nil
-}
-
-// RemoveRegistry removes a registry
-func (c *Client) RemoveRegistry(name string) error {
-	c.regMu.Lock()
-	defer c.regMu.Unlock()
-	for i := range c.registries {
-		if c.registries[i].Name == name {
-			c.registries = append(c.registries[:i], c.registries[i+1:]...)
-			return nil
-		}
-	}
-	return fmt.Errorf("registry not found: %s", name)
-}
-
-// AddOrUpdateServer adds or updates a server in the database
-func (c *Client) AddOrUpdateServer(registryID int, name, title, description, version, websiteURL, data string) error {
-	// No-op in API mode
-	return nil
-}
-
-// ClearRegistryServers removes all servers for a specific registry
-func (c *Client) ClearRegistryServers(registryID int) error { return nil }
-
-// RemoveRegistryByID removes a registry by ID
-func (c *Client) RemoveRegistryByID(id string) error {
-	c.regMu.Lock()
-	defer c.regMu.Unlock()
-	rid, err := strconv.Atoi(id)
-	if err != nil {
-		return fmt.Errorf("invalid registry id: %s", id)
-	}
-	for i := range c.registries {
-		if c.registries[i].ID == rid {
-			c.registries = append(c.registries[:i], c.registries[i+1:]...)
-			return nil
-		}
-	}
-	return fmt.Errorf("registry not found with id: %s", id)
-}
-
-// InstallServer marks a server as installed and stores its configuration
-func (c *Client) InstallServer(serverID string, config map[string]string) error { return nil }
-
-// UninstallServer marks a server as uninstalled and removes its installation record
-func (c *Client) UninstallServer(serverID string) error { return nil }
-
-// (no-op) previously used for local install config marshaling
-
-// MarkServerInstalled marks a server as installed or uninstalled
-func (c *Client) MarkServerInstalled(serverID int, installed bool) error { return nil }
-
-// MarkSkillInstalled marks a skill as installed or uninstalled
-func (c *Client) MarkSkillInstalled(skillID int, installed bool) error { return nil }
-
-// GetInstalledServers returns all installed MCP servers
-func (c *Client) GetInstalledServers() ([]models.ServerDetail, error) {
-	return []models.ServerDetail{}, nil
-}
-
-// GetInstallationByName returns an installation record by resource name
-func (c *Client) GetInstallationByName(resourceType, resourceName string) (*models.Installation, error) {
-	return nil, nil
+	return &resp, nil
 }
 
 // PublishSkill publishes a skill to the registry
@@ -487,71 +327,101 @@ func asHTTPStatus(err error) int {
 	return 0
 }
 
-// Mapping helpers
-func mapServerResponse(sr apiv0.ServerResponse) models.ServerDetail {
-	// Build CombinedServerData for downstream consumers (tables, sorting)
-	combined := models.CombinedServerData{
-		Server: models.ServerFullData{
-			Name:        sr.Server.Name,
-			Version:     sr.Server.Version,
-			Description: sr.Server.Description,
-			// Map packages
-			Packages: func() []models.ServerPackage {
-				out := make([]models.ServerPackage, 0, len(sr.Server.Packages))
-				for _, p := range sr.Server.Packages {
-					sp := models.ServerPackage{RegistryType: p.RegistryType, Identifier: p.Identifier}
-					sp.Transport.Type = p.Transport.Type
-					out = append(out, sp)
-				}
-				return out
-			}(),
-			// Remotes are optional and may be omitted in responses
-			Remotes: nil,
-		},
-	}
-	// Official meta if available
-	if sr.Meta.Official != nil {
-		combined.Meta.Official.Status = string(sr.Meta.Official.Status)
-		combined.Meta.Official.PublishedAt = sr.Meta.Official.PublishedAt
-		combined.Meta.Official.UpdatedAt = sr.Meta.Official.UpdatedAt
-		combined.Meta.Official.IsLatest = sr.Meta.Official.IsLatest
-	}
-
-	dataBytes, _ := json.Marshal(combined)
-	return models.ServerDetail{
-		// Local ID/Registry fields are not meaningful in API mode
-		ID:           0,
-		RegistryID:   0,
-		RegistryName: defaultRegistryName,
-		Name:         sr.Server.Name,
-		Title:        sr.Server.Title,
-		Description:  sr.Server.Description,
-		Version:      sr.Server.Version,
-		WebsiteURL:   sr.Server.WebsiteURL,
-		Installed:    false,
-		Data:         string(dataBytes),
-		// Timestamps not provided by API at this level
-		CreatedAt: time.Time{},
-		UpdatedAt: time.Time{},
-	}
+// DeploymentResponse represents a deployment returned by the API
+type DeploymentResponse struct {
+	ServerName   string            `json:"serverName"`
+	Version      string            `json:"version"`
+	DeployedAt   string            `json:"deployedAt"`
+	UpdatedAt    string            `json:"updatedAt"`
+	Status       string            `json:"status"`
+	Config       map[string]string `json:"config"`
+	PreferRemote bool              `json:"preferRemote"`
 }
 
-func mapSkillResponse(sk models.SkillResponse) models.Skill {
-	// Store the raw skill response as JSON for potential future use
-	dataBytes, _ := json.Marshal(sk)
-	// Derive category from packages if desired (placeholder empty)
-	return models.Skill{
-		ID:           0,
-		RegistryID:   0,
-		RegistryName: defaultRegistryName,
-		Name:         sk.Skill.Name,
-		Title:        sk.Skill.Title,
-		Description:  sk.Skill.Description,
-		Version:      sk.Skill.Version,
-		Category:     "",
-		Installed:    false,
-		Data:         string(dataBytes),
-		CreatedAt:    time.Time{},
-		UpdatedAt:    time.Time{},
+// DeploymentsListResponse represents the list of deployments
+type DeploymentsListResponse struct {
+	Deployments []DeploymentResponse `json:"deployments"`
+}
+
+// GetDeployedServers retrieves all deployed servers
+func (c *Client) GetDeployedServers() ([]*DeploymentResponse, error) {
+	req, err := c.newRequest(http.MethodGet, "/deployments")
+	if err != nil {
+		return nil, err
 	}
+
+	var resp DeploymentsListResponse
+	if err := c.doJSON(req, &resp); err != nil {
+		return nil, err
+	}
+
+	// Convert to pointer slice
+	result := make([]*DeploymentResponse, len(resp.Deployments))
+	for i := range resp.Deployments {
+		result[i] = &resp.Deployments[i]
+	}
+
+	return result, nil
+}
+
+// GetDeployedServerByName retrieves a specific deployment
+func (c *Client) GetDeployedServerByName(name string) (*DeploymentResponse, error) {
+	encName := url.PathEscape(name)
+	req, err := c.newRequest(http.MethodGet, "/deployments/"+encName)
+	if err != nil {
+		return nil, err
+	}
+
+	var deployment DeploymentResponse
+	if err := c.doJSON(req, &deployment); err != nil {
+		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	return &deployment, nil
+}
+
+// DeployServer deploys a server with configuration
+func (c *Client) DeployServer(name, version string, config map[string]string, preferRemote bool) (*DeploymentResponse, error) {
+	payload := map[string]interface{}{
+		"serverName":   name,
+		"version":      version,
+		"config":       config,
+		"preferRemote": preferRemote,
+	}
+
+	var deployment DeploymentResponse
+	if err := c.doJsonRequest(http.MethodPost, "/deployments", payload, &deployment); err != nil {
+		return nil, err
+	}
+
+	return &deployment, nil
+}
+
+// UpdateDeploymentConfig updates deployment configuration
+func (c *Client) UpdateDeploymentConfig(name string, config map[string]string) (*DeploymentResponse, error) {
+	encName := url.PathEscape(name)
+	payload := map[string]interface{}{
+		"config": config,
+	}
+
+	var deployment DeploymentResponse
+	if err := c.doJsonRequest(http.MethodPut, "/deployments/"+encName+"/config", payload, &deployment); err != nil {
+		return nil, err
+	}
+
+	return &deployment, nil
+}
+
+// RemoveServer removes a deployment
+func (c *Client) RemoveServer(name string) error {
+	encName := url.PathEscape(name)
+	req, err := c.newRequest(http.MethodDelete, "/deployments/"+encName)
+	if err != nil {
+		return err
+	}
+
+	return c.doJSON(req, nil)
 }

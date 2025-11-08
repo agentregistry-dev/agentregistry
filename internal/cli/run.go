@@ -1,18 +1,14 @@
 package cli
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"os/signal"
-	"strings"
 	"syscall"
 
-	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
@@ -73,108 +69,22 @@ func runMCPServer(resourceName string) {
 		return
 	}
 
-	// If a specific version was requested, try to get that version
-	if runVersion != "" {
-		fmt.Printf("Checking if MCP server '%s' version '%s' exists in registry...\n", resourceName, runVersion)
-		server, err := APIClient.GetServerByNameAndVersion(resourceName, runVersion)
-		if err != nil {
-			fmt.Printf("Error querying registry: %v\n", err)
-			return
-		}
-
-		if server == nil {
-			fmt.Printf("Error: MCP server '%s' version '%s' not found in registry\n", resourceName, runVersion)
-			fmt.Println("Use 'arctl list mcp' to see available servers and versions")
-			return
-		}
-
-		// Server version found, proceed with running it
-		fmt.Printf("✓ Found MCP server: %s (version %s)\n", server.Title, server.Version)
-		if err := runMCPServerWithRuntime(server); err != nil {
-			fmt.Printf("Error running MCP server: %v\n", err)
-			return
-		}
-		return
-	}
-
-	// No specific version requested, check if server exists and handle multiple versions
-	fmt.Printf("Checking if MCP server '%s' exists in registry...\n", resourceName)
-	versions, err := APIClient.GetServerVersions(resourceName)
+	// Use the common server version selection logic
+	server, err := selectServerVersion(resourceName, runVersion, runYes)
 	if err != nil {
-		fmt.Printf("Error querying registry: %v\n", err)
+		fmt.Printf("Error: %v\n", err)
 		return
 	}
 
-	// Check if server was found
-	if len(versions) == 0 {
-		fmt.Printf("Error: MCP server '%s' not found in registry\n", resourceName)
-		fmt.Println("Use 'arctl list mcp' to see available servers")
-		return
-	}
-
-	// Get the latest version (first in the list, as they're ordered by date)
-	latestServer := versions[0]
-
-	// If there are multiple versions, prompt the user (unless --yes is set)
-	if len(versions) > 1 {
-		fmt.Printf("✓ Found %d versions of MCP server '%s':\n", len(versions), resourceName)
-		for i, v := range versions {
-			marker := ""
-			if i == 0 {
-				marker = " (latest)"
-			}
-			fmt.Printf("  - %s%s\n", v.Version, marker)
-		}
-		fmt.Printf("\nDefault: version %s (latest)\n", latestServer.Version)
-
-		// Skip prompt if --yes flag is set
-		if !runYes {
-			// Prompt user for confirmation
-			reader := bufio.NewReader(os.Stdin)
-			fmt.Print("Proceed with the latest version? [Y/n]: ")
-			response, err := reader.ReadString('\n')
-			if err != nil {
-				fmt.Printf("Error reading input: %v\n", err)
-				return
-			}
-
-			response = strings.TrimSpace(strings.ToLower(response))
-			if response != "" && response != "y" && response != "yes" {
-				fmt.Println("Operation cancelled.")
-				fmt.Printf("To run a specific version, use: arctl run mcp %s --version <version>\n", resourceName)
-				return
-			}
-		} else {
-			fmt.Println("Auto-accepting latest version (--yes flag set)")
-		}
-	} else {
-		// Only one version available
-		fmt.Printf("✓ Found MCP server: %s (version %s)\n", latestServer.Title, latestServer.Version)
-	}
-
-	// Proceed with running the latest version
-	if err := runMCPServerWithRuntime(&latestServer); err != nil {
+	// Proceed with running the server
+	if err := runMCPServerWithRuntime(server); err != nil {
 		fmt.Printf("Error running MCP server: %v\n", err)
 		return
 	}
 }
 
 // runMCPServerWithRuntime starts an MCP server using the runtime
-func runMCPServerWithRuntime(server *models.ServerDetail) error {
-	var combinedData models.CombinedServerData
-	if err := json.Unmarshal([]byte(server.Data), &combinedData); err != nil {
-		return fmt.Errorf("failed to parse server data: %w", err)
-	}
-
-	serverBytes, err := json.Marshal(combinedData.Server)
-	if err != nil {
-		return fmt.Errorf("failed to marshal server data: %w", err)
-	}
-
-	var registryServer apiv0.ServerJSON
-	if err := json.Unmarshal(serverBytes, &registryServer); err != nil {
-		return fmt.Errorf("failed to parse registry server: %w", err)
-	}
+func runMCPServerWithRuntime(server *apiv0.ServerResponse) error {
 
 	// Parse environment variables, arguments, and headers from flags
 	envValues, err := parseKeyValuePairs(runEnvVars)
@@ -193,7 +103,7 @@ func runMCPServerWithRuntime(server *models.ServerDetail) error {
 	}
 
 	runRequest := &registry.MCPServerRunRequest{
-		RegistryServer: &registryServer,
+		RegistryServer: &server.Server,
 		PreferRemote:   false,
 		EnvValues:      envValues,
 		ArgValues:      argValues,
@@ -222,7 +132,7 @@ func runMCPServerWithRuntime(server *models.ServerDetail) error {
 		runVerbose,
 	)
 
-	fmt.Printf("Starting MCP server: %s (version %s)...\n", server.Name, server.Version)
+	fmt.Printf("Starting MCP server: %s (version %s)...\n", server.Server.Name, server.Server.Version)
 
 	// Start the server
 	if err := agentRuntime.ReconcileMCPServers(context.Background(), []*registry.MCPServerRunRequest{runRequest}); err != nil {

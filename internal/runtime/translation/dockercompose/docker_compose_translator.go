@@ -3,7 +3,6 @@ package dockercompose
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"sort"
 
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
@@ -39,7 +38,7 @@ func NewAgentGatewayTranslator(composeWorkingDir string, agentGatewayPort uint16
 	return &agentGatewayTranslator{
 		composeWorkingDir: composeWorkingDir,
 		agentGatewayPort:  agentGatewayPort,
-		projectName:       "ai_registry",
+		projectName:       "agentregistry_runtime",
 	}
 }
 
@@ -86,16 +85,6 @@ func (t *agentGatewayTranslator) TranslateRuntimeConfig(
 		Name:       t.projectName,
 		WorkingDir: t.composeWorkingDir,
 		Services:   dockerComposeServices,
-		//Networks:         nil,
-		//Volumes:          nil,
-		//Secrets:          nil,
-		//Configs:          nil,
-		//Models:           nil,
-		//Extensions:       nil,
-		//ComposeFiles:     nil,
-		//Environment:      nil,
-		//DisabledServices: nil,
-		//Profiles:         nil,
 	}
 
 	gwConfig, err := t.translateAgentGatewayConfig(desired.MCPServers)
@@ -127,8 +116,8 @@ func (t *agentGatewayTranslator) translateAgentGatewayService() (*types.ServiceC
 			Published: fmt.Sprintf("%d", port),
 		}},
 		Volumes: []types.ServiceVolumeConfig{{
-			Type:   "bind",
-			Source: filepath.Join(t.composeWorkingDir),
+			Type:   types.VolumeTypeBind,
+			Source: t.composeWorkingDir,
 			Target: "/config",
 		}},
 	}, nil

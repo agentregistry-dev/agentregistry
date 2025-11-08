@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api"
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
@@ -81,7 +82,7 @@ func App(_ context.Context) error {
 		}
 	}
 
-	log.Printf("Starting MCP Registry Application v%s (commit: %s)", Version, GitCommit)
+	log.Printf("Starting agentregistry v%s (commit: %s)", Version, GitCommit)
 
 	// Prepare version information
 	versionInfo := &v0.VersionBody{
@@ -101,13 +102,18 @@ func App(_ context.Context) error {
 		}
 	}()
 
-	// Start installed MCP Servers
-	// mgr := runtime.NewRuntimeManager(cfg.AgentGatewayPort, true)
-	// go func() {
-	// 	if err := mgr.StartMCPServers(); err != nil {
-	// 		log.Printf("Failed to start MCP servers: %v", err)
-	// 	}
-	// }()
+	if cfg.ReconcileOnStartup {
+		log.Println("Reconciling existing deployments at startup...")
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+
+		if err := registryService.ReconcileAll(ctx); err != nil {
+			log.Printf("Warning: Failed to reconcile deployments at startup: %v", err)
+			log.Println("Server will continue starting, but deployments may not be in sync")
+		} else {
+			log.Println("Startup reconciliation completed successfully")
+		}
+	}
 
 	// Initialize HTTP server
 	server := api.NewServer(cfg, registryService, metrics, versionInfo)

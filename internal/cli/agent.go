@@ -20,6 +20,8 @@ func newAgentCmd() *cobra.Command {
 
 	cfg := &config.Config{}
 
+	agentCmd.PersistentFlags().BoolVar(&cfg.Verbose, "verbose", false, "Verbose output")
+
 	initCfg := &agent.InitCfg{
 		Config: cfg,
 	}
@@ -63,29 +65,45 @@ Examples:
 	}
 
 	runCmd := &cobra.Command{
-		Use:   "run [project-directory]",
+		Use:   "run [project-directory-or-agent-name]",
 		Short: "Run agent project locally with docker-compose and launch chat interface",
 		Long: `Run an agent project locally using docker-compose and launch an interactive chat session.
 
+You can provide either a local directory path or an agent name from the registry.
+
 Examples:
-  arctl agent run ./my-agent
-  arctl agent run .`,
-		Args: cobra.MaximumNArgs(1),
+  arctl agent run ./my-agent        # Run from local directory
+  arctl agent run .                 # Run from current directory
+  arctl agent run dice              # Run agent 'dice' from registry`,
+		Args: cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			if len(args) > 0 {
-				runCfg.ProjectDir = args[0]
+
+			link := args[0]
+			if _, err := os.Stat(link); err == nil {
+				runCfg.ProjectDir = link
+				fmt.Println("Running agent from local directory: ", link)
+				if err := agent.RunCmd(cmd.Context(), runCfg); err != nil {
+					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+					os.Exit(1)
+				}
 			} else {
-				runCfg.ProjectDir = "."
+				// Assume this is an agent name from the registry
+				agentModel, err := APIClient.GetAgentByName(link)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+					os.Exit(1)
+				}
+				manifest := agentModel.Agent.AgentManifest
+				if err := agent.RunRemote(cmd.Context(), runCfg.Config, &manifest); err != nil {
+					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+					os.Exit(1)
+				}
 			}
 
-			if err := agent.RunCmd(cmd.Context(), runCfg); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
-			}
 		},
-		Example: `arctl agent run ./my-agent`,
+		Example: `arctl agent run ./my-agent
+  arctl agent run dice`,
 	}
-
 	runCmd.Flags().StringVar(&runCfg.ProjectDir, "project-dir", "", "Project directory (default: current directory)")
 
 	buildCfg := &agent.BuildCfg{

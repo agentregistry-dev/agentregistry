@@ -146,6 +146,20 @@ type Database interface {
 	CheckSkillVersionExists(ctx context.Context, tx pgx.Tx, skillName, version string) (bool, error)
 	// UnmarkSkillAsLatest marks the current latest version of a skill as no longer latest
 	UnmarkSkillAsLatest(ctx context.Context, tx pgx.Tx, skillName string) error
+
+	// Deployments API
+	// CreateDeployment creates a new deployment record
+	CreateDeployment(ctx context.Context, tx pgx.Tx, deployment *models.Deployment) error
+	// GetDeployments retrieves all deployed servers
+	GetDeployments(ctx context.Context, tx pgx.Tx) ([]*models.Deployment, error)
+	// GetDeploymentByName retrieves a specific deployment
+	GetDeploymentByName(ctx context.Context, tx pgx.Tx, serverName string) (*models.Deployment, error)
+	// UpdateDeploymentConfig updates the configuration for a deployment
+	UpdateDeploymentConfig(ctx context.Context, tx pgx.Tx, serverName string, config map[string]string) error
+	// UpdateDeploymentStatus updates the status of a deployment
+	UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, serverName, status string) error
+	// RemoveDeployment removes a deployment
+	RemoveDeployment(ctx context.Context, tx pgx.Tx, serverName string) error
 }
 
 // InTransactionT is a generic helper that wraps InTransaction for functions returning a value

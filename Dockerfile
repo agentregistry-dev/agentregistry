@@ -46,19 +46,34 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 
-# Use TargetARCH to download the correct Docker binary
-RUN wget https://download.docker.com/linux/static/stable/x86_64/docker-28.5.1.tgz
-RUN tar -xvf docker-28.5.1.tgz
-RUN mv docker/docker /usr/local/bin/docker
-RUN rm -rf docker-28.5.1.tgz docker
+# Install Docker CLI and Compose plugin for the target architecture
+ARG TARGETARCH
+RUN DOCKER_ARCH=$(case ${TARGETARCH} in \
+        "amd64") echo "x86_64" ;; \
+        "arm64") echo "aarch64" ;; \
+        *) echo "x86_64" ;; \
+    esac) && \
+    wget https://download.docker.com/linux/static/stable/${DOCKER_ARCH}/docker-28.5.1.tgz && \
+    tar -xvf docker-28.5.1.tgz && \
+    mv docker/docker /usr/local/bin/docker && \
+    rm -rf docker-28.5.1.tgz docker
 
-RUN DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
-RUN mkdir -p $DOCKER_CONFIG/cli-plugins
-RUN curl -SL https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-x86_64 -o $DOCKER_CONFIG/cli-plugins/docker-compose
-RUN chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
+# Install Docker Compose plugin
+ARG TARGETARCH
+RUN DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker} && \
+    COMPOSE_ARCH=$(case ${TARGETARCH} in \
+        "amd64") echo "x86_64" ;; \
+        "arm64") echo "aarch64" ;; \
+        *) echo "x86_64" ;; \
+    esac) && \
+    mkdir -p $DOCKER_CONFIG/cli-plugins && \
+    curl -SL https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-${COMPOSE_ARCH} -o $DOCKER_CONFIG/cli-plugins/docker-compose && \
+    chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose && \
+    docker compose version
 
 COPY --from=builder /app/bin/arctl-server /app/bin/arctl-server
 
 COPY .env.example .env
+
 
 CMD ["/app/bin/arctl-server"]

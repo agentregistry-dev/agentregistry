@@ -5,6 +5,8 @@ import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   Select,
@@ -31,6 +33,7 @@ import { ImportSkillsDialog } from "@/components/import-skills-dialog"
 import { AddSkillDialog } from "@/components/add-skill-dialog"
 import { ImportAgentsDialog } from "@/components/import-agents-dialog"
 import { AddAgentDialog } from "@/components/add-agent-dialog"
+import { DeployServerDialog } from "@/components/deploy-server-dialog"
 import { adminApiClient, ServerResponse, SkillResponse, AgentResponse, ServerStats } from "@/lib/admin-api"
 import MCPIcon from "@/components/icons/mcp"
 import {
@@ -44,6 +47,7 @@ import {
   ArrowUpDown,
   X,
   ChevronDown,
+  Filter,
 } from "lucide-react"
 
 // Grouped server type
@@ -64,6 +68,8 @@ export default function AdminPage() {
   const [stats, setStats] = useState<ServerStats | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [sortBy, setSortBy] = useState<"name" | "stars" | "date">("name")
+  const [filterVerifiedOrg, setFilterVerifiedOrg] = useState(false)
+  const [filterVerifiedPublisher, setFilterVerifiedPublisher] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [addServerDialogOpen, setAddServerDialogOpen] = useState(false)
   const [importSkillsDialogOpen, setImportSkillsDialogOpen] = useState(false)
@@ -75,6 +81,8 @@ export default function AdminPage() {
   const [selectedServer, setSelectedServer] = useState<ServerResponse | null>(null)
   const [selectedSkill, setSelectedSkill] = useState<SkillResponse | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<AgentResponse | null>(null)
+  const [deployDialogOpen, setDeployDialogOpen] = useState(false)
+  const [serverToDeploy, setServerToDeploy] = useState<ServerResponse | null>(null)
   
   // Track scroll position for restoring after navigation
   const scrollPositionRef = useRef<number>(0)
@@ -232,6 +240,12 @@ export default function AdminPage() {
     setSelectedServer(null)
   }
 
+  // Handle server deployment
+  const handleDeploy = (server: ServerResponse) => {
+    setServerToDeploy(server)
+    setDeployDialogOpen(true)
+  }
+
   // Filter and sort servers based on search query and sort option
   useEffect(() => {
     let filtered = [...groupedServers]
@@ -245,6 +259,22 @@ export default function AdminPage() {
           s.server.title?.toLowerCase().includes(query) ||
           s.server.description.toLowerCase().includes(query)
       )
+    }
+
+    // Filter by verified organization
+    if (filterVerifiedOrg) {
+      filtered = filtered.filter((s) => {
+        const identityData = s.server._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['agentregistry.solo.io/metadata']?.identity
+        return identityData?.org_is_verified === true
+      })
+    }
+
+    // Filter by verified publisher
+    if (filterVerifiedPublisher) {
+      filtered = filtered.filter((s) => {
+        const identityData = s.server._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['agentregistry.solo.io/metadata']?.identity
+        return identityData?.publisher_identity_verified_by_jwt === true
+      })
     }
 
     // Sort servers
@@ -267,7 +297,7 @@ export default function AdminPage() {
     })
 
     setFilteredServers(filtered)
-  }, [searchQuery, groupedServers, sortBy])
+  }, [searchQuery, groupedServers, sortBy, filterVerifiedOrg, filterVerifiedPublisher])
 
   // Filter skills and agents based on search query
   useEffect(() => {
@@ -539,19 +569,51 @@ export default function AdminPage() {
 
           {/* Servers Tab */}
           <TabsContent value="servers">
-            {/* Sort controls */}
-            <div className="flex items-center gap-2 mb-6">
-              <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
-              <Select value={sortBy} onValueChange={(value: "name" | "stars" | "date") => setSortBy(value)}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Sort by..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="name">Name (A-Z)</SelectItem>
-                  <SelectItem value="stars">GitHub Stars</SelectItem>
-                  <SelectItem value="date">Date Published</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* Sort and Filter controls */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-2">
+                <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+                <Select value={sortBy} onValueChange={(value: "name" | "stars" | "date") => setSortBy(value)}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Sort by..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="name">Name (A-Z)</SelectItem>
+                    <SelectItem value="stars">GitHub Stars</SelectItem>
+                    <SelectItem value="date">Date Published</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="filter-verified-org" 
+                    checked={filterVerifiedOrg}
+                    onCheckedChange={(checked: boolean) => setFilterVerifiedOrg(checked)}
+                  />
+                  <Label 
+                    htmlFor="filter-verified-org" 
+                    className="text-sm font-normal cursor-pointer"
+                  >
+                    Verified Organization
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="filter-verified-publisher" 
+                    checked={filterVerifiedPublisher}
+                    onCheckedChange={(checked: boolean) => setFilterVerifiedPublisher(checked)}
+                  />
+                  <Label 
+                    htmlFor="filter-verified-publisher" 
+                    className="text-sm font-normal cursor-pointer"
+                  >
+                    Verified Publisher
+                  </Label>
+                </div>
+              </div>
             </div>
 
             {/* Server List */}
@@ -593,14 +655,21 @@ export default function AdminPage() {
                 </Card>
               ) : (
                 <div className="grid gap-4">
-                  {filteredServers.map((server, index) => (
-                    <ServerCard
-                      key={`${server.server.name}-${server.server.version}-${index}`}
-                      server={server}
-                      versionCount={server.versionCount}
-                      onClick={() => handleServerClick(server)}
-                    />
-                  ))}
+                  {filteredServers.map((server, index) => {
+                    // Only show deploy button for published servers (active status)
+                    const isPublished = server._meta?.['io.modelcontextprotocol.registry/official']?.status === 'active'
+                    
+                    return (
+                      <ServerCard
+                        key={`${server.server.name}-${server.server.version}-${index}`}
+                        server={server}
+                        versionCount={server.versionCount}
+                        onClick={() => handleServerClick(server)}
+                        showDeploy={isPublished}
+                        onDeploy={handleDeploy}
+                      />
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -748,6 +817,14 @@ export default function AdminPage() {
         open={addAgentDialogOpen}
         onOpenChange={setAddAgentDialogOpen}
         onAgentAdded={() => {}}
+      />
+
+      {/* Deploy Dialog */}
+      <DeployServerDialog
+        open={deployDialogOpen}
+        onOpenChange={setDeployDialogOpen}
+        server={serverToDeploy}
+        onDeploySuccess={fetchData}
       />
     </main>
   )

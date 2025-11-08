@@ -159,11 +159,11 @@ docker-tag-as-latest:
 	docker pull $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION)
 	docker tag $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:latest
 	docker push $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:latest
-	@echo "✓ Docker image pulled successfully and tagged as latest"
+	@echo "✓ Docker image pulled successfully"
 
 docker-compose-up: docker docker-tag-as-latest
 	@echo "Starting services with Docker Compose..."
-	docker compose -p agentregistry -f internal/daemon/docker-compose.yml up -d --wait
+	docker compose -p agentregistry -f internal/daemon/docker-compose.yml up -d --wait --pull always
 
 docker-compose-down:
 	docker compose -p agentregistry -f internal/daemon/docker-compose.yml down

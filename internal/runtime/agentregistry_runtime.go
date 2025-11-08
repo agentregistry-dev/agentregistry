@@ -98,8 +98,9 @@ func (r *agentRegistryRuntime) ensureRuntime(
 	if err := os.WriteFile(filepath.Join(r.runtimeDir, "agent-gateway.yaml"), agentGatewayYaml, 0644); err != nil {
 		return fmt.Errorf("failed to write agent config yaml: %w", err)
 	}
-	// step 4: start docker compose with -d --remove-orphans
-	cmd := exec.CommandContext(ctx, "docker", "compose", "up", "-d", "--remove-orphans")
+	// step 4: start docker compose with -d --remove-orphans --force-recreate
+	// Using --force-recreate ensures all containers are recreated even if config hasn't changed
+	cmd := exec.CommandContext(ctx, "docker", "compose", "up", "-d", "--remove-orphans", "--force-recreate")
 	cmd.Dir = r.runtimeDir
 	if r.verbose {
 		cmd.Stdout = os.Stdout

@@ -8,6 +8,11 @@ import (
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
+// Reconciler handles server-side reconciliation of deployed resources (MCP servers, agents)
+type Reconciler interface {
+	ReconcileAll(ctx context.Context) error
+}
+
 // RegistryService defines the interface for registry operations
 type RegistryService interface {
 	// ListServers retrieve all servers with optional filtering
@@ -51,4 +56,20 @@ type RegistryService interface {
 	GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error)
 	// CreateSkill creates a new skill version
 	CreateSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error)
+
+	// Deployments APIs
+	// GetDeployments retrieves all deployed resources (MCP servers, agents)
+	GetDeployments(ctx context.Context) ([]*models.Deployment, error)
+	// GetDeploymentByName retrieves a specific deployment by resource name
+	GetDeploymentByName(ctx context.Context, resourceName string) (*models.Deployment, error)
+	// DeployServer deploys an MCP server with configuration
+	DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool) (*models.Deployment, error)
+	// DeployAgent deploys an agent with configuration (to be implemented)
+	DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool) (*models.Deployment, error)
+	// UpdateDeploymentConfig updates the configuration for a deployment
+	UpdateDeploymentConfig(ctx context.Context, resourceName string, config map[string]string) (*models.Deployment, error)
+	// RemoveServer removes a deployment (works for any resource type)
+	RemoveServer(ctx context.Context, resourceName string) error
+
+	Reconciler
 }

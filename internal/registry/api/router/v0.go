@@ -28,6 +28,7 @@ func RegisterV0Routes(
 	// Skills endpoints (v0 only)
 	v0.RegisterSkillsEndpoints(api, "/v0", registry)
 	v0.RegisterSkillsPublishEndpoint(api, "/v0", registry, authz)
+	v0.RegisterDeploymentsEndpoints(api, "/v0", registry)
 }
 
 func RegisterV0_1Routes(
@@ -40,4 +41,5 @@ func RegisterV0_1Routes(
 	v0.RegisterEditEndpoints(api, "/v0.1", registry, cfg)
 	v0auth.RegisterAuthEndpoints(api, "/v0.1", cfg)
 	v0.RegisterPublishEndpoint(api, "/v0.1", registry, authz)
+	v0.RegisterDeploymentsEndpoints(api, "/v0.1", registry)
 }
