@@ -192,9 +192,8 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 		WithSkipPaths("/health", "/metrics", "/ping", "/docs"),
 	))
 
-	// Register routes for all API versions
-	RegisterV0Routes(api, authz, cfg, registry, metrics, versionInfo)
-	RegisterV0_1Routes(api, authz, cfg, registry, metrics, versionInfo)
+	// Register all API routes (public and admin) for all versions
+	RegisterRoutes(api, authz, cfg, registry, metrics, versionInfo)
 
 	// Add /metrics for Prometheus metrics using promhttp
 	mux.Handle("/metrics", metrics.PrometheusHandler())
@@ -207,6 +206,8 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 			// Check if this is an API route - if so, return 404
 			if strings.HasPrefix(r.URL.Path, "/v0/") ||
 				strings.HasPrefix(r.URL.Path, "/v0.1/") ||
+				strings.HasPrefix(r.URL.Path, "/admin/v0/") ||
+				strings.HasPrefix(r.URL.Path, "/admin/v0.1/") ||
 				r.URL.Path == "/health" ||
 				r.URL.Path == "/ping" ||
 				r.URL.Path == "/metrics" ||

@@ -12,34 +12,93 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 )
 
-func RegisterV0Routes(
-	api huma.API, authz auth.Authorizer, cfg *config.Config, registry service.RegistryService, metrics *telemetry.Metrics, versionInfo *v0.VersionBody,
+// RegisterRoutes registers all API routes (public and admin) for all versions
+// This is the single entry point for all route registration
+func RegisterRoutes(
+	api huma.API,
+	authz auth.Authorizer,
+	cfg *config.Config,
+	registry service.RegistryService,
+	metrics *telemetry.Metrics,
+	versionInfo *v0.VersionBody,
 ) {
-	v0.RegisterHealthEndpoint(api, "/v0", cfg, metrics)
-	v0.RegisterPingEndpoint(api, "/v0")
-	v0.RegisterVersionEndpoint(api, "/v0", versionInfo)
-	v0.RegisterServersEndpoints(api, "/v0", registry)
-	v0.RegisterEditEndpoints(api, "/v0", registry, cfg)
-	v0auth.RegisterAuthEndpoints(api, "/v0", cfg)
-	v0.RegisterPublishEndpoint(api, "/v0", registry, authz)
-	v0.RegisterAgentsPublishEndpoint(api, "/v0", registry, authz)
-	// Agents endpoints (v0)
-	v0.RegisterAgentsEndpoints(api, "/v0", registry)
-	// Skills endpoints (v0 only)
-	v0.RegisterSkillsEndpoints(api, "/v0", registry)
-	v0.RegisterSkillsPublishEndpoint(api, "/v0", registry, authz)
-	v0.RegisterDeploymentsEndpoints(api, "/v0", registry)
+	// Public API endpoints (only show published resources)
+	registerPublicRoutes(api, "/v0", authz, cfg, registry, metrics, versionInfo)
+	registerPublicRoutes(api, "/v0.1", authz, cfg, registry, metrics, versionInfo)
+
+	// Admin API endpoints (show all resources, including unpublished)
+	registerAdminRoutes(api, "/admin/v0", cfg, registry, metrics, versionInfo)
+	registerAdminRoutes(api, "/admin/v0.1", cfg, registry, metrics, versionInfo)
 }
 
-func RegisterV0_1Routes(
-	api huma.API, authz auth.Authorizer, cfg *config.Config, registry service.RegistryService, metrics *telemetry.Metrics, versionInfo *v0.VersionBody,
+// registerPublicRoutes registers public API routes for a version
+// Public routes only return published resources
+func registerPublicRoutes(
+	api huma.API,
+	pathPrefix string,
+	authz auth.Authorizer,
+	cfg *config.Config,
+	registry service.RegistryService,
+	metrics *telemetry.Metrics,
+	versionInfo *v0.VersionBody,
 ) {
-	v0.RegisterHealthEndpoint(api, "/v0.1", cfg, metrics)
-	v0.RegisterPingEndpoint(api, "/v0.1")
-	v0.RegisterVersionEndpoint(api, "/v0.1", versionInfo)
-	v0.RegisterServersEndpoints(api, "/v0.1", registry)
-	v0.RegisterEditEndpoints(api, "/v0.1", registry, cfg)
-	v0auth.RegisterAuthEndpoints(api, "/v0.1", cfg)
-	v0.RegisterPublishEndpoint(api, "/v0.1", registry, authz)
-	v0.RegisterDeploymentsEndpoints(api, "/v0.1", registry)
+	// Public endpoints only show published resources
+	isAdmin := false
+
+	// Common endpoints (available in all versions)
+	registerCommonEndpoints(api, pathPrefix, cfg, metrics, versionInfo)
+	v0.RegisterServersEndpoints(api, pathPrefix, registry, isAdmin)
+	v0.RegisterCreateEndpoint(api, pathPrefix, registry, authz)
+	v0.RegisterEditEndpoints(api, pathPrefix, registry, cfg)
+	v0auth.RegisterAuthEndpoints(api, pathPrefix, cfg)
+	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry)
+
+	// v0-only endpoints (agents and skills)
+	if pathPrefix == "/v0" {
+		v0.RegisterAgentsEndpoints(api, pathPrefix, registry, isAdmin)
+		v0.RegisterAgentsCreateEndpoint(api, pathPrefix, registry, authz)
+		v0.RegisterSkillsEndpoints(api, pathPrefix, registry, isAdmin)
+		v0.RegisterSkillsCreateEndpoint(api, pathPrefix, registry, authz)
+	}
+}
+
+// registerAdminRoutes registers admin API routes for a version
+// Admin routes return all resources (published and unpublished)
+func registerAdminRoutes(
+	api huma.API,
+	pathPrefix string,
+	cfg *config.Config,
+	registry service.RegistryService,
+	metrics *telemetry.Metrics,
+	versionInfo *v0.VersionBody,
+) {
+	// Admin endpoints show all resources
+	isAdmin := true
+
+	// Common endpoints
+	registerCommonEndpoints(api, pathPrefix, cfg, metrics, versionInfo)
+	v0.RegisterServersEndpoints(api, pathPrefix, registry, isAdmin)
+	v0.RegisterPublishStatusEndpoints(api, pathPrefix, registry)
+	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry)
+
+	// v0-only admin endpoints (agents and skills)
+	if pathPrefix == "/admin/v0" {
+		v0.RegisterAgentsEndpoints(api, pathPrefix, registry, isAdmin)
+		v0.RegisterAgentsPublishStatusEndpoints(api, pathPrefix, registry)
+		v0.RegisterSkillsEndpoints(api, pathPrefix, registry, isAdmin)
+		v0.RegisterSkillsPublishStatusEndpoints(api, pathPrefix, registry)
+	}
+}
+
+// registerCommonEndpoints registers endpoints that are common to both public and admin routes
+func registerCommonEndpoints(
+	api huma.API,
+	pathPrefix string,
+	cfg *config.Config,
+	metrics *telemetry.Metrics,
+	versionInfo *v0.VersionBody,
+) {
+	v0.RegisterHealthEndpoint(api, pathPrefix, cfg, metrics)
+	v0.RegisterPingEndpoint(api, pathPrefix)
+	v0.RegisterVersionEndpoint(api, pathPrefix, versionInfo)
 }

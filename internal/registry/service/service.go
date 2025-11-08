@@ -33,6 +33,10 @@ type RegistryService interface {
 	GetServerReadmeLatest(ctx context.Context, serverName string) (*database.ServerReadme, error)
 	// GetServerReadmeByVersion retrieves the README for a specific server version
 	GetServerReadmeByVersion(ctx context.Context, serverName, version string) (*database.ServerReadme, error)
+	// PublishServer marks a server as published
+	PublishServer(ctx context.Context, serverName, version string) error
+	// UnpublishServer marks a server as unpublished
+	UnpublishServer(ctx context.Context, serverName, version string) error
 
 	// Agents APIs
 	// ListAgents retrieve all agents with optional filtering
@@ -45,6 +49,10 @@ type RegistryService interface {
 	GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error)
 	// CreateAgent creates a new agent version
 	CreateAgent(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error)
+	// PublishAgent marks an agent as published
+	PublishAgent(ctx context.Context, agentName, version string) error
+	// UnpublishAgent marks an agent as unpublished
+	UnpublishAgent(ctx context.Context, agentName, version string) error
 	// Skills APIs
 	// ListSkills retrieve all skills with optional filtering
 	ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error)
@@ -56,6 +64,10 @@ type RegistryService interface {
 	GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error)
 	// CreateSkill creates a new skill version
 	CreateSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error)
+	// PublishSkill marks a skill as published
+	PublishSkill(ctx context.Context, skillName, version string) error
+	// UnpublishSkill marks a skill as unpublished
+	UnpublishSkill(ctx context.Context, skillName, version string) error
 
 	// Deployments APIs
 	// GetDeployments retrieves all deployed resources (MCP servers, agents)

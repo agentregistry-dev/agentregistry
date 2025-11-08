@@ -28,6 +28,7 @@ type ServerFilter struct {
 	SubstringName *string    // for substring search on name
 	Version       *string    // for exact version matching
 	IsLatest      *bool      // for filtering latest versions only
+	Published     *bool      // for filtering by published status (nil = no filter)
 }
 
 // ServerReadme represents a stored README blob for a server version
@@ -49,6 +50,7 @@ type SkillFilter struct {
 	SubstringName *string    // for substring search on name
 	Version       *string    // for exact version matching
 	IsLatest      *bool      // for filtering latest versions only
+	Published     *bool      // for filtering by published status (nil = no filter)
 }
 
 // AgentFilter defines filtering options for agent queries (mirrors ServerFilter)
@@ -59,6 +61,7 @@ type AgentFilter struct {
 	SubstringName *string    // for substring search on name
 	Version       *string    // for exact version matching
 	IsLatest      *bool      // for filtering latest versions only
+	Published     *bool      // for filtering by published status (nil = no filter)
 }
 
 // Database defines the interface for database operations
@@ -88,6 +91,12 @@ type Database interface {
 	// AcquirePublishLock acquires an exclusive advisory lock for publishing a server
 	// This prevents race conditions when multiple versions are published concurrently
 	AcquirePublishLock(ctx context.Context, tx pgx.Tx, serverName string) error
+	// PublishServer marks a server as published
+	PublishServer(ctx context.Context, tx pgx.Tx, serverName, version string) error
+	// UnpublishServer marks a server as unpublished
+	UnpublishServer(ctx context.Context, tx pgx.Tx, serverName, version string) error
+	// IsServerPublished checks if a server is published
+	IsServerPublished(ctx context.Context, tx pgx.Tx, serverName, version string) (bool, error)
 	// UpsertServerReadme stores or updates a README blob for a server version
 	UpsertServerReadme(ctx context.Context, tx pgx.Tx, readme *ServerReadme) error
 	// GetServerReadme retrieves the README blob for a specific server version
@@ -122,6 +131,12 @@ type Database interface {
 	CheckAgentVersionExists(ctx context.Context, tx pgx.Tx, agentName, version string) (bool, error)
 	// UnmarkAgentAsLatest marks the current latest version of an agent as no longer latest
 	UnmarkAgentAsLatest(ctx context.Context, tx pgx.Tx, agentName string) error
+	// PublishAgent marks an agent as published
+	PublishAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error
+	// UnpublishAgent marks an agent as unpublished
+	UnpublishAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error
+	// IsAgentPublished checks if an agent is published
+	IsAgentPublished(ctx context.Context, tx pgx.Tx, agentName, version string) (bool, error)
 
 	// Skills API
 	// CreateSkill inserts a new skill version with official metadata
@@ -146,6 +161,12 @@ type Database interface {
 	CheckSkillVersionExists(ctx context.Context, tx pgx.Tx, skillName, version string) (bool, error)
 	// UnmarkSkillAsLatest marks the current latest version of a skill as no longer latest
 	UnmarkSkillAsLatest(ctx context.Context, tx pgx.Tx, skillName string) error
+	// PublishSkill marks a skill as published
+	PublishSkill(ctx context.Context, tx pgx.Tx, skillName, version string) error
+	// UnpublishSkill marks a skill as unpublished
+	UnpublishSkill(ctx context.Context, tx pgx.Tx, skillName, version string) error
+	// IsSkillPublished checks if a skill is published
+	IsSkillPublished(ctx context.Context, tx pgx.Tx, skillName, version string) (bool, error)
 
 	// Deployments API
 	// CreateDeployment creates a new deployment record

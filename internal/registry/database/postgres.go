@@ -133,6 +133,11 @@ func (db *PostgreSQL) ListServers(
 			args = append(args, *filter.IsLatest)
 			argIndex++
 		}
+		if filter.Published != nil {
+			whereConditions = append(whereConditions, fmt.Sprintf("published = $%d", argIndex))
+			args = append(args, *filter.Published)
+			argIndex++
+		}
 	}
 
 	// Add cursor pagination using compound serverName:version cursor
@@ -232,7 +237,7 @@ func (db *PostgreSQL) GetServerByName(ctx context.Context, tx pgx.Tx, serverName
 	}
 
 	query := `
-		SELECT server_name, version, status, published_at, updated_at, is_latest, value
+		SELECT server_name, version, status, published_at, updated_at, is_latest, published, value
 		FROM servers
 		WHERE server_name = $1 AND is_latest = true
 		ORDER BY published_at DESC
@@ -241,10 +246,10 @@ func (db *PostgreSQL) GetServerByName(ctx context.Context, tx pgx.Tx, serverName
 
 	var name, version, status string
 	var publishedAt, updatedAt time.Time
-	var isLatest bool
+	var isLatest, published bool
 	var valueJSON []byte
 
-	err := db.getExecutor(tx).QueryRow(ctx, query, serverName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON)
+	err := db.getExecutor(tx).QueryRow(ctx, query, serverName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &published, &valueJSON)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -714,6 +719,69 @@ func (db *PostgreSQL) UnmarkAsLatest(ctx context.Context, tx pgx.Tx, serverName 
 	return nil
 }
 
+// PublishServer marks a server as published
+func (db *PostgreSQL) PublishServer(ctx context.Context, tx pgx.Tx, serverName, version string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	executor := db.getExecutor(tx)
+	query := `UPDATE servers SET published = true, published_date = NOW() WHERE server_name = $1 AND version = $2`
+
+	result, err := executor.Exec(ctx, query, serverName, version)
+	if err != nil {
+		return fmt.Errorf("failed to publish server: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+// UnpublishServer marks a server as unpublished
+func (db *PostgreSQL) UnpublishServer(ctx context.Context, tx pgx.Tx, serverName, version string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	executor := db.getExecutor(tx)
+	query := `UPDATE servers SET published = false, unpublished_date = NOW() WHERE server_name = $1 AND version = $2`
+
+	result, err := executor.Exec(ctx, query, serverName, version)
+	if err != nil {
+		return fmt.Errorf("failed to unpublish server: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+// IsServerPublished checks if a server is published
+func (db *PostgreSQL) IsServerPublished(ctx context.Context, tx pgx.Tx, serverName, version string) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+
+	executor := db.getExecutor(tx)
+	query := `SELECT published FROM servers WHERE server_name = $1 AND version = $2`
+
+	var published bool
+	err := executor.QueryRow(ctx, query, serverName, version).Scan(&published)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, ErrNotFound
+		}
+		return false, fmt.Errorf("failed to check if server is published: %w", err)
+	}
+
+	return published, nil
+}
+
 func (db *PostgreSQL) UpsertServerReadme(ctx context.Context, tx pgx.Tx, readme *ServerReadme) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -864,6 +932,11 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 		if filter.IsLatest != nil {
 			whereConditions = append(whereConditions, fmt.Sprintf("is_latest = $%d", argIndex))
 			args = append(args, *filter.IsLatest)
+			argIndex++
+		}
+		if filter.Published != nil {
+			whereConditions = append(whereConditions, fmt.Sprintf("published = $%d", argIndex))
+			args = append(args, *filter.Published)
 			argIndex++
 		}
 	}
@@ -1260,6 +1333,69 @@ func (db *PostgreSQL) UnmarkAgentAsLatest(ctx context.Context, tx pgx.Tx, agentN
 	return nil
 }
 
+// PublishAgent marks an agent as published
+func (db *PostgreSQL) PublishAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	executor := db.getExecutor(tx)
+	query := `UPDATE agents SET published = true, published_date = NOW() WHERE agent_name = $1 AND version = $2`
+
+	result, err := executor.Exec(ctx, query, agentName, version)
+	if err != nil {
+		return fmt.Errorf("failed to publish agent: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+// UnpublishAgent marks an agent as unpublished
+func (db *PostgreSQL) UnpublishAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	executor := db.getExecutor(tx)
+	query := `UPDATE agents SET published = false, unpublished_date = NOW() WHERE agent_name = $1 AND version = $2`
+
+	result, err := executor.Exec(ctx, query, agentName, version)
+	if err != nil {
+		return fmt.Errorf("failed to unpublish agent: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+// IsAgentPublished checks if an agent is published
+func (db *PostgreSQL) IsAgentPublished(ctx context.Context, tx pgx.Tx, agentName, version string) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+
+	executor := db.getExecutor(tx)
+	query := `SELECT published FROM agents WHERE agent_name = $1 AND version = $2`
+
+	var published bool
+	err := executor.QueryRow(ctx, query, agentName, version).Scan(&published)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, ErrNotFound
+		}
+		return false, fmt.Errorf("failed to check if agent is published: %w", err)
+	}
+
+	return published, nil
+}
+
 // ==============================
 // Skills implementations
 // ==============================
@@ -1306,6 +1442,11 @@ func (db *PostgreSQL) ListSkills(ctx context.Context, tx pgx.Tx, filter *SkillFi
 		if filter.IsLatest != nil {
 			whereConditions = append(whereConditions, fmt.Sprintf("is_latest = $%d", argIndex))
 			args = append(args, *filter.IsLatest)
+			argIndex++
+		}
+		if filter.Published != nil {
+			whereConditions = append(whereConditions, fmt.Sprintf("published = $%d", argIndex))
+			args = append(args, *filter.Published)
 			argIndex++
 		}
 	}
@@ -1700,6 +1841,69 @@ func (db *PostgreSQL) UnmarkSkillAsLatest(ctx context.Context, tx pgx.Tx, skillN
 		return fmt.Errorf("failed to unmark latest skill version: %w", err)
 	}
 	return nil
+}
+
+// PublishSkill marks a skill as published
+func (db *PostgreSQL) PublishSkill(ctx context.Context, tx pgx.Tx, skillName, version string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	executor := db.getExecutor(tx)
+	query := `UPDATE skills SET published = true, published_date = NOW() WHERE skill_name = $1 AND version = $2`
+
+	result, err := executor.Exec(ctx, query, skillName, version)
+	if err != nil {
+		return fmt.Errorf("failed to publish skill: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+// UnpublishSkill marks a skill as unpublished
+func (db *PostgreSQL) UnpublishSkill(ctx context.Context, tx pgx.Tx, skillName, version string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	executor := db.getExecutor(tx)
+	query := `UPDATE skills SET published = false, unpublished_date = NOW() WHERE skill_name = $1 AND version = $2`
+
+	result, err := executor.Exec(ctx, query, skillName, version)
+	if err != nil {
+		return fmt.Errorf("failed to unpublish skill: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+// IsSkillPublished checks if a skill is published
+func (db *PostgreSQL) IsSkillPublished(ctx context.Context, tx pgx.Tx, skillName, version string) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+
+	executor := db.getExecutor(tx)
+	query := `SELECT published FROM skills WHERE skill_name = $1 AND version = $2`
+
+	var published bool
+	err := executor.QueryRow(ctx, query, skillName, version).Scan(&published)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, ErrNotFound
+		}
+		return false, fmt.Errorf("failed to check if skill is published: %w", err)
+	}
+
+	return published, nil
 }
 
 // CreateDeployment creates a new deployment record

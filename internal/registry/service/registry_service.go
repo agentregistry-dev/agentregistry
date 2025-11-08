@@ -313,6 +313,20 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 	return s.db.CreateSkill(ctx, tx, &skillJSON, officialMeta)
 }
 
+// PublishSkill marks a skill as published
+func (s *registryServiceImpl) PublishSkill(ctx context.Context, skillName, version string) error {
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		return s.db.PublishSkill(txCtx, tx, skillName, version)
+	})
+}
+
+// UnpublishSkill marks a skill as unpublished
+func (s *registryServiceImpl) UnpublishSkill(ctx context.Context, skillName, version string) error {
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		return s.db.UnpublishSkill(txCtx, tx, skillName, version)
+	})
+}
+
 // UpdateServer updates an existing server with new details
 func (s *registryServiceImpl) UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
 	// Wrap the entire operation in a transaction
@@ -408,6 +422,20 @@ func (s *registryServiceImpl) GetServerReadmeLatest(ctx context.Context, serverN
 
 func (s *registryServiceImpl) GetServerReadmeByVersion(ctx context.Context, serverName, version string) (*database.ServerReadme, error) {
 	return s.db.GetServerReadme(ctx, nil, serverName, version)
+}
+
+// PublishServer marks a server as published
+func (s *registryServiceImpl) PublishServer(ctx context.Context, serverName, version string) error {
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		return s.db.PublishServer(txCtx, tx, serverName, version)
+	})
+}
+
+// UnpublishServer marks a server as unpublished
+func (s *registryServiceImpl) UnpublishServer(ctx context.Context, serverName, version string) error {
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		return s.db.UnpublishServer(txCtx, tx, serverName, version)
+	})
 }
 
 // validateUpdateRequest validates an update request with optional registry validation skipping
@@ -550,6 +578,20 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 	return s.db.CreateAgent(ctx, tx, &agentJSON, officialMeta)
 }
 
+// PublishAgent marks an agent as published
+func (s *registryServiceImpl) PublishAgent(ctx context.Context, agentName, version string) error {
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		return s.db.PublishAgent(txCtx, tx, agentName, version)
+	})
+}
+
+// UnpublishAgent marks an agent as unpublished
+func (s *registryServiceImpl) UnpublishAgent(ctx context.Context, agentName, version string) error {
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		return s.db.UnpublishAgent(txCtx, tx, agentName, version)
+	})
+}
+
 // GetDeployments retrieves all deployed servers
 func (s *registryServiceImpl) GetDeployments(ctx context.Context) ([]*models.Deployment, error) {
 	return s.db.GetDeployments(ctx, nil)
@@ -576,6 +618,15 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 			return nil, fmt.Errorf("server %s not found in registry: %w", serverName, database.ErrNotFound)
 		}
 		return nil, fmt.Errorf("failed to verify server: %w", err)
+	}
+
+	// Check if the server is published before allowing deployment
+	isPublished, err := s.db.IsServerPublished(ctx, nil, serverName, serverResp.Server.Version)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check server published status: %w", err)
+	}
+	if !isPublished {
+		return nil, fmt.Errorf("cannot deploy unpublished server %s (version %s): server must be published before deployment", serverName, serverResp.Server.Version)
 	}
 
 	deployment := &models.Deployment{

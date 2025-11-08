@@ -9,6 +9,7 @@ import (
 	"time"
 
 	skillmodels "github.com/agentregistry-dev/agentregistry/internal/models"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/danielgtaylor/huma/v2"
@@ -40,7 +41,14 @@ type SkillVersionsInput struct {
 }
 
 // RegisterSkillsEndpoints registers all skill-related endpoints with a custom path prefix
-func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService) {
+// isAdmin: if true, shows all resources; if false, only shows published resources
+func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool) {
+	// Determine the tag based on whether this is admin or public
+	tag := "skills"
+	if isAdmin {
+		tag = "admin"
+	}
+
 	// List skills
 	huma.Register(api, huma.Operation{
 		OperationID: "list-skills" + strings.ReplaceAll(pathPrefix, "/", "-"),
@@ -48,10 +56,17 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Path:        pathPrefix + "/skills",
 		Summary:     "List Agentic skills",
 		Description: "Get a paginated list of Agentic skills from the registry",
-		Tags:        []string{"skills"},
+		Tags:        []string{tag},
 	}, func(ctx context.Context, input *ListSkillsInput) (*Response[skillmodels.SkillListResponse], error) {
 		// Build filter
 		filter := &database.SkillFilter{}
+
+		// For public endpoints, only show published resources
+		if !isAdmin {
+			published := true
+			filter.Published = &published
+		}
+
 		if input.UpdatedSince != "" {
 			if updatedTime, err := time.Parse(time.RFC3339, input.UpdatedSince); err == nil {
 				filter.UpdatedSince = &updatedTime
@@ -98,7 +113,7 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Path:        pathPrefix + "/skills/{skillName}/versions/{version}",
 		Summary:     "Get specific Agentic skill version",
 		Description: "Get detailed information about a specific version of an Agentic skill. Use the special version 'latest' to get the latest version.",
-		Tags:        []string{"skills"},
+		Tags:        []string{tag},
 	}, func(ctx context.Context, input *SkillVersionDetailInput) (*Response[skillmodels.SkillResponse], error) {
 		skillName, err := url.PathUnescape(input.SkillName)
 		if err != nil {
@@ -131,7 +146,7 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Path:        pathPrefix + "/skills/{skillName}/versions",
 		Summary:     "Get all versions of an Agentic skill",
 		Description: "Get all available versions for a specific Agentic skill",
-		Tags:        []string{"skills"},
+		Tags:        []string{tag},
 	}, func(ctx context.Context, input *SkillVersionsInput) (*Response[skillmodels.SkillListResponse], error) {
 		skillName, err := url.PathUnescape(input.SkillName)
 		if err != nil {
@@ -154,6 +169,109 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 			Body: skillmodels.SkillListResponse{
 				Skills:   skillValues,
 				Metadata: skillmodels.SkillMetadata{Count: len(skills)},
+			},
+		}, nil
+	})
+}
+
+// CreateSkillInput represents the input for creating/updating a skill
+type CreateSkillInput struct {
+	Body skillmodels.SkillJSON `body:""`
+}
+
+// RegisterSkillsCreateEndpoint registers the skills create/update endpoint with a custom path prefix
+// This endpoint creates or updates a skill in the registry (published defaults to false)
+func RegisterSkillsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService, authz auth.Authorizer) {
+	huma.Register(api, huma.Operation{
+		OperationID: "create-skill" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		Method:      http.MethodPost,
+		Path:        pathPrefix + "/skills/publish",
+		Summary:     "Create/update Agentic skill",
+		Description: "Create a new Agentic skill in the registry or update an existing one. By default, skills are created as unpublished (published=false).",
+		Tags:        []string{"publish"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, func(ctx context.Context, input *CreateSkillInput) (*Response[skillmodels.SkillResponse], error) {
+		if err := authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{Name: input.Body.Name, Type: "skill"}); err != nil {
+			return nil, err
+		}
+
+		// Create/update the skill (published defaults to false in the service layer)
+		createdSkill, err := registry.CreateSkill(ctx, &input.Body)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Failed to create skill", err)
+		}
+
+		return &Response[skillmodels.SkillResponse]{Body: *createdSkill}, nil
+	})
+}
+
+// RegisterSkillsPublishStatusEndpoints registers the publish/unpublish status endpoints for skills
+// These endpoints change the published status of existing skills
+func RegisterSkillsPublishStatusEndpoints(api huma.API, pathPrefix string, registry service.RegistryService) {
+	// Publish skill endpoint - marks an existing skill as published
+	huma.Register(api, huma.Operation{
+		OperationID: "publish-skill-status" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		Method:      http.MethodPost,
+		Path:        pathPrefix + "/skills/{skillName}/versions/{version}/publish",
+		Summary:     "Publish an existing skill",
+		Description: "Mark an existing skill version as published, making it visible in public listings. This acts on a skill that was already created.",
+		Tags:        []string{"admin"},
+	}, func(ctx context.Context, input *SkillVersionDetailInput) (*Response[EmptyResponse], error) {
+		// URL-decode the skill name and version
+		skillName, err := url.PathUnescape(input.SkillName)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid skill name encoding", err)
+		}
+		version, err := url.PathUnescape(input.Version)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid version encoding", err)
+		}
+
+		// Call the service to publish the skill
+		if err := registry.PublishSkill(ctx, skillName, version); err != nil {
+			if errors.Is(err, database.ErrNotFound) {
+				return nil, huma.Error404NotFound("Skill not found")
+			}
+			return nil, huma.Error500InternalServerError("Failed to publish skill", err)
+		}
+
+		return &Response[EmptyResponse]{
+			Body: EmptyResponse{
+				Message: "Skill published successfully",
+			},
+		}, nil
+	})
+
+	// Unpublish skill endpoint - marks an existing skill as unpublished
+	huma.Register(api, huma.Operation{
+		OperationID: "unpublish-skill-status" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		Method:      http.MethodPost,
+		Path:        pathPrefix + "/skills/{skillName}/versions/{version}/unpublish",
+		Summary:     "Unpublish an existing skill",
+		Description: "Mark an existing skill version as unpublished, hiding it from public listings. This acts on a skill that was already created.",
+		Tags:        []string{"admin"},
+	}, func(ctx context.Context, input *SkillVersionDetailInput) (*Response[EmptyResponse], error) {
+		// URL-decode the skill name and version
+		skillName, err := url.PathUnescape(input.SkillName)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid skill name encoding", err)
+		}
+		version, err := url.PathUnescape(input.Version)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid version encoding", err)
+		}
+
+		// Call the service to unpublish the skill
+		if err := registry.UnpublishSkill(ctx, skillName, version); err != nil {
+			if errors.Is(err, database.ErrNotFound) {
+				return nil, huma.Error404NotFound("Skill not found")
+			}
+			return nil, huma.Error500InternalServerError("Failed to unpublish skill", err)
+		}
+
+		return &Response[EmptyResponse]{
+			Body: EmptyResponse{
+				Message: "Skill unpublished successfully",
 			},
 		}, nil
 	})

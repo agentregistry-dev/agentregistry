@@ -6,6 +6,11 @@ type Response[T any] struct {
 	Body T
 }
 
+// EmptyResponse represents a simple success response with a message
+type EmptyResponse struct {
+	Message string `json:"message" doc:"Success message" example:"Operation completed successfully"`
+}
+
 // Example usage:
 // Instead of:
 //   type HealthOutput struct {
