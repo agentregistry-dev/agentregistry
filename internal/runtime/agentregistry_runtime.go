@@ -74,10 +74,6 @@ func (r *agentRegistryRuntime) ensureRuntime(
 	ctx context.Context,
 	cfg *dockercompose.AiRuntimeConfig,
 ) error {
-	// step 0: ensure custom agent gateway image exists
-	if err := r.ensureAgentGatewayImage(ctx); err != nil {
-		return fmt.Errorf("failed to ensure agent gateway image: %w", err)
-	}
 	// step 1: ensure the root runtime dir exists
 	if err := os.MkdirAll(r.runtimeDir, 0755); err != nil {
 		return fmt.Errorf("failed to create runtime directory: %w", err)
@@ -115,50 +111,5 @@ func (r *agentRegistryRuntime) ensureRuntime(
 
 	fmt.Println("✓ Docker containers started")
 
-	return nil
-}
-
-// TODO: we'll probably want to publish this image, instead of doing it this way.
-func (r *agentRegistryRuntime) ensureAgentGatewayImage(ctx context.Context) error {
-	imageName := "arctl-agentgateway:latest"
-
-	// Check if image already exists
-	checkCmd := exec.CommandContext(ctx, "docker", "image", "inspect", imageName)
-	if err := checkCmd.Run(); err == nil {
-		// Image exists
-		if r.verbose {
-			fmt.Printf("Using existing agent gateway image: %s\n", imageName)
-		}
-		return nil
-	}
-
-	// Image doesn't exist, build it
-	fmt.Printf("Building custom agent gateway image with npx/uvx support...\n")
-
-	// Write Dockerfile to runtime directory
-	dockerfilePath := filepath.Join(r.runtimeDir, "agentgateway.Dockerfile")
-	if err := os.MkdirAll(r.runtimeDir, 0755); err != nil {
-		return fmt.Errorf("failed to create runtime directory: %w", err)
-	}
-	if err := os.WriteFile(dockerfilePath, []byte(agentGatewayDockerfile), 0644); err != nil {
-		return fmt.Errorf("failed to write Dockerfile: %w", err)
-	}
-
-	// Build the image
-	buildCmd := exec.CommandContext(ctx, "docker", "build",
-		"-f", dockerfilePath,
-		"-t", imageName,
-		r.runtimeDir)
-
-	if r.verbose {
-		buildCmd.Stdout = os.Stdout
-		buildCmd.Stderr = os.Stderr
-	}
-
-	if err := buildCmd.Run(); err != nil {
-		return fmt.Errorf("failed to build agent gateway image: %w", err)
-	}
-
-	fmt.Println("✓ Agent gateway image built successfully")
 	return nil
 }

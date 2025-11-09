@@ -19,7 +19,7 @@ services:
       - agentregistry-network
 
   agentregistry:
-    image: localhost:5001/agentregistry-dev/agentregistry/server:latest
+    image: ${DOCKER_REGISTRY}/agentregistry-dev/agentregistry/server:${VERSION}
     container_name: agentregistry-server
     environment:
       AGENT_REGISTRY_DATABASE_URL: "postgres://agentregistry:agentregistry@postgres:5432/agent-registry?sslmode=disable"

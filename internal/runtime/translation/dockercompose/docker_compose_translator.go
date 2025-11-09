@@ -5,15 +5,13 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
 	"github.com/compose-spec/compose-go/v2/types"
+
+	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
+	"github.com/agentregistry-dev/agentregistry/internal/version"
 )
 
 type DockerComposeConfig = types.Project
-
-const (
-	customAgentGatewayImage = "arctl-agentgateway:latest"
-)
 
 type AiRuntimeConfig struct {
 	DockerCompose *DockerComposeConfig
@@ -105,7 +103,7 @@ func (t *agentGatewayTranslator) translateAgentGatewayService() (*types.ServiceC
 	}
 
 	// Use custom image with npx and uvx support for stdio MCP servers
-	image := customAgentGatewayImage
+	image := fmt.Sprintf("localhost:5001/agentregistry-dev/agentregistry/arctl-agentgateway:%s", version.Version)
 
 	return &types.ServiceConfig{
 		Name:    "agent_gateway",

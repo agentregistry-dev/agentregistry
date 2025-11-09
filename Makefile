@@ -8,7 +8,7 @@ BUILD_DATE ?= $(shell date -u '+%Y-%m-%d')
 GIT_COMMIT ?= $(shell git rev-parse --short HEAD || echo "unknown")
 VERSION ?= $(shell git describe --tags --always 2>/dev/null | grep v || echo "v0.0.0-$(GIT_COMMIT)")
 
-LDFLAGS := -s -w -X 'github.com/agentregistry-dev/agentregistry/cmd.Version=$(VERSION)' -X 'github.com/agentregistry-dev/agentregistry/cmd.GitCommit=$(GIT_COMMIT)' -X 'github.com/agentregistry-dev/agentregistry/cmd.BuildDate=$(BUILD_DATE)'
+LDFLAGS := -s -w -X 'github.com/agentregistry-dev/agentregistry/internal/version.Version=$(VERSION)' -X 'github.com/agentregistry-dev/agentregistry/internal/version.GitCommit=$(GIT_COMMIT)' -X 'github.com/agentregistry-dev/agentregistry/internal/version.BuildDate=$(BUILD_DATE)'
 
 # Local architecture detection to build for the current platform
 LOCALARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
@@ -148,17 +148,17 @@ docker-registry:
 
 docker: docker-agentgateway docker-server
 
-docker-tag-as-latest:
-	@echo "Pulling and tagging as latest..."
+docker-tag-as-dev:
+	@echo "Pulling and tagging as dev..."
 	docker pull $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION)
-	docker tag $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:latest
-	docker push $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:latest
+	docker tag $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:dev
+	docker push $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:dev
 	docker pull $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:$(VERSION)
-	docker tag $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:$(VERSION) $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:latest
-	docker push $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:latest
+	docker tag $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:$(VERSION) $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:dev
+	docker push $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:dev
 	@echo "✓ Docker image pulled successfully"
 
-docker-compose-up: docker docker-tag-as-latest
+docker-compose-up: docker docker-tag-as-dev
 	@echo "Starting services with Docker Compose..."
 	docker compose -p agentregistry -f internal/daemon/docker-compose.yml up -d --wait --pull always
 

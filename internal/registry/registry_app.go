@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
+	"github.com/agentregistry-dev/agentregistry/internal/version"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api"
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
@@ -20,19 +21,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/importer"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
-)
-
-// Version info for the MCP Registry application
-// These variables are injected at build time via ldflags
-var (
-	// Version is the current version of the MCP Registry application
-	Version = "dev"
-
-	// BuildTime is the time at which the binary was built
-	BuildTime = "unknown"
-
-	// GitCommit is the git commit that was compiled
-	GitCommit = "unknown"
 )
 
 func App(_ context.Context) error {
@@ -82,13 +70,13 @@ func App(_ context.Context) error {
 		}
 	}
 
-	log.Printf("Starting agentregistry v%s (commit: %s)", Version, GitCommit)
+	log.Printf("Starting agentregistry v%s (commit: %s)", version.Version, version.GitCommit)
 
 	// Prepare version information
 	versionInfo := &v0.VersionBody{
-		Version:   Version,
-		GitCommit: GitCommit,
-		BuildTime: BuildTime,
+		Version:   version.Version,
+		GitCommit: version.GitCommit,
+		BuildTime: version.BuildDate,
 	}
 
 	shutdownTelemetry, metrics, err := telemetry.InitMetrics(cfg.Version)
