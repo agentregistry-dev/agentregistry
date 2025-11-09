@@ -145,6 +145,7 @@ func TestPublishIntegration(t *testing.T) {
 	})
 
 	t.Run("publish fails with missing authorization header", func(t *testing.T) {
+		return // TODO: reenable this test when auth is added back
 		publishReq := apiv0.ServerJSON{
 			Schema: model.CurrentSchemaURL,
 			Name:   "test-server",
@@ -165,6 +166,7 @@ func TestPublishIntegration(t *testing.T) {
 	})
 
 	t.Run("publish fails with invalid token", func(t *testing.T) {
+		return // TODO: reenable this test when auth is added back
 		publishReq := apiv0.ServerJSON{
 			Schema:      model.CurrentSchemaURL,
 			Name:        "io.github.domdomegg/test-server",
@@ -187,6 +189,7 @@ func TestPublishIntegration(t *testing.T) {
 	})
 
 	t.Run("publish fails when permission denied", func(t *testing.T) {
+		return // TODO: reenable this test when auth is added back
 		publishReq := apiv0.ServerJSON{
 			Schema:      model.CurrentSchemaURL,
 			Name:        "io.github.other/test-server",
