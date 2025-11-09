@@ -43,10 +43,10 @@ type AgentVersionsInput struct {
 // RegisterAgentsEndpoints registers all agent-related endpoints with a custom path prefix
 // isAdmin: if true, shows all resources; if false, only shows published resources
 func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool) {
-	// Determine the tag based on whether this is admin or public
-	tag := "agents"
+	// Determine the tags based on whether this is admin or public
+	tags := []string{"agents"}
 	if isAdmin {
-		tag = "admin"
+		tags = append(tags, "admin")
 	}
 
 	// List agents
@@ -56,7 +56,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Path:        pathPrefix + "/agents",
 		Summary:     "List Agentic agents",
 		Description: "Get a paginated list of Agentic agents from the registry",
-		Tags:        []string{tag},
+		Tags:        tags,
 	}, func(ctx context.Context, input *ListAgentsInput) (*Response[agentmodels.AgentListResponse], error) {
 		// Build filter
 		filter := &database.AgentFilter{}
@@ -113,7 +113,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Path:        pathPrefix + "/agents/{agentName}/versions/{version}",
 		Summary:     "Get specific Agentic agent version",
 		Description: "Get detailed information about a specific version of an Agentic agent. Use the special version 'latest' to get the latest version.",
-		Tags:        []string{tag},
+		Tags:        tags,
 	}, func(ctx context.Context, input *AgentVersionDetailInput) (*Response[agentmodels.AgentResponse], error) {
 		agentName, err := url.PathUnescape(input.AgentName)
 		if err != nil {
@@ -146,7 +146,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Path:        pathPrefix + "/agents/{agentName}/versions",
 		Summary:     "Get all versions of an Agentic agent",
 		Description: "Get all available versions for a specific Agentic agent",
-		Tags:        []string{tag},
+		Tags:        tags,
 	}, func(ctx context.Context, input *AgentVersionsInput) (*Response[agentmodels.AgentListResponse], error) {
 		agentName, err := url.PathUnescape(input.AgentName)
 		if err != nil {
@@ -190,7 +190,7 @@ func RegisterAgentsCreateEndpoint(api huma.API, pathPrefix string, registry serv
 		Path:        pathPrefix + "/agents/publish",
 		Summary:     "Create/update Agentic agent",
 		Description: "Create a new Agentic agent in the registry or update an existing one. By default, agents are created as unpublished (published=false).",
-		Tags:        []string{"publish"},
+		Tags:        []string{"agents", "publish"},
 	}, func(ctx context.Context, input *CreateAgentInput) (*Response[agentmodels.AgentResponse], error) {
 		if err := authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{Name: input.Body.Name, Type: "agent"}); err != nil {
 			return nil, err
@@ -216,7 +216,7 @@ func RegisterAgentsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 		Path:        pathPrefix + "/agents/{agentName}/versions/{version}/publish",
 		Summary:     "Publish an existing agent",
 		Description: "Mark an existing agent version as published, making it visible in public listings. This acts on an agent that was already created.",
-		Tags:        []string{"admin"},
+		Tags:        []string{"agents", "admin"},
 	}, func(ctx context.Context, input *AgentVersionDetailInput) (*Response[EmptyResponse], error) {
 		// URL-decode the agent name and version
 		agentName, err := url.PathUnescape(input.AgentName)
@@ -250,7 +250,7 @@ func RegisterAgentsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 		Path:        pathPrefix + "/agents/{agentName}/versions/{version}/unpublish",
 		Summary:     "Unpublish an existing agent",
 		Description: "Mark an existing agent version as unpublished, hiding it from public listings. This acts on an agent that was already created.",
-		Tags:        []string{"admin"},
+		Tags:        []string{"agents", "admin"},
 	}, func(ctx context.Context, input *AgentVersionDetailInput) (*Response[EmptyResponse], error) {
 		// URL-decode the agent name and version
 		agentName, err := url.PathUnescape(input.AgentName)

@@ -36,7 +36,7 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.Reg
 		Path:        pathPrefix + "/servers/{serverName}/versions/{version}",
 		Summary:     "Edit MCP server",
 		Description: "Update a specific version of an existing MCP server (admin only).",
-		Tags:        []string{"admin"},
+		Tags:        []string{"servers", "admin"},
 		Security: []map[string][]string{
 			{"bearer": {}},
 		},

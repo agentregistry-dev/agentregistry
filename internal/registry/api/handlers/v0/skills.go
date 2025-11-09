@@ -43,10 +43,10 @@ type SkillVersionsInput struct {
 // RegisterSkillsEndpoints registers all skill-related endpoints with a custom path prefix
 // isAdmin: if true, shows all resources; if false, only shows published resources
 func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool) {
-	// Determine the tag based on whether this is admin or public
-	tag := "skills"
+	// Determine the tags based on whether this is admin or public
+	tags := []string{"skills"}
 	if isAdmin {
-		tag = "admin"
+		tags = append(tags, "admin")
 	}
 
 	// List skills
@@ -56,7 +56,7 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Path:        pathPrefix + "/skills",
 		Summary:     "List Agentic skills",
 		Description: "Get a paginated list of Agentic skills from the registry",
-		Tags:        []string{tag},
+		Tags:        tags,
 	}, func(ctx context.Context, input *ListSkillsInput) (*Response[skillmodels.SkillListResponse], error) {
 		// Build filter
 		filter := &database.SkillFilter{}
@@ -113,7 +113,7 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Path:        pathPrefix + "/skills/{skillName}/versions/{version}",
 		Summary:     "Get specific Agentic skill version",
 		Description: "Get detailed information about a specific version of an Agentic skill. Use the special version 'latest' to get the latest version.",
-		Tags:        []string{tag},
+		Tags:        tags,
 	}, func(ctx context.Context, input *SkillVersionDetailInput) (*Response[skillmodels.SkillResponse], error) {
 		skillName, err := url.PathUnescape(input.SkillName)
 		if err != nil {
@@ -146,7 +146,7 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Path:        pathPrefix + "/skills/{skillName}/versions",
 		Summary:     "Get all versions of an Agentic skill",
 		Description: "Get all available versions for a specific Agentic skill",
-		Tags:        []string{tag},
+		Tags:        tags,
 	}, func(ctx context.Context, input *SkillVersionsInput) (*Response[skillmodels.SkillListResponse], error) {
 		skillName, err := url.PathUnescape(input.SkillName)
 		if err != nil {
@@ -188,7 +188,7 @@ func RegisterSkillsCreateEndpoint(api huma.API, pathPrefix string, registry serv
 		Path:        pathPrefix + "/skills/publish",
 		Summary:     "Create/update Agentic skill",
 		Description: "Create a new Agentic skill in the registry or update an existing one. By default, skills are created as unpublished (published=false).",
-		Tags:        []string{"publish"},
+		Tags:        []string{"skills", "publish"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, func(ctx context.Context, input *CreateSkillInput) (*Response[skillmodels.SkillResponse], error) {
 		if err := authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{Name: input.Body.Name, Type: "skill"}); err != nil {
@@ -215,7 +215,7 @@ func RegisterSkillsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 		Path:        pathPrefix + "/skills/{skillName}/versions/{version}/publish",
 		Summary:     "Publish an existing skill",
 		Description: "Mark an existing skill version as published, making it visible in public listings. This acts on a skill that was already created.",
-		Tags:        []string{"admin"},
+		Tags:        []string{"skills", "admin"},
 	}, func(ctx context.Context, input *SkillVersionDetailInput) (*Response[EmptyResponse], error) {
 		// URL-decode the skill name and version
 		skillName, err := url.PathUnescape(input.SkillName)
@@ -249,7 +249,7 @@ func RegisterSkillsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 		Path:        pathPrefix + "/skills/{skillName}/versions/{version}/unpublish",
 		Summary:     "Unpublish an existing skill",
 		Description: "Mark an existing skill version as unpublished, hiding it from public listings. This acts on a skill that was already created.",
-		Tags:        []string{"admin"},
+		Tags:        []string{"skills", "admin"},
 	}, func(ctx context.Context, input *SkillVersionDetailInput) (*Response[EmptyResponse], error) {
 		// URL-decode the skill name and version
 		skillName, err := url.PathUnescape(input.SkillName)
