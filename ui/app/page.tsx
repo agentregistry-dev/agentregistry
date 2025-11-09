@@ -33,9 +33,9 @@ import { ImportSkillsDialog } from "@/components/import-skills-dialog"
 import { AddSkillDialog } from "@/components/add-skill-dialog"
 import { ImportAgentsDialog } from "@/components/import-agents-dialog"
 import { AddAgentDialog } from "@/components/add-agent-dialog"
-import { DeployServerDialog } from "@/components/deploy-server-dialog"
 import { adminApiClient, ServerResponse, SkillResponse, AgentResponse, ServerStats } from "@/lib/admin-api"
 import MCPIcon from "@/components/icons/mcp"
+import { toast } from "sonner"
 import {
   Search,
   Download,
@@ -81,8 +81,6 @@ export default function AdminPage() {
   const [selectedServer, setSelectedServer] = useState<ServerResponse | null>(null)
   const [selectedSkill, setSelectedSkill] = useState<SkillResponse | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<AgentResponse | null>(null)
-  const [deployDialogOpen, setDeployDialogOpen] = useState(false)
-  const [serverToDeploy, setServerToDeploy] = useState<ServerResponse | null>(null)
   
   // Track scroll position for restoring after navigation
   const scrollPositionRef = useRef<number>(0)
@@ -240,10 +238,35 @@ export default function AdminPage() {
     setSelectedServer(null)
   }
 
-  // Handle server deployment
-  const handleDeploy = (server: ServerResponse) => {
-    setServerToDeploy(server)
-    setDeployDialogOpen(true)
+  // Handle server publishing
+  const handlePublish = async (server: ServerResponse) => {
+    try {
+      await adminApiClient.publishServerStatus(server.server.name, server.server.version)
+      await fetchData() // Refresh data
+      toast.success(`Successfully published ${server.server.name}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to publish server")
+    }
+  }
+
+  const handlePublishSkill = async (skill: SkillResponse) => {
+    try {
+      await adminApiClient.publishSkillStatus(skill.skill.name, skill.skill.version)
+      await fetchData() // Refresh data
+      toast.success(`Successfully published ${skill.skill.name}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to publish skill")
+    }
+  }
+
+  const handlePublishAgent = async (agent: AgentResponse) => {
+    try {
+      await adminApiClient.publishAgentStatus(agent.agent.Name, agent.agent.version)
+      await fetchData() // Refresh data
+      toast.success(`Successfully published ${agent.agent.Name}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to publish agent")
+    }
   }
 
   // Filter and sort servers based on search query and sort option
@@ -316,9 +339,9 @@ export default function AdminPage() {
       // Filter agents
       const filteredA = agents.filter(
         (a) =>
-          a.agent.name.toLowerCase().includes(query) ||
-          a.agent.title?.toLowerCase().includes(query) ||
-          a.agent.description.toLowerCase().includes(query)
+          a.agent.Name?.toLowerCase().includes(query) ||
+          a.agent.ModelProvider?.toLowerCase().includes(query) ||
+          a.agent.Description.toLowerCase().includes(query)
       )
       setFilteredAgents(filteredA)
     } else {
@@ -358,6 +381,7 @@ export default function AdminPage() {
         server={selectedServer as ServerResponse & { allVersions?: ServerResponse[] }}
         onClose={handleCloseServerDetail}
         onServerCopied={fetchData}
+        onPublish={handlePublish}
       />
     )
   }
@@ -368,6 +392,7 @@ export default function AdminPage() {
       <SkillDetail
         skill={selectedSkill}
         onClose={() => setSelectedSkill(null)}
+        onPublish={handlePublishSkill}
       />
     )
   }
@@ -378,50 +403,13 @@ export default function AdminPage() {
       <AgentDetail
         agent={selectedAgent}
         onClose={() => setSelectedAgent(null)}
+        onPublish={handlePublishAgent}
       />
     )
   }
 
   return (
     <main className="min-h-screen bg-background">
-      {/* Navigation Bar */}
-      <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-        <div className="container mx-auto px-6">
-          <div className="flex items-center justify-between h-20">
-            <Link href="/" className="flex items-center">
-              <img 
-                src="/arlogo.png" 
-                alt="Agent Registry" 
-                width={180} 
-                height={60}
-                className="h-12 w-auto"
-              />
-            </Link>
-            
-            <div className="flex items-center gap-6">
-              <Link 
-                href="/" 
-                className="text-sm font-medium text-foreground hover:text-foreground/80 transition-colors border-b-2 border-foreground pb-1"
-              >
-                Admin
-              </Link>
-              <Link 
-                href="/registry" 
-                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Registry
-              </Link>
-              <Link 
-                href="/deployed" 
-                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Live View
-              </Link>
-            </div>
-          </div>
-        </div>
-      </nav>
-
       {/* Stats Section */}
       {stats && (
         <div className="bg-muted/30 border-b">
@@ -655,21 +643,16 @@ export default function AdminPage() {
                 </Card>
               ) : (
                 <div className="grid gap-4">
-                  {filteredServers.map((server, index) => {
-                    // Only show deploy button for published servers (active status)
-                    const isPublished = server._meta?.['io.modelcontextprotocol.registry/official']?.status === 'active'
-                    
-                    return (
-                      <ServerCard
-                        key={`${server.server.name}-${server.server.version}-${index}`}
-                        server={server}
-                        versionCount={server.versionCount}
-                        onClick={() => handleServerClick(server)}
-                        showDeploy={isPublished}
-                        onDeploy={handleDeploy}
-                      />
-                    )
-                  })}
+                  {filteredServers.map((server, index) => (
+                    <ServerCard
+                      key={`${server.server.name}-${server.server.version}-${index}`}
+                      server={server}
+                      versionCount={server.versionCount}
+                      onClick={() => handleServerClick(server)}
+                      showPublish={true}
+                      onPublish={handlePublish}
+                    />
+                  ))}
                 </div>
               )}
             </div>
@@ -721,6 +704,8 @@ export default function AdminPage() {
                       key={`${skill.skill.name}-${skill.skill.version}-${index}`}
                       skill={skill}
                       onClick={() => setSelectedSkill(skill)}
+                      showPublish={true}
+                      onPublish={handlePublishSkill}
                     />
                   ))}
                 </div>
@@ -771,9 +756,11 @@ export default function AdminPage() {
                 <div className="grid gap-4">
                   {filteredAgents.map((agent, index) => (
                     <AgentCard
-                      key={`${agent.agent.name}-${agent.agent.version}-${index}`}
+                      key={`${agent.agent.Name}-${agent.agent.version}-${index}`}
                       agent={agent}
                       onClick={() => setSelectedAgent(agent)}
+                      showPublish={true}
+                      onPublish={handlePublishAgent}
                     />
                   ))}
                 </div>
@@ -819,13 +806,6 @@ export default function AdminPage() {
         onAgentAdded={() => {}}
       />
 
-      {/* Deploy Dialog */}
-      <DeployServerDialog
-        open={deployDialogOpen}
-        onOpenChange={setDeployDialogOpen}
-        server={serverToDeploy}
-        onDeploySuccess={fetchData}
-      />
     </main>
   )
 }

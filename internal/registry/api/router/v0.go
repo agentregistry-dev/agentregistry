@@ -79,6 +79,7 @@ func registerAdminRoutes(
 	registerCommonEndpoints(api, pathPrefix, cfg, metrics, versionInfo)
 	v0.RegisterServersEndpoints(api, pathPrefix, registry, isAdmin)
 	v0.RegisterPublishStatusEndpoints(api, pathPrefix, registry)
+	v0.RegisterEditEndpoints(api, pathPrefix, registry, cfg)
 	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry)
 
 	// v0-only admin endpoints (agents and skills)

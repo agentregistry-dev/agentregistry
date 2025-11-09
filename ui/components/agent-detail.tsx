@@ -7,25 +7,35 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { toast } from "sonner"
+import {
   X,
-  Package,
   Calendar,
   Tag,
-  ExternalLink,
-  GitBranch,
-  Globe,
-  Code,
-  Link,
   ArrowLeft,
   Bot,
+  Code,
+  Container,
+  Cpu,
+  Brain,
+  Languages,
+  Box,
+  Clock,
+  Upload,
 } from "lucide-react"
 
 interface AgentDetailProps {
   agent: AgentResponse
   onClose: () => void
+  onPublish?: (agent: AgentResponse) => void
 }
 
-export function AgentDetail({ agent, onClose }: AgentDetailProps) {
+export function AgentDetail({ agent, onClose, onPublish }: AgentDetailProps) {
   const [activeTab, setActiveTab] = useState("overview")
   
   const { agent: agentData, _meta } = agent
@@ -80,12 +90,37 @@ export function AgentDetail({ agent, onClose }: AgentDetailProps) {
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2 flex-wrap">
-                <h1 className="text-3xl font-bold">{agentData.title || agentData.name}</h1>
+                <h1 className="text-3xl font-bold">{agentData.Name}</h1>
+                <Badge variant="outline" className="text-sm">
+                  {agentData.Framework}
+                </Badge>
+                <Badge variant="secondary" className="text-sm">
+                  {agentData.Language}
+                </Badge>
               </div>
-              <p className="text-muted-foreground">{agentData.name}</p>
+              {agentData.Description && (
+                <p className="text-muted-foreground">{agentData.Description}</p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    onClick={() => onPublish && onPublish(agent)}
+                    className="gap-2"
+                  >
+                    <Upload className="h-4 w-4" />
+                    Publish
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Publish this agent to your registry</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <Button variant="ghost" size="icon" onClick={onClose}>
               <X className="h-5 w-5" />
             </Button>
@@ -100,6 +135,12 @@ export function AgentDetail({ agent, onClose }: AgentDetailProps) {
             <span className="font-medium">{agentData.version}</span>
           </div>
 
+          <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md">
+            <Badge className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-muted-foreground">Status:</span>
+            <span className="font-medium">{agentData.status}</span>
+          </div>
+
           {official?.publishedAt && (
             <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md">
               <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
@@ -110,25 +151,10 @@ export function AgentDetail({ agent, onClose }: AgentDetailProps) {
 
           {official?.updatedAt && (
             <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md">
-              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-muted-foreground">Updated:</span>
               <span className="font-medium">{formatDate(official.updatedAt)}</span>
             </div>
-          )}
-
-          {agentData.websiteUrl && (
-            <a
-              href={agentData.websiteUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md hover:bg-muted/80 transition-colors"
-            >
-              <Globe className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-muted-foreground">Website:</span>
-              <span className="font-medium text-blue-600 flex items-center gap-1">
-                Visit <ExternalLink className="h-3 w-3" />
-              </span>
-            </a>
           )}
         </div>
 
@@ -136,119 +162,93 @@ export function AgentDetail({ agent, onClose }: AgentDetailProps) {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            {agentData.packages && agentData.packages.length > 0 && (
-              <TabsTrigger value="packages">Packages</TabsTrigger>
-            )}
-            {agentData.remotes && agentData.remotes.length > 0 && (
-              <TabsTrigger value="remotes">Remotes</TabsTrigger>
-            )}
+            <TabsTrigger value="technical">Technical Details</TabsTrigger>
             <TabsTrigger value="raw">Raw Data</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
             {/* Description */}
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold mb-4">Description</h3>
-              <p className="text-base">{agentData.description}</p>
-            </Card>
+            {agentData.Description && (
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold mb-4">Description</h3>
+                <p className="text-base">{agentData.Description}</p>
+              </Card>
+            )}
 
-            {/* Repository */}
-            {agentData.repository?.url && (
+            {/* Basic Info */}
+            <Card className="p-6">
+              <h3 className="text-lg font-semibold mb-4">Basic Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center gap-3">
+                  <Languages className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Language</p>
+                    <p className="font-medium">{agentData.Language}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Box className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Framework</p>
+                    <p className="font-medium">{agentData.Framework}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Brain className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Model Provider</p>
+                    <p className="font-medium">{agentData.ModelProvider}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Cpu className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Model Name</p>
+                    <p className="font-medium font-mono">{agentData.ModelName}</p>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="technical" className="space-y-4">
+            {/* Container Image */}
+            {agentData.Image && (
               <Card className="p-6">
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <GitBranch className="h-5 w-5" />
-                  Repository
+                  <Container className="h-5 w-5" />
+                  Container Image
                 </h3>
-                <div className="space-y-2">
-                  {agentData.repository.source && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Source</span>
-                      <Badge variant="outline">{agentData.repository.source}</Badge>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">URL</span>
-                    <a
-                      href={agentData.repository.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-blue-600 hover:underline flex items-center gap-1"
-                    >
-                      {agentData.repository.url} <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </div>
+                <div className="bg-muted p-4 rounded-lg">
+                  <code className="text-sm break-all">{agentData.Image}</code>
                 </div>
               </Card>
             )}
-          </TabsContent>
 
-          <TabsContent value="packages" className="space-y-4">
-            {agentData.packages && agentData.packages.length > 0 ? (
+            {/* Timestamps */}
+            <Card className="p-6">
+              <h3 className="text-lg font-semibold mb-4">Timestamps</h3>
               <div className="space-y-3">
-                {agentData.packages.map((pkg, i) => (
-                  <Card key={i} className="p-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <Package className="h-5 w-5 text-primary" />
-                        <h4 className="font-semibold">{pkg.identifier}</h4>
-                      </div>
-                      <Badge variant="outline">{pkg.registryType}</Badge>
-                    </div>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Version</span>
-                        <span className="font-mono">{pkg.version}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Transport</span>
-                        <span className="font-mono">{pkg.transport?.type || 'N/A'}</span>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
+                {agentData.UpdatedAt && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Last Updated (Local)</span>
+                    <span className="font-medium font-mono text-sm">{formatDate(agentData.UpdatedAt)}</span>
+                  </div>
+                )}
+                {official?.publishedAt && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Published (Registry)</span>
+                    <span className="font-medium font-mono text-sm">{formatDate(official.publishedAt)}</span>
+                  </div>
+                )}
+                {official?.updatedAt && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Updated (Registry)</span>
+                    <span className="font-medium font-mono text-sm">{formatDate(official.updatedAt)}</span>
+                  </div>
+                )}
               </div>
-            ) : (
-              <Card className="p-8">
-                <p className="text-center text-muted-foreground">No packages defined</p>
-              </Card>
-            )}
-          </TabsContent>
-
-          <TabsContent value="remotes" className="space-y-4">
-            {agentData.remotes && agentData.remotes.length > 0 ? (
-              <div className="space-y-3">
-                {agentData.remotes.map((remote, i) => (
-                  <Card key={i} className="p-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <ExternalLink className="h-5 w-5 text-primary" />
-                        <h4 className="font-semibold">Remote {i + 1}</h4>
-                      </div>
-                      <Badge variant="outline">{remote.type}</Badge>
-                    </div>
-                    {remote.url && (
-                      <div className="space-y-2 text-sm">
-                        <div className="flex items-center gap-2">
-                          <Link className="h-4 w-4 text-muted-foreground" />
-                          <a
-                            href={remote.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline break-all"
-                          >
-                            {remote.url}
-                          </a>
-                        </div>
-                      </div>
-                    )}
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <Card className="p-8">
-                <p className="text-center text-muted-foreground">No remotes defined</p>
-              </Card>
-            )}
+            </Card>
           </TabsContent>
 
           <TabsContent value="raw">

@@ -2,6 +2,7 @@
 
 import { AgentResponse } from "@/lib/admin-api"
 import { Card } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Tooltip,
@@ -9,7 +10,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Package, Calendar, Tag, ExternalLink, GitBranch, Github, Globe, Trash2, Bot, Upload } from "lucide-react"
+import { Calendar, Tag, Bot, Upload, Container, Cpu, Brain } from "lucide-react"
 
 interface AgentCardProps {
   agent: AgentResponse
@@ -21,7 +22,7 @@ interface AgentCardProps {
   onClick?: () => void
 }
 
-export function AgentCard({ agent, onDelete, onPublish, showDelete = false, showPublish = false, showExternalLinks = true, onClick }: AgentCardProps) {
+export function AgentCard({ agent, onDelete, onPublish, showDelete = false, showPublish = false, onClick }: AgentCardProps) {
   const { agent: agentData, _meta } = agent
   const official = _meta?.['io.modelcontextprotocol.registry/official']
 
@@ -56,8 +57,15 @@ export function AgentCard({ agent, onDelete, onPublish, showDelete = false, show
             <Bot className="h-5 w-5 text-primary" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-lg mb-1">{agentData.title || agentData.name}</h3>
-            <p className="text-sm text-muted-foreground">{agentData.name}</p>
+            <h3 className="font-semibold text-lg mb-1">{agentData.Name}</h3>
+            <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
+              <Badge variant="outline" className="text-xs">
+                {agentData.Framework}
+              </Badge>
+              <Badge variant="secondary" className="text-xs">
+                {agentData.Language}
+              </Badge>
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-1 ml-2">
@@ -81,54 +89,14 @@ export function AgentCard({ agent, onDelete, onPublish, showDelete = false, show
               </TooltipContent>
             </Tooltip>
           )}
-          {showExternalLinks && agentData.repository?.url && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={(e) => {
-                e.stopPropagation()
-                window.open(agentData.repository?.url || '', '_blank')
-              }}
-              title="View on GitHub"
-            >
-              <Github className="h-4 w-4" />
-            </Button>
-          )}
-          {showExternalLinks && agentData.websiteUrl && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={(e) => {
-                e.stopPropagation()
-                window.open(agentData.websiteUrl, '_blank')
-              }}
-              title="Visit website"
-            >
-              <Globe className="h-4 w-4" />
-            </Button>
-          )}
-          {showDelete && onDelete && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={(e) => {
-                e.stopPropagation()
-                onDelete(agent)
-              }}
-              title="Remove from registry"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          )}
         </div>
       </div>
 
-      <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-        {agentData.description}
-      </p>
+      {agentData.Description && (
+        <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
+          {agentData.Description}
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
         <div className="flex items-center gap-1">
@@ -143,24 +111,26 @@ export function AgentCard({ agent, onDelete, onPublish, showDelete = false, show
           </div>
         )}
 
-        {agentData.packages && agentData.packages.length > 0 && (
+        {agentData.ModelProvider && (
           <div className="flex items-center gap-1">
-            <Package className="h-3 w-3" />
-            <span>{agentData.packages.length} package{agentData.packages.length !== 1 ? 's' : ''}</span>
+            <Brain className="h-3 w-3" />
+            <span>{agentData.ModelProvider}</span>
           </div>
         )}
 
-        {agentData.remotes && agentData.remotes.length > 0 && (
+        {agentData.ModelName && (
           <div className="flex items-center gap-1">
-            <ExternalLink className="h-3 w-3" />
-            <span>{agentData.remotes.length} remote{agentData.remotes.length !== 1 ? 's' : ''}</span>
+            <Cpu className="h-3 w-3" />
+            <span className="font-mono text-xs">{agentData.ModelName}</span>
           </div>
         )}
 
-        {agentData.repository && (
+        {agentData.Image && (
           <div className="flex items-center gap-1">
-            <GitBranch className="h-3 w-3" />
-            <span>{agentData.repository.source}</span>
+            <Container className="h-3 w-3" />
+            <span className="font-mono text-xs truncate max-w-[200px]" title={agentData.Image}>
+              {agentData.Image}
+            </span>
           </div>
         )}
       </div>

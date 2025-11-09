@@ -5,7 +5,8 @@ import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { adminApiClient } from "@/lib/admin-api"
-import { Trash2, AlertCircle, Calendar, Package } from "lucide-react"
+import { Trash2, AlertCircle, Calendar, Package, Copy, Check } from "lucide-react"
+import { toast } from "sonner"
 import {
   Dialog,
   DialogContent,
@@ -32,6 +33,16 @@ export default function DeployedPage() {
   const [error, setError] = useState<string | null>(null)
   const [removing, setRemoving] = useState(false)
   const [serverToRemove, setServerToRemove] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const gatewayUrl = "http://localhost:21212/mcp"
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(gatewayUrl)
+    setCopied(true)
+    toast.success("Gateway URL copied to clipboard!")
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   const fetchDeployments = async () => {
     try {
@@ -78,44 +89,6 @@ export default function DeployedPage() {
   
   return (
     <main className="min-h-screen bg-background">
-      {/* Navigation Bar */}
-      <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-        <div className="container mx-auto px-6">
-          <div className="flex items-center justify-between h-20">
-            <Link href="/" className="flex items-center">
-              <img 
-                src="/arlogo.png" 
-                alt="Agent Registry" 
-                width={180} 
-                height={60}
-                className="h-12 w-auto"
-              />
-            </Link>
-            
-            <div className="flex items-center gap-6">
-              <Link 
-                href="/" 
-                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Admin
-              </Link>
-              <Link 
-                href="/registry" 
-                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Registry
-              </Link>
-              <Link 
-                href="/deployed" 
-                className="text-sm font-medium text-foreground hover:text-foreground/80 transition-colors border-b-2 border-foreground pb-1"
-              >
-                Live View
-              </Link>
-            </div>
-          </div>
-        </div>
-      </nav>
-
       {/* Stats Section */}
       <div className="bg-muted/30 border-b">
         <div className="container mx-auto px-6 py-6">
@@ -164,34 +137,49 @@ export default function DeployedPage() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{runningCount}</p>
+                  <p className="text-2xl font-bold">{deployments.filter(d => d.resourceType === "mcp").length}</p>
                   <p className="text-xs text-muted-foreground">MCP Servers</p>
                 </div>
               </div>
             </Card>
 
             <Card className="p-4 hover:shadow-md transition-all duration-200 border hover:border-primary/20">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-500/10 rounded-lg flex items-center justify-center">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={2}
-                    stroke="currentColor"
-                    className="h-5 w-5 text-purple-600"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"
-                    />
-                  </svg>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-500/10 rounded-lg flex items-center justify-center">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={2}
+                      stroke="currentColor"
+                      className="h-5 w-5 text-purple-600"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <code className="text-sm font-mono font-semibold">{gatewayUrl}</code>
+                    <p className="text-xs text-muted-foreground">Gateway Endpoint</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-2xl font-bold">21212</p>
-                  <p className="text-xs text-muted-foreground">Gateway Port</p>
-                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={copyToClipboard}
+                  className="shrink-0"
+                  title="Copy gateway URL"
+                >
+                  {copied ? (
+                    <Check className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
               </div>
             </Card>
           </div>
@@ -201,7 +189,7 @@ export default function DeployedPage() {
       <div className="container mx-auto px-6 py-12">
         <div className="max-w-4xl mx-auto">
           <div className="mb-8">
-            <h1 className="text-3xl font-bold mb-2">Live View</h1>
+            <h1 className="text-3xl font-bold mb-2">Deployed</h1>
             <p className="text-muted-foreground">
               Monitor and manage MCP servers and agents that are currently deployed on your system.
             </p>
@@ -263,9 +251,6 @@ export default function DeployedPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-3">
                         <h3 className="text-xl font-semibold">{deployment.serverName}</h3>
-                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-500/10 text-green-600 border border-green-500/20">
-                          Running
-                        </span>
                       </div>
                       
                       <div className="grid grid-cols-2 gap-4 text-sm">
@@ -313,29 +298,6 @@ export default function DeployedPage() {
               ))}
             </div>
           )}
-
-          <div className="mt-8 p-4 bg-muted/50 rounded-lg">
-            <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={2}
-                stroke="currentColor"
-                className="h-4 w-4"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"
-                />
-              </svg>
-              Gateway Endpoint
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              All deployed MCP servers are accessible through: <code className="px-2 py-1 bg-muted rounded text-xs">http://localhost:21212/mcp</code>
-            </p>
-          </div>
         </div>
       </div>
 
@@ -372,4 +334,3 @@ export default function DeployedPage() {
     </main>
   )
 }
-

@@ -26,7 +26,7 @@ var (
 var listCmd = &cobra.Command{
 	Use:   "list [resource-type]",
 	Short: "List resources from connected registries",
-	Long:  `Lists resources (mcp, skill, registry) across the connected registries. Use -A to list all resource types.`,
+	Long:  `Lists resources (mcp, skill, agent, registry) across the connected registries. Use -A to list all resource types.`,
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if APIClient == nil {
@@ -47,7 +47,7 @@ var listCmd = &cobra.Command{
 		// Require resource type if -A is not used
 		if len(args) == 0 {
 			fmt.Println("Error: resource type required (or use -A to list all types)")
-			fmt.Println("Valid types: mcp, skill, registry")
+			fmt.Println("Valid types: mcp, skill, agent, registry")
 			fmt.Println("Usage: arctl list <resource-type> or arctl list -A")
 			return
 		}
@@ -110,10 +110,17 @@ var listCmd = &cobra.Command{
 		case "agent", "agents":
 			agents, err := APIClient.GetAgents()
 			if err != nil {
-				log.Fatalf("Failed to get skills: %v", err)
+				log.Fatalf("Failed to get agents: %v", err)
 			}
+
+			deployedAgents, err := APIClient.GetDeployedServers()
+			if err != nil {
+				log.Printf("Warning: Failed to get deployed agents: %v", err)
+				deployedAgents = nil
+			}
+
 			if len(agents) == 0 {
-				fmt.Println("No skills available")
+				fmt.Println("No agents available")
 			} else {
 				// Handle different output formats
 				switch outputFormat {
@@ -122,12 +129,12 @@ var listCmd = &cobra.Command{
 				case "yaml":
 					outputDataYaml(agents)
 				default:
-					panic("not implemented")
+					displayPaginatedAgents(agents, deployedAgents, listPageSize, listAll)
 				}
 			}
 		default:
 			fmt.Printf("Unknown resource type: %s\n", resourceType)
-			fmt.Println("Valid types: mcp, skill, registry")
+			fmt.Println("Valid types: mcp, skill, agent, registry")
 		}
 	},
 }
@@ -461,6 +468,95 @@ func printSkillsTable(skills []*models.SkillResponse) {
 	}
 }
 
+func displayPaginatedAgents(agents []*models.AgentResponse, deployedAgents []*client.DeploymentResponse, pageSize int, showAll bool) {
+	total := len(agents)
+
+	if showAll || total <= pageSize {
+		printAgentsTable(agents, deployedAgents)
+		return
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	start := 0
+
+	for start < total {
+		end := start + pageSize
+		if end > total {
+			end = total
+		}
+
+		printAgentsTable(agents[start:end], deployedAgents)
+
+		remaining := total - end
+		if remaining > 0 {
+			fmt.Printf("\nShowing %d-%d of %d agents. %d more available.\n", start+1, end, total, remaining)
+			fmt.Print("Press Enter to continue, 'a' for all, or 'q' to quit: ")
+
+			response, err := reader.ReadString('\n')
+			if err != nil {
+				fmt.Println("\nStopping pagination.")
+				return
+			}
+
+			response = strings.TrimSpace(strings.ToLower(response))
+
+			switch response {
+			case "a", "all":
+				fmt.Println()
+				printAgentsTable(agents[end:], deployedAgents)
+				return
+			case "q", "quit":
+				fmt.Println()
+				return
+			default:
+				start = end
+				fmt.Println()
+			}
+		} else {
+			fmt.Printf("\nShowing all %d agents.\n", total)
+			return
+		}
+	}
+}
+
+func printAgentsTable(agents []*models.AgentResponse, deployedAgents []*client.DeploymentResponse) {
+	t := printer.NewTablePrinter(os.Stdout)
+	t.SetHeaders("Name", "Version", "Framework", "Language", "Provider", "Model", "Deployed", "Status")
+
+	deployedMap := make(map[string]*client.DeploymentResponse)
+	for _, d := range deployedAgents {
+		if d.ResourceType == "agent" {
+			deployedMap[d.ServerName] = d
+		}
+	}
+
+	for _, a := range agents {
+		deployedStatus := "-"
+		if deployment, ok := deployedMap[a.Agent.Name]; ok {
+			if deployment.Version == a.Agent.Version {
+				deployedStatus = "✓"
+			} else {
+				deployedStatus = fmt.Sprintf("✓ (v%s)", deployment.Version)
+			}
+		}
+
+		t.AddRow(
+			printer.TruncateString(a.Agent.Name, 40),
+			a.Agent.Version,
+			printer.EmptyValueOrDefault(a.Agent.Framework, "<none>"),
+			printer.EmptyValueOrDefault(a.Agent.Language, "<none>"),
+			printer.EmptyValueOrDefault(a.Agent.ModelProvider, "<none>"),
+			printer.TruncateString(printer.EmptyValueOrDefault(a.Agent.ModelName, "<none>"), 30),
+			deployedStatus,
+			a.Meta.Official.Status,
+		)
+	}
+
+	if err := t.Render(); err != nil {
+		printer.PrintError(fmt.Sprintf("failed to render table: %v", err))
+	}
+}
+
 // filterServersByType filters servers by their registry type
 func filterServersByType(servers []*v0.ServerResponse, typeFilter string) []*v0.ServerResponse {
 	typeFilter = strings.ToLower(typeFilter)
@@ -484,7 +580,7 @@ func filterServersByType(servers []*v0.ServerResponse, typeFilter string) []*v0.
 	return filtered
 }
 
-// listAllResourceTypes lists all resource types (mcp, skill, registry)
+// listAllResourceTypes lists all resource types (mcp, skill, agent, registry)
 func listAllResourceTypes() {
 	fmt.Println("=== MCP Servers ===")
 	servers, err := APIClient.GetServers()
@@ -522,6 +618,17 @@ func listAllResourceTypes() {
 		fmt.Println("No skills available")
 	} else {
 		displayPaginatedSkills(skills, listPageSize, true) // Always show all when listing all types
+	}
+
+	fmt.Println("\n=== Agents ===")
+	agents, err := APIClient.GetAgents()
+	if err != nil {
+		log.Fatalf("Failed to get agents: %v", err)
+	}
+	if len(agents) == 0 {
+		fmt.Println("No agents available")
+	} else {
+		displayPaginatedAgents(agents, deployedServers, listPageSize, true) // Always show all when listing all types
 	}
 
 }

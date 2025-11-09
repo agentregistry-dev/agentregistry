@@ -336,6 +336,7 @@ type DeploymentResponse struct {
 	Status       string            `json:"status"`
 	Config       map[string]string `json:"config"`
 	PreferRemote bool              `json:"preferRemote"`
+	ResourceType string            `json:"resourceType"`
 }
 
 // DeploymentsListResponse represents the list of deployments

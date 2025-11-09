@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { toast } from "sonner"
 import {
   Select,
   SelectContent,
@@ -55,9 +56,10 @@ interface ServerDetailProps {
   server: ServerResponse & { allVersions?: ServerResponse[] }
   onClose: () => void
   onServerCopied?: () => void
+  onPublish?: (server: ServerResponse) => void
 }
 
-export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailProps) {
+export function ServerDetail({ server, onClose, onServerCopied, onPublish }: ServerDetailProps) {
   const [activeTab, setActiveTab] = useState("overview")
   const [copying, setCopying] = useState(false)
   const [copySuccess, setCopySuccess] = useState(false)
@@ -119,27 +121,25 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
     }
   }
 
-  const handleCopyToPrivateRegistry = async () => {
+  const handlePublishServer = async () => {
+    if (onPublish) {
+      onPublish(selectedVersion)
+      return
+    }
+
     setCopying(true)
     setCopyError(null)
     setCopySuccess(false)
 
     try {
       // Copy the server data to create a new entry
-      await adminApiClient.createServer(serverData)
+      await adminApiClient.publishServerStatus(serverData.name, serverData.version)
+      toast.success(`Successfully published ${serverData.name}`)
       setCopySuccess(true)
-      
-      // Notify parent component
-      if (onServerCopied) {
-        onServerCopied()
-      }
-
-      // Auto-hide success message after 3 seconds
-      setTimeout(() => {
-        setCopySuccess(false)
-      }, 3000)
     } catch (err) {
-      setCopyError(err instanceof Error ? err.message : "Failed to copy server")
+      const errorMsg = err instanceof Error ? err.message : "Failed to publish server"
+      toast.error(errorMsg)
+      setCopyError(errorMsg)
     } finally {
       setCopying(false)
     }
@@ -248,7 +248,7 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
               <TooltipTrigger asChild>
                 <Button
                   variant="outline"
-                  onClick={handleCopyToPrivateRegistry}
+                  onClick={handlePublishServer}
                   disabled={copying}
                   className="gap-2"
                 >
@@ -276,7 +276,7 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
               <p className="text-sm font-medium text-green-900 dark:text-green-100">
-                Server successfully copied to your private registry!
+                Server successfully publish to your registry!
               </p>
             </div>
           </Card>

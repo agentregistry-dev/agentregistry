@@ -6,8 +6,16 @@ const nextConfig = {
   async rewrites() {
     return [
       {
+        source: '/admin/:path*',
+        destination: 'http://localhost:12121/admin/:path*',
+      },
+      {
         source: '/v0/:path*',
         destination: 'http://localhost:12121/v0/:path*',
+      },
+      {
+        source: '/v0.1/:path*',
+        destination: 'http://localhost:12121/v0.1/:path*',
       },
       {
         source: '/api/:path*',

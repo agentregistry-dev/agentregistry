@@ -42,31 +42,6 @@ Use --multi flag to auto-detect and process multiple skill folders.`,
 	RunE: runSkillPublish,
 }
 
-var skillListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List Claude Skills from connected registries",
-	Long:  `List all Claude Skills available from connected registries.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := runSkillList(cmd, args); err != nil {
-			printer.PrintError(fmt.Sprintf("Failed to list skills: %v", err))
-			os.Exit(1)
-		}
-	},
-}
-
-var skillShowCmd = &cobra.Command{
-	Use:   "show <skill-name>",
-	Short: "Show details of a Claude Skill",
-	Long:  `Display detailed information about a specific Claude Skill.`,
-	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := runSkillShow(args[0]); err != nil {
-			printer.PrintError(fmt.Sprintf("Failed to show skill: %v", err))
-			os.Exit(1)
-		}
-	},
-}
-
 func runSkillPublish(cmd *cobra.Command, args []string) error {
 	skillPath := args[0]
 
@@ -409,8 +384,6 @@ func detectSkills(path string) ([]string, error) {
 func init() {
 	// Add subcommands to skill command
 	skillCmd.AddCommand(skillPublishCmd)
-	skillCmd.AddCommand(skillListCmd)
-	skillCmd.AddCommand(skillShowCmd)
 
 	// Flags for publish command
 	skillPublishCmd.Flags().StringVar(&dockerUrl, "docker-url", "", "Docker registry URL. For example: docker.io/myorg. The final image name will be <docker-url>/<skill-name>:<tag>")
@@ -419,9 +392,6 @@ func init() {
 	skillPublishCmd.Flags().StringVar(&dockerTag, "tag", "latest", "Docker image tag to use")
 
 	_ = skillPublishCmd.MarkFlagRequired("docker-url")
-
-	// Flags for list command
-	skillListCmd.Flags().StringVar(&registryName, "registry", "", "Filter by registry name")
 
 	// Add skill command to root
 	rootCmd.AddCommand(skillCmd)

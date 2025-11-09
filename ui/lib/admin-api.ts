@@ -1,5 +1,5 @@
 // Admin API client for the registry management UI
-// This client communicates with the /v0 API endpoints
+// This client communicates with the /admin/v0 API endpoints
 
 // In development mode with Next.js dev server, use relative URL to leverage proxy
 // In production (static export), API_BASE_URL is set via environment variable or defaults to current origin
@@ -187,35 +187,17 @@ export interface SkillListResponse {
 }
 
 // Agent types
-export interface AgentRepository {
-  url: string
-  source: string
-}
-
-export interface AgentPackageInfo {
-  registryType: string
-  identifier: string
-  version: string
-  transport: {
-    type: string
-  }
-}
-
-export interface AgentRemoteInfo {
-  url?: string
-  type: string
-}
-
 export interface AgentJSON {
-  name: string
-  title?: string
-  description: string
+  Name: string
+  Image: string
+  Language: string
+  Framework: string
+  ModelProvider: string
+  ModelName: string
+  Description: string
+  UpdatedAt: string
   version: string
-  status?: string
-  websiteUrl?: string
-  repository?: AgentRepository
-  packages?: AgentPackageInfo[]
-  remotes?: AgentRemoteInfo[]
+  status: string
 }
 
 export interface AgentRegistryExtensions {
@@ -247,8 +229,31 @@ class AdminApiClient {
     this.baseUrl = baseUrl
   }
 
-  // List servers with pagination and filtering
+  // List servers with pagination and filtering (ADMIN - shows all servers)
   async listServers(params?: {
+    cursor?: string
+    limit?: number
+    search?: string
+    version?: string
+    updated_since?: string
+  }): Promise<ServerListResponse> {
+    const queryParams = new URLSearchParams()
+    if (params?.cursor) queryParams.append('cursor', params.cursor)
+    if (params?.limit) queryParams.append('limit', params.limit.toString())
+    if (params?.search) queryParams.append('search', params.search)
+    if (params?.version) queryParams.append('version', params.version)
+    if (params?.updated_since) queryParams.append('updated_since', params.updated_since)
+
+    const url = `${this.baseUrl}/admin/v0/servers${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error('Failed to fetch servers')
+    }
+    return response.json()
+  }
+
+  // List PUBLISHED servers only (PUBLIC endpoint)
+  async listPublishedServers(params?: {
     cursor?: string
     limit?: number
     search?: string
@@ -265,7 +270,7 @@ class AdminApiClient {
     const url = `${this.baseUrl}/v0/servers${queryParams.toString() ? '?' + queryParams.toString() : ''}`
     const response = await fetch(url)
     if (!response.ok) {
-      throw new Error('Failed to fetch servers')
+      throw new Error('Failed to fetch published servers')
     }
     return response.json()
   }
@@ -274,7 +279,7 @@ class AdminApiClient {
   async getServer(serverName: string, version: string = 'latest'): Promise<ServerResponse> {
     const encodedName = encodeURIComponent(serverName)
     const encodedVersion = encodeURIComponent(version)
-    const response = await fetch(`${this.baseUrl}/v0/servers/${encodedName}/versions/${encodedVersion}`)
+    const response = await fetch(`${this.baseUrl}/admin/v0/servers/${encodedName}/versions/${encodedVersion}`)
     if (!response.ok) {
       throw new Error('Failed to fetch server')
     }
@@ -284,7 +289,7 @@ class AdminApiClient {
   // Get all versions of a server
   async getServerVersions(serverName: string): Promise<ServerListResponse> {
     const encodedName = encodeURIComponent(serverName)
-    const response = await fetch(`${this.baseUrl}/v0/servers/${encodedName}/versions`)
+    const response = await fetch(`${this.baseUrl}/admin/v0/servers/${encodedName}/versions`)
     if (!response.ok) {
       throw new Error('Failed to fetch server versions')
     }
@@ -293,7 +298,7 @@ class AdminApiClient {
 
   // Import servers from an external registry
   async importServers(request: ImportRequest): Promise<ImportResponse> {
-    const response = await fetch(`${this.baseUrl}/v0/admin/import`, {
+    const response = await fetch(`${this.baseUrl}/admin/v0/import`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -310,7 +315,7 @@ class AdminApiClient {
   // Create a new server
   async createServer(server: ServerJSON): Promise<ServerResponse> {
     console.log('Creating server:', server)
-    const response = await fetch(`${this.baseUrl}/v0/admin/servers`, {
+    const response = await fetch(`${this.baseUrl}/admin/v0/servers`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -353,7 +358,7 @@ class AdminApiClient {
   async deleteServer(serverName: string, version: string): Promise<void> {
     const encodedName = encodeURIComponent(serverName)
     const encodedVersion = encodeURIComponent(version)
-    const response = await fetch(`${this.baseUrl}/v0/admin/servers/${encodedName}/versions/${encodedVersion}`, {
+    const response = await fetch(`${this.baseUrl}/admin/v0/servers/${encodedName}/versions/${encodedVersion}`, {
       method: 'DELETE',
     })
     if (!response.ok) {
@@ -364,7 +369,7 @@ class AdminApiClient {
 
   // Get registry statistics
   async getStats(): Promise<ServerStats> {
-    const response = await fetch(`${this.baseUrl}/v0/admin/stats`)
+    const response = await fetch(`${this.baseUrl}/admin/v0/stats`)
     if (!response.ok) {
       throw new Error('Failed to fetch statistics')
     }
@@ -373,7 +378,7 @@ class AdminApiClient {
 
   // Health check
   async healthCheck(): Promise<{ status: string }> {
-    const response = await fetch(`${this.baseUrl}/v0/health`)
+    const response = await fetch(`${this.baseUrl}/admin/v0/health`)
     if (!response.ok) {
       throw new Error('Health check failed')
     }
@@ -382,8 +387,31 @@ class AdminApiClient {
 
   // ===== Skills API =====
 
-  // List skills with pagination and filtering
+  // List skills with pagination and filtering (ADMIN - shows all skills)
   async listSkills(params?: {
+    cursor?: string
+    limit?: number
+    search?: string
+    version?: string
+    updated_since?: string
+  }): Promise<SkillListResponse> {
+    const queryParams = new URLSearchParams()
+    if (params?.cursor) queryParams.append('cursor', params.cursor)
+    if (params?.limit) queryParams.append('limit', params.limit.toString())
+    if (params?.search) queryParams.append('search', params.search)
+    if (params?.version) queryParams.append('version', params.version)
+    if (params?.updated_since) queryParams.append('updated_since', params.updated_since)
+
+    const url = `${this.baseUrl}/admin/v0/skills${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error('Failed to fetch skills')
+    }
+    return response.json()
+  }
+
+  // List PUBLISHED skills only (PUBLIC endpoint)
+  async listPublishedSkills(params?: {
     cursor?: string
     limit?: number
     search?: string
@@ -400,7 +428,7 @@ class AdminApiClient {
     const url = `${this.baseUrl}/v0/skills${queryParams.toString() ? '?' + queryParams.toString() : ''}`
     const response = await fetch(url)
     if (!response.ok) {
-      throw new Error('Failed to fetch skills')
+      throw new Error('Failed to fetch published skills')
     }
     return response.json()
   }
@@ -409,7 +437,7 @@ class AdminApiClient {
   async getSkill(skillName: string, version: string = 'latest'): Promise<SkillResponse> {
     const encodedName = encodeURIComponent(skillName)
     const encodedVersion = encodeURIComponent(version)
-    const response = await fetch(`${this.baseUrl}/v0/skills/${encodedName}/versions/${encodedVersion}`)
+    const response = await fetch(`${this.baseUrl}/admin/v0/skills/${encodedName}/versions/${encodedVersion}`)
     if (!response.ok) {
       throw new Error('Failed to fetch skill')
     }
@@ -419,7 +447,7 @@ class AdminApiClient {
   // Get all versions of a skill
   async getSkillVersions(skillName: string): Promise<SkillListResponse> {
     const encodedName = encodeURIComponent(skillName)
-    const response = await fetch(`${this.baseUrl}/v0/skills/${encodedName}/versions`)
+    const response = await fetch(`${this.baseUrl}/admin/v0/skills/${encodedName}/versions`)
     if (!response.ok) {
       throw new Error('Failed to fetch skill versions')
     }
@@ -428,7 +456,7 @@ class AdminApiClient {
 
   // Publish a new skill
   async publishSkill(skill: SkillJSON): Promise<SkillResponse> {
-    const response = await fetch(`${this.baseUrl}/v0/skills/publish`, {
+    const response = await fetch(`${this.baseUrl}/admin/v0/skills/publish`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -444,8 +472,31 @@ class AdminApiClient {
 
   // ===== Agents API =====
 
-  // List agents with pagination and filtering
+  // List agents with pagination and filtering (ADMIN - shows all agents)
   async listAgents(params?: {
+    cursor?: string
+    limit?: number
+    search?: string
+    version?: string
+    updated_since?: string
+  }): Promise<AgentListResponse> {
+    const queryParams = new URLSearchParams()
+    if (params?.cursor) queryParams.append('cursor', params.cursor)
+    if (params?.limit) queryParams.append('limit', params.limit.toString())
+    if (params?.search) queryParams.append('search', params.search)
+    if (params?.version) queryParams.append('version', params.version)
+    if (params?.updated_since) queryParams.append('updated_since', params.updated_since)
+
+    const url = `${this.baseUrl}/admin/v0/agents${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error('Failed to fetch agents')
+    }
+    return response.json()
+  }
+
+  // List PUBLISHED agents only (PUBLIC endpoint)
+  async listPublishedAgents(params?: {
     cursor?: string
     limit?: number
     search?: string
@@ -462,7 +513,7 @@ class AdminApiClient {
     const url = `${this.baseUrl}/v0/agents${queryParams.toString() ? '?' + queryParams.toString() : ''}`
     const response = await fetch(url)
     if (!response.ok) {
-      throw new Error('Failed to fetch agents')
+      throw new Error('Failed to fetch published agents')
     }
     return response.json()
   }
@@ -471,7 +522,7 @@ class AdminApiClient {
   async getAgent(agentName: string, version: string = 'latest'): Promise<AgentResponse> {
     const encodedName = encodeURIComponent(agentName)
     const encodedVersion = encodeURIComponent(version)
-    const response = await fetch(`${this.baseUrl}/v0/agents/${encodedName}/versions/${encodedVersion}`)
+    const response = await fetch(`${this.baseUrl}/admin/v0/agents/${encodedName}/versions/${encodedVersion}`)
     if (!response.ok) {
       throw new Error('Failed to fetch agent')
     }
@@ -481,7 +532,7 @@ class AdminApiClient {
   // Get all versions of an agent
   async getAgentVersions(agentName: string): Promise<AgentListResponse> {
     const encodedName = encodeURIComponent(agentName)
-    const response = await fetch(`${this.baseUrl}/v0/agents/${encodedName}/versions`)
+    const response = await fetch(`${this.baseUrl}/admin/v0/agents/${encodedName}/versions`)
     if (!response.ok) {
       throw new Error('Failed to fetch agent versions')
     }
@@ -490,7 +541,7 @@ class AdminApiClient {
 
   // Publish an agent to the registry
   async publishAgent(agent: AgentJSON): Promise<AgentResponse> {
-    const response = await fetch(`${this.baseUrl}/v0/agents/publish`, {
+    const response = await fetch(`${this.baseUrl}/admin/v0/agents/publish`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -504,6 +555,86 @@ class AdminApiClient {
     return response.json()
   }
 
+  // ===== Publish Status API =====
+
+  // Publish a server (change status to published)
+  async publishServerStatus(serverName: string, version: string): Promise<void> {
+    const encodedName = encodeURIComponent(serverName)
+    const encodedVersion = encodeURIComponent(version)
+    const response = await fetch(`${this.baseUrl}/admin/v0/servers/${encodedName}/versions/${encodedVersion}/publish`, {
+      method: 'POST',
+    })
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(error || 'Failed to publish server')
+    }
+  }
+
+  // Unpublish a server (change status to unpublished)
+  async unpublishServerStatus(serverName: string, version: string): Promise<void> {
+    const encodedName = encodeURIComponent(serverName)
+    const encodedVersion = encodeURIComponent(version)
+    const response = await fetch(`${this.baseUrl}/admin/v0/servers/${encodedName}/versions/${encodedVersion}/unpublish`, {
+      method: 'POST',
+    })
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(error || 'Failed to unpublish server')
+    }
+  }
+
+  // Publish a skill (change status to published)
+  async publishSkillStatus(skillName: string, version: string): Promise<void> {
+    const encodedName = encodeURIComponent(skillName)
+    const encodedVersion = encodeURIComponent(version)
+    const response = await fetch(`${this.baseUrl}/admin/v0/skills/${encodedName}/versions/${encodedVersion}/publish`, {
+      method: 'POST',
+    })
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(error || 'Failed to publish skill')
+    }
+  }
+
+  // Unpublish a skill (change status to unpublished)
+  async unpublishSkillStatus(skillName: string, version: string): Promise<void> {
+    const encodedName = encodeURIComponent(skillName)
+    const encodedVersion = encodeURIComponent(version)
+    const response = await fetch(`${this.baseUrl}/admin/v0/skills/${encodedName}/versions/${encodedVersion}/unpublish`, {
+      method: 'POST',
+    })
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(error || 'Failed to unpublish skill')
+    }
+  }
+
+  // Publish an agent (change status to published)
+  async publishAgentStatus(agentName: string, version: string): Promise<void> {
+    const encodedName = encodeURIComponent(agentName)
+    const encodedVersion = encodeURIComponent(version)
+    const response = await fetch(`${this.baseUrl}/admin/v0/agents/${encodedName}/versions/${encodedVersion}/publish`, {
+      method: 'POST',
+    })
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(error || 'Failed to publish agent')
+    }
+  }
+
+  // Unpublish an agent (change status to unpublished)
+  async unpublishAgentStatus(agentName: string, version: string): Promise<void> {
+    const encodedName = encodeURIComponent(agentName)
+    const encodedVersion = encodeURIComponent(version)
+    const response = await fetch(`${this.baseUrl}/admin/v0/agents/${encodedName}/versions/${encodedVersion}/unpublish`, {
+      method: 'POST',
+    })
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(error || 'Failed to unpublish agent')
+    }
+  }
+
   // ===== Deployments API =====
 
   // Deploy a server
@@ -512,17 +643,19 @@ class AdminApiClient {
     version?: string
     config?: Record<string, string>
     preferRemote?: boolean
+    resourceType?: 'mcp' | 'agent'
   }): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/v0/deployments`, {
+    const response = await fetch(`${this.baseUrl}/admin/v0/deployments`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        server_name: params.serverName,
+        serverName: params.serverName,
         version: params.version || 'latest',
         config: params.config || {},
-        prefer_remote: params.preferRemote || false,
+        preferRemote: params.preferRemote || false,
+        resourceType: params.resourceType || 'mcp',
       }),
     })
     if (!response.ok) {
@@ -542,7 +675,7 @@ class AdminApiClient {
     preferRemote: boolean
     resourceType: string
   }>> {
-    const response = await fetch(`${this.baseUrl}/v0/deployments`)
+    const response = await fetch(`${this.baseUrl}/admin/v0/deployments`)
     if (!response.ok) {
       throw new Error('Failed to fetch deployments')
     }
@@ -553,7 +686,7 @@ class AdminApiClient {
   // Remove a deployment
   async removeDeployment(serverName: string): Promise<void> {
     const encodedName = encodeURIComponent(serverName)
-    const response = await fetch(`${this.baseUrl}/v0/deployments/${encodedName}`, {
+    const response = await fetch(`${this.baseUrl}/admin/v0/deployments/${encodedName}`, {
       method: 'DELETE',
     })
     if (!response.ok) {
