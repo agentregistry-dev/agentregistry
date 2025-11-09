@@ -31,6 +31,8 @@ func Start() error {
 func IsRunning() bool {
 	cmd := exec.Command("docker", "compose", "-p", "agentregistry", "-f", "-", "ps")
 	cmd.Stdin = strings.NewReader(dockerComposeYaml)
+	cmd.Env = append(os.Environ(), fmt.Sprintf("VERSION=%s", version.Version), "DOCKER_REGISTRY=localhost:5001")
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("failed to check if daemon is running: %v, output: %s", err, string(output))

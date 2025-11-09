@@ -15,9 +15,6 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-//go:embed agentgateway.Dockerfile
-var agentGatewayDockerfile string
-
 type AgentRegistryRuntime interface {
 	ReconcileMCPServers(
 		ctx context.Context,
