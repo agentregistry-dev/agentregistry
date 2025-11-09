@@ -35,9 +35,9 @@ func runScorecardLibrary(parent context.Context, owner, repo, githubToken string
 	if err != nil {
 		return 0, nil, err
 	}
-	defer repoClient.Close()
+	defer repoClient.Close() //nolint:errcheck
 	if ossFuzzClient != nil {
-		defer ossFuzzClient.Close()
+		defer ossFuzzClient.Close() //nolint:errcheck
 	}
 
 	checksToRun := scorechecks.GetAll()

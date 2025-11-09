@@ -590,41 +590,41 @@ func parseGitHubRepo(raw string) (string, string) {
 }
 
 // fetchGitHubStars queries the GitHub repo API for stargazers_count
-func (s *Service) fetchGitHubStars(ctx context.Context, owner, repo string) (int, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s", owner, repo)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return 0, err
-	}
-	// Do NOT forward arbitrary registry headers to GitHub.
-	// Only apply an explicit GitHub token if provided.
-	if s.githubToken != "" {
-		req.Header.Set("Authorization", "Bearer "+s.githubToken)
-	}
-	if req.Header.Get("Accept") == "" {
-		req.Header.Set("Accept", "application/vnd.github+json")
-	}
-	client := s.httpClient
-	if client == nil {
-		client = http.DefaultClient
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return 0, fmt.Errorf("github api status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	var payload struct {
-		Stars int `json:"stargazers_count"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return 0, err
-	}
-	return payload.Stars, nil
-}
+// func (s *Service) fetchGitHubStars(ctx context.Context, owner, repo string) (int, error) {
+// 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s", owner, repo)
+// 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+// 	if err != nil {
+// 		return 0, err
+// 	}
+// 	// Do NOT forward arbitrary registry headers to GitHub.
+// 	// Only apply an explicit GitHub token if provided.
+// 	if s.githubToken != "" {
+// 		req.Header.Set("Authorization", "Bearer "+s.githubToken)
+// 	}
+// 	if req.Header.Get("Accept") == "" {
+// 		req.Header.Set("Accept", "application/vnd.github+json")
+// 	}
+// 	client := s.httpClient
+// 	if client == nil {
+// 		client = http.DefaultClient
+// 	}
+// 	resp, err := client.Do(req)
+// 	if err != nil {
+// 		return 0, err
+// 	}
+// 	defer func() { _ = resp.Body.Close() }()
+// 	if resp.StatusCode != http.StatusOK {
+// 		body, _ := io.ReadAll(resp.Body)
+// 		return 0, fmt.Errorf("github api status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+// 	}
+// 	var payload struct {
+// 		Stars int `json:"stargazers_count"`
+// 	}
+// 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+// 		return 0, err
+// 	}
+// 	return payload.Stars, nil
+// }
 
 // fetchGitHubRepoSummary retrieves repository summary fields used for enrichment.
 func (s *Service) fetchGitHubRepoSummary(ctx context.Context, owner, repo string) (*githubRepoSummary, error) {

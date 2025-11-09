@@ -306,16 +306,6 @@ func sortServerGroups(groups []ServerGroup, column string) {
 	}
 }
 
-// Helper functions to extract server properties for sorting
-func getServerType(server v0.ServerResponse) string {
-	if len(server.Server.Packages) > 0 {
-		return server.Server.Packages[0].RegistryType
-	} else if len(server.Server.Remotes) > 0 {
-		return server.Server.Remotes[0].Type
-	}
-	return ""
-}
-
 func displayPaginatedSkills(skills []*models.SkillResponse, pageSize int, showAll bool) {
 	total := len(skills)
 
@@ -388,7 +378,6 @@ func printServersTable(serverGroups []ServerGroup, deployedServers []*client.Dep
 
 		// Parse the stored combined data
 		registryType := "<none>"
-		registryStatus := "<none>"
 		updatedAt := ""
 
 		// Extract registry type from packages or remotes
@@ -399,7 +388,7 @@ func printServersTable(serverGroups []ServerGroup, deployedServers []*client.Dep
 		}
 
 		// Extract status from _meta
-		registryStatus = string(s.Meta.Official.Status)
+		registryStatus := string(s.Meta.Official.Status)
 		if !s.Meta.Official.UpdatedAt.IsZero() {
 			updatedAt = printer.FormatAge(s.Meta.Official.UpdatedAt)
 		}
