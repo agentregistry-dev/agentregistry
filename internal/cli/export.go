@@ -21,9 +21,10 @@ var (
 )
 
 var exportCmd = &cobra.Command{
-	Use:   "export",
-	Short: "Export servers from the registry database",
-	Long:  "Exports all MCP server entries from the local registry database into a JSON seed file compatible with arctl import.",
+	Use:    "export",
+	Hidden: true,
+	Short:  "Export servers from the registry database",
+	Long:   "Exports all MCP server entries from the local registry database into a JSON seed file compatible with arctl import.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		outputPath := strings.TrimSpace(exportOutput)
 		if outputPath == "" {

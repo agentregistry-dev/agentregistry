@@ -4,9 +4,18 @@ on:
   push:
     tags:
     - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number'
 
 jobs:
-  release:
+  docker:
+    strategy:
+      matrix:
+        image:
+          - agentgateway
+          - server
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -37,11 +46,42 @@ jobs:
         DOCKER_BUILDER: "docker buildx"
         DOCKER_REGISTRY: "ghcr.io" # prod for releases, local for dev
       run: |
-        export VERSION=$(echo "$GITHUB_REF" | cut -c12-)
-        make docker
+        # if workflow_dispatch is used, use the version input
+        if [ -n "${{ github.event.inputs.version }}" ]; then
+          export VERSION=${{ github.event.inputs.version }}
+        else
+          export VERSION=$(echo "$GITHUB_REF" | cut -c12-)
+        fi
+        make docker-${{ matrix.image }}
+
+  release:
+    needs:
+    - docker
+    strategy:
+      matrix:
+        image:
+          - agentgateway
+          - server
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: 1.22.x
 
     - name: Build Release Artifacts
-      run: make release-cli
+      run: |  
+        # if workflow_dispatch is used, use the version input
+        if [ -n "${{ github.event.inputs.version }}" ]; then
+          export VERSION=${{ github.event.inputs.version }}
+        else
+          export VERSION=$(echo "$GITHUB_REF" | cut -c12-)
+        fi
+        make release-cli
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2

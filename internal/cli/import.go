@@ -29,9 +29,10 @@ var (
 )
 
 var importCmd = &cobra.Command{
-	Use:   "import",
-	Short: "Import servers into the registry database",
-	Long:  "Imports MCP server entries from a JSON seed file or a registry /v0/servers endpoint into the local registry database.",
+	Use:    "import",
+	Hidden: true,
+	Short:  "Import servers into the registry database",
+	Long:   "Imports MCP server entries from a JSON seed file or a registry /v0/servers endpoint into the local registry database.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if strings.TrimSpace(importSource) == "" {
 			return errors.New("--source is required (file path, HTTP URL, or /v0/servers endpoint)")
