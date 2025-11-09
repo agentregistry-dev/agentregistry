@@ -13,9 +13,6 @@ import (
 //go:embed docker-compose.yml
 var dockerComposeYaml string
 
-func init() {
-}
-
 func Start() error {
 	// Pipe the docker-compose.yml via stdin to docker compose
 	cmd := exec.Command("docker", "compose", "-p", "agentregistry", "-f", "-", "up", "-d", "--wait")
