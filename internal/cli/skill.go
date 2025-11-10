@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,6 +41,122 @@ The skill folder must contain a SKILL.md file with proper YAML frontmatter.
 Use --multi flag to auto-detect and process multiple skill folders.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runSkillPublish,
+}
+
+var skillPullCmd = &cobra.Command{
+	Use:   "pull <skill-name> [output-directory]",
+	Short: "Pull a skill from the registry and extract it locally",
+	Long: `Pull a skill's Docker image from the registry and extract its contents to a local directory.
+	
+If output-directory is not specified, it will be extracted to ./skills/<skill-name>`,
+	Args: cobra.RangeArgs(1, 2),
+	RunE: runSkillPull,
+}
+
+func runSkillPull(cmd *cobra.Command, args []string) error {
+	skillName := args[0]
+
+	// Determine output directory
+	outputDir := ""
+	if len(args) > 1 {
+		outputDir = args[1]
+	} else {
+		outputDir = filepath.Join("skills", sanitizeRepoName(skillName))
+	}
+
+	printer.PrintInfo(fmt.Sprintf("Pulling skill: %s", skillName))
+
+	// 1. Fetch skill metadata from registry
+	printer.PrintInfo("Fetching skill metadata from registry...")
+	skill, err := APIClient.GetSkillByName(skillName)
+	if err != nil {
+		return fmt.Errorf("failed to fetch skill from registry: %w", err)
+	}
+
+	if skill == nil {
+		return fmt.Errorf("skill '%s' not found in registry", skillName)
+	}
+
+	printer.PrintSuccess(fmt.Sprintf("Found skill: %s (version %s)", skill.Skill.Name, skill.Skill.Version))
+
+	// 2. Find Docker package in skill
+	var dockerImage string
+	for _, pkg := range skill.Skill.Packages {
+		if pkg.RegistryType == "docker" {
+			dockerImage = pkg.Identifier
+			break
+		}
+	}
+
+	if dockerImage == "" {
+		return fmt.Errorf("skill does not have a Docker package")
+	}
+
+	printer.PrintInfo(fmt.Sprintf("Docker image: %s", dockerImage))
+
+	// 3. Pull the Docker image
+	printer.PrintInfo("Pulling Docker image...")
+	pullCmd := exec.Command("docker", "pull", dockerImage)
+	pullCmd.Stdout = os.Stdout
+	pullCmd.Stderr = os.Stderr
+	if err := pullCmd.Run(); err != nil {
+		return fmt.Errorf("failed to pull Docker image: %w", err)
+	}
+
+	// 4. Create output directory
+	absOutputDir, err := filepath.Abs(outputDir)
+	if err != nil {
+		return fmt.Errorf("failed to resolve output directory: %w", err)
+	}
+
+	if err := os.MkdirAll(absOutputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	// 5. Extract contents from Docker image
+	printer.PrintInfo(fmt.Sprintf("Extracting skill contents to: %s", absOutputDir))
+
+	// For images built FROM scratch, we need to provide a dummy command
+	// Create a container from the image (without running it)
+	createCmd := exec.Command("docker", "create", "--entrypoint", "/bin/sh", dockerImage, "-c", "echo")
+	createOutput, err := createCmd.CombinedOutput()
+	if err != nil {
+		// If that fails, try without entrypoint override (for images with proper entrypoints)
+		createCmd = exec.Command("docker", "create", dockerImage)
+		createOutput, err = createCmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("failed to create container from image: %w\nOutput: %s", err, string(createOutput))
+		}
+	}
+	containerIDStr := strings.TrimSpace(string(createOutput))
+
+	// Ensure we clean up the container
+	defer func() {
+		rmCmd := exec.Command("docker", "rm", containerIDStr)
+		_ = rmCmd.Run()
+	}()
+
+	// Extract to a temporary directory first
+	tempDir, err := os.MkdirTemp("", "skill-extract-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Copy contents from container to temp directory
+	cpCmd := exec.Command("docker", "cp", containerIDStr+":"+"/.", tempDir)
+	cpCmd.Stderr = os.Stderr
+	if err := cpCmd.Run(); err != nil {
+		return fmt.Errorf("failed to extract contents from container: %w", err)
+	}
+
+	// Copy only non-empty files and folders to the final destination
+	if err := copyNonEmptyContents(tempDir, absOutputDir); err != nil {
+		return fmt.Errorf("failed to copy non-empty contents: %w", err)
+	}
+
+	printer.PrintSuccess(fmt.Sprintf("Successfully pulled skill to: %s", absOutputDir))
+	return nil
 }
 
 func runSkillPublish(cmd *cobra.Command, args []string) error {
@@ -245,6 +362,128 @@ func buildSkillDockerImage(skillPath string) (*models.SkillJSON, error) {
 	return skill, nil
 }
 
+// copyNonEmptyContents recursively copies only non-empty files and directories
+func copyNonEmptyContents(src, dst string) error {
+	// Skip system directories that Docker creates
+	skipDirs := map[string]bool{
+		"dev":  true,
+		"etc":  true,
+		"proc": true,
+		"sys":  true,
+	}
+
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return fmt.Errorf("failed to read source directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+
+		// Skip system directories at root level
+		if src == filepath.Dir(srcPath) && skipDirs[entry.Name()] {
+			continue
+		}
+
+		// Skip hidden Docker files
+		if entry.Name() == ".dockerenv" {
+			continue
+		}
+
+		if entry.IsDir() {
+			// Check if directory has any non-empty content
+			if !hasNonEmptyContent(srcPath, skipDirs) {
+				continue
+			}
+
+			// Create directory in destination
+			if err := os.MkdirAll(dstPath, 0755); err != nil {
+				return fmt.Errorf("failed to create directory %s: %w", dstPath, err)
+			}
+
+			// Recursively copy contents
+			if err := copyNonEmptyContents(srcPath, dstPath); err != nil {
+				return err
+			}
+		} else {
+			// Check if file is non-empty
+			info, err := os.Stat(srcPath)
+			if err != nil {
+				return fmt.Errorf("failed to stat file %s: %w", srcPath, err)
+			}
+
+			if info.Size() == 0 {
+				continue
+			}
+
+			// Copy file
+			if err := copyFile(srcPath, dstPath); err != nil {
+				return fmt.Errorf("failed to copy file %s: %w", srcPath, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// hasNonEmptyContent checks if a directory contains any non-empty files
+func hasNonEmptyContent(dir string, skipDirs map[string]bool) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+
+	for _, entry := range entries {
+		path := filepath.Join(dir, entry.Name())
+
+		if entry.IsDir() {
+			if skipDirs[entry.Name()] {
+				continue
+			}
+			if hasNonEmptyContent(path, skipDirs) {
+				return true
+			}
+		} else {
+			if entry.Name() == ".dockerenv" {
+				continue
+			}
+			info, err := entry.Info()
+			if err == nil && info.Size() > 0 {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// copyFile copies a single file from src to dst
+func copyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	if _, err := io.Copy(destFile, sourceFile); err != nil {
+		return err
+	}
+
+	// Copy permissions
+	sourceInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	return os.Chmod(dst, sourceInfo.Mode())
+}
+
 // sanitizeRepoName converts a skill name to a docker-friendly repo name
 func sanitizeRepoName(name string) string {
 	n := strings.TrimSpace(strings.ToLower(name))
@@ -261,87 +500,6 @@ func sanitizeRepoName(name string) string {
 		n = "skill"
 	}
 	return n
-}
-
-func runSkillList(cmd *cobra.Command, args []string) error {
-	if APIClient == nil {
-		return fmt.Errorf("API client not initialized")
-	}
-
-	skills, err := APIClient.GetSkills()
-	if err != nil {
-		return fmt.Errorf("failed to get skills: %w", err)
-	}
-
-	if len(skills) == 0 {
-		printer.PrintInfo("No skills found. Connect to a registry or publish a skill.")
-		return nil
-	}
-
-	// Create table printer
-	t := printer.NewTablePrinter(os.Stdout)
-	t.SetHeaders("Name", "Title", "Version", "Category", "Status", "Website")
-
-	for _, skill := range skills {
-
-		title := skill.Skill.Title
-		if title == "" {
-			title = "-"
-		}
-
-		category := skill.Skill.Category
-		if category == "" {
-			category = "-"
-		}
-
-		t.AddRow(
-			skill.Skill.Name,
-			title,
-			skill.Skill.Version,
-			category,
-			skill.Meta.Official.Status,
-			skill.Skill.WebsiteURL,
-		)
-	}
-
-	if err := t.Render(); err != nil {
-		return fmt.Errorf("failed to render table: %w", err)
-	}
-
-	return nil
-}
-
-func runSkillShow(skillName string) error {
-	if APIClient == nil {
-		return fmt.Errorf("API client not initialized")
-	}
-
-	skill, err := APIClient.GetSkillByName(skillName)
-	if err != nil {
-		return fmt.Errorf("failed to get skill: %w", err)
-	}
-
-	if skill == nil {
-		return fmt.Errorf("skill '%s' not found", skillName)
-	}
-
-	// Display skill details in table format
-	t := printer.NewTablePrinter(os.Stdout)
-	t.SetHeaders("Property", "Value")
-
-	t.AddRow("Name", skill.Skill.Name)
-	t.AddRow("Title", printer.EmptyValueOrDefault(skill.Skill.Title, "<none>"))
-	t.AddRow("Description", skill.Skill.Description)
-	t.AddRow("Version", skill.Skill.Version)
-	t.AddRow("Category", printer.EmptyValueOrDefault(skill.Skill.Category, "<none>"))
-	t.AddRow("Status", skill.Meta.Official.Status)
-	t.AddRow("Website", skill.Skill.WebsiteURL)
-
-	if err := t.Render(); err != nil {
-		return fmt.Errorf("failed to render table: %w", err)
-	}
-
-	return nil
 }
 
 // detectSkills scans the given path for skill folders
@@ -384,6 +542,7 @@ func detectSkills(path string) ([]string, error) {
 func init() {
 	// Add subcommands to skill command
 	skillCmd.AddCommand(skillPublishCmd)
+	skillCmd.AddCommand(skillPullCmd)
 
 	// Flags for publish command
 	skillPublishCmd.Flags().StringVar(&dockerUrl, "docker-url", "", "Docker registry URL. For example: docker.io/myorg. The final image name will be <docker-url>/<skill-name>:<tag>")

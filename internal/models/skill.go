@@ -11,7 +11,7 @@ type SkillJSON struct {
 	Version     string             `json:"version"`
 	Status      string             `json:"status,omitempty"`
 	WebsiteURL  string             `json:"websiteUrl,omitempty"`
-	Repository  SkillRepository    `json:"repository"`
+	Repository  *SkillRepository   `json:"repository,omitempty"`
 	Packages    []SkillPackageInfo `json:"packages,omitempty"`
 	Remotes     []SkillRemoteInfo  `json:"remotes,omitempty"`
 }
