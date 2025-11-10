@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var initCmd = &cobra.Command{
+var InitCmd = &cobra.Command{
 	Use:   "init [skill-name]",
 	Short: "Initialize a new agentic skill project",
 	Long:  `Initialize a new agentic skill project.`,
@@ -23,10 +23,9 @@ var (
 )
 
 func init() {
-	SkillCmd.AddCommand(initCmd)
-	initCmd.PersistentFlags().BoolVar(&initForce, "force", false, "Overwrite existing directory")
-	initCmd.PersistentFlags().BoolVar(&initNoGit, "no-git", false, "Skip git initialization")
-	initCmd.PersistentFlags().BoolVar(&initVerbose, "verbose", false, "Enable verbose output during initialization")
+	InitCmd.PersistentFlags().BoolVar(&initForce, "force", false, "Overwrite existing directory")
+	InitCmd.PersistentFlags().BoolVar(&initNoGit, "no-git", false, "Skip git initialization")
+	InitCmd.PersistentFlags().BoolVar(&initVerbose, "verbose", false, "Enable verbose output during initialization")
 }
 
 func runInit(cmd *cobra.Command, args []string) error {

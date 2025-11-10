@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
 	"github.com/spf13/cobra"
@@ -542,6 +543,7 @@ func init() {
 	// Add subcommands to skill command
 	skillCmd.AddCommand(skillPublishCmd)
 	skillCmd.AddCommand(skillPullCmd)
+	skillCmd.AddCommand(skill.InitCmd)
 
 	// Flags for publish command
 	skillPublishCmd.Flags().StringVar(&dockerUrl, "docker-url", "", "Docker registry URL. For example: docker.io/myorg. The final image name will be <docker-url>/<skill-name>:<tag>")
