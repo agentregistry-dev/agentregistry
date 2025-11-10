@@ -42,7 +42,7 @@ func TestPublishRegistryValidation(t *testing.T) {
 
 	// Register the endpoint
 	authz := auth.Authorizer{Authz: nil}
-	v0.RegisterPublishEndpoint(api, "/v0", registryService, authz)
+	v0.RegisterCreateEndpoint(api, "/v0", registryService, authz)
 
 	t.Run("publish fails with npm registry validation error", func(t *testing.T) {
 		publishReq := apiv0.ServerJSON{

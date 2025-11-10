@@ -54,7 +54,7 @@ func TestPublishIntegration(t *testing.T) {
 
 	// Register the endpoint
 	authz := auth.Authorizer{Authz: nil}
-	v0.RegisterPublishEndpoint(api, "/v0", registryService, authz)
+	v0.RegisterCreateEndpoint(api, "/v0", registryService, authz)
 
 	t.Run("successful publish with GitHub auth", func(t *testing.T) {
 		publishReq := apiv0.ServerJSON{

@@ -43,8 +43,14 @@ func NewClientFromEnv() (*Client, error) {
 		},
 	}
 	// Verify connectivity
-	if err := c.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to reach API at %s: %w", base, err)
+	// retry backoff with exponential backoff
+	for i := 0; i < 5; i++ {
+		if err := c.Ping(); err != nil {
+			if i == 2 {
+				return nil, fmt.Errorf("failed to reach API after 3 attempts: %w", err)
+			}
+			time.Sleep(time.Duration(i+1) * time.Second)
+		}
 	}
 	// Seed placeholder registry entry
 	return c, nil

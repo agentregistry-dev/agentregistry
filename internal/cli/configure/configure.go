@@ -80,8 +80,8 @@ func NewConfigureCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&configureURL, "url", "", "Custom MCP server URL (default: http://localhost:8080/mcp)")
-	cmd.Flags().StringVar(&configurePort, "port", "8080", "Port for the MCP server")
+	cmd.Flags().StringVar(&configureURL, "url", "", "Custom MCP server URL (default: http://localhost:21212/mcp)")
+	cmd.Flags().StringVar(&configurePort, "port", "21212", "Port for the MCP server")
 
 	return cmd
 }

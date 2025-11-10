@@ -382,7 +382,7 @@ func TestPublishEndpoint(t *testing.T) {
 
 			// Register the endpoint with test config
 			authz := auth.Authorizer{Authz: nil}
-			v0.RegisterPublishEndpoint(api, "/v0", registryService, authz)
+			v0.RegisterCreateEndpoint(api, "/v0", registryService, authz)
 
 			// Prepare request body
 			var requestBody []byte
@@ -482,7 +482,7 @@ func TestPublishEndpoint_MultipleSlashesEdgeCases(t *testing.T) {
 
 			// Register the endpoint
 			authz := auth.Authorizer{Authz: nil}
-			v0.RegisterPublishEndpoint(api, "/v0", registryService, authz)
+			v0.RegisterCreateEndpoint(api, "/v0", registryService, authz)
 
 			// Create request body
 			requestBody := apiv0.ServerJSON{

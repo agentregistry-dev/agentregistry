@@ -181,7 +181,18 @@ type CreateAgentInput struct {
 	Body agentmodels.AgentJSON `body:""`
 }
 
-// RegisterAgentsCreateEndpoint registers the agents create/update endpoint with a custom path prefix
+// createAgentHandler is the shared handler logic for creating agents
+func createAgentHandler(ctx context.Context, input *CreateAgentInput, registry service.RegistryService) (*Response[agentmodels.AgentResponse], error) {
+	// Create/update the agent (published defaults to false in the service layer)
+	createdAgent, err := registry.CreateAgent(ctx, &input.Body)
+	if err != nil {
+		return nil, huma.Error400BadRequest("Failed to create agent", err)
+	}
+
+	return &Response[agentmodels.AgentResponse]{Body: *createdAgent}, nil
+}
+
+// RegisterAgentsCreateEndpoint registers the public agents create/update endpoint at /agents/publish
 // This endpoint creates or updates an agent in the registry (published defaults to false)
 func RegisterAgentsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService, authz auth.Authorizer) {
 	huma.Register(api, huma.Operation{
@@ -191,11 +202,23 @@ func RegisterAgentsCreateEndpoint(api huma.API, pathPrefix string, registry serv
 		Summary:     "Create/update Agentic agent",
 		Description: "Create a new Agentic agent in the registry or update an existing one. By default, agents are created as unpublished (published=false).",
 		Tags:        []string{"agents", "publish"},
+		Security:    []map[string][]string{{"bearer": {}}},
 	}, func(ctx context.Context, input *CreateAgentInput) (*Response[agentmodels.AgentResponse], error) {
-		if err := authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{Name: input.Body.Name, Type: "agent"}); err != nil {
-			return nil, err
-		}
+		return createAgentHandler(ctx, input, registry)
+	})
+}
 
+// RegisterAdminAgentsCreateEndpoint registers the admin agents create/update endpoint at /agents
+// This endpoint creates or updates an agent in the registry (published defaults to false)
+func RegisterAdminAgentsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-create-agent" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		Method:      http.MethodPost,
+		Path:        pathPrefix + "/agents",
+		Summary:     "Create/update Agentic agent (Admin)",
+		Description: "Create a new Agentic agent in the registry or update an existing one. By default, agents are created as unpublished (published=false).",
+		Tags:        []string{"agents", "admin"},
+	}, func(ctx context.Context, input *CreateAgentInput) (*Response[agentmodels.AgentResponse], error) {
 		// Create/update the agent (published defaults to false in the service layer)
 		createdAgent, err := registry.CreateAgent(ctx, &input.Body)
 		if err != nil {

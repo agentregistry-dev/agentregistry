@@ -27,7 +27,6 @@ var rootCmd = &cobra.Command{
 			if err := daemon.Start(); err != nil {
 				return fmt.Errorf("failed to start daemon: %w", err)
 			}
-			fmt.Println("✓ Daemon started successfully")
 		}
 		// Check if local registry is running
 		c, err := client.NewClientFromEnv()
@@ -41,8 +40,10 @@ var rootCmd = &cobra.Command{
 
 // APIClient is the shared API client used by CLI commands
 var APIClient *client.Client
+var verbose bool
 
 func Execute() {
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}

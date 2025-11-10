@@ -17,6 +17,9 @@ jobs:
           - agentgateway
           - server
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
     - uses: actions/checkout@v4
       with:
@@ -31,6 +34,13 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: 20.9.x
+
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
@@ -57,12 +67,9 @@ jobs:
   release:
     needs:
     - docker
-    strategy:
-      matrix:
-        image:
-          - agentgateway
-          - server
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
     - uses: actions/checkout@v4
       with:

@@ -103,7 +103,7 @@ func (t *agentGatewayTranslator) translateAgentGatewayService() (*types.ServiceC
 	}
 
 	// Use custom image with npx and uvx support for stdio MCP servers
-	image := fmt.Sprintf("localhost:5001/agentregistry-dev/agentregistry/arctl-agentgateway:%s", version.Version)
+	image := fmt.Sprintf("%s/agentregistry-dev/agentregistry/arctl-agentgateway:%s", version.DockerRegistry, version.Version)
 
 	return &types.ServiceConfig{
 		Name:    "agent_gateway",

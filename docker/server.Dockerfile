@@ -75,5 +75,8 @@ COPY --from=builder /app/bin/arctl-server /app/bin/arctl-server
 
 COPY .env.example .env
 
+LABEL org.opencontainers.image.source=https://github.com/agentregistry-dev/agentregistry
+LABEL org.opencontainers.image.description="Agent Registry Server"
+LABEL org.opencontainers.image.authors="Agent Registry Creators 🤖"
 
 CMD ["/app/bin/arctl-server"]
