@@ -19,11 +19,10 @@ import (
 
 var (
 	// Flags for skill publish command
-	dockerUrl    string
-	dockerTag    string
-	registryName string
-	pushFlag     bool
-	dryRunFlag   bool
+	dockerUrl  string
+	dockerTag  string
+	pushFlag   bool
+	dryRunFlag bool
 )
 
 var skillCmd = &cobra.Command{
@@ -141,7 +140,7 @@ func runSkillPull(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Copy contents from container to temp directory
 	cpCmd := exec.Command("docker", "cp", containerIDStr+":"+"/.", tempDir)
@@ -464,13 +463,13 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer sourceFile.Close()
+	defer func() { _ = sourceFile.Close() }()
 
 	destFile, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
-	defer destFile.Close()
+	defer func() { _ = destFile.Close() }()
 
 	if _, err := io.Copy(destFile, sourceFile); err != nil {
 		return err
