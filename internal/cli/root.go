@@ -26,7 +26,6 @@ var rootCmd = &cobra.Command{
 			if err := daemon.Start(); err != nil {
 				return fmt.Errorf("failed to start daemon: %w", err)
 			}
-			fmt.Println("✓ Daemon started successfully")
 		}
 		// Check if local registry is running
 		c, err := client.NewClientFromEnv()
