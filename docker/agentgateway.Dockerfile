@@ -22,8 +22,10 @@ COPY --from=ghcr.io/agentgateway/agentgateway:0.10.5 /app/agentgateway /usr/loca
 
 WORKDIR /app
 
-ENTRYPOINT ["/usr/local/bin/agentgateway"]
+LABEL org.opencontainers.image.source=https://github.com/agentregistry-dev/agentregistry
+LABEL org.opencontainers.image.description="Agent Registry Agent Gateway with NPX and UVX built in"
+LABEL org.opencontainers.image.authors="Agent Registry Creators 🤖"
 
+ENTRYPOINT ["/usr/local/bin/agentgateway"]
 # The config file will be mounted via volume
 CMD ["-f", "/config/agent-gateway.yaml"]
-
