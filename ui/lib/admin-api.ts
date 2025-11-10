@@ -7,6 +7,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'unde
 
 // MCP Server types based on the official spec
 export interface ServerJSON {
+  $schema?: string
   name: string
   title?: string
   description: string
@@ -21,6 +22,10 @@ export interface ServerJSON {
     identifier: string
     version: string
     registryType: 'npm' | 'pypi' | 'docker'
+    transport?: {
+      type: string
+      url?: string
+    }
   }>
   remotes?: Array<{
     type: string
@@ -454,9 +459,9 @@ class AdminApiClient {
     return response.json()
   }
 
-  // Publish a new skill
-  async publishSkill(skill: SkillJSON): Promise<SkillResponse> {
-    const response = await fetch(`${this.baseUrl}/admin/v0/skills/publish`, {
+  // Create a new skill
+  async createSkill(skill: SkillJSON): Promise<SkillResponse> {
+    const response = await fetch(`${this.baseUrl}/admin/v0/skills`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -465,7 +470,7 @@ class AdminApiClient {
     })
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.detail || 'Failed to publish skill')
+      throw new Error(errorData.detail || 'Failed to create skill')
     }
     return response.json()
   }
@@ -539,9 +544,9 @@ class AdminApiClient {
     return response.json()
   }
 
-  // Publish an agent to the registry
-  async publishAgent(agent: AgentJSON): Promise<AgentResponse> {
-    const response = await fetch(`${this.baseUrl}/admin/v0/agents/publish`, {
+  // Create an agent in the registry
+  async createAgent(agent: AgentJSON): Promise<AgentResponse> {
+    const response = await fetch(`${this.baseUrl}/admin/v0/agents`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -550,7 +555,7 @@ class AdminApiClient {
     })
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.detail || 'Failed to publish agent')
+      throw new Error(errorData.detail || 'Failed to create agent')
     }
     return response.json()
   }

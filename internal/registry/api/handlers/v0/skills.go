@@ -179,7 +179,18 @@ type CreateSkillInput struct {
 	Body skillmodels.SkillJSON `body:""`
 }
 
-// RegisterSkillsCreateEndpoint registers the skills create/update endpoint with a custom path prefix
+// createSkillHandler is the shared handler logic for creating skills
+func createSkillHandler(ctx context.Context, input *CreateSkillInput, registry service.RegistryService) (*Response[skillmodels.SkillResponse], error) {
+	// Create/update the skill (published defaults to false in the service layer)
+	createdSkill, err := registry.CreateSkill(ctx, &input.Body)
+	if err != nil {
+		return nil, huma.Error400BadRequest("Failed to create skill", err)
+	}
+
+	return &Response[skillmodels.SkillResponse]{Body: *createdSkill}, nil
+}
+
+// RegisterSkillsCreateEndpoint registers the public skills create/update endpoint at /skills/publish
 // This endpoint creates or updates a skill in the registry (published defaults to false)
 func RegisterSkillsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService, authz auth.Authorizer) {
 	huma.Register(api, huma.Operation{
@@ -191,10 +202,21 @@ func RegisterSkillsCreateEndpoint(api huma.API, pathPrefix string, registry serv
 		Tags:        []string{"skills", "publish"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, func(ctx context.Context, input *CreateSkillInput) (*Response[skillmodels.SkillResponse], error) {
-		if err := authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{Name: input.Body.Name, Type: "skill"}); err != nil {
-			return nil, err
-		}
+		return createSkillHandler(ctx, input, registry)
+	})
+}
 
+// RegisterAdminSkillsCreateEndpoint registers the admin skills create/update endpoint at /skills
+// This endpoint creates or updates a skill in the registry (published defaults to false)
+func RegisterAdminSkillsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-create-skill" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		Method:      http.MethodPost,
+		Path:        pathPrefix + "/skills",
+		Summary:     "Create/update Agentic skill (Admin)",
+		Description: "Create a new Agentic skill in the registry or update an existing one. By default, skills are created as unpublished (published=false).",
+		Tags:        []string{"skills", "admin"},
+	}, func(ctx context.Context, input *CreateSkillInput) (*Response[skillmodels.SkillResponse], error) {
 		// Create/update the skill (published defaults to false in the service layer)
 		createdSkill, err := registry.CreateSkill(ctx, &input.Body)
 		if err != nil {

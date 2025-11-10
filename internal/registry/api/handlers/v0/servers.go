@@ -295,7 +295,20 @@ type CreateServerInput struct {
 	Body apiv0.ServerJSON `body:""`
 }
 
-// RegisterCreateEndpoint registers the create/update server endpoint with a custom path prefix
+// createServerHandler is the shared handler logic for creating servers
+func createServerHandler(ctx context.Context, input *CreateServerInput, registry service.RegistryService) (*Response[apiv0.ServerResponse], error) {
+	// Create/update the server (published defaults to false in the service layer)
+	createdServer, err := registry.CreateServer(ctx, &input.Body)
+	if err != nil {
+		return nil, huma.Error400BadRequest("Failed to create server", err)
+	}
+
+	return &Response[apiv0.ServerResponse]{
+		Body: *createdServer,
+	}, nil
+}
+
+// RegisterCreateEndpoint registers the public create/update server endpoint at /publish
 // This endpoint creates or updates a server in the registry (published defaults to false)
 func RegisterCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService, authz auth.Authorizer) {
 	huma.Register(api, huma.Operation{
@@ -309,20 +322,22 @@ func RegisterCreateEndpoint(api huma.API, pathPrefix string, registry service.Re
 			{"bearer": {}},
 		},
 	}, func(ctx context.Context, input *CreateServerInput) (*Response[apiv0.ServerResponse], error) {
-		if err := authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{Name: input.Body.Name, Type: "server"}); err != nil {
-			return nil, err
-		}
+		return createServerHandler(ctx, input, registry)
+	})
+}
 
-		// Create/update the server (published defaults to false in the service layer)
-		createdServer, err := registry.CreateServer(ctx, &input.Body)
-		if err != nil {
-			return nil, huma.Error400BadRequest("Failed to create server", err)
-		}
-
-		// Return the created server response with metadata
-		return &Response[apiv0.ServerResponse]{
-			Body: *createdServer,
-		}, nil
+// RegisterAdminCreateEndpoint registers the admin create/update server endpoint at /servers
+// This endpoint creates or updates a server in the registry (published defaults to false)
+func RegisterAdminCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-create-server" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		Method:      http.MethodPost,
+		Path:        pathPrefix + "/servers",
+		Summary:     "Create/update MCP server (Admin)",
+		Description: "Create a new MCP server in the registry or update an existing one. By default, servers are created as unpublished (published=false).",
+		Tags:        []string{"servers", "admin"},
+	}, func(ctx context.Context, input *CreateServerInput) (*Response[apiv0.ServerResponse], error) {
+		return createServerHandler(ctx, input, registry)
 	})
 }
 

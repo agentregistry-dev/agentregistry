@@ -27,8 +27,8 @@ func RegisterRoutes(
 	registerPublicRoutes(api, "/v0.1", authz, cfg, registry, metrics, versionInfo)
 
 	// Admin API endpoints (show all resources, including unpublished)
-	registerAdminRoutes(api, "/admin/v0", cfg, registry, metrics, versionInfo)
-	registerAdminRoutes(api, "/admin/v0.1", cfg, registry, metrics, versionInfo)
+	registerAdminRoutes(api, "/admin/v0", authz, cfg, registry, metrics, versionInfo)
+	registerAdminRoutes(api, "/admin/v0.1", authz, cfg, registry, metrics, versionInfo)
 }
 
 // registerPublicRoutes registers public API routes for a version
@@ -67,6 +67,7 @@ func registerPublicRoutes(
 func registerAdminRoutes(
 	api huma.API,
 	pathPrefix string,
+	authz auth.Authorizer,
 	cfg *config.Config,
 	registry service.RegistryService,
 	metrics *telemetry.Metrics,
@@ -78,6 +79,7 @@ func registerAdminRoutes(
 	// Common endpoints
 	registerCommonEndpoints(api, pathPrefix, cfg, metrics, versionInfo)
 	v0.RegisterServersEndpoints(api, pathPrefix, registry, isAdmin)
+	v0.RegisterAdminCreateEndpoint(api, pathPrefix, registry)
 	v0.RegisterPublishStatusEndpoints(api, pathPrefix, registry)
 	v0.RegisterEditEndpoints(api, pathPrefix, registry, cfg)
 	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry)
@@ -85,8 +87,10 @@ func registerAdminRoutes(
 	// v0-only admin endpoints (agents and skills)
 	if pathPrefix == "/admin/v0" {
 		v0.RegisterAgentsEndpoints(api, pathPrefix, registry, isAdmin)
+		v0.RegisterAdminAgentsCreateEndpoint(api, pathPrefix, registry)
 		v0.RegisterAgentsPublishStatusEndpoints(api, pathPrefix, registry)
 		v0.RegisterSkillsEndpoints(api, pathPrefix, registry, isAdmin)
+		v0.RegisterAdminSkillsCreateEndpoint(api, pathPrefix, registry)
 		v0.RegisterSkillsPublishStatusEndpoints(api, pathPrefix, registry)
 	}
 }

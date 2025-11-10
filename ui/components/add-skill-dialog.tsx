@@ -64,8 +64,8 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
         ]
       }
 
-      // Publish the skill
-      await adminApiClient.publishSkill(skillData)
+      // Create the skill
+      await adminApiClient.createSkill(skillData)
 
       // Reset form
       setName("")
