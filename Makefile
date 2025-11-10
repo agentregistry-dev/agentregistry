@@ -103,7 +103,7 @@ dev-ui:
 # Run Go tests
 test:
 	@echo "Running Go tests..."
-	go test -v -tags=integration ./...
+	go test -ldflags "$(LDFLAGS)" -v -tags=integration ./...
 
 # Clean all build artifacts
 clean: clean-ui
