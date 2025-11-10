@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/models"
+	internalv0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	v0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
@@ -129,6 +130,18 @@ func (c *Client) Ping() error {
 		return err
 	}
 	return c.doJSON(req, nil)
+}
+
+func (c *Client) GetVersion() (*internalv0.VersionBody, error) {
+	req, err := c.newRequest(http.MethodGet, "/version")
+	if err != nil {
+		return nil, err
+	}
+	var resp internalv0.VersionBody
+	if err := c.doJSON(req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
 }
 
 // GetServers returns all MCP servers from connected registries

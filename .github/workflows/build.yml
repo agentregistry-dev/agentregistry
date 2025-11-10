@@ -50,10 +50,9 @@ jobs:
 
     - name: Run Integration Tests
       run: |
-        make docker-registry docker docker-tag-as-dev
         echo "Starting integration test services..."
-        docker compose -f internal/daemon/docker-compose.yml up --wait --wait-timeout 60
-        go test -v -tags=integration ./...
+        make docker-registry docker-compose-up
+        make test
 
     - name: Build Go CLI
       run: |

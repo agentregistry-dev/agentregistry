@@ -42,7 +42,7 @@ var APIClient *client.Client
 var verbose bool
 
 func Execute() {
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "V", false, "Verbose output")
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
