@@ -79,7 +79,7 @@ func (m *Manager) Exists() bool {
 }
 
 // GetDefault returns a new ProjectManifest with default values
-func GetDefault(name, framework, description, author, email, namespace string) *ProjectManifest {
+func GetDefault(name, framework, description, author, email string) *ProjectManifest {
 	if description == "" {
 		description = fmt.Sprintf("MCP server built with %s", framework)
 	}

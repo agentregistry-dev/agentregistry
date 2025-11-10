@@ -1,0 +1,419 @@
+---
+name: hello-world-template
+description: A comprehensive template skill demonstrating all skill features and patterns. Use this as a starting point when creating new skills. Shows examples of scripts, references, assets, workflow patterns, and best practices for skill development.
+---
+
+# Hello World Template
+
+## Overview
+
+This is a comprehensive template skill that demonstrates all the key features and patterns available in the Claude skill system. Use this as a foundation when creating new skills.
+
+This template shows:
+- How to structure SKILL.md with clear sections
+- Examples of using scripts, references, and assets
+- Different workflow patterns (sequential, conditional, task-based)
+- Template and example patterns for consistent output
+- Best practices for progressive disclosure
+
+## Quick Start
+
+When creating a new skill based on this template:
+
+1. Copy this skill directory and rename it
+2. Update the frontmatter (name and description)
+3. Replace example content with your domain-specific content
+4. Customize or delete resource directories (scripts/, references/, assets/) based on needs
+5. Test the skill and iterate
+
+## Workflow Decision Tree
+
+Choose the appropriate workflow based on the user's request:
+
+**Simple demonstration?** → Follow "Hello World Demo" below  
+**Learning about scripts?** → Follow "Using Scripts" section  
+**Learning about references?** → Follow "Using References" section  
+**Learning about assets?** → Follow "Using Assets" section
+**Creating a new skill?** → Follow "Skill Development Process" section
+
+## Hello World Demo
+
+This demonstrates a simple workflow pattern.
+
+### Step 1: Greet the User
+
+Execute the greeting script to demonstrate script usage:
+```bash
+python3 scripts/hello_world.py --name "User"
+```
+
+### Step 2: Load Reference Material
+
+If additional context is needed, read the reference documentation:
+```bash
+cat references/example_guide.md
+```
+
+### Step 3: Use Template Assets
+
+Copy the example template from assets/ and customize it:
+```bash
+cp assets/template.txt output.txt
+```
+
+## Using Scripts
+
+Scripts (`scripts/`) contain executable code for deterministic operations.
+
+### When to Use Scripts
+
+- Tasks requiring exact, reproducible results
+- Complex algorithms that would be error-prone to rewrite
+- Operations requiring specific library versions
+- File processing utilities
+
+### Example Script Usage
+
+The included `hello_world.py` demonstrates:
+- Command-line argument parsing
+- Error handling
+- Multiple output formats
+
+Execute with parameters:
+```bash
+# Basic usage
+python3 scripts/hello_world.py --name "World"
+
+# JSON output format
+python3 scripts/hello_world.py --name "World" --format json
+
+# With custom message
+python3 scripts/hello_world.py --name "World" --message "Welcome"
+```
+
+### Script Pattern
+
+Scripts should:
+- Include clear docstrings explaining purpose
+- Handle errors gracefully
+- Accept parameters for flexibility
+- Return appropriate exit codes
+
+## Using References
+
+References (`references/`) contain documentation loaded into context when needed.
+
+### When to Use References
+
+- Detailed API documentation
+- Database schemas
+- Comprehensive workflow guides
+- Domain-specific knowledge
+- Policy documents
+
+### Example Reference Usage
+
+Read the example guide when detailed information is needed:
+```bash
+cat references/example_guide.md
+```
+
+The guide demonstrates:
+- Structured documentation format
+- Code examples
+- Best practices
+- Troubleshooting tips
+
+### Reference Pattern
+
+For large reference files (>10k words), include search guidance in SKILL.md:
+```markdown
+## Finding Information in References
+
+Use grep to search for specific topics:
+- API endpoints: `grep -n "endpoint" references/api_guide.md`
+- Error codes: `grep -n "error" references/troubleshooting.md`
+```
+
+## Using Assets
+
+Assets (`assets/`) contain files used in final output, not loaded into context.
+
+### When to Use Assets
+
+- Document templates (.docx, .pptx)
+- Boilerplate code projects
+- Images, logos, icons
+- Fonts
+- Sample data files
+
+### Example Asset Usage
+
+The included template demonstrates asset usage:
+```bash
+# Copy template to working directory
+cp assets/template.txt my_document.txt
+
+# Customize the template
+echo "Custom content here" >> my_document.txt
+```
+
+### Asset Pattern
+
+Assets should be:
+- Ready-to-use files
+- Well-organized by type
+- Documented in SKILL.md with usage examples
+- Minimal in size (avoid large files when possible)
+
+## Skill Development Process
+
+Follow this workflow when creating new skills:
+
+### 1. Understand Use Cases
+
+Gather concrete examples:
+- What will users ask for?
+- What functionality is needed?
+- What are trigger phrases?
+
+### 2. Plan Resources
+
+Determine what bundled resources will help:
+- **Scripts**: What operations are repeated or error-prone?
+- **References**: What documentation should Claude reference?
+- **Assets**: What files will be used in outputs?
+
+### 3. Choose Structure Pattern
+
+Select the organizational pattern that fits:
+
+**Sequential Workflow** - For step-by-step processes:
+```markdown
+## Process Overview
+1. Step one
+2. Step two  
+3. Step three
+
+## Step 1: Details
+[Instructions]
+
+## Step 2: Details
+[Instructions]
+```
+
+**Task-Based** - For tool collections:
+```markdown
+## Quick Start
+[Basic usage]
+
+## Task Category 1
+[Operations]
+
+## Task Category 2
+[Operations]
+```
+
+**Reference/Guidelines** - For standards:
+```markdown
+## Guidelines Overview
+[Summary]
+
+## Specification 1
+[Details]
+
+## Specification 2
+[Details]
+```
+
+**Conditional Workflow** - For branching logic:
+```markdown
+## Decision Point
+**Condition A?** → Follow workflow A
+**Condition B?** → Follow workflow B
+
+## Workflow A
+[Steps]
+
+## Workflow B
+[Steps]
+```
+
+### 4. Write SKILL.md
+
+Follow these guidelines:
+
+**Frontmatter:**
+- `name`: Hyphen-case identifier matching directory name
+- `description`: Complete explanation including WHEN to use the skill
+
+**Body:**
+- Use imperative/infinitive form ("Run the script" not "Running the script")
+- Keep under 500 lines (split into references if longer)
+- Provide concrete examples
+- Reference bundled resources clearly
+
+### 5. Create Resources
+
+**Scripts:**
+- Make executable (`chmod +x`)
+- Include usage examples in comments
+- Test thoroughly
+
+**References:**
+- Structure with clear headers
+- Include search patterns for large files
+- Avoid duplicating SKILL.md content
+
+**Assets:**
+- Keep file sizes reasonable
+- Document expected usage
+- Organize by type
+
+### 6. Test and Iterate
+
+- Use the skill on real tasks
+- Note struggles or inefficiencies
+- Update based on usage patterns
+- Validate with `quick_validate.py`
+
+## Output Patterns
+
+### Template Pattern
+
+For consistent output format, provide explicit templates:
+
+**Example: Report Structure**
+```markdown
+# [Title]
+
+## Executive Summary
+[One paragraph overview]
+
+## Key Findings
+- Finding 1 with data
+- Finding 2 with data
+- Finding 3 with data
+
+## Recommendations
+1. Specific action
+2. Specific action
+```
+
+### Example Pattern
+
+For style and format guidance, provide input/output examples:
+
+**Example: Code Documentation**
+
+Input: Function that calculates fibonacci numbers
+Output:
+```python
+def fibonacci(n: int) -> int:
+    """
+    Calculate the nth Fibonacci number.
+    
+    Args:
+        n: Position in sequence (0-indexed)
+        
+    Returns:
+        The Fibonacci number at position n
+        
+    Example:
+        >>> fibonacci(6)
+        8
+    """
+```
+
+## Advanced Patterns
+
+### Progressive Disclosure
+
+Keep SKILL.md concise by splitting content:
+```markdown
+## Basic Usage
+[Core instructions]
+
+## Advanced Features
+For detailed information, see:
+- Form filling: `references/forms.md`
+- API reference: `references/api.md`
+- Examples: `references/examples.md`
+```
+
+### Conditional Resource Loading
+
+Guide Claude to load references based on context:
+```markdown
+## Working with APIs
+
+For REST APIs, see `references/rest_api.md`  
+For GraphQL APIs, see `references/graphql.md`  
+For authentication patterns, see `references/auth.md`
+```
+
+### Multi-Framework Support
+
+For skills supporting multiple tools/frameworks:
+```markdown
+## Framework Selection
+
+**Using React?** → See `references/react.md`  
+**Using Vue?** → See `references/vue.md`  
+**Using Angular?** → See `references/angular.md`
+```
+
+## Best Practices
+
+### Conciseness
+- Challenge every sentence: "Does Claude really need this?"
+- Prefer examples over explanations
+- Use references for detailed docs
+
+### Clarity
+- Use imperative form
+- Provide concrete examples
+- Show, don't just tell
+
+### Context Efficiency
+- Keep SKILL.md under 500 lines
+- Use progressive disclosure
+- Load references only when needed
+
+### Completeness
+- Document all bundled resources
+- Include error handling guidance
+- Provide usage examples
+
+## Validation and Packaging
+
+Before distributing the skill:
+
+1. **Validate structure:**
+```bash
+python3 /mnt/skills/examples/skill-creator/scripts/quick_validate.py /path/to/skill
+```
+
+2. **Package for distribution:**
+```bash
+python3 /mnt/skills/examples/skill-creator/scripts/package_skill.py /path/to/skill
+```
+
+The validator checks:
+- YAML frontmatter format
+- Required fields present
+- Naming conventions
+- File organization
+
+## Next Steps
+
+After reviewing this template:
+
+1. Copy to create your own skill
+2. Update frontmatter with your skill name and description
+3. Replace example content with domain-specific material
+4. Remove unused resource directories
+5. Test with real queries
+6. Iterate based on usage
+
+For detailed guidance, see the skill-creator skill in `/mnt/skills/examples/skill-creator/`.

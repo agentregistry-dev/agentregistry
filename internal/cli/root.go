@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/daemon"
 	"github.com/spf13/cobra"
@@ -50,4 +51,5 @@ func Execute() {
 func init() {
 	// Add subcommands
 	rootCmd.AddCommand(mcp.McpCmd)
+	rootCmd.AddCommand(skill.SkillCmd)
 }

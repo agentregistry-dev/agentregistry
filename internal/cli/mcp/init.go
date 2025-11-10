@@ -31,7 +31,6 @@ var (
 	initEmail          string
 	initDescription    string
 	initNonInteractive bool
-	initNamespace      string
 )
 
 func init() {
@@ -42,7 +41,6 @@ func init() {
 	initCmd.PersistentFlags().StringVar(&initEmail, "email", "", "Author email for the project")
 	initCmd.PersistentFlags().StringVar(&initDescription, "description", "", "Description for the project")
 	initCmd.PersistentFlags().BoolVar(&initNonInteractive, "non-interactive", false, "Run in non-interactive mode")
-	initCmd.PersistentFlags().StringVar(&initNamespace, "namespace", "default", "Default namespace for project resources")
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
@@ -75,7 +73,7 @@ func runInitFramework(
 	}
 
 	// Create project manifest
-	projectManifest := manifest.GetDefault(projectName, framework, initDescription, initAuthor, initEmail, initNamespace)
+	projectManifest := manifest.GetDefault(projectName, framework, initDescription, initAuthor, initEmail)
 
 	// Check if directory exists
 	projectPath, err := filepath.Abs(projectName)
