@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var addToolCmd = &cobra.Command{
+var AddToolCmd = &cobra.Command{
 	Use:   "add-tool [tool-name]",
 	Short: "Add a new MCP tool to your project",
 	Long: `Generate a new MCP tool that will be automatically loaded by the server.
@@ -38,12 +38,11 @@ var (
 )
 
 func init() {
-	McpCmd.AddCommand(addToolCmd)
 
-	addToolCmd.Flags().StringVarP(&addToolDescription, "description", "d", "", "Tool description")
-	addToolCmd.Flags().BoolVarP(&addToolForce, "force", "f", false, "Overwrite existing tool file")
-	addToolCmd.Flags().BoolVarP(&addToolInteractive, "interactive", "i", false, "Interactive tool creation")
-	addToolCmd.Flags().StringVar(&addToolDir, "project-dir", "", "Project directory (default: current directory)")
+	AddToolCmd.Flags().StringVarP(&addToolDescription, "description", "d", "", "Tool description")
+	AddToolCmd.Flags().BoolVarP(&addToolForce, "force", "f", false, "Overwrite existing tool file")
+	AddToolCmd.Flags().BoolVarP(&addToolInteractive, "interactive", "i", false, "Interactive tool creation")
+	AddToolCmd.Flags().StringVar(&addToolDir, "project-dir", "", "Project directory (default: current directory)")
 }
 
 func runAddTool(_ *cobra.Command, args []string) error {
@@ -83,11 +82,6 @@ func runAddTool(_ *cobra.Command, args []string) error {
 	// Check if tool already exists
 	toolPath := filepath.Join("src", "tools", toolName+".py")
 	toolExists := fileExists(toolPath)
-
-	if verbose {
-		fmt.Printf("Tool file path: %s\n", toolPath)
-		fmt.Printf("Tool exists: %v\n", toolExists)
-	}
 
 	if toolExists && !addToolForce {
 		return fmt.Errorf("tool '%s' already exists. Use --force to overwrite", toolName)
@@ -171,10 +165,6 @@ func createToolInteractive(toolName, projectRoot, framework string) error {
 }
 
 func createTool(toolName, projectRoot, framework string) error {
-	if verbose {
-		fmt.Printf("Creating tool: %s\n", toolName)
-	}
-
 	return generateTool(toolName, projectRoot, framework)
 }
 

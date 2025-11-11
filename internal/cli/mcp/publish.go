@@ -143,15 +143,20 @@ func sanitizeRepoName(name string) string {
 }
 
 func translateServerJSON(
-	serverManifest *manifest.ProjectManifest,
+	projectManifest *manifest.ProjectManifest,
 	imageRef string,
 	version string,
 ) (*apiv0.ServerJSON, error) {
+	author := "user"
+	if projectManifest.Author != "" {
+		author = projectManifest.Author
+	}
+	name := fmt.Sprintf("%s/%s", strings.ToLower(author), strings.ToLower(projectManifest.Name))
 	return &apiv0.ServerJSON{
 		Schema:      model.CurrentSchemaURL,
-		Name:        serverManifest.Name,
-		Description: serverManifest.Description,
-		Title:       serverManifest.Name,
+		Name:        name,
+		Description: projectManifest.Description,
+		Title:       projectManifest.Name,
 		Repository:  nil,
 		Version:     version,
 		WebsiteURL:  "",

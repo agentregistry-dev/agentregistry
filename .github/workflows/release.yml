@@ -81,6 +81,8 @@ jobs:
         go-version: 1.25.x
 
     - name: Build Release Artifacts
+      env:
+        DOCKER_REGISTRY: "ghcr.io" # prod for releases
       run: |  
         # if workflow_dispatch is used, use the version input
         if [ -n "${{ github.event.inputs.version }}" ]; then

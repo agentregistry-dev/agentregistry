@@ -22,7 +22,7 @@ including a pyproject.toml file, a main.py file, and an example tool.`,
 }
 
 func init() {
-	initCmd.AddCommand(initPythonCmd)
+	InitCmd.AddCommand(initPythonCmd)
 }
 
 func runInitPython(_ *cobra.Command, args []string) error {
