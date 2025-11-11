@@ -209,7 +209,7 @@ ALTER TABLE servers ADD CONSTRAINT check_status_valid
 CHECK (status IN ('active', 'deprecated', 'deleted'));
 
 ALTER TABLE servers ADD CONSTRAINT check_server_name_format
-CHECK (server_name ~ '^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$');
+CHECK (server_name ~ '^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]/[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]$');
 
 ALTER TABLE servers ADD CONSTRAINT check_version_not_empty
 CHECK (length(trim(version)) > 0);
