@@ -35,8 +35,7 @@ Learn how to create an Anthropic Skill, publish it to agentregistry, and use it 
   title="agentregistry Tutorial: Create and Publish an Anthropic Skill"
   frameBorder="0"
   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-  allowFullScreen
-></video>
+  allowFullScreen/>
 
 ##  Agent Registry Architecture
 
