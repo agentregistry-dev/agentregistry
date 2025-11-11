@@ -16,14 +16,14 @@ import (
 
 // Server name validation patterns
 var (
-	// Component patterns for namespace and name parts
-	namespacePattern = `[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]`
-	namePartPattern  = `[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]`
+// // Component patterns for namespace and name parts
+// namespacePattern = `[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]`
+// namePartPattern  = `[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]`
 
-	// Compiled regexes
-	namespaceRegex  = regexp.MustCompile(`^` + namespacePattern + `$`)
-	namePartRegex   = regexp.MustCompile(`^` + namePartPattern + `$`)
-	serverNameRegex = regexp.MustCompile(`^` + namespacePattern + `/` + namePartPattern + `$`)
+// // Compiled regexes
+// namespaceRegex  = regexp.MustCompile(`^` + namespacePattern + `$`)
+// namePartRegex   = regexp.MustCompile(`^` + namePartPattern + `$`)
+// serverNameRegex = regexp.MustCompile(`^` + namespacePattern + `/` + namePartPattern + `$`)
 )
 
 // Regexes to detect semver range syntaxes
@@ -469,47 +469,47 @@ func validatePublisherExtensions(req apiv0.ServerJSON) error {
 	return nil
 }
 
-func parseServerName(serverJSON apiv0.ServerJSON) (string, error) {
-	name := serverJSON.Name
-	if name == "" {
-		return "", fmt.Errorf("server name is required and must be a string")
-	}
+// func parseServerName(serverJSON apiv0.ServerJSON) (string, error) {
+// 	name := serverJSON.Name
+// 	if name == "" {
+// 		return "", fmt.Errorf("server name is required and must be a string")
+// 	}
 
-	// Validate format: dns-namespace/name
-	if !strings.Contains(name, "/") {
-		return "", fmt.Errorf("server name must be in format 'dns-namespace/name' (e.g., 'com.example.api/server')")
-	}
+// 	// Validate format: dns-namespace/name
+// 	if !strings.Contains(name, "/") {
+// 		return "", fmt.Errorf("server name must be in format 'dns-namespace/name' (e.g., 'com.example.api/server')")
+// 	}
 
-	// Check for multiple slashes - reject if found
-	slashCount := strings.Count(name, "/")
-	if slashCount > 1 {
-		return "", ErrMultipleSlashesInServerName
-	}
+// 	// Check for multiple slashes - reject if found
+// 	slashCount := strings.Count(name, "/")
+// 	if slashCount > 1 {
+// 		return "", ErrMultipleSlashesInServerName
+// 	}
 
-	// Split and check for empty parts
-	parts := strings.SplitN(name, "/", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", fmt.Errorf("server name must be in format 'dns-namespace/name' with non-empty namespace and name parts")
-	}
+// 	// Split and check for empty parts
+// 	parts := strings.SplitN(name, "/", 2)
+// 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+// 		return "", fmt.Errorf("server name must be in format 'dns-namespace/name' with non-empty namespace and name parts")
+// 	}
 
-	// Validate name format using regex
-	if !serverNameRegex.MatchString(name) {
-		namespace := parts[0]
-		serverName := parts[1]
+// 	// Validate name format using regex
+// 	if !serverNameRegex.MatchString(name) {
+// 		namespace := parts[0]
+// 		serverName := parts[1]
 
-		// Check which part is invalid for a better error message
-		if !namespaceRegex.MatchString(namespace) {
-			return "", fmt.Errorf("%w: namespace '%s' is invalid. Namespace must start and end with alphanumeric characters, and may contain dots and hyphens in the middle", ErrInvalidServerNameFormat, namespace)
-		}
-		if !namePartRegex.MatchString(serverName) {
-			return "", fmt.Errorf("%w: name '%s' is invalid. Name must start and end with alphanumeric characters, and may contain dots, underscores, and hyphens in the middle", ErrInvalidServerNameFormat, serverName)
-		}
-		// Fallback in case both somehow pass individually but not together
-		return "", fmt.Errorf("%w: invalid format for '%s'", ErrInvalidServerNameFormat, name)
-	}
+// 		// Check which part is invalid for a better error message
+// 		if !namespaceRegex.MatchString(namespace) {
+// 			return "", fmt.Errorf("%w: namespace '%s' is invalid. Namespace must start and end with alphanumeric characters, and may contain dots and hyphens in the middle", ErrInvalidServerNameFormat, namespace)
+// 		}
+// 		if !namePartRegex.MatchString(serverName) {
+// 			return "", fmt.Errorf("%w: name '%s' is invalid. Name must start and end with alphanumeric characters, and may contain dots, underscores, and hyphens in the middle", ErrInvalidServerNameFormat, serverName)
+// 		}
+// 		// Fallback in case both somehow pass individually but not together
+// 		return "", fmt.Errorf("%w: invalid format for '%s'", ErrInvalidServerNameFormat, name)
+// 	}
 
-	return name, nil
-}
+// 	return name, nil
+// }
 
 // validateRemoteNamespaceMatch validates that remote URLs match the reverse-DNS namespace
 func validateRemoteNamespaceMatch(serverJSON apiv0.ServerJSON) error {
