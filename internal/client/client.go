@@ -332,6 +332,13 @@ func (c *Client) PublishAgent(agent *models.AgentJSON) (*models.AgentResponse, e
 	return &resp, err
 }
 
+// PublishServer publishes a server to the registry
+func (c *Client) PublishServer(server *v0.ServerJSON) (*v0.ServerResponse, error) {
+	var resp v0.ServerResponse
+	err := c.doJsonRequest(http.MethodPost, "/publish", server, &resp)
+	return &resp, err
+}
+
 // Helpers to convert API errors
 func asHTTPStatus(err error) int {
 	if err == nil {

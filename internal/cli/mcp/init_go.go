@@ -29,7 +29,7 @@ You must provide a valid Go module name for the project.`,
 }
 
 func init() {
-	initCmd.AddCommand(initGoCmd)
+	InitCmd.AddCommand(initGoCmd)
 	initGoCmd.Flags().StringVar(
 		&goModuleName,
 		"go-module-name",

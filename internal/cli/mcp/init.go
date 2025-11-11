@@ -3,18 +3,19 @@ package mcp
 import (
 	"bufio"
 	"fmt"
-	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/frameworks"
-	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
-	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/templates"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/frameworks"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/templates"
+
 	"github.com/spf13/cobra"
 )
 
-var initCmd = &cobra.Command{
+var InitCmd = &cobra.Command{
 	Use:   "init [project-type] [project-name]",
 	Short: "Initialize a new MCP server project",
 	Long: `Initialize a new MCP server project with dynamic tool loading.
@@ -34,13 +35,12 @@ var (
 )
 
 func init() {
-	McpCmd.AddCommand(initCmd)
-	initCmd.PersistentFlags().BoolVar(&initForce, "force", false, "Overwrite existing directory")
-	initCmd.PersistentFlags().BoolVar(&initNoGit, "no-git", false, "Skip git initialization")
-	initCmd.PersistentFlags().StringVar(&initAuthor, "author", "", "Author name for the project")
-	initCmd.PersistentFlags().StringVar(&initEmail, "email", "", "Author email for the project")
-	initCmd.PersistentFlags().StringVar(&initDescription, "description", "", "Description for the project")
-	initCmd.PersistentFlags().BoolVar(&initNonInteractive, "non-interactive", false, "Run in non-interactive mode")
+	InitCmd.PersistentFlags().BoolVar(&initForce, "force", false, "Overwrite existing directory")
+	InitCmd.PersistentFlags().BoolVar(&initNoGit, "no-git", false, "Skip git initialization")
+	InitCmd.PersistentFlags().StringVar(&initAuthor, "author", "", "Author name for the project")
+	InitCmd.PersistentFlags().StringVar(&initEmail, "email", "", "Author email for the project")
+	InitCmd.PersistentFlags().StringVar(&initDescription, "description", "", "Description for the project")
+	InitCmd.PersistentFlags().BoolVar(&initNonInteractive, "non-interactive", false, "Run in non-interactive mode")
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
@@ -92,7 +92,6 @@ func runInitFramework(
 		Secrets:     projectManifest.Secrets,
 		Directory:   projectPath,
 		NoGit:       initNoGit,
-		Verbose:     verbose,
 	}
 
 	// Customize project config for the specific framework
@@ -111,8 +110,8 @@ func runInitFramework(
 		return fmt.Errorf("failed to generate project: %w", err)
 	}
 
-	fmt.Printf("  To run the server locally:\n")
-	fmt.Printf("  arctl mcp run local --project-dir %s\n", projectPath)
+	fmt.Printf("To build the server:\n")
+	fmt.Printf("  arctl mcp build %s\n", projectPath)
 
 	return manifest.NewManager(projectPath).Save(projectManifest)
 }

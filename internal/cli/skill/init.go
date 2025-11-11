@@ -2,9 +2,10 @@ package skill
 
 import (
 	"fmt"
-	"github.com/agentregistry-dev/agentregistry/internal/cli/skill/templates"
 	"path/filepath"
 	"strings"
+
+	"github.com/agentregistry-dev/agentregistry/internal/cli/skill/templates"
 
 	"github.com/spf13/cobra"
 )
@@ -57,8 +58,12 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Printf("  To build the skill:\n")
-	fmt.Printf("  arctl skill build --project-dir %s\n", projectPath)
+	fmt.Printf("To build the skill:\n")
+	fmt.Printf(" 	arctl skill publish --docker-url <docker-url> %s\n", projectPath)
+	fmt.Printf("For example:\n")
+	fmt.Printf("	arctl skill publish --docker-url docker.io/myorg %s\n", projectPath)
+	fmt.Printf("  arctl skill publish --docker-url ghcr.io/myorg %s\n", projectPath)
+	fmt.Printf("  arctl skill publish --docker-url localhost:5001/myorg %s\n", projectPath)
 
 	return nil
 }
