@@ -14,6 +14,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	internalv0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
+	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	v0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
@@ -329,6 +330,13 @@ func (c *Client) PublishSkill(skill *models.SkillJSON) (*models.SkillResponse, e
 func (c *Client) PublishAgent(agent *models.AgentJSON) (*models.AgentResponse, error) {
 	var resp models.AgentResponse
 	err := c.doJsonRequest(http.MethodPost, "/agents/publish", agent, &resp)
+	return &resp, err
+}
+
+// PublishAgent publishes an agent to the registry
+func (c *Client) PublishMCPServer(server *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
+	var resp apiv0.ServerResponse
+	err := c.doJsonRequest(http.MethodPost, "/publish", server, &resp)
 	return &resp, err
 }
 

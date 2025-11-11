@@ -33,6 +33,7 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("API client not initialized: %w", err)
 		}
 		APIClient = c
+		mcp.SetAPIClient(APIClient)
 		return nil
 	},
 }
