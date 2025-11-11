@@ -55,7 +55,7 @@ curl -fsSL https://raw.githubusercontent.com/agentregistry-dev/agentregistry/mai
 
 ```bash
 # Start the registry server and look for available MCP servers
-arctl mcp list
+arctl list
 
 # The first time the CLI runs it will automatically start the registry server daemon and import the built-in seed data.
 ```
