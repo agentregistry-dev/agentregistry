@@ -64,9 +64,10 @@ func ValidateServerJSON(serverJSON *apiv0.ServerJSON) error {
 	}
 
 	// Validate server name exists and format
-	if _, err := parseServerName(*serverJSON); err != nil {
-		return err
-	}
+	// TODO: Decide how to re-enable this validation
+	// if _, err := parseServerName(*serverJSON); err != nil {
+	// 	return err
+	// }
 
 	// Validate top-level server version is a specific version (not a range) & not "latest"
 	if err := validateVersion(serverJSON.Version); err != nil {

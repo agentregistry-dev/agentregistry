@@ -147,7 +147,6 @@ MIT License - see [`LICENSE`](LICENSE) for details.
 - 📖 [Documentation](https://agentregistry.dev/docs)
 - 💬 [GitHub Discussions](https://github.com/agentregistry-dev/agentregistry/discussions)
 - 🐛 [Issue Tracker](https://github.com/agentregistry-dev/agentregistry/issues)
-- 📧 Email: support@agentregistry.dev
 
 ---
 

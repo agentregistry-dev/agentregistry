@@ -312,12 +312,13 @@ func createServerHandler(ctx context.Context, input *CreateServerInput, registry
 // This endpoint creates or updates a server in the registry (published defaults to false)
 func RegisterCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService, authz auth.Authorizer) {
 	huma.Register(api, huma.Operation{
-		OperationID: "create-server" + strings.ReplaceAll(pathPrefix, "/", "-"),
-		Method:      http.MethodPost,
-		Path:        pathPrefix + "/publish",
-		Summary:     "Create/update MCP server",
-		Description: "Create a new MCP server in the registry or update an existing one. By default, servers are created as unpublished (published=false).",
-		Tags:        []string{"servers", "publish"},
+		OperationID:      "create-server" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		Method:           http.MethodPost,
+		Path:             pathPrefix + "/publish",
+		Summary:          "Create/update MCP server",
+		Description:      "Create a new MCP server in the registry or update an existing one. By default, servers are created as unpublished (published=false).",
+		Tags:             []string{"servers", "publish"},
+		SkipValidateBody: true, // Skip body for now because of the regex on name
 		Security: []map[string][]string{
 			{"bearer": {}},
 		},
