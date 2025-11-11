@@ -20,10 +20,11 @@ import (
 
 var (
 	// Flags for skill publish command
-	dockerUrl  string
-	dockerTag  string
-	pushFlag   bool
-	dryRunFlag bool
+	dockerUrl    string
+	dockerTag    string
+	platformFlag string
+	pushFlag     bool
+	dryRunFlag   bool
 )
 
 var skillCmd = &cobra.Command{
@@ -299,7 +300,14 @@ func buildSkillDockerImage(skillPath string) (*models.SkillJSON, error) {
 		printer.PrintInfo("[DRY RUN] Would build Docker image: " + imageRef)
 	} else {
 		// Use classic docker build with Dockerfile provided via stdin (-f -)
-		args := []string{"build", "-t", imageRef, "-f", "-", skillPath}
+		args := []string{"build", "-t", imageRef}
+
+		// Add platform flag if specified
+		if platformFlag != "" {
+			args = append(args, "--platform", platformFlag)
+		}
+
+		args = append(args, "-f", "-", skillPath)
 
 		printer.PrintInfo("Building Docker image (Dockerfile via stdin): docker " + strings.Join(args, " "))
 		cmd := exec.Command("docker", args...)
@@ -550,6 +558,7 @@ func init() {
 	skillPublishCmd.Flags().BoolVar(&pushFlag, "push", false, "Automatically push to Docker and agent registries")
 	skillPublishCmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Show what would be done without actually doing it")
 	skillPublishCmd.Flags().StringVar(&dockerTag, "tag", "latest", "Docker image tag to use")
+	skillPublishCmd.Flags().StringVar(&platformFlag, "platform", "", "Target platform(s) for the build (e.g., linux/amd64, linux/arm64, or linux/amd64,linux/arm64)")
 
 	_ = skillPublishCmd.MarkFlagRequired("docker-url")
 
