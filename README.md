@@ -1,5 +1,7 @@
 <div align="center">
-  <img src="img/agentregistry - Light on Transparent Background.svg" alt="Agent Registry" width="400">
+  <picture>
+    <img alt="agentregistry" src="./img/agentregistry-logo.svg" height="150"/>
+  </picture>
   
   [![Go Version](https://img.shields.io/badge/Go-1.25%2B-blue.svg)](https://golang.org/doc/install)
   [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -20,6 +22,21 @@ Agent Registry brings governance and control to AI artifacts and infrastructure,
 - **🔒 Control and Governance**: Selectively  and control custom collection of artifacts
 - **📊 Data Enrichment**: Automatically validate and score ingested data for insights
 - **🌐 Unify AI Infrastructure**: Deploy and access artifacts anywhere
+
+
+## See it in action
+
+Learn how to create an Anthropic Skill, publish it to agentregistry, and use it in Claude Code
+
+<iframe
+  width="560"
+  height="315"
+  src="https://www.youtube.com/embed/pWRMoypForM"
+  title="agentregistry Tutorial: Create and Publish an Anthropic Skill"
+  frameBorder="0"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+  allowFullScreen
+></iframe>
 
 ##  Agent Registry Architecture
 
