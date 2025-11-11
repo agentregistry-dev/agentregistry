@@ -28,14 +28,7 @@ Agent Registry brings governance and control to AI artifacts and infrastructure,
 
 Learn how to create an Anthropic Skill, publish it to agentregistry, and use it in Claude Code
 
-<video
-  width="560"
-  height="315"
-  src="https://www.youtube.com/embed/pWRMoypForM"
-  title="agentregistry Tutorial: Create and Publish an Anthropic Skill"
-  frameBorder="0"
-  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-  allowFullScreen/>
+[![Video](https://img.youtube.com/vi/pWRMoypForM/maxresdefault.jpg)](https://www.youtube.com/watch?v=pWRMoypForM)
 
 ##  Agent Registry Architecture
 
