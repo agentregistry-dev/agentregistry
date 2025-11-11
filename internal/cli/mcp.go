@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
@@ -60,9 +61,14 @@ func runPublish(cmd *cobra.Command, args []string) error {
 
 	printer.PrintInfo(fmt.Sprintf("Publishing MCP server from: %s", absPath))
 
+	author := "user"
+	if projectManifest.Author != "" {
+		author = projectManifest.Author
+	}
+
 	resp, err := APIClient.PublishServer(&v0.ServerJSON{
 		Schema:      model.CurrentSchemaURL,
-		Name:        projectManifest.Name,
+		Name:        fmt.Sprintf("%s/%s", strings.ToLower(author), strings.ToLower(projectManifest.Name)),
 		Description: projectManifest.Description,
 		Version:     version,
 	})
