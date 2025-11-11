@@ -1,32 +1,38 @@
-# Agent Registry
+<div align="center">
+  <img src="img/agentregistry - Light on Transparent Background.svg" alt="Agent Registry" width="400">
+  
+  [![Go Version](https://img.shields.io/badge/Go-1.25%2B-blue.svg)](https://golang.org/doc/install)
+  [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+  [![Discord](https://img.shields.io/discord/1435836734666707190?label=Join%20Discord&logo=discord&logoColor=white&color=5865F2)](https://discord.gg/HTYNjF2y2t)
+  
+  ### A centralized registry to securely curate, discover, deploy, and manage agentic infrastructure from MCP servers, agents to skills.
+</div>
 
-> **A comprehensive platform for discovering, deploying, and managing MCP (Model Context Protocol) servers, agents and skills**
 
-Agent Registry is a unified system that combines a centralized registry, runtime management, and development tooling for MCP servers, agents and skills. It enables teams to publish, discover, and deploy AI agent capabilities as composable services.
+##  What is Agent Registry?
 
-[![Go Version](https://img.shields.io/badge/Go-1.25%2B-blue.svg)](https://golang.org/doc/install)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+Agent Registry brings governance and control to AI artifacts and infrastructure, empowering developers to quickly build and deploy AI applications with confidence. It provides a secure, centralized registry where teams can publish, discover, and share AI artifacts, including MCP servers, agents, and skills, and deploy them seamlessly to any environment.
 
-## 🎯 What is Agent Registry?
 
-Agent Registry solves the challenge of managing AI agent capabilities by providing:
+### Agent Registry provides:
 
-- **📦 Centralized Registry**: Discover and publish MCP servers, skills, and agents
-- **🚀 Automated Deployment**: Deploy MCP servers locally or remotely with one command
-- **🔧 Developer Tools**: Scaffolding and code generators for Python and Go MCP servers
-- **🌐 Web UI**: Beautiful dashboard for managing your agent ecosystem
-- **🔌 Agent Gateway**: Unified endpoint for all your MCP servers
-- **🐳 Container Orchestration**: Automated Docker Compose management
+- **📦 Centralized Registry**: Package, discover and curate AI artifacts from a central source
+- **🔒 Control and Governance**: Selectively  and control custom collection of artifacts
+- **📊 Data Enrichment**: Automatically validate and score ingested data for insights
+- **🌐 Unify AI Infrastructure**: Deploy and access artifacts anywhere
 
-## 🏗️ Architecture
+##  Agent Registry Architecture
 
-### Operation
-
+### For Operators:  Enrich, package, curate and deploy with control
 ![Architecture](img/operator-scenario.png)
 
-### Development
+### For Developers: Build, push, pull and run applications with confidence
 
 ![Architecture](img/dev-scenario.png)
+
+### Development setup
+
+See [`DEVELOPMENT.md`](DEVELOPMENT.md) for detailed architecture information.
 
 ## 🚀 Quick Start
 
@@ -111,44 +117,36 @@ arctl configure vscode
 ```
 
 
+## 🤝 Get Involved
 
-## 🎨 Web UI
-
-The embedded web interface provides a visual dashboard for:
-
-- 📊 **Dashboard**: Overview of servers, deployments, and statistics
-- 🔍 **Discovery**: Browse and search the registry
-- 🚀 **Deployments**: Visual deployment management
-- ⚙️ **Configuration**: Server settings and environment variables
-- 📈 **Monitoring**: Deployment status and health
-
-
-## 🤝 Contributing
+### Contributing
 
 We welcome contributions! Please see [`CONTRIBUTING.md`](CONTRIBUTING.md) for guidelines.
 
-**Development setup:**
 
-See [`DEVELOPMENT.md`](DEVELOPMENT.md) for detailed architecture information.
+### Show your support
 
-## 📄 License
+- 🐛 **Report bugs and issues**: [GitHub Issues](https://github.com/agentregistry-dev/agentregistry/issues)
+- 💡 **Suggest new features**: [GitHub Discussions](https://github.com/agentregistry-dev/agentregistry/discussions)
+- 🔧 **Submit pull requests**: [GitHub Repository](https://github.com/agentregistry-dev/agentregistry)
+- ⭐ **Star the repository**: Show your support on [GitHub](https://github.com/agentregistry-dev/agentregistry)
+- 💬 **Join the Conversation**: Join our [Discord Server](https://discord.gg/HTYNjF2y2t)
 
-MIT License - see [`LICENSE`](LICENSE) for details.
-
-## 🔗 Related Projects
+###  Related Projects
 
 - [Model Context Protocol](https://modelcontextprotocol.io/)
 - [kagent](https://github.com/kagent-dev/kagent)
 - [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk)
 - [FastMCP](https://github.com/jlowin/fastmcp)
 
-## 📞 Support
+## 📚 Resources
 
-- 📖 [Documentation](https://agentregistry.dev/docs)
+- 📖 [Documentation] Coming Soon!
 - 💬 [GitHub Discussions](https://github.com/agentregistry-dev/agentregistry/discussions)
 - 🐛 [Issue Tracker](https://github.com/agentregistry-dev/agentregistry/issues)
-- 📧 Email: support@agentregistry.dev
+
+## 📄 License
+
+MIT License - see [`LICENSE`](LICENSE) for details.
 
 ---
-
-**Built with ❤️ for the AI agent community**
