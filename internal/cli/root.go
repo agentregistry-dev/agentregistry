@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/daemon"
 	"github.com/spf13/cobra"
@@ -32,6 +33,7 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("API client not initialized: %w", err)
 		}
 		APIClient = c
+		mcp.SetAPIClient(APIClient)
 		return nil
 	},
 }
@@ -45,4 +47,9 @@ func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+func init() {
+	// Add subcommands
+	rootCmd.AddCommand(mcp.McpCmd)
 }
