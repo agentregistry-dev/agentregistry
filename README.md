@@ -66,24 +66,19 @@ curl -fsSL https://raw.githubusercontent.com/agentregistry-dev/agentregistry/mai
 # Start the registry server and look for available MCP servers
 arctl list -A
 
-# The first time the CLI runs it will automatically start the registry server daemon and import the built-in seed data.
+# The first time the CLI runs, it will automatically start the registry server daemon and import the built-in seed data.
 ```
 
 
 ### Access the Web UI
 
-```bash
-# Launch the embedded web interface
-arctl ui
-
-# Open http://localhost:8080 in your browser
-```
+To access the UI, open `http://localhost:12121` in your browser.
 
 ## 📚 Core Concepts
 
 ### MCP Servers
 
-MCP (Model Context Protocol) servers are services that provide tools, resources, and prompts to AI agents. They're the building blocks of agent capabilities.
+MCP (Model Context Protocol) servers provide tools, resources, and prompts to AI agents. They're the building blocks of agent capabilities.
 
 ### Agent Gateway
 
