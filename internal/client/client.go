@@ -14,7 +14,6 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	internalv0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
-	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	v0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
@@ -334,8 +333,8 @@ func (c *Client) PublishAgent(agent *models.AgentJSON) (*models.AgentResponse, e
 }
 
 // PublishMCPServer publishes an mcp server to the registry
-func (c *Client) PublishMCPServer(server *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
-	var resp apiv0.ServerResponse
+func (c *Client) PublishMCPServer(server *v0.ServerJSON) (*v0.ServerResponse, error) {
+	var resp v0.ServerResponse
 	err := c.doJsonRequest(http.MethodPost, "/publish", server, &resp)
 	return &resp, err
 }
