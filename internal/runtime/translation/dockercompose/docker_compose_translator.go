@@ -64,7 +64,7 @@ func (t *agentGatewayTranslator) TranslateRuntimeConfig(
 
 	for _, mcpServer := range desired.MCPServers {
 		// only need to create services for local servers
-		if mcpServer.MCPServerType != api.MCPServerTypeLocal || mcpServer.Local.TransportType == api.TransportTypeStdio {
+		if mcpServer.ResourceType != api.ResourceTypeLocal || mcpServer.Local.TransportType == api.TransportTypeStdio {
 			continue
 		}
 		// error if MCPServer name is not unique
@@ -79,13 +79,33 @@ func (t *agentGatewayTranslator) TranslateRuntimeConfig(
 		dockerComposeServices[mcpServer.Name] = *serviceConfig
 	}
 
+	for _, agent := range desired.Agents {
+		// only need to create services for local agents
+		if agent.ResourceType != api.ResourceTypeLocal {
+			continue
+		}
+		// error if Agent name is not unique
+		if _, exists := dockerComposeServices[agent.Name]; exists {
+			return nil, fmt.Errorf("duplicate Agent name found: %s", agent.Name)
+		}
+
+		serviceConfig, err := t.translateAgentToServiceConfig(agent)
+		if err != nil {
+			return nil, fmt.Errorf("failed to translate MCPServer %s to service config: %w", agent.Name, err)
+		}
+		dockerComposeServices[agent.Name] = *serviceConfig
+	}
+
 	dockerCompose := &DockerComposeConfig{
 		Name:       t.projectName,
 		WorkingDir: t.composeWorkingDir,
 		Services:   dockerComposeServices,
 	}
 
-	gwConfig, err := t.translateAgentGatewayConfig(desired.MCPServers)
+	gwConfig, err := t.translateAgentGatewayConfig(
+		desired.MCPServers,
+		desired.Agents,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to translate agent gateway config: %w", err)
 	}
@@ -147,22 +167,51 @@ func (t *agentGatewayTranslator) translateMCPServerToServiceConfig(server *api.M
 	}, nil
 }
 
-func (t *agentGatewayTranslator) translateAgentGatewayConfig(servers []*api.MCPServer) (*AgentGatewayConfig, error) {
-	var targets []MCPTarget
+func (t *agentGatewayTranslator) translateAgentToServiceConfig(server *api.Agent) (*types.ServiceConfig, error) {
+	image := server.Local.Deployment.Image
+	if image == "" {
+		return nil, fmt.Errorf("image must be specified for Agent %s", server.Name)
+	}
+	cmd := append(
+		[]string{server.Local.Deployment.Cmd},
+		server.Local.Deployment.Args...,
+	)
+
+	var envValues []string
+	for k, v := range server.Local.Deployment.Env {
+		envValues = append(envValues, fmt.Sprintf("%s=%s", k, v))
+	}
+	sort.SliceStable(envValues, func(i, j int) bool {
+		return envValues[i] < envValues[j]
+	})
+
+	return &types.ServiceConfig{
+		Name:        server.Name,
+		Image:       image,
+		Command:     cmd,
+		Environment: types.NewMappingWithEquals(envValues),
+	}, nil
+}
+
+func (t *agentGatewayTranslator) translateAgentGatewayConfig(
+	servers []*api.MCPServer,
+	agents []*api.Agent,
+) (*AgentGatewayConfig, error) {
+	var mcpTargets []MCPTarget
 
 	for _, server := range servers {
 		mcpTarget := MCPTarget{
 			Name: server.Name,
 		}
 
-		switch server.MCPServerType {
-		case api.MCPServerTypeRemote:
+		switch server.ResourceType {
+		case api.ResourceTypeRemote:
 			mcpTarget.SSE = &SSETargetSpec{
 				Host: server.Remote.Host,
 				Port: server.Remote.Port,
 				Path: server.Remote.Path,
 			}
-		case api.MCPServerTypeLocal:
+		case api.ResourceTypeLocal:
 			switch server.Local.TransportType {
 			case api.TransportTypeStdio:
 				mcpTarget.Stdio = &StdioTargetSpec{
@@ -185,13 +234,83 @@ func (t *agentGatewayTranslator) translateAgentGatewayConfig(servers []*api.MCPS
 			}
 		}
 
-		targets = append(targets, mcpTarget)
+		mcpTargets = append(mcpTargets, mcpTarget)
 	}
 
 	// sort for idepmpotence
-	sort.SliceStable(targets, func(i, j int) bool {
-		return targets[i].Name < targets[j].Name
+	sort.SliceStable(mcpTargets, func(i, j int) bool {
+		return mcpTargets[i].Name < mcpTargets[j].Name
 	})
+
+	routes := []LocalRoute{{
+		RouteName: "mcp_route",
+		Matches: []RouteMatch{
+			{
+				Path: PathMatch{
+					PathPrefix: "/mcp",
+				},
+			},
+		},
+		Backends: []RouteBackend{{
+			Weight: 100,
+			MCP: &MCPBackend{
+				Targets: mcpTargets,
+			},
+		}},
+	}}
+
+	// append a unique route for each agent
+	for _, agent := range agents {
+		var (
+			hostname = ""
+			port     = uint32(0)
+			path     = ""
+		)
+		switch agent.ResourceType {
+		case api.ResourceTypeRemote:
+			hostname = agent.Remote.Host
+			port = agent.Remote.Port
+			path = agent.Remote.Path
+		case api.ResourceTypeLocal:
+			httpTransportConfig := agent.Local.HTTP
+			if httpTransportConfig == nil || httpTransportConfig.Port == 0 {
+				return nil, fmt.Errorf("HTTP transport requires a target port")
+			}
+
+			hostname = agent.Name
+			port = httpTransportConfig.Port
+			path = httpTransportConfig.Path
+		}
+
+		agentRoute := LocalRoute{
+			RouteName: fmt.Sprintf("agent_route_%s", agent.Name),
+			Matches: []RouteMatch{
+				{
+					Path: PathMatch{
+						PathPrefix: "/agent/" + agent.Name,
+					},
+				},
+			},
+			Backends: []RouteBackend{{
+				Weight: 100,
+				Opaque: &Target{
+					Hostname: &HostPort{
+						Host: hostname,
+						Port: uint16(port),
+					},
+				},
+				Filters: []RouteFilter{{
+					URLRewrite: &URLRewrite{
+						Path: &PathRedirect{
+							Prefix: path,
+						},
+					},
+				}},
+			}},
+		}
+
+		routes = append(routes, agentRoute)
+	}
 
 	return &AgentGatewayConfig{
 		Config: struct{}{},
@@ -202,22 +321,7 @@ func (t *agentGatewayTranslator) translateAgentGatewayConfig(servers []*api.MCPS
 					{
 						Name:     "default",
 						Protocol: "HTTP",
-						Routes: []LocalRoute{{
-							RouteName: "mcp_route",
-							Matches: []RouteMatch{
-								{
-									Path: PathMatch{
-										PathPrefix: "/mcp",
-									},
-								},
-							},
-							Backends: []RouteBackend{{
-								Weight: 100,
-								MCP: &MCPBackend{
-									Targets: targets,
-								},
-							}},
-						}},
+						Routes:   routes,
 					},
 				},
 			},

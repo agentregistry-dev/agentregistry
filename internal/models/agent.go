@@ -24,8 +24,14 @@ type AgentPackageInfo struct {
 	Identifier   string `json:"identifier"`
 	Version      string `json:"version"`
 	Transport    struct {
-		Type string `json:"type"`
+		Type    string                `json:"type"`
+		URL     string                `json:"url,omitempty"`
+		Headers []model.KeyValueInput `json:"headers,omitempty"`
 	} `json:"transport"`
+	RunTimeHint          string                `json:"runTimeHint,omitempty"`
+	RuntimeArguments     []model.Argument      `json:"runtimeArguments,omitempty"`
+	PackageArguments     []model.Argument      `json:"packageArguments,omitempty"`
+	EnvironmentVariables []model.KeyValueInput `json:"environmentVariables,omitempty"`
 }
 
 // AgentRegistryExtensions mirrors official metadata stored separately

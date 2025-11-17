@@ -773,7 +773,7 @@ func (s *registryServiceImpl) reconcileServers(ctx context.Context, requests []*
 	)
 
 	// Reconcile ALL servers
-	if err := agentRuntime.ReconcileMCPServers(ctx, requests); err != nil {
+	if err := agentRuntime.ReconcileResources(ctx, requests, nil); err != nil {
 		return fmt.Errorf("failed to reconcile servers: %w", err)
 	}
 

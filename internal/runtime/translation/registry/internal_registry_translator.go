@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"fmt"
+	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"net/url"
 	"slices"
 	"strconv"
@@ -22,12 +23,24 @@ type MCPServerRunRequest struct {
 	HeaderValues   map[string]string
 }
 
+type AgentRunRequest struct {
+	RegistryAgent *models.AgentJSON
+	PreferRemote  bool
+	EnvValues     map[string]string
+	ArgValues     map[string]string
+	HeaderValues  map[string]string
+}
+
 // Translator is the interface for translating MCPServer objects to AgentGateway objects.
 type Translator interface {
 	TranslateMCPServer(
 		ctx context.Context,
 		req *MCPServerRunRequest,
 	) (*api.MCPServer, error)
+	TranslateAgent(
+		ctx context.Context,
+		req *AgentRunRequest,
+	) (*api.Agent, error)
 }
 
 type registryTranslator struct{}
@@ -96,8 +109,8 @@ func translateRemoteMCPServer(
 	}
 
 	return &api.MCPServer{
-		Name:          generateInternalName(registryServer.Name),
-		MCPServerType: api.MCPServerTypeRemote,
+		Name:         generateInternalName(registryServer.Name),
+		ResourceType: api.ResourceTypeRemote,
 		Remote: &api.RemoteMCPServer{
 			Host:    u.host,
 			Port:    u.port,
@@ -233,10 +246,10 @@ func translateLocalMCPServer(
 	}
 
 	return &api.MCPServer{
-		Name:          generateInternalName(registryServer.Name),
-		MCPServerType: api.MCPServerTypeLocal,
+		Name:         generateInternalName(registryServer.Name),
+		ResourceType: api.ResourceTypeLocal,
 		Local: &api.LocalMCPServer{
-			Deployment: api.MCPServerDeployment{
+			Deployment: api.ContainerDeployment{
 				Image: image,
 				Cmd:   cmd,
 				Args:  args,
@@ -244,6 +257,211 @@ func translateLocalMCPServer(
 			},
 			TransportType: transportType,
 			HTTP:          httpTransport,
+		},
+	}, nil
+}
+
+func (t *registryTranslator) TranslateAgent(
+	ctx context.Context,
+	req *AgentRunRequest,
+) (*api.Agent, error) {
+	useRemote := len(req.RegistryAgent.Remotes) > 0 && (req.PreferRemote || len(req.RegistryAgent.Packages) == 0)
+	usePackage := len(req.RegistryAgent.Packages) > 0 && (!req.PreferRemote || len(req.RegistryAgent.Remotes) == 0)
+
+	switch {
+	case useRemote:
+		return translateRemoteAgent(
+			ctx,
+			req.RegistryAgent,
+			req.HeaderValues,
+		)
+	case usePackage:
+		return translateLocalAgent(
+			ctx,
+			req.RegistryAgent,
+			req.EnvValues,
+			req.ArgValues,
+		)
+	}
+
+	return nil, fmt.Errorf("no valid deployment method found for agent: %s", req.RegistryAgent.Name)
+}
+
+func translateRemoteAgent(
+	ctx context.Context,
+	registryAgent *models.AgentJSON,
+	headerValues map[string]string,
+) (*api.Agent, error) {
+	remoteInfo := registryAgent.Remotes[0]
+
+	var headers []api.HeaderValue
+	for _, h := range remoteInfo.Headers {
+		k := h.Name
+		v := h.Value
+		if v == "" {
+			v = h.Default
+		}
+		if headerValues != nil {
+			if override, exists := headerValues[k]; exists {
+				v = override
+			}
+		}
+		if h.IsRequired && v == "" {
+			return nil, fmt.Errorf("missing required header value for header: %s", k)
+		}
+		headers = append(headers, api.HeaderValue{
+			Name:  k,
+			Value: v,
+		})
+	}
+
+	u, err := parseUrl(remoteInfo.URL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse remote agent url: %v", err)
+	}
+
+	return &api.Agent{
+		Name:         generateInternalName(registryAgent.Name),
+		ResourceType: api.ResourceTypeRemote,
+		Remote: &api.RemoteAgent{
+			Host:    u.host,
+			Port:    u.port,
+			Path:    u.path,
+			Headers: headers,
+		},
+	}, nil
+}
+
+func translateLocalAgent(
+	ctx context.Context,
+	registryAgent *models.AgentJSON,
+	envValues map[string]string,
+	argValues map[string]string,
+) (*api.Agent, error) {
+	var (
+		image string
+		cmd   string
+		args  []string
+	)
+
+	// deploy the agent either as stdio or http
+	packageInfo := registryAgent.Packages[0]
+
+	cmd = packageInfo.RunTimeHint
+
+	processedArgs := make(map[string]bool)
+
+	getArgValue := func(arg model.Argument) string {
+		if v, exists := argValues[arg.Name]; exists {
+			return v
+		}
+		if arg.Value != "" {
+			return arg.Value
+		}
+		return arg.Default
+	}
+	addArgs := func(modelArgrs []model.Argument) {
+		// Process positional arguments first
+		for _, arg := range modelArgrs {
+			switch arg.Type {
+			case model.ArgumentTypePositional:
+				args = append(args, getArgValue(arg))
+				processedArgs[arg.Name] = true
+			}
+		}
+		// Then process named arguments
+		for _, arg := range modelArgrs {
+			switch arg.Type {
+			case model.ArgumentTypeNamed:
+				// Always add the argument name (e.g., "--rm", "-e")
+				args = append(args, arg.Name)
+				processedArgs[arg.Name] = true
+
+				// Only add a value if one exists (not all named args have values)
+				argValue := getArgValue(arg)
+				if argValue != "" {
+					args = append(args, argValue)
+				}
+			}
+		}
+	}
+
+	addArgs(packageInfo.RuntimeArguments)
+
+	switch packageInfo.RegistryType {
+	case "npm":
+		image = "node:24-alpine3.21"
+		if cmd == "" {
+			cmd = "npx"
+		}
+		if !slices.Contains(args, "-y") {
+			args = append(args, "-y")
+		}
+		args = append(args, packageInfo.Identifier)
+	case "pypi":
+		image = "ghcr.io/astral-sh/uv:debian"
+		if cmd == "" {
+			cmd = "uvx"
+		}
+		args = append(args, packageInfo.Identifier)
+	case "oci":
+		image = packageInfo.Identifier
+	default:
+		return nil, fmt.Errorf("unsupported package registry type: %s", packageInfo.RegistryType)
+	}
+
+	addArgs(packageInfo.PackageArguments)
+
+	var extraArgNames []string
+	for argName := range argValues {
+		if !processedArgs[argName] {
+			extraArgNames = append(extraArgNames, argName)
+		}
+	}
+	slices.Sort(extraArgNames)
+	for _, argName := range extraArgNames {
+		args = append(args, argName)
+		// Only add the value if it's not empty
+		// This allows users to pass flags like --verbose= (empty value means flag only)
+		if argValue := argValues[argName]; argValue != "" {
+			args = append(args, argValue)
+		}
+	}
+
+	for _, envVar := range packageInfo.EnvironmentVariables {
+		if _, exists := envValues[envVar.Name]; !exists {
+			if envVar.IsRequired {
+				return nil, fmt.Errorf("missing required environment variable: %s", envVar.Name)
+			} else if envVar.Default != "" {
+				envValues[envVar.Name] = envVar.Default
+			}
+		}
+	}
+
+	if packageInfo.Transport.URL == "" {
+		return nil, fmt.Errorf("transport url is required for local agent")
+	}
+
+	u, err := parseUrl(packageInfo.Transport.URL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse transport url: %v", err)
+	}
+	httpTransport := &api.HTTPTransport{
+		Port: u.port,
+		Path: u.path,
+	}
+
+	return &api.Agent{
+		Name:         generateInternalName(registryAgent.Name),
+		ResourceType: api.ResourceTypeLocal,
+		Local: &api.LocalAgent{
+			Deployment: api.ContainerDeployment{
+				Image: image,
+				Cmd:   cmd,
+				Args:  args,
+				Env:   envValues,
+			},
+			HTTP: httpTransport,
 		},
 	}, nil
 }

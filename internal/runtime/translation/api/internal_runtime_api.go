@@ -1,30 +1,31 @@
 package api
 
-// DestiredState represents the desired set of MCPServevrs the user wishes to run locally
+// DestiredState represents the desired set of MCPServers and Agents the user wishes to run locally
 type DesiredState struct {
 	MCPServers []*MCPServer `json:"mcpServers"`
+	Agents     []*Agent     `json:"agents"`
 }
 
 // MCPServer represents a single MCPServer configuration
 type MCPServer struct {
 	// Name is the unique name of the MCPServer
 	Name string `json:"name"`
-	// MCPServerType represents whether the MCP server is remote or local
-	MCPServerType MCPServerType `json:"mcpServerType"`
+	// ResourceType represents whether the MCP server is remote or local
+	ResourceType ResourceType `json:"resourceType"`
 	// Remote defines how to route to a remote MCP server
 	Remote *RemoteMCPServer `json:"remote,omitempty"`
 	// Local defines how to deploy the MCP server locally
 	Local *LocalMCPServer `json:"local,omitempty"`
 }
 
-type MCPServerType string
+type ResourceType string
 
 const (
-	// MCPServerTypeRemote indicates that the MCP server is hosted remotely
-	MCPServerTypeRemote MCPServerType = "remote"
+	// ResourceTypeRemote indicates that the resource server is hosted remotely
+	ResourceTypeRemote ResourceType = "remote"
 
-	// MCPServerTypeLocal indicates that the MCP server is hosted locally
-	MCPServerTypeLocal MCPServerType = "local"
+	// ResourceTypeLocal indicates that the resource server is hosted locally
+	ResourceTypeLocal ResourceType = "local"
 )
 
 // RemoteMCPServer represents the configuration for connecting to a remotely hosted MCPServer
@@ -43,7 +44,7 @@ type HeaderValue struct {
 // LocalMCPServer represents the configuration for running an MCPServer locally
 type LocalMCPServer struct {
 	// Deployment defines how to deploy the MCP server
-	Deployment MCPServerDeployment `json:"deployment"`
+	Deployment ContainerDeployment `json:"deployment"`
 	// TransportType defines the type of mcp server being run
 	TransportType TransportType `json:"transportType"`
 	// HTTP defines the configuration for an HTTP transport.(only for TransportTypeHTTP)
@@ -67,8 +68,31 @@ const (
 	TransportTypeHTTP TransportType = "http"
 )
 
-// MCPServerDeployment
-type MCPServerDeployment struct {
+type Agent struct {
+	// Name is the unique name of the Agent
+	Name string `json:"name"`
+	// ResourceType represents whether the agent is remote or local
+	ResourceType ResourceType `json:"resourceType"`
+	// Remote defines how to route to a remote MCP server
+	Remote *RemoteAgent `json:"remote,omitempty"`
+	// Local defines how to deploy the MCP server locally
+	Local *LocalAgent `json:"local,omitempty"`
+}
+
+// RemoteAgent represents the configuration for connecting to a remotely hosted Agent
+// Note: identical to RemoteMCPServer
+type RemoteAgent RemoteMCPServer
+
+// LocalAgent represents the configuration for running an Agent locally
+type LocalAgent struct {
+	// Deployment defines how to deploy the MCP server
+	Deployment ContainerDeployment `json:"deployment"`
+	// HTTP defines the configuration connecting to agents over an HTTP transport (Agents only support HTTP transport)
+	HTTP *HTTPTransport `json:"http,omitempty"`
+}
+
+// ContainerDeployment
+type ContainerDeployment struct {
 	// Image defines the container image to to deploy the MCP server.
 	Image string `json:"image,omitempty"`
 

@@ -193,10 +193,12 @@ type ServiceBackend struct {
 // Target represents a backend target
 type Target struct {
 	Address  *net.TCPAddr `json:"address,omitempty" yaml:"address,omitempty"`
-	Hostname *struct {
-		Host string `json:"host" yaml:"host"`
-		Port uint16 `json:"port" yaml:"port"`
-	} `json:"hostname,omitempty" yaml:"hostname,omitempty"`
+	Hostname *HostPort    `json:"hostname,omitempty" yaml:"hostname,omitempty"`
+}
+
+type HostPort struct {
+	Host string `json:"host" yaml:"host"`
+	Port uint16 `json:"port" yaml:"port"`
 }
 
 // MCPBackend represents an MCP backend

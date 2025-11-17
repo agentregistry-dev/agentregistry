@@ -16,9 +16,10 @@ import (
 )
 
 type AgentRegistryRuntime interface {
-	ReconcileMCPServers(
+	ReconcileResources(
 		ctx context.Context,
-		desired []*registry.MCPServerRunRequest,
+		desiredMCPServers []*registry.MCPServerRunRequest,
+		desiredAgents []*registry.AgentRunRequest,
 	) error
 }
 
@@ -43,20 +44,31 @@ func NewAgentRegistryRuntime(
 	}
 }
 
-func (r *agentRegistryRuntime) ReconcileMCPServers(
+func (r *agentRegistryRuntime) ReconcileResources(
 	ctx context.Context,
-	requests []*registry.MCPServerRunRequest,
+	desiredMCPServers []*registry.MCPServerRunRequest,
+	desiredAgents []*registry.AgentRunRequest,
 ) error {
 	desiredState := &api.DesiredState{}
-	for _, req := range requests {
+	for _, desiredMCPServer := range desiredMCPServers {
 		mcpServer, err := r.registryTranslator.TranslateMCPServer(
-			context.TODO(),
-			req,
+			ctx,
+			desiredMCPServer,
 		)
 		if err != nil {
-			return fmt.Errorf("translate mcp server %s: %w", req.RegistryServer.Name, err)
+			return fmt.Errorf("translate mcp server %s: %w", desiredMCPServer.RegistryServer.Name, err)
 		}
 		desiredState.MCPServers = append(desiredState.MCPServers, mcpServer)
+	}
+	for _, desiredAgent := range desiredAgents {
+		agent, err := r.registryTranslator.TranslateAgent(
+			ctx,
+			desiredAgent,
+		)
+		if err != nil {
+			return fmt.Errorf("translate agent %s: %w", desiredAgent.RegistryAgent.Name, err)
+		}
+		desiredState.Agents = append(desiredState.Agents, agent)
 	}
 
 	runtimeCfg, err := r.dockerComposeTranslator.TranslateRuntimeConfig(ctx, desiredState)

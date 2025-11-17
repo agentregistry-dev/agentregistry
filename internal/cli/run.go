@@ -135,7 +135,7 @@ func runMCPServerWithRuntime(server *apiv0.ServerResponse) error {
 	fmt.Printf("Starting MCP server: %s (version %s)...\n", server.Server.Name, server.Server.Version)
 
 	// Start the server
-	if err := agentRuntime.ReconcileMCPServers(context.Background(), []*registry.MCPServerRunRequest{runRequest}); err != nil {
+	if err := agentRuntime.ReconcileResources(context.Background(), []*registry.MCPServerRunRequest{runRequest}, nil); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
 
