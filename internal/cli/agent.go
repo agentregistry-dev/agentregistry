@@ -2,7 +2,9 @@ package cli
 
 import (
 	"fmt"
+	"github.com/kagent-dev/kagent/go/cli/common/image"
 	"os"
+	"path/filepath"
 
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/kagent-dev/kagent/go/cli/agent/frameworks/common"
@@ -163,6 +165,7 @@ Examples:
 			}
 		},
 	}
+	publishCmd.Flags().StringVar(&publishCfg.Image, "image", "", "Full image specification (e.g., ghcr.io/myorg/my-agent:v1.0.0)")
 
 	addMcpCfg := &agent.AddMcpCfg{
 		Config: cfg,
@@ -203,6 +206,7 @@ Examples:
 
 type publishAgentCfg struct {
 	Config     *config.Config
+	Image      string
 	ProjectDir string
 	Version    string
 }
@@ -229,10 +233,24 @@ func publishAgent(cfg *publishAgentCfg) error {
 		return fmt.Errorf("failed to load manifest: %w", err)
 	}
 
+	imageName := constructImageName(cfg)
+
 	jsn := &models.AgentJSON{
 		AgentManifest: *manifest,
 		Version:       version,
 		Status:        "active",
+		Packages: []models.AgentPackageInfo{{
+			RegistryType: "oci",
+			Identifier:   imageName,
+			Version:      "latest",
+			Transport: models.AgentTransport{
+				// default for kagent-based agents
+				// we need to make this configurable or detectable later
+				URL: "http://localhost:8080/",
+			},
+			PackageArguments:     nil,
+			EnvironmentVariables: nil,
+		}},
 	}
 
 	_, err = APIClient.PublishAgent(jsn)
@@ -249,4 +267,30 @@ func publishAgent(cfg *publishAgentCfg) error {
 
 func init() {
 	rootCmd.AddCommand(newAgentCmd())
+}
+
+// constructImageName constructs the full image name from the provided image or defaults
+func constructImageName(cfg *publishAgentCfg) string {
+	agentName := getAgentNameFromManifest(cfg.ProjectDir)
+
+	// If no agent name found in manifest, fall back to directory name
+	if agentName == "" {
+		agentName = filepath.Base(cfg.ProjectDir)
+	}
+
+	// Construct full image name using common utility
+	return image.ConstructImageName(cfg.Image, agentName)
+}
+
+// getAgentNameFromManifest attempts to load the agent name from agent.yaml
+func getAgentNameFromManifest(projectDir string) string {
+	// Use the Manager to load the manifest
+	manager := common.NewManifestManager(projectDir)
+	manifest, err := manager.Load()
+	if err != nil {
+		// Silently fail and return empty string to fall back to directory name
+		return ""
+	}
+
+	return manifest.Name
 }

@@ -20,18 +20,19 @@ type AgentJSON struct {
 }
 
 type AgentPackageInfo struct {
-	RegistryType string `json:"registryType"`
-	Identifier   string `json:"identifier"`
-	Version      string `json:"version"`
-	Transport    struct {
-		Type    string                `json:"type"`
-		URL     string                `json:"url,omitempty"`
-		Headers []model.KeyValueInput `json:"headers,omitempty"`
-	} `json:"transport"`
+	RegistryType         string                `json:"registryType"`
+	Identifier           string                `json:"identifier"`
+	Version              string                `json:"version"`
+	Transport            AgentTransport        `json:"transport"`
 	RunTimeHint          string                `json:"runTimeHint,omitempty"`
 	RuntimeArguments     []model.Argument      `json:"runtimeArguments,omitempty"`
 	PackageArguments     []model.Argument      `json:"packageArguments,omitempty"`
 	EnvironmentVariables []model.KeyValueInput `json:"environmentVariables,omitempty"`
+}
+
+type AgentTransport struct {
+	URL     string                `json:"url,omitempty"`
+	Headers []model.KeyValueInput `json:"headers,omitempty"`
 }
 
 // AgentRegistryExtensions mirrors official metadata stored separately
