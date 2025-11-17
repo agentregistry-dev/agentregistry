@@ -146,8 +146,12 @@ func (t *agentGatewayTranslator) translateMCPServerToServiceConfig(server *api.M
 	if image == "" {
 		return nil, fmt.Errorf("image must be specified for MCPServer %s or the command must be 'uvx' or 'npx'", server.Name)
 	}
-	cmd := append(
-		[]string{server.Local.Deployment.Cmd},
+	var cmd []string
+	if server.Local.Deployment.Cmd != "" {
+		cmd = []string{server.Local.Deployment.Cmd}
+	}
+	cmd = append(
+		cmd,
 		server.Local.Deployment.Args...,
 	)
 
@@ -167,18 +171,22 @@ func (t *agentGatewayTranslator) translateMCPServerToServiceConfig(server *api.M
 	}, nil
 }
 
-func (t *agentGatewayTranslator) translateAgentToServiceConfig(server *api.Agent) (*types.ServiceConfig, error) {
-	image := server.Local.Deployment.Image
+func (t *agentGatewayTranslator) translateAgentToServiceConfig(agent *api.Agent) (*types.ServiceConfig, error) {
+	image := agent.Local.Deployment.Image
 	if image == "" {
-		return nil, fmt.Errorf("image must be specified for Agent %s", server.Name)
+		return nil, fmt.Errorf("image must be specified for Agent %s", agent.Name)
 	}
-	cmd := append(
-		[]string{server.Local.Deployment.Cmd},
-		server.Local.Deployment.Args...,
+	var cmd []string
+	if agent.Local.Deployment.Cmd != "" {
+		cmd = []string{agent.Local.Deployment.Cmd}
+	}
+	cmd = append(
+		cmd,
+		agent.Local.Deployment.Args...,
 	)
 
 	var envValues []string
-	for k, v := range server.Local.Deployment.Env {
+	for k, v := range agent.Local.Deployment.Env {
 		envValues = append(envValues, fmt.Sprintf("%s=%s", k, v))
 	}
 	sort.SliceStable(envValues, func(i, j int) bool {
@@ -186,9 +194,13 @@ func (t *agentGatewayTranslator) translateAgentToServiceConfig(server *api.Agent
 	})
 
 	return &types.ServiceConfig{
-		Name:        server.Name,
-		Image:       image,
-		Command:     cmd,
+		Name:    agent.Name,
+		Image:   image,
+		Command: cmd,
+		Ports: []types.ServicePortConfig{{
+			Target:    agent.Local.HTTP.Port,
+			Published: fmt.Sprintf("%d", agent.Local.HTTP.Port),
+		}},
 		Environment: types.NewMappingWithEquals(envValues),
 	}, nil
 }
@@ -242,22 +254,26 @@ func (t *agentGatewayTranslator) translateAgentGatewayConfig(
 		return mcpTargets[i].Name < mcpTargets[j].Name
 	})
 
-	routes := []LocalRoute{{
-		RouteName: "mcp_route",
-		Matches: []RouteMatch{
-			{
-				Path: PathMatch{
-					PathPrefix: "/mcp",
+	var routes []LocalRoute
+
+	if len(mcpTargets) > 0 {
+		routes = []LocalRoute{{
+			RouteName: "mcp_route",
+			Matches: []RouteMatch{
+				{
+					Path: PathMatch{
+						PathPrefix: "/mcp",
+					},
 				},
 			},
-		},
-		Backends: []RouteBackend{{
-			Weight: 100,
-			MCP: &MCPBackend{
-				Targets: mcpTargets,
-			},
-		}},
-	}}
+			Backends: []RouteBackend{{
+				Weight: 100,
+				MCP: &MCPBackend{
+					Targets: mcpTargets,
+				},
+			}},
+		}}
+	}
 
 	// append a unique route for each agent
 	for _, agent := range agents {
@@ -293,20 +309,16 @@ func (t *agentGatewayTranslator) translateAgentGatewayConfig(
 			},
 			Backends: []RouteBackend{{
 				Weight: 100,
-				Opaque: &Target{
-					Hostname: &HostPort{
-						Host: hostname,
-						Port: uint16(port),
+				Host:   mkPtr(fmt.Sprintf("%s:%d", hostname, port)),
+			}},
+			Policies: &FilterOrPolicy{
+				URLRewrite: &URLRewrite{
+					Path: &PathRedirect{
+						Prefix: path,
 					},
 				},
-				Filters: []RouteFilter{{
-					URLRewrite: &URLRewrite{
-						Path: &PathRedirect{
-							Prefix: path,
-						},
-					},
-				}},
-			}},
+				A2A: &A2APolicy{},
+			},
 		}
 
 		routes = append(routes, agentRoute)
@@ -327,4 +339,8 @@ func (t *agentGatewayTranslator) translateAgentGatewayConfig(
 			},
 		},
 	}, nil
+}
+
+func mkPtr[T any](v T) *T {
+	return &v
 }

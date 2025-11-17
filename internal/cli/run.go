@@ -244,11 +244,11 @@ func runAgentWithRuntime(ctx context.Context, agent *agentmodels.AgentResponse) 
 	fmt.Printf("Starting Agent: %s (version %s)...\n", agentName, agent.Agent.Version)
 
 	// Start the server
-	if err := agentRuntime.ReconcileResources(context.Background(), nil, []*registry.AgentRunRequest{runRequest}); err != nil {
+	if err := agentRuntime.ReconcileResources(ctx, nil, []*registry.AgentRunRequest{runRequest}); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
 
-	agentGatewayURL := fmt.Sprintf("http://localhost:%d/agents/%s", agentGatewayPort, agentName)
+	agentGatewayURL := fmt.Sprintf("http://localhost:%d/agent/%s", agentGatewayPort, agentName)
 	fmt.Printf("\nAgent Gateway endpoint: %s\n", agentGatewayURL)
 
 	fmt.Println("Waiting for agent to be ready...")

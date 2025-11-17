@@ -222,6 +222,8 @@ func translateLocalMCPServer(
 				return nil, fmt.Errorf("missing required environment variable: %s", envVar.Name)
 			} else if envVar.Default != "" {
 				envValues[envVar.Name] = envVar.Default
+			} else if envVar.Value != "" {
+				envValues[envVar.Name] = envVar.Value
 			}
 		}
 	}
@@ -434,6 +436,8 @@ func translateLocalAgent(
 				return nil, fmt.Errorf("missing required environment variable: %s", envVar.Name)
 			} else if envVar.Default != "" {
 				envValues[envVar.Name] = envVar.Default
+			} else if envVar.Value != "" {
+				envValues[envVar.Name] = envVar.Value
 			}
 		}
 	}

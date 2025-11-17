@@ -163,6 +163,7 @@ type QueryValueMatch struct {
 type RouteBackend struct {
 	Weight  int             `json:"weight" yaml:"weight"`
 	Service *ServiceBackend `json:"service,omitempty" yaml:"service,omitempty"`
+	Host    *string         `json:"host,omitempty" yaml:"host,omitempty"`
 	Opaque  *Target         `json:"opaque,omitempty" yaml:"opaque,omitempty"`
 	Dynamic *struct{}       `json:"dynamic,omitempty" yaml:"dynamic,omitempty"`
 	MCP     *MCPBackend     `json:"mcp,omitempty" yaml:"mcp,omitempty"`
