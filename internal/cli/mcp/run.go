@@ -1,12 +1,15 @@
-package cli
+package mcp
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/agentregistry-dev/agentregistry/internal/runtime"
@@ -26,61 +29,43 @@ var (
 	runHeaderVars []string
 )
 
-var runCmd = &cobra.Command{
-	Use:   "run <resource-type> <resource-name>",
-	Short: "Run a resource",
-	Long:  `Runs a resource (agent, mcp).`,
-	Args:  cobra.ExactArgs(2),
-	Run: func(cmd *cobra.Command, args []string) {
-		resourceType := args[0]
-		if resourceType != "agent" && resourceType != "mcp" {
-			fmt.Println("Invalid resource type")
-			return
-		}
-
-		resourceName := args[1]
-		switch resourceType {
-		case "agent":
-			fmt.Println("Not implemented yet")
-			return
-		case "mcp":
-			runMCPServer(resourceName)
-		default:
-			fmt.Println("Invalid resource type")
-			return
-		}
-	},
+var RunCmd = &cobra.Command{
+	Use:   "run <server-name>",
+	Short: "Run an MCP server",
+	Long:  `Run an MCP server locally.`,
+	Args:  cobra.ExactArgs(1),
+	RunE:  runRun,
 }
 
 func init() {
-	rootCmd.AddCommand(runCmd)
-	runCmd.Flags().StringVarP(&runVersion, "version", "v", "", "Specify the version of the resource to run")
-	runCmd.Flags().BoolVar(&runInspector, "inspector", false, "Launch MCP Inspector to interact with the server")
-	runCmd.Flags().BoolVarP(&runYes, "yes", "y", false, "Automatically accept all prompts (use default values)")
-	runCmd.Flags().BoolVar(&runVerbose, "verbose", false, "Enable verbose logging")
-	runCmd.Flags().StringArrayVarP(&runEnvVars, "env", "e", []string{}, "Environment variables (key=value)")
-	runCmd.Flags().StringArrayVar(&runArgVars, "arg", []string{}, "Runtime arguments (key=value)")
-	runCmd.Flags().StringArrayVar(&runHeaderVars, "header", []string{}, "Headers for remote servers (key=value)")
+	RunCmd.Flags().StringVarP(&runVersion, "version", "v", "", "Specify the version of the server to run")
+	RunCmd.Flags().BoolVar(&runInspector, "inspector", false, "Launch MCP Inspector to interact with the server")
+	RunCmd.Flags().BoolVarP(&runYes, "yes", "y", false, "Automatically accept all prompts (use default values)")
+	RunCmd.Flags().BoolVar(&runVerbose, "verbose", false, "Enable verbose logging")
+	RunCmd.Flags().StringArrayVarP(&runEnvVars, "env", "e", []string{}, "Environment variables (key=value)")
+	RunCmd.Flags().StringArrayVar(&runArgVars, "arg", []string{}, "Runtime arguments (key=value)")
+	RunCmd.Flags().StringArrayVar(&runHeaderVars, "header", []string{}, "Headers for remote servers (key=value)")
 }
 
-func runMCPServer(resourceName string) {
-	if APIClient == nil {
-		fmt.Println("Error: API client not initialized")
-		return
+func runRun(cmd *cobra.Command, args []string) error {
+	serverName := args[0]
+
+	if apiClient == nil {
+		return fmt.Errorf("API client not initialized")
 	}
 
 	// Use the common server version selection logic
-	server, err := selectServerVersion(resourceName, runVersion, runYes)
+	server, err := selectServerVersion(serverName, runVersion, runYes)
 	if err != nil {
-		fmt.Printf("Error: %v\n", err)
-		return
+		return err
 	}
 
 	// Proceed with running the server
 	if err := runMCPServerWithRuntime(server); err != nil {
-		fmt.Printf("Error running MCP server: %v\n", err)
-		return
+		return fmt.Errorf("error running MCP server: %w", err)
 	}
+
+	return nil
 }
 
 // runMCPServerWithRuntime starts an MCP server using the runtime
@@ -224,4 +209,61 @@ func waitForShutdown(runtimeDir, projectName string, inspectorCmd *exec.Cmd) err
 
 	fmt.Println("\n✓ Cleanup completed successfully")
 	return nil
+}
+
+// parseKeyValuePairs parses key=value pairs from command line flags
+func parseKeyValuePairs(pairs []string) (map[string]string, error) {
+	result := make(map[string]string)
+	for _, pair := range pairs {
+		idx := findFirstEquals(pair)
+		if idx == -1 {
+			return nil, fmt.Errorf("invalid key=value pair (missing =): %s", pair)
+		}
+		key := pair[:idx]
+		value := pair[idx+1:]
+		result[key] = value
+	}
+	return result, nil
+}
+
+// findFirstEquals finds the first = character in a string
+func findFirstEquals(s string) int {
+	for i, c := range s {
+		if c == '=' {
+			return i
+		}
+	}
+	return -1
+}
+
+// generateRandomName generates a random hex string for use in naming
+func generateRandomName() (string, error) {
+	randomBytes := make([]byte, 8)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "", fmt.Errorf("failed to generate random name: %w", err)
+	}
+	return hex.EncodeToString(randomBytes), nil
+}
+
+// generateRuntimePaths generates random names and paths for runtime directories
+// Returns projectName, runtimeDir, and any error encountered
+func generateRuntimePaths(prefix string) (projectName string, runtimeDir string, err error) {
+	// Generate a random name
+	randomName, err := generateRandomName()
+	if err != nil {
+		return "", "", err
+	}
+
+	// Create project name with prefix
+	projectName = prefix + randomName
+
+	// Get home directory and construct runtime directory path
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	baseRuntimeDir := filepath.Join(homeDir, ".arctl", "runtime")
+	runtimeDir = filepath.Join(baseRuntimeDir, prefix+randomName)
+
+	return projectName, runtimeDir, nil
 }

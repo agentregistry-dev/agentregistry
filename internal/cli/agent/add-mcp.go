@@ -18,18 +18,16 @@ var AddMcpCmd = &cobra.Command{
 }
 
 var (
-	projectDir string
-	remoteURL  string
-	headers    []string
-	command    string
-	args       []string
-	env        []string
-	image      string
-	build      string
+	remoteURL string
+	headers   []string
+	command   string
+	args      []string
+	env       []string
+	image     string
+	build     string
 )
 
 func init() {
-	AddMcpCmd.Flags().StringVar(&projectDir, "project-dir", "", "Project directory (default: current directory)")
 	AddMcpCmd.Flags().StringVar(&remoteURL, "remote", "", "Remote MCP server URL (http/https)")
 	AddMcpCmd.Flags().StringSliceVar(&headers, "header", nil, "HTTP header for remote MCP in KEY=VALUE format (repeatable, supports ${VAR} for env vars)")
 	AddMcpCmd.Flags().StringVar(&command, "command", "", "Command to run MCP server (e.g., npx, uvx, arctl, or a binary)")

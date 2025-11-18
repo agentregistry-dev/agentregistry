@@ -30,14 +30,12 @@ arctl agent build ./my-agent --image ghcr.io/myorg/my-agent:v1.0.0 --push`,
 }
 
 var (
-	buildProjectDir string
-	buildImage      string
-	buildPush       bool
-	buildPlatform   string
+	buildImage    string
+	buildPush     bool
+	buildPlatform string
 )
 
 func init() {
-	BuildCmd.Flags().StringVar(&buildProjectDir, "project-dir", "", "Project directory (default: current directory)")
 	BuildCmd.Flags().StringVar(&buildImage, "image", "", "Full image specification (e.g., ghcr.io/myorg/my-agent:v1.0.0)")
 	BuildCmd.Flags().BoolVar(&buildPush, "push", false, "Push the image to the registry")
 	BuildCmd.Flags().StringVar(&buildPlatform, "platform", "", "Target platform for Docker build (e.g., linux/amd64, linux/arm64)")

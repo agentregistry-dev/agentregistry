@@ -26,14 +26,6 @@ Examples:
   arctl agent run dice`,
 }
 
-var (
-	runProjectDir string
-)
-
-func init() {
-	RunCmd.Flags().StringVar(&runProjectDir, "project-dir", "", "Project directory (default: current directory)")
-}
-
 func runRun(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return cmd.Help()

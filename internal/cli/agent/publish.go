@@ -7,7 +7,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/kagent-dev/kagent/go/cli/agent/frameworks/common"
 	"github.com/kagent-dev/kagent/go/cli/config"
-	kagentconfig "github.com/kagent-dev/kagent/go/cli/config"
 	"github.com/spf13/cobra"
 )
 
@@ -23,19 +22,11 @@ arctl agent publish ./my-agent`,
 	Example: `arctl agent publish ./my-agent`,
 }
 
-var (
-	publishProjectDir string
-)
-
-func init() {
-	RunCmd.Flags().StringVar(&runProjectDir, "project-dir", "", "Project directory (default: current directory)")
-}
-
 func runPublish(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return cmd.Help()
 	}
-	cfg := &kagentconfig.Config{}
+	cfg := &config.Config{}
 	publishCfg := &publishAgentCfg{
 		Config: cfg,
 	}
