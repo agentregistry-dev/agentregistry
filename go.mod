@@ -30,6 +30,8 @@ require (
 	golang.org/x/mod v0.29.0
 	golang.org/x/text v0.29.0
 	gopkg.in/yaml.v3 v3.0.1
+	sigs.k8s.io/yaml v1.6.0
+	trpc.group/trpc-go/trpc-a2a-go v0.2.4
 )
 
 require (
@@ -254,6 +256,4 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/release-utils v0.6.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
-	sigs.k8s.io/yaml v1.6.0 // indirect
-	trpc.group/trpc-go/trpc-a2a-go v0.2.4 // indirect
 )
