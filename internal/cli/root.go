@@ -13,7 +13,7 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "arctl",
 	Short: "AI Registry and Runtime",
-	Long:  `arctl is a CLI tool for managing MCP servers, skills, and registries.`,
+	Long:  `arctl is a CLI tool for managing agents, MCP servers and skills.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Check if docker compose is available
 		if !daemon.IsDockerComposeAvailable() {

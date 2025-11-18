@@ -3,16 +3,17 @@ package mcp
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/build"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/spf13/cobra"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
 )
 
 var (
@@ -24,7 +25,7 @@ var (
 	publishPlatform string
 )
 
-var publishCmd = &cobra.Command{
+var PublishCmd = &cobra.Command{
 	Use:   "publish <mcp-server-folder-path>",
 	Short: "Build and publish an MCP Server as a Docker image",
 	Long: `Wrap an MCP Server in a Docker image and publish it to both Docker registry and agent registry.
@@ -181,15 +182,12 @@ func translateServerJSON(
 }
 
 func init() {
-	// Add subcommands to mcp command
-	McpCmd.AddCommand(publishCmd)
-
 	// Flags for publish command
-	publishCmd.Flags().StringVar(&dockerUrl, "docker-url", "", "Docker registry URL. For example: docker.io/myorg. The final image name will be <docker-url>/<mcp-server-name>:<tag>")
-	publishCmd.Flags().BoolVar(&pushFlag, "push", false, "Automatically push to Docker and agent registries")
-	publishCmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Show what would be done without actually doing it")
-	publishCmd.Flags().StringVar(&dockerTag, "tag", "latest", "Docker image tag to use")
-	publishCmd.Flags().StringVar(&publishPlatform, "platform", "", "Target platform (e.g., linux/amd64,linux/arm64)")
+	PublishCmd.Flags().StringVar(&dockerUrl, "docker-url", "", "Docker registry URL. For example: docker.io/myorg. The final image name will be <docker-url>/<mcp-server-name>:<tag>")
+	PublishCmd.Flags().BoolVar(&pushFlag, "push", false, "Automatically push to Docker and agent registries")
+	PublishCmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Show what would be done without actually doing it")
+	PublishCmd.Flags().StringVar(&dockerTag, "tag", "latest", "Docker image tag to use")
+	PublishCmd.Flags().StringVar(&publishPlatform, "platform", "", "Target platform (e.g., linux/amd64,linux/arm64)")
 
-	_ = publishCmd.MarkFlagRequired("docker-url")
+	_ = PublishCmd.MarkFlagRequired("docker-url")
 }

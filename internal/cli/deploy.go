@@ -20,7 +20,7 @@ var (
 var deployCmd = &cobra.Command{
 	Use:           "deploy <resource-type> <resource-name>",
 	Short:         "Deploy a resource",
-	Long:          `Deploy resources (mcp server, skill, agent) to the runtime.`,
+	Long:          `Deploy resources (mcp server, agent) to the runtime.`,
 	Args:          cobra.ExactArgs(2),
 	RunE:          runDeploy,
 	SilenceUsage:  true,  // Don't show usage on deployment errors

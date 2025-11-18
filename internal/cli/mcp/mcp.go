@@ -18,4 +18,9 @@ var McpCmd = &cobra.Command{
 
 func init() {
 	McpCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
+
+	McpCmd.AddCommand(InitCmd)
+	McpCmd.AddCommand(BuildCmd)
+	McpCmd.AddCommand(AddToolCmd)
+	McpCmd.AddCommand(PublishCmd)
 }

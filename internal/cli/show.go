@@ -18,7 +18,7 @@ var (
 var showCmd = &cobra.Command{
 	Use:   "show <resource-type> <resource-name>",
 	Short: "Show details of a resource",
-	Long:  `Shows detailed information about a resource (mcp, skill, registry).`,
+	Long:  `Shows detailed information about a resource (agent,mcp, skill).`,
 	Args:  cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		resourceType := args[0]
