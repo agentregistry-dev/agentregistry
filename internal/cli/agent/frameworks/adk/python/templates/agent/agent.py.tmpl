@@ -1,0 +1,73 @@
+import random
+
+from google.adk import Agent
+from google.adk.tools.tool_context import ToolContext
+from google.adk.models.lite_llm import LiteLlm
+
+from .mcp_tools import get_mcp_tools
+
+
+def roll_die(sides: int, tool_context: ToolContext) -> int:
+    """Roll a die and record the outcome for later reference."""
+    result = random.randint(1, sides)
+    if "rolls" not in tool_context.state:
+        tool_context.state["rolls"] = []
+
+    tool_context.state["rolls"] = tool_context.state["rolls"] + [result]
+    return result
+
+
+async def check_prime(nums: list[int]) -> str:
+    """Check whether the provided numbers are prime."""
+    primes = set()
+    for number in nums:
+        number = int(number)
+        if number <= 1:
+            continue
+        is_prime = True
+        for i in range(2, int(number**0.5) + 1):
+            if number % i == 0:
+                is_prime = False
+                break
+        if is_prime:
+            primes.add(number)
+    return "No prime numbers found." if not primes else f"{', '.join(str(num) for num in primes)} are prime numbers."
+
+
+{{if eq .ModelProvider "gemini"}}
+def create_model():
+    """Use a Gemini model."""
+    return "{{.ModelName}}"
+{{else if eq .ModelProvider "openai"}}
+def create_model():
+    """Use an OpenAI model via LiteLLM."""
+    return LiteLlm(model="openai/{{.ModelName}}")
+{{else if eq .ModelProvider "anthropic"}}
+def create_model():
+    """Use an Anthropic model via LiteLLM."""
+    return LiteLlm(model="anthropic/{{.ModelName}}")
+{{else if eq .ModelProvider "azureopenai"}}
+def create_model():
+    """Use an Azure OpenAI deployment via LiteLLM."""
+    return LiteLlm(model="azure/{{.ModelName}}")
+{{else}}
+def create_model():
+    """Fallback model specification."""
+    return "{{.ModelName}}"
+{{end}}
+
+
+mcp_tools = get_mcp_tools()
+root_agent = Agent(
+    model=create_model(),
+    name="{{.Name}}_agent",
+    description="{{if .Description}}{{.Description}}{{else}}{{.Name}} agent.{{end}}",
+    instruction="""
+{{.Instruction}}
+    """,
+    tools=[
+        roll_die,
+        check_prime,
+    ] + (mcp_tools if mcp_tools else []),
+)
+
