@@ -32,7 +32,7 @@ func init() {
 	ListCmd.Flags().BoolVarP(&listAll, "all", "a", false, "Show all items without pagination")
 	ListCmd.Flags().IntVarP(&listPageSize, "page-size", "p", 15, "Number of items per page")
 	ListCmd.Flags().StringVarP(&filterType, "type", "t", "", "Filter by registry type (e.g., npm, pypi, oci, sse, streamable-http)")
-	ListCmd.Flags().StringVarP(&sortBy, "sortBy", "s", "name", "Sort by column (name, namespace, version, type, status, updated)")
+	ListCmd.Flags().StringVarP(&sortBy, "sortBy", "s", "name", "Sort by column (name, version, type, status, updated)")
 	ListCmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "Output format (table, json, yaml)")
 }
 
@@ -80,13 +80,13 @@ func runList(cmd *cobra.Command, args []string) error {
 }
 
 func displayPaginatedServers(servers []*v0.ServerResponse, deployedServers []*client.DeploymentResponse, pageSize int, showAll bool) {
-	// Group servers by name to handle multiple versions
-	serverGroups := groupServersByName(servers)
-	total := len(serverGroups)
+	// Sort servers before displaying
+	sortServers(servers, sortBy)
+	total := len(servers)
 
 	if showAll || total <= pageSize {
 		// Show all items
-		printServersTable(serverGroups, deployedServers)
+		printServersTable(servers, deployedServers)
 		return
 	}
 
@@ -101,7 +101,7 @@ func displayPaginatedServers(servers []*v0.ServerResponse, deployedServers []*cl
 		}
 
 		// Display current page
-		printServersTable(serverGroups[start:end], deployedServers)
+		printServersTable(servers[start:end], deployedServers)
 
 		// Check if there are more items
 		remaining := total - end
@@ -121,7 +121,7 @@ func displayPaginatedServers(servers []*v0.ServerResponse, deployedServers []*cl
 			case "a", "all":
 				// Show all remaining
 				fmt.Println()
-				printServersTable(serverGroups[end:], deployedServers)
+				printServersTable(servers[end:], deployedServers)
 				return
 			case "q", "quit":
 				// Quit pagination
@@ -140,131 +140,90 @@ func displayPaginatedServers(servers []*v0.ServerResponse, deployedServers []*cl
 	}
 }
 
-// ServerGroup represents a server with potentially multiple versions
-type ServerGroup struct {
-	Server        *v0.ServerResponse
-	VersionCount  int
-	LatestVersion string
-	Namespace     string
-	Name          string
-}
-
-// groupServersByName groups servers by name and picks the latest version
-func groupServersByName(servers []*v0.ServerResponse) []ServerGroup {
-	groups := make(map[string]*ServerGroup)
-
-	for _, s := range servers {
-		if existing, ok := groups[s.Server.Name]; ok {
-			existing.VersionCount++
-			// Keep the latest version (assumes servers are sorted by version DESC from DB)
-			// We keep the first one we see since it should be the latest
-		} else {
-			// Split namespace and name
-			namespace, name := splitServerName(s.Server.Name)
-
-			groups[s.Server.Name] = &ServerGroup{
-				Server:        s,
-				VersionCount:  1,
-				LatestVersion: s.Server.Version,
-				Namespace:     namespace,
-				Name:          name,
-			}
-		}
-	}
-
-	// Convert map to slice
-	result := make([]ServerGroup, 0, len(groups))
-	for _, group := range groups {
-		result = append(result, *group)
-	}
-
-	// Sort the results
-	sortServerGroups(result, sortBy)
-
-	return result
-}
-
-// sortServerGroups sorts server groups by the specified column
-func sortServerGroups(groups []ServerGroup, column string) {
+// sortServers sorts servers by the specified column
+func sortServers(servers []*v0.ServerResponse, column string) {
 	column = strings.ToLower(column)
 
 	switch column {
-	case "namespace":
-		// Sort by namespace, then name
-		for i := 0; i < len(groups); i++ {
-			for j := i + 1; j < len(groups); j++ {
-				if groups[i].Namespace > groups[j].Namespace ||
-					(groups[i].Namespace == groups[j].Namespace && groups[i].Name > groups[j].Name) {
-					groups[i], groups[j] = groups[j], groups[i]
-				}
-			}
-		}
 	case "version":
 		// Sort by version
-		for i := 0; i < len(groups); i++ {
-			for j := i + 1; j < len(groups); j++ {
-				if groups[i].LatestVersion > groups[j].LatestVersion {
-					groups[i], groups[j] = groups[j], groups[i]
+		for i := 0; i < len(servers); i++ {
+			for j := i + 1; j < len(servers); j++ {
+				if servers[i].Server.Version > servers[j].Server.Version {
+					servers[i], servers[j] = servers[j], servers[i]
 				}
 			}
 		}
 	case "type":
 		// Sort by registry type
-		for i := 0; i < len(groups); i++ {
-			for j := i + 1; j < len(groups); j++ {
-				typeI := groups[i].Server.Server.Packages[0].RegistryType
-				typeJ := groups[j].Server.Server.Packages[0].RegistryType
+		for i := 0; i < len(servers); i++ {
+			for j := i + 1; j < len(servers); j++ {
+				typeI := ""
+				typeJ := ""
+				if len(servers[i].Server.Packages) > 0 {
+					typeI = servers[i].Server.Packages[0].RegistryType
+				} else if len(servers[i].Server.Remotes) > 0 {
+					typeI = servers[i].Server.Remotes[0].Type
+				}
+				if len(servers[j].Server.Packages) > 0 {
+					typeJ = servers[j].Server.Packages[0].RegistryType
+				} else if len(servers[j].Server.Remotes) > 0 {
+					typeJ = servers[j].Server.Remotes[0].Type
+				}
 				if typeI > typeJ {
-					groups[i], groups[j] = groups[j], groups[i]
+					servers[i], servers[j] = servers[j], servers[i]
 				}
 			}
 		}
 	case "status":
 		// Sort by status
-		for i := 0; i < len(groups); i++ {
-			for j := i + 1; j < len(groups); j++ {
-				statusI := groups[i].Server.Meta.Official.Status
-				statusJ := groups[j].Server.Meta.Official.Status
+		for i := 0; i < len(servers); i++ {
+			for j := i + 1; j < len(servers); j++ {
+				statusI := string(servers[i].Meta.Official.Status)
+				statusJ := string(servers[j].Meta.Official.Status)
 				if statusI > statusJ {
-					groups[i], groups[j] = groups[j], groups[i]
+					servers[i], servers[j] = servers[j], servers[i]
 				}
 			}
 		}
 	case "updated":
 		// Sort by updated time (most recent first)
-		for i := 0; i < len(groups); i++ {
-			for j := i + 1; j < len(groups); j++ {
-				timeI := groups[i].Server.Meta.Official.UpdatedAt
-				timeJ := groups[j].Server.Meta.Official.UpdatedAt
+		for i := 0; i < len(servers); i++ {
+			for j := i + 1; j < len(servers); j++ {
+				timeI := servers[i].Meta.Official.UpdatedAt
+				timeJ := servers[j].Meta.Official.UpdatedAt
 				if timeI.Before(timeJ) {
-					groups[i], groups[j] = groups[j], groups[i]
+					servers[i], servers[j] = servers[j], servers[i]
 				}
 			}
 		}
 	default:
-		// Default: sort by name
-		for i := 0; i < len(groups); i++ {
-			for j := i + 1; j < len(groups); j++ {
-				if groups[i].Name > groups[j].Name {
-					groups[i], groups[j] = groups[j], groups[i]
+		// Default: sort by name, then version
+		for i := 0; i < len(servers); i++ {
+			for j := i + 1; j < len(servers); j++ {
+				if servers[i].Server.Name > servers[j].Server.Name ||
+					(servers[i].Server.Name == servers[j].Server.Name && servers[i].Server.Version > servers[j].Server.Version) {
+					servers[i], servers[j] = servers[j], servers[i]
 				}
 			}
 		}
 	}
 }
 
-func printServersTable(serverGroups []ServerGroup, deployedServers []*client.DeploymentResponse) {
+func printServersTable(servers []*v0.ServerResponse, deployedServers []*client.DeploymentResponse) {
 	t := printer.NewTablePrinter(os.Stdout)
 	t.SetHeaders("Name", "Version", "Type", "Published", "Deployed", "Updated")
 
-	deployedMap := make(map[string]*client.DeploymentResponse)
+	// Create a map of deployed servers by name and version
+	deployedMap := make(map[string]map[string]*client.DeploymentResponse)
 	for _, d := range deployedServers {
-		deployedMap[d.ServerName] = d
+		if deployedMap[d.ServerName] == nil {
+			deployedMap[d.ServerName] = make(map[string]*client.DeploymentResponse)
+		}
+		deployedMap[d.ServerName][d.Version] = d
 	}
 
-	for _, group := range serverGroups {
-		s := group.Server
-
+	for _, s := range servers {
 		// Parse the stored combined data
 		registryType := "<none>"
 		updatedAt := ""
@@ -289,27 +248,20 @@ func printServersTable(serverGroups []ServerGroup, deployedServers []*client.Dep
 			updatedAt = printer.FormatAge(s.Meta.Official.UpdatedAt)
 		}
 
-		// Format version display
-		versionDisplay := group.LatestVersion
-		if group.VersionCount > 1 {
-			versionDisplay = fmt.Sprintf("%s (+%d)", group.LatestVersion, group.VersionCount-1)
-		}
-
 		// Use the full server name (includes namespace if present)
 		fullName := s.Server.Name
 
 		deployedStatus := "False"
-		if deployment, ok := deployedMap[s.Server.Name]; ok {
-			if deployment.Version == group.LatestVersion {
+		if serverDeployments, ok := deployedMap[s.Server.Name]; ok {
+			if _, ok := serverDeployments[s.Server.Version]; ok {
 				deployedStatus = "True"
-			} else {
-				deployedStatus = fmt.Sprintf("True (v%s)", deployment.Version)
 			}
+			// If this specific version is not deployed, show False even if another version is deployed
 		}
 
 		t.AddRow(
 			printer.TruncateString(fullName, 50),
-			versionDisplay,
+			s.Server.Version,
 			registryType,
 			publishedStatus,
 			deployedStatus,
@@ -342,14 +294,6 @@ func filterServersByType(servers []*v0.ServerResponse, typeFilter string) []*v0.
 	}
 
 	return filtered
-}
-
-func splitServerName(fullName string) (namespace, name string) {
-	parts := strings.Split(fullName, "/")
-	if len(parts) == 2 {
-		return parts[0], parts[1]
-	}
-	return "", fullName
 }
 
 func outputDataJson(data interface{}) error {

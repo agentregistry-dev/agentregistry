@@ -150,15 +150,10 @@ func showServerDetails(server *v0.ServerResponse, otherVersions []string) {
 		updatedAt = printer.FormatAge(server.Meta.Official.UpdatedAt)
 	}
 
-	// Split namespace and name
-	namespace, name := splitServerName(server.Server.Name)
-
 	// Display server details in table format
 	t := printer.NewTablePrinter(os.Stdout)
 	t.SetHeaders("Property", "Value")
 	t.AddRow("Full Name", server.Server.Name)
-	t.AddRow("Namespace", printer.EmptyValueOrDefault(namespace, "<none>"))
-	t.AddRow("Name", name)
 	t.AddRow("Title", printer.EmptyValueOrDefault(server.Server.Title, "<none>"))
 	t.AddRow("Description", printer.EmptyValueOrDefault(server.Server.Description, "<none>"))
 
