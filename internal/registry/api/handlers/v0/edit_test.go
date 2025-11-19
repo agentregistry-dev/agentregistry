@@ -651,7 +651,7 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 		assert.Equal(t, "1.0.0", response.Server.Version)
 
 		// Verify the other version wasn't affected
-		otherVersion, err := registryService.GetServerByNameAndVersion(context.Background(), "com.example/multi-version-server", "2.0.0")
+		otherVersion, err := registryService.GetServerByNameAndVersion(context.Background(), "com.example/multi-version-server", "2.0.0", false)
 		require.NoError(t, err)
 		assert.NotEqual(t, "Updated v1.0.0 specifically", otherVersion.Server.Description)
 	})

@@ -26,7 +26,7 @@ var ShowCmd = &cobra.Command{
 
 func init() {
 	ShowCmd.Flags().StringVarP(&showOutputFormat, "output", "o", "table", "Output format (table, json)")
-	ShowCmd.Flags().StringVarP(&showVersion, "version", "v", "", "Show specific version of the server")
+	ShowCmd.Flags().StringVar(&showVersion, "version", "", "Show specific version of the server")
 }
 
 func runShow(cmd *cobra.Command, args []string) error {
@@ -224,7 +224,7 @@ func groupServersByBaseName(servers []*v0.ServerResponse) []ServerVersionGroup {
 }
 
 func findServersByName(searchName string) []*v0.ServerResponse {
-	servers, err := apiClient.GetServers()
+	servers, err := apiClient.GetPublishedServers()
 	if err != nil {
 		log.Fatalf("Failed to get servers: %v", err)
 	}

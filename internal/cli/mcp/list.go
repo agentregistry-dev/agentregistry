@@ -41,7 +41,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API client not initialized")
 	}
 
-	servers, err := apiClient.GetServers()
+	servers, err := apiClient.GetPublishedServers()
 	if err != nil {
 		return fmt.Errorf("failed to get servers: %w", err)
 	}
@@ -255,7 +255,7 @@ func sortServerGroups(groups []ServerGroup, column string) {
 
 func printServersTable(serverGroups []ServerGroup, deployedServers []*client.DeploymentResponse) {
 	t := printer.NewTablePrinter(os.Stdout)
-	t.SetHeaders("Namespace", "Name", "Version", "Type", "Status", "Deployed", "Updated")
+	t.SetHeaders("Name", "Version", "Type", "Published", "Deployed", "Updated")
 
 	deployedMap := make(map[string]*client.DeploymentResponse)
 	for _, d := range deployedServers {
@@ -276,8 +276,15 @@ func printServersTable(serverGroups []ServerGroup, deployedServers []*client.Dep
 			registryType = s.Server.Remotes[0].Type
 		}
 
-		// Extract status from _meta
-		registryStatus := string(s.Meta.Official.Status)
+		// Extract published status using the published boolean field
+		publishedStatus := "False"
+		isPublished, err := isServerPublished(s.Server.Name, s.Server.Version)
+		if err != nil {
+			log.Printf("Warning: Failed to check if server is published: %v", err)
+		}
+		if isPublished {
+			publishedStatus = "True"
+		}
 		if !s.Meta.Official.UpdatedAt.IsZero() {
 			updatedAt = printer.FormatAge(s.Meta.Official.UpdatedAt)
 		}
@@ -288,27 +295,23 @@ func printServersTable(serverGroups []ServerGroup, deployedServers []*client.Dep
 			versionDisplay = fmt.Sprintf("%s (+%d)", group.LatestVersion, group.VersionCount-1)
 		}
 
-		// Use empty string if no namespace
-		namespace := group.Namespace
-		if namespace == "" {
-			namespace = "<none>"
-		}
+		// Use the full server name (includes namespace if present)
+		fullName := s.Server.Name
 
-		deployedStatus := "-"
+		deployedStatus := "False"
 		if deployment, ok := deployedMap[s.Server.Name]; ok {
 			if deployment.Version == group.LatestVersion {
-				deployedStatus = "✓"
+				deployedStatus = "True"
 			} else {
-				deployedStatus = fmt.Sprintf("✓ (v%s)", deployment.Version)
+				deployedStatus = fmt.Sprintf("True (v%s)", deployment.Version)
 			}
 		}
 
 		t.AddRow(
-			printer.TruncateString(namespace, 30),
-			printer.TruncateString(group.Name, 40),
+			printer.TruncateString(fullName, 50),
 			versionDisplay,
 			registryType,
-			registryStatus,
+			publishedStatus,
 			deployedStatus,
 			updatedAt,
 		)

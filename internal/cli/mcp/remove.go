@@ -6,6 +6,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	removeVersion string
+)
+
 var RemoveCmd = &cobra.Command{
 	Use:           "remove <server-name>",
 	Short:         "Remove a deployed MCP server",
@@ -16,6 +20,10 @@ var RemoveCmd = &cobra.Command{
 	SilenceErrors: false, // Still show error messages
 }
 
+func init() {
+	RemoveCmd.Flags().StringVar(&removeVersion, "version", "", "Specify the version of the deployment to remove (for validation)")
+}
+
 func runRemove(cmd *cobra.Command, args []string) error {
 	serverName := args[0]
 
@@ -23,14 +31,23 @@ func runRemove(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API client not initialized")
 	}
 
-	// Remove server via API (server will handle reconciliation)
-	fmt.Printf("Removing %s from deployments...\n", serverName)
-	err := apiClient.RemoveServer(serverName)
-	if err != nil {
-		return fmt.Errorf("failed to remove server: %w", err)
+	if removeVersion == "" {
+		return fmt.Errorf("version is required")
 	}
 
-	fmt.Printf("\n✓ Removed %s\n", serverName)
+	isDeployed, _ := isServerDeployed(serverName, removeVersion)
+	if !isDeployed {
+		return fmt.Errorf("server %s version %s is not deployed", serverName, removeVersion)
+	}
+
+	// Remove server via API (server will handle reconciliation)
+	fmt.Printf("Removing %s from deployments...\n", serverName)
+	err := apiClient.RemoveServer(serverName, removeVersion)
+	if err != nil {
+		return fmt.Errorf("failed to remove server %s version %s: %w", serverName, removeVersion, err)
+	}
+
+	fmt.Printf("\n✓ Removed %s version %s\n", serverName, removeVersion)
 	fmt.Println("Server removal recorded. The registry will reconcile containers automatically.")
 
 	return nil

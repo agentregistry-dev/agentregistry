@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -74,8 +75,32 @@ func NewClient(baseURL, token string) *Client {
 // Close is a no-op in API mode
 func (c *Client) Close() error { return nil }
 
+func (c *Client) baseURLWithoutVersion() string {
+	base := strings.TrimRight(c.BaseURL, "/")
+	if strings.HasSuffix(base, "/v0") {
+		return base[:len(base)-3]
+	}
+	if strings.HasSuffix(base, "/v0.1") {
+		return base[:len(base)-5]
+	}
+	return base
+}
+
 func (c *Client) newRequest(method, pathWithQuery string) (*http.Request, error) {
 	fullURL := strings.TrimRight(c.BaseURL, "/") + pathWithQuery
+	req, err := http.NewRequest(method, fullURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	return req, nil
+}
+
+func (c *Client) newAdminRequest(method, pathWithQuery string) (*http.Request, error) {
+	base := c.baseURLWithoutVersion()
+	fullURL := strings.TrimRight(base, "/") + pathWithQuery
 	req, err := http.NewRequest(method, fullURL, nil)
 	if err != nil {
 		return nil, err
@@ -144,8 +169,37 @@ func (c *Client) GetVersion() (*internalv0.VersionBody, error) {
 	return &resp, nil
 }
 
-// GetServers returns all MCP servers from connected registries
-func (c *Client) GetServers() ([]*v0.ServerResponse, error) {
+func (c *Client) GetAllServers() ([]*v0.ServerResponse, error) {
+	limit := 100
+	cursor := ""
+	var all []*v0.ServerResponse
+
+	for {
+		req, err := c.newAdminRequest(http.MethodGet, "/admin/v0/servers?limit="+strconv.Itoa(limit)+"&cursor="+url.QueryEscape(cursor))
+		if err != nil {
+			return nil, err
+		}
+
+		var resp v0.ServerListResponse
+		if err := c.doJSON(req, &resp); err != nil {
+			return nil, err
+		}
+
+		for _, s := range resp.Servers {
+			all = append(all, &s)
+		}
+
+		if resp.Metadata.NextCursor == "" {
+			break
+		}
+		cursor = resp.Metadata.NextCursor
+	}
+
+	return all, nil
+}
+
+// GetPublishedServers returns all published MCP servers
+func (c *Client) GetPublishedServers() ([]*v0.ServerResponse, error) {
 	// Cursor-based pagination to fetch all servers
 	limit := 100
 	cursor := ""
@@ -180,20 +234,25 @@ func (c *Client) GetServers() ([]*v0.ServerResponse, error) {
 }
 
 // GetServerByName returns a server by name (latest version)
-func (c *Client) GetServerByName(name string) (*v0.ServerResponse, error) {
-	return c.GetServerByNameAndVersion(name, "latest")
+func (c *Client) GetServerByName(name string, publishedOnly bool) (*v0.ServerResponse, error) {
+	return c.GetServerByNameAndVersion(name, "latest", publishedOnly)
 }
 
 // GetServerByNameAndVersion returns a specific version of a server
-func (c *Client) GetServerByNameAndVersion(name, version string) (*v0.ServerResponse, error) {
+func (c *Client) GetServerByNameAndVersion(name, version string, publishedOnly bool) (*v0.ServerResponse, error) {
 	// Use the version endpoint
 	encName := url.PathEscape(name)
 	encVersion := url.PathEscape(version)
-	req, err := c.newRequest(http.MethodGet, "/servers/"+encName+"/versions/"+encVersion)
+	q := "/servers/" + encName + "/versions/" + encVersion
+	if publishedOnly {
+		q += "?published_only=true"
+	}
+	req, err := c.newRequest(http.MethodGet, q)
 	if err != nil {
 		return nil, err
 	}
-	var resp v0.ServerResponse
+	// The endpoint now returns ServerListResponse (even for a single version)
+	var resp v0.ServerListResponse
 	if err := c.doJSON(req, &resp); err != nil {
 		// 404 -> not found returns nil
 		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
@@ -201,13 +260,39 @@ func (c *Client) GetServerByNameAndVersion(name, version string) (*v0.ServerResp
 		}
 		return nil, fmt.Errorf("failed to get server by name and version: %w", err)
 	}
-	return &resp, nil
+
+	if len(resp.Servers) == 0 {
+		return nil, nil
+	}
+
+	return &resp.Servers[0], nil
 }
 
-// GetServerVersions returns all versions of a server by name
+// GetServerVersions returns all versions of a server by name (public endpoint - only published)
 func (c *Client) GetServerVersions(name string) ([]v0.ServerResponse, error) {
 	encName := url.PathEscape(name)
 	req, err := c.newRequest(http.MethodGet, "/servers/"+encName+"/versions")
+	if err != nil {
+		return nil, err
+	}
+
+	var resp v0.ServerListResponse
+	if err := c.doJSON(req, &resp); err != nil {
+		// 404 -> not found returns empty list
+		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get server versions: %w", err)
+	}
+
+	return resp.Servers, nil
+}
+
+// GetAllServerVersionsAdmin returns all versions of a server by name (admin endpoint - includes unpublished)
+func (c *Client) GetAllServerVersionsAdmin(name string) ([]v0.ServerResponse, error) {
+	encName := url.PathEscape(name)
+
+	req, err := c.newAdminRequest(http.MethodGet, "/admin/v0/servers/"+encName+"/versions")
 	if err != nil {
 		return nil, err
 	}
@@ -334,9 +419,33 @@ func (c *Client) PublishAgent(agent *models.AgentJSON) (*models.AgentResponse, e
 
 // PublishMCPServer publishes an mcp server to the registry
 func (c *Client) PublishMCPServer(server *v0.ServerJSON) (*v0.ServerResponse, error) {
-	var resp v0.ServerResponse
-	err := c.doJsonRequest(http.MethodPost, "/publish", server, &resp)
-	return &resp, err
+	encName := url.PathEscape(server.Name)
+	encVersion := url.PathEscape(server.Version)
+
+	req, err := c.newAdminRequest(http.MethodPost, "/admin/v0/servers/"+encName+"/versions/"+encVersion+"/publish")
+	if err != nil {
+		return nil, err
+	}
+
+	// The publish endpoint returns an EmptyResponse, so we need to fetch the server after publishing
+	if err := c.doJSON(req, nil); err != nil {
+		return nil, err
+	}
+
+	// Fetch the published server to return it
+	return c.GetServerByNameAndVersion(server.Name, server.Version, true)
+}
+
+// UnpublishMCPServer unpublishes an MCP server from the registry
+func (c *Client) UnpublishMCPServer(name, version string) error {
+	encName := url.PathEscape(name)
+	encVersion := url.PathEscape(version)
+
+	req, err := c.newAdminRequest(http.MethodPost, "/admin/v0/servers/"+encName+"/versions/"+encVersion+"/unpublish")
+	if err != nil {
+		return err
+	}
+	return c.doJSON(req, nil)
 }
 
 // Helpers to convert API errors
@@ -391,10 +500,12 @@ func (c *Client) GetDeployedServers() ([]*DeploymentResponse, error) {
 	return result, nil
 }
 
-// GetDeployedServerByName retrieves a specific deployment
-func (c *Client) GetDeployedServerByName(name string) (*DeploymentResponse, error) {
+// GetDeployedServerByNameAndVersion retrieves a specific deployment by name and version
+func (c *Client) GetDeployedServerByNameAndVersion(name string, version string) (*DeploymentResponse, error) {
 	encName := url.PathEscape(name)
-	req, err := c.newRequest(http.MethodGet, "/deployments/"+encName)
+	encVersion := url.PathEscape(version)
+	url := fmt.Sprintf("/deployments/%s/versions/%s", encName, encVersion)
+	req, err := c.newRequest(http.MethodGet, url)
 	if err != nil {
 		return nil, err
 	}
@@ -412,11 +523,12 @@ func (c *Client) GetDeployedServerByName(name string) (*DeploymentResponse, erro
 
 // DeployServer deploys a server with configuration
 func (c *Client) DeployServer(name, version string, config map[string]string, preferRemote bool) (*DeploymentResponse, error) {
-	payload := map[string]interface{}{
-		"serverName":   name,
-		"version":      version,
-		"config":       config,
-		"preferRemote": preferRemote,
+	payload := internalv0.DeploymentRequest{
+		ServerName:   name,
+		Version:      version,
+		Config:       config,
+		PreferRemote: preferRemote,
+		ResourceType: "mcp",
 	}
 
 	var deployment DeploymentResponse
@@ -443,9 +555,10 @@ func (c *Client) UpdateDeploymentConfig(name string, config map[string]string) (
 }
 
 // RemoveServer removes a deployment
-func (c *Client) RemoveServer(name string) error {
+func (c *Client) RemoveServer(name string, version string) error {
 	encName := url.PathEscape(name)
-	req, err := c.newRequest(http.MethodDelete, "/deployments/"+encName)
+	encVersion := url.PathEscape(version)
+	req, err := c.newRequest(http.MethodDelete, "/deployments/"+encName+"/versions/"+encVersion)
 	if err != nil {
 		return err
 	}

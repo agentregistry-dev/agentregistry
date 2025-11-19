@@ -38,7 +38,7 @@ var RunCmd = &cobra.Command{
 }
 
 func init() {
-	RunCmd.Flags().StringVarP(&runVersion, "version", "v", "", "Specify the version of the server to run")
+	RunCmd.Flags().StringVar(&runVersion, "version", "", "Specify the version of the server to run")
 	RunCmd.Flags().BoolVar(&runInspector, "inspector", false, "Launch MCP Inspector to interact with the server")
 	RunCmd.Flags().BoolVarP(&runYes, "yes", "y", false, "Automatically accept all prompts (use default values)")
 	RunCmd.Flags().BoolVar(&runVerbose, "verbose", false, "Enable verbose logging")
