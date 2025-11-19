@@ -43,7 +43,9 @@ func TestValidateOCI_RegistryAllowlist(t *testing.T) {
 			name:        "Artifact Registry regional should be allowed",
 			identifier:  "us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:latest",
 			expectError: true,
-			errorMsg:    "missing required annotation",
+			// This image has an annotation but with a different value, so it will fail with ownership validation
+			// Either error is acceptable as long as it's not "unsupported registry", "does not exist", or "is private"
+			errorMsg: "ownership validation failed",
 		},
 		{
 			name:        "Artifact Registry multi-region should be allowed",
