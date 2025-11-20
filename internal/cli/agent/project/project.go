@@ -98,6 +98,10 @@ func RegenerateDockerCompose(projectDir string, manifest *common.AgentManifest, 
 	}
 
 	envVars := EnvVarsFromManifest(manifest)
+	image := manifest.Image
+	if image == "" {
+		image = ConstructImageName("", manifest.Name)
+	}
 	gen := python.NewPythonGenerator()
 	templateBytes, err := gen.BaseGenerator.ReadTemplateFile("docker-compose.yaml.tmpl")
 	if err != nil {
@@ -106,12 +110,14 @@ func RegenerateDockerCompose(projectDir string, manifest *common.AgentManifest, 
 
 	rendered, err := gen.BaseGenerator.RenderTemplate(string(templateBytes), struct {
 		Name          string
+		Image         string
 		ModelProvider string
 		ModelName     string
 		EnvVars       []string
 		McpServers    []common.McpServerType
 	}{
 		Name:          manifest.Name,
+		Image:         image,
 		ModelProvider: manifest.ModelProvider,
 		ModelName:     manifest.ModelName,
 		EnvVars:       envVars,

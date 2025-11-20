@@ -11,6 +11,10 @@ services:
     ports:
       - "8080:8080"
     environment:
+      # TODO: remove kagent variables (currently required)
+      - KAGENT_URL=placeholder
+      - KAGENT_NAME=placeholder
+      - KAGENT_NAMESPACE=placeholder
       - AGENT_NAME={{.Name}}
       - MODEL_PROVIDER={{.ModelProvider}}
       - MODEL_NAME={{.ModelName}}

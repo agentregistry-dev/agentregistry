@@ -117,14 +117,21 @@ func renderComposeFromManifest(manifest *common.AgentManifest) ([]byte, error) {
 		return nil, fmt.Errorf("failed to read docker-compose template: %w", err)
 	}
 
+	image := manifest.Image
+	if image == "" {
+		image = project.ConstructImageName("", manifest.Name)
+	}
+
 	rendered, err := gen.BaseGenerator.RenderTemplate(string(templateBytes), struct {
 		Name          string
+		Image         string
 		ModelProvider string
 		ModelName     string
 		EnvVars       []string
 		McpServers    []common.McpServerType
 	}{
 		Name:          manifest.Name,
+		Image:         image,
 		ModelProvider: manifest.ModelProvider,
 		ModelName:     manifest.ModelName,
 		EnvVars:       project.EnvVarsFromManifest(manifest),
