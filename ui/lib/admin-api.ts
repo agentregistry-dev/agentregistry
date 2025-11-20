@@ -689,9 +689,10 @@ class AdminApiClient {
   }
 
   // Remove a deployment
-  async removeDeployment(serverName: string): Promise<void> {
+  async removeDeployment(serverName: string, version: string): Promise<void> {
     const encodedName = encodeURIComponent(serverName)
-    const response = await fetch(`${this.baseUrl}/admin/v0/deployments/${encodedName}`, {
+    const encodedVersion = encodeURIComponent(version)
+    const response = await fetch(`${this.baseUrl}/admin/v0/deployments/${encodedName}/versions/${encodedVersion}`, {
       method: 'DELETE',
     })
     if (!response.ok) {

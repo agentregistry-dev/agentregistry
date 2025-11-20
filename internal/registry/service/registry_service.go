@@ -67,8 +67,8 @@ func (s *registryServiceImpl) GetServerByName(ctx context.Context, serverName st
 }
 
 // GetServerByNameAndVersion retrieves a specific version of a server by server name and version
-func (s *registryServiceImpl) GetServerByNameAndVersion(ctx context.Context, serverName string, version string) (*apiv0.ServerResponse, error) {
-	serverRecord, err := s.db.GetServerByNameAndVersion(ctx, nil, serverName, version)
+func (s *registryServiceImpl) GetServerByNameAndVersion(ctx context.Context, serverName string, version string, publishedOnly bool) (*apiv0.ServerResponse, error) {
+	serverRecord, err := s.db.GetServerByNameAndVersion(ctx, nil, serverName, version, publishedOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -77,8 +77,8 @@ func (s *registryServiceImpl) GetServerByNameAndVersion(ctx context.Context, ser
 }
 
 // GetAllVersionsByServerName retrieves all versions of a server by server name
-func (s *registryServiceImpl) GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
-	serverRecords, err := s.db.GetAllVersionsByServerName(ctx, nil, serverName)
+func (s *registryServiceImpl) GetAllVersionsByServerName(ctx context.Context, serverName string, publishedOnly bool) ([]*apiv0.ServerResponse, error) {
+	serverRecords, err := s.db.GetAllVersionsByServerName(ctx, nil, serverName, publishedOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -338,7 +338,7 @@ func (s *registryServiceImpl) UpdateServer(ctx context.Context, serverName, vers
 // updateServerInTransaction contains the actual UpdateServer logic within a transaction
 func (s *registryServiceImpl) updateServerInTransaction(ctx context.Context, tx pgx.Tx, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
 	// Get current server to check if it's deleted or being deleted
-	currentServer, err := s.db.GetServerByNameAndVersion(ctx, tx, serverName, version)
+	currentServer, err := s.db.GetServerByNameAndVersion(ctx, tx, serverName, version, false)
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +395,7 @@ func (s *registryServiceImpl) StoreServerReadme(ctx context.Context, serverName,
 	}
 
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
-		if _, err := s.db.GetServerByNameAndVersion(txCtx, tx, serverName, version); err != nil {
+		if _, err := s.db.GetServerByNameAndVersion(txCtx, tx, serverName, version, false); err != nil {
 			return err
 		}
 
@@ -434,6 +434,17 @@ func (s *registryServiceImpl) PublishServer(ctx context.Context, serverName, ver
 // UnpublishServer marks a server as unpublished
 func (s *registryServiceImpl) UnpublishServer(ctx context.Context, serverName, version string) error {
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		// Check if the server is currently deployed
+		deployment, err := s.db.GetDeploymentByNameAndVersion(txCtx, tx, serverName, version)
+		if err != nil && !errors.Is(err, database.ErrNotFound) {
+			return fmt.Errorf("failed to check deployment status: %w", err)
+		}
+
+		// If deployed (record exists) and it's the same version being unpublished, prevent unpublish
+		if deployment != nil && deployment.Version == version {
+			return fmt.Errorf("cannot unpublish deployed server %s (version %s): server must be removed from deployment first", serverName, version)
+		}
+
 		return s.db.UnpublishServer(txCtx, tx, serverName, version)
 	})
 }
@@ -598,35 +609,22 @@ func (s *registryServiceImpl) GetDeployments(ctx context.Context) ([]*models.Dep
 }
 
 // GetDeploymentByName retrieves a specific deployment
-func (s *registryServiceImpl) GetDeploymentByName(ctx context.Context, serverName string) (*models.Deployment, error) {
-	return s.db.GetDeploymentByName(ctx, nil, serverName)
+func (s *registryServiceImpl) GetDeploymentByNameAndVersion(ctx context.Context, serverName string, version string) (*models.Deployment, error) {
+	return s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version)
+}
+
+func (s *registryServiceImpl) IsServerPublished(ctx context.Context, serverName, version string) (bool, error) {
+	return s.db.IsServerPublished(ctx, nil, serverName, version)
 }
 
 // DeployServer deploys a server with configuration
 func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool) (*models.Deployment, error) {
-	var serverResp *apiv0.ServerResponse
-	var err error
-
-	if version == "" || version == "latest" {
-		serverResp, err = s.db.GetServerByName(ctx, nil, serverName)
-	} else {
-		serverResp, err = s.db.GetServerByNameAndVersion(ctx, nil, serverName, version)
-	}
-
+	serverResp, err := s.db.GetServerByNameAndVersion(ctx, nil, serverName, version, true)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
 			return nil, fmt.Errorf("server %s not found in registry: %w", serverName, database.ErrNotFound)
 		}
 		return nil, fmt.Errorf("failed to verify server: %w", err)
-	}
-
-	// Check if the server is published before allowing deployment
-	isPublished, err := s.db.IsServerPublished(ctx, nil, serverName, serverResp.Server.Version)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check server published status: %w", err)
-	}
-	if !isPublished {
-		return nil, fmt.Errorf("cannot deploy unpublished server %s (version %s): server must be published before deployment", serverName, serverResp.Server.Version)
 	}
 
 	deployment := &models.Deployment{
@@ -644,6 +642,7 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 		deployment.Config = make(map[string]string)
 	}
 
+	fmt.Println("creating deployment", deployment)
 	err = s.db.CreateDeployment(ctx, nil, deployment)
 	if err != nil {
 		return nil, err
@@ -654,7 +653,7 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 	}
 
 	// Return the created deployment
-	return s.db.GetDeploymentByName(ctx, nil, serverName)
+	return s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version)
 }
 
 // DeployAgent deploys an agent with configuration
@@ -664,8 +663,8 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 }
 
 // UpdateDeploymentConfig updates the configuration for a deployment
-func (s *registryServiceImpl) UpdateDeploymentConfig(ctx context.Context, serverName string, config map[string]string) (*models.Deployment, error) {
-	_, err := s.db.GetDeploymentByName(ctx, nil, serverName)
+func (s *registryServiceImpl) UpdateDeploymentConfig(ctx context.Context, serverName string, version string, config map[string]string) (*models.Deployment, error) {
+	_, err := s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version)
 	if err != nil {
 		return nil, err
 	}
@@ -680,12 +679,12 @@ func (s *registryServiceImpl) UpdateDeploymentConfig(ctx context.Context, server
 		return nil, fmt.Errorf("config updated but reconciliation failed: %w", err)
 	}
 
-	return s.db.GetDeploymentByName(ctx, nil, serverName)
+	return s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version)
 }
 
 // RemoveServer removes a deployment
-func (s *registryServiceImpl) RemoveServer(ctx context.Context, serverName string) error {
-	err := s.db.RemoveDeployment(ctx, nil, serverName)
+func (s *registryServiceImpl) RemoveServer(ctx context.Context, serverName string, version string) error {
+	err := s.db.RemoveDeployment(ctx, nil, serverName, version)
 	if err != nil {
 		return err
 	}
@@ -718,7 +717,7 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 	var allRunRequests []*registry.MCPServerRunRequest
 	for _, dep := range deployments {
 		// Get server details from registry
-		depServer, err := s.GetServerByNameAndVersion(ctx, dep.ServerName, dep.Version)
+		depServer, err := s.GetServerByNameAndVersion(ctx, dep.ServerName, dep.Version, true)
 		if err != nil {
 			log.Printf("Warning: Failed to get server %s v%s: %v", dep.ServerName, dep.Version, err)
 			continue

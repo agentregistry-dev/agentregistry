@@ -26,7 +26,7 @@ var ShowCmd = &cobra.Command{
 
 func init() {
 	ShowCmd.Flags().StringVarP(&showOutputFormat, "output", "o", "table", "Output format (table, json)")
-	ShowCmd.Flags().StringVarP(&showVersion, "version", "v", "", "Show specific version of the server")
+	ShowCmd.Flags().StringVar(&showVersion, "version", "", "Show specific version of the server")
 }
 
 func runShow(cmd *cobra.Command, args []string) error {
@@ -150,15 +150,10 @@ func showServerDetails(server *v0.ServerResponse, otherVersions []string) {
 		updatedAt = printer.FormatAge(server.Meta.Official.UpdatedAt)
 	}
 
-	// Split namespace and name
-	namespace, name := splitServerName(server.Server.Name)
-
 	// Display server details in table format
 	t := printer.NewTablePrinter(os.Stdout)
 	t.SetHeaders("Property", "Value")
 	t.AddRow("Full Name", server.Server.Name)
-	t.AddRow("Namespace", printer.EmptyValueOrDefault(namespace, "<none>"))
-	t.AddRow("Name", name)
 	t.AddRow("Title", printer.EmptyValueOrDefault(server.Server.Title, "<none>"))
 	t.AddRow("Description", printer.EmptyValueOrDefault(server.Server.Description, "<none>"))
 
@@ -224,7 +219,7 @@ func groupServersByBaseName(servers []*v0.ServerResponse) []ServerVersionGroup {
 }
 
 func findServersByName(searchName string) []*v0.ServerResponse {
-	servers, err := apiClient.GetServers()
+	servers, err := apiClient.GetPublishedServers()
 	if err != nil {
 		log.Fatalf("Failed to get servers: %v", err)
 	}

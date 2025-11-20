@@ -77,9 +77,9 @@ type Database interface {
 	// GetServerByName retrieve a single server by its name
 	GetServerByName(ctx context.Context, tx pgx.Tx, serverName string) (*apiv0.ServerResponse, error)
 	// GetServerByNameAndVersion retrieve specific version of a server by server name and version
-	GetServerByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName string, version string) (*apiv0.ServerResponse, error)
+	GetServerByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName string, version string, publishedOnly bool) (*apiv0.ServerResponse, error)
 	// GetAllVersionsByServerName retrieve all versions of a server by server name
-	GetAllVersionsByServerName(ctx context.Context, tx pgx.Tx, serverName string) ([]*apiv0.ServerResponse, error)
+	GetAllVersionsByServerName(ctx context.Context, tx pgx.Tx, serverName string, publishedOnly bool) ([]*apiv0.ServerResponse, error)
 	// GetCurrentLatestVersion retrieve the current latest version of a server by server name
 	GetCurrentLatestVersion(ctx context.Context, tx pgx.Tx, serverName string) (*apiv0.ServerResponse, error)
 	// CountServerVersions count the number of versions for a server
@@ -174,13 +174,13 @@ type Database interface {
 	// GetDeployments retrieves all deployed servers
 	GetDeployments(ctx context.Context, tx pgx.Tx) ([]*models.Deployment, error)
 	// GetDeploymentByName retrieves a specific deployment
-	GetDeploymentByName(ctx context.Context, tx pgx.Tx, serverName string) (*models.Deployment, error)
+	GetDeploymentByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName string, version string) (*models.Deployment, error)
 	// UpdateDeploymentConfig updates the configuration for a deployment
 	UpdateDeploymentConfig(ctx context.Context, tx pgx.Tx, serverName string, config map[string]string) error
 	// UpdateDeploymentStatus updates the status of a deployment
-	UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, serverName, status string) error
+	UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, serverName, version, status string) error
 	// RemoveDeployment removes a deployment
-	RemoveDeployment(ctx context.Context, tx pgx.Tx, serverName string) error
+	RemoveDeployment(ctx context.Context, tx pgx.Tx, serverName string, version string) error
 }
 
 // InTransactionT is a generic helper that wraps InTransaction for functions returning a value

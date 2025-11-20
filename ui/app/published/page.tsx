@@ -106,15 +106,15 @@ export default function PublishedPage() {
     return () => clearInterval(interval)
   }, [])
 
-  // Check if a resource is currently deployed
-  const isDeployed = (name: string) => {
-    return deployments.some(d => d.serverName === name)
+  // Check if a resource is currently deployed (check both name and version)
+  const isDeployed = (name: string, version: string) => {
+    return deployments.some(d => d.serverName === name && d.version === version)
   }
 
   const handleUnpublish = async (name: string, version: string, type: 'server' | 'skill' | 'agent') => {
-    // Check if the resource is deployed
-    if (type !== 'skill' && isDeployed(name)) {
-      toast.error(`Cannot unpublish ${name} while it's deployed. Remove it from the Deployed page first.`)
+    // Check if the resource is deployed (check specific version)
+    if (type !== 'skill' && isDeployed(name, version)) {
+      toast.error(`Cannot unpublish ${name} version ${version} while it's deployed. Remove it from the Deployed page first.`)
       return
     }
     setItemToUnpublish({ name, version, type })
@@ -141,6 +141,8 @@ export default function PublishedPage() {
       
       setItemToDeploy(null)
       toast.success(`Successfully deployed ${itemToDeploy.name}!`)
+      // Refresh deployments to update the UI
+      await fetchPublished()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to deploy resource')
     } finally {
@@ -167,6 +169,8 @@ export default function PublishedPage() {
       
       setItemToUnpublish(null)
       toast.success(`Successfully unpublished ${itemToUnpublish.name}`)
+      // Refresh deployments to update the UI
+      await fetchPublished()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to unpublish resource')
     } finally {
@@ -338,7 +342,7 @@ export default function PublishedPage() {
                   {servers.map((serverResponse) => {
                     const server = serverResponse.server
                     const meta = serverResponse._meta?.['io.modelcontextprotocol.registry/official']
-                    const deployed = isDeployed(server.name)
+                    const deployed = isDeployed(server.name, server.version)
                     return (
                       <Card key={`${server.name}-${server.version}`} className="p-6 hover:shadow-md transition-all duration-200">
                         <div className="flex items-start justify-between">

@@ -41,6 +41,7 @@ type DeploymentsListResponse struct {
 // DeploymentInput represents path parameters for deployment operations
 type DeploymentInput struct {
 	ServerName string `path:"serverName" doc:"URL-encoded server name" example:"io.github.user%2Fweather"`
+	Version    string `path:"version" doc:"Version of the deployment to get" example:"1.0.0"`
 }
 
 // DeploymentsListInput represents query parameters for listing deployments
@@ -81,17 +82,24 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 	huma.Register(api, huma.Operation{
 		OperationID: "get-deployment",
 		Method:      http.MethodGet,
-		Path:        basePath + "/deployments/{serverName}",
+		Path:        basePath + "/deployments/{serverName}/versions/{version}",
 		Summary:     "Get deployment details",
 		Description: "Retrieve details for a specific deployed resource (MCP server or agent)",
 		Tags:        []string{"deployments"},
-	}, func(ctx context.Context, input *DeploymentInput) (*DeploymentResponse, error) {
+	}, func(ctx context.Context, input *struct {
+		DeploymentInput
+	}) (*DeploymentResponse, error) {
 		serverName, err := url.PathUnescape(input.ServerName)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
 		}
 
-		deployment, err := registry.GetDeploymentByName(ctx, serverName)
+		version, err := url.PathUnescape(input.Version)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid version encoding", err)
+		}
+
+		deployment, err := registry.GetDeploymentByNameAndVersion(ctx, serverName, version)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Deployment not found")
@@ -156,7 +164,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 	huma.Register(api, huma.Operation{
 		OperationID: "update-deployment-config",
 		Method:      http.MethodPut,
-		Path:        basePath + "/deployments/{serverName}",
+		Path:        basePath + "/deployments/{serverName}/versions/{version}",
 		Summary:     "Update deployment configuration",
 		Description: "Update the configuration (env vars, args, headers) for a deployed resource (MCP server or agent)",
 		Tags:        []string{"deployments"},
@@ -169,7 +177,12 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
 		}
 
-		deployment, err := registry.UpdateDeploymentConfig(ctx, serverName, input.Body.Config)
+		version, err := url.PathUnescape(input.Version)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid version encoding", err)
+		}
+
+		deployment, err := registry.UpdateDeploymentConfig(ctx, serverName, version, input.Body.Config)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Deployment not found")
@@ -184,7 +197,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 	huma.Register(api, huma.Operation{
 		OperationID: "remove-server",
 		Method:      http.MethodDelete,
-		Path:        basePath + "/deployments/{serverName}",
+		Path:        basePath + "/deployments/{serverName}/versions/{version}",
 		Summary:     "Remove a deployed resource",
 		Description: "Remove a resource (MCP server or agent) from deployed state",
 		Tags:        []string{"deployments"},
@@ -194,7 +207,12 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
 		}
 
-		err = registry.RemoveServer(ctx, serverName)
+		version, err := url.PathUnescape(input.Version)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid version encoding", err)
+		}
+
+		err = registry.RemoveServer(ctx, serverName, version)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Deployment not found")
