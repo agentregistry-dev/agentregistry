@@ -93,7 +93,7 @@ func (g *BaseGenerator) GenerateProject(config AgentConfig) error {
 			return fmt.Errorf("failed to read template %s: %w", path, err)
 		}
 
-		rendered, err := g.renderTemplate(string(content), config)
+		rendered, err := g.RenderTemplate(string(content), config)
 		if err != nil {
 			return fmt.Errorf("failed to render template %s: %w", path, err)
 		}
@@ -121,7 +121,8 @@ func (g *BaseGenerator) GenerateProject(config AgentConfig) error {
 	return nil
 }
 
-func (g *BaseGenerator) renderTemplate(tmplContent string, data interface{}) (string, error) {
+// RenderTemplate renders a template string with the provided data.
+func (g *BaseGenerator) RenderTemplate(tmplContent string, data interface{}) (string, error) {
 	tmpl, err := template.New("template").Parse(tmplContent)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
@@ -133,6 +134,12 @@ func (g *BaseGenerator) renderTemplate(tmplContent string, data interface{}) (st
 	}
 
 	return result.String(), nil
+}
+
+// ReadTemplateFile reads a raw template file from the generator's embedded filesystem.
+func (g *BaseGenerator) ReadTemplateFile(templatePath string) ([]byte, error) {
+	fullPath := filepath.Join(g.templateRoot, templatePath)
+	return fs.ReadFile(g.templateFiles, fullPath)
 }
 
 func initGitRepo(dir string, verbose bool) error {

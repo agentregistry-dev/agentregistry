@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	"github.com/agentregistry-dev/agentregistry/internal/models"
-	"github.com/kagent-dev/kagent/go/cli/agent/frameworks/common"
 	"github.com/kagent-dev/kagent/go/cli/config"
 	"github.com/spf13/cobra"
 )

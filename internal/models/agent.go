@@ -3,7 +3,7 @@ package models
 import (
 	"time"
 
-	"github.com/kagent-dev/kagent/go/cli/agent/frameworks/common"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 )
 
