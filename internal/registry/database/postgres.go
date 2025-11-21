@@ -168,7 +168,7 @@ func (db *PostgreSQL) ListServers(
 
 	// Query servers table with hybrid column/JSON data
 	query := fmt.Sprintf(`
-        SELECT server_name, version, status, published_at, updated_at, is_latest, value
+        SELECT server_name, version, status, published, published_at, updated_at, is_latest, value
         FROM servers
         %s
         ORDER BY server_name, version
@@ -185,11 +185,11 @@ func (db *PostgreSQL) ListServers(
 	var results []*apiv0.ServerResponse
 	for rows.Next() {
 		var serverName, version, status string
+		var published, isLatest bool
 		var publishedAt, updatedAt time.Time
-		var isLatest bool
 		var valueJSON []byte
 
-		err := rows.Scan(&serverName, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON)
+		err := rows.Scan(&serverName, &version, &status, &published, &publishedAt, &updatedAt, &isLatest, &valueJSON)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to scan server row: %w", err)
 		}
@@ -280,24 +280,32 @@ func (db *PostgreSQL) GetServerByName(ctx context.Context, tx pgx.Tx, serverName
 }
 
 // GetServerByNameAndVersion retrieves a specific version of a server by server name and version
-func (db *PostgreSQL) GetServerByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName string, version string) (*apiv0.ServerResponse, error) {
+func (db *PostgreSQL) GetServerByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName string, version string, publishedOnly bool) (*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
 	query := `
-		SELECT server_name, version, status, published_at, updated_at, is_latest, value
+		SELECT server_name, version, status, published, published_at, updated_at, is_latest, value
 		FROM servers
 		WHERE server_name = $1 AND version = $2
+	`
+
+	if publishedOnly {
+		query += ` AND published = true`
+	}
+
+	query += `
+		ORDER BY published_at DESC
 		LIMIT 1
 	`
 
 	var name, vers, status string
+	var published, isLatest bool
 	var publishedAt, updatedAt time.Time
-	var isLatest bool
 	var valueJSON []byte
 
-	err := db.getExecutor(tx).QueryRow(ctx, query, serverName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON)
+	err := db.getExecutor(tx).QueryRow(ctx, query, serverName, version).Scan(&name, &vers, &status, &published, &publishedAt, &updatedAt, &isLatest, &valueJSON)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -328,15 +336,22 @@ func (db *PostgreSQL) GetServerByNameAndVersion(ctx context.Context, tx pgx.Tx, 
 }
 
 // GetAllVersionsByServerName retrieves all versions of a server by server name
-func (db *PostgreSQL) GetAllVersionsByServerName(ctx context.Context, tx pgx.Tx, serverName string) ([]*apiv0.ServerResponse, error) {
+// If publishedOnly is true, only returns versions where published = true
+func (db *PostgreSQL) GetAllVersionsByServerName(ctx context.Context, tx pgx.Tx, serverName string, publishedOnly bool) ([]*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
 	query := `
-		SELECT server_name, version, status, published_at, updated_at, is_latest, value
+		SELECT server_name, version, status, published, published_at, updated_at, is_latest, value
 		FROM servers
-		WHERE server_name = $1
+		WHERE server_name = $1`
+
+	if publishedOnly {
+		query += ` AND published = true`
+	}
+
+	query += `
 		ORDER BY published_at DESC
 	`
 
@@ -349,11 +364,11 @@ func (db *PostgreSQL) GetAllVersionsByServerName(ctx context.Context, tx pgx.Tx,
 	var results []*apiv0.ServerResponse
 	for rows.Next() {
 		var name, version, status string
+		var published, isLatest bool
 		var publishedAt, updatedAt time.Time
-		var isLatest bool
 		var valueJSON []byte
 
-		err := rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON)
+		err := rows.Scan(&name, &version, &status, &published, &publishedAt, &updatedAt, &isLatest, &valueJSON)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan server row: %w", err)
 		}
@@ -470,14 +485,14 @@ func (db *PostgreSQL) UpdateServer(ctx context.Context, tx pgx.Tx, serverName, v
 		UPDATE servers
 		SET value = $1, updated_at = NOW()
 		WHERE server_name = $2 AND version = $3
-		RETURNING server_name, version, status, published_at, updated_at, is_latest
+		RETURNING server_name, version, status, published, published_at, updated_at, is_latest
 	`
 
 	var name, vers, status string
+	var published, isLatest bool
 	var publishedAt, updatedAt time.Time
-	var isLatest bool
 
-	err = db.getExecutor(tx).QueryRow(ctx, query, valueJSON, serverName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest)
+	err = db.getExecutor(tx).QueryRow(ctx, query, valueJSON, serverName, version).Scan(&name, &vers, &status, &published, &publishedAt, &updatedAt, &isLatest)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -512,15 +527,15 @@ func (db *PostgreSQL) SetServerStatus(ctx context.Context, tx pgx.Tx, serverName
 		UPDATE servers
 		SET status = $1, updated_at = NOW()
 		WHERE server_name = $2 AND version = $3
-		RETURNING server_name, version, status, value, published_at, updated_at, is_latest
+		RETURNING server_name, version, status, published, value, published_at, updated_at, is_latest
 	`
 
 	var name, vers, currentStatus string
+	var published, isLatest bool
 	var publishedAt, updatedAt time.Time
-	var isLatest bool
 	var valueJSON []byte
 
-	err := db.getExecutor(tx).QueryRow(ctx, query, status, serverName, version).Scan(&name, &vers, &currentStatus, &valueJSON, &publishedAt, &updatedAt, &isLatest)
+	err := db.getExecutor(tx).QueryRow(ctx, query, status, serverName, version).Scan(&name, &vers, &currentStatus, &published, &valueJSON, &publishedAt, &updatedAt, &isLatest)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -622,7 +637,7 @@ func (db *PostgreSQL) GetCurrentLatestVersion(ctx context.Context, tx pgx.Tx, se
 	executor := db.getExecutor(tx)
 
 	query := `
-		SELECT server_name, version, status, value, published_at, updated_at, is_latest
+		SELECT server_name, version, status, published, value, published_at, updated_at, is_latest
 		FROM servers
 		WHERE server_name = $1 AND is_latest = true
 	`
@@ -630,11 +645,11 @@ func (db *PostgreSQL) GetCurrentLatestVersion(ctx context.Context, tx pgx.Tx, se
 	row := executor.QueryRow(ctx, query, serverName)
 
 	var name, version, status string
+	var published, isLatest bool
 	var publishedAt, updatedAt time.Time
-	var isLatest bool
 	var jsonValue []byte
 
-	err := row.Scan(&name, &version, &status, &jsonValue, &publishedAt, &updatedAt, &isLatest)
+	err := row.Scan(&name, &version, &status, &published, &jsonValue, &publishedAt, &updatedAt, &isLatest)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -962,7 +977,7 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 	}
 
 	query := fmt.Sprintf(`
-		SELECT agent_name, version, status, published_at, updated_at, is_latest, value
+		SELECT agent_name, version, status, published_at, updated_at, is_latest, published, value
 		FROM agents
 		%s
 		ORDER BY agent_name, version
@@ -980,10 +995,10 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 	for rows.Next() {
 		var name, version, status string
 		var publishedAt, updatedAt time.Time
-		var isLatest bool
+		var isLatest, published bool
 		var valueJSON []byte
 
-		if err := rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+		if err := rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &published, &valueJSON); err != nil {
 			return nil, "", fmt.Errorf("failed to scan agent row: %w", err)
 		}
 
@@ -1000,6 +1015,7 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 					PublishedAt: publishedAt,
 					UpdatedAt:   updatedAt,
 					IsLatest:    isLatest,
+					Published:   published,
 				},
 			},
 		}
@@ -1022,7 +1038,7 @@ func (db *PostgreSQL) GetAgentByName(ctx context.Context, tx pgx.Tx, agentName s
 		return nil, ctx.Err()
 	}
 	query := `
-		SELECT agent_name, version, status, published_at, updated_at, is_latest, value
+		SELECT agent_name, version, status, published_at, updated_at, is_latest, published, value
 		FROM agents
 		WHERE agent_name = $1 AND is_latest = true
 		ORDER BY published_at DESC
@@ -1030,9 +1046,9 @@ func (db *PostgreSQL) GetAgentByName(ctx context.Context, tx pgx.Tx, agentName s
 	`
 	var name, version, status string
 	var publishedAt, updatedAt time.Time
-	var isLatest bool
+	var isLatest, published bool
 	var valueJSON []byte
-	if err := db.getExecutor(tx).QueryRow(ctx, query, agentName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+	if err := db.getExecutor(tx).QueryRow(ctx, query, agentName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &published, &valueJSON); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -1050,6 +1066,7 @@ func (db *PostgreSQL) GetAgentByName(ctx context.Context, tx pgx.Tx, agentName s
 				PublishedAt: publishedAt,
 				UpdatedAt:   updatedAt,
 				IsLatest:    isLatest,
+				Published:   published,
 			},
 		},
 	}, nil
@@ -1472,7 +1489,7 @@ func (db *PostgreSQL) ListSkills(ctx context.Context, tx pgx.Tx, filter *SkillFi
 	}
 
 	query := fmt.Sprintf(`
-        SELECT skill_name, version, status, published_at, updated_at, is_latest, value
+        SELECT skill_name, version, status, published_at, updated_at, is_latest, published, value
         FROM skills
         %s
         ORDER BY skill_name, version
@@ -1490,10 +1507,10 @@ func (db *PostgreSQL) ListSkills(ctx context.Context, tx pgx.Tx, filter *SkillFi
 	for rows.Next() {
 		var name, version, status string
 		var publishedAt, updatedAt time.Time
-		var isLatest bool
+		var isLatest, published bool
 		var valueJSON []byte
 
-		if err := rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+		if err := rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &published, &valueJSON); err != nil {
 			return nil, "", fmt.Errorf("failed to scan skill row: %w", err)
 		}
 
@@ -1510,6 +1527,7 @@ func (db *PostgreSQL) ListSkills(ctx context.Context, tx pgx.Tx, filter *SkillFi
 					PublishedAt: publishedAt,
 					UpdatedAt:   updatedAt,
 					IsLatest:    isLatest,
+					Published:   published,
 				},
 			},
 		}
@@ -1532,7 +1550,7 @@ func (db *PostgreSQL) GetSkillByName(ctx context.Context, tx pgx.Tx, skillName s
 		return nil, ctx.Err()
 	}
 	query := `
-        SELECT skill_name, version, status, published_at, updated_at, is_latest, value
+        SELECT skill_name, version, status, published_at, updated_at, is_latest, published, value
         FROM skills
         WHERE skill_name = $1 AND is_latest = true
         ORDER BY published_at DESC
@@ -1540,9 +1558,9 @@ func (db *PostgreSQL) GetSkillByName(ctx context.Context, tx pgx.Tx, skillName s
     `
 	var name, version, status string
 	var publishedAt, updatedAt time.Time
-	var isLatest bool
+	var isLatest, published bool
 	var valueJSON []byte
-	if err := db.getExecutor(tx).QueryRow(ctx, query, skillName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+	if err := db.getExecutor(tx).QueryRow(ctx, query, skillName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &published, &valueJSON); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -1560,6 +1578,7 @@ func (db *PostgreSQL) GetSkillByName(ctx context.Context, tx pgx.Tx, skillName s
 				PublishedAt: publishedAt,
 				UpdatedAt:   updatedAt,
 				IsLatest:    isLatest,
+				Published:   published,
 			},
 		},
 	}, nil
@@ -1570,16 +1589,16 @@ func (db *PostgreSQL) GetSkillByNameAndVersion(ctx context.Context, tx pgx.Tx, s
 		return nil, ctx.Err()
 	}
 	query := `
-        SELECT skill_name, version, status, published_at, updated_at, is_latest, value
+        SELECT skill_name, version, status, published_at, updated_at, is_latest, published, value
         FROM skills
         WHERE skill_name = $1 AND version = $2
         LIMIT 1
     `
 	var name, vers, status string
 	var publishedAt, updatedAt time.Time
-	var isLatest bool
+	var isLatest, published bool
 	var valueJSON []byte
-	if err := db.getExecutor(tx).QueryRow(ctx, query, skillName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+	if err := db.getExecutor(tx).QueryRow(ctx, query, skillName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &published, &valueJSON); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -1597,6 +1616,7 @@ func (db *PostgreSQL) GetSkillByNameAndVersion(ctx context.Context, tx pgx.Tx, s
 				PublishedAt: publishedAt,
 				UpdatedAt:   updatedAt,
 				IsLatest:    isLatest,
+				Published:   published,
 			},
 		},
 	}, nil
@@ -1607,7 +1627,7 @@ func (db *PostgreSQL) GetAllVersionsBySkillName(ctx context.Context, tx pgx.Tx, 
 		return nil, ctx.Err()
 	}
 	query := `
-        SELECT skill_name, version, status, published_at, updated_at, is_latest, value
+        SELECT skill_name, version, status, published_at, updated_at, is_latest, published, value
         FROM skills
         WHERE skill_name = $1
         ORDER BY published_at DESC
@@ -1621,9 +1641,9 @@ func (db *PostgreSQL) GetAllVersionsBySkillName(ctx context.Context, tx pgx.Tx, 
 	for rows.Next() {
 		var name, version, status string
 		var publishedAt, updatedAt time.Time
-		var isLatest bool
+		var isLatest, published bool
 		var valueJSON []byte
-		if err := rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+		if err := rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &published, &valueJSON); err != nil {
 			return nil, fmt.Errorf("failed to scan skill row: %w", err)
 		}
 		var skillJSON models.SkillJSON
@@ -1638,6 +1658,7 @@ func (db *PostgreSQL) GetAllVersionsBySkillName(ctx context.Context, tx pgx.Tx, 
 					PublishedAt: publishedAt,
 					UpdatedAt:   updatedAt,
 					IsLatest:    isLatest,
+					Published:   published,
 				},
 			},
 		})
@@ -1952,7 +1973,6 @@ func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx) ([]*models.
 	query := `
 		SELECT server_name, version, deployed_at, updated_at, status, config, prefer_remote, resource_type
 		FROM deployments
-		WHERE status = 'active'
 		ORDER BY deployed_at DESC
 	`
 
@@ -2001,19 +2021,19 @@ func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx) ([]*models.
 }
 
 // GetDeploymentByName retrieves a specific deployment
-func (db *PostgreSQL) GetDeploymentByName(ctx context.Context, tx pgx.Tx, serverName string) (*models.Deployment, error) {
+func (db *PostgreSQL) GetDeploymentByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName string, version string) (*models.Deployment, error) {
 	executor := db.getExecutor(tx)
 
 	query := `
 		SELECT server_name, version, deployed_at, updated_at, status, config, prefer_remote, resource_type
 		FROM deployments
-		WHERE server_name = $1
+		WHERE server_name = $1 AND version = $2
 	`
 
 	var d models.Deployment
 	var configJSON []byte
 
-	err := executor.QueryRow(ctx, query, serverName).Scan(
+	err := executor.QueryRow(ctx, query, serverName, version).Scan(
 		&d.ServerName,
 		&d.Version,
 		&d.DeployedAt,
@@ -2070,16 +2090,16 @@ func (db *PostgreSQL) UpdateDeploymentConfig(ctx context.Context, tx pgx.Tx, ser
 }
 
 // UpdateDeploymentStatus updates the status of a deployment
-func (db *PostgreSQL) UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, serverName, status string) error {
+func (db *PostgreSQL) UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, serverName, version string, status string) error {
 	executor := db.getExecutor(tx)
 
 	query := `
 		UPDATE deployments
-		SET status = $2
-		WHERE server_name = $1
+		SET status = $3
+		WHERE server_name = $1 AND version = $2
 	`
 
-	result, err := executor.Exec(ctx, query, serverName, status)
+	result, err := executor.Exec(ctx, query, serverName, version, status)
 	if err != nil {
 		return fmt.Errorf("failed to update deployment status: %w", err)
 	}
@@ -2092,12 +2112,12 @@ func (db *PostgreSQL) UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, ser
 }
 
 // RemoveDeployment removes a deployment
-func (db *PostgreSQL) RemoveDeployment(ctx context.Context, tx pgx.Tx, serverName string) error {
+func (db *PostgreSQL) RemoveDeployment(ctx context.Context, tx pgx.Tx, serverName string, version string) error {
 	executor := db.getExecutor(tx)
 
-	query := `DELETE FROM deployments WHERE server_name = $1`
+	query := `DELETE FROM deployments WHERE server_name = $1 AND version = $2`
 
-	result, err := executor.Exec(ctx, query, serverName)
+	result, err := executor.Exec(ctx, query, serverName, version)
 	if err != nil {
 		return fmt.Errorf("failed to delete deployment: %w", err)
 	}

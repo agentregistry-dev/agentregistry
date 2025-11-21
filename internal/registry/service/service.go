@@ -20,9 +20,9 @@ type RegistryService interface {
 	// GetServerByName retrieve latest version of a server by server name
 	GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error)
 	// GetServerByNameAndVersion retrieve specific version of a server by server name and version
-	GetServerByNameAndVersion(ctx context.Context, serverName string, version string) (*apiv0.ServerResponse, error)
+	GetServerByNameAndVersion(ctx context.Context, serverName string, version string, publishedOnly bool) (*apiv0.ServerResponse, error)
 	// GetAllVersionsByServerName retrieve all versions of a server by server name
-	GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error)
+	GetAllVersionsByServerName(ctx context.Context, serverName string, publishedOnly bool) ([]*apiv0.ServerResponse, error)
 	// CreateServer creates a new server version
 	CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
 	// UpdateServer updates an existing server and optionally its status
@@ -73,15 +73,15 @@ type RegistryService interface {
 	// GetDeployments retrieves all deployed resources (MCP servers, agents)
 	GetDeployments(ctx context.Context) ([]*models.Deployment, error)
 	// GetDeploymentByName retrieves a specific deployment by resource name
-	GetDeploymentByName(ctx context.Context, resourceName string) (*models.Deployment, error)
+	GetDeploymentByNameAndVersion(ctx context.Context, resourceName string, version string) (*models.Deployment, error)
 	// DeployServer deploys an MCP server with configuration
 	DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool) (*models.Deployment, error)
 	// DeployAgent deploys an agent with configuration (to be implemented)
 	DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool) (*models.Deployment, error)
 	// UpdateDeploymentConfig updates the configuration for a deployment
-	UpdateDeploymentConfig(ctx context.Context, resourceName string, config map[string]string) (*models.Deployment, error)
+	UpdateDeploymentConfig(ctx context.Context, resourceName string, version string, config map[string]string) (*models.Deployment, error)
 	// RemoveServer removes a deployment (works for any resource type)
-	RemoveServer(ctx context.Context, resourceName string) error
+	RemoveServer(ctx context.Context, resourceName string, version string) error
 
 	Reconciler
 }

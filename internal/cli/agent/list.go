@@ -113,7 +113,7 @@ func displayPaginatedAgents(agents []*models.AgentResponse, deployedAgents []*cl
 
 func printAgentsTable(agents []*models.AgentResponse, deployedAgents []*client.DeploymentResponse) {
 	t := printer.NewTablePrinter(os.Stdout)
-	t.SetHeaders("Name", "Version", "Framework", "Language", "Provider", "Model", "Deployed", "Status")
+	t.SetHeaders("Name", "Version", "Framework", "Language", "Provider", "Model", "Deployed", "Published")
 
 	deployedMap := make(map[string]*client.DeploymentResponse)
 	for _, d := range deployedAgents {
@@ -123,13 +123,18 @@ func printAgentsTable(agents []*models.AgentResponse, deployedAgents []*client.D
 	}
 
 	for _, a := range agents {
-		deployedStatus := "-"
+		deployedStatus := "False"
 		if deployment, ok := deployedMap[a.Agent.Name]; ok {
 			if deployment.Version == a.Agent.Version {
-				deployedStatus = "✓"
+				deployedStatus = "True"
 			} else {
-				deployedStatus = fmt.Sprintf("✓ (v%s)", deployment.Version)
+				deployedStatus = fmt.Sprintf("True (v%s)", deployment.Version)
 			}
+		}
+
+		publishedStatus := "False"
+		if a.Meta.Official.Published {
+			publishedStatus = "True"
 		}
 
 		t.AddRow(
@@ -140,7 +145,7 @@ func printAgentsTable(agents []*models.AgentResponse, deployedAgents []*client.D
 			printer.EmptyValueOrDefault(a.Agent.ModelProvider, "<none>"),
 			printer.TruncateString(printer.EmptyValueOrDefault(a.Agent.ModelName, "<none>"), 30),
 			deployedStatus,
-			a.Meta.Official.Status,
+			publishedStatus,
 		)
 	}
 

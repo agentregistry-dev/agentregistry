@@ -68,7 +68,8 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.Reg
 		}
 
 		// Get current server to check permissions against existing name
-		currentServer, err := registry.GetServerByNameAndVersion(ctx, serverName, version)
+		// Only allow editing unpublished servers
+		currentServer, err := registry.GetServerByNameAndVersion(ctx, serverName, version, false)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Server not found")

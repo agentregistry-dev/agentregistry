@@ -34,8 +34,10 @@ type ServerDetailInput struct {
 
 // ServerVersionDetailInput represents the input for getting a specific version
 type ServerVersionDetailInput struct {
-	ServerName string `path:"serverName" doc:"URL-encoded server name" example:"com.example%2Fmy-server"`
-	Version    string `path:"version" doc:"URL-encoded server version" example:"1.0.0"`
+	ServerName    string `path:"serverName" doc:"URL-encoded server name" example:"com.example%2Fmy-server"`
+	Version       string `path:"version" doc:"URL-encoded server version" example:"1.0.0"`
+	All           bool   `query:"all" doc:"If true, return all versions of the server instead of a single version" default:"false"`
+	PublishedOnly bool   `query:"published_only" doc:"If true, only return published versions (only applies when all=true)" default:"false"`
 }
 
 // ServerVersionsInput represents the input for listing all versions of a server
@@ -130,15 +132,16 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		}, nil
 	})
 
-	// Get specific server version endpoint (supports "latest" as special version)
+	// Get specific server version endpoint
+	// Can return a single version or all versions based on query parameters
 	huma.Register(api, huma.Operation{
 		OperationID: "get-server-version" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodGet,
 		Path:        pathPrefix + "/servers/{serverName}/versions/{version}",
 		Summary:     "Get specific MCP server version",
-		Description: "Get detailed information about a specific version of an MCP server. Use the special version 'latest' to get the latest version.",
+		Description: "Get detailed information about a specific version of an MCP server. Set 'all=true' query parameter to get all versions. Set 'published_only=true' to filter to only published versions (only applies when all=true).",
 		Tags:        tags,
-	}, func(ctx context.Context, input *ServerVersionDetailInput) (*Response[apiv0.ServerResponse], error) {
+	}, func(ctx context.Context, input *ServerVersionDetailInput) (*Response[apiv0.ServerListResponse], error) {
 		// URL-decode the server name
 		serverName, err := url.PathUnescape(input.ServerName)
 		if err != nil {
@@ -151,23 +154,92 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
 		}
 
-		var serverResponse *apiv0.ServerResponse
-		// Handle "latest" as a special version
-		if version == "latest" {
-			serverResponse, err = registry.GetServerByName(ctx, serverName)
-		} else {
-			serverResponse, err = registry.GetServerByNameAndVersion(ctx, serverName, version)
+		// If all=true, return all versions
+		if input.All {
+			// Determine if we should filter to published only
+			onlyPublished := input.PublishedOnly
+			// For public endpoints, always filter to published only
+			if !isAdmin {
+				onlyPublished = true
+			}
+
+			servers, err := registry.GetAllVersionsByServerName(ctx, serverName, onlyPublished)
+			if err != nil {
+				if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
+					return nil, huma.Error404NotFound("Server not found")
+				}
+				return nil, huma.Error500InternalServerError("Failed to get server versions", err)
+			}
+
+			// Convert []*ServerResponse to []ServerResponse
+			serverValues := make([]apiv0.ServerResponse, len(servers))
+			for i, server := range servers {
+				serverValues[i] = *server
+			}
+
+			return &Response[apiv0.ServerListResponse]{
+				Body: apiv0.ServerListResponse{
+					Servers: serverValues,
+					Metadata: apiv0.Metadata{
+						Count: len(servers),
+					},
+				},
+			}, nil
 		}
 
-		if err != nil {
-			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
+		// Default behavior: return a single version (wrapped in a list for consistency)
+		// For public endpoints, always filter to published only
+		publishedOnly := input.PublishedOnly
+		if !isAdmin {
+			publishedOnly = true
+		}
+
+		var serverResponse *apiv0.ServerResponse
+
+		// Handle "latest" as a special version string
+		if version == "latest" {
+			// Get all versions and find the latest one
+			servers, err := registry.GetAllVersionsByServerName(ctx, serverName, publishedOnly)
+			if err != nil {
+				if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
+					return nil, huma.Error404NotFound("Server not found")
+				}
+				return nil, huma.Error500InternalServerError("Failed to get server versions", err)
+			}
+			if len(servers) == 0 {
 				return nil, huma.Error404NotFound("Server not found")
 			}
-			return nil, huma.Error500InternalServerError("Failed to get server details", err)
+			// Find the latest version (should be marked with IsLatest=true)
+			var latestServer *apiv0.ServerResponse
+			for _, s := range servers {
+				if s.Meta.Official != nil && s.Meta.Official.IsLatest {
+					latestServer = s
+					break
+				}
+			}
+			// If no server is marked as latest, use the first one (shouldn't happen, but be defensive)
+			if latestServer == nil {
+				latestServer = servers[0]
+			}
+			serverResponse = latestServer
+		} else {
+			serverResponse, err = registry.GetServerByNameAndVersion(ctx, serverName, version, publishedOnly)
+			if err != nil {
+				if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
+					return nil, huma.Error404NotFound("Server not found")
+				}
+				return nil, huma.Error500InternalServerError("Failed to get server details", err)
+			}
 		}
 
-		return &Response[apiv0.ServerResponse]{
-			Body: *serverResponse,
+		// Return single server wrapped in a list response
+		return &Response[apiv0.ServerListResponse]{
+			Body: apiv0.ServerListResponse{
+				Servers: []apiv0.ServerResponse{*serverResponse},
+				Metadata: apiv0.Metadata{
+					Count: 1,
+				},
+			},
 		}, nil
 	})
 
@@ -187,7 +259,9 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		}
 
 		// Get all versions for this server
-		servers, err := registry.GetAllVersionsByServerName(ctx, serverName)
+		// For public endpoints, only get published versions (published = true)
+		// For admin endpoints, get all versions (published = true or false)
+		servers, err := registry.GetAllVersionsByServerName(ctx, serverName, !isAdmin)
 		if err != nil {
 			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Server not found")

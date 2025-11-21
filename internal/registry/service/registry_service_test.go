@@ -270,7 +270,7 @@ func TestGetServerByNameAndVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := service.GetServerByNameAndVersion(ctx, tt.serverName, tt.version)
+			result, err := service.GetServerByNameAndVersion(ctx, tt.serverName, tt.version, false)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -445,7 +445,7 @@ func TestGetAllVersionsByServerName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := service.GetAllVersionsByServerName(ctx, tt.serverName)
+			result, err := service.GetAllVersionsByServerName(ctx, tt.serverName, false)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -504,7 +504,7 @@ func TestCreateServerConcurrentVersionsNoRace(t *testing.T) {
 	}
 
 	// Query database to check the final state after all creates complete
-	allVersions, err := service.GetAllVersionsByServerName(ctx, serverName)
+	allVersions, err := service.GetAllVersionsByServerName(ctx, serverName, false)
 	require.NoError(t, err, "failed to get all versions")
 
 	latestCount := 0
@@ -664,7 +664,7 @@ func TestUpdateServer_SkipValidationForDeletedServers(t *testing.T) {
 	require.NoError(t, err, "should be able to set server to deleted (validation should be skipped)")
 
 	// Verify server is now deleted
-	updatedServer, err := service.GetServerByNameAndVersion(ctx, serverName, version)
+	updatedServer, err := service.GetServerByNameAndVersion(ctx, serverName, version, false)
 	require.NoError(t, err)
 	assert.Equal(t, model.StatusDeleted, updatedServer.Meta.Official.Status)
 
@@ -853,7 +853,7 @@ func TestVersionComparison(t *testing.T) {
 	assert.True(t, latest.Meta.Official.IsLatest)
 
 	// Verify only one version is marked as latest
-	allVersions, err := service.GetAllVersionsByServerName(ctx, serverName)
+	allVersions, err := service.GetAllVersionsByServerName(ctx, serverName, false)
 	require.NoError(t, err)
 
 	latestCount := 0
