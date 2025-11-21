@@ -46,7 +46,7 @@ func (g *PythonGenerator) Generate(agentConfig *common.AgentConfig) error {
 	agentConfig.Framework = "adk"
 	agentConfig.Language = "python"
 
-	if err := g.BaseGenerator.GenerateProject(*agentConfig); err != nil {
+	if err := g.GenerateProject(*agentConfig); err != nil {
 		return fmt.Errorf("failed to generate project: %w", err)
 	}
 

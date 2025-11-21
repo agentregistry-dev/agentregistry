@@ -112,7 +112,7 @@ type runContext struct {
 
 func renderComposeFromManifest(manifest *common.AgentManifest) ([]byte, error) {
 	gen := python.NewPythonGenerator()
-	templateBytes, err := gen.BaseGenerator.ReadTemplateFile("docker-compose.yaml.tmpl")
+	templateBytes, err := gen.ReadTemplateFile("docker-compose.yaml.tmpl")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read docker-compose template: %w", err)
 	}
@@ -122,7 +122,7 @@ func renderComposeFromManifest(manifest *common.AgentManifest) ([]byte, error) {
 		image = project.ConstructImageName("", manifest.Name)
 	}
 
-	rendered, err := gen.BaseGenerator.RenderTemplate(string(templateBytes), struct {
+	rendered, err := gen.RenderTemplate(string(templateBytes), struct {
 		Name          string
 		Image         string
 		ModelProvider string
