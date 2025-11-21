@@ -122,6 +122,14 @@ This embeds all files in `internal/registry/api/ui/dist/` at compile time.
 ### Development
 
 ```bash
+# Setup registry for images
+make docker-registry
+
+# Build docker images
+make docker
+```
+
+```bash
 # UI only (hot reload)
 make dev-ui
 

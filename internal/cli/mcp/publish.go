@@ -10,11 +10,15 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/build"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/utils"
+	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/spf13/cobra"
 )
+
+// TODO(infocus7): Maybe dry-run flag would make apiClient optional? (since we wouldn't require it to be running in this case, and maybe a user does not have everything set up but wants to test the publish command)
 
 var (
 	// Flags for mcp publish command
@@ -46,6 +50,11 @@ Examples:
 }
 
 func runMCPServerPublish(cmd *cobra.Command, args []string) error {
+	apiClient, err := utils.EnsureRegistryConnection()
+	if err != nil {
+		return err
+	}
+
 	input := args[0]
 
 	// Check if input is a local path with mcp.yaml
@@ -62,7 +71,7 @@ func runMCPServerPublish(cmd *cobra.Command, args []string) error {
 
 	// If it's a local path, build and publish
 	if isLocalPath {
-		return buildAndPublishLocal(absPath)
+		return buildAndPublishLocal(apiClient, absPath)
 	}
 
 	if publishVersion == "" {
@@ -70,15 +79,15 @@ func runMCPServerPublish(cmd *cobra.Command, args []string) error {
 	}
 
 	// Otherwise, treat it as a server name from the registry
-	return publishExistingServer(input, publishVersion)
+	return publishExistingServer(apiClient, input, publishVersion)
 }
 
-func publishExistingServer(serverName string, version string) error {
+func publishExistingServer(apiClient *client.Client, serverName string, version string) error {
 	// We need to check get all servers with the same name and version from the registry.
 	// If the specific version is not found, we should return an error.
 	// Once found, we need to check if it's already published.
 
-	isPublished, err := isServerPublished(serverName, version)
+	isPublished, err := isServerPublished(apiClient, serverName, version)
 	if err != nil {
 		return fmt.Errorf("failed to check if server is published: %w", err)
 	}
@@ -106,7 +115,7 @@ func publishExistingServer(serverName string, version string) error {
 	return fmt.Errorf("server %s version %s not found in registry", serverName, version)
 }
 
-func buildAndPublishLocal(absPath string) error {
+func buildAndPublishLocal(apiClient *client.Client, absPath string) error {
 	printer.PrintInfo(fmt.Sprintf("Publishing MCP server from: %s", absPath))
 
 	// 1. Load mcp.yaml manifest
@@ -164,7 +173,6 @@ func buildAndPublishLocal(absPath string) error {
 			pushCmd.Stderr = os.Stderr
 			if err := pushCmd.Run(); err != nil {
 				return fmt.Errorf("docker push failed for %s: %w", imageRef, err)
-
 			}
 		}
 	}

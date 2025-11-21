@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/utils"
+	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
 	v0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/spf13/cobra"
@@ -30,13 +32,14 @@ func init() {
 }
 
 func runShow(cmd *cobra.Command, args []string) error {
-	serverName := args[0]
-
-	if apiClient == nil {
-		return fmt.Errorf("API client not initialized")
+	apiClient, err := utils.EnsureRegistryConnection()
+	if err != nil {
+		return err
 	}
 
-	servers := findServersByName(serverName)
+	serverName := args[0]
+
+	servers := findServersByName(apiClient, serverName)
 	if len(servers) == 0 {
 		fmt.Printf("Server '%s' not found\n", serverName)
 		return nil
@@ -218,7 +221,7 @@ func groupServersByBaseName(servers []*v0.ServerResponse) []ServerVersionGroup {
 	return result
 }
 
-func findServersByName(searchName string) []*v0.ServerResponse {
+func findServersByName(apiClient *client.Client, searchName string) []*v0.ServerResponse {
 	servers, err := apiClient.GetPublishedServers()
 	if err != nil {
 		log.Fatalf("Failed to get servers: %v", err)

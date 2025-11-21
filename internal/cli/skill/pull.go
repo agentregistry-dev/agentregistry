@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
 	"github.com/spf13/cobra"
 )
@@ -23,11 +24,12 @@ If output-directory is not specified, it will be extracted to ./skills/<skill-na
 }
 
 func runPull(cmd *cobra.Command, args []string) error {
-	skillName := args[0]
-
-	if apiClient == nil {
-		return fmt.Errorf("API client not initialized")
+	apiClient, err := utils.EnsureRegistryConnection()
+	if err != nil {
+		return err
 	}
+
+	skillName := args[0]
 
 	// Determine output directory
 	outputDir := ""

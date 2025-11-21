@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
@@ -27,8 +28,9 @@ var ListCmd = &cobra.Command{
 }
 
 func runList(cmd *cobra.Command, args []string) error {
-	if apiClient == nil {
-		return fmt.Errorf("API client not initialized")
+	apiClient, err := utils.EnsureRegistryConnection()
+	if err != nil {
+		return err
 	}
 
 	agents, err := apiClient.GetAgents()

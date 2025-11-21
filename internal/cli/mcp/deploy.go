@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -36,11 +37,12 @@ func init() {
 }
 
 func runDeploy(cmd *cobra.Command, args []string) error {
-	serverName := args[0]
-
-	if apiClient == nil {
-		return fmt.Errorf("API client not initialized")
+	apiClient, err := utils.EnsureRegistryConnection()
+	if err != nil {
+		return err
 	}
+
+	serverName := args[0]
 
 	config := make(map[string]string)
 
@@ -81,7 +83,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("server not found: %s", serverName)
 	}
 
-	isPublished, err := isServerPublished(serverName, deployVersion)
+	isPublished, err := isServerPublished(apiClient, serverName, deployVersion)
 	if err != nil {
 		return fmt.Errorf("failed to check if server is published: %w", err)
 	}

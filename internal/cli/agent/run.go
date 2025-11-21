@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/docker"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/adk/python"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
@@ -41,6 +42,11 @@ var providerAPIKeys = map[string]string{
 }
 
 func runRun(cmd *cobra.Command, args []string) error {
+	apiClient, err := utils.EnsureRegistryConnection()
+	if err != nil {
+		return err
+	}
+
 	if len(args) == 0 {
 		return cmd.Help()
 	}

@@ -13,6 +13,7 @@ import (
 	"syscall"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
@@ -62,12 +63,13 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return runLocalMCPServer(serverNameOrPath)
 	}
 
-	if apiClient == nil {
-		return fmt.Errorf("API client not initialized")
+	apiClient, err := utils.EnsureRegistryConnection()
+	if err != nil {
+		return err
 	}
 
 	// Use the common server version selection logic
-	server, err := selectServerVersion(serverNameOrPath, runVersion, runYes)
+	server, err := selectServerVersion(apiClient, serverNameOrPath, runVersion, runYes)
 	if err != nil {
 		return err
 	}

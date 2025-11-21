@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/utils"
+	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/kagent-dev/kagent/go/cli/config"
@@ -23,6 +25,11 @@ arctl agent publish ./my-agent`,
 }
 
 func runPublish(cmd *cobra.Command, args []string) error {
+	apiClient, err := utils.EnsureRegistryConnection()
+	if err != nil {
+		return err
+	}
+
 	if len(args) == 0 {
 		return cmd.Help()
 	}
@@ -33,7 +40,7 @@ func runPublish(cmd *cobra.Command, args []string) error {
 
 	publishCfg.ProjectDir = args[0]
 
-	return publishAgent(publishCfg)
+	return publishAgent(apiClient, publishCfg)
 }
 
 type publishAgentCfg struct {
@@ -42,7 +49,7 @@ type publishAgentCfg struct {
 	Version    string
 }
 
-func publishAgent(cfg *publishAgentCfg) error {
+func publishAgent(apiClient *client.Client, cfg *publishAgentCfg) error {
 	// Validate project directory
 	if cfg.ProjectDir == "" {
 		return fmt.Errorf("project directory is required")

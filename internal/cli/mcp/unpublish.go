@@ -3,6 +3,8 @@ package mcp
 import (
 	"fmt"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/utils"
+	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/spf13/cobra"
 )
 
@@ -30,11 +32,12 @@ func init() {
 }
 
 func runUnpublish(cmd *cobra.Command, args []string) error {
-	serverName := args[0]
-
-	if apiClient == nil {
-		return fmt.Errorf("API client not initialized")
+	apiClient, err := utils.EnsureRegistryConnection()
+	if err != nil {
+		return err
 	}
+
+	serverName := args[0]
 
 	// Validate flags
 	if unpublishAll && unpublishVersion != "" {
@@ -43,7 +46,7 @@ func runUnpublish(cmd *cobra.Command, args []string) error {
 
 	// If --all flag is set, unpublish all versions
 	if unpublishAll {
-		return unpublishAllVersions(serverName)
+		return unpublishAllVersions(apiClient, serverName)
 	}
 
 	if unpublishVersion == "" {
@@ -51,7 +54,7 @@ func runUnpublish(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if the server with the specific version is even published
-	isPublished, _ := isServerPublished(serverName, unpublishVersion)
+	isPublished, _ := isServerPublished(apiClient, serverName, unpublishVersion)
 	if !isPublished {
 		return fmt.Errorf("server %s version %s is not published", serverName, unpublishVersion)
 	}
@@ -71,7 +74,7 @@ func runUnpublish(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func unpublishAllVersions(serverName string) error {
+func unpublishAllVersions(apiClient *client.Client, serverName string) error {
 	fmt.Printf("Fetching all versions of %s...\n", serverName)
 
 	// Get all versions of the server

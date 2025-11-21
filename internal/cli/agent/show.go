@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
 	"github.com/spf13/cobra"
 )
@@ -21,11 +22,12 @@ var ShowCmd = &cobra.Command{
 }
 
 func runShow(cmd *cobra.Command, args []string) error {
-	agentName := args[0]
-
-	if apiClient == nil {
-		return fmt.Errorf("API client not initialized")
+	apiClient, err := utils.EnsureRegistryConnection()
+	if err != nil {
+		return err
 	}
+
+	agentName := args[0]
 
 	agent, err := apiClient.GetAgentByName(agentName)
 	if err != nil {

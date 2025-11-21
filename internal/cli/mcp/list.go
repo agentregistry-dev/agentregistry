@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
 	v0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -37,8 +38,9 @@ func init() {
 }
 
 func runList(cmd *cobra.Command, args []string) error {
-	if apiClient == nil {
-		return fmt.Errorf("API client not initialized")
+	apiClient, err := utils.EnsureRegistryConnection()
+	if err != nil {
+		return err
 	}
 
 	servers, err := apiClient.GetPublishedServers()
@@ -73,20 +75,20 @@ func runList(cmd *cobra.Command, args []string) error {
 	case "yaml":
 		return outputDataYaml(servers)
 	default:
-		displayPaginatedServers(servers, deployedServers, listPageSize, listAll)
+		displayPaginatedServers(apiClient, servers, deployedServers, listPageSize, listAll)
 	}
 
 	return nil
 }
 
-func displayPaginatedServers(servers []*v0.ServerResponse, deployedServers []*client.DeploymentResponse, pageSize int, showAll bool) {
+func displayPaginatedServers(apiClient *client.Client, servers []*v0.ServerResponse, deployedServers []*client.DeploymentResponse, pageSize int, showAll bool) {
 	// Sort servers before displaying
 	sortServers(servers, sortBy)
 	total := len(servers)
 
 	if showAll || total <= pageSize {
 		// Show all items
-		printServersTable(servers, deployedServers)
+		printServersTable(apiClient, servers, deployedServers)
 		return
 	}
 
@@ -101,7 +103,7 @@ func displayPaginatedServers(servers []*v0.ServerResponse, deployedServers []*cl
 		}
 
 		// Display current page
-		printServersTable(servers[start:end], deployedServers)
+		printServersTable(apiClient, servers[start:end], deployedServers)
 
 		// Check if there are more items
 		remaining := total - end
@@ -121,7 +123,7 @@ func displayPaginatedServers(servers []*v0.ServerResponse, deployedServers []*cl
 			case "a", "all":
 				// Show all remaining
 				fmt.Println()
-				printServersTable(servers[end:], deployedServers)
+				printServersTable(apiClient, servers[end:], deployedServers)
 				return
 			case "q", "quit":
 				// Quit pagination
@@ -210,7 +212,7 @@ func sortServers(servers []*v0.ServerResponse, column string) {
 	}
 }
 
-func printServersTable(servers []*v0.ServerResponse, deployedServers []*client.DeploymentResponse) {
+func printServersTable(apiClient *client.Client, servers []*v0.ServerResponse, deployedServers []*client.DeploymentResponse) {
 	t := printer.NewTablePrinter(os.Stdout)
 	t.SetHeaders("Name", "Version", "Type", "Published", "Deployed", "Updated")
 
@@ -237,7 +239,7 @@ func printServersTable(servers []*v0.ServerResponse, deployedServers []*client.D
 
 		// Extract published status using the published boolean field
 		publishedStatus := "False"
-		isPublished, err := isServerPublished(s.Server.Name, s.Server.Version)
+		isPublished, err := isServerPublished(apiClient, s.Server.Name, s.Server.Version)
 		if err != nil {
 			log.Printf("Warning: Failed to check if server is published: %v", err)
 		}

@@ -7,10 +7,11 @@ import (
 	"os"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/client"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
-func isServerDeployed(serverName string, version string) (bool, error) {
+func isServerDeployed(apiClient *client.Client, serverName string, version string) (bool, error) {
 	if apiClient == nil {
 		return false, errors.New("API client not initialized")
 	}
@@ -23,7 +24,7 @@ func isServerDeployed(serverName string, version string) (bool, error) {
 }
 
 // isServerPublished checks if a server is published
-func isServerPublished(serverName, version string) (bool, error) {
+func isServerPublished(apiClient *client.Client, serverName, version string) (bool, error) {
 	if apiClient == nil {
 		return false, errors.New("API client not initialized")
 	}
@@ -40,7 +41,7 @@ func isServerPublished(serverName, version string) (bool, error) {
 // selectServerVersion handles server version selection logic with interactive prompts
 // Returns the selected server or an error if not found or cancelled
 // Only allows deployment of published servers
-func selectServerVersion(resourceName, requestedVersion string, autoYes bool) (*apiv0.ServerResponse, error) {
+func selectServerVersion(apiClient *client.Client, resourceName, requestedVersion string, autoYes bool) (*apiv0.ServerResponse, error) {
 	if apiClient == nil {
 		return nil, errors.New("API client not initialized")
 	}
@@ -57,7 +58,7 @@ func selectServerVersion(resourceName, requestedVersion string, autoYes bool) (*
 		}
 
 		// Check if the server is published
-		isPublished, err := isServerPublished(server.Server.Name, server.Server.Version)
+		isPublished, err := isServerPublished(apiClient, server.Server.Name, server.Server.Version)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check if server is published: %w", err)
 		}
@@ -84,7 +85,7 @@ func selectServerVersion(resourceName, requestedVersion string, autoYes bool) (*
 	// Filter to only published versions
 	var publishedVersions []*apiv0.ServerResponse
 	for _, v := range allVersions {
-		isPublished, err := isServerPublished(resourceName, v.Server.Version)
+		isPublished, err := isServerPublished(apiClient, resourceName, v.Server.Version)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check if server is published: %w", err)
 		}

@@ -3,6 +3,7 @@ package skill
 import (
 	"fmt"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -15,6 +16,11 @@ var RemoveCmd = &cobra.Command{
 }
 
 func runRemove(cmd *cobra.Command, args []string) error {
+	_, err := utils.EnsureRegistryConnection()
+	if err != nil {
+		return err
+	}
+
 	// Not implemented yet
 	fmt.Println("Not implemented yet")
 	return nil

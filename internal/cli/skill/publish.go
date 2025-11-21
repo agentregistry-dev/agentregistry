@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
 	"github.com/spf13/cobra"
@@ -47,12 +48,15 @@ func init() {
 	_ = PublishCmd.MarkFlagRequired("docker-url")
 }
 
-func runPublish(cmd *cobra.Command, args []string) error {
-	skillPath := args[0]
+// TODO(infocus7): Maybe dry-run flag would make apiClient optional? (since we wouldn't require it to be running in this case, and maybe a user does not have everything set up but wants to test the publish command)
 
-	if apiClient == nil {
-		return fmt.Errorf("API client not initialized")
+func runPublish(cmd *cobra.Command, args []string) error {
+	apiClient, err := utils.EnsureRegistryConnection()
+	if err != nil {
+		return err
 	}
+
+	skillPath := args[0]
 
 	// Validate path exists
 	absPath, err := filepath.Abs(skillPath)
