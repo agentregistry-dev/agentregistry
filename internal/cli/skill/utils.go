@@ -1,6 +1,9 @@
 package skill
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // sanitizeRepoName converts a skill name to a docker-friendly repo name
 func sanitizeRepoName(name string) string {
@@ -18,4 +21,22 @@ func sanitizeRepoName(name string) string {
 		n = "skill"
 	}
 	return n
+}
+
+func validateProjectName(name string) error {
+	if name == "" {
+		return fmt.Errorf("project name cannot be empty")
+	}
+
+	// Check for invalid characters
+	if strings.ContainsAny(name, " \t\n\r/\\:*?\"<>|") {
+		return fmt.Errorf("project name contains invalid characters")
+	}
+
+	// Check if it starts with a dot
+	if strings.HasPrefix(name, ".") {
+		return fmt.Errorf("project name cannot start with a dot")
+	}
+
+	return nil
 }

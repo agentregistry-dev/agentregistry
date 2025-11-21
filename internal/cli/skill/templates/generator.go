@@ -22,6 +22,7 @@ type ProjectConfig struct {
 	Directory   string
 	Verbose     bool
 	ProjectName string
+	Empty       bool
 }
 
 // NewGenerator creates a new Skill generator
@@ -36,6 +37,16 @@ func (g *Generator) GenerateProject(config ProjectConfig) error {
 		return fmt.Errorf("failed to get templates subdirectory: %w", err)
 	}
 
+	// If Empty flag is set, only render specific templates
+	var allowedTemplates map[string]bool
+	if config.Empty {
+		allowedTemplates = map[string]bool{
+			"Dockerfile.tmpl":  true,
+			"LICENSE.txt.tmpl": true,
+			"SKILL.md.tmpl":    true,
+		}
+	}
+
 	err = fs.WalkDir(templateRoot, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -44,11 +55,29 @@ func (g *Generator) GenerateProject(config ProjectConfig) error {
 		destPath := filepath.Join(config.ProjectName, strings.TrimSuffix(path, ".tmpl"))
 
 		if d.IsDir() {
+			// When Empty flag is set, skip creating directories (allowed templates are in root)
+			if config.Empty {
+				return nil
+			}
 			// Create the directory if it doesn't exist
 			if err := os.MkdirAll(destPath, 0755); err != nil {
 				return fmt.Errorf("failed to create directory %s: %w", destPath, err)
 			}
 			return nil
+		}
+
+		// If Empty flag is set, only render allowed templates
+		if config.Empty {
+			baseName := filepath.Base(path)
+			if !allowedTemplates[baseName] {
+				return nil // Skip this template
+			}
+		}
+
+		// Ensure parent directory exists
+		parentDir := filepath.Dir(destPath)
+		if err := os.MkdirAll(parentDir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", parentDir, err)
 		}
 
 		// Read template file

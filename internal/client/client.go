@@ -448,6 +448,67 @@ func (c *Client) UnpublishMCPServer(name, version string) error {
 	return c.doJSON(req, nil)
 }
 
+// UnpublishSkill unpublishes a skill from the registry
+func (c *Client) UnpublishSkill(name, version string) error {
+	encName := url.PathEscape(name)
+	encVersion := url.PathEscape(version)
+
+	req, err := c.newAdminRequest(http.MethodPost, "/admin/v0/skills/"+encName+"/versions/"+encVersion+"/unpublish")
+	if err != nil {
+		return err
+	}
+	return c.doJSON(req, nil)
+}
+
+// GetSkillVersions returns all versions of a skill by name (admin endpoint - includes unpublished)
+func (c *Client) GetSkillVersions(name string) ([]*models.SkillResponse, error) {
+	encName := url.PathEscape(name)
+
+	req, err := c.newAdminRequest(http.MethodGet, "/admin/v0/skills/"+encName+"/versions")
+	if err != nil {
+		return nil, err
+	}
+
+	var resp models.SkillListResponse
+	if err := c.doJSON(req, &resp); err != nil {
+		// 404 -> not found returns empty list
+		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get skill versions: %w", err)
+	}
+
+	// Convert []SkillResponse to []*SkillResponse
+	result := make([]*models.SkillResponse, len(resp.Skills))
+	for i := range resp.Skills {
+		result[i] = &resp.Skills[i]
+	}
+
+	return result, nil
+}
+
+// GetSkillByNameAndVersion returns a specific version of a skill
+func (c *Client) GetSkillByNameAndVersion(name, version string) (*models.SkillResponse, error) {
+	encName := url.PathEscape(name)
+	encVersion := url.PathEscape(version)
+
+	req, err := c.newRequest(http.MethodGet, "/skills/"+encName+"/versions/"+encVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp models.SkillResponse
+	if err := c.doJSON(req, &resp); err != nil {
+		// 404 -> not found returns nil
+		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get skill by name and version: %w", err)
+	}
+
+	return &resp, nil
+}
+
 // Helpers to convert API errors
 func asHTTPStatus(err error) int {
 	if err == nil {

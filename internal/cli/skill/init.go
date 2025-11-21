@@ -3,7 +3,6 @@ package skill
 import (
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/skill/templates"
 
@@ -21,12 +20,14 @@ var (
 	initForce   bool
 	initNoGit   bool
 	initVerbose bool
+	initEmpty   bool
 )
 
 func init() {
 	InitCmd.PersistentFlags().BoolVar(&initForce, "force", false, "Overwrite existing directory")
 	InitCmd.PersistentFlags().BoolVar(&initNoGit, "no-git", false, "Skip git initialization")
 	InitCmd.PersistentFlags().BoolVar(&initVerbose, "verbose", false, "Enable verbose output during initialization")
+	InitCmd.PersistentFlags().BoolVar(&initEmpty, "empty", false, "Create an empty skill project")
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
@@ -53,6 +54,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		Directory:   projectPath,
 		Verbose:     false,
 		ProjectName: projectName,
+		Empty:       initEmpty,
 	})
 	if err != nil {
 		return err
@@ -64,24 +66,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("	arctl skill publish --docker-url docker.io/myorg %s\n", projectPath)
 	fmt.Printf("  arctl skill publish --docker-url ghcr.io/myorg %s\n", projectPath)
 	fmt.Printf("  arctl skill publish --docker-url localhost:5001/myorg %s\n", projectPath)
-
-	return nil
-}
-
-func validateProjectName(name string) error {
-	if name == "" {
-		return fmt.Errorf("project name cannot be empty")
-	}
-
-	// Check for invalid characters
-	if strings.ContainsAny(name, " \t\n\r/\\:*?\"<>|") {
-		return fmt.Errorf("project name contains invalid characters")
-	}
-
-	// Check if it starts with a dot
-	if strings.HasPrefix(name, ".") {
-		return fmt.Errorf("project name cannot start with a dot")
-	}
 
 	return nil
 }
