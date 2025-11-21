@@ -67,12 +67,12 @@ func RegenerateMcpTools(projectDir string, manifest *common.AgentManifest, verbo
 	}
 
 	gen := python.NewPythonGenerator()
-	templateBytes, err := gen.BaseGenerator.ReadTemplateFile("agent/mcp_tools.py.tmpl")
+	templateBytes, err := gen.ReadTemplateFile("agent/mcp_tools.py.tmpl")
 	if err != nil {
 		return fmt.Errorf("failed to read mcp_tools template: %w", err)
 	}
 
-	rendered, err := gen.BaseGenerator.RenderTemplate(string(templateBytes), struct {
+	rendered, err := gen.RenderTemplate(string(templateBytes), struct {
 		McpServers []common.McpServerType
 	}{
 		McpServers: manifest.McpServers,
@@ -103,12 +103,12 @@ func RegenerateDockerCompose(projectDir string, manifest *common.AgentManifest, 
 		image = ConstructImageName("", manifest.Name)
 	}
 	gen := python.NewPythonGenerator()
-	templateBytes, err := gen.BaseGenerator.ReadTemplateFile("docker-compose.yaml.tmpl")
+	templateBytes, err := gen.ReadTemplateFile("docker-compose.yaml.tmpl")
 	if err != nil {
 		return fmt.Errorf("failed to read docker-compose template: %w", err)
 	}
 
-	rendered, err := gen.BaseGenerator.RenderTemplate(string(templateBytes), struct {
+	rendered, err := gen.RenderTemplate(string(templateBytes), struct {
 		Name          string
 		Image         string
 		ModelProvider string

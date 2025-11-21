@@ -220,7 +220,7 @@ func waitForAgent(ctx context.Context, agentURL string, timeout time.Duration) e
 			resp, err := client.Do(req)
 			if err == nil {
 				_, _ = io.Copy(io.Discard, resp.Body)
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				if resp.StatusCode == http.StatusOK {
 					fmt.Println(" ✓")
 					return nil

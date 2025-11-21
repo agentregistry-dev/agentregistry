@@ -127,7 +127,7 @@ func buildMCPServers(projectDir string, manifest *common.AgentManifest, extraArg
 
 		dockerfilePath := filepath.Join(serverDir, "Dockerfile")
 		if _, err := os.Stat(dockerfilePath); err != nil {
-			return fmt.Errorf("Dockerfile not found for MCP server %s (%s)", srv.Name, dockerfilePath)
+			return fmt.Errorf("dockerfile not found for MCP server %s (%s)", srv.Name, dockerfilePath)
 		}
 
 		imageName := project.ConstructMCPServerImageName(manifest.Name, srv.Name)
