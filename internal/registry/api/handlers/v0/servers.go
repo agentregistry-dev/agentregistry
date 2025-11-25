@@ -58,8 +58,56 @@ type ServerReadmeResponse struct {
 // RegisterServersEndpoints registers all server-related endpoints with a custom path prefix
 // isAdmin: if true, shows all resources; if false, only shows published resources
 func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool) {
+	if isAdmin {
+		huma.Register(api, huma.Operation{
+			OperationID: "delete-server-version" + strings.ReplaceAll(pathPrefix, "/", "-"),
+			Method:      http.MethodDelete,
+			Path:        pathPrefix + "/servers/{serverName}/versions/{version}",
+			Summary:     "Delete MCP server version",
+			Description: "Permanently delete an MCP server version from the registry.",
+			Tags:        []string{"servers", "admin"},
+		}, func(ctx context.Context, input *ServerVersionDetailInput) (*Response[EmptyResponse], error) {
+			serverName, err := url.PathUnescape(input.ServerName)
+			if err != nil {
+				return nil, huma.Error400BadRequest("Invalid server name encoding", err)
+			}
+			version, err := url.PathUnescape(input.Version)
+			if err != nil {
+				return nil, huma.Error400BadRequest("Invalid version encoding", err)
+			}
+			if err := registry.DeleteServer(ctx, serverName, version); err != nil {
+				if errors.Is(err, database.ErrNotFound) {
+					return nil, huma.Error404NotFound("Server not found")
+				}
+				return nil, huma.Error500InternalServerError("Failed to delete server", err)
+			}
+			return &Response[EmptyResponse]{
+				Body: EmptyResponse{
+					Message: "Server deleted successfully",
+				},
+			}, nil
+		})
+	}
+	var tags []string
+	tags = []string{"servers"}
+	if isAdmin {
+		tags = append(tags, "admin")
+	}
+
+	// Register /servers/push endpoint here
+	huma.Register(api, huma.Operation{
+		OperationID: "push-server" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		Method:      http.MethodPost,
+		Path:        pathPrefix + "/servers/push",
+		Summary:     "Push MCP server (create unpublished)",
+		Description: "Create a new MCP server in the registry as an unpublished entry (published=false).",
+		Tags:        tags,
+	}, func(ctx context.Context, input *CreateServerInput) (*Response[apiv0.ServerResponse], error) {
+		// Always create as unpublished (handled in service layer)
+		return createServerHandler(ctx, input, registry)
+	})
 	// Determine the tags based on whether this is admin or public
-	tags := []string{"servers"}
+	tags = []string{"servers"}
 	if isAdmin {
 		tags = append(tags, "admin")
 	}

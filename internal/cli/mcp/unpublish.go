@@ -64,10 +64,7 @@ func runUnpublish(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to unpublish server: %w", err)
 	}
 
-	fmt.Printf("✓ Successfully unpublished %s version %s\n", serverName, unpublishVersion)
-	fmt.Println("\nThe server has been hidden from public listings.")
-	fmt.Println("To re-publish it, use: arctl mcp publish")
-
+	fmt.Printf("MCP server '%s' version %s unpublished successfully\n", serverName, unpublishVersion)
 	return nil
 }
 

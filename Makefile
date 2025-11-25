@@ -18,7 +18,7 @@ LDFLAGS := \
 # Local architecture detection to build for the current platform
 LOCALARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
 
-.PHONY: help install-ui build-ui clean-ui build-cli build install dev-ui test clean fmt lint all build-agentgateway rebuild-agentgateway postgres-start postgres-stop release-cli docker-compose-up docker-compose-down docker-compose-logs
+.PHONY: help install-ui build-ui clean-ui build-cli build install dev-ui test clean fmt lint all build-agentgateway rebuild-agentgateway release-cli docker-compose-up docker-compose-down docker-compose-logs
 
 # Default target
 help:
@@ -33,12 +33,9 @@ help:
 	@echo "  test                 - Run Go tests"
 	@echo "  clean                - Clean all build artifacts"
 	@echo "  all                  - Clean and build everything"
-	@echo "  build-agentgateway   - Build custom agent gateway Docker image"
 	@echo "  rebuild-agentgateway - Force rebuild agent gateway Docker image"
 	@echo "  fmt                  - Run the formatter"
 	@echo "  lint                 - Run the linter"
-	@echo "  postgres-start       - Start PostgreSQL database in Docker"
-	@echo "  postgres-stop        - Stop PostgreSQL database"
 	@echo "  release              - Build and release the CLI"
 
 # Install UI dependencies

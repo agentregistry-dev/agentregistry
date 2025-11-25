@@ -448,6 +448,13 @@ func (s *registryServiceImpl) UnpublishServer(ctx context.Context, serverName, v
 	})
 }
 
+// DeleteServer permanently removes a server version from the registry
+func (s *registryServiceImpl) DeleteServer(ctx context.Context, serverName, version string) error {
+    return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+        return s.db.DeleteServer(txCtx, tx, serverName, version)
+    })
+}
+
 // validateUpdateRequest validates an update request with optional registry validation skipping
 func (s *registryServiceImpl) validateUpdateRequest(ctx context.Context, req apiv0.ServerJSON, skipRegistryValidation bool) error {
 	// Always validate the server JSON structure
@@ -599,6 +606,13 @@ func (s *registryServiceImpl) PublishAgent(ctx context.Context, agentName, versi
 func (s *registryServiceImpl) UnpublishAgent(ctx context.Context, agentName, version string) error {
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
 		return s.db.UnpublishAgent(txCtx, tx, agentName, version)
+	})
+}
+
+// DeleteAgent permanently removes an agent version from the registry
+func (s *registryServiceImpl) DeleteAgent(ctx context.Context, agentName, version string) error {
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		return s.db.DeleteAgent(txCtx, tx, agentName, version)
 	})
 }
 

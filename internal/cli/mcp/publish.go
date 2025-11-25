@@ -95,7 +95,7 @@ func publishExistingServer(serverName string, version string) error {
 		if server.Server.Name == serverName && server.Server.Version == version {
 			// We found the entry, it's not published yet, so we can publish it.
 			fmt.Printf("Publishing server: %s, Version: %s\n", server.Server.Name, server.Server.Version)
-			_, err = apiClient.PublishMCPServer(&server.Server)
+			err = apiClient.PublishMCPServerStatus(serverName, version)
 			if err != nil {
 				return fmt.Errorf("failed to publish server: %w", err)
 			}

@@ -776,6 +776,23 @@ func (db *PostgreSQL) UnpublishServer(ctx context.Context, tx pgx.Tx, serverName
 	return nil
 }
 
+// DeleteServer permanently removes a server version from the database
+func (db *PostgreSQL) DeleteServer(ctx context.Context, tx pgx.Tx, serverName, version string) error {
+    if ctx.Err() != nil {
+        return ctx.Err()
+    }
+    executor := db.getExecutor(tx)
+    query := `DELETE FROM servers WHERE server_name = $1 AND version = $2`
+    result, err := executor.Exec(ctx, query, serverName, version)
+    if err != nil {
+        return fmt.Errorf("failed to delete server: %w", err)
+    }
+    if result.RowsAffected() == 0 {
+        return ErrNotFound
+    }
+    return nil
+}
+
 // IsServerPublished checks if a server is published
 func (db *PostgreSQL) IsServerPublished(ctx context.Context, tx pgx.Tx, serverName, version string) (bool, error) {
 	if ctx.Err() != nil {
@@ -2120,6 +2137,24 @@ func (db *PostgreSQL) RemoveDeployment(ctx context.Context, tx pgx.Tx, serverNam
 	result, err := executor.Exec(ctx, query, serverName, version)
 	if err != nil {
 		return fmt.Errorf("failed to delete deployment: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+// DeleteAgent permanently removes an agent version from the database
+func (db *PostgreSQL) DeleteAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error {
+	executor := db.getExecutor(tx)
+
+	query := `DELETE FROM agents WHERE agent_name = $1 AND version = $2`
+
+	result, err := executor.Exec(ctx, query, agentName, version)
+	if err != nil {
+		return fmt.Errorf("failed to delete agent: %w", err)
 	}
 
 	if result.RowsAffected() == 0 {

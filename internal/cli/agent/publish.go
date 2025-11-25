@@ -11,15 +11,27 @@ import (
 )
 
 var PublishCmd = &cobra.Command{
-	Use:   "publish [project-directory]",
+	Use:   "publish [project-directory|agent-name]",
 	Short: "Publish an agent project to the registry",
 	Long: `Publish an agent project to the registry.
 
+This command supports two forms:
+
+- 'arctl agent publish ./my-agent' publishes the agent defined by agent.yaml in the given folder.
+- 'arctl agent publish my-agent --version 1.2.3' publishes an agent that already exists in the registry by name and version.
+
 Examples:
-arctl agent publish ./my-agent`,
+arctl agent publish ./my-agent
+arctl agent publish my-agent --version latest`,
 	Args:    cobra.ExactArgs(1),
 	RunE:    runPublish,
 	Example: `arctl agent publish ./my-agent`,
+}
+
+var publishVersion string
+
+func init() {
+	PublishCmd.Flags().StringVar(&publishVersion, "version", "", "Specify version to publish (when publishing an existing registry agent)")
 }
 
 func runPublish(cmd *cobra.Command, args []string) error {
@@ -30,10 +42,36 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	publishCfg := &publishAgentCfg{
 		Config: cfg,
 	}
+	publishCfg.Version = publishVersion
 
-	publishCfg.ProjectDir = args[0]
+	arg := args[0]
 
-	return publishAgent(publishCfg)
+	// If --version flag was provided, treat as registry-based publish
+	// No need to push the agent, just mark as published
+	if publishCfg.Version != "" {
+		agentName := arg
+		version := publishCfg.Version
+
+		if apiClient == nil {
+			return fmt.Errorf("API client not initialized")
+		}
+
+		if err := apiClient.PublishAgentStatus(agentName, version); err != nil {
+			return fmt.Errorf("failed to publish agent: %w", err)
+		}
+
+		fmt.Printf("Agent '%s' version %s published successfully\n", agentName, version)
+
+		return nil
+	}
+
+	// If the argument is a directory containing an agent project, publish from local
+	if fi, err := os.Stat(arg); err == nil && fi.IsDir() {
+		publishCfg.ProjectDir = arg
+		publishCfg.Version = "latest"
+		return publishAgent(publishCfg)
+	}
+	return nil
 }
 
 type publishAgentCfg struct {
@@ -75,9 +113,7 @@ func publishAgent(cfg *publishAgentCfg) error {
 		return fmt.Errorf("failed to publish agent: %w", err)
 	}
 
-	fmt.Println("Agent published successfully")
-	fmt.Println("You can now run the agent using the following command:")
-	fmt.Println("arctl run agent " + jsn.Name + " " + jsn.Version)
+	fmt.Printf("Agent '%s' version %s published successfully\n", jsn.Name, jsn.Version)
 
 	return nil
 }
