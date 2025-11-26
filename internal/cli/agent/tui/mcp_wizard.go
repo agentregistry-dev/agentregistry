@@ -162,6 +162,7 @@ type McpServerWizard struct {
 	buildPath    string // stores selected file path from picker
 }
 
+// TODO(infocus7): Add registry type selection using actual registry server list for selection
 func NewMcpServerWizard() *McpServerWizard {
 	// Type list
 	typeItems := []list.Item{

@@ -22,14 +22,17 @@ var AddMcpCmd = &cobra.Command{
 }
 
 var (
-	projectDir string
-	remoteURL  string
-	headers    []string
-	command    string
-	args       []string
-	env        []string
-	image      string
-	build      string
+	projectDir      string
+	remoteURL       string
+	headers         []string
+	command         string
+	args            []string
+	env             []string
+	image           string
+	build           string
+	registryURL     string
+	registryName    string
+	registryVersion string
 )
 
 func init() {
@@ -41,9 +44,13 @@ func init() {
 	AddMcpCmd.Flags().StringSliceVar(&env, "env", nil, "Environment variable in KEY=VALUE format (repeatable)")
 	AddMcpCmd.Flags().StringVar(&image, "image", "", "Container image (optional; mutually exclusive with --build)")
 	AddMcpCmd.Flags().StringVar(&build, "build", "", "Container build (optional; mutually exclusive with --image)")
+	AddMcpCmd.Flags().StringVar(&registryURL, "registry-url", "", "Registry URL (e.g., https://registry.example.com) (optional; mutually exclusive with --remote, --command, --image, --build)")
+	AddMcpCmd.Flags().StringVar(&registryName, "registry-name", "", "Registry-deployed MCP server name (optional; mutually exclusive with --remote, --command, --image, --build)")
+	AddMcpCmd.Flags().StringVar(&registryVersion, "registry-version", "", "Version of the MCP server to deploy from registry (e.g., 1.0.0) (optional)")
 }
 
 // addMcpCmd runs the interactive flow to append an MCP server to agent.yaml
+// note: adding a server from a registry will not resolve the MCP server directory + docker compose file here.
 func addMcpCmd(name string) error {
 	// Determine project directory
 	resolvedDir, err := ResolveProjectDir(projectDir)
@@ -63,7 +70,7 @@ func addMcpCmd(name string) error {
 
 	// If flags provided, build non-interactively; else run wizard
 	var res common.McpServerType
-	if remoteURL != "" || command != "" || image != "" || build != "" {
+	if remoteURL != "" || command != "" || image != "" || build != "" || registryURL != "" || registryName != "" {
 		if remoteURL != "" {
 			headerMap := parseKeyValuePairs(headers)
 			res = common.McpServerType{
@@ -71,6 +78,14 @@ func addMcpCmd(name string) error {
 				URL:     remoteURL,
 				Name:    name,
 				Headers: headerMap,
+			}
+		} else if registryURL != "" && registryName != "" {
+			res = common.McpServerType{
+				Type:         "registry",
+				Name:         name,
+				RegistryURL:  registryURL,
+				RegistryName: registryName,
+				Version:      registryVersion,
 			}
 		} else {
 			if image != "" && build != "" {
@@ -113,6 +128,7 @@ func addMcpCmd(name string) error {
 	// Append and validate
 	manifest.McpServers = append(manifest.McpServers, res)
 	manager := common.NewManifestManager(resolvedDir)
+
 	if err := manager.Validate(manifest); err != nil {
 		return fmt.Errorf("invalid MCP server configuration: %w", err)
 	}

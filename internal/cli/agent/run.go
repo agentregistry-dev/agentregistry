@@ -81,6 +81,11 @@ func runFromDirectory(ctx context.Context, projectDir string) error {
 	})
 }
 
+// TODO(infocus7): When running here, the AgentManifest will have registry MCP servers, so we would translate that for the runtime.
+// We'll need to: 1. Fetch servers from registry url; 2. Parse the list of servers to get the correct one (check if an endpoint for this exists); 3. look up the startup parameters (commands, args, env, etc.); 4. set up folder for it; 5. update docker-compose to run the server; 6. update manifest to replace the remote with new command; 7. run agent
+// Would need to be done in a way that doesn't break the agent -- aka running `run` multiple times does not conflict with a previous run's resolution, running deploy & run any number of times keeps agent.yaml intact, and the docker-compose clean (avoiding future run/deploy conflicting writing data)
+// This isn't an issue during `add-mcp` because that is done per-mcp added, but for registry-based servers, a run/deploy call can be done any number of times, so writing & managing manifests could get tricky.
+// Unsure about on-deploy until that gets ported/implemented.
 func runFromManifest(ctx context.Context, manifest *common.AgentManifest, overrides *runContext) error {
 	if manifest == nil {
 		return fmt.Errorf("agent manifest is required")
