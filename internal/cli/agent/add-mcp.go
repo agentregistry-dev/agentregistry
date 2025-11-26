@@ -125,6 +125,8 @@ func addMcpCmd(name string) error {
 		}
 	}
 
+	// TODO(infocus7): Validate the registry + mcp server exists? Or save that for when run/deploy?
+
 	// Append and validate
 	manifest.McpServers = append(manifest.McpServers, res)
 	manager := common.NewManifestManager(resolvedDir)
