@@ -8,10 +8,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
-	"github.com/modelcontextprotocol/registry/pkg/model"
+	"github.com/agentregistry-dev/agentregistry/internal/utils"
 
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
+	"github.com/modelcontextprotocol/registry/pkg/model"
 )
 
 type MCPServerRunRequest struct {
@@ -22,18 +24,67 @@ type MCPServerRunRequest struct {
 	HeaderValues   map[string]string
 }
 
+type AgentRunRequest struct {
+	RegistryAgent *models.AgentJSON
+	EnvValues     map[string]string
+	MCPServers    []*MCPServerRunRequest
+}
+
 // Translator is the interface for translating MCPServer objects to AgentGateway objects.
 type Translator interface {
 	TranslateMCPServer(
 		ctx context.Context,
 		req *MCPServerRunRequest,
 	) (*api.MCPServer, error)
+
+	TranslateAgent(
+		ctx context.Context,
+		req *AgentRunRequest,
+	) (*api.Agent, error)
 }
 
 type registryTranslator struct{}
 
 func NewTranslator() Translator {
 	return &registryTranslator{}
+}
+
+func (t *registryTranslator) TranslateAgent(
+	ctx context.Context,
+	req *AgentRunRequest,
+) (*api.Agent, error) {
+	manifest := &req.RegistryAgent.AgentManifest
+
+	// Build environment variables map starting with passed values
+	env := make(map[string]string)
+	for k, v := range req.EnvValues {
+		env[k] = v
+	}
+
+	// TODO: remove kagent variables (currently required)
+	// note that the change to remove this would have to be done in kagent-adk
+	env["KAGENT_URL"] = "http://localhost"
+	env["KAGENT_NAME"] = manifest.Name
+	env["KAGENT_NAMESPACE"] = "default"
+
+	// Set agent configuration
+	env["AGENT_NAME"] = manifest.Name
+	env["MODEL_PROVIDER"] = manifest.ModelProvider
+	env["MODEL_NAME"] = manifest.ModelName
+
+	port, err := utils.FindAvailablePort()
+	if err != nil {
+		return nil, fmt.Errorf("failed to find available port: %w", err)
+	}
+	return &api.Agent{
+		Name: req.RegistryAgent.Name,
+		Deployment: api.AgentDeployment{
+			Image: req.RegistryAgent.Image,
+			Port:  port,
+			Env:   env,
+		},
+	}, nil
+
 }
 
 func (t *registryTranslator) TranslateMCPServer(

@@ -1,8 +1,16 @@
 package api
 
-// DestiredState represents the desired set of MCPServevrs the user wishes to run locally
+// DesiredState represents the desired set of MCPServevrs the user wishes to run locally
 type DesiredState struct {
 	MCPServers []*MCPServer `json:"mcpServers"`
+	Agents     []*Agent     `json:"agents"`
+}
+
+// Agent represents a single Agent configuration
+type Agent struct {
+	Name       string          `json:"name"`
+	Deployment AgentDeployment `json:"deployment"`
+	// TODO: We'll need references to MCPServers here (or in AgentDeployment) as well
 }
 
 // MCPServer represents a single MCPServer configuration
@@ -80,4 +88,28 @@ type MCPServerDeployment struct {
 
 	// Env defines the environment variables to set in the container.
 	Env map[string]string `json:"env,omitempty"`
+}
+
+type AgentDeployment struct {
+	Image string            `json:"image,omitempty"`
+	Env   map[string]string `json:"env,omitempty"`
+	Port  uint16            `json:"port,omitempty"`
+}
+
+type AIRuntimeConfig struct {
+	Local      *LocalRuntimeConfig
+	Kubernetes *KubernetesRuntimeConfig
+
+	Type RuntimeConfigType
+}
+
+type RuntimeConfigType string
+
+const (
+	RuntimeConfigTypeLocal      RuntimeConfigType = "local"
+	RuntimeConfigTypeKubernetes RuntimeConfigType = "kubernetes"
+)
+
+type KubernetesRuntimeConfig struct {
+	// TODO: add k8s config here
 }

@@ -403,6 +403,20 @@ func (c *Client) GetAgentByName(name string) (*models.AgentResponse, error) {
 	return &resp, nil
 }
 
+func (c *Client) GetAgentByNameAndVersion(name, version string) (*models.AgentResponse, error) {
+	encName := url.PathEscape(name)
+	encVersion := url.PathEscape(version)
+	req, err := c.newRequest(http.MethodGet, "/agents/"+encName+"/versions/"+encVersion)
+	if err != nil {
+		return nil, err
+	}
+	var resp models.AgentResponse
+	if err := c.doJSON(req, &resp); err != nil {
+		return nil, fmt.Errorf("failed to get agent by name and version: %w", err)
+	}
+	return &resp, nil
+}
+
 // PublishSkill publishes a skill to the registry
 func (c *Client) PublishSkill(skill *models.SkillJSON) (*models.SkillResponse, error) {
 	var resp models.SkillResponse
@@ -590,6 +604,23 @@ func (c *Client) DeployServer(name, version string, config map[string]string, pr
 		Config:       config,
 		PreferRemote: preferRemote,
 		ResourceType: "mcp",
+	}
+
+	var deployment DeploymentResponse
+	if err := c.doJsonRequest(http.MethodPost, "/deployments", payload, &deployment); err != nil {
+		return nil, err
+	}
+
+	return &deployment, nil
+}
+
+// DeployAgent deploys an agent with configuration
+func (c *Client) DeployAgent(name, version string, config map[string]string) (*DeploymentResponse, error) {
+	payload := internalv0.DeploymentRequest{
+		ServerName:   name,
+		Version:      version,
+		Config:       config,
+		ResourceType: "agent",
 	}
 
 	var deployment DeploymentResponse

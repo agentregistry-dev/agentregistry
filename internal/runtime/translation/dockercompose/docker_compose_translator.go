@@ -5,26 +5,10 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/compose-spec/compose-go/v2/types"
-
-	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
+	api "github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
+	"github.com/compose-spec/compose-go/v2/types"
 )
-
-type DockerComposeConfig = types.Project
-
-type AiRuntimeConfig struct {
-	DockerCompose *DockerComposeConfig
-	AgentGateway  *AgentGatewayConfig
-}
-
-// Translator is the interface for translating MCPServer objects to AgentGateway objects.
-type Translator interface {
-	TranslateRuntimeConfig(
-		ctx context.Context,
-		desired *api.DesiredState,
-	) (*AiRuntimeConfig, error)
-}
 
 type agentGatewayTranslator struct {
 	composeWorkingDir string
@@ -32,7 +16,7 @@ type agentGatewayTranslator struct {
 	projectName       string
 }
 
-func NewAgentGatewayTranslator(composeWorkingDir string, agentGatewayPort uint16) Translator {
+func NewAgentGatewayTranslator(composeWorkingDir string, agentGatewayPort uint16) api.RuntimeTranslator {
 	return &agentGatewayTranslator{
 		composeWorkingDir: composeWorkingDir,
 		agentGatewayPort:  agentGatewayPort,
@@ -40,7 +24,7 @@ func NewAgentGatewayTranslator(composeWorkingDir string, agentGatewayPort uint16
 	}
 }
 
-func NewAgentGatewayTranslatorWithProjectName(composeWorkingDir string, agentGatewayPort uint16, projectName string) Translator {
+func NewAgentGatewayTranslatorWithProjectName(composeWorkingDir string, agentGatewayPort uint16, projectName string) api.RuntimeTranslator {
 	return &agentGatewayTranslator{
 		composeWorkingDir: composeWorkingDir,
 		agentGatewayPort:  agentGatewayPort,
@@ -51,7 +35,7 @@ func NewAgentGatewayTranslatorWithProjectName(composeWorkingDir string, agentGat
 func (t *agentGatewayTranslator) TranslateRuntimeConfig(
 	ctx context.Context,
 	desired *api.DesiredState,
-) (*AiRuntimeConfig, error) {
+) (*api.AIRuntimeConfig, error) {
 
 	agentGatewayService, err := t.translateAgentGatewayService()
 	if err != nil {
@@ -79,20 +63,36 @@ func (t *agentGatewayTranslator) TranslateRuntimeConfig(
 		dockerComposeServices[mcpServer.Name] = *serviceConfig
 	}
 
-	dockerCompose := &DockerComposeConfig{
+	for _, agent := range desired.Agents {
+		if _, exists := dockerComposeServices[agent.Name]; exists {
+			return nil, fmt.Errorf("duplicate Agent name found: %s", agent.Name)
+		}
+
+		serviceConfig, err := t.translateAgentToServiceConfig(agent)
+		fmt.Printf("service config for agent %s: %v", agent.Name, serviceConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to translate Agent %s to service config: %w", agent.Name, err)
+		}
+		dockerComposeServices[agent.Name] = *serviceConfig
+	}
+
+	dockerCompose := &api.DockerComposeConfig{
 		Name:       t.projectName,
 		WorkingDir: t.composeWorkingDir,
 		Services:   dockerComposeServices,
 	}
 
-	gwConfig, err := t.translateAgentGatewayConfig(desired.MCPServers)
+	gwConfig, err := t.translateAgentGatewayConfig(desired.MCPServers, desired.Agents)
 	if err != nil {
 		return nil, fmt.Errorf("failed to translate agent gateway config: %w", err)
 	}
 
-	return &AiRuntimeConfig{
-		DockerCompose: dockerCompose,
-		AgentGateway:  gwConfig,
+	return &api.AIRuntimeConfig{
+		Type: api.RuntimeConfigTypeLocal,
+		Local: &api.LocalRuntimeConfig{
+			DockerCompose: dockerCompose,
+			AgentGateway:  gwConfig,
+		},
 	}, nil
 }
 
@@ -147,17 +147,48 @@ func (t *agentGatewayTranslator) translateMCPServerToServiceConfig(server *api.M
 	}, nil
 }
 
-func (t *agentGatewayTranslator) translateAgentGatewayConfig(servers []*api.MCPServer) (*AgentGatewayConfig, error) {
-	var targets []MCPTarget
+func (t *agentGatewayTranslator) translateAgentToServiceConfig(agent *api.Agent) (*types.ServiceConfig, error) {
+	image := agent.Deployment.Image
+	if image == "" {
+		return nil, fmt.Errorf("image must be specified for Agent %s", agent.Name)
+	}
+
+	var envValues []string
+	for k, v := range agent.Deployment.Env {
+		envValues = append(envValues, fmt.Sprintf("%s=%s", k, v))
+	}
+	sort.SliceStable(envValues, func(i, j int) bool {
+		return envValues[i] < envValues[j]
+	})
+
+	port := agent.Deployment.Port
+	if port == 0 {
+		port = 8080 // default port
+	}
+
+	return &types.ServiceConfig{
+		Name:        agent.Name,
+		Image:       image,
+		Command:     []string{agent.Name, "--local", "--port", fmt.Sprintf("%d", port)},
+		Environment: types.NewMappingWithEquals(envValues),
+		Ports: []types.ServicePortConfig{{
+			Target:    uint32(port),
+			Published: fmt.Sprintf("%d", port),
+		}},
+	}, nil
+}
+
+func (t *agentGatewayTranslator) translateAgentGatewayConfig(servers []*api.MCPServer, agents []*api.Agent) (*api.AgentGatewayConfig, error) {
+	var targets []api.MCPTarget
 
 	for _, server := range servers {
-		mcpTarget := MCPTarget{
+		mcpTarget := api.MCPTarget{
 			Name: server.Name,
 		}
 
 		switch server.MCPServerType {
 		case api.MCPServerTypeRemote:
-			mcpTarget.SSE = &SSETargetSpec{
+			mcpTarget.SSE = &api.SSETargetSpec{
 				Host: server.Remote.Host,
 				Port: server.Remote.Port,
 				Path: server.Remote.Path,
@@ -165,7 +196,7 @@ func (t *agentGatewayTranslator) translateAgentGatewayConfig(servers []*api.MCPS
 		case api.MCPServerTypeLocal:
 			switch server.Local.TransportType {
 			case api.TransportTypeStdio:
-				mcpTarget.Stdio = &StdioTargetSpec{
+				mcpTarget.Stdio = &api.StdioTargetSpec{
 					Cmd:  server.Local.Deployment.Cmd,
 					Args: server.Local.Deployment.Args,
 					Env:  server.Local.Deployment.Env,
@@ -175,7 +206,7 @@ func (t *agentGatewayTranslator) translateAgentGatewayConfig(servers []*api.MCPS
 				if httpTransportConfig == nil || httpTransportConfig.Port == 0 {
 					return nil, fmt.Errorf("HTTP transport requires a target port")
 				}
-				mcpTarget.SSE = &SSETargetSpec{
+				mcpTarget.SSE = &api.SSETargetSpec{
 					Host: server.Name,
 					Port: httpTransportConfig.Port,
 					Path: httpTransportConfig.Path,
@@ -188,36 +219,76 @@ func (t *agentGatewayTranslator) translateAgentGatewayConfig(servers []*api.MCPS
 		targets = append(targets, mcpTarget)
 	}
 
-	// sort for idepmpotence
+	// create route for each agent
+	var agentRoutes []api.LocalRoute
+	for _, agent := range agents {
+		route := api.LocalRoute{
+			RouteName: fmt.Sprintf("%s_route", agent.Name),
+			Matches: []api.RouteMatch{
+				{
+					Path: api.PathMatch{
+						PathPrefix: fmt.Sprintf("/agents/%s", agent.Name),
+					},
+				},
+			},
+			Backends: []api.RouteBackend{{
+				Weight: 100,
+				Host:   fmt.Sprintf("%s:%d", agent.Name, agent.Deployment.Port),
+			}},
+			Policies: &api.FilterOrPolicy{
+				A2A: &api.A2APolicy{},
+				URLRewrite: &api.URLRewrite{
+					Path: &api.PathRedirect{
+						Prefix: "/",
+					},
+				},
+			},
+		}
+		agentRoutes = append(agentRoutes, route)
+	}
+
+	// sort for idempotence
+	sort.SliceStable(agentRoutes, func(i, j int) bool {
+		return agentRoutes[i].RouteName < agentRoutes[j].RouteName
+	})
+
 	sort.SliceStable(targets, func(i, j int) bool {
 		return targets[i].Name < targets[j].Name
 	})
 
-	return &AgentGatewayConfig{
+	mcpRoute := api.LocalRoute{
+		RouteName: "mcp_route",
+		Matches: []api.RouteMatch{
+			{
+				Path: api.PathMatch{
+					PathPrefix: "/mcp",
+				},
+			},
+		},
+		Backends: []api.RouteBackend{{
+			Weight: 100,
+			MCP: &api.MCPBackend{
+				Targets: targets,
+			},
+		}},
+	}
+
+	var allRoutes []api.LocalRoute
+	if len(targets) > 0 {
+		allRoutes = append([]api.LocalRoute{}, mcpRoute)
+	}
+	allRoutes = append(allRoutes, agentRoutes...)
+
+	return &api.AgentGatewayConfig{
 		Config: struct{}{},
-		Binds: []LocalBind{
+		Binds: []api.LocalBind{
 			{
 				Port: t.agentGatewayPort,
-				Listeners: []LocalListener{
+				Listeners: []api.LocalListener{
 					{
 						Name:     "default",
 						Protocol: "HTTP",
-						Routes: []LocalRoute{{
-							RouteName: "mcp_route",
-							Matches: []RouteMatch{
-								{
-									Path: PathMatch{
-										PathPrefix: "/mcp",
-									},
-								},
-							},
-							Backends: []RouteBackend{{
-								Weight: 100,
-								MCP: &MCPBackend{
-									Targets: targets,
-								},
-							}},
-						}},
+						Routes:   allRoutes,
 					},
 				},
 			},

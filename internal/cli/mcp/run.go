@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -16,6 +15,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/runtime"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
+	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/spf13/cobra"
 	"github.com/stoewer/go-strcase"
@@ -114,7 +114,7 @@ func runMCPServerWithRuntime(server *apiv0.ServerResponse) error {
 	}
 
 	// Find an available port for the agent gateway
-	agentGatewayPort, err := findAvailablePort()
+	agentGatewayPort, err := utils.FindAvailablePort()
 	if err != nil {
 		return fmt.Errorf("failed to find available port: %w", err)
 	}
@@ -132,7 +132,7 @@ func runMCPServerWithRuntime(server *apiv0.ServerResponse) error {
 	fmt.Printf("Starting MCP server: %s (version %s)...\n", server.Server.Name, server.Server.Version)
 
 	// Start the server
-	if err := agentRuntime.ReconcileMCPServers(context.Background(), []*registry.MCPServerRunRequest{runRequest}); err != nil {
+	if err := agentRuntime.ReconcileAll(context.Background(), []*registry.MCPServerRunRequest{runRequest}, nil); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
 
@@ -142,6 +142,11 @@ func runMCPServerWithRuntime(server *apiv0.ServerResponse) error {
 	// Launch inspector if requested
 	var inspectorCmd *exec.Cmd
 	if runInspector {
+		// Check if npx is installed
+		_, err := exec.LookPath("npx")
+		if err != nil {
+			return fmt.Errorf("'npx' not found in PATH")
+		}
 		fmt.Println("\nLaunching MCP Inspector...")
 		inspectorCmd = exec.Command("npx", "-y", "@modelcontextprotocol/inspector", "--server-url", agentGatewayURL)
 		inspectorCmd.Stdout = os.Stdout
@@ -159,20 +164,6 @@ func runMCPServerWithRuntime(server *apiv0.ServerResponse) error {
 
 	fmt.Println("\nPress CTRL+C to stop the server and clean up...")
 	return waitForShutdown(runtimeDir, projectName, inspectorCmd)
-}
-
-// findAvailablePort finds an available port on localhost
-func findAvailablePort() (uint16, error) {
-	// Try to bind to port 0, which tells the OS to pick an available port
-	listener, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		return 0, fmt.Errorf("failed to find available port: %w", err)
-	}
-	defer func() { _ = listener.Close() }()
-
-	// Get the port that was assigned
-	addr := listener.Addr().(*net.TCPAddr)
-	return uint16(addr.Port), nil
 }
 
 // waitForShutdown waits for CTRL+C and then cleans up
@@ -335,7 +326,7 @@ func runLocalMCPServer(projectPath string) error {
 
 // runLocalMCPServerWithDocker runs the Docker container directly for local development
 func runLocalMCPServerWithDocker(manifest *manifest.ProjectManifest, imageName string) error {
-	port, err := findAvailablePort()
+	port, err := utils.FindAvailablePort()
 	if err != nil {
 		return fmt.Errorf("failed to find available port: %w", err)
 	}
