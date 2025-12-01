@@ -18,8 +18,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/project"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/tui"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
-	"github.com/agentregistry-dev/agentregistry/internal/registry"
-	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/spf13/cobra"
 	a2aclient "trpc.group/trpc-go/trpc-a2a-go/client"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
@@ -68,7 +66,7 @@ func runFromDirectory(ctx context.Context, projectDir string) error {
 		return fmt.Errorf("failed to load agent.yaml: %w", err)
 	}
 
-	servers, err := parseAgentManifestServers(manifest)
+	servers, err := utils.ParseAgentManifestServers(manifest, verbose)
 	if err != nil {
 		return fmt.Errorf("failed to parse agent manifest mcp servers: %w", err)
 	}
@@ -118,7 +116,7 @@ func runFromManifest(ctx context.Context, manifest *common.AgentManifest, overri
 		workDir = overrides.workDir
 	} else {
 		// Called with registry agent name - need to resolve and render in-memory
-		servers, err := parseAgentManifestServers(manifest)
+		servers, err := utils.ParseAgentManifestServers(manifest, verbose)
 		if err != nil {
 			return fmt.Errorf("failed to parse agent manifest mcp servers: %w", err)
 		}
@@ -132,73 +130,6 @@ func runFromManifest(ctx context.Context, manifest *common.AgentManifest, overri
 	}
 
 	return runAgent(ctx, composeData, manifest, workDir)
-}
-
-func parseAgentManifestServers(manifest *common.AgentManifest) ([]common.McpServerType, error) {
-	servers := []common.McpServerType{}
-
-	for _, mcpServer := range manifest.McpServers {
-		switch mcpServer.Type {
-		case "registry":
-			// Fetch server spec from registry and translate to command/remote type
-			translatedServer, err := resolveRegistryServer(mcpServer)
-			if err != nil {
-				return nil, fmt.Errorf("failed to resolve registry server %q: %w", mcpServer.Name, err)
-			}
-			servers = append(servers, *translatedServer)
-		default:
-			servers = append(servers, mcpServer)
-		}
-	}
-
-	return servers, nil
-}
-
-// resolveRegistryServer fetches a server from the registry and translates it to a runnable config
-func resolveRegistryServer(mcpServer common.McpServerType) (*common.McpServerType, error) {
-	registryURL := mcpServer.RegistryURL
-	if registryURL == "" {
-		registryURL = "http://localhost:12121"
-	}
-
-	client := registry.NewClient()
-	serverEntry, err := client.FetchServer(registryURL, mcpServer.RegistryName, mcpServer.RegistryVersion)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch server %q from registry: %w", mcpServer.RegistryName, err)
-	}
-
-	// Collect environment variable overrides from the current environment
-	// This allows users to set required env vars before running
-	envOverrides := collectEnvOverrides(serverEntry.Server.Packages)
-
-	// Translate the registry server spec to a runnable McpServerType
-	translated, err := utils.TranslateRegistryServer(&serverEntry.Server, mcpServer.Name, envOverrides)
-	if err != nil {
-		return nil, err
-	}
-
-	if verbose {
-		fmt.Printf("Resolved registry server %q (%s) -> %s (image: %s, command: %s)\n",
-			mcpServer.RegistryName, serverEntry.Server.Version, translated.Type, translated.Image, translated.Command)
-	}
-
-	return translated, nil
-}
-
-// collectEnvOverrides gathers environment variable values from the current environment
-// for any env vars defined in the package specs
-func collectEnvOverrides(packages []model.Package) map[string]string {
-	overrides := make(map[string]string)
-
-	for _, pkg := range packages {
-		for _, envVar := range pkg.EnvironmentVariables {
-			if value := os.Getenv(envVar.Name); value != "" {
-				overrides[envVar.Name] = value
-			}
-		}
-	}
-
-	return overrides
 }
 
 type runContext struct {

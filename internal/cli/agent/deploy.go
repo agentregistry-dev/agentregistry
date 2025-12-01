@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -43,6 +44,13 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	manifest := &agentModel.Agent.AgentManifest
+
+	// Resolve registry MCP servers before deployment
+	resolvedServers, err := utils.ParseAgentManifestServers(manifest, verbose)
+	if err != nil {
+		return fmt.Errorf("failed to resolve registry MCP servers: %w", err)
+	}
+	manifest.McpServers = resolvedServers
 
 	// Validate that required API keys are set
 	if err := validateAPIKey(manifest.ModelProvider); err != nil {
