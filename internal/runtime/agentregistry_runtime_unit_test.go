@@ -113,15 +113,15 @@ func Test_TranslateDockerCompose(t *testing.T) {
 	if runtimeCfg == nil {
 		t.Fatal("runtimeCfg is nil")
 	}
-	if runtimeCfg.DockerCompose == nil {
+	if runtimeCfg.Local.DockerCompose == nil {
 		t.Fatal("DockerCompose is nil")
 	}
-	if runtimeCfg.AgentGateway == nil {
+	if runtimeCfg.Local.AgentGateway == nil {
 		t.Fatal("AgentGateway is nil")
 	}
 
 	// Verify YAML can be generated
-	dockerComposeYaml, err := runtimeCfg.DockerCompose.MarshalYAML()
+	dockerComposeYaml, err := runtimeCfg.Local.DockerCompose.MarshalYAML()
 	if err != nil {
 		t.Fatalf("failed to marshal docker compose yaml: %v", err)
 	}

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
 	"time"
 
 	models "github.com/agentregistry-dev/agentregistry/internal/models"
@@ -657,9 +656,39 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 }
 
 // DeployAgent deploys an agent with configuration
-// TODO: Implement agent deployment support
 func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool) (*models.Deployment, error) {
-	return nil, fmt.Errorf("agent deployment is not yet implemented")
+	agentResp, err := s.db.GetAgentByNameAndVersion(ctx, nil, agentName, version)
+	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			return nil, fmt.Errorf("agent %s not found in registry: %w", agentName, database.ErrNotFound)
+		}
+		return nil, fmt.Errorf("failed to verify agent: %w", err)
+	}
+
+	deployment := &models.Deployment{
+		ServerName:   agentName,
+		Version:      agentResp.Agent.Version,
+		Status:       "active",
+		Config:       config,
+		PreferRemote: preferRemote,
+		ResourceType: "agent",
+		DeployedAt:   time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	if config == nil {
+		deployment.Config = make(map[string]string)
+	}
+
+	if err := s.db.CreateDeployment(ctx, nil, deployment); err != nil {
+		return nil, err
+	}
+
+	if err := s.ReconcileAll(ctx); err != nil {
+		return nil, fmt.Errorf("deployment created but reconciliation failed: %w", err)
+	}
+
+	return s.db.GetDeploymentByNameAndVersion(ctx, nil, agentName, version)
 }
 
 // UpdateDeploymentConfig updates the configuration for a deployment
@@ -699,69 +728,73 @@ func (s *registryServiceImpl) RemoveServer(ctx context.Context, serverName strin
 // ReconcileAll fetches all deployments from database and reconciles containers
 // This implements the Reconciler interface
 func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
-	// Get all deployed servers from database
+	// Get all deployments from database
 	deployments, err := s.GetDeployments(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get deployed servers: %w", err)
+		return fmt.Errorf("failed to get deployments: %w", err)
 	}
 
-	log.Printf("Reconciling %d deployed server(s)", len(deployments))
+	log.Printf("Reconciling %d deployment(s)", len(deployments))
 
-	// If no servers remain, reconcile with empty list (will stop all containers)
-	if len(deployments) == 0 {
-		log.Println("No servers deployed, stopping all containers...")
-		return s.reconcileServers(ctx, []*registry.MCPServerRunRequest{})
-	}
+	var (
+		serverRunRequests []*registry.MCPServerRunRequest
+		agentRunRequests  []*registry.AgentRunRequest
+	)
 
-	// Build run requests for ALL deployed servers
-	var allRunRequests []*registry.MCPServerRunRequest
 	for _, dep := range deployments {
-		// Get server details from registry
-		depServer, err := s.GetServerByNameAndVersion(ctx, dep.ServerName, dep.Version, true)
-		if err != nil {
-			log.Printf("Warning: Failed to get server %s v%s: %v", dep.ServerName, dep.Version, err)
-			continue
-		}
+		switch dep.ResourceType {
+		case "mcp":
+			depServer, err := s.GetServerByNameAndVersion(ctx, dep.ServerName, dep.Version, true)
+			if err != nil {
+				log.Printf("Warning: Failed to get server %s v%s: %v", dep.ServerName, dep.Version, err)
+				continue
+			}
 
-		// Parse config into env, arg, and header values
-		depEnvValues := make(map[string]string)
-		depArgValues := make(map[string]string)
-		depHeaderValues := make(map[string]string)
+			depEnvValues := make(map[string]string)
+			depArgValues := make(map[string]string)
+			depHeaderValues := make(map[string]string)
 
-		for k, v := range dep.Config {
-			if len(k) > 7 && k[:7] == "HEADER_" {
-				depHeaderValues[k[7:]] = v
-			} else if len(k) > 4 && k[:4] == "ARG_" {
-				depArgValues[k[4:]] = v
-			} else {
+			for k, v := range dep.Config {
+				if len(k) > 7 && k[:7] == "HEADER_" {
+					depHeaderValues[k[7:]] = v
+				} else if len(k) > 4 && k[:4] == "ARG_" {
+					depArgValues[k[4:]] = v
+				} else {
+					depEnvValues[k] = v
+				}
+			}
+
+			serverRunRequests = append(serverRunRequests, &registry.MCPServerRunRequest{
+				RegistryServer: &depServer.Server,
+				PreferRemote:   dep.PreferRemote,
+				EnvValues:      depEnvValues,
+				ArgValues:      depArgValues,
+				HeaderValues:   depHeaderValues,
+			})
+
+		case "agent":
+			depAgent, err := s.GetAgentByNameAndVersion(ctx, dep.ServerName, dep.Version)
+			if err != nil {
+				log.Printf("Warning: Failed to get agent %s v%s: %v", dep.ServerName, dep.Version, err)
+				continue
+			}
+
+			fmt.Printf("Agent image %s\n", depAgent.Agent.Image)
+
+			depEnvValues := make(map[string]string)
+			for k, v := range dep.Config {
 				depEnvValues[k] = v
 			}
+
+			agentRunRequests = append(agentRunRequests, &registry.AgentRunRequest{
+				RegistryAgent: &depAgent.Agent,
+				EnvValues:     depEnvValues,
+			})
+		default:
+			log.Printf("Warning: Unknown resource type %q for deployment %s v%s", dep.ResourceType, dep.ServerName, dep.Version)
 		}
-
-		allRunRequests = append(allRunRequests, &registry.MCPServerRunRequest{
-			RegistryServer: &depServer.Server,
-			PreferRemote:   dep.PreferRemote,
-			EnvValues:      depEnvValues,
-			ArgValues:      depArgValues,
-			HeaderValues:   depHeaderValues,
-		})
 	}
 
-	if len(allRunRequests) == 0 {
-		return fmt.Errorf("no valid servers to reconcile")
-	}
-
-	log.Printf("Reconciling %d valid server(s)", len(allRunRequests))
-	return s.reconcileServers(ctx, allRunRequests)
-}
-
-func (s *registryServiceImpl) reconcileServers(ctx context.Context, requests []*registry.MCPServerRunRequest) error {
-	// Ensure runtime directory exists
-	if err := os.MkdirAll(s.cfg.RuntimeDir, 0755); err != nil {
-		return fmt.Errorf("failed to create runtime directory: %w", err)
-	}
-
-	// Create runtime with translators
 	regTranslator := registry.NewTranslator()
 	composeTranslator := dockercompose.NewAgentGatewayTranslator(s.cfg.RuntimeDir, s.cfg.AgentGatewayPort)
 	agentRuntime := runtime.NewAgentRegistryRuntime(
@@ -771,11 +804,9 @@ func (s *registryServiceImpl) reconcileServers(ctx context.Context, requests []*
 		s.cfg.Verbose,
 	)
 
-	// Reconcile ALL servers
-	if err := agentRuntime.ReconcileMCPServers(ctx, requests); err != nil {
-		return fmt.Errorf("failed to reconcile servers: %w", err)
+	if err := agentRuntime.ReconcileAll(ctx, serverRunRequests, agentRunRequests); err != nil {
+		return fmt.Errorf("failed reconciliation: %w", err)
 	}
 
-	log.Println("Server reconciliation completed successfully")
 	return nil
 }

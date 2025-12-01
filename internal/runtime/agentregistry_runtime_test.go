@@ -19,7 +19,7 @@ import (
 // Test_AgentRegistryRuntime_ReconcileMCPServers_DockerIntegration tests that
 // ReconcileMCPServers actually starts Docker containers correctly.
 // This test requires Docker to be available.
-func Test_AgentRegistryRuntime_ReconcileMCPServers_DockerIntegration(t *testing.T) {
+func Test_AgentRegistryRuntime_ReconcileAll_MCPServers_DockerIntegration(t *testing.T) {
 	ctx := context.Background()
 	// Create a temp runtime dir
 	runtimeDir := t.TempDir()
@@ -58,7 +58,7 @@ func Test_AgentRegistryRuntime_ReconcileMCPServers_DockerIntegration(t *testing.
 		reqs = append(reqs, parseServerReq(t, srvJson))
 	}
 
-	if err := r.ReconcileMCPServers(ctx, reqs); err != nil {
+	if err := r.ReconcileAll(ctx, reqs, nil); err != nil {
 		t.Fatalf("ReconcileMCPServers: %v", err)
 	}
 

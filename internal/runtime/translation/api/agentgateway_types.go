@@ -1,4 +1,4 @@
-package dockercompose
+package api
 
 import (
 	"net"
@@ -169,6 +169,7 @@ type RouteBackend struct {
 	AI      *AIBackend      `json:"ai,omitempty" yaml:"ai,omitempty"`
 	Invalid bool            `json:"invalid,omitempty" yaml:"invalid,omitempty"`
 	Filters []RouteFilter   `json:"filters,omitempty" yaml:"filters,omitempty"`
+	Host    string          `json:"host,omitempty" yaml:"host,omitempty"`
 }
 
 // TCPRouteBackend represents a TCP route backend

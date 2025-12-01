@@ -9,59 +9,69 @@ import (
 	"path/filepath"
 
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
-	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
 
 	"go.yaml.in/yaml/v3"
 )
 
 type AgentRegistryRuntime interface {
-	ReconcileMCPServers(
+	ReconcileAll(
 		ctx context.Context,
-		desired []*registry.MCPServerRunRequest,
+		servers []*registry.MCPServerRunRequest,
+		agents []*registry.AgentRunRequest,
 	) error
 }
 
 type agentRegistryRuntime struct {
-	registryTranslator      registry.Translator
-	dockerComposeTranslator dockercompose.Translator
-	runtimeDir              string
-	verbose                 bool
+	registryTranslator registry.Translator
+	runtimeTranslator  api.RuntimeTranslator
+	runtimeDir         string
+	verbose            bool
 }
 
 func NewAgentRegistryRuntime(
 	registryTranslator registry.Translator,
-	dockerComposeTranslator dockercompose.Translator,
+	translator api.RuntimeTranslator,
 	runtimeDir string,
 	verbose bool,
 ) AgentRegistryRuntime {
 	return &agentRegistryRuntime{
-		registryTranslator:      registryTranslator,
-		dockerComposeTranslator: dockerComposeTranslator,
-		runtimeDir:              runtimeDir,
-		verbose:                 verbose,
+		registryTranslator: registryTranslator,
+		runtimeTranslator:  translator,
+		runtimeDir:         runtimeDir,
+		verbose:            verbose,
 	}
 }
 
-func (r *agentRegistryRuntime) ReconcileMCPServers(
+func (r *agentRegistryRuntime) ReconcileAll(
 	ctx context.Context,
-	requests []*registry.MCPServerRunRequest,
+	serverRequests []*registry.MCPServerRunRequest,
+	agentRequests []*registry.AgentRunRequest,
 ) error {
 	desiredState := &api.DesiredState{}
-	for _, req := range requests {
-		mcpServer, err := r.registryTranslator.TranslateMCPServer(
-			context.TODO(),
-			req,
-		)
+	for _, req := range serverRequests {
+		mcpServer, err := r.registryTranslator.TranslateMCPServer(context.TODO(), req)
 		if err != nil {
 			return fmt.Errorf("translate mcp server %s: %w", req.RegistryServer.Name, err)
 		}
 		desiredState.MCPServers = append(desiredState.MCPServers, mcpServer)
 	}
 
-	runtimeCfg, err := r.dockerComposeTranslator.TranslateRuntimeConfig(ctx, desiredState)
+	for _, req := range agentRequests {
+		agent, err := r.registryTranslator.TranslateAgent(context.TODO(), req)
+		if err != nil {
+			return fmt.Errorf("translate agent %s: %w", req.RegistryAgent.Name, err)
+		}
+		desiredState.Agents = append(desiredState.Agents, agent)
+	}
+
+	runtimeCfg, err := r.runtimeTranslator.TranslateRuntimeConfig(ctx, desiredState)
 	if err != nil {
 		return fmt.Errorf("translate runtime config: %w", err)
+	}
+
+	if r.verbose {
+		fmt.Printf("desired state: agents=%d MCP servers=%d\n", len(desiredState.Agents), len(desiredState.MCPServers))
 	}
 
 	return r.ensureRuntime(ctx, runtimeCfg)
@@ -69,7 +79,21 @@ func (r *agentRegistryRuntime) ReconcileMCPServers(
 
 func (r *agentRegistryRuntime) ensureRuntime(
 	ctx context.Context,
-	cfg *dockercompose.AiRuntimeConfig,
+	cfg *api.AIRuntimeConfig,
+) error {
+
+	switch cfg.Type {
+	case api.RuntimeConfigTypeLocal:
+		return r.ensureLocalRuntime(ctx, cfg.Local)
+	// TODO: Add a handler for other runtimes
+	default:
+		return fmt.Errorf("unsupported runtime config type: %v", cfg.Type)
+	}
+}
+
+func (r *agentRegistryRuntime) ensureLocalRuntime(
+	ctx context.Context,
+	cfg *api.LocalRuntimeConfig,
 ) error {
 	// step 1: ensure the root runtime dir exists
 	if err := os.MkdirAll(r.runtimeDir, 0755); err != nil {
@@ -79,6 +103,9 @@ func (r *agentRegistryRuntime) ensureRuntime(
 	dockerComposeYaml, err := cfg.DockerCompose.MarshalYAML()
 	if err != nil {
 		return fmt.Errorf("failed to marshal docker compose yaml: %w", err)
+	}
+	if r.verbose {
+		fmt.Printf("Docker Compose YAML:\n%s\n", string(dockerComposeYaml))
 	}
 	if err := os.WriteFile(filepath.Join(r.runtimeDir, "docker-compose.yaml"), dockerComposeYaml, 0644); err != nil {
 		return fmt.Errorf("failed to write docker compose yaml: %w", err)
@@ -90,6 +117,9 @@ func (r *agentRegistryRuntime) ensureRuntime(
 	}
 	if err := os.WriteFile(filepath.Join(r.runtimeDir, "agent-gateway.yaml"), agentGatewayYaml, 0644); err != nil {
 		return fmt.Errorf("failed to write agent config yaml: %w", err)
+	}
+	if r.verbose {
+		fmt.Printf("Agent Gateway YAML:\n%s\n", string(agentGatewayYaml))
 	}
 	// step 4: start docker compose with -d --remove-orphans --force-recreate
 	// Using --force-recreate ensures all containers are recreated even if config hasn't changed
@@ -106,7 +136,7 @@ func (r *agentRegistryRuntime) ensureRuntime(
 		return fmt.Errorf("failed to start docker compose: %w", err)
 	}
 
-	fmt.Println("✓ Docker containers started")
+	fmt.Println("Docker containers started")
 
 	return nil
 }
