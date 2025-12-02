@@ -120,7 +120,11 @@ func runFromManifest(ctx context.Context, manifest *common.AgentManifest, overri
 		if err != nil {
 			return fmt.Errorf("failed to create temporary directory: %w", err)
 		}
-		defer os.RemoveAll(tmpDir)
+		defer func() {
+			if err := os.RemoveAll(tmpDir); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to remove temporary directory %s: %v\n", tmpDir, err)
+			}
+		}()
 
 		// Called with registry agent name - need to resolve and render in-memory
 		servers, err := utils.ParseAgentManifestServers(manifest, verbose)
