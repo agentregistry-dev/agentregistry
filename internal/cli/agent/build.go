@@ -107,6 +107,8 @@ func validateProjectDir(projectDir string) error {
 	return nil
 }
 
+// buildMCPServers builds Docker images for MCP servers that are defined locally in the agent.yaml.
+// This only builds command-type servers. Remote-type does not need to be built, and registry-type are built at runtime.
 func buildMCPServers(projectDir string, manifest *common.AgentManifest, extraArgs []string) error {
 	if manifest == nil {
 		return nil

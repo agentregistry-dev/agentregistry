@@ -115,12 +115,29 @@ func runFromManifest(ctx context.Context, manifest *common.AgentManifest, overri
 		composeData = overrides.composeData
 		workDir = overrides.workDir
 	} else {
+		// Running an agent from registry means we'll need to resolve any registry-based mcp servers and build to run
+		tmpDir, err := os.MkdirTemp("", "arctl-registry-resolve-*")
+		if err != nil {
+			return fmt.Errorf("failed to create temporary directory: %w", err)
+		}
+		defer os.RemoveAll(tmpDir)
+
 		// Called with registry agent name - need to resolve and render in-memory
 		servers, err := utils.ParseAgentManifestServers(manifest, verbose)
 		if err != nil {
 			return fmt.Errorf("failed to parse agent manifest mcp servers: %w", err)
 		}
 		manifest.McpServers = servers
+
+		// Create directories & dockerfiles for command-type servers
+		if err := project.EnsureMcpServerDirectories(tmpDir, manifest, verbose); err != nil {
+			return fmt.Errorf("failed to create mcp server directories: %w", err)
+		}
+
+		// Build the registry-resolved servers
+		if err := buildRegistryResolvedServers(tmpDir, manifest, verbose); err != nil {
+			return fmt.Errorf("failed to build registry server images: %w", err)
+		}
 
 		data, err := renderComposeFromManifest(manifest)
 		if err != nil {
@@ -296,5 +313,43 @@ func validateAPIKey(modelProvider string) error {
 	if os.Getenv(envVar) == "" {
 		return fmt.Errorf("required API key %s not set for model provider %s", envVar, modelProvider)
 	}
+	return nil
+}
+
+// buildRegistryResolvedServers builds Docker images for MCP servers that were resolved from the registry.
+// This is similar to buildMCPServers, but for registry-resolved servers at runtime.
+func buildRegistryResolvedServers(tempDir string, manifest *common.AgentManifest, verbose bool) error {
+	if manifest == nil {
+		return nil
+	}
+
+	for _, srv := range manifest.McpServers {
+		// Only build command-type servers that came from registry resolution (have a registry build path)
+		if srv.Type != "command" || !strings.HasPrefix(srv.Build, "registry/") {
+			continue
+		}
+
+		// Server directory is at tempDir/registry/<name>
+		serverDir := filepath.Join(tempDir, srv.Build)
+		if _, err := os.Stat(serverDir); err != nil {
+			return fmt.Errorf("registry server directory not found for %s: %w", srv.Name, err)
+		}
+
+		dockerfilePath := filepath.Join(serverDir, "Dockerfile")
+		if _, err := os.Stat(dockerfilePath); err != nil {
+			return fmt.Errorf("dockerfile not found for registry server %s (%s): %w", srv.Name, dockerfilePath, err)
+		}
+
+		imageName := project.ConstructMCPServerImageName(manifest.Name, srv.Name)
+		if verbose {
+			fmt.Printf("Building registry-resolved MCP server %s -> %s\n", srv.Name, imageName)
+		}
+
+		exec := docker.NewExecutor(verbose, serverDir)
+		if err := exec.Build(imageName, "."); err != nil {
+			return fmt.Errorf("docker build failed for registry server %s: %w", srv.Name, err)
+		}
+	}
+
 	return nil
 }
