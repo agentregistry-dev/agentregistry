@@ -815,8 +815,6 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 	for _, agentReq := range agentRunRequests {
 		resolvedServers, err := s.resolveAgentManifestMCPServers(ctx, &agentReq.RegistryAgent.AgentManifest)
 		if err != nil {
-			// TODO: remove the logs. UI does not give a proper error message and the returned error is is not in the service logs, so manually logginc
-			log.Printf("ERROR: Failed to resolve MCP servers for agent %s: %v", agentReq.RegistryAgent.Name, err)
 			return fmt.Errorf("failed to resolve MCP servers for agent %s: %w", agentReq.RegistryAgent.Name, err)
 		}
 
@@ -829,7 +827,6 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 	}
 
 	if err := agentRuntime.ReconcileAll(ctx, serverRunRequests, agentRunRequests); err != nil {
-		log.Printf("ERROR: ReconcileAll failed: %v", err)
 		return fmt.Errorf("failed reconciliation: %w", err)
 	}
 
@@ -843,12 +840,15 @@ func (s *registryServiceImpl) resolveAgentManifestMCPServers(ctx context.Context
 
 	for _, mcpServer := range manifest.McpServers {
 		// Only process registry-type servers (non-registry servers are baked into the image)
+		// TODO(infocus7): Should we also be resolving the others (command-based)? I didn't see my @everything command server configured in the agent-gateway yaml, unsure if expected or a bug...
+		// cat /tmp/arctl-runtime/agent-gateway.yaml only had an mcp route for the registry-resolved one.
 		if mcpServer.Type != "registry" {
 			continue
 		}
 
 		// Determine registry URL
 		registryURL := mcpServer.RegistryURL
+		log.Printf("NOTE: Registry URL %s", registryURL)
 		if registryURL == "" {
 			registryURL = "http://127.0.0.1:12121"
 		}
@@ -864,14 +864,12 @@ func (s *registryServiceImpl) resolveAgentManifestMCPServers(ctx context.Context
 		}
 
 		// Convert registry.ServerSpec to apiv0.ServerJSON
-		// TODO: Validate this conversion works as expected...
 		serverJSON := convertServerSpecToServerJSON(&serverEntry.Server)
 
 		// Create MCPServerRunRequest so that this resolved server is ran/deployed
 		resolvedServers = append(resolvedServers, &registry.MCPServerRunRequest{
 			RegistryServer: serverJSON,
 			// PreferRemote:   len(serverJSON.Remotes) > 0 && len(serverJSON.Packages) == 0,
-			// Empty maps = use defaults from RegistryServer spec only (no overrides)
 			EnvValues:    make(map[string]string),
 			ArgValues:    make(map[string]string),
 			HeaderValues: make(map[string]string),
@@ -901,14 +899,6 @@ func fetchServerFromRegistry(baseURL string, name string, version string) (*type
 	}
 	resp, err := client.Get(fetchURL)
 	if err != nil {
-		/* TODO: Why does this keep failing?
-
-		2025/12/02 03:16:52 ERROR: Failed to resolve MCP servers for agent test: failed to fetch server "io.github.Asthanaji05/pokeapi-mcp-server" from registry http://localhost:12121:⁠ failed to fetch server by name: Get "http://localhost:12121/v0/servers/io.github.Asthanaji05%2Fpokeapi-mcp-server/versions/1.9.0": dial tcp [::1]:12121: connect: connection refused
-
-		Doing a curl locally works, unsure why doing it within the registry is failing.
-		Doing through `run` works, but it uses the client from CLI, so maybe that helps it? Maybe the registry service has issues contacting itself?
-		I could make an assumption if `localhost:12121` -> use internal client/database, else http; but not sure if this is the best approach.
-		*/
 		return nil, fmt.Errorf("failed to fetch server by name: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -932,7 +922,6 @@ func fetchServerFromRegistry(baseURL string, name string, version string) (*type
 }
 
 // convertServerSpecToServerJSON converts a types.ServerSpec to apiv0.ServerJSON
-// TODO: Validate this conversion works as expected...
 func convertServerSpecToServerJSON(spec *types.ServerSpec) *apiv0.ServerJSON {
 	// Convert Repository - apiv0.ServerJSON uses model.Repository
 	var repo *model.Repository
