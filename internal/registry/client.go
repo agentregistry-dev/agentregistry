@@ -9,46 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/modelcontextprotocol/registry/pkg/model"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/types"
 	"github.com/schollz/progressbar/v3"
 )
-
-// RegistryResponse represents the response from the MCP registry
-type RegistryResponse struct {
-	Servers  []ServerEntry    `json:"servers"`
-	Metadata RegistryMetadata `json:"metadata"`
-}
-
-// RegistryMetadata contains pagination information
-type RegistryMetadata struct {
-	Count      int    `json:"count"`
-	NextCursor string `json:"nextCursor"`
-}
-
-// ServerEntry represents a server entry in the registry
-type ServerEntry struct {
-	Server ServerSpec      `json:"server"`
-	Meta   json.RawMessage `json:"_meta"`
-}
-
-// ServerSpec represents the server specification
-type ServerSpec struct {
-	Name        string            `json:"name"`
-	Title       string            `json:"title"`
-	Description string            `json:"description"`
-	Version     string            `json:"version"`
-	Status      string            `json:"status"`
-	WebsiteURL  string            `json:"websiteUrl"`
-	Repository  Repository        `json:"repository"`
-	Packages    []model.Package   `json:"packages"`
-	Remotes     []model.Transport `json:"remotes"`
-}
-
-// Repository represents the repository information
-type Repository struct {
-	URL    string `json:"url"`
-	Source string `json:"source"`
-}
 
 // Client handles communication with registries
 type Client struct {
@@ -85,7 +48,7 @@ func (c *Client) ValidateRegistry(baseURL string) error {
 		return fmt.Errorf("failed to read registry response: %w", err)
 	}
 
-	var registryResp RegistryResponse
+	var registryResp types.RegistryResponse
 	if err := json.Unmarshal(body, &registryResp); err != nil {
 		return fmt.Errorf("invalid registry format: %w", err)
 	}
@@ -100,8 +63,8 @@ type FetchOptions struct {
 }
 
 // FetchAllServers fetches all servers from a registry with pagination
-func (c *Client) FetchAllServers(baseURL string, opts FetchOptions) ([]ServerEntry, error) {
-	var allServers []ServerEntry
+func (c *Client) FetchAllServers(baseURL string, opts FetchOptions) ([]types.ServerEntry, error) {
+	var allServers []types.ServerEntry
 	cursor := ""
 	pageCount := 0
 	const pageLimit = 100
@@ -154,13 +117,13 @@ func (c *Client) FetchAllServers(baseURL string, opts FetchOptions) ([]ServerEnt
 		}
 
 		// Parse JSON
-		var registryResp RegistryResponse
+		var registryResp types.RegistryResponse
 		if err := json.Unmarshal(body, &registryResp); err != nil {
 			return nil, fmt.Errorf("failed to parse JSON on page %d: %w", pageCount, err)
 		}
 
 		// Filter servers by status (only keep "active" servers)
-		activeServers := make([]ServerEntry, 0, len(registryResp.Servers))
+		activeServers := make([]types.ServerEntry, 0, len(registryResp.Servers))
 		for _, server := range registryResp.Servers {
 			if server.Server.Status == "" || server.Server.Status == "active" {
 				activeServers = append(activeServers, server)
@@ -195,7 +158,7 @@ func (c *Client) FetchAllServers(baseURL string, opts FetchOptions) ([]ServerEnt
 
 // FetchServer fetches a server by name and (optionally) version
 // If version is empty, it will fetch the latest version
-func (c *Client) FetchServer(baseURL string, name string, version string) (*ServerEntry, error) {
+func (c *Client) FetchServer(baseURL string, name string, version string) (*types.ServerEntry, error) {
 	// Construct the endpoint: /v0/servers/{serverName}/versions/{version}
 	baseURL = strings.TrimSuffix(baseURL, "/")
 	if !strings.HasSuffix(baseURL, "/v0/servers") {
@@ -221,7 +184,7 @@ func (c *Client) FetchServer(baseURL string, name string, version string) (*Serv
 		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(body))
 	}
 
-	var registryResp RegistryResponse
+	var registryResp types.RegistryResponse
 	if err := json.NewDecoder(resp.Body).Decode(&registryResp); err != nil {
 		return nil, fmt.Errorf("failed to decode server list response: %w", err)
 	}

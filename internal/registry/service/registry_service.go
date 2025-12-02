@@ -2,14 +2,21 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	models "github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/types"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/dockercompose"
@@ -804,9 +811,150 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 		s.cfg.Verbose,
 	)
 
+	// Resolve registry-type MCP servers from agent manifests to add them to serverRunRequests
+	for _, agentReq := range agentRunRequests {
+		resolvedServers, err := s.resolveAgentManifestMCPServers(ctx, &agentReq.RegistryAgent.AgentManifest)
+		if err != nil {
+			// TODO: remove the logs. UI does not give a proper error message and the returned error is is not in the service logs, so manually logginc
+			log.Printf("ERROR: Failed to resolve MCP servers for agent %s: %v", agentReq.RegistryAgent.Name, err)
+			return fmt.Errorf("failed to resolve MCP servers for agent %s: %w", agentReq.RegistryAgent.Name, err)
+		}
+
+		agentReq.ResolvedMCPServers = resolvedServers
+		// Add resolved servers to serverRunRequests so they get deployed
+		serverRunRequests = append(serverRunRequests, resolvedServers...)
+		if s.cfg.Verbose && len(resolvedServers) > 0 {
+			log.Printf("Resolved %d MCP server(s) of type 'registry' for agent %s", len(resolvedServers), agentReq.RegistryAgent.Name)
+		}
+	}
+
 	if err := agentRuntime.ReconcileAll(ctx, serverRunRequests, agentRunRequests); err != nil {
+		log.Printf("ERROR: ReconcileAll failed: %v", err)
 		return fmt.Errorf("failed reconciliation: %w", err)
 	}
 
 	return nil
+}
+
+// resolveAgentManifestMCPServers extracts and resolves registry-type MCP servers from an agent manifest
+// This follows the same logic as the CLI-side ResolveRegistryServer
+func (s *registryServiceImpl) resolveAgentManifestMCPServers(ctx context.Context, manifest *common.AgentManifest) ([]*registry.MCPServerRunRequest, error) {
+	var resolvedServers []*registry.MCPServerRunRequest
+
+	for _, mcpServer := range manifest.McpServers {
+		// Only process registry-type servers (non-registry servers are baked into the image)
+		if mcpServer.Type != "registry" {
+			continue
+		}
+
+		// Determine registry URL
+		registryURL := mcpServer.RegistryURL
+		if registryURL == "" {
+			registryURL = "http://127.0.0.1:12121"
+		}
+
+		version := mcpServer.RegistryVersion
+		if version == "" {
+			version = "latest"
+		}
+
+		serverEntry, err := fetchServerFromRegistry(registryURL, mcpServer.RegistryName, version)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch server %q from registry %s: %w", mcpServer.RegistryName, registryURL, err)
+		}
+
+		// Convert registry.ServerSpec to apiv0.ServerJSON
+		// TODO: Validate this conversion works as expected...
+		serverJSON := convertServerSpecToServerJSON(&serverEntry.Server)
+
+		// Create MCPServerRunRequest so that this resolved server is ran/deployed
+		resolvedServers = append(resolvedServers, &registry.MCPServerRunRequest{
+			RegistryServer: serverJSON,
+			// PreferRemote:   len(serverJSON.Remotes) > 0 && len(serverJSON.Packages) == 0,
+			// Empty maps = use defaults from RegistryServer spec only (no overrides)
+			EnvValues:    make(map[string]string),
+			ArgValues:    make(map[string]string),
+			HeaderValues: make(map[string]string),
+		})
+	}
+
+	return resolvedServers, nil
+}
+
+// fetchServerFromRegistry fetches a server from a registry via HTTP
+func fetchServerFromRegistry(baseURL string, name string, version string) (*types.ServerEntry, error) {
+	// Construct the endpoint: /v0/servers/{serverName}/versions/{version}
+	baseURL = strings.TrimSuffix(baseURL, "/")
+	if !strings.HasSuffix(baseURL, "/v0/servers") {
+		baseURL = baseURL + "/v0/servers"
+	}
+
+	if version == "" {
+		version = "latest"
+	}
+
+	encodedName := url.PathEscape(name)
+	fetchURL := fmt.Sprintf("%s/%s/versions/%s", baseURL, encodedName, version)
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+	resp, err := client.Get(fetchURL)
+	if err != nil {
+		/* TODO: Why does this keep failing?
+
+		2025/12/02 03:16:52 ERROR: Failed to resolve MCP servers for agent test: failed to fetch server "io.github.Asthanaji05/pokeapi-mcp-server" from registry http://localhost:12121:⁠ failed to fetch server by name: Get "http://localhost:12121/v0/servers/io.github.Asthanaji05%2Fpokeapi-mcp-server/versions/1.9.0": dial tcp [::1]:12121: connect: connection refused
+
+		Doing a curl locally works, unsure why doing it within the registry is failing.
+		Doing through `run` works, but it uses the client from CLI, so maybe that helps it? Maybe the registry service has issues contacting itself?
+		I could make an assumption if `localhost:12121` -> use internal client/database, else http; but not sure if this is the best approach.
+		*/
+		return nil, fmt.Errorf("failed to fetch server by name: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(body))
+	}
+
+	var registryResp types.RegistryResponse
+	if err := json.NewDecoder(resp.Body).Decode(&registryResp); err != nil {
+		return nil, fmt.Errorf("failed to decode server list response: %w", err)
+	}
+
+	if len(registryResp.Servers) == 0 {
+		return nil, fmt.Errorf("server not found: %s with version %s", name, version)
+	}
+
+	// based on name + version, there should only be one server
+	return &registryResp.Servers[0], nil
+}
+
+// convertServerSpecToServerJSON converts a types.ServerSpec to apiv0.ServerJSON
+// TODO: Validate this conversion works as expected...
+func convertServerSpecToServerJSON(spec *types.ServerSpec) *apiv0.ServerJSON {
+	// Convert Repository - apiv0.ServerJSON uses model.Repository
+	var repo *model.Repository
+	if spec.Repository.URL != "" || spec.Repository.Source != "" {
+		repo = &model.Repository{
+			URL:    spec.Repository.URL,
+			Source: spec.Repository.Source, // Source is a string in model.Repository
+		}
+	}
+
+	return &apiv0.ServerJSON{
+		Schema:      "", // ServerSpec doesn't include schema, but it's not required for runtime
+		Name:        spec.Name,
+		Title:       spec.Title,
+		Description: spec.Description,
+		Version:     spec.Version,
+		// Status is not part of ServerJSON - it's in the metadata
+		WebsiteURL: spec.WebsiteURL,
+		Repository: repo,
+		Packages:   spec.Packages,
+		Remotes:    spec.Remotes,
+		Icons:      nil, // ServerSpec doesn't include icons
+		Meta:       nil, // ServerSpec doesn't include meta
+	}
 }

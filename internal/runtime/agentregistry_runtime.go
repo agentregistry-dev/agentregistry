@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -63,6 +64,16 @@ func (r *agentRegistryRuntime) ReconcileAll(
 			return fmt.Errorf("translate agent %s: %w", req.RegistryAgent.Name, err)
 		}
 		desiredState.Agents = append(desiredState.Agents, agent)
+
+		// Write resolved MCP server config file for this agent
+		if len(req.ResolvedMCPServers) > 0 {
+			if err := r.writeResolvedMCPServerConfig(req.RegistryAgent.Name, req.ResolvedMCPServers); err != nil {
+				// Log warning but don't fail deployment
+				if r.verbose {
+					fmt.Printf("Warning: Failed to write MCP server config for agent %s: %v\n", req.RegistryAgent.Name, err)
+				}
+			}
+		}
 	}
 
 	runtimeCfg, err := r.runtimeTranslator.TranslateRuntimeConfig(ctx, desiredState)
@@ -137,6 +148,73 @@ func (r *agentRegistryRuntime) ensureLocalRuntime(
 	}
 
 	fmt.Println("Docker containers started")
+
+	return nil
+}
+
+// writeResolvedMCPServerConfig writes resolved MCP server configuration to a faile
+// The format matches what Python mcp_tools.py expects for loading MCP servers at runtime
+func (r *agentRegistryRuntime) writeResolvedMCPServerConfig(agentName string, resolvedServers []*registry.MCPServerRunRequest) error {
+	// Convert resolved servers to Python-compatible format
+	var pythonServers []map[string]interface{}
+
+	for _, serverReq := range resolvedServers {
+		server := serverReq.RegistryServer
+
+		// Determine server type and build Python dict
+		serverDict := map[string]interface{}{
+			"name": server.Name,
+		}
+
+		// Check if it's a remote server
+		if len(server.Remotes) > 0 && (serverReq.PreferRemote || len(server.Packages) == 0) {
+			remote := server.Remotes[0]
+			serverDict["type"] = "remote"
+			serverDict["url"] = remote.URL
+
+			// Process headers
+			if len(remote.Headers) > 0 || len(serverReq.HeaderValues) > 0 {
+				headers := make(map[string]string)
+				// Add headers from server spec
+				for _, h := range remote.Headers {
+					headers[h.Name] = h.Value
+				}
+				// Override with header values from request
+				for k, v := range serverReq.HeaderValues {
+					headers[k] = v
+				}
+				if len(headers) > 0 {
+					serverDict["headers"] = headers
+				}
+			}
+		} else if len(server.Packages) > 0 {
+			// Command-based server
+			serverDict["type"] = "command"
+			// For command type, Python code constructs URL as f"http://{server_name}:3000/mcp"
+			// So we don't need to include url in the dict
+		} else {
+			// Skip servers with no packages or remotes
+			continue
+		}
+
+		pythonServers = append(pythonServers, serverDict)
+	}
+
+	// Write to JSON file with agent-specific name
+	// Each agent container mounts /config, so we use agent name to avoid conflicts
+	configPath := filepath.Join(r.runtimeDir, fmt.Sprintf("mcp-servers-%s.json", agentName))
+	configData, err := json.MarshalIndent(pythonServers, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal MCP server config: %w", err)
+	}
+
+	if err := os.WriteFile(configPath, configData, 0644); err != nil {
+		return fmt.Errorf("failed to write MCP server config file: %w", err)
+	}
+
+	if r.verbose {
+		fmt.Printf("Wrote MCP server config for agent %s to %s\n", agentName, configPath)
+	}
 
 	return nil
 }

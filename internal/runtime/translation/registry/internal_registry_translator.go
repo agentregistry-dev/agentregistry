@@ -28,7 +28,8 @@ type MCPServerRunRequest struct {
 type AgentRunRequest struct {
 	RegistryAgent *models.AgentJSON
 	EnvValues     map[string]string
-	MCPServers    []*MCPServerRunRequest
+	// Registry-type MCP servers resolved from agent manifest at deploy time to inject into the agent
+	ResolvedMCPServers []*MCPServerRunRequest
 }
 
 // Translator is the interface for translating MCPServer objects to AgentGateway objects.

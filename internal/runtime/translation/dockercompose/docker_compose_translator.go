@@ -175,6 +175,11 @@ func (t *agentGatewayTranslator) translateAgentToServiceConfig(agent *api.Agent)
 			Target:    uint32(port),
 			Published: fmt.Sprintf("%d", port),
 		}},
+		Volumes: []types.ServiceVolumeConfig{{
+			Type:   types.VolumeTypeBind,
+			Source: t.composeWorkingDir,
+			Target: "/config",
+		}},
 	}, nil
 }
 

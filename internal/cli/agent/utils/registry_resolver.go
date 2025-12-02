@@ -36,7 +36,8 @@ func ParseAgentManifestServers(manifest *common.AgentManifest, verbose bool) ([]
 func ResolveRegistryServer(mcpServer common.McpServerType, verbose bool) (*common.McpServerType, error) {
 	registryURL := mcpServer.RegistryURL
 	if registryURL == "" {
-		registryURL = "http://localhost:12121"
+		// TODO: Use this or localhost?
+		registryURL = "http://127.0.0.1:12121"
 	}
 
 	client := registry.NewClient()

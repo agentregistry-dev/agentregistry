@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
-	"github.com/agentregistry-dev/agentregistry/internal/registry"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/types"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry/utils"
 )
 
@@ -14,7 +14,7 @@ import (
 // envOverrides allows passing environment variables that override defaults or satisfy required vars.
 // Returns an error if required environment variables are missing.
 func TranslateRegistryServer(
-	serverSpec *registry.ServerSpec,
+	serverSpec *types.ServerSpec,
 	name string,
 	envOverrides map[string]string,
 ) (*common.McpServerType, error) {
