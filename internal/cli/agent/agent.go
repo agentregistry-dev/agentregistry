@@ -30,6 +30,7 @@ func init() {
 	AgentCmd.AddCommand(InitCmd)
 	AgentCmd.AddCommand(BuildCmd)
 	AgentCmd.AddCommand(RunCmd)
+	AgentCmd.AddCommand(ChatCmd)
 	AgentCmd.AddCommand(AddSkillCmd)
 	AgentCmd.AddCommand(AddMcpCmd)
 	AgentCmd.AddCommand(PublishCmd)
