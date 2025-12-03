@@ -40,9 +40,9 @@ func ResolveRegistryServer(mcpServer common.McpServerType, verbose bool) (*commo
 	}
 
 	client := registry.NewClient()
-	serverEntry, err := client.FetchServer(registryURL, mcpServer.RegistryName, mcpServer.RegistryVersion)
+	serverEntry, err := client.FetchServer(registryURL, mcpServer.RegistryServerName, mcpServer.RegistryServerVersion)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch server %q from registry: %w", mcpServer.RegistryName, err)
+		return nil, fmt.Errorf("failed to fetch server %q from registry: %w", mcpServer.RegistryServerName, err)
 	}
 
 	// Collect environment variable overrides from the current environment
@@ -57,7 +57,7 @@ func ResolveRegistryServer(mcpServer common.McpServerType, verbose bool) (*commo
 
 	if verbose {
 		fmt.Printf("Resolved registry server %q (%s) -> %s (image: %s, command: %s)\n",
-			mcpServer.RegistryName, serverEntry.Server.Version, translated.Type, translated.Image, translated.Command)
+			mcpServer.RegistryServerName, serverEntry.Server.Version, translated.Type, translated.Image, translated.Command)
 	}
 
 	return translated, nil

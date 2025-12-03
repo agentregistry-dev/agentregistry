@@ -853,14 +853,14 @@ func (s *registryServiceImpl) resolveAgentManifestMCPServers(ctx context.Context
 			registryURL = "http://127.0.0.1:12121"
 		}
 
-		version := mcpServer.RegistryVersion
+		version := mcpServer.RegistryServerVersion
 		if version == "" {
 			version = "latest"
 		}
 
-		serverEntry, err := fetchServerFromRegistry(registryURL, mcpServer.RegistryName, version)
+		serverEntry, err := fetchServerFromRegistry(registryURL, mcpServer.RegistryServerName, version)
 		if err != nil {
-			return nil, fmt.Errorf("failed to fetch server %q from registry %s: %w", mcpServer.RegistryName, registryURL, err)
+			return nil, fmt.Errorf("failed to fetch server %q from registry %s: %w", mcpServer.RegistryServerName, registryURL, err)
 		}
 
 		// Convert registry.ServerSpec to apiv0.ServerJSON

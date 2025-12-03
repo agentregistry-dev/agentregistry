@@ -27,8 +27,8 @@ const (
 	stepCommandMode
 	stepCommandDetails
 	stepRegistryURL
-	stepRegistryName
-	stepRegistryVersion
+	stepRegistryServerName
+	stepRegistryServerVersion
 	stepArgsEnv
 	stepName
 	stepDone
@@ -134,11 +134,11 @@ var (
 		Registry: WizardFlowConfig{
 			Name: "registry",
 			StepPositions: map[wizardStep]int{
-				stepPickType:        1,
-				stepRegistryURL:     2,
-				stepRegistryName:    3,
-				stepRegistryVersion: 4,
-				stepName:            5,
+				stepPickType:              1,
+				stepRegistryURL:           2,
+				stepRegistryServerName:    3,
+				stepRegistryServerVersion: 4,
+				stepName:                  5,
 			},
 			TotalSteps: 5,
 		},
@@ -175,12 +175,12 @@ type McpServerWizard struct {
 	headers          map[string]string
 
 	// Registry support
-	registryURLInput        textinput.Model
-	registryNameList        list.Model
-	registryVersionList     list.Model
-	registryURL             string
-	selectedRegistryServer  string
-	selectedRegistryVersion string
+	registryURLInput              textinput.Model
+	registryServerNameList        list.Model
+	registryServerVersionList     list.Model
+	registryURL                   string
+	selectedRegistryServerName    string
+	selectedRegistryServerVersion string
 
 	chosenType   string // serverTypes.Remote.ID or serverTypes.Command.ID
 	chosenMethod string // commandMethods.*.ID
@@ -263,25 +263,25 @@ func NewMcpServerWizard() *McpServerWizard {
 	rvl.Styles.PaginationStyle = list.DefaultStyles().PaginationStyle.PaddingLeft(2)
 
 	w := &McpServerWizard{
-		id:                  "mcp_server_wizard",
-		step:                stepPickType,
-		typeList:            tl,
-		methodList:          ml,
-		modeList:            mdl,
-		registryURLInput:    mk("https://registry.example.com", 50),
-		registryNameList:    rnl,
-		registryVersionList: rvl,
-		urlInput:            mk("https://your-mcp-server", 40),
-		imageInput:          mk("ghcr.io/org/tool:tag", 40),
-		pkgInput:            mk("@acme/mcp-tool", 40),
-		commandInput:        mk("command to execute", 40),
-		argsInput:           mk("comma-separated args (optional)", 40),
-		envInput:            mk("comma-separated KEY=VALUE (optional)", 40),
-		nameInput:           mk("server name", 40),
-		filePicker:          fp,
-		headerKeyInput:      mk("Header name (e.g., Authorization)", 40),
-		headerValueInput:    mk("Header value (e.g., Bearer ${API_KEY})", 50),
-		headers:             make(map[string]string),
+		id:                        "mcp_server_wizard",
+		step:                      stepPickType,
+		typeList:                  tl,
+		methodList:                ml,
+		modeList:                  mdl,
+		registryURLInput:          mk("https://registry.example.com", 50),
+		registryServerNameList:    rnl,
+		registryServerVersionList: rvl,
+		urlInput:                  mk("https://your-mcp-server", 40),
+		imageInput:                mk("ghcr.io/org/tool:tag", 40),
+		pkgInput:                  mk("@acme/mcp-tool", 40),
+		commandInput:              mk("command to execute", 40),
+		argsInput:                 mk("comma-separated args (optional)", 40),
+		envInput:                  mk("comma-separated KEY=VALUE (optional)", 40),
+		nameInput:                 mk("server name", 40),
+		filePicker:                fp,
+		headerKeyInput:            mk("Header name (e.g., Authorization)", 40),
+		headerValueInput:          mk("Header value (e.g., Bearer ${API_KEY})", 50),
+		headers:                   make(map[string]string),
 	}
 	return w
 }
@@ -308,10 +308,10 @@ func (w *McpServerWizard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch w.step {
 		case stepPickType:
 			w.typeList.SetSize(maxInt(40, m.Width-20), maxInt(8, m.Height-10))
-		case stepRegistryName:
-			w.registryNameList.SetSize(maxInt(50, m.Width-20), maxInt(12, m.Height-10))
-		case stepRegistryVersion:
-			w.registryVersionList.SetSize(maxInt(50, m.Width-20), maxInt(12, m.Height-10))
+		case stepRegistryServerName:
+			w.registryServerNameList.SetSize(maxInt(50, m.Width-20), maxInt(12, m.Height-10))
+		case stepRegistryServerVersion:
+			w.registryServerVersionList.SetSize(maxInt(50, m.Width-20), maxInt(12, m.Height-10))
 		case stepCommandMethod:
 			w.methodList.SetSize(maxInt(50, m.Width-20), maxInt(10, m.Height-10))
 		}
@@ -344,10 +344,10 @@ func (w *McpServerWizard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			items = append(items, choiceItem{displayName})
 		}
-		w.registryNameList.SetItems(items)
-		w.step = stepRegistryName
+		w.registryServerNameList.SetItems(items)
+		w.step = stepRegistryServerName
 		return w, nil
-	case fetchRegistryVersionsMsg:
+	case fetchRegistryServerVersionsMsg:
 		if m.err != nil {
 			w.errMsg = fmt.Sprintf("Failed to fetch versions for server %s: %v", m.serverName, m.err)
 			return w, nil
@@ -357,8 +357,8 @@ func (w *McpServerWizard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for i, version := range m.versions {
 			items[i] = choiceItem{version.Server.Version}
 		}
-		w.registryVersionList.SetItems(items)
-		w.step = stepRegistryVersion
+		w.registryServerVersionList.SetItems(items)
+		w.step = stepRegistryServerVersion
 		return w, nil
 	case tea.KeyMsg:
 		switch m.String() {
@@ -390,13 +390,13 @@ func (w *McpServerWizard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		w.registryURLInput, cmd = w.registryURLInput.Update(msg)
 		return w, tea.Batch(fpCmd, cmd)
-	case stepRegistryName:
+	case stepRegistryServerName:
 		var cmd tea.Cmd
-		w.registryNameList, cmd = w.registryNameList.Update(msg)
+		w.registryServerNameList, cmd = w.registryServerNameList.Update(msg)
 		return w, tea.Batch(fpCmd, cmd)
-	case stepRegistryVersion:
+	case stepRegistryServerVersion:
 		var cmd tea.Cmd
-		w.registryVersionList, cmd = w.registryVersionList.Update(msg)
+		w.registryServerVersionList, cmd = w.registryServerVersionList.Update(msg)
 		return w, tea.Batch(fpCmd, cmd)
 	case stepCommandMethod:
 		var cmd tea.Cmd
@@ -469,10 +469,10 @@ func (w *McpServerWizard) View() string {
 		body = w.renderHeadersStep()
 	case stepRegistryURL:
 		body = w.labeled("Registry URL", w.registryURLInput.View()) + w.errorView()
-	case stepRegistryName:
-		body = w.registryNameList.View() + w.errorView()
-	case stepRegistryVersion:
-		body = w.registryVersionList.View() + w.errorView()
+	case stepRegistryServerName:
+		body = w.registryServerNameList.View() + w.errorView()
+	case stepRegistryServerVersion:
+		body = w.registryServerVersionList.View() + w.errorView()
 	case stepCommandMethod:
 		body = w.methodList.View()
 	case stepCommandMode:
@@ -521,10 +521,10 @@ func (w *McpServerWizard) onEnter() tea.Cmd {
 		return w.enterRemoteHeaders()
 	case stepRegistryURL:
 		return w.enterRegistryURL()
-	case stepRegistryName:
-		return w.enterRegistryName()
-	case stepRegistryVersion:
-		return w.enterRegistryVersion()
+	case stepRegistryServerName:
+		return w.enterRegistryServerName()
+	case stepRegistryServerVersion:
+		return w.enterRegistryServerVersion()
 	case stepCommandMethod:
 		return w.enterCommandMethod()
 	case stepCommandMode:
@@ -608,25 +608,25 @@ func (w *McpServerWizard) fetchRegistryServers() tea.Cmd {
 	}
 }
 
-// fetchRegistryVersionsCmd is a tea.Msg for fetching registry server versions
-type fetchRegistryVersionsMsg struct {
+// fetchRegistryServerVersionsCmd is a tea.Msg for fetching registry server versions
+type fetchRegistryServerVersionsMsg struct {
 	serverName string
 	versions   []types.ServerEntry
 	err        error
 }
 
-// fetchRegistryVersions performs the async operation to fetch versions for a server
-func (w *McpServerWizard) fetchRegistryVersions(serverName string) tea.Cmd {
+// fetchRegistryServerVersions performs the async operation to fetch versions for a server
+func (w *McpServerWizard) fetchRegistryServerVersions(serverName string) tea.Cmd {
 	return func() tea.Msg {
 		client := registry.NewClient()
 		versions, err := client.FetchServerVersions(w.registryURL, serverName)
-		return fetchRegistryVersionsMsg{serverName: serverName, versions: versions, err: err}
+		return fetchRegistryServerVersionsMsg{serverName: serverName, versions: versions, err: err}
 	}
 }
 
-// enterRegistryName processes the selected server and fetches its versions.
-func (w *McpServerWizard) enterRegistryName() tea.Cmd {
-	if it, ok := w.registryNameList.SelectedItem().(choiceItem); ok {
+// enterRegistryServerName processes the selected server and fetches its versions.
+func (w *McpServerWizard) enterRegistryServerName() tea.Cmd {
+	if it, ok := w.registryServerNameList.SelectedItem().(choiceItem); ok {
 		// Extract server name from the display text (handle "Title (Name)" format)
 		displayText := it.Title()
 		serverName := displayText
@@ -638,16 +638,16 @@ func (w *McpServerWizard) enterRegistryName() tea.Cmd {
 				serverName = displayText[start+2 : end]
 			}
 		}
-		w.selectedRegistryServer = serverName
-		return w.fetchRegistryVersions(serverName)
+		w.selectedRegistryServerName = serverName
+		return w.fetchRegistryServerVersions(serverName)
 	}
 	return nil
 }
 
-// enterRegistryVersion processes the selected version and advances to naming.
-func (w *McpServerWizard) enterRegistryVersion() tea.Cmd {
-	if it, ok := w.registryVersionList.SelectedItem().(choiceItem); ok {
-		w.selectedRegistryVersion = it.Title()
+// enterRegistryServerVersion processes the selected version and advances to naming.
+func (w *McpServerWizard) enterRegistryServerVersion() tea.Cmd {
+	if it, ok := w.registryServerVersionList.SelectedItem().(choiceItem); ok {
+		w.selectedRegistryServerVersion = it.Title()
 		w.step = stepName
 		w.nameInput.SetValue("")
 		w.nameInput.Focus()
@@ -864,8 +864,8 @@ func (w *McpServerWizard) buildFinalResult(name string) {
 		w.result.Type = serverTypes.Registry.ID
 		w.result.Name = name
 		w.result.RegistryURL = w.registryURL
-		w.result.RegistryName = w.selectedRegistryServer
-		w.result.RegistryVersion = w.selectedRegistryVersion
+		w.result.RegistryServerName = w.selectedRegistryServerName
+		w.result.RegistryServerVersion = w.selectedRegistryServerVersion
 		return
 	}
 
@@ -920,10 +920,10 @@ func (w *McpServerWizard) onTab(reverse bool) tea.Cmd {
 		return w.tabRemoteHeaders(reverse)
 	case stepRegistryURL:
 		return w.tabRegistryURL(reverse)
-	case stepRegistryName:
-		return w.tabRegistryName(reverse)
-	case stepRegistryVersion:
-		return w.tabRegistryVersion(reverse)
+	case stepRegistryServerName:
+		return w.tabRegistryServerName(reverse)
+	case stepRegistryServerVersion:
+		return w.tabRegistryServerVersion(reverse)
 	case stepCommandDetails:
 		return w.tabCommandDetails(reverse)
 	case stepArgsEnv:
@@ -940,11 +940,11 @@ func (w *McpServerWizard) tabRemoteURL(_ bool) tea.Cmd { return nil }
 // tabRegistryURL has a single input; nothing to cycle.
 func (w *McpServerWizard) tabRegistryURL(_ bool) tea.Cmd { return nil }
 
-// tabRegistryName has a single list; nothing to cycle.
-func (w *McpServerWizard) tabRegistryName(_ bool) tea.Cmd { return nil }
+// tabRegistryServerName has a single list; nothing to cycle.
+func (w *McpServerWizard) tabRegistryServerName(_ bool) tea.Cmd { return nil }
 
-// tabRegistryVersion has a single list; nothing to cycle.
-func (w *McpServerWizard) tabRegistryVersion(_ bool) tea.Cmd { return nil }
+// tabRegistryServerVersion has a single list; nothing to cycle.
+func (w *McpServerWizard) tabRegistryServerVersion(_ bool) tea.Cmd { return nil }
 
 // tabRemoteHeaders toggles focus between header key and value inputs.
 func (w *McpServerWizard) tabRemoteHeaders(reverse bool) tea.Cmd {
@@ -1116,7 +1116,7 @@ func (w *McpServerWizard) renderHeader() string {
 			idx = v
 		}
 		total = wizardFlows.Remote.TotalSteps
-	} else if w.chosenType == serverTypes.Registry.ID || w.step == stepRegistryURL || w.step == stepRegistryName || w.step == stepRegistryVersion {
+	} else if w.chosenType == serverTypes.Registry.ID || w.step == stepRegistryURL || w.step == stepRegistryServerName || w.step == stepRegistryServerVersion {
 		// registry flow
 		if v, ok := wizardFlows.Registry.StepPositions[w.step]; ok {
 			idx = v
@@ -1153,10 +1153,10 @@ func (w *McpServerWizard) prevStep() {
 		w.step = stepRemoteURL
 	case stepRegistryURL:
 		w.step = stepPickType
-	case stepRegistryName:
+	case stepRegistryServerName:
 		w.step = stepRegistryURL
-	case stepRegistryVersion:
-		w.step = stepRegistryName
+	case stepRegistryServerVersion:
+		w.step = stepRegistryServerName
 	case stepCommandMethod:
 		w.step = stepPickType
 	case stepCommandMode:
@@ -1174,7 +1174,7 @@ func (w *McpServerWizard) prevStep() {
 		case serverTypes.Remote.ID:
 			w.step = stepRemoteHeaders
 		case serverTypes.Registry.ID:
-			w.step = stepRegistryVersion
+			w.step = stepRegistryServerVersion
 		default:
 			w.step = stepArgsEnv
 		}

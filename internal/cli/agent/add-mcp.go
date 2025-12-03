@@ -22,17 +22,17 @@ var AddMcpCmd = &cobra.Command{
 }
 
 var (
-	projectDir      string
-	remoteURL       string
-	headers         []string
-	command         string
-	args            []string
-	env             []string
-	image           string
-	build           string
-	registryURL     string
-	registryName    string
-	registryVersion string
+	projectDir            string
+	remoteURL             string
+	headers               []string
+	command               string
+	args                  []string
+	env                   []string
+	image                 string
+	build                 string
+	registryURL           string
+	registryServerName    string
+	registryServerVersion string
 )
 
 func init() {
@@ -45,8 +45,8 @@ func init() {
 	AddMcpCmd.Flags().StringVar(&image, "image", "", "Container image (optional; mutually exclusive with --build)")
 	AddMcpCmd.Flags().StringVar(&build, "build", "", "Container build (optional; mutually exclusive with --image)")
 	AddMcpCmd.Flags().StringVar(&registryURL, "registry-url", "", "Registry URL (e.g., https://registry.example.com) (optional; mutually exclusive with --remote, --command, --image, --build)")
-	AddMcpCmd.Flags().StringVar(&registryName, "registry-name", "", "Registry-deployed MCP server name (optional; mutually exclusive with --remote, --command, --image, --build)")
-	AddMcpCmd.Flags().StringVar(&registryVersion, "registry-version", "", "Version of the MCP server to deploy from registry (e.g., 1.0.0) (optional)")
+	AddMcpCmd.Flags().StringVar(&registryServerName, "registry-server-name", "", "Registry-deployed MCP server name (optional; mutually exclusive with --remote, --command, --image, --build)")
+	AddMcpCmd.Flags().StringVar(&registryServerVersion, "registry-server-version", "", "Version of the MCP server to deploy from registry (e.g., 1.0.0) (optional)")
 }
 
 // addMcpCmd runs the interactive flow to append an MCP server to agent.yaml
@@ -70,7 +70,7 @@ func addMcpCmd(name string) error {
 
 	// If flags provided, build non-interactively; else run wizard
 	var res common.McpServerType
-	if remoteURL != "" || command != "" || image != "" || build != "" || registryURL != "" || registryName != "" {
+	if remoteURL != "" || command != "" || image != "" || build != "" || registryURL != "" || registryServerName != "" {
 		if remoteURL != "" {
 			headerMap := parseKeyValuePairs(headers)
 			res = common.McpServerType{
@@ -79,13 +79,13 @@ func addMcpCmd(name string) error {
 				Name:    name,
 				Headers: headerMap,
 			}
-		} else if registryURL != "" && registryName != "" {
+		} else if registryURL != "" && registryServerName != "" {
 			res = common.McpServerType{
-				Type:            "registry",
-				Name:            name,
-				RegistryURL:     registryURL,
-				RegistryName:    registryName,
-				RegistryVersion: registryVersion,
+				Type:                  "registry",
+				Name:                  name,
+				RegistryURL:           registryURL,
+				RegistryServerName:    registryServerName,
+				RegistryServerVersion: registryServerVersion,
 			}
 		} else {
 			if image != "" && build != "" {
