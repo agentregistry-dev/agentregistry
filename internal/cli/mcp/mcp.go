@@ -30,7 +30,6 @@ func init() {
 	McpCmd.AddCommand(InitCmd)
 	McpCmd.AddCommand(BuildCmd)
 	McpCmd.AddCommand(AddToolCmd)
-	McpCmd.AddCommand(PushCmd)
 	McpCmd.AddCommand(PublishCmd)
 	McpCmd.AddCommand(DeleteCmd)
 	McpCmd.AddCommand(DeployCmd)

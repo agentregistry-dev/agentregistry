@@ -32,7 +32,6 @@ func init() {
 	AgentCmd.AddCommand(RunCmd)
 	AgentCmd.AddCommand(AddSkillCmd)
 	AgentCmd.AddCommand(AddMcpCmd)
-	AgentCmd.AddCommand(PushCmd)
 	AgentCmd.AddCommand(PublishCmd)
 	AgentCmd.AddCommand(DeleteCmd)
 	AgentCmd.AddCommand(RemoveCmd)
