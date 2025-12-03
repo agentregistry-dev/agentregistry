@@ -37,10 +37,6 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API client not initialized")
 	}
 
-	if deleteVersion == "" {
-		return fmt.Errorf("version is required (use --version flag)")
-	}
-
 	// Check if skill is published
 	isPublished, err := isSkillPublished(skillName, deleteVersion)
 	if err != nil {
