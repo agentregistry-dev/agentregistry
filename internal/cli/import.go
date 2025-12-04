@@ -13,6 +13,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/importer"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	"github.com/agentregistry-dev/agentregistry/pkg/cli"
 	"github.com/spf13/cobra"
 )
 
@@ -94,7 +95,7 @@ var importCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(importCmd)
+	cli.Root().AddCommand(importCmd)
 	importCmd.Flags().StringVar(&importSource, "source", "", "Seed file path, HTTP URL, or registry /v0/servers URL (required)")
 	importCmd.Flags().BoolVar(&importSkipValidation, "skip-validation", false, "Disable registry validation for this import run")
 	importCmd.Flags().StringArrayVar(&importHeaders, "request-header", nil, "Additional request header in key=value form (repeatable)")

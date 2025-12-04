@@ -1,9 +1,13 @@
 package main
 
 import (
-	"github.com/agentregistry-dev/agentregistry/internal/cli"
+	"os"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/cli"
 )
 
 func main() {
-	cli.Execute()
+	if err := cli.Root().Execute(); err != nil {
+		os.Exit(1)
+	}
 }

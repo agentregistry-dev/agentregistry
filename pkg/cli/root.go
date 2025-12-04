@@ -59,3 +59,7 @@ func init() {
 	rootCmd.AddCommand(agent.AgentCmd)
 	rootCmd.AddCommand(skill.SkillCmd)
 }
+
+func Root() *cobra.Command {
+	return rootCmd
+}

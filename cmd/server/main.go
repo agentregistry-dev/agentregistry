@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry"
 )
 
 func main() {

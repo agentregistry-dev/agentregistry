@@ -12,6 +12,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/exporter"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	"github.com/agentregistry-dev/agentregistry/pkg/cli"
 	"github.com/spf13/cobra"
 )
 
@@ -67,7 +68,7 @@ var exportCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(exportCmd)
+	cli.Root().AddCommand(exportCmd)
 	exportCmd.Flags().StringVar(&exportOutput, "output", "", "Destination seed file path (required)")
 	exportCmd.Flags().StringVar(&exportReadmeOutput, "readme-output", "", "Optional README seed output path")
 	_ = exportCmd.MarkFlagRequired("output")

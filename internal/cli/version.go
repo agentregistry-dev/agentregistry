@@ -7,6 +7,7 @@ import (
 	"golang.org/x/mod/semver"
 
 	"github.com/agentregistry-dev/agentregistry/internal/version"
+	"github.com/agentregistry-dev/agentregistry/pkg/cli"
 )
 
 var versionCmd = &cobra.Command{
@@ -17,7 +18,7 @@ var versionCmd = &cobra.Command{
 		fmt.Printf("arctl version %s\n", version.Version)
 		fmt.Printf("Git commit: %s\n", version.GitCommit)
 		fmt.Printf("Build date: %s\n", version.BuildDate)
-		serverVersion, err := APIClient.GetVersion()
+		serverVersion, err := cli.APIClient.GetVersion()
 		if err != nil {
 			fmt.Printf("Error getting server version: %v\n", err)
 			return
@@ -47,5 +48,5 @@ var versionCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(versionCmd)
+	cli.Root().AddCommand(versionCmd)
 }
