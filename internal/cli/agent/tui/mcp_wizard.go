@@ -655,9 +655,8 @@ type fetchRegistryServerVersionsMsg struct {
 
 // fetchRegistryServerPreferRemoteCmd is a tea.Msg for fetching prefer remote for a server
 type fetchRegistryServerPreferRemoteMsg struct {
-	serverName   string
-	preferRemote bool
-	err          error
+	serverName string
+	err        error
 }
 
 // fetchRegistryServerVersions performs the async operation to fetch versions for a server
