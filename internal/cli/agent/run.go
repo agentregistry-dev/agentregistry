@@ -18,7 +18,8 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/project"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/tui"
-	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
+	agentutils "github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
+	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	"github.com/spf13/cobra"
 	a2aclient "trpc.group/trpc-go/trpc-a2a-go/client"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
@@ -58,7 +59,8 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to resolve agent %q: %w", target, err)
 	}
 	manifest := agentModel.Agent.AgentManifest
-	return runFromManifest(cmd.Context(), &manifest, nil)
+	version := agentModel.Agent.Version
+	return runFromManifest(cmd.Context(), &manifest, version, nil)
 }
 
 // Note: The below implementation may be redundant in most cases.
@@ -73,7 +75,7 @@ func runFromDirectory(ctx context.Context, projectDir string) error {
 	// Resolve registry-type MCP servers if present
 	if hasRegistryServers(manifest) {
 		// resolve registry-type MCP servers and add them to the manifest
-		servers, err := utils.ParseAgentManifestServers(manifest, verbose)
+		servers, err := agentutils.ParseAgentManifestServers(manifest, verbose)
 		if err != nil {
 			return fmt.Errorf("failed to parse agent manifest mcp servers: %w", err)
 		}
@@ -92,13 +94,18 @@ func runFromDirectory(ctx context.Context, projectDir string) error {
 			if err := project.EnsureMcpServerDirectories(projectDir, &tmpManifest, verbose); err != nil {
 				return fmt.Errorf("failed to create MCP server directories: %w", err)
 			}
-			if err := writeResolvedMCPServerConfig(projectDir, &tmpManifest, verbose); err != nil {
+			if err := writeResolvedMCPServerConfig(projectDir, &tmpManifest, "", verbose); err != nil {
 				return fmt.Errorf("failed to write MCP server config: %w", err)
 			}
 		}
+	} else {
+		// no registry-type MCP servers, we clean up the resolved MCP server config in case any previous one exists.
+		if err := cleanupResolvedMCPServerConfig(projectDir, manifest.Name, "", verbose); err != nil {
+			return fmt.Errorf("failed to cleanup resolved MCP server config: %w", err)
+		}
 	}
 
-	if err := project.RegenerateDockerCompose(projectDir, manifest, verbose); err != nil {
+	if err := project.RegenerateDockerCompose(projectDir, manifest, "", verbose); err != nil {
 		return fmt.Errorf("failed to refresh docker-compose.yaml: %w", err)
 	}
 
@@ -108,7 +115,7 @@ func runFromDirectory(ctx context.Context, projectDir string) error {
 		return fmt.Errorf("failed to read docker-compose.yaml: %w", err)
 	}
 
-	return runFromManifest(ctx, manifest, &runContext{
+	return runFromManifest(ctx, manifest, "", &runContext{
 		composeData: data,
 		workDir:     projectDir,
 	})
@@ -124,7 +131,7 @@ func hasRegistryServers(manifest *common.AgentManifest) bool {
 	return false
 }
 
-func runFromManifest(ctx context.Context, manifest *common.AgentManifest, overrides *runContext) error {
+func runFromManifest(ctx context.Context, manifest *common.AgentManifest, version string, overrides *runContext) error {
 	if manifest == nil {
 		return fmt.Errorf("agent manifest is required")
 	}
@@ -146,7 +153,7 @@ func runFromManifest(ctx context.Context, manifest *common.AgentManifest, overri
 			}
 
 			// Called with registry agent name - need to resolve and render in-memory
-			servers, err := utils.ParseAgentManifestServers(manifest, verbose)
+			servers, err := agentutils.ParseAgentManifestServers(manifest, verbose)
 			if err != nil {
 				return fmt.Errorf("failed to parse agent manifest mcp servers: %w", err)
 			}
@@ -171,7 +178,7 @@ func runFromManifest(ctx context.Context, manifest *common.AgentManifest, overri
 				if err := buildRegistryResolvedServers(tmpDir, &tmpManifest, verbose); err != nil {
 					return fmt.Errorf("failed to build registry server images: %w", err)
 				}
-				if err := writeResolvedMCPServerConfig(tmpDir, &tmpManifest, verbose); err != nil {
+				if err := writeResolvedMCPServerConfig(tmpDir, &tmpManifest, version, verbose); err != nil {
 					return fmt.Errorf("failed to write MCP server config: %w", err)
 				}
 
@@ -179,7 +186,7 @@ func runFromManifest(ctx context.Context, manifest *common.AgentManifest, overri
 			}
 		}
 
-		data, err := renderComposeFromManifest(manifest)
+		data, err := renderComposeFromManifest(manifest, version)
 		if err != nil {
 			return err
 		}
@@ -203,7 +210,7 @@ type runContext struct {
 	workDir     string
 }
 
-func renderComposeFromManifest(manifest *common.AgentManifest) ([]byte, error) {
+func renderComposeFromManifest(manifest *common.AgentManifest, version string) ([]byte, error) {
 	gen := python.NewPythonGenerator()
 	templateBytes, err := gen.ReadTemplateFile("docker-compose.yaml.tmpl")
 	if err != nil {
@@ -215,8 +222,12 @@ func renderComposeFromManifest(manifest *common.AgentManifest) ([]byte, error) {
 		image = project.ConstructImageName("", manifest.Name)
 	}
 
+	// Sanitize version for filesystem use in template
+	sanitizedVersion := utils.SanitizeVersion(version)
+
 	rendered, err := gen.RenderTemplate(string(templateBytes), struct {
 		Name          string
+		Version       string
 		Image         string
 		ModelProvider string
 		ModelName     string
@@ -224,6 +235,7 @@ func renderComposeFromManifest(manifest *common.AgentManifest) ([]byte, error) {
 		McpServers    []common.McpServerType
 	}{
 		Name:          manifest.Name,
+		Version:       sanitizedVersion,
 		Image:         image,
 		ModelProvider: manifest.ModelProvider,
 		ModelName:     manifest.ModelName,
@@ -405,8 +417,9 @@ func buildRegistryResolvedServers(tempDir string, manifest *common.AgentManifest
 
 // writeResolvedMCPServerConfig writes resolved MCP server configuration to a JSON file that matches the agent's framework's MCP format.
 // This enables registry-run agents to use registry-typed MCP servers at runtime.
+// Similar to writeResolvedMCPServerConfig in runtime/agentregistry_runtime.go
 // TODO: If we add support for more agent languages/frameworks, expand this to work with those formats.
-func writeResolvedMCPServerConfig(tempDir string, manifest *common.AgentManifest, verbose bool) error {
+func writeResolvedMCPServerConfig(tempDir string, manifest *common.AgentManifest, version string, verbose bool) error {
 	if manifest == nil || len(manifest.McpServers) == 0 {
 		return nil
 	}
@@ -441,8 +454,24 @@ func writeResolvedMCPServerConfig(tempDir string, manifest *common.AgentManifest
 		return nil // No resolved servers to write
 	}
 
-	// Write to JSON file with agent-specific name (same naming as runtime system)
-	configPath := filepath.Join(tempDir, fmt.Sprintf("mcp-servers-%s.json", manifest.Name))
+	// Determine config directory path based on whether version is provided
+	var configDir string
+	if version != "" {
+		// Registry runs: use version-specific path {agentName}/{version}/
+		sanitizedVersion := utils.SanitizeVersion(version)
+		configDir = filepath.Join(tempDir, manifest.Name, sanitizedVersion)
+	} else {
+		// Local runs: use simple path {agentName}/
+		configDir = filepath.Join(tempDir, manifest.Name)
+	}
+
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("failed to create agent config directory: %w", err)
+	}
+
+	// Write to JSON file at {agentName}/{version}/mcp-servers.json or {agentName}/mcp-servers.json
+	// The agent container will mount this directory to /config, so the file will be at /config/mcp-servers.json
+	configPath := filepath.Join(configDir, "mcp-servers.json")
 	configData, err := json.MarshalIndent(mcpServers, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal MCP server config: %w", err)
@@ -453,7 +482,30 @@ func writeResolvedMCPServerConfig(tempDir string, manifest *common.AgentManifest
 	}
 
 	if verbose {
-		fmt.Printf("Wrote MCP server config for agent %s to %s\n", manifest.Name, configPath)
+		fmt.Printf("Wrote MCP server config for agent %s version %s to %s\n", manifest.Name, version, configPath)
+	}
+
+	return nil
+}
+
+// cleanupResolvedMCPServerConfig cleans up the resolved MCP server config directory.
+// Used in the case that no registry-type MCP servers are present to ensure there is no previously-existing config.
+func cleanupResolvedMCPServerConfig(tempDir string, agentName string, version string, verbose bool) error {
+	var configDir string
+	if version != "" {
+		sanitizedVersion := utils.SanitizeVersion(version)
+		configDir = filepath.Join(tempDir, agentName, sanitizedVersion)
+	} else {
+		configDir = filepath.Join(tempDir, agentName)
+	}
+
+	configPath := filepath.Join(configDir, "mcp-servers.json")
+	if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove MCP server config file: %w", err)
+	}
+
+	if verbose {
+		fmt.Printf("Cleaned up resolved MCP server config for agent %s version %s\n", agentName, version)
 	}
 
 	return nil

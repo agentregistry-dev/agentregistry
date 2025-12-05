@@ -10,6 +10,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/adk/python"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
+	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 )
 
@@ -92,7 +93,7 @@ func RegenerateMcpTools(projectDir string, manifest *common.AgentManifest, verbo
 }
 
 // RegenerateDockerCompose rewrites docker-compose.yaml using the embedded template.
-func RegenerateDockerCompose(projectDir string, manifest *common.AgentManifest, verbose bool) error {
+func RegenerateDockerCompose(projectDir string, manifest *common.AgentManifest, version string, verbose bool) error {
 	if manifest == nil {
 		return fmt.Errorf("manifest is required")
 	}
@@ -108,8 +109,12 @@ func RegenerateDockerCompose(projectDir string, manifest *common.AgentManifest, 
 		return fmt.Errorf("failed to read docker-compose template: %w", err)
 	}
 
+	// Sanitize version for filesystem use in template
+	sanitizedVersion := utils.SanitizeVersion(version)
+
 	rendered, err := gen.RenderTemplate(string(templateBytes), struct {
 		Name          string
+		Version       string
 		Image         string
 		ModelProvider string
 		ModelName     string
@@ -117,6 +122,7 @@ func RegenerateDockerCompose(projectDir string, manifest *common.AgentManifest, 
 		McpServers    []common.McpServerType
 	}{
 		Name:          manifest.Name,
+		Version:       sanitizedVersion,
 		Image:         image,
 		ModelProvider: manifest.ModelProvider,
 		ModelName:     manifest.ModelName,

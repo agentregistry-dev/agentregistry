@@ -3,9 +3,11 @@ package dockercompose
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sort"
 
 	api "github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
+	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/compose-spec/compose-go/v2/types"
 )
@@ -165,6 +167,17 @@ func (t *agentGatewayTranslator) translateAgentToServiceConfig(agent *api.Agent)
 		port = 8080 // default port
 	}
 
+	// Mount agent-specific subdirectory: {composeWorkingDir}/{agentName}/{version} -> /config
+	// Runtime agents should always have a version, but handle empty gracefully
+	var agentConfigDir string
+	if agent.Version != "" {
+		sanitizedVersion := utils.SanitizeVersion(agent.Version)
+		agentConfigDir = filepath.Join(t.composeWorkingDir, agent.Name, sanitizedVersion)
+	} else {
+		// Fallback to non-versioned directory for safety (shouldn't happen for runtime agents)
+		agentConfigDir = filepath.Join(t.composeWorkingDir, agent.Name)
+	}
+
 	return &types.ServiceConfig{
 		Name:        agent.Name,
 		Image:       image,
@@ -176,7 +189,7 @@ func (t *agentGatewayTranslator) translateAgentToServiceConfig(agent *api.Agent)
 		}},
 		Volumes: []types.ServiceVolumeConfig{{
 			Type:   types.VolumeTypeBind,
-			Source: t.composeWorkingDir,
+			Source: agentConfigDir,
 			Target: "/config",
 		}},
 	}, nil

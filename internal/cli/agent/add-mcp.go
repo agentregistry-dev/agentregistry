@@ -155,7 +155,7 @@ func addMcpCmd(name string) error {
 	}
 
 	// Regenerate docker-compose.yaml with updated MCP server configuration
-	if err := project.RegenerateDockerCompose(resolvedDir, manifest, verbose); err != nil {
+	if err := project.RegenerateDockerCompose(resolvedDir, manifest, "", verbose); err != nil {
 		return fmt.Errorf("failed to regenerate docker-compose.yaml: %w", err)
 	}
 

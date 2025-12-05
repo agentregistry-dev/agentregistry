@@ -45,13 +45,10 @@ def _resolve_env_vars(value: str) -> str:
 
 def _load_runtime_mcp_servers() -> List[dict]:
     """Load MCP servers resolved at runtime (registry types) from config file."""
-    agent_name = os.environ.get("AGENT_NAME", "")
+    # The agent-specific directory is mounted to /config, so the file is at /config/mcp-servers.json
+    config_paths = [Path("/config/mcp-servers.json")]
     
-    config_paths = []
-    if agent_name:
-        config_paths.append(Path(f"/config/mcp-servers-{agent_name}.json"))
-    config_paths.append(Path("/config/mcp-servers.json"))
-    
+    # Allow override via environment variable for testing/debugging
     env_path = os.environ.get("MCP_SERVERS_CONFIG_PATH")
     if env_path:
         config_paths.insert(0, Path(env_path))

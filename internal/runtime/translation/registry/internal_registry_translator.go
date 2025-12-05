@@ -79,7 +79,8 @@ func (t *registryTranslator) TranslateAgent(
 		return nil, fmt.Errorf("failed to find available port: %w", err)
 	}
 	return &api.Agent{
-		Name: req.RegistryAgent.Name,
+		Name:    req.RegistryAgent.Name,
+		Version: req.RegistryAgent.Version,
 		Deployment: api.AgentDeployment{
 			Image: req.RegistryAgent.Image,
 			Port:  port,

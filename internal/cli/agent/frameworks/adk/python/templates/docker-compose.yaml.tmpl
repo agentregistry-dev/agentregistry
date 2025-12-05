@@ -30,7 +30,7 @@ services:
 {{- end }}
     volumes:
       - type: bind
-        source: .
+        source: ./{{.Name}}{{if .Version}}/{{.Version}}{{end}}
         target: /config
 {{- range .McpServers }}
 {{- if eq .Type "command" }}

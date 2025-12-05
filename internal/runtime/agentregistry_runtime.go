@@ -12,6 +12,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
+	"github.com/agentregistry-dev/agentregistry/internal/utils"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -69,9 +70,14 @@ func (r *agentRegistryRuntime) ReconcileAll(
 		// Write registry-resolved MCP server config file for this agent
 		// This is used to inject MCP servers resolved from a registry into the agent at runtime
 		if len(req.ResolvedMCPServers) > 0 {
-			if err := r.writeResolvedMCPServerConfig(req.RegistryAgent.Name, req.ResolvedMCPServers); err != nil {
+			if err := r.writeResolvedMCPServerConfig(req.RegistryAgent.Name, req.RegistryAgent.Version, req.ResolvedMCPServers); err != nil {
 				// Log error but don't fail deployment
 				fmt.Printf("Error: Failed to write MCP server config for agent %s: %v\n", req.RegistryAgent.Name, err)
+			}
+		} else {
+			// No registry-type MCP servers, we clean up the resolved MCP server config in case any previous one exists.
+			if err := r.cleanupResolvedMCPServerConfig(req.RegistryAgent.Name, req.RegistryAgent.Version); err != nil {
+				return fmt.Errorf("failed to cleanup resolved MCP server config: %w", err)
 			}
 		}
 	}
@@ -154,8 +160,9 @@ func (r *agentRegistryRuntime) ensureLocalRuntime(
 
 // writeResolvedMCPServerConfig writes resolved MCP server configuration to a JSON file that matches the agent's framework's MCP format.
 // This enables registry-run agents to use registry-typed MCP servers at runtime.
+// Similar to writeResolvedMCPServerConfig in cli/agent/run.go
 // TODO: If we add support for more agent languages/frameworks, expand this to work with those formats.
-func (r *agentRegistryRuntime) writeResolvedMCPServerConfig(agentName string, resolvedServers []*registry.MCPServerRunRequest) error {
+func (r *agentRegistryRuntime) writeResolvedMCPServerConfig(agentName, version string, resolvedServers []*registry.MCPServerRunRequest) error {
 	// Convert resolved servers to common.PythonMCPServer format
 	var mcpServers []common.PythonMCPServer
 
@@ -204,9 +211,24 @@ func (r *agentRegistryRuntime) writeResolvedMCPServerConfig(agentName string, re
 		mcpServers = append(mcpServers, pythonServer)
 	}
 
-	// Write to JSON file with agent-specific name
-	// Each agent container mounts /config, so we use agent name to avoid conflicts
-	configPath := filepath.Join(r.runtimeDir, fmt.Sprintf("mcp-servers-%s.json", agentName))
+	// Determine config directory path based on whether version is provided
+	// Runtime agents should always have a version, but handle empty gracefully
+	var configDir string
+	if version != "" {
+		// Registry runs: use version-specific path {agentName}/{version}/
+		sanitizedVersion := utils.SanitizeVersion(version)
+		configDir = filepath.Join(r.runtimeDir, agentName, sanitizedVersion)
+	} else {
+		// Fallback for edge case (shouldn't happen for runtime agents)
+		configDir = filepath.Join(r.runtimeDir, agentName)
+	}
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("failed to create agent config directory: %w", err)
+	}
+
+	// Write to JSON file at {agentName}/{version}/mcp-servers.json
+	// The agent container will mount this directory to /config, so the file will be at /config/mcp-servers.json
+	configPath := filepath.Join(configDir, "mcp-servers.json")
 	configData, err := json.MarshalIndent(mcpServers, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal MCP server config: %w", err)
@@ -217,7 +239,30 @@ func (r *agentRegistryRuntime) writeResolvedMCPServerConfig(agentName string, re
 	}
 
 	if r.verbose {
-		fmt.Printf("Wrote MCP server config for agent %s to %s\n", agentName, configPath)
+		fmt.Printf("Wrote MCP server config for agent %s version %s to %s\n", agentName, version, configPath)
+	}
+
+	return nil
+}
+
+// cleanupResolvedMCPServerConfig cleans up the resolved MCP server config directory.
+// Used in the case that no registry-type MCP servers are present to ensure there is no previously-existing config.
+func (r *agentRegistryRuntime) cleanupResolvedMCPServerConfig(agentName, version string) error {
+	var configDir string
+	if version != "" {
+		sanitizedVersion := utils.SanitizeVersion(version)
+		configDir = filepath.Join(r.runtimeDir, agentName, sanitizedVersion)
+	} else {
+		configDir = filepath.Join(r.runtimeDir, agentName)
+	}
+
+	configPath := filepath.Join(configDir, "mcp-servers.json")
+	if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove MCP server config file: %w", err)
+	}
+
+	if r.verbose {
+		fmt.Printf("Cleaned up resolved MCP server config for agent %s version %s\n", agentName, version)
 	}
 
 	return nil
