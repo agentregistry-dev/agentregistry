@@ -69,7 +69,6 @@ func (t *agentGatewayTranslator) TranslateRuntimeConfig(
 		}
 
 		serviceConfig, err := t.translateAgentToServiceConfig(agent)
-		fmt.Printf("service config for agent %s: %v", agent.Name, serviceConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to translate Agent %s to service config: %w", agent.Name, err)
 		}
