@@ -40,6 +40,7 @@ var rootCmd = &cobra.Command{
 		mcp.SetAPIClient(APIClient)
 		agent.SetAPIClient(APIClient)
 		skill.SetAPIClient(APIClient)
+		cli.SetAPIClient(APIClient)
 		return nil
 	},
 }
@@ -61,7 +62,7 @@ func init() {
 	rootCmd.AddCommand(agent.AgentCmd)
 	rootCmd.AddCommand(skill.SkillCmd)
 	rootCmd.AddCommand(configure.ConfigureCmd)
-	rootCmd.AddCommand(cli.VersionCmd(APIClient))
+	rootCmd.AddCommand(cli.VersionCmd)
 	rootCmd.AddCommand(cli.ImportCmd)
 	rootCmd.AddCommand(cli.ExportCmd)
 }
