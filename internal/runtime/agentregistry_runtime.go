@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
 
@@ -63,6 +64,19 @@ func (r *agentRegistryRuntime) ReconcileAll(
 			return fmt.Errorf("translate agent %s: %w", req.RegistryAgent.Name, err)
 		}
 		desiredState.Agents = append(desiredState.Agents, agent)
+
+		serversForConfig := pythonServersFromServerRunRequests(req.ResolvedMCPServers)
+		if err := common.RefreshMCPConfig(
+			&common.MCPConfigTarget{
+				BaseDir:   r.runtimeDir,
+				AgentName: req.RegistryAgent.Name,
+				Version:   req.RegistryAgent.Version,
+			},
+			serversForConfig,
+			r.verbose,
+		); err != nil {
+			return fmt.Errorf("failed to refresh resolved MCP server config for agent %s: %w", req.RegistryAgent.Name, err)
+		}
 	}
 
 	runtimeCfg, err := r.runtimeTranslator.TranslateRuntimeConfig(ctx, desiredState)
@@ -135,8 +149,52 @@ func (r *agentRegistryRuntime) ensureLocalRuntime(
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to start docker compose: %w", err)
 	}
-
-	fmt.Println("Docker containers started")
-
 	return nil
+}
+
+// pythonServersFromServerRunRequests converts server run requests into Python MCP server structs.
+func pythonServersFromServerRunRequests(requests []*registry.MCPServerRunRequest) []common.PythonMCPServer {
+	if len(requests) == 0 {
+		return nil
+	}
+
+	var mcpServers []common.PythonMCPServer
+	for _, serverReq := range requests {
+		server := serverReq.RegistryServer
+		// Skip servers with no remotes or packages
+		if len(server.Remotes) == 0 && len(server.Packages) == 0 {
+			continue
+		}
+
+		pythonServer := common.PythonMCPServer{
+			Name: server.Name,
+		}
+
+		useRemote := len(server.Remotes) > 0 && (serverReq.PreferRemote || len(server.Packages) == 0)
+		if useRemote {
+			remote := server.Remotes[0]
+			pythonServer.Type = "remote"
+			pythonServer.URL = remote.URL
+
+			if len(remote.Headers) > 0 || len(serverReq.HeaderValues) > 0 {
+				headers := make(map[string]string)
+				for _, h := range remote.Headers {
+					headers[h.Name] = h.Value
+				}
+				for k, v := range serverReq.HeaderValues {
+					headers[k] = v
+				}
+				if len(headers) > 0 {
+					pythonServer.Headers = headers
+				}
+			}
+		} else {
+			pythonServer.Type = "command"
+			// For command type, Python derives URL as http://{server_name}:3000/mcp
+		}
+
+		mcpServers = append(mcpServers, pythonServer)
+	}
+
+	return mcpServers
 }

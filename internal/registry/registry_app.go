@@ -21,9 +21,15 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/importer"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
-func App(_ context.Context) error {
+func App(_ context.Context, opts ...types.AppOptions) error {
+	var options types.AppOptions
+	if len(opts) > 0 {
+		options = opts[0]
+	}
 	cfg := config.NewConfig()
 
 	// Create a context with timeout for PostgreSQL connection
@@ -45,7 +51,18 @@ func App(_ context.Context) error {
 		}
 	}()
 
-	registryService := service.NewRegistryService(db, cfg)
+	baseRegistryService := service.NewRegistryService(db, cfg)
+
+	var registryService service.RegistryService
+	if options.ServiceFactory != nil {
+		registryService = options.ServiceFactory(baseRegistryService)
+	} else {
+		registryService = baseRegistryService
+	}
+
+	if options.OnServiceCreated != nil {
+		options.OnServiceCreated(registryService)
+	}
 
 	// Import builtin seed data unless it is disabled
 	if !cfg.DisableBuiltinSeed {
@@ -108,7 +125,18 @@ func App(_ context.Context) error {
 	}
 
 	// Initialize HTTP server
-	server := api.NewServer(cfg, registryService, metrics, versionInfo)
+	baseServer := api.NewServer(cfg, registryService, metrics, versionInfo)
+
+	var server types.Server
+	if options.HTTPServerFactory != nil {
+		server = options.HTTPServerFactory(baseServer)
+	} else {
+		server = baseServer
+	}
+
+	if options.OnHTTPServerCreated != nil {
+		options.OnHTTPServerCreated(server)
+	}
 
 	// Start server in a goroutine so it doesn't block signal handling
 	go func() {

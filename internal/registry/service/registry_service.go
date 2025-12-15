@@ -2,14 +2,21 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	models "github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/types"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/dockercompose"
@@ -448,6 +455,13 @@ func (s *registryServiceImpl) UnpublishServer(ctx context.Context, serverName, v
 	})
 }
 
+// DeleteServer permanently removes a server version from the registry
+func (s *registryServiceImpl) DeleteServer(ctx context.Context, serverName, version string) error {
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		return s.db.DeleteServer(txCtx, tx, serverName, version)
+	})
+}
+
 // validateUpdateRequest validates an update request with optional registry validation skipping
 func (s *registryServiceImpl) validateUpdateRequest(ctx context.Context, req apiv0.ServerJSON, skipRegistryValidation bool) error {
 	// Always validate the server JSON structure
@@ -599,6 +613,13 @@ func (s *registryServiceImpl) PublishAgent(ctx context.Context, agentName, versi
 func (s *registryServiceImpl) UnpublishAgent(ctx context.Context, agentName, version string) error {
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
 		return s.db.UnpublishAgent(txCtx, tx, agentName, version)
+	})
+}
+
+// DeleteAgent permanently removes an agent version from the registry
+func (s *registryServiceImpl) DeleteAgent(ctx context.Context, agentName, version string) error {
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		return s.db.DeleteAgent(txCtx, tx, agentName, version)
 	})
 }
 
@@ -779,8 +800,6 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 				continue
 			}
 
-			fmt.Printf("Agent image %s\n", depAgent.Agent.Image)
-
 			depEnvValues := make(map[string]string)
 			for k, v := range dep.Config {
 				depEnvValues[k] = v
@@ -804,9 +823,141 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 		s.cfg.Verbose,
 	)
 
+	// Resolve registry-type MCP servers from agent manifests to add them to serverRunRequests
+	for _, agentReq := range agentRunRequests {
+		resolvedServers, err := s.resolveAgentManifestMCPServers(ctx, &agentReq.RegistryAgent.AgentManifest)
+		if err != nil {
+			return fmt.Errorf("failed to resolve MCP servers for agent %s: %w", agentReq.RegistryAgent.Name, err)
+		}
+
+		// Store resolved mcp servers so they can be written to the agent mcp server injection config
+		agentReq.ResolvedMCPServers = resolvedServers
+		// Add resolved servers to serverRunRequests so they get deployed
+		serverRunRequests = append(serverRunRequests, resolvedServers...)
+		if s.cfg.Verbose && len(resolvedServers) > 0 {
+			log.Printf("Resolved %d MCP server(s) of type 'registry' for agent %s", len(resolvedServers), agentReq.RegistryAgent.Name)
+		}
+	}
+
 	if err := agentRuntime.ReconcileAll(ctx, serverRunRequests, agentRunRequests); err != nil {
 		return fmt.Errorf("failed reconciliation: %w", err)
 	}
 
 	return nil
+}
+
+// resolveAgentManifestMCPServers extracts and resolves registry-type MCP servers from an agent manifest
+// This follows the same logic as the CLI-side resolveRegistryServer
+// TODO: Should we also be resolving the other types (i.e. command)? I didn't see my command server configured in the agent-gateway yaml, unsure if expected or a bug.
+// cat /tmp/arctl-runtime/agent-gateway.yaml only had an mcp route for the registry-resolved (since we added it to the run requests).
+func (s *registryServiceImpl) resolveAgentManifestMCPServers(ctx context.Context, manifest *common.AgentManifest) ([]*registry.MCPServerRunRequest, error) {
+	var resolvedServers []*registry.MCPServerRunRequest
+
+	for _, mcpServer := range manifest.McpServers {
+		// Only process registry-type servers (non-registry servers are baked into the image)
+		if mcpServer.Type != "registry" {
+			continue
+		}
+
+		// Determine registry URL
+		registryURL := mcpServer.RegistryURL
+		if registryURL == "" {
+			registryURL = "http://127.0.0.1:12121"
+		}
+
+		version := mcpServer.RegistryServerVersion
+		if version == "" {
+			version = "latest"
+		}
+
+		serverEntry, err := fetchServerFromRegistry(registryURL, mcpServer.RegistryServerName, version)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch server %q from registry %s: %w", mcpServer.RegistryServerName, registryURL, err)
+		}
+
+		// Convert registry.ServerSpec to apiv0.ServerJSON
+		serverJSON := convertServerSpecToServerJSON(&serverEntry.Server)
+
+		// Create MCPServerRunRequest so that this resolved server is ran/deployed
+		resolvedServers = append(resolvedServers, &registry.MCPServerRunRequest{
+			RegistryServer: serverJSON,
+			PreferRemote:   mcpServer.RegistryServerPreferRemote,
+			EnvValues:      make(map[string]string),
+			ArgValues:      make(map[string]string),
+			HeaderValues:   make(map[string]string),
+		})
+	}
+
+	return resolvedServers, nil
+}
+
+// fetchServerFromRegistry fetches a server from a registry via HTTP
+func fetchServerFromRegistry(baseURL string, name string, version string) (*types.ServerEntry, error) {
+	// Construct the endpoint: /v0/servers/{serverName}/versions/{version}
+	baseURL = strings.TrimSuffix(baseURL, "/")
+	if !strings.HasSuffix(baseURL, "/v0/servers") {
+		baseURL = baseURL + "/v0/servers"
+	}
+
+	if version == "" {
+		version = "latest"
+	}
+
+	encodedName := url.PathEscape(name)
+	fetchURL := fmt.Sprintf("%s/%s/versions/%s", baseURL, encodedName, version)
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+	resp, err := client.Get(fetchURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch server by name: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(body))
+	}
+
+	var registryResp types.RegistryResponse
+	if err := json.NewDecoder(resp.Body).Decode(&registryResp); err != nil {
+		return nil, fmt.Errorf("failed to decode server list response: %w", err)
+	}
+
+	if len(registryResp.Servers) != 1 {
+		return nil, fmt.Errorf("expected 1 server, got %d: %s with version %s", len(registryResp.Servers), name, version)
+	}
+
+	return &registryResp.Servers[0], nil
+}
+
+// convertServerSpecToServerJSON converts a types.ServerSpec to apiv0.ServerJSON
+func convertServerSpecToServerJSON(spec *types.ServerSpec) *apiv0.ServerJSON {
+	// Convert Repository - apiv0.ServerJSON uses model.Repository
+	var repo *model.Repository
+	if spec.Repository.URL != "" || spec.Repository.Source != "" {
+		repo = &model.Repository{
+			URL:    spec.Repository.URL,
+			Source: spec.Repository.Source, // Source is a string in model.Repository
+		}
+	}
+
+	return &apiv0.ServerJSON{
+		// ServerSpec doesn't include schema
+		// TODO(infocus7): Should we use model.CurrentSchemaURL? Or should we return the schema from the ServerEntry?
+		// In raw JSON, it's "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json", so would maybe need to parse it.
+		Schema:      "",
+		Name:        spec.Name,
+		Title:       spec.Title,
+		Description: spec.Description,
+		Version:     spec.Version,
+		WebsiteURL:  spec.WebsiteURL,
+		Repository:  repo,
+		Packages:    spec.Packages,
+		Remotes:     spec.Remotes,
+		// ServerSpec doesn't include meta
+		Icons: nil,
+		Meta:  nil,
+	}
 }

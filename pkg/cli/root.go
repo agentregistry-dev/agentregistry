@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/configure"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
@@ -38,6 +40,7 @@ var rootCmd = &cobra.Command{
 		mcp.SetAPIClient(APIClient)
 		agent.SetAPIClient(APIClient)
 		skill.SetAPIClient(APIClient)
+		cli.SetAPIClient(APIClient)
 		return nil
 	},
 }
@@ -58,4 +61,12 @@ func init() {
 	rootCmd.AddCommand(mcp.McpCmd)
 	rootCmd.AddCommand(agent.AgentCmd)
 	rootCmd.AddCommand(skill.SkillCmd)
+	rootCmd.AddCommand(configure.ConfigureCmd)
+	rootCmd.AddCommand(cli.VersionCmd)
+	rootCmd.AddCommand(cli.ImportCmd)
+	rootCmd.AddCommand(cli.ExportCmd)
+}
+
+func Root() *cobra.Command {
+	return rootCmd
 }

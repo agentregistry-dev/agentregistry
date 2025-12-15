@@ -66,7 +66,18 @@ type Server struct {
 	config   *config.Config
 	registry service.RegistryService
 	humaAPI  huma.API
+	mux      *http.ServeMux
 	server   *http.Server
+}
+
+// HumaAPI returns the Huma API instance, allowing registration of new routes
+func (s *Server) HumaAPI() huma.API {
+	return s.humaAPI
+}
+
+// Mux returns the HTTP ServeMux, allowing registration of custom HTTP handlers
+func (s *Server) Mux() *http.ServeMux {
+	return s.mux
 }
 
 // NewServer creates a new HTTP server
@@ -109,6 +120,7 @@ func NewServer(cfg *config.Config, registryService service.RegistryService, metr
 		config:   cfg,
 		registry: registryService,
 		humaAPI:  api,
+		mux:      mux,
 		server: &http.Server{
 			Addr:              cfg.ServerAddress,
 			Handler:           handler,

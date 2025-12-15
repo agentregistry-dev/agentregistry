@@ -139,6 +139,35 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		return &Response[agentmodels.AgentResponse]{Body: *agentResp}, nil
 	})
 
+	huma.Register(api, huma.Operation{
+		OperationID: "delete-agent-version" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		Method:      http.MethodDelete,
+		Path:        pathPrefix + "/agents/{agentName}/versions/{version}",
+		Summary:     "Delete an agent version (admin)",
+		Description: "Permanently delete a specific agent version from the registry. Admin only.",
+		Tags:        tags,
+	}, func(ctx context.Context, input *AgentVersionDetailInput) (*Response[EmptyResponse], error) {
+		agentName, err := url.PathUnescape(input.AgentName)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid agent name encoding", err)
+		}
+		version, err := url.PathUnescape(input.Version)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid version encoding", err)
+		}
+
+		if err := registry.DeleteAgent(ctx, agentName, version); err != nil {
+			if errors.Is(err, database.ErrNotFound) {
+				return nil, huma.Error404NotFound("Agent not found")
+			}
+			return nil, huma.Error500InternalServerError("Failed to delete agent", err)
+		}
+
+		return &Response[EmptyResponse]{
+			Body: EmptyResponse{Message: "Agent deleted successfully"},
+		}, nil
+	})
+
 	// Get all versions for an agent
 	huma.Register(api, huma.Operation{
 		OperationID: "get-agent-versions" + strings.ReplaceAll(pathPrefix, "/", "-"),
@@ -201,6 +230,19 @@ func RegisterAgentsCreateEndpoint(api huma.API, pathPrefix string, registry serv
 		Path:        pathPrefix + "/agents/publish",
 		Summary:     "Create/update Agentic agent",
 		Description: "Create a new Agentic agent in the registry or update an existing one. By default, agents are created as unpublished (published=false).",
+		Tags:        []string{"agents", "publish"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, func(ctx context.Context, input *CreateAgentInput) (*Response[agentmodels.AgentResponse], error) {
+		return createAgentHandler(ctx, input, registry)
+	})
+
+	// Also register a dedicated /agents/push endpoint for "push" operations that create an unpublished agent.
+	huma.Register(api, huma.Operation{
+		OperationID: "push-agent" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		Method:      http.MethodPost,
+		Path:        pathPrefix + "/agents/push",
+		Summary:     "Push Agentic agent (create unpublished)",
+		Description: "Create a new Agentic agent in the registry as an unpublished entry (published=false).",
 		Tags:        []string{"agents", "publish"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, func(ctx context.Context, input *CreateAgentInput) (*Response[agentmodels.AgentResponse], error) {

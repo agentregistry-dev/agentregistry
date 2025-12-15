@@ -20,7 +20,7 @@ var (
 	exportReadmeOutput string
 )
 
-var exportCmd = &cobra.Command{
+var ExportCmd = &cobra.Command{
 	Use:    "export",
 	Hidden: true,
 	Short:  "Export servers from the registry database",
@@ -67,8 +67,7 @@ var exportCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(exportCmd)
-	exportCmd.Flags().StringVar(&exportOutput, "output", "", "Destination seed file path (required)")
-	exportCmd.Flags().StringVar(&exportReadmeOutput, "readme-output", "", "Optional README seed output path")
-	_ = exportCmd.MarkFlagRequired("output")
+	ExportCmd.Flags().StringVar(&exportOutput, "output", "", "Destination seed file path (required)")
+	ExportCmd.Flags().StringVar(&exportReadmeOutput, "readme-output", "", "Optional README seed output path")
+	_ = ExportCmd.MarkFlagRequired("output")
 }

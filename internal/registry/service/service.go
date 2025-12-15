@@ -37,6 +37,8 @@ type RegistryService interface {
 	PublishServer(ctx context.Context, serverName, version string) error
 	// UnpublishServer marks a server as unpublished
 	UnpublishServer(ctx context.Context, serverName, version string) error
+	// DeleteServer permanently removes a server version from the registry
+	DeleteServer(ctx context.Context, serverName, version string) error
 
 	// Agents APIs
 	// ListAgents retrieve all agents with optional filtering
@@ -53,6 +55,8 @@ type RegistryService interface {
 	PublishAgent(ctx context.Context, agentName, version string) error
 	// UnpublishAgent marks an agent as unpublished
 	UnpublishAgent(ctx context.Context, agentName, version string) error
+	// DeleteAgent permanently removes an agent version from the registry
+	DeleteAgent(ctx context.Context, agentName, version string) error
 	// Skills APIs
 	// ListSkills retrieve all skills with optional filtering
 	ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error)

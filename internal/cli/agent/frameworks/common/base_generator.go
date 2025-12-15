@@ -13,6 +13,7 @@ import (
 // AgentConfig captures the data required to render an agent project from templates.
 type AgentConfig struct {
 	Name        string
+	Version     string
 	Description string
 	Image       string
 	Directory   string

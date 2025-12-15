@@ -66,6 +66,8 @@ type AgentFilter struct {
 
 // Database defines the interface for database operations
 type Database interface {
+	// DeleteServer permanently removes a server version from the database
+	DeleteServer(ctx context.Context, tx pgx.Tx, serverName, version string) error
 	// CreateServer inserts a new server version with official metadata
 	CreateServer(ctx context.Context, tx pgx.Tx, serverJSON *apiv0.ServerJSON, officialMeta *apiv0.RegistryExtensions) (*apiv0.ServerResponse, error)
 	// UpdateServer updates an existing server record
@@ -137,6 +139,8 @@ type Database interface {
 	UnpublishAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error
 	// IsAgentPublished checks if an agent is published
 	IsAgentPublished(ctx context.Context, tx pgx.Tx, agentName, version string) (bool, error)
+	// DeleteAgent permanently removes an agent version from the database
+	DeleteAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error
 
 	// Skills API
 	// CreateSkill inserts a new skill version with official metadata

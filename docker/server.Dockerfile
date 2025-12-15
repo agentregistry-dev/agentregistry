@@ -24,6 +24,7 @@ RUN go mod download && go mod verify
 
 COPY cmd cmd
 COPY internal internal
+COPY pkg pkg
 
 COPY --from=ui-builder /app/internal/registry/api/ui/dist /app/internal/registry/api/ui/dist
 

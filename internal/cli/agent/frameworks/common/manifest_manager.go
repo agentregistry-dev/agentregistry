@@ -27,6 +27,7 @@ type AgentManifest struct {
 
 // McpServerType represents a single MCP server configuration.
 type McpServerType struct {
+	// MCP Server Type -- remote, command, registry
 	Type    string            `yaml:"type" json:"type"`
 	Name    string            `yaml:"name" json:"name"`
 	Image   string            `yaml:"image,omitempty" json:"image,omitempty"`
@@ -36,6 +37,11 @@ type McpServerType struct {
 	Env     []string          `yaml:"env,omitempty" json:"env,omitempty"`
 	URL     string            `yaml:"url,omitempty" json:"url,omitempty"`
 	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`
+	// Registry MCP server fields -- these are translated into the appropiate fields above when the agent is ran or deployed
+	RegistryURL                string `yaml:"registryURL,omitempty" json:"registryURL,omitempty"`
+	RegistryServerName         string `yaml:"registryServerName,omitempty" json:"registryServerName,omitempty"`
+	RegistryServerVersion      string `yaml:"registryServerVersion,omitempty" json:"registryServerVersion,omitempty"`
+	RegistryServerPreferRemote bool   `yaml:"registryServerPreferRemote,omitempty" json:"registryServerPreferRemote,omitempty"`
 }
 
 // Manager handles loading and saving of agent manifests.
@@ -135,6 +141,13 @@ func (m *Manager) Validate(manifest *AgentManifest) error {
 		case "command":
 			if srv.Command == "" && srv.Image == "" && srv.Build == "" {
 				return fmt.Errorf("mcpServers[%d]: at least one of command, image, or build is required for type 'command'", i)
+			}
+		case "registry":
+			if srv.RegistryURL == "" {
+				return fmt.Errorf("mcpServers[%d]: registryURL is required for type 'registry'", i)
+			}
+			if srv.RegistryServerName == "" {
+				return fmt.Errorf("mcpServers[%d]: registryServerName is required for type 'registry'", i)
 			}
 		default:
 			return fmt.Errorf("mcpServers[%d]: unsupported type '%s'", i, srv.Type)

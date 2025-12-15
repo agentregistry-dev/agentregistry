@@ -7,10 +7,11 @@ import (
 	"errors"
 	"fmt"
 
+	"log"
+
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
-	"log"
 )
 
 //go:embed seed.json

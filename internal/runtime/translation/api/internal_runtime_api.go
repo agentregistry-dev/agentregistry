@@ -9,6 +9,7 @@ type DesiredState struct {
 // Agent represents a single Agent configuration
 type Agent struct {
 	Name       string          `json:"name"`
+	Version    string          `json:"version"`
 	Deployment AgentDeployment `json:"deployment"`
 	// TODO: We'll need references to MCPServers here (or in AgentDeployment) as well
 }

@@ -88,9 +88,7 @@ func runUnpublish(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to unpublish skill: %w", err)
 	}
 
-	fmt.Printf("✓ Successfully unpublished %s version %s\n", skillName, unpublishVersion)
-	fmt.Println("\nThe skill has been hidden from public listings.")
-	fmt.Println("To re-publish it, use: arctl skill publish")
+	fmt.Printf("Skill '%s' version %s unpublished successfully\n", skillName, unpublishVersion)
 
 	return nil
 }

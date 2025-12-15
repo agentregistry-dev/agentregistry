@@ -3,7 +3,6 @@ package client
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -403,6 +402,7 @@ func (c *Client) GetAgentByName(name string) (*models.AgentResponse, error) {
 	return &resp, nil
 }
 
+// GetAgentByNameAndVersion returns a specific version of an agent
 func (c *Client) GetAgentByNameAndVersion(name, version string) (*models.AgentResponse, error) {
 	encName := url.PathEscape(name)
 	encVersion := url.PathEscape(version)
@@ -412,38 +412,125 @@ func (c *Client) GetAgentByNameAndVersion(name, version string) (*models.AgentRe
 	}
 	var resp models.AgentResponse
 	if err := c.doJSON(req, &resp); err != nil {
+		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("failed to get agent by name and version: %w", err)
 	}
 	return &resp, nil
 }
 
-// PublishSkill publishes a skill to the registry
-func (c *Client) PublishSkill(skill *models.SkillJSON) (*models.SkillResponse, error) {
+// PushSkill creates a skill entry in the registry without publishing (published=false)
+func (c *Client) PushSkill(skill *models.SkillJSON) (*models.SkillResponse, error) {
 	var resp models.SkillResponse
 	err := c.doJsonRequest(http.MethodPost, "/skills/publish", skill, &resp)
 	return &resp, err
 }
 
-// PublishAgent publishes an agent to the registry
-func (c *Client) PublishAgent(agent *models.AgentJSON) (*models.AgentResponse, error) {
-	var resp models.AgentResponse
-	err := c.doJsonRequest(http.MethodPost, "/agents/publish", agent, &resp)
-	return &resp, err
+// PublishSkillStatus marks an existing skill as published (sets published=true)
+func (c *Client) PublishSkillStatus(name, version string) error {
+	encName := url.PathEscape(name)
+	encVersion := url.PathEscape(version)
+
+	req, err := c.newAdminRequest(http.MethodPost, "/admin/v0/skills/"+encName+"/versions/"+encVersion+"/publish")
+	if err != nil {
+		return err
+	}
+	return c.doJSON(req, nil)
 }
 
-// PublishMCPServer publishes an mcp server to the registry
-func (c *Client) PublishMCPServer(server *v0.ServerJSON) (*v0.ServerResponse, error) {
-	encName := url.PathEscape(server.Name)
-	encVersion := url.PathEscape(server.Version)
-
-	req, err := c.newAdminRequest(http.MethodPost, "/admin/v0/servers/"+encName+"/versions/"+encVersion+"/publish")
-	if err != nil {
+// PublishSkill creates a skill entry and marks it as published (published=true)
+func (c *Client) PublishSkill(skill *models.SkillJSON) (*models.SkillResponse, error) {
+	if _, err := c.PushSkill(skill); err != nil {
 		return nil, err
 	}
 
-	// The publish endpoint returns an EmptyResponse, so we need to fetch the server after publishing
-	if err := c.doJSON(req, nil); err != nil {
+	// Then mark it as published
+	if err := c.PublishSkillStatus(skill.Name, skill.Version); err != nil {
+		return nil, fmt.Errorf("failed to publish skill: %w", err)
+	}
+
+	// Fetch the updated skill to return it
+	return c.GetSkillByNameAndVersion(skill.Name, skill.Version)
+}
+
+// PushAgent creates an agent entry in the registry without publishing (published=false)
+func (c *Client) PushAgent(agent *models.AgentJSON) (*models.AgentResponse, error) {
+	var resp models.AgentResponse
+	// Use a dedicated /agents/push public endpoint for push (creates unpublished entry)
+	err := c.doJsonRequest(http.MethodPost, "/agents/push", agent, &resp)
+	return &resp, err
+}
+
+// PublishAgentStatus marks an existing agent as published (sets published=true)
+func (c *Client) PublishAgentStatus(name, version string) error {
+	encName := url.PathEscape(name)
+	encVersion := url.PathEscape(version)
+
+	req, err := c.newAdminRequest(http.MethodPost, "/admin/v0/agents/"+encName+"/versions/"+encVersion+"/publish")
+	if err != nil {
+		return err
+	}
+	return c.doJSON(req, nil)
+}
+
+// UnpublishAgentStatus marks an existing agent as unpublished (sets published=false)
+func (c *Client) UnpublishAgentStatus(name, version string) error {
+	encName := url.PathEscape(name)
+	encVersion := url.PathEscape(version)
+
+	req, err := c.newAdminRequest(http.MethodPost, "/admin/v0/agents/"+encName+"/versions/"+encVersion+"/unpublish")
+	if err != nil {
+		return err
+	}
+	return c.doJSON(req, nil)
+}
+
+// PublishAgent creates an agent entry and marks it as published (published=true)
+func (c *Client) PublishAgent(agent *models.AgentJSON) (*models.AgentResponse, error) {
+	// First create the agent (published=false)
+	if _, err := c.PushAgent(agent); err != nil {
 		return nil, err
+	}
+
+	// Then mark it as published
+	if err := c.PublishAgentStatus(agent.Name, agent.Version); err != nil {
+		return nil, fmt.Errorf("failed to publish agent: %w", err)
+	}
+
+	// Fetch the updated agent to return it
+	return c.GetAgentByNameAndVersion(agent.Name, agent.Version)
+}
+
+// PushMCPServer creates an MCP server entry in the registry without publishing (published=false)
+func (c *Client) PushMCPServer(server *v0.ServerJSON) (*v0.ServerResponse, error) {
+	var resp v0.ServerResponse
+	err := c.doJsonRequest(http.MethodPost, "/servers/push", server, &resp)
+	return &resp, err
+}
+
+// PublishMCPServerStatus marks an existing MCP server as published (sets published=true)
+func (c *Client) PublishMCPServerStatus(name, version string) error {
+	encName := url.PathEscape(name)
+	encVersion := url.PathEscape(version)
+
+	req, err := c.newAdminRequest(http.MethodPost, "/admin/v0/servers/"+encName+"/versions/"+encVersion+"/publish")
+	if err != nil {
+		return err
+	}
+	return c.doJSON(req, nil)
+}
+
+// PublishMCPServer creates an MCP server entry and marks it as published (published=true)
+func (c *Client) PublishMCPServer(server *v0.ServerJSON) (*v0.ServerResponse, error) {
+	// First create the server (published=false)
+	if _, err := c.PushMCPServer(server); err != nil {
+		return nil, err
+	}
+
+	// Then mark it as published
+	if err := c.PublishMCPServerStatus(server.Name, server.Version); err != nil {
+		return nil, fmt.Errorf("failed to publish mcp server: %w", err)
 	}
 
 	// Fetch the published server to return it
@@ -523,16 +610,109 @@ func (c *Client) GetSkillByNameAndVersion(name, version string) (*models.SkillRe
 	return &resp, nil
 }
 
+// GetSkillByNameAndVersionAdmin returns a specific version of a skill (admin endpoint - includes unpublished)
+func (c *Client) GetSkillByNameAndVersionAdmin(name, version string) (*models.SkillResponse, error) {
+	encName := url.PathEscape(name)
+	encVersion := url.PathEscape(version)
+
+	req, err := c.newAdminRequest(http.MethodGet, "/admin/v0/skills/"+encName+"/versions/"+encVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp models.SkillResponse
+	if err := c.doJSON(req, &resp); err != nil {
+		// 404 -> not found returns nil
+		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get skill by name and version: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// GetAgentByNameAndVersionAdmin returns a specific version of an agent (admin endpoint - includes unpublished)
+func (c *Client) GetAgentByNameAndVersionAdmin(name, version string) (*models.AgentResponse, error) {
+	encName := url.PathEscape(name)
+	encVersion := url.PathEscape(version)
+
+	req, err := c.newAdminRequest(http.MethodGet, "/admin/v0/agents/"+encName+"/versions/"+encVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp models.AgentResponse
+	if err := c.doJSON(req, &resp); err != nil {
+		// 404 -> not found returns nil
+		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get agent by name and version: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// DeleteAgent deletes an agent from the registry
+func (c *Client) DeleteAgent(name, version string) error {
+	encName := url.PathEscape(name)
+	encVersion := url.PathEscape(version)
+
+	req, err := c.newAdminRequest(http.MethodDelete, "/admin/v0/agents/"+encName+"/versions/"+encVersion)
+	if err != nil {
+		return err
+	}
+
+	return c.doJSON(req, nil)
+}
+
+// DeleteSkill deletes a skill from the registry
+// Note: This uses DELETE HTTP method. If the endpoint doesn't exist, it will return an error.
+func (c *Client) DeleteSkill(name, version string) error {
+	encName := url.PathEscape(name)
+	encVersion := url.PathEscape(version)
+
+	req, err := c.newAdminRequest(http.MethodDelete, "/admin/v0/skills/"+encName+"/versions/"+encVersion)
+	if err != nil {
+		return err
+	}
+
+	return c.doJSON(req, nil)
+}
+
+// DeleteMCPServer deletes an MCP server from the registry by setting its status to deleted
+func (c *Client) DeleteMCPServer(name, version string) error {
+	encName := url.PathEscape(name)
+	encVersion := url.PathEscape(version)
+
+	req, err := c.newAdminRequest(http.MethodDelete, "/admin/v0/servers/"+encName+"/versions/"+encVersion)
+	if err != nil {
+		return err
+	}
+	return c.doJSON(req, nil)
+}
+
 // Helpers to convert API errors
 func asHTTPStatus(err error) int {
 	if err == nil {
 		return 0
 	}
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) && urlErr.Err != nil {
-		// No direct status available when using http.Client unless we read resp
-		// This helper is best-effort; return 0 (unknown)
-		return 0
+	errStr := err.Error()
+	// Parse error format: "unexpected status: 404 Not Found, ..."
+	// Extract status code from the error message
+	if strings.Contains(errStr, "unexpected status:") {
+		parts := strings.Split(errStr, "unexpected status: ")
+		if len(parts) > 1 {
+			statusPart := strings.Split(parts[1], " ")[0]
+			if code, parseErr := strconv.Atoi(statusPart); parseErr == nil {
+				return code
+			}
+		}
+	}
+	// Also check for "404" or "Not Found" in the error message
+	if strings.Contains(errStr, "404") || strings.Contains(errStr, "Not Found") {
+		return http.StatusNotFound
 	}
 	return 0
 }
@@ -587,7 +767,7 @@ func (c *Client) GetDeployedServerByNameAndVersion(name string, version string) 
 
 	var deployment DeploymentResponse
 	if err := c.doJSON(req, &deployment); err != nil {
-		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "Not Found") {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to get deployment: %w", err)

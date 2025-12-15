@@ -28,13 +28,27 @@ func isServerPublished(serverName, version string) (bool, error) {
 		return false, errors.New("API client not initialized")
 	}
 
-	// Get the server by name and version
-	server, err := apiClient.GetServerByNameAndVersion(serverName, version, true)
+	// Get all versions (admin endpoint) to check published status
+	allVersions, err := apiClient.GetAllServerVersionsAdmin(serverName)
 	if err != nil {
 		return false, err
 	}
 
-	return server != nil, nil
+	// Find the specific version and check if it's published
+	for _, v := range allVersions {
+		if v.Server.Version == version {
+			// Check if published field exists in metadata
+			// Note: The published field is stored in the database but may not be in the response
+			// For now, if we can get it with publishedOnly=true, it's published
+			publishedServer, err := apiClient.GetServerByNameAndVersion(serverName, version, true)
+			if err != nil {
+				return false, err
+			}
+			return publishedServer != nil, nil
+		}
+	}
+
+	return false, nil
 }
 
 // selectServerVersion handles server version selection logic with interactive prompts

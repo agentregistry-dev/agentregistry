@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/agentregistry-dev/agentregistry/internal/registry/types"
 )
 
 func TestNewClient(t *testing.T) {
@@ -30,17 +32,17 @@ func TestValidateRegistry_Success(t *testing.T) {
 			t.Errorf("Expected limit=1, got %s", r.URL.Query().Get("limit"))
 		}
 
-		response := RegistryResponse{
-			Servers: []ServerEntry{
+		response := types.RegistryResponse{
+			Servers: []types.ServerEntry{
 				{
-					Server: ServerSpec{
+					Server: types.ServerSpec{
 						Name:        "io.test/server",
 						Description: "Test server",
 						Version:     "1.0.0",
 					},
 				},
 			},
-			Metadata: RegistryMetadata{
+			Metadata: types.RegistryMetadata{
 				Count:      1,
 				NextCursor: "",
 			},
@@ -115,10 +117,10 @@ func TestValidateRegistry_InvalidURL(t *testing.T) {
 func TestFetchAllServers_SinglePage(t *testing.T) {
 	// Create a test server with a single page of results
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		response := RegistryResponse{
-			Servers: []ServerEntry{
+		response := types.RegistryResponse{
+			Servers: []types.ServerEntry{
 				{
-					Server: ServerSpec{
+					Server: types.ServerSpec{
 						Name:        "io.test/server1",
 						Description: "Test server 1",
 						Version:     "1.0.0",
@@ -127,7 +129,7 @@ func TestFetchAllServers_SinglePage(t *testing.T) {
 					Meta: json.RawMessage(`{"official":{"status":"active"}}`),
 				},
 				{
-					Server: ServerSpec{
+					Server: types.ServerSpec{
 						Name:        "io.test/server2",
 						Description: "Test server 2",
 						Version:     "2.0.0",
@@ -136,7 +138,7 @@ func TestFetchAllServers_SinglePage(t *testing.T) {
 					Meta: json.RawMessage(`{"official":{"status":"active"}}`),
 				},
 			},
-			Metadata: RegistryMetadata{
+			Metadata: types.RegistryMetadata{
 				Count:      2,
 				NextCursor: "",
 			},
@@ -173,15 +175,15 @@ func TestFetchAllServers_MultiplePages(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cursor := r.URL.Query().Get("cursor")
 
-		var response RegistryResponse
+		var response types.RegistryResponse
 
 		switch cursor {
 		case "":
 			// First page
-			response = RegistryResponse{
-				Servers: []ServerEntry{
+			response = types.RegistryResponse{
+				Servers: []types.ServerEntry{
 					{
-						Server: ServerSpec{
+						Server: types.ServerSpec{
 							Name:    "io.test/server1",
 							Version: "1.0.0",
 							Status:  "active",
@@ -189,7 +191,7 @@ func TestFetchAllServers_MultiplePages(t *testing.T) {
 						Meta: json.RawMessage(`{}`),
 					},
 				},
-				Metadata: RegistryMetadata{
+				Metadata: types.RegistryMetadata{
 					Count:      1,
 					NextCursor: "page2",
 				},
@@ -197,10 +199,10 @@ func TestFetchAllServers_MultiplePages(t *testing.T) {
 			pageNumber = 1
 		case "page2":
 			// Second page
-			response = RegistryResponse{
-				Servers: []ServerEntry{
+			response = types.RegistryResponse{
+				Servers: []types.ServerEntry{
 					{
-						Server: ServerSpec{
+						Server: types.ServerSpec{
 							Name:    "io.test/server2",
 							Version: "2.0.0",
 							Status:  "active",
@@ -208,7 +210,7 @@ func TestFetchAllServers_MultiplePages(t *testing.T) {
 						Meta: json.RawMessage(`{}`),
 					},
 				},
-				Metadata: RegistryMetadata{
+				Metadata: types.RegistryMetadata{
 					Count:      1,
 					NextCursor: "page3",
 				},
@@ -216,10 +218,10 @@ func TestFetchAllServers_MultiplePages(t *testing.T) {
 			pageNumber = 2
 		case "page3":
 			// Third page (last)
-			response = RegistryResponse{
-				Servers: []ServerEntry{
+			response = types.RegistryResponse{
+				Servers: []types.ServerEntry{
 					{
-						Server: ServerSpec{
+						Server: types.ServerSpec{
 							Name:    "io.test/server3",
 							Version: "3.0.0",
 							Status:  "active",
@@ -227,7 +229,7 @@ func TestFetchAllServers_MultiplePages(t *testing.T) {
 						Meta: json.RawMessage(`{}`),
 					},
 				},
-				Metadata: RegistryMetadata{
+				Metadata: types.RegistryMetadata{
 					Count:      1,
 					NextCursor: "",
 				},
@@ -262,10 +264,10 @@ func TestFetchAllServers_MultiplePages(t *testing.T) {
 func TestFetchAllServers_FilterInactiveServers(t *testing.T) {
 	// Create a test server with mixed active and inactive servers
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		response := RegistryResponse{
-			Servers: []ServerEntry{
+		response := types.RegistryResponse{
+			Servers: []types.ServerEntry{
 				{
-					Server: ServerSpec{
+					Server: types.ServerSpec{
 						Name:    "io.test/active1",
 						Version: "1.0.0",
 						Status:  "active",
@@ -273,7 +275,7 @@ func TestFetchAllServers_FilterInactiveServers(t *testing.T) {
 					Meta: json.RawMessage(`{}`),
 				},
 				{
-					Server: ServerSpec{
+					Server: types.ServerSpec{
 						Name:    "io.test/inactive",
 						Version: "1.0.0",
 						Status:  "deprecated",
@@ -281,7 +283,7 @@ func TestFetchAllServers_FilterInactiveServers(t *testing.T) {
 					Meta: json.RawMessage(`{}`),
 				},
 				{
-					Server: ServerSpec{
+					Server: types.ServerSpec{
 						Name:    "io.test/active2",
 						Version: "2.0.0",
 						Status:  "active",
@@ -289,7 +291,7 @@ func TestFetchAllServers_FilterInactiveServers(t *testing.T) {
 					Meta: json.RawMessage(`{}`),
 				},
 				{
-					Server: ServerSpec{
+					Server: types.ServerSpec{
 						Name:    "io.test/archived",
 						Version: "1.0.0",
 						Status:  "archived",
@@ -297,7 +299,7 @@ func TestFetchAllServers_FilterInactiveServers(t *testing.T) {
 					Meta: json.RawMessage(`{}`),
 				},
 			},
-			Metadata: RegistryMetadata{
+			Metadata: types.RegistryMetadata{
 				Count:      4,
 				NextCursor: "",
 			},
@@ -333,10 +335,10 @@ func TestFetchAllServers_FilterInactiveServers(t *testing.T) {
 func TestFetchAllServers_EmptyStatus(t *testing.T) {
 	// Servers with empty status should be treated as active
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		response := RegistryResponse{
-			Servers: []ServerEntry{
+		response := types.RegistryResponse{
+			Servers: []types.ServerEntry{
 				{
-					Server: ServerSpec{
+					Server: types.ServerSpec{
 						Name:    "io.test/no-status",
 						Version: "1.0.0",
 						Status:  "", // Empty status
@@ -344,7 +346,7 @@ func TestFetchAllServers_EmptyStatus(t *testing.T) {
 					Meta: json.RawMessage(`{}`),
 				},
 			},
-			Metadata: RegistryMetadata{
+			Metadata: types.RegistryMetadata{
 				Count:      1,
 				NextCursor: "",
 			},
@@ -379,10 +381,10 @@ func TestFetchAllServers_HTTPError(t *testing.T) {
 
 		if pageCount == 1 {
 			// First page succeeds
-			response := RegistryResponse{
-				Servers: []ServerEntry{
+			response := types.RegistryResponse{
+				Servers: []types.ServerEntry{
 					{
-						Server: ServerSpec{
+						Server: types.ServerSpec{
 							Name:    "io.test/server1",
 							Version: "1.0.0",
 							Status:  "active",
@@ -390,7 +392,7 @@ func TestFetchAllServers_HTTPError(t *testing.T) {
 						Meta: json.RawMessage(`{}`),
 					},
 				},
-				Metadata: RegistryMetadata{
+				Metadata: types.RegistryMetadata{
 					Count:      1,
 					NextCursor: "page2",
 				},
@@ -436,10 +438,10 @@ func TestFetchAllServers_InvalidJSON(t *testing.T) {
 func TestFetchAllServers_WithProgressBar(t *testing.T) {
 	// Test that progress bar doesn't cause errors
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		response := RegistryResponse{
-			Servers: []ServerEntry{
+		response := types.RegistryResponse{
+			Servers: []types.ServerEntry{
 				{
-					Server: ServerSpec{
+					Server: types.ServerSpec{
 						Name:    "io.test/server1",
 						Version: "1.0.0",
 						Status:  "active",
@@ -447,7 +449,7 @@ func TestFetchAllServers_WithProgressBar(t *testing.T) {
 					Meta: json.RawMessage(`{}`),
 				},
 			},
-			Metadata: RegistryMetadata{
+			Metadata: types.RegistryMetadata{
 				Count:      1,
 				NextCursor: "",
 			},
@@ -475,9 +477,9 @@ func TestFetchAllServers_WithProgressBar(t *testing.T) {
 
 func TestFetchAllServers_EmptyRegistry(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		response := RegistryResponse{
-			Servers: []ServerEntry{},
-			Metadata: RegistryMetadata{
+		response := types.RegistryResponse{
+			Servers: []types.ServerEntry{},
+			Metadata: types.RegistryMetadata{
 				Count:      0,
 				NextCursor: "",
 			},
@@ -511,9 +513,9 @@ func TestFetchAllServers_PaginationLimit(t *testing.T) {
 			t.Errorf("Expected limit=100, got %s", limit)
 		}
 
-		response := RegistryResponse{
-			Servers:  []ServerEntry{},
-			Metadata: RegistryMetadata{Count: 0, NextCursor: ""},
+		response := types.RegistryResponse{
+			Servers:  []types.ServerEntry{},
+			Metadata: types.RegistryMetadata{Count: 0, NextCursor: ""},
 		}
 
 		w.Header().Set("Content-Type", "application/json")

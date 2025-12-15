@@ -28,7 +28,7 @@ var (
 	enrichServerData     bool
 )
 
-var importCmd = &cobra.Command{
+var ImportCmd = &cobra.Command{
 	Use:    "import",
 	Hidden: true,
 	Short:  "Import servers into the registry database",
@@ -94,15 +94,14 @@ var importCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(importCmd)
-	importCmd.Flags().StringVar(&importSource, "source", "", "Seed file path, HTTP URL, or registry /v0/servers URL (required)")
-	importCmd.Flags().BoolVar(&importSkipValidation, "skip-validation", false, "Disable registry validation for this import run")
-	importCmd.Flags().StringArrayVar(&importHeaders, "request-header", nil, "Additional request header in key=value form (repeatable)")
-	importCmd.Flags().DurationVar(&importTimeout, "timeout", 30*time.Second, "HTTP request timeout")
-	importCmd.Flags().StringVar(&importGithubToken, "github-token", "", "GitHub token for higher rate limits when enriching metadata")
-	importCmd.Flags().BoolVar(&importUpdate, "update", false, "Update existing entries if name/version already exists")
-	importCmd.Flags().StringVar(&importReadmeSeed, "readme-seed", "", "Optional README seed file path or URL")
-	importCmd.Flags().StringVar(&importProgressCache, "progress-cache", "", "Optional path to store import progress for resuming interrupted runs")
-	importCmd.Flags().BoolVar(&enrichServerData, "enrich-server-data", false, "Enrich server data during import (may increase import time)")
-	_ = importCmd.MarkFlagRequired("source")
+	ImportCmd.Flags().StringVar(&importSource, "source", "", "Seed file path, HTTP URL, or registry /v0/servers URL (required)")
+	ImportCmd.Flags().BoolVar(&importSkipValidation, "skip-validation", false, "Disable registry validation for this import run")
+	ImportCmd.Flags().StringArrayVar(&importHeaders, "request-header", nil, "Additional request header in key=value form (repeatable)")
+	ImportCmd.Flags().DurationVar(&importTimeout, "timeout", 30*time.Second, "HTTP request timeout")
+	ImportCmd.Flags().StringVar(&importGithubToken, "github-token", "", "GitHub token for higher rate limits when enriching metadata")
+	ImportCmd.Flags().BoolVar(&importUpdate, "update", false, "Update existing entries if name/version already exists")
+	ImportCmd.Flags().StringVar(&importReadmeSeed, "readme-seed", "", "Optional README seed file path or URL")
+	ImportCmd.Flags().StringVar(&importProgressCache, "progress-cache", "", "Optional path to store import progress for resuming interrupted runs")
+	ImportCmd.Flags().BoolVar(&enrichServerData, "enrich-server-data", false, "Enrich server data during import (may increase import time)")
+	_ = ImportCmd.MarkFlagRequired("source")
 }

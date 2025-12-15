@@ -55,7 +55,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to regenerate mcp_tools.py: %w", err)
 	}
 
-	if err := project.RegenerateDockerCompose(projectDir, manifest, verbose); err != nil {
+	if err := project.RegenerateDockerCompose(projectDir, manifest, "", verbose); err != nil {
 		return fmt.Errorf("failed to regenerate docker-compose.yaml: %w", err)
 	}
 
@@ -107,6 +107,8 @@ func validateProjectDir(projectDir string) error {
 	return nil
 }
 
+// buildMCPServers builds Docker images for MCP servers that are defined locally in the agent.yaml.
+// This only builds command-type servers. Remote-type does not need to be built, and registry-type are built at runtime.
 func buildMCPServers(projectDir string, manifest *common.AgentManifest, extraArgs []string) error {
 	if manifest == nil {
 		return nil
