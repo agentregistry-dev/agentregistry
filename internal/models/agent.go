@@ -10,13 +10,13 @@ import (
 // AgentJSON mirrors the ServerJSON shape for now, defined locally
 type AgentJSON struct {
 	common.AgentManifest `json:",inline"`
-	Title                string `json:"title,omitempty"`
-	Version              string `json:"version"`
-	Status               string `json:"status,omitempty"`
-	WebsiteURL           string `json:"websiteUrl,omitempty"`
-	// Repository           *model.Repository  `json:"repository"`
-	Packages []AgentPackageInfo `json:"packages,omitempty"`
-	Remotes  []model.Transport  `json:"remotes,omitempty"`
+	Title                string             `json:"title,omitempty"`
+	Version              string             `json:"version"`
+	Status               string             `json:"status,omitempty"`
+	WebsiteURL           string             `json:"websiteUrl,omitempty"`
+	Repository           *model.Repository  `json:"repository,omitempty" doc:"Optional repository metadata for the agent source code."`
+	Packages             []AgentPackageInfo `json:"packages,omitempty"`
+	Remotes              []model.Transport  `json:"remotes,omitempty"`
 }
 
 type AgentPackageInfo struct {

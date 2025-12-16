@@ -27,6 +27,8 @@ import {
   Box,
   Clock,
   Upload,
+  Github,
+  ExternalLink,
 } from "lucide-react"
 
 interface AgentDetailProps {
@@ -90,16 +92,16 @@ export function AgentDetail({ agent, onClose, onPublish }: AgentDetailProps) {
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2 flex-wrap">
-                <h1 className="text-3xl font-bold">{agentData.Name}</h1>
+                <h1 className="text-3xl font-bold">{agentData.name}</h1>
                 <Badge variant="outline" className="text-sm">
-                  {agentData.Framework}
+                  {agentData.framework}
                 </Badge>
                 <Badge variant="secondary" className="text-sm">
-                  {agentData.Language}
+                  {agentData.language}
                 </Badge>
               </div>
-              {agentData.Description && (
-                <p className="text-muted-foreground">{agentData.Description}</p>
+              {agentData.description && (
+                <p className="text-muted-foreground">{agentData.description}</p>
               )}
             </div>
           </div>
@@ -168,10 +170,10 @@ export function AgentDetail({ agent, onClose, onPublish }: AgentDetailProps) {
 
           <TabsContent value="overview" className="space-y-4">
             {/* Description */}
-            {agentData.Description && (
+            {agentData.description && (
               <Card className="p-6">
                 <h3 className="text-lg font-semibold mb-4">Description</h3>
-                <p className="text-base">{agentData.Description}</p>
+                <p className="text-base">{agentData.description}</p>
               </Card>
             )}
 
@@ -183,44 +185,98 @@ export function AgentDetail({ agent, onClose, onPublish }: AgentDetailProps) {
                   <Languages className="h-5 w-5 text-muted-foreground" />
                   <div>
                     <p className="text-sm text-muted-foreground">Language</p>
-                    <p className="font-medium">{agentData.Language}</p>
+                    <p className="font-medium">{agentData.language}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <Box className="h-5 w-5 text-muted-foreground" />
                   <div>
                     <p className="text-sm text-muted-foreground">Framework</p>
-                    <p className="font-medium">{agentData.Framework}</p>
+                    <p className="font-medium">{agentData.framework}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <Brain className="h-5 w-5 text-muted-foreground" />
                   <div>
                     <p className="text-sm text-muted-foreground">Model Provider</p>
-                    <p className="font-medium">{agentData.ModelProvider}</p>
+                    <p className="font-medium">{agentData.modelProvider}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <Cpu className="h-5 w-5 text-muted-foreground" />
                   <div>
                     <p className="text-sm text-muted-foreground">Model Name</p>
-                    <p className="font-medium font-mono">{agentData.ModelName}</p>
+                    <p className="font-medium font-mono">{agentData.modelName}</p>
                   </div>
                 </div>
               </div>
             </Card>
+
+            {/* Repository */}
+            {agentData.repository?.url && (
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Github className="h-5 w-5" />
+                  Repository
+                </h3>
+                <a
+                  href={agentData.repository.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-primary hover:underline break-all"
+                >
+                  <span>{agentData.repository.url}</span>
+                  <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                </a>
+                {agentData.repository.source && (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Source: <span className="font-medium">{agentData.repository.source}</span>
+                  </p>
+                )}
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="technical" className="space-y-4">
+            {/* Repository */}
+            {agentData.repository?.url && (
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Github className="h-5 w-5" />
+                  Source Repository
+                </h3>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">URL</p>
+                    <a
+                      href={agentData.repository.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-primary hover:underline break-all"
+                    >
+                      <span className="font-mono text-sm">{agentData.repository.url}</span>
+                      <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                    </a>
+                  </div>
+                  {agentData.repository.source && (
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Source</p>
+                      <p className="font-medium">{agentData.repository.source}</p>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
+
             {/* Container Image */}
-            {agentData.Image && (
+            {agentData.image && (
               <Card className="p-6">
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                   <Container className="h-5 w-5" />
                   Container Image
                 </h3>
                 <div className="bg-muted p-4 rounded-lg">
-                  <code className="text-sm break-all">{agentData.Image}</code>
+                  <code className="text-sm break-all">{agentData.image}</code>
                 </div>
               </Card>
             )}
@@ -229,10 +285,10 @@ export function AgentDetail({ agent, onClose, onPublish }: AgentDetailProps) {
             <Card className="p-6">
               <h3 className="text-lg font-semibold mb-4">Timestamps</h3>
               <div className="space-y-3">
-                {agentData.UpdatedAt && (
+                {agentData.updatedAt && (
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Last Updated (Local)</span>
-                    <span className="font-medium font-mono text-sm">{formatDate(agentData.UpdatedAt)}</span>
+                    <span className="font-medium font-mono text-sm">{formatDate(agentData.updatedAt)}</span>
                   </div>
                 )}
                 {official?.publishedAt && (

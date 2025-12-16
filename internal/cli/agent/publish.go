@@ -7,6 +7,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/kagent-dev/kagent/go/cli/config"
+	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/spf13/cobra"
 )
 
@@ -29,9 +30,11 @@ arctl agent publish my-agent --version latest`,
 }
 
 var publishVersion string
+var githubRepository string
 
 func init() {
 	PublishCmd.Flags().StringVar(&publishVersion, "version", "", "Specify version to publish (when publishing an existing registry agent)")
+	PublishCmd.Flags().StringVar(&githubRepository, "github", "", "Specify the GitHub repository for the agent")
 }
 
 func runPublish(cmd *cobra.Command, args []string) error {
@@ -43,6 +46,7 @@ func runPublish(cmd *cobra.Command, args []string) error {
 		Config: cfg,
 	}
 	publishCfg.Version = publishVersion
+	publishCfg.GitHubRepository = githubRepository
 
 	arg := args[0]
 
@@ -75,9 +79,10 @@ func runPublish(cmd *cobra.Command, args []string) error {
 }
 
 type publishAgentCfg struct {
-	Config     *config.Config
-	ProjectDir string
-	Version    string
+	Config           *config.Config
+	ProjectDir       string
+	Version          string
+	GitHubRepository string
 }
 
 func publishAgent(cfg *publishAgentCfg) error {
@@ -106,6 +111,13 @@ func publishAgent(cfg *publishAgentCfg) error {
 		AgentManifest: *manifest,
 		Version:       version,
 		Status:        "active",
+	}
+
+	if cfg.GitHubRepository != "" {
+		jsn.Repository = &model.Repository{
+			URL:    cfg.GitHubRepository,
+			Source: "github",
+		}
 	}
 
 	_, err = apiClient.PublishAgent(jsn)

@@ -259,11 +259,13 @@ export default function AdminPage() {
     }
   }
 
-  const handlePublishAgent = async (agent: AgentResponse) => {
+  const handlePublishAgent = async (agentResponse: AgentResponse) => {
+    const {agent } = agentResponse;
+
     try {
-      await adminApiClient.publishAgentStatus(agent.agent.Name, agent.agent.version)
+      await adminApiClient.publishAgentStatus(agent.name, agent.version)
       await fetchData() // Refresh data
-      toast.success(`Successfully published ${agent.agent.Name}`)
+      toast.success(`Successfully published ${agent.name}`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to publish agent")
     }
@@ -338,10 +340,10 @@ export default function AdminPage() {
 
       // Filter agents
       const filteredA = agents.filter(
-        (a) =>
-          a.agent.Name?.toLowerCase().includes(query) ||
-          a.agent.ModelProvider?.toLowerCase().includes(query) ||
-          a.agent.Description.toLowerCase().includes(query)
+        ({agent}) =>
+          agent.name?.toLowerCase().includes(query) ||
+          agent.modelProvider?.toLowerCase().includes(query) ||
+          agent.description.toLowerCase().includes(query)
       )
       setFilteredAgents(filteredA)
     } else {
@@ -756,7 +758,7 @@ export default function AdminPage() {
                 <div className="grid gap-4">
                   {filteredAgents.map((agent, index) => (
                     <AgentCard
-                      key={`${agent.agent.Name}-${agent.agent.version}-${index}`}
+                      key={`${agent.agent.name}-${agent.agent.version}-${index}`}
                       agent={agent}
                       onClick={() => setSelectedAgent(agent)}
                       showPublish={true}

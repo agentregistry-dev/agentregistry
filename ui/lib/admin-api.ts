@@ -193,16 +193,20 @@ export interface SkillListResponse {
 
 // Agent types
 export interface AgentJSON {
-  Name: string
-  Image: string
-  Language: string
-  Framework: string
-  ModelProvider: string
-  ModelName: string
-  Description: string
-  UpdatedAt: string
+  name: string
+  image: string
+  language: string
+  framework: string
+  modelProvider: string
+  modelName: string
+  description: string
+  updatedAt: string
   version: string
   status: string
+  repository?: {
+    url: string
+    source: string
+  }
 }
 
 export interface AgentRegistryExtensions {

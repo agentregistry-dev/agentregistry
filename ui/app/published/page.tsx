@@ -164,7 +164,7 @@ export default function PublishedPage() {
         setSkills(prev => prev.filter(s => s.skill.name !== itemToUnpublish.name || s.skill.version !== itemToUnpublish.version))
       } else if (itemToUnpublish.type === 'agent') {
         await adminApiClient.unpublishAgentStatus(itemToUnpublish.name, itemToUnpublish.version)
-        setAgents(prev => prev.filter(a => a.agent.Name !== itemToUnpublish.name || a.agent.version !== itemToUnpublish.version))
+        setAgents(prev => prev.filter(a => a.agent.name !== itemToUnpublish.name || a.agent.version !== itemToUnpublish.version))
       }
       
       setItemToUnpublish(null)
@@ -449,14 +449,14 @@ export default function PublishedPage() {
                     const agent = agentResponse.agent
                     const meta = agentResponse._meta?.['io.modelcontextprotocol.registry/official']
                     return (
-                      <Card key={`${agent.Name}-${agent.version}`} className="p-6 hover:shadow-md transition-all duration-200">
+                      <Card key={`${agent.name}-${agent.version}`} className="p-6 hover:shadow-md transition-all duration-200">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-3">
-                              <h3 className="text-xl font-semibold">{agent.Name}</h3>
+                              <h3 className="text-xl font-semibold">{agent.name}</h3>
                             </div>
                             
-                            <p className="text-sm text-muted-foreground mb-3">{agent.Description}</p>
+                            <p className="text-sm text-muted-foreground mb-3">{agent.description}</p>
                             
                             <div className="grid grid-cols-2 gap-4 text-sm">
                               <div className="flex items-center gap-2 text-muted-foreground">
@@ -476,7 +476,7 @@ export default function PublishedPage() {
                             <Button
                               variant="default"
                               size="sm"
-                              onClick={() => handleDeploy(agent.Name, agent.version, 'agent')}
+                              onClick={() => handleDeploy(agent.name, agent.version, 'agent')}
                               disabled={deploying}
                             >
                               <Rocket className="h-4 w-4 mr-2" />
@@ -485,7 +485,7 @@ export default function PublishedPage() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleUnpublish(agent.Name, agent.version, 'agent')}
+                              onClick={() => handleUnpublish(agent.name, agent.version, 'agent')}
                               disabled={unpublishing}
                             >
                               Unpublish

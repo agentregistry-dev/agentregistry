@@ -10,7 +10,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Calendar, Tag, Bot, Upload, Container, Cpu, Brain } from "lucide-react"
+import { Calendar, Tag, Bot, Upload, Container, Cpu, Brain, Github } from "lucide-react"
 
 interface AgentCardProps {
   agent: AgentResponse
@@ -57,13 +57,13 @@ export function AgentCard({ agent, onDelete, onPublish, showDelete = false, show
             <Bot className="h-5 w-5 text-primary" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-lg mb-1">{agentData.Name}</h3>
+            <h3 className="font-semibold text-lg mb-1">{agentData.name}</h3>
             <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
               <Badge variant="outline" className="text-xs">
-                {agentData.Framework}
+                {agentData.framework}
               </Badge>
               <Badge variant="secondary" className="text-xs">
-                {agentData.Language}
+                {agentData.language}
               </Badge>
             </p>
           </div>
@@ -92,9 +92,9 @@ export function AgentCard({ agent, onDelete, onPublish, showDelete = false, show
         </div>
       </div>
 
-      {agentData.Description && (
+      {agentData.description && (
         <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-          {agentData.Description}
+          {agentData.description}
         </p>
       )}
 
@@ -111,27 +111,40 @@ export function AgentCard({ agent, onDelete, onPublish, showDelete = false, show
           </div>
         )}
 
-        {agentData.ModelProvider && (
+        {agentData.modelProvider && (
           <div className="flex items-center gap-1">
             <Brain className="h-3 w-3" />
-            <span>{agentData.ModelProvider}</span>
+            <span>{agentData.modelProvider}</span>
           </div>
         )}
 
-        {agentData.ModelName && (
+        {agentData.modelName && (
           <div className="flex items-center gap-1">
             <Cpu className="h-3 w-3" />
-            <span className="font-mono text-xs">{agentData.ModelName}</span>
+            <span className="font-mono text-xs">{agentData.modelName}</span>
           </div>
         )}
 
-        {agentData.Image && (
+        {agentData.image && (
           <div className="flex items-center gap-1">
             <Container className="h-3 w-3" />
-            <span className="font-mono text-xs truncate max-w-[200px]" title={agentData.Image}>
-              {agentData.Image}
+            <span className="font-mono text-xs truncate max-w-[200px]" title={agentData.image}>
+              {agentData.image}
             </span>
           </div>
+        )}
+
+        {agentData.repository?.url && (
+          <a
+            href={agentData.repository.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 hover:text-primary transition-colors"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Github className="h-3 w-3" />
+            <span>Repository</span>
+          </a>
         )}
       </div>
       </Card>
