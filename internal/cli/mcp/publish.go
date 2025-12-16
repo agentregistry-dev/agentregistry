@@ -8,6 +8,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
+	"github.com/agentregistry-dev/agentregistry/pkg/cli/config"
 	"github.com/spf13/cobra"
 )
 
@@ -37,10 +38,10 @@ Examples:
   # Re-publish an existing server from the registry
   arctl mcp publish io.github.example/my-server`,
 	Args: cobra.ExactArgs(1),
-	RunE: runMCPServerPublish,
+	RunE: runPublish,
 }
 
-func runMCPServerPublish(cmd *cobra.Command, args []string) error {
+func runPublish(cmd *cobra.Command, args []string) error {
 	input := args[0]
 
 	// Check if input is a local path with mcp.yaml
@@ -121,9 +122,10 @@ func buildAndPublishLocal(absPath string) error {
 		}
 
 		// auto-approve the server
-		// TODO(infocus7): For enterprise, we WILL NOT want to auto-approve the server.
-		if err := apiClient.ApproveMCPServerStatus(serverJSON.Name, serverJSON.Version, "Auto-approved via publish command"); err != nil {
-			return fmt.Errorf("failed to approve mcp server: %w", err)
+		if config.GetAutoApprove() {
+			if err := apiClient.ApproveMCPServerStatus(serverJSON.Name, serverJSON.Version, "Auto-approved via publish command"); err != nil {
+				return fmt.Errorf("failed to approve mcp server: %w", err)
+			}
 		}
 
 		// Publish the server

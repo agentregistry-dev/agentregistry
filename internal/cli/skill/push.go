@@ -12,6 +12,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
+	"github.com/agentregistry-dev/agentregistry/pkg/cli/config"
 	"github.com/spf13/cobra"
 	yaml "gopkg.in/yaml.v3"
 )
@@ -93,11 +94,12 @@ func runPush(cmd *cobra.Command, args []string) error {
 				continue
 			}
 
-			// Auto-approve the skill
-			// TODO(infocus7): For enterprise, we WILL NOT want to auto-approve the skill.
-			if err := apiClient.ApproveSkillStatus(skillJson.Name, skillJson.Version, "Auto-approved via push command"); err != nil {
-				errs = append(errs, fmt.Errorf("failed to approve skill '%s': %w", skill, err))
-				continue
+			// Auto-approve the skill (if configured)
+			if config.GetAutoApprove() {
+				if err := apiClient.ApproveSkillStatus(skillJson.Name, skillJson.Version, "Auto-approved via push command"); err != nil {
+					errs = append(errs, fmt.Errorf("failed to approve skill '%s': %w", skill, err))
+					continue
+				}
 			}
 		}
 	}

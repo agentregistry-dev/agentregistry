@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	arConfig "github.com/agentregistry-dev/agentregistry/pkg/cli/config"
 	"github.com/kagent-dev/kagent/go/cli/config"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/spf13/cobra"
@@ -95,10 +96,11 @@ func runPublish(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to push agent: %w", err)
 		}
 
-		// Auto-approve the agent
-		// TODO(infocus7): For enterprise, we WILL NOT want to auto-approve the agent.
-		if err := apiClient.ApproveAgentStatus(jsn.Name, jsn.Version, "Auto-approved via publish command"); err != nil {
-			return fmt.Errorf("failed to approve agent: %w", err)
+		// Auto-approve the agent (if configured)
+		if arConfig.GetAutoApprove() {
+			if err := apiClient.ApproveAgentStatus(jsn.Name, jsn.Version, "Auto-approved via publish command"); err != nil {
+				return fmt.Errorf("failed to approve agent: %w", err)
+			}
 		}
 
 		// Mark the agent as published

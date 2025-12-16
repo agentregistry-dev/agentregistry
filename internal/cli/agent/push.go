@@ -6,6 +6,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	"github.com/agentregistry-dev/agentregistry/internal/models"
+	arConfig "github.com/agentregistry-dev/agentregistry/pkg/cli/config"
 	"github.com/kagent-dev/kagent/go/cli/config"
 	"github.com/spf13/cobra"
 )
@@ -58,9 +59,10 @@ func runPush(cmd *cobra.Command, args []string) error {
 		}
 
 		// Auto-approve the agent
-		// TODO(infocus7): For enterprise, we WILL NOT want to auto-approve the agent.
-		if err := apiClient.ApproveAgentStatus(jsn.Name, jsn.Version, "Auto-approved via push command"); err != nil {
-			return fmt.Errorf("failed to approve agent: %w", err)
+		if arConfig.GetAutoApprove() {
+			if err := apiClient.ApproveAgentStatus(jsn.Name, jsn.Version, "Auto-approved via push command"); err != nil {
+				return fmt.Errorf("failed to approve agent: %w", err)
+			}
 		}
 
 		return nil
