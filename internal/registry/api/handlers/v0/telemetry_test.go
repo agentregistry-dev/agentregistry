@@ -35,7 +35,9 @@ func TestPrometheusHandler(t *testing.T) {
 		Version: "2.0.0",
 	})
 	assert.NoError(t, err)
-	// Publish the server so it's visible via public endpoints
+	// Approve and publish the server so it's visible via public endpoints
+	err = registryService.ApproveServer(context.Background(), server.Server.Name, server.Server.Version, "Test approval")
+	assert.NoError(t, err)
 	err = registryService.PublishServer(context.Background(), server.Server.Name, server.Server.Version)
 	assert.NoError(t, err)
 

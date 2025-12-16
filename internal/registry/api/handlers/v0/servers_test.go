@@ -127,7 +127,9 @@ func TestGetLatestServerVersionEndpoint(t *testing.T) {
 		Version:     "1.0.0",
 	})
 	require.NoError(t, err)
-	// Publish the server so it's visible via public endpoints
+	// Approve and publish the server so it's visible via public endpoints
+	err = registryService.ApproveServer(ctx, "com.example/detail-server", "1.0.0", "Test approval")
+	require.NoError(t, err)
 	err = registryService.PublishServer(ctx, "com.example/detail-server", "1.0.0")
 	require.NoError(t, err)
 
@@ -195,6 +197,9 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 		Version:     "1.0.0",
 	})
 	require.NoError(t, err)
+	// Approve and publish the server so it's visible via public endpoints
+	err = registryService.ApproveServer(ctx, serverName, "1.0.0", "Test approval")
+	require.NoError(t, err)
 	err = registryService.PublishServer(ctx, serverName, "1.0.0")
 	require.NoError(t, err)
 
@@ -204,6 +209,8 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 		Description: "Version test server v2",
 		Version:     "2.0.0",
 	})
+	require.NoError(t, err)
+	err = registryService.ApproveServer(ctx, serverName, "2.0.0", "Test approval")
 	require.NoError(t, err)
 	err = registryService.PublishServer(ctx, serverName, "2.0.0")
 	require.NoError(t, err)
@@ -215,6 +222,8 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 		Description: "Version test server with build metadata",
 		Version:     "1.0.0+20130313144700",
 	})
+	require.NoError(t, err)
+	err = registryService.ApproveServer(ctx, serverName, "1.0.0+20130313144700", "Test approval")
 	require.NoError(t, err)
 	err = registryService.PublishServer(ctx, serverName, "1.0.0+20130313144700")
 	require.NoError(t, err)
@@ -398,7 +407,9 @@ func TestGetAllVersionsEndpoint(t *testing.T) {
 			Version:     version,
 		})
 		require.NoError(t, err)
-		// Publish each version so it's visible via public endpoints
+		// Approve and publish each version so it's visible via public endpoints
+		err = registryService.ApproveServer(ctx, serverName, version, "Test approval")
+		require.NoError(t, err)
 		err = registryService.PublishServer(ctx, serverName, version)
 		require.NoError(t, err)
 	}
@@ -500,7 +511,9 @@ func TestServersEndpointEdgeCases(t *testing.T) {
 			Version:     server.version,
 		})
 		require.NoError(t, err)
-		// Publish each server so it's visible via public endpoints
+		// Approve and publish each server so it's visible via public endpoints
+		err = registryService.ApproveServer(ctx, server.name, server.version, "Test approval")
+		require.NoError(t, err)
 		err = registryService.PublishServer(ctx, server.name, server.version)
 		require.NoError(t, err)
 	}
