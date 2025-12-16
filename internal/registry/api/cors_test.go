@@ -46,7 +46,7 @@ func TestCORSHeaders(t *testing.T) {
 	}
 
 	// Create server
-	_ = api.NewServer(cfg, registryService, metrics, versionInfo)
+	_ = api.NewServer(cfg, registryService, metrics, versionInfo, nil)
 
 	tests := []struct {
 		name           string
@@ -160,7 +160,7 @@ func TestCORSHeaderValues(t *testing.T) {
 	}
 
 	// Create server
-	_ = api.NewServer(cfg, registryService, metrics, versionInfo)
+	_ = api.NewServer(cfg, registryService, metrics, versionInfo, nil)
 
 	// Test that CORS is configured with correct values
 	// This is more of a documentation test to ensure we know what CORS settings we use

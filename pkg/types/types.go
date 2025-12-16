@@ -33,6 +33,11 @@ type AppOptions struct {
 	// OnHTTPServerCreated is an optional callback that receives the created server
 	// (potentially extended via HTTPServerFactory).
 	OnHTTPServerCreated func(Server)
+
+	// UIHandler is an optional HTTP handler for serving a custom UI at the root path ("/").
+	// If provided, this handler will be used instead of the default redirect to docs.
+	// API routes will still take precedence over the UI handler.
+	UIHandler http.Handler
 }
 
 // Server represents the HTTP server and provides access to the Huma API

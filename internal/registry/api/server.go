@@ -81,17 +81,23 @@ func (s *Server) Mux() *http.ServeMux {
 }
 
 // NewServer creates a new HTTP server
-func NewServer(cfg *config.Config, registryService service.RegistryService, metrics *telemetry.Metrics, versionInfo *v0.VersionBody) *Server {
+func NewServer(cfg *config.Config, registryService service.RegistryService, metrics *telemetry.Metrics, versionInfo *v0.VersionBody, customUIHandler http.Handler) *Server {
 	// Create HTTP mux and Huma API
 	mux := http.NewServeMux()
 
-	// Create UI handler
-	uiHandler, err := createUIHandler()
-	if err != nil {
-		log.Printf("Warning: Failed to create UI handler: %v. UI will not be served.", err)
-		uiHandler = nil
+	var uiHandler http.Handler
+
+	if customUIHandler != nil {
+		uiHandler = customUIHandler
 	} else {
-		log.Println("UI handler initialized - web interface will be available")
+		var err error
+		uiHandler, err = createUIHandler()
+		if err != nil {
+			log.Printf("Warning: Failed to create UI handler: %v. UI will not be served.", err)
+			uiHandler = nil
+		} else {
+			log.Println("UI handler initialized - web interface will be available")
+		}
 	}
 
 	api := router.NewHumaAPI(cfg, registryService, mux, metrics, versionInfo, uiHandler)
