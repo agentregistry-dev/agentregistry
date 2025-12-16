@@ -35,24 +35,31 @@ func init() {
 	PublishCmd.Flags().StringVar(&githubRepository, "github", "", "Specify the GitHub repository for the agent")
 }
 
+type publishAgentCfg struct {
+	AgentCfg         *agentCfg
+	GitHubRepository string
+}
+
 func runPublish(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return cmd.Help()
 	}
 	cfg := &config.Config{}
-	publishCfg := &agentCfg{
-		Config: cfg,
+	publishCfg := &publishAgentCfg{
+		AgentCfg: &agentCfg{
+			Config:  cfg,
+			Version: publishVersion,
+		},
+		GitHubRepository: githubRepository,
 	}
-	publishCfg.Version = publishVersion
-	publishCfg.GitHubRepository = githubRepository
 
 	arg := args[0]
 
 	// If --version flag was provided, treat as registry-based publish
 	// No need to push the agent, just mark as published
-	if publishCfg.Version != "" {
+	if publishCfg.AgentCfg.Version != "" {
 		agentName := arg
-		version := publishCfg.Version
+		version := publishCfg.AgentCfg.Version
 
 		if apiClient == nil {
 			return fmt.Errorf("API client not initialized")
@@ -69,11 +76,18 @@ func runPublish(cmd *cobra.Command, args []string) error {
 
 	// If the argument is a directory containing an agent project, publish from local
 	if fi, err := os.Stat(arg); err == nil && fi.IsDir() {
-		publishCfg.ProjectDir = arg
-		publishCfg.Version = "latest"
-		jsn, err := createAgentJSONFromCfg(publishCfg)
+		publishCfg.AgentCfg.ProjectDir = arg
+		publishCfg.AgentCfg.Version = "latest"
+		jsn, err := createAgentJSONFromCfg(publishCfg.AgentCfg)
 		if err != nil {
 			return fmt.Errorf("failed to create agent JSON: %w", err)
+		}
+
+		if publishCfg.GitHubRepository != "" {
+			jsn.Repository = &model.Repository{
+				URL:    publishCfg.GitHubRepository,
+				Source: "github",
+			}
 		}
 
 		// Push the agent (creates unpublished entry)
