@@ -130,7 +130,7 @@ func TestGetLatestServerVersionEndpoint(t *testing.T) {
 	})
 	require.NoError(t, err)
 	// Approve and publish the server so it's visible via public endpoints
-	err = registryService.ApproveServer(ctx, "com.example/detail-server", "1.0.0", "Test approval")
+	err = registryService.ApproveServer(ctx, "com.example/detail-server", "1.0.0", "Test approval reason")
 	require.NoError(t, err)
 	err = registryService.PublishServer(ctx, "com.example/detail-server", "1.0.0")
 	require.NoError(t, err)
@@ -514,7 +514,7 @@ func TestServersEndpointEdgeCases(t *testing.T) {
 		})
 		require.NoError(t, err)
 		// Approve and publish each server so it's visible via public endpoints
-		err = registryService.ApproveServer(ctx, server.name, server.version, "Test approval")
+		err = registryService.ApproveServer(ctx, server.name, server.version, "Test approval reason")
 		require.NoError(t, err)
 		err = registryService.PublishServer(ctx, server.name, server.version)
 		require.NoError(t, err)
@@ -657,10 +657,10 @@ func TestServersPublishedAndApprovalStatus(t *testing.T) {
 
 		if !tc.shouldLeavePending {
 			if tc.shouldApprove {
-				err = registryService.ApproveServer(ctx, tc.serverName, tc.version, "Test approval")
+				err = registryService.ApproveServer(ctx, tc.serverName, tc.version, "Test approval reason")
 				require.NoError(t, err, "Failed to approve server %s", tc.serverName)
 			} else {
-				err = registryService.DenyServer(ctx, tc.serverName, tc.version, "Test denial")
+				err = registryService.DenyServer(ctx, tc.serverName, tc.version, "Test denial reason")
 				require.NoError(t, err, "Failed to deny server %s", tc.serverName)
 			}
 		}
@@ -760,7 +760,7 @@ func TestServersApprovalEndpoints(t *testing.T) {
 	assert.NoError(t, err)
 	require.Len(t, initialResp.Servers, 1)
 	assert.Equal(t, "PENDING", initialResp.Servers[0].Meta.ApprovalStatus.Status, "New server should have PENDING approval status")
-	assert.Empty(t, initialResp.Servers[0].Meta.ApprovalStatus.Reason, "New server should have no approval reason")
+	assert.Nil(t, initialResp.Servers[0].Meta.ApprovalStatus.Reason, "New server should have no approval reason")
 
 	t.Run("approve server", func(t *testing.T) {
 		encodedName := url.PathEscape(serverName)
@@ -792,7 +792,7 @@ func TestServersApprovalEndpoints(t *testing.T) {
 		assert.NoError(t, err)
 		require.Len(t, verifyResp.Servers, 1)
 		assert.Equal(t, "APPROVED", verifyResp.Servers[0].Meta.ApprovalStatus.Status, "Server should have APPROVED status after approval endpoint call")
-		assert.Equal(t, "Test approval reason", verifyResp.Servers[0].Meta.ApprovalStatus.Reason, "Server should have the approval reason after approval endpoint call")
+		assert.Equal(t, "Test approval reason", *verifyResp.Servers[0].Meta.ApprovalStatus.Reason, "Server should have the approval reason after approval endpoint call")
 	})
 
 	t.Run("deny server", func(t *testing.T) {
@@ -836,6 +836,6 @@ func TestServersApprovalEndpoints(t *testing.T) {
 		assert.NoError(t, err)
 		require.Len(t, verifyResp.Servers, 1)
 		assert.Equal(t, "DENIED", verifyResp.Servers[0].Meta.ApprovalStatus.Status, "Server should have DENIED status after deny endpoint call")
-		assert.Equal(t, "Test denial reason", verifyResp.Servers[0].Meta.ApprovalStatus.Reason, "Server should have the denial reason after deny endpoint call")
+		assert.Equal(t, "Test denial reason", *verifyResp.Servers[0].Meta.ApprovalStatus.Reason, "Server should have the denial reason after deny endpoint call")
 	})
 }

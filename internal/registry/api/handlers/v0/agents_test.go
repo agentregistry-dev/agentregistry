@@ -367,7 +367,7 @@ func TestGetAllAgentVersionsEndpoint(t *testing.T) {
 		})
 		require.NoError(t, err)
 		// Approve and publish each version so it's visible via public endpoints
-		err = registryService.ApproveAgent(ctx, agentName, version, "Test approval")
+		err = registryService.ApproveAgent(ctx, agentName, version, "Test approval reason")
 		require.NoError(t, err)
 		err = registryService.PublishAgent(ctx, agentName, version)
 		require.NoError(t, err)
@@ -474,7 +474,7 @@ func TestAgentsEndpointEdgeCases(t *testing.T) {
 		})
 		require.NoError(t, err)
 		// Approve and publish each agent so it's visible via public endpoints
-		err = registryService.ApproveAgent(ctx, agent.name, agent.version, "Test approval")
+		err = registryService.ApproveAgent(ctx, agent.name, agent.version, "Test approval reason")
 		require.NoError(t, err)
 		err = registryService.PublishAgent(ctx, agent.name, agent.version)
 		require.NoError(t, err)
@@ -675,10 +675,10 @@ func TestAgentsPublishedAndApprovalStatus(t *testing.T) {
 
 		if !tc.shouldLeavePending {
 			if tc.shouldApprove {
-				err = registryService.ApproveAgent(ctx, tc.agentName, tc.version, "Test approval")
+				err = registryService.ApproveAgent(ctx, tc.agentName, tc.version, "Test approval reason")
 				require.NoError(t, err, "Failed to approve agent %s", tc.agentName)
 			} else {
-				err = registryService.DenyAgent(ctx, tc.agentName, tc.version, "Test denial")
+				err = registryService.DenyAgent(ctx, tc.agentName, tc.version, "Test denial reason")
 				require.NoError(t, err, "Failed to deny agent %s", tc.agentName)
 			}
 		}
@@ -753,13 +753,13 @@ func TestAgentsPublishedAndApprovalStatus(t *testing.T) {
 
 			if tc.shouldLeavePending {
 				assert.Equal(t, "PENDING", agent.Meta.ApprovalStatus.Status, "Agent %s should have PENDING approval status", tc.agentName)
-				assert.Empty(t, agent.Meta.ApprovalStatus.Reason, "Agent %s should have no approval reason", tc.agentName)
+				assert.Nil(t, agent.Meta.ApprovalStatus.Reason, "Agent %s should have no approval reason", tc.agentName)
 			} else if tc.shouldApprove {
 				assert.Equal(t, "APPROVED", agent.Meta.ApprovalStatus.Status, "Agent %s should have APPROVED status", tc.agentName)
-				assert.Equal(t, "Test approval reason", agent.Meta.ApprovalStatus.Reason, "Agent %s should have the approval reason", tc.agentName)
+				assert.Equal(t, "Test approval reason", *agent.Meta.ApprovalStatus.Reason, "Agent %s should have the approval reason", tc.agentName)
 			} else {
 				assert.Equal(t, "DENIED", agent.Meta.ApprovalStatus.Status, "Agent %s should have DENIED status", tc.agentName)
-				assert.Equal(t, "Test denial reason", agent.Meta.ApprovalStatus.Reason, "Agent %s should have the denial reason", tc.agentName)
+				assert.Equal(t, "Test denial reason", *agent.Meta.ApprovalStatus.Reason, "Agent %s should have the denial reason", tc.agentName)
 			}
 
 			// Verify published status
@@ -802,7 +802,7 @@ func TestAgentsApprovalEndpoints(t *testing.T) {
 	err = json.NewDecoder(initialW.Body).Decode(&initialResp)
 	assert.NoError(t, err)
 	assert.Equal(t, "PENDING", initialResp.Meta.ApprovalStatus.Status, "New agent should have PENDING approval status")
-	assert.Empty(t, initialResp.Meta.ApprovalStatus.Reason, "New agent should have no approval reason")
+	assert.Nil(t, initialResp.Meta.ApprovalStatus.Reason, "New agent should have no approval reason")
 
 	t.Run("approve agent", func(t *testing.T) {
 		encodedName := url.PathEscape(agentName)
@@ -832,7 +832,8 @@ func TestAgentsApprovalEndpoints(t *testing.T) {
 		var verifyResp agentmodels.AgentResponse
 		err = json.NewDecoder(verifyW.Body).Decode(&verifyResp)
 		assert.NoError(t, err)
-		assert.Equal(t, "APPROVED", verifyResp.Meta.ApprovalStatus, "Agent should have APPROVED status after approval endpoint call")
+		assert.Equal(t, "APPROVED", verifyResp.Meta.ApprovalStatus.Status, "Agent should have APPROVED status after approval endpoint call")
+		assert.Equal(t, "Test approval reason", *verifyResp.Meta.ApprovalStatus.Reason, "Agent should have the approval reason after approval endpoint call")
 	})
 
 	t.Run("deny agent", func(t *testing.T) {
@@ -876,6 +877,7 @@ func TestAgentsApprovalEndpoints(t *testing.T) {
 		var verifyResp agentmodels.AgentResponse
 		err = json.NewDecoder(verifyW.Body).Decode(&verifyResp)
 		assert.NoError(t, err)
-		assert.Equal(t, "DENIED", verifyResp.Meta.ApprovalStatus, "Agent should have DENIED status after deny endpoint call")
+		assert.Equal(t, "DENIED", verifyResp.Meta.ApprovalStatus.Status, "Agent should have DENIED status after deny endpoint call")
+		assert.Equal(t, "Test denial reason", *verifyResp.Meta.ApprovalStatus.Reason, "Agent should have the denial reason after deny endpoint call")
 	})
 }
