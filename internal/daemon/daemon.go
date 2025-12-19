@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
@@ -78,11 +77,6 @@ func (d *DefaultDaemonManager) Start() error {
 
 	fmt.Printf("✓ %s daemon started successfully\n", d.config.ProjectName)
 
-	_, err := client.NewClientFromEnv()
-	if err != nil {
-		return fmt.Errorf("failed to connect to API: %w", err)
-	}
-	fmt.Println("✓ API connected successfully")
 	return nil
 }
 
