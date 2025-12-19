@@ -63,8 +63,6 @@ type Server interface {
 // DaemonManager defines the interface for managing the CLI's backend daemon.
 // External libraries can implement this to use their own orchestration.
 type DaemonManager interface {
-	// IsDockerComposeAvailable checks if docker compose is available on the system
-	IsDockerComposeAvailable() bool
 	// IsRunning checks if the daemon is currently running
 	IsRunning() bool
 	// Start starts the daemon, blocking until it's ready

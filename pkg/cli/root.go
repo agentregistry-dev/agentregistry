@@ -11,6 +11,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/daemon"
+	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -40,7 +41,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		// Check if docker compose is available
-		if !dm.IsDockerComposeAvailable() {
+		if !utils.IsDockerComposeAvailable() {
 			fmt.Println("Docker compose is not available. Please install docker compose and try again.")
 			fmt.Println("See https://docs.docker.com/compose/install/ for installation instructions.")
 			fmt.Println("agent registry uses docker compose to start the server and the agent gateway.")

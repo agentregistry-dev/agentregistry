@@ -91,9 +91,3 @@ func (d *DefaultDaemonManager) IsRunning() bool {
 	}
 	return strings.Contains(string(output), d.config.ContainerName)
 }
-
-func (d *DefaultDaemonManager) IsDockerComposeAvailable() bool {
-	cmd := exec.Command("docker", "compose", "version")
-	_, err := cmd.CombinedOutput()
-	return err == nil
-}
