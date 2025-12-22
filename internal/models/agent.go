@@ -39,9 +39,9 @@ type AgentRegistryExtensions struct {
 
 // ApprovalStatus represents the approval-related metadata of a resource
 type ApprovalStatus struct {
-	Status    string    `json:"status"` // PENDING, APPROVED, or DENIED
-	Reason    *string   `json:"reason,omitempty"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	Status    string     `json:"status"` // PENDING, APPROVED, or DENIED
+	Reason    *string    `json:"reason,omitempty"`
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
 }
 
 type AgentResponseMeta struct {

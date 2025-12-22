@@ -190,7 +190,8 @@ func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx 
 		}
 		// Update the response to reflect approved status
 		serverResponse.Meta.ApprovalStatus.Status = "APPROVED"
-		serverResponse.Meta.ApprovalStatus.UpdatedAt = time.Now()
+		now := time.Now()
+		serverResponse.Meta.ApprovalStatus.UpdatedAt = &now
 		approvedReason := "Auto-approved: auto-approval is enabled"
 		serverResponse.Meta.ApprovalStatus.Reason = &approvedReason
 	}
@@ -349,7 +350,8 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 		}
 		// Update the response to reflect approved status
 		skillResponse.Meta.ApprovalStatus.Status = "APPROVED"
-		skillResponse.Meta.ApprovalStatus.UpdatedAt = time.Now()
+		now := time.Now()
+		skillResponse.Meta.ApprovalStatus.UpdatedAt = &now
 		approvedReason := "Auto-approved: auto-approval is enabled"
 		skillResponse.Meta.ApprovalStatus.Reason = &approvedReason
 	}
@@ -678,7 +680,8 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 		}
 		// Update the response to reflect approved status
 		agentResponse.Meta.ApprovalStatus.Status = "APPROVED"
-		agentResponse.Meta.ApprovalStatus.UpdatedAt = time.Now()
+		now := time.Now()
+		agentResponse.Meta.ApprovalStatus.UpdatedAt = &now
 		approvedReason := "Auto-approved: auto-approval is enabled"
 		agentResponse.Meta.ApprovalStatus.Reason = &approvedReason
 	}

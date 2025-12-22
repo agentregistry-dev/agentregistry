@@ -191,7 +191,8 @@ func (db *PostgreSQL) ListServers(
 	for rows.Next() {
 		var serverName, version, status string
 		var published, isLatest bool
-		var publishedAt, updatedAt, approvalDate time.Time
+		var publishedAt, updatedAt time.Time
+		var approvalDate *time.Time
 		var approvalStatus string
 		var approvalReason *string
 		var valueJSON []byte
@@ -257,7 +258,8 @@ func (db *PostgreSQL) GetServerByName(ctx context.Context, tx pgx.Tx, serverName
 	`
 
 	var name, version, status string
-	var publishedAt, updatedAt, approvalDate time.Time
+	var publishedAt, updatedAt time.Time
+	var approvalDate *time.Time
 	var isLatest, published bool
 	var approvalStatus string
 	var approvalReason *string
@@ -322,7 +324,8 @@ func (db *PostgreSQL) GetServerByNameAndVersion(ctx context.Context, tx pgx.Tx, 
 	var name, vers, status, approvalStatus string
 	var approvalReason *string
 	var published, isLatest bool
-	var publishedAt, updatedAt, approvalDate time.Time
+	var publishedAt, updatedAt time.Time
+	var approvalDate *time.Time
 	var valueJSON []byte
 
 	err := db.getExecutor(tx).QueryRow(ctx, query, serverName, version).Scan(&name, &vers, &status, &published, &publishedAt, &updatedAt, &isLatest, &approvalStatus, &approvalReason, &approvalDate, &valueJSON)
@@ -391,7 +394,8 @@ func (db *PostgreSQL) GetAllVersionsByServerName(ctx context.Context, tx pgx.Tx,
 		var name, version, status, approvalStatus string
 		var approvalReason *string
 		var published, isLatest bool
-		var publishedAt, updatedAt, approvalDate time.Time
+		var publishedAt, updatedAt time.Time
+		var approvalDate *time.Time
 		var valueJSON []byte
 
 		err := rows.Scan(&name, &version, &status, &published, &publishedAt, &updatedAt, &isLatest, &approvalStatus, &approvalReason, &approvalDate, &valueJSON)
@@ -490,7 +494,7 @@ func (db *PostgreSQL) CreateServer(ctx context.Context, tx pgx.Tx, serverJSON *a
 			ApprovalStatus: models.ApprovalStatus{
 				Status:    "PENDING",
 				Reason:    nil,
-				UpdatedAt: now,
+				UpdatedAt: &now,
 			},
 		},
 	}
@@ -532,7 +536,8 @@ func (db *PostgreSQL) UpdateServer(ctx context.Context, tx pgx.Tx, serverName, v
 	var approvalStatus string
 	var approvalReason *string
 	var published, isLatest bool
-	var publishedAt, updatedAt, approvalDate time.Time
+	var publishedAt, updatedAt time.Time
+	var approvalDate *time.Time
 
 	err = db.getExecutor(tx).QueryRow(ctx, query, valueJSON, serverName, version).Scan(&name, &vers, &status, &published, &publishedAt, &updatedAt, &isLatest, &approvalStatus, &approvalReason, &approvalDate)
 	if err != nil {
@@ -581,7 +586,8 @@ func (db *PostgreSQL) SetServerStatus(ctx context.Context, tx pgx.Tx, serverName
 	var approvalStatus string
 	var approvalReason *string
 	var published, isLatest bool
-	var publishedAt, updatedAt, approvalDate time.Time
+	var publishedAt, updatedAt time.Time
+	var approvalDate *time.Time
 	var valueJSON []byte
 
 	err := db.getExecutor(tx).QueryRow(ctx, query, status, serverName, version).Scan(&name, &vers, &currentStatus, &published, &valueJSON, &publishedAt, &updatedAt, &isLatest, &approvalStatus, &approvalReason, &approvalDate)
@@ -700,7 +706,8 @@ func (db *PostgreSQL) GetCurrentLatestVersion(ctx context.Context, tx pgx.Tx, se
 
 	var name, version, status string
 	var published, isLatest bool
-	var publishedAt, updatedAt, approvalDate time.Time
+	var publishedAt, updatedAt time.Time
+	var approvalDate *time.Time
 	var approvalStatus string
 	var approvalReason *string
 	var jsonValue []byte
@@ -1142,7 +1149,8 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 	for rows.Next() {
 		var name, version, status, approvalStatus string
 		var approvalReason *string
-		var publishedAt, updatedAt, approvalDate time.Time
+		var publishedAt, updatedAt time.Time
+		var approvalDate *time.Time
 		var isLatest, published bool
 		var valueJSON []byte
 
@@ -1199,7 +1207,8 @@ func (db *PostgreSQL) GetAgentByName(ctx context.Context, tx pgx.Tx, agentName s
 	`
 	var name, version, status, approvalStatus string
 	var approvalReason *string
-	var publishedAt, updatedAt, approvalDate time.Time
+	var publishedAt, updatedAt time.Time
+	var approvalDate *time.Time
 	var isLatest, published bool
 	var valueJSON []byte
 	if err := db.getExecutor(tx).QueryRow(ctx, query, agentName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &published, &approvalStatus, &approvalReason, &approvalDate, &valueJSON); err != nil {
@@ -1243,7 +1252,8 @@ func (db *PostgreSQL) GetAgentByNameAndVersion(ctx context.Context, tx pgx.Tx, a
 	`
 	var name, vers, status, approvalStatus string
 	var approvalReason *string
-	var publishedAt, updatedAt, approvalDate time.Time
+	var publishedAt, updatedAt time.Time
+	var approvalDate *time.Time
 	var isLatest bool
 	var valueJSON []byte
 	if err := db.getExecutor(tx).QueryRow(ctx, query, agentName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &approvalStatus, &approvalReason, &approvalDate, &valueJSON); err != nil {
@@ -1293,7 +1303,8 @@ func (db *PostgreSQL) GetAllVersionsByAgentName(ctx context.Context, tx pgx.Tx, 
 	for rows.Next() {
 		var name, version, status, approvalStatus string
 		var approvalReason *string
-		var publishedAt, updatedAt, approvalDate time.Time
+		var publishedAt, updatedAt time.Time
+		var approvalDate *time.Time
 		var isLatest bool
 		var valueJSON []byte
 		if err := rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &approvalStatus, &approvalReason, &approvalDate, &valueJSON); err != nil {
@@ -1370,7 +1381,7 @@ func (db *PostgreSQL) CreateAgent(ctx context.Context, tx pgx.Tx, agentJSON *mod
 			ApprovalStatus: models.ApprovalStatus{
 				Status:    "PENDING",
 				Reason:    nil,
-				UpdatedAt: now,
+				UpdatedAt: &now,
 			},
 		},
 	}, nil
@@ -1398,7 +1409,8 @@ func (db *PostgreSQL) UpdateAgent(ctx context.Context, tx pgx.Tx, agentName, ver
 	`
 	var name, vers, status, approvalStatus string
 	var approvalReason *string
-	var publishedAt, updatedAt, approvalDate time.Time
+	var publishedAt, updatedAt time.Time
+	var approvalDate *time.Time
 	var isLatest bool
 	if err := db.getExecutor(tx).QueryRow(ctx, query, valueJSON, agentName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &approvalStatus, &approvalReason, &approvalDate); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -1436,7 +1448,8 @@ func (db *PostgreSQL) SetAgentStatus(ctx context.Context, tx pgx.Tx, agentName, 
 	`
 	var name, vers, currentStatus, approvalStatus string
 	var approvalReason *string
-	var publishedAt, updatedAt, approvalDate time.Time
+	var publishedAt, updatedAt time.Time
+	var approvalDate *time.Time
 	var isLatest bool
 	var valueJSON []byte
 	if err := db.getExecutor(tx).QueryRow(ctx, query, status, agentName, version).Scan(&name, &vers, &currentStatus, &valueJSON, &publishedAt, &updatedAt, &isLatest, &approvalStatus, &approvalReason, &approvalDate); err != nil {
@@ -1480,7 +1493,8 @@ func (db *PostgreSQL) GetCurrentLatestAgentVersion(ctx context.Context, tx pgx.T
 	row := executor.QueryRow(ctx, query, agentName)
 	var name, version, status, approvalStatus string
 	var approvalReason *string
-	var publishedAt, updatedAt, approvalDate time.Time
+	var publishedAt, updatedAt time.Time
+	var approvalDate *time.Time
 	var isLatest bool
 	var jsonValue []byte
 	if err := row.Scan(&name, &version, &status, &jsonValue, &publishedAt, &updatedAt, &isLatest, &approvalStatus, &approvalReason, &approvalDate); err != nil {
@@ -1775,7 +1789,8 @@ func (db *PostgreSQL) ListSkills(ctx context.Context, tx pgx.Tx, filter *SkillFi
 	for rows.Next() {
 		var name, version, status, approvalStatus string
 		var approvalReason *string
-		var publishedAt, updatedAt, approvalDate time.Time
+		var publishedAt, updatedAt time.Time
+		var approvalDate *time.Time
 		var isLatest, published bool
 		var valueJSON []byte
 
@@ -1832,7 +1847,8 @@ func (db *PostgreSQL) GetSkillByName(ctx context.Context, tx pgx.Tx, skillName s
     `
 	var name, version, status, approvalStatus string
 	var approvalReason *string
-	var publishedAt, updatedAt, approvalDate time.Time
+	var publishedAt, updatedAt time.Time
+	var approvalDate *time.Time
 	var isLatest, published bool
 	var valueJSON []byte
 	if err := db.getExecutor(tx).QueryRow(ctx, query, skillName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &published, &approvalStatus, &approvalReason, &approvalDate, &valueJSON); err != nil {
@@ -1876,7 +1892,8 @@ func (db *PostgreSQL) GetSkillByNameAndVersion(ctx context.Context, tx pgx.Tx, s
     `
 	var name, vers, status, approvalStatus string
 	var approvalReason *string
-	var publishedAt, updatedAt, approvalDate time.Time
+	var publishedAt, updatedAt time.Time
+	var approvalDate *time.Time
 	var isLatest, published bool
 	var valueJSON []byte
 	if err := db.getExecutor(tx).QueryRow(ctx, query, skillName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &published, &approvalStatus, &approvalReason, &approvalDate, &valueJSON); err != nil {
@@ -1927,7 +1944,8 @@ func (db *PostgreSQL) GetAllVersionsBySkillName(ctx context.Context, tx pgx.Tx, 
 	for rows.Next() {
 		var name, version, status, approvalStatus string
 		var approvalReason *string
-		var publishedAt, updatedAt, approvalDate time.Time
+		var publishedAt, updatedAt time.Time
+		var approvalDate *time.Time
 		var isLatest, published bool
 		var valueJSON []byte
 		if err := rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &published, &approvalStatus, &approvalReason, &approvalDate, &valueJSON); err != nil {
@@ -2003,7 +2021,7 @@ func (db *PostgreSQL) CreateSkill(ctx context.Context, tx pgx.Tx, skillJSON *mod
 			ApprovalStatus: models.ApprovalStatus{
 				Status:    "PENDING",
 				Reason:    nil,
-				UpdatedAt: now,
+				UpdatedAt: &now,
 			},
 		},
 	}, nil
@@ -2031,7 +2049,8 @@ func (db *PostgreSQL) UpdateSkill(ctx context.Context, tx pgx.Tx, skillName, ver
     `
 	var name, vers, status, approvalStatus string
 	var approvalReason *string
-	var publishedAt, updatedAt, approvalDate time.Time
+	var publishedAt, updatedAt time.Time
+	var approvalDate *time.Time
 	var isLatest bool
 	if err := db.getExecutor(tx).QueryRow(ctx, query, valueJSON, skillName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &approvalStatus, &approvalReason, &approvalDate); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -2069,7 +2088,8 @@ func (db *PostgreSQL) SetSkillStatus(ctx context.Context, tx pgx.Tx, skillName, 
     `
 	var name, vers, currentStatus, approvalStatus string
 	var approvalReason *string
-	var publishedAt, updatedAt, approvalDate time.Time
+	var publishedAt, updatedAt time.Time
+	var approvalDate *time.Time
 	var isLatest bool
 	var valueJSON []byte
 	if err := db.getExecutor(tx).QueryRow(ctx, query, status, skillName, version).Scan(&name, &vers, &currentStatus, &valueJSON, &publishedAt, &updatedAt, &isLatest, &approvalStatus, &approvalReason, &approvalDate); err != nil {
@@ -2113,7 +2133,8 @@ func (db *PostgreSQL) GetCurrentLatestSkillVersion(ctx context.Context, tx pgx.T
 	row := executor.QueryRow(ctx, query, skillName)
 	var name, version, status, approvalStatus string
 	var approvalReason *string
-	var publishedAt, updatedAt, approvalDate time.Time
+	var publishedAt, updatedAt time.Time
+	var approvalDate *time.Time
 	var isLatest bool
 	var jsonValue []byte
 	if err := row.Scan(&name, &version, &status, &jsonValue, &publishedAt, &updatedAt, &isLatest, &approvalStatus, &approvalReason, &approvalDate); err != nil {
