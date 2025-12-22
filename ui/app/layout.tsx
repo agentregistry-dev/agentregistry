@@ -9,6 +9,9 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 export const metadata: Metadata = {
   title: "artcl - agent registry admin",
   description: "Admin interface for managing agent registry",
+  icons: {
+    icon: "/icon.svg",
+  },
 }
 
 export default function RootLayout({

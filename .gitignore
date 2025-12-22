@@ -36,6 +36,7 @@ internal/registry/api/ui/dist/
 # IDE
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 *~
