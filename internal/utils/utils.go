@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"net"
+	"os/exec"
 	"strings"
 )
 
@@ -62,4 +63,10 @@ func SanitizeVersion(version string) string {
 		sanitized = strings.ReplaceAll(sanitized, "--", "-")
 	}
 	return sanitized
+}
+
+func IsDockerComposeAvailable() bool {
+	cmd := exec.Command("docker", "compose", "version")
+	_, err := cmd.CombinedOutput()
+	return err == nil
 }

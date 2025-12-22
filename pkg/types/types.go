@@ -64,9 +64,27 @@ type Server interface {
 	Shutdown(ctx context.Context) error
 }
 
+// DaemonManager defines the interface for managing the CLI's backend daemon.
+// External libraries can implement this to use their own orchestration.
+type DaemonManager interface {
+	// IsRunning checks if the daemon is currently running
+	IsRunning() bool
+	// Start starts the daemon, blocking until it's ready
+	Start() error
+}
+
 // HTTPServerFactory is a function type that creates a server implementation that
 // adds new API routes and handlers.
 //
 // The factory receives a Server interface and should return a Server after
 // registering new routes using base.HumaAPI() or base.Mux().
 type HTTPServerFactory func(base Server) Server
+
+// DaemonConfig allows customization of the default daemon manager
+type DaemonConfig struct {
+	ProjectName    string // docker compose project name (default: "agentregistry")
+	ContainerName  string // container name to check for running state (default: "agentregistry-server")
+	ComposeYAML    string // docker-compose.yml content (default: embedded)
+	DockerRegistry string // image registry (default: version.DockerRegistry)
+	Version        string // image version (default: version.Version)
+}

@@ -10,24 +10,45 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
-	"github.com/agentregistry-dev/agentregistry/internal/daemon"
+	"github.com/agentregistry-dev/agentregistry/internal/utils"
+	"github.com/agentregistry-dev/agentregistry/pkg/daemon"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/spf13/cobra"
 )
+
+// CLIOptions configures the CLI behavior
+// We could extend this to include more extensibility options in the future (e.g. client factory)
+type CLIOptions struct {
+	// DaemonManager handles daemon lifecycle. If nil, uses default.
+	DaemonManager types.DaemonManager
+}
+
+var cliOptions CLIOptions
+
+// Configure applies options to the root command
+func Configure(opts CLIOptions) {
+	cliOptions = opts
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "arctl",
 	Short: "Agent Registry CLI",
 	Long:  `arctl is a CLI tool for managing agents, MCP servers and skills.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		dm := cliOptions.DaemonManager
+		if dm == nil {
+			dm = daemon.NewDaemonManager(nil)
+		}
+
 		// Check if docker compose is available
-		if !daemon.IsDockerComposeAvailable() {
+		if !utils.IsDockerComposeAvailable() {
 			fmt.Println("Docker compose is not available. Please install docker compose and try again.")
 			fmt.Println("See https://docs.docker.com/compose/install/ for installation instructions.")
 			fmt.Println("agent registry uses docker compose to start the server and the agent gateway.")
 			return fmt.Errorf("docker compose is not available")
 		}
-		if !daemon.IsRunning() {
-			if err := daemon.Start(); err != nil {
+		if !dm.IsRunning() {
+			if err := dm.Start(); err != nil {
 				return fmt.Errorf("failed to start daemon: %w", err)
 			}
 		}
