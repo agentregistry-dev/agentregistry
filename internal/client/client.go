@@ -243,11 +243,15 @@ func (c *Client) GetServerByNameAndVersion(name, version string, publishedOnly b
 	encName := url.PathEscape(name)
 	encVersion := url.PathEscape(version)
 	q := "/servers/" + encName + "/versions/" + encVersion
+	params := url.Values{}
 	if publishedOnly {
-		q += "?published_only=true"
+		params.Set("published_only", "true")
 	}
 	if approvedOnly {
-		q += "?approved_only=true"
+		params.Set("approved_only", "true")
+	}
+	if len(params) > 0 {
+		q += "?" + params.Encode()
 	}
 	req, err := c.newRequest(http.MethodGet, q)
 	if err != nil {
@@ -395,11 +399,15 @@ func (c *Client) GetAgents() ([]*models.AgentResponse, error) {
 func (c *Client) GetAgentByName(name string, publishedOnly bool, approvedOnly bool) (*models.AgentResponse, error) {
 	encName := url.PathEscape(name)
 	q := "/agents/" + encName + "/versions/latest"
+	params := url.Values{}
 	if publishedOnly {
-		q += "?published_only=true"
+		params.Set("published_only", "true")
 	}
 	if approvedOnly {
-		q += "?approved_only=true"
+		params.Set("approved_only", "true")
+	}
+	if len(params) > 0 {
+		q += "?" + params.Encode()
 	}
 	req, err := c.newRequest(http.MethodGet, q)
 	if err != nil {
@@ -417,11 +425,15 @@ func (c *Client) GetAgentByNameAndVersion(name, version string, publishedOnly bo
 	encName := url.PathEscape(name)
 	encVersion := url.PathEscape(version)
 	q := "/agents/" + encName + "/versions/" + encVersion
+	params := url.Values{}
 	if publishedOnly {
-		q += "?published_only=true"
+		params.Set("published_only", "true")
 	}
 	if approvedOnly {
-		q += "?approved_only=true"
+		params.Set("approved_only", "true")
+	}
+	if len(params) > 0 {
+		q += "?" + params.Encode()
 	}
 	req, err := c.newRequest(http.MethodGet, q)
 	if err != nil {
