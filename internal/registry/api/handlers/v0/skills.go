@@ -41,7 +41,7 @@ type SkillVersionsInput struct {
 }
 
 // RegisterSkillsEndpoints registers all skill-related endpoints with a custom path prefix
-// isAdmin: if true, shows all resources; if false, only shows published resources
+// isAdmin: if true, shows all resources; if false, only shows approved published resources
 func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool) {
 	// Determine the tags based on whether this is admin or public
 	tags := []string{"skills"}
@@ -61,10 +61,12 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 		// Build filter
 		filter := &database.SkillFilter{}
 
-		// For public endpoints, only show published resources
+		// For public endpoints, only show approved published resources
 		if !isAdmin {
 			published := true
 			filter.Published = &published
+			approvalStatus := "APPROVED"
+			filter.ApprovalStatus = &approvalStatus
 		}
 
 		if input.UpdatedSince != "" {
@@ -294,6 +296,96 @@ func RegisterSkillsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 		return &Response[EmptyResponse]{
 			Body: EmptyResponse{
 				Message: "Skill unpublished successfully",
+			},
+		}, nil
+	})
+}
+
+// ApproveSkillInput represents the input for approving a skill
+type ApproveSkillInput struct {
+	SkillName string `path:"skillName"`
+	Version   string `path:"version"`
+	Body      struct {
+		Reason string `json:"reason" doc:"Reason for approval"`
+	} `body:""`
+}
+
+// DenySkillInput represents the input for denying a skill
+type DenySkillInput struct {
+	SkillName string `path:"skillName"`
+	Version   string `path:"version"`
+	Body      struct {
+		Reason string `json:"reason" doc:"Reason for denial"`
+	} `body:""`
+}
+
+// RegisterAdminSkillsApprovalStatusEndpoints registers the approval status endpoints for skills
+// These endpoints change the approval status of existing skills and are only available to admins
+func RegisterAdminSkillsApprovalStatusEndpoints(api huma.API, pathPrefix string, registry service.RegistryService) {
+	// Approve skill endpoint - marks an existing skill as approved
+	huma.Register(api, huma.Operation{
+		OperationID: "approve-skill-status" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		Method:      http.MethodPost,
+		Path:        pathPrefix + "/skills/{skillName}/versions/{version}/approve",
+		Summary:     "Approve an existing skill",
+		Description: "Mark an existing skill version as approved, allowing it to be published. This acts on a skill that was already created.",
+		Tags:        []string{"skills", "admin"},
+	}, func(ctx context.Context, input *ApproveSkillInput) (*Response[EmptyResponse], error) {
+		// URL-decode the skill name and version
+		skillName, err := url.PathUnescape(input.SkillName)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid skill name encoding", err)
+		}
+		version, err := url.PathUnescape(input.Version)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid version encoding", err)
+		}
+
+		// Call the service to approve the skill
+		if err := registry.ApproveSkill(ctx, skillName, version, input.Body.Reason); err != nil {
+			if errors.Is(err, database.ErrNotFound) {
+				return nil, huma.Error404NotFound("Skill not found")
+			}
+			return nil, huma.Error500InternalServerError("Failed to approve skill", err)
+		}
+
+		return &Response[EmptyResponse]{
+			Body: EmptyResponse{
+				Message: "Skill approved successfully",
+			},
+		}, nil
+	})
+
+	// Deny skill endpoint - marks an existing skill as denied
+	huma.Register(api, huma.Operation{
+		OperationID: "deny-skill-status" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		Method:      http.MethodPost,
+		Path:        pathPrefix + "/skills/{skillName}/versions/{version}/deny",
+		Summary:     "Deny an existing skill",
+		Description: "Mark an existing skill version as denied, preventing it from being published. This acts on a skill that was already created.",
+		Tags:        []string{"skills", "admin"},
+	}, func(ctx context.Context, input *DenySkillInput) (*Response[EmptyResponse], error) {
+		// URL-decode the skill name and version
+		skillName, err := url.PathUnescape(input.SkillName)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid skill name encoding", err)
+		}
+		version, err := url.PathUnescape(input.Version)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid version encoding", err)
+		}
+
+		// Call the service to deny the skill
+		if err := registry.DenySkill(ctx, skillName, version, input.Body.Reason); err != nil {
+			if errors.Is(err, database.ErrNotFound) {
+				return nil, huma.Error404NotFound("Skill not found")
+			}
+			return nil, huma.Error500InternalServerError("Failed to deny skill", err)
+		}
+
+		return &Response[EmptyResponse]{
+			Body: EmptyResponse{
+				Message: "Skill denied successfully",
 			},
 		}, nil
 	})

@@ -31,8 +31,10 @@ type AgentDetailInput struct {
 
 // AgentVersionDetailInput represents the input for getting a specific version
 type AgentVersionDetailInput struct {
-	AgentName string `path:"agentName" doc:"URL-encoded agent name" example:"com.example%2Fmy-agent"`
-	Version   string `path:"version" doc:"URL-encoded agent version" example:"1.0.0"`
+	AgentName     string `path:"agentName" doc:"URL-encoded agent name" example:"com.example%2Fmy-agent"`
+	Version       string `path:"version" doc:"URL-encoded agent version" example:"1.0.0"`
+	PublishedOnly bool   `query:"published_only" doc:"Only return published agents" default:"false" example:"true"`
+	ApprovedOnly  bool   `query:"approved_only" doc:"Only return approved agents" default:"false" example:"true"`
 }
 
 // AgentVersionsInput represents the input for listing all versions of an agent
@@ -41,7 +43,7 @@ type AgentVersionsInput struct {
 }
 
 // RegisterAgentsEndpoints registers all agent-related endpoints with a custom path prefix
-// isAdmin: if true, shows all resources; if false, only shows published resources
+// isAdmin: if true, shows all resources; if false, only shows approved published resources
 func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool) {
 	// Determine the tags based on whether this is admin or public
 	tags := []string{"agents"}
@@ -61,10 +63,12 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		// Build filter
 		filter := &database.AgentFilter{}
 
-		// For public endpoints, only show published resources
+		// For public endpoints, only show approved published resources
 		if !isAdmin {
 			published := true
 			filter.Published = &published
+			approvalStatus := "APPROVED"
+			filter.ApprovalStatus = &approvalStatus
 		}
 
 		if input.UpdatedSince != "" {
@@ -124,11 +128,19 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
 		}
 
+		onlyPublished := input.PublishedOnly
+		onlyApproved := input.ApprovedOnly
+		if !isAdmin {
+			onlyPublished = true
+			onlyApproved = true
+		}
+
 		var agentResp *agentmodels.AgentResponse
 		if version == "latest" {
+			// TODO: Update to allow for filtering by published only
 			agentResp, err = registry.GetAgentByName(ctx, agentName)
 		} else {
-			agentResp, err = registry.GetAgentByNameAndVersion(ctx, agentName, version)
+			agentResp, err = registry.GetAgentByNameAndVersion(ctx, agentName, version, onlyPublished, onlyApproved)
 		}
 		if err != nil {
 			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
@@ -182,7 +194,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 			return nil, huma.Error400BadRequest("Invalid agent name encoding", err)
 		}
 
-		agents, err := registry.GetAllVersionsByAgentName(ctx, agentName)
+		agents, err := registry.GetAllVersionsByAgentName(ctx, agentName, !isAdmin, !isAdmin)
 		if err != nil {
 			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Agent not found")
@@ -271,8 +283,8 @@ func RegisterAdminAgentsCreateEndpoint(api huma.API, pathPrefix string, registry
 	})
 }
 
-// RegisterAgentsPublishStatusEndpoints registers the publish/unpublish status endpoints for agents
-// These endpoints change the published status of existing agents
+// RegisterAgentsPublishStatusEndpoints registers the publish/unpublish status and approval status endpoints for agents
+// These endpoints change the published status and approval status of existing agents
 func RegisterAgentsPublishStatusEndpoints(api huma.API, pathPrefix string, registry service.RegistryService) {
 	// Publish agent endpoint - marks an existing agent as published
 	huma.Register(api, huma.Operation{
@@ -338,6 +350,102 @@ func RegisterAgentsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 		return &Response[EmptyResponse]{
 			Body: EmptyResponse{
 				Message: "Agent unpublished successfully",
+			},
+		}, nil
+	})
+}
+
+// ApproveAgentInput represents the input for approving an agent
+type ApproveAgentInput struct {
+	AgentName string `path:"agentName"`
+	Version   string `path:"version"`
+	Body      struct {
+		Reason string `json:"reason" doc:"Reason for approval"`
+	} `body:""`
+}
+
+// DenyAgentInput represents the input for denying an agent
+type DenyAgentInput struct {
+	AgentName string `path:"agentName"`
+	Version   string `path:"version"`
+	Body      struct {
+		Reason string `json:"reason" doc:"Reason for denial"`
+	} `body:""`
+}
+
+// RegisterAdminAgentsApprovalStatusEndpoints registers the approval status endpoints for agents
+// These endpoints change the approval status of existing agents and are only available to admins
+func RegisterAdminAgentsApprovalStatusEndpoints(api huma.API, pathPrefix string, registry service.RegistryService) {
+	// Approve agent endpoint - marks an existing agent as approved
+	huma.Register(api, huma.Operation{
+		OperationID: "approve-agent-status" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		Method:      http.MethodPost,
+		Path:        pathPrefix + "/agents/{agentName}/versions/{version}/approve",
+		Summary:     "Approve an existing agent",
+		Description: "Mark an existing agent version as approved, allowing it to be published. This acts on an agent that was already created.",
+		Tags:        []string{"agents", "admin"},
+	}, func(ctx context.Context, input *ApproveAgentInput) (*Response[EmptyResponse], error) {
+		// URL-decode the agent name and version
+		agentName, err := url.PathUnescape(input.AgentName)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid agent name encoding", err)
+		}
+		version, err := url.PathUnescape(input.Version)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid version encoding", err)
+		}
+
+		// Call the service to approve the agent
+		if err := registry.ApproveAgent(ctx, agentName, version, input.Body.Reason); err != nil {
+			if errors.Is(err, database.ErrNotFound) {
+				return nil, huma.Error404NotFound("Agent not found")
+			}
+			if errors.Is(err, database.ErrCannotChangeApprovalWhileDeployed) {
+				return nil, huma.Error409Conflict("Cannot change approval status while artifact is deployed. Remove deployment first.")
+			}
+			return nil, huma.Error500InternalServerError("Failed to approve agent", err)
+		}
+
+		return &Response[EmptyResponse]{
+			Body: EmptyResponse{
+				Message: "Agent approved successfully",
+			},
+		}, nil
+	})
+
+	// Deny agent endpoint - marks an existing agent as denied
+	huma.Register(api, huma.Operation{
+		OperationID: "deny-agent-status" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		Method:      http.MethodPost,
+		Path:        pathPrefix + "/agents/{agentName}/versions/{version}/deny",
+		Summary:     "Deny an existing agent",
+		Description: "Mark an existing agent version as denied, preventing it from being published. This acts on an agent that was already created.",
+		Tags:        []string{"agents", "admin"},
+	}, func(ctx context.Context, input *DenyAgentInput) (*Response[EmptyResponse], error) {
+		// URL-decode the agent name and version
+		agentName, err := url.PathUnescape(input.AgentName)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid agent name encoding", err)
+		}
+		version, err := url.PathUnescape(input.Version)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid version encoding", err)
+		}
+
+		// Call the service to deny the agent
+		if err := registry.DenyAgent(ctx, agentName, version, input.Body.Reason); err != nil {
+			if errors.Is(err, database.ErrNotFound) {
+				return nil, huma.Error404NotFound("Agent not found")
+			}
+			if errors.Is(err, database.ErrCannotChangeApprovalWhileDeployed) {
+				return nil, huma.Error409Conflict("Cannot change approval status while artifact is deployed. Remove deployment first.")
+			}
+			return nil, huma.Error500InternalServerError("Failed to deny agent", err)
+		}
+
+		return &Response[EmptyResponse]{
+			Body: EmptyResponse{
+				Message: "Agent denied successfully",
 			},
 		}, nil
 	})

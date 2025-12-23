@@ -51,7 +51,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		}
 	}()
 
-	baseRegistryService := service.NewRegistryService(db, cfg)
+	baseRegistryService := service.NewRegistryService(db, cfg, options.AutoApproveArtifacts)
 
 	var registryService service.RegistryService
 	if options.ServiceFactory != nil {

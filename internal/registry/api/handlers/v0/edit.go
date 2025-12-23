@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
@@ -40,7 +41,7 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.Reg
 		Security: []map[string][]string{
 			{"bearer": {}},
 		},
-	}, func(ctx context.Context, input *EditServerInput) (*Response[apiv0.ServerResponse], error) {
+	}, func(ctx context.Context, input *EditServerInput) (*Response[models.ServerResponse], error) {
 		// Extract bearer token
 		const bearerPrefix = "Bearer "
 		authHeader := input.Authorization
@@ -69,7 +70,8 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.Reg
 
 		// Get current server to check permissions against existing name
 		// Only allow editing unpublished servers
-		currentServer, err := registry.GetServerByNameAndVersion(ctx, serverName, version, false)
+		// TODO: Edge case: If a server is approved, it can be edited. This is not ideal, so we'll need to either not allow editing outside of "PENDING" status, or find a way to stage the edit for approval.
+		currentServer, err := registry.GetServerByNameAndVersion(ctx, serverName, version, false, false)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Server not found")
@@ -121,7 +123,7 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.Reg
 			return nil, huma.Error400BadRequest("Failed to edit server", err)
 		}
 
-		return &Response[apiv0.ServerResponse]{
+		return &Response[models.ServerResponse]{
 			Body: *updatedServer,
 		}, nil
 	})

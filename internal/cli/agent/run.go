@@ -53,7 +53,8 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return runFromDirectory(cmd.Context(), target)
 	}
 
-	agentModel, err := apiClient.GetAgentByName(target)
+	// Get the latest approved version of the agent
+	agentModel, err := apiClient.GetAgentByName(target, true, true)
 	if err != nil {
 		return fmt.Errorf("failed to resolve agent %q: %w", target, err)
 	}

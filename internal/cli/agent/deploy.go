@@ -53,7 +53,8 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API client not initialized")
 	}
 
-	agentModel, err := apiClient.GetAgentByNameAndVersion(name, version)
+	// Get the latest published and approved version of the agent
+	agentModel, err := apiClient.GetAgentByNameAndVersion(name, version, true, true)
 	if err != nil {
 		return fmt.Errorf("failed to fetch agent %q: %w", name, err)
 	}

@@ -33,7 +33,7 @@ func TestCORSHeaders(t *testing.T) {
 
 	// Create test services
 	db := database.NewTestDB(t)
-	registryService := service.NewRegistryService(db, cfg)
+	registryService := service.NewRegistryService(db, cfg, true)
 
 	shutdownTelemetry, metrics, err := telemetry.InitMetrics("test")
 	assert.NoError(t, err)
@@ -147,7 +147,7 @@ func TestCORSHeaderValues(t *testing.T) {
 
 	// Create test services
 	db := database.NewTestDB(t)
-	registryService := service.NewRegistryService(db, cfg)
+	registryService := service.NewRegistryService(db, cfg, true)
 
 	shutdownTelemetry, metrics, err := telemetry.InitMetrics("test")
 	assert.NoError(t, err)

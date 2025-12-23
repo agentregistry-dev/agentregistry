@@ -31,23 +31,26 @@ const maxServerVersionsPerServer = 10000
 // registryServiceImpl implements the RegistryService interface using our Database
 // It also implements the Reconciler interface for server-side container management
 type registryServiceImpl struct {
-	db  database.Database
-	cfg *config.Config
+	db                   database.Database
+	cfg                  *config.Config
+	autoApproveArtifacts bool
 }
 
 // NewRegistryService creates a new registry service with the provided database and configuration
 func NewRegistryService(
 	db database.Database,
 	cfg *config.Config,
+	autoApproveArtifacts bool,
 ) RegistryService {
 	return &registryServiceImpl{
-		db:  db,
-		cfg: cfg,
+		db:                   db,
+		cfg:                  cfg,
+		autoApproveArtifacts: autoApproveArtifacts,
 	}
 }
 
 // ListServers returns registry entries with cursor-based pagination and optional filtering
-func (s *registryServiceImpl) ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
+func (s *registryServiceImpl) ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*models.ServerResponse, string, error) {
 	// If limit is not set or negative, use a default limit
 	if limit <= 0 {
 		limit = 30
@@ -63,7 +66,7 @@ func (s *registryServiceImpl) ListServers(ctx context.Context, filter *database.
 }
 
 // GetServerByName retrieves the latest version of a server by its server name
-func (s *registryServiceImpl) GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+func (s *registryServiceImpl) GetServerByName(ctx context.Context, serverName string) (*models.ServerResponse, error) {
 	serverRecord, err := s.db.GetServerByName(ctx, nil, serverName)
 	if err != nil {
 		return nil, err
@@ -73,8 +76,8 @@ func (s *registryServiceImpl) GetServerByName(ctx context.Context, serverName st
 }
 
 // GetServerByNameAndVersion retrieves a specific version of a server by server name and version
-func (s *registryServiceImpl) GetServerByNameAndVersion(ctx context.Context, serverName string, version string, publishedOnly bool) (*apiv0.ServerResponse, error) {
-	serverRecord, err := s.db.GetServerByNameAndVersion(ctx, nil, serverName, version, publishedOnly)
+func (s *registryServiceImpl) GetServerByNameAndVersion(ctx context.Context, serverName string, version string, publishedOnly bool, approvedOnly bool) (*models.ServerResponse, error) {
+	serverRecord, err := s.db.GetServerByNameAndVersion(ctx, nil, serverName, version, publishedOnly, approvedOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -83,8 +86,8 @@ func (s *registryServiceImpl) GetServerByNameAndVersion(ctx context.Context, ser
 }
 
 // GetAllVersionsByServerName retrieves all versions of a server by server name
-func (s *registryServiceImpl) GetAllVersionsByServerName(ctx context.Context, serverName string, publishedOnly bool) ([]*apiv0.ServerResponse, error) {
-	serverRecords, err := s.db.GetAllVersionsByServerName(ctx, nil, serverName, publishedOnly)
+func (s *registryServiceImpl) GetAllVersionsByServerName(ctx context.Context, serverName string, publishedOnly bool, approvedOnly bool) ([]*models.ServerResponse, error) {
+	serverRecords, err := s.db.GetAllVersionsByServerName(ctx, nil, serverName, publishedOnly, approvedOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -93,15 +96,15 @@ func (s *registryServiceImpl) GetAllVersionsByServerName(ctx context.Context, se
 }
 
 // CreateServer creates a new server version
-func (s *registryServiceImpl) CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
+func (s *registryServiceImpl) CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*models.ServerResponse, error) {
 	// Wrap the entire operation in a transaction
-	return database.InTransactionT(ctx, s.db, func(ctx context.Context, tx pgx.Tx) (*apiv0.ServerResponse, error) {
+	return database.InTransactionT(ctx, s.db, func(ctx context.Context, tx pgx.Tx) (*models.ServerResponse, error) {
 		return s.createServerInTransaction(ctx, tx, req)
 	})
 }
 
 // createServerInTransaction contains the actual CreateServer logic within a transaction
-func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx pgx.Tx, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
+func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx pgx.Tx, req *apiv0.ServerJSON) (*models.ServerResponse, error) {
 	// Validate the request
 	if err := validators.ValidatePublishRequest(ctx, *req, s.cfg); err != nil {
 		return nil, err
@@ -175,7 +178,25 @@ func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx 
 	}
 
 	// Insert new server version
-	return s.db.CreateServer(ctx, tx, &serverJSON, officialMeta)
+	serverResponse, err := s.db.CreateServer(ctx, tx, &serverJSON, officialMeta)
+	if err != nil {
+		return nil, err
+	}
+
+	// Auto-approve a created artifact if configured
+	if s.autoApproveArtifacts {
+		if err := s.db.ApproveServer(ctx, tx, serverJSON.Name, serverJSON.Version, "Auto-approved: auto-approval is enabled"); err != nil {
+			return nil, fmt.Errorf("failed to auto-approve server: %w", err)
+		}
+		// Update the response to reflect approved status
+		serverResponse.Meta.ApprovalStatus.Status = "APPROVED"
+		now := time.Now()
+		serverResponse.Meta.ApprovalStatus.UpdatedAt = &now
+		approvedReason := "Auto-approved: auto-approval is enabled"
+		serverResponse.Meta.ApprovalStatus.Reason = &approvedReason
+	}
+
+	return serverResponse, nil
 }
 
 // validateNoDuplicateRemoteURLs checks that no other server is using the same remote URLs
@@ -316,13 +337,46 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 		IsLatest:    isNewLatest,
 	}
 
-	return s.db.CreateSkill(ctx, tx, &skillJSON, officialMeta)
+	// Insert new skill version
+	skillResponse, err := s.db.CreateSkill(ctx, tx, &skillJSON, officialMeta)
+	if err != nil {
+		return nil, err
+	}
+
+	// Auto-approve a created artifact if configured
+	if s.autoApproveArtifacts {
+		if err := s.db.ApproveSkill(ctx, tx, skillJSON.Name, skillJSON.Version, "Auto-approved: auto-approval is enabled"); err != nil {
+			return nil, fmt.Errorf("failed to auto-approve skill: %w", err)
+		}
+		// Update the response to reflect approved status
+		skillResponse.Meta.ApprovalStatus.Status = "APPROVED"
+		now := time.Now()
+		skillResponse.Meta.ApprovalStatus.UpdatedAt = &now
+		approvedReason := "Auto-approved: auto-approval is enabled"
+		skillResponse.Meta.ApprovalStatus.Reason = &approvedReason
+	}
+
+	return skillResponse, nil
 }
 
 // PublishSkill marks a skill as published
 func (s *registryServiceImpl) PublishSkill(ctx context.Context, skillName, version string) error {
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
 		return s.db.PublishSkill(txCtx, tx, skillName, version)
+	})
+}
+
+// ApproveSkill marks a skill as approved
+func (s *registryServiceImpl) ApproveSkill(ctx context.Context, skillName, version string, reason string) error {
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		return s.db.ApproveSkill(txCtx, tx, skillName, version, reason)
+	})
+}
+
+// DenySkill marks a skill as denied
+func (s *registryServiceImpl) DenySkill(ctx context.Context, skillName, version string, reason string) error {
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		return s.db.DenySkill(txCtx, tx, skillName, version, reason)
 	})
 }
 
@@ -334,17 +388,17 @@ func (s *registryServiceImpl) UnpublishSkill(ctx context.Context, skillName, ver
 }
 
 // UpdateServer updates an existing server with new details
-func (s *registryServiceImpl) UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
+func (s *registryServiceImpl) UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*models.ServerResponse, error) {
 	// Wrap the entire operation in a transaction
-	return database.InTransactionT(ctx, s.db, func(ctx context.Context, tx pgx.Tx) (*apiv0.ServerResponse, error) {
+	return database.InTransactionT(ctx, s.db, func(ctx context.Context, tx pgx.Tx) (*models.ServerResponse, error) {
 		return s.updateServerInTransaction(ctx, tx, serverName, version, req, newStatus)
 	})
 }
 
 // updateServerInTransaction contains the actual UpdateServer logic within a transaction
-func (s *registryServiceImpl) updateServerInTransaction(ctx context.Context, tx pgx.Tx, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
+func (s *registryServiceImpl) updateServerInTransaction(ctx context.Context, tx pgx.Tx, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*models.ServerResponse, error) {
 	// Get current server to check if it's deleted or being deleted
-	currentServer, err := s.db.GetServerByNameAndVersion(ctx, tx, serverName, version, false)
+	currentServer, err := s.db.GetServerByNameAndVersion(ctx, tx, serverName, version, false, false)
 	if err != nil {
 		return nil, err
 	}
@@ -401,7 +455,7 @@ func (s *registryServiceImpl) StoreServerReadme(ctx context.Context, serverName,
 	}
 
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
-		if _, err := s.db.GetServerByNameAndVersion(txCtx, tx, serverName, version, false); err != nil {
+		if _, err := s.db.GetServerByNameAndVersion(txCtx, tx, serverName, version, false, false); err != nil {
 			return err
 		}
 
@@ -434,6 +488,28 @@ func (s *registryServiceImpl) GetServerReadmeByVersion(ctx context.Context, serv
 func (s *registryServiceImpl) PublishServer(ctx context.Context, serverName, version string) error {
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
 		return s.db.PublishServer(txCtx, tx, serverName, version)
+	})
+}
+
+// ApproveServer marks a server as approved
+func (s *registryServiceImpl) ApproveServer(ctx context.Context, serverName, version string, reason string) error {
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		// Block approval change if server is deployed
+		if deployment, _ := s.db.GetDeploymentByNameAndVersion(txCtx, tx, serverName, version); deployment != nil {
+			return database.ErrCannotChangeApprovalWhileDeployed
+		}
+		return s.db.ApproveServer(txCtx, tx, serverName, version, reason)
+	})
+}
+
+// DenyServer marks a server as denied
+func (s *registryServiceImpl) DenyServer(ctx context.Context, serverName, version string, reason string) error {
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		// Block approval change if server is deployed
+		if deployment, _ := s.db.GetDeploymentByNameAndVersion(txCtx, tx, serverName, version); deployment != nil {
+			return database.ErrCannotChangeApprovalWhileDeployed
+		}
+		return s.db.DenyServer(txCtx, tx, serverName, version, reason)
 	})
 }
 
@@ -506,13 +582,13 @@ func (s *registryServiceImpl) GetAgentByName(ctx context.Context, agentName stri
 }
 
 // GetAgentByNameAndVersion retrieves a specific version of an agent by name and version
-func (s *registryServiceImpl) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
-	return s.db.GetAgentByNameAndVersion(ctx, nil, agentName, version)
+func (s *registryServiceImpl) GetAgentByNameAndVersion(ctx context.Context, agentName, version string, publishedOnly bool, approvedOnly bool) (*models.AgentResponse, error) {
+	return s.db.GetAgentByNameAndVersion(ctx, nil, agentName, version, publishedOnly, approvedOnly)
 }
 
 // GetAllVersionsByAgentName retrieves all versions for an agent
-func (s *registryServiceImpl) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
-	return s.db.GetAllVersionsByAgentName(ctx, nil, agentName)
+func (s *registryServiceImpl) GetAllVersionsByAgentName(ctx context.Context, agentName string, publishedOnly bool, approvedOnly bool) ([]*models.AgentResponse, error) {
+	return s.db.GetAllVersionsByAgentName(ctx, nil, agentName, publishedOnly, approvedOnly)
 }
 
 // CreateAgent creates a new agent version
@@ -599,13 +675,54 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 		IsLatest:    isNewLatest,
 	}
 
-	return s.db.CreateAgent(ctx, tx, &agentJSON, officialMeta)
+	// Insert new agent version
+	agentResponse, err := s.db.CreateAgent(ctx, tx, &agentJSON, officialMeta)
+	if err != nil {
+		return nil, err
+	}
+
+	// Auto-approve a created artifact if configured
+	if s.autoApproveArtifacts {
+		if err := s.db.ApproveAgent(ctx, tx, agentJSON.Name, agentJSON.Version, "Auto-approved: auto-approval is enabled"); err != nil {
+			return nil, fmt.Errorf("failed to auto-approve agent: %w", err)
+		}
+		// Update the response to reflect approved status
+		agentResponse.Meta.ApprovalStatus.Status = "APPROVED"
+		now := time.Now()
+		agentResponse.Meta.ApprovalStatus.UpdatedAt = &now
+		approvedReason := "Auto-approved: auto-approval is enabled"
+		agentResponse.Meta.ApprovalStatus.Reason = &approvedReason
+	}
+
+	return agentResponse, nil
 }
 
 // PublishAgent marks an agent as published
 func (s *registryServiceImpl) PublishAgent(ctx context.Context, agentName, version string) error {
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
 		return s.db.PublishAgent(txCtx, tx, agentName, version)
+	})
+}
+
+// ApproveAgent marks an agent as approved
+func (s *registryServiceImpl) ApproveAgent(ctx context.Context, agentName, version string, reason string) error {
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		// Block approval change if agent is deployed
+		if deployment, _ := s.db.GetDeploymentByNameAndVersion(txCtx, tx, agentName, version); deployment != nil {
+			return database.ErrCannotChangeApprovalWhileDeployed
+		}
+		return s.db.ApproveAgent(txCtx, tx, agentName, version, reason)
+	})
+}
+
+// DenyAgent marks an agent as denied
+func (s *registryServiceImpl) DenyAgent(ctx context.Context, agentName, version string, reason string) error {
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		// Block approval change if agent is deployed
+		if deployment, _ := s.db.GetDeploymentByNameAndVersion(txCtx, tx, agentName, version); deployment != nil {
+			return database.ErrCannotChangeApprovalWhileDeployed
+		}
+		return s.db.DenyAgent(txCtx, tx, agentName, version, reason)
 	})
 }
 
@@ -638,8 +755,9 @@ func (s *registryServiceImpl) IsServerPublished(ctx context.Context, serverName,
 }
 
 // DeployServer deploys a server with configuration
+// Only deploy servers that are approved and published
 func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool) (*models.Deployment, error) {
-	serverResp, err := s.db.GetServerByNameAndVersion(ctx, nil, serverName, version, true)
+	serverResp, err := s.db.GetServerByNameAndVersion(ctx, nil, serverName, version, true, true)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
 			return nil, fmt.Errorf("server %s not found in registry: %w", serverName, database.ErrNotFound)
@@ -678,7 +796,7 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 
 // DeployAgent deploys an agent with configuration
 func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool) (*models.Deployment, error) {
-	agentResp, err := s.db.GetAgentByNameAndVersion(ctx, nil, agentName, version)
+	agentResp, err := s.db.GetAgentByNameAndVersion(ctx, nil, agentName, version, true, true)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
 			return nil, fmt.Errorf("agent %s not found in registry: %w", agentName, database.ErrNotFound)
@@ -765,7 +883,7 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 	for _, dep := range deployments {
 		switch dep.ResourceType {
 		case "mcp":
-			depServer, err := s.GetServerByNameAndVersion(ctx, dep.ServerName, dep.Version, true)
+			depServer, err := s.GetServerByNameAndVersion(ctx, dep.ServerName, dep.Version, true, true)
 			if err != nil {
 				log.Printf("Warning: Failed to get server %s v%s: %v", dep.ServerName, dep.Version, err)
 				continue
@@ -794,7 +912,7 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 			})
 
 		case "agent":
-			depAgent, err := s.GetAgentByNameAndVersion(ctx, dep.ServerName, dep.Version)
+			depAgent, err := s.GetAgentByNameAndVersion(ctx, dep.ServerName, dep.Version, true, true)
 			if err != nil {
 				log.Printf("Warning: Failed to get agent %s v%s: %v", dep.ServerName, dep.Version, err)
 				continue

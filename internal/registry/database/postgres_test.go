@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	models "github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -205,7 +206,7 @@ func TestPostgreSQL_GetServerByNameAndVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := db.GetServerByNameAndVersion(ctx, nil, tt.serverName, tt.version, false)
+			result, err := db.GetServerByNameAndVersion(ctx, nil, tt.serverName, tt.version, false, false)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -733,7 +734,7 @@ func TestPostgreSQL_HelperMethods(t *testing.T) {
 	})
 
 	t.Run("GetAllVersionsByServerName", func(t *testing.T) {
-		allVersions, err := db.GetAllVersionsByServerName(ctx, nil, serverName, false)
+		allVersions, err := db.GetAllVersionsByServerName(ctx, nil, serverName, false, false)
 		assert.NoError(t, err)
 		assert.Len(t, allVersions, 3)
 
@@ -903,7 +904,7 @@ func TestPostgreSQL_PerformanceScenarios(t *testing.T) {
 		assert.Equal(t, versionCount, count)
 
 		// Test getting all versions
-		allVersions, err := db.GetAllVersionsByServerName(ctx, nil, serverName, false)
+		allVersions, err := db.GetAllVersionsByServerName(ctx, nil, serverName, false, false)
 		assert.NoError(t, err)
 		assert.Len(t, allVersions, versionCount)
 
@@ -935,7 +936,7 @@ func TestPostgreSQL_PerformanceScenarios(t *testing.T) {
 		}
 
 		// Test paginated retrieval
-		allResults := []*apiv0.ServerResponse{}
+		allResults := []*models.ServerResponse{}
 		cursor := ""
 		pageSize := 10
 
