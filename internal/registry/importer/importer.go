@@ -3,7 +3,9 @@ package importer
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,6 +26,7 @@ import (
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
@@ -32,15 +35,17 @@ import (
 
 // Service handles importing seed data into the registry
 type Service struct {
-	registry          service.RegistryService
-	httpClient        *http.Client
-	requestHeaders    map[string]string
-	updateIfExists    bool
-	githubToken       string
-	readmeSeedPath    string
-	progressCachePath string
-	progressMu        sync.RWMutex
-	processedServers  map[string]struct{}
+	registry           service.RegistryService
+	httpClient         *http.Client
+	requestHeaders     map[string]string
+	updateIfExists     bool
+	githubToken        string
+	readmeSeedPath     string
+	progressCachePath  string
+	progressMu         sync.RWMutex
+	processedServers   map[string]struct{}
+	generateEmbeddings bool
+	embeddingProvider  embeddings.Provider
 }
 
 // NewService creates a new importer service with sane defaults
@@ -87,6 +92,16 @@ func (s *Service) SetGitHubToken(token string) {
 // SetReadmeSeedPath configures an optional README seed file used for imports.
 func (s *Service) SetReadmeSeedPath(path string) {
 	s.readmeSeedPath = strings.TrimSpace(path)
+}
+
+// SetEmbeddingProvider configures the embedding provider used for semantic enrichment.
+func (s *Service) SetEmbeddingProvider(provider embeddings.Provider) {
+	s.embeddingProvider = provider
+}
+
+// SetGenerateEmbeddings toggles whether embeddings should be generated during import.
+func (s *Service) SetGenerateEmbeddings(enabled bool) {
+	s.generateEmbeddings = enabled
 }
 
 // SetProgressCachePath configures a file used to persist import progress between runs.
@@ -184,6 +199,15 @@ func (s *Service) importServer(
 		}
 	}
 
+	var embeddingRecord *database.SemanticEmbedding
+	if s.generateEmbeddings && s.embeddingProvider != nil {
+		if record, err := s.buildServerEmbedding(ctx, srv); err != nil {
+			log.Printf("Warning: failed to generate embedding for %s@%s: %v", srv.Name, srv.Version, err)
+		} else {
+			embeddingRecord = record
+		}
+	}
+
 	_, err := s.registry.CreateServer(ctx, srv)
 	if err != nil {
 		// If duplicate version and update is enabled, try update path
@@ -196,6 +220,12 @@ func (s *Service) importServer(
 		} else {
 			log.Printf("Failed to create server %s: %v", srv.Name, err)
 			return
+		}
+	}
+
+	if embeddingRecord != nil {
+		if err := s.registry.UpsertServerEmbedding(ctx, srv.Name, srv.Version, embeddingRecord); err != nil {
+			log.Printf("Warning: failed to store embedding for %s@%s: %v", srv.Name, srv.Version, err)
 		}
 	}
 
@@ -216,6 +246,83 @@ func (s *Service) importServer(
 			log.Printf("Warning: storing README failed for %s@%s: %v", srv.Name, srv.Version, err)
 		}
 	}
+}
+
+func (s *Service) buildServerEmbedding(ctx context.Context, srv *apiv0.ServerJSON) (*database.SemanticEmbedding, error) {
+	payload := buildServerEmbeddingPayload(srv)
+	if strings.TrimSpace(payload) == "" {
+		return nil, fmt.Errorf("embedding payload is empty for %s", srv.Name)
+	}
+	if s.embeddingProvider == nil {
+		return nil, fmt.Errorf("embedding provider is not configured")
+	}
+
+	result, err := s.embeddingProvider.Generate(ctx, embeddings.Payload{Text: payload})
+	if err != nil {
+		return nil, err
+	}
+
+	sum := sha256.Sum256([]byte(payload))
+	dims := result.Dimensions
+	if dims == 0 {
+		dims = len(result.Vector)
+	}
+	generated := result.GeneratedAt
+	if generated.IsZero() {
+		generated = time.Now().UTC()
+	}
+
+	return &database.SemanticEmbedding{
+		Vector:     result.Vector,
+		Provider:   result.Provider,
+		Model:      result.Model,
+		Dimensions: dims,
+		Checksum:   hex.EncodeToString(sum[:]),
+		Generated:  generated,
+	}, nil
+}
+
+func buildServerEmbeddingPayload(server *apiv0.ServerJSON) string {
+	if server == nil {
+		return ""
+	}
+
+	var parts []string
+	appendIf := func(values ...string) {
+		for _, v := range values {
+			if strings.TrimSpace(v) != "" {
+				parts = append(parts, v)
+			}
+		}
+	}
+
+	appendIf(server.Name, server.Title, server.Description, server.Version, server.WebsiteURL)
+
+	if server.Repository != nil {
+		if repoJSON, err := json.Marshal(server.Repository); err == nil {
+			parts = append(parts, string(repoJSON))
+		}
+	}
+
+	if len(server.Packages) > 0 {
+		if pkgJSON, err := json.Marshal(server.Packages); err == nil {
+			parts = append(parts, string(pkgJSON))
+		}
+	}
+
+	if len(server.Remotes) > 0 {
+		if remotesJSON, err := json.Marshal(server.Remotes); err == nil {
+			parts = append(parts, string(remotesJSON))
+		}
+	}
+
+	if server.Meta != nil && server.Meta.PublisherProvided != nil {
+		if metaJSON, err := json.Marshal(server.Meta.PublisherProvided); err == nil {
+			parts = append(parts, string(metaJSON))
+		}
+	}
+
+	return strings.Join(parts, "\n")
 }
 
 // readSeedFile reads seed data from various sources

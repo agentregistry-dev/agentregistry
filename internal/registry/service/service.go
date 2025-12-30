@@ -39,6 +39,8 @@ type RegistryService interface {
 	UnpublishServer(ctx context.Context, serverName, version string) error
 	// DeleteServer permanently removes a server version from the registry
 	DeleteServer(ctx context.Context, serverName, version string) error
+	// UpsertServerEmbedding stores semantic embedding metadata for a server version
+	UpsertServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error
 
 	// Agents APIs
 	// ListAgents retrieve all agents with optional filtering
@@ -57,6 +59,8 @@ type RegistryService interface {
 	UnpublishAgent(ctx context.Context, agentName, version string) error
 	// DeleteAgent permanently removes an agent version from the registry
 	DeleteAgent(ctx context.Context, agentName, version string) error
+	// UpsertAgentEmbedding stores semantic embedding metadata for an agent version
+	UpsertAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error
 	// Skills APIs
 	// ListSkills retrieve all skills with optional filtering
 	ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error)

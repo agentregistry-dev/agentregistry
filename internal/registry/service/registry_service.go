@@ -16,6 +16,7 @@ import (
 	models "github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/types"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime"
@@ -31,18 +32,21 @@ const maxServerVersionsPerServer = 10000
 // registryServiceImpl implements the RegistryService interface using our Database
 // It also implements the Reconciler interface for server-side container management
 type registryServiceImpl struct {
-	db  database.Database
-	cfg *config.Config
+	db                 database.Database
+	cfg                *config.Config
+	embeddingsProvider embeddings.Provider
 }
 
 // NewRegistryService creates a new registry service with the provided database and configuration
 func NewRegistryService(
 	db database.Database,
 	cfg *config.Config,
+	embeddingProvider embeddings.Provider,
 ) RegistryService {
 	return &registryServiceImpl{
-		db:  db,
-		cfg: cfg,
+		db:                 db,
+		cfg:                cfg,
+		embeddingsProvider: embeddingProvider,
 	}
 }
 
@@ -51,6 +55,10 @@ func (s *registryServiceImpl) ListServers(ctx context.Context, filter *database.
 	// If limit is not set or negative, use a default limit
 	if limit <= 0 {
 		limit = 30
+	}
+
+	if err := s.prepareSemanticOptions(ctx, filter); err != nil {
+		return nil, "", err
 	}
 
 	// Use the database's ListServers method with pagination and filtering
@@ -493,6 +501,9 @@ func (s *registryServiceImpl) ListAgents(ctx context.Context, filter *database.A
 	if limit <= 0 {
 		limit = 30
 	}
+	if err := s.prepareSemanticOptions(ctx, filter); err != nil {
+		return nil, "", err
+	}
 	agents, next, err := s.db.ListAgents(ctx, nil, filter, cursor, limit)
 	if err != nil {
 		return nil, "", err
@@ -620,6 +631,18 @@ func (s *registryServiceImpl) UnpublishAgent(ctx context.Context, agentName, ver
 func (s *registryServiceImpl) DeleteAgent(ctx context.Context, agentName, version string) error {
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
 		return s.db.DeleteAgent(txCtx, tx, agentName, version)
+	})
+}
+
+func (s *registryServiceImpl) UpsertServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error {
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		return s.db.SetServerEmbedding(txCtx, tx, serverName, version, embedding)
+	})
+}
+
+func (s *registryServiceImpl) UpsertAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error {
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		return s.db.SetAgentEmbedding(txCtx, tx, agentName, version, embedding)
 	})
 }
 
@@ -960,4 +983,44 @@ func convertServerSpecToServerJSON(spec *types.ServerSpec) *apiv0.ServerJSON {
 		Icons: nil,
 		Meta:  nil,
 	}
+}
+
+func (s *registryServiceImpl) prepareSemanticOptions(ctx context.Context, filter interface{}) error {
+	if filter == nil {
+		return nil
+	}
+
+	switch f := filter.(type) {
+	case *database.ServerFilter:
+		return s.ensureSemanticEmbedding(ctx, f.Semantic)
+	case *database.AgentFilter:
+		return s.ensureSemanticEmbedding(ctx, f.Semantic)
+	default:
+		return nil
+	}
+}
+
+func (s *registryServiceImpl) ensureSemanticEmbedding(ctx context.Context, opts *database.SemanticSearchOptions) error {
+	if opts == nil {
+		return nil
+	}
+	if len(opts.QueryEmbedding) > 0 {
+		return nil
+	}
+	if strings.TrimSpace(opts.RawQuery) == "" {
+		return fmt.Errorf("%w: semantic search requires a non-empty search string", database.ErrInvalidInput)
+	}
+	if s.embeddingsProvider == nil {
+		return fmt.Errorf("%w: semantic search provider is not configured", database.ErrInvalidInput)
+	}
+
+	result, err := s.embeddingsProvider.Generate(ctx, embeddings.Payload{
+		Text: opts.RawQuery,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to generate semantic embedding: %w", err)
+	}
+
+	opts.QueryEmbedding = result.Vector
+	return nil
 }

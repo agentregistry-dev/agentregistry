@@ -20,11 +20,13 @@ const errRecordNotFound = "record not found"
 
 // ListServersInput represents the input for listing servers
 type ListServersInput struct {
-	Cursor       string `query:"cursor" doc:"Pagination cursor" required:"false" example:"server-cursor-123"`
-	Limit        int    `query:"limit" doc:"Number of items per page" default:"30" minimum:"1" maximum:"100" example:"50"`
-	UpdatedSince string `query:"updated_since" doc:"Filter servers updated since timestamp (RFC3339 datetime)" required:"false" example:"2025-08-07T13:15:04.280Z"`
-	Search       string `query:"search" doc:"Search servers by name (substring match)" required:"false" example:"filesystem"`
-	Version      string `query:"version" doc:"Filter by version ('latest' for latest version, or an exact version like '1.2.3')" required:"false" example:"latest"`
+	Cursor                 string  `query:"cursor" doc:"Pagination cursor" required:"false" example:"server-cursor-123"`
+	Limit                  int     `query:"limit" doc:"Number of items per page" default:"30" minimum:"1" maximum:"100" example:"50"`
+	UpdatedSince           string  `query:"updated_since" doc:"Filter servers updated since timestamp (RFC3339 datetime)" required:"false" example:"2025-08-07T13:15:04.280Z"`
+	Search                 string  `query:"search" doc:"Search servers by name (substring match)" required:"false" example:"filesystem"`
+	Version                string  `query:"version" doc:"Filter by version ('latest' for latest version, or an exact version like '1.2.3')" required:"false" example:"latest"`
+	Semantic               bool    `query:"semantic_search" doc:"Use semantic search for the search term (hybrid with substring filter when search is set)" default:"false"`
+	SemanticMatchThreshold float64 `query:"semantic_threshold" doc:"Optional maximum distance for semantic matches (cosine distance)" required:"false"`
 }
 
 // ServerDetailInput represents the input for getting server details
@@ -145,6 +147,17 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			filter.SubstringName = &input.Search
 		}
 
+		if input.Semantic {
+			if strings.TrimSpace(input.Search) == "" {
+				return nil, huma.Error400BadRequest("semantic_search requires the search parameter to be set", nil)
+			}
+			filter.Semantic = &database.SemanticSearchOptions{
+				RawQuery:  input.Search,
+				Threshold: input.SemanticMatchThreshold,
+			}
+			filter.Semantic.HybridSubstring = filter.SubstringName
+		}
+
 		// Handle version parameter
 		if input.Version != "" {
 			if input.Version == "latest" {
@@ -160,6 +173,9 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		// Get paginated results with filtering
 		servers, nextCursor, err := registry.ListServers(ctx, filter, input.Cursor, input.Limit)
 		if err != nil {
+			if errors.Is(err, database.ErrInvalidInput) {
+				return nil, huma.Error400BadRequest(err.Error(), err)
+			}
 			return nil, huma.Error500InternalServerError("Failed to get registry list", err)
 		}
 

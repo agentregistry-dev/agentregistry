@@ -22,6 +22,8 @@ type ListAgentsInput struct {
 	UpdatedSince string `query:"updated_since" doc:"Filter agents updated since timestamp (RFC3339 datetime)" required:"false" example:"2025-08-07T13:15:04.280Z"`
 	Search       string `query:"search" doc:"Search agents by name (substring match)" required:"false" example:"filesystem"`
 	Version      string `query:"version" doc:"Filter by version ('latest' for latest version, or an exact version like '1.2.3')" required:"false" example:"latest"`
+	Semantic     bool   `query:"semantic_search" doc:"Use semantic search for the search term"` 
+	SemanticMatchThreshold float64 `query:"semantic_threshold" doc:"Optional maximum cosine distance when semantic_search is enabled" required:"false"`
 }
 
 // AgentDetailInput represents the input for getting agent details
@@ -77,6 +79,16 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		if input.Search != "" {
 			filter.SubstringName = &input.Search
 		}
+		if input.Semantic {
+			if strings.TrimSpace(input.Search) == "" {
+				return nil, huma.Error400BadRequest("semantic_search requires the search parameter to be provided", nil)
+			}
+			filter.Semantic = &database.SemanticSearchOptions{
+				RawQuery:  input.Search,
+				Threshold: input.SemanticMatchThreshold,
+			}
+			filter.Semantic.HybridSubstring = filter.SubstringName
+		}
 		if input.Version != "" {
 			if input.Version == "latest" {
 				isLatest := true
@@ -88,6 +100,9 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 
 		agents, nextCursor, err := registry.ListAgents(ctx, filter, input.Cursor, input.Limit)
 		if err != nil {
+			if errors.Is(err, database.ErrInvalidInput) {
+				return nil, huma.Error400BadRequest(err.Error(), err)
+			}
 			return nil, huma.Error500InternalServerError("Failed to get agents list", err)
 		}
 
