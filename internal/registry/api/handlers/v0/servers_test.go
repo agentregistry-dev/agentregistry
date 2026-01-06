@@ -6,14 +6,18 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"testing"
+	"time"
 
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
+	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/stretchr/testify/assert"
@@ -113,6 +117,97 @@ func TestListServersEndpoint(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestListServersSemanticSearch(t *testing.T) {
+	ctx := context.Background()
+	db := database.NewTestDB(t)
+	ensureVectorExtension(t, db)
+
+	cfg := config.NewConfig()
+	cfg.Embeddings.Enabled = true
+	cfg.Embeddings.Provider = "stub"
+	cfg.Embeddings.Model = "stub-model"
+
+	provider := newStubEmbeddingProvider(map[string][]float32{
+		"server": {0.1, 0.95, 0.0},
+	})
+
+	registryService := service.NewRegistryService(db, cfg, provider)
+
+	// Setup servers
+	backupServer := "com.example/backup-server"
+	weatherServer := "com.example/weather-server"
+
+	for _, srv := range []struct {
+		name        string
+		description string
+	}{
+		{name: backupServer, description: "Handles filesystem backups"},
+		{name: weatherServer, description: "Provides detailed weather forecasts"},
+	} {
+		_, err := registryService.CreateServer(ctx, &apiv0.ServerJSON{
+			Schema:      model.CurrentSchemaURL,
+			Name:        srv.name,
+			Description: srv.description,
+			Version:     "1.0.0",
+		})
+		require.NoError(t, err)
+		require.NoError(t, registryService.PublishServer(ctx, srv.name, "1.0.0"))
+	}
+
+	// Seed embeddings for deterministic ordering
+	require.NoError(t, registryService.UpsertServerEmbedding(ctx, backupServer, "1.0.0", &database.SemanticEmbedding{
+		Vector:     []float32{0.1, 0.9, 0.0},
+		Provider:   "stub",
+		Model:      "stub-model",
+		Dimensions: 3,
+		Checksum:   "backup",
+		Generated:  time.Now().UTC(),
+	}))
+	require.NoError(t, registryService.UpsertServerEmbedding(ctx, weatherServer, "1.0.0", &database.SemanticEmbedding{
+		Vector:     []float32{0.9, 0.1, 0.0},
+		Provider:   "stub",
+		Model:      "stub-model",
+		Dimensions: 3,
+		Checksum:   "weather",
+		Generated:  time.Now().UTC(),
+	}))
+
+	mux := http.NewServeMux()
+	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
+	v0.RegisterServersEndpoints(api, "/v0", registryService, false)
+
+	t.Run("semantic search ranks by similarity", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/v0/servers?search=server&semantic_search=true", nil)
+		w := httptest.NewRecorder()
+
+		mux.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var resp apiv0.ServerListResponse
+		require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+		require.Len(t, resp.Servers, 2)
+
+		assert.Equal(t, backupServer, resp.Servers[0].Server.Name, "backup server should rank first")
+		semanticMeta, ok := resp.Servers[0].Server.Meta.PublisherProvided["agentregistry.solo.io/semantic"].(map[string]interface{})
+		require.True(t, ok, "semantic metadata should be present")
+		assert.Contains(t, semanticMeta, "score")
+
+		assert.Equal(t, []string{"server"}, provider.Queries())
+	})
+
+	t.Run("semantic search without search term is rejected", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/v0/servers?semantic_search=true", nil)
+		w := httptest.NewRecorder()
+
+		mux.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Contains(t, w.Body.String(), "semantic_search requires the search parameter")
+		assert.Equal(t, []string{"server"}, provider.Queries(), "provider should not be called for invalid requests")
+	})
 }
 
 func TestGetLatestServerVersionEndpoint(t *testing.T) {
@@ -312,6 +407,56 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 			}
 		})
 	}
+}
+
+func ensureVectorExtension(t *testing.T, db database.Database) {
+	t.Helper()
+	err := db.InTransaction(context.Background(), func(ctx context.Context, tx pgx.Tx) error {
+		_, execErr := tx.Exec(ctx, "CREATE EXTENSION IF NOT EXISTS vector")
+		return execErr
+	})
+	require.NoError(t, err, "failed to ensure pgvector extension for tests")
+}
+
+type stubEmbeddingProvider struct {
+	mu       sync.Mutex
+	vectors  map[string][]float32
+	queries  []string
+	provider string
+	model    string
+}
+
+func newStubEmbeddingProvider(vectors map[string][]float32) *stubEmbeddingProvider {
+	return &stubEmbeddingProvider{
+		vectors:  vectors,
+		provider: "stub",
+		model:    "stub-model",
+	}
+}
+
+func (s *stubEmbeddingProvider) Generate(ctx context.Context, payload embeddings.Payload) (*embeddings.Result, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.queries = append(s.queries, payload.Text)
+	vec, ok := s.vectors[payload.Text]
+	if !ok {
+		vec = []float32{0, 0, 1}
+	}
+
+	return &embeddings.Result{
+		Vector:      vec,
+		Provider:    s.provider,
+		Model:       s.model,
+		Dimensions:  len(vec),
+		GeneratedAt: time.Now().UTC(),
+	}, nil
+}
+
+func (s *stubEmbeddingProvider) Queries() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.queries...)
 }
 
 func TestGetServerReadmeEndpoints(t *testing.T) {
