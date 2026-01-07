@@ -41,6 +41,8 @@ type RegistryService interface {
 	DeleteServer(ctx context.Context, serverName, version string) error
 	// UpsertServerEmbedding stores semantic embedding metadata for a server version
 	UpsertServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error
+	// GetServerEmbeddingMetadata retrieves the embedding metadata for a server version
+	GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error)
 
 	// Agents APIs
 	// ListAgents retrieve all agents with optional filtering

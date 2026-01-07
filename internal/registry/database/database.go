@@ -77,6 +77,16 @@ type SemanticEmbedding struct {
 	Generated  time.Time
 }
 
+// SemanticEmbeddingMetadata captures stored metadata about an embedding without the vector payload.
+type SemanticEmbeddingMetadata struct {
+	HasEmbedding bool
+	Provider     string
+	Model        string
+	Dimensions   int
+	Checksum     string
+	Generated    time.Time
+}
+
 // SemanticSearchOptions drives vector similarity queries when listing resources.
 type SemanticSearchOptions struct {
 	// RawQuery retains the original search string for embedding generation (service layer use only).
@@ -126,6 +136,8 @@ type Database interface {
 	IsServerPublished(ctx context.Context, tx pgx.Tx, serverName, version string) (bool, error)
 	// SetServerEmbedding upserts the semantic embedding metadata for a server version
 	SetServerEmbedding(ctx context.Context, tx pgx.Tx, serverName, version string, embedding *SemanticEmbedding) error
+	// GetServerEmbeddingMetadata returns metadata about a server's embedding without loading the vector
+	GetServerEmbeddingMetadata(ctx context.Context, tx pgx.Tx, serverName, version string) (*SemanticEmbeddingMetadata, error)
 	// UpsertServerReadme stores or updates a README blob for a server version
 	UpsertServerReadme(ctx context.Context, tx pgx.Tx, readme *ServerReadme) error
 	// GetServerReadme retrieves the README blob for a specific server version

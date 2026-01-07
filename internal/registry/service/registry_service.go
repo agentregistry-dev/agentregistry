@@ -640,6 +640,10 @@ func (s *registryServiceImpl) UpsertServerEmbedding(ctx context.Context, serverN
 	})
 }
 
+func (s *registryServiceImpl) GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
+	return s.db.GetServerEmbeddingMetadata(ctx, nil, serverName, version)
+}
+
 func (s *registryServiceImpl) UpsertAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error {
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
 		return s.db.SetAgentEmbedding(txCtx, tx, agentName, version, embedding)

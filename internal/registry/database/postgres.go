@@ -929,6 +929,74 @@ func (db *PostgreSQL) SetServerEmbedding(ctx context.Context, tx pgx.Tx, serverN
 	return nil
 }
 
+// GetServerEmbeddingMetadata retrieves embedding metadata for a server version without loading
+// the underlying vector payload. This is useful for maintenance tasks that only need to know
+// whether an embedding exists or if its checksum is stale.
+func (db *PostgreSQL) GetServerEmbeddingMetadata(ctx context.Context, tx pgx.Tx, serverName, version string) (*SemanticEmbeddingMetadata, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	executor := db.getExecutor(tx)
+	query := `
+		SELECT
+			semantic_embedding IS NOT NULL AS has_embedding,
+			semantic_embedding_provider,
+			semantic_embedding_model,
+			semantic_embedding_dimensions,
+			semantic_embedding_checksum,
+			semantic_embedding_generated_at
+		FROM servers
+		WHERE server_name = $1 AND version = $2
+		LIMIT 1
+	`
+
+	var (
+		hasEmbedding bool
+		provider     sql.NullString
+		model        sql.NullString
+		dimensions   sql.NullInt32
+		checksum     sql.NullString
+		generatedAt  sql.NullTime
+	)
+
+	err := executor.QueryRow(ctx, query, serverName, version).Scan(
+		&hasEmbedding,
+		&provider,
+		&model,
+		&dimensions,
+		&checksum,
+		&generatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to fetch server embedding metadata: %w", err)
+	}
+
+	meta := &SemanticEmbeddingMetadata{
+		HasEmbedding: hasEmbedding,
+	}
+	if provider.Valid {
+		meta.Provider = provider.String
+	}
+	if model.Valid {
+		meta.Model = model.String
+	}
+	if dimensions.Valid {
+		meta.Dimensions = int(dimensions.Int32)
+	}
+	if checksum.Valid {
+		meta.Checksum = checksum.String
+	}
+	if generatedAt.Valid {
+		meta.Generated = generatedAt.Time
+	}
+
+	return meta, nil
+}
+
 func (db *PostgreSQL) UpsertServerReadme(ctx context.Context, tx pgx.Tx, readme *ServerReadme) error {
 	if ctx.Err() != nil {
 		return ctx.Err()

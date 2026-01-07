@@ -3,9 +3,7 @@ package importer
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -249,80 +247,8 @@ func (s *Service) importServer(
 }
 
 func (s *Service) buildServerEmbedding(ctx context.Context, srv *apiv0.ServerJSON) (*database.SemanticEmbedding, error) {
-	payload := buildServerEmbeddingPayload(srv)
-	if strings.TrimSpace(payload) == "" {
-		return nil, fmt.Errorf("embedding payload is empty for %s", srv.Name)
-	}
-	if s.embeddingProvider == nil {
-		return nil, fmt.Errorf("embedding provider is not configured")
-	}
-
-	result, err := s.embeddingProvider.Generate(ctx, embeddings.Payload{Text: payload})
-	if err != nil {
-		return nil, err
-	}
-
-	sum := sha256.Sum256([]byte(payload))
-	dims := result.Dimensions
-	if dims == 0 {
-		dims = len(result.Vector)
-	}
-	generated := result.GeneratedAt
-	if generated.IsZero() {
-		generated = time.Now().UTC()
-	}
-
-	return &database.SemanticEmbedding{
-		Vector:     result.Vector,
-		Provider:   result.Provider,
-		Model:      result.Model,
-		Dimensions: dims,
-		Checksum:   hex.EncodeToString(sum[:]),
-		Generated:  generated,
-	}, nil
-}
-
-func buildServerEmbeddingPayload(server *apiv0.ServerJSON) string {
-	if server == nil {
-		return ""
-	}
-
-	var parts []string
-	appendIf := func(values ...string) {
-		for _, v := range values {
-			if strings.TrimSpace(v) != "" {
-				parts = append(parts, v)
-			}
-		}
-	}
-
-	appendIf(server.Name, server.Title, server.Description, server.Version, server.WebsiteURL)
-
-	if server.Repository != nil {
-		if repoJSON, err := json.Marshal(server.Repository); err == nil {
-			parts = append(parts, string(repoJSON))
-		}
-	}
-
-	if len(server.Packages) > 0 {
-		if pkgJSON, err := json.Marshal(server.Packages); err == nil {
-			parts = append(parts, string(pkgJSON))
-		}
-	}
-
-	if len(server.Remotes) > 0 {
-		if remotesJSON, err := json.Marshal(server.Remotes); err == nil {
-			parts = append(parts, string(remotesJSON))
-		}
-	}
-
-	if server.Meta != nil && server.Meta.PublisherProvided != nil {
-		if metaJSON, err := json.Marshal(server.Meta.PublisherProvided); err == nil {
-			parts = append(parts, string(metaJSON))
-		}
-	}
-
-	return strings.Join(parts, "\n")
+	payload := embeddings.BuildServerEmbeddingPayload(srv)
+	return embeddings.GenerateSemanticEmbedding(ctx, s.embeddingProvider, payload)
 }
 
 // readSeedFile reads seed data from various sources
