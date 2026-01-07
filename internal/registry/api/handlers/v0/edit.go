@@ -7,10 +7,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/danielgtaylor/huma/v2"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
@@ -18,17 +18,14 @@ import (
 
 // EditServerInput represents the input for editing a server
 type EditServerInput struct {
-	Authorization string           `header:"Authorization" doc:"Registry JWT token with edit permissions" required:"true"`
-	ServerName    string           `path:"serverName" doc:"URL-encoded server name" example:"com.example%2Fmy-server"`
-	Version       string           `path:"version" doc:"URL-encoded version to edit" example:"1.0.0"`
-	Status        string           `query:"status" doc:"New status for the server (active, deprecated, deleted)" required:"false" enum:"active,deprecated,deleted"`
-	Body          apiv0.ServerJSON `body:""`
+	ServerName string           `path:"serverName" doc:"URL-encoded server name" example:"com.example%2Fmy-server"`
+	Version    string           `path:"version" doc:"URL-encoded version to edit" example:"1.0.0"`
+	Status     string           `query:"status" doc:"New status for the server (active, deprecated, deleted)" required:"false" enum:"active,deprecated,deleted"`
+	Body       apiv0.ServerJSON `body:""`
 }
 
 // RegisterEditEndpoints registers the edit endpoint with a custom path prefix
-func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, cfg *config.Config) {
-	jwtManager := auth.NewJWTManager(cfg)
-
+func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, cfg *config.Config, authz auth.Authorizer) {
 	// Edit server endpoint
 	huma.Register(api, huma.Operation{
 		OperationID: "edit-server" + strings.ReplaceAll(pathPrefix, "/", "-"),
@@ -41,20 +38,6 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.Reg
 			{"bearer": {}},
 		},
 	}, func(ctx context.Context, input *EditServerInput) (*Response[apiv0.ServerResponse], error) {
-		// Extract bearer token
-		const bearerPrefix = "Bearer "
-		authHeader := input.Authorization
-		if len(authHeader) < len(bearerPrefix) || !strings.EqualFold(authHeader[:len(bearerPrefix)], bearerPrefix) {
-			return nil, huma.Error401Unauthorized("Invalid Authorization header format. Expected 'Bearer <token>'")
-		}
-		token := authHeader[len(bearerPrefix):]
-
-		// Validate Registry JWT token
-		claims, err := jwtManager.ValidateToken(ctx, token)
-		if err != nil {
-			return nil, huma.Error401Unauthorized("Invalid or expired Registry JWT token", err)
-		}
-
 		// URL-decode the server name
 		serverName, err := url.PathUnescape(input.ServerName)
 		if err != nil {
@@ -77,9 +60,13 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.Reg
 			return nil, huma.Error500InternalServerError("Failed to get current server", err)
 		}
 
-		// Verify edit permissions for this server using the existing server name
-		if !jwtManager.HasPermission(currentServer.Server.Name, auth.PermissionActionEdit, claims.Permissions) {
-			return nil, huma.Error403Forbidden("You do not have edit permissions for this server")
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: serverName,
+			Type: "server",
+		}
+		if err := authz.Check(ctx, auth.PermissionActionEdit, resource); err != nil {
+			return nil, err
 		}
 
 		// Prevent renaming servers

@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 )
 
 // CryptoAlgorithm represents the cryptographic algorithm used for a public key

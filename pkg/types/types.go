@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -38,6 +39,12 @@ type AppOptions struct {
 	// If provided, this handler will be used instead of the default redirect to docs.
 	// API routes will still take precedence over the UI handler.
 	UIHandler http.Handler
+
+	// AuthnProvider is an optional authentication provider.
+	AuthnProvider auth.AuthnProvider
+
+	// AuthzProvider is an optional authorization provider.
+	AuthzProvider auth.AuthzProvider
 }
 
 // Server represents the HTTP server and provides access to the Huma API

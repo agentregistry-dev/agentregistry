@@ -23,8 +23,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/auth"
-	intauth "github.com/agentregistry-dev/agentregistry/internal/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
+	intauth "github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 )
 
 const wellKnownPath = "/.well-known/agent-registry-auth"
