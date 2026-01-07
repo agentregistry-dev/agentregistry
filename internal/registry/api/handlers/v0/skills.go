@@ -42,7 +42,7 @@ type SkillVersionsInput struct {
 
 // RegisterSkillsEndpoints registers all skill-related endpoints with a custom path prefix
 // isAdmin: if true, shows all resources; if false, only shows published resources
-func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool) {
+func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool, authz auth.Authorizer) {
 	// Determine the tags based on whether this is admin or public
 	tags := []string{"skills"}
 	if isAdmin {
@@ -58,6 +58,15 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Description: "Get a paginated list of Agentic skills from the registry",
 		Tags:        tags,
 	}, func(ctx context.Context, input *ListSkillsInput) (*Response[skillmodels.SkillListResponse], error) {
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: "*",
+			Type: "skill",
+		}
+		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
+			return nil, err
+		}
+
 		// Build filter
 		filter := &database.SkillFilter{}
 
@@ -124,6 +133,15 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
 		}
 
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: skillName,
+			Type: "skill",
+		}
+		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
+			return nil, err
+		}
+
 		var skillResp *skillmodels.SkillResponse
 		if version == "latest" {
 			skillResp, err = registry.GetSkillByName(ctx, skillName)
@@ -153,6 +171,16 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 			return nil, huma.Error400BadRequest("Invalid skill name encoding", err)
 		}
 
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: skillName,
+			Type: "skill",
+		}
+		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
+			return nil, err
+		}
+
+		// Get all versions of the skill
 		skills, err := registry.GetAllVersionsBySkillName(ctx, skillName)
 		if err != nil {
 			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
@@ -207,7 +235,7 @@ func RegisterSkillsCreateEndpoint(api huma.API, pathPrefix string, registry serv
 			Name: input.Body.Name,
 			Type: "skill",
 		}
-		if err := authz.Check(ctx, auth.PermissionActionPublish, resource); err != nil {
+		if err := authz.Check(ctx, auth.PermissionActionPush, resource); err != nil {
 			return nil, err
 		}
 
@@ -231,7 +259,21 @@ func RegisterAdminSkillsCreateEndpoint(api huma.API, pathPrefix string, registry
 			Name: input.Body.Name,
 			Type: "skill",
 		}
-		if err := authz.Check(ctx, auth.PermissionActionPublish, resource); err != nil {
+
+		// Check if the skill already exists to decide the action
+		existingSkill, err := registry.GetSkillByName(ctx, input.Body.Name)
+		if err != nil && err != database.ErrNotFound {
+			return nil, huma.Error500InternalServerError("Failed to check if skill exists", err)
+		}
+
+		var action auth.PermissionAction
+		if existingSkill != nil {
+			action = auth.PermissionActionEdit
+		} else {
+			action = auth.PermissionActionPush
+		}
+
+		if err := authz.Check(ctx, action, resource); err != nil {
 			return nil, err
 		}
 
@@ -247,7 +289,7 @@ func RegisterAdminSkillsCreateEndpoint(api huma.API, pathPrefix string, registry
 
 // RegisterSkillsPublishStatusEndpoints registers the publish/unpublish status endpoints for skills
 // These endpoints change the published status of existing skills
-func RegisterSkillsPublishStatusEndpoints(api huma.API, pathPrefix string, registry service.RegistryService) {
+func RegisterSkillsPublishStatusEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, authz auth.Authorizer) {
 	// Publish skill endpoint - marks an existing skill as published
 	huma.Register(api, huma.Operation{
 		OperationID: "publish-skill-status" + strings.ReplaceAll(pathPrefix, "/", "-"),
@@ -265,6 +307,15 @@ func RegisterSkillsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 		version, err := url.PathUnescape(input.Version)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
+		}
+
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: skillName,
+			Type: "skill",
+		}
+		if err := authz.Check(ctx, auth.PermissionActionPublish, resource); err != nil {
+			return nil, err
 		}
 
 		// Call the service to publish the skill
@@ -299,6 +350,15 @@ func RegisterSkillsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 		version, err := url.PathUnescape(input.Version)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
+		}
+
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: skillName,
+			Type: "skill",
+		}
+		if err := authz.Check(ctx, auth.PermissionActionPublish, resource); err != nil {
+			return nil, err
 		}
 
 		// Call the service to unpublish the skill

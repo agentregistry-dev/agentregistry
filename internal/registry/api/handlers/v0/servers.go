@@ -57,7 +57,7 @@ type ServerReadmeResponse struct {
 
 // RegisterServersEndpoints registers all server-related endpoints with a custom path prefix
 // isAdmin: if true, shows all resources; if false, only shows published resources
-func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool) {
+func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool, authz auth.Authorizer) {
 	if isAdmin {
 		huma.Register(api, huma.Operation{
 			OperationID: "delete-server-version" + strings.ReplaceAll(pathPrefix, "/", "-"),
@@ -67,6 +67,15 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			Description: "Permanently delete an MCP server version from the registry.",
 			Tags:        []string{"servers", "admin"},
 		}, func(ctx context.Context, input *ServerVersionDetailInput) (*Response[EmptyResponse], error) {
+			// Enforce authorization
+			resource := auth.Resource{
+				Name: input.ServerName,
+				Type: "server",
+			}
+			if err := authz.Check(ctx, auth.PermissionActionDelete, resource); err != nil {
+				return nil, err
+			}
+
 			serverName, err := url.PathUnescape(input.ServerName)
 			if err != nil {
 				return nil, huma.Error400BadRequest("Invalid server name encoding", err)
@@ -103,6 +112,15 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		Description: "Create a new MCP server in the registry as an unpublished entry (published=false).",
 		Tags:        tags,
 	}, func(ctx context.Context, input *CreateServerInput) (*Response[apiv0.ServerResponse], error) {
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: input.Body.Name,
+			Type: "server",
+		}
+		if err := authz.Check(ctx, auth.PermissionActionPush, resource); err != nil {
+			return nil, err
+		}
+
 		// Always create as unpublished (handled in service layer)
 		return createServerHandler(ctx, input, registry)
 	})
@@ -121,6 +139,15 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		Description: "Get a paginated list of MCP servers from the registry",
 		Tags:        tags,
 	}, func(ctx context.Context, input *ListServersInput) (*Response[apiv0.ServerListResponse], error) {
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: "*",
+			Type: "server",
+		}
+		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
+			return nil, err
+		}
+
 		// Build filter from input parameters
 		filter := &database.ServerFilter{}
 
@@ -200,6 +227,15 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		version, err := url.PathUnescape(input.Version)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
+		}
+
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: serverName,
+			Type: "server",
+		}
+		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
+			return nil, err
 		}
 
 		// If all=true, return all versions
@@ -306,6 +342,15 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
 		}
 
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: serverName,
+			Type: "server",
+		}
+		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
+			return nil, err
+		}
+
 		// Get all versions for this server
 		// For public endpoints, only get published versions (published = true)
 		// For admin endpoints, get all versions (published = true or false)
@@ -347,6 +392,15 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
 		}
 
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: serverName,
+			Type: "server",
+		}
+		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
+			return nil, err
+		}
+
 		readme, err := registry.GetServerReadmeLatest(ctx, serverName)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
@@ -376,6 +430,15 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		version, err := url.PathUnescape(input.Version)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
+		}
+
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: serverName,
+			Type: "server",
+		}
+		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
+			return nil, err
 		}
 
 		var readme *database.ServerReadme
@@ -449,7 +512,20 @@ func RegisterCreateEndpoint(api huma.API, pathPrefix string, registry service.Re
 			Name: input.Body.Name,
 			Type: "server",
 		}
-		if err := authz.Check(ctx, auth.PermissionActionPublish, resource); err != nil {
+
+		// check if the server already exists to decide the action
+		existingServer, err := registry.GetServerByName(ctx, input.Body.Name)
+		if err != nil && err != database.ErrNotFound {
+			return nil, huma.Error500InternalServerError("Failed to check if server exists", err)
+		}
+		var action auth.PermissionAction
+		if existingServer != nil {
+			action = auth.PermissionActionEdit
+		} else {
+			action = auth.PermissionActionPush
+		}
+
+		if err := authz.Check(ctx, action, resource); err != nil {
 			return nil, err
 		}
 
@@ -473,9 +549,23 @@ func RegisterAdminCreateEndpoint(api huma.API, pathPrefix string, registry servi
 			Name: input.Body.Name,
 			Type: "server",
 		}
-		if err := authz.Check(ctx, auth.PermissionActionPublish, resource); err != nil {
+
+		// check if the server already exists to decide the action
+		existingServer, err := registry.GetServerByName(ctx, input.Body.Name)
+		if err != nil && err != database.ErrNotFound {
+			return nil, huma.Error500InternalServerError("Failed to check if server exists", err)
+		}
+		var action auth.PermissionAction
+		if existingServer != nil {
+			action = auth.PermissionActionEdit
+		} else {
+			action = auth.PermissionActionPush
+		}
+
+		if err := authz.Check(ctx, action, resource); err != nil {
 			return nil, err
 		}
+
 		return createServerHandler(ctx, input, registry)
 	})
 }

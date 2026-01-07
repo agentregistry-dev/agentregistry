@@ -39,6 +39,10 @@ func TestEditServerEndpoint(t *testing.T) {
 	// Create registry service and test data
 	registryService := service.NewRegistryService(database.NewTestDB(t), cfg)
 
+	// Create authorizer
+	jwtManager := auth.NewJWTManager(cfg)
+	authz := auth.Authorizer{Authz: jwtManager}
+
 	// Create test servers for different scenarios
 	testServers := map[string]*apiv0.ServerJSON{
 		"editable": {
@@ -174,13 +178,18 @@ func TestEditServerEndpoint(t *testing.T) {
 			},
 		},
 		{
-			name:           "missing authorization header",
-			serverName:     "io.github.testuser/editable-server",
-			version:        "1.0.0",
-			authHeader:     "", // No auth header
-			requestBody:    apiv0.ServerJSON{},
-			expectedStatus: http.StatusUnprocessableEntity,
-			expectedError:  "required header parameter is missing",
+			name:       "missing authorization header",
+			serverName: "io.github.testuser/editable-server",
+			version:    "1.0.0",
+			authHeader: "", // No auth header
+			requestBody: apiv0.ServerJSON{
+				Schema:      model.CurrentSchemaURL,
+				Name:        "io.github.testuser/editable-server",
+				Description: "Test server",
+				Version:     "1.0.0",
+			},
+			expectedStatus: http.StatusUnauthorized,
+			expectedError:  "Unauthorized",
 		},
 		{
 			name:       "invalid authorization header format",
@@ -194,7 +203,7 @@ func TestEditServerEndpoint(t *testing.T) {
 				Version:     "1.0.0",
 			},
 			expectedStatus: http.StatusUnauthorized,
-			expectedError:  "Invalid Authorization header format",
+			expectedError:  "Unauthorized",
 		},
 		{
 			name:       "invalid token",
@@ -208,7 +217,7 @@ func TestEditServerEndpoint(t *testing.T) {
 				Version:     "1.0.0",
 			},
 			expectedStatus: http.StatusUnauthorized,
-			expectedError:  "Invalid or expired Registry JWT token",
+			expectedError:  "Unauthorized",
 		},
 		{
 			name:       "permission denied - no edit permissions",
@@ -228,7 +237,7 @@ func TestEditServerEndpoint(t *testing.T) {
 				Version:     "1.0.0",
 			},
 			expectedStatus: http.StatusForbidden,
-			expectedError:  "You do not have edit permissions",
+			expectedError:  "You do not have permission to perform this action",
 		},
 		{
 			name:       "permission denied - wrong namespace",
@@ -248,7 +257,7 @@ func TestEditServerEndpoint(t *testing.T) {
 				Version:     "1.0.0",
 			},
 			expectedStatus: http.StatusForbidden,
-			expectedError:  "You do not have edit permissions",
+			expectedError:  "You do not have permission to perform this action",
 		},
 		{
 			name:       "server not found",
@@ -371,7 +380,7 @@ func TestEditServerEndpoint(t *testing.T) {
 			api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
 			// Register edit endpoints
-			v0.RegisterEditEndpoints(api, "/v0", registryService, cfg)
+			v0.RegisterEditEndpoints(api, "/v0", registryService, cfg, authz)
 
 			// Create request body
 			requestBody, err := json.Marshal(tc.requestBody)
@@ -393,10 +402,16 @@ func TestEditServerEndpoint(t *testing.T) {
 				req.Header.Set("Authorization", tc.authHeader)
 			} else if tc.authClaims != nil {
 				// Generate valid JWT token
-				jwtManager := auth.NewJWTManager(cfg)
 				tokenResponse, err := jwtManager.GenerateTokenResponse(context.Background(), *tc.authClaims)
 				require.NoError(t, err)
 				req.Header.Set("Authorization", "Bearer "+tokenResponse.RegistryToken)
+			}
+
+			// Always try to create session from header - if auth fails, no session will be created
+			// (simulating what auth middleware does)
+			session, err := jwtManager.Authenticate(context.Background(), req.Header.Get, req.URL.Query())
+			if err == nil && session != nil {
+				req = req.WithContext(auth.AuthSessionTo(req.Context(), session))
 			}
 
 			// Create response recorder and execute request
@@ -432,6 +447,9 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 
 	// Create registry service
 	registryService := service.NewRegistryService(database.NewTestDB(t), cfg)
+
+	// Create authorizer
+	authz := auth.Authorizer{Authz: nil}
 
 	// Setup test servers with different characteristics
 	testServers := []struct {
@@ -469,7 +487,7 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 	// Create API
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterEditEndpoints(api, "/v0", registryService, cfg)
+	v0.RegisterEditEndpoints(api, "/v0", registryService, cfg, authz)
 
 	t.Run("status transitions", func(t *testing.T) {
 		tests := []struct {
@@ -541,6 +559,12 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 				require.NoError(t, err)
 				req.Header.Set("Authorization", "Bearer "+tokenResponse.RegistryToken)
 
+				// Create session from the generated token for authz.Check
+				session, err := jwtManager.Authenticate(context.Background(), req.Header.Get, req.URL.Query())
+				require.NoError(t, err)
+				assert.NotNil(t, session)
+				req = req.WithContext(auth.AuthSessionTo(req.Context(), session))
+
 				w := httptest.NewRecorder()
 				mux.ServeHTTP(w, req)
 
@@ -598,6 +622,12 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 		require.NoError(t, err)
 		req.Header.Set("Authorization", "Bearer "+tokenResponse.RegistryToken)
 
+		// Create session from the generated token for authz.Check
+		session, err := jwtManager.Authenticate(context.Background(), req.Header.Get, req.URL.Query())
+		require.NoError(t, err)
+		assert.NotNil(t, session)
+		req = req.WithContext(auth.AuthSessionTo(req.Context(), session))
+
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, req)
 
@@ -638,6 +668,12 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 		})
 		require.NoError(t, err)
 		req.Header.Set("Authorization", "Bearer "+tokenResponse.RegistryToken)
+
+		// Create session from the generated token for authz.Check
+		session, err := jwtManager.Authenticate(context.Background(), req.Header.Get, req.URL.Query())
+		require.NoError(t, err)
+		assert.NotNil(t, session)
+		req = req.WithContext(auth.AuthSessionTo(req.Context(), session))
 
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, req)

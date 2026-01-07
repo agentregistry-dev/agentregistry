@@ -17,6 +17,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 )
@@ -44,13 +45,14 @@ func TestPrometheusHandler(t *testing.T) {
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-
+	// Create authorizer
+	authz := auth.Authorizer{Authz: nil}
 	// Add metrics middleware with options
 	api.UseMiddleware(router.MetricTelemetryMiddleware(metrics,
 		router.WithSkipPaths("/health", "/metrics", "/ping", "/docs"),
 	))
 	v0.RegisterHealthEndpoint(api, "/v0", cfg, metrics)
-	v0.RegisterServersEndpoints(api, "/v0", registryService, false)
+	v0.RegisterServersEndpoints(api, "/v0", registryService, false, authz)
 
 	// Add /metrics for Prometheus metrics using promhttp
 	mux.Handle("/metrics", metrics.PrometheusHandler())

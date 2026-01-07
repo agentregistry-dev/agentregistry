@@ -29,6 +29,9 @@ type Config struct {
 	OIDCExtraClaims  string `env:"OIDC_EXTRA_CLAIMS" envDefault:""`
 	OIDCEditPerms    string `env:"OIDC_EDIT_PERMISSIONS" envDefault:""`
 	OIDCPublishPerms string `env:"OIDC_PUBLISH_PERMISSIONS" envDefault:""`
+	OIDCGetPerms     string `env:"OIDC_GET_PERMISSIONS" envDefault:""`
+	OIDCPushPerms    string `env:"OIDC_PUSH_PERMISSIONS" envDefault:""`
+	OIDCDeletePerms  string `env:"OIDC_DELETE_PERMISSIONS" envDefault:""`
 
 	// Agent Gateway Configuration
 	AgentGatewayPort uint16 `env:"AGENT_GATEWAY_PORT" envDefault:"8081"`

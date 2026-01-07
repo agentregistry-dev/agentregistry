@@ -237,6 +237,30 @@ func (h *OIDCHandler) validateExtraClaims(claims *OIDCClaims) error {
 func (h *OIDCHandler) buildPermissions(_ *OIDCClaims) []auth.Permission {
 	var permissions []auth.Permission
 
+	if h.config.OIDCGetPerms != "" {
+		for _, pattern := range strings.Split(h.config.OIDCGetPerms, ",") {
+			pattern = strings.TrimSpace(pattern)
+			if pattern != "" {
+				permissions = append(permissions, auth.Permission{
+					Action:          auth.PermissionActionRead,
+					ResourcePattern: pattern,
+				})
+			}
+		}
+	}
+
+	if h.config.OIDCPushPerms != "" {
+		for _, pattern := range strings.Split(h.config.OIDCPushPerms, ",") {
+			pattern = strings.TrimSpace(pattern)
+			if pattern != "" {
+				permissions = append(permissions, auth.Permission{
+					Action:          auth.PermissionActionPush,
+					ResourcePattern: pattern,
+				})
+			}
+		}
+	}
+
 	// Parse permission patterns from configuration
 	if h.config.OIDCPublishPerms != "" {
 		for _, pattern := range strings.Split(h.config.OIDCPublishPerms, ",") {
@@ -256,6 +280,18 @@ func (h *OIDCHandler) buildPermissions(_ *OIDCClaims) []auth.Permission {
 			if pattern != "" {
 				permissions = append(permissions, auth.Permission{
 					Action:          auth.PermissionActionEdit,
+					ResourcePattern: pattern,
+				})
+			}
+		}
+	}
+
+	if h.config.OIDCDeletePerms != "" {
+		for _, pattern := range strings.Split(h.config.OIDCDeletePerms, ",") {
+			pattern = strings.TrimSpace(pattern)
+			if pattern != "" {
+				permissions = append(permissions, auth.Permission{
+					Action:          auth.PermissionActionDelete,
 					ResourcePattern: pattern,
 				})
 			}

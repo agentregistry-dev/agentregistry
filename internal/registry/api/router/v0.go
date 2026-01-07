@@ -47,17 +47,17 @@ func registerPublicRoutes(
 
 	// Common endpoints (available in all versions)
 	registerCommonEndpoints(api, pathPrefix, cfg, metrics, versionInfo)
-	v0.RegisterServersEndpoints(api, pathPrefix, registry, isAdmin)
+	v0.RegisterServersEndpoints(api, pathPrefix, registry, isAdmin, authz)
 	v0.RegisterCreateEndpoint(api, pathPrefix, registry, authz)
-	v0.RegisterEditEndpoints(api, pathPrefix, registry, cfg)
+	v0.RegisterEditEndpoints(api, pathPrefix, registry, cfg, authz)
 	v0auth.RegisterAuthEndpoints(api, pathPrefix, cfg)
 	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry)
 
 	// v0-only endpoints (agents and skills)
 	if pathPrefix == "/v0" {
-		v0.RegisterAgentsEndpoints(api, pathPrefix, registry, isAdmin)
+		v0.RegisterAgentsEndpoints(api, pathPrefix, registry, isAdmin, authz)
 		v0.RegisterAgentsCreateEndpoint(api, pathPrefix, registry, authz)
-		v0.RegisterSkillsEndpoints(api, pathPrefix, registry, isAdmin)
+		v0.RegisterSkillsEndpoints(api, pathPrefix, registry, isAdmin, authz)
 		v0.RegisterSkillsCreateEndpoint(api, pathPrefix, registry, authz)
 	}
 }
@@ -78,20 +78,20 @@ func registerAdminRoutes(
 
 	// Common endpoints
 	registerCommonEndpoints(api, pathPrefix, cfg, metrics, versionInfo)
-	v0.RegisterServersEndpoints(api, pathPrefix, registry, isAdmin)
+	v0.RegisterServersEndpoints(api, pathPrefix, registry, isAdmin, authz)
 	v0.RegisterAdminCreateEndpoint(api, pathPrefix, registry, authz)
 	v0.RegisterPublishStatusEndpoints(api, pathPrefix, registry, authz)
-	v0.RegisterEditEndpoints(api, pathPrefix, registry, cfg)
+	v0.RegisterEditEndpoints(api, pathPrefix, registry, cfg, authz)
 	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry)
 
 	// v0-only admin endpoints (agents and skills)
 	if pathPrefix == "/admin/v0" {
-		v0.RegisterAgentsEndpoints(api, pathPrefix, registry, isAdmin)
+		v0.RegisterAgentsEndpoints(api, pathPrefix, registry, isAdmin, authz)
 		v0.RegisterAdminAgentsCreateEndpoint(api, pathPrefix, registry, authz)
-		v0.RegisterAgentsPublishStatusEndpoints(api, pathPrefix, registry)
-		v0.RegisterSkillsEndpoints(api, pathPrefix, registry, isAdmin)
+		v0.RegisterAgentsPublishStatusEndpoints(api, pathPrefix, registry, authz)
+		v0.RegisterSkillsEndpoints(api, pathPrefix, registry, isAdmin, authz)
 		v0.RegisterAdminSkillsCreateEndpoint(api, pathPrefix, registry, authz)
-		v0.RegisterSkillsPublishStatusEndpoints(api, pathPrefix, registry)
+		v0.RegisterSkillsPublishStatusEndpoints(api, pathPrefix, registry, authz)
 	}
 }
 
