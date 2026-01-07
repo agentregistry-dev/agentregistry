@@ -992,8 +992,14 @@ func (s *registryServiceImpl) prepareSemanticOptions(ctx context.Context, filter
 
 	switch f := filter.(type) {
 	case *database.ServerFilter:
+		if f == nil {
+			return nil
+		}
 		return s.ensureSemanticEmbedding(ctx, f.Semantic)
 	case *database.AgentFilter:
+		if f == nil {
+			return nil
+		}
 		return s.ensureSemanticEmbedding(ctx, f.Semantic)
 	default:
 		return nil

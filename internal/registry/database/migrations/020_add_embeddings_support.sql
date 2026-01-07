@@ -5,7 +5,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 -- Servers table embedding metadata
 ALTER TABLE servers
-    ADD COLUMN IF NOT EXISTS semantic_embedding vector,
+    ADD COLUMN IF NOT EXISTS semantic_embedding vector(1536),
     ADD COLUMN IF NOT EXISTS semantic_embedding_provider TEXT,
     ADD COLUMN IF NOT EXISTS semantic_embedding_model TEXT,
     ADD COLUMN IF NOT EXISTS semantic_embedding_dimensions INTEGER,
@@ -14,7 +14,7 @@ ALTER TABLE servers
 
 -- Agents table embedding metadata
 ALTER TABLE agents
-    ADD COLUMN IF NOT EXISTS semantic_embedding vector,
+    ADD COLUMN IF NOT EXISTS semantic_embedding vector(1536),
     ADD COLUMN IF NOT EXISTS semantic_embedding_provider TEXT,
     ADD COLUMN IF NOT EXISTS semantic_embedding_model TEXT,
     ADD COLUMN IF NOT EXISTS semantic_embedding_dimensions INTEGER,

@@ -26,33 +26,48 @@ func ensureTemplateDB(ctx context.Context, adminConn *pgx.Conn) error {
 		return fmt.Errorf("failed to check template database: %w", err)
 	}
 
-	if exists {
-		// Template already exists
-		return nil
-	}
-
-	// Create template database
-	_, err = adminConn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s", templateDBName))
-	if err != nil {
-		// Ignore duplicate database name error - another process created it concurrently
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			if (pgErr.Code == "42P04") || (pgErr.Code == "23505" && pgErr.ConstraintName == "pg_database_datname_index") {
-				return nil
+	if !exists {
+		_, err = adminConn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s", templateDBName))
+		if err != nil {
+			// Ignore duplicate database name error - another process created it concurrently
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) {
+				if (pgErr.Code == "42P04") || (pgErr.Code == "23505" && pgErr.ConstraintName == "pg_database_datname_index") {
+					// Template got created concurrently; treat as success
+				} else {
+					return fmt.Errorf("failed to create template database: %w", err)
+				}
+			} else {
+				return fmt.Errorf("failed to create template database: %w", err)
 			}
 		}
-		return fmt.Errorf("failed to create template database: %w", err)
 	}
 
-	// Connect to template and run migrations
 	templateURI := fmt.Sprintf("postgres://agentregistry:agentregistry@localhost:5432/%s?sslmode=disable", templateDBName)
+	if err := ensureVectorExtension(ctx, templateURI); err != nil {
+		return err
+	}
+
+	// Connect to template and run migrations (always) to keep it up-to-date
 	templateDB, err := NewPostgreSQL(ctx, templateURI)
 	if err != nil {
 		return fmt.Errorf("failed to connect to template database: %w", err)
 	}
 	defer func() { _ = templateDB.Close() }()
 
-	// Migrations run automatically in NewPostgreSQL
+	return nil
+}
+
+func ensureVectorExtension(ctx context.Context, uri string) error {
+	conn, err := pgx.Connect(ctx, uri)
+	if err != nil {
+		return fmt.Errorf("failed to connect to template database for extension install: %w", err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+
+	if _, err := conn.Exec(ctx, "CREATE EXTENSION IF NOT EXISTS vector"); err != nil {
+		return fmt.Errorf("failed to install pgvector extension: %w", err)
+	}
 	return nil
 }
 

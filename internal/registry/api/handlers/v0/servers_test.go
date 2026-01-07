@@ -24,6 +24,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const semanticEmbeddingDimensions = 1536
+
 func TestListServersEndpoint(t *testing.T) {
 	ctx := context.Background()
 	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig(), nil)
@@ -158,7 +160,7 @@ func TestListServersSemanticSearch(t *testing.T) {
 
 	// Seed embeddings for deterministic ordering
 	require.NoError(t, registryService.UpsertServerEmbedding(ctx, backupServer, "1.0.0", &database.SemanticEmbedding{
-		Vector:     []float32{0.1, 0.9, 0.0},
+		Vector:     semanticVector(0.1, 0.9, 0.0),
 		Provider:   "stub",
 		Model:      "stub-model",
 		Dimensions: 3,
@@ -166,7 +168,7 @@ func TestListServersSemanticSearch(t *testing.T) {
 		Generated:  time.Now().UTC(),
 	}))
 	require.NoError(t, registryService.UpsertServerEmbedding(ctx, weatherServer, "1.0.0", &database.SemanticEmbedding{
-		Vector:     []float32{0.9, 0.1, 0.0},
+		Vector:     semanticVector(0.9, 0.1, 0.0),
 		Provider:   "stub",
 		Model:      "stub-model",
 		Dimensions: 3,
@@ -427,8 +429,12 @@ type stubEmbeddingProvider struct {
 }
 
 func newStubEmbeddingProvider(vectors map[string][]float32) *stubEmbeddingProvider {
+	norm := make(map[string][]float32, len(vectors))
+	for key, vec := range vectors {
+		norm[key] = semanticVector(vec...)
+	}
 	return &stubEmbeddingProvider{
-		vectors:  vectors,
+		vectors:  norm,
 		provider: "stub",
 		model:    "stub-model",
 	}
@@ -439,10 +445,11 @@ func (s *stubEmbeddingProvider) Generate(ctx context.Context, payload embeddings
 	defer s.mu.Unlock()
 
 	s.queries = append(s.queries, payload.Text)
-	vec, ok := s.vectors[payload.Text]
+	base, ok := s.vectors[payload.Text]
 	if !ok {
-		vec = []float32{0, 0, 1}
+		base = semanticVector(1, 0, 0)
 	}
+	vec := append([]float32(nil), base...)
 
 	return &embeddings.Result{
 		Vector:      vec,
@@ -457,6 +464,12 @@ func (s *stubEmbeddingProvider) Queries() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]string(nil), s.queries...)
+}
+
+func semanticVector(values ...float32) []float32 {
+	vec := make([]float32, semanticEmbeddingDimensions)
+	copy(vec, values)
+	return vec
 }
 
 func TestGetServerReadmeEndpoints(t *testing.T) {
