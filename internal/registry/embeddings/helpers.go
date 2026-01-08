@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
@@ -22,39 +23,41 @@ func BuildServerEmbeddingPayload(server *apiv0.ServerJSON) string {
 	}
 
 	var parts []string
-	appendIf := func(values ...string) {
-		for _, v := range values {
-			if strings.TrimSpace(v) != "" {
-				parts = append(parts, v)
-			}
-		}
-	}
-
-	appendIf(server.Name, server.Title, server.Description, server.Version, server.WebsiteURL)
-
-	if server.Repository != nil {
-		if repoJSON, err := json.Marshal(server.Repository); err == nil {
-			parts = append(parts, string(repoJSON))
-		}
-	}
-
-	if len(server.Packages) > 0 {
-		if pkgJSON, err := json.Marshal(server.Packages); err == nil {
-			parts = append(parts, string(pkgJSON))
-		}
-	}
-
-	if len(server.Remotes) > 0 {
-		if remotesJSON, err := json.Marshal(server.Remotes); err == nil {
-			parts = append(parts, string(remotesJSON))
-		}
-	}
+	appendIf(&parts, server.Name, server.Title, server.Description, server.Version, server.WebsiteURL)
+	appendJSON(&parts, server.Repository)
+	appendJSONArray(&parts, server.Packages)
+	appendJSONArray(&parts, server.Remotes)
 
 	if server.Meta != nil && server.Meta.PublisherProvided != nil {
-		if metaJSON, err := json.Marshal(server.Meta.PublisherProvided); err == nil {
-			parts = append(parts, string(metaJSON))
-		}
+		appendJSON(&parts, server.Meta.PublisherProvided)
 	}
+
+	return strings.Join(parts, "\n")
+}
+
+// BuildAgentEmbeddingPayload mirrors BuildServerEmbeddingPayload but for AgentJSON entries.
+func BuildAgentEmbeddingPayload(agent *models.AgentJSON) string {
+	if agent == nil {
+		return ""
+	}
+
+	var parts []string
+	appendIf(&parts,
+		agent.Name,
+		agent.Title,
+		agent.Description,
+		agent.Version,
+		agent.WebsiteURL,
+		agent.Language,
+		agent.Framework,
+		agent.ModelProvider,
+		agent.ModelName,
+		agent.Image,
+	)
+	appendJSONArray(&parts, agent.McpServers)
+	appendJSON(&parts, agent.Repository)
+	appendJSONArray(&parts, agent.Packages)
+	appendJSONArray(&parts, agent.Remotes)
 
 	return strings.Join(parts, "\n")
 }
@@ -98,4 +101,28 @@ func GenerateSemanticEmbedding(ctx context.Context, provider Provider, payload s
 		Checksum:   PayloadChecksum(payload),
 		Generated:  generated,
 	}, nil
+}
+
+func appendIf(parts *[]string, values ...string) {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			*parts = append(*parts, v)
+		}
+	}
+}
+
+func appendJSON(parts *[]string, value interface{}) {
+	if value == nil {
+		return
+	}
+	if data, err := json.Marshal(value); err == nil && len(data) > 0 {
+		*parts = append(*parts, string(data))
+	}
+}
+
+func appendJSONArray(parts *[]string, value interface{}) {
+	if value == nil {
+		return
+	}
+	appendJSON(parts, value)
 }

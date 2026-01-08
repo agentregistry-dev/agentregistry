@@ -650,6 +650,10 @@ func (s *registryServiceImpl) UpsertAgentEmbedding(ctx context.Context, agentNam
 	})
 }
 
+func (s *registryServiceImpl) GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
+	return s.db.GetAgentEmbeddingMetadata(ctx, nil, agentName, version)
+}
+
 // GetDeployments retrieves all deployed servers
 func (s *registryServiceImpl) GetDeployments(ctx context.Context) ([]*models.Deployment, error) {
 	return s.db.GetDeployments(ctx, nil)

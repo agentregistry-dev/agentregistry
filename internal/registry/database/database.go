@@ -182,6 +182,8 @@ type Database interface {
 	DeleteAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error
 	// SetAgentEmbedding upserts the semantic embedding metadata for an agent version
 	SetAgentEmbedding(ctx context.Context, tx pgx.Tx, agentName, version string, embedding *SemanticEmbedding) error
+	// GetAgentEmbeddingMetadata returns metadata about an agent's embedding without loading the vector
+	GetAgentEmbeddingMetadata(ctx context.Context, tx pgx.Tx, agentName, version string) (*SemanticEmbeddingMetadata, error)
 
 	// Skills API
 	// CreateSkill inserts a new skill version with official metadata

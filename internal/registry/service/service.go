@@ -63,6 +63,8 @@ type RegistryService interface {
 	DeleteAgent(ctx context.Context, agentName, version string) error
 	// UpsertAgentEmbedding stores semantic embedding metadata for an agent version
 	UpsertAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error
+	// GetAgentEmbeddingMetadata retrieves the embedding metadata for an agent version
+	GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error)
 	// Skills APIs
 	// ListSkills retrieve all skills with optional filtering
 	ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error)

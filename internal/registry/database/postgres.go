@@ -1726,6 +1726,72 @@ func (db *PostgreSQL) SetAgentEmbedding(ctx context.Context, tx pgx.Tx, agentNam
 	return nil
 }
 
+// GetAgentEmbeddingMetadata retrieves embedding metadata for an agent version without loading the vector.
+func (db *PostgreSQL) GetAgentEmbeddingMetadata(ctx context.Context, tx pgx.Tx, agentName, version string) (*SemanticEmbeddingMetadata, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	executor := db.getExecutor(tx)
+	query := `
+		SELECT
+			semantic_embedding IS NOT NULL AS has_embedding,
+			semantic_embedding_provider,
+			semantic_embedding_model,
+			semantic_embedding_dimensions,
+			semantic_embedding_checksum,
+			semantic_embedding_generated_at
+		FROM agents
+		WHERE agent_name = $1 AND version = $2
+		LIMIT 1
+	`
+
+	var (
+		hasEmbedding bool
+		provider     sql.NullString
+		model        sql.NullString
+		dimensions   sql.NullInt32
+		checksum     sql.NullString
+		generatedAt  sql.NullTime
+	)
+
+	err := executor.QueryRow(ctx, query, agentName, version).Scan(
+		&hasEmbedding,
+		&provider,
+		&model,
+		&dimensions,
+		&checksum,
+		&generatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to fetch agent embedding metadata: %w", err)
+	}
+
+	meta := &SemanticEmbeddingMetadata{
+		HasEmbedding: hasEmbedding,
+	}
+	if provider.Valid {
+		meta.Provider = provider.String
+	}
+	if model.Valid {
+		meta.Model = model.String
+	}
+	if dimensions.Valid {
+		meta.Dimensions = int(dimensions.Int32)
+	}
+	if checksum.Valid {
+		meta.Checksum = checksum.String
+	}
+	if generatedAt.Valid {
+		meta.Generated = generatedAt.Time
+	}
+
+	return meta, nil
+}
+
 // ==============================
 // Skills implementations
 // ==============================
