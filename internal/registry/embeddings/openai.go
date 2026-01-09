@@ -79,7 +79,7 @@ func (p *openAIProvider) Generate(ctx context.Context, payload Payload) (*Result
 	if err != nil {
 		return nil, fmt.Errorf("embedding request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
