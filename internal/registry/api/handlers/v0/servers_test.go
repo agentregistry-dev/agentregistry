@@ -327,14 +327,14 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 		version        string
 		expectedStatus int
 		expectedError  string
-		checkResult    func(*testing.T, *apiv0.ServerResponse)
+		checkResult    func(*testing.T, *models.ServerResponse)
 	}{
 		{
 			name:           "get existing version",
 			serverName:     serverName,
 			version:        "1.0.0",
 			expectedStatus: http.StatusOK,
-			checkResult: func(t *testing.T, resp *apiv0.ServerResponse) {
+			checkResult: func(t *testing.T, resp *models.ServerResponse) {
 				t.Helper()
 				assert.Equal(t, "1.0.0", resp.Server.Version)
 				assert.Equal(t, "Version test server v1", resp.Server.Description)
@@ -346,7 +346,7 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 			serverName:     serverName,
 			version:        "2.0.0",
 			expectedStatus: http.StatusOK,
-			checkResult: func(t *testing.T, resp *apiv0.ServerResponse) {
+			checkResult: func(t *testing.T, resp *models.ServerResponse) {
 				t.Helper()
 				assert.Equal(t, "2.0.0", resp.Server.Version)
 				assert.True(t, resp.Meta.Official.IsLatest)
@@ -371,7 +371,7 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 			serverName:     serverName,
 			version:        "1.0.0+20130313144700",
 			expectedStatus: http.StatusOK,
-			checkResult: func(t *testing.T, resp *apiv0.ServerResponse) {
+			checkResult: func(t *testing.T, resp *models.ServerResponse) {
 				t.Helper()
 				assert.Equal(t, "1.0.0+20130313144700", resp.Server.Version)
 				assert.Equal(t, "Version test server with build metadata", resp.Server.Description)

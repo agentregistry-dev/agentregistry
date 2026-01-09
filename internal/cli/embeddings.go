@@ -57,6 +57,10 @@ func runEmbeddingsGenerate(ctx context.Context) error {
 		return fmt.Errorf("embeddings are disabled (set AGENT_REGISTRY_EMBEDDINGS_ENABLED=true)")
 	}
 
+	if cfg.Embeddings.Dimensions <= 0 {
+		return fmt.Errorf("invalid embeddings dimensions: %d", cfg.Embeddings.Dimensions)
+	}
+
 	db, err := database.NewPostgreSQL(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
@@ -81,9 +85,10 @@ func runEmbeddingsGenerate(ctx context.Context) error {
 	}
 
 	opts := backfillOptions{
-		limit:  limit,
-		force:  embeddingsForceUpdate,
-		dryRun: embeddingsDryRun,
+		limit:      limit,
+		force:      embeddingsForceUpdate,
+		dryRun:     embeddingsDryRun,
+		dimensions: cfg.Embeddings.Dimensions,
 	}
 
 	processServers := embeddingsIncludeServers
@@ -129,9 +134,10 @@ func runEmbeddingsGenerate(ctx context.Context) error {
 }
 
 type backfillOptions struct {
-	limit  int
-	force  bool
-	dryRun bool
+	limit      int
+	force      bool
+	dryRun     bool
+	dimensions int
 }
 
 type embeddingStats struct {
@@ -195,7 +201,7 @@ func backfillServers(ctx context.Context, registrySvc service.RegistryService, p
 				continue
 			}
 
-			record, err := regembeddings.GenerateSemanticEmbedding(ctx, provider, payload, cfg.Embeddings.Dimensions)
+			record, err := regembeddings.GenerateSemanticEmbedding(ctx, provider, payload, opts.dimensions)
 			if err != nil {
 				log.Printf("Failed to generate server embedding for %s@%s: %v", name, version, err)
 				stats.failures++
@@ -277,7 +283,7 @@ func backfillAgents(ctx context.Context, registrySvc service.RegistryService, pr
 				continue
 			}
 
-			record, err := regembeddings.GenerateSemanticEmbedding(ctx, provider, payload, cfg.Embeddings.Dimensions)
+			record, err := regembeddings.GenerateSemanticEmbedding(ctx, provider, payload, opts.dimensions)
 			if err != nil {
 				log.Printf("Failed to generate agent embedding for %s@%s: %v", name, version, err)
 				stats.failures++
