@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
@@ -32,15 +33,18 @@ import (
 
 // Service handles importing seed data into the registry
 type Service struct {
-	registry          service.RegistryService
-	httpClient        *http.Client
-	requestHeaders    map[string]string
-	updateIfExists    bool
-	githubToken       string
-	readmeSeedPath    string
-	progressCachePath string
-	progressMu        sync.RWMutex
-	processedServers  map[string]struct{}
+	registry            service.RegistryService
+	httpClient          *http.Client
+	requestHeaders      map[string]string
+	updateIfExists      bool
+	githubToken         string
+	readmeSeedPath      string
+	progressCachePath   string
+	progressMu          sync.RWMutex
+	processedServers    map[string]struct{}
+	generateEmbeddings  bool
+	embeddingProvider   embeddings.Provider
+	embeddingDimensions int
 }
 
 // NewService creates a new importer service with sane defaults
@@ -87,6 +91,21 @@ func (s *Service) SetGitHubToken(token string) {
 // SetReadmeSeedPath configures an optional README seed file used for imports.
 func (s *Service) SetReadmeSeedPath(path string) {
 	s.readmeSeedPath = strings.TrimSpace(path)
+}
+
+// SetEmbeddingProvider configures the embedding provider used for semantic enrichment.
+func (s *Service) SetEmbeddingProvider(provider embeddings.Provider) {
+	s.embeddingProvider = provider
+}
+
+// SetEmbeddingDimensions sets the expected embedding dimensions for validation.
+func (s *Service) SetEmbeddingDimensions(dimensions int) {
+	s.embeddingDimensions = dimensions
+}
+
+// SetGenerateEmbeddings toggles whether embeddings should be generated during import.
+func (s *Service) SetGenerateEmbeddings(enabled bool) {
+	s.generateEmbeddings = enabled
 }
 
 // SetProgressCachePath configures a file used to persist import progress between runs.
@@ -184,6 +203,15 @@ func (s *Service) importServer(
 		}
 	}
 
+	var embeddingRecord *database.SemanticEmbedding
+	if s.generateEmbeddings && s.embeddingProvider != nil {
+		if record, err := s.buildServerEmbedding(ctx, srv); err != nil {
+			log.Printf("Warning: failed to generate embedding for %s@%s: %v", srv.Name, srv.Version, err)
+		} else {
+			embeddingRecord = record
+		}
+	}
+
 	_, err := s.registry.CreateServer(ctx, srv)
 	if err != nil {
 		// If duplicate version and update is enabled, try update path
@@ -196,6 +224,12 @@ func (s *Service) importServer(
 		} else {
 			log.Printf("Failed to create server %s: %v", srv.Name, err)
 			return
+		}
+	}
+
+	if embeddingRecord != nil {
+		if err := s.registry.UpsertServerEmbedding(ctx, srv.Name, srv.Version, embeddingRecord); err != nil {
+			log.Printf("Warning: failed to store embedding for %s@%s: %v", srv.Name, srv.Version, err)
 		}
 	}
 
@@ -216,6 +250,11 @@ func (s *Service) importServer(
 			log.Printf("Warning: storing README failed for %s@%s: %v", srv.Name, srv.Version, err)
 		}
 	}
+}
+
+func (s *Service) buildServerEmbedding(ctx context.Context, srv *apiv0.ServerJSON) (*database.SemanticEmbedding, error) {
+	payload := embeddings.BuildServerEmbeddingPayload(srv)
+	return embeddings.GenerateSemanticEmbedding(ctx, s.embeddingProvider, payload, s.embeddingDimensions)
 }
 
 // readSeedFile reads seed data from various sources

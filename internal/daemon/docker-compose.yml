@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: agent-registry-postgres
     environment:
       POSTGRES_DB: agent-registry

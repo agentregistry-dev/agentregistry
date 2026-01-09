@@ -6,23 +6,30 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/agentregistry-dev/agentregistry/internal/models"
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
+	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+const semanticEmbeddingDimensions = 1536
+
 func TestListServersEndpoint(t *testing.T) {
 	ctx := context.Background()
-	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig())
+	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig(), nil)
 
 	// Setup test data
 	_, err := registryService.CreateServer(ctx, &apiv0.ServerJSON{
@@ -96,7 +103,7 @@ func TestListServersEndpoint(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
 			if tt.expectedStatus == http.StatusOK {
-				var resp apiv0.ServerListResponse
+				var resp models.ServerListResponse
 				err := json.NewDecoder(w.Body).Decode(&resp)
 				assert.NoError(t, err)
 				assert.Len(t, resp.Servers, tt.expectedCount)
@@ -115,9 +122,99 @@ func TestListServersEndpoint(t *testing.T) {
 	}
 }
 
+func TestListServersSemanticSearch(t *testing.T) {
+	ctx := context.Background()
+	db := database.NewTestDB(t)
+	ensureVectorExtension(t, db)
+
+	cfg := config.NewConfig()
+	cfg.Embeddings.Enabled = true
+	cfg.Embeddings.Provider = "stub"
+	cfg.Embeddings.Model = "stub-model"
+
+	provider := newStubEmbeddingProvider(map[string][]float32{
+		"server": {0.1, 0.95, 0.0},
+	})
+
+	registryService := service.NewRegistryService(db, cfg, provider)
+
+	// Setup servers
+	backupServer := "com.example/backup-server"
+	weatherServer := "com.example/weather-server"
+
+	for _, srv := range []struct {
+		name        string
+		description string
+	}{
+		{name: backupServer, description: "Handles filesystem backups"},
+		{name: weatherServer, description: "Provides detailed weather forecasts"},
+	} {
+		_, err := registryService.CreateServer(ctx, &apiv0.ServerJSON{
+			Schema:      model.CurrentSchemaURL,
+			Name:        srv.name,
+			Description: srv.description,
+			Version:     "1.0.0",
+		})
+		require.NoError(t, err)
+		require.NoError(t, registryService.PublishServer(ctx, srv.name, "1.0.0"))
+	}
+
+	// Seed embeddings for deterministic ordering
+	require.NoError(t, registryService.UpsertServerEmbedding(ctx, backupServer, "1.0.0", &database.SemanticEmbedding{
+		Vector:     semanticVector(0.1, 0.9, 0.0),
+		Provider:   "stub",
+		Model:      "stub-model",
+		Dimensions: 3,
+		Checksum:   "backup",
+		Generated:  time.Now().UTC(),
+	}))
+	require.NoError(t, registryService.UpsertServerEmbedding(ctx, weatherServer, "1.0.0", &database.SemanticEmbedding{
+		Vector:     semanticVector(0.9, 0.1, 0.0),
+		Provider:   "stub",
+		Model:      "stub-model",
+		Dimensions: 3,
+		Checksum:   "weather",
+		Generated:  time.Now().UTC(),
+	}))
+
+	mux := http.NewServeMux()
+	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
+	v0.RegisterServersEndpoints(api, "/v0", registryService, false)
+
+	t.Run("semantic search ranks by similarity", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/v0/servers?search=server&semantic_search=true", nil)
+		w := httptest.NewRecorder()
+
+		mux.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var resp models.ServerListResponse
+		require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+		require.Len(t, resp.Servers, 2)
+
+		assert.Equal(t, backupServer, resp.Servers[0].Server.Name, "backup server should rank first")
+		require.NotNil(t, resp.Servers[0].Meta.Semantic, "semantic metadata should be present")
+		assert.NotZero(t, resp.Servers[0].Meta.Semantic.Score)
+
+		assert.Equal(t, []string{"server"}, provider.Queries())
+	})
+
+	t.Run("semantic search without search term is rejected", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/v0/servers?semantic_search=true", nil)
+		w := httptest.NewRecorder()
+
+		mux.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Contains(t, w.Body.String(), "semantic_search requires the search parameter")
+		assert.Equal(t, []string{"server"}, provider.Queries(), "provider should not be called for invalid requests")
+	})
+}
+
 func TestGetLatestServerVersionEndpoint(t *testing.T) {
 	ctx := context.Background()
-	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig())
+	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig(), nil)
 
 	// Setup test data
 	_, err := registryService.CreateServer(ctx, &apiv0.ServerJSON{
@@ -167,7 +264,7 @@ func TestGetLatestServerVersionEndpoint(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
 			if tt.expectedStatus == http.StatusOK {
-				var resp apiv0.ServerListResponse
+				var resp models.ServerListResponse
 				err := json.NewDecoder(w.Body).Decode(&resp)
 				assert.NoError(t, err)
 				require.Len(t, resp.Servers, 1, "Should return exactly one server")
@@ -183,7 +280,7 @@ func TestGetLatestServerVersionEndpoint(t *testing.T) {
 
 func TestGetServerVersionEndpoint(t *testing.T) {
 	ctx := context.Background()
-	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig())
+	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig(), nil)
 
 	serverName := "com.example/version-server"
 
@@ -230,14 +327,14 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 		version        string
 		expectedStatus int
 		expectedError  string
-		checkResult    func(*testing.T, *apiv0.ServerResponse)
+		checkResult    func(*testing.T, *models.ServerResponse)
 	}{
 		{
 			name:           "get existing version",
 			serverName:     serverName,
 			version:        "1.0.0",
 			expectedStatus: http.StatusOK,
-			checkResult: func(t *testing.T, resp *apiv0.ServerResponse) {
+			checkResult: func(t *testing.T, resp *models.ServerResponse) {
 				t.Helper()
 				assert.Equal(t, "1.0.0", resp.Server.Version)
 				assert.Equal(t, "Version test server v1", resp.Server.Description)
@@ -249,7 +346,7 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 			serverName:     serverName,
 			version:        "2.0.0",
 			expectedStatus: http.StatusOK,
-			checkResult: func(t *testing.T, resp *apiv0.ServerResponse) {
+			checkResult: func(t *testing.T, resp *models.ServerResponse) {
 				t.Helper()
 				assert.Equal(t, "2.0.0", resp.Server.Version)
 				assert.True(t, resp.Meta.Official.IsLatest)
@@ -274,7 +371,7 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 			serverName:     serverName,
 			version:        "1.0.0+20130313144700",
 			expectedStatus: http.StatusOK,
-			checkResult: func(t *testing.T, resp *apiv0.ServerResponse) {
+			checkResult: func(t *testing.T, resp *models.ServerResponse) {
 				t.Helper()
 				assert.Equal(t, "1.0.0+20130313144700", resp.Server.Version)
 				assert.Equal(t, "Version test server with build metadata", resp.Server.Description)
@@ -295,7 +392,7 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
 			if tt.expectedStatus == http.StatusOK {
-				var resp apiv0.ServerListResponse
+				var resp models.ServerListResponse
 				err := json.NewDecoder(w.Body).Decode(&resp)
 				assert.NoError(t, err)
 				require.Len(t, resp.Servers, 1, "Should return exactly one server")
@@ -314,9 +411,70 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 	}
 }
 
+func ensureVectorExtension(t *testing.T, db database.Database) {
+	t.Helper()
+	err := db.InTransaction(context.Background(), func(ctx context.Context, tx pgx.Tx) error {
+		_, execErr := tx.Exec(ctx, "CREATE EXTENSION IF NOT EXISTS vector")
+		return execErr
+	})
+	require.NoError(t, err, "failed to ensure pgvector extension for tests")
+}
+
+type stubEmbeddingProvider struct {
+	mu       sync.Mutex
+	vectors  map[string][]float32
+	queries  []string
+	provider string
+	model    string
+}
+
+func newStubEmbeddingProvider(vectors map[string][]float32) *stubEmbeddingProvider {
+	norm := make(map[string][]float32, len(vectors))
+	for key, vec := range vectors {
+		norm[key] = semanticVector(vec...)
+	}
+	return &stubEmbeddingProvider{
+		vectors:  norm,
+		provider: "stub",
+		model:    "stub-model",
+	}
+}
+
+func (s *stubEmbeddingProvider) Generate(ctx context.Context, payload embeddings.Payload) (*embeddings.Result, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.queries = append(s.queries, payload.Text)
+	base, ok := s.vectors[payload.Text]
+	if !ok {
+		base = semanticVector(1, 0, 0)
+	}
+	vec := append([]float32(nil), base...)
+
+	return &embeddings.Result{
+		Vector:      vec,
+		Provider:    s.provider,
+		Model:       s.model,
+		Dimensions:  len(vec),
+		GeneratedAt: time.Now().UTC(),
+	}, nil
+}
+
+func (s *stubEmbeddingProvider) Queries() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.queries...)
+}
+
+func semanticVector(values ...float32) []float32 {
+	vec := make([]float32, semanticEmbeddingDimensions)
+	copy(vec, values)
+	return vec
+}
+
 func TestGetServerReadmeEndpoints(t *testing.T) {
 	ctx := context.Background()
-	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig())
+	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig(), nil)
 
 	serverName := "com.example/readme-endpoint"
 	_, err := registryService.CreateServer(ctx, &apiv0.ServerJSON{
@@ -384,7 +542,7 @@ func TestGetServerReadmeEndpoints(t *testing.T) {
 
 func TestGetAllVersionsEndpoint(t *testing.T) {
 	ctx := context.Background()
-	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig())
+	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig(), nil)
 
 	serverName := "com.example/multi-version-server"
 
@@ -441,7 +599,7 @@ func TestGetAllVersionsEndpoint(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
 			if tt.expectedStatus == http.StatusOK {
-				var resp apiv0.ServerListResponse
+				var resp models.ServerListResponse
 				err := json.NewDecoder(w.Body).Decode(&resp)
 				assert.NoError(t, err)
 				assert.Len(t, resp.Servers, tt.expectedCount)
@@ -479,7 +637,7 @@ func TestGetAllVersionsEndpoint(t *testing.T) {
 
 func TestServersEndpointEdgeCases(t *testing.T) {
 	ctx := context.Background()
-	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig())
+	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig(), nil)
 
 	// Setup test data with edge case names that comply with constraints
 	specialServers := []struct {
@@ -531,7 +689,7 @@ func TestServersEndpointEdgeCases(t *testing.T) {
 
 				assert.Equal(t, http.StatusOK, w.Code)
 
-				var resp apiv0.ServerListResponse
+				var resp models.ServerListResponse
 				err := json.NewDecoder(w.Body).Decode(&resp)
 				assert.NoError(t, err)
 				require.Len(t, resp.Servers, 1, "Should return exactly one server")
@@ -567,7 +725,7 @@ func TestServersEndpointEdgeCases(t *testing.T) {
 				assert.Equal(t, tt.expectedStatus, w.Code)
 
 				if tt.expectedStatus == http.StatusOK {
-					var resp apiv0.ServerListResponse
+					var resp models.ServerListResponse
 					err := json.NewDecoder(w.Body).Decode(&resp)
 					assert.NoError(t, err)
 					assert.NotNil(t, resp.Metadata)
@@ -587,7 +745,7 @@ func TestServersEndpointEdgeCases(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
 
-		var resp apiv0.ServerListResponse
+		var resp models.ServerListResponse
 		err := json.NewDecoder(w.Body).Decode(&resp)
 		assert.NoError(t, err)
 
