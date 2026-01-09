@@ -19,6 +19,17 @@ const templateDBName = "agent_registry_test_template"
 // ensureTemplateDB creates a template database with migrations applied
 // Multiple processes may call this, so we handle race conditions
 func ensureTemplateDB(ctx context.Context, adminConn *pgx.Conn) error {
+	// Serialize template creation/migration across concurrent test processes to
+	// avoid racing on extension creation (which can violate pg_extension_name_index).
+	// Use a global advisory lock key to coordinate.
+	const lockKey int64 = 0x61726567 // "areg" prefix
+	if _, err := adminConn.Exec(ctx, "SELECT pg_advisory_lock($1)", lockKey); err != nil {
+		return fmt.Errorf("failed to acquire advisory lock for template DB: %w", err)
+	}
+	defer func() {
+		_, _ = adminConn.Exec(context.Background(), "SELECT pg_advisory_unlock($1)", lockKey)
+	}()
+
 	// Check if template exists
 	var exists bool
 	err := adminConn.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)", templateDBName).Scan(&exists)
