@@ -92,6 +92,7 @@ var ImportCmd = &cobra.Command{
 				return fmt.Errorf("failed to initialize embeddings provider: %w", err)
 			}
 			importerService.SetEmbeddingProvider(provider)
+			importerService.SetEmbeddingDimensions(cfg.Embeddings.Dimensions)
 			importerService.SetGenerateEmbeddings(true)
 		}
 

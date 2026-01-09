@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/agentregistry-dev/agentregistry/internal/models"
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
@@ -102,7 +103,7 @@ func TestListServersEndpoint(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
 			if tt.expectedStatus == http.StatusOK {
-				var resp apiv0.ServerListResponse
+				var resp models.ServerListResponse
 				err := json.NewDecoder(w.Body).Decode(&resp)
 				assert.NoError(t, err)
 				assert.Len(t, resp.Servers, tt.expectedCount)
@@ -188,14 +189,13 @@ func TestListServersSemanticSearch(t *testing.T) {
 
 		require.Equal(t, http.StatusOK, w.Code)
 
-		var resp apiv0.ServerListResponse
+		var resp models.ServerListResponse
 		require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
 		require.Len(t, resp.Servers, 2)
 
 		assert.Equal(t, backupServer, resp.Servers[0].Server.Name, "backup server should rank first")
-		semanticMeta, ok := resp.Servers[0].Server.Meta.PublisherProvided["agentregistry.solo.io/semantic"].(map[string]interface{})
-		require.True(t, ok, "semantic metadata should be present")
-		assert.Contains(t, semanticMeta, "score")
+		require.NotNil(t, resp.Servers[0].Meta.Semantic, "semantic metadata should be present")
+		assert.NotZero(t, resp.Servers[0].Meta.Semantic.Score)
 
 		assert.Equal(t, []string{"server"}, provider.Queries())
 	})
@@ -264,7 +264,7 @@ func TestGetLatestServerVersionEndpoint(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
 			if tt.expectedStatus == http.StatusOK {
-				var resp apiv0.ServerListResponse
+				var resp models.ServerListResponse
 				err := json.NewDecoder(w.Body).Decode(&resp)
 				assert.NoError(t, err)
 				require.Len(t, resp.Servers, 1, "Should return exactly one server")
@@ -392,7 +392,7 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
 			if tt.expectedStatus == http.StatusOK {
-				var resp apiv0.ServerListResponse
+				var resp models.ServerListResponse
 				err := json.NewDecoder(w.Body).Decode(&resp)
 				assert.NoError(t, err)
 				require.Len(t, resp.Servers, 1, "Should return exactly one server")
@@ -599,7 +599,7 @@ func TestGetAllVersionsEndpoint(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
 			if tt.expectedStatus == http.StatusOK {
-				var resp apiv0.ServerListResponse
+				var resp models.ServerListResponse
 				err := json.NewDecoder(w.Body).Decode(&resp)
 				assert.NoError(t, err)
 				assert.Len(t, resp.Servers, tt.expectedCount)
@@ -689,7 +689,7 @@ func TestServersEndpointEdgeCases(t *testing.T) {
 
 				assert.Equal(t, http.StatusOK, w.Code)
 
-				var resp apiv0.ServerListResponse
+				var resp models.ServerListResponse
 				err := json.NewDecoder(w.Body).Decode(&resp)
 				assert.NoError(t, err)
 				require.Len(t, resp.Servers, 1, "Should return exactly one server")
@@ -725,7 +725,7 @@ func TestServersEndpointEdgeCases(t *testing.T) {
 				assert.Equal(t, tt.expectedStatus, w.Code)
 
 				if tt.expectedStatus == http.StatusOK {
-					var resp apiv0.ServerListResponse
+					var resp models.ServerListResponse
 					err := json.NewDecoder(w.Body).Decode(&resp)
 					assert.NoError(t, err)
 					assert.NotNil(t, resp.Metadata)
@@ -745,7 +745,7 @@ func TestServersEndpointEdgeCases(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
 
-		var resp apiv0.ServerListResponse
+		var resp models.ServerListResponse
 		err := json.NewDecoder(w.Body).Decode(&resp)
 		assert.NoError(t, err)
 

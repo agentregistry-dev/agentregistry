@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -70,7 +71,8 @@ func PayloadChecksum(payload string) string {
 
 // GenerateSemanticEmbedding transforms the provided payload into a SemanticEmbedding
 // by invoking the configured provider. The payload must be non-empty.
-func GenerateSemanticEmbedding(ctx context.Context, provider Provider, payload string) (*database.SemanticEmbedding, error) {
+// When expectedDimensions > 0, the provider output is validated against it.
+func GenerateSemanticEmbedding(ctx context.Context, provider Provider, payload string, expectedDimensions int) (*database.SemanticEmbedding, error) {
 	if provider == nil {
 		return nil, errors.New("embedding provider is not configured")
 	}
@@ -86,6 +88,9 @@ func GenerateSemanticEmbedding(ctx context.Context, provider Provider, payload s
 	dims := result.Dimensions
 	if dims == 0 {
 		dims = len(result.Vector)
+	}
+	if expectedDimensions > 0 && dims != expectedDimensions {
+		return nil, fmt.Errorf("embedding dimensions mismatch: expected %d, got %d", expectedDimensions, dims)
 	}
 
 	generated := result.GeneratedAt

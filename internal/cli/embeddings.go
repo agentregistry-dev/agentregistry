@@ -195,7 +195,7 @@ func backfillServers(ctx context.Context, registrySvc service.RegistryService, p
 				continue
 			}
 
-			record, err := regembeddings.GenerateSemanticEmbedding(ctx, provider, payload)
+			record, err := regembeddings.GenerateSemanticEmbedding(ctx, provider, payload, cfg.Embeddings.Dimensions)
 			if err != nil {
 				log.Printf("Failed to generate server embedding for %s@%s: %v", name, version, err)
 				stats.failures++
@@ -277,7 +277,7 @@ func backfillAgents(ctx context.Context, registrySvc service.RegistryService, pr
 				continue
 			}
 
-			record, err := regembeddings.GenerateSemanticEmbedding(ctx, provider, payload)
+			record, err := regembeddings.GenerateSemanticEmbedding(ctx, provider, payload, cfg.Embeddings.Dimensions)
 			if err != nil {
 				log.Printf("Failed to generate agent embedding for %s@%s: %v", name, version, err)
 				stats.failures++

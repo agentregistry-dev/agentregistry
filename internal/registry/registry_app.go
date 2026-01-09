@@ -31,6 +31,9 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		options = opts[0]
 	}
 	cfg := config.NewConfig()
+	if err := config.Validate(cfg); err != nil {
+		return fmt.Errorf("configuration validation failed: %w", err)
+	}
 
 	// Create a context with timeout for PostgreSQL connection
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -97,6 +100,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 			importerService := importer.NewService(registryService)
 			if embeddingProvider != nil {
 				importerService.SetEmbeddingProvider(embeddingProvider)
+				importerService.SetEmbeddingDimensions(cfg.Embeddings.Dimensions)
 				importerService.SetGenerateEmbeddings(cfg.Embeddings.Enabled)
 			}
 			if err := importerService.ImportFromPath(ctx, cfg.SeedFrom, cfg.EnrichServerData); err != nil {

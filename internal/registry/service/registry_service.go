@@ -1035,6 +1035,10 @@ func (s *registryServiceImpl) ensureSemanticEmbedding(ctx context.Context, opts 
 		return fmt.Errorf("failed to generate semantic embedding: %w", err)
 	}
 
+	if s.cfg != nil && s.cfg.Embeddings.Dimensions > 0 && len(result.Vector) != s.cfg.Embeddings.Dimensions {
+		return fmt.Errorf("%w: embedding dimensions mismatch (expected %d, got %d)", database.ErrInvalidInput, s.cfg.Embeddings.Dimensions, len(result.Vector))
+	}
+
 	opts.QueryEmbedding = result.Vector
 	return nil
 }

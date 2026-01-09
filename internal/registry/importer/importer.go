@@ -33,17 +33,18 @@ import (
 
 // Service handles importing seed data into the registry
 type Service struct {
-	registry           service.RegistryService
-	httpClient         *http.Client
-	requestHeaders     map[string]string
-	updateIfExists     bool
-	githubToken        string
-	readmeSeedPath     string
-	progressCachePath  string
-	progressMu         sync.RWMutex
-	processedServers   map[string]struct{}
-	generateEmbeddings bool
-	embeddingProvider  embeddings.Provider
+	registry            service.RegistryService
+	httpClient          *http.Client
+	requestHeaders      map[string]string
+	updateIfExists      bool
+	githubToken         string
+	readmeSeedPath      string
+	progressCachePath   string
+	progressMu          sync.RWMutex
+	processedServers    map[string]struct{}
+	generateEmbeddings  bool
+	embeddingProvider   embeddings.Provider
+	embeddingDimensions int
 }
 
 // NewService creates a new importer service with sane defaults
@@ -95,6 +96,11 @@ func (s *Service) SetReadmeSeedPath(path string) {
 // SetEmbeddingProvider configures the embedding provider used for semantic enrichment.
 func (s *Service) SetEmbeddingProvider(provider embeddings.Provider) {
 	s.embeddingProvider = provider
+}
+
+// SetEmbeddingDimensions sets the expected embedding dimensions for validation.
+func (s *Service) SetEmbeddingDimensions(dimensions int) {
+	s.embeddingDimensions = dimensions
 }
 
 // SetGenerateEmbeddings toggles whether embeddings should be generated during import.
@@ -248,7 +254,7 @@ func (s *Service) importServer(
 
 func (s *Service) buildServerEmbedding(ctx context.Context, srv *apiv0.ServerJSON) (*database.SemanticEmbedding, error) {
 	payload := embeddings.BuildServerEmbeddingPayload(srv)
-	return embeddings.GenerateSemanticEmbedding(ctx, s.embeddingProvider, payload)
+	return embeddings.GenerateSemanticEmbedding(ctx, s.embeddingProvider, payload, s.embeddingDimensions)
 }
 
 // readSeedFile reads seed data from various sources
