@@ -18,12 +18,13 @@ import (
 
 var (
 	// Flags for mcp publish command
-	dockerUrl       string
-	dockerTag       string
-	pushFlag        bool
-	dryRunFlag      bool
-	publishPlatform string
-	publishVersion  string
+	dockerUrl        string
+	dockerTag        string
+	pushFlag         bool
+	dryRunFlag       bool
+	publishPlatform  string
+	publishVersion   string
+	githubRepository string
 )
 
 var PublishCmd = &cobra.Command{
@@ -135,7 +136,7 @@ func buildAndPublishLocal(absPath string) error {
 	imageRef := fmt.Sprintf("%s/%s:%s", strings.TrimSuffix(dockerUrl, "/"), repoName, version)
 
 	printer.PrintInfo(fmt.Sprintf("Processing mcp server: %s", projectManifest.Name))
-	serverJSON, err := translateServerJSON(projectManifest, imageRef, version)
+	serverJSON, err := translateServerJSON(projectManifest, imageRef, version, githubRepository)
 	if err != nil {
 		return fmt.Errorf("failed to build server JSON for '%v': %w", projectManifest, err)
 	}
@@ -206,18 +207,28 @@ func translateServerJSON(
 	projectManifest *manifest.ProjectManifest,
 	imageRef string,
 	version string,
+	githubRepo string,
 ) (*apiv0.ServerJSON, error) {
 	author := "user"
 	if projectManifest.Author != "" {
 		author = projectManifest.Author
 	}
 	name := fmt.Sprintf("%s/%s", strings.ToLower(author), strings.ToLower(projectManifest.Name))
+
+	var repository *model.Repository
+	if githubRepo != "" {
+		repository = &model.Repository{
+			URL:    githubRepo,
+			Source: "github",
+		}
+	}
+
 	return &apiv0.ServerJSON{
 		Schema:      model.CurrentSchemaURL,
 		Name:        name,
 		Description: projectManifest.Description,
 		Title:       projectManifest.Name,
-		Repository:  nil,
+		Repository:  repository,
 		Version:     version,
 		WebsiteURL:  "",
 		Icons:       nil,
@@ -248,4 +259,5 @@ func init() {
 	PublishCmd.Flags().StringVar(&dockerTag, "tag", "latest", "Docker image tag to use (for local builds)")
 	PublishCmd.Flags().StringVar(&publishPlatform, "platform", "", "Target platform (e.g., linux/amd64,linux/arm64)")
 	PublishCmd.Flags().StringVar(&publishVersion, "version", "", "Specify the version to publish (for re-publishing existing servers, skips interactive selection)")
+	PublishCmd.Flags().StringVar(&githubRepository, "github", "", "Specify the GitHub repository URL for the MCP server")
 }
