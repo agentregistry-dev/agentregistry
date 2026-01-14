@@ -6,6 +6,10 @@ from google.adk.models.lite_llm import LiteLlm
 
 from .mcp_tools import get_mcp_tools
 
+# Initialize OpenTelemetry
+from google.adk.telemetry.setup import maybe_set_otel_providers
+maybe_set_otel_providers()
+
 
 def roll_die(sides: int, tool_context: ToolContext) -> int:
     """Roll a die and record the outcome for later reference."""
