@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/agentregistry-dev/agentregistry/internal/models"
 	agentmodels "github.com/agentregistry-dev/agentregistry/internal/models"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/auth"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
@@ -23,6 +26,12 @@ const (
 // NewServer constructs an MCP server that exposes read-only discovery tools backed by the registry service.
 // All endpoints are restricted to published content to keep the surface area safe for unauthenticated agents.
 func NewServer(registry service.RegistryService) *mcp.Server {
+	cfg := config.NewConfig()
+	var jwtManager *auth.JWTManager
+	if cfg.JWTPrivateKey != "" {
+		jwtManager = auth.NewJWTManager(cfg)
+	}
+
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "agentregistry-mcp",
 		Version: version.Version,
@@ -33,9 +42,27 @@ func NewServer(registry service.RegistryService) *mcp.Server {
 	addAgentTools(server, registry)
 	addServerTools(server, registry)
 	addSkillTools(server, registry)
+	addDeploymentTools(server, registry, jwtManager)
 	addMetaTools(server)
 
 	return server
+}
+
+func requireAuthToken(ctx context.Context, jwtManager *auth.JWTManager, provided string, resource string) error {
+	if jwtManager == nil {
+		return errors.New("authentication is not configured")
+	}
+	if provided == "" {
+		return errors.New("unauthorized: missing bearer token")
+	}
+	claims, err := jwtManager.ValidateToken(ctx, provided)
+	if err != nil {
+		return err
+	}
+	if !jwtManager.HasPermission(resource, auth.PermissionActionPublish, claims.Permissions) {
+		return errors.New("forbidden: insufficient permissions")
+	}
+	return nil
 }
 
 type listAgentsArgs struct {
@@ -347,11 +374,153 @@ func addMetaTools(server *mcp.Server) {
 		Name:        "registry_version",
 		Description: "Return registry build metadata",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, map[string]string, error) {
-		_ = ctx
 		return nil, map[string]string{
 			"version":    version.Version,
 			"serverName": "agentregistry-mcp",
 		}, nil
+	})
+}
+
+type listDeploymentsArgs struct {
+	AuthToken string `json:"auth_token"`
+}
+
+type getDeploymentArgs struct {
+	AuthToken string `json:"auth_token"`
+	Name      string `json:"name"`
+	Version   string `json:"version"`
+}
+
+type deployArgs struct {
+	AuthToken    string            `json:"auth_token"`
+	Name         string            `json:"name"`
+	Version      string            `json:"version"`
+	Config       map[string]string `json:"config,omitempty"`
+	PreferRemote bool              `json:"prefer_remote,omitempty"`
+}
+
+type updateDeploymentConfigArgs struct {
+	AuthToken string            `json:"auth_token"`
+	Name      string            `json:"name"`
+	Version   string            `json:"version"`
+	Config    map[string]string `json:"config,omitempty"`
+}
+
+type deploymentsResponse struct {
+	Deployments []models.Deployment `json:"deployments"`
+	Count       int                 `json:"count"`
+}
+
+func addDeploymentTools(server *mcp.Server, registry service.RegistryService, jwtManager *auth.JWTManager) {
+	// List deployments
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "list_deployments",
+		Description: "List deployments (servers or agents)",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listDeploymentsArgs) (*mcp.CallToolResult, deploymentsResponse, error) {
+		if err := requireAuthToken(ctx, jwtManager, args.AuthToken, "*"); err != nil {
+			return nil, deploymentsResponse{}, err
+		}
+		deployments, err := registry.GetDeployments(ctx)
+		if err != nil {
+			return nil, deploymentsResponse{}, err
+		}
+		resp := deploymentsResponse{
+			Deployments: make([]models.Deployment, len(deployments)),
+			Count:       len(deployments),
+		}
+		for i, d := range deployments {
+			resp.Deployments[i] = *d
+		}
+		return nil, resp, nil
+	})
+
+	// Get deployment
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "get_deployment",
+		Description: "Get a deployment by name/version",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, args getDeploymentArgs) (*mcp.CallToolResult, models.Deployment, error) {
+		if err := requireAuthToken(ctx, jwtManager, args.AuthToken, args.Name); err != nil {
+			return nil, models.Deployment{}, err
+		}
+		if args.Name == "" || args.Version == "" {
+			return nil, models.Deployment{}, errors.New("name and version are required")
+		}
+		deployment, err := registry.GetDeploymentByNameAndVersion(ctx, args.Name, args.Version)
+		if err != nil {
+			return nil, models.Deployment{}, err
+		}
+		return nil, *deployment, nil
+	})
+
+	// Deploy server
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "deploy_server",
+		Description: "Deploy a server by name/version with optional config",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, args deployArgs) (*mcp.CallToolResult, models.Deployment, error) {
+		if err := requireAuthToken(ctx, jwtManager, args.AuthToken, args.Name); err != nil {
+			return nil, models.Deployment{}, err
+		}
+		if args.Name == "" || args.Version == "" {
+			return nil, models.Deployment{}, errors.New("name and version are required")
+		}
+		deployment, err := registry.DeployServer(ctx, args.Name, args.Version, args.Config, args.PreferRemote)
+		if err != nil {
+			return nil, models.Deployment{}, err
+		}
+		return nil, *deployment, nil
+	})
+
+	// Deploy agent
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "deploy_agent",
+		Description: "Deploy an agent by name/version with optional config",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, args deployArgs) (*mcp.CallToolResult, models.Deployment, error) {
+		if err := requireAuthToken(ctx, jwtManager, args.AuthToken, args.Name); err != nil {
+			return nil, models.Deployment{}, err
+		}
+		if args.Name == "" || args.Version == "" {
+			return nil, models.Deployment{}, errors.New("name and version are required")
+		}
+		deployment, err := registry.DeployAgent(ctx, args.Name, args.Version, args.Config, args.PreferRemote)
+		if err != nil {
+			return nil, models.Deployment{}, err
+		}
+		return nil, *deployment, nil
+	})
+
+	// Update deployment config
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "update_deployment_config",
+		Description: "Update deployment configuration",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, args updateDeploymentConfigArgs) (*mcp.CallToolResult, models.Deployment, error) {
+		if err := requireAuthToken(ctx, jwtManager, args.AuthToken, args.Name); err != nil {
+			return nil, models.Deployment{}, err
+		}
+		if args.Name == "" || args.Version == "" {
+			return nil, models.Deployment{}, errors.New("name and version are required")
+		}
+		deployment, err := registry.UpdateDeploymentConfig(ctx, args.Name, args.Version, args.Config)
+		if err != nil {
+			return nil, models.Deployment{}, err
+		}
+		return nil, *deployment, nil
+	})
+
+	// Remove deployment
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "remove_deployment",
+		Description: "Remove a deployment by name/version",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, args getDeploymentArgs) (*mcp.CallToolResult, map[string]string, error) {
+		if err := requireAuthToken(ctx, jwtManager, args.AuthToken, args.Name); err != nil {
+			return nil, nil, err
+		}
+		if args.Name == "" || args.Version == "" {
+			return nil, nil, errors.New("name and version are required")
+		}
+		if err := registry.RemoveServer(ctx, args.Name, args.Version); err != nil {
+			return nil, nil, err
+		}
+		return nil, map[string]string{"status": "deleted"}, nil
 	})
 }
 
