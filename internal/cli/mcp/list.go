@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/client"
+	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
-	v0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/spf13/cobra"
 )
 
@@ -79,7 +79,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func displayPaginatedServers(servers []*v0.ServerResponse, deployedServers []*client.DeploymentResponse, pageSize int, showAll bool) {
+func displayPaginatedServers(servers []*models.ServerResponse, deployedServers []*client.DeploymentResponse, pageSize int, showAll bool) {
 	// Sort servers before displaying
 	sortServers(servers, sortBy)
 	total := len(servers)
@@ -141,7 +141,7 @@ func displayPaginatedServers(servers []*v0.ServerResponse, deployedServers []*cl
 }
 
 // sortServers sorts servers by the specified column
-func sortServers(servers []*v0.ServerResponse, column string) {
+func sortServers(servers []*models.ServerResponse, column string) {
 	column = strings.ToLower(column)
 
 	switch column {
@@ -210,7 +210,7 @@ func sortServers(servers []*v0.ServerResponse, column string) {
 	}
 }
 
-func printServersTable(servers []*v0.ServerResponse, deployedServers []*client.DeploymentResponse) {
+func printServersTable(servers []*models.ServerResponse, deployedServers []*client.DeploymentResponse) {
 	t := printer.NewTablePrinter(os.Stdout)
 	t.SetHeaders("Name", "Version", "Type", "Published", "Deployed", "Updated")
 
@@ -275,9 +275,9 @@ func printServersTable(servers []*v0.ServerResponse, deployedServers []*client.D
 }
 
 // filterServersByType filters servers by their registry type
-func filterServersByType(servers []*v0.ServerResponse, typeFilter string) []*v0.ServerResponse {
+func filterServersByType(servers []*models.ServerResponse, typeFilter string) []*models.ServerResponse {
 	typeFilter = strings.ToLower(typeFilter)
-	var filtered []*v0.ServerResponse
+	var filtered []*models.ServerResponse
 
 	for _, s := range servers {
 		// Extract registry type from packages or remotes

@@ -27,7 +27,7 @@ func runShow(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API client not initialized")
 	}
 
-	agent, err := apiClient.GetAgentByName(agentName)
+	agent, err := apiClient.GetAgentByName(agentName, true, false)
 	if err != nil {
 		return fmt.Errorf("failed to get agent: %w", err)
 	}
@@ -54,6 +54,7 @@ func runShow(cmd *cobra.Command, args []string) error {
 	t.AddRow("Model Name", printer.EmptyValueOrDefault(agent.Agent.ModelName, "<none>"))
 	t.AddRow("Status", agent.Meta.Official.Status)
 	t.AddRow("Website", printer.EmptyValueOrDefault(agent.Agent.WebsiteURL, "<none>"))
+	t.AddRow("Approval Status", agent.Meta.ApprovalStatus.Status)
 
 	if !agent.Meta.Official.PublishedAt.IsZero() {
 		t.AddRow("Published", printer.FormatAge(agent.Meta.Official.PublishedAt))

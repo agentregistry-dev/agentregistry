@@ -12,23 +12,25 @@ import (
 
 // Common database errors
 var (
-	ErrNotFound          = errors.New("record not found")
-	ErrAlreadyExists     = errors.New("record already exists")
-	ErrInvalidInput      = errors.New("invalid input")
-	ErrDatabase          = errors.New("database error")
-	ErrInvalidVersion    = errors.New("invalid version: cannot publish duplicate version")
-	ErrMaxServersReached = errors.New("maximum number of versions for this server reached (10000): please reach out at https://github.com/modelcontextprotocol/registry to explain your use case")
+	ErrNotFound                          = errors.New("record not found")
+	ErrAlreadyExists                     = errors.New("record already exists")
+	ErrInvalidInput                      = errors.New("invalid input")
+	ErrDatabase                          = errors.New("database error")
+	ErrInvalidVersion                    = errors.New("invalid version: cannot publish duplicate version")
+	ErrMaxServersReached                 = errors.New("maximum number of versions for this server reached (10000): please reach out at https://github.com/modelcontextprotocol/registry to explain your use case")
+	ErrCannotChangeApprovalWhileDeployed = errors.New("cannot change approval status while artifact is deployed")
 )
 
 // ServerFilter defines filtering options for server queries
 type ServerFilter struct {
-	Name          *string    // for finding versions of same server
-	RemoteURL     *string    // for duplicate URL detection
-	UpdatedSince  *time.Time // for incremental sync filtering
-	SubstringName *string    // for substring search on name
-	Version       *string    // for exact version matching
-	IsLatest      *bool      // for filtering latest versions only
-	Published     *bool      // for filtering by published status (nil = no filter)
+	Name           *string    // for finding versions of same server
+	RemoteURL      *string    // for duplicate URL detection
+	UpdatedSince   *time.Time // for incremental sync filtering
+	SubstringName  *string    // for substring search on name
+	Version        *string    // for exact version matching
+	IsLatest       *bool      // for filtering latest versions only
+	Published      *bool      // for filtering by published status (nil = no filter)
+	ApprovalStatus *string    // for filtering by approval status (nil = no filter)
 }
 
 // ServerReadme represents a stored README blob for a server version
@@ -44,24 +46,26 @@ type ServerReadme struct {
 
 // SkillFilter defines filtering options for skill queries (mirrors ServerFilter)
 type SkillFilter struct {
-	Name          *string    // for finding versions of same skill
-	RemoteURL     *string    // for duplicate URL detection
-	UpdatedSince  *time.Time // for incremental sync filtering
-	SubstringName *string    // for substring search on name
-	Version       *string    // for exact version matching
-	IsLatest      *bool      // for filtering latest versions only
-	Published     *bool      // for filtering by published status (nil = no filter)
+	Name           *string    // for finding versions of same skill
+	RemoteURL      *string    // for duplicate URL detection
+	UpdatedSince   *time.Time // for incremental sync filtering
+	SubstringName  *string    // for substring search on name
+	Version        *string    // for exact version matching
+	IsLatest       *bool      // for filtering latest versions only
+	Published      *bool      // for filtering by published status (nil = no filter)
+	ApprovalStatus *string    // for filtering by approval status (nil = no filter)
 }
 
 // AgentFilter defines filtering options for agent queries (mirrors ServerFilter)
 type AgentFilter struct {
-	Name          *string    // for finding versions of same agent
-	RemoteURL     *string    // for duplicate URL detection
-	UpdatedSince  *time.Time // for incremental sync filtering
-	SubstringName *string    // for substring search on name
-	Version       *string    // for exact version matching
-	IsLatest      *bool      // for filtering latest versions only
-	Published     *bool      // for filtering by published status (nil = no filter)
+	Name           *string    // for finding versions of same agent
+	RemoteURL      *string    // for duplicate URL detection
+	UpdatedSince   *time.Time // for incremental sync filtering
+	SubstringName  *string    // for substring search on name
+	Version        *string    // for exact version matching
+	IsLatest       *bool      // for filtering latest versions only
+	Published      *bool      // for filtering by published status (nil = no filter)
+	ApprovalStatus *string    // for filtering by approval status (nil = no filter)
 }
 
 // Database defines the interface for database operations
@@ -69,21 +73,21 @@ type Database interface {
 	// DeleteServer permanently removes a server version from the database
 	DeleteServer(ctx context.Context, tx pgx.Tx, serverName, version string) error
 	// CreateServer inserts a new server version with official metadata
-	CreateServer(ctx context.Context, tx pgx.Tx, serverJSON *apiv0.ServerJSON, officialMeta *apiv0.RegistryExtensions) (*apiv0.ServerResponse, error)
+	CreateServer(ctx context.Context, tx pgx.Tx, serverJSON *apiv0.ServerJSON, officialMeta *apiv0.RegistryExtensions) (*models.ServerResponse, error)
 	// UpdateServer updates an existing server record
-	UpdateServer(ctx context.Context, tx pgx.Tx, serverName, version string, serverJSON *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
+	UpdateServer(ctx context.Context, tx pgx.Tx, serverName, version string, serverJSON *apiv0.ServerJSON) (*models.ServerResponse, error)
 	// SetServerStatus updates the status of a specific server version
-	SetServerStatus(ctx context.Context, tx pgx.Tx, serverName, version string, status string) (*apiv0.ServerResponse, error)
+	SetServerStatus(ctx context.Context, tx pgx.Tx, serverName, version string, status string) (*models.ServerResponse, error)
 	// ListServers retrieve server entries with optional filtering
-	ListServers(ctx context.Context, tx pgx.Tx, filter *ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
+	ListServers(ctx context.Context, tx pgx.Tx, filter *ServerFilter, cursor string, limit int) ([]*models.ServerResponse, string, error)
 	// GetServerByName retrieve a single server by its name
-	GetServerByName(ctx context.Context, tx pgx.Tx, serverName string) (*apiv0.ServerResponse, error)
+	GetServerByName(ctx context.Context, tx pgx.Tx, serverName string) (*models.ServerResponse, error)
 	// GetServerByNameAndVersion retrieve specific version of a server by server name and version
-	GetServerByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName string, version string, publishedOnly bool) (*apiv0.ServerResponse, error)
+	GetServerByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName string, version string, publishedOnly bool, approvedOnly bool) (*models.ServerResponse, error)
 	// GetAllVersionsByServerName retrieve all versions of a server by server name
-	GetAllVersionsByServerName(ctx context.Context, tx pgx.Tx, serverName string, publishedOnly bool) ([]*apiv0.ServerResponse, error)
+	GetAllVersionsByServerName(ctx context.Context, tx pgx.Tx, serverName string, publishedOnly bool, approvedOnly bool) ([]*models.ServerResponse, error)
 	// GetCurrentLatestVersion retrieve the current latest version of a server by server name
-	GetCurrentLatestVersion(ctx context.Context, tx pgx.Tx, serverName string) (*apiv0.ServerResponse, error)
+	GetCurrentLatestVersion(ctx context.Context, tx pgx.Tx, serverName string) (*models.ServerResponse, error)
 	// CountServerVersions count the number of versions for a server
 	CountServerVersions(ctx context.Context, tx pgx.Tx, serverName string) (int, error)
 	// CheckVersionExists check if a specific version exists for a server
@@ -99,6 +103,14 @@ type Database interface {
 	UnpublishServer(ctx context.Context, tx pgx.Tx, serverName, version string) error
 	// IsServerPublished checks if a server is published
 	IsServerPublished(ctx context.Context, tx pgx.Tx, serverName, version string) (bool, error)
+	// IsServerApproved checks if a server is approved
+	IsServerApproved(ctx context.Context, tx pgx.Tx, serverName, version string) (bool, error)
+	// ApproveServer marks a server as approved
+	ApproveServer(ctx context.Context, tx pgx.Tx, serverName, version string, reason string) error
+	// DenyServer marks a server as denied
+	DenyServer(ctx context.Context, tx pgx.Tx, serverName, version string, reason string) error
+	// GetServerApprovalStatus gets the approval status of a server
+	GetServerApprovalStatus(ctx context.Context, tx pgx.Tx, serverName, version string) (string, error)
 	// UpsertServerReadme stores or updates a README blob for a server version
 	UpsertServerReadme(ctx context.Context, tx pgx.Tx, readme *ServerReadme) error
 	// GetServerReadme retrieves the README blob for a specific server version
@@ -122,9 +134,9 @@ type Database interface {
 	// GetAgentByName retrieve a single agent by its name (latest)
 	GetAgentByName(ctx context.Context, tx pgx.Tx, agentName string) (*models.AgentResponse, error)
 	// GetAgentByNameAndVersion retrieve specific version of an agent by name and version
-	GetAgentByNameAndVersion(ctx context.Context, tx pgx.Tx, agentName string, version string) (*models.AgentResponse, error)
+	GetAgentByNameAndVersion(ctx context.Context, tx pgx.Tx, agentName string, version string, publishedOnly bool, approvedOnly bool) (*models.AgentResponse, error)
 	// GetAllVersionsByAgentName retrieve all versions of an agent
-	GetAllVersionsByAgentName(ctx context.Context, tx pgx.Tx, agentName string) ([]*models.AgentResponse, error)
+	GetAllVersionsByAgentName(ctx context.Context, tx pgx.Tx, agentName string, publishedOnly bool, approvedOnly bool) ([]*models.AgentResponse, error)
 	// GetCurrentLatestAgentVersion retrieve current latest version of an agent
 	GetCurrentLatestAgentVersion(ctx context.Context, tx pgx.Tx, agentName string) (*models.AgentResponse, error)
 	// CountAgentVersions count the number of versions for an agent
@@ -139,6 +151,14 @@ type Database interface {
 	UnpublishAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error
 	// IsAgentPublished checks if an agent is published
 	IsAgentPublished(ctx context.Context, tx pgx.Tx, agentName, version string) (bool, error)
+	// IsAgentApproved checks if an agent is approved
+	IsAgentApproved(ctx context.Context, tx pgx.Tx, agentName, version string) (bool, error)
+	// ApproveAgent marks an agent as approved
+	ApproveAgent(ctx context.Context, tx pgx.Tx, agentName, version string, reason string) error
+	// DenyAgent marks an agent as denied
+	DenyAgent(ctx context.Context, tx pgx.Tx, agentName, version string, reason string) error
+	// GetAgentApprovalStatus gets the approval status of an agent
+	GetAgentApprovalStatus(ctx context.Context, tx pgx.Tx, agentName, version string) (string, error)
 	// DeleteAgent permanently removes an agent version from the database
 	DeleteAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error
 
@@ -171,6 +191,14 @@ type Database interface {
 	UnpublishSkill(ctx context.Context, tx pgx.Tx, skillName, version string) error
 	// IsSkillPublished checks if a skill is published
 	IsSkillPublished(ctx context.Context, tx pgx.Tx, skillName, version string) (bool, error)
+	// IsSkillApproved checks if a skill is approved
+	IsSkillApproved(ctx context.Context, tx pgx.Tx, skillName, version string) (bool, error)
+	// ApproveSkill marks a skill as approved
+	ApproveSkill(ctx context.Context, tx pgx.Tx, skillName, version string, reason string) error
+	// DenySkill marks a skill as denied
+	DenySkill(ctx context.Context, tx pgx.Tx, skillName, version string, reason string) error
+	// GetSkillApprovalStatus gets the approval status of a skill
+	GetSkillApprovalStatus(ctx context.Context, tx pgx.Tx, skillName, version string) (string, error)
 
 	// Deployments API
 	// CreateDeployment creates a new deployment record

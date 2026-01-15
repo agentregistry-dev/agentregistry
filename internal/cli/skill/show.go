@@ -56,6 +56,7 @@ func runShow(cmd *cobra.Command, args []string) error {
 	t.AddRow("Category", skill.Skill.Category)
 	t.AddRow("Status", skill.Meta.Official.Status)
 	t.AddRow("Website", skill.Skill.WebsiteURL)
+	t.AddRow("Approval Status", skill.Meta.ApprovalStatus.Status)
 	if err := t.Render(); err != nil {
 		return fmt.Errorf("failed to render table: %w", err)
 	}

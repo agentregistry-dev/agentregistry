@@ -371,7 +371,7 @@ func TestPublishEndpoint(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create registry service
-			registryService := service.NewRegistryService(database.NewTestDB(t), testConfig)
+			registryService := service.NewRegistryService(database.NewTestDB(t), testConfig, true)
 
 			// Setup registry service
 			tc.setupRegistryService(registryService)
@@ -474,7 +474,7 @@ func TestPublishEndpoint_MultipleSlashesEdgeCases(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create registry service
-			registryService := service.NewRegistryService(database.NewTestDB(t), testConfig)
+			registryService := service.NewRegistryService(database.NewTestDB(t), testConfig, true)
 
 			// Create a new ServeMux and Huma API
 			mux := http.NewServeMux()

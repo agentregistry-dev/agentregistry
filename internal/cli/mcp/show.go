@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
-	v0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/spf13/cobra"
 )
 
@@ -44,7 +44,7 @@ func runShow(cmd *cobra.Command, args []string) error {
 
 	// Filter by version if specified
 	if showVersion != "" {
-		var filteredServers []*v0.ServerResponse
+		var filteredServers []*models.ServerResponse
 		for _, s := range servers {
 			if s.Server.Version == showVersion {
 				filteredServers = append(filteredServers, s)
@@ -133,7 +133,7 @@ func runShow(cmd *cobra.Command, args []string) error {
 
 // showServerDetails displays detailed information about a server
 // otherVersions is a list of other available versions (can be nil)
-func showServerDetails(server *v0.ServerResponse, otherVersions []string) {
+func showServerDetails(server *models.ServerResponse, otherVersions []string) {
 	// Parse the stored combined data for additional details
 	var registryType, registryStatus, updatedAt string
 
@@ -176,6 +176,7 @@ func showServerDetails(server *v0.ServerResponse, otherVersions []string) {
 	}
 
 	t.AddRow("Type", printer.EmptyValueOrDefault(registryType, "<none>"))
+	t.AddRow("Approval Status", server.Meta.ApprovalStatus.Status)
 	t.AddRow("Status", registryStatus)
 	t.AddRow("Updated", printer.EmptyValueOrDefault(updatedAt, "<none>"))
 	t.AddRow("Website", printer.EmptyValueOrDefault(server.Server.WebsiteURL, "<none>"))
@@ -187,11 +188,11 @@ func showServerDetails(server *v0.ServerResponse, otherVersions []string) {
 // ServerVersionGroup groups servers with the same base name but different versions
 type ServerVersionGroup struct {
 	BaseName string
-	Servers  []*v0.ServerResponse
+	Servers  []*models.ServerResponse
 }
 
 // groupServersByBaseName groups servers by their base name (ignoring registry prefix differences)
-func groupServersByBaseName(servers []*v0.ServerResponse) []ServerVersionGroup {
+func groupServersByBaseName(servers []*models.ServerResponse) []ServerVersionGroup {
 	groups := make(map[string]*ServerVersionGroup)
 
 	for _, server := range servers {
@@ -204,7 +205,7 @@ func groupServersByBaseName(servers []*v0.ServerResponse) []ServerVersionGroup {
 		} else {
 			groups[key] = &ServerVersionGroup{
 				BaseName: server.Server.Name,
-				Servers:  []*v0.ServerResponse{server},
+				Servers:  []*models.ServerResponse{server},
 			}
 		}
 	}
@@ -218,7 +219,7 @@ func groupServersByBaseName(servers []*v0.ServerResponse) []ServerVersionGroup {
 	return result
 }
 
-func findServersByName(searchName string) []*v0.ServerResponse {
+func findServersByName(searchName string) []*models.ServerResponse {
 	servers, err := apiClient.GetPublishedServers()
 	if err != nil {
 		log.Fatalf("Failed to get servers: %v", err)
@@ -227,12 +228,12 @@ func findServersByName(searchName string) []*v0.ServerResponse {
 	// First, try exact match with full name
 	for _, s := range servers {
 		if s.Server.Name == searchName {
-			return []*v0.ServerResponse{s}
+			return []*models.ServerResponse{s}
 		}
 	}
 
 	// If no exact match, search for name part (after /)
-	var matches []*v0.ServerResponse
+	var matches []*models.ServerResponse
 	searchLower := strings.ToLower(searchName)
 
 	for _, s := range servers {

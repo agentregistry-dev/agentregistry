@@ -12,11 +12,11 @@ import (
 	"syscall"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
+	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
-	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/spf13/cobra"
 	"github.com/stoewer/go-strcase"
 )
@@ -81,7 +81,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 }
 
 // runMCPServerWithRuntime starts an MCP server using the runtime
-func runMCPServerWithRuntime(server *apiv0.ServerResponse) error {
+func runMCPServerWithRuntime(server *models.ServerResponse) error {
 
 	// Parse environment variables, arguments, and headers from flags
 	envValues, err := parseKeyValuePairs(runEnvVars)

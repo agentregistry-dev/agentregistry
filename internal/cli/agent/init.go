@@ -34,10 +34,10 @@ arctl agent init adk python dice --model-provider Gemini --model-name gemini-2.0
 }
 
 var (
-	initInstructionFile string
-	initModelProvider   string
-	initModelName       string
-	initDescription     string
+	initInstructionFile   string
+	initModelProvider     string
+	initModelName         string
+	initDescription       string
 	initTelemetryEndpoint string
 )
 
@@ -93,19 +93,19 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	agentConfig := &common.AgentConfig{
-		Name:             agentName,
-		Description:      initDescription,
-		Image:            defaultImage(agentName),
-		Directory:        projectDir,
-		Verbose:          verbose,
-		Instruction:      instruction,
-		ModelProvider:    modelProvider,
-		ModelName:        modelName,
-		Framework:        framework,
-		Language:         language,
-		CLIVersion:       adkBaseImageVersion,
+		Name:              agentName,
+		Description:       initDescription,
+		Image:             defaultImage(agentName),
+		Directory:         projectDir,
+		Verbose:           verbose,
+		Instruction:       instruction,
+		ModelProvider:     modelProvider,
+		ModelName:         modelName,
+		Framework:         framework,
+		Language:          language,
+		CLIVersion:        adkBaseImageVersion,
 		TelemetryEndpoint: initTelemetryEndpoint,
-		InitGit:          true,
+		InitGit:           true,
 	}
 
 	if err := generator.Generate(agentConfig); err != nil {
