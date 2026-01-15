@@ -256,3 +256,63 @@ func TestDeploymentTools_AuthFailure(t *testing.T) {
 	raw, _ := json.Marshal(res.Content)
 	assert.Contains(t, string(raw), "bearer token")
 }
+
+func TestDeploymentTools_FilterResourceType(t *testing.T) {
+	ctx := context.Background()
+	t.Setenv("AGENT_REGISTRY_JWT_PRIVATE_KEY", "0000000000000000000000000000000000000000000000000000000000000000")
+	cfg := config.NewConfig()
+	jwtMgr := auth.NewJWTManager(cfg)
+	tokenResp, err := jwtMgr.GenerateTokenResponse(ctx, auth.JWTClaims{
+		Permissions: []auth.Permission{{Action: auth.PermissionActionPublish, ResourcePattern: "*"}},
+	})
+	require.NoError(t, err)
+	token := tokenResp.RegistryToken
+
+	deployments := []*models.Deployment{
+		{
+			ServerName:   "com.example/echo",
+			Version:      "1.0.0",
+			ResourceType: "mcp",
+		},
+		{
+			ServerName:   "com.example/echo-agent",
+			Version:      "2.0.0",
+			ResourceType: "agent",
+		},
+	}
+
+	reg := &fakeRegistry{
+		listDeploymentsFn: func(ctx context.Context) ([]*models.Deployment, error) {
+			return deployments, nil
+		},
+	}
+	server := NewServer(reg)
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	require.NoError(t, err)
+	defer serverSession.Wait()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	require.NoError(t, err)
+	defer clientSession.Close()
+
+	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "list_deployments",
+		Arguments: map[string]any{
+			"auth_token":    token,
+			"resource_type": "agent",
+		},
+	})
+	require.NoError(t, err)
+	raw, _ := json.Marshal(res.StructuredContent)
+	var out struct {
+		Deployments []models.Deployment `json:"deployments"`
+		Count       int                 `json:"count"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &out))
+	assert.Equal(t, 1, out.Count)
+	require.Len(t, out.Deployments, 1)
+	assert.Equal(t, "agent", out.Deployments[0].ResourceType)
+	assert.Equal(t, "com.example/echo-agent", out.Deployments[0].ServerName)
+}

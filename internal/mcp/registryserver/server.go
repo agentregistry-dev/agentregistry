@@ -382,7 +382,8 @@ func addMetaTools(server *mcp.Server) {
 }
 
 type listDeploymentsArgs struct {
-	AuthToken string `json:"auth_token"`
+	AuthToken    string `json:"auth_token"`
+	ResourceType string `json:"resource_type,omitempty"`
 }
 
 type getDeploymentArgs struct {
@@ -428,9 +429,16 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService, jw
 			Deployments: make([]models.Deployment, len(deployments)),
 			Count:       len(deployments),
 		}
-		for i, d := range deployments {
-			resp.Deployments[i] = *d
+		outIdx := 0
+		for _, d := range deployments {
+			if args.ResourceType != "" && d.ResourceType != args.ResourceType {
+				continue
+			}
+			resp.Deployments[outIdx] = *d
+			outIdx++
 		}
+		resp.Deployments = resp.Deployments[:outIdx]
+		resp.Count = outIdx
 		return nil, resp, nil
 	})
 
@@ -516,6 +524,9 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService, jw
 		}
 		if args.Name == "" || args.Version == "" {
 			return nil, nil, errors.New("name and version are required")
+		}
+		if _, err := registry.GetDeploymentByNameAndVersion(ctx, args.Name, args.Version); err != nil {
+			return nil, nil, err
 		}
 		if err := registry.RemoveServer(ctx, args.Name, args.Version); err != nil {
 			return nil, nil, err
