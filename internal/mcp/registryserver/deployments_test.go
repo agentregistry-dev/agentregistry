@@ -275,6 +275,130 @@ func TestDeploymentTools_NoAuthConfigured_AllowsRequests(t *testing.T) {
 	assert.Equal(t, "com.example/no-auth", single.ServerName)
 }
 
+func TestDeploymentTools_DeployUpdateRemove(t *testing.T) {
+	ctx := context.Background()
+	cfg := config.NewConfig() // auth disabled -> easy happy path
+
+	deployed := &models.Deployment{
+		ServerName:   "com.example/echo",
+		Version:      "1.0.0",
+		ResourceType: "mcp",
+		Config:       map[string]string{"ENV": "prod"},
+	}
+	updated := &models.Deployment{
+		ServerName:   "com.example/echo",
+		Version:      "1.0.0",
+		ResourceType: "mcp",
+		Config:       map[string]string{"ENV": "staging"},
+	}
+	agentDep := &models.Deployment{
+		ServerName:   "com.example/agent",
+		Version:      "2.0.0",
+		ResourceType: "agent",
+		Config:       map[string]string{"FOO": "bar"},
+	}
+
+	var removed bool
+	reg := &fakeRegistry{
+		deployServerFn: func(ctx context.Context, name, version string, config map[string]string, preferRemote bool) (*models.Deployment, error) {
+			return deployed, nil
+		},
+		deployAgentFn: func(ctx context.Context, name, version string, config map[string]string, preferRemote bool) (*models.Deployment, error) {
+			return agentDep, nil
+		},
+		updateDeploymentConfigFn: func(ctx context.Context, name, version string, config map[string]string) (*models.Deployment, error) {
+			return updated, nil
+		},
+		getDeploymentFn: func(ctx context.Context, name, version string) (*models.Deployment, error) {
+			if name == deployed.ServerName && version == deployed.Version {
+				return deployed, nil
+			}
+			return nil, errors.New("not found")
+		},
+		removeServerFn: func(ctx context.Context, name, version string) error {
+			if name == deployed.ServerName && version == deployed.Version {
+				removed = true
+				return nil
+			}
+			return errors.New("not found")
+		},
+	}
+
+	server := NewServer(cfg, reg)
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	require.NoError(t, err)
+	defer serverSession.Wait()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	require.NoError(t, err)
+	defer clientSession.Close()
+
+	// deploy_server
+	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "deploy_server",
+		Arguments: map[string]any{
+			"serverName": "com.example/echo",
+			"version":    "1.0.0",
+			"config":     map[string]string{"ENV": "prod"},
+		},
+	})
+	require.NoError(t, err)
+	raw, _ := json.Marshal(res.StructuredContent)
+	var dep models.Deployment
+	require.NoError(t, json.Unmarshal(raw, &dep))
+	assert.Equal(t, "com.example/echo", dep.ServerName)
+	assert.Equal(t, "mcp", dep.ResourceType)
+	assert.Equal(t, "prod", dep.Config["ENV"])
+
+	// deploy_agent
+	res, err = clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "deploy_agent",
+		Arguments: map[string]any{
+			"serverName": "com.example/agent",
+			"version":    "2.0.0",
+			"config":     map[string]string{"FOO": "bar"},
+		},
+	})
+	require.NoError(t, err)
+	raw, _ = json.Marshal(res.StructuredContent)
+	var depAgent models.Deployment
+	require.NoError(t, json.Unmarshal(raw, &depAgent))
+	assert.Equal(t, "agent", depAgent.ResourceType)
+	assert.Equal(t, "com.example/agent", depAgent.ServerName)
+
+	// update_deployment_config
+	res, err = clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "update_deployment_config",
+		Arguments: map[string]any{
+			"serverName": "com.example/echo",
+			"version":    "1.0.0",
+			"config":     map[string]string{"ENV": "staging"},
+		},
+	})
+	require.NoError(t, err)
+	raw, _ = json.Marshal(res.StructuredContent)
+	var depUpdated models.Deployment
+	require.NoError(t, json.Unmarshal(raw, &depUpdated))
+	assert.Equal(t, "staging", depUpdated.Config["ENV"])
+
+	// remove_deployment
+	res, err = clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "remove_deployment",
+		Arguments: map[string]any{
+			"serverName": "com.example/echo",
+			"version":    "1.0.0",
+		},
+	})
+	require.NoError(t, err)
+	assert.True(t, removed)
+	raw, _ = json.Marshal(res.StructuredContent)
+	var delResp map[string]string
+	require.NoError(t, json.Unmarshal(raw, &delResp))
+	assert.Equal(t, "deleted", delResp["status"])
+}
+
 func TestDeploymentTools_AuthFailure(t *testing.T) {
 	ctx := context.Background()
 	t.Setenv("AGENT_REGISTRY_JWT_PRIVATE_KEY", "0000000000000000000000000000000000000000000000000000000000000000")
