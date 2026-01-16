@@ -86,6 +86,7 @@ func init() {
 	rootCmd.AddCommand(cli.VersionCmd)
 	rootCmd.AddCommand(cli.ImportCmd)
 	rootCmd.AddCommand(cli.ExportCmd)
+	rootCmd.AddCommand(cli.EmbeddingsCmd)
 }
 
 func Root() *cobra.Command {

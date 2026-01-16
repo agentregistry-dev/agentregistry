@@ -45,7 +45,7 @@ func TestImportService_LocalFile(t *testing.T) {
 
 	// Create registry service
 	testDB := database.NewTestDB(t)
-	registryService := service.NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
+	registryService := service.NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false}, nil)
 
 	// Create importer service and test import
 	importerService := importer.NewService(registryService)
@@ -91,7 +91,7 @@ func TestImportService_HTTPFile(t *testing.T) {
 
 	// Create registry service
 	testDB := database.NewTestDB(t)
-	registryService := service.NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
+	registryService := service.NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false}, nil)
 
 	// Create importer service and test import
 	importerService := importer.NewService(registryService)
@@ -113,7 +113,7 @@ func TestImportService_RegistryPagination(t *testing.T) {
 
 	// Create registry service with test data
 	testDB := database.NewTestDB(t)
-	registryService := service.NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
+	registryService := service.NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false}, nil)
 
 	// Setup source registry with test data
 	sourceServers := []*apiv0.ServerJSON{
@@ -160,7 +160,7 @@ func TestImportService_RegistryPagination(t *testing.T) {
 
 	// Create target registry for import
 	targetDB := database.NewTestDB(t)
-	targetRegistryService := service.NewRegistryService(targetDB, &config.Config{EnableRegistryValidation: false})
+	targetRegistryService := service.NewRegistryService(targetDB, &config.Config{EnableRegistryValidation: false}, nil)
 	// Create importer service and test registry import
 	importerService := importer.NewService(targetRegistryService)
 	err := importerService.ImportFromPath(context.Background(), httpServer.URL+"/v0/servers", false)
@@ -183,7 +183,7 @@ func TestImportService_RegistryPagination(t *testing.T) {
 func TestImportService_ErrorHandling(t *testing.T) {
 	// Create registry service
 	testDB := database.NewTestDB(t)
-	registryService := service.NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
+	registryService := service.NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false}, nil)
 	importerService := importer.NewService(registryService)
 
 	tests := []struct {
@@ -274,7 +274,7 @@ func TestImportService_ReadmeSeed(t *testing.T) {
 	require.NoError(t, os.WriteFile(readmeSeedPath, readmeData, 0o600))
 
 	testDB := database.NewTestDB(t)
-	registryService := service.NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
+	registryService := service.NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false}, nil)
 
 	importerService := importer.NewService(registryService)
 	importerService.SetReadmeSeedPath(readmeSeedPath)

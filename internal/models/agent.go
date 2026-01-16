@@ -37,8 +37,13 @@ type AgentRegistryExtensions struct {
 	Published   bool      `json:"published"`
 }
 
+type AgentSemanticMeta struct {
+	Score float64 `json:"score"`
+}
+
 type AgentResponseMeta struct {
 	Official *AgentRegistryExtensions `json:"io.modelcontextprotocol.registry/official,omitempty"`
+	Semantic *AgentSemanticMeta       `json:"agentregistry.solo.io/semantic,omitempty"`
 }
 
 type AgentResponse struct {
