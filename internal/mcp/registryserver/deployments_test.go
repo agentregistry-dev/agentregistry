@@ -186,7 +186,7 @@ func TestDeploymentTools_ListAndGet(t *testing.T) {
 		},
 	}
 
-	server := NewServer(reg)
+	server := NewServer(cfg, reg)
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(ctx, serverTransport, nil)
 	require.NoError(t, err)
@@ -235,7 +235,8 @@ func TestDeploymentTools_AuthFailure(t *testing.T) {
 			return nil, nil
 		},
 	}
-	server := NewServer(reg)
+	cfg := config.NewConfig()
+	server := NewServer(cfg, reg)
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(ctx, serverTransport, nil)
 	require.NoError(t, err)
@@ -286,7 +287,7 @@ func TestDeploymentTools_FilterResourceType(t *testing.T) {
 			return deployments, nil
 		},
 	}
-	server := NewServer(reg)
+	server := NewServer(config.NewConfig(), reg)
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(ctx, serverTransport, nil)
 	require.NoError(t, err)

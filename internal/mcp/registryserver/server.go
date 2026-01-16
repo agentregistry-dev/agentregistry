@@ -14,6 +14,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
+	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
@@ -25,10 +26,9 @@ const (
 
 // NewServer constructs an MCP server that exposes read-only discovery tools backed by the registry service.
 // All endpoints are restricted to published content to keep the surface area safe for unauthenticated agents.
-func NewServer(registry service.RegistryService) *mcp.Server {
-	cfg := config.NewConfig()
+func NewServer(cfg *config.Config, registry service.RegistryService) *mcp.Server {
 	var jwtManager *auth.JWTManager
-	if cfg.JWTPrivateKey != "" {
+	if cfg != nil && cfg.JWTPrivateKey != "" {
 		jwtManager = auth.NewJWTManager(cfg)
 	}
 
@@ -52,12 +52,26 @@ func requireAuthToken(ctx context.Context, jwtManager *auth.JWTManager, provided
 	if jwtManager == nil {
 		return errors.New("authentication is not configured")
 	}
-	if provided == "" {
-		return errors.New("unauthorized: missing bearer token")
+	if provided != "" {
+		claims, err := jwtManager.ValidateToken(ctx, provided)
+		if err != nil {
+			return err
+		}
+		return validateClaims(jwtManager, claims, resource)
 	}
-	claims, err := jwtManager.ValidateToken(ctx, provided)
-	if err != nil {
-		return err
+
+	if tokenInfo := mcpauth.TokenInfoFromContext(ctx); tokenInfo != nil && tokenInfo.Extra != nil {
+		if claims, ok := tokenInfo.Extra["registry_claims"].(*auth.JWTClaims); ok {
+			return validateClaims(jwtManager, claims, resource)
+		}
+	}
+
+	return errors.New("unauthorized: missing bearer token")
+}
+
+func validateClaims(jwtManager *auth.JWTManager, claims *auth.JWTClaims, resource string) error {
+	if claims == nil {
+		return errors.New("unauthorized: missing claims")
 	}
 	if !jwtManager.HasPermission(resource, auth.PermissionActionPublish, claims.Permissions) {
 		return errors.New("forbidden: insufficient permissions")
