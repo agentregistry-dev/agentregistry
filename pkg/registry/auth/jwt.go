@@ -18,9 +18,11 @@ import (
 type PermissionAction string
 
 const (
+	PermissionActionRead    PermissionAction = "read"
+	PermissionActionPush    PermissionAction = "push"
 	PermissionActionPublish PermissionAction = "publish"
-	// Intended for admins taking moderation actions only, at least for now
-	PermissionActionEdit PermissionAction = "edit"
+	PermissionActionEdit    PermissionAction = "edit"
+	PermissionActionDelete  PermissionAction = "delete"
 )
 
 type Permission struct {

@@ -9,9 +9,9 @@ import (
 	"time"
 
 	agentmodels "github.com/agentregistry-dev/agentregistry/internal/models"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -42,7 +42,7 @@ type AgentVersionsInput struct {
 
 // RegisterAgentsEndpoints registers all agent-related endpoints with a custom path prefix
 // isAdmin: if true, shows all resources; if false, only shows published resources
-func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool) {
+func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool, authz auth.Authorizer) {
 	// Determine the tags based on whether this is admin or public
 	tags := []string{"agents"}
 	if isAdmin {
@@ -58,6 +58,15 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Description: "Get a paginated list of Agentic agents from the registry",
 		Tags:        tags,
 	}, func(ctx context.Context, input *ListAgentsInput) (*Response[agentmodels.AgentListResponse], error) {
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: "*",
+			Type: "agent",
+		}
+		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
+			return nil, err
+		}
+
 		// Build filter
 		filter := &database.AgentFilter{}
 
@@ -124,6 +133,15 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
 		}
 
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: agentName,
+			Type: "agent",
+		}
+		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
+			return nil, err
+		}
+
 		var agentResp *agentmodels.AgentResponse
 		if version == "latest" {
 			agentResp, err = registry.GetAgentByName(ctx, agentName)
@@ -156,6 +174,15 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
 		}
 
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: agentName,
+			Type: "agent",
+		}
+		if err := authz.Check(ctx, auth.PermissionActionDelete, resource); err != nil {
+			return nil, err
+		}
+
 		if err := registry.DeleteAgent(ctx, agentName, version); err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Agent not found")
@@ -180,6 +207,15 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		agentName, err := url.PathUnescape(input.AgentName)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid agent name encoding", err)
+		}
+
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: agentName,
+			Type: "agent",
+		}
+		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
+			return nil, err
 		}
 
 		agents, err := registry.GetAllVersionsByAgentName(ctx, agentName)
@@ -233,6 +269,28 @@ func RegisterAgentsCreateEndpoint(api huma.API, pathPrefix string, registry serv
 		Tags:        []string{"agents", "publish"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, func(ctx context.Context, input *CreateAgentInput) (*Response[agentmodels.AgentResponse], error) {
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: input.Body.Name,
+			Type: "agent",
+		}
+
+		// check if the agent already exists to decide the action
+		existingAgent, err := registry.GetAgentByName(ctx, input.Body.Name)
+		if err != nil && err != database.ErrNotFound {
+			return nil, huma.Error500InternalServerError("Failed to check if agent exists", err)
+		}
+		var action auth.PermissionAction
+		if existingAgent != nil {
+			action = auth.PermissionActionEdit
+		} else {
+			action = auth.PermissionActionPush
+		}
+
+		if err := authz.Check(ctx, action, resource); err != nil {
+			return nil, err
+		}
+
 		return createAgentHandler(ctx, input, registry)
 	})
 
@@ -246,13 +304,22 @@ func RegisterAgentsCreateEndpoint(api huma.API, pathPrefix string, registry serv
 		Tags:        []string{"agents", "publish"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, func(ctx context.Context, input *CreateAgentInput) (*Response[agentmodels.AgentResponse], error) {
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: input.Body.Name,
+			Type: "agent",
+		}
+		if err := authz.Check(ctx, auth.PermissionActionPush, resource); err != nil {
+			return nil, err
+		}
+
 		return createAgentHandler(ctx, input, registry)
 	})
 }
 
 // RegisterAdminAgentsCreateEndpoint registers the admin agents create/update endpoint at /agents
 // This endpoint creates or updates an agent in the registry (published defaults to false)
-func RegisterAdminAgentsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
+func RegisterAdminAgentsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService, authz auth.Authorizer) {
 	huma.Register(api, huma.Operation{
 		OperationID: "admin-create-agent" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodPost,
@@ -261,6 +328,27 @@ func RegisterAdminAgentsCreateEndpoint(api huma.API, pathPrefix string, registry
 		Description: "Create a new Agentic agent in the registry or update an existing one. By default, agents are created as unpublished (published=false).",
 		Tags:        []string{"agents", "admin"},
 	}, func(ctx context.Context, input *CreateAgentInput) (*Response[agentmodels.AgentResponse], error) {
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: input.Body.Name,
+			Type: "agent",
+		}
+
+		// check if the agent already exists to decide the action
+		existingAgent, err := registry.GetAgentByName(ctx, input.Body.Name)
+		if err != nil && err != database.ErrNotFound {
+			return nil, huma.Error500InternalServerError("Failed to check if agent exists", err)
+		}
+		var action auth.PermissionAction
+		if existingAgent != nil {
+			action = auth.PermissionActionEdit
+		} else {
+			action = auth.PermissionActionPush
+		}
+		if err := authz.Check(ctx, action, resource); err != nil {
+			return nil, err
+		}
+
 		// Create/update the agent (published defaults to false in the service layer)
 		createdAgent, err := registry.CreateAgent(ctx, &input.Body)
 		if err != nil {
@@ -273,7 +361,7 @@ func RegisterAdminAgentsCreateEndpoint(api huma.API, pathPrefix string, registry
 
 // RegisterAgentsPublishStatusEndpoints registers the publish/unpublish status endpoints for agents
 // These endpoints change the published status of existing agents
-func RegisterAgentsPublishStatusEndpoints(api huma.API, pathPrefix string, registry service.RegistryService) {
+func RegisterAgentsPublishStatusEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, authz auth.Authorizer) {
 	// Publish agent endpoint - marks an existing agent as published
 	huma.Register(api, huma.Operation{
 		OperationID: "publish-agent-status" + strings.ReplaceAll(pathPrefix, "/", "-"),
@@ -291,6 +379,15 @@ func RegisterAgentsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 		version, err := url.PathUnescape(input.Version)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
+		}
+
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: agentName,
+			Type: "agent",
+		}
+		if err := authz.Check(ctx, auth.PermissionActionPublish, resource); err != nil {
+			return nil, err
 		}
 
 		// Call the service to publish the agent
@@ -325,6 +422,15 @@ func RegisterAgentsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 		version, err := url.PathUnescape(input.Version)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
+		}
+
+		// Enforce authorization
+		resource := auth.Resource{
+			Name: agentName,
+			Type: "agent",
+		}
+		if err := authz.Check(ctx, auth.PermissionActionPublish, resource); err != nil {
+			return nil, err
 		}
 
 		// Call the service to unpublish the agent

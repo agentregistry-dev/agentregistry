@@ -12,6 +12,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -23,6 +24,8 @@ import (
 func TestListServersEndpoint(t *testing.T) {
 	ctx := context.Background()
 	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig())
+	// Create authorizer
+	authz := auth.Authorizer{Authz: nil}
 
 	// Setup test data
 	_, err := registryService.CreateServer(ctx, &apiv0.ServerJSON{
@@ -44,7 +47,7 @@ func TestListServersEndpoint(t *testing.T) {
 	// Create API
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", registryService, false)
+	v0.RegisterServersEndpoints(api, "/v0", registryService, false, authz)
 
 	tests := []struct {
 		name           string
@@ -118,7 +121,8 @@ func TestListServersEndpoint(t *testing.T) {
 func TestGetLatestServerVersionEndpoint(t *testing.T) {
 	ctx := context.Background()
 	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig())
-
+	// Create authorizer
+	authz := auth.Authorizer{Authz: nil}
 	// Setup test data
 	_, err := registryService.CreateServer(ctx, &apiv0.ServerJSON{
 		Schema:      model.CurrentSchemaURL,
@@ -134,7 +138,7 @@ func TestGetLatestServerVersionEndpoint(t *testing.T) {
 	// Create API
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", registryService, false)
+	v0.RegisterServersEndpoints(api, "/v0", registryService, false, authz)
 
 	tests := []struct {
 		name           string
@@ -185,6 +189,9 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 	ctx := context.Background()
 	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig())
 
+	// Create authorizer
+	authz := auth.Authorizer{Authz: nil}
+
 	serverName := "com.example/version-server"
 
 	// Setup test data with multiple versions
@@ -222,7 +229,7 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 	// Create API
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", registryService, false)
+	v0.RegisterServersEndpoints(api, "/v0", registryService, false, authz)
 
 	tests := []struct {
 		name           string
@@ -318,6 +325,9 @@ func TestGetServerReadmeEndpoints(t *testing.T) {
 	ctx := context.Background()
 	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig())
 
+	// Create authorizer
+	authz := auth.Authorizer{Authz: nil}
+
 	serverName := "com.example/readme-endpoint"
 	_, err := registryService.CreateServer(ctx, &apiv0.ServerJSON{
 		Schema:      model.CurrentSchemaURL,
@@ -332,7 +342,7 @@ func TestGetServerReadmeEndpoints(t *testing.T) {
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", registryService, false)
+	v0.RegisterServersEndpoints(api, "/v0", registryService, false, authz)
 
 	t.Run("latest readme", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/v0/servers/"+url.PathEscape(serverName)+"/readme", nil)
@@ -386,6 +396,9 @@ func TestGetAllVersionsEndpoint(t *testing.T) {
 	ctx := context.Background()
 	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig())
 
+	// Create authorizer
+	authz := auth.Authorizer{Authz: nil}
+
 	serverName := "com.example/multi-version-server"
 
 	// Setup test data with multiple versions
@@ -406,7 +419,7 @@ func TestGetAllVersionsEndpoint(t *testing.T) {
 	// Create API
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", registryService, false)
+	v0.RegisterServersEndpoints(api, "/v0", registryService, false, authz)
 
 	tests := []struct {
 		name           string
@@ -480,7 +493,8 @@ func TestGetAllVersionsEndpoint(t *testing.T) {
 func TestServersEndpointEdgeCases(t *testing.T) {
 	ctx := context.Background()
 	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig())
-
+	// Create authorizer
+	authz := auth.Authorizer{Authz: nil}
 	// Setup test data with edge case names that comply with constraints
 	specialServers := []struct {
 		name        string
@@ -508,7 +522,7 @@ func TestServersEndpointEdgeCases(t *testing.T) {
 	// Create API
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", registryService, false)
+	v0.RegisterServersEndpoints(api, "/v0", registryService, false, authz)
 
 	t.Run("URL encoding edge cases", func(t *testing.T) {
 		tests := []struct {

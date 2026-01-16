@@ -11,10 +11,10 @@ import (
 	"testing"
 
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
