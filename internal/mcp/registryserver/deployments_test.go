@@ -227,6 +227,59 @@ func TestDeploymentTools_ListAndGet(t *testing.T) {
 	assert.Equal(t, dep.ServerName, single.ServerName)
 }
 
+func TestDeploymentTools_NoAuthConfigured_AllowsRequests(t *testing.T) {
+	ctx := context.Background()
+	// No JWT key configured; auth should be bypassed.
+	reg := &fakeRegistry{
+		listDeploymentsFn: func(ctx context.Context) ([]*models.Deployment, error) {
+			return []*models.Deployment{
+				{ServerName: "com.example/no-auth", Version: "1.0.0", ResourceType: "mcp", Config: map[string]string{}},
+			}, nil
+		},
+		getDeploymentFn: func(ctx context.Context, name, version string) (*models.Deployment, error) {
+			return &models.Deployment{ServerName: name, Version: version, ResourceType: "mcp", Config: map[string]string{}}, nil
+		},
+	}
+
+	server := NewServer(config.NewConfig(), reg)
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	require.NoError(t, err)
+	defer serverSession.Wait()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	require.NoError(t, err)
+	defer clientSession.Close()
+
+	// No auth_token provided; should still succeed because JWT manager is nil.
+	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "list_deployments",
+		Arguments: map[string]any{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res.StructuredContent)
+
+	raw, _ := json.Marshal(res.StructuredContent)
+	var out struct {
+		Deployments []models.Deployment `json:"deployments"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &out))
+	require.Len(t, out.Deployments, 1)
+	assert.Equal(t, "com.example/no-auth", out.Deployments[0].ServerName)
+
+	// get_deployment without token also allowed
+	res, err = clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "get_deployment",
+		Arguments: map[string]any{"name": "com.example/no-auth", "version": "1.0.0"},
+	})
+	require.NoError(t, err)
+	raw, _ = json.Marshal(res.StructuredContent)
+	var single models.Deployment
+	require.NoError(t, json.Unmarshal(raw, &single))
+	assert.Equal(t, "com.example/no-auth", single.ServerName)
+}
+
 func TestDeploymentTools_AuthFailure(t *testing.T) {
 	ctx := context.Background()
 	t.Setenv("AGENT_REGISTRY_JWT_PRIVATE_KEY", "0000000000000000000000000000000000000000000000000000000000000000")
@@ -274,11 +327,13 @@ func TestDeploymentTools_FilterResourceType(t *testing.T) {
 			ServerName:   "com.example/echo",
 			Version:      "1.0.0",
 			ResourceType: "mcp",
+			Config:       map[string]string{},
 		},
 		{
 			ServerName:   "com.example/echo-agent",
 			Version:      "2.0.0",
 			ResourceType: "agent",
+			Config:       map[string]string{},
 		},
 	}
 

@@ -49,8 +49,9 @@ func NewServer(cfg *config.Config, registry service.RegistryService) *mcp.Server
 }
 
 func requireAuthToken(ctx context.Context, jwtManager *auth.JWTManager, provided string, resource string) error {
+	// If no JWT manager is configured, allow all requests (mirrors REST API behavior when auth is disabled).
 	if jwtManager == nil {
-		return errors.New("authentication is not configured")
+		return nil
 	}
 	if provided != "" {
 		claims, err := jwtManager.ValidateToken(ctx, provided)
@@ -396,18 +397,18 @@ func addMetaTools(server *mcp.Server) {
 }
 
 type listDeploymentsArgs struct {
-	AuthToken    string `json:"auth_token"`
+	AuthToken    string `json:"auth_token,omitempty"`
 	ResourceType string `json:"resource_type,omitempty"`
 }
 
 type getDeploymentArgs struct {
-	AuthToken string `json:"auth_token"`
+	AuthToken string `json:"auth_token,omitempty"`
 	Name      string `json:"name"`
 	Version   string `json:"version"`
 }
 
 type deployArgs struct {
-	AuthToken    string            `json:"auth_token"`
+	AuthToken    string            `json:"auth_token,omitempty"`
 	Name         string            `json:"name"`
 	Version      string            `json:"version"`
 	Config       map[string]string `json:"config,omitempty"`
@@ -415,7 +416,7 @@ type deployArgs struct {
 }
 
 type updateDeploymentConfigArgs struct {
-	AuthToken string            `json:"auth_token"`
+	AuthToken string            `json:"auth_token,omitempty"`
 	Name      string            `json:"name"`
 	Version   string            `json:"version"`
 	Config    map[string]string `json:"config,omitempty"`
