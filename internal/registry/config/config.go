@@ -11,6 +11,7 @@ import (
 // See .env.example for more documentation
 type Config struct {
 	ServerAddress            string `env:"SERVER_ADDRESS" envDefault:":8080"`
+	MCPPort                  uint16 `env:"MCP_PORT" envDefault:"0"`
 	DatabaseURL              string `env:"DATABASE_URL" envDefault:"postgres://agentregistry:agentregistry@localhost:5432/agent-registry?sslmode=disable"`
 	SeedFrom                 string `env:"SEED_FROM" envDefault:""`
 	EnrichServerData         bool   `env:"ENRICH_SERVER_DATA" envDefault:"false"`

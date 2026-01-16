@@ -20,29 +20,29 @@ const errRecordNotFound = "record not found"
 
 // ListServersInput represents the input for listing servers
 type ListServersInput struct {
-	Cursor       string `query:"cursor" doc:"Pagination cursor" required:"false" example:"server-cursor-123"`
-	Limit        int    `query:"limit" doc:"Number of items per page" default:"30" minimum:"1" maximum:"100" example:"50"`
-	UpdatedSince string `query:"updated_since" doc:"Filter servers updated since timestamp (RFC3339 datetime)" required:"false" example:"2025-08-07T13:15:04.280Z"`
-	Search       string `query:"search" doc:"Search servers by name (substring match)" required:"false" example:"filesystem"`
-	Version      string `query:"version" doc:"Filter by version ('latest' for latest version, or an exact version like '1.2.3')" required:"false" example:"latest"`
+	Cursor       string `query:"cursor" json:"cursor,omitempty" doc:"Pagination cursor" required:"false" example:"server-cursor-123"`
+	Limit        int    `query:"limit" json:"limit,omitempty" doc:"Number of items per page" default:"30" minimum:"1" maximum:"100" example:"50"`
+	UpdatedSince string `query:"updated_since" json:"updated_since,omitempty" doc:"Filter servers updated since timestamp (RFC3339 datetime)" required:"false" example:"2025-08-07T13:15:04.280Z"`
+	Search       string `query:"search" json:"search,omitempty" doc:"Search servers by name (substring match)" required:"false" example:"filesystem"`
+	Version      string `query:"version" json:"version,omitempty" doc:"Filter by version ('latest' for latest version, or an exact version like '1.2.3')" required:"false" example:"latest"`
 }
 
 // ServerDetailInput represents the input for getting server details
 type ServerDetailInput struct {
-	ServerName string `path:"serverName" doc:"URL-encoded server name" example:"com.example%2Fmy-server"`
+	ServerName string `path:"serverName" json:"serverName" doc:"URL-encoded server name" example:"com.example%2Fmy-server"`
 }
 
 // ServerVersionDetailInput represents the input for getting a specific version
 type ServerVersionDetailInput struct {
-	ServerName    string `path:"serverName" doc:"URL-encoded server name" example:"com.example%2Fmy-server"`
-	Version       string `path:"version" doc:"URL-encoded server version" example:"1.0.0"`
-	All           bool   `query:"all" doc:"If true, return all versions of the server instead of a single version" default:"false"`
-	PublishedOnly bool   `query:"published_only" doc:"If true, only return published versions (only applies when all=true)" default:"false"`
+	ServerName    string `path:"serverName" json:"serverName" doc:"URL-encoded server name" example:"com.example%2Fmy-server"`
+	Version       string `path:"version" json:"version" doc:"URL-encoded server version" example:"1.0.0"`
+	All           bool   `query:"all" json:"all,omitempty" doc:"If true, return all versions of the server instead of a single version" default:"false"`
+	PublishedOnly bool   `query:"published_only" json:"published_only,omitempty" doc:"If true, only return published versions (only applies when all=true)" default:"false"`
 }
 
 // ServerVersionsInput represents the input for listing all versions of a server
 type ServerVersionsInput struct {
-	ServerName string `path:"serverName" doc:"URL-encoded server name" example:"com.example%2Fmy-server"`
+	ServerName string `path:"serverName" json:"serverName" doc:"URL-encoded server name" example:"com.example%2Fmy-server"`
 }
 
 // ServerReadmeResponse is the payload for README fetch endpoints

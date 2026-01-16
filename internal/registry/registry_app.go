@@ -8,14 +8,20 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
+	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	mcpregistry "github.com/agentregistry-dev/agentregistry/internal/mcp/registryserver"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api"
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
+	registryauth "github.com/agentregistry-dev/agentregistry/internal/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/importer"
@@ -138,6 +144,54 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		options.OnHTTPServerCreated(server)
 	}
 
+	var mcpHTTPServer *http.Server
+	if cfg.MCPPort > 0 {
+		var jwtManager *registryauth.JWTManager
+		if cfg.JWTPrivateKey != "" {
+			jwtManager = registryauth.NewJWTManager(cfg)
+		}
+
+		mcpServer := mcpregistry.NewServer(cfg, registryService)
+
+		var handler http.Handler = mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
+			return mcpServer
+		}, &mcp.StreamableHTTPOptions{})
+
+		if jwtManager != nil {
+			verifier := func(ctx context.Context, token string, req *http.Request) (*mcpauth.TokenInfo, error) {
+				claims, err := jwtManager.ValidateToken(ctx, token)
+				if err != nil {
+					return nil, fmt.Errorf("%w: %v", mcpauth.ErrInvalidToken, err)
+				}
+				exp := time.Unix(int64(claims.ExpiresAt.Unix()), 0)
+				return &mcpauth.TokenInfo{
+					Scopes:     []string{},
+					Expiration: exp,
+					UserID:     claims.AuthMethodSubject,
+					Extra: map[string]any{
+						"registry_claims": claims,
+					},
+				}, nil
+			}
+			handler = mcpauth.RequireBearerToken(verifier, nil)(handler)
+		}
+
+		addr := ":" + strconv.Itoa(int(cfg.MCPPort))
+		mcpHTTPServer = &http.Server{
+			Addr:              addr,
+			Handler:           handler,
+			ReadHeaderTimeout: 10 * time.Second,
+		}
+
+		go func() {
+			log.Printf("MCP HTTP server starting on %s", addr)
+			if err := mcpHTTPServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Printf("Failed to start MCP server: %v", err)
+				os.Exit(1)
+			}
+		}()
+	}
+
 	// Start server in a goroutine so it doesn't block signal handling
 	go func() {
 		if err := server.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -160,6 +214,11 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	// Gracefully shutdown the server
 	if err := server.Shutdown(sctx); err != nil {
 		log.Printf("Server forced to shutdown: %v", err)
+	}
+	if mcpHTTPServer != nil {
+		if err := mcpHTTPServer.Shutdown(sctx); err != nil {
+			log.Printf("MCP server forced to shutdown: %v", err)
+		}
 	}
 
 	log.Println("Server exiting")
