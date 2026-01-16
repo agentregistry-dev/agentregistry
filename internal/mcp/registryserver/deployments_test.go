@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/internal/models"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -157,14 +156,8 @@ func (f *fakeRegistry) UnpublishSkill(context.Context, string, string) error {
 func TestDeploymentTools_ListAndGet(t *testing.T) {
 	ctx := context.Background()
 
-	t.Setenv("AGENT_REGISTRY_JWT_PRIVATE_KEY", "0000000000000000000000000000000000000000000000000000000000000000")
 	cfg := config.NewConfig()
-	jwtMgr := auth.NewJWTManager(cfg)
-	tokenResp, err := jwtMgr.GenerateTokenResponse(ctx, auth.JWTClaims{
-		Permissions: []auth.Permission{{Action: auth.PermissionActionPublish, ResourcePattern: "*"}},
-	})
-	require.NoError(t, err)
-	token := tokenResp.RegistryToken
+	// No JWT key configured; auth is bypassed.
 
 	dep := &models.Deployment{
 		ServerName:   "com.example/echo",
@@ -199,7 +192,7 @@ func TestDeploymentTools_ListAndGet(t *testing.T) {
 
 	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "list_deployments",
-		Arguments: map[string]any{"auth_token": token},
+		Arguments: map[string]any{},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, res.StructuredContent)
@@ -215,9 +208,8 @@ func TestDeploymentTools_ListAndGet(t *testing.T) {
 	res, err = clientSession.CallTool(ctx, &mcp.CallToolParams{
 		Name: "get_deployment",
 		Arguments: map[string]any{
-			"name":       dep.ServerName,
+			"serverName": dep.ServerName,
 			"version":    dep.Version,
-			"auth_token": token,
 		},
 	})
 	require.NoError(t, err)
@@ -270,8 +262,11 @@ func TestDeploymentTools_NoAuthConfigured_AllowsRequests(t *testing.T) {
 
 	// get_deployment without token also allowed
 	res, err = clientSession.CallTool(ctx, &mcp.CallToolParams{
-		Name:      "get_deployment",
-		Arguments: map[string]any{"name": "com.example/no-auth", "version": "1.0.0"},
+		Name: "get_deployment",
+		Arguments: map[string]any{
+			"serverName": "com.example/no-auth",
+			"version":    "1.0.0",
+		},
 	})
 	require.NoError(t, err)
 	raw, _ = json.Marshal(res.StructuredContent)
@@ -302,7 +297,7 @@ func TestDeploymentTools_AuthFailure(t *testing.T) {
 
 	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "list_deployments",
-		Arguments: map[string]any{"auth_token": ""},
+		Arguments: map[string]any{},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, res)
@@ -313,15 +308,6 @@ func TestDeploymentTools_AuthFailure(t *testing.T) {
 
 func TestDeploymentTools_FilterResourceType(t *testing.T) {
 	ctx := context.Background()
-	t.Setenv("AGENT_REGISTRY_JWT_PRIVATE_KEY", "0000000000000000000000000000000000000000000000000000000000000000")
-	cfg := config.NewConfig()
-	jwtMgr := auth.NewJWTManager(cfg)
-	tokenResp, err := jwtMgr.GenerateTokenResponse(ctx, auth.JWTClaims{
-		Permissions: []auth.Permission{{Action: auth.PermissionActionPublish, ResourcePattern: "*"}},
-	})
-	require.NoError(t, err)
-	token := tokenResp.RegistryToken
-
 	deployments := []*models.Deployment{
 		{
 			ServerName:   "com.example/echo",
@@ -356,8 +342,7 @@ func TestDeploymentTools_FilterResourceType(t *testing.T) {
 	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
 		Name: "list_deployments",
 		Arguments: map[string]any{
-			"auth_token":    token,
-			"resource_type": "agent",
+			"resourceType": "agent",
 		},
 	})
 	require.NoError(t, err)

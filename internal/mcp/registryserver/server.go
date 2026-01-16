@@ -9,6 +9,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	agentmodels "github.com/agentregistry-dev/agentregistry/internal/models"
+	restv0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
@@ -48,17 +49,10 @@ func NewServer(cfg *config.Config, registry service.RegistryService) *mcp.Server
 	return server
 }
 
-func requireAuthToken(ctx context.Context, jwtManager *auth.JWTManager, provided string, resource string) error {
+func requireAuthToken(ctx context.Context, jwtManager *auth.JWTManager, resource string) error {
 	// If no JWT manager is configured, allow all requests (mirrors REST API behavior when auth is disabled).
 	if jwtManager == nil {
 		return nil
-	}
-	if provided != "" {
-		claims, err := jwtManager.ValidateToken(ctx, provided)
-		if err != nil {
-			return err
-		}
-		return validateClaims(jwtManager, claims, resource)
 	}
 
 	if tokenInfo := mcpauth.TokenInfoFromContext(ctx); tokenInfo != nil && tokenInfo.Extra != nil {
@@ -80,13 +74,7 @@ func validateClaims(jwtManager *auth.JWTManager, claims *auth.JWTClaims, resourc
 	return nil
 }
 
-type listAgentsArgs struct {
-	Cursor       string `json:"cursor,omitempty"`
-	Limit        int    `json:"limit,omitempty"`
-	UpdatedSince string `json:"updated_since,omitempty"`
-	Search       string `json:"search,omitempty"`
-	Version      string `json:"version,omitempty"`
-}
+type listAgentsArgs = restv0.ListAgentsInput
 
 func addAgentTools(server *mcp.Server, registry service.RegistryService) {
 	mcp.AddTool(server, &mcp.Tool{
@@ -161,13 +149,7 @@ func addAgentTools(server *mcp.Server, registry service.RegistryService) {
 	})
 }
 
-type listServersArgs struct {
-	Cursor       string `json:"cursor,omitempty"`
-	Limit        int    `json:"limit,omitempty"`
-	UpdatedSince string `json:"updated_since,omitempty"`
-	Search       string `json:"search,omitempty"`
-	Version      string `json:"version,omitempty"`
-}
+type listServersArgs = restv0.ListServersInput
 
 func addServerTools(server *mcp.Server, registry service.RegistryService) {
 	mcp.AddTool(server, &mcp.Tool{
@@ -294,13 +276,7 @@ func addServerTools(server *mcp.Server, registry service.RegistryService) {
 	})
 }
 
-type listSkillsArgs struct {
-	Cursor       string `json:"cursor,omitempty"`
-	Limit        int    `json:"limit,omitempty"`
-	UpdatedSince string `json:"updated_since,omitempty"`
-	Search       string `json:"search,omitempty"`
-	Version      string `json:"version,omitempty"`
-}
+type listSkillsArgs = restv0.ListSkillsInput
 
 func addSkillTools(server *mcp.Server, registry service.RegistryService) {
 	mcp.AddTool(server, &mcp.Tool{
@@ -397,29 +373,20 @@ func addMetaTools(server *mcp.Server) {
 }
 
 type listDeploymentsArgs struct {
-	AuthToken    string `json:"auth_token,omitempty"`
-	ResourceType string `json:"resource_type,omitempty"`
+	restv0.DeploymentsListInput
 }
 
 type getDeploymentArgs struct {
-	AuthToken string `json:"auth_token,omitempty"`
-	Name      string `json:"name"`
-	Version   string `json:"version"`
+	restv0.DeploymentInput
 }
 
 type deployArgs struct {
-	AuthToken    string            `json:"auth_token,omitempty"`
-	Name         string            `json:"name"`
-	Version      string            `json:"version"`
-	Config       map[string]string `json:"config,omitempty"`
-	PreferRemote bool              `json:"prefer_remote,omitempty"`
+	restv0.DeploymentRequest
 }
 
 type updateDeploymentConfigArgs struct {
-	AuthToken string            `json:"auth_token,omitempty"`
-	Name      string            `json:"name"`
-	Version   string            `json:"version"`
-	Config    map[string]string `json:"config,omitempty"`
+	restv0.DeploymentInput
+	restv0.DeploymentConfigUpdate
 }
 
 type deploymentsResponse struct {
@@ -433,7 +400,7 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService, jw
 		Name:        "list_deployments",
 		Description: "List deployments (servers or agents)",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listDeploymentsArgs) (*mcp.CallToolResult, deploymentsResponse, error) {
-		if err := requireAuthToken(ctx, jwtManager, args.AuthToken, "*"); err != nil {
+		if err := requireAuthToken(ctx, jwtManager, "*"); err != nil {
 			return nil, deploymentsResponse{}, err
 		}
 		deployments, err := registry.GetDeployments(ctx)
@@ -462,13 +429,13 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService, jw
 		Name:        "get_deployment",
 		Description: "Get a deployment by name/version",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args getDeploymentArgs) (*mcp.CallToolResult, models.Deployment, error) {
-		if err := requireAuthToken(ctx, jwtManager, args.AuthToken, args.Name); err != nil {
+		if err := requireAuthToken(ctx, jwtManager, args.ServerName); err != nil {
 			return nil, models.Deployment{}, err
 		}
-		if args.Name == "" || args.Version == "" {
+		if args.ServerName == "" || args.Version == "" {
 			return nil, models.Deployment{}, errors.New("name and version are required")
 		}
-		deployment, err := registry.GetDeploymentByNameAndVersion(ctx, args.Name, args.Version)
+		deployment, err := registry.GetDeploymentByNameAndVersion(ctx, args.ServerName, args.Version)
 		if err != nil {
 			return nil, models.Deployment{}, err
 		}
@@ -480,13 +447,13 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService, jw
 		Name:        "deploy_server",
 		Description: "Deploy a server by name/version with optional config",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args deployArgs) (*mcp.CallToolResult, models.Deployment, error) {
-		if err := requireAuthToken(ctx, jwtManager, args.AuthToken, args.Name); err != nil {
+		if err := requireAuthToken(ctx, jwtManager, args.ServerName); err != nil {
 			return nil, models.Deployment{}, err
 		}
-		if args.Name == "" || args.Version == "" {
+		if args.ServerName == "" || args.Version == "" {
 			return nil, models.Deployment{}, errors.New("name and version are required")
 		}
-		deployment, err := registry.DeployServer(ctx, args.Name, args.Version, args.Config, args.PreferRemote)
+		deployment, err := registry.DeployServer(ctx, args.ServerName, args.Version, args.Config, args.PreferRemote)
 		if err != nil {
 			return nil, models.Deployment{}, err
 		}
@@ -498,13 +465,13 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService, jw
 		Name:        "deploy_agent",
 		Description: "Deploy an agent by name/version with optional config",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args deployArgs) (*mcp.CallToolResult, models.Deployment, error) {
-		if err := requireAuthToken(ctx, jwtManager, args.AuthToken, args.Name); err != nil {
+		if err := requireAuthToken(ctx, jwtManager, args.ServerName); err != nil {
 			return nil, models.Deployment{}, err
 		}
-		if args.Name == "" || args.Version == "" {
+		if args.ServerName == "" || args.Version == "" {
 			return nil, models.Deployment{}, errors.New("name and version are required")
 		}
-		deployment, err := registry.DeployAgent(ctx, args.Name, args.Version, args.Config, args.PreferRemote)
+		deployment, err := registry.DeployAgent(ctx, args.ServerName, args.Version, args.Config, args.PreferRemote)
 		if err != nil {
 			return nil, models.Deployment{}, err
 		}
@@ -516,13 +483,13 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService, jw
 		Name:        "update_deployment_config",
 		Description: "Update deployment configuration",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args updateDeploymentConfigArgs) (*mcp.CallToolResult, models.Deployment, error) {
-		if err := requireAuthToken(ctx, jwtManager, args.AuthToken, args.Name); err != nil {
+		if err := requireAuthToken(ctx, jwtManager, args.ServerName); err != nil {
 			return nil, models.Deployment{}, err
 		}
-		if args.Name == "" || args.Version == "" {
+		if args.ServerName == "" || args.Version == "" {
 			return nil, models.Deployment{}, errors.New("name and version are required")
 		}
-		deployment, err := registry.UpdateDeploymentConfig(ctx, args.Name, args.Version, args.Config)
+		deployment, err := registry.UpdateDeploymentConfig(ctx, args.ServerName, args.Version, args.Config)
 		if err != nil {
 			return nil, models.Deployment{}, err
 		}
@@ -534,16 +501,16 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService, jw
 		Name:        "remove_deployment",
 		Description: "Remove a deployment by name/version",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args getDeploymentArgs) (*mcp.CallToolResult, map[string]string, error) {
-		if err := requireAuthToken(ctx, jwtManager, args.AuthToken, args.Name); err != nil {
+		if err := requireAuthToken(ctx, jwtManager, args.ServerName); err != nil {
 			return nil, nil, err
 		}
-		if args.Name == "" || args.Version == "" {
+		if args.ServerName == "" || args.Version == "" {
 			return nil, nil, errors.New("name and version are required")
 		}
-		if _, err := registry.GetDeploymentByNameAndVersion(ctx, args.Name, args.Version); err != nil {
+		if _, err := registry.GetDeploymentByNameAndVersion(ctx, args.ServerName, args.Version); err != nil {
 			return nil, nil, err
 		}
-		if err := registry.RemoveServer(ctx, args.Name, args.Version); err != nil {
+		if err := registry.RemoveServer(ctx, args.ServerName, args.Version); err != nil {
 			return nil, nil, err
 		}
 		return nil, map[string]string{"status": "deleted"}, nil

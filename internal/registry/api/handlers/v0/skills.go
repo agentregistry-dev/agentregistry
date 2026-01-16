@@ -17,27 +17,27 @@ import (
 
 // ListSkillsInput represents the input for listing skills
 type ListSkillsInput struct {
-	Cursor       string `query:"cursor" doc:"Pagination cursor" required:"false" example:"skill-cursor-123"`
-	Limit        int    `query:"limit" doc:"Number of items per page" default:"30" minimum:"1" maximum:"100" example:"50"`
-	UpdatedSince string `query:"updated_since" doc:"Filter skills updated since timestamp (RFC3339 datetime)" required:"false" example:"2025-08-07T13:15:04.280Z"`
-	Search       string `query:"search" doc:"Search skills by name (substring match)" required:"false" example:"filesystem"`
-	Version      string `query:"version" doc:"Filter by version ('latest' for latest version, or an exact version like '1.2.3')" required:"false" example:"latest"`
+	Cursor       string `query:"cursor" json:"cursor,omitempty" doc:"Pagination cursor" required:"false" example:"skill-cursor-123"`
+	Limit        int    `query:"limit" json:"limit,omitempty" doc:"Number of items per page" default:"30" minimum:"1" maximum:"100" example:"50"`
+	UpdatedSince string `query:"updated_since" json:"updated_since,omitempty" doc:"Filter skills updated since timestamp (RFC3339 datetime)" required:"false" example:"2025-08-07T13:15:04.280Z"`
+	Search       string `query:"search" json:"search,omitempty" doc:"Search skills by name (substring match)" required:"false" example:"filesystem"`
+	Version      string `query:"version" json:"version,omitempty" doc:"Filter by version ('latest' for latest version, or an exact version like '1.2.3')" required:"false" example:"latest"`
 }
 
 // SkillDetailInput represents the input for getting skill details
 type SkillDetailInput struct {
-	SkillName string `path:"skillName" doc:"URL-encoded skill name" example:"com.example%2Fmy-skill"`
+	SkillName string `path:"skillName" json:"skillName" doc:"URL-encoded skill name" example:"com.example%2Fmy-skill"`
 }
 
 // SkillVersionDetailInput represents the input for getting a specific version
 type SkillVersionDetailInput struct {
-	SkillName string `path:"skillName" doc:"URL-encoded skill name" example:"com.example%2Fmy-skill"`
-	Version   string `path:"version" doc:"URL-encoded skill version" example:"1.0.0"`
+	SkillName string `path:"skillName" json:"skillName" doc:"URL-encoded skill name" example:"com.example%2Fmy-skill"`
+	Version   string `path:"version" json:"version" doc:"URL-encoded skill version" example:"1.0.0"`
 }
 
 // SkillVersionsInput represents the input for listing all versions of a skill
 type SkillVersionsInput struct {
-	SkillName string `path:"skillName" doc:"URL-encoded skill name" example:"com.example%2Fmy-skill"`
+	SkillName string `path:"skillName" json:"skillName" doc:"URL-encoded skill name" example:"com.example%2Fmy-skill"`
 }
 
 // RegisterSkillsEndpoints registers all skill-related endpoints with a custom path prefix
