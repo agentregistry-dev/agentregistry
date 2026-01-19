@@ -23,8 +23,9 @@ var (
 	pushDockerTag string
 	pushPlatform  string
 	// Should push to docker registry
-	pushDockerPushFlag bool
-	pushDryRunFlag     bool
+	pushDockerPushFlag   bool
+	pushDryRunFlag       bool
+	pushGithubRepository string
 )
 
 var PushCmd = &cobra.Command{
@@ -61,7 +62,7 @@ func runPush(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("mcp.yaml not found in %s. Run 'arctl mcp init' first", absPath)
 	}
 
-	serverJSON, err := buildAndPushDockerLocal(absPath, pushDryRunFlag, pushDockerPushFlag)
+	serverJSON, err := buildAndPushDockerLocal(absPath, pushDryRunFlag, pushDockerPushFlag, pushGithubRepository)
 	if err != nil {
 		return fmt.Errorf("failed to build and push mcp server: %w", err)
 	}
@@ -86,7 +87,7 @@ func runPush(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func buildDockerImage(absPath string) (string, *apiv0.ServerJSON, error) {
+func buildDockerImage(absPath, githubRepository string) (string, *apiv0.ServerJSON, error) {
 	// 1. Load mcp.yaml manifest
 	manifestManager := manifest.NewManager(absPath)
 	if !manifestManager.Exists() {
@@ -111,7 +112,7 @@ func buildDockerImage(absPath string) (string, *apiv0.ServerJSON, error) {
 
 	printer.PrintInfo(fmt.Sprintf("Processing mcp server: %s", projectManifest.Name))
 	var serverJSON *apiv0.ServerJSON
-	serverJSON, err = translateServerJSON(projectManifest, imageRef, version)
+	serverJSON, err = translateServerJSON(projectManifest, imageRef, version, githubRepository)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to build server JSON for '%v': %w", projectManifest, err)
 	}
@@ -144,11 +145,11 @@ func pushDockerImage(imageRef string) error {
 	return nil
 }
 
-func buildAndPushDockerLocal(absPath string, dryRun bool, pushDocker bool) (*apiv0.ServerJSON, error) {
+func buildAndPushDockerLocal(absPath string, dryRun bool, pushDocker bool, githubRepository string) (*apiv0.ServerJSON, error) {
 	printer.PrintInfo(fmt.Sprintf("Building and pushing MCP server Docker image from: %s", absPath))
 
 	// build the docker image
-	imageRef, serverJSON, err := buildDockerImage(absPath)
+	imageRef, serverJSON, err := buildDockerImage(absPath, githubRepository)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build docker image: %w", err)
 	}
@@ -175,6 +176,7 @@ func init() {
 	PushCmd.Flags().StringVar(&pushPlatform, "platform", "", "Target platform (e.g., linux/amd64,linux/arm64)")
 	PushCmd.Flags().BoolVar(&pushDryRunFlag, "dry-run", false, "Show what would be done without actually doing it")
 	PushCmd.Flags().BoolVar(&pushDockerPushFlag, "push-docker", false, "Push to Docker registry")
+	PushCmd.Flags().StringVar(&pushGithubRepository, "github", "", "Specify the GitHub repository URL for the MCP server")
 	_ = PushCmd.MarkFlagRequired("docker-url")
 }
 
@@ -200,18 +202,28 @@ func translateServerJSON(
 	projectManifest *manifest.ProjectManifest,
 	imageRef string,
 	version string,
+	githubRepo string,
 ) (*apiv0.ServerJSON, error) {
 	author := "user"
 	if projectManifest.Author != "" {
 		author = projectManifest.Author
 	}
 	name := fmt.Sprintf("%s/%s", strings.ToLower(author), strings.ToLower(projectManifest.Name))
+
+	var repository *model.Repository
+	if githubRepo != "" {
+		repository = &model.Repository{
+			URL:    githubRepo,
+			Source: "github",
+		}
+	}
+
 	return &apiv0.ServerJSON{
 		Schema:      model.CurrentSchemaURL,
 		Name:        name,
 		Description: projectManifest.Description,
 		Title:       projectManifest.Name,
-		Repository:  nil,
+		Repository:  repository,
 		Version:     version,
 		WebsiteURL:  "",
 		Icons:       nil,

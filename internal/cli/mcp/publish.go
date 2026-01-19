@@ -14,12 +14,13 @@ import (
 
 var (
 	// Flags for mcp publish command
-	dockerUrl       string
-	dockerTag       string
-	pushFlag        bool
-	dryRunFlag      bool
-	publishPlatform string
-	publishVersion  string
+	dockerUrl               string
+	dockerTag               string
+	pushFlag                bool
+	dryRunFlag              bool
+	publishPlatform         string
+	publishVersion          string
+	publishGithubRepository string
 )
 
 var PublishCmd = &cobra.Command{
@@ -105,7 +106,7 @@ func publishExistingServer(serverName string, version string) error {
 func buildAndPublishLocal(absPath string) error {
 	printer.PrintInfo(fmt.Sprintf("Publishing MCP server from: %s", absPath))
 
-	serverJSON, err := buildAndPushDockerLocal(absPath, dryRunFlag, pushFlag)
+	serverJSON, err := buildAndPushDockerLocal(absPath, dryRunFlag, pushFlag, publishGithubRepository)
 	if err != nil {
 		return fmt.Errorf("failed to build and push mcp server: %w", err)
 	}
@@ -147,4 +148,5 @@ func init() {
 	PublishCmd.Flags().StringVar(&dockerTag, "tag", "latest", "Docker image tag to use (for local builds)")
 	PublishCmd.Flags().StringVar(&publishPlatform, "platform", "", "Target platform (e.g., linux/amd64,linux/arm64)")
 	PublishCmd.Flags().StringVar(&publishVersion, "version", "", "Specify the version to publish (for re-publishing existing servers, skips interactive selection)")
+	PublishCmd.Flags().StringVar(&publishGithubRepository, "github", "", "Specify the GitHub repository URL for the MCP server")
 }

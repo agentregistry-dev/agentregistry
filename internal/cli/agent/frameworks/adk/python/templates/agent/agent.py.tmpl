@@ -2,8 +2,9 @@ import random
 
 from google.adk import Agent
 from google.adk.tools.tool_context import ToolContext
+{{if ne .ModelProvider "gemini"}}
 from google.adk.models.lite_llm import LiteLlm
-
+{{end}}
 from .mcp_tools import get_mcp_tools
 
 # Initialize OpenTelemetry
