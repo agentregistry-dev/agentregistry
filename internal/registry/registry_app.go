@@ -42,9 +42,8 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
 	}
 
-	// Allow implementors to wrap the database (additional migrations)
-	// TODO(infocus7): update this for a better migration strategy between OSS and extensions.
-	// Ordering matters so we shouldn't simply chain migrations.
+	// Allow implementors to wrap the database (runs additional migrations)
+	// Important: This assumes the extension's migrations are purely additive, in which the ordering between OSS + extension migrations would not matter.
 	var db database.Database = baseDB
 	if options.DatabaseFactory != nil {
 		db, err = options.DatabaseFactory(ctx, cfg.DatabaseURL, baseDB)
