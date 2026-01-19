@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/danielgtaylor/huma/v2"
@@ -14,12 +15,21 @@ import (
 // that implements RegistryService (and optionally additional interfaces).
 type ServiceFactory func(base service.RegistryService) service.RegistryService
 
+// DatabaseFactory is a function type that creates a database implementation.
+// This allows implementors to run additional migrations
+type DatabaseFactory func(ctx context.Context, databaseURL string, baseDB database.Database) (database.Database, error)
+
 // AppOptions contains configuration for the registry app.
 // All fields are optional and allow external developers to extend functionality.
 //
 // This type is defined in pkg/registry and used by both pkg/registry/registry_app.go
 // and internal/registry/registry_app.go to avoid circular dependencies.
 type AppOptions struct {
+	// DatabaseFactory is an optional function to create a database that adds new functionality.
+	// The factory receives the base database and can run additional migrations.
+	// If nil, uses the default PostgreSQL database.
+	DatabaseFactory DatabaseFactory
+
 	// ServiceFactory is an optional function to create a service that adds new functionality.
 	// The factory receives the base service and should return an extended service.
 	ServiceFactory ServiceFactory

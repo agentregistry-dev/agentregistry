@@ -51,7 +51,7 @@ func registerPublicRoutes(
 	v0.RegisterCreateEndpoint(api, pathPrefix, registry, authz)
 	v0.RegisterEditEndpoints(api, pathPrefix, registry, cfg, authz)
 	v0auth.RegisterAuthEndpoints(api, pathPrefix, cfg)
-	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry)
+	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry, authz)
 
 	// v0-only endpoints (agents and skills)
 	if pathPrefix == "/v0" {
@@ -82,7 +82,7 @@ func registerAdminRoutes(
 	v0.RegisterAdminCreateEndpoint(api, pathPrefix, registry, authz)
 	v0.RegisterPublishStatusEndpoints(api, pathPrefix, registry, authz)
 	v0.RegisterEditEndpoints(api, pathPrefix, registry, cfg, authz)
-	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry)
+	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry, authz)
 
 	// v0-only admin endpoints (agents and skills)
 	if pathPrefix == "/admin/v0" {

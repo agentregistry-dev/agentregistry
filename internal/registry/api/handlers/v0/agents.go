@@ -40,8 +40,6 @@ type AgentVersionsInput struct {
 	AgentName string `path:"agentName" doc:"URL-encoded agent name" example:"com.example%2Fmy-agent"`
 }
 
-// TODO(infocus7): authz interface should take in the db, so it can check against permissions set in the db
-
 // RegisterAgentsEndpoints registers all agent-related endpoints with a custom path prefix
 // isAdmin: if true, shows all resources; if false, only shows published resources
 func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool, authz auth.Authorizer) {
@@ -60,16 +58,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Description: "Get a paginated list of Agentic agents from the registry",
 		Tags:        tags,
 	}, func(ctx context.Context, input *ListAgentsInput) (*Response[agentmodels.AgentListResponse], error) {
-		// TODO(infocus7): List should take account any extended DB access control setup, not a global read permission
-
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: "*",
-			Type: auth.PermissionArtifactTypeAgent,
-		}
-		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
-			return nil, err
-		}
+		// Note: Authz filtering for list operations is handled at the database layer.
 
 		// Build filter
 		filter := &database.AgentFilter{}

@@ -61,17 +61,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		Description: "Retrieve all deployed resources (MCP servers, agents) with their configurations. Optionally filter by resource type.",
 		Tags:        []string{"deployments"},
 	}, func(ctx context.Context, input *DeploymentsListInput) (*DeploymentsListResponse, error) {
-		// TODO(infocus7): List should take account any extended DB access control setup, not a global read permission
-		// TODO: Should reading deployments be based on the individual artifact permissions? or a permission for the specific deployment?
-
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: "*",
-			Type: auth.PermissionArtifactTypeDeployment,
-		}
-		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
-			return nil, err
-		}
+		// Note: Authz filtering for list operations is handled at the database layer.
 
 		deployments, err := registry.GetDeployments(ctx)
 		if err != nil {

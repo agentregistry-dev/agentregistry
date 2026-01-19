@@ -36,18 +36,31 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Connect to PostgreSQL
-	db, err := database.NewPostgreSQL(ctx, cfg.DatabaseURL)
+	// Connect to PostgreSQL (runs OSS migrations)
+	baseDB, err := database.NewPostgreSQL(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
 	}
 
-	// Store the PostgreSQL instance for later cleanup
+	// Allow implementors to wrap the database (additional migrations)
+	// TODO(infocus7): update this for a better migration strategy between OSS and extensions.
+	// Ordering matters so we shouldn't simply chain migrations.
+	var db database.Database = baseDB
+	if options.DatabaseFactory != nil {
+		db, err = options.DatabaseFactory(ctx, cfg.DatabaseURL, baseDB)
+		if err != nil {
+			// Close base database on factory error
+			baseDB.Close()
+			return fmt.Errorf("failed to create extended database: %w", err)
+		}
+	}
+
+	// Store the database instance for later cleanup
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Printf("Error closing PostgreSQL connection: %v", err)
+			log.Printf("Error closing database connection: %v", err)
 		} else {
-			log.Println("PostgreSQL connection closed successfully")
+			log.Println("Database connection closed successfully")
 		}
 	}()
 

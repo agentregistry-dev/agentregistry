@@ -139,16 +139,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		Description: "Get a paginated list of MCP servers from the registry",
 		Tags:        tags,
 	}, func(ctx context.Context, input *ListServersInput) (*Response[apiv0.ServerListResponse], error) {
-		// TODO(infocus7): List should take account any extended DB access control setup, not a global read permission
-
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: "*",
-			Type: auth.PermissionArtifactTypeServer,
-		}
-		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
-			return nil, err
-		}
+		// Note: Authz filtering for list operations is handled at the database layer.
 
 		// Build filter from input parameters
 		filter := &database.ServerFilter{}

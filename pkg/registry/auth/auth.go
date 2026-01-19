@@ -36,6 +36,8 @@ type AuthnProvider interface {
 
 // Authz
 type AuthzProvider interface {
+	// Check verifies if the session can perform the action on the resource.
+	// Used for single-resource operations (get, update, delete).
 	Check(ctx context.Context, s Session, verb PermissionAction, resource Resource) error
 }
 
