@@ -4,8 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
-	"github.com/agentregistry-dev/agentregistry/internal/models"
+	arConfig "github.com/agentregistry-dev/agentregistry/pkg/cli/config"
 	"github.com/kagent-dev/kagent/go/cli/config"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/spf13/cobra"
@@ -37,24 +36,31 @@ func init() {
 	PublishCmd.Flags().StringVar(&githubRepository, "github", "", "Specify the GitHub repository for the agent")
 }
 
+type publishAgentCfg struct {
+	AgentCfg         *agentCfg
+	GitHubRepository string
+}
+
 func runPublish(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return cmd.Help()
 	}
 	cfg := &config.Config{}
 	publishCfg := &publishAgentCfg{
-		Config: cfg,
+		AgentCfg: &agentCfg{
+			Config:  cfg,
+			Version: publishVersion,
+		},
+		GitHubRepository: githubRepository,
 	}
-	publishCfg.Version = publishVersion
-	publishCfg.GitHubRepository = githubRepository
 
 	arg := args[0]
 
 	// If --version flag was provided, treat as registry-based publish
 	// No need to push the agent, just mark as published
-	if publishCfg.Version != "" {
+	if publishCfg.AgentCfg.Version != "" {
 		agentName := arg
-		version := publishCfg.Version
+		version := publishCfg.AgentCfg.Version
 
 		if apiClient == nil {
 			return fmt.Errorf("API client not initialized")
@@ -71,66 +77,38 @@ func runPublish(cmd *cobra.Command, args []string) error {
 
 	// If the argument is a directory containing an agent project, publish from local
 	if fi, err := os.Stat(arg); err == nil && fi.IsDir() {
-		publishCfg.ProjectDir = arg
-		publishCfg.Version = "latest"
-		return publishAgent(publishCfg)
-	}
-	return nil
-}
-
-type publishAgentCfg struct {
-	Config           *config.Config
-	ProjectDir       string
-	Version          string
-	GitHubRepository string
-}
-
-func publishAgent(cfg *publishAgentCfg) error {
-	// Validate project directory
-	if cfg.ProjectDir == "" {
-		return fmt.Errorf("project directory is required")
-	}
-
-	// Check if project directory exists
-	if _, err := os.Stat(cfg.ProjectDir); os.IsNotExist(err) {
-		return fmt.Errorf("project directory does not exist: %s", cfg.ProjectDir)
-	}
-
-	version := "latest"
-	if cfg.Version != "" {
-		version = cfg.Version
-	}
-
-	mgr := common.NewManifestManager(cfg.ProjectDir)
-	manifest, err := mgr.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load manifest: %w", err)
-	}
-
-	// Create a copy of the manifest without telemetryEndpoint for registry publishing
-	// since telemetry is a deployment/runtime concern, not stored in the registry
-	publishManifest := *manifest
-	publishManifest.TelemetryEndpoint = ""
-
-	jsn := &models.AgentJSON{
-		AgentManifest: publishManifest,
-		Version:       version,
-		Status:        "active",
-	}
-
-	if cfg.GitHubRepository != "" {
-		jsn.Repository = &model.Repository{
-			URL:    cfg.GitHubRepository,
-			Source: "github",
+		publishCfg.AgentCfg.ProjectDir = arg
+		publishCfg.AgentCfg.Version = "latest"
+		jsn, err := createAgentJSONFromCfg(publishCfg.AgentCfg)
+		if err != nil {
+			return fmt.Errorf("failed to create agent JSON: %w", err)
 		}
+
+		if publishCfg.GitHubRepository != "" {
+			jsn.Repository = &model.Repository{
+				URL:    publishCfg.GitHubRepository,
+				Source: "github",
+			}
+		}
+
+		// Push the agent (creates unpublished entry)
+		if _, err := apiClient.PushAgent(jsn); err != nil {
+			return fmt.Errorf("failed to push agent: %w", err)
+		}
+
+		// Auto-approve the agent (if configured)
+		if arConfig.GetAutoApprove() {
+			if err := apiClient.ApproveAgentStatus(jsn.Name, jsn.Version, "Auto-approved via publish command"); err != nil {
+				return fmt.Errorf("failed to approve agent: %w", err)
+			}
+		}
+
+		// Mark the agent as published
+		if err := apiClient.PublishAgentStatus(jsn.Name, jsn.Version); err != nil {
+			return fmt.Errorf("failed to publish agent: %w", err)
+		}
+
+		return nil
 	}
-
-	_, err = apiClient.PublishAgent(jsn)
-	if err != nil {
-		return fmt.Errorf("failed to publish agent: %w", err)
-	}
-
-	fmt.Printf("Agent '%s' version %s published successfully\n", jsn.Name, jsn.Version)
-
-	return nil
+	return fmt.Errorf("invalid argument: %s must be a directory", arg)
 }

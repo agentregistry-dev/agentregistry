@@ -29,6 +29,7 @@ func init() {
 	SkillCmd.AddCommand(InitCmd)
 	SkillCmd.AddCommand(ListCmd)
 	SkillCmd.AddCommand(PublishCmd)
+	SkillCmd.AddCommand(PushCmd)
 	SkillCmd.AddCommand(DeleteCmd)
 	SkillCmd.AddCommand(PullCmd)
 	SkillCmd.AddCommand(ShowCmd)

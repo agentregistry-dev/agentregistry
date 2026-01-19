@@ -12,6 +12,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/exporter"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	cliConfig "github.com/agentregistry-dev/agentregistry/pkg/cli/config"
 	"github.com/spf13/cobra"
 )
 
@@ -46,7 +47,7 @@ var ExportCmd = &cobra.Command{
 			}
 		}()
 
-		registryService := service.NewRegistryService(db, cfg)
+		registryService := service.NewRegistryService(db, cfg, cliConfig.GetAutoApprove())
 		exporterService := exporter.NewService(registryService)
 
 		exportCtx := cmd.Context()

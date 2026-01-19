@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
+	"github.com/agentregistry-dev/agentregistry/internal/models"
 )
 
 func isServerDeployed(serverName string, version string) (bool, error) {
@@ -40,7 +40,7 @@ func isServerPublished(serverName, version string) (bool, error) {
 			// Check if published field exists in metadata
 			// Note: The published field is stored in the database but may not be in the response
 			// For now, if we can get it with publishedOnly=true, it's published
-			publishedServer, err := apiClient.GetServerByNameAndVersion(serverName, version, true)
+			publishedServer, err := apiClient.GetServerByNameAndVersion(serverName, version, true, false)
 			if err != nil {
 				return false, err
 			}
@@ -51,10 +51,33 @@ func isServerPublished(serverName, version string) (bool, error) {
 	return false, nil
 }
 
+// isServerApproved checks if a server is approved
+func isServerApproved(serverName, version string) (bool, error) {
+	if apiClient == nil {
+		return false, errors.New("API client not initialized")
+	}
+
+	// Get all versions (admin endpoint) to check approval status
+	allVersions, err := apiClient.GetAllServerVersionsAdmin(serverName)
+	if err != nil {
+		return false, err
+	}
+
+	// Find the specific version and check if it's approved
+	for _, v := range allVersions {
+		if v.Server.Version == version {
+			// The approval status should be stored in the database and returned in the response
+			return v.Meta.ApprovalStatus.Status == "APPROVED", nil
+		}
+	}
+
+	return false, nil
+}
+
 // selectServerVersion handles server version selection logic with interactive prompts
 // Returns the selected server or an error if not found or cancelled
-// Only allows deployment of published servers
-func selectServerVersion(resourceName, requestedVersion string, autoYes bool) (*apiv0.ServerResponse, error) {
+// Only allows deployment of published-approved servers
+func selectServerVersion(resourceName, requestedVersion string, autoYes bool) (*models.ServerResponse, error) {
 	if apiClient == nil {
 		return nil, errors.New("API client not initialized")
 	}
@@ -62,7 +85,7 @@ func selectServerVersion(resourceName, requestedVersion string, autoYes bool) (*
 	// If a specific version was requested, try to get that version
 	if requestedVersion != "" && requestedVersion != "latest" {
 		fmt.Printf("Checking if MCP server '%s' version '%s' exists in registry...\n", resourceName, requestedVersion)
-		server, err := apiClient.GetServerByNameAndVersion(resourceName, requestedVersion, true)
+		server, err := apiClient.GetServerByNameAndVersion(resourceName, requestedVersion, true, true)
 		if err != nil {
 			return nil, fmt.Errorf("error querying registry: %w", err)
 		}
@@ -80,6 +103,16 @@ func selectServerVersion(resourceName, requestedVersion string, autoYes bool) (*
 				resourceName, requestedVersion, resourceName)
 		}
 
+		// Check if the server is approved
+		isApproved, err := isServerApproved(server.Server.Name, server.Server.Version)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check if server is approved: %w", err)
+		}
+		if !isApproved {
+			return nil, fmt.Errorf("cannot deploy unapproved server %s (version %s). It must be approved by an admin first",
+				resourceName, requestedVersion)
+		}
+
 		fmt.Printf("✓ Found MCP server: %s (version %s)\n", server.Server.Name, server.Server.Version)
 		return server, nil
 	}
@@ -95,15 +128,24 @@ func selectServerVersion(resourceName, requestedVersion string, autoYes bool) (*
 		return nil, fmt.Errorf("MCP server '%s' not found in registry. Use 'arctl mcp list' to see available servers", resourceName)
 	}
 
-	// Filter to only published versions
-	var publishedVersions []*apiv0.ServerResponse
+	// Filter to only published and approved versions
+	var publishedVersions []*models.ServerResponse
 	for _, v := range allVersions {
 		isPublished, err := isServerPublished(resourceName, v.Server.Version)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check if server is published: %w", err)
 		}
-		if isPublished {
-			publishedVersions = append(publishedVersions, &v)
+		if !isPublished {
+			continue
+		}
+
+		isApproved, err := isServerApproved(resourceName, v.Server.Version)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check if server is approved: %w", err)
+		}
+		if isApproved {
+			vCopy := v
+			publishedVersions = append(publishedVersions, &vCopy)
 		}
 	}
 

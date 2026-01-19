@@ -38,6 +38,10 @@ type AppOptions struct {
 	// If provided, this handler will be used instead of the default redirect to docs.
 	// API routes will still take precedence over the UI handler.
 	UIHandler http.Handler
+
+	// AutoApproveArtifacts is an optional boolean that controls whether newly created artifacts are automatically approved.
+	// This exists in the registry service AppOptions instead of the Config, because it is a static configuration that is set at startup.
+	AutoApproveArtifacts bool
 }
 
 // Server represents the HTTP server and provides access to the Huma API

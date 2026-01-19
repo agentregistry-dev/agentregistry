@@ -37,7 +37,7 @@ func TestEditServerEndpoint(t *testing.T) {
 	}
 
 	// Create registry service and test data
-	registryService := service.NewRegistryService(database.NewTestDB(t), cfg)
+	registryService := service.NewRegistryService(database.NewTestDB(t), cfg, true)
 
 	// Create test servers for different scenarios
 	testServers := map[string]*apiv0.ServerJSON{
@@ -431,7 +431,7 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 	}
 
 	// Create registry service
-	registryService := service.NewRegistryService(database.NewTestDB(t), cfg)
+	registryService := service.NewRegistryService(database.NewTestDB(t), cfg, true)
 
 	// Setup test servers with different characteristics
 	testServers := []struct {
@@ -651,7 +651,7 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 		assert.Equal(t, "1.0.0", response.Server.Version)
 
 		// Verify the other version wasn't affected
-		otherVersion, err := registryService.GetServerByNameAndVersion(context.Background(), "com.example/multi-version-server", "2.0.0", false)
+		otherVersion, err := registryService.GetServerByNameAndVersion(context.Background(), "com.example/multi-version-server", "2.0.0", false, false)
 		require.NoError(t, err)
 		assert.NotEqual(t, "Updated v1.0.0 specifically", otherVersion.Server.Description)
 	})

@@ -16,17 +16,17 @@ type Reconciler interface {
 // RegistryService defines the interface for registry operations
 type RegistryService interface {
 	// ListServers retrieve all servers with optional filtering
-	ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
+	ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*models.ServerResponse, string, error)
 	// GetServerByName retrieve latest version of a server by server name
-	GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error)
+	GetServerByName(ctx context.Context, serverName string) (*models.ServerResponse, error)
 	// GetServerByNameAndVersion retrieve specific version of a server by server name and version
-	GetServerByNameAndVersion(ctx context.Context, serverName string, version string, publishedOnly bool) (*apiv0.ServerResponse, error)
+	GetServerByNameAndVersion(ctx context.Context, serverName string, version string, publishedOnly bool, approvedOnly bool) (*models.ServerResponse, error)
 	// GetAllVersionsByServerName retrieve all versions of a server by server name
-	GetAllVersionsByServerName(ctx context.Context, serverName string, publishedOnly bool) ([]*apiv0.ServerResponse, error)
+	GetAllVersionsByServerName(ctx context.Context, serverName string, publishedOnly bool, approvedOnly bool) ([]*models.ServerResponse, error)
 	// CreateServer creates a new server version
-	CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
+	CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*models.ServerResponse, error)
 	// UpdateServer updates an existing server and optionally its status
-	UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error)
+	UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*models.ServerResponse, error)
 	// StoreServerReadme stores or updates the README for a server version
 	StoreServerReadme(ctx context.Context, serverName, version string, content []byte, contentType string) error
 	// GetServerReadmeLatest retrieves the README for the latest server version
@@ -37,6 +37,10 @@ type RegistryService interface {
 	PublishServer(ctx context.Context, serverName, version string) error
 	// UnpublishServer marks a server as unpublished
 	UnpublishServer(ctx context.Context, serverName, version string) error
+	// ApproveServer marks a server as approved
+	ApproveServer(ctx context.Context, serverName, version string, reason string) error
+	// DenyServer marks a server as denied
+	DenyServer(ctx context.Context, serverName, version string, reason string) error
 	// DeleteServer permanently removes a server version from the registry
 	DeleteServer(ctx context.Context, serverName, version string) error
 
@@ -46,15 +50,19 @@ type RegistryService interface {
 	// GetAgentByName retrieve latest version of an agent by name
 	GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error)
 	// GetAgentByNameAndVersion retrieve specific version of an agent by name and version
-	GetAgentByNameAndVersion(ctx context.Context, agentName string, version string) (*models.AgentResponse, error)
+	GetAgentByNameAndVersion(ctx context.Context, agentName string, version string, publishedOnly bool, approvedOnly bool) (*models.AgentResponse, error)
 	// GetAllVersionsByAgentName retrieve all versions of an agent by name
-	GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error)
+	GetAllVersionsByAgentName(ctx context.Context, agentName string, publishedOnly bool, approvedOnly bool) ([]*models.AgentResponse, error)
 	// CreateAgent creates a new agent version
 	CreateAgent(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error)
 	// PublishAgent marks an agent as published
 	PublishAgent(ctx context.Context, agentName, version string) error
 	// UnpublishAgent marks an agent as unpublished
 	UnpublishAgent(ctx context.Context, agentName, version string) error
+	// ApproveAgent marks an agent as approved
+	ApproveAgent(ctx context.Context, agentName, version string, reason string) error
+	// DenyAgent marks an agent as denied
+	DenyAgent(ctx context.Context, agentName, version string, reason string) error
 	// DeleteAgent permanently removes an agent version from the registry
 	DeleteAgent(ctx context.Context, agentName, version string) error
 	// Skills APIs
@@ -72,6 +80,10 @@ type RegistryService interface {
 	PublishSkill(ctx context.Context, skillName, version string) error
 	// UnpublishSkill marks a skill as unpublished
 	UnpublishSkill(ctx context.Context, skillName, version string) error
+	// ApproveSkill marks a skill as approved
+	ApproveSkill(ctx context.Context, skillName, version string, reason string) error
+	// DenySkill marks a skill as denied
+	DenySkill(ctx context.Context, skillName, version string, reason string) error
 
 	// Deployments APIs
 	// GetDeployments retrieves all deployed resources (MCP servers, agents)

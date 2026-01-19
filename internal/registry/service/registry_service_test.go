@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
+	models "github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -43,7 +45,7 @@ func TestValidateNoDuplicateRemoteURLs(t *testing.T) {
 	}
 
 	testDB := database.NewTestDB(t)
-	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
+	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false}, true)
 
 	// Create existing servers using the new CreateServer method
 	for _, server := range existingServers {
@@ -130,7 +132,7 @@ func TestValidateNoDuplicateRemoteURLs(t *testing.T) {
 func TestGetServerByName(t *testing.T) {
 	ctx := context.Background()
 	testDB := database.NewTestDB(t)
-	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
+	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false}, true)
 
 	// Create multiple versions of the same server
 	_, err := service.CreateServer(ctx, &apiv0.ServerJSON{
@@ -154,13 +156,13 @@ func TestGetServerByName(t *testing.T) {
 		serverName  string
 		expectError bool
 		errorMsg    string
-		checkResult func(*testing.T, *apiv0.ServerResponse)
+		checkResult func(*testing.T, *models.ServerResponse)
 	}{
 		{
 			name:        "get latest version by server name",
 			serverName:  "com.example/test-server",
 			expectError: false,
-			checkResult: func(t *testing.T, result *apiv0.ServerResponse) {
+			checkResult: func(t *testing.T, result *models.ServerResponse) {
 				t.Helper()
 				assert.Equal(t, "2.0.0", result.Server.Version) // Should get latest version
 				assert.Equal(t, "Test server v2", result.Server.Description)
@@ -199,7 +201,7 @@ func TestGetServerByName(t *testing.T) {
 func TestGetServerByNameAndVersion(t *testing.T) {
 	ctx := context.Background()
 	testDB := database.NewTestDB(t)
-	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
+	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false}, true)
 
 	serverName := "com.example/versioned-server"
 
@@ -226,14 +228,14 @@ func TestGetServerByNameAndVersion(t *testing.T) {
 		version     string
 		expectError bool
 		errorMsg    string
-		checkResult func(*testing.T, *apiv0.ServerResponse)
+		checkResult func(*testing.T, *models.ServerResponse)
 	}{
 		{
 			name:        "get specific version 1.0.0",
 			serverName:  serverName,
 			version:     "1.0.0",
 			expectError: false,
-			checkResult: func(t *testing.T, result *apiv0.ServerResponse) {
+			checkResult: func(t *testing.T, result *models.ServerResponse) {
 				t.Helper()
 				assert.Equal(t, "1.0.0", result.Server.Version)
 				assert.Equal(t, "Versioned server v1", result.Server.Description)
@@ -245,7 +247,7 @@ func TestGetServerByNameAndVersion(t *testing.T) {
 			serverName:  serverName,
 			version:     "2.0.0",
 			expectError: false,
-			checkResult: func(t *testing.T, result *apiv0.ServerResponse) {
+			checkResult: func(t *testing.T, result *models.ServerResponse) {
 				t.Helper()
 				assert.Equal(t, "2.0.0", result.Server.Version)
 				assert.Equal(t, "Versioned server v2", result.Server.Description)
@@ -270,7 +272,7 @@ func TestGetServerByNameAndVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := service.GetServerByNameAndVersion(ctx, tt.serverName, tt.version, false)
+			result, err := service.GetServerByNameAndVersion(ctx, tt.serverName, tt.version, false, false)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -292,7 +294,7 @@ func TestGetServerByNameAndVersion(t *testing.T) {
 func TestStoreAndRetrieveServerReadme(t *testing.T) {
 	ctx := context.Background()
 	testDB := database.NewTestDB(t)
-	svc := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
+	svc := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false}, true)
 
 	serverName := "com.example/readme-server"
 
@@ -347,7 +349,7 @@ func TestStoreAndRetrieveServerReadme(t *testing.T) {
 func TestGetServerReadmeMissing(t *testing.T) {
 	ctx := context.Background()
 	testDB := database.NewTestDB(t)
-	svc := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
+	svc := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false}, true)
 
 	serverName := "com.example/missing-readme"
 
@@ -371,7 +373,7 @@ func TestGetServerReadmeMissing(t *testing.T) {
 func TestGetAllVersionsByServerName(t *testing.T) {
 	ctx := context.Background()
 	testDB := database.NewTestDB(t)
-	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
+	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false}, true)
 
 	serverName := "com.example/multi-version-server"
 
@@ -405,13 +407,13 @@ func TestGetAllVersionsByServerName(t *testing.T) {
 		serverName  string
 		expectError bool
 		errorMsg    string
-		checkResult func(*testing.T, []*apiv0.ServerResponse)
+		checkResult func(*testing.T, []*models.ServerResponse)
 	}{
 		{
 			name:        "get all versions of server",
 			serverName:  serverName,
 			expectError: false,
-			checkResult: func(t *testing.T, result []*apiv0.ServerResponse) {
+			checkResult: func(t *testing.T, result []*models.ServerResponse) {
 				t.Helper()
 				assert.Len(t, result, 3)
 
@@ -445,7 +447,7 @@ func TestGetAllVersionsByServerName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := service.GetAllVersionsByServerName(ctx, tt.serverName, false)
+			result, err := service.GetAllVersionsByServerName(ctx, tt.serverName, false, false)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -467,11 +469,11 @@ func TestGetAllVersionsByServerName(t *testing.T) {
 func TestCreateServerConcurrentVersionsNoRace(t *testing.T) {
 	ctx := context.Background()
 	testDB := database.NewTestDB(t)
-	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
+	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false}, true)
 
 	const concurrency = 100
 	serverName := "com.example/test-concurrent"
-	results := make([]*apiv0.ServerResponse, concurrency)
+	results := make([]*models.ServerResponse, concurrency)
 	errors := make([]error, concurrency)
 
 	var wg sync.WaitGroup
@@ -504,7 +506,7 @@ func TestCreateServerConcurrentVersionsNoRace(t *testing.T) {
 	}
 
 	// Query database to check the final state after all creates complete
-	allVersions, err := service.GetAllVersionsByServerName(ctx, serverName, false)
+	allVersions, err := service.GetAllVersionsByServerName(ctx, serverName, false, false)
 	require.NoError(t, err, "failed to get all versions")
 
 	latestCount := 0
@@ -523,7 +525,7 @@ func TestCreateServerConcurrentVersionsNoRace(t *testing.T) {
 func TestUpdateServer(t *testing.T) {
 	ctx := context.Background()
 	testDB := database.NewTestDB(t)
-	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
+	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false}, true)
 
 	serverName := "com.example/update-test-server"
 	version := "1.0.0"
@@ -548,7 +550,7 @@ func TestUpdateServer(t *testing.T) {
 		newStatus     *string
 		expectError   bool
 		errorMsg      string
-		checkResult   func(*testing.T, *apiv0.ServerResponse)
+		checkResult   func(*testing.T, *models.ServerResponse)
 	}{
 		{
 			name:       "successful server update",
@@ -564,7 +566,7 @@ func TestUpdateServer(t *testing.T) {
 				},
 			},
 			expectError: false,
-			checkResult: func(t *testing.T, result *apiv0.ServerResponse) {
+			checkResult: func(t *testing.T, result *models.ServerResponse) {
 				t.Helper()
 				assert.Equal(t, "Updated description", result.Server.Description)
 				assert.Len(t, result.Server.Remotes, 1)
@@ -584,7 +586,7 @@ func TestUpdateServer(t *testing.T) {
 			},
 			newStatus:   stringPtr(string(model.StatusDeprecated)),
 			expectError: false,
-			checkResult: func(t *testing.T, result *apiv0.ServerResponse) {
+			checkResult: func(t *testing.T, result *models.ServerResponse) {
 				t.Helper()
 				assert.Equal(t, "Updated with status change", result.Server.Description)
 				assert.Equal(t, model.StatusDeprecated, result.Meta.Official.Status)
@@ -630,7 +632,7 @@ func TestUpdateServer_SkipValidationForDeletedServers(t *testing.T) {
 	ctx := context.Background()
 	testDB := database.NewTestDB(t)
 	// Enable registry validation to test that it gets skipped for deleted servers
-	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: true})
+	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: true}, true)
 
 	serverName := "com.example/validation-skip-test"
 	version := "1.0.0"
@@ -664,7 +666,7 @@ func TestUpdateServer_SkipValidationForDeletedServers(t *testing.T) {
 	require.NoError(t, err, "should be able to set server to deleted (validation should be skipped)")
 
 	// Verify server is now deleted
-	updatedServer, err := service.GetServerByNameAndVersion(ctx, serverName, version, false)
+	updatedServer, err := service.GetServerByNameAndVersion(ctx, serverName, version, false, false)
 	require.NoError(t, err)
 	assert.Equal(t, model.StatusDeleted, updatedServer.Meta.Official.Status)
 
@@ -724,7 +726,7 @@ func TestUpdateServer_SkipValidationForDeletedServers(t *testing.T) {
 func TestListServers(t *testing.T) {
 	ctx := context.Background()
 	testDB := database.NewTestDB(t)
-	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
+	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false}, true)
 
 	// Create test servers
 	testServers := []struct {
@@ -816,7 +818,7 @@ func TestListServers(t *testing.T) {
 func TestVersionComparison(t *testing.T) {
 	ctx := context.Background()
 	testDB := database.NewTestDB(t)
-	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
+	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false}, true)
 
 	serverName := "com.example/version-comparison-server"
 
@@ -853,7 +855,7 @@ func TestVersionComparison(t *testing.T) {
 	assert.True(t, latest.Meta.Official.IsLatest)
 
 	// Verify only one version is marked as latest
-	allVersions, err := service.GetAllVersionsByServerName(ctx, serverName, false)
+	allVersions, err := service.GetAllVersionsByServerName(ctx, serverName, false, false)
 	require.NoError(t, err)
 
 	latestCount := 0
@@ -863,6 +865,128 @@ func TestVersionComparison(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, latestCount, "Exactly one version should be marked as latest")
+}
+
+func TestApprovalEnforcement(t *testing.T) {
+	ctx := context.Background()
+	testDB := database.NewTestDB(t)
+	// Create service WITHOUT auto-approval for testing enforcement
+	svc := NewRegistryService(testDB, &config.Config{
+		EnableRegistryValidation: false,
+		AgentGatewayPort:         21212,
+	}, false)
+
+	t.Run("DeployServer requires approval", func(t *testing.T) {
+		serverName := "com.example/test-server"
+		version := "1.0.0"
+
+		// Create server
+		_, err := svc.CreateServer(ctx, &apiv0.ServerJSON{
+			Schema:  model.CurrentSchemaURL,
+			Name:    serverName,
+			Version: version,
+			Remotes: []model.Transport{
+				{Type: "streamable-http", URL: "https://api.example.com/mcp"},
+			},
+		})
+		require.NoError(t, err)
+
+		// Try to deploy - should fail with NotFound BEFORE reconciliation
+		_, err = svc.DeployServer(ctx, serverName, version, nil, false)
+		assert.ErrorIs(t, err, database.ErrNotFound)
+
+		// Publish server
+		err = svc.PublishServer(ctx, serverName, version)
+		require.NoError(t, err)
+
+		// Approve server
+		err = svc.ApproveServer(ctx, serverName, version, "approved for deployment")
+		require.NoError(t, err)
+
+		// Try to deploy - should succeed deploying (error will occur due to ReconcileAll)
+		_, err = svc.DeployServer(ctx, serverName, version, nil, false)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "deployment created but reconciliation failed")
+	})
+
+	t.Run("DeployAgent requires approval", func(t *testing.T) {
+		agentName := "com.example.test-agent"
+		version := "1.0.0"
+
+		// Create agent
+		_, err := svc.CreateAgent(ctx, &models.AgentJSON{
+			AgentManifest: common.AgentManifest{
+				Name:  agentName,
+				Image: "example-image",
+			},
+			Title:   "Test Agent",
+			Version: version,
+			Remotes: []model.Transport{
+				{Type: "streamable-http", URL: "https://api.example.com/agent"},
+			},
+		})
+		require.NoError(t, err)
+
+		// Try to deploy - should fail with NotFound BEFORE reconciliation
+		_, err = svc.DeployAgent(ctx, agentName, version, nil, false)
+		assert.ErrorIs(t, err, database.ErrNotFound)
+
+		// Publish agent
+		err = svc.PublishAgent(ctx, agentName, version)
+		require.NoError(t, err)
+
+		// Approve agent
+		err = svc.ApproveAgent(ctx, agentName, version, "approved for deployment")
+		require.NoError(t, err)
+
+		// Try to deploy - should succeed deploying (error will occur due to ReconcileAll)
+		_, err = svc.DeployAgent(ctx, agentName, version, nil, false)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "deployment created but reconciliation failed")
+	})
+
+	t.Run("Cannot change approval status while deployed", func(t *testing.T) {
+		serverName := "com.example/deploy-lock-test"
+		version := "1.0.0"
+
+		// Create and approve server
+		_, err := svc.CreateServer(ctx, &apiv0.ServerJSON{
+			Schema:  model.CurrentSchemaURL,
+			Name:    serverName,
+			Version: version,
+			Remotes: []model.Transport{
+				{Type: "streamable-http", URL: "https://api.example.com/lock-test"},
+			},
+		})
+		require.NoError(t, err)
+		err = svc.ApproveServer(ctx, serverName, version, "initial approval")
+		require.NoError(t, err)
+
+		// Directly insert a deployment record into the DB to avoid ReconcileAll
+		err = testDB.CreateDeployment(ctx, nil, &models.Deployment{
+			ServerName:   serverName,
+			Version:      version,
+			Status:       "active",
+			ResourceType: "mcp",
+		})
+		require.NoError(t, err)
+
+		// Try to Deny - should fail because it's "deployed" in the DB
+		err = svc.DenyServer(ctx, serverName, version, "denying deployed server")
+		assert.ErrorIs(t, err, database.ErrCannotChangeApprovalWhileDeployed)
+
+		// Try to Approve again - should fail
+		err = svc.ApproveServer(ctx, serverName, version, "re-approving deployed server")
+		assert.ErrorIs(t, err, database.ErrCannotChangeApprovalWhileDeployed)
+
+		// Remove deployment record from DB
+		err = testDB.RemoveDeployment(ctx, nil, serverName, version)
+		require.NoError(t, err)
+
+		// Now should be able to deny
+		err = svc.DenyServer(ctx, serverName, version, "denying after removal")
+		assert.NoError(t, err)
+	})
 }
 
 // Helper functions

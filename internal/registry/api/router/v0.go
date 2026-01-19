@@ -32,7 +32,7 @@ func RegisterRoutes(
 }
 
 // registerPublicRoutes registers public API routes for a version
-// Public routes only return published resources
+// Public routes only return approved published resources
 func registerPublicRoutes(
 	api huma.API,
 	pathPrefix string,
@@ -42,7 +42,7 @@ func registerPublicRoutes(
 	metrics *telemetry.Metrics,
 	versionInfo *v0.VersionBody,
 ) {
-	// Public endpoints only show published resources
+	// Public endpoints only show approved published resources
 	isAdmin := false
 
 	// Common endpoints (available in all versions)
@@ -63,7 +63,7 @@ func registerPublicRoutes(
 }
 
 // registerAdminRoutes registers admin API routes for a version
-// Admin routes return all resources (published and unpublished)
+// Admin routes return all resources (regardless of approval status or published status)
 func registerAdminRoutes(
 	api huma.API,
 	pathPrefix string,
@@ -92,6 +92,9 @@ func registerAdminRoutes(
 		v0.RegisterSkillsEndpoints(api, pathPrefix, registry, isAdmin)
 		v0.RegisterAdminSkillsCreateEndpoint(api, pathPrefix, registry)
 		v0.RegisterSkillsPublishStatusEndpoints(api, pathPrefix, registry)
+		v0.RegisterAdminAgentsApprovalStatusEndpoints(api, pathPrefix, registry)
+		v0.RegisterAdminServersApprovalStatusEndpoints(api, pathPrefix, registry)
+		v0.RegisterAdminSkillsApprovalStatusEndpoints(api, pathPrefix, registry)
 	}
 }
 
