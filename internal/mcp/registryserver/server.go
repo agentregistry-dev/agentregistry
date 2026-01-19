@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/models"
-	agentmodels "github.com/agentregistry-dev/agentregistry/internal/models"
 	restv0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
@@ -80,7 +79,7 @@ func addAgentTools(server *mcp.Server, registry service.RegistryService) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_agents",
 		Description: "List published agents with optional search and pagination",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listAgentsArgs) (*mcp.CallToolResult, agentmodels.AgentListResponse, error) {
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listAgentsArgs) (*mcp.CallToolResult, models.AgentListResponse, error) {
 		filter := &database.AgentFilter{}
 		published := true
 		filter.Published = &published
@@ -88,7 +87,7 @@ func addAgentTools(server *mcp.Server, registry service.RegistryService) {
 		if args.UpdatedSince != "" {
 			ts, err := time.Parse(time.RFC3339, args.UpdatedSince)
 			if err != nil {
-				return nil, agentmodels.AgentListResponse{}, fmt.Errorf("invalid updated_since: %w", err)
+				return nil, models.AgentListResponse{}, fmt.Errorf("invalid updated_since: %w", err)
 			}
 			filter.UpdatedSince = &ts
 		}
@@ -107,12 +106,12 @@ func addAgentTools(server *mcp.Server, registry service.RegistryService) {
 		limit := clampLimit(args.Limit)
 		agents, nextCursor, err := registry.ListAgents(ctx, filter, args.Cursor, limit)
 		if err != nil {
-			return nil, agentmodels.AgentListResponse{}, err
+			return nil, models.AgentListResponse{}, err
 		}
 
-		out := agentmodels.AgentListResponse{
-			Agents:   make([]agentmodels.AgentResponse, len(agents)),
-			Metadata: agentmodels.AgentMetadata{NextCursor: nextCursor, Count: len(agents)},
+		out := models.AgentListResponse{
+			Agents:   make([]models.AgentResponse, len(agents)),
+			Metadata: models.AgentMetadata{NextCursor: nextCursor, Count: len(agents)},
 		}
 		for i, a := range agents {
 			out.Agents[i] = *a
@@ -126,16 +125,16 @@ func addAgentTools(server *mcp.Server, registry service.RegistryService) {
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args struct {
 		Name    string `json:"name"`
 		Version string `json:"version,omitempty"`
-	}) (*mcp.CallToolResult, agentmodels.AgentResponse, error) {
+	}) (*mcp.CallToolResult, models.AgentResponse, error) {
 		if args.Name == "" {
-			return nil, agentmodels.AgentResponse{}, fmt.Errorf("name is required")
+			return nil, models.AgentResponse{}, fmt.Errorf("name is required")
 		}
 		version := args.Version
 		if version == "" {
 			version = "latest"
 		}
 
-		var agent *agentmodels.AgentResponse
+		var agent *models.AgentResponse
 		var err error
 		if version == "latest" {
 			agent, err = registry.GetAgentByName(ctx, args.Name)
@@ -143,7 +142,7 @@ func addAgentTools(server *mcp.Server, registry service.RegistryService) {
 			agent, err = registry.GetAgentByNameAndVersion(ctx, args.Name, version)
 		}
 		if err != nil {
-			return nil, agentmodels.AgentResponse{}, err
+			return nil, models.AgentResponse{}, err
 		}
 		return nil, *agent, nil
 	})
@@ -282,7 +281,7 @@ func addSkillTools(server *mcp.Server, registry service.RegistryService) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_skills",
 		Description: "List published skills with optional search and pagination",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listSkillsArgs) (*mcp.CallToolResult, agentmodels.SkillListResponse, error) {
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listSkillsArgs) (*mcp.CallToolResult, models.SkillListResponse, error) {
 		filter := &database.SkillFilter{}
 		published := true
 		filter.Published = &published
@@ -290,7 +289,7 @@ func addSkillTools(server *mcp.Server, registry service.RegistryService) {
 		if args.UpdatedSince != "" {
 			ts, err := time.Parse(time.RFC3339, args.UpdatedSince)
 			if err != nil {
-				return nil, agentmodels.SkillListResponse{}, fmt.Errorf("invalid updated_since: %w", err)
+				return nil, models.SkillListResponse{}, fmt.Errorf("invalid updated_since: %w", err)
 			}
 			filter.UpdatedSince = &ts
 		}
@@ -309,12 +308,12 @@ func addSkillTools(server *mcp.Server, registry service.RegistryService) {
 		limit := clampLimit(args.Limit)
 		skills, nextCursor, err := registry.ListSkills(ctx, filter, args.Cursor, limit)
 		if err != nil {
-			return nil, agentmodels.SkillListResponse{}, err
+			return nil, models.SkillListResponse{}, err
 		}
 
-		out := agentmodels.SkillListResponse{
-			Skills:   make([]agentmodels.SkillResponse, len(skills)),
-			Metadata: agentmodels.SkillMetadata{NextCursor: nextCursor, Count: len(skills)},
+		out := models.SkillListResponse{
+			Skills:   make([]models.SkillResponse, len(skills)),
+			Metadata: models.SkillMetadata{NextCursor: nextCursor, Count: len(skills)},
 		}
 		for i, s := range skills {
 			out.Skills[i] = *s
@@ -328,9 +327,9 @@ func addSkillTools(server *mcp.Server, registry service.RegistryService) {
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args struct {
 		Name    string `json:"name"`
 		Version string `json:"version,omitempty"`
-	}) (*mcp.CallToolResult, agentmodels.SkillResponse, error) {
+	}) (*mcp.CallToolResult, models.SkillResponse, error) {
 		if args.Name == "" {
-			return nil, agentmodels.SkillResponse{}, fmt.Errorf("name is required")
+			return nil, models.SkillResponse{}, fmt.Errorf("name is required")
 		}
 
 		version := args.Version
@@ -338,7 +337,7 @@ func addSkillTools(server *mcp.Server, registry service.RegistryService) {
 			version = "latest"
 		}
 
-		var skill *agentmodels.SkillResponse
+		var skill *models.SkillResponse
 		var err error
 		if version == "latest" {
 			skill, err = registry.GetSkillByName(ctx, args.Name)
@@ -346,7 +345,7 @@ func addSkillTools(server *mcp.Server, registry service.RegistryService) {
 			skill, err = registry.GetSkillByNameAndVersion(ctx, args.Name, version)
 		}
 		if err != nil {
-			return nil, agentmodels.SkillResponse{}, err
+			return nil, models.SkillResponse{}, err
 		}
 		return nil, *skill, nil
 	})

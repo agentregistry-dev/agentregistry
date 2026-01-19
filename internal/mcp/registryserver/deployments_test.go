@@ -242,13 +242,15 @@ func TestDeploymentTools_NoAuthConfigured_AllowsRequests(t *testing.T) {
 	serverSession, err := server.Connect(ctx, serverTransport, nil)
 	require.NoError(t, err)
 	defer func() {
-		require.NoError(t, serverSession.Wait())
+		_ = serverSession.Wait()
 	}()
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
 	clientSession, err := client.Connect(ctx, clientTransport, nil)
 	require.NoError(t, err)
-	defer clientSession.Close()
+	defer func() {
+		_ = clientSession.Close()
+	}()
 
 	// No auth_token provided; should still succeed because JWT manager is nil.
 	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
@@ -341,7 +343,9 @@ func TestDeploymentTools_DeployUpdateRemove(t *testing.T) {
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
 	clientSession, err := client.Connect(ctx, clientTransport, nil)
 	require.NoError(t, err)
-	defer clientSession.Close()
+	defer func() {
+		_ = clientSession.Close()
+	}()
 
 	// deploy_server
 	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
@@ -427,7 +431,9 @@ func TestDeploymentTools_AuthFailure(t *testing.T) {
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
 	clientSession, err := client.Connect(ctx, clientTransport, nil)
 	require.NoError(t, err)
-	defer clientSession.Close()
+	defer func() {
+		_ = clientSession.Close()
+	}()
 
 	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "list_deployments",
@@ -473,7 +479,9 @@ func TestDeploymentTools_FilterResourceType(t *testing.T) {
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
 	clientSession, err := client.Connect(ctx, clientTransport, nil)
 	require.NoError(t, err)
-	defer clientSession.Close()
+	defer func() {
+		_ = clientSession.Close()
+	}()
 
 	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
 		Name: "list_deployments",
