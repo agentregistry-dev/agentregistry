@@ -183,12 +183,16 @@ func TestDeploymentTools_ListAndGet(t *testing.T) {
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(ctx, serverTransport, nil)
 	require.NoError(t, err)
-	defer serverSession.Wait()
+	defer func() {
+		_ = serverSession.Wait()
+	}()
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
 	clientSession, err := client.Connect(ctx, clientTransport, nil)
 	require.NoError(t, err)
-	defer clientSession.Close()
+	defer func() {
+		_ = clientSession.Close()
+	}()
 
 	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "list_deployments",
@@ -237,7 +241,9 @@ func TestDeploymentTools_NoAuthConfigured_AllowsRequests(t *testing.T) {
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(ctx, serverTransport, nil)
 	require.NoError(t, err)
-	defer serverSession.Wait()
+	defer func() {
+		require.NoError(t, serverSession.Wait())
+	}()
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
 	clientSession, err := client.Connect(ctx, clientTransport, nil)
@@ -328,7 +334,9 @@ func TestDeploymentTools_DeployUpdateRemove(t *testing.T) {
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(ctx, serverTransport, nil)
 	require.NoError(t, err)
-	defer serverSession.Wait()
+	defer func() {
+		require.NoError(t, serverSession.Wait())
+	}()
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
 	clientSession, err := client.Connect(ctx, clientTransport, nil)
@@ -412,7 +420,9 @@ func TestDeploymentTools_AuthFailure(t *testing.T) {
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(ctx, serverTransport, nil)
 	require.NoError(t, err)
-	defer serverSession.Wait()
+	defer func() {
+		require.NoError(t, serverSession.Wait())
+	}()
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
 	clientSession, err := client.Connect(ctx, clientTransport, nil)
@@ -456,7 +466,9 @@ func TestDeploymentTools_FilterResourceType(t *testing.T) {
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(ctx, serverTransport, nil)
 	require.NoError(t, err)
-	defer serverSession.Wait()
+	defer func() {
+		require.NoError(t, serverSession.Wait())
+	}()
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
 	clientSession, err := client.Connect(ctx, clientTransport, nil)

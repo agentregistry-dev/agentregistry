@@ -45,7 +45,9 @@ func TestMCPListServers_HappyPath(t *testing.T) {
 
 	serverSession, err := server.Connect(ctx, serverTransport, nil)
 	require.NoError(t, err, "connect MCP server")
-	defer serverSession.Wait()
+	defer func() {
+		require.NoError(t, serverSession.Wait())
+	}()
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
 	clientSession, err := client.Connect(ctx, clientTransport, nil)

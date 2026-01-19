@@ -173,7 +173,9 @@ func TestServerTools_ListAndReadme(t *testing.T) {
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(ctx, serverTransport, nil)
 	require.NoError(t, err)
-	defer serverSession.Wait()
+	defer func() {
+		require.NoError(t, serverSession.Wait())
+	}()
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
 	clientSession, err := client.Connect(ctx, clientTransport, nil)
@@ -258,7 +260,9 @@ func TestAgentAndSkillTools_ListAndGet(t *testing.T) {
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(ctx, serverTransport, nil)
 	require.NoError(t, err)
-	defer serverSession.Wait()
+	defer func() {
+		require.NoError(t, serverSession.Wait())
+	}()
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
 	clientSession, err := client.Connect(ctx, clientTransport, nil)
