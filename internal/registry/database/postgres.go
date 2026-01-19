@@ -778,19 +778,19 @@ func (db *PostgreSQL) UnpublishServer(ctx context.Context, tx pgx.Tx, serverName
 
 // DeleteServer permanently removes a server version from the database
 func (db *PostgreSQL) DeleteServer(ctx context.Context, tx pgx.Tx, serverName, version string) error {
-    if ctx.Err() != nil {
-        return ctx.Err()
-    }
-    executor := db.getExecutor(tx)
-    query := `DELETE FROM servers WHERE server_name = $1 AND version = $2`
-    result, err := executor.Exec(ctx, query, serverName, version)
-    if err != nil {
-        return fmt.Errorf("failed to delete server: %w", err)
-    }
-    if result.RowsAffected() == 0 {
-        return ErrNotFound
-    }
-    return nil
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	executor := db.getExecutor(tx)
+	query := `DELETE FROM servers WHERE server_name = $1 AND version = $2`
+	result, err := executor.Exec(ctx, query, serverName, version)
+	if err != nil {
+		return fmt.Errorf("failed to delete server: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // IsServerPublished checks if a server is published
