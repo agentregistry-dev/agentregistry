@@ -1,21 +1,6 @@
 // Package database provides the Database interface for registry operations.
-// This package re-exports the internal database interface to allow enterprise
+// This package re-exports the internal database interface to allow external
 // implementations to wrap and extend the database layer.
-//
-// Example usage:
-//
-//	type MyDB struct {
-//	    base database.Database
-//	}
-//
-//	func (db *MyDB) ListServers(ctx context.Context, tx pgx.Tx, filter *database.ServerFilter, ...) ([]*apiv0.ServerResponse, string, error) {
-//	    // Extract filter data from context (set by PrepareListContext)
-//	    filterCtx := GetFilterContext(ctx)
-//	    if filterCtx != nil {
-//	        // Modify query to include filters
-//	    }
-//	    return db.base.ListServers(ctx, tx, filter, ...)
-//	}
 package database
 
 import (
@@ -26,7 +11,6 @@ import (
 )
 
 // Database is the interface for registry database operations.
-// Enterprise implementations can wrap this to add RBAC filtering.
 type Database = internaldatabase.Database
 
 // Filter types for list operations
