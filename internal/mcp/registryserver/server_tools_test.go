@@ -180,7 +180,7 @@ func TestServerTools_ListAndReadme(t *testing.T) {
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
 	clientSession, err := client.Connect(ctx, clientTransport, nil)
 	require.NoError(t, err)
-	defer clientSession.Close()
+	defer func() { _ = clientSession.Close() }()
 
 	// list_servers
 	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
@@ -267,7 +267,7 @@ func TestAgentAndSkillTools_ListAndGet(t *testing.T) {
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
 	clientSession, err := client.Connect(ctx, clientTransport, nil)
 	require.NoError(t, err)
-	defer clientSession.Close()
+	defer func() { _ = clientSession.Close() }()
 
 	// list_agents
 	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{

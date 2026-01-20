@@ -52,7 +52,7 @@ func TestMCPListServers_HappyPath(t *testing.T) {
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
 	clientSession, err := client.Connect(ctx, clientTransport, nil)
 	require.NoError(t, err, "connect MCP client")
-	defer clientSession.Close()
+	defer func() { _ = clientSession.Close() }()
 
 	// Call list_servers and decode structured output.
 	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
