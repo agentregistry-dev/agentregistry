@@ -994,10 +994,6 @@ func convertServerSpecToServerJSON(spec *types.ServerSpec) *apiv0.ServerJSON {
 }
 
 func (s *registryServiceImpl) prepareSemanticOptions(ctx context.Context, filter interface{}) error {
-	if filter == nil {
-		return nil
-	}
-
 	switch f := filter.(type) {
 	case *database.ServerFilter:
 		if f == nil {
