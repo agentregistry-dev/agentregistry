@@ -9,6 +9,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	"github.com/agentregistry-dev/agentregistry/internal/runtime"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -19,6 +20,7 @@ type DeploymentRequest struct {
 	Config       map[string]string `json:"config,omitempty" doc:"Configuration key-value pairs (env vars, args, headers)"`
 	PreferRemote bool              `json:"preferRemote,omitempty" doc:"Prefer remote deployment over local" default:"false"`
 	ResourceType string            `json:"resourceType,omitempty" doc:"Type of resource to deploy (mcp, agent)" default:"mcp" example:"mcp" enum:"mcp,agent"`
+	Runtime      string            `json:"runtime,omitempty" doc:"Runtime target (local, kubernetes)" default:"local" example:"local" enum:"local,kubernetes"`
 }
 
 // DeploymentConfigUpdate represents the input for updating deployment configuration
@@ -127,6 +129,14 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			resourceType = "mcp"
 		}
 
+		runtimeTarget := input.Body.Runtime
+		if runtimeTarget == "" {
+			runtimeTarget = "local"
+		}
+		if err := runtime.ValidateRuntime(runtimeTarget); err != nil {
+			return nil, huma.Error400BadRequest("Invalid runtime target", err)
+		}
+
 		// Validate resource type
 		if resourceType != "mcp" && resourceType != "agent" {
 			return nil, huma.Error400BadRequest("Invalid resource type. Must be 'mcp' or 'agent'")
@@ -138,9 +148,9 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		// Route to appropriate service method based on resource type
 		switch resourceType {
 		case "mcp":
-			deployment, err = registry.DeployServer(ctx, input.Body.ServerName, input.Body.Version, input.Body.Config, input.Body.PreferRemote)
+			deployment, err = registry.DeployServer(ctx, input.Body.ServerName, input.Body.Version, input.Body.Config, input.Body.PreferRemote, runtimeTarget)
 		case "agent":
-			deployment, err = registry.DeployAgent(ctx, input.Body.ServerName, input.Body.Version, input.Body.Config, input.Body.PreferRemote)
+			deployment, err = registry.DeployAgent(ctx, input.Body.ServerName, input.Body.Version, input.Body.Config, input.Body.PreferRemote, runtimeTarget)
 		}
 
 		if err != nil {

@@ -22,6 +22,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/dockercompose"
+	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/kagent"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
 	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -674,7 +675,7 @@ func (s *registryServiceImpl) IsServerPublished(ctx context.Context, serverName,
 }
 
 // DeployServer deploys a server with configuration
-func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool) (*models.Deployment, error) {
+func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool, runtimeTarget string) (*models.Deployment, error) {
 	serverResp, err := s.db.GetServerByNameAndVersion(ctx, nil, serverName, version, true)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
@@ -690,6 +691,7 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 		Config:       config,
 		PreferRemote: preferRemote,
 		ResourceType: "mcp",
+		Runtime:      runtimeTarget,
 		DeployedAt:   time.Now(),
 		UpdatedAt:    time.Now(),
 	}
@@ -705,6 +707,9 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 	}
 
 	if err := s.ReconcileAll(ctx); err != nil {
+		if cleanupErr := s.db.RemoveDeployment(ctx, nil, serverName, version); cleanupErr != nil {
+			return nil, fmt.Errorf("deployment created but reconciliation failed: %v (cleanup failed: %v)", err, cleanupErr)
+		}
 		return nil, fmt.Errorf("deployment created but reconciliation failed: %w", err)
 	}
 
@@ -713,7 +718,7 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 }
 
 // DeployAgent deploys an agent with configuration
-func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool) (*models.Deployment, error) {
+func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool, runtimeTarget string) (*models.Deployment, error) {
 	agentResp, err := s.db.GetAgentByNameAndVersion(ctx, nil, agentName, version)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
@@ -729,6 +734,7 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 		Config:       config,
 		PreferRemote: preferRemote,
 		ResourceType: "agent",
+		Runtime:      runtimeTarget,
 		DeployedAt:   time.Now(),
 		UpdatedAt:    time.Now(),
 	}
@@ -741,7 +747,12 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 		return nil, err
 	}
 
+	// If reconciliation fails, remove the deployment that we just added
+	// This is required because reconciler uses the DB as the source of truth for desired state
 	if err := s.ReconcileAll(ctx); err != nil {
+		if cleanupErr := s.db.RemoveDeployment(ctx, nil, agentName, version); cleanupErr != nil {
+			return nil, fmt.Errorf("deployment created but reconciliation failed: %v (cleanup failed: %v)", err, cleanupErr)
+		}
 		return nil, fmt.Errorf("deployment created but reconciliation failed: %w", err)
 	}
 
@@ -770,7 +781,29 @@ func (s *registryServiceImpl) UpdateDeploymentConfig(ctx context.Context, server
 
 // RemoveServer removes a deployment
 func (s *registryServiceImpl) RemoveServer(ctx context.Context, serverName string, version string) error {
-	err := s.db.RemoveDeployment(ctx, nil, serverName, version)
+	deployment, err := s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version)
+	if err != nil {
+		return err
+	}
+
+	// Clean up kubernetes resources
+	if deployment != nil && deployment.Runtime == "kubernetes" {
+		if deployment.ResourceType == "agent" {
+			if err := runtime.DeleteKubernetesAgent(ctx, serverName, version, kagent.DefaultNamespace, s.cfg.Verbose); err != nil {
+				return err
+			}
+		}
+		if deployment.ResourceType == "mcp" {
+			if err := runtime.DeleteKubernetesMCPServer(ctx, serverName, kagent.DefaultNamespace, s.cfg.Verbose); err != nil {
+				return err
+			}
+			if err := runtime.DeleteKubernetesRemoteMCPServer(ctx, serverName, kagent.DefaultNamespace, s.cfg.Verbose); err != nil {
+				return err
+			}
+		}
+	}
+
+	err = s.db.RemoveDeployment(ctx, nil, serverName, version)
 	if err != nil {
 		return err
 	}
@@ -793,12 +826,23 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 
 	log.Printf("Reconciling %d deployment(s)", len(deployments))
 
-	var (
-		serverRunRequests []*registry.MCPServerRunRequest
-		agentRunRequests  []*registry.AgentRunRequest
-	)
+	type runtimeRequests struct {
+		servers []*registry.MCPServerRunRequest
+		agents  []*registry.AgentRunRequest
+	}
+	// Store server and agent run requests by runtime target
+	requestsByRuntime := map[string]*runtimeRequests{
+		"local":      {},
+		"kubernetes": {},
+	}
 
 	for _, dep := range deployments {
+		runtimeTarget := dep.Runtime
+		if runtimeTarget == "" {
+			runtimeTarget = "local"
+		}
+		targetRequests := requestsByRuntime[runtimeTarget]
+
 		switch dep.ResourceType {
 		case "mcp":
 			depServer, err := s.GetServerByNameAndVersion(ctx, dep.ServerName, dep.Version, true)
@@ -807,26 +851,27 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 				continue
 			}
 
-			depEnvValues := make(map[string]string)
-			depArgValues := make(map[string]string)
-			depHeaderValues := make(map[string]string)
-
+			// Extract some configurations from deployment config
+			envValues := make(map[string]string)
+			argValues := make(map[string]string)
+			headerValues := make(map[string]string)
 			for k, v := range dep.Config {
-				if len(k) > 7 && k[:7] == "HEADER_" {
-					depHeaderValues[k[7:]] = v
-				} else if len(k) > 4 && k[:4] == "ARG_" {
-					depArgValues[k[4:]] = v
-				} else {
-					depEnvValues[k] = v
+				switch {
+				case len(k) > 7 && k[:7] == "HEADER_":
+					headerValues[k[7:]] = v
+				case len(k) > 4 && k[:4] == "ARG_":
+					argValues[k[4:]] = v
+				default:
+					envValues[k] = v
 				}
 			}
 
-			serverRunRequests = append(serverRunRequests, &registry.MCPServerRunRequest{
+			targetRequests.servers = append(targetRequests.servers, &registry.MCPServerRunRequest{
 				RegistryServer: &depServer.Server,
 				PreferRemote:   dep.PreferRemote,
-				EnvValues:      depEnvValues,
-				ArgValues:      depArgValues,
-				HeaderValues:   depHeaderValues,
+				EnvValues:      envValues,
+				ArgValues:      argValues,
+				HeaderValues:   headerValues,
 			})
 
 		case "agent":
@@ -839,42 +884,50 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 			depEnvValues := make(map[string]string)
 			maps.Copy(depEnvValues, dep.Config)
 
-			agentRunRequests = append(agentRunRequests, &registry.AgentRunRequest{
+			targetRequests.agents = append(targetRequests.agents, &registry.AgentRunRequest{
 				RegistryAgent: &depAgent.Agent,
 				EnvValues:     depEnvValues,
 			})
+
 		default:
 			log.Printf("Warning: Unknown resource type %q for deployment %s v%s", dep.ResourceType, dep.ServerName, dep.Version)
 		}
 	}
 
 	regTranslator := registry.NewTranslator()
-	composeTranslator := dockercompose.NewAgentGatewayTranslator(s.cfg.RuntimeDir, s.cfg.AgentGatewayPort)
-	agentRuntime := runtime.NewAgentRegistryRuntime(
-		regTranslator,
-		composeTranslator,
-		s.cfg.RuntimeDir,
-		s.cfg.Verbose,
-	)
 
-	// Resolve registry-type MCP servers from agent manifests to add them to serverRunRequests
-	for _, agentReq := range agentRunRequests {
-		resolvedServers, err := s.resolveAgentManifestMCPServers(ctx, &agentReq.RegistryAgent.AgentManifest)
-		if err != nil {
-			return fmt.Errorf("failed to resolve MCP servers for agent %s: %w", agentReq.RegistryAgent.Name, err)
+	for runtimeTarget, requests := range requestsByRuntime {
+		if len(requests.servers) == 0 && len(requests.agents) == 0 {
+			continue
 		}
 
-		// Store resolved mcp servers so they can be written to the agent mcp server injection config
-		agentReq.ResolvedMCPServers = resolvedServers
-		// Add resolved servers to serverRunRequests so they get deployed
-		serverRunRequests = append(serverRunRequests, resolvedServers...)
-		if s.cfg.Verbose && len(resolvedServers) > 0 {
-			log.Printf("Resolved %d MCP server(s) of type 'registry' for agent %s", len(resolvedServers), agentReq.RegistryAgent.Name)
-		}
-	}
+		// Resolve registry-type MCP servers from agent manifests
+		for _, agentReq := range requests.agents {
+			resolvedServers, err := s.resolveAgentManifestMCPServers(ctx, &agentReq.RegistryAgent.AgentManifest)
+			if err != nil {
+				return fmt.Errorf("failed to resolve MCP servers for agent %s: %w", agentReq.RegistryAgent.Name, err)
+			}
 
-	if err := agentRuntime.ReconcileAll(ctx, serverRunRequests, agentRunRequests); err != nil {
-		return fmt.Errorf("failed reconciliation: %w", err)
+			agentReq.ResolvedMCPServers = resolvedServers
+			requests.servers = append(requests.servers, resolvedServers...)
+			if s.cfg.Verbose && len(resolvedServers) > 0 {
+				log.Printf("Resolved %d MCP server(s) of type 'registry' for %s agent %s", len(resolvedServers), runtimeTarget, agentReq.RegistryAgent.Name)
+			}
+		}
+
+		// Create the appropriate runtime translator for the target runtime and reconcile the requests
+		var agentRuntime runtime.AgentRegistryRuntime
+		if runtimeTarget == "kubernetes" {
+			k8sTranslator := kagent.NewTranslator()
+			agentRuntime = runtime.NewAgentRegistryRuntime(regTranslator, k8sTranslator, s.cfg.RuntimeDir, s.cfg.Verbose)
+		} else {
+			composeTranslator := dockercompose.NewAgentGatewayTranslator(s.cfg.RuntimeDir, s.cfg.AgentGatewayPort)
+			agentRuntime = runtime.NewAgentRegistryRuntime(regTranslator, composeTranslator, s.cfg.RuntimeDir, s.cfg.Verbose)
+		}
+
+		if err := agentRuntime.ReconcileAll(ctx, requests.servers, requests.agents); err != nil {
+			return fmt.Errorf("failed %s reconciliation: %w", runtimeTarget, err)
+		}
 	}
 
 	return nil

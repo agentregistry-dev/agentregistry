@@ -2316,14 +2316,18 @@ func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deploymen
 	}
 
 	query := `
-		INSERT INTO deployments (server_name, version, status, config, prefer_remote, resource_type)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO deployments (server_name, version, status, config, prefer_remote, resource_type, runtime)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`
 
 	// Default to 'mcp' if not specified
 	resourceType := deployment.ResourceType
 	if resourceType == "" {
 		resourceType = "mcp"
+	}
+	runtime := deployment.Runtime
+	if runtime == "" {
+		runtime = "local"
 	}
 
 	_, err = executor.Exec(ctx, query,
@@ -2333,6 +2337,7 @@ func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deploymen
 		configJSON,
 		deployment.PreferRemote,
 		resourceType,
+		runtime,
 	)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -2350,7 +2355,7 @@ func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx) ([]*models.
 	executor := db.getExecutor(tx)
 
 	query := `
-		SELECT server_name, version, deployed_at, updated_at, status, config, prefer_remote, resource_type
+		SELECT server_name, version, deployed_at, updated_at, status, config, prefer_remote, resource_type, runtime
 		FROM deployments
 		ORDER BY deployed_at DESC
 	`
@@ -2375,6 +2380,7 @@ func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx) ([]*models.
 			&configJSON,
 			&d.PreferRemote,
 			&d.ResourceType,
+			&d.Runtime,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan deployment: %w", err)
@@ -2404,7 +2410,7 @@ func (db *PostgreSQL) GetDeploymentByNameAndVersion(ctx context.Context, tx pgx.
 	executor := db.getExecutor(tx)
 
 	query := `
-		SELECT server_name, version, deployed_at, updated_at, status, config, prefer_remote, resource_type
+		SELECT server_name, version, deployed_at, updated_at, status, config, prefer_remote, resource_type, runtime
 		FROM deployments
 		WHERE server_name = $1 AND version = $2
 	`
@@ -2421,6 +2427,7 @@ func (db *PostgreSQL) GetDeploymentByNameAndVersion(ctx context.Context, tx pgx.
 		&configJSON,
 		&d.PreferRemote,
 		&d.ResourceType,
+		&d.Runtime,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
