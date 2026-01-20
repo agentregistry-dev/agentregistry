@@ -91,20 +91,16 @@ func runEmbeddingsGenerate(ctx context.Context) error {
 		dimensions: cfg.Embeddings.Dimensions,
 	}
 
-	processServers := embeddingsIncludeServers
-	processAgents := embeddingsIncludeAgents
-	if !processServers && !processAgents {
-		// Default to both targets when no explicit selection was provided.
-		processServers = true
-		processAgents = true
-	}
-
 	var (
 		totalFailures int
 		summaries     []string
 	)
 
-	if processServers {
+	if !embeddingsIncludeServers && !embeddingsIncludeAgents {
+		return fmt.Errorf("no targets selected; use --servers or --agents")
+	}
+
+	if embeddingsIncludeServers {
 		stats, err := backfillServers(ctx, registrySvc, embeddingProvider, opts)
 		if err != nil {
 			return err
@@ -113,7 +109,7 @@ func runEmbeddingsGenerate(ctx context.Context) error {
 		summaries = append(summaries, fmt.Sprintf("Servers: processed=%d updated=%d skipped=%d failures=%d", stats.processed, stats.updated, stats.skipped, stats.failures))
 	}
 
-	if processAgents {
+	if embeddingsIncludeAgents {
 		stats, err := backfillAgents(ctx, registrySvc, embeddingProvider, opts)
 		if err != nil {
 			return err
