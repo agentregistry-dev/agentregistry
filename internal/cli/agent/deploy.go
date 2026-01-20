@@ -102,6 +102,10 @@ func buildDeployConfig(manifest *models.AgentManifest) map[string]string {
 		}
 	}
 
+	if manifest.TelemetryEndpoint != "" {
+		config["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = manifest.TelemetryEndpoint
+	}
+
 	return config
 }
 

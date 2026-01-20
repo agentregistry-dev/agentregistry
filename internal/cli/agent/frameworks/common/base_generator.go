@@ -21,12 +21,13 @@ type AgentConfig struct {
 	Directory   string
 	Verbose     bool
 
-	Instruction   string
-	ModelProvider string
-	ModelName     string
-	Framework     string
-	Language      string
-	CLIVersion    string
+	Instruction       string
+	ModelProvider     string
+	ModelName         string
+	Framework         string
+	Language          string
+	CLIVersion        string
+	TelemetryEndpoint string
 
 	McpServers []models.McpServerType
 	EnvVars    []string
@@ -40,7 +41,14 @@ func (c AgentConfig) shouldInitGit() bool {
 // ShouldSkipPath allows template walkers to skip specific directories.
 func (c AgentConfig) ShouldSkipPath(path string) bool {
 	// Skip MCP server assets. They are generated via specific commands.
-	return strings.HasPrefix(path, "mcp_server")
+	if strings.HasPrefix(path, "mcp_server") {
+		return true
+	}
+	// Skip OTLP collector config unless telemetry is enabled.
+	if path == "otel-collector-config.yaml" && c.TelemetryEndpoint == "" {
+		return true
+	}
+	return false
 }
 
 // BaseGenerator renders template trees into a destination directory.

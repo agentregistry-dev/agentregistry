@@ -8,6 +8,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
+	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/spf13/cobra"
 )
@@ -34,10 +35,11 @@ arctl agent init adk python dice --model-provider Gemini --model-name gemini-2.0
 }
 
 var (
-	initInstructionFile string
-	initModelProvider   string
-	initModelName       string
-	initDescription     string
+	initInstructionFile   string
+	initModelProvider     string
+	initModelName         string
+	initDescription       string
+	initTelemetryEndpoint string
 )
 
 func init() {
@@ -45,6 +47,7 @@ func init() {
 	InitCmd.Flags().StringVar(&initModelProvider, "model-provider", "Gemini", "Model provider (OpenAI, Anthropic, Gemini, AzureOpenAI)")
 	InitCmd.Flags().StringVar(&initModelName, "model-name", "gemini-2.0-flash", "Model name (e.g., gpt-4, claude-3-5-sonnet, gemini-2.0-flash)")
 	InitCmd.Flags().StringVar(&initDescription, "description", "", "Description for the agent")
+	InitCmd.Flags().StringVar(&initTelemetryEndpoint, "telemetry", "", "OTLP endpoint URL for OpenTelemetry traces (e.g., http://localhost:4318/v1/traces)")
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
@@ -58,6 +61,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	if err := validateFrameworkAndLanguage(framework, language); err != nil {
 		return err
+	}
+
+	if err := utils.ValidatePythonIdentifier(agentName); err != nil {
+		return fmt.Errorf("invalid agent name: %w", err)
 	}
 
 	modelProvider, err := normalizeModelProvider(initModelProvider)
@@ -91,18 +98,19 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	agentConfig := &common.AgentConfig{
-		Name:          agentName,
-		Description:   initDescription,
-		Image:         defaultImage(agentName),
-		Directory:     projectDir,
-		Verbose:       verbose,
-		Instruction:   instruction,
-		ModelProvider: modelProvider,
-		ModelName:     modelName,
-		Framework:     framework,
-		Language:      language,
-		CLIVersion:    adkBaseImageVersion,
-		InitGit:       true,
+		Name:              agentName,
+		Description:       initDescription,
+		Image:             defaultImage(agentName),
+		Directory:         projectDir,
+		Verbose:           verbose,
+		Instruction:       instruction,
+		ModelProvider:     modelProvider,
+		ModelName:         modelName,
+		Framework:         framework,
+		Language:          language,
+		CLIVersion:        adkBaseImageVersion,
+		TelemetryEndpoint: initTelemetryEndpoint,
+		InitGit:           true,
 	}
 
 	if err := generator.Generate(agentConfig); err != nil {
