@@ -34,28 +34,6 @@ type AuthnProvider interface {
 	Authenticate(ctx context.Context, reqHeaders func(name string) string, query url.Values) (Session, error)
 }
 
-// Authz
-type AuthzProvider interface {
-	// Check verifies if the session can perform the action on the resource.
-	// Used for single-resource operations (get, update, delete).
-	Check(ctx context.Context, s Session, verb PermissionAction, resource Resource) error
-}
-
-type Authorizer struct {
-	Authz AuthzProvider
-}
-
-func (a *Authorizer) Check(ctx context.Context, verb PermissionAction, resource Resource) error {
-	if a.Authz == nil {
-		return nil
-	}
-	s, ok := AuthSessionFrom(ctx)
-	if !ok {
-		return ErrUnauthorized
-	}
-	return a.Authz.Check(ctx, s, verb, resource)
-}
-
 // context utils
 
 type sessionKeyType struct{}

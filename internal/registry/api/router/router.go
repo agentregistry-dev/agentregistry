@@ -142,12 +142,14 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 	jwtManager := auth.NewJWTManager(cfg)
 	api := humago.New(mux, humaConfig)
 
-	// Use provided auth or fallback to JWT manager
-	if authzProvider == nil {
-		authzProvider = jwtManager
-	}
+	// Use provided auth providers or fallback to OSS defaults:
+	// - AuthN: JWT manager (validates tokens when present, allows anonymous)
+	// - AuthZ: Public provider (public reads, gated writes for authenticated users)
 	if authnProvider == nil {
 		authnProvider = jwtManager
+	}
+	if authzProvider == nil {
+		authzProvider = auth.NewPublicAuthzProvider(jwtManager)
 	}
 
 	authz := auth.Authorizer{Authz: authzProvider}
