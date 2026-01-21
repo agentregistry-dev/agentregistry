@@ -13,13 +13,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agentregistry-dev/agentregistry/internal/models"
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"github.com/jackc/pgx/v5"
@@ -41,7 +42,7 @@ func TestListServersEndpoint(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	registryService := service.NewRegistryService(database.NewTestDB(t), testConfig, nil)
+	registryService := service.NewRegistryService(internaldb.NewTestDB(t), testConfig, nil)
 	// Create authorizer
 	jwtManager := auth.NewJWTManager(testConfig)
 	authzProvider := auth.NewPublicAuthzProvider(jwtManager)
@@ -140,13 +141,19 @@ func TestListServersEndpoint(t *testing.T) {
 
 func TestListServersSemanticSearch(t *testing.T) {
 	ctx := context.Background()
-	db := database.NewTestDB(t)
+	db := internaldb.NewTestDB(t)
 	ensureVectorExtension(t, db)
 
 	cfg := config.NewConfig()
 	cfg.Embeddings.Enabled = true
 	cfg.Embeddings.Provider = "stub"
 	cfg.Embeddings.Model = "stub-model"
+
+	testSeed := make([]byte, ed25519.SeedSize)
+	_, randErr := rand.Read(testSeed)
+	require.NoError(t, randErr)
+	cfg.JWTPrivateKey = hex.EncodeToString(testSeed)
+	cfg.EnableRegistryValidation = false // Disable for unit tests
 
 	provider := newStubEmbeddingProvider(map[string][]float32{
 		"server": {0.1, 0.95, 0.0},
@@ -193,9 +200,13 @@ func TestListServersSemanticSearch(t *testing.T) {
 		Generated:  time.Now().UTC(),
 	}))
 
+	jwtManager := auth.NewJWTManager(cfg)
+	authzProvider := auth.NewPublicAuthzProvider(jwtManager)
+	authz := auth.Authorizer{Authz: authzProvider}
+
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", registryService, false)
+	v0.RegisterServersEndpoints(api, "/v0", registryService, false, authz)
 
 	t.Run("semantic search ranks by similarity", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/v0/servers?search=server&semantic_search=true", nil)
@@ -238,7 +249,7 @@ func TestGetLatestServerVersionEndpoint(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	registryService := service.NewRegistryService(database.NewTestDB(t), testConfig, nil)
+	registryService := service.NewRegistryService(internaldb.NewTestDB(t), testConfig, nil)
 	// Create authorizer
 	jwtManager := auth.NewJWTManager(testConfig)
 	authzProvider := auth.NewPublicAuthzProvider(jwtManager)
@@ -315,7 +326,7 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	registryService := service.NewRegistryService(database.NewTestDB(t), testConfig, nil)
+	registryService := service.NewRegistryService(internaldb.NewTestDB(t), testConfig, nil)
 
 	// Create authorizer
 	jwtManager := auth.NewJWTManager(testConfig)
@@ -522,7 +533,7 @@ func TestGetServerReadmeEndpoints(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	registryService := service.NewRegistryService(database.NewTestDB(t), testConfig, nil)
+	registryService := service.NewRegistryService(internaldb.NewTestDB(t), testConfig, nil)
 
 	// Create authorizer
 	jwtManager := auth.NewJWTManager(testConfig)
@@ -603,7 +614,7 @@ func TestGetAllVersionsEndpoint(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	registryService := service.NewRegistryService(database.NewTestDB(t), testConfig, nil)
+	registryService := service.NewRegistryService(internaldb.NewTestDB(t), testConfig, nil)
 
 	// Create authorizer
 	jwtManager := auth.NewJWTManager(testConfig)
@@ -711,7 +722,7 @@ func TestServersEndpointEdgeCases(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	registryService := service.NewRegistryService(database.NewTestDB(t), testConfig, nil)
+	registryService := service.NewRegistryService(internaldb.NewTestDB(t), testConfig, nil)
 	// Create authorizer
 	jwtManager := auth.NewJWTManager(testConfig)
 	authzProvider := auth.NewPublicAuthzProvider(jwtManager)

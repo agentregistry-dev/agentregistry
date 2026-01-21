@@ -10,9 +10,10 @@ import (
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	regembeddings "github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/spf13/cobra"
 )
 
@@ -61,7 +62,7 @@ func runEmbeddingsGenerate(ctx context.Context) error {
 		return fmt.Errorf("invalid embeddings dimensions: %d", cfg.Embeddings.Dimensions)
 	}
 
-	db, err := database.NewPostgreSQL(ctx, cfg.DatabaseURL)
+	db, err := internaldb.NewPostgreSQL(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}

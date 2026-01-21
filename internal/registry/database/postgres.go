@@ -869,7 +869,7 @@ func (db *PostgreSQL) IsServerPublished(ctx context.Context, tx pgx.Tx, serverNa
 }
 
 // SetServerEmbedding stores semantic embedding metadata for a server version.
-func (db *PostgreSQL) SetServerEmbedding(ctx context.Context, tx pgx.Tx, serverName, version string, embedding *SemanticEmbedding) error {
+func (db *PostgreSQL) SetServerEmbedding(ctx context.Context, tx pgx.Tx, serverName, version string, embedding *database.SemanticEmbedding) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -933,7 +933,7 @@ func (db *PostgreSQL) SetServerEmbedding(ctx context.Context, tx pgx.Tx, serverN
 // GetServerEmbeddingMetadata retrieves embedding metadata for a server version without loading
 // the underlying vector payload. This is useful for maintenance tasks that only need to know
 // whether an embedding exists or if its checksum is stale.
-func (db *PostgreSQL) GetServerEmbeddingMetadata(ctx context.Context, tx pgx.Tx, serverName, version string) (*SemanticEmbeddingMetadata, error) {
+func (db *PostgreSQL) GetServerEmbeddingMetadata(ctx context.Context, tx pgx.Tx, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -976,7 +976,7 @@ func (db *PostgreSQL) GetServerEmbeddingMetadata(ctx context.Context, tx pgx.Tx,
 		return nil, fmt.Errorf("failed to fetch server embedding metadata: %w", err)
 	}
 
-	meta := &SemanticEmbeddingMetadata{
+	meta := &database.SemanticEmbeddingMetadata{
 		HasEmbedding: hasEmbedding,
 	}
 	if provider.Valid {
@@ -1666,7 +1666,7 @@ func (db *PostgreSQL) IsAgentPublished(ctx context.Context, tx pgx.Tx, agentName
 }
 
 // SetAgentEmbedding stores semantic embedding metadata for an agent version.
-func (db *PostgreSQL) SetAgentEmbedding(ctx context.Context, tx pgx.Tx, agentName, version string, embedding *SemanticEmbedding) error {
+func (db *PostgreSQL) SetAgentEmbedding(ctx context.Context, tx pgx.Tx, agentName, version string, embedding *database.SemanticEmbedding) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -1728,7 +1728,7 @@ func (db *PostgreSQL) SetAgentEmbedding(ctx context.Context, tx pgx.Tx, agentNam
 }
 
 // GetAgentEmbeddingMetadata retrieves embedding metadata for an agent version without loading the vector.
-func (db *PostgreSQL) GetAgentEmbeddingMetadata(ctx context.Context, tx pgx.Tx, agentName, version string) (*SemanticEmbeddingMetadata, error) {
+func (db *PostgreSQL) GetAgentEmbeddingMetadata(ctx context.Context, tx pgx.Tx, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -1766,12 +1766,12 @@ func (db *PostgreSQL) GetAgentEmbeddingMetadata(ctx context.Context, tx pgx.Tx, 
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, database.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to fetch agent embedding metadata: %w", err)
 	}
 
-	meta := &SemanticEmbeddingMetadata{
+	meta := &database.SemanticEmbeddingMetadata{
 		HasEmbedding: hasEmbedding,
 	}
 	if provider.Valid {
