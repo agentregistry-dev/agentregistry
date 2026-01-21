@@ -107,8 +107,13 @@ func publishAgent(cfg *publishAgentCfg) error {
 		return fmt.Errorf("failed to load manifest: %w", err)
 	}
 
+	// Create a copy of the manifest without telemetryEndpoint for registry publishing
+	// since telemetry is a deployment/runtime concern, not stored in the registry
+	publishManifest := *manifest
+	publishManifest.TelemetryEndpoint = ""
+
 	jsn := &models.AgentJSON{
-		AgentManifest: *manifest,
+		AgentManifest: publishManifest,
 		Version:       version,
 		Status:        "active",
 	}
