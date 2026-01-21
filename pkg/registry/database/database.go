@@ -1,37 +1,209 @@
-// Package database provides the Database interface for registry operations.
-// This package re-exports the internal database interface to allow external
-// implementations to wrap and extend the database layer.
 package database
 
 import (
 	"context"
+	"errors"
+	"time"
 
-	internaldatabase "github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/jackc/pgx/v5"
-)
-
-// Database is the interface for registry database operations.
-type Database = internaldatabase.Database
-
-// Filter types for list operations
-type (
-	ServerFilter = internaldatabase.ServerFilter
-	AgentFilter  = internaldatabase.AgentFilter
-	SkillFilter  = internaldatabase.SkillFilter
-	ServerReadme = internaldatabase.ServerReadme
+	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
 // Common database errors
 var (
-	ErrNotFound          = internaldatabase.ErrNotFound
-	ErrAlreadyExists     = internaldatabase.ErrAlreadyExists
-	ErrInvalidInput      = internaldatabase.ErrInvalidInput
-	ErrDatabase          = internaldatabase.ErrDatabase
-	ErrInvalidVersion    = internaldatabase.ErrInvalidVersion
-	ErrMaxServersReached = internaldatabase.ErrMaxServersReached
+	ErrNotFound          = errors.New("record not found")
+	ErrAlreadyExists     = errors.New("record already exists")
+	ErrInvalidInput      = errors.New("invalid input")
+	ErrDatabase          = errors.New("database error")
+	ErrInvalidVersion    = errors.New("invalid version: cannot publish duplicate version")
+	ErrMaxServersReached = errors.New("maximum number of versions for this server reached (10000): please reach out at https://github.com/modelcontextprotocol/registry to explain your use case")
 )
 
-// InTransactionT is a generic helper that wraps InTransaction for functions returning a value.
+// ServerFilter defines filtering options for server queries
+type ServerFilter struct {
+	Name          *string    // for finding versions of same server
+	RemoteURL     *string    // for duplicate URL detection
+	UpdatedSince  *time.Time // for incremental sync filtering
+	SubstringName *string    // for substring search on name
+	Version       *string    // for exact version matching
+	IsLatest      *bool      // for filtering latest versions only
+	Published     *bool      // for filtering by published status (nil = no filter)
+}
+
+// ServerReadme represents a stored README blob for a server version
+type ServerReadme struct {
+	ServerName  string
+	Version     string
+	Content     []byte
+	ContentType string
+	SizeBytes   int
+	SHA256      []byte
+	FetchedAt   time.Time
+}
+
+// SkillFilter defines filtering options for skill queries (mirrors ServerFilter)
+type SkillFilter struct {
+	Name          *string    // for finding versions of same skill
+	RemoteURL     *string    // for duplicate URL detection
+	UpdatedSince  *time.Time // for incremental sync filtering
+	SubstringName *string    // for substring search on name
+	Version       *string    // for exact version matching
+	IsLatest      *bool      // for filtering latest versions only
+	Published     *bool      // for filtering by published status (nil = no filter)
+}
+
+// AgentFilter defines filtering options for agent queries (mirrors ServerFilter)
+type AgentFilter struct {
+	Name          *string    // for finding versions of same agent
+	RemoteURL     *string    // for duplicate URL detection
+	UpdatedSince  *time.Time // for incremental sync filtering
+	SubstringName *string    // for substring search on name
+	Version       *string    // for exact version matching
+	IsLatest      *bool      // for filtering latest versions only
+	Published     *bool      // for filtering by published status (nil = no filter)
+}
+
+// Database defines the interface for database operations
+type Database interface {
+	// DeleteServer permanently removes a server version from the database
+	DeleteServer(ctx context.Context, tx pgx.Tx, serverName, version string) error
+	// CreateServer inserts a new server version with official metadata
+	CreateServer(ctx context.Context, tx pgx.Tx, serverJSON *apiv0.ServerJSON, officialMeta *apiv0.RegistryExtensions) (*apiv0.ServerResponse, error)
+	// UpdateServer updates an existing server record
+	UpdateServer(ctx context.Context, tx pgx.Tx, serverName, version string, serverJSON *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
+	// SetServerStatus updates the status of a specific server version
+	SetServerStatus(ctx context.Context, tx pgx.Tx, serverName, version string, status string) (*apiv0.ServerResponse, error)
+	// ListServers retrieve server entries with optional filtering
+	ListServers(ctx context.Context, tx pgx.Tx, filter *ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
+	// GetServerByName retrieve a single server by its name
+	GetServerByName(ctx context.Context, tx pgx.Tx, serverName string) (*apiv0.ServerResponse, error)
+	// GetServerByNameAndVersion retrieve specific version of a server by server name and version
+	GetServerByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName string, version string, publishedOnly bool) (*apiv0.ServerResponse, error)
+	// GetAllVersionsByServerName retrieve all versions of a server by server name
+	GetAllVersionsByServerName(ctx context.Context, tx pgx.Tx, serverName string, publishedOnly bool) ([]*apiv0.ServerResponse, error)
+	// GetCurrentLatestVersion retrieve the current latest version of a server by server name
+	GetCurrentLatestVersion(ctx context.Context, tx pgx.Tx, serverName string) (*apiv0.ServerResponse, error)
+	// CountServerVersions count the number of versions for a server
+	CountServerVersions(ctx context.Context, tx pgx.Tx, serverName string) (int, error)
+	// CheckVersionExists check if a specific version exists for a server
+	CheckVersionExists(ctx context.Context, tx pgx.Tx, serverName, version string) (bool, error)
+	// UnmarkAsLatest marks the current latest version of a server as no longer latest
+	UnmarkAsLatest(ctx context.Context, tx pgx.Tx, serverName string) error
+	// AcquirePublishLock acquires an exclusive advisory lock for publishing a server
+	// This prevents race conditions when multiple versions are published concurrently
+	AcquirePublishLock(ctx context.Context, tx pgx.Tx, serverName string) error
+	// PublishServer marks a server as published
+	PublishServer(ctx context.Context, tx pgx.Tx, serverName, version string) error
+	// UnpublishServer marks a server as unpublished
+	UnpublishServer(ctx context.Context, tx pgx.Tx, serverName, version string) error
+	// IsServerPublished checks if a server is published
+	IsServerPublished(ctx context.Context, tx pgx.Tx, serverName, version string) (bool, error)
+	// UpsertServerReadme stores or updates a README blob for a server version
+	UpsertServerReadme(ctx context.Context, tx pgx.Tx, readme *ServerReadme) error
+	// GetServerReadme retrieves the README blob for a specific server version
+	GetServerReadme(ctx context.Context, tx pgx.Tx, serverName, version string) (*ServerReadme, error)
+	// GetLatestServerReadme retrieves the README blob for the latest server version
+	GetLatestServerReadme(ctx context.Context, tx pgx.Tx, serverName string) (*ServerReadme, error)
+	// InTransaction executes a function within a database transaction
+	InTransaction(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error
+	// Close closes the database connection
+	Close() error
+
+	// Agents API
+	// CreateAgent inserts a new agent version with official metadata
+	CreateAgent(ctx context.Context, tx pgx.Tx, agentJSON *models.AgentJSON, officialMeta *models.AgentRegistryExtensions) (*models.AgentResponse, error)
+	// UpdateAgent updates an existing agent record
+	UpdateAgent(ctx context.Context, tx pgx.Tx, agentName, version string, agentJSON *models.AgentJSON) (*models.AgentResponse, error)
+	// SetAgentStatus updates the status of a specific agent version
+	SetAgentStatus(ctx context.Context, tx pgx.Tx, agentName, version string, status string) (*models.AgentResponse, error)
+	// ListAgents retrieve agent entries with optional filtering
+	ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error)
+	// GetAgentByName retrieve a single agent by its name (latest)
+	GetAgentByName(ctx context.Context, tx pgx.Tx, agentName string) (*models.AgentResponse, error)
+	// GetAgentByNameAndVersion retrieve specific version of an agent by name and version
+	GetAgentByNameAndVersion(ctx context.Context, tx pgx.Tx, agentName string, version string) (*models.AgentResponse, error)
+	// GetAllVersionsByAgentName retrieve all versions of an agent
+	GetAllVersionsByAgentName(ctx context.Context, tx pgx.Tx, agentName string) ([]*models.AgentResponse, error)
+	// GetCurrentLatestAgentVersion retrieve current latest version of an agent
+	GetCurrentLatestAgentVersion(ctx context.Context, tx pgx.Tx, agentName string) (*models.AgentResponse, error)
+	// CountAgentVersions count the number of versions for an agent
+	CountAgentVersions(ctx context.Context, tx pgx.Tx, agentName string) (int, error)
+	// CheckAgentVersionExists check if a specific version exists for an agent
+	CheckAgentVersionExists(ctx context.Context, tx pgx.Tx, agentName, version string) (bool, error)
+	// UnmarkAgentAsLatest marks the current latest version of an agent as no longer latest
+	UnmarkAgentAsLatest(ctx context.Context, tx pgx.Tx, agentName string) error
+	// PublishAgent marks an agent as published
+	PublishAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error
+	// UnpublishAgent marks an agent as unpublished
+	UnpublishAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error
+	// IsAgentPublished checks if an agent is published
+	IsAgentPublished(ctx context.Context, tx pgx.Tx, agentName, version string) (bool, error)
+	// DeleteAgent permanently removes an agent version from the database
+	DeleteAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error
+
+	// Skills API
+	// CreateSkill inserts a new skill version with official metadata
+	CreateSkill(ctx context.Context, tx pgx.Tx, skillJSON *models.SkillJSON, officialMeta *models.SkillRegistryExtensions) (*models.SkillResponse, error)
+	// UpdateSkill updates an existing skill record
+	UpdateSkill(ctx context.Context, tx pgx.Tx, skillName, version string, skillJSON *models.SkillJSON) (*models.SkillResponse, error)
+	// SetSkillStatus updates the status of a specific skill version
+	SetSkillStatus(ctx context.Context, tx pgx.Tx, skillName, version string, status string) (*models.SkillResponse, error)
+	// ListSkills retrieve skill entries with optional filtering
+	ListSkills(ctx context.Context, tx pgx.Tx, filter *SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error)
+	// GetSkillByName retrieve a single skill by its name (latest)
+	GetSkillByName(ctx context.Context, tx pgx.Tx, skillName string) (*models.SkillResponse, error)
+	// GetSkillByNameAndVersion retrieve specific version of a skill by name and version
+	GetSkillByNameAndVersion(ctx context.Context, tx pgx.Tx, skillName string, version string) (*models.SkillResponse, error)
+	// GetAllVersionsBySkillName retrieve all versions of a skill
+	GetAllVersionsBySkillName(ctx context.Context, tx pgx.Tx, skillName string) ([]*models.SkillResponse, error)
+	// GetCurrentLatestSkillVersion retrieve current latest version of a skill
+	GetCurrentLatestSkillVersion(ctx context.Context, tx pgx.Tx, skillName string) (*models.SkillResponse, error)
+	// CountSkillVersions count the number of versions for a skill
+	CountSkillVersions(ctx context.Context, tx pgx.Tx, skillName string) (int, error)
+	// CheckSkillVersionExists check if a specific version exists for a skill
+	CheckSkillVersionExists(ctx context.Context, tx pgx.Tx, skillName, version string) (bool, error)
+	// UnmarkSkillAsLatest marks the current latest version of a skill as no longer latest
+	UnmarkSkillAsLatest(ctx context.Context, tx pgx.Tx, skillName string) error
+	// PublishSkill marks a skill as published
+	PublishSkill(ctx context.Context, tx pgx.Tx, skillName, version string) error
+	// UnpublishSkill marks a skill as unpublished
+	UnpublishSkill(ctx context.Context, tx pgx.Tx, skillName, version string) error
+	// IsSkillPublished checks if a skill is published
+	IsSkillPublished(ctx context.Context, tx pgx.Tx, skillName, version string) (bool, error)
+
+	// Deployments API
+	// CreateDeployment creates a new deployment record
+	CreateDeployment(ctx context.Context, tx pgx.Tx, deployment *models.Deployment) error
+	// GetDeployments retrieves all deployed servers
+	GetDeployments(ctx context.Context, tx pgx.Tx) ([]*models.Deployment, error)
+	// GetDeploymentByName retrieves a specific deployment
+	GetDeploymentByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName string, version string) (*models.Deployment, error)
+	// UpdateDeploymentConfig updates the configuration for a deployment
+	UpdateDeploymentConfig(ctx context.Context, tx pgx.Tx, serverName string, config map[string]string) error
+	// UpdateDeploymentStatus updates the status of a deployment
+	UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, serverName, version, status string) error
+	// RemoveDeployment removes a deployment
+	RemoveDeployment(ctx context.Context, tx pgx.Tx, serverName string, version string) error
+}
+
+// InTransactionT is a generic helper that wraps InTransaction for functions returning a value
+// This exists because Go does not support generic methods on interfaces - only the Database interface
+// method InTransaction (without generics) can exist, so we provide this generic wrapper function.
+// This is a common pattern in Go for working around this language limitation.
 func InTransactionT[T any](ctx context.Context, db Database, fn func(ctx context.Context, tx pgx.Tx) (T, error)) (T, error) {
-	return internaldatabase.InTransactionT(ctx, db, fn)
+	var result T
+	var fnErr error
+
+	err := db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		result, fnErr = fn(txCtx, tx)
+		return fnErr
+	})
+
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+
+	return result, nil
 }

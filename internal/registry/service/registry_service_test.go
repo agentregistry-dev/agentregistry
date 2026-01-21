@@ -9,7 +9,8 @@ import (
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/stretchr/testify/assert"
@@ -42,7 +43,7 @@ func TestValidateNoDuplicateRemoteURLs(t *testing.T) {
 		},
 	}
 
-	testDB := database.NewTestDB(t)
+	testDB := internaldb.NewTestDB(t)
 	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
 
 	// Create existing servers using the new CreateServer method
@@ -129,7 +130,7 @@ func TestValidateNoDuplicateRemoteURLs(t *testing.T) {
 
 func TestGetServerByName(t *testing.T) {
 	ctx := context.Background()
-	testDB := database.NewTestDB(t)
+	testDB := internaldb.NewTestDB(t)
 	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
 
 	// Create multiple versions of the same server
@@ -198,7 +199,7 @@ func TestGetServerByName(t *testing.T) {
 
 func TestGetServerByNameAndVersion(t *testing.T) {
 	ctx := context.Background()
-	testDB := database.NewTestDB(t)
+	testDB := internaldb.NewTestDB(t)
 	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
 
 	serverName := "com.example/versioned-server"
@@ -291,7 +292,7 @@ func TestGetServerByNameAndVersion(t *testing.T) {
 
 func TestStoreAndRetrieveServerReadme(t *testing.T) {
 	ctx := context.Background()
-	testDB := database.NewTestDB(t)
+	testDB := internaldb.NewTestDB(t)
 	svc := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
 
 	serverName := "com.example/readme-server"
@@ -346,7 +347,7 @@ func TestStoreAndRetrieveServerReadme(t *testing.T) {
 
 func TestGetServerReadmeMissing(t *testing.T) {
 	ctx := context.Background()
-	testDB := database.NewTestDB(t)
+	testDB := internaldb.NewTestDB(t)
 	svc := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
 
 	serverName := "com.example/missing-readme"
@@ -370,7 +371,7 @@ func TestGetServerReadmeMissing(t *testing.T) {
 
 func TestGetAllVersionsByServerName(t *testing.T) {
 	ctx := context.Background()
-	testDB := database.NewTestDB(t)
+	testDB := internaldb.NewTestDB(t)
 	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
 
 	serverName := "com.example/multi-version-server"
@@ -466,7 +467,7 @@ func TestGetAllVersionsByServerName(t *testing.T) {
 
 func TestCreateServerConcurrentVersionsNoRace(t *testing.T) {
 	ctx := context.Background()
-	testDB := database.NewTestDB(t)
+	testDB := internaldb.NewTestDB(t)
 	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
 
 	const concurrency = 100
@@ -522,7 +523,7 @@ func TestCreateServerConcurrentVersionsNoRace(t *testing.T) {
 
 func TestUpdateServer(t *testing.T) {
 	ctx := context.Background()
-	testDB := database.NewTestDB(t)
+	testDB := internaldb.NewTestDB(t)
 	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
 
 	serverName := "com.example/update-test-server"
@@ -628,7 +629,7 @@ func TestUpdateServer(t *testing.T) {
 
 func TestUpdateServer_SkipValidationForDeletedServers(t *testing.T) {
 	ctx := context.Background()
-	testDB := database.NewTestDB(t)
+	testDB := internaldb.NewTestDB(t)
 	// Enable registry validation to test that it gets skipped for deleted servers
 	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: true})
 
@@ -723,7 +724,7 @@ func TestUpdateServer_SkipValidationForDeletedServers(t *testing.T) {
 
 func TestListServers(t *testing.T) {
 	ctx := context.Background()
-	testDB := database.NewTestDB(t)
+	testDB := internaldb.NewTestDB(t)
 	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
 
 	// Create test servers
@@ -815,7 +816,7 @@ func TestListServers(t *testing.T) {
 
 func TestVersionComparison(t *testing.T) {
 	ctx := context.Background()
-	testDB := database.NewTestDB(t)
+	testDB := internaldb.NewTestDB(t)
 	service := NewRegistryService(testDB, &config.Config{EnableRegistryValidation: false})
 
 	serverName := "com.example/version-comparison-server"

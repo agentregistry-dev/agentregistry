@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 )
@@ -84,7 +85,7 @@ func NewPostgreSQL(ctx context.Context, connectionURI string) (*PostgreSQL, erro
 func (db *PostgreSQL) ListServers(
 	ctx context.Context,
 	tx pgx.Tx,
-	filter *ServerFilter,
+	filter *database.ServerFilter,
 	cursor string,
 	limit int,
 ) ([]*apiv0.ServerResponse, string, error) {
@@ -230,6 +231,8 @@ func (db *PostgreSQL) ListServers(
 	return results, nextCursor, nil
 }
 
+// Eitan: pass authz as part of db interface to use?
+
 // GetServerByName retrieves the latest version of a server by server name
 func (db *PostgreSQL) GetServerByName(ctx context.Context, tx pgx.Tx, serverName string) (*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
@@ -252,7 +255,7 @@ func (db *PostgreSQL) GetServerByName(ctx context.Context, tx pgx.Tx, serverName
 	err := db.getExecutor(tx).QueryRow(ctx, query, serverName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &published, &valueJSON)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, database.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to get server by name: %w", err)
 	}
@@ -308,7 +311,7 @@ func (db *PostgreSQL) GetServerByNameAndVersion(ctx context.Context, tx pgx.Tx, 
 	err := db.getExecutor(tx).QueryRow(ctx, query, serverName, version).Scan(&name, &vers, &status, &published, &publishedAt, &updatedAt, &isLatest, &valueJSON)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, database.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to get server by name and version: %w", err)
 	}
@@ -400,7 +403,7 @@ func (db *PostgreSQL) GetAllVersionsByServerName(ctx context.Context, tx pgx.Tx,
 	}
 
 	if len(results) == 0 {
-		return nil, ErrNotFound
+		return nil, database.ErrNotFound
 	}
 
 	return results, nil
@@ -471,7 +474,7 @@ func (db *PostgreSQL) UpdateServer(ctx context.Context, tx pgx.Tx, serverName, v
 
 	// Ensure the serverJSON matches the provided serverName and version
 	if serverJSON.Name != serverName || serverJSON.Version != version {
-		return nil, fmt.Errorf("%w: server name and version in JSON must match parameters", ErrInvalidInput)
+		return nil, fmt.Errorf("%w: server name and version in JSON must match parameters", database.ErrInvalidInput)
 	}
 
 	// Marshal updated ServerJSON
@@ -495,7 +498,7 @@ func (db *PostgreSQL) UpdateServer(ctx context.Context, tx pgx.Tx, serverName, v
 	err = db.getExecutor(tx).QueryRow(ctx, query, valueJSON, serverName, version).Scan(&name, &vers, &status, &published, &publishedAt, &updatedAt, &isLatest)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, database.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to update server: %w", err)
 	}
@@ -538,7 +541,7 @@ func (db *PostgreSQL) SetServerStatus(ctx context.Context, tx pgx.Tx, serverName
 	err := db.getExecutor(tx).QueryRow(ctx, query, status, serverName, version).Scan(&name, &vers, &currentStatus, &published, &valueJSON, &publishedAt, &updatedAt, &isLatest)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, database.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to update server status: %w", err)
 	}
@@ -652,7 +655,7 @@ func (db *PostgreSQL) GetCurrentLatestVersion(ctx context.Context, tx pgx.Tx, se
 	err := row.Scan(&name, &version, &status, &published, &jsonValue, &publishedAt, &updatedAt, &isLatest)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, database.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to scan server row: %w", err)
 	}
@@ -749,7 +752,7 @@ func (db *PostgreSQL) PublishServer(ctx context.Context, tx pgx.Tx, serverName, 
 	}
 
 	if result.RowsAffected() == 0 {
-		return ErrNotFound
+		return database.ErrNotFound
 	}
 
 	return nil
@@ -770,7 +773,7 @@ func (db *PostgreSQL) UnpublishServer(ctx context.Context, tx pgx.Tx, serverName
 	}
 
 	if result.RowsAffected() == 0 {
-		return ErrNotFound
+		return database.ErrNotFound
 	}
 
 	return nil
@@ -788,7 +791,7 @@ func (db *PostgreSQL) DeleteServer(ctx context.Context, tx pgx.Tx, serverName, v
 		return fmt.Errorf("failed to delete server: %w", err)
 	}
 	if result.RowsAffected() == 0 {
-		return ErrNotFound
+		return database.ErrNotFound
 	}
 	return nil
 }
@@ -806,7 +809,7 @@ func (db *PostgreSQL) IsServerPublished(ctx context.Context, tx pgx.Tx, serverNa
 	err := executor.QueryRow(ctx, query, serverName, version).Scan(&published)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return false, ErrNotFound
+			return false, database.ErrNotFound
 		}
 		return false, fmt.Errorf("failed to check if server is published: %w", err)
 	}
@@ -814,7 +817,7 @@ func (db *PostgreSQL) IsServerPublished(ctx context.Context, tx pgx.Tx, serverNa
 	return published, nil
 }
 
-func (db *PostgreSQL) UpsertServerReadme(ctx context.Context, tx pgx.Tx, readme *ServerReadme) error {
+func (db *PostgreSQL) UpsertServerReadme(ctx context.Context, tx pgx.Tx, readme *database.ServerReadme) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -866,7 +869,7 @@ func (db *PostgreSQL) UpsertServerReadme(ctx context.Context, tx pgx.Tx, readme 
 	return nil
 }
 
-func (db *PostgreSQL) GetServerReadme(ctx context.Context, tx pgx.Tx, serverName, version string) (*ServerReadme, error) {
+func (db *PostgreSQL) GetServerReadme(ctx context.Context, tx pgx.Tx, serverName, version string) (*database.ServerReadme, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -882,7 +885,7 @@ func (db *PostgreSQL) GetServerReadme(ctx context.Context, tx pgx.Tx, serverName
 	return scanServerReadme(row)
 }
 
-func (db *PostgreSQL) GetLatestServerReadme(ctx context.Context, tx pgx.Tx, serverName string) (*ServerReadme, error) {
+func (db *PostgreSQL) GetLatestServerReadme(ctx context.Context, tx pgx.Tx, serverName string) (*database.ServerReadme, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -899,8 +902,8 @@ func (db *PostgreSQL) GetLatestServerReadme(ctx context.Context, tx pgx.Tx, serv
 	return scanServerReadme(row)
 }
 
-func scanServerReadme(row pgx.Row) (*ServerReadme, error) {
-	var readme ServerReadme
+func scanServerReadme(row pgx.Row) (*database.ServerReadme, error) {
+	var readme database.ServerReadme
 	if err := row.Scan(
 		&readme.ServerName,
 		&readme.Version,
@@ -911,7 +914,7 @@ func scanServerReadme(row pgx.Row) (*ServerReadme, error) {
 		&readme.FetchedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, database.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to scan server readme: %w", err)
 	}
@@ -923,7 +926,7 @@ func scanServerReadme(row pgx.Row) (*ServerReadme, error) {
 // ==============================
 
 // ListAgents returns paginated agents with filtering
-func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
+func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -1067,7 +1070,7 @@ func (db *PostgreSQL) GetAgentByName(ctx context.Context, tx pgx.Tx, agentName s
 	var valueJSON []byte
 	if err := db.getExecutor(tx).QueryRow(ctx, query, agentName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &published, &valueJSON); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, database.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to get agent by name: %w", err)
 	}
@@ -1105,7 +1108,7 @@ func (db *PostgreSQL) GetAgentByNameAndVersion(ctx context.Context, tx pgx.Tx, a
 	var valueJSON []byte
 	if err := db.getExecutor(tx).QueryRow(ctx, query, agentName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, database.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to get agent by name and version: %w", err)
 	}
@@ -1170,7 +1173,7 @@ func (db *PostgreSQL) GetAllVersionsByAgentName(ctx context.Context, tx pgx.Tx, 
 		return nil, fmt.Errorf("error iterating agent rows: %w", err)
 	}
 	if len(results) == 0 {
-		return nil, ErrNotFound
+		return nil, database.ErrNotFound
 	}
 	return results, nil
 }
@@ -1220,7 +1223,7 @@ func (db *PostgreSQL) UpdateAgent(ctx context.Context, tx pgx.Tx, agentName, ver
 		return nil, fmt.Errorf("agentJSON is required")
 	}
 	if agentJSON.Name != agentName || agentJSON.Version != version {
-		return nil, fmt.Errorf("%w: agent name and version in JSON must match parameters", ErrInvalidInput)
+		return nil, fmt.Errorf("%w: agent name and version in JSON must match parameters", database.ErrInvalidInput)
 	}
 	valueJSON, err := json.Marshal(agentJSON)
 	if err != nil {
@@ -1237,7 +1240,7 @@ func (db *PostgreSQL) UpdateAgent(ctx context.Context, tx pgx.Tx, agentName, ver
 	var isLatest bool
 	if err := db.getExecutor(tx).QueryRow(ctx, query, valueJSON, agentName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, database.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to update agent: %w", err)
 	}
@@ -1270,7 +1273,7 @@ func (db *PostgreSQL) SetAgentStatus(ctx context.Context, tx pgx.Tx, agentName, 
 	var valueJSON []byte
 	if err := db.getExecutor(tx).QueryRow(ctx, query, status, agentName, version).Scan(&name, &vers, &currentStatus, &valueJSON, &publishedAt, &updatedAt, &isLatest); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, database.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to update agent status: %w", err)
 	}
@@ -1308,7 +1311,7 @@ func (db *PostgreSQL) GetCurrentLatestAgentVersion(ctx context.Context, tx pgx.T
 	var jsonValue []byte
 	if err := row.Scan(&name, &version, &status, &jsonValue, &publishedAt, &updatedAt, &isLatest); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, database.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to scan agent row: %w", err)
 	}
@@ -1382,7 +1385,7 @@ func (db *PostgreSQL) PublishAgent(ctx context.Context, tx pgx.Tx, agentName, ve
 	}
 
 	if result.RowsAffected() == 0 {
-		return ErrNotFound
+		return database.ErrNotFound
 	}
 
 	return nil
@@ -1403,7 +1406,7 @@ func (db *PostgreSQL) UnpublishAgent(ctx context.Context, tx pgx.Tx, agentName, 
 	}
 
 	if result.RowsAffected() == 0 {
-		return ErrNotFound
+		return database.ErrNotFound
 	}
 
 	return nil
@@ -1422,7 +1425,7 @@ func (db *PostgreSQL) IsAgentPublished(ctx context.Context, tx pgx.Tx, agentName
 	err := executor.QueryRow(ctx, query, agentName, version).Scan(&published)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return false, ErrNotFound
+			return false, database.ErrNotFound
 		}
 		return false, fmt.Errorf("failed to check if agent is published: %w", err)
 	}
@@ -1435,7 +1438,7 @@ func (db *PostgreSQL) IsAgentPublished(ctx context.Context, tx pgx.Tx, agentName
 // ==============================
 
 // ListSkills returns paginated skills with filtering
-func (db *PostgreSQL) ListSkills(ctx context.Context, tx pgx.Tx, filter *SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
+func (db *PostgreSQL) ListSkills(ctx context.Context, tx pgx.Tx, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -1579,7 +1582,7 @@ func (db *PostgreSQL) GetSkillByName(ctx context.Context, tx pgx.Tx, skillName s
 	var valueJSON []byte
 	if err := db.getExecutor(tx).QueryRow(ctx, query, skillName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &published, &valueJSON); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, database.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to get skill by name: %w", err)
 	}
@@ -1617,7 +1620,7 @@ func (db *PostgreSQL) GetSkillByNameAndVersion(ctx context.Context, tx pgx.Tx, s
 	var valueJSON []byte
 	if err := db.getExecutor(tx).QueryRow(ctx, query, skillName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &published, &valueJSON); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, database.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to get skill by name and version: %w", err)
 	}
@@ -1684,7 +1687,7 @@ func (db *PostgreSQL) GetAllVersionsBySkillName(ctx context.Context, tx pgx.Tx, 
 		return nil, fmt.Errorf("error iterating skill rows: %w", err)
 	}
 	if len(results) == 0 {
-		return nil, ErrNotFound
+		return nil, database.ErrNotFound
 	}
 	return results, nil
 }
@@ -1734,7 +1737,7 @@ func (db *PostgreSQL) UpdateSkill(ctx context.Context, tx pgx.Tx, skillName, ver
 		return nil, fmt.Errorf("skillJSON is required")
 	}
 	if skillJSON.Name != skillName || skillJSON.Version != version {
-		return nil, fmt.Errorf("%w: skill name and version in JSON must match parameters", ErrInvalidInput)
+		return nil, fmt.Errorf("%w: skill name and version in JSON must match parameters", database.ErrInvalidInput)
 	}
 	valueJSON, err := json.Marshal(skillJSON)
 	if err != nil {
@@ -1751,7 +1754,7 @@ func (db *PostgreSQL) UpdateSkill(ctx context.Context, tx pgx.Tx, skillName, ver
 	var isLatest bool
 	if err := db.getExecutor(tx).QueryRow(ctx, query, valueJSON, skillName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, database.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to update skill: %w", err)
 	}
@@ -1784,7 +1787,7 @@ func (db *PostgreSQL) SetSkillStatus(ctx context.Context, tx pgx.Tx, skillName, 
 	var valueJSON []byte
 	if err := db.getExecutor(tx).QueryRow(ctx, query, status, skillName, version).Scan(&name, &vers, &currentStatus, &valueJSON, &publishedAt, &updatedAt, &isLatest); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, database.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to update skill status: %w", err)
 	}
@@ -1822,7 +1825,7 @@ func (db *PostgreSQL) GetCurrentLatestSkillVersion(ctx context.Context, tx pgx.T
 	var jsonValue []byte
 	if err := row.Scan(&name, &version, &status, &jsonValue, &publishedAt, &updatedAt, &isLatest); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, database.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to scan skill row: %w", err)
 	}
@@ -1896,7 +1899,7 @@ func (db *PostgreSQL) PublishSkill(ctx context.Context, tx pgx.Tx, skillName, ve
 	}
 
 	if result.RowsAffected() == 0 {
-		return ErrNotFound
+		return database.ErrNotFound
 	}
 
 	return nil
@@ -1917,7 +1920,7 @@ func (db *PostgreSQL) UnpublishSkill(ctx context.Context, tx pgx.Tx, skillName, 
 	}
 
 	if result.RowsAffected() == 0 {
-		return ErrNotFound
+		return database.ErrNotFound
 	}
 
 	return nil
@@ -1936,7 +1939,7 @@ func (db *PostgreSQL) IsSkillPublished(ctx context.Context, tx pgx.Tx, skillName
 	err := executor.QueryRow(ctx, query, skillName, version).Scan(&published)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return false, ErrNotFound
+			return false, database.ErrNotFound
 		}
 		return false, fmt.Errorf("failed to check if skill is published: %w", err)
 	}
@@ -1975,7 +1978,7 @@ func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deploymen
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
-			return ErrAlreadyExists
+			return database.ErrAlreadyExists
 		}
 		return fmt.Errorf("failed to create deployment: %w", err)
 	}
@@ -2062,7 +2065,7 @@ func (db *PostgreSQL) GetDeploymentByNameAndVersion(ctx context.Context, tx pgx.
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, database.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to get deployment: %w", err)
 	}
@@ -2100,7 +2103,7 @@ func (db *PostgreSQL) UpdateDeploymentConfig(ctx context.Context, tx pgx.Tx, ser
 	}
 
 	if result.RowsAffected() == 0 {
-		return ErrNotFound
+		return database.ErrNotFound
 	}
 
 	return nil
@@ -2122,7 +2125,7 @@ func (db *PostgreSQL) UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, ser
 	}
 
 	if result.RowsAffected() == 0 {
-		return ErrNotFound
+		return database.ErrNotFound
 	}
 
 	return nil
@@ -2140,7 +2143,7 @@ func (db *PostgreSQL) RemoveDeployment(ctx context.Context, tx pgx.Tx, serverNam
 	}
 
 	if result.RowsAffected() == 0 {
-		return ErrNotFound
+		return database.ErrNotFound
 	}
 
 	return nil
@@ -2158,7 +2161,7 @@ func (db *PostgreSQL) DeleteAgent(ctx context.Context, tx pgx.Tx, agentName, ver
 	}
 
 	if result.RowsAffected() == 0 {
-		return ErrNotFound
+		return database.ErrNotFound
 	}
 
 	return nil

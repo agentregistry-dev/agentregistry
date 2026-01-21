@@ -17,10 +17,11 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api"
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/importer"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
@@ -36,8 +37,11 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// [apply all oss], [apply all ext]
+	// [> 499]
+
 	// Connect to PostgreSQL (runs OSS migrations)
-	baseDB, err := database.NewPostgreSQL(ctx, cfg.DatabaseURL)
+	baseDB, err := internaldb.NewPostgreSQL(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
 	}

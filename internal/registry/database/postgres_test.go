@@ -6,7 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
@@ -15,7 +16,7 @@ import (
 )
 
 func TestPostgreSQL_CreateServer(t *testing.T) {
-	db := database.NewTestDB(t)
+	db := internaldb.NewTestDB(t)
 	ctx := context.Background()
 
 	tests := []struct {
@@ -92,7 +93,7 @@ func TestPostgreSQL_CreateServer(t *testing.T) {
 }
 
 func TestPostgreSQL_GetServerByName(t *testing.T) {
-	db := database.NewTestDB(t)
+	db := internaldb.NewTestDB(t)
 	ctx := context.Background()
 
 	// Setup test data
@@ -151,7 +152,7 @@ func TestPostgreSQL_GetServerByName(t *testing.T) {
 }
 
 func TestPostgreSQL_GetServerByNameAndVersion(t *testing.T) {
-	db := database.NewTestDB(t)
+	db := internaldb.NewTestDB(t)
 	ctx := context.Background()
 
 	// Setup test data with multiple versions
@@ -225,7 +226,7 @@ func TestPostgreSQL_GetServerByNameAndVersion(t *testing.T) {
 }
 
 func TestPostgreSQL_ListServers(t *testing.T) {
-	db := database.NewTestDB(t)
+	db := internaldb.NewTestDB(t)
 	ctx := context.Background()
 
 	// Setup test data
@@ -396,7 +397,7 @@ func TestPostgreSQL_ListServers(t *testing.T) {
 }
 
 func TestPostgreSQL_UpdateServer(t *testing.T) {
-	db := database.NewTestDB(t)
+	db := internaldb.NewTestDB(t)
 	ctx := context.Background()
 
 	// Setup test data
@@ -474,7 +475,7 @@ func TestPostgreSQL_UpdateServer(t *testing.T) {
 }
 
 func TestPostgreSQL_SetServerStatus(t *testing.T) {
-	db := database.NewTestDB(t)
+	db := internaldb.NewTestDB(t)
 	ctx := context.Background()
 
 	// Setup test data
@@ -547,7 +548,7 @@ func TestPostgreSQL_SetServerStatus(t *testing.T) {
 }
 
 func TestPostgreSQL_TransactionHandling(t *testing.T) {
-	db := database.NewTestDB(t)
+	db := internaldb.NewTestDB(t)
 	ctx := context.Background()
 
 	t.Run("successful transaction", func(t *testing.T) {
@@ -611,7 +612,7 @@ func TestPostgreSQL_TransactionHandling(t *testing.T) {
 }
 
 func TestPostgreSQL_ConcurrencyAndLocking(t *testing.T) {
-	db := database.NewTestDB(t)
+	db := internaldb.NewTestDB(t)
 	ctx := context.Background()
 
 	serverName := "com.example/concurrent-server"
@@ -679,7 +680,7 @@ func TestPostgreSQL_ConcurrencyAndLocking(t *testing.T) {
 }
 
 func TestPostgreSQL_HelperMethods(t *testing.T) {
-	db := database.NewTestDB(t)
+	db := internaldb.NewTestDB(t)
 	ctx := context.Background()
 
 	serverName := "com.example/helper-test-server"
@@ -760,7 +761,7 @@ func TestPostgreSQL_HelperMethods(t *testing.T) {
 }
 
 func TestPostgreSQL_EdgeCases(t *testing.T) {
-	db := database.NewTestDB(t)
+	db := internaldb.NewTestDB(t)
 	ctx := context.Background()
 
 	t.Run("input validation", func(t *testing.T) {
@@ -875,7 +876,7 @@ func TestPostgreSQL_EdgeCases(t *testing.T) {
 }
 
 func TestPostgreSQL_PerformanceScenarios(t *testing.T) {
-	db := database.NewTestDB(t)
+	db := internaldb.NewTestDB(t)
 	ctx := context.Background()
 
 	t.Run("many versions management", func(t *testing.T) {
