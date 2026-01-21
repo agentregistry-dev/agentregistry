@@ -57,8 +57,10 @@ func (s *registryServiceImpl) ListServers(ctx context.Context, filter *database.
 		limit = 30
 	}
 
-	if err := s.prepareSemanticOptions(ctx, filter); err != nil {
-		return nil, "", err
+	if filter != nil {
+		if err := s.ensureSemanticEmbedding(ctx, filter.Semantic); err != nil {
+			return nil, "", err
+		}
 	}
 
 	// Use the database's ListServers method with pagination and filtering
@@ -501,8 +503,10 @@ func (s *registryServiceImpl) ListAgents(ctx context.Context, filter *database.A
 	if limit <= 0 {
 		limit = 30
 	}
-	if err := s.prepareSemanticOptions(ctx, filter); err != nil {
-		return nil, "", err
+	if filter != nil {
+		if err := s.ensureSemanticEmbedding(ctx, filter.Semantic); err != nil {
+			return nil, "", err
+		}
 	}
 	agents, next, err := s.db.ListAgents(ctx, nil, filter, cursor, limit)
 	if err != nil {
@@ -990,23 +994,6 @@ func convertServerSpecToServerJSON(spec *types.ServerSpec) *apiv0.ServerJSON {
 		// ServerSpec doesn't include meta
 		Icons: nil,
 		Meta:  nil,
-	}
-}
-
-func (s *registryServiceImpl) prepareSemanticOptions(ctx context.Context, filter interface{}) error {
-	switch f := filter.(type) {
-	case *database.ServerFilter:
-		if f == nil {
-			return nil
-		}
-		return s.ensureSemanticEmbedding(ctx, f.Semantic)
-	case *database.AgentFilter:
-		if f == nil {
-			return nil
-		}
-		return s.ensureSemanticEmbedding(ctx, f.Semantic)
-	default:
-		return nil
 	}
 }
 
