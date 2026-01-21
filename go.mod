@@ -39,6 +39,7 @@ require (
 	k8s.io/api v0.34.1
 	k8s.io/apimachinery v0.34.1
 	k8s.io/client-go v0.34.1
+	sigs.k8s.io/controller-runtime v0.22.1
 	trpc.group/trpc-go/trpc-a2a-go v0.2.4
 )
 
@@ -252,7 +253,6 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.39.0 // indirect
 	mvdan.cc/sh/v3 v3.7.0 // indirect
-	sigs.k8s.io/controller-runtime v0.22.1 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/release-utils v0.6.0 // indirect

@@ -21,6 +21,7 @@ type AgentManifest struct {
 	ModelProvider     string          `yaml:"modelProvider" json:"modelProvider"`
 	ModelName         string          `yaml:"modelName" json:"modelName"`
 	Description       string          `yaml:"description" json:"description"`
+	Version           string          `yaml:"version,omitempty" json:"version,omitempty"`
 	TelemetryEndpoint string          `yaml:"telemetryEndpoint,omitempty" json:"telemetryEndpoint,omitempty"`
 	McpServers        []McpServerType `yaml:"mcpServers,omitempty" json:"mcpServers,omitempty"`
 	UpdatedAt         time.Time       `yaml:"updatedAt,omitempty" json:"updatedAt,omitempty"`

@@ -72,7 +72,7 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	// If the argument is a directory containing an agent project, publish from local
 	if fi, err := os.Stat(arg); err == nil && fi.IsDir() {
 		publishCfg.ProjectDir = arg
-		publishCfg.Version = "latest"
+		// Version will be determined in publishAgent from manifest or flag
 		return publishAgent(publishCfg)
 	}
 	return nil
@@ -96,15 +96,18 @@ func publishAgent(cfg *publishAgentCfg) error {
 		return fmt.Errorf("project directory does not exist: %s", cfg.ProjectDir)
 	}
 
-	version := "latest"
-	if cfg.Version != "" {
-		version = cfg.Version
-	}
-
 	mgr := common.NewManifestManager(cfg.ProjectDir)
 	manifest, err := mgr.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load manifest: %w", err)
+	}
+
+	// Determine version: flag > manifest > default
+	version := "latest"
+	if cfg.Version != "" {
+		version = cfg.Version
+	} else if manifest.Version != "" {
+		version = manifest.Version
 	}
 
 	// Create a copy of the manifest without telemetryEndpoint for registry publishing

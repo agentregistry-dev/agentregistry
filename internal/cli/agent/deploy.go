@@ -40,6 +40,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	name := args[0]
 	version, _ := cmd.Flags().GetString("version")
 	runtime, _ := cmd.Flags().GetString("runtime")
+	namespace, _ := cmd.Flags().GetString("namespace")
 
 	if version == "" {
 		version = "latest"
@@ -74,13 +75,16 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	// They are part of the agent.yaml, so we should store them
 	// in the config, then when doing reconciliation, we can deploy them as well.
 	config := buildDeployConfig(manifest)
+	if namespace != "" {
+		config["KAGENT_NAMESPACE"] = namespace
+	}
 
 	// Handle runtime-specific deployment logic
 	switch runtime {
 	case "local":
 		return deployLocal(name, version, config)
 	case "kubernetes":
-		return deployKubernetes(name, version, config)
+		return deployKubernetes(name, version, config, namespace)
 	default:
 		// This shouldn't happen due to PreRunE validation, but handle gracefully
 		return fmt.Errorf("unimplemented runtime: %s", runtime)
@@ -124,13 +128,13 @@ func deployLocal(name, version string, config map[string]string) error {
 }
 
 // deployKubernetes deploys an agent to the kubernetes runtime
-func deployKubernetes(name, version string, config map[string]string) error {
+func deployKubernetes(name, version string, config map[string]string, namespace string) error {
 	deployment, err := apiClient.DeployAgent(name, version, config, "kubernetes")
 	if err != nil {
 		return fmt.Errorf("failed to deploy agent: %w", err)
 	}
 
-	fmt.Printf("Agent '%s' version '%s' deployed to kubernetes runtime\n", deployment.ServerName, deployment.Version)
+	fmt.Printf("Agent '%s' version '%s' deployed to kubernetes runtime in namespace '%s'\n", deployment.ServerName, deployment.Version, namespace)
 	return nil
 }
 
@@ -138,4 +142,5 @@ func init() {
 	DeployCmd.Flags().String("version", "latest", "Agent version to deploy")
 	DeployCmd.Flags().String("runtime", "local", "Deployment runtime target (local, kubernetes)")
 	DeployCmd.Flags().Bool("prefer-remote", false, "Prefer using a remote source when available")
+	DeployCmd.Flags().String("namespace", "", "Kubernetes namespace for agent deployment")
 }

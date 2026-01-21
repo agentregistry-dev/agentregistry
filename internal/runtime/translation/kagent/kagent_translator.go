@@ -161,6 +161,12 @@ func (t *translator) translateLocalMCPServer(server *api.MCPServer) (*kmcpv1alph
 	}
 
 	namespace := t.defaultNamespace
+	// Check for namespace in environment variables (passed via deployment config)
+	if len(server.Local.Deployment.Env) > 0 {
+		if ns, ok := server.Local.Deployment.Env["KAGENT_NAMESPACE"]; ok && ns != "" {
+			namespace = ns
+		}
+	}
 	deployment := kmcpv1alpha1.MCPServerDeployment{
 		Image: server.Local.Deployment.Image,
 		Cmd:   server.Local.Deployment.Cmd,
