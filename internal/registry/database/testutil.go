@@ -20,6 +20,17 @@ const templateDBName = "agent_registry_test_template"
 // ensureTemplateDB creates a template database with migrations applied
 // Multiple processes may call this, so we handle race conditions
 func ensureTemplateDB(ctx context.Context, adminConn *pgx.Conn) error {
+	// Serialize template creation/migration across concurrent test processes to
+	// avoid racing on extension creation (which can violate pg_extension_name_index).
+	// Use a global advisory lock key to coordinate.
+	const lockKey int64 = 0x61726567 // "areg" prefix
+	if _, err := adminConn.Exec(ctx, "SELECT pg_advisory_lock($1)", lockKey); err != nil {
+		return fmt.Errorf("failed to acquire advisory lock for template DB: %w", err)
+	}
+	defer func() {
+		_, _ = adminConn.Exec(context.Background(), "SELECT pg_advisory_unlock($1)", lockKey)
+	}()
+
 	// Check if template exists
 	var exists bool
 	err := adminConn.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)", templateDBName).Scan(&exists)
@@ -27,33 +38,48 @@ func ensureTemplateDB(ctx context.Context, adminConn *pgx.Conn) error {
 		return fmt.Errorf("failed to check template database: %w", err)
 	}
 
-	if exists {
-		// Template already exists
-		return nil
-	}
-
-	// Create template database
-	_, err = adminConn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s", templateDBName))
-	if err != nil {
-		// Ignore duplicate database name error - another process created it concurrently
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			if (pgErr.Code == "42P04") || (pgErr.Code == "23505" && pgErr.ConstraintName == "pg_database_datname_index") {
-				return nil
+	if !exists {
+		_, err = adminConn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s", templateDBName))
+		if err != nil {
+			// Ignore duplicate database name error - another process created it concurrently
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) {
+				if (pgErr.Code == "42P04") || (pgErr.Code == "23505" && pgErr.ConstraintName == "pg_database_datname_index") {
+					// Template got created concurrently; treat as success
+				} else {
+					return fmt.Errorf("failed to create template database: %w", err)
+				}
+			} else {
+				return fmt.Errorf("failed to create template database: %w", err)
 			}
 		}
-		return fmt.Errorf("failed to create template database: %w", err)
 	}
 
-	// Connect to template and run migrations
 	templateURI := fmt.Sprintf("postgres://agentregistry:agentregistry@localhost:5432/%s?sslmode=disable", templateDBName)
+	if err := ensureVectorExtension(ctx, templateURI); err != nil {
+		return err
+	}
+
+	// Connect to template and run migrations (always) to keep it up-to-date
 	templateDB, err := NewPostgreSQL(ctx, templateURI)
 	if err != nil {
 		return fmt.Errorf("failed to connect to template database: %w", err)
 	}
 	defer func() { _ = templateDB.Close() }()
 
-	// Migrations run automatically in NewPostgreSQL
+	return nil
+}
+
+func ensureVectorExtension(ctx context.Context, uri string) error {
+	conn, err := pgx.Connect(ctx, uri)
+	if err != nil {
+		return fmt.Errorf("failed to connect to template database for extension install: %w", err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+
+	if _, err := conn.Exec(ctx, "CREATE EXTENSION IF NOT EXISTS vector"); err != nil {
+		return fmt.Errorf("failed to install pgvector extension: %w", err)
+	}
 	return nil
 }
 

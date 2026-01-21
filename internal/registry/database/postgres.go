@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,6 +25,8 @@ import (
 type PostgreSQL struct {
 	pool *pgxpool.Pool
 }
+
+const semanticMetadataKey = "agentregistry.solo.io/semantic"
 
 // Executor is an interface for executing queries (satisfied by both pgx.Tx and pgxpool.Pool)
 type Executor interface {
@@ -97,12 +100,20 @@ func (db *PostgreSQL) ListServers(
 		return nil, "", ctx.Err()
 	}
 
-	// Build WHERE clause for filtering using dedicated columns
+	semanticActive := filter != nil && filter.Semantic != nil && len(filter.Semantic.QueryEmbedding) > 0
+	var semanticLiteral string
+	if semanticActive {
+		var err error
+		semanticLiteral, err = vectorLiteral(filter.Semantic.QueryEmbedding)
+		if err != nil {
+			return nil, "", fmt.Errorf("invalid semantic embedding: %w", err)
+		}
+	}
+
 	var whereConditions []string
 	args := []any{}
 	argIndex := 1
 
-	// Add filters using dedicated columns for better performance
 	if filter != nil {
 		if filter.Name != nil {
 			whereConditions = append(whereConditions, fmt.Sprintf("server_name = $%d", argIndex))
@@ -141,40 +152,60 @@ func (db *PostgreSQL) ListServers(
 		}
 	}
 
-	// Add cursor pagination using compound serverName:version cursor
-	if cursor != "" {
-		// Parse cursor format: "serverName:version"
+	if semanticActive {
+		whereConditions = append(whereConditions, "semantic_embedding IS NOT NULL")
+	}
+
+	if cursor != "" && !semanticActive {
 		parts := strings.SplitN(cursor, ":", 2)
 		if len(parts) == 2 {
 			cursorServerName := parts[0]
 			cursorVersion := parts[1]
-
-			// Use compound condition: (server_name > cursor_name) OR (server_name = cursor_name AND version > cursor_version)
 			whereConditions = append(whereConditions, fmt.Sprintf("(server_name > $%d OR (server_name = $%d AND version > $%d))", argIndex, argIndex+1, argIndex+2))
 			args = append(args, cursorServerName, cursorServerName, cursorVersion)
 			argIndex += 3
 		} else {
-			// Fallback for malformed cursor - treat as server name only for backwards compatibility
 			whereConditions = append(whereConditions, fmt.Sprintf("server_name > $%d", argIndex))
 			args = append(args, cursor)
 			argIndex++
 		}
 	}
 
-	// Build the WHERE clause
 	whereClause := ""
 	if len(whereConditions) > 0 {
 		whereClause = "WHERE " + strings.Join(whereConditions, " AND ")
 	}
 
-	// Query servers table with hybrid column/JSON data
+	selectClause := `
+        SELECT server_name, version, status, published, published_at, updated_at, is_latest, value`
+	orderClause := "ORDER BY server_name, version"
+
+	if semanticActive {
+		selectClause += fmt.Sprintf(", semantic_embedding <=> $%d::vector AS semantic_score", argIndex)
+		args = append(args, semanticLiteral)
+		vectorParamIdx := argIndex
+		argIndex++
+
+		if filter.Semantic.Threshold > 0 {
+			whereClauseCondition := fmt.Sprintf("semantic_embedding <=> $%d::vector <= $%d", vectorParamIdx, argIndex)
+			if whereClause == "" {
+				whereClause = "WHERE " + whereClauseCondition
+			} else {
+				whereClause += " AND " + whereClauseCondition
+			}
+			args = append(args, filter.Semantic.Threshold)
+			argIndex++
+		}
+		orderClause = "ORDER BY semantic_score ASC, server_name, version"
+	}
+
 	query := fmt.Sprintf(`
-        SELECT server_name, version, status, published, published_at, updated_at, is_latest, value
+        %s
         FROM servers
         %s
-        ORDER BY server_name, version
+        %s
         LIMIT $%d
-    `, whereClause, argIndex)
+    `, selectClause, whereClause, orderClause, argIndex)
 	args = append(args, limit)
 
 	rows, err := db.getExecutor(tx).Query(ctx, query, args...)
@@ -189,19 +220,27 @@ func (db *PostgreSQL) ListServers(
 		var published, isLatest bool
 		var publishedAt, updatedAt time.Time
 		var valueJSON []byte
+		var semanticScore sql.NullFloat64
 
-		err := rows.Scan(&serverName, &version, &status, &published, &publishedAt, &updatedAt, &isLatest, &valueJSON)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to scan server row: %w", err)
+		var scanErr error
+		if semanticActive {
+			scanErr = rows.Scan(&serverName, &version, &status, &published, &publishedAt, &updatedAt, &isLatest, &valueJSON, &semanticScore)
+		} else {
+			scanErr = rows.Scan(&serverName, &version, &status, &published, &publishedAt, &updatedAt, &isLatest, &valueJSON)
+		}
+		if scanErr != nil {
+			return nil, "", fmt.Errorf("failed to scan server row: %w", scanErr)
 		}
 
-		// Parse the ServerJSON from JSONB
 		var serverJSON apiv0.ServerJSON
 		if err := json.Unmarshal(valueJSON, &serverJSON); err != nil {
 			return nil, "", fmt.Errorf("failed to unmarshal server JSON: %w", err)
 		}
 
-		// Build ServerResponse with separated metadata
+		if semanticActive && semanticScore.Valid {
+			annotateServerSemanticScore(&serverJSON, semanticScore.Float64)
+		}
+
 		serverResponse := &apiv0.ServerResponse{
 			Server: serverJSON,
 			Meta: apiv0.ResponseMeta{
@@ -221,14 +260,28 @@ func (db *PostgreSQL) ListServers(
 		return nil, "", fmt.Errorf("error iterating rows: %w", err)
 	}
 
-	// Determine next cursor using compound serverName:version format
 	nextCursor := ""
-	if len(results) > 0 && len(results) >= limit {
+	if !semanticActive && len(results) > 0 && len(results) >= limit {
 		lastResult := results[len(results)-1]
 		nextCursor = lastResult.Server.Name + ":" + lastResult.Server.Version
 	}
 
 	return results, nextCursor, nil
+}
+
+func annotateServerSemanticScore(server *apiv0.ServerJSON, score float64) {
+	if server == nil {
+		return
+	}
+	if server.Meta == nil {
+		server.Meta = &apiv0.ServerMeta{}
+	}
+	if server.Meta.PublisherProvided == nil {
+		server.Meta.PublisherProvided = map[string]interface{}{}
+	}
+	server.Meta.PublisherProvided[semanticMetadataKey] = map[string]interface{}{
+		"score": score,
+	}
 }
 
 // GetServerByName retrieves the latest version of a server by server name
@@ -815,6 +868,136 @@ func (db *PostgreSQL) IsServerPublished(ctx context.Context, tx pgx.Tx, serverNa
 	return published, nil
 }
 
+// SetServerEmbedding stores semantic embedding metadata for a server version.
+func (db *PostgreSQL) SetServerEmbedding(ctx context.Context, tx pgx.Tx, serverName, version string, embedding *SemanticEmbedding) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	executor := db.getExecutor(tx)
+
+	var (
+		query string
+		args  []any
+	)
+
+	if embedding == nil || len(embedding.Vector) == 0 {
+		query = `
+			UPDATE servers
+			SET semantic_embedding = NULL,
+			    semantic_embedding_provider = NULL,
+			    semantic_embedding_model = NULL,
+			    semantic_embedding_dimensions = NULL,
+			    semantic_embedding_checksum = NULL,
+			    semantic_embedding_generated_at = NULL
+			WHERE server_name = $1 AND version = $2
+		`
+		args = []any{serverName, version}
+	} else {
+		vectorLiteral, err := vectorLiteral(embedding.Vector)
+		if err != nil {
+			return err
+		}
+		query = `
+			UPDATE servers
+			SET semantic_embedding = $3::vector,
+			    semantic_embedding_provider = $4,
+			    semantic_embedding_model = $5,
+			    semantic_embedding_dimensions = $6,
+			    semantic_embedding_checksum = $7,
+			    semantic_embedding_generated_at = $8
+			WHERE server_name = $1 AND version = $2
+		`
+		args = []any{
+			serverName,
+			version,
+			vectorLiteral,
+			embedding.Provider,
+			embedding.Model,
+			embedding.Dimensions,
+			embedding.Checksum,
+			embedding.Generated,
+		}
+	}
+
+	result, err := executor.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to update server embedding: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return database.ErrNotFound
+	}
+	return nil
+}
+
+// GetServerEmbeddingMetadata retrieves embedding metadata for a server version without loading
+// the underlying vector payload. This is useful for maintenance tasks that only need to know
+// whether an embedding exists or if its checksum is stale.
+func (db *PostgreSQL) GetServerEmbeddingMetadata(ctx context.Context, tx pgx.Tx, serverName, version string) (*SemanticEmbeddingMetadata, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	executor := db.getExecutor(tx)
+	query := `
+		SELECT
+			semantic_embedding IS NOT NULL AS has_embedding,
+			semantic_embedding_provider,
+			semantic_embedding_model,
+			semantic_embedding_dimensions,
+			semantic_embedding_checksum,
+			semantic_embedding_generated_at
+		FROM servers
+		WHERE server_name = $1 AND version = $2
+		LIMIT 1
+	`
+
+	var (
+		hasEmbedding bool
+		provider     sql.NullString
+		model        sql.NullString
+		dimensions   sql.NullInt32
+		checksum     sql.NullString
+		generatedAt  sql.NullTime
+	)
+
+	err := executor.QueryRow(ctx, query, serverName, version).Scan(
+		&hasEmbedding,
+		&provider,
+		&model,
+		&dimensions,
+		&checksum,
+		&generatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, database.ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to fetch server embedding metadata: %w", err)
+	}
+
+	meta := &SemanticEmbeddingMetadata{
+		HasEmbedding: hasEmbedding,
+	}
+	if provider.Valid {
+		meta.Provider = provider.String
+	}
+	if model.Valid {
+		meta.Model = model.String
+	}
+	if dimensions.Valid {
+		meta.Dimensions = int(dimensions.Int32)
+	}
+	if checksum.Valid {
+		meta.Checksum = checksum.String
+	}
+	if generatedAt.Valid {
+		meta.Generated = generatedAt.Time
+	}
+
+	return meta, nil
+}
+
 func (db *PostgreSQL) UpsertServerReadme(ctx context.Context, tx pgx.Tx, readme *database.ServerReadme) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -932,6 +1115,16 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *databas
 		return nil, "", ctx.Err()
 	}
 
+	semanticActive := filter != nil && filter.Semantic != nil && len(filter.Semantic.QueryEmbedding) > 0
+	var semanticLiteral string
+	if semanticActive {
+		var err error
+		semanticLiteral, err = vectorLiteral(filter.Semantic.QueryEmbedding)
+		if err != nil {
+			return nil, "", fmt.Errorf("invalid semantic embedding: %w", err)
+		}
+	}
+
 	var whereConditions []string
 	args := []any{}
 	argIndex := 1
@@ -974,7 +1167,11 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *databas
 		}
 	}
 
-	if cursor != "" {
+	if semanticActive {
+		whereConditions = append(whereConditions, "semantic_embedding IS NOT NULL")
+	}
+
+	if cursor != "" && !semanticActive {
 		parts := strings.SplitN(cursor, ":", 2)
 		if len(parts) == 2 {
 			cursorName := parts[0]
@@ -994,13 +1191,37 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *databas
 		whereClause = "WHERE " + strings.Join(whereConditions, " AND ")
 	}
 
+	selectClause := `
+		SELECT agent_name, version, status, published_at, updated_at, is_latest, published, value`
+	orderClause := "ORDER BY agent_name, version"
+
+	if semanticActive {
+		selectClause += fmt.Sprintf(", semantic_embedding <=> $%d::vector AS semantic_score", argIndex)
+		args = append(args, semanticLiteral)
+		vectorParamIdx := argIndex
+		argIndex++
+
+		if filter.Semantic.Threshold > 0 {
+			condition := fmt.Sprintf("semantic_embedding <=> $%d::vector <= $%d", vectorParamIdx, argIndex)
+			if whereClause == "" {
+				whereClause = "WHERE " + condition
+			} else {
+				whereClause += " AND " + condition
+			}
+			args = append(args, filter.Semantic.Threshold)
+			argIndex++
+		}
+
+		orderClause = "ORDER BY semantic_score ASC, agent_name, version"
+	}
+
 	query := fmt.Sprintf(`
-		SELECT agent_name, version, status, published_at, updated_at, is_latest, published, value
+		%s
 		FROM agents
 		%s
-		ORDER BY agent_name, version
+		%s
 		LIMIT $%d
-	`, whereClause, argIndex)
+	`, selectClause, whereClause, orderClause, argIndex)
 	args = append(args, limit)
 
 	rows, err := db.getExecutor(tx).Query(ctx, query, args...)
@@ -1015,8 +1236,16 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *databas
 		var publishedAt, updatedAt time.Time
 		var isLatest, published bool
 		var valueJSON []byte
+		var semanticScore sql.NullFloat64
 
-		if err := rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &published, &valueJSON); err != nil {
+		var scanErr error
+		if semanticActive {
+			scanErr = rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &published, &valueJSON, &semanticScore)
+		} else {
+			scanErr = rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &published, &valueJSON)
+		}
+
+		if scanErr != nil {
 			return nil, "", fmt.Errorf("failed to scan agent row: %w", err)
 		}
 
@@ -1037,6 +1266,11 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *databas
 				},
 			},
 		}
+		if semanticActive && semanticScore.Valid {
+			resp.Meta.Semantic = &models.AgentSemanticMeta{
+				Score: semanticScore.Float64,
+			}
+		}
 		results = append(results, resp)
 	}
 	if err := rows.Err(); err != nil {
@@ -1044,7 +1278,7 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *databas
 	}
 
 	nextCursor := ""
-	if len(results) > 0 && len(results) >= limit {
+	if !semanticActive && len(results) > 0 && len(results) >= limit {
 		last := results[len(results)-1]
 		nextCursor = last.Agent.Name + ":" + last.Agent.Version
 	}
@@ -1429,6 +1663,134 @@ func (db *PostgreSQL) IsAgentPublished(ctx context.Context, tx pgx.Tx, agentName
 	}
 
 	return published, nil
+}
+
+// SetAgentEmbedding stores semantic embedding metadata for an agent version.
+func (db *PostgreSQL) SetAgentEmbedding(ctx context.Context, tx pgx.Tx, agentName, version string, embedding *SemanticEmbedding) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	executor := db.getExecutor(tx)
+
+	var (
+		query string
+		args  []any
+	)
+
+	if embedding == nil || len(embedding.Vector) == 0 {
+		query = `
+			UPDATE agents
+			SET semantic_embedding = NULL,
+			    semantic_embedding_provider = NULL,
+			    semantic_embedding_model = NULL,
+			    semantic_embedding_dimensions = NULL,
+			    semantic_embedding_checksum = NULL,
+			    semantic_embedding_generated_at = NULL
+			WHERE agent_name = $1 AND version = $2
+		`
+		args = []any{agentName, version}
+	} else {
+		vectorLiteral, err := vectorLiteral(embedding.Vector)
+		if err != nil {
+			return err
+		}
+		query = `
+			UPDATE agents
+			SET semantic_embedding = $3::vector,
+			    semantic_embedding_provider = $4,
+			    semantic_embedding_model = $5,
+			    semantic_embedding_dimensions = $6,
+			    semantic_embedding_checksum = $7,
+			    semantic_embedding_generated_at = $8
+			WHERE agent_name = $1 AND version = $2
+		`
+		args = []any{
+			agentName,
+			version,
+			vectorLiteral,
+			embedding.Provider,
+			embedding.Model,
+			embedding.Dimensions,
+			embedding.Checksum,
+			embedding.Generated,
+		}
+	}
+
+	result, err := executor.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to update agent embedding: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return database.ErrNotFound
+	}
+	return nil
+}
+
+// GetAgentEmbeddingMetadata retrieves embedding metadata for an agent version without loading the vector.
+func (db *PostgreSQL) GetAgentEmbeddingMetadata(ctx context.Context, tx pgx.Tx, agentName, version string) (*SemanticEmbeddingMetadata, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	executor := db.getExecutor(tx)
+	query := `
+		SELECT
+			semantic_embedding IS NOT NULL AS has_embedding,
+			semantic_embedding_provider,
+			semantic_embedding_model,
+			semantic_embedding_dimensions,
+			semantic_embedding_checksum,
+			semantic_embedding_generated_at
+		FROM agents
+		WHERE agent_name = $1 AND version = $2
+		LIMIT 1
+	`
+
+	var (
+		hasEmbedding bool
+		provider     sql.NullString
+		model        sql.NullString
+		dimensions   sql.NullInt32
+		checksum     sql.NullString
+		generatedAt  sql.NullTime
+	)
+
+	err := executor.QueryRow(ctx, query, agentName, version).Scan(
+		&hasEmbedding,
+		&provider,
+		&model,
+		&dimensions,
+		&checksum,
+		&generatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to fetch agent embedding metadata: %w", err)
+	}
+
+	meta := &SemanticEmbeddingMetadata{
+		HasEmbedding: hasEmbedding,
+	}
+	if provider.Valid {
+		meta.Provider = provider.String
+	}
+	if model.Valid {
+		meta.Model = model.String
+	}
+	if dimensions.Valid {
+		meta.Dimensions = int(dimensions.Int32)
+	}
+	if checksum.Valid {
+		meta.Checksum = checksum.String
+	}
+	if generatedAt.Valid {
+		meta.Generated = generatedAt.Time
+	}
+
+	return meta, nil
 }
 
 // ==============================
