@@ -18,13 +18,15 @@ import (
 
 var (
 	// Flags for mcp publish command
-	dockerUrl        string
-	dockerTag        string
-	pushFlag         bool
-	dryRunFlag       bool
-	publishPlatform  string
-	publishVersion   string
-	githubRepository string
+	dockerUrl           string
+	dockerTag           string
+	pushFlag            bool
+	dryRunFlag          bool
+	publishPlatform     string
+	publishVersion      string
+	githubRepository    string
+	publishTransport    string
+	publishTransportURL string
 )
 
 var PublishCmd = &cobra.Command{
@@ -136,7 +138,22 @@ func buildAndPublishLocal(absPath string) error {
 	imageRef := fmt.Sprintf("%s/%s:%s", strings.TrimSuffix(dockerUrl, "/"), repoName, version)
 
 	printer.PrintInfo(fmt.Sprintf("Processing mcp server: %s", projectManifest.Name))
-	serverJSON, err := translateServerJSON(projectManifest, imageRef, version, githubRepository)
+
+	// Determine transport type and URL from manifest or flags (flags take precedence)
+	transportType := publishTransport
+	transportURL := publishTransportURL
+
+	if projectManifest.Transport != nil {
+		// Use manifest values if flags are not set
+		if transportType == "" {
+			transportType = projectManifest.Transport.Type
+		}
+		if transportURL == "" {
+			transportURL = projectManifest.Transport.URL
+		}
+	}
+
+	serverJSON, err := translateServerJSON(projectManifest, imageRef, version, githubRepository, transportType, transportURL)
 	if err != nil {
 		return fmt.Errorf("failed to build server JSON for '%v': %w", projectManifest, err)
 	}
@@ -207,6 +224,8 @@ func translateServerJSON(
 	imageRef string,
 	version string,
 	githubRepo string,
+	transportType string,
+	transportURL string,
 ) (*apiv0.ServerJSON, error) {
 	author := "user"
 	if projectManifest.Author != "" {
@@ -220,6 +239,16 @@ func translateServerJSON(
 			URL:    githubRepo,
 			Source: "github",
 		}
+	}
+
+	// Default to stdio if not specified
+	if transportType == "" {
+		transportType = string(model.TransportTypeStdio)
+	}
+
+	// If streamable-http transport is specified but no URL, use default
+	if transportType == string(model.TransportTypeStreamableHTTP) && transportURL == "" {
+		transportURL = "http://localhost:3000/mcp"
 	}
 
 	return &apiv0.ServerJSON{
@@ -239,7 +268,8 @@ func translateServerJSON(
 			FileSHA256:      "",
 			RunTimeHint:     "",
 			Transport: model.Transport{
-				Type: "stdio",
+				Type: transportType,
+				URL:  transportURL,
 			},
 			RuntimeArguments:     nil,
 			PackageArguments:     nil,
@@ -259,4 +289,6 @@ func init() {
 	PublishCmd.Flags().StringVar(&publishPlatform, "platform", "", "Target platform (e.g., linux/amd64,linux/arm64)")
 	PublishCmd.Flags().StringVar(&publishVersion, "version", "", "Specify the version to publish (for re-publishing existing servers, skips interactive selection)")
 	PublishCmd.Flags().StringVar(&githubRepository, "github", "", "Specify the GitHub repository URL for the MCP server")
+	PublishCmd.Flags().StringVar(&publishTransport, "transport", "", "Transport type: stdio or streamable-http (reads from mcp.yaml if not specified)")
+	PublishCmd.Flags().StringVar(&publishTransportURL, "transport-url", "", "Transport URL for streamable-http transport (default: http://localhost:3000/mcp when transport=streamable-http)")
 }

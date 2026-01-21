@@ -14,6 +14,8 @@ var (
 	deployHeaders      []string
 	deployPreferRemote bool
 	deployYes          bool
+	deployRuntime      string
+	deployNamespace    string
 )
 
 var DeployCmd = &cobra.Command{
@@ -33,6 +35,8 @@ func init() {
 	DeployCmd.Flags().StringArrayVar(&deployHeaders, "header", []string{}, "HTTP headers for remote servers (KEY=VALUE)")
 	DeployCmd.Flags().BoolVar(&deployPreferRemote, "prefer-remote", false, "Prefer remote deployment over local")
 	DeployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "Automatically accept all prompts (use default/latest version)")
+	DeployCmd.Flags().StringVar(&deployRuntime, "runtime", "local", "Deployment runtime target (local, kubernetes)")
+	DeployCmd.Flags().StringVar(&deployNamespace, "namespace", "default", "Kubernetes namespace for deployment (only used with --runtime kubernetes)")
 }
 
 func runDeploy(cmd *cobra.Command, args []string) error {
@@ -68,6 +72,11 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		config["HEADER_"+parts[0]] = parts[1]
 	}
 
+	// Add namespace to config for Kubernetes deployments
+	if deployRuntime == "kubernetes" && deployNamespace != "" {
+		config["KAGENT_NAMESPACE"] = deployNamespace
+	}
+
 	if deployVersion == "" {
 		return fmt.Errorf("version is required")
 	}
@@ -91,17 +100,22 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	// Deploy server via API (server will handle reconciliation)
 	fmt.Println("\nDeploying server...")
-	deployment, err := apiClient.DeployServer(server.Server.Name, deployVersion, config, deployPreferRemote, "local")
+	deployment, err := apiClient.DeployServer(server.Server.Name, deployVersion, config, deployPreferRemote, deployRuntime)
 	if err != nil {
 		return fmt.Errorf("failed to deploy server: %w", err)
 	}
 
-	fmt.Printf("\n✓ Deployed %s (v%s)\n", deployment.ServerName, deployment.Version)
+	fmt.Printf("\n✓ Deployed %s (v%s) to %s runtime\n", deployment.ServerName, deployment.Version, deployRuntime)
+	if deployRuntime == "kubernetes" {
+		fmt.Printf("Namespace: %s\n", deployNamespace)
+	}
 	if len(config) > 0 {
 		fmt.Printf("Configuration: %d setting(s)\n", len(config))
 	}
-	fmt.Printf("\nServer deployment recorded. The registry will reconcile containers automatically.\n")
-	fmt.Printf("Agent Gateway endpoint: http://localhost:21212/mcp\n")
+	if deployRuntime == "local" {
+		fmt.Printf("\nServer deployment recorded. The registry will reconcile containers automatically.\n")
+		fmt.Printf("Agent Gateway endpoint: http://localhost:21212/mcp\n")
+	}
 
 	return nil
 }

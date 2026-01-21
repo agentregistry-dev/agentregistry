@@ -14,37 +14,30 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/kagent"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
 
+	v1alpha2 "github.com/kagent-dev/kagent/go/api/v1alpha2"
+	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
 	"go.yaml.in/yaml/v3"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	k8sruntime "k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
+	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/clientcmd"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// GVRs for kagent resources
-var (
-	agentGVR = schema.GroupVersionResource{
-		Group:    "kagent.dev",
-		Version:  "v1alpha2",
-		Resource: "agents",
-	}
-	remoteMCPGVR = schema.GroupVersionResource{
-		Group:    "kagent.dev",
-		Version:  "v1alpha2",
-		Resource: "remotemcpservers",
-	}
-	mcpServerGVR = schema.GroupVersionResource{
-		Group:    "kagent.dev",
-		Version:  "v1alpha1",
-		Resource: "mcpservers",
-	}
-)
+// fieldManager identifies agentregistry as the field owner for server-side apply.
+const fieldManager = "agentregistry"
 
-// newDynamicClient creates a Kubernetes dynamic client from kubeconfig.
-func newDynamicClient(verbose bool) (dynamic.Interface, error) {
+// scheme contains the API types for controller-runtime client.
+var scheme = runtime.NewScheme()
+
+func init() {
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(v1alpha2.AddToScheme(scheme))
+	utilruntime.Must(kmcpv1alpha1.AddToScheme(scheme))
+}
+
+// newClient creates a controller-runtime client with the kagent scheme.
+func newClient(verbose bool) (client.Client, error) {
 	kubeconfigPath := os.Getenv("KUBECONFIG")
 	if kubeconfigPath == "" {
 		if home := os.Getenv("HOME"); home != "" {
@@ -61,67 +54,38 @@ func newDynamicClient(verbose bool) (dynamic.Interface, error) {
 		return nil, fmt.Errorf("failed to load kubeconfig from %s: %w", kubeconfigPath, err)
 	}
 
-	client, err := dynamic.NewForConfig(restConfig)
+	c, err := client.New(restConfig, client.Options{Scheme: scheme})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
-	return client, nil
+	return c, nil
 }
 
-// applyResource creates or updates a Kubernetes resource using the dynamic client.
-func applyResource(
-	ctx context.Context,
-	client dynamic.Interface,
-	gvr schema.GroupVersionResource,
-	obj interface{},
-	name, namespace string,
-	verbose bool,
-) error {
-	unstructuredMap, err := k8sruntime.DefaultUnstructuredConverter.ToUnstructured(obj)
-	if err != nil {
-		return fmt.Errorf("failed to convert to unstructured: %w", err)
+// applyResource uses server-side apply to create or update a Kubernetes resource.
+func applyResource(ctx context.Context, c client.Client, obj client.Object, verbose bool) error {
+	if verbose {
+		fmt.Printf("Applying %s %s in namespace %s\n",
+			obj.GetObjectKind().GroupVersionKind().Kind,
+			obj.GetName(),
+			obj.GetNamespace())
 	}
-	unstructuredObj := &unstructured.Unstructured{Object: unstructuredMap}
+
+	// Server-side apply: single declarative call, no need to check if exists
+	if err := c.Patch(ctx, obj, client.Apply, client.FieldOwner(fieldManager), client.ForceOwnership); err != nil {
+		return fmt.Errorf("failed to apply %s %s: %w",
+			obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName(), err)
+	}
 
 	if verbose {
-		fmt.Printf("Applying %s %s in namespace %s\n", gvr.Resource, name, namespace)
+		fmt.Printf("Applied %s %s\n", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
 	}
-
-	existing, err := client.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
-	if err == nil {
-		// Update existing resource
-		unstructuredObj.SetResourceVersion(existing.GetResourceVersion())
-		_, err = client.Resource(gvr).Namespace(namespace).Update(ctx, unstructuredObj, metav1.UpdateOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to update: %w", err)
-		}
-		if verbose {
-			fmt.Printf("Updated %s %s\n", gvr.Resource, name)
-		}
-	} else {
-		// Create new resource
-		_, err = client.Resource(gvr).Namespace(namespace).Create(ctx, unstructuredObj, metav1.CreateOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to create: %w", err)
-		}
-		if verbose {
-			fmt.Printf("Created %s %s\n", gvr.Resource, name)
-		}
-	}
-
 	return nil
 }
 
 // deleteResource deletes a Kubernetes resource, ignoring NotFound errors.
-func deleteResource(
-	ctx context.Context,
-	client dynamic.Interface,
-	gvr schema.GroupVersionResource,
-	name, namespace string,
-) error {
-	err := client.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
-	if err != nil && !apierrors.IsNotFound(err) {
+func deleteResource(ctx context.Context, c client.Client, obj client.Object) error {
+	if err := c.Delete(ctx, obj); client.IgnoreNotFound(err) != nil {
 		return err
 	}
 	return nil
@@ -272,38 +236,34 @@ func (r *agentRegistryRuntime) ensureKubernetesRuntime(
 		return nil
 	}
 
-	client, err := newDynamicClient(r.verbose)
+	c, err := newClient(r.verbose)
 	if err != nil {
 		return err
 	}
 
 	for _, agent := range cfg.Agents {
-		namespace := agent.Namespace
-		if namespace == "" {
-			namespace = kagent.DefaultNamespace
+		if agent.Namespace == "" {
+			agent.Namespace = kagent.DefaultNamespace
 		}
-		if err := applyResource(ctx, client, agentGVR, agent, agent.Name, namespace, r.verbose); err != nil {
+		if err := applyResource(ctx, c, agent, r.verbose); err != nil {
 			return fmt.Errorf("agent %s: %w", agent.Name, err)
 		}
 	}
 
 	for _, remoteMCP := range cfg.RemoteMCPServers {
-		namespace := remoteMCP.Namespace
-		if namespace == "" {
-			namespace = kagent.DefaultNamespace
+		if remoteMCP.Namespace == "" {
+			remoteMCP.Namespace = kagent.DefaultNamespace
 		}
-		if err := applyResource(ctx, client, remoteMCPGVR, remoteMCP, remoteMCP.Name, namespace, r.verbose); err != nil {
+		if err := applyResource(ctx, c, remoteMCP, r.verbose); err != nil {
 			return fmt.Errorf("remote MCP server %s: %w", remoteMCP.Name, err)
 		}
 	}
 
 	for _, mcpServer := range cfg.MCPServers {
-		namespace := mcpServer.Namespace
-		if namespace == "" {
-			namespace = kagent.DefaultNamespace
+		if mcpServer.Namespace == "" {
+			mcpServer.Namespace = kagent.DefaultNamespace
 		}
-		mcpServer.Namespace = namespace
-		if err := applyResource(ctx, client, mcpServerGVR, mcpServer, mcpServer.Name, namespace, r.verbose); err != nil {
+		if err := applyResource(ctx, c, mcpServer, r.verbose); err != nil {
 			return fmt.Errorf("MCP server %s: %w", mcpServer.Name, err)
 		}
 	}
@@ -317,14 +277,17 @@ func DeleteKubernetesAgent(ctx context.Context, name, version, namespace string,
 		namespace = kagent.DefaultNamespace
 	}
 
-	client, err := newDynamicClient(verbose)
+	c, err := newClient(verbose)
 	if err != nil {
 		return err
 	}
 
-	resourceName := kagent.AgentResourceName(name, version)
-	if err := deleteResource(ctx, client, agentGVR, resourceName, namespace); err != nil {
-		return fmt.Errorf("failed to delete agent %s: %w", resourceName, err)
+	agent := &v1alpha2.Agent{}
+	agent.Name = kagent.AgentResourceName(name, version)
+	agent.Namespace = namespace
+
+	if err := deleteResource(ctx, c, agent); err != nil {
+		return fmt.Errorf("failed to delete agent %s: %w", agent.Name, err)
 	}
 	return nil
 }
@@ -335,14 +298,17 @@ func DeleteKubernetesRemoteMCPServer(ctx context.Context, name, namespace string
 		namespace = kagent.DefaultNamespace
 	}
 
-	client, err := newDynamicClient(verbose)
+	c, err := newClient(verbose)
 	if err != nil {
 		return err
 	}
 
-	resourceName := kagent.RemoteMCPResourceName(name)
-	if err := deleteResource(ctx, client, remoteMCPGVR, resourceName, namespace); err != nil {
-		return fmt.Errorf("failed to delete remote MCP server %s: %w", resourceName, err)
+	remoteMCP := &v1alpha2.RemoteMCPServer{}
+	remoteMCP.Name = kagent.RemoteMCPResourceName(name)
+	remoteMCP.Namespace = namespace
+
+	if err := deleteResource(ctx, c, remoteMCP); err != nil {
+		return fmt.Errorf("failed to delete remote MCP server %s: %w", remoteMCP.Name, err)
 	}
 	return nil
 }
@@ -353,14 +319,17 @@ func DeleteKubernetesMCPServer(ctx context.Context, name, namespace string, verb
 		namespace = kagent.DefaultNamespace
 	}
 
-	client, err := newDynamicClient(verbose)
+	c, err := newClient(verbose)
 	if err != nil {
 		return err
 	}
 
-	resourceName := kagent.MCPServerResourceName(name)
-	if err := deleteResource(ctx, client, mcpServerGVR, resourceName, namespace); err != nil {
-		return fmt.Errorf("failed to delete MCP server %s: %w", resourceName, err)
+	mcpServer := &kmcpv1alpha1.MCPServer{}
+	mcpServer.Name = kagent.MCPServerResourceName(name)
+	mcpServer.Namespace = namespace
+
+	if err := deleteResource(ctx, c, mcpServer); err != nil {
+		return fmt.Errorf("failed to delete MCP server %s: %w", mcpServer.Name, err)
 	}
 	return nil
 }

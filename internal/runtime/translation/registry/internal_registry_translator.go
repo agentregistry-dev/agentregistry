@@ -66,7 +66,9 @@ func (t *registryTranslator) TranslateAgent(
 	// note that the change to remove this would have to be done in kagent-adk
 	env["KAGENT_URL"] = "http://localhost"
 	env["KAGENT_NAME"] = manifest.Name
-	env["KAGENT_NAMESPACE"] = "default"
+	if _, ok := env["KAGENT_NAMESPACE"]; !ok {
+		env["KAGENT_NAMESPACE"] = "default"
+	}
 
 	// Set agent configuration
 	env["AGENT_NAME"] = manifest.Name

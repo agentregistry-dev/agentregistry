@@ -15,8 +15,9 @@ type ProjectManifest struct {
 	Email       string `yaml:"email,omitempty" json:"email,omitempty"`
 
 	// Project configuration
-	Tools   map[string]ToolConfig `yaml:"tools,omitempty" json:"tools,omitempty"`
-	Secrets SecretsConfig         `yaml:"secrets,omitempty" json:"secrets,omitempty"`
+	Tools     map[string]ToolConfig `yaml:"tools,omitempty" json:"tools,omitempty"`
+	Secrets   SecretsConfig         `yaml:"secrets,omitempty" json:"secrets,omitempty"`
+	Transport *TransportConfig      `yaml:"transport,omitempty" json:"transport,omitempty"`
 
 	// Metadata
 	CreatedAt time.Time `yaml:"created_at,omitempty" json:"created_at,omitempty"`
@@ -74,6 +75,12 @@ type DockerConfig struct {
 	Port        int               `yaml:"port,omitempty" json:"port,omitempty"`
 	Environment map[string]string `yaml:"environment,omitempty" json:"environment,omitempty"`
 	HealthCheck string            `yaml:"health_check,omitempty" json:"health_check,omitempty"`
+}
+
+// TransportConfig represents MCP server transport configuration
+type TransportConfig struct {
+	Type string `yaml:"type,omitempty" json:"type,omitempty"` // "stdio" or "streamable-http"
+	URL  string `yaml:"url,omitempty" json:"url,omitempty"`
 }
 
 // Supported frameworks
