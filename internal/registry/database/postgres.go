@@ -2039,19 +2039,19 @@ func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx) ([]*models.
 }
 
 // GetDeploymentByName retrieves a specific deployment
-func (db *PostgreSQL) GetDeploymentByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName string, version string) (*models.Deployment, error) {
+func (db *PostgreSQL) GetDeploymentByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName string, version string, resourceType string) (*models.Deployment, error) {
 	executor := db.getExecutor(tx)
 
 	query := `
 		SELECT server_name, version, deployed_at, updated_at, status, config, prefer_remote, resource_type
 		FROM deployments
-		WHERE server_name = $1 AND version = $2
+		WHERE server_name = $1 AND version = $2 AND resource_type = $3
 	`
 
 	var d models.Deployment
 	var configJSON []byte
 
-	err := executor.QueryRow(ctx, query, serverName, version).Scan(
+	err := executor.QueryRow(ctx, query, serverName, version, resourceType).Scan(
 		&d.ServerName,
 		&d.Version,
 		&d.DeployedAt,
@@ -2081,7 +2081,7 @@ func (db *PostgreSQL) GetDeploymentByNameAndVersion(ctx context.Context, tx pgx.
 }
 
 // UpdateDeploymentConfig updates the configuration for a deployment
-func (db *PostgreSQL) UpdateDeploymentConfig(ctx context.Context, tx pgx.Tx, serverName string, config map[string]string) error {
+func (db *PostgreSQL) UpdateDeploymentConfig(ctx context.Context, tx pgx.Tx, serverName string, version string, resourceType string, config map[string]string) error {
 	executor := db.getExecutor(tx)
 
 	configJSON, err := json.Marshal(config)
@@ -2092,10 +2092,10 @@ func (db *PostgreSQL) UpdateDeploymentConfig(ctx context.Context, tx pgx.Tx, ser
 	query := `
 		UPDATE deployments
 		SET config = $2
-		WHERE server_name = $1
+		WHERE server_name = $1 AND version = $2 AND resource_type = $3
 	`
 
-	result, err := executor.Exec(ctx, query, serverName, configJSON)
+	result, err := executor.Exec(ctx, query, serverName, version, resourceType, configJSON)
 	if err != nil {
 		return fmt.Errorf("failed to update deployment config: %w", err)
 	}
@@ -2108,16 +2108,16 @@ func (db *PostgreSQL) UpdateDeploymentConfig(ctx context.Context, tx pgx.Tx, ser
 }
 
 // UpdateDeploymentStatus updates the status of a deployment
-func (db *PostgreSQL) UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, serverName, version string, status string) error {
+func (db *PostgreSQL) UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, serverName, version string, resourceType string, status string) error {
 	executor := db.getExecutor(tx)
 
 	query := `
 		UPDATE deployments
 		SET status = $3
-		WHERE server_name = $1 AND version = $2
+		WHERE server_name = $1 AND version = $2 AND resource_type = $3
 	`
 
-	result, err := executor.Exec(ctx, query, serverName, version, status)
+	result, err := executor.Exec(ctx, query, serverName, version, resourceType, status)
 	if err != nil {
 		return fmt.Errorf("failed to update deployment status: %w", err)
 	}
@@ -2130,12 +2130,12 @@ func (db *PostgreSQL) UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, ser
 }
 
 // RemoveDeployment removes a deployment
-func (db *PostgreSQL) RemoveDeployment(ctx context.Context, tx pgx.Tx, serverName string, version string) error {
+func (db *PostgreSQL) RemoveDeployment(ctx context.Context, tx pgx.Tx, serverName string, version string, resourceType string) error {
 	executor := db.getExecutor(tx)
 
-	query := `DELETE FROM deployments WHERE server_name = $1 AND version = $2`
+	query := `DELETE FROM deployments WHERE server_name = $1 AND version = $2 AND resource_type = $3`
 
-	result, err := executor.Exec(ctx, query, serverName, version)
+	result, err := executor.Exec(ctx, query, serverName, version, resourceType)
 	if err != nil {
 		return fmt.Errorf("failed to delete deployment: %w", err)
 	}

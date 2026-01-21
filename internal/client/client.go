@@ -812,14 +812,15 @@ func (c *Client) DeployAgent(name, version string, config map[string]string) (*D
 }
 
 // UpdateDeploymentConfig updates deployment configuration
-func (c *Client) UpdateDeploymentConfig(name string, resourceType string, config map[string]string) (*DeploymentResponse, error) {
+func (c *Client) UpdateDeploymentConfig(name string, version string, resourceType string, config map[string]string) (*DeploymentResponse, error) {
 	encName := url.PathEscape(name)
+	encVersion := url.PathEscape(version)
 	payload := map[string]interface{}{
 		"config": config,
 	}
 
 	var deployment DeploymentResponse
-	if err := c.doJsonRequest(http.MethodPut, "/deployments/"+encName+"/config?resourceType="+resourceType, payload, &deployment); err != nil {
+	if err := c.doJsonRequest(http.MethodPut, "/deployments/"+encName+"/versions/"+encVersion+"?resourceType="+resourceType, payload, &deployment); err != nil {
 		return nil, err
 	}
 

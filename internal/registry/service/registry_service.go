@@ -443,7 +443,7 @@ func (s *registryServiceImpl) PublishServer(ctx context.Context, serverName, ver
 func (s *registryServiceImpl) UnpublishServer(ctx context.Context, serverName, version string) error {
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
 		// Check if the server is currently deployed
-		deployment, err := s.db.GetDeploymentByNameAndVersion(txCtx, tx, serverName, version)
+		deployment, err := s.db.GetDeploymentByNameAndVersion(txCtx, tx, serverName, version, "mcp")
 		if err != nil && !errors.Is(err, database.ErrNotFound) {
 			return fmt.Errorf("failed to check deployment status: %w", err)
 		}
@@ -631,8 +631,8 @@ func (s *registryServiceImpl) GetDeployments(ctx context.Context) ([]*models.Dep
 }
 
 // GetDeploymentByName retrieves a specific deployment
-func (s *registryServiceImpl) GetDeploymentByNameAndVersion(ctx context.Context, serverName string, version string) (*models.Deployment, error) {
-	return s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version)
+func (s *registryServiceImpl) GetDeploymentByNameAndVersion(ctx context.Context, serverName string, version string, artifactType string) (*models.Deployment, error) {
+	return s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version, artifactType)
 }
 
 func (s *registryServiceImpl) IsServerPublished(ctx context.Context, serverName, version string) (bool, error) {
@@ -675,7 +675,7 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 	}
 
 	// Return the created deployment
-	return s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version)
+	return s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version, "mcp")
 }
 
 // DeployAgent deploys an agent with configuration
@@ -711,17 +711,17 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 		return nil, fmt.Errorf("deployment created but reconciliation failed: %w", err)
 	}
 
-	return s.db.GetDeploymentByNameAndVersion(ctx, nil, agentName, version)
+	return s.db.GetDeploymentByNameAndVersion(ctx, nil, agentName, version, "agent")
 }
 
 // UpdateDeploymentConfig updates the configuration for a deployment
-func (s *registryServiceImpl) UpdateDeploymentConfig(ctx context.Context, serverName string, version string, config map[string]string) (*models.Deployment, error) {
-	_, err := s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version)
+func (s *registryServiceImpl) UpdateDeploymentConfig(ctx context.Context, serverName string, version string, artifactType string, config map[string]string) (*models.Deployment, error) {
+	_, err := s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version, artifactType)
 	if err != nil {
 		return nil, err
 	}
 
-	err = s.db.UpdateDeploymentConfig(ctx, nil, serverName, config)
+	err = s.db.UpdateDeploymentConfig(ctx, nil, serverName, version, artifactType, config)
 	if err != nil {
 		return nil, err
 	}
@@ -731,12 +731,12 @@ func (s *registryServiceImpl) UpdateDeploymentConfig(ctx context.Context, server
 		return nil, fmt.Errorf("config updated but reconciliation failed: %w", err)
 	}
 
-	return s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version)
+	return s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version, artifactType)
 }
 
 // RemoveServer removes a deployment
-func (s *registryServiceImpl) RemoveServer(ctx context.Context, serverName string, version string) error {
-	err := s.db.RemoveDeployment(ctx, nil, serverName, version)
+func (s *registryServiceImpl) RemoveServer(ctx context.Context, serverName string, version string, artifactType string) error {
+	err := s.db.RemoveDeployment(ctx, nil, serverName, version, artifactType)
 	if err != nil {
 		return err
 	}

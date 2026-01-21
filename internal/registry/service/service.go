@@ -77,15 +77,15 @@ type RegistryService interface {
 	// GetDeployments retrieves all deployed resources (MCP servers, agents)
 	GetDeployments(ctx context.Context) ([]*models.Deployment, error)
 	// GetDeploymentByName retrieves a specific deployment by resource name
-	GetDeploymentByNameAndVersion(ctx context.Context, resourceName string, version string) (*models.Deployment, error)
+	GetDeploymentByNameAndVersion(ctx context.Context, resourceName string, version string, artifactType string) (*models.Deployment, error)
 	// DeployServer deploys an MCP server with configuration
 	DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool) (*models.Deployment, error)
 	// DeployAgent deploys an agent with configuration (to be implemented)
 	DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool) (*models.Deployment, error)
 	// UpdateDeploymentConfig updates the configuration for a deployment
-	UpdateDeploymentConfig(ctx context.Context, resourceName string, version string, config map[string]string) (*models.Deployment, error)
+	UpdateDeploymentConfig(ctx context.Context, resourceName string, version string, artifactType string, config map[string]string) (*models.Deployment, error)
 	// RemoveServer removes a deployment (works for any resource type)
-	RemoveServer(ctx context.Context, resourceName string, version string) error
+	RemoveServer(ctx context.Context, resourceName string, version string, artifactType string) error
 
 	Reconciler
 }

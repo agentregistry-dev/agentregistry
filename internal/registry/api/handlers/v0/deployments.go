@@ -43,7 +43,7 @@ type DeploymentsListResponse struct {
 type DeploymentInput struct {
 	ServerName   string `path:"serverName" doc:"URL-encoded server name" example:"io.github.user%2Fweather"`
 	Version      string `path:"version" doc:"Version of the deployment to get" example:"1.0.0"`
-	ResourceType string `path:"resourceType" doc:"Resource type (mcp, agent)" example:"mcp" enum:"mcp,agent"`
+	ResourceType string `query:"resourceType" doc:"Resource type (mcp, agent)" example:"mcp" enum:"mcp,agent"`
 }
 
 // DeploymentsListInput represents query parameters for listing deployments
@@ -120,7 +120,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
 		}
 
-		deployment, err := registry.GetDeploymentByNameAndVersion(ctx, serverName, version)
+		deployment, err := registry.GetDeploymentByNameAndVersion(ctx, serverName, version, input.ResourceType)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Deployment not found")
@@ -230,7 +230,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
 		}
 
-		deployment, err := registry.UpdateDeploymentConfig(ctx, serverName, version, input.Body.Config)
+		deployment, err := registry.UpdateDeploymentConfig(ctx, serverName, version, input.ResourceType, input.Body.Config)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Deployment not found")
@@ -279,7 +279,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
 		}
 
-		err = registry.RemoveServer(ctx, serverName, version)
+		err = registry.RemoveServer(ctx, serverName, version, input.ResourceType)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Deployment not found")
