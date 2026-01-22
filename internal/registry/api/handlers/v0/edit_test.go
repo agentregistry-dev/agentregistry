@@ -41,8 +41,6 @@ func TestEditServerEndpoint(t *testing.T) {
 
 	// Create authorizer
 	jwtManager := auth.NewJWTManager(cfg)
-	authzProvider := auth.NewPublicAuthzProvider(jwtManager)
-	authz := auth.Authorizer{Authz: authzProvider}
 
 	// Create test servers for different scenarios
 	testServers := map[string]*apiv0.ServerJSON{
@@ -381,7 +379,7 @@ func TestEditServerEndpoint(t *testing.T) {
 			api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
 			// Register edit endpoints
-			v0.RegisterEditEndpoints(api, "/v0", registryService, cfg, authz)
+			v0.RegisterEditEndpoints(api, "/v0", registryService)
 
 			// Create request body
 			requestBody, err := json.Marshal(tc.requestBody)
@@ -449,11 +447,6 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 	// Create registry service
 	registryService := service.NewRegistryService(database.NewTestDB(t), cfg, nil)
 
-	// Create authorizer
-	jwtManager := auth.NewJWTManager(cfg)
-	authzProvider := auth.NewPublicAuthzProvider(jwtManager)
-	authz := auth.Authorizer{Authz: authzProvider}
-
 	// Setup test servers with different characteristics
 	testServers := []struct {
 		name    string
@@ -490,7 +483,7 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 	// Create API
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterEditEndpoints(api, "/v0", registryService, cfg, authz)
+	v0.RegisterEditEndpoints(api, "/v0", registryService)
 
 	t.Run("status transitions", func(t *testing.T) {
 		tests := []struct {

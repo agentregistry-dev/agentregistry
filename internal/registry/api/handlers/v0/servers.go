@@ -11,7 +11,6 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -99,7 +98,7 @@ type ServerReadmeResponse struct {
 
 // RegisterServersEndpoints registers all server-related endpoints with a custom path prefix
 // isAdmin: if true, shows all resources; if false, only shows published resources
-func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool, authz auth.Authorizer) {
+func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool) {
 	if isAdmin {
 		huma.Register(api, huma.Operation{
 			OperationID: "delete-server-version" + strings.ReplaceAll(pathPrefix, "/", "-"),
@@ -490,7 +489,7 @@ func createServerHandler(ctx context.Context, input *CreateServerInput, registry
 
 // RegisterCreateEndpoint registers the public create/update server endpoint at /publish
 // This endpoint creates or updates a server in the registry (published defaults to false)
-func RegisterCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService, authz auth.Authorizer) {
+func RegisterCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
 	huma.Register(api, huma.Operation{
 		OperationID: "create-server" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodPost,
@@ -508,7 +507,7 @@ func RegisterCreateEndpoint(api huma.API, pathPrefix string, registry service.Re
 
 // RegisterAdminCreateEndpoint registers the admin create/update server endpoint at /servers
 // This endpoint creates or updates a server in the registry (published defaults to false)
-func RegisterAdminCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService, authz auth.Authorizer) {
+func RegisterAdminCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
 	huma.Register(api, huma.Operation{
 		OperationID: "admin-create-server" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodPost,
@@ -523,7 +522,7 @@ func RegisterAdminCreateEndpoint(api huma.API, pathPrefix string, registry servi
 
 // RegisterPublishStatusEndpoints registers the publish/unpublish status endpoints for servers
 // These endpoints change the published status of existing servers
-func RegisterPublishStatusEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, authz auth.Authorizer) {
+func RegisterPublishStatusEndpoints(api huma.API, pathPrefix string, registry service.RegistryService) {
 	// Publish server endpoint - marks an existing server as published
 	huma.Register(api, huma.Operation{
 		OperationID: "publish-server-status" + strings.ReplaceAll(pathPrefix, "/", "-"),

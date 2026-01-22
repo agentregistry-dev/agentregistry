@@ -10,7 +10,6 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	agentmodels "github.com/agentregistry-dev/agentregistry/pkg/models"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -44,7 +43,7 @@ type AgentVersionsInput struct {
 
 // RegisterAgentsEndpoints registers all agent-related endpoints with a custom path prefix
 // isAdmin: if true, shows all resources; if false, only shows published resources
-func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool, authz auth.Authorizer) {
+func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool) {
 	// Determine the tags based on whether this is admin or public
 	tags := []string{"agents"}
 	if isAdmin {
@@ -240,7 +239,7 @@ func createAgentHandler(ctx context.Context, input *CreateAgentInput, registry s
 
 // RegisterAgentsCreateEndpoint registers the public agents create/update endpoint at /agents/publish
 // This endpoint creates or updates an agent in the registry (published defaults to false)
-func RegisterAgentsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService, authz auth.Authorizer) {
+func RegisterAgentsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
 	huma.Register(api, huma.Operation{
 		OperationID: "create-agent" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodPost,
@@ -269,7 +268,7 @@ func RegisterAgentsCreateEndpoint(api huma.API, pathPrefix string, registry serv
 
 // RegisterAdminAgentsCreateEndpoint registers the admin agents create/update endpoint at /agents
 // This endpoint creates or updates an agent in the registry (published defaults to false)
-func RegisterAdminAgentsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService, authz auth.Authorizer) {
+func RegisterAdminAgentsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
 	huma.Register(api, huma.Operation{
 		OperationID: "admin-create-agent" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodPost,
@@ -290,7 +289,7 @@ func RegisterAdminAgentsCreateEndpoint(api huma.API, pathPrefix string, registry
 
 // RegisterAgentsPublishStatusEndpoints registers the publish/unpublish status endpoints for agents
 // These endpoints change the published status of existing agents
-func RegisterAgentsPublishStatusEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, authz auth.Authorizer) {
+func RegisterAgentsPublishStatusEndpoints(api huma.API, pathPrefix string, registry service.RegistryService) {
 	// Publish agent endpoint - marks an existing agent as published
 	huma.Register(api, huma.Operation{
 		OperationID: "publish-agent-status" + strings.ReplaceAll(pathPrefix, "/", "-"),

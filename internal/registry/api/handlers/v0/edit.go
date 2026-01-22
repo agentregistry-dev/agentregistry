@@ -7,10 +7,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -26,7 +24,7 @@ type EditServerInput struct {
 }
 
 // RegisterEditEndpoints registers the edit endpoint with a custom path prefix
-func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, cfg *config.Config, authz auth.Authorizer) {
+func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.RegistryService) {
 	// Edit server endpoint
 	huma.Register(api, huma.Operation{
 		OperationID: "edit-server" + strings.ReplaceAll(pathPrefix, "/", "-"),

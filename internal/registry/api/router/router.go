@@ -143,16 +143,13 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 	api := humago.New(mux, humaConfig)
 
 	// Use provided auth providers or fallback to OSS defaults:
-	// - AuthN: JWT manager (validates tokens when present, allows anonymous)
-	// - AuthZ: Public provider (public reads, gated writes for authenticated users)
+	// - AuthN: JWT manager (validates tokens when present and adds them to context)
+	// - Note: AuthZ is embedded into the DB service
 	if authnProvider == nil {
 		authnProvider = jwtManager
 	}
-	if authzProvider == nil {
-		authzProvider = auth.NewPublicAuthzProvider(jwtManager)
-	}
 
-	authz := auth.Authorizer{Authz: authzProvider}
+	// Add authentication middleware
 	api.UseMiddleware(auth.AuthnMiddleware(authnProvider))
 
 	// Add OpenAPI tag metadata with descriptions
@@ -201,7 +198,7 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 	))
 
 	// Register all API routes (public and admin) for all versions
-	RegisterRoutes(api, authz, cfg, registry, metrics, versionInfo)
+	RegisterRoutes(api, cfg, registry, metrics, versionInfo)
 
 	// Add /metrics for Prometheus metrics using promhttp
 	mux.Handle("/metrics", metrics.PrometheusHandler())

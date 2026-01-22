@@ -8,7 +8,6 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -52,7 +51,7 @@ type DeploymentsListInput struct {
 }
 
 // RegisterDeploymentsEndpoints registers all deployment-related endpoints
-func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry service.RegistryService, authz auth.Authorizer) {
+func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry service.RegistryService) {
 	// List all deployments
 	huma.Register(api, huma.Operation{
 		OperationID: "list-deployments",

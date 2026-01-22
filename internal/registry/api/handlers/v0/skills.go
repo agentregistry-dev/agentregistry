@@ -10,7 +10,6 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	skillmodels "github.com/agentregistry-dev/agentregistry/pkg/models"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -42,7 +41,7 @@ type SkillVersionsInput struct {
 
 // RegisterSkillsEndpoints registers all skill-related endpoints with a custom path prefix
 // isAdmin: if true, shows all resources; if false, only shows published resources
-func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool, authz auth.Authorizer) {
+func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool) {
 	// Determine the tags based on whether this is admin or public
 	tags := []string{"skills"}
 	if isAdmin {
@@ -195,7 +194,7 @@ func createSkillHandler(ctx context.Context, input *CreateSkillInput, registry s
 
 // RegisterSkillsCreateEndpoint registers the public skills create/update endpoint at /skills/publish
 // This endpoint creates or updates a skill in the registry (published defaults to false)
-func RegisterSkillsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService, authz auth.Authorizer) {
+func RegisterSkillsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
 	huma.Register(api, huma.Operation{
 		OperationID: "create-skill" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodPost,
@@ -211,7 +210,7 @@ func RegisterSkillsCreateEndpoint(api huma.API, pathPrefix string, registry serv
 
 // RegisterAdminSkillsCreateEndpoint registers the admin skills create/update endpoint at /skills
 // This endpoint creates or updates a skill in the registry (published defaults to false)
-func RegisterAdminSkillsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService, authz auth.Authorizer) {
+func RegisterAdminSkillsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
 	huma.Register(api, huma.Operation{
 		OperationID: "admin-create-skill" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodPost,
@@ -232,7 +231,7 @@ func RegisterAdminSkillsCreateEndpoint(api huma.API, pathPrefix string, registry
 
 // RegisterSkillsPublishStatusEndpoints registers the publish/unpublish status endpoints for skills
 // These endpoints change the published status of existing skills
-func RegisterSkillsPublishStatusEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, authz auth.Authorizer) {
+func RegisterSkillsPublishStatusEndpoints(api huma.API, pathPrefix string, registry service.RegistryService) {
 	// Publish skill endpoint - marks an existing skill as published
 	huma.Register(api, huma.Operation{
 		OperationID: "publish-skill-status" + strings.ReplaceAll(pathPrefix, "/", "-"),

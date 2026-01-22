@@ -53,10 +53,7 @@ func TestPublishIntegration(t *testing.T) {
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
 	// Register the endpoint
-	jwtManager := auth.NewJWTManager(testConfig)
-	authzProvider := auth.NewPublicAuthzProvider(jwtManager)
-	authz := auth.Authorizer{Authz: authzProvider}
-	v0.RegisterCreateEndpoint(api, "/v0", registryService, authz)
+	v0.RegisterCreateEndpoint(api, "/v0", registryService)
 
 	t.Run("successful publish with GitHub auth", func(t *testing.T) {
 		publishReq := apiv0.ServerJSON{
