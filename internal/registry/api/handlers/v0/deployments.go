@@ -7,9 +7,9 @@ import (
 	"net/url"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	"github.com/agentregistry-dev/agentregistry/internal/runtime"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
-	"github.com/agentregistry-dev/agentregistry/internal/runtime"
 	"github.com/danielgtaylor/huma/v2"
 )
 
