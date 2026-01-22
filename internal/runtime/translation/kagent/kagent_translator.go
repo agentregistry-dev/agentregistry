@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	api "github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
@@ -105,7 +105,7 @@ func (t *translator) translateAgent(agent *api.Agent) (*v1alpha2.Agent, error) {
 		for key := range agent.Deployment.Env {
 			keys = append(keys, key)
 		}
-		sort.Strings(keys)
+		slices.Sort(keys)
 		for _, key := range keys {
 			envVars = append(envVars, corev1.EnvVar{
 				Name:  key,

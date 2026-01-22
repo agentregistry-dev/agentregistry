@@ -452,7 +452,7 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService, jw
 		if args.ServerName == "" || args.Version == "" {
 			return nil, models.Deployment{}, errors.New("name and version are required")
 		}
-		
+
 		runtimeTarget := args.Runtime
 		if runtimeTarget == "" {
 			runtimeTarget = "local"
