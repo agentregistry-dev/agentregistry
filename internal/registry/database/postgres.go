@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
@@ -23,7 +24,8 @@ import (
 
 // PostgreSQL is an implementation of the Database interface using PostgreSQL
 type PostgreSQL struct {
-	pool *pgxpool.Pool
+	pool  *pgxpool.Pool
+	authz auth.Authorizer
 }
 
 const semanticMetadataKey = "agentregistry.solo.io/semantic"
@@ -44,7 +46,7 @@ func (db *PostgreSQL) getExecutor(tx pgx.Tx) Executor {
 }
 
 // NewPostgreSQL creates a new instance of the PostgreSQL database
-func NewPostgreSQL(ctx context.Context, connectionURI string) (*PostgreSQL, error) {
+func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authorizer) (*PostgreSQL, error) {
 	// Parse connection config for pool settings
 	config, err := pgxpool.ParseConfig(connectionURI)
 	if err != nil {
@@ -81,7 +83,8 @@ func NewPostgreSQL(ctx context.Context, connectionURI string) (*PostgreSQL, erro
 	}
 
 	return &PostgreSQL{
-		pool: pool,
+		pool:  pool,
+		authz: authz,
 	}, nil
 }
 
@@ -290,6 +293,13 @@ func (db *PostgreSQL) GetServerByName(ctx context.Context, tx pgx.Tx, serverName
 		return nil, ctx.Err()
 	}
 
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: serverName,
+		Type: auth.PermissionArtifactTypeServer,
+	}); err != nil {
+		return nil, err
+	}
+
 	query := `
 		SELECT server_name, version, status, published_at, updated_at, is_latest, published, value
 		FROM servers
@@ -337,6 +347,13 @@ func (db *PostgreSQL) GetServerByName(ctx context.Context, tx pgx.Tx, serverName
 func (db *PostgreSQL) GetServerByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName string, version string, publishedOnly bool) (*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: serverName,
+		Type: auth.PermissionArtifactTypeServer,
+	}); err != nil {
+		return nil, err
 	}
 
 	query := `
@@ -394,6 +411,13 @@ func (db *PostgreSQL) GetServerByNameAndVersion(ctx context.Context, tx pgx.Tx, 
 func (db *PostgreSQL) GetAllVersionsByServerName(ctx context.Context, tx pgx.Tx, serverName string, publishedOnly bool) ([]*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: serverName,
+		Type: auth.PermissionArtifactTypeServer,
+	}); err != nil {
+		return nil, err
 	}
 
 	query := `
@@ -466,6 +490,13 @@ func (db *PostgreSQL) CreateServer(ctx context.Context, tx pgx.Tx, serverJSON *a
 		return nil, ctx.Err()
 	}
 
+	if err := db.authz.Check(ctx, auth.PermissionActionPush, auth.Resource{
+		Name: serverJSON.Name,
+		Type: auth.PermissionArtifactTypeServer,
+	}); err != nil {
+		return nil, err
+	}
+
 	// Validate inputs
 	if serverJSON == nil || officialMeta == nil {
 		return nil, fmt.Errorf("serverJSON and officialMeta are required")
@@ -516,6 +547,13 @@ func (db *PostgreSQL) CreateServer(ctx context.Context, tx pgx.Tx, serverJSON *a
 func (db *PostgreSQL) UpdateServer(ctx context.Context, tx pgx.Tx, serverName, version string, serverJSON *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
+		Name: serverName,
+		Type: auth.PermissionArtifactTypeServer,
+	}); err != nil {
+		return nil, err
 	}
 
 	// Validate inputs
@@ -574,6 +612,13 @@ func (db *PostgreSQL) UpdateServer(ctx context.Context, tx pgx.Tx, serverName, v
 func (db *PostgreSQL) SetServerStatus(ctx context.Context, tx pgx.Tx, serverName, version string, status string) (*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
+		Name: serverName,
+		Type: auth.PermissionArtifactTypeServer,
+	}); err != nil {
+		return nil, err
 	}
 
 	// Update the status column
@@ -794,6 +839,13 @@ func (db *PostgreSQL) PublishServer(ctx context.Context, tx pgx.Tx, serverName, 
 		return ctx.Err()
 	}
 
+	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
+		Name: serverName,
+		Type: auth.PermissionArtifactTypeServer,
+	}); err != nil {
+		return err
+	}
+
 	executor := db.getExecutor(tx)
 	query := `UPDATE servers SET published = true, published_date = NOW() WHERE server_name = $1 AND version = $2`
 
@@ -813,6 +865,14 @@ func (db *PostgreSQL) PublishServer(ctx context.Context, tx pgx.Tx, serverName, 
 func (db *PostgreSQL) UnpublishServer(ctx context.Context, tx pgx.Tx, serverName, version string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
+	}
+
+	// Authz check
+	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
+		Name: serverName,
+		Type: auth.PermissionArtifactTypeServer,
+	}); err != nil {
+		return err
 	}
 
 	executor := db.getExecutor(tx)
@@ -872,6 +932,14 @@ func (db *PostgreSQL) IsServerPublished(ctx context.Context, tx pgx.Tx, serverNa
 func (db *PostgreSQL) SetServerEmbedding(ctx context.Context, tx pgx.Tx, serverName, version string, embedding *database.SemanticEmbedding) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
+	}
+
+	// Authz check
+	if err := db.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
+		Name: serverName,
+		Type: auth.PermissionArtifactTypeServer,
+	}); err != nil {
+		return err
 	}
 
 	executor := db.getExecutor(tx)
@@ -1012,6 +1080,13 @@ func (db *PostgreSQL) UpsertServerReadme(ctx context.Context, tx pgx.Tx, readme 
 		readme.ContentType = "text/markdown"
 	}
 
+	if err := db.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
+		Name: readme.ServerName,
+		Type: auth.PermissionArtifactTypeServer,
+	}); err != nil {
+		return err
+	}
+
 	if readme.SizeBytes == 0 {
 		readme.SizeBytes = len(readme.Content)
 	}
@@ -1054,6 +1129,15 @@ func (db *PostgreSQL) GetServerReadme(ctx context.Context, tx pgx.Tx, serverName
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+
+	// Authz check
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: serverName,
+		Type: auth.PermissionArtifactTypeServer,
+	}); err != nil {
+		return nil, err
+	}
+
 	executor := db.getExecutor(tx)
 	query := `
         SELECT server_name, version, content, content_type, size_bytes, sha256, fetched_at
@@ -1070,6 +1154,15 @@ func (db *PostgreSQL) GetLatestServerReadme(ctx context.Context, tx pgx.Tx, serv
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+
+	// Authz check
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: serverName,
+		Type: auth.PermissionArtifactTypeServer,
+	}); err != nil {
+		return nil, err
+	}
+
 	executor := db.getExecutor(tx)
 	query := `
         SELECT sr.server_name, sr.version, sr.content, sr.content_type, sr.size_bytes, sr.sha256, sr.fetched_at
@@ -1289,6 +1382,15 @@ func (db *PostgreSQL) GetAgentByName(ctx context.Context, tx pgx.Tx, agentName s
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+
+	// Authz check
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: agentName,
+		Type: auth.PermissionArtifactTypeAgent,
+	}); err != nil {
+		return nil, err
+	}
+
 	query := `
 		SELECT agent_name, version, status, published_at, updated_at, is_latest, published, value
 		FROM agents
@@ -1328,6 +1430,15 @@ func (db *PostgreSQL) GetAgentByNameAndVersion(ctx context.Context, tx pgx.Tx, a
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+
+	// Authz check
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: agentName,
+		Type: auth.PermissionArtifactTypeAgent,
+	}); err != nil {
+		return nil, err
+	}
+
 	query := `
 		SELECT agent_name, version, status, published_at, updated_at, is_latest, value
 		FROM agents
@@ -1365,6 +1476,14 @@ func (db *PostgreSQL) GetAllVersionsByAgentName(ctx context.Context, tx pgx.Tx, 
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: agentName,
+		Type: auth.PermissionArtifactTypeAgent,
+	}); err != nil {
+		return nil, err
+	}
+
 	query := `
 		SELECT agent_name, version, status, published_at, updated_at, is_latest, value
 		FROM agents
@@ -1414,6 +1533,14 @@ func (db *PostgreSQL) CreateAgent(ctx context.Context, tx pgx.Tx, agentJSON *mod
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionPush, auth.Resource{
+		Name: agentJSON.Name,
+		Type: auth.PermissionArtifactTypeAgent,
+	}); err != nil {
+		return nil, err
+	}
+
 	if agentJSON == nil || officialMeta == nil {
 		return nil, fmt.Errorf("agentJSON and officialMeta are required")
 	}
@@ -1451,6 +1578,14 @@ func (db *PostgreSQL) UpdateAgent(ctx context.Context, tx pgx.Tx, agentName, ver
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
+		Name: agentName,
+		Type: auth.PermissionArtifactTypeAgent,
+	}); err != nil {
+		return nil, err
+	}
+
 	if agentJSON == nil {
 		return nil, fmt.Errorf("agentJSON is required")
 	}
@@ -1493,6 +1628,14 @@ func (db *PostgreSQL) SetAgentStatus(ctx context.Context, tx pgx.Tx, agentName, 
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
+		Name: agentName,
+		Type: auth.PermissionArtifactTypeAgent,
+	}); err != nil {
+		return nil, err
+	}
+
 	query := `
 		UPDATE agents
 		SET status = $1, updated_at = NOW()
@@ -1608,6 +1751,13 @@ func (db *PostgreSQL) PublishAgent(ctx context.Context, tx pgx.Tx, agentName, ve
 		return ctx.Err()
 	}
 
+	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
+		Name: agentName,
+		Type: auth.PermissionArtifactTypeAgent,
+	}); err != nil {
+		return err
+	}
+
 	executor := db.getExecutor(tx)
 	query := `UPDATE agents SET published = true, published_date = NOW() WHERE agent_name = $1 AND version = $2`
 
@@ -1627,6 +1777,13 @@ func (db *PostgreSQL) PublishAgent(ctx context.Context, tx pgx.Tx, agentName, ve
 func (db *PostgreSQL) UnpublishAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
+		Name: agentName,
+		Type: auth.PermissionArtifactTypeAgent,
+	}); err != nil {
+		return err
 	}
 
 	executor := db.getExecutor(tx)
@@ -1669,6 +1826,13 @@ func (db *PostgreSQL) IsAgentPublished(ctx context.Context, tx pgx.Tx, agentName
 func (db *PostgreSQL) SetAgentEmbedding(ctx context.Context, tx pgx.Tx, agentName, version string, embedding *database.SemanticEmbedding) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
+		Name: agentName,
+		Type: auth.PermissionArtifactTypeAgent,
+	}); err != nil {
+		return err
 	}
 
 	executor := db.getExecutor(tx)
@@ -1929,6 +2093,14 @@ func (db *PostgreSQL) GetSkillByName(ctx context.Context, tx pgx.Tx, skillName s
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: skillName,
+		Type: auth.PermissionArtifactTypeSkill,
+	}); err != nil {
+		return nil, err
+	}
+
 	query := `
         SELECT skill_name, version, status, published_at, updated_at, is_latest, published, value
         FROM skills
@@ -1968,6 +2140,14 @@ func (db *PostgreSQL) GetSkillByNameAndVersion(ctx context.Context, tx pgx.Tx, s
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: skillName,
+		Type: auth.PermissionArtifactTypeSkill,
+	}); err != nil {
+		return nil, err
+	}
+
 	query := `
         SELECT skill_name, version, status, published_at, updated_at, is_latest, published, value
         FROM skills
@@ -2006,6 +2186,14 @@ func (db *PostgreSQL) GetAllVersionsBySkillName(ctx context.Context, tx pgx.Tx, 
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: skillName,
+		Type: auth.PermissionArtifactTypeSkill,
+	}); err != nil {
+		return nil, err
+	}
+
 	query := `
         SELECT skill_name, version, status, published_at, updated_at, is_latest, published, value
         FROM skills
@@ -2056,6 +2244,14 @@ func (db *PostgreSQL) CreateSkill(ctx context.Context, tx pgx.Tx, skillJSON *mod
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionPush, auth.Resource{
+		Name: skillJSON.Name,
+		Type: auth.PermissionArtifactTypeSkill,
+	}); err != nil {
+		return nil, err
+	}
+
 	if skillJSON == nil || officialMeta == nil {
 		return nil, fmt.Errorf("skillJSON and officialMeta are required")
 	}
@@ -2093,6 +2289,14 @@ func (db *PostgreSQL) UpdateSkill(ctx context.Context, tx pgx.Tx, skillName, ver
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
+		Name: skillName,
+		Type: auth.PermissionArtifactTypeSkill,
+	}); err != nil {
+		return nil, err
+	}
+
 	if skillJSON == nil {
 		return nil, fmt.Errorf("skillJSON is required")
 	}
@@ -2135,6 +2339,14 @@ func (db *PostgreSQL) SetSkillStatus(ctx context.Context, tx pgx.Tx, skillName, 
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
+		Name: skillName,
+		Type: auth.PermissionArtifactTypeSkill,
+	}); err != nil {
+		return nil, err
+	}
+
 	query := `
         UPDATE skills
         SET status = $1, updated_at = NOW()
@@ -2250,6 +2462,13 @@ func (db *PostgreSQL) PublishSkill(ctx context.Context, tx pgx.Tx, skillName, ve
 		return ctx.Err()
 	}
 
+	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
+		Name: skillName,
+		Type: auth.PermissionArtifactTypeSkill,
+	}); err != nil {
+		return err
+	}
+
 	executor := db.getExecutor(tx)
 	query := `UPDATE skills SET published = true, published_date = NOW() WHERE skill_name = $1 AND version = $2`
 
@@ -2269,6 +2488,13 @@ func (db *PostgreSQL) PublishSkill(ctx context.Context, tx pgx.Tx, skillName, ve
 func (db *PostgreSQL) UnpublishSkill(ctx context.Context, tx pgx.Tx, skillName, version string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
+		Name: skillName,
+		Type: auth.PermissionArtifactTypeSkill,
+	}); err != nil {
+		return err
 	}
 
 	executor := db.getExecutor(tx)
@@ -2309,6 +2535,18 @@ func (db *PostgreSQL) IsSkillPublished(ctx context.Context, tx pgx.Tx, skillName
 
 // CreateDeployment creates a new deployment record
 func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deployment *models.Deployment) error {
+	// Authz check (determine resource type)
+	artifactType := auth.PermissionArtifactTypeServer
+	if deployment.ResourceType == "agent" {
+		artifactType = auth.PermissionArtifactTypeAgent
+	}
+	if err := db.authz.Check(ctx, auth.PermissionActionDeploy, auth.Resource{
+		Name: deployment.ServerName,
+		Type: artifactType,
+	}); err != nil {
+		return err
+	}
+
 	executor := db.getExecutor(tx)
 
 	configJSON, err := json.Marshal(deployment.Config)
@@ -2402,6 +2640,18 @@ func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx) ([]*models.
 
 // GetDeploymentByName retrieves a specific deployment
 func (db *PostgreSQL) GetDeploymentByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName string, version string, resourceType string) (*models.Deployment, error) {
+	// Authz check (determine resource type)
+	artifactType := auth.PermissionArtifactTypeServer
+	if resourceType == "agent" {
+		artifactType = auth.PermissionArtifactTypeAgent
+	}
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: serverName,
+		Type: artifactType,
+	}); err != nil {
+		return nil, err
+	}
+
 	executor := db.getExecutor(tx)
 
 	query := `
@@ -2444,6 +2694,18 @@ func (db *PostgreSQL) GetDeploymentByNameAndVersion(ctx context.Context, tx pgx.
 
 // UpdateDeploymentConfig updates the configuration for a deployment
 func (db *PostgreSQL) UpdateDeploymentConfig(ctx context.Context, tx pgx.Tx, serverName string, version string, resourceType string, config map[string]string) error {
+	// Authz check (determine resource type)
+	artifactType := auth.PermissionArtifactTypeServer
+	if resourceType == "agent" {
+		artifactType = auth.PermissionArtifactTypeAgent
+	}
+	if err := db.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
+		Name: serverName,
+		Type: artifactType,
+	}); err != nil {
+		return err
+	}
+
 	executor := db.getExecutor(tx)
 
 	configJSON, err := json.Marshal(config)
@@ -2471,6 +2733,18 @@ func (db *PostgreSQL) UpdateDeploymentConfig(ctx context.Context, tx pgx.Tx, ser
 
 // UpdateDeploymentStatus updates the status of a deployment
 func (db *PostgreSQL) UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, serverName, version string, resourceType string, status string) error {
+	// Authz check (determine resource type)
+	artifactType := auth.PermissionArtifactTypeServer
+	if resourceType == "agent" {
+		artifactType = auth.PermissionArtifactTypeAgent
+	}
+	if err := db.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
+		Name: serverName,
+		Type: artifactType,
+	}); err != nil {
+		return err
+	}
+
 	executor := db.getExecutor(tx)
 
 	query := `
@@ -2493,6 +2767,18 @@ func (db *PostgreSQL) UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, ser
 
 // RemoveDeployment removes a deployment
 func (db *PostgreSQL) RemoveDeployment(ctx context.Context, tx pgx.Tx, serverName string, version string, resourceType string) error {
+	// Authz check (determine resource type)
+	artifactType := auth.PermissionArtifactTypeServer
+	if resourceType == "agent" {
+		artifactType = auth.PermissionArtifactTypeAgent
+	}
+	if err := db.authz.Check(ctx, auth.PermissionActionDeploy, auth.Resource{
+		Name: serverName,
+		Type: artifactType,
+	}); err != nil {
+		return err
+	}
+
 	executor := db.getExecutor(tx)
 
 	query := `DELETE FROM deployments WHERE server_name = $1 AND version = $2 AND resource_type = $3`
@@ -2511,6 +2797,13 @@ func (db *PostgreSQL) RemoveDeployment(ctx context.Context, tx pgx.Tx, serverNam
 
 // DeleteAgent permanently removes an agent version from the database
 func (db *PostgreSQL) DeleteAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error {
+	if err := db.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
+		Name: agentName,
+		Type: auth.PermissionArtifactTypeAgent,
+	}); err != nil {
+		return err
+	}
+
 	executor := db.getExecutor(tx)
 
 	query := `DELETE FROM agents WHERE agent_name = $1 AND version = $2`

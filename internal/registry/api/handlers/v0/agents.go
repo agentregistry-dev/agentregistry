@@ -17,12 +17,12 @@ import (
 
 // ListAgentsInput represents the input for listing agents
 type ListAgentsInput struct {
-	Cursor       string `query:"cursor" doc:"Pagination cursor" required:"false" example:"agent-cursor-123"`
-	Limit        int    `query:"limit" doc:"Number of items per page" default:"30" minimum:"1" maximum:"100" example:"50"`
-	UpdatedSince string `query:"updated_since" doc:"Filter agents updated since timestamp (RFC3339 datetime)" required:"false" example:"2025-08-07T13:15:04.280Z"`
-	Search       string `query:"search" doc:"Search agents by name (substring match)" required:"false" example:"filesystem"`
-	Version      string `query:"version" doc:"Filter by version ('latest' for latest version, or an exact version like '1.2.3')" required:"false" example:"latest"`
-	Semantic     bool   `query:"semantic_search" doc:"Use semantic search for the search term"` 
+	Cursor                 string  `query:"cursor" doc:"Pagination cursor" required:"false" example:"agent-cursor-123"`
+	Limit                  int     `query:"limit" doc:"Number of items per page" default:"30" minimum:"1" maximum:"100" example:"50"`
+	UpdatedSince           string  `query:"updated_since" doc:"Filter agents updated since timestamp (RFC3339 datetime)" required:"false" example:"2025-08-07T13:15:04.280Z"`
+	Search                 string  `query:"search" doc:"Search agents by name (substring match)" required:"false" example:"filesystem"`
+	Version                string  `query:"version" doc:"Filter by version ('latest' for latest version, or an exact version like '1.2.3')" required:"false" example:"latest"`
+	Semantic               bool    `query:"semantic_search" doc:"Use semantic search for the search term"`
 	SemanticMatchThreshold float64 `query:"semantic_threshold" doc:"Optional maximum cosine distance when semantic_search is enabled" required:"false"`
 }
 

@@ -20,7 +20,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -35,7 +34,6 @@ type registryServiceImpl struct {
 	db                 database.Database
 	cfg                *config.Config
 	embeddingsProvider embeddings.Provider
-	authz              auth.Authorizer
 }
 
 // NewRegistryService creates a new registry service with the provided database and configuration
@@ -43,13 +41,11 @@ func NewRegistryService(
 	db database.Database,
 	cfg *config.Config,
 	embeddingProvider embeddings.Provider,
-	authz auth.Authorizer,
 ) RegistryService {
 	return &registryServiceImpl{
 		db:                 db,
 		cfg:                cfg,
 		embeddingsProvider: embeddingProvider,
-		authz:              authz,
 	}
 }
 
@@ -110,14 +106,6 @@ func (s *registryServiceImpl) GetAllVersionsByServerName(ctx context.Context, se
 
 // CreateServer creates a new server version
 func (s *registryServiceImpl) CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
-	// Authz check - always Push for create (service rejects duplicates anyway)
-	if err := s.authz.Check(ctx, auth.PermissionActionPush, auth.Resource{
-		Name: req.Name,
-		Type: auth.PermissionArtifactTypeServer,
-	}); err != nil {
-		return nil, err
-	}
-
 	// Wrap the entire operation in a transaction
 	return database.InTransactionT(ctx, s.db, func(ctx context.Context, tx pgx.Tx) (*apiv0.ServerResponse, error) {
 		return s.createServerInTransaction(ctx, tx, req)
@@ -258,14 +246,6 @@ func (s *registryServiceImpl) GetAllVersionsBySkillName(ctx context.Context, ski
 
 // CreateSkill creates a new skill version
 func (s *registryServiceImpl) CreateSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error) {
-	// Authz check - always Push for create (service rejects duplicates anyway)
-	if err := s.authz.Check(ctx, auth.PermissionActionPush, auth.Resource{
-		Name: req.Name,
-		Type: auth.PermissionArtifactTypeSkill,
-	}); err != nil {
-		return nil, err
-	}
-
 	return database.InTransactionT(ctx, s.db, func(ctx context.Context, tx pgx.Tx) (*models.SkillResponse, error) {
 		return s.createSkillInTransaction(ctx, tx, req)
 	})
@@ -353,14 +333,6 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 
 // PublishSkill marks a skill as published
 func (s *registryServiceImpl) PublishSkill(ctx context.Context, skillName, version string) error {
-	// Authz check
-	if err := s.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
-		Name: skillName,
-		Type: auth.PermissionArtifactTypeSkill,
-	}); err != nil {
-		return err
-	}
-
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
 		return s.db.PublishSkill(txCtx, tx, skillName, version)
 	})
@@ -368,14 +340,6 @@ func (s *registryServiceImpl) PublishSkill(ctx context.Context, skillName, versi
 
 // UnpublishSkill marks a skill as unpublished
 func (s *registryServiceImpl) UnpublishSkill(ctx context.Context, skillName, version string) error {
-	// Authz check
-	if err := s.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
-		Name: skillName,
-		Type: auth.PermissionArtifactTypeSkill,
-	}); err != nil {
-		return err
-	}
-
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
 		return s.db.UnpublishSkill(txCtx, tx, skillName, version)
 	})
@@ -383,14 +347,6 @@ func (s *registryServiceImpl) UnpublishSkill(ctx context.Context, skillName, ver
 
 // UpdateServer updates an existing server with new details
 func (s *registryServiceImpl) UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
-	// Authz check
-	if err := s.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
-		Name: serverName,
-		Type: auth.PermissionArtifactTypeServer,
-	}); err != nil {
-		return nil, err
-	}
-
 	// Wrap the entire operation in a transaction
 	return database.InTransactionT(ctx, s.db, func(ctx context.Context, tx pgx.Tx) (*apiv0.ServerResponse, error) {
 		return s.updateServerInTransaction(ctx, tx, serverName, version, req, newStatus)
@@ -449,14 +405,6 @@ func (s *registryServiceImpl) updateServerInTransaction(ctx context.Context, tx 
 }
 
 func (s *registryServiceImpl) StoreServerReadme(ctx context.Context, serverName, version string, content []byte, contentType string) error {
-	// Authz check
-	if err := s.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
-		Name: serverName,
-		Type: auth.PermissionArtifactTypeServer,
-	}); err != nil {
-		return err
-	}
-
 	if len(content) == 0 {
 		return nil
 	}
@@ -496,14 +444,6 @@ func (s *registryServiceImpl) GetServerReadmeByVersion(ctx context.Context, serv
 
 // PublishServer marks a server as published
 func (s *registryServiceImpl) PublishServer(ctx context.Context, serverName, version string) error {
-	// Authz check
-	if err := s.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
-		Name: serverName,
-		Type: auth.PermissionArtifactTypeServer,
-	}); err != nil {
-		return err
-	}
-
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
 		return s.db.PublishServer(txCtx, tx, serverName, version)
 	})
@@ -511,14 +451,6 @@ func (s *registryServiceImpl) PublishServer(ctx context.Context, serverName, ver
 
 // UnpublishServer marks a server as unpublished
 func (s *registryServiceImpl) UnpublishServer(ctx context.Context, serverName, version string) error {
-	// Authz check
-	if err := s.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
-		Name: serverName,
-		Type: auth.PermissionArtifactTypeServer,
-	}); err != nil {
-		return err
-	}
-
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
 		// Check if the server is currently deployed
 		deployment, err := s.db.GetDeploymentByNameAndVersion(txCtx, tx, serverName, version, "mcp")
@@ -537,14 +469,6 @@ func (s *registryServiceImpl) UnpublishServer(ctx context.Context, serverName, v
 
 // DeleteServer permanently removes a server version from the registry
 func (s *registryServiceImpl) DeleteServer(ctx context.Context, serverName, version string) error {
-	// Authz check
-	if err := s.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
-		Name: serverName,
-		Type: auth.PermissionArtifactTypeServer,
-	}); err != nil {
-		return err
-	}
-
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
 		return s.db.DeleteServer(txCtx, tx, serverName, version)
 	})
@@ -610,14 +534,6 @@ func (s *registryServiceImpl) GetAllVersionsByAgentName(ctx context.Context, age
 
 // CreateAgent creates a new agent version
 func (s *registryServiceImpl) CreateAgent(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error) {
-	// Authz check - always Push for create (service rejects duplicates anyway)
-	if err := s.authz.Check(ctx, auth.PermissionActionPush, auth.Resource{
-		Name: req.Name,
-		Type: auth.PermissionArtifactTypeAgent,
-	}); err != nil {
-		return nil, err
-	}
-
 	return database.InTransactionT(ctx, s.db, func(ctx context.Context, tx pgx.Tx) (*models.AgentResponse, error) {
 		return s.createAgentInTransaction(ctx, tx, req)
 	})
@@ -705,14 +621,6 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 
 // PublishAgent marks an agent as published
 func (s *registryServiceImpl) PublishAgent(ctx context.Context, agentName, version string) error {
-	// Authz check
-	if err := s.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
-		Name: agentName,
-		Type: auth.PermissionArtifactTypeAgent,
-	}); err != nil {
-		return err
-	}
-
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
 		return s.db.PublishAgent(txCtx, tx, agentName, version)
 	})
@@ -720,14 +628,6 @@ func (s *registryServiceImpl) PublishAgent(ctx context.Context, agentName, versi
 
 // UnpublishAgent marks an agent as unpublished
 func (s *registryServiceImpl) UnpublishAgent(ctx context.Context, agentName, version string) error {
-	// Authz check
-	if err := s.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
-		Name: agentName,
-		Type: auth.PermissionArtifactTypeAgent,
-	}); err != nil {
-		return err
-	}
-
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
 		return s.db.UnpublishAgent(txCtx, tx, agentName, version)
 	})
@@ -735,28 +635,12 @@ func (s *registryServiceImpl) UnpublishAgent(ctx context.Context, agentName, ver
 
 // DeleteAgent permanently removes an agent version from the registry
 func (s *registryServiceImpl) DeleteAgent(ctx context.Context, agentName, version string) error {
-	// Authz check
-	if err := s.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
-		Name: agentName,
-		Type: auth.PermissionArtifactTypeAgent,
-	}); err != nil {
-		return err
-	}
-
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
 		return s.db.DeleteAgent(txCtx, tx, agentName, version)
 	})
 }
 
 func (s *registryServiceImpl) UpsertServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error {
-	// Authz check
-	if err := s.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
-		Name: serverName,
-		Type: auth.PermissionArtifactTypeServer,
-	}); err != nil {
-		return err
-	}
-
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
 		return s.db.SetServerEmbedding(txCtx, tx, serverName, version, embedding)
 	})
@@ -767,14 +651,6 @@ func (s *registryServiceImpl) GetServerEmbeddingMetadata(ctx context.Context, se
 }
 
 func (s *registryServiceImpl) UpsertAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error {
-	// Authz check
-	if err := s.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
-		Name: agentName,
-		Type: auth.PermissionArtifactTypeAgent,
-	}); err != nil {
-		return err
-	}
-
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
 		return s.db.SetAgentEmbedding(txCtx, tx, agentName, version, embedding)
 	})
@@ -800,14 +676,6 @@ func (s *registryServiceImpl) IsServerPublished(ctx context.Context, serverName,
 
 // DeployServer deploys a server with configuration
 func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool) (*models.Deployment, error) {
-	// Authz check
-	if err := s.authz.Check(ctx, auth.PermissionActionDeploy, auth.Resource{
-		Name: serverName,
-		Type: auth.PermissionArtifactTypeServer,
-	}); err != nil {
-		return nil, err
-	}
-
 	serverResp, err := s.db.GetServerByNameAndVersion(ctx, nil, serverName, version, true)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
@@ -847,14 +715,6 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 
 // DeployAgent deploys an agent with configuration
 func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool) (*models.Deployment, error) {
-	// Authz check
-	if err := s.authz.Check(ctx, auth.PermissionActionDeploy, auth.Resource{
-		Name: agentName,
-		Type: auth.PermissionArtifactTypeAgent,
-	}); err != nil {
-		return nil, err
-	}
-
 	agentResp, err := s.db.GetAgentByNameAndVersion(ctx, nil, agentName, version)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
@@ -891,18 +751,6 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 
 // UpdateDeploymentConfig updates the configuration for a deployment
 func (s *registryServiceImpl) UpdateDeploymentConfig(ctx context.Context, serverName string, version string, artifactType string, config map[string]string) (*models.Deployment, error) {
-	// Authz check - determine resource type based on artifact type
-	resourceType := auth.PermissionArtifactTypeServer
-	if artifactType == "agent" {
-		resourceType = auth.PermissionArtifactTypeAgent
-	}
-	if err := s.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
-		Name: serverName,
-		Type: resourceType,
-	}); err != nil {
-		return nil, err
-	}
-
 	_, err := s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version, artifactType)
 	if err != nil {
 		return nil, err
@@ -923,18 +771,6 @@ func (s *registryServiceImpl) UpdateDeploymentConfig(ctx context.Context, server
 
 // RemoveServer removes a deployment
 func (s *registryServiceImpl) RemoveServer(ctx context.Context, serverName string, version string, artifactType string) error {
-	// Authz check - determine resource type based on artifact type
-	resourceType := auth.PermissionArtifactTypeServer
-	if artifactType == "agent" {
-		resourceType = auth.PermissionArtifactTypeAgent
-	}
-	if err := s.authz.Check(ctx, auth.PermissionActionDeploy, auth.Resource{
-		Name: serverName,
-		Type: resourceType,
-	}); err != nil {
-		return err
-	}
-
 	err := s.db.RemoveDeployment(ctx, nil, serverName, version, artifactType)
 	if err != nil {
 		return err

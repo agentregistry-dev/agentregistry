@@ -41,8 +41,16 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Connect to PostgreSQL (runs OSS migrations)
-	baseDB, err := internaldb.NewPostgreSQL(ctx, cfg.DatabaseURL)
+	// Build authorizer from options (before database creation)
+	jwtManager := auth.NewJWTManager(cfg)
+	authzProvider := options.AuthzProvider
+	if authzProvider == nil {
+		authzProvider = auth.NewPublicAuthzProvider(jwtManager)
+	}
+	authz := auth.Authorizer{Authz: authzProvider}
+
+	// Connect to PostgreSQL with authz (runs OSS migrations)
+	baseDB, err := internaldb.NewPostgreSQL(ctx, cfg.DatabaseURL, authz)
 	if err != nil {
 		return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
 	}
@@ -78,15 +86,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		}
 	}
 
-	// Build authorizer from options
-	jwtManager := auth.NewJWTManager(cfg)
-	authzProvider := options.AuthzProvider
-	if authzProvider == nil {
-		authzProvider = auth.NewPublicAuthzProvider(jwtManager)
-	}
-	authz := auth.Authorizer{Authz: authzProvider}
-
-	baseRegistryService := service.NewRegistryService(db, cfg, embeddingProvider, authz)
+	baseRegistryService := service.NewRegistryService(db, cfg, embeddingProvider)
 
 	var registryService service.RegistryService
 	if options.ServiceFactory != nil {

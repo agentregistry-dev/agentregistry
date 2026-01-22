@@ -33,12 +33,12 @@ func (a *Authorizer) Check(ctx context.Context, verb PermissionAction, resource 
 }
 
 // PublicActions defines which actions are allowed without authentication (non-destructive actions).
+// NOTE: In the meantime, we'll allow all actions to be performed locally without authentication.
+// Once we implement better authN/authZ handling, we'll want to remove these, and just have read-only (above) actions as "public".
 var PublicActions = map[PermissionAction]bool{
-	PermissionActionRead: true,
-	PermissionActionPull: true,
-	PermissionActionRun:  true, // local runs
-	// NOTE: In the meantime, we'll allow all actions to be performed locally without authentication.
-	// Once we implement better authN/authZ handling, we'll want to remove these, and just have read-only (above) actions as "public".
+	PermissionActionRead:    true,
+	PermissionActionPull:    true,
+	PermissionActionRun:     true, // local runs
 	PermissionActionPush:    true,
 	PermissionActionPublish: true,
 	// PermissionActionEdit:    true,

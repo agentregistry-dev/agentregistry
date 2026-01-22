@@ -35,7 +35,7 @@ func TestPrometheusHandler(t *testing.T) {
 		EnableRegistryValidation: false, // Disable for unit tests
 	}
 
-	registryService := service.NewRegistryService(database.NewTestDB(t), testConfig, nil, testAuthz())
+	registryService := service.NewRegistryService(database.NewTestDB(t), testConfig, nil)
 	server, err := registryService.CreateServer(context.Background(), &apiv0.ServerJSON{
 		Schema:      model.CurrentSchemaURL,
 		Name:        "io.github.example/test-server",

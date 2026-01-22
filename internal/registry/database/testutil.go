@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -16,6 +18,14 @@ import (
 )
 
 const templateDBName = "agent_registry_test_template"
+
+// createTestAuthz creates a permissive authorizer for testing
+func createTestAuthz() auth.Authorizer {
+	cfg := &config.Config{}
+	jwtManager := auth.NewJWTManager(cfg)
+	authzProvider := auth.NewPublicAuthzProvider(jwtManager)
+	return auth.Authorizer{Authz: authzProvider}
+}
 
 // ensureTemplateDB creates a template database with migrations applied
 // Multiple processes may call this, so we handle race conditions
@@ -61,7 +71,9 @@ func ensureTemplateDB(ctx context.Context, adminConn *pgx.Conn) error {
 	}
 
 	// Connect to template and run migrations (always) to keep it up-to-date
-	templateDB, err := NewPostgreSQL(ctx, templateURI)
+	// Create a permissive authz for tests
+	testAuthz := createTestAuthz()
+	templateDB, err := NewPostgreSQL(ctx, templateURI, testAuthz)
 	if err != nil {
 		return fmt.Errorf("failed to connect to template database: %w", err)
 	}
@@ -133,7 +145,9 @@ func NewTestDB(t *testing.T) database.Database {
 	// Connect to test database (no migrations needed - copied from template)
 	testURI := fmt.Sprintf("postgres://agentregistry:agentregistry@localhost:5432/%s?sslmode=disable", dbName)
 
-	db, err := NewPostgreSQL(ctx, testURI)
+	// Create a permissive authz for tests
+	testAuthz := createTestAuthz()
+	db, err := NewPostgreSQL(ctx, testURI, testAuthz)
 	require.NoError(t, err, "Failed to connect to test database")
 
 	// Register cleanup to close connection

@@ -93,12 +93,9 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 	}, func(ctx context.Context, input *struct {
 		DeploymentInput
 	}) (*DeploymentResponse, error) {
-		var artifactType auth.PermissionArtifactType
 		switch input.ResourceType {
-		case "", "mcp":
-			artifactType = auth.PermissionArtifactTypeServer
-		case "agent":
-			artifactType = auth.PermissionArtifactTypeAgent
+		case "", "mcp", "agent":
+			// Valid resource types
 		default:
 			return nil, huma.Error400BadRequest("Invalid resource type. Must be 'mcp' or 'agent'")
 		}
@@ -135,25 +132,17 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 	}, func(ctx context.Context, input *struct {
 		Body DeploymentRequest
 	}) (*DeploymentResponse, error) {
-		var artifactType auth.PermissionArtifactType
-		switch input.Body.ResourceType {
-		case "", "mcp":
-			artifactType = auth.PermissionArtifactTypeServer
-		case "agent":
-			artifactType = auth.PermissionArtifactTypeAgent
-		default:
-			return nil, huma.Error400BadRequest("Invalid resource type. Must be 'mcp' or 'agent'")
-		}
-
 		var deployment *models.Deployment
 		var err error
 
 		// Route to appropriate service method based on resource type
-		switch artifactType {
-		case auth.PermissionArtifactTypeServer:
+		switch input.Body.ResourceType {
+		case "", "mcp":
 			deployment, err = registry.DeployServer(ctx, input.Body.ServerName, input.Body.Version, input.Body.Config, input.Body.PreferRemote)
-		case auth.PermissionArtifactTypeAgent:
+		case "agent":
 			deployment, err = registry.DeployAgent(ctx, input.Body.ServerName, input.Body.Version, input.Body.Config, input.Body.PreferRemote)
+		default:
+			return nil, huma.Error400BadRequest("Invalid resource type. Must be 'mcp' or 'agent'")
 		}
 
 		if err != nil {
@@ -190,12 +179,9 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
 		}
 
-		var artifactType auth.PermissionArtifactType
 		switch input.ResourceType {
-		case "", "mcp":
-			artifactType = auth.PermissionArtifactTypeServer
-		case "agent":
-			artifactType = auth.PermissionArtifactTypeAgent
+		case "", "mcp", "agent":
+			// Valid resource types
 		default:
 			return nil, huma.Error400BadRequest("Invalid resource type. Must be 'mcp' or 'agent'")
 		}
@@ -230,12 +216,9 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
 		}
 
-		var artifactType auth.PermissionArtifactType
 		switch input.ResourceType {
-		case "", "mcp":
-			artifactType = auth.PermissionArtifactTypeServer
-		case "agent":
-			artifactType = auth.PermissionArtifactTypeAgent
+		case "", "mcp", "agent":
+			// Valid resource types
 		default:
 			return nil, huma.Error400BadRequest("Invalid resource type. Must be 'mcp' or 'agent'")
 		}
