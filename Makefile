@@ -228,7 +228,7 @@ GOIMPORT = $(LOCALBIN)/goimports
 GOIMPORT_VERSION ?= v0.41
 
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
-GOLANGCI_LINT_VERSION ?= v2.7.2
+GOLANGCI_LINT_VERSION ?= v2.8.0
 
 .PHONY: goimports
 goimports: $(GOIMPORT) ## Download goimports locally if necessary.
