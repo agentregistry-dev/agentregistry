@@ -306,7 +306,8 @@ func TestStoreAndRetrieveServerReadme(t *testing.T) {
 	require.NoError(t, err)
 
 	firstReadme := []byte("# Version 1\nHello world\n")
-	require.NoError(t, svc.StoreServerReadme(ctx, serverName, "1.0.0", firstReadme, ""))
+	ctxWithAuth := internaldb.WithTestSession(ctx)
+	require.NoError(t, svc.StoreServerReadme(ctxWithAuth, serverName, "1.0.0", firstReadme, ""))
 
 	readmeV1, err := svc.GetServerReadmeByVersion(ctx, serverName, "1.0.0")
 	require.NoError(t, err)
@@ -332,7 +333,7 @@ func TestStoreAndRetrieveServerReadme(t *testing.T) {
 	require.NoError(t, err)
 
 	secondReadme := []byte("# Version 2\nUpdated\n")
-	require.NoError(t, svc.StoreServerReadme(ctx, serverName, "2.0.0", secondReadme, "text/markdown"))
+	require.NoError(t, svc.StoreServerReadme(ctxWithAuth, serverName, "2.0.0", secondReadme, "text/markdown"))
 
 	latest, err = svc.GetServerReadmeLatest(ctx, serverName)
 	require.NoError(t, err)
@@ -608,7 +609,8 @@ func TestUpdateServer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := service.UpdateServer(ctx, tt.serverName, tt.version, tt.updatedServer, tt.newStatus)
+			ctxWithAuth := internaldb.WithTestSession(ctx)
+			result, err := service.UpdateServer(ctxWithAuth, tt.serverName, tt.version, tt.updatedServer, tt.newStatus)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -660,8 +662,9 @@ func TestUpdateServer_SkipValidationForDeletedServers(t *testing.T) {
 	service.(*registryServiceImpl).cfg.EnableRegistryValidation = originalConfig
 
 	// First, set server to deleted status
+	ctxWithAuth := internaldb.WithTestSession(ctx)
 	deletedStatus := string(model.StatusDeleted)
-	_, err = service.UpdateServer(ctx, serverName, version, invalidServer, &deletedStatus)
+	_, err = service.UpdateServer(ctxWithAuth, serverName, version, invalidServer, &deletedStatus)
 	require.NoError(t, err, "should be able to set server to deleted (validation should be skipped)")
 
 	// Verify server is now deleted
@@ -686,7 +689,7 @@ func TestUpdateServer_SkipValidationForDeletedServers(t *testing.T) {
 	}
 
 	// This should succeed despite invalid packages because server is deleted
-	result, err := service.UpdateServer(ctx, serverName, version, updatedInvalidServer, nil)
+	result, err := service.UpdateServer(ctxWithAuth, serverName, version, updatedInvalidServer, nil)
 	assert.NoError(t, err, "updating deleted server should skip registry validation")
 	assert.NotNil(t, result)
 	assert.Equal(t, "Updated description for deleted server", result.Server.Description)
@@ -716,7 +719,7 @@ func TestUpdateServer_SkipValidationForDeletedServers(t *testing.T) {
 
 	// Update server and set to deleted in same operation - should skip validation
 	newDeletedStatus := string(model.StatusDeleted)
-	result2, err := service.UpdateServer(ctx, "com.example/being-deleted-test", "1.0.0", activeServer, &newDeletedStatus)
+	result2, err := service.UpdateServer(ctxWithAuth, "com.example/being-deleted-test", "1.0.0", activeServer, &newDeletedStatus)
 	assert.NoError(t, err, "updating server being set to deleted should skip registry validation")
 	assert.NotNil(t, result2)
 	assert.Equal(t, model.StatusDeleted, result2.Meta.Official.Status)

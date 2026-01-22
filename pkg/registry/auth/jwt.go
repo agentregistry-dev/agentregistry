@@ -134,9 +134,9 @@ func (j *JWTManager) GenerateTokenResponse(_ context.Context, claims JWTClaims) 
 }
 
 func (j *JWTManager) Check(ctx context.Context, s Session, verb PermissionAction, resource Resource) error {
-	// TODO(infocus7): also check resource.Type
+	// TODO: also check resource.Type
 	if !j.HasPermission(resource.Name, verb, s.Principal().User.Permissions) {
-		return huma.Error403Forbidden("You do not have permission to perform this action")
+		return ErrForbidden
 	}
 	return nil
 }

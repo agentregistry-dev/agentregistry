@@ -490,20 +490,19 @@ func (db *PostgreSQL) CreateServer(ctx context.Context, tx pgx.Tx, serverJSON *a
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionPush, auth.Resource{
-		Name: serverJSON.Name,
-		Type: auth.PermissionArtifactTypeServer,
-	}); err != nil {
-		return nil, err
-	}
-
-	// Validate inputs
 	if serverJSON == nil || officialMeta == nil {
 		return nil, fmt.Errorf("serverJSON and officialMeta are required")
 	}
 
 	if serverJSON.Name == "" || serverJSON.Version == "" {
 		return nil, fmt.Errorf("server name and version are required")
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionPush, auth.Resource{
+		Name: serverJSON.Name,
+		Type: auth.PermissionArtifactTypeServer,
+	}); err != nil {
+		return nil, err
 	}
 
 	// Marshal the ServerJSON to JSONB

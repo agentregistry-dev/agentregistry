@@ -10,6 +10,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	skillmodels "github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -89,6 +90,9 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 
 		skills, nextCursor, err := registry.ListSkills(ctx, filter, input.Cursor, input.Limit)
 		if err != nil {
+			if errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error404NotFound("Not found")
+			}
 			return nil, huma.Error500InternalServerError("Failed to get skills list", err)
 		}
 
@@ -132,7 +136,7 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 			skillResp, err = registry.GetSkillByNameAndVersion(ctx, skillName, version)
 		}
 		if err != nil {
-			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
+			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Skill not found")
 			}
 			return nil, huma.Error500InternalServerError("Failed to get skill details", err)
@@ -157,7 +161,7 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 		// Get all versions of the skill
 		skills, err := registry.GetAllVersionsBySkillName(ctx, skillName)
 		if err != nil {
-			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
+			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Skill not found")
 			}
 			return nil, huma.Error500InternalServerError("Failed to get skill versions", err)
@@ -186,6 +190,9 @@ func createSkillHandler(ctx context.Context, input *CreateSkillInput, registry s
 	// Create/update the skill (published defaults to false in the service layer)
 	createdSkill, err := registry.CreateSkill(ctx, &input.Body)
 	if err != nil {
+		if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			return nil, huma.Error404NotFound("Not found")
+		}
 		return nil, huma.Error400BadRequest("Failed to create skill", err)
 	}
 
@@ -222,6 +229,9 @@ func RegisterAdminSkillsCreateEndpoint(api huma.API, pathPrefix string, registry
 		// Create/update the skill (published defaults to false in the service layer)
 		createdSkill, err := registry.CreateSkill(ctx, &input.Body)
 		if err != nil {
+			if errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error404NotFound("Not found")
+			}
 			return nil, huma.Error400BadRequest("Failed to create skill", err)
 		}
 
@@ -253,7 +263,7 @@ func RegisterSkillsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 
 		// Call the service to publish the skill
 		if err := registry.PublishSkill(ctx, skillName, version); err != nil {
-			if errors.Is(err, database.ErrNotFound) {
+			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Skill not found")
 			}
 			return nil, huma.Error500InternalServerError("Failed to publish skill", err)
@@ -287,7 +297,7 @@ func RegisterSkillsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 
 		// Call the service to unpublish the skill
 		if err := registry.UnpublishSkill(ctx, skillName, version); err != nil {
-			if errors.Is(err, database.ErrNotFound) {
+			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Skill not found")
 			}
 			return nil, huma.Error500InternalServerError("Failed to unpublish skill", err)

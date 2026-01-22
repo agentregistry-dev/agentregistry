@@ -2,13 +2,17 @@ package auth
 
 import (
 	"context"
-
-	"github.com/danielgtaylor/huma/v2"
+	"errors"
 )
 
 var (
-	// ErrForbidden is returned when a user is authenticated but lacks permission
-	ErrForbidden = huma.Error403Forbidden("You do not have permission to perform this action")
+	// ErrUnauthenticated is returned when authentication is required but not provided.
+	// This should be mapped to HTTP 401 Unauthorized in handlers.
+	ErrUnauthenticated = errors.New("unauthenticated")
+
+	// ErrForbidden is returned when a user is authenticated but lacks permission.
+	// This should be mapped to HTTP 403 Forbidden in handlers (or 404 to prevent info leakage).
+	ErrForbidden = errors.New("forbidden")
 )
 
 // Authz
@@ -69,7 +73,7 @@ func (o *PublicAuthzProvider) Check(ctx context.Context, s Session, verb Permiss
 
 	// Protected actions require a session
 	if s == nil {
-		return ErrUnauthorized
+		return ErrUnauthenticated
 	}
 
 	// If no JWT manager is configured, allow authenticated sessions for protected actions

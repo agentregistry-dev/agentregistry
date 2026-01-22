@@ -8,10 +8,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
-var (
-	ErrUnauthorized = huma.Error401Unauthorized("Unauthorized")
-)
-
 type Resource struct {
 	Name string
 	Type PermissionArtifactType

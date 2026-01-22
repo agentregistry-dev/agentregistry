@@ -9,6 +9,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -65,6 +66,9 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 	}, func(ctx context.Context, input *DeploymentsListInput) (*DeploymentsListResponse, error) {
 		deployments, err := registry.GetDeployments(ctx)
 		if err != nil {
+			if errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error404NotFound("Not found")
+			}
 			return nil, huma.Error500InternalServerError("Failed to retrieve deployments", err)
 		}
 
@@ -111,7 +115,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 
 		deployment, err := registry.GetDeploymentByNameAndVersion(ctx, serverName, version, input.ResourceType)
 		if err != nil {
-			if errors.Is(err, database.ErrNotFound) {
+			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Deployment not found")
 			}
 			return nil, huma.Error500InternalServerError("Failed to retrieve deployment", err)
@@ -162,7 +166,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		}
 
 		if err != nil {
-			if errors.Is(err, database.ErrNotFound) {
+			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Resource not found in registry")
 			}
 			if errors.Is(err, database.ErrAlreadyExists) {
@@ -209,7 +213,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 
 		deployment, err := registry.UpdateDeploymentConfig(ctx, serverName, version, input.ResourceType, input.Body.Config)
 		if err != nil {
-			if errors.Is(err, database.ErrNotFound) {
+			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Deployment not found")
 			}
 			return nil, huma.Error500InternalServerError("Failed to update deployment configuration", err)
@@ -246,7 +250,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 
 		err = registry.RemoveServer(ctx, serverName, version, input.ResourceType)
 		if err != nil {
-			if errors.Is(err, database.ErrNotFound) {
+			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Deployment not found")
 			}
 			return nil, huma.Error500InternalServerError("Failed to remove server", err)

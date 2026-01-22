@@ -201,8 +201,8 @@ func TestPublishEndpoint(t *testing.T) {
 				}
 				_, _ = registry.CreateServer(context.Background(), &existingServer)
 			},
-			expectedStatus: http.StatusUnauthorized,
-			expectedError:  "Unauthorized",
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "duplicate version",
 		},
 		{
 			name: "package validation success - MCPB package",

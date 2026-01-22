@@ -11,6 +11,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -117,7 +118,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 				return nil, huma.Error400BadRequest("Invalid version encoding", err)
 			}
 			if err := registry.DeleteServer(ctx, serverName, version); err != nil {
-				if errors.Is(err, database.ErrNotFound) {
+				if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 					return nil, huma.Error404NotFound("Server not found")
 				}
 				return nil, huma.Error500InternalServerError("Failed to delete server", err)
@@ -217,6 +218,9 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			if errors.Is(err, database.ErrInvalidInput) {
 				return nil, huma.Error400BadRequest(err.Error(), err)
 			}
+			if errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error404NotFound("Not found")
+			}
 			return nil, huma.Error500InternalServerError("Failed to get registry list", err)
 		}
 
@@ -270,7 +274,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 
 			servers, err := registry.GetAllVersionsByServerName(ctx, serverName, onlyPublished)
 			if err != nil {
-				if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
+				if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 					return nil, huma.Error404NotFound("Server not found")
 				}
 				return nil, huma.Error500InternalServerError("Failed to get server versions", err)
@@ -306,7 +310,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			// Get all versions and find the latest one
 			servers, err := registry.GetAllVersionsByServerName(ctx, serverName, publishedOnly)
 			if err != nil {
-				if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
+				if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 					return nil, huma.Error404NotFound("Server not found")
 				}
 				return nil, huma.Error500InternalServerError("Failed to get server versions", err)
@@ -330,7 +334,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		} else {
 			serverResponse, err = registry.GetServerByNameAndVersion(ctx, serverName, version, publishedOnly)
 			if err != nil {
-				if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
+				if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 					return nil, huma.Error404NotFound("Server not found")
 				}
 				return nil, huma.Error500InternalServerError("Failed to get server details", err)
@@ -368,7 +372,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		// For admin endpoints, get all versions (published = true or false)
 		servers, err := registry.GetAllVersionsByServerName(ctx, serverName, !isAdmin)
 		if err != nil {
-			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
+			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Server not found")
 			}
 			return nil, huma.Error500InternalServerError("Failed to get server versions", err)
@@ -406,7 +410,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 
 		readme, err := registry.GetServerReadmeLatest(ctx, serverName)
 		if err != nil {
-			if errors.Is(err, database.ErrNotFound) {
+			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("README not found")
 			}
 			return nil, huma.Error500InternalServerError("Failed to fetch server README", err)
@@ -442,7 +446,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			readme, err = registry.GetServerReadmeByVersion(ctx, serverName, version)
 		}
 		if err != nil {
-			if errors.Is(err, database.ErrNotFound) {
+			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("README not found")
 			}
 			return nil, huma.Error500InternalServerError("Failed to fetch server README", err)
@@ -479,6 +483,9 @@ func createServerHandler(ctx context.Context, input *CreateServerInput, registry
 	// Create/update the server (published defaults to false in the service layer)
 	createdServer, err := registry.CreateServer(ctx, &input.Body)
 	if err != nil {
+		if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			return nil, huma.Error404NotFound("Not found")
+		}
 		return nil, huma.Error400BadRequest("Failed to create server", err)
 	}
 
@@ -544,7 +551,7 @@ func RegisterPublishStatusEndpoints(api huma.API, pathPrefix string, registry se
 
 		// Call the service to publish the server
 		if err := registry.PublishServer(ctx, serverName, version); err != nil {
-			if errors.Is(err, database.ErrNotFound) {
+			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Server not found")
 			}
 			return nil, huma.Error500InternalServerError("Failed to publish server", err)

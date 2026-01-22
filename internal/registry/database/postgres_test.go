@@ -455,7 +455,8 @@ func TestPostgreSQL_UpdateServer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := db.UpdateServer(ctx, nil, tt.serverName, tt.version, tt.updatedServer)
+			ctxWithAuth := internaldb.WithTestSession(ctx)
+			result, err := db.UpdateServer(ctxWithAuth, nil, tt.serverName, tt.version, tt.updatedServer)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -529,7 +530,8 @@ func TestPostgreSQL_SetServerStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := db.SetServerStatus(ctx, nil, tt.serverName, tt.version, tt.newStatus)
+			ctxWithAuth := internaldb.WithTestSession(ctx)
+			result, err := db.SetServerStatus(ctxWithAuth, nil, tt.serverName, tt.version, tt.newStatus)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -867,8 +869,9 @@ func TestPostgreSQL_EdgeCases(t *testing.T) {
 			string(model.StatusActive), // Can transition back
 		}
 
+		ctxWithAuth := internaldb.WithTestSession(ctx)
 		for _, status := range statuses {
-			result, err := db.SetServerStatus(ctx, nil, serverName, version, status)
+			result, err := db.SetServerStatus(ctxWithAuth, nil, serverName, version, status)
 			assert.NoError(t, err, "Should allow transition to %s", status)
 			assert.Equal(t, model.Status(status), result.Meta.Official.Status)
 		}

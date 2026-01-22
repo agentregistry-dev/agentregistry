@@ -9,6 +9,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -53,7 +54,7 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.Reg
 		// Only allow editing unpublished servers
 		currentServer, err := registry.GetServerByNameAndVersion(ctx, serverName, version, false)
 		if err != nil {
-			if errors.Is(err, database.ErrNotFound) {
+			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Server not found")
 			}
 			return nil, huma.Error500InternalServerError("Failed to get current server", err)
@@ -92,7 +93,7 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.Reg
 		}
 		updatedServer, err := registry.UpdateServer(ctx, serverName, version, &input.Body, statusPtr)
 		if err != nil {
-			if errors.Is(err, database.ErrNotFound) {
+			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Server not found")
 			}
 			return nil, huma.Error400BadRequest("Failed to edit server", err)

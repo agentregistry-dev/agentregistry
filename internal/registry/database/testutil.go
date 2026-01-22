@@ -2,8 +2,10 @@ package database
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"testing"
@@ -19,9 +21,40 @@ import (
 
 const templateDBName = "agent_registry_test_template"
 
+// testSession is a mock session for testing that has full permissions
+type testSession struct{}
+
+func (s *testSession) Principal() auth.Principal {
+	return auth.Principal{
+		User: auth.User{
+			Permissions: []auth.Permission{
+				{
+					Action:          auth.PermissionActionEdit,
+					ResourcePattern: "*", // Allow all resources
+				},
+			},
+		},
+	}
+}
+
+// WithTestSession adds a test session to the context that has full permissions
+func WithTestSession(ctx context.Context) context.Context {
+	return auth.AuthSessionTo(ctx, &testSession{})
+}
+
 // createTestAuthz creates a permissive authorizer for testing
 func createTestAuthz() auth.Authorizer {
-	cfg := &config.Config{}
+	// Generate a proper Ed25519 seed for testing
+	testSeed := make([]byte, ed25519.SeedSize)
+	_, err := rand.Read(testSeed)
+	if err != nil {
+		panic(fmt.Sprintf("failed to generate test seed: %v", err))
+	}
+
+	cfg := &config.Config{
+		JWTPrivateKey:            hex.EncodeToString(testSeed),
+		EnableRegistryValidation: false, // disable registry validation for testing
+	}
 	jwtManager := auth.NewJWTManager(cfg)
 	authzProvider := auth.NewPublicAuthzProvider(jwtManager)
 	return auth.Authorizer{Authz: authzProvider}

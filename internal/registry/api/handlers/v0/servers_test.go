@@ -178,7 +178,8 @@ func TestListServersSemanticSearch(t *testing.T) {
 	}
 
 	// Seed embeddings for deterministic ordering
-	require.NoError(t, registryService.UpsertServerEmbedding(ctx, backupServer, "1.0.0", &database.SemanticEmbedding{
+	ctxWithAuth := internaldb.WithTestSession(ctx)
+	require.NoError(t, registryService.UpsertServerEmbedding(ctxWithAuth, backupServer, "1.0.0", &database.SemanticEmbedding{
 		Vector:     semanticVector(0.1, 0.9, 0.0),
 		Provider:   "stub",
 		Model:      "stub-model",
@@ -186,7 +187,7 @@ func TestListServersSemanticSearch(t *testing.T) {
 		Checksum:   "backup",
 		Generated:  time.Now().UTC(),
 	}))
-	require.NoError(t, registryService.UpsertServerEmbedding(ctx, weatherServer, "1.0.0", &database.SemanticEmbedding{
+	require.NoError(t, registryService.UpsertServerEmbedding(ctxWithAuth, weatherServer, "1.0.0", &database.SemanticEmbedding{
 		Vector:     semanticVector(0.9, 0.1, 0.0),
 		Provider:   "stub",
 		Model:      "stub-model",
@@ -527,7 +528,8 @@ func TestGetServerReadmeEndpoints(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = registryService.StoreServerReadme(ctx, serverName, "1.0.0", []byte("# Title\nBody"), "text/markdown")
+	ctxWithAuth := internaldb.WithTestSession(ctx)
+	err = registryService.StoreServerReadme(ctxWithAuth, serverName, "1.0.0", []byte("# Title\nBody"), "text/markdown")
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()

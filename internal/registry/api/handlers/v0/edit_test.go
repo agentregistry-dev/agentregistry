@@ -26,6 +26,8 @@ import (
 	"github.com/modelcontextprotocol/registry/pkg/model"
 )
 
+// Note: for security any unauthenticated/unauthorized requests will return 404 Not Found
+// to prevent existence leaks. Actual responses would be logged.
 func TestEditServerEndpoint(t *testing.T) {
 	// Create test config
 	testSeed := make([]byte, ed25519.SeedSize)
@@ -90,7 +92,8 @@ func TestEditServerEndpoint(t *testing.T) {
 	require.NoError(t, err)
 
 	// Set the server to deleted status
-	_, err = registryService.UpdateServer(context.Background(), deletedServer.Name, deletedServer.Version, deletedServer, stringPtr(string(model.StatusDeleted)))
+	ctxWithAuth := database.WithTestSession(context.Background())
+	_, err = registryService.UpdateServer(ctxWithAuth, deletedServer.Name, deletedServer.Version, deletedServer, stringPtr(string(model.StatusDeleted)))
 	require.NoError(t, err)
 
 	// Create a server with build metadata for URL encoding test
@@ -187,8 +190,8 @@ func TestEditServerEndpoint(t *testing.T) {
 				Description: "Test server",
 				Version:     "1.0.0",
 			},
-			expectedStatus: http.StatusUnauthorized,
-			expectedError:  "Unauthorized",
+			expectedStatus: http.StatusNotFound,
+			expectedError:  "Not Found",
 		},
 		{
 			name:       "invalid authorization header format",
@@ -201,8 +204,8 @@ func TestEditServerEndpoint(t *testing.T) {
 				Description: "Test server",
 				Version:     "1.0.0",
 			},
-			expectedStatus: http.StatusUnauthorized,
-			expectedError:  "Unauthorized",
+			expectedStatus: http.StatusNotFound,
+			expectedError:  "Not Found",
 		},
 		{
 			name:       "invalid token",
@@ -215,8 +218,8 @@ func TestEditServerEndpoint(t *testing.T) {
 				Description: "Test server",
 				Version:     "1.0.0",
 			},
-			expectedStatus: http.StatusUnauthorized,
-			expectedError:  "Unauthorized",
+			expectedStatus: http.StatusNotFound,
+			expectedError:  "Not Found",
 		},
 		{
 			name:       "permission denied - no edit permissions",
@@ -235,8 +238,8 @@ func TestEditServerEndpoint(t *testing.T) {
 				Description: "Updated test server",
 				Version:     "1.0.0",
 			},
-			expectedStatus: http.StatusForbidden,
-			expectedError:  "You do not have permission to perform this action",
+			expectedStatus: http.StatusNotFound,
+			expectedError:  "Not Found",
 		},
 		{
 			name:       "permission denied - wrong namespace",
@@ -255,8 +258,8 @@ func TestEditServerEndpoint(t *testing.T) {
 				Description: "Updated test server",
 				Version:     "1.0.0",
 			},
-			expectedStatus: http.StatusForbidden,
-			expectedError:  "You do not have permission to perform this action",
+			expectedStatus: http.StatusNotFound,
+			expectedError:  "Not Found",
 		},
 		{
 			name:       "server not found",
@@ -470,7 +473,8 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 
 		// Set specific status if not active
 		if server.status != model.StatusActive {
-			_, err = registryService.UpdateServer(context.Background(), server.name, server.version, &apiv0.ServerJSON{
+			ctxWithAuth := database.WithTestSession(context.Background())
+			_, err = registryService.UpdateServer(ctxWithAuth, server.name, server.version, &apiv0.ServerJSON{
 				Schema:      model.CurrentSchemaURL,
 				Name:        server.name,
 				Description: "Test server for editing",
