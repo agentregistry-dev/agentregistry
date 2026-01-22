@@ -128,10 +128,10 @@ func (d *discoveryRegistry) GetDeployments(context.Context) ([]*models.Deploymen
 func (d *discoveryRegistry) GetDeploymentByNameAndVersion(context.Context, string, string) (*models.Deployment, error) {
 	return nil, database.ErrNotFound
 }
-func (d *discoveryRegistry) DeployServer(context.Context, string, string, map[string]string, bool) (*models.Deployment, error) {
+func (d *discoveryRegistry) DeployServer(context.Context, string, string, map[string]string, bool, string) (*models.Deployment, error) {
 	return nil, database.ErrNotFound
 }
-func (d *discoveryRegistry) DeployAgent(context.Context, string, string, map[string]string, bool) (*models.Deployment, error) {
+func (d *discoveryRegistry) DeployAgent(context.Context, string, string, map[string]string, bool, string) (*models.Deployment, error) {
 	return nil, database.ErrNotFound
 }
 func (d *discoveryRegistry) UpdateDeploymentConfig(context.Context, string, string, map[string]string) (*models.Deployment, error) {

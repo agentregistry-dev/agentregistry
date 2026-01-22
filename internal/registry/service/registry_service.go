@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"maps"
+	"strings"
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
@@ -998,4 +999,33 @@ func (s *registryServiceImpl) resolveAgentManifestMCPServers(ctx context.Context
 	}
 
 	return resolvedServers, nil
+}
+
+func (s *registryServiceImpl) ensureSemanticEmbedding(ctx context.Context, opts *database.SemanticSearchOptions) error {
+	if opts == nil {
+		return nil
+	}
+	if len(opts.QueryEmbedding) > 0 {
+		return nil
+	}
+	if strings.TrimSpace(opts.RawQuery) == "" {
+		return fmt.Errorf("%w: semantic search requires a non-empty search string", database.ErrInvalidInput)
+	}
+	if s.embeddingsProvider == nil {
+		return fmt.Errorf("%w: semantic search provider is not configured", database.ErrInvalidInput)
+	}
+
+	result, err := s.embeddingsProvider.Generate(ctx, embeddings.Payload{
+		Text: opts.RawQuery,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to generate semantic embedding: %w", err)
+	}
+
+	if s.cfg != nil && s.cfg.Embeddings.Dimensions > 0 && len(result.Vector) != s.cfg.Embeddings.Dimensions {
+		return fmt.Errorf("%w: embedding dimensions mismatch (expected %d, got %d)", database.ErrInvalidInput, s.cfg.Embeddings.Dimensions, len(result.Vector))
+	}
+
+	opts.QueryEmbedding = result.Vector
+	return nil
 }
