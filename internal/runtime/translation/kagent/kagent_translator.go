@@ -281,13 +281,6 @@ func (t *translator) translateAgentConfigMap(agent *api.Agent) (*corev1.ConfigMa
 				"app.kubernetes.io/component":  "agent-config",
 				"agentregistry.dev/agent":      sanitizeK8sName(agent.Name),
 			},
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion: "kagent.dev/v1alpha2",
-					Kind:       "Agent",
-					Name:       AgentResourceName(agent.Name, agent.Version),
-				},
-			},
 		},
 		Data: map[string]string{
 			"mcp-servers.json": string(serversJSON),

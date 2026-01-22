@@ -201,16 +201,6 @@ func TestTranslateRuntimeConfig_AgentWithMCPServers(t *testing.T) {
 		t.Errorf("Expected ConfigMap name %s, got %s", expectedCMName, cm.Name)
 	}
 
-	// Check OwnerReference
-	if len(cm.OwnerReferences) != 1 {
-		t.Errorf("Expected 1 OwnerReference, got %d", len(cm.OwnerReferences))
-	} else {
-		owner := cm.OwnerReferences[0]
-		if owner.Kind != "Agent" || owner.Name != "test-agent-v1" {
-			t.Errorf("Unexpected OwnerReference: %+v", owner)
-		}
-	}
-
 	// Check JSON content
 	jsonContent, ok := cm.Data["mcp-servers.json"]
 	if !ok {
