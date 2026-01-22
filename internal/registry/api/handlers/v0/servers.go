@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
@@ -17,14 +18,55 @@ import (
 )
 
 const errRecordNotFound = "record not found"
+const semanticMetadataKey = "agentregistry.solo.io/semantic"
+
+// normalizeServerResponse moves semantic metadata into a dedicated response meta
+// field while keeping publisher-provided data untouched.
+func normalizeServerResponse(src *apiv0.ServerResponse) models.ServerResponse {
+	if src == nil {
+		return models.ServerResponse{}
+	}
+
+	server := src.Server
+	var semanticScore *float64
+
+	if server.Meta != nil && server.Meta.PublisherProvided != nil {
+		if raw, ok := server.Meta.PublisherProvided[semanticMetadataKey]; ok {
+			if m, okm := raw.(map[string]interface{}); okm {
+				if v, okv := m["score"].(float64); okv {
+					semanticScore = &v
+				}
+			}
+			// Remove semantic metadata from publisher-provided to avoid mixing concerns.
+			delete(server.Meta.PublisherProvided, semanticMetadataKey)
+			if len(server.Meta.PublisherProvided) == 0 {
+				server.Meta.PublisherProvided = nil
+			}
+		}
+	}
+
+	meta := models.ServerResponseMeta{
+		Official: src.Meta.Official,
+	}
+	if semanticScore != nil {
+		meta.Semantic = &models.ServerSemanticMeta{Score: *semanticScore}
+	}
+
+	return models.ServerResponse{
+		Server: server,
+		Meta:   meta,
+	}
+}
 
 // ListServersInput represents the input for listing servers
 type ListServersInput struct {
-	Cursor       string `query:"cursor" json:"cursor,omitempty" doc:"Pagination cursor" required:"false" example:"server-cursor-123"`
-	Limit        int    `query:"limit" json:"limit,omitempty" doc:"Number of items per page" default:"30" minimum:"1" maximum:"100" example:"50"`
-	UpdatedSince string `query:"updated_since" json:"updated_since,omitempty" doc:"Filter servers updated since timestamp (RFC3339 datetime)" required:"false" example:"2025-08-07T13:15:04.280Z"`
-	Search       string `query:"search" json:"search,omitempty" doc:"Search servers by name (substring match)" required:"false" example:"filesystem"`
-	Version      string `query:"version" json:"version,omitempty" doc:"Filter by version ('latest' for latest version, or an exact version like '1.2.3')" required:"false" example:"latest"`
+	Cursor                 string  `query:"cursor" json:"cursor,omitempty" doc:"Pagination cursor" required:"false" example:"server-cursor-123"`
+	Limit                  int     `query:"limit" json:"limit,omitempty" doc:"Number of items per page" default:"30" minimum:"1" maximum:"100" example:"50"`
+	UpdatedSince           string  `query:"updated_since" json:"updated_since,omitempty" doc:"Filter servers updated since timestamp (RFC3339 datetime)" required:"false" example:"2025-08-07T13:15:04.280Z"`
+	Search                 string  `query:"search" json:"search,omitempty" doc:"Search servers by name (substring match)" required:"false" example:"filesystem"`
+	Version                string  `query:"version" json:"version,omitempty" doc:"Filter by version ('latest' for latest version, or an exact version like '1.2.3')" required:"false" example:"latest"`
+	Semantic               bool    `query:"semantic_search" json:"semantic_search,omitempty" doc:"Use semantic search for the search term (hybrid with substring filter when search is set)" default:"false"`
+	SemanticMatchThreshold float64 `query:"semantic_threshold" json:"semantic_threshold,omitempty" doc:"Optional maximum distance for semantic matches (cosine distance)" required:"false"`
 }
 
 // ServerDetailInput represents the input for getting server details
@@ -102,7 +144,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		Summary:     "Push MCP server (create unpublished)",
 		Description: "Create a new MCP server in the registry as an unpublished entry (published=false).",
 		Tags:        tags,
-	}, func(ctx context.Context, input *CreateServerInput) (*Response[apiv0.ServerResponse], error) {
+	}, func(ctx context.Context, input *CreateServerInput) (*Response[models.ServerResponse], error) {
 		// Always create as unpublished (handled in service layer)
 		return createServerHandler(ctx, input, registry)
 	})
@@ -120,7 +162,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		Summary:     "List MCP servers",
 		Description: "Get a paginated list of MCP servers from the registry",
 		Tags:        tags,
-	}, func(ctx context.Context, input *ListServersInput) (*Response[apiv0.ServerListResponse], error) {
+	}, func(ctx context.Context, input *ListServersInput) (*Response[models.ServerListResponse], error) {
 		// Build filter from input parameters
 		filter := &database.ServerFilter{}
 
@@ -145,6 +187,17 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			filter.SubstringName = &input.Search
 		}
 
+		if input.Semantic {
+			if strings.TrimSpace(input.Search) == "" {
+				return nil, huma.Error400BadRequest("semantic_search requires the search parameter to be set", nil)
+			}
+			filter.Semantic = &database.SemanticSearchOptions{
+				RawQuery:  input.Search,
+				Threshold: input.SemanticMatchThreshold,
+			}
+			filter.Semantic.HybridSubstring = filter.SubstringName
+		}
+
 		// Handle version parameter
 		if input.Version != "" {
 			if input.Version == "latest" {
@@ -160,19 +213,22 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		// Get paginated results with filtering
 		servers, nextCursor, err := registry.ListServers(ctx, filter, input.Cursor, input.Limit)
 		if err != nil {
+			if errors.Is(err, database.ErrInvalidInput) {
+				return nil, huma.Error400BadRequest(err.Error(), err)
+			}
 			return nil, huma.Error500InternalServerError("Failed to get registry list", err)
 		}
 
-		// Convert []*ServerResponse to []ServerResponse
-		serverValues := make([]apiv0.ServerResponse, len(servers))
+		// Convert []*ServerResponse to []ServerResponse while normalizing metadata.
+		serverValues := make([]models.ServerResponse, len(servers))
 		for i, server := range servers {
-			serverValues[i] = *server
+			serverValues[i] = normalizeServerResponse(server)
 		}
 
-		return &Response[apiv0.ServerListResponse]{
-			Body: apiv0.ServerListResponse{
+		return &Response[models.ServerListResponse]{
+			Body: models.ServerListResponse{
 				Servers: serverValues,
-				Metadata: apiv0.Metadata{
+				Metadata: models.ServerMetadata{
 					NextCursor: nextCursor,
 					Count:      len(servers),
 				},
@@ -189,7 +245,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		Summary:     "Get specific MCP server version",
 		Description: "Get detailed information about a specific version of an MCP server. Set 'all=true' query parameter to get all versions. Set 'published_only=true' to filter to only published versions (only applies when all=true).",
 		Tags:        tags,
-	}, func(ctx context.Context, input *ServerVersionDetailInput) (*Response[apiv0.ServerListResponse], error) {
+	}, func(ctx context.Context, input *ServerVersionDetailInput) (*Response[models.ServerListResponse], error) {
 		// URL-decode the server name
 		serverName, err := url.PathUnescape(input.ServerName)
 		if err != nil {
@@ -220,15 +276,15 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			}
 
 			// Convert []*ServerResponse to []ServerResponse
-			serverValues := make([]apiv0.ServerResponse, len(servers))
+			serverValues := make([]models.ServerResponse, len(servers))
 			for i, server := range servers {
-				serverValues[i] = *server
+				serverValues[i] = normalizeServerResponse(server)
 			}
 
-			return &Response[apiv0.ServerListResponse]{
-				Body: apiv0.ServerListResponse{
+			return &Response[models.ServerListResponse]{
+				Body: models.ServerListResponse{
 					Servers: serverValues,
-					Metadata: apiv0.Metadata{
+					Metadata: models.ServerMetadata{
 						Count: len(servers),
 					},
 				},
@@ -281,10 +337,10 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		}
 
 		// Return single server wrapped in a list response
-		return &Response[apiv0.ServerListResponse]{
-			Body: apiv0.ServerListResponse{
-				Servers: []apiv0.ServerResponse{*serverResponse},
-				Metadata: apiv0.Metadata{
+		return &Response[models.ServerListResponse]{
+			Body: models.ServerListResponse{
+				Servers: []models.ServerResponse{normalizeServerResponse(serverResponse)},
+				Metadata: models.ServerMetadata{
 					Count: 1,
 				},
 			},
@@ -299,7 +355,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		Summary:     "Get all versions of an MCP server",
 		Description: "Get all available versions for a specific MCP server",
 		Tags:        tags,
-	}, func(ctx context.Context, input *ServerVersionsInput) (*Response[apiv0.ServerListResponse], error) {
+	}, func(ctx context.Context, input *ServerVersionsInput) (*Response[models.ServerListResponse], error) {
 		// URL-decode the server name
 		serverName, err := url.PathUnescape(input.ServerName)
 		if err != nil {
@@ -318,15 +374,15 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		}
 
 		// Convert []*ServerResponse to []ServerResponse
-		serverValues := make([]apiv0.ServerResponse, len(servers))
+		serverValues := make([]models.ServerResponse, len(servers))
 		for i, server := range servers {
-			serverValues[i] = *server
+			serverValues[i] = normalizeServerResponse(server)
 		}
 
-		return &Response[apiv0.ServerListResponse]{
-			Body: apiv0.ServerListResponse{
+		return &Response[models.ServerListResponse]{
+			Body: models.ServerListResponse{
 				Servers: serverValues,
-				Metadata: apiv0.Metadata{
+				Metadata: models.ServerMetadata{
 					Count: len(servers),
 				},
 			},
@@ -418,15 +474,15 @@ type CreateServerInput struct {
 }
 
 // createServerHandler is the shared handler logic for creating servers
-func createServerHandler(ctx context.Context, input *CreateServerInput, registry service.RegistryService) (*Response[apiv0.ServerResponse], error) {
+func createServerHandler(ctx context.Context, input *CreateServerInput, registry service.RegistryService) (*Response[models.ServerResponse], error) {
 	// Create/update the server (published defaults to false in the service layer)
 	createdServer, err := registry.CreateServer(ctx, &input.Body)
 	if err != nil {
 		return nil, huma.Error400BadRequest("Failed to create server", err)
 	}
 
-	return &Response[apiv0.ServerResponse]{
-		Body: *createdServer,
+	return &Response[models.ServerResponse]{
+		Body: normalizeServerResponse(createdServer),
 	}, nil
 }
 
@@ -443,7 +499,7 @@ func RegisterCreateEndpoint(api huma.API, pathPrefix string, registry service.Re
 		Security: []map[string][]string{
 			{"bearer": {}},
 		},
-	}, func(ctx context.Context, input *CreateServerInput) (*Response[apiv0.ServerResponse], error) {
+	}, func(ctx context.Context, input *CreateServerInput) (*Response[models.ServerResponse], error) {
 		return createServerHandler(ctx, input, registry)
 	})
 }
@@ -458,7 +514,7 @@ func RegisterAdminCreateEndpoint(api huma.API, pathPrefix string, registry servi
 		Summary:     "Create/update MCP server (Admin)",
 		Description: "Create a new MCP server in the registry or update an existing one. By default, servers are created as unpublished (published=false).",
 		Tags:        []string{"servers", "admin"},
-	}, func(ctx context.Context, input *CreateServerInput) (*Response[apiv0.ServerResponse], error) {
+	}, func(ctx context.Context, input *CreateServerInput) (*Response[models.ServerResponse], error) {
 		return createServerHandler(ctx, input, registry)
 	})
 }

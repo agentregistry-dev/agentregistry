@@ -113,21 +113,23 @@ func RegenerateDockerCompose(projectDir string, manifest *common.AgentManifest, 
 	sanitizedVersion := utils.SanitizeVersion(version)
 
 	rendered, err := gen.RenderTemplate(string(templateBytes), struct {
-		Name          string
-		Version       string
-		Image         string
-		ModelProvider string
-		ModelName     string
-		EnvVars       []string
-		McpServers    []common.McpServerType
+		Name              string
+		Version           string
+		Image             string
+		ModelProvider     string
+		ModelName         string
+		TelemetryEndpoint string
+		EnvVars           []string
+		McpServers        []common.McpServerType
 	}{
-		Name:          manifest.Name,
-		Version:       sanitizedVersion,
-		Image:         image,
-		ModelProvider: manifest.ModelProvider,
-		ModelName:     manifest.ModelName,
-		EnvVars:       envVars,
-		McpServers:    manifest.McpServers,
+		Name:              manifest.Name,
+		Version:           sanitizedVersion,
+		Image:             image,
+		ModelProvider:     manifest.ModelProvider,
+		ModelName:         manifest.ModelName,
+		TelemetryEndpoint: manifest.TelemetryEndpoint,
+		EnvVars:           envVars,
+		McpServers:        manifest.McpServers,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to render docker-compose: %w", err)

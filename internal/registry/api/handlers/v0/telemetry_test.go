@@ -22,7 +22,7 @@ import (
 )
 
 func TestPrometheusHandler(t *testing.T) {
-	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig())
+	registryService := service.NewRegistryService(database.NewTestDB(t), config.NewConfig(), nil)
 	server, err := registryService.CreateServer(context.Background(), &apiv0.ServerJSON{
 		Schema:      model.CurrentSchemaURL,
 		Name:        "io.github.example/test-server",

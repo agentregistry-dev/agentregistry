@@ -11,21 +11,23 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/importer"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/spf13/cobra"
 )
 
 var (
-	importSource         string
-	importSkipValidation bool
-	importHeaders        []string
-	importTimeout        time.Duration
-	importGithubToken    string
-	importUpdate         bool
-	importReadmeSeed     string
-	importProgressCache  string
-	enrichServerData     bool
+	importSource             string
+	importSkipValidation     bool
+	importHeaders            []string
+	importTimeout            time.Duration
+	importGithubToken        string
+	importUpdate             bool
+	importReadmeSeed         string
+	importProgressCache      string
+	enrichServerData         bool
+	importGenerateEmbeddings bool
 )
 
 var ImportCmd = &cobra.Command{
@@ -58,7 +60,7 @@ var ImportCmd = &cobra.Command{
 			}
 		}()
 
-		registryService := service.NewRegistryService(db, cfg)
+		registryService := service.NewRegistryService(db, cfg, nil)
 
 		// Build HTTP client and headers for importer
 		httpClient := &http.Client{Timeout: importTimeout}
@@ -84,6 +86,15 @@ var ImportCmd = &cobra.Command{
 		importerService.SetGitHubToken(importGithubToken)
 		importerService.SetReadmeSeedPath(importReadmeSeed)
 		importerService.SetProgressCachePath(importProgressCache)
+		if importGenerateEmbeddings {
+			provider, err := embeddings.Factory(&cfg.Embeddings, httpClient)
+			if err != nil {
+				return fmt.Errorf("failed to initialize embeddings provider: %w", err)
+			}
+			importerService.SetEmbeddingProvider(provider)
+			importerService.SetEmbeddingDimensions(cfg.Embeddings.Dimensions)
+			importerService.SetGenerateEmbeddings(true)
+		}
 
 		if err := importerService.ImportFromPath(context.Background(), importSource, enrichServerData); err != nil {
 			// Importer already logged failures and summary; return error to exit non-zero
@@ -103,5 +114,6 @@ func init() {
 	ImportCmd.Flags().StringVar(&importReadmeSeed, "readme-seed", "", "Optional README seed file path or URL")
 	ImportCmd.Flags().StringVar(&importProgressCache, "progress-cache", "", "Optional path to store import progress for resuming interrupted runs")
 	ImportCmd.Flags().BoolVar(&enrichServerData, "enrich-server-data", false, "Enrich server data during import (may increase import time)")
+	ImportCmd.Flags().BoolVar(&importGenerateEmbeddings, "generate-embeddings", false, "Generate semantic embeddings during import (requires embeddings configuration)")
 	_ = ImportCmd.MarkFlagRequired("source")
 }

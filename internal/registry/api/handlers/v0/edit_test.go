@@ -37,7 +37,7 @@ func TestEditServerEndpoint(t *testing.T) {
 	}
 
 	// Create registry service and test data
-	registryService := service.NewRegistryService(database.NewTestDB(t), cfg)
+	registryService := service.NewRegistryService(database.NewTestDB(t), cfg, nil)
 
 	// Create test servers for different scenarios
 	testServers := map[string]*apiv0.ServerJSON{
@@ -431,7 +431,7 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 	}
 
 	// Create registry service
-	registryService := service.NewRegistryService(database.NewTestDB(t), cfg)
+	registryService := service.NewRegistryService(database.NewTestDB(t), cfg, nil)
 
 	// Setup test servers with different characteristics
 	testServers := []struct {

@@ -51,14 +51,15 @@ func (g *PythonGenerator) Generate(agentConfig *common.AgentConfig) error {
 	}
 
 	manifest := &common.AgentManifest{
-		Name:          agentConfig.Name,
-		Image:         agentConfig.Image,
-		Language:      agentConfig.Language,
-		Framework:     agentConfig.Framework,
-		ModelProvider: agentConfig.ModelProvider,
-		ModelName:     agentConfig.ModelName,
-		Description:   agentConfig.Description,
-		McpServers:    agentConfig.McpServers,
+		Name:              agentConfig.Name,
+		Image:             agentConfig.Image,
+		Language:          agentConfig.Language,
+		Framework:         agentConfig.Framework,
+		ModelProvider:     agentConfig.ModelProvider,
+		ModelName:         agentConfig.ModelName,
+		Description:       agentConfig.Description,
+		TelemetryEndpoint: agentConfig.TelemetryEndpoint,
+		McpServers:        agentConfig.McpServers,
 	}
 
 	manager := common.NewManifestManager(agentConfig.Directory)
@@ -120,4 +121,7 @@ func printSummary(cfg *common.AgentConfig) {
 	fmt.Printf("   ├── docker-compose.yaml\n")
 	fmt.Printf("   ├── README.md\n")
 	fmt.Printf("   └── .python-version\n")
+	if cfg.TelemetryEndpoint != "" {
+		fmt.Printf("   └── otel-collector-config.yaml\n")
+	}
 }

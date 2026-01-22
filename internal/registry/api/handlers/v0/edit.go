@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
@@ -40,7 +41,7 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.Reg
 		Security: []map[string][]string{
 			{"bearer": {}},
 		},
-	}, func(ctx context.Context, input *EditServerInput) (*Response[apiv0.ServerResponse], error) {
+	}, func(ctx context.Context, input *EditServerInput) (*Response[models.ServerResponse], error) {
 		// Extract bearer token
 		const bearerPrefix = "Bearer "
 		authHeader := input.Authorization
@@ -121,8 +122,8 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.Reg
 			return nil, huma.Error400BadRequest("Failed to edit server", err)
 		}
 
-		return &Response[apiv0.ServerResponse]{
-			Body: *updatedServer,
+		return &Response[models.ServerResponse]{
+			Body: normalizeServerResponse(updatedServer),
 		}, nil
 	})
 }

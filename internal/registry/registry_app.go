@@ -16,17 +16,17 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	mcpregistry "github.com/agentregistry-dev/agentregistry/internal/mcp/registryserver"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
-	"github.com/agentregistry-dev/agentregistry/internal/version"
-
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api"
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	registryauth "github.com/agentregistry-dev/agentregistry/internal/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/importer"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
+	"github.com/agentregistry-dev/agentregistry/internal/version"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
@@ -37,6 +37,9 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		options = opts[0]
 	}
 	cfg := config.NewConfig()
+	if err := config.Validate(cfg); err != nil {
+		return fmt.Errorf("configuration validation failed: %w", err)
+	}
 
 	// Create a context with timeout for PostgreSQL connection
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -57,7 +60,17 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		}
 	}()
 
-	baseRegistryService := service.NewRegistryService(db, cfg)
+	var embeddingProvider embeddings.Provider
+	if cfg.Embeddings.Enabled {
+		client := &http.Client{Timeout: 30 * time.Second}
+		if provider, err := embeddings.Factory(&cfg.Embeddings, client); err != nil {
+			log.Printf("Warning: semantic embeddings disabled: %v", err)
+		} else {
+			embeddingProvider = provider
+		}
+	}
+
+	baseRegistryService := service.NewRegistryService(db, cfg, embeddingProvider)
 
 	var registryService service.RegistryService
 	if options.ServiceFactory != nil {
@@ -91,6 +104,11 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 			defer cancel()
 
 			importerService := importer.NewService(registryService)
+			if embeddingProvider != nil {
+				importerService.SetEmbeddingProvider(embeddingProvider)
+				importerService.SetEmbeddingDimensions(cfg.Embeddings.Dimensions)
+				importerService.SetGenerateEmbeddings(cfg.Embeddings.Enabled)
+			}
 			if err := importerService.ImportFromPath(ctx, cfg.SeedFrom, cfg.EnrichServerData); err != nil {
 				log.Printf("Failed to import seed data: %v", err)
 			}

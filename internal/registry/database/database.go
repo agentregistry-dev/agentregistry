@@ -29,6 +29,7 @@ type ServerFilter struct {
 	Version       *string    // for exact version matching
 	IsLatest      *bool      // for filtering latest versions only
 	Published     *bool      // for filtering by published status (nil = no filter)
+	Semantic      *SemanticSearchOptions
 }
 
 // ServerReadme represents a stored README blob for a server version
@@ -51,6 +52,7 @@ type SkillFilter struct {
 	Version       *string    // for exact version matching
 	IsLatest      *bool      // for filtering latest versions only
 	Published     *bool      // for filtering by published status (nil = no filter)
+	Semantic      *SemanticSearchOptions
 }
 
 // AgentFilter defines filtering options for agent queries (mirrors ServerFilter)
@@ -62,6 +64,39 @@ type AgentFilter struct {
 	Version       *string    // for exact version matching
 	IsLatest      *bool      // for filtering latest versions only
 	Published     *bool      // for filtering by published status (nil = no filter)
+	Semantic      *SemanticSearchOptions
+}
+
+// SemanticEmbedding captures data stored alongside registry resources for semantic search.
+type SemanticEmbedding struct {
+	Vector     []float32
+	Provider   string
+	Model      string
+	Dimensions int
+	Checksum   string
+	Generated  time.Time
+}
+
+// SemanticEmbeddingMetadata captures stored metadata about an embedding without the vector payload.
+type SemanticEmbeddingMetadata struct {
+	HasEmbedding bool
+	Provider     string
+	Model        string
+	Dimensions   int
+	Checksum     string
+	Generated    time.Time
+}
+
+// SemanticSearchOptions drives vector similarity queries when listing resources.
+type SemanticSearchOptions struct {
+	// RawQuery retains the original search string for embedding generation (service layer use only).
+	RawQuery string
+	// QueryEmbedding holds the vector representation expected by the database layer.
+	QueryEmbedding []float32
+	// Threshold filters out matches whose distance exceeds this value (distance metric specific).
+	Threshold float64
+	// HybridSubstring preserves substring conditions for hybrid search.
+	HybridSubstring *string
 }
 
 // Database defines the interface for database operations
@@ -99,6 +134,10 @@ type Database interface {
 	UnpublishServer(ctx context.Context, tx pgx.Tx, serverName, version string) error
 	// IsServerPublished checks if a server is published
 	IsServerPublished(ctx context.Context, tx pgx.Tx, serverName, version string) (bool, error)
+	// SetServerEmbedding upserts the semantic embedding metadata for a server version
+	SetServerEmbedding(ctx context.Context, tx pgx.Tx, serverName, version string, embedding *SemanticEmbedding) error
+	// GetServerEmbeddingMetadata returns metadata about a server's embedding without loading the vector
+	GetServerEmbeddingMetadata(ctx context.Context, tx pgx.Tx, serverName, version string) (*SemanticEmbeddingMetadata, error)
 	// UpsertServerReadme stores or updates a README blob for a server version
 	UpsertServerReadme(ctx context.Context, tx pgx.Tx, readme *ServerReadme) error
 	// GetServerReadme retrieves the README blob for a specific server version
@@ -141,6 +180,10 @@ type Database interface {
 	IsAgentPublished(ctx context.Context, tx pgx.Tx, agentName, version string) (bool, error)
 	// DeleteAgent permanently removes an agent version from the database
 	DeleteAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error
+	// SetAgentEmbedding upserts the semantic embedding metadata for an agent version
+	SetAgentEmbedding(ctx context.Context, tx pgx.Tx, agentName, version string, embedding *SemanticEmbedding) error
+	// GetAgentEmbeddingMetadata returns metadata about an agent's embedding without loading the vector
+	GetAgentEmbeddingMetadata(ctx context.Context, tx pgx.Tx, agentName, version string) (*SemanticEmbeddingMetadata, error)
 
 	// Skills API
 	// CreateSkill inserts a new skill version with official metadata
