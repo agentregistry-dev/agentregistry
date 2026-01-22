@@ -1110,4 +1110,3 @@ func (s *registryServiceImpl) ListKubernetesDeployments(ctx context.Context, nam
 
 	return resources, nil
 }
-
