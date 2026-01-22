@@ -13,18 +13,11 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/importer"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// testAuthz creates a permissive authorizer for testing
-func testAuthz() auth.Authorizer {
-	jwtManager := auth.NewJWTManager(&config.Config{})
-	return auth.Authorizer{Authz: auth.NewPublicAuthzProvider(jwtManager)}
-}
 
 func TestImportService_LocalFile(t *testing.T) {
 	// Create a temporary seed file

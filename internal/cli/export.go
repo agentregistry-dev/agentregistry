@@ -12,6 +12,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/exporter"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/spf13/cobra"
 )
 
@@ -36,7 +37,11 @@ var ExportCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		db, err := database.NewPostgreSQL(ctx, cfg.DatabaseURL)
+		// TODO: instead of communicating with db directly, we should communicate through the registry service
+		// so that the authn middleware extracts the session and stores in the context. (which the db can use to authorize queries)
+		authz := auth.Authorizer{Authz: nil}
+
+		db, err := database.NewPostgreSQL(ctx, cfg.DatabaseURL, authz)
 		if err != nil {
 			return fmt.Errorf("failed to connect to database: %w", err)
 		}

@@ -24,7 +24,7 @@ type Authorizer struct {
 
 func (a *Authorizer) Check(ctx context.Context, verb PermissionAction, resource Resource) error {
 	if a.Authz == nil {
-		return nil
+		return nil // no authz provider, so allow all actions
 	}
 	// Get session from context - may be nil for unauthenticated requests.
 	// The AuthzProvider decides whether to allow unauthenticated access.

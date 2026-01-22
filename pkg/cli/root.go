@@ -21,6 +21,10 @@ import (
 type CLIOptions struct {
 	// DaemonManager handles daemon lifecycle. If nil, uses default.
 	DaemonManager types.DaemonManager
+
+	// AuthnProvider provides CLI-specific authentication.
+	// If nil, uses ARCTL_API_TOKEN env var.
+	AuthnProvider types.CLIAuthnProvider
 }
 
 var cliOptions CLIOptions
@@ -52,11 +56,39 @@ var rootCmd = &cobra.Command{
 				return fmt.Errorf("failed to start daemon: %w", err)
 			}
 		}
-		// Check if local registry is running
-		c, err := client.NewClientFromEnv()
-		if err != nil {
-			return fmt.Errorf("API client not initialized: %w", err)
+
+		// Get authentication token
+		var token string
+		if cliOptions.AuthnProvider != nil {
+			var err error
+			token, err = cliOptions.AuthnProvider.Authenticate(cmd.Context())
+			if err != nil {
+				return fmt.Errorf("CLI authentication failed: %w", err)
+			}
 		}
+
+		// Check if local registry is running and create API client
+		var c *client.Client
+		var err error
+		if token != "" {
+			// Use token from custom provider
+			baseURL := os.Getenv("ARCTL_API_BASE_URL")
+			if baseURL == "" {
+				baseURL = "http://localhost:12121/v0"
+			}
+			c = client.NewClient(baseURL, token)
+			// Verify connectivity
+			if err := c.Ping(); err != nil {
+				return fmt.Errorf("failed to reach API: %w", err)
+			}
+		} else {
+			// Use default env-based client (existing behavior)
+			c, err = client.NewClientFromEnv()
+			if err != nil {
+				return fmt.Errorf("API client not initialized: %w", err)
+			}
+		}
+
 		APIClient = c
 		mcp.SetAPIClient(APIClient)
 		agent.SetAPIClient(APIClient)

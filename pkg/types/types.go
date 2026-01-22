@@ -86,6 +86,13 @@ type DaemonManager interface {
 	Start() error
 }
 
+// CLIAuthnProvider provides authentication for CLI commands.
+// External libraries can implement this to support different auth mechanisms
+type CLIAuthnProvider interface {
+	// Authenticate returns credentials for API calls.
+	Authenticate(ctx context.Context) (token string, err error)
+}
+
 // HTTPServerFactory is a function type that creates a server implementation that
 // adds new API routes and handlers.
 //

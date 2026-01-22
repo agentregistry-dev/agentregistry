@@ -10,19 +10,12 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// testAuthz creates a permissive authorizer for testing
-func testAuthz() auth.Authorizer {
-	jwtManager := auth.NewJWTManager(&config.Config{})
-	return auth.Authorizer{Authz: auth.NewPublicAuthzProvider(jwtManager)}
-}
 
 func TestValidateNoDuplicateRemoteURLs(t *testing.T) {
 	ctx := context.Background()
