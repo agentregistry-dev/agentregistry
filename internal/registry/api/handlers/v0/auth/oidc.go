@@ -239,7 +239,7 @@ func (h *OIDCHandler) buildPermissions(_ *OIDCClaims) []auth.Permission {
 
 	// Parse permission patterns from configuration
 	if h.config.OIDCPublishPerms != "" {
-		for _, pattern := range strings.Split(h.config.OIDCPublishPerms, ",") {
+		for pattern := range strings.SplitSeq(h.config.OIDCPublishPerms, ",") {
 			pattern = strings.TrimSpace(pattern)
 			if pattern != "" {
 				permissions = append(permissions, auth.Permission{
@@ -251,7 +251,7 @@ func (h *OIDCHandler) buildPermissions(_ *OIDCClaims) []auth.Permission {
 	}
 
 	if h.config.OIDCEditPerms != "" {
-		for _, pattern := range strings.Split(h.config.OIDCEditPerms, ",") {
+		for pattern := range strings.SplitSeq(h.config.OIDCEditPerms, ",") {
 			pattern = strings.TrimSpace(pattern)
 			if pattern != "" {
 				permissions = append(permissions, auth.Permission{

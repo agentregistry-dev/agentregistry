@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -836,9 +837,7 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 			}
 
 			depEnvValues := make(map[string]string)
-			for k, v := range dep.Config {
-				depEnvValues[k] = v
-			}
+			maps.Copy(depEnvValues, dep.Config)
 
 			agentRunRequests = append(agentRunRequests, &registry.AgentRunRequest{
 				RegistryAgent: &depAgent.Agent,

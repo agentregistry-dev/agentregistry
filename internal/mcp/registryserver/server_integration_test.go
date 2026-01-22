@@ -20,7 +20,7 @@ import (
 func TestMCPListServers_HappyPath(t *testing.T) {
 	ctx := context.Background()
 	db := database.NewTestDB(t)
-	svc := service.NewRegistryService(db, &config.Config{EnableRegistryValidation: false})
+	svc := service.NewRegistryService(db, &config.Config{EnableRegistryValidation: false}, nil)
 
 	// Seed a published server so the MCP tool can return it.
 	const (

@@ -622,7 +622,7 @@ func TestPostgreSQL_ConcurrencyAndLocking(t *testing.T) {
 		errors := make(chan error, 2)
 
 		// Launch two concurrent publish operations
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			go func(version string) {
 				err := db.InTransaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 					// Acquire lock
@@ -883,7 +883,7 @@ func TestPostgreSQL_PerformanceScenarios(t *testing.T) {
 
 		// Create many versions (but stay under the limit)
 		versionCount := 50
-		for i := 0; i < versionCount; i++ {
+		for i := range versionCount {
 			_, err := db.CreateServer(ctx, nil, &apiv0.ServerJSON{
 				Name:        serverName,
 				Description: fmt.Sprintf("Version %d", i),
@@ -920,7 +920,7 @@ func TestPostgreSQL_PerformanceScenarios(t *testing.T) {
 	t.Run("large result pagination", func(t *testing.T) {
 		// Create multiple servers for pagination testing
 		serverCount := 25
-		for i := 0; i < serverCount; i++ {
+		for i := range serverCount {
 			_, err := db.CreateServer(ctx, nil, &apiv0.ServerJSON{
 				Name:        fmt.Sprintf("com.example/pagination-server-%02d", i),
 				Description: "Pagination test server",

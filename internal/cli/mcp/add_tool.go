@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/frameworks"
@@ -38,7 +39,6 @@ var (
 )
 
 func init() {
-
 	AddToolCmd.Flags().StringVarP(&addToolDescription, "description", "d", "", "Tool description")
 	AddToolCmd.Flags().BoolVarP(&addToolForce, "force", "f", false, "Overwrite existing tool file")
 	AddToolCmd.Flags().BoolVarP(&addToolInteractive, "interactive", "i", false, "Interactive tool creation")
@@ -106,10 +106,8 @@ func validateToolName(name string) error {
 
 	// Check for reserved names
 	reservedNames := []string{"server", "main", "core", "utils", "init", "test"}
-	for _, reserved := range reservedNames {
-		if strings.ToLower(name) == reserved {
-			return fmt.Errorf("'%s' is a reserved name", name)
-		}
+	if slices.Contains(reservedNames, strings.ToLower(name)) {
+		return fmt.Errorf("'%s' is a reserved name", name)
 	}
 
 	return nil

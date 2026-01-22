@@ -56,7 +56,7 @@ func TestSetOutput(t *testing.T) {
 func TestPrintJSON(t *testing.T) {
 	tests := []struct {
 		name     string
-		data     interface{}
+		data     any
 		expected string
 	}{
 		{
@@ -79,7 +79,7 @@ func TestPrintJSON(t *testing.T) {
 		},
 		{
 			name: "Nested object",
-			data: map[string]interface{}{
+			data: map[string]any{
 				"name": "test",
 				"nested": map[string]int{
 					"count": 42,

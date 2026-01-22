@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -195,12 +196,7 @@ func isValidFramework(framework string) bool {
 		FrameworkJava,
 	}
 
-	for _, valid := range validFrameworks {
-		if framework == valid {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(validFrameworks, framework)
 }
 
 func isValidSecretProvider(provider string) bool {
@@ -209,10 +205,5 @@ func isValidSecretProvider(provider string) bool {
 		SecretProviderKubernetes,
 	}
 
-	for _, valid := range validProviders {
-		if provider == valid {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(validProviders, provider)
 }

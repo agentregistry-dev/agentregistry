@@ -30,7 +30,7 @@ func (p *Printer) SetOutput(out io.Writer) {
 }
 
 // PrintJSON prints data in JSON format
-func (p *Printer) PrintJSON(data interface{}) error {
+func (p *Printer) PrintJSON(data any) error {
 	encoder := json.NewEncoder(p.out)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(data)

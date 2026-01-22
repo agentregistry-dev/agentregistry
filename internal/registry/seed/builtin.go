@@ -58,7 +58,6 @@ func loadReadmeSeedData(data []byte) (ReadmeFile, error) {
 		return nil, fmt.Errorf("failed to parse README seed data: %w", err)
 	}
 	return readmes, nil
-
 }
 
 func importServer(

@@ -24,7 +24,6 @@ type BaseGenerator struct {
 
 // GenerateProject generates a new project
 func (g *BaseGenerator) GenerateProject(config templates.ProjectConfig) error {
-
 	templateRoot, err := fs.Sub(g.TemplateFiles, "templates")
 	if err != nil {
 		return fmt.Errorf("failed to get templates subdirectory: %w", err)
@@ -88,7 +87,6 @@ func (g *BaseGenerator) GenerateProject(config templates.ProjectConfig) error {
 
 // GenerateTool generates a new tool for a project.
 func (g *BaseGenerator) GenerateTool(projectRoot string, config templates.ToolConfig) error {
-
 	templateRoot, err := fs.Sub(g.TemplateFiles, "templates")
 	if err != nil {
 		return fmt.Errorf("failed to get templates subdirectory: %w", err)
@@ -130,7 +128,7 @@ func (g *BaseGenerator) GenerateToolFile(filePath string, config templates.ToolC
 	toolName := config.ToolName
 	toolNamePascalCase := cases.Title(language.English).String(toolName)
 	toolNameCamelCase := strcase.LowerCamelCase(toolName)
-	data := map[string]interface{}{
+	data := map[string]any{
 		"ToolName":           toolName,
 		"ToolNameCamelCase":  toolNameCamelCase,
 		"ToolNameTitle":      cases.Title(language.English).String(toolName),
@@ -190,7 +188,7 @@ func (g *BaseGenerator) initGitRepo(dir string, verbose bool) error {
 }
 
 // renderTemplate renders a template string with the provided data
-func renderTemplate(tmplContent string, data interface{}) (string, error) {
+func renderTemplate(tmplContent string, data any) (string, error) {
 	tmpl, err := template.New("template").Parse(tmplContent)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)

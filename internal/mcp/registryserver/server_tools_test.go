@@ -141,6 +141,18 @@ func (d *discoveryRegistry) RemoveServer(context.Context, string, string) error 
 	return database.ErrNotFound
 }
 func (d *discoveryRegistry) ReconcileAll(context.Context) error { return nil }
+func (d *discoveryRegistry) UpsertServerEmbedding(context.Context, string, string, *database.SemanticEmbedding) error {
+	return database.ErrNotFound
+}
+func (d *discoveryRegistry) GetServerEmbeddingMetadata(context.Context, string, string) (*database.SemanticEmbeddingMetadata, error) {
+	return nil, database.ErrNotFound
+}
+func (d *discoveryRegistry) UpsertAgentEmbedding(context.Context, string, string, *database.SemanticEmbedding) error {
+	return database.ErrNotFound
+}
+func (d *discoveryRegistry) GetAgentEmbeddingMetadata(context.Context, string, string) (*database.SemanticEmbeddingMetadata, error) {
+	return nil, database.ErrNotFound
+}
 
 func TestServerTools_ListAndReadme(t *testing.T) {
 	ctx := context.Background()

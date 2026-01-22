@@ -45,7 +45,7 @@ func NewClientFromEnv() (*Client, error) {
 	}
 	// Verify connectivity
 	// retry backoff with exponential backoff
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if err := c.Ping(); err != nil {
 			if i == 2 {
 				return nil, fmt.Errorf("failed to reach API after 3 attempts: %w", err)
@@ -814,7 +814,7 @@ func (c *Client) DeployAgent(name, version string, config map[string]string) (*D
 // UpdateDeploymentConfig updates deployment configuration
 func (c *Client) UpdateDeploymentConfig(name string, config map[string]string) (*DeploymentResponse, error) {
 	encName := url.PathEscape(name)
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"config": config,
 	}
 

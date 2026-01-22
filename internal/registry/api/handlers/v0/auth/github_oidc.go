@@ -9,6 +9,7 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"slices"
 	"strings"
 
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
@@ -116,14 +117,7 @@ func (v *GitHubOIDCValidator) ValidateToken(ctx context.Context, tokenString str
 	}
 
 	// Validate audience
-	foundAudience := false
-	for _, aud := range claims.Audience {
-		if aud == audience {
-			foundAudience = true
-			break
-		}
-	}
-	if !foundAudience {
+	if !slices.Contains(claims.Audience, audience) {
 		return nil, fmt.Errorf("invalid audience: expected %s, got %v", audience, claims.Audience)
 	}
 

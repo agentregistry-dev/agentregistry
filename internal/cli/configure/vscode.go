@@ -24,7 +24,7 @@ func (v *VSCodeConfigurer) GetConfigPath() (string, error) {
 	return ".vscode/mcp.json", nil
 }
 
-func (v *VSCodeConfigurer) CreateConfig(url string, configPath string) (interface{}, error) {
+func (v *VSCodeConfigurer) CreateConfig(url string, configPath string) (any, error) {
 	config := mcpConfig{
 		Servers: make(map[string]mcpServerConfig),
 	}

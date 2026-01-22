@@ -95,10 +95,7 @@ func displayPaginatedServers(servers []*v0.ServerResponse, deployedServers []*cl
 	start := 0
 
 	for start < total {
-		end := start + pageSize
-		if end > total {
-			end = total
-		}
+		end := min(start+pageSize, total)
 
 		// Display current page
 		printServersTable(servers[start:end], deployedServers)
@@ -147,7 +144,7 @@ func sortServers(servers []*v0.ServerResponse, column string) {
 	switch column {
 	case "version":
 		// Sort by version
-		for i := 0; i < len(servers); i++ {
+		for i := range len(servers) {
 			for j := i + 1; j < len(servers); j++ {
 				if servers[i].Server.Version > servers[j].Server.Version {
 					servers[i], servers[j] = servers[j], servers[i]
@@ -156,7 +153,7 @@ func sortServers(servers []*v0.ServerResponse, column string) {
 		}
 	case "type":
 		// Sort by registry type
-		for i := 0; i < len(servers); i++ {
+		for i := range len(servers) {
 			for j := i + 1; j < len(servers); j++ {
 				typeI := ""
 				typeJ := ""
@@ -177,7 +174,7 @@ func sortServers(servers []*v0.ServerResponse, column string) {
 		}
 	case "status":
 		// Sort by status
-		for i := 0; i < len(servers); i++ {
+		for i := range len(servers) {
 			for j := i + 1; j < len(servers); j++ {
 				statusI := string(servers[i].Meta.Official.Status)
 				statusJ := string(servers[j].Meta.Official.Status)
@@ -188,7 +185,7 @@ func sortServers(servers []*v0.ServerResponse, column string) {
 		}
 	case "updated":
 		// Sort by updated time (most recent first)
-		for i := 0; i < len(servers); i++ {
+		for i := range len(servers) {
 			for j := i + 1; j < len(servers); j++ {
 				timeI := servers[i].Meta.Official.UpdatedAt
 				timeJ := servers[j].Meta.Official.UpdatedAt
@@ -199,7 +196,7 @@ func sortServers(servers []*v0.ServerResponse, column string) {
 		}
 	default:
 		// Default: sort by name, then version
-		for i := 0; i < len(servers); i++ {
+		for i := range len(servers) {
 			for j := i + 1; j < len(servers); j++ {
 				if servers[i].Server.Name > servers[j].Server.Name ||
 					(servers[i].Server.Name == servers[j].Server.Name && servers[i].Server.Version > servers[j].Server.Version) {
@@ -296,7 +293,7 @@ func filterServersByType(servers []*v0.ServerResponse, typeFilter string) []*v0.
 	return filtered
 }
 
-func outputDataJson(data interface{}) error {
+func outputDataJson(data any) error {
 	p := printer.New(printer.OutputTypeJSON, false)
 	if err := p.PrintJSON(data); err != nil {
 		return fmt.Errorf("failed to output JSON: %w", err)
@@ -304,7 +301,7 @@ func outputDataJson(data interface{}) error {
 	return nil
 }
 
-func outputDataYaml(data interface{}) error {
+func outputDataYaml(data any) error {
 	// For now, YAML is not implemented, fallback to JSON
 	fmt.Println("YAML output not yet implemented, using JSON:")
 	return outputDataJson(data)

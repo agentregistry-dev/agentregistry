@@ -32,7 +32,7 @@ func normalizeServerResponse(src *apiv0.ServerResponse) models.ServerResponse {
 
 	if server.Meta != nil && server.Meta.PublisherProvided != nil {
 		if raw, ok := server.Meta.PublisherProvided[semanticMetadataKey]; ok {
-			if m, okm := raw.(map[string]interface{}); okm {
+			if m, okm := raw.(map[string]any); okm {
 				if v, okv := m["score"].(float64); okv {
 					semanticScore = &v
 				}

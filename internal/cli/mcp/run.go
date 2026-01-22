@@ -82,7 +82,6 @@ func runRun(cmd *cobra.Command, args []string) error {
 
 // runMCPServerWithRuntime starts an MCP server using the runtime
 func runMCPServerWithRuntime(server *apiv0.ServerResponse) error {
-
 	// Parse environment variables, arguments, and headers from flags
 	envValues, err := parseKeyValuePairs(runEnvVars)
 	if err != nil {

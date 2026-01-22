@@ -152,6 +152,18 @@ func (f *fakeRegistry) PublishSkill(context.Context, string, string) error {
 func (f *fakeRegistry) UnpublishSkill(context.Context, string, string) error {
 	return errors.New("not implemented")
 }
+func (f *fakeRegistry) UpsertServerEmbedding(context.Context, string, string, *database.SemanticEmbedding) error {
+	return errors.New("not implemented")
+}
+func (f *fakeRegistry) GetServerEmbeddingMetadata(context.Context, string, string) (*database.SemanticEmbeddingMetadata, error) {
+	return nil, errors.New("not implemented")
+}
+func (f *fakeRegistry) UpsertAgentEmbedding(context.Context, string, string, *database.SemanticEmbedding) error {
+	return errors.New("not implemented")
+}
+func (f *fakeRegistry) GetAgentEmbeddingMetadata(context.Context, string, string) (*database.SemanticEmbeddingMetadata, error) {
+	return nil, errors.New("not implemented")
+}
 
 func TestDeploymentTools_ListAndGet(t *testing.T) {
 	ctx := context.Background()

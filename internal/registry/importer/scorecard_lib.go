@@ -1,10 +1,11 @@
 package importer
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -77,11 +78,11 @@ func extractScorecardHighlights(results []checker.CheckResult, limit int) []stri
 	if len(entries) == 0 {
 		return nil
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].Score == entries[j].Score {
-			return entries[i].Name < entries[j].Name
+	slices.SortFunc(entries, func(a, b checker.CheckResult) int {
+		if a.Score == b.Score {
+			return cmp.Compare(a.Name, b.Name)
 		}
-		return entries[i].Score < entries[j].Score
+		return cmp.Compare(a.Score, b.Score)
 	})
 	if len(entries) > limit {
 		entries = entries[:limit]

@@ -165,14 +165,7 @@ func showServerDetails(server *v0.ServerResponse, otherVersions []string) {
 	t.AddRow("Version", versionDisplay)
 
 	if len(otherVersions) > 0 {
-		versionsStr := ""
-		for i, v := range otherVersions {
-			if i > 0 {
-				versionsStr += ", "
-			}
-			versionsStr += v
-		}
-		t.AddRow("Other Versions", versionsStr)
+		t.AddRow("Other Versions", strings.Join(otherVersions, ", "))
 	}
 
 	t.AddRow("Type", printer.EmptyValueOrDefault(registryType, "<none>"))

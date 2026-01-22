@@ -23,7 +23,7 @@ func (c *CursorConfigurer) GetConfigPath() (string, error) {
 	return ".cursor/mcp.json", nil
 }
 
-func (c *CursorConfigurer) CreateConfig(url string, configPath string) (interface{}, error) {
+func (c *CursorConfigurer) CreateConfig(url string, configPath string) (any, error) {
 	config := cursorConfig{
 		MCPServers: make(map[string]cursorServerConfig),
 	}

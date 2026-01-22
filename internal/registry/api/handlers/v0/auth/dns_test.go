@@ -366,15 +366,13 @@ func TestDNSAuthHandler_Permissions(t *testing.T) {
 				require.NotNil(t, foundPerm, "Permission with pattern %s not found", expectedPattern)
 
 				// Test various resource scenarios
-				if strings.HasSuffix(expectedPattern, "/*") {
+				if basePattern, found := strings.CutSuffix(expectedPattern, "/*"); found {
 					// Exact domain permissions (e.g., "com.example/*")
-					basePattern := strings.TrimSuffix(expectedPattern, "/*")
 					testResource := basePattern + "/my-package"
 					assert.True(t, jwtManager.HasPermission(testResource, intauth.PermissionActionPublish, claims.Permissions),
 						"Should have permission for %s with pattern %s", testResource, expectedPattern)
-				} else if strings.HasSuffix(expectedPattern, ".*") {
+				} else if basePattern, found := strings.CutSuffix(expectedPattern, ".*"); found {
 					// Subdomain permissions (e.g., "com.example.*")
-					basePattern := strings.TrimSuffix(expectedPattern, ".*")
 					testResource := basePattern + ".subdomain/my-package"
 					assert.True(t, jwtManager.HasPermission(testResource, intauth.PermissionActionPublish, claims.Permissions),
 						"Should have permission for %s with pattern %s", testResource, expectedPattern)

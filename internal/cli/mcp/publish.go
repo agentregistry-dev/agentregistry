@@ -165,7 +165,6 @@ func buildAndPublishLocal(absPath string) error {
 			pushCmd.Stderr = os.Stderr
 			if err := pushCmd.Run(); err != nil {
 				return fmt.Errorf("docker push failed for %s: %w", imageRef, err)
-
 			}
 		}
 	}

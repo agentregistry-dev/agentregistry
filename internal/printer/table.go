@@ -82,7 +82,7 @@ func (p *TablePrinter) SetHeaders(headers ...string) {
 }
 
 // AddRow adds a data row to the table
-func (p *TablePrinter) AddRow(values ...interface{}) {
+func (p *TablePrinter) AddRow(values ...any) {
 	row := make([]string, len(values))
 	for i, v := range values {
 		row[i] = fmt.Sprintf("%v", v)
@@ -115,7 +115,7 @@ func PrintTable(headers []string, rows [][]string, opts ...Option) error {
 	printer := NewTablePrinter(os.Stdout, opts...)
 	printer.SetHeaders(headers...)
 	for _, row := range rows {
-		values := make([]interface{}, len(row))
+		values := make([]any, len(row))
 		for i, v := range row {
 			values[i] = v
 		}

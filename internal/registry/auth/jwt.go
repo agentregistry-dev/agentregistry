@@ -160,7 +160,7 @@ func (j *JWTManager) ValidateToken(_ context.Context, tokenString string) (*JWTC
 	token, err := jwt.ParseWithClaims(
 		tokenString,
 		&JWTClaims{},
-		func(_ *jwt.Token) (interface{}, error) { return j.publicKey, nil },
+		func(_ *jwt.Token) (any, error) { return j.publicKey, nil },
 		jwt.WithValidMethods([]string{"EdDSA"}),
 		jwt.WithExpirationRequired(),
 	)
@@ -195,8 +195,8 @@ func isResourceMatch(resource, pattern string) bool {
 	if pattern == "*" {
 		return true
 	}
-	if strings.HasSuffix(pattern, "*") {
-		return strings.HasPrefix(resource, strings.TrimSuffix(pattern, "*"))
+	if prefix, found := strings.CutSuffix(pattern, "*"); found {
+		return strings.HasPrefix(resource, prefix)
 	}
 	return resource == pattern
 }

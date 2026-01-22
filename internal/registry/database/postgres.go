@@ -276,9 +276,9 @@ func annotateServerSemanticScore(server *apiv0.ServerJSON, score float64) {
 		server.Meta = &apiv0.ServerMeta{}
 	}
 	if server.Meta.PublisherProvided == nil {
-		server.Meta.PublisherProvided = map[string]interface{}{}
+		server.Meta.PublisherProvided = map[string]any{}
 	}
-	server.Meta.PublisherProvided[semanticMetadataKey] = map[string]interface{}{
+	server.Meta.PublisherProvided[semanticMetadataKey] = map[string]any{
 		"score": score,
 	}
 }

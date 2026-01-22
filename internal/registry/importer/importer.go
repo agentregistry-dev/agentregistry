@@ -16,7 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -440,8 +440,8 @@ func (s *Service) enrichServer(ctx context.Context, server *apiv0.ServerJSON) er
 	codeqlEnabled, _ := s.detectCodeQLEnabled(ctx, owner, repo)
 
 	// Security alert counts (best-effort, require token)
-	var dependabotAlerts interface{} = nil
-	var codeScanningAlerts interface{} = nil
+	var dependabotAlerts any = nil
+	var codeScanningAlerts any = nil
 	if strings.TrimSpace(s.githubToken) != "" {
 		if cnt, err := s.fetchDependabotAlertsCount(ctx, owner, repo); err == nil && cnt != nil {
 			dependabotAlerts = *cnt
@@ -471,9 +471,9 @@ func (s *Service) enrichServer(ctx context.Context, server *apiv0.ServerJSON) er
 	osvRes, _ := s.runOSVScan(ctx, owner, repo)
 
 	// Endpoint health probe (first remote only)
-	var endpointReachable interface{} = nil
-	var endpointResponseMs interface{} = nil
-	var endpointCheckedAt interface{} = nil
+	var endpointReachable any = nil
+	var endpointResponseMs any = nil
+	var endpointCheckedAt any = nil
 	if len(server.Remotes) > 0 && server.Remotes[0].URL != "" {
 		reachable, ms, ts := probeEndpointHealth(ctx, server.Remotes[0].URL)
 		endpointReachable = reachable
@@ -489,52 +489,52 @@ func (s *Service) enrichServer(ctx context.Context, server *apiv0.ServerJSON) er
 		server.Meta = &apiv0.ServerMeta{}
 	}
 	if server.Meta.PublisherProvided == nil {
-		server.Meta.PublisherProvided = map[string]interface{}{}
+		server.Meta.PublisherProvided = map[string]any{}
 	}
 
-	enterprise := map[string]interface{}{
+	enterprise := map[string]any{
 		"stars": repoSummary.Stars,
-		"downloads": map[string]interface{}{
+		"downloads": map[string]any{
 			"total": releasesSummary.TotalDownloads,
 		},
 		"score": score,
-		"repo": map[string]interface{}{
+		"repo": map[string]any{
 			"forks_count":      repoSummary.ForksCount,
 			"watchers_count":   repoSummary.WatchersCount,
 			"primary_language": repoSummary.PrimaryLanguage,
 			"topics":           repoSummary.Topics,
 			"tags":             repoTags,
 		},
-		"activity": map[string]interface{}{
+		"activity": map[string]any{
 			"created_at": timePtrToRFC3339(repoSummary.CreatedAt),
 			"updated_at": timePtrToRFC3339(repoSummary.UpdatedAt),
 			"pushed_at":  timePtrToRFC3339(repoSummary.PushedAt),
 		},
-		"releases": map[string]interface{}{
+		"releases": map[string]any{
 			"latest_published_at": timePtrToRFC3339(releasesSummary.LatestPublishedAt),
 		},
-		"identity": map[string]interface{}{
+		"identity": map[string]any{
 			"publisher_identity_verified_by_jwt": false, // importer lacks JWT context
 			"org_is_verified":                    orgIsVerified,
 		},
-		"semver": map[string]interface{}{
+		"semver": map[string]any{
 			"uses_semver": usesSemver,
 		},
-		"scorecard": map[string]interface{}{
+		"scorecard": map[string]any{
 			"openssf": ossfScore,
 		},
-		"endpoint_health": map[string]interface{}{
+		"endpoint_health": map[string]any{
 			"reachable":       endpointReachable,
 			"response_ms":     endpointResponseMs,
 			"last_checked_at": endpointCheckedAt,
 		},
-		"security_scanning": map[string]interface{}{
+		"security_scanning": map[string]any{
 			"codeql_enabled":       codeqlEnabled,
 			"dependabot_enabled":   dependabotEnabled,
 			"code_scanning_alerts": codeScanningAlerts,
 			"dependabot_alerts":    dependabotAlerts,
 		},
-		"scans": func() map[string]interface{} {
+		"scans": func() map[string]any {
 			summaries := []string{}
 			if osvRes != nil && strings.TrimSpace(osvRes.Summary) != "" {
 				summaries = append(summaries, strings.TrimSpace(osvRes.Summary))
@@ -545,13 +545,13 @@ func (s *Service) enrichServer(ctx context.Context, server *apiv0.ServerJSON) er
 			if text := containerSummary.summaryString(); text != "" {
 				summaries = append(summaries, text)
 			}
-			var summaryValue interface{}
+			var summaryValue any
 			if len(summaries) > 0 {
 				summaryValue = strings.Join(summaries, " | ")
 			} else {
 				summaryValue = nil
 			}
-			details := []interface{}{}
+			details := []any{}
 			addDetail := func(text string) {
 				if text == "" {
 					return
@@ -571,25 +571,25 @@ func (s *Service) enrichServer(ctx context.Context, server *apiv0.ServerJSON) er
 					addDetail(d)
 				}
 			}
-			return map[string]interface{}{
+			return map[string]any{
 				"summary": summaryValue,
 				"details": details,
-				"dependency_health": func() interface{} {
+				"dependency_health": func() any {
 					if dependencySummary == nil {
 						return nil
 					}
-					return map[string]interface{}{
+					return map[string]any{
 						"packages_total":    dependencySummary.TotalPackages,
 						"ecosystems":        dependencySummary.Ecosystems,
 						"copyleft_licenses": dependencySummary.CopyleftCount,
 						"unknown_licenses":  dependencySummary.UnknownLicenseCount,
 					}
 				}(),
-				"container_images": func() interface{} {
+				"container_images": func() any {
 					if containerSummary == nil {
-						return []interface{}{}
+						return []any{}
 					}
-					entry := map[string]interface{}{
+					entry := map[string]any{
 						"registry":              containerSummary.Registry,
 						"image":                 containerSummary.Image,
 						"pull_count":            containerSummary.PullCount,
@@ -598,7 +598,7 @@ func (s *Service) enrichServer(ctx context.Context, server *apiv0.ServerJSON) er
 						"latest_tag":            containerSummary.LatestTag,
 						"latest_tag_updated_at": timePtrToRFC3339(containerSummary.LatestTagUpdatedAt),
 					}
-					return []interface{}{entry}
+					return []any{entry}
 				}(),
 			}
 		}(),
@@ -810,7 +810,7 @@ func isSemverVersion(v string) bool {
 }
 
 // timePtrToRFC3339 formats a *time.Time as RFC3339 or returns nil if the pointer is nil.
-func timePtrToRFC3339(t *time.Time) interface{} {
+func timePtrToRFC3339(t *time.Time) any {
 	if t == nil {
 		return nil
 	}
@@ -1362,8 +1362,7 @@ func (s *Service) loadProgressCache() error {
 		return err
 	}
 
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		key := strings.TrimSpace(line)
 		if key == "" {
 			continue
@@ -1444,7 +1443,7 @@ func (s *Service) persistProgressCacheLocked() error {
 	for key := range s.processedServers {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	for _, key := range keys {
 		if _, err := tmp.WriteString(key + "\n"); err != nil {

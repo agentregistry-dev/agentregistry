@@ -46,7 +46,7 @@ func TestPublishEndpoint(t *testing.T) {
 
 	testCases := []struct {
 		name                 string
-		requestBody          interface{}
+		requestBody          any
 		tokenClaims          *auth.JWTClaims
 		authHeader           string
 		setupRegistryService func(service.RegistryService)

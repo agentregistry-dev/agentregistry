@@ -132,7 +132,7 @@ func (g *Generator) initGitRepo(dir string, verbose bool) error {
 }
 
 // renderTemplate renders a template string with the provided data
-func renderTemplate(tmplContent string, data interface{}) (string, error) {
+func renderTemplate(tmplContent string, data any) (string, error) {
 	tmpl, err := template.New("template").Parse(tmplContent)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)

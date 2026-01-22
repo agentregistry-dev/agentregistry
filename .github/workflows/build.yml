@@ -90,9 +90,7 @@ jobs:
       run: make build-ui
 
     - name: golangci-lint
-      uses: golangci/golangci-lint-action@v8
-      with:
-        version: latest
+      run: make lint
 
     - name: Lint UI
       run: cd ui && npm run lint
