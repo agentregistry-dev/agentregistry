@@ -126,15 +126,6 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
 		}
 
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: skillName,
-			Type: auth.PermissionArtifactTypeSkill,
-		}
-		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
-			return nil, err
-		}
-
 		var skillResp *skillmodels.SkillResponse
 		if version == "latest" {
 			skillResp, err = registry.GetSkillByName(ctx, skillName)
@@ -162,15 +153,6 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 		skillName, err := url.PathUnescape(input.SkillName)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid skill name encoding", err)
-		}
-
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: skillName,
-			Type: auth.PermissionArtifactTypeSkill,
-		}
-		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
-			return nil, err
 		}
 
 		// Get all versions of the skill
@@ -223,26 +205,6 @@ func RegisterSkillsCreateEndpoint(api huma.API, pathPrefix string, registry serv
 		Tags:        []string{"skills", "publish"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, func(ctx context.Context, input *CreateSkillInput) (*Response[skillmodels.SkillResponse], error) {
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: input.Body.Name,
-			Type: auth.PermissionArtifactTypeSkill,
-		}
-
-		action := auth.PermissionActionPush
-		// Check if the skill already exists to set the appropriate action (edit if existing)
-		existingSkill, err := registry.GetSkillByNameAndVersion(ctx, input.Body.Name, input.Body.Version)
-		if err != nil && err != database.ErrNotFound {
-			return nil, huma.Error500InternalServerError("Failed to check if skill exists", err)
-		}
-		if existingSkill != nil {
-			action = auth.PermissionActionEdit
-		}
-
-		if err := authz.Check(ctx, action, resource); err != nil {
-			return nil, err
-		}
-
 		return createSkillHandler(ctx, input, registry)
 	})
 }
@@ -258,26 +220,6 @@ func RegisterAdminSkillsCreateEndpoint(api huma.API, pathPrefix string, registry
 		Description: "Create a new Agentic skill in the registry or update an existing one. By default, skills are created as unpublished (published=false).",
 		Tags:        []string{"skills", "admin"},
 	}, func(ctx context.Context, input *CreateSkillInput) (*Response[skillmodels.SkillResponse], error) {
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: input.Body.Name,
-			Type: auth.PermissionArtifactTypeSkill,
-		}
-
-		action := auth.PermissionActionPush
-		// Check if the skill already exists to set the appropriate action (edit if existing)
-		existingSkill, err := registry.GetSkillByNameAndVersion(ctx, input.Body.Name, input.Body.Version)
-		if err != nil && err != database.ErrNotFound {
-			return nil, huma.Error500InternalServerError("Failed to check if skill exists", err)
-		}
-		if existingSkill != nil {
-			action = auth.PermissionActionEdit
-		}
-
-		if err := authz.Check(ctx, action, resource); err != nil {
-			return nil, err
-		}
-
 		// Create/update the skill (published defaults to false in the service layer)
 		createdSkill, err := registry.CreateSkill(ctx, &input.Body)
 		if err != nil {
@@ -308,15 +250,6 @@ func RegisterSkillsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 		version, err := url.PathUnescape(input.Version)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
-		}
-
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: skillName,
-			Type: auth.PermissionArtifactTypeSkill,
-		}
-		if err := authz.Check(ctx, auth.PermissionActionPublish, resource); err != nil {
-			return nil, err
 		}
 
 		// Call the service to publish the skill
@@ -351,15 +284,6 @@ func RegisterSkillsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 		version, err := url.PathUnescape(input.Version)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
-		}
-
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: skillName,
-			Type: auth.PermissionArtifactTypeSkill,
-		}
-		if err := authz.Check(ctx, auth.PermissionActionPublish, resource); err != nil {
-			return nil, err
 		}
 
 		// Call the service to unpublish the skill

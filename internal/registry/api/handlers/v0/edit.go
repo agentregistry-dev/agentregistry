@@ -61,15 +61,6 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.Reg
 			return nil, huma.Error500InternalServerError("Failed to get current server", err)
 		}
 
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: serverName,
-			Type: auth.PermissionArtifactTypeServer,
-		}
-		if err := authz.Check(ctx, auth.PermissionActionEdit, resource); err != nil {
-			return nil, err
-		}
-
 		// Prevent renaming servers
 		if currentServer.Server.Name != input.Body.Name {
 			return nil, huma.Error400BadRequest("Cannot rename server")

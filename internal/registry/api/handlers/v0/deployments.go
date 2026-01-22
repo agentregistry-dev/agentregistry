@@ -102,13 +102,6 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		default:
 			return nil, huma.Error400BadRequest("Invalid resource type. Must be 'mcp' or 'agent'")
 		}
-		resource := auth.Resource{
-			Name: input.ServerName,
-			Type: artifactType,
-		}
-		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
-			return nil, err
-		}
 
 		serverName, err := url.PathUnescape(input.ServerName)
 		if err != nil {
@@ -150,15 +143,6 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			artifactType = auth.PermissionArtifactTypeAgent
 		default:
 			return nil, huma.Error400BadRequest("Invalid resource type. Must be 'mcp' or 'agent'")
-		}
-
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: input.Body.ServerName,
-			Type: artifactType,
-		}
-		if err := authz.Check(ctx, auth.PermissionActionDeploy, resource); err != nil {
-			return nil, err
 		}
 
 		var deployment *models.Deployment
@@ -216,15 +200,6 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			return nil, huma.Error400BadRequest("Invalid resource type. Must be 'mcp' or 'agent'")
 		}
 
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: serverName,
-			Type: artifactType,
-		}
-		if err := authz.Check(ctx, auth.PermissionActionEdit, resource); err != nil {
-			return nil, err
-		}
-
 		version, err := url.PathUnescape(input.Version)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
@@ -263,15 +238,6 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			artifactType = auth.PermissionArtifactTypeAgent
 		default:
 			return nil, huma.Error400BadRequest("Invalid resource type. Must be 'mcp' or 'agent'")
-		}
-
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: serverName,
-			Type: artifactType,
-		}
-		if err := authz.Check(ctx, auth.PermissionActionDeploy, resource); err != nil {
-			return nil, err
 		}
 
 		version, err := url.PathUnescape(input.Version)

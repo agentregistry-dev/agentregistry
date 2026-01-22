@@ -2,6 +2,13 @@ package auth
 
 import (
 	"context"
+
+	"github.com/danielgtaylor/huma/v2"
+)
+
+var (
+	// ErrForbidden is returned when a user is authenticated but lacks permission
+	ErrForbidden = huma.Error403Forbidden("You do not have permission to perform this action")
 )
 
 // Authz

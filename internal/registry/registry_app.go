@@ -20,8 +20,9 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
@@ -77,7 +78,15 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		}
 	}
 
-	baseRegistryService := service.NewRegistryService(db, cfg, embeddingProvider)
+	// Build authorizer from options
+	jwtManager := auth.NewJWTManager(cfg)
+	authzProvider := options.AuthzProvider
+	if authzProvider == nil {
+		authzProvider = auth.NewPublicAuthzProvider(jwtManager)
+	}
+	authz := auth.Authorizer{Authz: authzProvider}
+
+	baseRegistryService := service.NewRegistryService(db, cfg, embeddingProvider, authz)
 
 	var registryService service.RegistryService
 	if options.ServiceFactory != nil {

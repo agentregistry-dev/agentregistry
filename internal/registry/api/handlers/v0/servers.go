@@ -109,15 +109,6 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			Description: "Permanently delete an MCP server version from the registry.",
 			Tags:        []string{"servers", "admin"},
 		}, func(ctx context.Context, input *ServerVersionDetailInput) (*Response[EmptyResponse], error) {
-			// Enforce authorization
-			resource := auth.Resource{
-				Name: input.ServerName,
-				Type: auth.PermissionArtifactTypeServer,
-			}
-			if err := authz.Check(ctx, auth.PermissionActionDelete, resource); err != nil {
-				return nil, err
-			}
-
 			serverName, err := url.PathUnescape(input.ServerName)
 			if err != nil {
 				return nil, huma.Error400BadRequest("Invalid server name encoding", err)
@@ -154,15 +145,6 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		Description: "Create a new MCP server in the registry as an unpublished entry (published=false).",
 		Tags:        tags,
 	}, func(ctx context.Context, input *CreateServerInput) (*Response[models.ServerResponse], error) {
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: input.Body.Name,
-			Type: auth.PermissionArtifactTypeServer,
-		}
-		if err := authz.Check(ctx, auth.PermissionActionPush, resource); err != nil {
-			return nil, err
-		}
-
 		// Always create as unpublished (handled in service layer)
 		return createServerHandler(ctx, input, registry)
 	})
@@ -278,15 +260,6 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
 		}
 
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: serverName,
-			Type: auth.PermissionArtifactTypeServer,
-		}
-		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
-			return nil, err
-		}
-
 		// If all=true, return all versions
 		if input.All {
 			// Determine if we should filter to published only
@@ -391,15 +364,6 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
 		}
 
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: serverName,
-			Type: auth.PermissionArtifactTypeServer,
-		}
-		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
-			return nil, err
-		}
-
 		// Get all versions for this server
 		// For public endpoints, only get published versions (published = true)
 		// For admin endpoints, get all versions (published = true or false)
@@ -441,15 +405,6 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
 		}
 
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: serverName,
-			Type: auth.PermissionArtifactTypeServer,
-		}
-		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
-			return nil, err
-		}
-
 		readme, err := registry.GetServerReadmeLatest(ctx, serverName)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
@@ -479,15 +434,6 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		version, err := url.PathUnescape(input.Version)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
-		}
-
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: serverName,
-			Type: auth.PermissionArtifactTypeServer,
-		}
-		if err := authz.Check(ctx, auth.PermissionActionRead, resource); err != nil {
-			return nil, err
 		}
 
 		var readme *database.ServerReadme
@@ -556,26 +502,6 @@ func RegisterCreateEndpoint(api huma.API, pathPrefix string, registry service.Re
 			{"bearer": {}},
 		},
 	}, func(ctx context.Context, input *CreateServerInput) (*Response[models.ServerResponse], error) {
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: input.Body.Name,
-			Type: auth.PermissionArtifactTypeServer,
-		}
-
-		action := auth.PermissionActionPush
-		// Check if the server already exists to decide the action
-		existingServer, err := registry.GetServerByNameAndVersion(ctx, input.Body.Name, input.Body.Version, false)
-		if err != nil && err != database.ErrNotFound {
-			return nil, huma.Error500InternalServerError("Failed to check if server exists", err)
-		}
-		if existingServer != nil {
-			action = auth.PermissionActionEdit
-		}
-
-		if err := authz.Check(ctx, action, resource); err != nil {
-			return nil, err
-		}
-
 		return createServerHandler(ctx, input, registry)
 	})
 }
@@ -591,26 +517,6 @@ func RegisterAdminCreateEndpoint(api huma.API, pathPrefix string, registry servi
 		Description: "Create a new MCP server in the registry or update an existing one. By default, servers are created as unpublished (published=false).",
 		Tags:        []string{"servers", "admin"},
 	}, func(ctx context.Context, input *CreateServerInput) (*Response[models.ServerResponse], error) {
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: input.Body.Name,
-			Type: auth.PermissionArtifactTypeServer,
-		}
-
-		action := auth.PermissionActionPush
-		// Check if the server already exists to set the appropriate action (edit if existing)
-		existingServer, err := registry.GetServerByNameAndVersion(ctx, input.Body.Name, input.Body.Version, false)
-		if err != nil && err != database.ErrNotFound {
-			return nil, huma.Error500InternalServerError("Failed to check if server exists", err)
-		}
-		if existingServer != nil {
-			action = auth.PermissionActionEdit
-		}
-
-		if err := authz.Check(ctx, action, resource); err != nil {
-			return nil, err
-		}
-
 		return createServerHandler(ctx, input, registry)
 	})
 }
@@ -635,15 +541,6 @@ func RegisterPublishStatusEndpoints(api huma.API, pathPrefix string, registry se
 		version, err := url.PathUnescape(input.Version)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
-		}
-
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: serverName,
-			Type: auth.PermissionArtifactTypeServer,
-		}
-		if err := authz.Check(ctx, auth.PermissionActionPublish, resource); err != nil {
-			return nil, err
 		}
 
 		// Call the service to publish the server
@@ -678,15 +575,6 @@ func RegisterPublishStatusEndpoints(api huma.API, pathPrefix string, registry se
 		version, err := url.PathUnescape(input.Version)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
-		}
-
-		// Enforce authorization
-		resource := auth.Resource{
-			Name: serverName,
-			Type: auth.PermissionArtifactTypeServer,
-		}
-		if err := authz.Check(ctx, auth.PermissionActionPublish, resource); err != nil {
-			return nil, err
 		}
 
 		// Call the service to unpublish the server
