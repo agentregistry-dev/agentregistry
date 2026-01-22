@@ -13,15 +13,14 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/kagent"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
-
 	v1alpha2 "github.com/kagent-dev/kagent/go/api/v1alpha2"
 	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
 	"go.yaml.in/yaml/v3"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
 // fieldManager identifies agentregistry as the field owner for server-side apply.
@@ -37,21 +36,10 @@ func init() {
 }
 
 // newClient creates a controller-runtime client with the kagent scheme.
-func newClient(verbose bool) (client.Client, error) {
-	kubeconfigPath := os.Getenv("KUBECONFIG")
-	if kubeconfigPath == "" {
-		if home := os.Getenv("HOME"); home != "" {
-			kubeconfigPath = filepath.Join(home, ".kube", "config")
-		}
-	}
-
-	if verbose {
-		fmt.Printf("Using kubeconfig: %s\n", kubeconfigPath)
-	}
-
-	restConfig, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+func newClient() (client.Client, error) {
+	restConfig, err := config.GetConfig()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load kubeconfig from %s: %w", kubeconfigPath, err)
+		return nil, fmt.Errorf("failed to get kubernetes config: %w", err)
 	}
 
 	c, err := client.New(restConfig, client.Options{Scheme: scheme})
@@ -260,7 +248,7 @@ func (r *agentRegistryRuntime) ensureKubernetesRuntime(
 		return nil
 	}
 
-	c, err := newClient(r.verbose)
+	c, err := newClient()
 	if err != nil {
 		return err
 	}
@@ -306,12 +294,12 @@ func (r *agentRegistryRuntime) ensureKubernetesRuntime(
 }
 
 // DeleteKubernetesAgent deletes a kagent Agent CR by name/version.
-func DeleteKubernetesAgent(ctx context.Context, name, version, namespace string, verbose bool) error {
+func DeleteKubernetesAgent(ctx context.Context, name, version, namespace string) error {
 	if namespace == "" {
 		namespace = kagent.DefaultNamespace
 	}
 
-	c, err := newClient(verbose)
+	c, err := newClient()
 	if err != nil {
 		return err
 	}
@@ -327,12 +315,12 @@ func DeleteKubernetesAgent(ctx context.Context, name, version, namespace string,
 }
 
 // DeleteKubernetesRemoteMCPServer deletes a kagent RemoteMCPServer CR by name.
-func DeleteKubernetesRemoteMCPServer(ctx context.Context, name, namespace string, verbose bool) error {
+func DeleteKubernetesRemoteMCPServer(ctx context.Context, name, namespace string) error {
 	if namespace == "" {
 		namespace = kagent.DefaultNamespace
 	}
 
-	c, err := newClient(verbose)
+	c, err := newClient()
 	if err != nil {
 		return err
 	}
@@ -348,12 +336,12 @@ func DeleteKubernetesRemoteMCPServer(ctx context.Context, name, namespace string
 }
 
 // DeleteKubernetesMCPServer deletes a kagent MCPServer CR by name.
-func DeleteKubernetesMCPServer(ctx context.Context, name, namespace string, verbose bool) error {
+func DeleteKubernetesMCPServer(ctx context.Context, name, namespace string) error {
 	if namespace == "" {
 		namespace = kagent.DefaultNamespace
 	}
 
-	c, err := newClient(verbose)
+	c, err := newClient()
 	if err != nil {
 		return err
 	}

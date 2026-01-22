@@ -812,15 +812,15 @@ func (s *registryServiceImpl) RemoveServer(ctx context.Context, serverName strin
 	// Clean up kubernetes resources
 	if deployment != nil && deployment.Runtime == "kubernetes" {
 		if deployment.ResourceType == "agent" {
-			if err := runtime.DeleteKubernetesAgent(ctx, serverName, version, kagent.DefaultNamespace, s.cfg.Verbose); err != nil {
+			if err := runtime.DeleteKubernetesAgent(ctx, serverName, version, kagent.DefaultNamespace); err != nil {
 				return err
 			}
 		}
 		if deployment.ResourceType == "mcp" {
-			if err := runtime.DeleteKubernetesMCPServer(ctx, serverName, kagent.DefaultNamespace, s.cfg.Verbose); err != nil {
+			if err := runtime.DeleteKubernetesMCPServer(ctx, serverName, kagent.DefaultNamespace); err != nil {
 				return err
 			}
-			if err := runtime.DeleteKubernetesRemoteMCPServer(ctx, serverName, kagent.DefaultNamespace, s.cfg.Verbose); err != nil {
+			if err := runtime.DeleteKubernetesRemoteMCPServer(ctx, serverName, kagent.DefaultNamespace); err != nil {
 				return err
 			}
 		}

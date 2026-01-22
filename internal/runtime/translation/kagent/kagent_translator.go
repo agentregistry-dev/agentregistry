@@ -18,8 +18,7 @@ type translator struct {
 	defaultNamespace string
 }
 
-// Hardcoded default namespace for Kagent Agent CRs
-const DefaultNamespace = "default"
+const DefaultNamespace = "kagent"
 
 // NewTranslator returns a Kubernetes runtime translator that renders kagent Agent CRs.
 func NewTranslator() api.RuntimeTranslator {
