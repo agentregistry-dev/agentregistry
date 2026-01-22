@@ -11,6 +11,7 @@ import (
 // See .env.example for more documentation
 type Config struct {
 	ServerAddress            string `env:"SERVER_ADDRESS" envDefault:":8080"`
+	MCPPort                  uint16 `env:"MCP_PORT" envDefault:"0"`
 	DatabaseURL              string `env:"DATABASE_URL" envDefault:"postgres://agentregistry:agentregistry@localhost:5432/agent-registry?sslmode=disable"`
 	SeedFrom                 string `env:"SEED_FROM" envDefault:""`
 	EnrichServerData         bool   `env:"ENRICH_SERVER_DATA" envDefault:"false"`
@@ -50,13 +51,13 @@ type Config struct {
 
 // EmbeddingsConfig captures configuration needed to generate embeddings
 type EmbeddingsConfig struct {
-	Enabled           bool   `env:"EMBEDDINGS_ENABLED" envDefault:"false"`
-	Provider          string `env:"EMBEDDINGS_PROVIDER" envDefault:"openai"`
-	Model             string `env:"EMBEDDINGS_MODEL" envDefault:"text-embedding-3-small"`
-	Dimensions        int    `env:"EMBEDDINGS_DIMENSIONS" envDefault:"1536"`
-	OpenAIAPIKey      string `env:"OPENAI_API_KEY" envDefault:""`
-	OpenAIBaseURL     string `env:"OPENAI_BASE_URL" envDefault:"https://api.openai.com/v1"`
-	OpenAIOrg         string `env:"OPENAI_ORG" envDefault:""`
+	Enabled       bool   `env:"EMBEDDINGS_ENABLED" envDefault:"false"`
+	Provider      string `env:"EMBEDDINGS_PROVIDER" envDefault:"openai"`
+	Model         string `env:"EMBEDDINGS_MODEL" envDefault:"text-embedding-3-small"`
+	Dimensions    int    `env:"EMBEDDINGS_DIMENSIONS" envDefault:"1536"`
+	OpenAIAPIKey  string `env:"OPENAI_API_KEY" envDefault:""`
+	OpenAIBaseURL string `env:"OPENAI_BASE_URL" envDefault:"https://api.openai.com/v1"`
+	OpenAIOrg     string `env:"OPENAI_ORG" envDefault:""`
 }
 
 // NewConfig creates a new configuration with default values

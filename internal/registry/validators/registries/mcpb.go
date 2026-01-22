@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -90,15 +91,7 @@ func validateMCPBUrl(fullURL string) error {
 		"www.gitlab.com",
 	}
 
-	isAllowed := false
-	for _, allowed := range allowedHosts {
-		if host == allowed {
-			isAllowed = true
-			break
-		}
-	}
-
-	if !isAllowed {
+	if !slices.Contains(allowedHosts, host) {
 		return fmt.Errorf("MCPB packages must be hosted on allowlisted providers (GitHub or GitLab). Host '%s' is not allowed", host)
 	}
 

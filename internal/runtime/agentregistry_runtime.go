@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -95,7 +96,6 @@ func (r *agentRegistryRuntime) ensureRuntime(
 	ctx context.Context,
 	cfg *api.AIRuntimeConfig,
 ) error {
-
 	switch cfg.Type {
 	case api.RuntimeConfigTypeLocal:
 		return r.ensureLocalRuntime(ctx, cfg.Local)
@@ -181,9 +181,7 @@ func pythonServersFromServerRunRequests(requests []*registry.MCPServerRunRequest
 				for _, h := range remote.Headers {
 					headers[h.Name] = h.Value
 				}
-				for k, v := range serverReq.HeaderValues {
-					headers[k] = v
-				}
+				maps.Copy(headers, serverReq.HeaderValues)
 				if len(headers) > 0 {
 					pythonServer.Headers = headers
 				}

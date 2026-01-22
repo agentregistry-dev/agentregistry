@@ -1,12 +1,13 @@
 package importer
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -61,11 +62,11 @@ func topEcosystems(m map[string]int, limit int) []string {
 	for name, count := range m {
 		entries = append(entries, entry{Name: name, Count: count})
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].Count == entries[j].Count {
-			return entries[i].Name < entries[j].Name
+	slices.SortFunc(entries, func(a, b entry) int {
+		if a.Count == b.Count {
+			return cmp.Compare(a.Name, b.Name)
 		}
-		return entries[i].Count > entries[j].Count
+		return cmp.Compare(b.Count, a.Count)
 	})
 	if limit > 0 && len(entries) > limit {
 		entries = entries[:limit]
@@ -168,8 +169,8 @@ func detectPurlType(refs []struct {
 		if locator == ref.ReferenceLocator {
 			continue
 		}
-		if idx := strings.Index(locator, "/"); idx != -1 {
-			return strings.ToLower(locator[:idx])
+		if before, _, found := strings.Cut(locator, "/"); found {
+			return strings.ToLower(before)
 		}
 		if idx := strings.IndexAny(locator, "@?"); idx != -1 {
 			return strings.ToLower(locator[:idx])

@@ -1,10 +1,11 @@
 package dockercompose
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"path/filepath"
-	"sort"
+	"slices"
 
 	api "github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
@@ -38,7 +39,6 @@ func (t *agentGatewayTranslator) TranslateRuntimeConfig(
 	ctx context.Context,
 	desired *api.DesiredState,
 ) (*api.AIRuntimeConfig, error) {
-
 	agentGatewayService, err := t.translateAgentGatewayService()
 	if err != nil {
 		return nil, fmt.Errorf("failed to translate agent gateway service: %w", err)
@@ -136,8 +136,8 @@ func (t *agentGatewayTranslator) translateMCPServerToServiceConfig(server *api.M
 	for k, v := range server.Local.Deployment.Env {
 		envValues = append(envValues, fmt.Sprintf("%s=%s", k, v))
 	}
-	sort.SliceStable(envValues, func(i, j int) bool {
-		return envValues[i] < envValues[j]
+	slices.SortStableFunc(envValues, func(a, b string) int {
+		return cmp.Compare(a, b)
 	})
 
 	return &types.ServiceConfig{
@@ -158,8 +158,8 @@ func (t *agentGatewayTranslator) translateAgentToServiceConfig(agent *api.Agent)
 	for k, v := range agent.Deployment.Env {
 		envValues = append(envValues, fmt.Sprintf("%s=%s", k, v))
 	}
-	sort.SliceStable(envValues, func(i, j int) bool {
-		return envValues[i] < envValues[j]
+	slices.SortStableFunc(envValues, func(a, b string) int {
+		return cmp.Compare(a, b)
 	})
 
 	port := agent.Deployment.Port
@@ -265,12 +265,12 @@ func (t *agentGatewayTranslator) translateAgentGatewayConfig(servers []*api.MCPS
 	}
 
 	// sort for idempotence
-	sort.SliceStable(agentRoutes, func(i, j int) bool {
-		return agentRoutes[i].RouteName < agentRoutes[j].RouteName
+	slices.SortStableFunc(agentRoutes, func(a, b api.LocalRoute) int {
+		return cmp.Compare(a.RouteName, b.RouteName)
 	})
 
-	sort.SliceStable(targets, func(i, j int) bool {
-		return targets[i].Name < targets[j].Name
+	slices.SortStableFunc(targets, func(a, b api.MCPTarget) int {
+		return cmp.Compare(a.Name, b.Name)
 	})
 
 	mcpRoute := api.LocalRoute{

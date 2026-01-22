@@ -7,7 +7,7 @@ import (
 
 // AgentGatewayConfig represents the main configuration structure for AgentGateway
 type AgentGatewayConfig struct {
-	Config    interface{}     `json:"config" yaml:"config"` // required type
+	Config    any             `json:"config" yaml:"config"` // required type
 	Binds     []LocalBind     `json:"binds,omitempty" yaml:"binds,omitempty"`
 	Workloads []LocalWorkload `json:"workloads,omitempty" yaml:"workloads,omitempty"`
 	Services  []Service       `json:"services,omitempty" yaml:"services,omitempty"`
@@ -90,13 +90,13 @@ type FilterOrPolicy struct {
 	// Policies
 	MCPAuthorization *MCPAuthorization `json:"mcpAuthorization,omitempty" yaml:"mcpAuthorization,omitempty"`
 	A2A              *A2APolicy        `json:"a2a,omitempty" yaml:"a2a,omitempty"`
-	AI               interface{}       `json:"ai,omitempty" yaml:"ai,omitempty"` // Skipped complex type
+	AI               any               `json:"ai,omitempty" yaml:"ai,omitempty"` // Skipped complex type
 	BackendTLS       *BackendTLS       `json:"backendTLS,omitempty" yaml:"backendTLS,omitempty"`
 	BackendAuth      *BackendAuth      `json:"backendAuth,omitempty" yaml:"backendAuth,omitempty"`
-	LocalRateLimit   []interface{}     `json:"localRateLimit,omitempty" yaml:"localRateLimit,omitempty"`   // Skipped complex type
-	RemoteRateLimit  interface{}       `json:"remoteRateLimit,omitempty" yaml:"remoteRateLimit,omitempty"` // Skipped complex type
-	JWTAuth          interface{}       `json:"jwtAuth,omitempty" yaml:"jwtAuth,omitempty"`                 // Skipped complex type
-	ExtAuthz         interface{}       `json:"extAuthz,omitempty" yaml:"extAuthz,omitempty"`               // Skipped complex type
+	LocalRateLimit   []any             `json:"localRateLimit,omitempty" yaml:"localRateLimit,omitempty"`   // Skipped complex type
+	RemoteRateLimit  any               `json:"remoteRateLimit,omitempty" yaml:"remoteRateLimit,omitempty"` // Skipped complex type
+	JWTAuth          any               `json:"jwtAuth,omitempty" yaml:"jwtAuth,omitempty"`                 // Skipped complex type
+	ExtAuthz         any               `json:"extAuthz,omitempty" yaml:"extAuthz,omitempty"`               // Skipped complex type
 
 	// Traffic Policy
 	Timeout *TimeoutPolicy `json:"timeout,omitempty" yaml:"timeout,omitempty"`
@@ -211,7 +211,7 @@ type MCPTarget struct {
 	SSE     *SSETargetSpec     `json:"sse,omitempty" yaml:"sse,omitempty"`
 	Stdio   *StdioTargetSpec   `json:"stdio,omitempty" yaml:"stdio,omitempty"`
 	OpenAPI *OpenAPITargetSpec `json:"openapi,omitempty" yaml:"openapi,omitempty"`
-	Filters []interface{}      `json:"filters,omitempty" yaml:"filters,omitempty"` // Skipped complex type
+	Filters []any              `json:"filters,omitempty" yaml:"filters,omitempty"` // Skipped complex type
 }
 
 // SSETargetSpec represents SSE target specification
@@ -230,9 +230,9 @@ type StdioTargetSpec struct {
 
 // OpenAPITargetSpec represents OpenAPI target specification
 type OpenAPITargetSpec struct {
-	Host   string      `json:"host" yaml:"host"`
-	Port   uint32      `json:"port" yaml:"port"`
-	Schema interface{} `json:"schema" yaml:"schema"` // OpenAPI schema
+	Host   string `json:"host" yaml:"host"`
+	Port   uint32 `json:"port" yaml:"port"`
+	Schema any    `json:"schema" yaml:"schema"` // OpenAPI schema
 }
 
 // AIBackend represents an AI backend (placeholder)
@@ -318,7 +318,7 @@ type PathRedirect struct {
 
 // MCPAuthorization represents MCP authorization policy
 type MCPAuthorization struct {
-	Rules interface{} `json:"rules" yaml:"rules"` // RuleSet - skipped complex type
+	Rules any `json:"rules" yaml:"rules"` // RuleSet - skipped complex type
 }
 
 // A2APolicy represents application-to-application policy
@@ -340,8 +340,8 @@ type BackendTLS struct {
 // BackendAuth represents backend authentication
 type BackendAuth struct {
 	// Placeholder for backend auth configuration
-	Type   string      `json:"type" yaml:"type"`
-	Config interface{} `json:"config,omitempty" yaml:"config,omitempty"`
+	Type   string `json:"type" yaml:"type"`
+	Config any    `json:"config,omitempty" yaml:"config,omitempty"`
 }
 
 // TimeoutPolicy represents timeout policy

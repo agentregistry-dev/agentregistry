@@ -7,7 +7,7 @@ type ClientConfigurer interface {
 
 	// CreateConfig creates or updates the MCP configuration for the client
 	// It should read existing config, merge with the new server, and return the updated config
-	CreateConfig(url string, configPath string) (interface{}, error)
+	CreateConfig(url string, configPath string) (any, error)
 
 	// GetClientName returns the display name of the client
 	GetClientName() string

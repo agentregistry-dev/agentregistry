@@ -84,7 +84,7 @@ func init() {
 	ConfigureCmd.Flags().StringVar(&configurePort, "port", "21212", "Port for the MCP server")
 }
 
-func writeConfigFile(configPath string, config interface{}) error {
+func writeConfigFile(configPath string, config any) error {
 	// Create directory if it doesn't exist
 	dir := filepath.Dir(configPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {

@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/adk/python"
@@ -177,7 +177,7 @@ func extractEnvVarsFromHeaders(servers []models.McpServerType) []string {
 	for name := range envSet {
 		envs = append(envs, name)
 	}
-	sort.Strings(envs)
+	slices.Sort(envs)
 	return envs
 }
 

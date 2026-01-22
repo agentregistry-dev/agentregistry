@@ -72,10 +72,7 @@ func displayPaginatedAgents(agents []*models.AgentResponse, deployedAgents []*cl
 	start := 0
 
 	for start < total {
-		end := start + pageSize
-		if end > total {
-			end = total
-		}
+		end := min(start+pageSize, total)
 
 		printAgentsTable(agents[start:end], deployedAgents)
 
@@ -154,7 +151,7 @@ func printAgentsTable(agents []*models.AgentResponse, deployedAgents []*client.D
 	}
 }
 
-func outputDataJson(data interface{}) error {
+func outputDataJson(data any) error {
 	p := printer.New(printer.OutputTypeJSON, false)
 	if err := p.PrintJSON(data); err != nil {
 		return fmt.Errorf("failed to output JSON: %w", err)
@@ -162,7 +159,7 @@ func outputDataJson(data interface{}) error {
 	return nil
 }
 
-func outputDataYaml(data interface{}) error {
+func outputDataYaml(data any) error {
 	// For now, YAML is not implemented, fallback to JSON
 	fmt.Println("YAML output not yet implemented, using JSON:")
 	return outputDataJson(data)

@@ -114,8 +114,7 @@ func IsValidSubfolderPath(path string) bool {
 	}
 
 	// Check that path segments are valid
-	segments := strings.Split(path, "/")
-	for _, segment := range segments {
+	for segment := range strings.SplitSeq(path, "/") {
 		// Disallow empty segments ("//"), current dir ("."), and parent dir ("..")
 		if segment == "" || segment == "." || segment == ".." {
 			return false

@@ -116,7 +116,7 @@ func appendIf(parts *[]string, values ...string) {
 	}
 }
 
-func appendJSON(parts *[]string, value interface{}) {
+func appendJSON(parts *[]string, value any) {
 	if value == nil {
 		return
 	}
@@ -125,7 +125,7 @@ func appendJSON(parts *[]string, value interface{}) {
 	}
 }
 
-func appendJSONArray(parts *[]string, value interface{}) {
+func appendJSONArray(parts *[]string, value any) {
 	if value == nil {
 		return
 	}

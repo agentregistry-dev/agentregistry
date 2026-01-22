@@ -556,9 +556,8 @@ func TestHTTPAuthHandler_Permissions(t *testing.T) {
 				require.NotNil(t, foundPerm, "Permission with pattern %s not found", expectedPattern)
 
 				// Test resource scenarios - only exact domain should work for HTTP
-				if strings.HasSuffix(expectedPattern, "/*") {
+				if basePattern, found := strings.CutSuffix(expectedPattern, "/*"); found {
 					// Exact domain permissions (e.g., "com.example/*")
-					basePattern := strings.TrimSuffix(expectedPattern, "/*")
 					testResource := basePattern + "/my-package"
 					assert.True(t, jwtManager.HasPermission(testResource, intauth.PermissionActionPublish, claims.Permissions),
 						"Should have permission for %s with pattern %s", testResource, expectedPattern)

@@ -54,7 +54,6 @@ func runInitFramework(
 	projectName, framework string,
 	customizeProjectConfig func(*templates.ProjectConfig) error,
 ) error {
-
 	// Validate project name
 	if err := validateProjectName(projectName); err != nil {
 		return fmt.Errorf("invalid project name: %w", err)

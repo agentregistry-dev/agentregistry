@@ -27,7 +27,7 @@ func (c *ClaudeCodeConfigurer) GetConfigPath() (string, error) {
 	return ".mcp.json", nil
 }
 
-func (c *ClaudeCodeConfigurer) CreateConfig(url string, configPath string) (interface{}, error) {
+func (c *ClaudeCodeConfigurer) CreateConfig(url string, configPath string) (any, error) {
 	config := claudeConfig{
 		MCPServers: make(map[string]claudeServerConfig),
 	}

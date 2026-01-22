@@ -16,29 +16,29 @@ import (
 
 // ListAgentsInput represents the input for listing agents
 type ListAgentsInput struct {
-	Cursor                 string  `query:"cursor" doc:"Pagination cursor" required:"false" example:"agent-cursor-123"`
-	Limit                  int     `query:"limit" doc:"Number of items per page" default:"30" minimum:"1" maximum:"100" example:"50"`
-	UpdatedSince           string  `query:"updated_since" doc:"Filter agents updated since timestamp (RFC3339 datetime)" required:"false" example:"2025-08-07T13:15:04.280Z"`
-	Search                 string  `query:"search" doc:"Search agents by name (substring match)" required:"false" example:"filesystem"`
-	Version                string  `query:"version" doc:"Filter by version ('latest' for latest version, or an exact version like '1.2.3')" required:"false" example:"latest"`
-	Semantic               bool    `query:"semantic_search" doc:"Use semantic search for the search term"`
-	SemanticMatchThreshold float64 `query:"semantic_threshold" doc:"Optional maximum cosine distance when semantic_search is enabled" required:"false"`
+	Cursor                 string  `query:"cursor" json:"cursor,omitempty" doc:"Pagination cursor" required:"false" example:"agent-cursor-123"`
+	Limit                  int     `query:"limit" json:"limit,omitempty" doc:"Number of items per page" default:"30" minimum:"1" maximum:"100" example:"50"`
+	UpdatedSince           string  `query:"updated_since" json:"updated_since,omitempty" doc:"Filter agents updated since timestamp (RFC3339 datetime)" required:"false" example:"2025-08-07T13:15:04.280Z"`
+	Search                 string  `query:"search" json:"search,omitempty" doc:"Search agents by name (substring match)" required:"false" example:"filesystem"`
+	Version                string  `query:"version" json:"version,omitempty" doc:"Filter by version ('latest' for latest version, or an exact version like '1.2.3')" required:"false" example:"latest"`
+	Semantic               bool    `query:"semantic_search" json:"semantic_search,omitempty" doc:"Use semantic search for the search term"`
+	SemanticMatchThreshold float64 `query:"semantic_threshold" json:"semantic_threshold,omitempty" doc:"Optional maximum cosine distance when semantic_search is enabled" required:"false"`
 }
 
 // AgentDetailInput represents the input for getting agent details
 type AgentDetailInput struct {
-	AgentName string `path:"agentName" doc:"URL-encoded agent name" example:"com.example%2Fmy-agent"`
+	AgentName string `path:"agentName" json:"agentName" doc:"URL-encoded agent name" example:"com.example%2Fmy-agent"`
 }
 
 // AgentVersionDetailInput represents the input for getting a specific version
 type AgentVersionDetailInput struct {
-	AgentName string `path:"agentName" doc:"URL-encoded agent name" example:"com.example%2Fmy-agent"`
-	Version   string `path:"version" doc:"URL-encoded agent version" example:"1.0.0"`
+	AgentName string `path:"agentName" json:"agentName" doc:"URL-encoded agent name" example:"com.example%2Fmy-agent"`
+	Version   string `path:"version" json:"version" doc:"URL-encoded agent version" example:"1.0.0"`
 }
 
 // AgentVersionsInput represents the input for listing all versions of an agent
 type AgentVersionsInput struct {
-	AgentName string `path:"agentName" doc:"URL-encoded agent name" example:"com.example%2Fmy-agent"`
+	AgentName string `path:"agentName" json:"agentName" doc:"URL-encoded agent name" example:"com.example%2Fmy-agent"`
 }
 
 // RegisterAgentsEndpoints registers all agent-related endpoints with a custom path prefix
@@ -59,8 +59,6 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Description: "Get a paginated list of Agentic agents from the registry",
 		Tags:        tags,
 	}, func(ctx context.Context, input *ListAgentsInput) (*Response[agentmodels.AgentListResponse], error) {
-		// Note: Authz filtering for list operations is handled at the database layer.
-
 		// Build filter
 		filter := &database.AgentFilter{}
 

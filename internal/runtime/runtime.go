@@ -1,6 +1,9 @@
 package runtime
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // RuntimeValidator is a function that validates if a runtime value is supported
 type RuntimeValidator func(runtime string) error
@@ -16,10 +19,8 @@ var (
 // ValidateRuntime checks if a runtime is valid
 func ValidateRuntime(runtime string) error {
 	// Check base runtimes
-	for _, r := range SupportedRuntimes {
-		if r == runtime {
-			return nil
-		}
+	if slices.Contains(SupportedRuntimes, runtime) {
+		return nil
 	}
 
 	if CustomRuntimeValidator != nil {

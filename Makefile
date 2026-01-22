@@ -119,15 +119,14 @@ dev-build: build-ui
 	@echo "Development build complete!"
 
 
-fmt:
-	gofmt -s -w .
+fmt: goimports
+	$(GOIMPORT) -w .
+	@echo "✓ Formatted code"
 
-lint:
-	golangci-lint run --timeout=5m
 
 # Build custom agent gateway image with npx/uvx support
 docker-agentgateway:
-	@echo "Building custom agent gateway image..."
+	@echo "Building custom age	nt gateway image..."
 	$(DOCKER_BUILDER) build $(DOCKER_BUILD_ARGS) -f docker/agentgateway.Dockerfile -t $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:$(VERSION) .
 	echo "✓ Agent gateway image built successfully";
 
@@ -204,3 +203,55 @@ release-cli: bin/arctl-linux-arm64.sha256
 release-cli: bin/arctl-darwin-amd64.sha256  
 release-cli: bin/arctl-darwin-arm64.sha256  
 release-cli: bin/arctl-windows-amd64.exe.sha256
+
+.PHONY: lint
+lint: golangci-lint ## Run golangci-lint linter
+	$(GOLANGCI_LINT) run
+
+.PHONY: lint-fix
+lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
+	$(GOLANGCI_LINT) run --fix
+
+.PHONY: lint-config
+lint-config: golangci-lint ## Verify golangci-lint linter configuration
+	$(GOLANGCI_LINT) config verify
+
+##@ Dependencies
+
+## Location to install dependencies to
+LOCALBIN ?= $(shell pwd)/bin
+$(LOCALBIN):
+	mkdir -p $(LOCALBIN)
+
+
+GOIMPORT = $(LOCALBIN)/goimports
+GOIMPORT_VERSION ?= v0.41
+
+GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+GOLANGCI_LINT_VERSION ?= v2.8.0
+
+.PHONY: goimports
+goimports: $(GOIMPORT) ## Download goimports locally if necessary.
+$(GOIMPORT): $(LOCALBIN)
+	$(call go-install-tool,$(GOIMPORT),golang.org/x/tools/cmd/goimports,$(GOIMPORT_VERSION))
+
+.PHONY: golangci-lint
+golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
+$(GOLANGCI_LINT): $(LOCALBIN)
+	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+
+# go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
+# $1 - target path with name of binary
+# $2 - package url which can be installed
+# $3 - specific version of package
+define go-install-tool
+@[ -f "$(1)-$(3)" ] || { \
+set -e; \
+package=$(2)@$(3) ;\
+echo "Downloading $${package}" ;\
+rm -f $(1) || true ;\
+GOBIN=$(LOCALBIN) go install $${package} ;\
+mv $(1) $(1)-$(3) ;\
+} ;\
+ln -sf $(1)-$(3) $(1)
+endef

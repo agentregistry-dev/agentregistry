@@ -76,12 +76,12 @@ func TestAddRow(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		values []interface{}
+		values []any
 	}{
-		{"String values", []interface{}{"server1", "1.0.0", "active"}},
-		{"Mixed types", []interface{}{"server2", 123, true}},
-		{"With nil", []interface{}{"server3", nil, "active"}},
-		{"Empty row", []interface{}{}},
+		{"String values", []any{"server1", "1.0.0", "active"}},
+		{"Mixed types", []any{"server2", 123, true}},
+		{"With nil", []any{"server3", nil, "active"}},
+		{"Empty row", []any{}},
 	}
 
 	for _, tt := range tests {
@@ -214,7 +214,7 @@ func TestPrintTable(t *testing.T) {
 	p := NewTablePrinter(buf)
 	p.SetHeaders(headers...)
 	for _, row := range rows {
-		values := make([]interface{}, len(row))
+		values := make([]any, len(row))
 		for i, v := range row {
 			values[i] = v
 		}
@@ -430,7 +430,7 @@ func TestRender_MultipleRows(t *testing.T) {
 	p.SetHeaders("Col1", "Col2", "Col3")
 
 	// Add many rows
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		p.AddRow(i, i*2, i*3)
 	}
 

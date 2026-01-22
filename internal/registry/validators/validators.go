@@ -574,10 +574,7 @@ func validateRemoteURLMatchesNamespace(remoteURL, namespace string) error {
 // e.g., "com.example" -> "example.com"
 func extractPublisherDomainFromNamespace(namespace string) string {
 	// Extract the namespace part before the first slash
-	namespacePart := namespace
-	if slashIdx := strings.Index(namespace, "/"); slashIdx != -1 {
-		namespacePart = namespace[:slashIdx]
-	}
+	namespacePart, _, _ := strings.Cut(namespace, "/")
 
 	// Split into parts and reverse them to get normal domain format
 	parts := strings.Split(namespacePart, ".")

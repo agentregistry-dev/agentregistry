@@ -610,7 +610,7 @@ func TestConcurrentTokenExchange(t *testing.T) {
 	concurrency := 10
 	errors := make(chan error, concurrency)
 
-	for i := 0; i < concurrency; i++ {
+	for i := range concurrency {
 		go func() {
 			ctx := context.Background()
 			_, err := handler.ExchangeToken(ctx, fmt.Sprintf("token-%d", i))
@@ -619,7 +619,7 @@ func TestConcurrentTokenExchange(t *testing.T) {
 	}
 
 	// Collect results
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		err := <-errors
 		assert.NoError(t, err)
 	}

@@ -112,7 +112,7 @@ func handle404(w http.ResponseWriter, r *http.Request) {
 		)
 	}
 
-	errorBody := map[string]interface{}{
+	errorBody := map[string]any{
 		"title":  "Not Found",
 		"status": 404,
 		"detail": detail,

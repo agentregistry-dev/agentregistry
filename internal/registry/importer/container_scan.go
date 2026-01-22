@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
 type containerImageSummary struct {

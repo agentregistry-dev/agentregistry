@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/url"
 	"slices"
 	"strconv"
@@ -59,9 +60,7 @@ func (t *registryTranslator) TranslateAgent(
 
 	// Build environment variables map starting with passed values
 	env := make(map[string]string)
-	for k, v := range req.EnvValues {
-		env[k] = v
-	}
+	maps.Copy(env, req.EnvValues)
 
 	// TODO: remove kagent variables (currently required)
 	// note that the change to remove this would have to be done in kagent-adk
@@ -87,7 +86,6 @@ func (t *registryTranslator) TranslateAgent(
 			Env:   env,
 		},
 	}, nil
-
 }
 
 func (t *registryTranslator) TranslateMCPServer(

@@ -215,7 +215,6 @@ func buildSkillDockerImage(skillPath string) (*models.SkillJSON, error) {
 			pushCmd.Stderr = os.Stderr
 			if err := pushCmd.Run(); err != nil {
 				return nil, fmt.Errorf("docker push failed for %s: %w", imageRef, err)
-
 			}
 		}
 	}

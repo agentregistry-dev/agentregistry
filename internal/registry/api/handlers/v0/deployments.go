@@ -40,14 +40,14 @@ type DeploymentsListResponse struct {
 
 // DeploymentInput represents path parameters for deployment operations
 type DeploymentInput struct {
-	ServerName   string `path:"serverName" doc:"URL-encoded server name" example:"io.github.user%2Fweather"`
-	Version      string `path:"version" doc:"Version of the deployment to get" example:"1.0.0"`
-	ResourceType string `query:"resourceType" doc:"Resource type (mcp, agent)" example:"mcp" enum:"mcp,agent"`
+	ServerName   string `path:"serverName" json:"serverName" doc:"URL-encoded server name" example:"io.github.user%2Fweather"`
+	Version      string `path:"version" json:"version" doc:"Version of the deployment to get" example:"1.0.0"`
+	ResourceType string `query:"resourceType" json:"resourceType" doc:"Resource type (mcp, agent)" example:"mcp" enum:"mcp,agent"`
 }
 
 // DeploymentsListInput represents query parameters for listing deployments
 type DeploymentsListInput struct {
-	ResourceType string `query:"resourceType" doc:"Filter by resource type (mcp, agent)" example:"mcp" enum:"mcp,agent"`
+	ResourceType string `query:"resourceType" json:"resourceType,omitempty" doc:"Filter by resource type (mcp, agent)" example:"mcp" enum:"mcp,agent"`
 }
 
 // RegisterDeploymentsEndpoints registers all deployment-related endpoints
@@ -61,8 +61,6 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		Description: "Retrieve all deployed resources (MCP servers, agents) with their configurations. Optionally filter by resource type.",
 		Tags:        []string{"deployments"},
 	}, func(ctx context.Context, input *DeploymentsListInput) (*DeploymentsListResponse, error) {
-		// Note: Authz filtering for list operations is handled at the database layer.
-
 		deployments, err := registry.GetDeployments(ctx)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("Failed to retrieve deployments", err)

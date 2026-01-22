@@ -35,15 +35,15 @@ type a2aEventMsg struct {
 type streamDoneMsg struct{}
 
 type toolCall struct {
-	Name string      `json:"name"`
-	ID   string      `json:"id"`
-	Args interface{} `json:"args"`
+	Name string `json:"name"`
+	ID   string `json:"id"`
+	Args any    `json:"args"`
 }
 
 type toolResult struct {
-	Name     string      `json:"name"`
-	ID       string      `json:"id"`
-	Response interface{} `json:"response"`
+	Name     string `json:"name"`
+	ID       string `json:"id"`
+	Response any    `json:"response"`
 }
 
 type chatModel struct {
@@ -134,10 +134,7 @@ func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			inputHeight = 0
 		}
 		sepHeight := 2
-		vpHeight := msg.Height - inputHeight - sepHeight
-		if vpHeight < 5 {
-			vpHeight = 5
-		}
+		vpHeight := max(msg.Height-inputHeight-sepHeight, 5)
 
 		oldWidth := m.vp.Width
 		m.vp.Width = msg.Width
@@ -324,7 +321,7 @@ func (m *chatModel) handleMessageParts(msg protocol.Message, shouldDisplay bool)
 				continue
 			}
 
-			dataMap, ok := dp.Data.(map[string]interface{})
+			dataMap, ok := dp.Data.(map[string]any)
 			if !ok {
 				continue
 			}
@@ -471,18 +468,11 @@ func (m *chatModel) updateStatus() {
 	}
 }
 
-func getString(m map[string]interface{}, key string) string {
+func getString(m map[string]any, key string) string {
 	if val, ok := m[key]; ok {
 		if str, ok := val.(string); ok {
 			return str
 		}
 	}
 	return ""
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
