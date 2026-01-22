@@ -169,8 +169,8 @@ func detectPurlType(refs []struct {
 		if locator == ref.ReferenceLocator {
 			continue
 		}
-		if idx := strings.Index(locator, "/"); idx != -1 {
-			return strings.ToLower(locator[:idx])
+		if before, _, found := strings.Cut(locator, "/"); found {
+			return strings.ToLower(before)
 		}
 		if idx := strings.IndexAny(locator, "@?"); idx != -1 {
 			return strings.ToLower(locator[:idx])
