@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
@@ -19,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
@@ -35,19 +37,33 @@ func init() {
 	utilruntime.Must(kmcpv1alpha1.AddToScheme(scheme))
 }
 
-// newClient creates a controller-runtime client with the kagent scheme.
-func newClient() (client.Client, error) {
-	restConfig, err := config.GetConfig()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get kubernetes config: %w", err)
-	}
+var (
+	k8sClient  client.Client
+	clientOnce sync.Once
+)
 
-	c, err := client.New(restConfig, client.Options{Scheme: scheme})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
-	}
+// controller-runtime client singleton
+func GetKubeClient() (client.Client, error) {
+	var err error
+	clientOnce.Do(func() {
+		var restConfig *rest.Config
+		restConfig, err = config.GetConfig()
+		if err != nil {
+			err = fmt.Errorf("failed to get kubernetes config: %w", err)
+			return
+		}
 
-	return c, nil
+		k8sClient, err = client.New(restConfig, client.Options{Scheme: scheme})
+		if err != nil {
+			err = fmt.Errorf("failed to create kubernetes client: %w", err)
+			return
+		}
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return k8sClient, nil
 }
 
 // applyResource uses server-side apply to create or update a Kubernetes resource.
@@ -248,7 +264,7 @@ func (r *agentRegistryRuntime) ensureKubernetesRuntime(
 		return nil
 	}
 
-	c, err := newClient()
+	c, err := GetKubeClient()
 	if err != nil {
 		return err
 	}
@@ -293,10 +309,9 @@ func (r *agentRegistryRuntime) ensureKubernetesRuntime(
 	return nil
 }
 
-// TODO: Client should be cached in the runtime / discovery service
 // ListAgents lists all Agent CRs in the given namespace (or all namespaces if empty)
 func ListAgents(ctx context.Context, namespace string) ([]*v1alpha2.Agent, error) {
-	c, err := newClient()
+	c, err := GetKubeClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
@@ -320,7 +335,7 @@ func ListAgents(ctx context.Context, namespace string) ([]*v1alpha2.Agent, error
 
 // ListMCPServers lists all MCPServer CRs in the given namespace (or all namespaces if empty)
 func ListMCPServers(ctx context.Context, namespace string) ([]*kmcpv1alpha1.MCPServer, error) {
-	c, err := newClient()
+	c, err := GetKubeClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
@@ -344,7 +359,7 @@ func ListMCPServers(ctx context.Context, namespace string) ([]*kmcpv1alpha1.MCPS
 
 // ListRemoteMCPServers lists all RemoteMCPServer CRs in the given namespace (or all namespaces if empty)
 func ListRemoteMCPServers(ctx context.Context, namespace string) ([]*v1alpha2.RemoteMCPServer, error) {
-	c, err := newClient()
+	c, err := GetKubeClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
@@ -372,7 +387,7 @@ func DeleteKubernetesAgent(ctx context.Context, name, version, namespace string)
 		namespace = kagent.DefaultNamespace
 	}
 
-	c, err := newClient()
+	c, err := GetKubeClient()
 	if err != nil {
 		return err
 	}
@@ -393,7 +408,7 @@ func DeleteKubernetesRemoteMCPServer(ctx context.Context, name, namespace string
 		namespace = kagent.DefaultNamespace
 	}
 
-	c, err := newClient()
+	c, err := GetKubeClient()
 	if err != nil {
 		return err
 	}
@@ -414,7 +429,7 @@ func DeleteKubernetesMCPServer(ctx context.Context, name, namespace string) erro
 		namespace = kagent.DefaultNamespace
 	}
 
-	c, err := newClient()
+	c, err := GetKubeClient()
 	if err != nil {
 		return err
 	}
