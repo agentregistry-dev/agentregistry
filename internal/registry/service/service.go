@@ -95,5 +95,8 @@ type RegistryService interface {
 	// RemoveServer removes a deployment (works for any resource type)
 	RemoveServer(ctx context.Context, resourceName string, version string) error
 
+	// ListKubernetesDeployments lists all agents and MCP servers from Kubernetes, marking external ones
+	ListKubernetesDeployments(ctx context.Context, namespace string) ([]models.KubernetesResource, error)
+
 	Reconciler
 }

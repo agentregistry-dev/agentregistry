@@ -153,6 +153,9 @@ func (d *discoveryRegistry) UpsertAgentEmbedding(context.Context, string, string
 func (d *discoveryRegistry) GetAgentEmbeddingMetadata(context.Context, string, string) (*database.SemanticEmbeddingMetadata, error) {
 	return nil, database.ErrNotFound
 }
+func (d *discoveryRegistry) ListKubernetesDeployments(context.Context, string) ([]models.KubernetesResource, error) {
+	return nil, database.ErrNotFound
+}
 
 func TestServerTools_ListAndReadme(t *testing.T) {
 	ctx := context.Background()

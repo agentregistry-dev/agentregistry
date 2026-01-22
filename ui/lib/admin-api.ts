@@ -707,6 +707,34 @@ class AdminApiClient {
       throw new Error(errorData.message || errorData.detail || 'Failed to remove deployment')
     }
   }
+
+  // ===== Kubernetes Discovery API =====
+
+  // List Kubernetes resources (agents, MCP servers)
+  async ListKubernetesDeployments(params?: {
+    namespace?: string
+  }): Promise<{
+    resources: Array<{
+      type: string
+      name: string
+      namespace: string
+      labels?: Record<string, string>
+      status?: string
+      createdAt?: string
+      isExternal: boolean
+    }>
+    count: number
+  }> {
+    const queryParams = new URLSearchParams()
+    if (params?.namespace) queryParams.append('namespace', params.namespace)
+
+    const url = `${this.baseUrl}/admin/v0/kubernetes/resources${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error('Failed to fetch Kubernetes resources')
+    }
+    return response.json()
+  }
 }
 
 export const adminApiClient = new AdminApiClient()

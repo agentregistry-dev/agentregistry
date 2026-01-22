@@ -293,6 +293,79 @@ func (r *agentRegistryRuntime) ensureKubernetesRuntime(
 	return nil
 }
 
+// TODO: Client should be cached in the runtime / discovery service
+// ListAgents lists all Agent CRs in the given namespace (or all namespaces if empty)
+func ListAgents(ctx context.Context, namespace string) ([]*v1alpha2.Agent, error) {
+	c, err := newClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	agentList := &v1alpha2.AgentList{}
+	listOpts := []client.ListOption{}
+	if namespace != "" {
+		listOpts = append(listOpts, client.InNamespace(namespace))
+	}
+
+	if err := c.List(ctx, agentList, listOpts...); err != nil {
+		return nil, fmt.Errorf("failed to list agents: %w", err)
+	}
+
+	agents := make([]*v1alpha2.Agent, 0, len(agentList.Items))
+	for i := range agentList.Items {
+		agents = append(agents, &agentList.Items[i])
+	}
+	return agents, nil
+}
+
+// ListMCPServers lists all MCPServer CRs in the given namespace (or all namespaces if empty)
+func ListMCPServers(ctx context.Context, namespace string) ([]*kmcpv1alpha1.MCPServer, error) {
+	c, err := newClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	mcpList := &kmcpv1alpha1.MCPServerList{}
+	listOpts := []client.ListOption{}
+	if namespace != "" {
+		listOpts = append(listOpts, client.InNamespace(namespace))
+	}
+
+	if err := c.List(ctx, mcpList, listOpts...); err != nil {
+		return nil, fmt.Errorf("failed to list MCP servers: %w", err)
+	}
+
+	servers := make([]*kmcpv1alpha1.MCPServer, 0, len(mcpList.Items))
+	for i := range mcpList.Items {
+		servers = append(servers, &mcpList.Items[i])
+	}
+	return servers, nil
+}
+
+// ListRemoteMCPServers lists all RemoteMCPServer CRs in the given namespace (or all namespaces if empty)
+func ListRemoteMCPServers(ctx context.Context, namespace string) ([]*v1alpha2.RemoteMCPServer, error) {
+	c, err := newClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	remoteMCPList := &v1alpha2.RemoteMCPServerList{}
+	listOpts := []client.ListOption{}
+	if namespace != "" {
+		listOpts = append(listOpts, client.InNamespace(namespace))
+	}
+
+	if err := c.List(ctx, remoteMCPList, listOpts...); err != nil {
+		return nil, fmt.Errorf("failed to list remote MCP servers: %w", err)
+	}
+
+	servers := make([]*v1alpha2.RemoteMCPServer, 0, len(remoteMCPList.Items))
+	for i := range remoteMCPList.Items {
+		servers = append(servers, &remoteMCPList.Items[i])
+	}
+	return servers, nil
+}
+
 // DeleteKubernetesAgent deletes a kagent Agent CR by name/version.
 func DeleteKubernetesAgent(ctx context.Context, name, version, namespace string) error {
 	if namespace == "" {

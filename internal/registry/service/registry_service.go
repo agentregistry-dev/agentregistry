@@ -1029,3 +1029,104 @@ func (s *registryServiceImpl) ensureSemanticEmbedding(ctx context.Context, opts 
 	opts.QueryEmbedding = result.Vector
 	return nil
 }
+
+// ListKubernetesDeployments lists all agents and MCP servers from Kubernetes and marks external ones
+func (s *registryServiceImpl) ListKubernetesDeployments(ctx context.Context, namespace string) ([]models.KubernetesResource, error) {
+	var resources []models.KubernetesResource
+
+	// Helper to check if a resource is managed by the registry (has the managed label)
+	isManaged := func(labels map[string]string) bool {
+		if labels == nil {
+			return false
+		}
+		return labels["agentregistry.io/managed"] == "true"
+	}
+
+	// List agents from Kubernetes
+	agents, err := runtime.ListAgents(ctx, namespace)
+	if err != nil {
+		log.Printf("Warning: Failed to list agents from Kubernetes: %v", err)
+	} else {
+		for _, agent := range agents {
+			createdAt := agent.CreationTimestamp.Format(time.RFC3339)
+
+			// Derive status from conditions
+			status := ""
+			for _, cond := range agent.Status.Conditions {
+				if cond.Type == "Ready" {
+					if cond.Status == "True" {
+						status = "Ready"
+					} else {
+						status = "NotReady"
+					}
+					break
+				}
+			}
+
+			resources = append(resources, models.KubernetesResource{
+				Type:       "agent",
+				Name:       agent.Name,
+				Namespace:  agent.Namespace,
+				Labels:     agent.Labels,
+				Status:     status,
+				CreatedAt:  &createdAt,
+				IsExternal: !isManaged(agent.Labels),
+			})
+		}
+	}
+
+	// List MCP servers from Kubernetes
+	mcpServers, err := runtime.ListMCPServers(ctx, namespace)
+	if err != nil {
+		log.Printf("Warning: Failed to list MCP servers from Kubernetes: %v", err)
+	} else {
+		for _, mcp := range mcpServers {
+			createdAt := mcp.CreationTimestamp.Format(time.RFC3339)
+
+			// Derive status from conditions
+			status := ""
+			for _, cond := range mcp.Status.Conditions {
+				if cond.Type == "Accepted" {
+					if cond.Status == "True" {
+						status = "Accepted"
+					} else {
+						status = "Pending"
+					}
+					break
+				}
+			}
+
+			resources = append(resources, models.KubernetesResource{
+				Type:       "mcpserver",
+				Name:       mcp.Name,
+				Namespace:  mcp.Namespace,
+				Labels:     mcp.Labels,
+				Status:     status,
+				CreatedAt:  &createdAt,
+				IsExternal: !isManaged(mcp.Labels),
+			})
+		}
+	}
+
+	// List remote MCP servers from Kubernetes
+	remoteMCPs, err := runtime.ListRemoteMCPServers(ctx, namespace)
+	if err != nil {
+		log.Printf("Warning: Failed to list remote MCP servers from Kubernetes: %v", err)
+	} else {
+		for _, remoteMCP := range remoteMCPs {
+			createdAt := remoteMCP.CreationTimestamp.Format(time.RFC3339)
+
+			resources = append(resources, models.KubernetesResource{
+				Type:       "remotemcpserver",
+				Name:       remoteMCP.Name,
+				Namespace:  remoteMCP.Namespace,
+				Labels:     remoteMCP.Labels,
+				Status:     "", // RemoteMCPServer may not have status
+				CreatedAt:  &createdAt,
+				IsExternal: !isManaged(remoteMCP.Labels),
+			})
+		}
+	}
+
+	return resources, nil
+}

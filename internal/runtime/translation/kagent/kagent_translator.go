@@ -153,6 +153,10 @@ func (t *translator) translateAgent(agent *api.Agent) (*v1alpha2.Agent, error) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      AgentResourceName(agent.Name, agent.Version),
 			Namespace: namespace,
+			// Add a label to identify this resource as managed by agentregistry
+			Labels: map[string]string{
+				"agentregistry.io/managed": "true",
+			},
 		},
 		Spec: v1alpha2.AgentSpec{
 			Description: agent.Name,
@@ -184,6 +188,9 @@ func (t *translator) translateRemoteMCPServer(server *api.MCPServer) (*v1alpha2.
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      RemoteMCPResourceName(server.Name),
 			Namespace: namespace,
+			Labels: map[string]string{
+				"agentregistry.io/managed": "true",
+			},
 		},
 		Spec: v1alpha2.RemoteMCPServerSpec{
 			Description: server.Name,
@@ -245,6 +252,9 @@ func (t *translator) translateLocalMCPServer(server *api.MCPServer) (*kmcpv1alph
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      MCPServerResourceName(server.Name),
 			Namespace: namespace,
+			Labels: map[string]string{
+				"agentregistry.io/managed": "true",
+			},
 		},
 		Spec: spec,
 	}, nil

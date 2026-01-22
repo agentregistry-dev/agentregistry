@@ -165,6 +165,9 @@ func (f *fakeRegistry) UpsertAgentEmbedding(context.Context, string, string, *da
 func (f *fakeRegistry) GetAgentEmbeddingMetadata(context.Context, string, string) (*database.SemanticEmbeddingMetadata, error) {
 	return nil, errors.New("not implemented")
 }
+func (f *fakeRegistry) ListKubernetesDeployments(context.Context, string) ([]models.KubernetesResource, error) {
+	return nil, errors.New("not implemented")
+}
 
 func TestDeploymentTools_ListAndGet(t *testing.T) {
 	ctx := context.Background()
