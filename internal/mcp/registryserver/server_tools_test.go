@@ -122,7 +122,7 @@ func (d *discoveryRegistry) UnpublishSkill(context.Context, string, string) erro
 }
 
 // Deployments and reconciler not used here.
-func (d *discoveryRegistry) GetDeployments(context.Context) ([]*models.Deployment, error) {
+func (d *discoveryRegistry) GetDeployments(context.Context, *models.DeploymentFilter) ([]*models.Deployment, error) {
 	return nil, database.ErrNotFound
 }
 func (d *discoveryRegistry) GetDeploymentByNameAndVersion(context.Context, string, string) (*models.Deployment, error) {
@@ -151,9 +151,6 @@ func (d *discoveryRegistry) UpsertAgentEmbedding(context.Context, string, string
 	return database.ErrNotFound
 }
 func (d *discoveryRegistry) GetAgentEmbeddingMetadata(context.Context, string, string) (*database.SemanticEmbeddingMetadata, error) {
-	return nil, database.ErrNotFound
-}
-func (d *discoveryRegistry) ListKubernetesDeployments(context.Context, string) ([]models.KubernetesResource, error) {
 	return nil, database.ErrNotFound
 }
 

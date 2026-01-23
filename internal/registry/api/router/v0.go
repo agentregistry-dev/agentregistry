@@ -52,7 +52,6 @@ func registerPublicRoutes(
 	v0.RegisterEditEndpoints(api, pathPrefix, registry, cfg)
 	v0auth.RegisterAuthEndpoints(api, pathPrefix, cfg)
 	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry)
-	v0.RegisterKubernetesEndpoints(api, pathPrefix, registry)
 
 	// v0-only endpoints (agents and skills)
 	if pathPrefix == "/v0" {
@@ -84,7 +83,6 @@ func registerAdminRoutes(
 	v0.RegisterPublishStatusEndpoints(api, pathPrefix, registry)
 	v0.RegisterEditEndpoints(api, pathPrefix, registry, cfg)
 	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry)
-	v0.RegisterKubernetesEndpoints(api, pathPrefix, registry)
 
 	// v0-only admin endpoints (agents and skills)
 	if pathPrefix == "/admin/v0" {

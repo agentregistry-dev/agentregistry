@@ -27,21 +27,11 @@ type DeploymentResponse = {
   preferRemote: boolean
   resourceType: string // "mcp" or "agent"
   runtime: string
-}
-
-type KubernetesResource = {
-  type: string
-  name: string
-  namespace: string
-  labels?: Record<string, string>
-  status?: string
-  createdAt?: string
-  isExternal: boolean
+  isExternal?: boolean // true if not managed by registry
 }
 
 export default function DeployedPage() {
   const [deployments, setDeployments] = useState<DeploymentResponse[]>([])
-  const [k8sResources, setK8sResources] = useState<KubernetesResource[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [removing, setRemoving] = useState(false)
@@ -60,15 +50,9 @@ export default function DeployedPage() {
   const fetchDeployments = async () => {
     try {
       setError(null)
-      const [deployData, k8sData] = await Promise.all([
-        adminApiClient.listDeployments(),
-        adminApiClient.ListKubernetesDeployments().catch(err => {
-          console.error("Failed to fetch K8s resources:", err)
-          return { resources: [], count: 0 }
-        })
-      ])
+      // listDeployments now returns both managed and external K8s resources
+      const deployData = await adminApiClient.listDeployments()
       setDeployments(deployData)
-      setK8sResources(k8sData.resources)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch deployments')
     } finally {
@@ -97,7 +81,6 @@ export default function DeployedPage() {
       // Remove from local state
       setDeployments(prev => prev.filter(d => d.serverName !== serverToRemove.name || d.version !== serverToRemove.version))
       setServerToRemove(null)
-      // Refresh to update K8s list too
       fetchDeployments()
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to remove deployment')
@@ -106,18 +89,9 @@ export default function DeployedPage() {
     }
   }
 
-  const externalK8s = k8sResources.filter(r => r.isExternal)
-  const runningCount = deployments.length + externalK8s.length
-
-  const agents = [
-    ...deployments.filter(d => d.resourceType === 'agent'),
-    ...externalK8s.filter(r => r.type === 'agent')
-  ]
-
-  const mcpServers = [
-    ...deployments.filter(d => d.resourceType === 'mcp'),
-    ...externalK8s.filter(r => r.type !== 'agent') // mcpserver and remotemcpserver
-  ]
+  const runningCount = deployments.length
+  const agents = deployments.filter(d => d.resourceType === 'agent')
+  const mcpServers = deployments.filter(d => d.resourceType === 'mcp')
 
   return (
     <main className="min-h-screen bg-background">
@@ -287,101 +261,76 @@ export default function DeployedPage() {
                     Agents
                     <Badge variant="secondary" className="ml-2">{agents.length}</Badge>
                   </h2>
-                  {agents.map((item) => {
-                    const isManaged = 'serverName' in item
-                    const name = isManaged ? (item as DeploymentResponse).serverName : (item as KubernetesResource).name
-                    const version = isManaged ? (item as DeploymentResponse).version : 'unknown'
-                    const runtime = isManaged ? (item as DeploymentResponse).runtime : 'kubernetes'
-                    
-                    return (
-                      <Card key={`${name}-${version}`} className="p-6 hover:shadow-md transition-all duration-200">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-3">
-                              <h3 className="text-xl font-semibold">{name}</h3>
-                              <Badge variant="outline">
-                                {runtime || "local"}
+                  {agents.map((item) => (
+                    <Card key={`${item.serverName}-${item.version}`} className="p-6 hover:shadow-md transition-all duration-200">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            <h3 className="text-xl font-semibold">{item.serverName}</h3>
+                            <Badge variant="outline">
+                              {item.runtime || "local"}
+                            </Badge>
+                            {!item.isExternal ? (
+                              <Badge className="bg-primary/10 text-primary hover:bg-primary/20 border-primary/20">
+                                Managed
                               </Badge>
-                              {isManaged ? (
-                                <Badge className="bg-primary/10 text-primary hover:bg-primary/20 border-primary/20">
-                                  Managed
-                                </Badge>
-                              ) : (
-                                <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 border-purple-500/20">
-                                  External
-                                </Badge>
-                              )}
-                              {!isManaged && (item as KubernetesResource).status && (
-                                <Badge variant={(item as KubernetesResource).status === 'Ready' || (item as KubernetesResource).status === 'Accepted' ? 'default' : 'destructive'} className="ml-auto">
-                                  {(item as KubernetesResource).status}
-                                </Badge>
-                              )}
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4 text-sm">
-                              <div className="flex items-center gap-2 text-muted-foreground">
-                                <Calendar className="h-4 w-4" />
-                                <span>
-                                  {isManaged ? 'Deployed: ' : 'Created: '}
-                                  {new Date(isManaged ? (item as DeploymentResponse).deployedAt : ((item as KubernetesResource).createdAt || '')).toLocaleString()}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2 text-muted-foreground">
-                                <Package className="h-4 w-4" />
-                                <span>
-                                  {isManaged ? `Version: ${version}` : `Namespace: ${(item as KubernetesResource).namespace}`}
-                                </span>
-                              </div>
-                            </div>
-
-                            {isManaged && Object.keys((item as DeploymentResponse).config).length > 0 && (
-                              <div className="mt-3 pt-3 border-t">
-                                <p className="text-xs text-muted-foreground mb-2">Configuration:</p>
-                                <div className="flex flex-wrap gap-2">
-                                  {Object.entries((item as DeploymentResponse).config).slice(0, 3).map(([key, value]) => (
-                                    <span key={key} className="text-xs px-2 py-1 bg-muted rounded">
-                                      {key}
-                                    </span>
-                                  ))}
-                                  {Object.keys((item as DeploymentResponse).config).length > 3 && (
-                                    <span className="text-xs px-2 py-1 bg-muted rounded text-muted-foreground">
-                                      +{Object.keys((item as DeploymentResponse).config).length - 3} more
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-
-                            {!isManaged && (item as KubernetesResource).labels && Object.keys((item as KubernetesResource).labels || {}).length > 0 && (
-                              <div className="mt-3 pt-3 border-t">
-                                <p className="text-xs text-muted-foreground mb-2">Labels:</p>
-                                <div className="flex flex-wrap gap-2">
-                                  {Object.entries((item as KubernetesResource).labels || {}).slice(0, 5).map(([key, value]) => (
-                                    <span key={key} className="text-xs px-2 py-1 bg-muted rounded">
-                                      {key}: {value}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
+                            ) : (
+                              <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 border-purple-500/20">
+                                External
+                              </Badge>
                             )}
                           </div>
 
-                          {isManaged && (
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              className="ml-4"
-                              onClick={() => handleRemove(name, version)}
-                              disabled={removing}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Remove
-                            </Button>
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <Calendar className="h-4 w-4" />
+                              <span>
+                                Deployed: {new Date(item.deployedAt).toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <Package className="h-4 w-4" />
+                              <span>
+                                Version: {item.version}
+                                {item.config?.namespace && ` • ${item.config.namespace}`}
+                              </span>
+                            </div>
+                          </div>
+
+                          {Object.keys(item.config || {}).length > 0 && (
+                            <div className="mt-3 pt-3 border-t">
+                              <p className="text-xs text-muted-foreground mb-2">Configuration:</p>
+                              <div className="flex flex-wrap gap-2">
+                                {Object.entries(item.config || {}).slice(0, 3).map(([key]) => (
+                                  <span key={key} className="text-xs px-2 py-1 bg-muted rounded">
+                                    {key}
+                                  </span>
+                                ))}
+                                {Object.keys(item.config || {}).length > 3 && (
+                                  <span className="text-xs px-2 py-1 bg-muted rounded text-muted-foreground">
+                                    +{Object.keys(item.config || {}).length - 3} more
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           )}
                         </div>
-                      </Card>
-                    )
-                  })}
+
+                        {!item.isExternal && (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="ml-4"
+                            onClick={() => handleRemove(item.serverName, item.version)}
+                            disabled={removing}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+                    </Card>
+                  ))}
                 </div>
               )}
 
@@ -392,101 +341,76 @@ export default function DeployedPage() {
                     MCP Servers
                     <Badge variant="secondary" className="ml-2">{mcpServers.length}</Badge>
                   </h2>
-                  {mcpServers.map((item) => {
-                    const isManaged = 'serverName' in item
-                    const name = isManaged ? (item as DeploymentResponse).serverName : (item as KubernetesResource).name
-                    const version = isManaged ? (item as DeploymentResponse).version : 'unknown'
-                    const runtime = isManaged ? (item as DeploymentResponse).runtime : 'kubernetes'
-
-                    return (
-                      <Card key={`${name}-${version}`} className="p-6 hover:shadow-md transition-all duration-200">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-3">
-                              <h3 className="text-xl font-semibold">{name}</h3>
-                              <Badge variant="outline">
-                                {runtime || "local"}
+                  {mcpServers.map((item) => (
+                    <Card key={`${item.serverName}-${item.version}`} className="p-6 hover:shadow-md transition-all duration-200">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            <h3 className="text-xl font-semibold">{item.serverName}</h3>
+                            <Badge variant="outline">
+                              {item.runtime || "local"}
+                            </Badge>
+                            {!item.isExternal ? (
+                              <Badge className="bg-primary/10 text-primary hover:bg-primary/20 border-primary/20">
+                                Managed
                               </Badge>
-                              {isManaged ? (
-                                <Badge className="bg-primary/10 text-primary hover:bg-primary/20 border-primary/20">
-                                  Managed
-                                </Badge>
-                              ) : (
-                                <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 border-purple-500/20">
-                                  External
-                                </Badge>
-                              )}
-                              {!isManaged && (item as KubernetesResource).status && (
-                                <Badge variant={(item as KubernetesResource).status === 'Ready' || (item as KubernetesResource).status === 'Accepted' ? 'default' : 'destructive'} className="ml-auto">
-                                  {(item as KubernetesResource).status}
-                                </Badge>
-                              )}
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4 text-sm">
-                              <div className="flex items-center gap-2 text-muted-foreground">
-                                <Calendar className="h-4 w-4" />
-                                <span>
-                                  {isManaged ? 'Deployed: ' : 'Created: '}
-                                  {new Date(isManaged ? (item as DeploymentResponse).deployedAt : ((item as KubernetesResource).createdAt || '')).toLocaleString()}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2 text-muted-foreground">
-                                <Package className="h-4 w-4" />
-                                <span>
-                                  {isManaged ? `Version: ${version}` : `Namespace: ${(item as KubernetesResource).namespace}`}
-                                </span>
-                              </div>
-                            </div>
-
-                            {isManaged && Object.keys((item as DeploymentResponse).config).length > 0 && (
-                              <div className="mt-3 pt-3 border-t">
-                                <p className="text-xs text-muted-foreground mb-2">Configuration:</p>
-                                <div className="flex flex-wrap gap-2">
-                                  {Object.entries((item as DeploymentResponse).config).slice(0, 3).map(([key, value]) => (
-                                    <span key={key} className="text-xs px-2 py-1 bg-muted rounded">
-                                      {key}
-                                    </span>
-                                  ))}
-                                  {Object.keys((item as DeploymentResponse).config).length > 3 && (
-                                    <span className="text-xs px-2 py-1 bg-muted rounded text-muted-foreground">
-                                      +{Object.keys((item as DeploymentResponse).config).length - 3} more
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-
-                            {!isManaged && (item as KubernetesResource).labels && Object.keys((item as KubernetesResource).labels || {}).length > 0 && (
-                              <div className="mt-3 pt-3 border-t">
-                                <p className="text-xs text-muted-foreground mb-2">Labels:</p>
-                                <div className="flex flex-wrap gap-2">
-                                  {Object.entries((item as KubernetesResource).labels || {}).slice(0, 5).map(([key, value]) => (
-                                    <span key={key} className="text-xs px-2 py-1 bg-muted rounded">
-                                      {key}: {value}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
+                            ) : (
+                              <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 border-purple-500/20">
+                                External
+                              </Badge>
                             )}
                           </div>
 
-                          {isManaged && (
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              className="ml-4"
-                              onClick={() => handleRemove(name, version)}
-                              disabled={removing}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Remove
-                            </Button>
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <Calendar className="h-4 w-4" />
+                              <span>
+                                Deployed: {new Date(item.deployedAt).toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <Package className="h-4 w-4" />
+                              <span>
+                                Version: {item.version}
+                                {item.config?.namespace && ` • ${item.config.namespace}`}
+                              </span>
+                            </div>
+                          </div>
+
+                          {Object.keys(item.config || {}).length > 0 && (
+                            <div className="mt-3 pt-3 border-t">
+                              <p className="text-xs text-muted-foreground mb-2">Configuration:</p>
+                              <div className="flex flex-wrap gap-2">
+                                {Object.entries(item.config || {}).slice(0, 3).map(([key]) => (
+                                  <span key={key} className="text-xs px-2 py-1 bg-muted rounded">
+                                    {key}
+                                  </span>
+                                ))}
+                                {Object.keys(item.config || {}).length > 3 && (
+                                  <span className="text-xs px-2 py-1 bg-muted rounded text-muted-foreground">
+                                    +{Object.keys(item.config || {}).length - 3} more
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           )}
                         </div>
-                      </Card>
-                    )
-                  })}
+
+                        {!item.isExternal && (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="ml-4"
+                            onClick={() => handleRemove(item.serverName, item.version)}
+                            disabled={removing}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+                    </Card>
+                  ))}
                 </div>
               )}
 

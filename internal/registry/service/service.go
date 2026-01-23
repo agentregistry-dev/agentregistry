@@ -83,7 +83,7 @@ type RegistryService interface {
 
 	// Deployments APIs
 	// GetDeployments retrieves all deployed resources (MCP servers, agents)
-	GetDeployments(ctx context.Context) ([]*models.Deployment, error)
+	GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
 	// GetDeploymentByName retrieves a specific deployment by resource name
 	GetDeploymentByNameAndVersion(ctx context.Context, resourceName string, version string) (*models.Deployment, error)
 	// DeployServer deploys an MCP server with configuration
@@ -94,9 +94,6 @@ type RegistryService interface {
 	UpdateDeploymentConfig(ctx context.Context, resourceName string, version string, config map[string]string) (*models.Deployment, error)
 	// RemoveServer removes a deployment (works for any resource type)
 	RemoveServer(ctx context.Context, resourceName string, version string) error
-
-	// ListKubernetesDeployments lists all agents and MCP servers from Kubernetes, marking external ones
-	ListKubernetesDeployments(ctx context.Context, namespace string) ([]models.KubernetesResource, error)
 
 	Reconciler
 }
