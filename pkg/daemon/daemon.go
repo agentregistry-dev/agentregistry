@@ -91,10 +91,19 @@ func (d *DefaultDaemonManager) IsRunning() bool {
 // isServerResponding checks if the server is responding on port 12121
 func isServerResponding() bool {
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get("http://localhost:12121/v0/version")
-	if err != nil {
-		return false
+
+	const maxRetries = 3
+	for i := 0; i < maxRetries; i++ {
+		resp, err := client.Get("http://localhost:12121/v0/version")
+		if err == nil {
+			defer resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return true
+			}
+		}
+		if i < maxRetries-1 {
+			time.Sleep(500 * time.Millisecond)
+		}
 	}
-	defer resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
+	return false
 }
