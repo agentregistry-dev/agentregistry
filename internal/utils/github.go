@@ -16,8 +16,7 @@ type GitHubRepoInfo struct {
 }
 
 func ParseGitHubURL(rawURL string) (*GitHubRepoInfo, error) {
-	if strings.HasPrefix(rawURL, "git@github.com:") {
-		path := strings.TrimPrefix(rawURL, "git@github.com:")
+	if path, ok := strings.CutPrefix(rawURL, "git@github.com:"); ok {
 		path = strings.TrimSuffix(path, ".git")
 		parts := strings.Split(path, "/")
 		if len(parts) != 2 {
