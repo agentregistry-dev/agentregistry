@@ -27,6 +27,7 @@ type DeploymentResponse = {
   preferRemote: boolean
   resourceType: string // "mcp" or "agent"
   runtime: string
+  isExternal?: boolean // true if not managed by registry
 }
 
 export default function DeployedPage() {
@@ -48,10 +49,10 @@ export default function DeployedPage() {
 
   const fetchDeployments = async () => {
     try {
-      setLoading(true)
       setError(null)
-      const data = await adminApiClient.listDeployments()
-      setDeployments(data)
+      // listDeployments now returns both managed and external K8s resources
+      const deployData = await adminApiClient.listDeployments()
+      setDeployments(deployData)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch deployments')
     } finally {
@@ -80,6 +81,7 @@ export default function DeployedPage() {
       // Remove from local state
       setDeployments(prev => prev.filter(d => d.serverName !== serverToRemove.name || d.version !== serverToRemove.version))
       setServerToRemove(null)
+      fetchDeployments()
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to remove deployment')
     } finally {
@@ -88,6 +90,8 @@ export default function DeployedPage() {
   }
 
   const runningCount = deployments.length
+  const agents = deployments.filter(d => d.resourceType === 'agent')
+  const mcpServers = deployments.filter(d => d.resourceType === 'mcp')
 
   return (
     <main className="min-h-screen bg-background">
@@ -115,7 +119,7 @@ export default function DeployedPage() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{runningCount}</p>
-                  <p className="text-xs text-muted-foreground">Deployed</p>
+                  <p className="text-xs text-muted-foreground">Total Resources</p>
                 </div>
               </div>
             </Card>
@@ -139,7 +143,9 @@ export default function DeployedPage() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{deployments.filter(d => d.resourceType === "mcp").length}</p>
+                  <p className="text-2xl font-bold">
+                    {mcpServers.length}
+                  </p>
                   <p className="text-xs text-muted-foreground">MCP Servers</p>
                 </div>
               </div>
@@ -191,9 +197,9 @@ export default function DeployedPage() {
       <div className="container mx-auto px-6 py-12">
         <div className="max-w-4xl mx-auto">
           <div className="mb-8">
-            <h1 className="text-3xl font-bold mb-2">Deployed</h1>
+            <h1 className="text-3xl font-bold mb-2">Deployed Resources</h1>
             <p className="text-muted-foreground">
-              Monitor and manage MCP servers and agents that are currently deployed on your system.
+              Monitor and manage MCP servers and agents deployed on your system.
             </p>
           </div>
 
@@ -209,10 +215,10 @@ export default function DeployedPage() {
           {loading ? (
             <Card className="p-12">
               <div className="text-center text-muted-foreground">
-                <p className="text-lg font-medium">Loading deployments...</p>
+                <p className="text-lg font-medium">Loading resources...</p>
               </div>
             </Card>
-          ) : deployments.length === 0 ? (
+          ) : (agents.length === 0 && mcpServers.length === 0) ? (
             <Card className="p-12">
               <div className="text-center text-muted-foreground">
                 <div className="w-16 h-16 mx-auto mb-4 opacity-50 flex items-center justify-center">
@@ -232,7 +238,7 @@ export default function DeployedPage() {
                   </svg>
                 </div>
                 <p className="text-lg font-medium mb-2">
-                  No deployed servers
+                  No resources found
                 </p>
                 <p className="text-sm mb-6">
                   Deploy MCP servers from the Admin panel to monitor them here.
@@ -246,61 +252,168 @@ export default function DeployedPage() {
               </div>
             </Card>
           ) : (
-            <div className="space-y-4">
-              {deployments.map((deployment) => (
-                <Card key={`${deployment.serverName}-${deployment.version}`} className="p-6 hover:shadow-md transition-all duration-200">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-3">
-                        <h3 className="text-xl font-semibold">{deployment.serverName}</h3>
-                        <Badge variant="outline">
-                          {deployment.runtime || "local"}
-                        </Badge>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Calendar className="h-4 w-4" />
-                          <span>Deployed: {new Date(deployment.deployedAt).toLocaleString()}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Package className="h-4 w-4" />
-                          <span>Version: {deployment.version}</span>
-                        </div>
-                      </div>
-
-                      {Object.keys(deployment.config).length > 0 && (
-                        <div className="mt-3 pt-3 border-t">
-                          <p className="text-xs text-muted-foreground mb-2">Configuration:</p>
-                          <div className="flex flex-wrap gap-2">
-                            {Object.entries(deployment.config).slice(0, 3).map(([key, value]) => (
-                              <span key={key} className="text-xs px-2 py-1 bg-muted rounded">
-                                {key}
-                              </span>
-                            ))}
-                            {Object.keys(deployment.config).length > 3 && (
-                              <span className="text-xs px-2 py-1 bg-muted rounded text-muted-foreground">
-                                +{Object.keys(deployment.config).length - 3} more
-                              </span>
+            <div className="space-y-6">
+              
+              {/* Agents */}
+              {agents.length > 0 && (
+                <div className="space-y-4">
+                  <h2 className="text-xl font-semibold flex items-center gap-2">
+                    Agents
+                    <Badge variant="secondary" className="ml-2">{agents.length}</Badge>
+                  </h2>
+                  {agents.map((item) => (
+                    <Card key={`${item.serverName}-${item.version}`} className="p-6 hover:shadow-md transition-all duration-200">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            <h3 className="text-xl font-semibold">{item.serverName}</h3>
+                            <Badge variant="outline">
+                              {item.runtime || "local"}
+                            </Badge>
+                            {!item.isExternal ? (
+                              <Badge className="bg-primary/10 text-primary hover:bg-primary/20 border-primary/20">
+                                Managed
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 border-purple-500/20">
+                                External
+                              </Badge>
                             )}
                           </div>
-                        </div>
-                      )}
-                    </div>
 
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="ml-4"
-                      onClick={() => handleRemove(deployment.serverName, deployment.version)}
-                      disabled={removing}
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Remove
-                    </Button>
-                  </div>
-                </Card>
-              ))}
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <Calendar className="h-4 w-4" />
+                              <span>
+                                Deployed: {new Date(item.deployedAt).toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <Package className="h-4 w-4" />
+                              <span>
+                                Version: {item.version}
+                                {item.config?.namespace && ` • ${item.config.namespace}`}
+                              </span>
+                            </div>
+                          </div>
+
+                          {Object.keys(item.config || {}).length > 0 && (
+                            <div className="mt-3 pt-3 border-t">
+                              <p className="text-xs text-muted-foreground mb-2">Configuration:</p>
+                              <div className="flex flex-wrap gap-2">
+                                {Object.entries(item.config || {}).slice(0, 3).map(([key]) => (
+                                  <span key={key} className="text-xs px-2 py-1 bg-muted rounded">
+                                    {key}
+                                  </span>
+                                ))}
+                                {Object.keys(item.config || {}).length > 3 && (
+                                  <span className="text-xs px-2 py-1 bg-muted rounded text-muted-foreground">
+                                    +{Object.keys(item.config || {}).length - 3} more
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {!item.isExternal && (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="ml-4"
+                            onClick={() => handleRemove(item.serverName, item.version)}
+                            disabled={removing}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
+              {/* MCP Servers */}
+              {mcpServers.length > 0 && (
+                <div className="space-y-4">
+                  <h2 className="text-xl font-semibold flex items-center gap-2">
+                    MCP Servers
+                    <Badge variant="secondary" className="ml-2">{mcpServers.length}</Badge>
+                  </h2>
+                  {mcpServers.map((item) => (
+                    <Card key={`${item.serverName}-${item.version}`} className="p-6 hover:shadow-md transition-all duration-200">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            <h3 className="text-xl font-semibold">{item.serverName}</h3>
+                            <Badge variant="outline">
+                              {item.runtime || "local"}
+                            </Badge>
+                            {!item.isExternal ? (
+                              <Badge className="bg-primary/10 text-primary hover:bg-primary/20 border-primary/20">
+                                Managed
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 border-purple-500/20">
+                                External
+                              </Badge>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <Calendar className="h-4 w-4" />
+                              <span>
+                                Deployed: {new Date(item.deployedAt).toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <Package className="h-4 w-4" />
+                              <span>
+                                Version: {item.version}
+                                {item.config?.namespace && ` • ${item.config.namespace}`}
+                              </span>
+                            </div>
+                          </div>
+
+                          {Object.keys(item.config || {}).length > 0 && (
+                            <div className="mt-3 pt-3 border-t">
+                              <p className="text-xs text-muted-foreground mb-2">Configuration:</p>
+                              <div className="flex flex-wrap gap-2">
+                                {Object.entries(item.config || {}).slice(0, 3).map(([key]) => (
+                                  <span key={key} className="text-xs px-2 py-1 bg-muted rounded">
+                                    {key}
+                                  </span>
+                                ))}
+                                {Object.keys(item.config || {}).length > 3 && (
+                                  <span className="text-xs px-2 py-1 bg-muted rounded text-muted-foreground">
+                                    +{Object.keys(item.config || {}).length - 3} more
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {!item.isExternal && (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="ml-4"
+                            onClick={() => handleRemove(item.serverName, item.version)}
+                            disabled={removing}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
             </div>
           )}
         </div>

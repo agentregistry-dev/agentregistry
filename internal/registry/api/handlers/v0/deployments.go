@@ -49,6 +49,7 @@ type DeploymentInput struct {
 // DeploymentsListInput represents query parameters for listing deployments
 type DeploymentsListInput struct {
 	ResourceType string `query:"resourceType" json:"resourceType,omitempty" doc:"Filter by resource type (mcp, agent)" example:"mcp" enum:"mcp,agent"`
+	Runtime      string `query:"runtime" json:"runtime,omitempty" doc:"Filter by runtime (local, kubernetes)" example:"local" enum:"local,kubernetes"`
 }
 
 // RegisterDeploymentsEndpoints registers all deployment-related endpoints
@@ -62,7 +63,17 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		Description: "Retrieve all deployed resources (MCP servers, agents) with their configurations. Optionally filter by resource type.",
 		Tags:        []string{"deployments"},
 	}, func(ctx context.Context, input *DeploymentsListInput) (*DeploymentsListResponse, error) {
-		deployments, err := registry.GetDeployments(ctx)
+		filter := &models.DeploymentFilter{}
+		if input.ResourceType != "" {
+			t := input.ResourceType
+			filter.ResourceType = &t
+		}
+		if input.Runtime != "" {
+			r := input.Runtime
+			filter.Runtime = &r
+		}
+
+		deployments, err := registry.GetDeployments(ctx, filter)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("Failed to retrieve deployments", err)
 		}
@@ -70,10 +81,6 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		resp := &DeploymentsListResponse{}
 		resp.Body.Deployments = make([]models.Deployment, 0, len(deployments))
 		for _, d := range deployments {
-			// Filter by resource type if specified
-			if input.ResourceType != "" && d.ResourceType != input.ResourceType {
-				continue
-			}
 			resp.Body.Deployments = append(resp.Body.Deployments, *d)
 		}
 

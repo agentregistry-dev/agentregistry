@@ -122,7 +122,7 @@ func (d *discoveryRegistry) UnpublishSkill(context.Context, string, string) erro
 }
 
 // Deployments and reconciler not used here.
-func (d *discoveryRegistry) GetDeployments(context.Context) ([]*models.Deployment, error) {
+func (d *discoveryRegistry) GetDeployments(context.Context, *models.DeploymentFilter) ([]*models.Deployment, error) {
 	return nil, database.ErrNotFound
 }
 func (d *discoveryRegistry) GetDeploymentByNameAndVersion(context.Context, string, string) (*models.Deployment, error) {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
@@ -19,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
@@ -35,19 +37,33 @@ func init() {
 	utilruntime.Must(kmcpv1alpha1.AddToScheme(scheme))
 }
 
-// newClient creates a controller-runtime client with the kagent scheme.
-func newClient() (client.Client, error) {
-	restConfig, err := config.GetConfig()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get kubernetes config: %w", err)
-	}
+var (
+	k8sClient  client.Client
+	clientOnce sync.Once
+)
 
-	c, err := client.New(restConfig, client.Options{Scheme: scheme})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
-	}
+// controller-runtime client singleton
+func GetKubeClient() (client.Client, error) {
+	var err error
+	clientOnce.Do(func() {
+		var restConfig *rest.Config
+		restConfig, err = config.GetConfig()
+		if err != nil {
+			err = fmt.Errorf("failed to get kubernetes config: %w", err)
+			return
+		}
 
-	return c, nil
+		k8sClient, err = client.New(restConfig, client.Options{Scheme: scheme})
+		if err != nil {
+			err = fmt.Errorf("failed to create kubernetes client: %w", err)
+			return
+		}
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return k8sClient, nil
 }
 
 // applyResource uses server-side apply to create or update a Kubernetes resource.
@@ -258,7 +274,7 @@ func (r *agentRegistryRuntime) ensureKubernetesRuntime(
 		return nil
 	}
 
-	c, err := newClient()
+	c, err := GetKubeClient()
 	if err != nil {
 		return err
 	}
@@ -303,13 +319,85 @@ func (r *agentRegistryRuntime) ensureKubernetesRuntime(
 	return nil
 }
 
+// ListAgents lists all Agent CRs in the given namespace (or all namespaces if empty)
+func ListAgents(ctx context.Context, namespace string) ([]*v1alpha2.Agent, error) {
+	c, err := GetKubeClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	agentList := &v1alpha2.AgentList{}
+	listOpts := []client.ListOption{}
+	if namespace != "" {
+		listOpts = append(listOpts, client.InNamespace(namespace))
+	}
+
+	if err := c.List(ctx, agentList, listOpts...); err != nil {
+		return nil, fmt.Errorf("failed to list agents: %w", err)
+	}
+
+	agents := make([]*v1alpha2.Agent, 0, len(agentList.Items))
+	for i := range agentList.Items {
+		agents = append(agents, &agentList.Items[i])
+	}
+	return agents, nil
+}
+
+// ListMCPServers lists all MCPServer CRs in the given namespace (or all namespaces if empty)
+func ListMCPServers(ctx context.Context, namespace string) ([]*kmcpv1alpha1.MCPServer, error) {
+	c, err := GetKubeClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	mcpList := &kmcpv1alpha1.MCPServerList{}
+	listOpts := []client.ListOption{}
+	if namespace != "" {
+		listOpts = append(listOpts, client.InNamespace(namespace))
+	}
+
+	if err := c.List(ctx, mcpList, listOpts...); err != nil {
+		return nil, fmt.Errorf("failed to list MCP servers: %w", err)
+	}
+
+	servers := make([]*kmcpv1alpha1.MCPServer, 0, len(mcpList.Items))
+	for i := range mcpList.Items {
+		servers = append(servers, &mcpList.Items[i])
+	}
+	return servers, nil
+}
+
+// ListRemoteMCPServers lists all RemoteMCPServer CRs in the given namespace (or all namespaces if empty)
+func ListRemoteMCPServers(ctx context.Context, namespace string) ([]*v1alpha2.RemoteMCPServer, error) {
+	c, err := GetKubeClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	remoteMCPList := &v1alpha2.RemoteMCPServerList{}
+	listOpts := []client.ListOption{}
+	if namespace != "" {
+		listOpts = append(listOpts, client.InNamespace(namespace))
+	}
+
+	if err := c.List(ctx, remoteMCPList, listOpts...); err != nil {
+		return nil, fmt.Errorf("failed to list remote MCP servers: %w", err)
+	}
+
+	servers := make([]*v1alpha2.RemoteMCPServer, 0, len(remoteMCPList.Items))
+	for i := range remoteMCPList.Items {
+		servers = append(servers, &remoteMCPList.Items[i])
+	}
+	return servers, nil
+}
+
 // DeleteKubernetesAgent deletes a kagent Agent CR by name/version.
 func DeleteKubernetesAgent(ctx context.Context, name, version, namespace string) error {
 	if namespace == "" {
 		namespace = kagent.DefaultNamespace
 	}
 
-	c, err := newClient()
+	c, err := GetKubeClient()
 	if err != nil {
 		return err
 	}
@@ -330,7 +418,7 @@ func DeleteKubernetesRemoteMCPServer(ctx context.Context, name, namespace string
 		namespace = kagent.DefaultNamespace
 	}
 
-	c, err := newClient()
+	c, err := GetKubeClient()
 	if err != nil {
 		return err
 	}
@@ -351,7 +439,7 @@ func DeleteKubernetesMCPServer(ctx context.Context, name, namespace string) erro
 		namespace = kagent.DefaultNamespace
 	}
 
-	c, err := newClient()
+	c, err := GetKubeClient()
 	if err != nil {
 		return err
 	}

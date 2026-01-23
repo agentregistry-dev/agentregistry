@@ -402,7 +402,7 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService, jw
 		if err := requireAuthToken(ctx, jwtManager, "*"); err != nil {
 			return nil, deploymentsResponse{}, err
 		}
-		deployments, err := registry.GetDeployments(ctx)
+		deployments, err := registry.GetDeployments(ctx, nil)
 		if err != nil {
 			return nil, deploymentsResponse{}, err
 		}
