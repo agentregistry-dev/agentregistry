@@ -135,7 +135,7 @@ func (d *discoveryRegistry) DeployAgent(context.Context, string, string, map[str
 func (d *discoveryRegistry) UpdateDeploymentConfig(context.Context, string, string, string, map[string]string) (*models.Deployment, error) {
 	return nil, database.ErrNotFound
 }
-func (d *discoveryRegistry) RemoveServer(context.Context, string, string, string) error {
+func (d *discoveryRegistry) RemoveDeployment(context.Context, string, string, string) error {
 	return database.ErrNotFound
 }
 func (d *discoveryRegistry) ReconcileAll(context.Context) error { return nil }

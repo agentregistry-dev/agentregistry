@@ -103,13 +103,6 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 	}, func(ctx context.Context, input *struct {
 		DeploymentInput
 	}) (*DeploymentResponse, error) {
-		switch input.ResourceType {
-		case "", "mcp", "agent":
-			// Valid resource types
-		default:
-			return nil, huma.Error400BadRequest("Invalid resource type. Must be 'mcp' or 'agent'")
-		}
-
 		serverName, err := url.PathUnescape(input.ServerName)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
@@ -206,13 +199,6 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
 		}
 
-		switch input.ResourceType {
-		case "", "mcp", "agent":
-			// Valid resource types
-		default:
-			return nil, huma.Error400BadRequest("Invalid resource type. Must be 'mcp' or 'agent'")
-		}
-
 		version, err := url.PathUnescape(input.Version)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
@@ -229,25 +215,25 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		return &DeploymentResponse{Body: *deployment}, nil
 	})
 
-	// Remove a deployed server (undeploy)
+	// Remove a deployment
 	huma.Register(api, huma.Operation{
-		OperationID: "remove-server",
+		OperationID: "remove-deployment",
 		Method:      http.MethodDelete,
 		Path:        basePath + "/deployments/{serverName}/versions/{version}",
 		Summary:     "Remove a deployed resource",
-		Description: "Remove a resource (MCP server or agent) from deployed state",
+		Description: "Remove a deployment from deployed state",
 		Tags:        []string{"deployments"},
 	}, func(ctx context.Context, input *DeploymentInput) (*struct{}, error) {
+		switch input.ResourceType {
+		case "mcp", "agent":
+			// Valid resource types
+		default:
+			return nil, huma.Error400BadRequest("Invalid resource type. Must be 'mcp' or 'agent'. Got: " + input.ResourceType)
+		}
+
 		serverName, err := url.PathUnescape(input.ServerName)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
-		}
-
-		switch input.ResourceType {
-		case "", "mcp", "agent":
-			// Valid resource types
-		default:
-			return nil, huma.Error400BadRequest("Invalid resource type. Must be 'mcp' or 'agent'")
 		}
 
 		version, err := url.PathUnescape(input.Version)
@@ -255,12 +241,12 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
 		}
 
-		err = registry.RemoveServer(ctx, serverName, version, input.ResourceType)
+		err = registry.RemoveDeployment(ctx, serverName, version, input.ResourceType)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Deployment not found")
 			}
-			return nil, huma.Error500InternalServerError("Failed to remove server", err)
+			return nil, huma.Error500InternalServerError("Failed to remove deployment", err)
 		}
 
 		return &struct{}{}, nil

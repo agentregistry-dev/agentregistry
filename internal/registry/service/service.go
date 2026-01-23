@@ -92,8 +92,8 @@ type RegistryService interface {
 	DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool, runtime string) (*models.Deployment, error)
 	// UpdateDeploymentConfig updates the configuration for a deployment
 	UpdateDeploymentConfig(ctx context.Context, resourceName string, version string, artifactType string, config map[string]string) (*models.Deployment, error)
-	// RemoveServer removes a deployment (works for any resource type)
-	RemoveServer(ctx context.Context, resourceName string, version string, artifactType string) error
+	// RemoveDeployment removes a deployment (works for any resource type)
+	RemoveDeployment(ctx context.Context, resourceName string, version string, artifactType string) error
 
 	Reconciler
 }

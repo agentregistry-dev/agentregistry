@@ -846,8 +846,8 @@ func (s *registryServiceImpl) UpdateDeploymentConfig(ctx context.Context, server
 	return s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version, artifactType)
 }
 
-// RemoveServer removes a deployment
-func (s *registryServiceImpl) RemoveServer(ctx context.Context, serverName string, version string, artifactType string) error {
+// RemoveDeployment removes a deployment
+func (s *registryServiceImpl) RemoveDeployment(ctx context.Context, serverName string, version string, artifactType string) error {
 	deployment, err := s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version, artifactType)
 	if err != nil {
 		return err
@@ -884,8 +884,8 @@ func (s *registryServiceImpl) RemoveServer(ctx context.Context, serverName strin
 
 // RemoveAgent removes an agent deployment
 func (s *registryServiceImpl) RemoveAgent(ctx context.Context, agentName string, version string) error {
-	// Use RemoveServer implementation as it handles both types based on deployment record
-	return s.RemoveServer(ctx, agentName, version, "agent")
+	// Use RemoveDeployment implementation as it handles both types based on deployment record
+	return s.RemoveDeployment(ctx, agentName, version, "agent")
 }
 
 // ReconcileAll fetches all deployments from database and reconciles containers

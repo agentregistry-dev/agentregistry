@@ -830,8 +830,8 @@ func (c *Client) UpdateDeploymentConfig(name string, version string, resourceTyp
 	return &deployment, nil
 }
 
-// RemoveServer removes a deployment
-func (c *Client) RemoveServer(name string, version string, resourceType string) error {
+// RemoveDeployment removes a deployment
+func (c *Client) RemoveDeployment(name string, version string, resourceType string) error {
 	encName := url.PathEscape(name)
 	encVersion := url.PathEscape(version)
 	req, err := c.newRequest(http.MethodDelete, "/deployments/"+encName+"/versions/"+encVersion+"?resourceType="+resourceType)

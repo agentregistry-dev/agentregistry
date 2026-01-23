@@ -21,7 +21,7 @@ type fakeRegistry struct {
 	deployServerFn           func(ctx context.Context, name, version string, config map[string]string, preferRemote bool, runtime string) (*models.Deployment, error)
 	deployAgentFn            func(ctx context.Context, name, version string, config map[string]string, preferRemote bool, runtime string) (*models.Deployment, error)
 	updateDeploymentConfigFn func(ctx context.Context, name, version, artifactType string, config map[string]string) (*models.Deployment, error)
-	removeServerFn           func(ctx context.Context, name, version, artifactType string) error
+	removeDeploymentFn       func(ctx context.Context, name, version, artifactType string) error
 }
 
 // Deployment-related methods
@@ -61,9 +61,9 @@ func (f *fakeRegistry) UpdateDeploymentConfig(ctx context.Context, name, version
 	return nil, errors.New("not implemented")
 }
 
-func (f *fakeRegistry) RemoveServer(ctx context.Context, name, version, artifactType string) error {
-	if f.removeServerFn != nil {
-		return f.removeServerFn(ctx, name, version, artifactType)
+func (f *fakeRegistry) RemoveDeployment(ctx context.Context, name, version, artifactType string) error {
+	if f.removeDeploymentFn != nil {
+		return f.removeDeploymentFn(ctx, name, version, artifactType)
 	}
 	return errors.New("not implemented")
 }
@@ -335,7 +335,7 @@ func TestDeploymentTools_DeployUpdateRemove(t *testing.T) {
 			}
 			return nil, errors.New("not found")
 		},
-		removeServerFn: func(ctx context.Context, name, version, artifactType string) error {
+		removeDeploymentFn: func(ctx context.Context, name, version, artifactType string) error {
 			if name == deployed.ServerName && version == deployed.Version {
 				removed = true
 				return nil

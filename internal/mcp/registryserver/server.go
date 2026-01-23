@@ -470,7 +470,7 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService) {
 		if _, err := registry.GetDeploymentByNameAndVersion(ctx, args.ServerName, args.Version, args.ResourceType); err != nil {
 			return nil, nil, err
 		}
-		if err := registry.RemoveServer(ctx, args.ServerName, args.Version, args.ResourceType); err != nil {
+		if err := registry.RemoveDeployment(ctx, args.ServerName, args.Version, args.ResourceType); err != nil {
 			return nil, nil, err
 		}
 		return nil, map[string]string{"status": "deleted"}, nil
