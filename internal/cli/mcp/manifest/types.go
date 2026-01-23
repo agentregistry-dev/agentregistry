@@ -19,6 +19,12 @@ type ProjectManifest struct {
 	Secrets   SecretsConfig         `yaml:"secrets,omitempty" json:"secrets,omitempty"`
 	Transport *TransportConfig      `yaml:"transport,omitempty" json:"transport,omitempty"`
 
+	// Runtime configuration for OCI deployment
+	// RuntimeHint is the command to run inside the container (e.g., "python", "node")
+	RuntimeHint string `yaml:"runtimeHint,omitempty" json:"runtimeHint,omitempty"`
+	// RuntimeArgs are the arguments to pass to the command (e.g., ["src/main.py"])
+	RuntimeArgs []string `yaml:"runtimeArgs,omitempty" json:"runtimeArgs,omitempty"`
+
 	// Metadata
 	CreatedAt time.Time `yaml:"created_at,omitempty" json:"created_at,omitempty"`
 	UpdatedAt time.Time `yaml:"updated_at,omitempty" json:"updated_at,omitempty"`

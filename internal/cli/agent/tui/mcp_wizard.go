@@ -30,6 +30,7 @@ const (
 	stepRegistryServerName
 	stepRegistryServerVersion
 	stepRegistryServerPreferRemote
+	stepRegistryEnv
 	stepArgsEnv
 	stepName
 	stepDone
@@ -140,9 +141,10 @@ var (
 				stepRegistryServerName:         3,
 				stepRegistryServerVersion:      4,
 				stepRegistryServerPreferRemote: 5,
-				stepName:                       6,
+				stepRegistryEnv:                6,
+				stepName:                       7,
 			},
-			TotalSteps: 6,
+			TotalSteps: 7,
 		},
 	}
 )
@@ -181,10 +183,13 @@ type McpServerWizard struct {
 	registryServerNameList             list.Model
 	registryServerVersionList          list.Model
 	registryServerPreferRemoteList     list.Model
+	registryEnvKeyInput                textinput.Model
+	registryEnvValueInput              textinput.Model
 	registryURL                        string
 	selectedRegistryServerName         string
 	selectedRegistryServerVersion      string
 	selectedRegistryServerPreferRemote bool
+	registryEnvVars                    map[string]string
 
 	chosenType   string // serverTypes.Remote.ID or serverTypes.Command.ID
 	chosenMethod string // commandMethods.*.ID
@@ -288,6 +293,9 @@ func NewMcpServerWizard() *McpServerWizard {
 		registryServerNameList:         rnl,
 		registryServerVersionList:      rvl,
 		registryServerPreferRemoteList: rrl,
+		registryEnvKeyInput:            mk("Env var name (e.g., API_KEY)", 40),
+		registryEnvValueInput:          mk("Env var value or ${VAR_NAME}", 50),
+		registryEnvVars:                make(map[string]string),
 		urlInput:                       mk("https://your-mcp-server", 40),
 		imageInput:                     mk("ghcr.io/org/tool:tag", 40),
 		pkgInput:                       mk("@acme/mcp-tool", 40),
@@ -432,6 +440,14 @@ func (w *McpServerWizard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		w.registryServerPreferRemoteList, cmd = w.registryServerPreferRemoteList.Update(msg)
 		return w, tea.Batch(fpCmd, cmd)
+	case stepRegistryEnv:
+		var cmds []tea.Cmd
+		if fpCmd != nil {
+			cmds = append(cmds, fpCmd)
+		}
+		w.registryEnvKeyInput, _ = w.registryEnvKeyInput.Update(msg)
+		w.registryEnvValueInput, _ = w.registryEnvValueInput.Update(msg)
+		return w, tea.Batch(cmds...)
 	case stepCommandMethod:
 		var cmd tea.Cmd
 		w.methodList, cmd = w.methodList.Update(msg)
@@ -509,6 +525,8 @@ func (w *McpServerWizard) View() string {
 		body = w.registryServerVersionList.View() + w.errorView()
 	case stepRegistryServerPreferRemote:
 		body = w.registryServerPreferRemoteList.View() + w.errorView()
+	case stepRegistryEnv:
+		body = w.renderRegistryEnvStep()
 	case stepCommandMethod:
 		body = w.methodList.View()
 	case stepCommandMode:
@@ -560,6 +578,8 @@ func (w *McpServerWizard) onEnter() tea.Cmd {
 		return w.enterRegistryServerVersion()
 	case stepRegistryServerPreferRemote:
 		return w.enterRegistryServerPreferRemote()
+	case stepRegistryEnv:
+		return w.enterRegistryEnv()
 	case stepCommandMethod:
 		return w.enterCommandMethod()
 	case stepCommandMode:
@@ -695,15 +715,51 @@ func (w *McpServerWizard) enterRegistryServerVersion() tea.Cmd {
 	return nil
 }
 
-// enterRegistryServerPreferRemote processes the selected prefer remote and advances to naming.
+// enterRegistryServerPreferRemote processes the selected prefer remote and advances to env vars step.
 func (w *McpServerWizard) enterRegistryServerPreferRemote() tea.Cmd {
 	if it, ok := w.registryServerPreferRemoteList.SelectedItem().(choiceItem); ok {
 		w.selectedRegistryServerPreferRemote = it.Title() == "true"
+		w.step = stepRegistryEnv
+		w.registryEnvKeyInput.SetValue("")
+		w.registryEnvValueInput.SetValue("")
+		w.registryEnvKeyInput.Focus()
+		return nil
+	}
+	return nil
+}
+
+// enterRegistryEnv handles adding env vars or skipping to name step.
+func (w *McpServerWizard) enterRegistryEnv() tea.Cmd {
+	key := strings.TrimSpace(w.registryEnvKeyInput.Value())
+	value := strings.TrimSpace(w.registryEnvValueInput.Value())
+
+	// If both are empty, user wants to skip/finish adding env vars
+	if key == "" && value == "" {
 		w.step = stepName
 		w.nameInput.SetValue("")
 		w.nameInput.Focus()
 		return nil
 	}
+
+	// Validate that both key and value are provided
+	if key == "" {
+		w.errMsg = "Environment variable name is required (or leave both empty to continue)"
+		return nil
+	}
+	if value == "" {
+		w.errMsg = "Environment variable value is required (or leave both empty to continue)"
+		return nil
+	}
+
+	// Add the env var
+	w.registryEnvVars[key] = value
+
+	// Clear inputs for next env var
+	w.registryEnvKeyInput.SetValue("")
+	w.registryEnvValueInput.SetValue("")
+	w.registryEnvKeyInput.Focus()
+	w.errMsg = ""
+
 	return nil
 }
 
@@ -918,6 +974,14 @@ func (w *McpServerWizard) buildFinalResult(name string) {
 		w.result.RegistryServerName = w.selectedRegistryServerName
 		w.result.RegistryServerVersion = w.selectedRegistryServerVersion
 		w.result.RegistryServerPreferRemote = w.selectedRegistryServerPreferRemote
+		// Convert env vars map to KEY=VALUE slice format
+		if len(w.registryEnvVars) > 0 {
+			envSlice := make([]string, 0, len(w.registryEnvVars))
+			for k, v := range w.registryEnvVars {
+				envSlice = append(envSlice, k+"="+v)
+			}
+			w.result.Env = envSlice
+		}
 		return
 	}
 
@@ -978,6 +1042,8 @@ func (w *McpServerWizard) onTab(reverse bool) tea.Cmd {
 		return w.tabRegistryServerVersion(reverse)
 	case stepRegistryServerPreferRemote:
 		return w.tabRegistryServerPreferRemote(reverse)
+	case stepRegistryEnv:
+		return w.tabRegistryEnv(reverse)
 	case stepCommandDetails:
 		return w.tabCommandDetails(reverse)
 	case stepArgsEnv:
@@ -1002,6 +1068,28 @@ func (w *McpServerWizard) tabRegistryServerVersion(_ bool) tea.Cmd { return nil 
 
 // tabRegistryServerPreferRemote has a single list; nothing to cycle.
 func (w *McpServerWizard) tabRegistryServerPreferRemote(_ bool) tea.Cmd { return nil }
+
+// tabRegistryEnv toggles focus between env key and value inputs.
+func (w *McpServerWizard) tabRegistryEnv(reverse bool) tea.Cmd {
+	if reverse {
+		if w.registryEnvValueInput.Focused() {
+			w.registryEnvKeyInput.Focus()
+			w.registryEnvValueInput.Blur()
+		} else {
+			w.registryEnvKeyInput.Blur()
+			w.registryEnvValueInput.Focus()
+		}
+	} else {
+		if w.registryEnvKeyInput.Focused() {
+			w.registryEnvKeyInput.Blur()
+			w.registryEnvValueInput.Focus()
+		} else {
+			w.registryEnvValueInput.Blur()
+			w.registryEnvKeyInput.Focus()
+		}
+	}
+	return nil
+}
 
 // tabRemoteHeaders toggles focus between header key and value inputs.
 func (w *McpServerWizard) tabRemoteHeaders(reverse bool) tea.Cmd {
@@ -1173,7 +1261,7 @@ func (w *McpServerWizard) renderHeader() string {
 			idx = v
 		}
 		total = wizardFlows.Remote.TotalSteps
-	} else if w.chosenType == serverTypes.Registry.ID || w.step == stepRegistryURL || w.step == stepRegistryServerName || w.step == stepRegistryServerVersion {
+	} else if w.chosenType == serverTypes.Registry.ID || w.step == stepRegistryURL || w.step == stepRegistryServerName || w.step == stepRegistryServerVersion || w.step == stepRegistryEnv {
 		// registry flow
 		if v, ok := wizardFlows.Registry.StepPositions[w.step]; ok {
 			idx = v
@@ -1216,6 +1304,8 @@ func (w *McpServerWizard) prevStep() {
 		w.step = stepRegistryServerName
 	case stepRegistryServerPreferRemote:
 		w.step = stepRegistryServerVersion
+	case stepRegistryEnv:
+		w.step = stepRegistryServerPreferRemote
 	case stepCommandMethod:
 		w.step = stepPickType
 	case stepCommandMode:
@@ -1233,13 +1323,51 @@ func (w *McpServerWizard) prevStep() {
 		case serverTypes.Remote.ID:
 			w.step = stepRemoteHeaders
 		case serverTypes.Registry.ID:
-			w.step = stepRegistryServerPreferRemote
+			w.step = stepRegistryEnv
 		default:
 			w.step = stepArgsEnv
 		}
 	default:
 		w.step = stepPickType
 	}
+}
+
+// renderRegistryEnvStep displays the environment variables input interface for registry servers.
+func (w *McpServerWizard) renderRegistryEnvStep() string {
+	var sb strings.Builder
+
+	sb.WriteString("\n")
+	sb.WriteString(theme.StatusStyle().Render("Add environment variables (optional)"))
+	sb.WriteString("\n\n")
+
+	// Show existing env vars
+	if len(w.registryEnvVars) > 0 {
+		sb.WriteString(theme.StatusStyle().Render("Current environment variables:"))
+		sb.WriteString("\n")
+		for k, v := range w.registryEnvVars {
+			// Mask sensitive values
+			displayValue := v
+			if strings.Contains(strings.ToLower(k), "key") || strings.Contains(strings.ToLower(k), "secret") || strings.Contains(strings.ToLower(k), "token") || strings.Contains(strings.ToLower(k), "password") {
+				if len(v) > 10 && !strings.HasPrefix(v, "${") {
+					displayValue = v[:7] + "***"
+				}
+			}
+			sb.WriteString(fmt.Sprintf("  • %s=%s\n", k, displayValue))
+		}
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString(w.labeled("Env var name", w.registryEnvKeyInput.View()))
+	sb.WriteString("\n")
+	sb.WriteString(w.labeled("Env var value", w.registryEnvValueInput.View()))
+	sb.WriteString("\n\n")
+	sb.WriteString(theme.StatusStyle().Render("💡 Tip: Use ${VAR_NAME} to reference host environment variables"))
+	sb.WriteString("\n")
+	sb.WriteString(theme.StatusStyle().Render("   Press Enter with both fields empty to continue"))
+	sb.WriteString("\n")
+	sb.WriteString(w.errorView())
+
+	return sb.String()
 }
 
 // renderHeadersStep displays the headers input interface with current headers.

@@ -12,6 +12,7 @@ import (
 type RegistryConfig struct {
 	Image   string
 	Command string
+	IsOCI   bool // True for OCI registry type where image is ready to use (no build needed)
 }
 
 // ProcessArguments processes model.Argument slices into []string args, allowing for overrides.
@@ -208,6 +209,8 @@ func GetRegistryConfig(
 
 	case strings.ToLower(string(model.RegistryTypeOCI)):
 		config.Image = packageInfo.Identifier
+		config.Command = packageInfo.RunTimeHint
+		config.IsOCI = true
 
 	default:
 		return RegistryConfig{}, nil, fmt.Errorf("unsupported package registry type: %s", string(packageInfo.RegistryType))

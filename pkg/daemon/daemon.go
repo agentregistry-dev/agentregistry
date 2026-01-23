@@ -3,9 +3,11 @@ package daemon
 import (
 	_ "embed"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/daemon"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
@@ -70,6 +72,11 @@ func (d *DefaultDaemonManager) Start() error {
 }
 
 func (d *DefaultDaemonManager) IsRunning() bool {
+	// First check if a server is responding on the API port (local or Docker)
+	if isServerResponding() {
+		return true
+	}
+
 	cmd := exec.Command("docker", "compose", "-p", d.config.ProjectName, "-f", "-", "ps")
 	cmd.Stdin = strings.NewReader(d.config.ComposeYAML)
 	cmd.Env = append(os.Environ(), fmt.Sprintf("VERSION=%s", d.config.Version), fmt.Sprintf("DOCKER_REGISTRY=%s", d.config.DockerRegistry))
@@ -79,4 +86,15 @@ func (d *DefaultDaemonManager) IsRunning() bool {
 		return false
 	}
 	return strings.Contains(string(output), d.config.ContainerName)
+}
+
+// isServerResponding checks if the server is responding on port 12121
+func isServerResponding() bool {
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get("http://localhost:12121/v0/version")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
 }
