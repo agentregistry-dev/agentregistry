@@ -128,11 +128,21 @@ func (r *agentRegistryRuntime) ReconcileAll(
 			return fmt.Errorf("translate agent %s: %w", req.RegistryAgent.Name, err)
 		}
 
+		// Extract namespace from agent's env (if set) to propagate to MCP servers
+		agentNamespace := ""
+		if ns, ok := req.EnvValues["KAGENT_NAMESPACE"]; ok && ns != "" {
+			agentNamespace = ns
+		}
+
 		// Translate and add resolved MCP servers from agent manifest to desired state
 		for _, serverReq := range req.ResolvedMCPServers {
 			mcpServer, err := r.registryTranslator.TranslateMCPServer(context.TODO(), serverReq)
 			if err != nil {
 				return fmt.Errorf("translate resolved MCP server %s for agent %s: %w", serverReq.RegistryServer.Name, req.RegistryAgent.Name, err)
+			}
+			// Propagate namespace from agent to MCP server for co-location
+			if agentNamespace != "" {
+				mcpServer.Namespace = agentNamespace
 			}
 			desiredState.MCPServers = append(desiredState.MCPServers, mcpServer)
 		}

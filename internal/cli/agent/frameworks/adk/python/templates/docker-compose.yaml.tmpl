@@ -52,12 +52,22 @@ services:
 {{- range .McpServers }}
 {{- if eq .Type "command" }}
   {{.Name}}:
+{{- if .Build }}
     image: localhost:5001/{{$.Name}}-{{.Name}}:latest
     build:
-      context: ./{{if .Build}}{{.Build}}{{else}}{{.Name}}{{end}}
+      context: ./{{.Build}}
       dockerfile: Dockerfile
+{{- else }}
+    image: {{.Image}}
+{{- end }}
     expose:
       - "3000"
+{{- if .Env }}
+    environment:
+{{- range .Env }}
+      - {{.}}
+{{- end }}
+{{- end }}
 {{- if $.TelemetryEndpoint}}
     networks:
       - agentregistry-network

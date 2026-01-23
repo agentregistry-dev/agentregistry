@@ -84,6 +84,9 @@ func GetDefault(name, framework, description, author, email string) *ProjectMani
 	if description == "" {
 		description = fmt.Sprintf("MCP server built with %s", framework)
 	}
+
+	runtimeHint, runtimeArgs := getFrameworkRuntimeConfig(framework)
+
 	return &ProjectManifest{
 		Name:        name,
 		Framework:   framework,
@@ -99,8 +102,24 @@ func GetDefault(name, framework, description, author, email string) *ProjectMani
 				File:     ".env.local",
 			},
 		},
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		RuntimeHint: runtimeHint,
+		RuntimeArgs: runtimeArgs,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+}
+
+// getFrameworkRuntimeConfig returns the runtime command and arguments based on framework
+func getFrameworkRuntimeConfig(framework string) (string, []string) {
+	switch framework {
+	case FrameworkFastMCPPython:
+		return "python", []string{"src/main.py"}
+	case FrameworkMCPGo:
+		return "/app/server", nil
+	case FrameworkTypeScript:
+		return "node", []string{"dist/index.js"}
+	default:
+		return "", nil
 	}
 }
 
