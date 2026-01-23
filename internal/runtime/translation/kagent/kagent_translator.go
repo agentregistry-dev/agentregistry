@@ -155,7 +155,7 @@ func (t *translator) translateAgent(agent *api.Agent) (*v1alpha2.Agent, error) {
 			Namespace: namespace,
 			// Add a label to identify this resource as managed by agentregistry
 			Labels: map[string]string{
-				"agentregistry.solo.io/managed": "true",
+				"aregistry.ai/managed": "true",
 			},
 		},
 		Spec: v1alpha2.AgentSpec{
@@ -193,7 +193,7 @@ func (t *translator) translateRemoteMCPServer(server *api.MCPServer) (*v1alpha2.
 			Name:      RemoteMCPResourceName(server.Name),
 			Namespace: namespace,
 			Labels: map[string]string{
-				"agentregistry.solo.io/managed": "true",
+				"aregistry.ai/managed": "true",
 			},
 		},
 		Spec: v1alpha2.RemoteMCPServerSpec{
@@ -262,7 +262,7 @@ func (t *translator) translateLocalMCPServer(server *api.MCPServer) (*kmcpv1alph
 			Name:      MCPServerResourceName(server.Name),
 			Namespace: namespace,
 			Labels: map[string]string{
-				"agentregistry.solo.io/managed": "true",
+				"aregistry.ai/managed": "true",
 			},
 		},
 		Spec: spec,

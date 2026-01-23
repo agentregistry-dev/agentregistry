@@ -394,7 +394,7 @@ func (s *Service) fetchFromRegistryAPI(ctx context.Context, baseURL string) ([]*
 }
 
 // enrichServer augments ServerJSON with vendor metadata under _meta.publisher-provided
-// Key: agentregistry.solo.io/metadata { stars: <int> }
+// Key: aregistry.ai/metadata { stars: <int> }
 func (s *Service) enrichServer(ctx context.Context, server *apiv0.ServerJSON) error {
 	if server == nil || server.Repository == nil || server.Repository.URL == "" {
 		return nil
@@ -604,7 +604,7 @@ func (s *Service) enrichServer(ctx context.Context, server *apiv0.ServerJSON) er
 		}(),
 	}
 
-	server.Meta.PublisherProvided["agentregistry.solo.io/metadata"] = enterprise
+	server.Meta.PublisherProvided["aregistry.ai/metadata"] = enterprise
 	return nil
 }
 

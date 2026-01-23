@@ -18,7 +18,7 @@ import (
 )
 
 const errRecordNotFound = "record not found"
-const semanticMetadataKey = "agentregistry.solo.io/semantic"
+const semanticMetadataKey = "aregistry.ai/semantic"
 
 // normalizeServerResponse moves semantic metadata into a dedicated response meta
 // field while keeping publisher-provided data untouched.

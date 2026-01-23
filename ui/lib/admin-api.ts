@@ -38,7 +38,7 @@ export interface ServerJSON {
   websiteUrl?: string
   _meta?: {
     'io.modelcontextprotocol.registry/publisher-provided'?: {
-      'agentregistry.solo.io/metadata'?: {
+      'aregistry.ai/metadata'?: {
         stars?: number
         score?: number
         scorecard?: {

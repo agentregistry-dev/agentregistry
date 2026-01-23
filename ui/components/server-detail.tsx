@@ -74,7 +74,7 @@ export function ServerDetail({ server, onClose, onServerCopied, onPublish }: Ser
   const official = _meta?.['io.modelcontextprotocol.registry/official']
   
   // Extract metadata
-  const publisherMetadata = serverData._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['agentregistry.solo.io/metadata']
+  const publisherMetadata = serverData._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['aregistry.ai/metadata']
   const githubStars = publisherMetadata?.stars
   const overallScore = publisherMetadata?.score
   const openSSFScore = publisherMetadata?.scorecard?.openssf

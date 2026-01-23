@@ -88,7 +88,7 @@ export default function AdminPage() {
 
   // Helper function to extract GitHub stars from server metadata
   const getStars = (server: ServerResponse): number => {
-    const publisherMetadata = server.server._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['agentregistry.solo.io/metadata']
+    const publisherMetadata = server.server._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['aregistry.ai/metadata']
     return publisherMetadata?.stars ?? 0
   }
 
@@ -289,7 +289,7 @@ export default function AdminPage() {
     // Filter by verified organization
     if (filterVerifiedOrg) {
       filtered = filtered.filter((s) => {
-        const identityData = s.server._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['agentregistry.solo.io/metadata']?.identity
+        const identityData = s.server._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['aregistry.ai/metadata']?.identity
         return identityData?.org_is_verified === true
       })
     }
@@ -297,7 +297,7 @@ export default function AdminPage() {
     // Filter by verified publisher
     if (filterVerifiedPublisher) {
       filtered = filtered.filter((s) => {
-        const identityData = s.server._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['agentregistry.solo.io/metadata']?.identity
+        const identityData = s.server._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['aregistry.ai/metadata']?.identity
         return identityData?.publisher_identity_verified_by_jwt === true
       })
     }

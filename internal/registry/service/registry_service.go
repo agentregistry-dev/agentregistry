@@ -1087,7 +1087,7 @@ func (s *registryServiceImpl) listKubernetesDeployments(ctx context.Context, nam
 
 	// Helper to check if a resource is managed by the registry
 	isManaged := func(labels map[string]string) bool {
-		return labels != nil && labels["agentregistry.solo.io/managed"] == "true"
+		return labels != nil && labels["aregistry.ai/managed"] == "true"
 	}
 
 	// Helper to determine status from conditions (Ready or Pending)

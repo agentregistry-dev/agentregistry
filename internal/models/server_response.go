@@ -12,7 +12,7 @@ type ServerSemanticMeta struct {
 // ServerResponseMeta mirrors the MCP ResponseMeta but adds semantic metadata.
 type ServerResponseMeta struct {
 	Official *apiv0.RegistryExtensions `json:"io.modelcontextprotocol.registry/official,omitempty"`
-	Semantic *ServerSemanticMeta       `json:"agentregistry.solo.io/semantic,omitempty"`
+	Semantic *ServerSemanticMeta       `json:"aregistry.ai/semantic,omitempty"`
 }
 
 // ServerResponse is the server API shape with registry-managed metadata.

@@ -25,7 +25,7 @@ type PostgreSQL struct {
 	pool *pgxpool.Pool
 }
 
-const semanticMetadataKey = "agentregistry.solo.io/semantic"
+const semanticMetadataKey = "aregistry.ai/semantic"
 
 // Executor is an interface for executing queries (satisfied by both pgx.Tx and pgxpool.Pool)
 type Executor interface {
