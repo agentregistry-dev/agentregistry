@@ -66,6 +66,8 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		// Get logger from middleware (it handles lifecycle, we just add fields)
 		reqLog := logging.EventLoggerFromContext(ctx)
 
+		logging.L(ctx, logging.HandlerLog).Info("listing agents")
+
 		reqLog.AddNamespacedFields("handler",
 			zap.Any("input", input),
 			zap.Bool("is_admin", isAdmin),

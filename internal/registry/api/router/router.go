@@ -55,8 +55,8 @@ func (c *requestLoggerContext) Context() context.Context {
 }
 
 // RequestLoggingMiddleware creates a RequestLogger per request and stores it in context.
-// Handlers retrieve it via telemetry.FromContext(ctx) and add namespaced fields.
-// Handlers can set custom outcome via telemetry.SetOutcomePtr().
+// Handlers retrieve it via logging.EventLoggerFromContext(ctx) and add namespaced fields.
+// Handlers can set custom outcome via logging.SetEventOutcome(ctx, logging.EventOutcome).
 func RequestLoggingMiddleware(cfg *logging.EventLoggingConfig, options ...MiddlewareOption) func(huma.Context, func(huma.Context)) {
 	mwCfg := &middlewareConfig{skipPaths: make(map[string]bool)}
 	for _, opt := range options {
@@ -102,8 +102,9 @@ func RequestLoggingMiddleware(cfg *logging.EventLoggingConfig, options ...Middle
 		// Create mutable outcome holder that handler can update
 		outcomeHolder := &logging.EventOutcomeHolder{}
 
-		// Inject logger and outcome holder into context
-		newCtx := logging.ContextWithEventLogger(ctx.Context(), reqLog)
+		// Inject request ID, logger, and outcome holder into context
+		newCtx := logging.SetRequestID(ctx.Context(), reqLog.RequestID()) // For non-wide logging.L() pattern
+		newCtx = logging.ContextWithEventLogger(newCtx, reqLog)
 		newCtx = logging.ContextWithEventOutcomeHolder(newCtx, outcomeHolder)
 		wrappedCtx := &requestLoggerContext{humaContext: ctx, ctx: newCtx}
 
