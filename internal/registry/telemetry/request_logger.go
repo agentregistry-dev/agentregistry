@@ -92,13 +92,16 @@ type Outcome struct {
 
 // RequestLogger accumulates fields throughout a request lifecycle
 // and emits a single "wide" log entry via Finalize().
+// Fields can be added globally or under namespaces (e.g., "handler", "service", "db")
+// for clear ownership in the final log output.
 type RequestLogger struct {
 	baseLogger *zap.Logger
 	config     *parsedLoggingConfig
 	requestID  string
 	path       string
 	startTime  time.Time
-	fields     []zap.Field
+	fields     []zap.Field            // top-level fields (request_id, path, etc.)
+	namespaces map[string][]zap.Field // namespaced fields (handler.*, service.*, db.*)
 	skipLog    bool
 	errorOnly  bool
 	finalized  bool
@@ -127,6 +130,7 @@ func NewRequestLogger(name string, path string, cfg *LoggingConfig) *RequestLogg
 		path:       path,
 		startTime:  time.Now(),
 		fields:     []zap.Field{zap.String("request_id", requestID)},
+		namespaces: make(map[string][]zap.Field),
 	}
 }
 
@@ -138,7 +142,7 @@ func NewRequestLoggerWithID(name string, path string, requestID string, cfg *Log
 }
 
 func newNoOpRequestLogger() *RequestLogger {
-	return &RequestLogger{noop: true, fields: []zap.Field{}}
+	return &RequestLogger{noop: true, fields: []zap.Field{}, namespaces: make(map[string][]zap.Field)}
 }
 
 func (l *RequestLogger) RequestID() string {
@@ -154,26 +158,16 @@ func (l *RequestLogger) AddFields(fields ...zap.Field) {
 	}
 }
 
-func (l *RequestLogger) With(fields ...zap.Field) *RequestLogger {
+// AddNamespacedFields adds fields under a specific namespace (e.g., "handler", "service", "db").
+// In the final log output, these will appear as nested objects:
+//
+//	{"request_id": "abc", "handler": {"input": {...}}, "service": {"filter": {...}}, "db": {"duration_ms": 12}}
+func (l *RequestLogger) AddNamespacedFields(namespace string, fields ...zap.Field) {
 	if l.noop {
-		return l
+		return
 	}
-
-	newFields := make([]zap.Field, len(l.fields), len(l.fields)+len(fields))
-	copy(newFields, l.fields)
 	for _, f := range fields {
-		newFields = append(newFields, l.redactField(f))
-	}
-
-	return &RequestLogger{
-		baseLogger: l.baseLogger,
-		config:     l.config,
-		requestID:  l.requestID,
-		path:       l.path,
-		startTime:  l.startTime,
-		fields:     newFields,
-		skipLog:    l.skipLog,
-		errorOnly:  l.errorOnly,
+		l.namespaces[namespace] = append(l.namespaces[namespace], l.redactField(f))
 	}
 }
 
@@ -197,8 +191,21 @@ func (l *RequestLogger) Finalize(outcome Outcome) {
 
 	duration := time.Since(l.startTime)
 
-	finalFields := make([]zap.Field, 0, len(l.fields)+4)
+	finalFields := make([]zap.Field, 0, len(l.fields)+len(l.namespaces)+4)
 	finalFields = append(finalFields, l.fields...)
+
+	// Add namespaced fields as nested objects
+	for ns, nsFields := range l.namespaces {
+		// Capture loop variables for closure
+		fields := nsFields
+		finalFields = append(finalFields, zap.Object(ns, zapcore.ObjectMarshalerFunc(func(enc zapcore.ObjectEncoder) error {
+			for _, f := range fields {
+				f.AddTo(enc)
+			}
+			return nil
+		})))
+	}
+
 	finalFields = append(finalFields,
 		zap.String("path", l.path),
 		zap.Int("status_code", outcome.StatusCode),

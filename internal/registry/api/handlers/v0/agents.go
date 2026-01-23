@@ -15,6 +15,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/danielgtaylor/huma/v2"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // ListAgentsInput represents the input for listing agents
@@ -62,16 +63,17 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Description: "Get a paginated list of Agentic agents from the registry",
 		Tags:        tags,
 	}, func(ctx context.Context, input *ListAgentsInput) (*Response[agentmodels.AgentListResponse], error) {
-		// todo: make this into a middleware? the main issue will be on how to do appropiate final log.Warn/Err/Info/Debug,
-		// since the middleware (correctly) encapsulates the start + end, but the final type of log is decided here in the business logic, so it would need to be propagated back to the middleware.
-		logger := telemetry.NewLogger("api_handler")
-		logger = logger.With(
-			zap.String("path", pathPrefix+"/agents"),
+		path := pathPrefix + "/agents"
+
+		// Create request logger and store in context for downstream layers
+		reqLog := telemetry.NewRequestLogger("api", path, nil)
+		ctx = telemetry.ContextWithLogger(ctx, reqLog)
+
+		// Add handler-specific fields under "handler" namespace
+		reqLog.AddNamespacedFields("handler",
 			zap.String("method", http.MethodGet),
-			// todo: log auth details (e.g. user id) - possibly up to authN/Z providers to handle adding from context?
-			// todo: create/get request id
-			// todo: add details (e.g. user agent, ip address, etc.)? at least user-agent in case automation gets defined and it'll be easy to find by user-agent.
-			zap.Any("request_input", input),
+			zap.Any("input", input),
+			zap.Bool("is_admin", isAdmin),
 		)
 
 		// Build filter
@@ -87,7 +89,12 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 			if updatedTime, err := time.Parse(time.RFC3339, input.UpdatedSince); err == nil {
 				filter.UpdatedSince = &updatedTime
 			} else {
-				logger.Error("Invalid updated_since format", zap.Int("status_code", http.StatusBadRequest), zap.Error(err))
+				reqLog.Finalize(telemetry.Outcome{
+					Level:      zapcore.WarnLevel,
+					StatusCode: http.StatusBadRequest,
+					Error:      err,
+					Message:    "Invalid updated_since format",
+				})
 				return nil, huma.Error400BadRequest("Invalid updated_since format: expected RFC3339 timestamp (e.g., 2025-08-07T13:15:04.280Z)")
 			}
 		}
@@ -96,6 +103,11 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		}
 		if input.Semantic {
 			if strings.TrimSpace(input.Search) == "" {
+				reqLog.Finalize(telemetry.Outcome{
+					Level:      zapcore.WarnLevel,
+					StatusCode: http.StatusBadRequest,
+					Message:    "semantic_search requires search parameter",
+				})
 				return nil, huma.Error400BadRequest("semantic_search requires the search parameter to be provided", nil)
 			}
 			filter.Semantic = &database.SemanticSearchOptions{
@@ -113,16 +125,23 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 			}
 		}
 
-		logger = logger.With(zap.Any("filter", filter))
-
-		// todo: track latency to listAgents call
 		agents, nextCursor, err := registry.ListAgents(ctx, filter, input.Cursor, input.Limit)
 		if err != nil {
 			if errors.Is(err, database.ErrInvalidInput) {
-				logger.Error("Invalid input", zap.Int("status_code", http.StatusBadRequest), zap.Error(err))
+				reqLog.Finalize(telemetry.Outcome{
+					Level:      zapcore.WarnLevel,
+					StatusCode: http.StatusBadRequest,
+					Error:      err,
+					Message:    "Invalid input",
+				})
 				return nil, huma.Error400BadRequest(err.Error(), err)
 			}
-			logger.Error("Failed to get agents list", zap.Int("status_code", http.StatusInternalServerError), zap.Error(err))
+			reqLog.Finalize(telemetry.Outcome{
+				Level:      zapcore.ErrorLevel,
+				StatusCode: http.StatusInternalServerError,
+				Error:      err,
+				Message:    "Failed to get agents list",
+			})
 			return nil, huma.Error500InternalServerError("Failed to get agents list", err)
 		}
 
@@ -130,7 +149,18 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		for i, a := range agents {
 			agentValues[i] = *a
 		}
-		logger.Info("Agents list retrieved", zap.Int("status_code", http.StatusOK), zap.Int("count", len(agents)))
+
+		reqLog.AddNamespacedFields("handler",
+			zap.Int("result_count", len(agents)),
+			zap.Bool("has_next_page", nextCursor != ""),
+		)
+
+		reqLog.Finalize(telemetry.Outcome{
+			Level:      zapcore.InfoLevel,
+			StatusCode: http.StatusOK,
+			Message:    "Agents list retrieved",
+		})
+
 		return &Response[agentmodels.AgentListResponse]{
 			Body: agentmodels.AgentListResponse{
 				Agents: agentValues,

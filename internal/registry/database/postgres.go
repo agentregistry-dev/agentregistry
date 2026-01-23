@@ -1109,19 +1109,20 @@ func scanServerReadme(row pgx.Row) (*ServerReadme, error) {
 
 // ListAgents returns paginated agents with filtering
 func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
-	logger := telemetry.NewLogger("postgres_database")
-	logger = logger.With(
+	reqLog := telemetry.FromContext(ctx)
+	queryStart := time.Now()
+
+	// Add initial db-specific fields under "db" namespace
+	reqLog.AddNamespacedFields("db",
 		zap.String("method", "ListAgents"),
-		zap.String("cursor", cursor),
-		zap.Int("limit", limit),
-		zap.Any("filter", filter),
+		zap.String("table", "agents"),
 	)
 
 	if limit <= 0 {
 		limit = 10
 	}
 	if ctx.Err() != nil {
-		logger.Error("Context error", zap.Error(ctx.Err()))
+		reqLog.AddNamespacedFields("db", zap.Bool("context_cancelled", true))
 		return nil, "", ctx.Err()
 	}
 
@@ -1131,11 +1132,11 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 		var err error
 		semanticLiteral, err = vectorLiteral(filter.Semantic.QueryEmbedding)
 		if err != nil {
-			logger.Error("Invalid semantic embedding", zap.Error(err))
+			reqLog.AddNamespacedFields("db", zap.Bool("semantic_embedding_error", true))
 			return nil, "", fmt.Errorf("invalid semantic embedding: %w", err)
 		}
 	}
-	logger = logger.With(zap.String("semantic_literal", semanticLiteral))
+	reqLog.AddNamespacedFields("db", zap.Bool("semantic_active", semanticActive))
 
 	var whereConditions []string
 	args := []any{}
@@ -1236,10 +1237,12 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 	`, selectClause, whereClause, orderClause, argIndex)
 	args = append(args, limit)
 
-	// todo: should we track query duration? or entire call duration?
 	rows, err := db.getExecutor(tx).Query(ctx, query, args...)
+	queryDuration := time.Since(queryStart)
+	reqLog.AddNamespacedFields("db", zap.Int64("query_duration_ms", queryDuration.Milliseconds()))
+
 	if err != nil {
-		logger.Error("Failed to query agents", zap.Error(err))
+		reqLog.AddNamespacedFields("db", zap.Bool("query_error", true))
 		return nil, "", fmt.Errorf("failed to query agents: %w", err)
 	}
 	defer rows.Close()
@@ -1260,13 +1263,13 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 		}
 
 		if scanErr != nil {
-			logger.Error("Failed to scan agent row", zap.Error(scanErr))
+			reqLog.AddNamespacedFields("db", zap.Bool("scan_error", true))
 			return nil, "", fmt.Errorf("failed to scan agent row: %w", err)
 		}
 
 		var agentJSON models.AgentJSON
 		if err := json.Unmarshal(valueJSON, &agentJSON); err != nil {
-			logger.Error("Failed to unmarshal agent JSON", zap.Error(err))
+			reqLog.AddNamespacedFields("db", zap.Bool("unmarshal_error", true))
 			return nil, "", fmt.Errorf("failed to unmarshal agent JSON: %w", err)
 		}
 
@@ -1290,7 +1293,7 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 		results = append(results, resp)
 	}
 	if err := rows.Err(); err != nil {
-		logger.Error("Error iterating agent rows", zap.Error(err))
+		reqLog.AddNamespacedFields("db", zap.Bool("iteration_error", true))
 		return nil, "", fmt.Errorf("error iterating agent rows: %w", err)
 	}
 
@@ -1299,7 +1302,8 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 		last := results[len(results)-1]
 		nextCursor = last.Agent.Name + ":" + last.Agent.Version
 	}
-	logger.Info("Agents list retrieved", zap.Int("count", len(results)))
+
+	reqLog.AddNamespacedFields("db", zap.Int("rows_returned", len(results)))
 	return results, nextCursor, nil
 }
 

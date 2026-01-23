@@ -502,9 +502,10 @@ func (s *registryServiceImpl) validateUpdateRequest(ctx context.Context, req api
 
 // ListAgents returns registry entries for agents with pagination and filtering
 func (s *registryServiceImpl) ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
-	logger := telemetry.NewLogger("registry_service")
-	// todo: should use request_logger
-	logger = logger.With(
+	reqLog := telemetry.FromContext(ctx)
+
+	// Add service-specific fields under "service" namespace
+	reqLog.AddNamespacedFields("service",
 		zap.String("method", "ListAgents"),
 		zap.String("cursor", cursor),
 		zap.Int("limit", limit),
@@ -516,17 +517,20 @@ func (s *registryServiceImpl) ListAgents(ctx context.Context, filter *database.A
 	}
 	if filter != nil {
 		if err := s.ensureSemanticEmbedding(ctx, filter.Semantic); err != nil {
-			logger.Error("Error ensuring semantic embedding", zap.Error(err))
+			reqLog.AddNamespacedFields("service", zap.Bool("embedding_error", true))
 			return nil, "", err
 		}
+		if filter.Semantic != nil {
+			reqLog.AddNamespacedFields("service", zap.Bool("semantic_search", true))
+		}
 	}
-	// todo: track latency to listAgents call
+
 	agents, next, err := s.db.ListAgents(ctx, nil, filter, cursor, limit)
 	if err != nil {
-		logger.Error("Failed to list agents", zap.Error(err))
 		return nil, "", err
 	}
-	logger.Info("Agents list retrieved", zap.Int("count", len(agents)))
+
+	reqLog.AddNamespacedFields("service", zap.Int("agents_returned", len(agents)))
 	return agents, next, nil
 }
 
