@@ -258,7 +258,7 @@ func (l *RequestLogger) hashToFloat() float64 {
 	return float64(h.Sum64()) / float64(^uint64(0))
 }
 
-const redactedValue = "[REDACTED]"
+const redactedValue = "***"
 
 func (l *RequestLogger) redactField(f zap.Field) zap.Field {
 	if l.config.redactRegex == nil {
