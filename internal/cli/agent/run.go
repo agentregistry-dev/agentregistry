@@ -40,6 +40,7 @@ var providerAPIKeys = map[string]string{
 	"openai":      "OPENAI_API_KEY",
 	"anthropic":   "ANTHROPIC_API_KEY",
 	"azureopenai": "AZUREOPENAI_API_KEY",
+	"gemini":      "GOOGLE_API_KEY",
 }
 
 func runRun(cmd *cobra.Command, args []string) error {
@@ -80,27 +81,69 @@ func runFromDirectory(ctx context.Context, projectDir string) error {
 
 	// Resolve registry-type MCP servers if present
 	if hasRegistryServers(manifest) {
+		if verbose {
+			fmt.Println("[registry-resolve] Detected registry-type MCP servers in manifest")
+			fmt.Printf("[registry-resolve] Total MCP servers in manifest: %d\n", len(manifest.McpServers))
+			for i, srv := range manifest.McpServers {
+				fmt.Printf("[registry-resolve]   [%d] name=%q type=%q registryServerName=%q registryURL=%q\n",
+					i, srv.Name, srv.Type, srv.RegistryServerName, srv.RegistryURL)
+			}
+		}
+
+		if verbose {
+			fmt.Println("[registry-resolve] Starting resolution of registry servers...")
+		}
 		servers, err := agentutils.ParseAgentManifestServers(manifest, verbose)
 		if err != nil {
 			return fmt.Errorf("failed to parse agent manifest mcp servers: %w", err)
 		}
 		manifest.McpServers = servers
 
+		if verbose {
+			fmt.Printf("[registry-resolve] Resolution complete. Total servers after resolution: %d\n", len(manifest.McpServers))
+			for i, srv := range manifest.McpServers {
+				fmt.Printf("[registry-resolve]   [%d] name=%q type=%q build=%q image=%q command=%q\n",
+					i, srv.Name, srv.Type, srv.Build, srv.Image, srv.Command)
+			}
+		}
+
 		var registryResolvedServers []common.McpServerType
 		for _, srv := range manifest.McpServers {
 			if srv.Type == "command" && strings.HasPrefix(srv.Build, "registry/") {
 				registryResolvedServers = append(registryResolvedServers, srv)
+				if verbose {
+					fmt.Printf("[registry-resolve] Including server %q for build (type=command, build=%q)\n", srv.Name, srv.Build)
+				}
+			} else if verbose {
+				if srv.Type == "command" && srv.Build == "" && srv.Image != "" {
+					fmt.Printf("[registry-resolve] Skipping server %q for build (OCI image %q ready to use)\n", srv.Name, srv.Image)
+				} else {
+					fmt.Printf("[registry-resolve] Skipping server %q for build (type=%q, build=%q)\n", srv.Name, srv.Type, srv.Build)
+				}
 			}
 		}
+
 		if len(registryResolvedServers) > 0 {
+			if verbose {
+				fmt.Printf("[registry-resolve] %d registry-resolved servers require directory setup\n", len(registryResolvedServers))
+			}
 			tmpManifest := *manifest
 			tmpManifest.McpServers = registryResolvedServers
 			// create directories and build images for the registry-resolved servers
 			if err := project.EnsureMcpServerDirectories(projectDir, &tmpManifest, verbose); err != nil {
 				return fmt.Errorf("failed to create MCP server directories: %w", err)
 			}
-			serversForConfig = common.PythonServersFromManifest(&tmpManifest)
+		} else if verbose {
+			fmt.Println("[registry-resolve] No registry-resolved command servers to build")
 		}
+
+		// Create MCP config for ALL resolved command-type servers (including OCI which don't need building)
+		serversForConfig = common.PythonServersFromManifest(manifest)
+		if verbose {
+			fmt.Printf("[registry-resolve] Created %d server configurations for MCP config (includes OCI servers)\n", len(serversForConfig))
+		}
+	} else if verbose {
+		fmt.Println("[registry-resolve] No registry-type MCP servers found in manifest")
 	}
 
 	// Always clean before run; only write config when we have resolved registry servers to persist.
@@ -156,43 +199,100 @@ func runFromManifest(ctx context.Context, manifest *common.AgentManifest, versio
 
 	if useOverrides {
 		// servers already resolved, compose already generated (i.e. from runFromDirectory)
+		if verbose {
+			fmt.Println("[registry-resolve] Using pre-resolved overrides from runFromDirectory")
+		}
 		composeData = overrides.composeData
 		workDir = overrides.workDir
 	} else {
 		// Resolve registry-type MCP servers (if any) and build registry-resolved command servers.
 		if hasRegistryServers(manifest) {
+			if verbose {
+				fmt.Println("[registry-resolve] Detected registry-type MCP servers in manifest (runFromManifest path)")
+				fmt.Printf("[registry-resolve] Total MCP servers in manifest: %d\n", len(manifest.McpServers))
+				for i, srv := range manifest.McpServers {
+					fmt.Printf("[registry-resolve]   [%d] name=%q type=%q registryServerName=%q registryURL=%q version=%q\n",
+						i, srv.Name, srv.Type, srv.RegistryServerName, srv.RegistryURL, srv.RegistryServerVersion)
+				}
+			}
+
+			if verbose {
+				fmt.Println("[registry-resolve] Starting resolution of registry servers...")
+			}
 			servers, err := agentutils.ParseAgentManifestServers(manifest, verbose)
 			if err != nil {
 				return fmt.Errorf("failed to parse agent manifest mcp servers: %w", err)
 			}
 			manifest.McpServers = servers
 
-			var registryResolvedServers []common.McpServerType
-			for _, srv := range manifest.McpServers {
-				if srv.Type == "command" && strings.HasPrefix(srv.Build, "registry/") {
-					registryResolvedServers = append(registryResolvedServers, srv)
+			if verbose {
+				fmt.Printf("[registry-resolve] Resolution complete. Total servers after resolution: %d\n", len(manifest.McpServers))
+				for i, srv := range manifest.McpServers {
+					fmt.Printf("[registry-resolve]   [%d] name=%q type=%q build=%q image=%q command=%q\n",
+						i, srv.Name, srv.Type, srv.Build, srv.Image, srv.Command)
 				}
 			}
 
-			if len(registryResolvedServers) > 0 {
-				tmpDir, err := os.MkdirTemp("", "arctl-registry-resolve-*")
-				if err != nil {
-					return fmt.Errorf("failed to create temporary directory: %w", err)
+			// Separate servers that need building (npm/pypi) from those that don't (OCI)
+			var serversToBuild []common.McpServerType
+			for _, srv := range manifest.McpServers {
+				if srv.Type == "command" && strings.HasPrefix(srv.Build, "registry/") {
+					serversToBuild = append(serversToBuild, srv)
+					if verbose {
+						fmt.Printf("[registry-resolve] Including server %q for build (type=command, build=%q)\n", srv.Name, srv.Build)
+					}
+				} else if verbose {
+					if srv.Type == "command" && srv.Build == "" && srv.Image != "" {
+						fmt.Printf("[registry-resolve] Skipping server %q for build (OCI image %q ready to use)\n", srv.Name, srv.Image)
+					} else {
+						fmt.Printf("[registry-resolve] Skipping server %q for build (type=%q, build=%q)\n", srv.Name, srv.Type, srv.Build)
+					}
+				}
+			}
+
+			// Always create temp directory for mcp-servers.json (needed for both OCI and non-OCI servers)
+			tmpDir, err := os.MkdirTemp("", "arctl-registry-resolve-*")
+			if err != nil {
+				return fmt.Errorf("failed to create temporary directory: %w", err)
+			}
+			if verbose {
+				fmt.Printf("[registry-resolve] Created temporary directory: %s\n", tmpDir)
+			}
+			workDir = tmpDir
+
+			// Build only servers that need building (npm/pypi, not OCI)
+			if len(serversToBuild) > 0 {
+				if verbose {
+					fmt.Printf("[registry-resolve] %d registry-resolved servers require directory setup and build\n", len(serversToBuild))
 				}
 
 				tmpManifest := *manifest
-				tmpManifest.McpServers = registryResolvedServers
+				tmpManifest.McpServers = serversToBuild
 
+				if verbose {
+					fmt.Println("[registry-resolve] Creating MCP server directories...")
+				}
 				if err := project.EnsureMcpServerDirectories(tmpDir, &tmpManifest, verbose); err != nil {
 					return fmt.Errorf("failed to create mcp server directories: %w", err)
+				}
+
+				if verbose {
+					fmt.Println("[registry-resolve] Building registry-resolved server images...")
 				}
 				if err := buildRegistryResolvedServers(tmpDir, &tmpManifest, verbose); err != nil {
 					return fmt.Errorf("failed to build registry server images: %w", err)
 				}
-
-				workDir = tmpDir
-				serversForConfig = common.PythonServersFromManifest(&tmpManifest)
+			} else if verbose {
+				fmt.Println("[registry-resolve] No registry-resolved command servers to build (OCI images only)")
 			}
+
+			// Create MCP config for ALL resolved command-type servers (including OCI which don't need building)
+			serversForConfig = common.PythonServersFromManifest(manifest)
+			if verbose {
+				fmt.Printf("[registry-resolve] Created %d server configurations for MCP config (includes OCI servers)\n", len(serversForConfig))
+			}
+		} else if verbose {
+			fmt.Println("[registry-resolve] No registry-type MCP servers found in manifest")
 		}
 
 		data, err := renderComposeFromManifest(manifest, version)
