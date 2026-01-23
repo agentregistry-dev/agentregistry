@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"strings"
 
@@ -110,9 +111,7 @@ func resolveRegistryServer(mcpServer common.McpServerType, verbose bool) (*commo
 
 	// Also add user-provided env vars from the manifest (set via TUI or agent.yaml)
 	manifestEnvVars := parseManifestEnvVars(mcpServer.Env)
-	for k, v := range manifestEnvVars {
-		envOverrides[k] = v
-	}
+	maps.Copy(envOverrides, manifestEnvVars)
 
 	if verbose {
 		if len(envOverrides) > 0 {

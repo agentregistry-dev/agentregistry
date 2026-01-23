@@ -93,7 +93,7 @@ func isServerResponding() bool {
 	client := &http.Client{Timeout: 2 * time.Second}
 
 	const maxRetries = 3
-	for i := 0; i < maxRetries; i++ {
+	for i := range maxRetries {
 		resp, err := client.Get("http://localhost:12121/v0/version")
 		if err == nil {
 			defer resp.Body.Close()
