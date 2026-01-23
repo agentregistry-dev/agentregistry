@@ -17,7 +17,8 @@ import (
 	"go.uber.org/zap"
 
 	models "github.com/agentregistry-dev/agentregistry/internal/models"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/logging"
+
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 )
@@ -1109,7 +1110,7 @@ func scanServerReadme(row pgx.Row) (*ServerReadme, error) {
 
 // ListAgents returns paginated agents with filtering
 func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
-	reqLog := telemetry.FromContext(ctx)
+	reqLog := logging.EventLoggerFromContext(ctx)
 	queryStart := time.Now()
 
 	// Add initial db-specific fields under "db" namespace

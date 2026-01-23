@@ -18,6 +18,7 @@ import (
 
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/logging"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 )
@@ -56,7 +57,7 @@ func (c *requestLoggerContext) Context() context.Context {
 // RequestLoggingMiddleware creates a RequestLogger per request and stores it in context.
 // Handlers retrieve it via telemetry.FromContext(ctx) and add namespaced fields.
 // Handlers can set custom outcome via telemetry.SetOutcomePtr().
-func RequestLoggingMiddleware(cfg *telemetry.LoggingConfig, options ...MiddlewareOption) func(huma.Context, func(huma.Context)) {
+func RequestLoggingMiddleware(cfg *logging.EventLoggingConfig, options ...MiddlewareOption) func(huma.Context, func(huma.Context)) {
 	mwCfg := &middlewareConfig{skipPaths: make(map[string]bool)}
 	for _, opt := range options {
 		opt(mwCfg)
@@ -81,11 +82,11 @@ func RequestLoggingMiddleware(cfg *telemetry.LoggingConfig, options ...Middlewar
 		}
 
 		// Create logger
-		var reqLog *telemetry.EventLogger
+		var reqLog *logging.EventLogger
 		if requestID != "" {
-			reqLog = telemetry.NewEventLoggerWithID("api", path, requestID, cfg)
+			reqLog = logging.NewEventLoggerWithID("api", path, requestID, cfg)
 		} else {
-			reqLog = telemetry.NewEventLogger("api", path, cfg)
+			reqLog = logging.NewEventLogger("api", path, cfg)
 		}
 
 		// Add request metadata
@@ -99,11 +100,11 @@ func RequestLoggingMiddleware(cfg *telemetry.LoggingConfig, options ...Middlewar
 		ctx.SetHeader("X-Request-ID", reqLog.RequestID())
 
 		// Create mutable outcome holder that handler can update
-		outcomeHolder := &telemetry.OutcomeHolder{}
+		outcomeHolder := &logging.EventOutcomeHolder{}
 
 		// Inject logger and outcome holder into context
-		newCtx := telemetry.ContextWithLogger(ctx.Context(), reqLog)
-		newCtx = telemetry.ContextWithOutcomeHolder(newCtx, outcomeHolder)
+		newCtx := logging.ContextWithEventLogger(ctx.Context(), reqLog)
+		newCtx = logging.ContextWithEventOutcomeHolder(newCtx, outcomeHolder)
 		wrappedCtx := &requestLoggerContext{humaContext: ctx, ctx: newCtx}
 
 		next(wrappedCtx)
@@ -113,8 +114,8 @@ func RequestLoggingMiddleware(cfg *telemetry.LoggingConfig, options ...Middlewar
 			outcomeHolder.Outcome.StatusCode = ctx.Status() // Ensure status matches response
 			reqLog.Finalize(*outcomeHolder.Outcome)
 		} else {
-			reqLog.Finalize(telemetry.Outcome{
-				Level:      telemetry.LevelFromStatusCode(ctx.Status()),
+			reqLog.Finalize(logging.EventOutcome{
+				Level:      logging.EventLevelFromStatusCode(ctx.Status()),
 				StatusCode: ctx.Status(),
 				Message:    "request completed",
 			})

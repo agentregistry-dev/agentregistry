@@ -17,7 +17,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/logging"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/types"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime"
@@ -502,7 +502,7 @@ func (s *registryServiceImpl) validateUpdateRequest(ctx context.Context, req api
 
 // ListAgents returns registry entries for agents with pagination and filtering
 func (s *registryServiceImpl) ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
-	reqLog := telemetry.FromContext(ctx)
+	reqLog := logging.EventLoggerFromContext(ctx)
 
 	// Add service-specific fields under "service" namespace
 	reqLog.AddNamespacedFields("service",

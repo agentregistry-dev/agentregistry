@@ -11,8 +11,8 @@ import (
 	agentmodels "github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/logging"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/danielgtaylor/huma/v2"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -64,7 +64,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Tags:        tags,
 	}, func(ctx context.Context, input *ListAgentsInput) (*Response[agentmodels.AgentListResponse], error) {
 		// Get logger from middleware (it handles lifecycle, we just add fields)
-		reqLog := telemetry.FromContext(ctx)
+		reqLog := logging.EventLoggerFromContext(ctx)
 
 		reqLog.AddNamespacedFields("handler",
 			zap.Any("input", input),
@@ -84,7 +84,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 			if updatedTime, err := time.Parse(time.RFC3339, input.UpdatedSince); err == nil {
 				filter.UpdatedSince = &updatedTime
 			} else {
-				telemetry.SetOutcome(ctx, telemetry.Outcome{
+				logging.SetEventOutcome(ctx, logging.EventOutcome{
 					Level:   zapcore.WarnLevel,
 					Error:   err,
 					Message: "Invalid updated_since format",
@@ -97,7 +97,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		}
 		if input.Semantic {
 			if strings.TrimSpace(input.Search) == "" {
-				telemetry.SetOutcome(ctx, telemetry.Outcome{
+				logging.SetEventOutcome(ctx, logging.EventOutcome{
 					Level:   zapcore.WarnLevel,
 					Message: "semantic_search requires search parameter",
 				})
@@ -121,14 +121,14 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		agents, nextCursor, err := registry.ListAgents(ctx, filter, input.Cursor, input.Limit)
 		if err != nil {
 			if errors.Is(err, database.ErrInvalidInput) {
-				telemetry.SetOutcome(ctx, telemetry.Outcome{
+				logging.SetEventOutcome(ctx, logging.EventOutcome{
 					Level:   zapcore.WarnLevel,
 					Error:   err,
 					Message: "Invalid input",
 				})
 				return nil, huma.Error400BadRequest(err.Error(), err)
 			}
-			telemetry.SetOutcome(ctx, telemetry.Outcome{
+			logging.SetEventOutcome(ctx, logging.EventOutcome{
 				Level:   zapcore.ErrorLevel,
 				Error:   err,
 				Message: "Failed to get agents list",
@@ -146,7 +146,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 			zap.Bool("has_next_page", nextCursor != ""),
 		)
 
-		telemetry.SetOutcome(ctx, telemetry.Outcome{
+		logging.SetEventOutcome(ctx, logging.EventOutcome{
 			Level:   zapcore.InfoLevel,
 			Message: "Agents list retrieved",
 		})

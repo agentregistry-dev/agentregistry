@@ -1,4 +1,4 @@
-package telemetry
+package logging
 
 import (
 	// todo: maybe use zerolog instead for performance?

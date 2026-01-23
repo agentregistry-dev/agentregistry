@@ -1,4 +1,4 @@
-package telemetry
+package logging
 
 import (
 	"net/http"
@@ -31,8 +31,8 @@ func (r *ResponseRecorder) Write(b []byte) (int, error) {
 	return r.ResponseWriter.Write(b)
 }
 
-func LoggingMiddleware(cfg *LoggingConfig) func(http.Handler) http.Handler {
-	parsedCfg := parseLoggingConfig(cfg)
+func EventLoggingMiddleware(cfg *EventLoggingConfig) func(http.Handler) http.Handler {
+	parsedCfg := parseEventLoggingConfig(cfg)
 	excludeSet := parsedCfg.excludePaths
 
 	return func(next http.Handler) http.Handler {
@@ -65,15 +65,15 @@ func LoggingMiddleware(cfg *LoggingConfig) func(http.Handler) http.Handler {
 			w.Header().Set("X-Request-ID", logger.RequestID())
 
 			// Create outcome holder for handler to populate
-			outcomeHolder := &OutcomeHolder{}
-			ctx := ContextWithLogger(r.Context(), logger)
-			ctx = ContextWithOutcomeHolder(ctx, outcomeHolder)
+			outcomeHolder := &EventOutcomeHolder{}
+			ctx := ContextWithEventLogger(r.Context(), logger)
+			ctx = ContextWithEventOutcomeHolder(ctx, outcomeHolder)
 			recorder := NewResponseRecorder(w)
 
 			defer func() {
 				if rec := recover(); rec != nil {
 					logger.AddFields(zap.Any("panic", rec))
-					logger.Finalize(Outcome{
+					logger.Finalize(EventOutcome{
 						Level:      zap.ErrorLevel,
 						StatusCode: http.StatusInternalServerError,
 						Message:    "request panicked",
@@ -88,8 +88,8 @@ func LoggingMiddleware(cfg *LoggingConfig) func(http.Handler) http.Handler {
 				outcomeHolder.Outcome.StatusCode = recorder.StatusCode
 				logger.Finalize(*outcomeHolder.Outcome)
 			} else {
-				logger.Finalize(Outcome{
-					Level:      LevelFromStatusCode(recorder.StatusCode),
+				logger.Finalize(EventOutcome{
+					Level:      EventLevelFromStatusCode(recorder.StatusCode),
 					StatusCode: recorder.StatusCode,
 					Message:    "request completed",
 				})

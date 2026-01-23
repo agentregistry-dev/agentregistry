@@ -1,4 +1,4 @@
-package telemetry
+package logging
 
 import (
 	"context"
@@ -18,11 +18,11 @@ type outcomeHolderKeyType struct{}
 var eventLoggerKey = eventLoggerKeyType{}
 var outcomeHolderKey = outcomeHolderKeyType{}
 
-func ContextWithLogger(ctx context.Context, logger *EventLogger) context.Context {
+func ContextWithEventLogger(ctx context.Context, logger *EventLogger) context.Context {
 	return context.WithValue(ctx, eventLoggerKey, logger)
 }
 
-func FromContext(ctx context.Context) *EventLogger {
+func EventLoggerFromContext(ctx context.Context) *EventLogger {
 	if logger, ok := ctx.Value(eventLoggerKey).(*EventLogger); ok {
 		return logger
 	}
@@ -31,47 +31,47 @@ func FromContext(ctx context.Context) *EventLogger {
 
 // OutcomeHolder is a mutable container for Outcome that handlers can update.
 // This allows handlers to set custom error messages/levels that middleware will use.
-type OutcomeHolder struct {
-	Outcome *Outcome
+type EventOutcomeHolder struct {
+	Outcome *EventOutcome
 }
 
-func ContextWithOutcomeHolder(ctx context.Context, holder *OutcomeHolder) context.Context {
+func ContextWithEventOutcomeHolder(ctx context.Context, holder *EventOutcomeHolder) context.Context {
 	return context.WithValue(ctx, outcomeHolderKey, holder)
 }
 
 // SetOutcome allows handlers to set a custom outcome (message, error, level).
 // The middleware will use this when finalizing the log.
-func SetOutcome(ctx context.Context, outcome Outcome) {
-	if holder, ok := ctx.Value(outcomeHolderKey).(*OutcomeHolder); ok && holder != nil {
+func SetEventOutcome(ctx context.Context, outcome EventOutcome) {
+	if holder, ok := ctx.Value(outcomeHolderKey).(*EventOutcomeHolder); ok && holder != nil {
 		holder.Outcome = &outcome
 	}
 }
 
 // OutcomeFromContext retrieves the outcome from the holder (if set by handler).
-func OutcomeFromContext(ctx context.Context) *Outcome {
-	if holder, ok := ctx.Value(outcomeHolderKey).(*OutcomeHolder); ok && holder != nil {
+func EventOutcomeFromContext(ctx context.Context) *EventOutcome {
+	if holder, ok := ctx.Value(outcomeHolderKey).(*EventOutcomeHolder); ok && holder != nil {
 		return holder.Outcome
 	}
 	return nil
 }
 
 // LoggingConfig holds sampling and filtering configuration.
-type LoggingConfig struct {
+type EventLoggingConfig struct {
 	SuccessSampleRate float64 `env:"LOG_SUCCESS_SAMPLE_RATE" envDefault:"0.1"`
 	ExcludePaths      string  `env:"LOG_EXCLUDE_PATHS" envDefault:"/health,/ready,/live,/metrics"`
 	ErrorOnlyPaths    string  `env:"LOG_ERROR_ONLY_PATHS" envDefault:"/healthz,/livez"`
 	RedactPatterns    string  `env:"LOG_REDACT_PATTERNS" envDefault:"password,token,secret,key,authorization,credential,bearer,api_key,apikey,private"`
 }
 
-type parsedLoggingConfig struct {
+type parsedEventLoggingConfig struct {
 	successSampleRate float64
 	excludePaths      map[string]bool
 	errorOnlyPaths    map[string]bool
 	redactRegex       *regexp.Regexp
 }
 
-func parseLoggingConfig(cfg *LoggingConfig) *parsedLoggingConfig {
-	parsed := &parsedLoggingConfig{
+func parseEventLoggingConfig(cfg *EventLoggingConfig) *parsedEventLoggingConfig {
+	parsed := &parsedEventLoggingConfig{
 		successSampleRate: cfg.SuccessSampleRate,
 		excludePaths:      make(map[string]bool),
 		errorOnlyPaths:    make(map[string]bool),
@@ -102,8 +102,8 @@ func parseLoggingConfig(cfg *LoggingConfig) *parsedLoggingConfig {
 	return parsed
 }
 
-func DefaultLoggingConfig() *LoggingConfig {
-	return &LoggingConfig{
+func DefaultEventLoggingConfig() *EventLoggingConfig {
+	return &EventLoggingConfig{
 		SuccessSampleRate: 0.1,
 		ExcludePaths:      "/health,/ready,/live,/metrics",
 		ErrorOnlyPaths:    "/healthz,/livez",
@@ -111,7 +111,7 @@ func DefaultLoggingConfig() *LoggingConfig {
 	}
 }
 
-type Outcome struct {
+type EventOutcome struct {
 	Level      zapcore.Level
 	StatusCode int
 	Error      error
@@ -124,7 +124,7 @@ type Outcome struct {
 // for clear ownership in the final log output.
 type EventLogger struct {
 	baseLogger *zap.Logger
-	config     *parsedLoggingConfig
+	config     *parsedEventLoggingConfig
 	requestID  string
 	path       string
 	startTime  time.Time
@@ -136,17 +136,17 @@ type EventLogger struct {
 	noop       bool
 }
 
-func NewEventLogger(name string, path string, cfg *LoggingConfig) *EventLogger {
+func NewEventLogger(name string, path string, cfg *EventLoggingConfig) *EventLogger {
 	baseLogger, err := zap.NewProduction()
 	if err != nil {
 		panic(err)
 	}
 
-	var parsedCfg *parsedLoggingConfig
+	var parsedCfg *parsedEventLoggingConfig
 	if cfg != nil {
-		parsedCfg = parseLoggingConfig(cfg)
+		parsedCfg = parseEventLoggingConfig(cfg)
 	} else {
-		parsedCfg = parseLoggingConfig(DefaultLoggingConfig())
+		parsedCfg = parseEventLoggingConfig(DefaultEventLoggingConfig())
 	}
 
 	requestID := ulid.Make().String()
@@ -162,7 +162,7 @@ func NewEventLogger(name string, path string, cfg *LoggingConfig) *EventLogger {
 	}
 }
 
-func NewEventLoggerWithID(name string, path string, requestID string, cfg *LoggingConfig) *EventLogger {
+func NewEventLoggerWithID(name string, path string, requestID string, cfg *EventLoggingConfig) *EventLogger {
 	logger := NewEventLogger(name, path, cfg)
 	logger.requestID = requestID
 	logger.fields[0] = zap.String("request_id", requestID)
@@ -207,7 +207,7 @@ func (l *EventLogger) SetErrorOnly() {
 	l.errorOnly = true
 }
 
-func (l *EventLogger) Finalize(outcome Outcome) {
+func (l *EventLogger) Finalize(outcome EventOutcome) {
 	if l.noop || l.finalized {
 		return
 	}
@@ -266,7 +266,7 @@ func (l *EventLogger) Finalize(outcome Outcome) {
 	}
 }
 
-func (l *EventLogger) shouldLog(outcome Outcome) bool {
+func (l *EventLogger) shouldLog(outcome EventOutcome) bool {
 	if l.config.excludePaths[l.path] {
 		return false
 	}
@@ -305,7 +305,7 @@ func (l *EventLogger) redactField(f zap.Field) zap.Field {
 	return f
 }
 
-func LevelFromStatusCode(statusCode int) zapcore.Level {
+func EventLevelFromStatusCode(statusCode int) zapcore.Level {
 	switch {
 	case statusCode >= 500:
 		return zapcore.ErrorLevel
