@@ -1,81 +1,41 @@
 package logging
 
 import (
-	// todo: maybe use zerolog instead for performance?
+	"context"
+
 	"go.uber.org/zap"
 )
 
-type loggerKeyType struct{}
+type requestIDKeyType struct{}
 
-var (
-	loggerKey = loggerKeyType{}
-)
+var requestIDKey = requestIDKeyType{}
 
-type Logger struct {
-	*zap.Logger
-	fields []zap.Field
-}
-
-func NewLogger(name string) *Logger {
+// NewLogger creates a named zap production logger.
+func NewLogger(name string) *zap.Logger {
 	logger, err := zap.NewProduction()
 	if err != nil {
 		panic(err)
 	}
-	return &Logger{Logger: logger.Named(name), fields: []zap.Field{}}
+	return logger.Named(name)
 }
 
-func (l *Logger) With(fields ...zap.Field) *Logger {
-	newFields := make([]zap.Field, len(l.fields)+len(fields))
-	copy(newFields, l.fields)
-	copy(newFields[len(l.fields):], fields)
-
-	return &Logger{Logger: l.Logger.With(newFields...), fields: newFields}
+// WithRequestID returns a logger with request_id from context.
+func WithRequestID(ctx context.Context, logger *zap.Logger) *zap.Logger {
+	if reqID, ok := ctx.Value(requestIDKey).(string); ok && reqID != "" {
+		return logger.With(zap.String("request_id", reqID))
+	}
+	return logger
 }
 
-func (l *Logger) Info(msg string, additionalFields ...zap.Field) {
-	fields := make([]zap.Field, len(l.fields)+len(additionalFields))
-	copy(fields, l.fields)
-	copy(fields[len(l.fields):], additionalFields)
-
-	l.Logger.Info(msg, fields...)
+// SetRequestID stores request_id in context (call once in middleware).
+func SetRequestID(ctx context.Context, requestID string) context.Context {
+	return context.WithValue(ctx, requestIDKey, requestID)
 }
 
-func (l *Logger) Fatal(msg string, additionalFields ...zap.Field) {
-	fields := make([]zap.Field, len(l.fields)+len(additionalFields))
-	copy(fields, l.fields)
-	copy(fields[len(l.fields):], additionalFields)
-
-	l.Logger.Fatal(msg, fields...)
-}
-
-func (l *Logger) Panic(msg string, additionalFields ...zap.Field) {
-	fields := make([]zap.Field, len(l.fields)+len(additionalFields))
-	copy(fields, l.fields)
-	copy(fields[len(l.fields):], additionalFields)
-
-	l.Logger.Panic(msg, fields...)
-}
-
-func (l *Logger) Error(msg string, additionalFields ...zap.Field) {
-	fields := make([]zap.Field, len(l.fields)+len(additionalFields))
-	copy(fields, l.fields)
-	copy(fields[len(l.fields):], additionalFields)
-
-	l.Logger.Error(msg, fields...)
-}
-
-func (l *Logger) Warn(msg string, additionalFields ...zap.Field) {
-	fields := make([]zap.Field, len(l.fields)+len(additionalFields))
-	copy(fields, l.fields)
-	copy(fields[len(l.fields):], additionalFields)
-
-	l.Logger.Warn(msg, fields...)
-}
-
-func (l *Logger) Debug(msg string, additionalFields ...zap.Field) {
-	fields := make([]zap.Field, len(l.fields)+len(additionalFields))
-	copy(fields, l.fields)
-	copy(fields[len(l.fields):], additionalFields)
-
-	l.Logger.Debug(msg, fields...)
+// GetRequestID retrieves request_id from context.
+func GetRequestID(ctx context.Context) string {
+	if reqID, ok := ctx.Value(requestIDKey).(string); ok {
+		return reqID
+	}
+	return ""
 }
