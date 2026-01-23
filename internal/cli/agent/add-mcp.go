@@ -93,6 +93,7 @@ func addMcpCmd(name string) error {
 				RegistryServerName:         registryServerName,
 				RegistryServerVersion:      registryServerVersion,
 				RegistryServerPreferRemote: registryServerPreferRemote,
+				Env:                        env,
 			}
 		} else {
 			if image != "" && build != "" {

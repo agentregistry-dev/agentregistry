@@ -251,6 +251,18 @@ func translateServerJSON(
 		transportURL = "http://localhost:3000/mcp"
 	}
 
+	var runtimeArguments []model.Argument
+	for _, arg := range projectManifest.RuntimeArgs {
+		runtimeArguments = append(runtimeArguments, model.Argument{
+			InputWithVariables: model.InputWithVariables{
+				Input: model.Input{
+					Value: arg,
+				},
+			},
+			Type: model.ArgumentTypePositional,
+		})
+	}
+
 	return &apiv0.ServerJSON{
 		Schema:      model.CurrentSchemaURL,
 		Name:        name,
@@ -266,12 +278,12 @@ func translateServerJSON(
 			Identifier:      imageRef,
 			Version:         version,
 			FileSHA256:      "",
-			RunTimeHint:     "",
+			RunTimeHint:     projectManifest.RuntimeHint,
 			Transport: model.Transport{
 				Type: transportType,
 				URL:  transportURL,
 			},
-			RuntimeArguments:     nil,
+			RuntimeArguments:     runtimeArguments,
 			PackageArguments:     nil,
 			EnvironmentVariables: nil,
 		}},

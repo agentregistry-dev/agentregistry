@@ -676,7 +676,10 @@ class AdminApiClient {
   }
 
   // Get all deployments
-  async listDeployments(): Promise<Array<{
+  async listDeployments(params?: {
+    runtime?: string      // 'local' | 'kubernetes'
+    resourceType?: string // 'mcp' | 'agent'
+  }): Promise<Array<{
     serverName: string
     version: string
     deployedAt: string
@@ -686,8 +689,14 @@ class AdminApiClient {
     preferRemote: boolean
     resourceType: string
     runtime: string
+    isExternal?: boolean
   }>> {
-    const response = await fetch(`${this.baseUrl}/admin/v0/deployments`)
+    const queryParams = new URLSearchParams()
+    if (params?.runtime) queryParams.append('runtime', params.runtime)
+    if (params?.resourceType) queryParams.append('resourceType', params.resourceType)
+    
+    const url = `${this.baseUrl}/admin/v0/deployments${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+    const response = await fetch(url)
     if (!response.ok) {
       throw new Error('Failed to fetch deployments')
     }

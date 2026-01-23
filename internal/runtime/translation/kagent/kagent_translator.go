@@ -153,6 +153,10 @@ func (t *translator) translateAgent(agent *api.Agent) (*v1alpha2.Agent, error) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      AgentResourceName(agent.Name, agent.Version),
 			Namespace: namespace,
+			// Add a label to identify this resource as managed by agentregistry
+			Labels: map[string]string{
+				"agentregistry.solo.io/managed": "true",
+			},
 		},
 		Spec: v1alpha2.AgentSpec{
 			Description: agent.Name,
@@ -175,6 +179,10 @@ func (t *translator) translateRemoteMCPServer(server *api.MCPServer) (*v1alpha2.
 
 	url := buildRemoteMCPURL(server.Remote.Host, server.Remote.Port, server.Remote.Path)
 	namespace := t.defaultNamespace
+	// Use namespace from MCPServer if set (propagated from agent's deployment config)
+	if server.Namespace != "" {
+		namespace = server.Namespace
+	}
 
 	return &v1alpha2.RemoteMCPServer{
 		TypeMeta: metav1.TypeMeta{
@@ -184,6 +192,9 @@ func (t *translator) translateRemoteMCPServer(server *api.MCPServer) (*v1alpha2.
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      RemoteMCPResourceName(server.Name),
 			Namespace: namespace,
+			Labels: map[string]string{
+				"agentregistry.solo.io/managed": "true",
+			},
 		},
 		Spec: v1alpha2.RemoteMCPServerSpec{
 			Description: server.Name,
@@ -203,8 +214,11 @@ func (t *translator) translateLocalMCPServer(server *api.MCPServer) (*kmcpv1alph
 	}
 
 	namespace := t.defaultNamespace
-	// Check for namespace in environment variables (passed via deployment config)
-	if len(server.Local.Deployment.Env) > 0 {
+	// Use namespace from MCPServer if set (propagated from agent's deployment config)
+	if server.Namespace != "" {
+		namespace = server.Namespace
+	} else if len(server.Local.Deployment.Env) > 0 {
+		// Fallback: check for namespace in environment variables (passed via deployment config)
 		if ns, ok := server.Local.Deployment.Env["KAGENT_NAMESPACE"]; ok && ns != "" {
 			namespace = ns
 		}
@@ -215,6 +229,8 @@ func (t *translator) translateLocalMCPServer(server *api.MCPServer) (*kmcpv1alph
 		Args:  server.Local.Deployment.Args,
 		Env:   server.Local.Deployment.Env,
 	}
+	fmt.Printf("[DEBUG] kagent translateLocalMCPServer: name=%s, image=%s, cmd=%q, args=%v\n",
+		server.Name, deployment.Image, deployment.Cmd, deployment.Args)
 
 	spec := kmcpv1alpha1.MCPServerSpec{
 		Deployment: deployment,
@@ -245,6 +261,9 @@ func (t *translator) translateLocalMCPServer(server *api.MCPServer) (*kmcpv1alph
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      MCPServerResourceName(server.Name),
 			Namespace: namespace,
+			Labels: map[string]string{
+				"agentregistry.solo.io/managed": "true",
+			},
 		},
 		Spec: spec,
 	}, nil

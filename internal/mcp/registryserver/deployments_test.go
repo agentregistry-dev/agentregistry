@@ -16,7 +16,7 @@ import (
 )
 
 type fakeRegistry struct {
-	listDeploymentsFn        func(ctx context.Context) ([]*models.Deployment, error)
+	listDeploymentsFn        func(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
 	getDeploymentFn          func(ctx context.Context, name, version, artifactType string) (*models.Deployment, error)
 	deployServerFn           func(ctx context.Context, name, version string, config map[string]string, preferRemote bool, runtime string) (*models.Deployment, error)
 	deployAgentFn            func(ctx context.Context, name, version string, config map[string]string, preferRemote bool, runtime string) (*models.Deployment, error)
@@ -25,9 +25,9 @@ type fakeRegistry struct {
 }
 
 // Deployment-related methods
-func (f *fakeRegistry) GetDeployments(ctx context.Context) ([]*models.Deployment, error) {
+func (f *fakeRegistry) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	if f.listDeploymentsFn != nil {
-		return f.listDeploymentsFn(ctx)
+		return f.listDeploymentsFn(ctx, filter)
 	}
 	return nil, errors.New("not implemented")
 }
@@ -178,7 +178,7 @@ func TestDeploymentTools_ListAndGet(t *testing.T) {
 	}
 
 	reg := &fakeRegistry{
-		listDeploymentsFn: func(ctx context.Context) ([]*models.Deployment, error) {
+		listDeploymentsFn: func(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 			return []*models.Deployment{dep}, nil
 		},
 		getDeploymentFn: func(ctx context.Context, name, version, artifactType string) (*models.Deployment, error) {
@@ -238,7 +238,7 @@ func TestDeploymentTools_NoAuthConfigured_AllowsRequests(t *testing.T) {
 	ctx := context.Background()
 	// No authz provider configured; auth should be bypassed.
 	reg := &fakeRegistry{
-		listDeploymentsFn: func(ctx context.Context) ([]*models.Deployment, error) {
+		listDeploymentsFn: func(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 			return []*models.Deployment{
 				{ServerName: "com.example/no-auth", Version: "1.0.0", ResourceType: "mcp", Config: map[string]string{}},
 			}, nil
@@ -443,7 +443,7 @@ func TestDeploymentTools_FilterResourceType(t *testing.T) {
 	}
 
 	reg := &fakeRegistry{
-		listDeploymentsFn: func(ctx context.Context) ([]*models.Deployment, error) {
+		listDeploymentsFn: func(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 			return deployments, nil
 		},
 	}

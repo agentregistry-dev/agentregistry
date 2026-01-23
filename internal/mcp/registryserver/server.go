@@ -366,7 +366,7 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService) {
 		Name:        "list_deployments",
 		Description: "List deployments (servers or agents)",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listDeploymentsArgs) (*mcp.CallToolResult, deploymentsResponse, error) {
-		deployments, err := registry.GetDeployments(ctx)
+		deployments, err := registry.GetDeployments(ctx, nil)
 		if err != nil {
 			return nil, deploymentsResponse{}, err
 		}

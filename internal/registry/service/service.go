@@ -83,7 +83,7 @@ type RegistryService interface {
 
 	// Deployments APIs
 	// GetDeployments retrieves all deployed resources (MCP servers, agents)
-	GetDeployments(ctx context.Context) ([]*models.Deployment, error)
+	GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
 	// GetDeploymentByName retrieves a specific deployment by resource name
 	GetDeploymentByNameAndVersion(ctx context.Context, resourceName string, version string, artifactType string) (*models.Deployment, error)
 	// DeployServer deploys an MCP server with configuration

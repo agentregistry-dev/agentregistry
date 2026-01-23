@@ -40,6 +40,8 @@ type MCPServer struct {
 	Remote *RemoteMCPServer `json:"remote,omitempty"`
 	// Local defines how to deploy the MCP server locally
 	Local *LocalMCPServer `json:"local,omitempty"`
+	// Namespace is the target namespace for Kubernetes deployments (optional, defaults to "kagent")
+	Namespace string `json:"namespace,omitempty"`
 }
 
 type MCPServerType string

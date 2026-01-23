@@ -62,11 +62,18 @@ func TranslateRegistryServer(
 		}
 		envVars := utils.EnvMapToStringSlice(envVarsMap)
 
+		// For OCI registry type, we already have a complete image - no build needed.
+		// For other types (npm, pypi), we need to create a build context with Dockerfile.
+		buildPath := ""
+		if !config.IsOCI {
+			buildPath = "registry/" + name // Registry-resolved servers go under registry/ to easily manage on sequential runs
+		}
+
 		return &models.McpServerType{
 			Type:    "command",
 			Name:    name,
 			Image:   config.Image,
-			Build:   "registry/" + name, // Registry-resolved servers go under registry/ to easily manage on sequential runs
+			Build:   buildPath,
 			Command: config.Command,
 			Args:    args,
 			Env:     envVars,

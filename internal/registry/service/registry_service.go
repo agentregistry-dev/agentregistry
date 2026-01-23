@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const maxServerVersionsPerServer = 10000
@@ -654,9 +655,53 @@ func (s *registryServiceImpl) GetAgentEmbeddingMetadata(ctx context.Context, age
 	return s.db.GetAgentEmbeddingMetadata(ctx, nil, agentName, version)
 }
 
-// GetDeployments retrieves all deployed servers
-func (s *registryServiceImpl) GetDeployments(ctx context.Context) ([]*models.Deployment, error) {
-	return s.db.GetDeployments(ctx, nil)
+// GetDeployments retrieves all deployed servers with optional filtering
+func (s *registryServiceImpl) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+	// Get managed deployments from DB
+	dbDeployments, err := s.db.GetDeployments(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get deployments from DB: %w", err)
+	}
+
+	// Filter DB deployments based on request
+	var deployments []*models.Deployment
+	for _, d := range dbDeployments {
+		if filter != nil {
+			if filter.Runtime != nil && d.Runtime != *filter.Runtime {
+				continue
+			}
+			if filter.ResourceType != nil && d.ResourceType != *filter.ResourceType {
+				continue
+			}
+		}
+		deployments = append(deployments, d)
+	}
+
+	// If runtime filter includes kubernetes (or no filter i.e. default), fetch from K8s
+	includeK8s := filter == nil || filter.Runtime == nil || *filter.Runtime == "kubernetes"
+	if includeK8s {
+		// Use empty namespace to list all (or default)
+		k8sResources, err := s.listKubernetesDeployments(ctx, "")
+		if err != nil {
+			log.Printf("Warning: Failed to list kubernetes deployments: %v", err)
+		} else {
+			for _, k8sDep := range k8sResources {
+				// Skip internal resources, they are covered in the DB
+				if !k8sDep.IsExternal {
+					continue
+				}
+
+				// Apply ResourceType filter to K8s resources
+				if filter != nil && filter.ResourceType != nil && k8sDep.ResourceType != *filter.ResourceType {
+					continue
+				}
+
+				deployments = append(deployments, k8sDep)
+			}
+		}
+	}
+
+	return deployments, nil
 }
 
 // GetDeploymentByName retrieves a specific deployment
@@ -837,11 +882,17 @@ func (s *registryServiceImpl) RemoveServer(ctx context.Context, serverName strin
 	return nil
 }
 
+// RemoveAgent removes an agent deployment
+func (s *registryServiceImpl) RemoveAgent(ctx context.Context, agentName string, version string) error {
+	// Use RemoveServer implementation as it handles both types based on deployment record
+	return s.RemoveServer(ctx, agentName, version)
+}
+
 // ReconcileAll fetches all deployments from database and reconciles containers
 // This implements the Reconciler interface
 func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 	// Get all deployments from database
-	deployments, err := s.GetDeployments(ctx)
+	deployments, err := s.GetDeployments(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get deployments: %w", err)
 	}
@@ -1027,4 +1078,86 @@ func (s *registryServiceImpl) ensureSemanticEmbedding(ctx context.Context, opts 
 
 	opts.QueryEmbedding = result.Vector
 	return nil
+}
+
+// listKubernetesDeployments lists all agents and MCP servers from Kubernetes as Deployments
+func (s *registryServiceImpl) listKubernetesDeployments(ctx context.Context, namespace string) ([]*models.Deployment, error) {
+	var deployments []*models.Deployment
+
+	// Helper to check if a resource is managed by the registry
+	isManaged := func(labels map[string]string) bool {
+		return labels != nil && labels["agentregistry.solo.io/managed"] == "true"
+	}
+
+	// Helper to determine status from conditions (Ready or Pending)
+	getStatus := func(conditions []metav1.Condition) string {
+		for _, cond := range conditions {
+			// Check for Ready (agents) or Accepted (MCP servers)
+			if (cond.Type == "Ready" || cond.Type == "Accepted") && cond.Status == metav1.ConditionTrue {
+				return "Ready"
+			}
+		}
+		return "Pending"
+	}
+
+	// Helper to append a generic resource to the list
+	addResource := func(
+		resType, name, ns string,
+		labels map[string]string,
+		creation time.Time,
+		conditions []metav1.Condition,
+	) {
+		resourceType := "agent"
+		if resType == "mcpserver" || resType == "remotemcpserver" {
+			resourceType = "mcp"
+		}
+
+		preferRemote := resType == "remotemcpserver"
+
+		d := &models.Deployment{
+			ServerName:   name,
+			Version:      "unknown",
+			DeployedAt:   creation,
+			UpdatedAt:    creation,
+			Status:       getStatus(conditions),
+			Config:       labels,
+			PreferRemote: preferRemote,
+			ResourceType: resourceType,
+			Runtime:      "kubernetes",
+			IsExternal:   !isManaged(labels),
+		}
+		deployments = append(deployments, d)
+	}
+
+	// List agents from Kubernetes
+	agents, err := runtime.ListAgents(ctx, namespace)
+	if err != nil {
+		log.Printf("Warning: Failed to list agents from Kubernetes: %v", err)
+	} else {
+		for _, agent := range agents {
+			addResource("agent", agent.Name, agent.Namespace, agent.Labels, agent.CreationTimestamp.Time, agent.Status.Conditions)
+		}
+	}
+
+	// List MCP servers from Kubernetes
+	mcpServers, err := runtime.ListMCPServers(ctx, namespace)
+	if err != nil {
+		log.Printf("Warning: Failed to list MCP servers from Kubernetes: %v", err)
+	} else {
+		for _, mcp := range mcpServers {
+			addResource("mcpserver", mcp.Name, mcp.Namespace, mcp.Labels, mcp.CreationTimestamp.Time, mcp.Status.Conditions)
+		}
+	}
+
+	// List remote MCP servers from Kubernetes
+	remoteMCPs, err := runtime.ListRemoteMCPServers(ctx, namespace)
+	if err != nil {
+		log.Printf("Warning: Failed to list remote MCP servers from Kubernetes: %v", err)
+	} else {
+		for _, remoteMCP := range remoteMCPs {
+			addResource("remotemcpserver", remoteMCP.Name, remoteMCP.Namespace, remoteMCP.Labels, remoteMCP.CreationTimestamp.Time, remoteMCP.Status.Conditions)
+		}
+	}
+
+	return deployments, nil
 }
