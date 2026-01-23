@@ -885,7 +885,7 @@ func (s *registryServiceImpl) RemoveServer(ctx context.Context, serverName strin
 // RemoveAgent removes an agent deployment
 func (s *registryServiceImpl) RemoveAgent(ctx context.Context, agentName string, version string) error {
 	// Use RemoveServer implementation as it handles both types based on deployment record
-	return s.RemoveServer(ctx, agentName, version)
+	return s.RemoveServer(ctx, agentName, version, "agent")
 }
 
 // ReconcileAll fetches all deployments from database and reconciles containers

@@ -320,7 +320,7 @@ export default function DeployedPage() {
                             variant="destructive"
                             size="sm"
                             className="ml-4"
-                            onClick={() => handleRemove(item.serverName, item.version)}
+                            onClick={() => handleRemove(item.serverName, item.version, item.resourceType)}
                             disabled={removing}
                           >
                             <Trash2 className="h-4 w-4 mr-2" />
