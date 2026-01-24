@@ -43,9 +43,6 @@ func TestNoneHandler_GetAnonymousToken(t *testing.T) {
 	assert.Equal(t, auth.MethodNone, claims.AuthMethod)
 	assert.Equal(t, "anonymous", claims.AuthMethodSubject)
 
-	// Check permissions - should have all permissions
-	require.Len(t, claims.Permissions, 8, "should have all permissions")
-
 	expectedPermissions := []auth.Permission{
 		{Action: auth.PermissionActionRead, ResourcePattern: "io.modelcontextprotocol.anonymous/*"},
 		{Action: auth.PermissionActionPush, ResourcePattern: "io.modelcontextprotocol.anonymous/*"},
@@ -55,5 +52,5 @@ func TestNoneHandler_GetAnonymousToken(t *testing.T) {
 		{Action: auth.PermissionActionDeploy, ResourcePattern: "io.modelcontextprotocol.anonymous/*"},
 	}
 
-	assert.Equal(t, expectedPermissions, claims.Permissions, "should have all permissions")
+	assert.ElementsMatch(t, expectedPermissions, claims.Permissions, "should have all permissions")
 }
