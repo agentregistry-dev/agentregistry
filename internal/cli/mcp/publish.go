@@ -11,13 +11,14 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/build"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
 	"github.com/agentregistry-dev/agentregistry/internal/printer"
+	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 var (
-	// Flags for mcp publish command
 	dockerUrl           string
 	dockerTag           string
 	pushFlag            bool
@@ -27,6 +28,8 @@ var (
 	githubRepository    string
 	publishTransport    string
 	publishTransportURL string
+	fromGitHub          string
+	gitBranch           string
 )
 
 var PublishCmd = &cobra.Command{
@@ -34,24 +37,38 @@ var PublishCmd = &cobra.Command{
 	Short: "Build and publish an MCP Server or re-publish an existing server",
 	Long: `Publish an MCP Server to the registry.
 
-This command supports two modes:
+This command supports three modes:
 1. Build and publish from local folder: Provide a path to a folder containing mcp.yaml
 2. Re-publish existing server: Provide a server name from the registry to change its status to published
+3. Publish from GitHub: Use --from-github to publish directly from a GitHub repository
 
 Examples:
   # Build and publish from local folder
   arctl mcp publish ./my-server --docker-url docker.io/myorg --push
 
   # Re-publish an existing server from the registry
-  arctl mcp publish io.github.example/my-server`,
-	Args: cobra.ExactArgs(1),
+  arctl mcp publish io.github.example/my-server --version 1.0.0
+
+  # Publish from GitHub repository (metadata only)
+  arctl mcp publish --from-github https://github.com/myorg/my-mcp-server
+
+  # Publish from GitHub with pre-built Docker image
+  arctl mcp publish --from-github https://github.com/myorg/my-mcp-server --docker-url docker.io/myorg/my-server:latest`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: runMCPServerPublish,
 }
 
 func runMCPServerPublish(cmd *cobra.Command, args []string) error {
+	if fromGitHub != "" {
+		return publishMCPFromGitHub(fromGitHub, gitBranch)
+	}
+
+	if len(args) == 0 {
+		return cmd.Help()
+	}
+
 	input := args[0]
 
-	// Check if input is a local path with mcp.yaml
 	absPath, err := filepath.Abs(input)
 	isLocalPath := false
 	if err == nil {
@@ -63,7 +80,6 @@ func runMCPServerPublish(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// If it's a local path, build and publish
 	if isLocalPath {
 		return buildAndPublishLocal(absPath)
 	}
@@ -72,7 +88,6 @@ func runMCPServerPublish(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("version is required")
 	}
 
-	// Otherwise, treat it as a server name from the registry
 	return publishExistingServer(input, publishVersion)
 }
 
@@ -293,7 +308,6 @@ func translateServerJSON(
 }
 
 func init() {
-	// Flags for publish command
 	PublishCmd.Flags().StringVar(&dockerUrl, "docker-url", "", "Docker registry URL (required for local builds). For example: docker.io/myorg. The final image name will be <docker-url>/<mcp-server-name>:<tag>")
 	PublishCmd.Flags().BoolVar(&pushFlag, "push", false, "Automatically push to Docker and agent registries (for local builds)")
 	PublishCmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Show what would be done without actually doing it")
@@ -303,4 +317,75 @@ func init() {
 	PublishCmd.Flags().StringVar(&githubRepository, "github", "", "Specify the GitHub repository URL for the MCP server")
 	PublishCmd.Flags().StringVar(&publishTransport, "transport", "", "Transport type: stdio or streamable-http (reads from mcp.yaml if not specified)")
 	PublishCmd.Flags().StringVar(&publishTransportURL, "transport-url", "", "Transport URL for streamable-http transport (default: http://localhost:3000/mcp when transport=streamable-http)")
+	PublishCmd.Flags().StringVar(&fromGitHub, "from-github", "", "Publish MCP server directly from a GitHub repository URL")
+	PublishCmd.Flags().StringVar(&gitBranch, "branch", "main", "Branch to use when publishing from GitHub")
+}
+
+func publishMCPFromGitHub(repoURL, branch string) error {
+	repoInfo, err := utils.ParseGitHubURL(repoURL)
+	if err != nil {
+		return fmt.Errorf("invalid GitHub URL: %w", err)
+	}
+
+	if branch != "" {
+		repoInfo.Branch = branch
+	}
+
+	printer.PrintInfo(fmt.Sprintf("Fetching mcp.yaml from %s (branch: %s)...", repoInfo.GetGitHubRepoURL(), repoInfo.Branch))
+
+	content, err := utils.FetchGitHubRawFile(repoInfo, "mcp.yaml")
+	if err != nil {
+		return fmt.Errorf("failed to fetch mcp.yaml: %w", err)
+	}
+
+	var projectManifest manifest.ProjectManifest
+	if err := yaml.Unmarshal(content, &projectManifest); err != nil {
+		return fmt.Errorf("failed to parse mcp.yaml: %w", err)
+	}
+
+	version := projectManifest.Version
+	if publishVersion != "" {
+		version = publishVersion
+	}
+	if version == "" {
+		version = "latest"
+	}
+
+	transportType := publishTransport
+	transportURL := publishTransportURL
+
+	if projectManifest.Transport != nil {
+		if transportType == "" {
+			transportType = projectManifest.Transport.Type
+		}
+		if transportURL == "" {
+			transportURL = projectManifest.Transport.URL
+		}
+	}
+
+	var imageRef string
+	if dockerUrl != "" {
+		repoName := sanitizeRepoName(projectManifest.Name)
+		imageRef = fmt.Sprintf("%s/%s:%s", strings.TrimSuffix(dockerUrl, "/"), repoName, version)
+	}
+
+	serverJSON, err := translateServerJSON(&projectManifest, imageRef, version, repoInfo.GetGitHubRepoURL(), transportType, transportURL)
+	if err != nil {
+		return fmt.Errorf("failed to build server JSON: %w", err)
+	}
+
+	if dryRunFlag {
+		j, _ := json.Marshal(serverJSON)
+		printer.PrintInfo("[DRY RUN] Would publish mcp server to registry: " + string(j))
+		return nil
+	}
+
+	_, err = apiClient.PublishMCPServer(serverJSON)
+	if err != nil {
+		return fmt.Errorf("failed to publish MCP server: %w", err)
+	}
+
+	printer.PrintSuccess(fmt.Sprintf("MCP Server '%s' version %s published from GitHub: %s", serverJSON.Name, version, repoInfo.GetGitHubRepoURL()))
+
+	return nil
 }
