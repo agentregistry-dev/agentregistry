@@ -10,7 +10,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/build"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
-	"github.com/agentregistry-dev/agentregistry/internal/printer"
+	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/spf13/cobra"
