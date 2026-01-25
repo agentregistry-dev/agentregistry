@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -63,6 +64,13 @@ var rootCmd = &cobra.Command{
 			var err error
 			token, err = cliOptions.AuthnProvider.Authenticate(cmd.Context())
 			if err != nil {
+				// missing stored token is a sentinel error, and should not block all commands (e.g. artifact init)
+				if errors.Is(err, types.ErrCLINoStoredToken) {
+					if verbose {
+						fmt.Println("No stored authentication token found. Continuing without authentication.")
+					}
+				}
+				// in this case, there is a valid issue with authentication, so block the command execution
 				return fmt.Errorf("CLI authentication failed: %w", err)
 			}
 		}
