@@ -20,7 +20,11 @@ type AuthzProvider interface {
 	// Check verifies if the session can perform the action on the resource.
 	// Used for single-resource operations (get, update, delete).
 	Check(ctx context.Context, s Session, verb PermissionAction, resource Resource) error
+	// IsRegistryAdmin checks if the session has global permissions (i.e. "*") for the registry
+	IsRegistryAdmin(ctx context.Context, s Session) bool
 }
+
+var _ AuthzProvider = &PublicAuthzProvider{}
 
 type Authorizer struct {
 	Authz AuthzProvider
@@ -34,6 +38,14 @@ func (a *Authorizer) Check(ctx context.Context, verb PermissionAction, resource 
 	// The AuthzProvider decides whether to allow unauthenticated access.
 	s, _ := AuthSessionFrom(ctx)
 	return a.Authz.Check(ctx, s, verb, resource)
+}
+
+func (a *Authorizer) IsRegistryAdmin(ctx context.Context) bool {
+	if a.Authz == nil {
+		return false
+	}
+	s, _ := AuthSessionFrom(ctx)
+	return a.Authz.IsRegistryAdmin(ctx, s)
 }
 
 // PublicActions defines which actions are allowed without authentication (non-destructive actions).
@@ -61,8 +73,6 @@ func NewPublicAuthzProvider(jwtManager *JWTManager) *PublicAuthzProvider {
 }
 
 // Check verifies if the session can perform the action on the resource.
-//   - Public actions (read) are allowed without authentication
-//   - Protected actions (push, publish, edit, delete, deploy) require authentication
 func (o *PublicAuthzProvider) Check(ctx context.Context, s Session, verb PermissionAction, resource Resource) error {
 	// Public actions are allowed without authentication
 	if PublicActions[verb] {
@@ -81,4 +91,14 @@ func (o *PublicAuthzProvider) Check(ctx context.Context, s Session, verb Permiss
 
 	// Delegate to JWT manager for permission checking
 	return o.jwtManager.Check(ctx, s, verb, resource)
+}
+
+func (o *PublicAuthzProvider) IsRegistryAdmin(ctx context.Context, s Session) bool {
+	permissions := s.Principal().User.Permissions
+	for _, permission := range permissions {
+		if permission.ResourcePattern == "*" {
+			return true
+		}
+	}
+	return false
 }
