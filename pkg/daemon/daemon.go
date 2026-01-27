@@ -156,4 +156,3 @@ func isServerResponding() bool {
 	}
 	return false
 }
-
