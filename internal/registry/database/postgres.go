@@ -732,6 +732,13 @@ func (db *PostgreSQL) GetCurrentLatestVersion(ctx context.Context, tx pgx.Tx, se
 		return nil, ctx.Err()
 	}
 
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: serverName,
+		Type: auth.PermissionArtifactTypeServer,
+	}); err != nil {
+		return nil, err
+	}
+
 	executor := db.getExecutor(tx)
 
 	query := `
@@ -782,6 +789,13 @@ func (db *PostgreSQL) CountServerVersions(ctx context.Context, tx pgx.Tx, server
 		return 0, ctx.Err()
 	}
 
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: serverName,
+		Type: auth.PermissionArtifactTypeServer,
+	}); err != nil {
+		return 0, err
+	}
+
 	executor := db.getExecutor(tx)
 
 	query := `SELECT COUNT(*) FROM servers WHERE server_name = $1`
@@ -801,6 +815,13 @@ func (db *PostgreSQL) CheckVersionExists(ctx context.Context, tx pgx.Tx, serverN
 		return false, ctx.Err()
 	}
 
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: serverName,
+		Type: auth.PermissionArtifactTypeServer,
+	}); err != nil {
+		return false, err
+	}
+
 	executor := db.getExecutor(tx)
 
 	query := `SELECT EXISTS(SELECT 1 FROM servers WHERE server_name = $1 AND version = $2)`
@@ -818,6 +839,15 @@ func (db *PostgreSQL) CheckVersionExists(ctx context.Context, tx pgx.Tx, serverN
 func (db *PostgreSQL) UnmarkAsLatest(ctx context.Context, tx pgx.Tx, serverName string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
+	}
+
+	// note: we do a push check because this is called during an artifact's creation operation, which automatically marks the new version as latest.
+	// maybe we should add a parameter to the function to indicate if it's from a creation operation or not? this would be important if we allow manual marking of latest.
+	if err := db.authz.Check(ctx, auth.PermissionActionPush, auth.Resource{
+		Name: serverName,
+		Type: auth.PermissionArtifactTypeServer,
+	}); err != nil {
+		return err
 	}
 
 	executor := db.getExecutor(tx)
@@ -894,6 +924,14 @@ func (db *PostgreSQL) DeleteServer(ctx context.Context, tx pgx.Tx, serverName, v
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
+		Name: serverName,
+		Type: auth.PermissionArtifactTypeServer,
+	}); err != nil {
+		return err
+	}
+
 	executor := db.getExecutor(tx)
 	query := `DELETE FROM servers WHERE server_name = $1 AND version = $2`
 	result, err := executor.Exec(ctx, query, serverName, version)
@@ -910,6 +948,13 @@ func (db *PostgreSQL) DeleteServer(ctx context.Context, tx pgx.Tx, serverName, v
 func (db *PostgreSQL) IsServerPublished(ctx context.Context, tx pgx.Tx, serverName, version string) (bool, error) {
 	if ctx.Err() != nil {
 		return false, ctx.Err()
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: serverName,
+		Type: auth.PermissionArtifactTypeServer,
+	}); err != nil {
+		return false, err
 	}
 
 	executor := db.getExecutor(tx)
@@ -1003,6 +1048,13 @@ func (db *PostgreSQL) SetServerEmbedding(ctx context.Context, tx pgx.Tx, serverN
 func (db *PostgreSQL) GetServerEmbeddingMetadata(ctx context.Context, tx pgx.Tx, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: serverName,
+		Type: auth.PermissionArtifactTypeServer,
+	}); err != nil {
+		return nil, err
 	}
 
 	executor := db.getExecutor(tx)
@@ -1672,6 +1724,14 @@ func (db *PostgreSQL) GetCurrentLatestAgentVersion(ctx context.Context, tx pgx.T
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: agentName,
+		Type: auth.PermissionArtifactTypeAgent,
+	}); err != nil {
+		return nil, err
+	}
+
 	executor := db.getExecutor(tx)
 	query := `
 		SELECT agent_name, version, status, value, published_at, updated_at, is_latest
@@ -1710,6 +1770,14 @@ func (db *PostgreSQL) CountAgentVersions(ctx context.Context, tx pgx.Tx, agentNa
 	if ctx.Err() != nil {
 		return 0, ctx.Err()
 	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: agentName,
+		Type: auth.PermissionArtifactTypeAgent,
+	}); err != nil {
+		return 0, err
+	}
+
 	executor := db.getExecutor(tx)
 	query := `SELECT COUNT(*) FROM agents WHERE agent_name = $1`
 	var count int
@@ -1723,6 +1791,14 @@ func (db *PostgreSQL) CheckAgentVersionExists(ctx context.Context, tx pgx.Tx, ag
 	if ctx.Err() != nil {
 		return false, ctx.Err()
 	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: agentName,
+		Type: auth.PermissionArtifactTypeAgent,
+	}); err != nil {
+		return false, err
+	}
+
 	executor := db.getExecutor(tx)
 	query := `SELECT EXISTS(SELECT 1 FROM agents WHERE agent_name = $1 AND version = $2)`
 	var exists bool
@@ -1736,6 +1812,16 @@ func (db *PostgreSQL) UnmarkAgentAsLatest(ctx context.Context, tx pgx.Tx, agentN
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
+
+	// note: we do a push check because this is called during an artifact's creation operation, which automatically marks the new version as latest.
+	// maybe we should add a parameter to the function to indicate if it's from a creation operation or not? this would be important if we allow manual marking of latest.
+	if err := db.authz.Check(ctx, auth.PermissionActionPush, auth.Resource{
+		Name: agentName,
+		Type: auth.PermissionArtifactTypeAgent,
+	}); err != nil {
+		return err
+	}
+
 	executor := db.getExecutor(tx)
 	query := `UPDATE agents SET is_latest = false WHERE agent_name = $1 AND is_latest = true`
 	if _, err := executor.Exec(ctx, query, agentName); err != nil {
@@ -1804,6 +1890,13 @@ func (db *PostgreSQL) UnpublishAgent(ctx context.Context, tx pgx.Tx, agentName, 
 func (db *PostgreSQL) IsAgentPublished(ctx context.Context, tx pgx.Tx, agentName, version string) (bool, error) {
 	if ctx.Err() != nil {
 		return false, ctx.Err()
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: agentName,
+		Type: auth.PermissionArtifactTypeAgent,
+	}); err != nil {
+		return false, err
 	}
 
 	executor := db.getExecutor(tx)
@@ -1894,6 +1987,13 @@ func (db *PostgreSQL) SetAgentEmbedding(ctx context.Context, tx pgx.Tx, agentNam
 func (db *PostgreSQL) GetAgentEmbeddingMetadata(ctx context.Context, tx pgx.Tx, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: agentName,
+		Type: auth.PermissionArtifactTypeAgent,
+	}); err != nil {
+		return nil, err
 	}
 
 	executor := db.getExecutor(tx)
@@ -2383,6 +2483,14 @@ func (db *PostgreSQL) GetCurrentLatestSkillVersion(ctx context.Context, tx pgx.T
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: skillName,
+		Type: auth.PermissionArtifactTypeSkill,
+	}); err != nil {
+		return nil, err
+	}
+
 	executor := db.getExecutor(tx)
 	query := `
         SELECT skill_name, version, status, value, published_at, updated_at, is_latest
@@ -2421,6 +2529,14 @@ func (db *PostgreSQL) CountSkillVersions(ctx context.Context, tx pgx.Tx, skillNa
 	if ctx.Err() != nil {
 		return 0, ctx.Err()
 	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: skillName,
+		Type: auth.PermissionArtifactTypeSkill,
+	}); err != nil {
+		return 0, err
+	}
+
 	executor := db.getExecutor(tx)
 	query := `SELECT COUNT(*) FROM skills WHERE skill_name = $1`
 	var count int
@@ -2434,6 +2550,14 @@ func (db *PostgreSQL) CheckSkillVersionExists(ctx context.Context, tx pgx.Tx, sk
 	if ctx.Err() != nil {
 		return false, ctx.Err()
 	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: skillName,
+		Type: auth.PermissionArtifactTypeSkill,
+	}); err != nil {
+		return false, err
+	}
+
 	executor := db.getExecutor(tx)
 	query := `SELECT EXISTS(SELECT 1 FROM skills WHERE skill_name = $1 AND version = $2)`
 	var exists bool
@@ -2447,6 +2571,16 @@ func (db *PostgreSQL) UnmarkSkillAsLatest(ctx context.Context, tx pgx.Tx, skillN
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
+
+	// note: we do a push check because this is called during an artifact's creation operation, which automatically marks the new version as latest.
+	// maybe we should add a parameter to the function to indicate if it's from a creation operation or not? this would be important if we allow manual marking of latest.
+	if err := db.authz.Check(ctx, auth.PermissionActionPush, auth.Resource{
+		Name: skillName,
+		Type: auth.PermissionArtifactTypeSkill,
+	}); err != nil {
+		return err
+	}
+
 	executor := db.getExecutor(tx)
 	query := `UPDATE skills SET is_latest = false WHERE skill_name = $1 AND is_latest = true`
 	if _, err := executor.Exec(ctx, query, skillName); err != nil {
@@ -2515,6 +2649,13 @@ func (db *PostgreSQL) UnpublishSkill(ctx context.Context, tx pgx.Tx, skillName, 
 func (db *PostgreSQL) IsSkillPublished(ctx context.Context, tx pgx.Tx, skillName, version string) (bool, error) {
 	if ctx.Err() != nil {
 		return false, ctx.Err()
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: skillName,
+		Type: auth.PermissionArtifactTypeSkill,
+	}); err != nil {
+		return false, err
 	}
 
 	executor := db.getExecutor(tx)
@@ -2721,7 +2862,7 @@ func (db *PostgreSQL) UpdateDeploymentConfig(ctx context.Context, tx pgx.Tx, ser
 
 	query := `
 		UPDATE deployments
-		SET config = $2
+		SET config = $4
 		WHERE server_name = $1 AND version = $2 AND resource_type = $3
 	`
 
@@ -2755,7 +2896,7 @@ func (db *PostgreSQL) UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, ser
 
 	query := `
 		UPDATE deployments
-		SET status = $3
+		SET status = $4
 		WHERE server_name = $1 AND version = $2 AND resource_type = $3
 	`
 
