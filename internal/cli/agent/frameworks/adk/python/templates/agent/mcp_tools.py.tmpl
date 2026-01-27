@@ -43,6 +43,15 @@ def _resolve_env_vars(value: str) -> str:
     return re.sub(r"\$\{([^}]+)\}", replace_var, value)
 
 
+def _get_terminate_on_close() -> bool:
+    """Get the terminate_on_close setting from environment variable.
+    
+    Defaults to True for backward compatibility.
+    Set MCP_TERMINATE_ON_CLOSE=false for stateless MCP servers.
+    """
+    return os.environ.get("MCP_TERMINATE_ON_CLOSE", "true").lower() != "false"
+
+
 def _load_runtime_mcp_servers() -> List[dict]:
     """Load MCP servers resolved at runtime (registry types) from config file."""
     # The agent-specific directory is mounted to /config, so the file is at /config/mcp-servers.json
@@ -91,12 +100,19 @@ def get_mcp_tools(
     server_filters: Optional[Union[ToolPredicate, List[str]]] = None,
     global_filter: Optional[Union[ToolPredicate, List[str]]] = None,
 ) -> List[MCPToolset]:
-    """Return MCP toolsets for the configured servers."""
+    """Return MCP toolsets for the configured servers.
+    
+    Environment variables:
+        MCP_TERMINATE_ON_CLOSE: Set to "false" for stateless MCP servers.
+            Defaults to "true" for backward compatibility.
+    """
 
     servers = _get_all_mcp_servers()
 
     if server_names is not None:
         servers = [s for s in servers if s.get("name") in server_names]
+
+    terminate_on_close = _get_terminate_on_close()
 
     toolsets = []
     for server in servers:
@@ -115,14 +131,20 @@ def get_mcp_tools(
             predicate = global_filter
 
         if headers:
-            connection_params = StreamableHTTPConnectionParams(url=url, headers=headers)
+            connection_params = StreamableHTTPConnectionParams(
+                url=url, headers=headers, terminate_on_close=terminate_on_close
+            )
         else:
-            connection_params = StreamableHTTPConnectionParams(url=url)
+            connection_params = StreamableHTTPConnectionParams(
+                url=url, terminate_on_close=terminate_on_close
+            )
 
         if predicate is not None:
-            toolsets.append(MCPToolset(connection_params=connection_params, tool_filter=predicate))
+            toolset = MCPToolset(connection_params=connection_params, tool_filter=predicate)
         else:
-            toolsets.append(MCPToolset(connection_params=connection_params))
+            toolset = MCPToolset(connection_params=connection_params)
+
+        toolsets.append(toolset)
 
     return toolsets
 
