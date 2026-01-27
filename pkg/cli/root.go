@@ -91,7 +91,7 @@ func Execute() {
 func init() {
 	envBaseURL := os.Getenv("ARCTL_API_BASE_URL")
 	envToken := os.Getenv("ARCTL_API_TOKEN")
-	rootCmd.PersistentFlags().StringVar(&registryURL, "registry-url", envBaseURL, "Registry base URL (overrides ARCTL_API_BASE_URL; default http://localhost:12121/v0)")
+	rootCmd.PersistentFlags().StringVar(&registryURL, "registry-url", envBaseURL, "Registry base URL (overrides ARCTL_API_BASE_URL; default http://localhost:12121)")
 	rootCmd.PersistentFlags().StringVar(&registryToken, "registry-token", envToken, "Registry bearer token (overrides ARCTL_API_TOKEN)")
 
 	// Add subcommands
