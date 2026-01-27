@@ -38,30 +38,30 @@ func init() {
 }
 
 var (
-	k8sClient  client.Client
-	clientOnce sync.Once
+	k8sClient    client.Client
+	k8sClientErr error
+	clientOnce   sync.Once
 )
 
 // controller-runtime client singleton
 func GetKubeClient() (client.Client, error) {
-	var err error
 	clientOnce.Do(func() {
 		var restConfig *rest.Config
-		restConfig, err = config.GetConfig()
-		if err != nil {
-			err = fmt.Errorf("failed to get kubernetes config: %w", err)
+		restConfig, k8sClientErr = config.GetConfig()
+		if k8sClientErr != nil {
+			k8sClientErr = fmt.Errorf("failed to get kubernetes config: %w", k8sClientErr)
 			return
 		}
 
-		k8sClient, err = client.New(restConfig, client.Options{Scheme: scheme})
-		if err != nil {
-			err = fmt.Errorf("failed to create kubernetes client: %w", err)
+		k8sClient, k8sClientErr = client.New(restConfig, client.Options{Scheme: scheme})
+		if k8sClientErr != nil {
+			k8sClientErr = fmt.Errorf("failed to create kubernetes client: %w", k8sClientErr)
 			return
 		}
 	})
 
-	if err != nil {
-		return nil, err
+	if k8sClientErr != nil {
+		return nil, k8sClientErr
 	}
 	return k8sClient, nil
 }
