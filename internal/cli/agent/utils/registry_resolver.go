@@ -11,6 +11,16 @@ import (
 	"github.com/modelcontextprotocol/registry/pkg/model"
 )
 
+var defaultRegistryURL = "http://127.0.0.1:12121"
+
+// SetDefaultRegistryURL overrides the fallback registry URL used when manifests omit registry_url.
+func SetDefaultRegistryURL(url string) {
+	if strings.TrimSpace(url) == "" {
+		return
+	}
+	defaultRegistryURL = url
+}
+
 // ParseAgentManifestServers resolves registry-type MCP servers in an agent manifest, keeping non-registry servers as-is.
 func ParseAgentManifestServers(manifest *models.AgentManifest, verbose bool) ([]models.McpServerType, error) {
 	servers := []models.McpServerType{}
@@ -58,7 +68,7 @@ func ParseAgentManifestServers(manifest *models.AgentManifest, verbose bool) ([]
 func resolveRegistryServer(mcpServer models.McpServerType, verbose bool) (*models.McpServerType, error) {
 	registryURL := mcpServer.RegistryURL
 	if registryURL == "" {
-		registryURL = "http://127.0.0.1:12121"
+		registryURL = defaultRegistryURL
 		if verbose {
 			fmt.Printf("[registry-resolver]   Using default registry URL: %s\n", registryURL)
 		}
