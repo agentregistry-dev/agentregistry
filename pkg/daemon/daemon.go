@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/daemon"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
+	"gopkg.in/yaml.v3"
 )
 
 // DefaultConfig returns the default configuration for the daemon (AgentRegistry OSS daemon)
@@ -86,20 +86,47 @@ func (d *DefaultDaemonManager) getComposeYAML() string {
 		return d.config.ComposeYAML
 	}
 
-	// Patch localhost/127.0.0.1 to host.docker.internal for Docker Desktop on macOS
-	patched := strings.ReplaceAll(string(content), "localhost", "host.docker.internal")
-	patched = strings.ReplaceAll(patched, "127.0.0.1", "host.docker.internal")
+	// Parse kubeconfig as YAML to selectively patch only local clusters
+	var kubeconfig map[string]any
+	if err := yaml.Unmarshal(content, &kubeconfig); err != nil {
+		return d.config.ComposeYAML
+	}
 
-	// Replace certificate-authority-data with insecure-skip-tls-verify
-	caRegex := regexp.MustCompile(`(?m)^\s*certificate-authority-data:.*$`)
-	patched = caRegex.ReplaceAllString(patched, "    insecure-skip-tls-verify: true")
+	if clusters, ok := kubeconfig["clusters"].([]any); ok {
+		for _, c := range clusters {
+			cluster, ok := c.(map[string]any)
+			if !ok {
+				continue
+			}
+			clusterData, ok := cluster["cluster"].(map[string]any)
+			if !ok {
+				continue
+			}
+			server, _ := clusterData["server"].(string)
+			if strings.Contains(server, "localhost") || strings.Contains(server, "127.0.0.1") {
+				// Patch server URL
+				server = strings.ReplaceAll(server, "localhost", "host.docker.internal")
+				server = strings.ReplaceAll(server, "127.0.0.1", "host.docker.internal")
+				clusterData["server"] = server
+				// Disable TLS verification and remove CA data
+				clusterData["insecure-skip-tls-verify"] = true
+				delete(clusterData, "certificate-authority-data")
+				delete(clusterData, "certificate-authority")
+			}
+		}
+	}
+
+	patchedBytes, err := yaml.Marshal(kubeconfig)
+	if err != nil {
+		return d.config.ComposeYAML
+	}
 
 	arctlDir := filepath.Join(homeDir, ".arctl")
 	if err := os.MkdirAll(arctlDir, 0755); err != nil {
 		return d.config.ComposeYAML
 	}
 	kubeconfigPatchedPath := filepath.Join(arctlDir, "kubeconfig")
-	if err := os.WriteFile(kubeconfigPatchedPath, []byte(patched), 0600); err != nil {
+	if err := os.WriteFile(kubeconfigPatchedPath, patchedBytes, 0600); err != nil {
 		return d.config.ComposeYAML
 	}
 
