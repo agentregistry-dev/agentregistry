@@ -94,14 +94,18 @@ func (d *DefaultDaemonManager) getComposeYAML() string {
 	caRegex := regexp.MustCompile(`(?m)^\s*certificate-authority-data:.*$`)
 	patched = caRegex.ReplaceAllString(patched, "    insecure-skip-tls-verify: true")
 
-	tmpPath := "/tmp/arctl-kubeconfig"
-	if err := os.WriteFile(tmpPath, []byte(patched), 0600); err != nil {
+	arctlDir := filepath.Join(homeDir, ".arctl")
+	if err := os.MkdirAll(arctlDir, 0755); err != nil {
+		return d.config.ComposeYAML
+	}
+	kubeconfigPatchedPath := filepath.Join(arctlDir, "kubeconfig")
+	if err := os.WriteFile(kubeconfigPatchedPath, []byte(patched), 0600); err != nil {
 		return d.config.ComposeYAML
 	}
 
 	return strings.ReplaceAll(d.config.ComposeYAML,
 		"~/.kube/config:/root/.kube/config",
-		tmpPath+":/root/.kube/config")
+		kubeconfigPatchedPath+":/root/.kube/config")
 }
 
 func (d *DefaultDaemonManager) Start() error {
