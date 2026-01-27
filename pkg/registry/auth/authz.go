@@ -15,12 +15,13 @@ var (
 	ErrForbidden = errors.New("forbidden")
 )
 
-// Authz
+// AuthzProvider defines the authorization interface.
 type AuthzProvider interface {
 	// Check verifies if the session can perform the action on the resource.
 	// Used for single-resource operations (get, update, delete).
 	Check(ctx context.Context, s Session, verb PermissionAction, resource Resource) error
 	// IsRegistryAdmin checks if the session has global permissions (i.e. "*") for the registry
+	// Also used by internal operations and database queries that need to bypass filtering.
 	IsRegistryAdmin(ctx context.Context, s Session) bool
 }
 
@@ -32,10 +33,8 @@ type Authorizer struct {
 
 func (a *Authorizer) Check(ctx context.Context, verb PermissionAction, resource Resource) error {
 	if a.Authz == nil {
-		return nil // no authz provider, so allow all actions
+		return nil
 	}
-	// Get session from context - may be nil for unauthenticated requests.
-	// The AuthzProvider decides whether to allow unauthenticated access.
 	s, _ := AuthSessionFrom(ctx)
 	return a.Authz.Check(ctx, s, verb, resource)
 }
@@ -74,28 +73,36 @@ func NewPublicAuthzProvider(jwtManager *JWTManager) *PublicAuthzProvider {
 
 // Check verifies if the session can perform the action on the resource.
 func (o *PublicAuthzProvider) Check(ctx context.Context, s Session, verb PermissionAction, resource Resource) error {
-	// Public actions are allowed without authentication
+	if o.IsRegistryAdmin(ctx, s) {
+		return nil
+	}
+
 	if PublicActions[verb] {
 		return nil
 	}
 
-	// Protected actions require a session
 	if s == nil {
 		return ErrUnauthenticated
 	}
 
-	// If no JWT manager is configured, allow authenticated sessions for protected actions
 	if o.jwtManager == nil {
 		return nil
 	}
 
-	// Delegate to JWT manager for permission checking
 	return o.jwtManager.Check(ctx, s, verb, resource)
 }
 
 func (o *PublicAuthzProvider) IsRegistryAdmin(ctx context.Context, s Session) bool {
-	permissions := s.Principal().User.Permissions
-	for _, permission := range permissions {
+	if s == nil {
+		return false
+	}
+
+	// the system session is exempt from authz checks and acts as a global admin, similar to the registry admin
+	if IsSystemSession(s) {
+		return true
+	}
+
+	for _, permission := range s.Principal().User.Permissions {
 		if permission.ResourcePattern == "*" {
 			return true
 		}
