@@ -67,7 +67,7 @@ func NewClientWithConfig(baseURL, token string) (*Client, error) {
 func pingWithRetry(c *Client) error {
 	var lastErr error
 	const attempts = 3
-	for i := 0; i < attempts; i++ {
+	for i := range attempts {
 		if err := c.Ping(); err != nil {
 			lastErr = err
 			time.Sleep(time.Duration(i+1) * time.Second)
