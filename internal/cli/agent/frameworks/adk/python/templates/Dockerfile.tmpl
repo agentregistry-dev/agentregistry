@@ -14,5 +14,7 @@ COPY .python-version .python-version
 
 RUN uv sync
 
+ENV OTEL_SERVICE_NAME={{.Name}}
+
 CMD ["{{.Name}}"]
 

@@ -27,34 +27,12 @@ type Client struct {
 const (
 	defaultRegistryName = "local"
 	defaultBaseURL      = "http://localhost:12121/v0"
+	DefaultBaseURL      = defaultBaseURL
 )
 
 // NewClientFromEnv constructs a client using environment variables
 func NewClientFromEnv() (*Client, error) {
-	base := os.Getenv("ARCTL_API_BASE_URL")
-	if strings.TrimSpace(base) == "" {
-		base = defaultBaseURL
-	}
-	token := os.Getenv("ARCTL_API_TOKEN")
-	c := &Client{
-		BaseURL: base,
-		token:   token,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-	}
-	// Verify connectivity
-	// retry backoff with exponential backoff
-	for i := range 5 {
-		if err := c.Ping(); err != nil {
-			if i == 2 {
-				return nil, fmt.Errorf("failed to reach API after 3 attempts: %w", err)
-			}
-			time.Sleep(time.Duration(i+1) * time.Second)
-		}
-	}
-	// Seed placeholder registry entry
-	return c, nil
+	return NewClientWithConfig(os.Getenv("ARCTL_API_BASE_URL"), os.Getenv("ARCTL_API_TOKEN"))
 }
 
 // NewClient constructs a client with explicit baseURL and token
@@ -69,6 +47,35 @@ func NewClient(baseURL, token string) *Client {
 			Timeout: 30 * time.Second,
 		},
 	}
+}
+
+// NewClientWithConfig constructs a client from explicit inputs (flag/env), applies defaults, and verifies connectivity.
+func NewClientWithConfig(baseURL, token string) (*Client, error) {
+	base := strings.TrimSpace(baseURL)
+	if base == "" {
+		base = defaultBaseURL
+	}
+
+	c := NewClient(base, token)
+	if err := pingWithRetry(c); err != nil {
+		return nil, fmt.Errorf("failed to reach API at %s: %w", c.BaseURL, err)
+	}
+
+	return c, nil
+}
+
+func pingWithRetry(c *Client) error {
+	var lastErr error
+	const attempts = 3
+	for i := range attempts {
+		if err := c.Ping(); err != nil {
+			lastErr = err
+			time.Sleep(time.Duration(i+1) * time.Second)
+			continue
+		}
+		return nil
+	}
+	return fmt.Errorf("failed to reach API after %d attempts: %w", attempts, lastErr)
 }
 
 // Close is a no-op in API mode

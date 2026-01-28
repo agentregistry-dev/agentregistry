@@ -123,6 +123,8 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
 
+			ctx = auth.WithSystemContext(ctx)
+
 			if err := seed.ImportBuiltinSeedData(ctx, registryService); err != nil {
 				log.Printf("Failed to import builtin seed data: %v", err)
 			}
@@ -135,6 +137,8 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
+
+			ctx = auth.WithSystemContext(ctx)
 
 			importerService := importer.NewService(registryService)
 			if embeddingProvider != nil {
@@ -172,6 +176,8 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		log.Println("Reconciling existing deployments at startup...")
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
+
+		ctx = auth.WithSystemContext(ctx)
 
 		if err := registryService.ReconcileAll(ctx); err != nil {
 			log.Printf("Warning: Failed to reconcile deployments at startup: %v", err)

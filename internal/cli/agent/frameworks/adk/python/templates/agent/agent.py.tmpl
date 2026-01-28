@@ -1,4 +1,5 @@
 import random
+import os
 
 from google.adk import Agent
 from google.adk.tools.tool_context import ToolContext
@@ -8,6 +9,9 @@ from google.adk.models.lite_llm import LiteLlm
 from .mcp_tools import get_mcp_tools
 
 # Initialize OpenTelemetry
+# Set service name from environment variable for OpenTelemetry
+os.environ.setdefault('OTEL_SERVICE_NAME', '{{.Name}}')
+
 from google.adk.telemetry.setup import maybe_set_otel_providers
 maybe_set_otel_providers()
 
