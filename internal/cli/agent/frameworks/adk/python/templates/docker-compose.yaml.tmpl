@@ -28,6 +28,7 @@ services:
       - KAGENT_NAME=placeholder
       - KAGENT_NAMESPACE=placeholder
       - AGENT_NAME={{.Name}}
+      - OTEL_SERVICE_NAME={{.Name}}
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT}
       - MODEL_PROVIDER={{.ModelProvider}}
       - MODEL_NAME={{.ModelName}}
