@@ -27,6 +27,13 @@ var (
 	githubRepository    string
 	publishTransport    string
 	publishTransportURL string
+
+	// Flags for package reference publishing (NPM/PyPI/OCI)
+	registryType   string
+	packageID      string
+	packageVersion string
+	publishDesc    string
+	publishArgs    []string
 )
 
 var PublishCmd = &cobra.Command{
@@ -34,22 +41,37 @@ var PublishCmd = &cobra.Command{
 	Short: "Build and publish an MCP Server or re-publish an existing server",
 	Long: `Publish an MCP Server to the registry.
 
-This command supports two modes:
+This command supports three modes:
 1. Build and publish from local folder: Provide a path to a folder containing mcp.yaml
 2. Re-publish existing server: Provide a server name from the registry to change its status to published
+3. Publish package reference: Use --registry-type flag to publish NPM/PyPI/OCI package references
 
 Examples:
   # Build and publish from local folder
   arctl mcp publish ./my-server --docker-url docker.io/myorg --push
 
   # Re-publish an existing server from the registry
-  arctl mcp publish io.github.example/my-server`,
+  arctl mcp publish io.github.example/my-server --version 1.0.0
+
+  # Publish an NPM package reference (name must be namespace/name format)
+  arctl mcp publish myorg/filesystem-server \
+    --registry-type npm \
+    --package-id @modelcontextprotocol/server-filesystem \
+    --version 1.0.0 \
+    --description "Filesystem MCP server" \
+    --arg /path/to/directory`,
+
 	Args: cobra.ExactArgs(1),
 	RunE: runMCPServerPublish,
 }
 
 func runMCPServerPublish(cmd *cobra.Command, args []string) error {
 	input := args[0]
+
+	// If registry type is provided, we're in package reference mode
+	if registryType != "" {
+		return publishPackageReference(input)
+	}
 
 	// Check if input is a local path with mcp.yaml
 	absPath, err := filepath.Abs(input)
@@ -74,6 +96,116 @@ func runMCPServerPublish(cmd *cobra.Command, args []string) error {
 
 	// Otherwise, treat it as a server name from the registry
 	return publishExistingServer(input, publishVersion)
+}
+
+// publishPackageReference publishes an NPM/PyPI/OCI package reference to the registry
+func publishPackageReference(serverName string) error {
+	// Validate required flags
+	if packageID == "" {
+		return fmt.Errorf("--package-id is required for package reference publishing")
+	}
+	if publishDesc == "" {
+		return fmt.Errorf("--description is required for package reference publishing")
+	}
+	if publishVersion == "" {
+		return fmt.Errorf("--version is required for package reference publishing")
+	}
+
+	// Server name must contain a slash (e.g., "author/server-name")
+	if !strings.Contains(serverName, "/") {
+		return fmt.Errorf("server name must be in format 'namespace/name' (e.g., 'myorg/my-server')")
+	}
+
+	normalizedType := strings.ToLower(registryType)
+	if normalizedType != "npm" && normalizedType != "pypi" && normalizedType != "oci" {
+		return fmt.Errorf("--registry-type must be one of: npm, pypi, oci (got: %s)", registryType)
+	}
+
+	pkgVersion := packageVersion
+	if pkgVersion == "" {
+		pkgVersion = publishVersion
+	}
+
+	// Set runtime hint based on registry type
+	var runtimeHint string
+	switch normalizedType {
+	case "npm":
+		runtimeHint = "npx"
+	case "pypi":
+		runtimeHint = "uvx"
+	case "oci":
+		runtimeHint = ""
+	}
+
+	// Default transport
+	transportType := publishTransport
+	if transportType == "" {
+		transportType = string(model.TransportTypeStdio)
+	}
+
+	transportURL := publishTransportURL
+	if transportType == string(model.TransportTypeStreamableHTTP) && transportURL == "" {
+		transportURL = "http://localhost:3000/mcp"
+	}
+
+	// Build repository info if GitHub URL provided (optional and not used for building)
+	var repository *model.Repository
+	if githubRepository != "" {
+		repository = &model.Repository{
+			URL:    githubRepository,
+			Source: "github",
+		}
+	}
+
+	// Package arguments from --arg flags are passed to the server binary/package
+	var packageArguments []model.Argument
+	for _, arg := range publishArgs {
+		packageArguments = append(packageArguments, model.Argument{
+			InputWithVariables: model.InputWithVariables{
+				Input: model.Input{
+					Value: arg,
+				},
+			},
+			Type: model.ArgumentTypePositional,
+		})
+	}
+
+	// Construct ServerJSON
+	serverJSON := &apiv0.ServerJSON{
+		Schema:      model.CurrentSchemaURL,
+		Name:        strings.ToLower(serverName),
+		Description: publishDesc,
+		Title:       serverName,
+		Repository:  repository,
+		Version:     publishVersion,
+		Packages: []model.Package{{
+			RegistryType:     normalizedType,
+			Identifier:       packageID,
+			Version:          pkgVersion,
+			RunTimeHint:      runtimeHint,
+			PackageArguments: packageArguments,
+			Transport: model.Transport{
+				Type: transportType,
+				URL:  transportURL,
+			},
+		}},
+	}
+
+	// Publish to registry
+	if dryRunFlag {
+		j, _ := json.Marshal(serverJSON)
+		printer.PrintInfo("[DRY RUN] Would publish package reference to registry " + apiClient.BaseURL + ": " + string(j))
+		return nil
+	}
+
+	printer.PrintInfo(fmt.Sprintf("Publishing %s reference: %s", normalizedType, serverJSON.Name))
+	_, err := apiClient.PublishMCPServer(serverJSON)
+	if err != nil {
+		return fmt.Errorf("failed to publish package reference: %w", err)
+	}
+
+	printer.PrintSuccess(fmt.Sprintf("Published: %s (v%s)", serverJSON.Name, publishVersion))
+	return nil
 }
 
 func publishExistingServer(serverName string, version string) error {
@@ -303,4 +435,11 @@ func init() {
 	PublishCmd.Flags().StringVar(&githubRepository, "github", "", "Specify the GitHub repository URL for the MCP server")
 	PublishCmd.Flags().StringVar(&publishTransport, "transport", "", "Transport type: stdio or streamable-http (reads from mcp.yaml if not specified)")
 	PublishCmd.Flags().StringVar(&publishTransportURL, "transport-url", "", "Transport URL for streamable-http transport (default: http://localhost:3000/mcp when transport=streamable-http)")
+
+	// Flags for package reference publishing (NPM/PyPI)
+	PublishCmd.Flags().StringVar(&registryType, "registry-type", "", "Package registry type: npm, pypi, or oci (enables package reference mode)")
+	PublishCmd.Flags().StringVar(&packageID, "package-id", "", "Package identifier (e.g., @modelcontextprotocol/server-filesystem for npm)")
+	PublishCmd.Flags().StringVar(&packageVersion, "package-version", "", "Package version (defaults to --version if not specified)")
+	PublishCmd.Flags().StringVar(&publishDesc, "description", "", "Server description (required for package reference publishing)")
+	PublishCmd.Flags().StringArrayVar(&publishArgs, "arg", nil, "Package argument to pass when running (repeatable, e.g., --arg /path/to/dir)")
 }
