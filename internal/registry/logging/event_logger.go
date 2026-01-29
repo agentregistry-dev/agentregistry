@@ -5,7 +5,6 @@ import (
 	"hash/fnv"
 	"regexp"
 	"strings"
-	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -14,8 +13,8 @@ import (
 // EventLoggingConfig holds sampling and filtering configuration.
 type EventLoggingConfig struct {
 	SuccessSampleRate float64 `env:"LOG_SUCCESS_SAMPLE_RATE" envDefault:"0.1"`
-	ExcludePaths      string  `env:"LOG_EXCLUDE_PATHS" envDefault:"/health,/ready,/live,/metrics"`
-	ErrorOnlyPaths    string  `env:"LOG_ERROR_ONLY_PATHS" envDefault:"/healthz,/livez"`
+	ExcludePaths      string  `env:"LOG_EXCLUDE_PATHS" envDefault:"/health,/metrics,/ping"`
+	ErrorOnlyPaths    string  `env:"LOG_ERROR_ONLY_PATHS" envDefault:"/healthz"`
 	RedactPatterns    string  `env:"LOG_REDACT_PATTERNS" envDefault:"password,token,secret,key,authorization,credential,bearer,api_key,apikey,private"`
 }
 
@@ -63,8 +62,8 @@ func ParseEventLoggingConfig(cfg *EventLoggingConfig) *ParsedEventLoggingConfig 
 func DefaultEventLoggingConfig() *EventLoggingConfig {
 	return &EventLoggingConfig{
 		SuccessSampleRate: 0.1,
-		ExcludePaths:      "/health,/ready,/live,/metrics",
-		ErrorOnlyPaths:    "/healthz,/livez",
+		ExcludePaths:      "/health,/metrics,/ping",
+		ErrorOnlyPaths:    "/healthz",
 		RedactPatterns:    "password,token,secret,key,authorization,credential,bearer,api_key,apikey,private",
 	}
 }
@@ -120,38 +119,13 @@ func shouldLogForLevel(ctx context.Context, level zapcore.Level) bool {
 	return ShouldLog(ctx)
 }
 
-// LogWithDuration logs an event with duration using the logger from context.
-// Respects tail-based sampling: all logs for a request are logged or not based on the sampling decision.
-// Usage: logging.LogWithDuration(ctx, logging.ServiceLog, zapcore.InfoLevel, "operation completed", duration, fields...)
-func LogWithDuration(ctx context.Context, base *zap.Logger, level zapcore.Level, message string, duration time.Duration, fields ...zap.Field) {
-	if !shouldLogForLevel(ctx, level) {
-		return
-	}
-
-	logger := L(ctx, base)
-	allFields := append([]zap.Field{
-		zap.Duration("duration", duration),
-		zap.Int64("duration_ms", duration.Milliseconds()),
-	}, RedactFields(fields...)...)
-
-	switch level {
-	case zapcore.DebugLevel:
-		logger.Debug(message, allFields...)
-	case zapcore.InfoLevel:
-		logger.Info(message, allFields...)
-	case zapcore.WarnLevel:
-		logger.Warn(message, allFields...)
-	case zapcore.ErrorLevel:
-		logger.Error(message, allFields...)
-	case zapcore.FatalLevel:
-		logger.Fatal(message, allFields...)
-	default:
-		logger.Info(message, allFields...)
-	}
-}
-
 // Log logs an event using the logger from context with tail-based sampling.
-// Usage: logging.Log(ctx, logging.HandlerLog, zapcore.InfoLevel, "message", fields...)
+// Errors and warnings are always logged; Info/Debug are sampled based on request_id.
+// Usage:
+//
+//	logging.Log(ctx, logging.HandlerLog, zapcore.InfoLevel, "message", fields...)
+//	logging.Log(ctx, logging.HandlerLog, zapcore.ErrorLevel, "error", zap.Error(err))
+//	logging.Log(ctx, logging.ServiceLog, zapcore.InfoLevel, "completed", zap.Duration("duration", duration))
 func Log(ctx context.Context, base *zap.Logger, level zapcore.Level, message string, fields ...zap.Field) {
 	if !shouldLogForLevel(ctx, level) {
 		return
@@ -160,20 +134,8 @@ func Log(ctx context.Context, base *zap.Logger, level zapcore.Level, message str
 	logger := L(ctx, base)
 	allFields := RedactFields(fields...)
 
-	switch level {
-	case zapcore.DebugLevel:
-		logger.Debug(message, allFields...)
-	case zapcore.InfoLevel:
-		logger.Info(message, allFields...)
-	case zapcore.WarnLevel:
-		logger.Warn(message, allFields...)
-	case zapcore.ErrorLevel:
-		logger.Error(message, allFields...)
-	case zapcore.FatalLevel:
-		logger.Fatal(message, allFields...)
-	default:
-		logger.Info(message, allFields...)
-	}
+	// Use zap's Log method directly - no need for switch statement
+	logger.Log(level, message, allFields...)
 }
 
 // HashRequestIDToFloat returns a deterministic float between 0 and 1 based on request ID.

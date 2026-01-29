@@ -1117,7 +1117,7 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 		limit = 10
 	}
 	if ctx.Err() != nil {
-		logging.L(ctx, logging.DBLog).Error("context cancelled", zap.Error(ctx.Err()))
+		logging.Log(ctx, logging.DBLog, zapcore.ErrorLevel, "context cancelled", zap.Error(ctx.Err()))
 		return nil, "", ctx.Err()
 	}
 
@@ -1127,7 +1127,7 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 		var err error
 		semanticLiteral, err = vectorLiteral(filter.Semantic.QueryEmbedding)
 		if err != nil {
-			logging.L(ctx, logging.DBLog).Error("semantic embedding error", zap.Error(err))
+			logging.Log(ctx, logging.DBLog, zapcore.ErrorLevel, "semantic embedding error", zap.Error(err))
 			return nil, "", fmt.Errorf("invalid semantic embedding: %w", err)
 		}
 	}
@@ -1235,7 +1235,8 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 	queryDuration := time.Since(queryStart)
 
 	if err != nil {
-		logging.LogWithDuration(ctx, logging.DBLog, zapcore.ErrorLevel, "ListAgents query failed", queryDuration,
+		logging.Log(ctx, logging.DBLog, zapcore.ErrorLevel, "ListAgents query failed",
+			zap.Duration("duration", queryDuration),
 			zap.String("table", "agents"),
 			zap.Error(err),
 		)
@@ -1259,13 +1260,21 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 		}
 
 		if scanErr != nil {
-			logging.L(ctx, logging.DBLog).Error("scan error", zap.Error(scanErr))
+			queryDuration := time.Since(queryStart)
+			logging.Log(ctx, logging.DBLog, zapcore.ErrorLevel, "scan error",
+				zap.Duration("duration", queryDuration),
+				zap.Error(scanErr),
+			)
 			return nil, "", fmt.Errorf("failed to scan agent row: %w", err)
 		}
 
 		var agentJSON models.AgentJSON
 		if err := json.Unmarshal(valueJSON, &agentJSON); err != nil {
-			logging.L(ctx, logging.DBLog).Error("unmarshal error", zap.Error(err))
+			queryDuration := time.Since(queryStart)
+			logging.Log(ctx, logging.DBLog, zapcore.ErrorLevel, "unmarshal error",
+				zap.Duration("duration", queryDuration),
+				zap.Error(err),
+			)
 			return nil, "", fmt.Errorf("failed to unmarshal agent JSON: %w", err)
 		}
 
@@ -1289,7 +1298,11 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 		results = append(results, resp)
 	}
 	if err := rows.Err(); err != nil {
-		logging.L(ctx, logging.DBLog).Error("iteration error", zap.Error(err))
+		queryDuration := time.Since(queryStart)
+		logging.Log(ctx, logging.DBLog, zapcore.ErrorLevel, "iteration error",
+			zap.Duration("duration", queryDuration),
+			zap.Error(err),
+		)
 		return nil, "", fmt.Errorf("error iterating agent rows: %w", err)
 	}
 
@@ -1299,7 +1312,8 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 		nextCursor = last.Agent.Name + ":" + last.Agent.Version
 	}
 
-	logging.LogWithDuration(ctx, logging.DBLog, zapcore.InfoLevel, "ListAgents completed", queryDuration,
+	logging.Log(ctx, logging.DBLog, zapcore.InfoLevel, "ListAgents completed",
+		zap.Duration("duration", queryDuration),
 		zap.String("table", "agents"),
 		zap.Bool("semantic_active", semanticActive),
 		zap.Int("rows_returned", len(results)),
@@ -1327,13 +1341,15 @@ func (db *PostgreSQL) GetAgentByName(ctx context.Context, tx pgx.Tx, agentName s
 	if err := db.getExecutor(tx).QueryRow(ctx, query, agentName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &published, &valueJSON); err != nil {
 		queryDuration := time.Since(queryStart)
 		if errors.Is(err, pgx.ErrNoRows) {
-			logging.LogWithDuration(ctx, logging.DBLog, zapcore.InfoLevel, "GetAgentByName not found", queryDuration,
+			logging.Log(ctx, logging.DBLog, zapcore.InfoLevel, "GetAgentByName not found",
+				zap.Duration("duration", queryDuration),
 				zap.String("table", "agents"),
 				zap.String("agent_name", agentName),
 			)
 			return nil, ErrNotFound
 		}
-		logging.LogWithDuration(ctx, logging.DBLog, zapcore.ErrorLevel, "GetAgentByName failed", queryDuration,
+		logging.Log(ctx, logging.DBLog, zapcore.ErrorLevel, "GetAgentByName failed",
+			zap.Duration("duration", queryDuration),
 			zap.String("table", "agents"),
 			zap.String("agent_name", agentName),
 			zap.Error(err),
@@ -1342,12 +1358,17 @@ func (db *PostgreSQL) GetAgentByName(ctx context.Context, tx pgx.Tx, agentName s
 	}
 	var agentJSON models.AgentJSON
 	if err := json.Unmarshal(valueJSON, &agentJSON); err != nil {
-		logging.L(ctx, logging.DBLog).Error("unmarshal error", zap.Error(err))
+		queryDuration := time.Since(queryStart)
+		logging.Log(ctx, logging.DBLog, zapcore.ErrorLevel, "unmarshal error",
+			zap.Duration("duration", queryDuration),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to unmarshal agent JSON: %w", err)
 	}
 
 	queryDuration := time.Since(queryStart)
-	logging.LogWithDuration(ctx, logging.DBLog, zapcore.InfoLevel, "GetAgentByName completed", queryDuration,
+	logging.Log(ctx, logging.DBLog, zapcore.InfoLevel, "GetAgentByName completed",
+		zap.Duration("duration", queryDuration),
 		zap.String("table", "agents"),
 		zap.String("agent_name", agentName),
 		zap.String("result_version", version),
@@ -1386,14 +1407,16 @@ func (db *PostgreSQL) GetAgentByNameAndVersion(ctx context.Context, tx pgx.Tx, a
 	if err := db.getExecutor(tx).QueryRow(ctx, query, agentName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
 		queryDuration := time.Since(queryStart)
 		if errors.Is(err, pgx.ErrNoRows) {
-			logging.LogWithDuration(ctx, logging.DBLog, zapcore.InfoLevel, "GetAgentByNameAndVersion not found", queryDuration,
+			logging.Log(ctx, logging.DBLog, zapcore.InfoLevel, "GetAgentByNameAndVersion not found",
+				zap.Duration("duration", queryDuration),
 				zap.String("table", "agents"),
 				zap.String("agent_name", agentName),
 				zap.String("version", version),
 			)
 			return nil, ErrNotFound
 		}
-		logging.LogWithDuration(ctx, logging.DBLog, zapcore.ErrorLevel, "GetAgentByNameAndVersion failed", queryDuration,
+		logging.Log(ctx, logging.DBLog, zapcore.ErrorLevel, "GetAgentByNameAndVersion failed",
+			zap.Duration("duration", queryDuration),
 			zap.String("table", "agents"),
 			zap.String("agent_name", agentName),
 			zap.String("version", version),
@@ -1403,12 +1426,17 @@ func (db *PostgreSQL) GetAgentByNameAndVersion(ctx context.Context, tx pgx.Tx, a
 	}
 	var agentJSON models.AgentJSON
 	if err := json.Unmarshal(valueJSON, &agentJSON); err != nil {
-		logging.L(ctx, logging.DBLog).Error("unmarshal error", zap.Error(err))
+		queryDuration := time.Since(queryStart)
+		logging.Log(ctx, logging.DBLog, zapcore.ErrorLevel, "unmarshal error",
+			zap.Duration("duration", queryDuration),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to unmarshal agent JSON: %w", err)
 	}
 
 	queryDuration := time.Since(queryStart)
-	logging.LogWithDuration(ctx, logging.DBLog, zapcore.InfoLevel, "GetAgentByNameAndVersion completed", queryDuration,
+	logging.Log(ctx, logging.DBLog, zapcore.InfoLevel, "GetAgentByNameAndVersion completed",
+		zap.Duration("duration", queryDuration),
 		zap.String("table", "agents"),
 		zap.String("agent_name", agentName),
 		zap.String("version", version),

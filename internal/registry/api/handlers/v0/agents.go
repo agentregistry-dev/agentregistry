@@ -76,7 +76,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 			if updatedTime, err := time.Parse(time.RFC3339, input.UpdatedSince); err == nil {
 				filter.UpdatedSince = &updatedTime
 			} else {
-				logging.L(ctx, logging.HandlerLog).Error("Invalid updated_since format", zap.Error(err))
+				logging.Log(ctx, logging.HandlerLog, zapcore.ErrorLevel, "Invalid updated_since format", zap.Error(err))
 				return nil, huma.Error400BadRequest("Invalid updated_since format: expected RFC3339 timestamp (e.g., 2025-08-07T13:15:04.280Z)")
 			}
 		}
@@ -85,7 +85,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		}
 		if input.Semantic {
 			if strings.TrimSpace(input.Search) == "" {
-				logging.L(ctx, logging.HandlerLog).Warn("semantic_search requires search parameter")
+				logging.Log(ctx, logging.HandlerLog, zapcore.WarnLevel, "semantic_search requires search parameter")
 				return nil, huma.Error400BadRequest("semantic_search requires the search parameter to be provided", nil)
 			}
 			filter.Semantic = &database.SemanticSearchOptions{
@@ -106,10 +106,10 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		agents, nextCursor, err := registry.ListAgents(ctx, filter, input.Cursor, input.Limit)
 		if err != nil {
 			if errors.Is(err, database.ErrInvalidInput) {
-				logging.L(ctx, logging.HandlerLog).Error("Invalid input", zap.Error(err))
+				logging.Log(ctx, logging.HandlerLog, zapcore.ErrorLevel, "Invalid input", zap.Error(err))
 				return nil, huma.Error400BadRequest(err.Error(), err)
 			}
-			logging.L(ctx, logging.HandlerLog).Error("Failed to get agents list", zap.Error(err))
+			logging.Log(ctx, logging.HandlerLog, zapcore.ErrorLevel, "Failed to get agents list", zap.Error(err))
 			return nil, huma.Error500InternalServerError("Failed to get agents list", err)
 		}
 
@@ -145,12 +145,12 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 	}, func(ctx context.Context, input *AgentVersionDetailInput) (*Response[agentmodels.AgentResponse], error) {
 		agentName, err := url.PathUnescape(input.AgentName)
 		if err != nil {
-			logging.L(ctx, logging.HandlerLog).Error("Invalid agent name encoding", zap.Error(err))
+			logging.Log(ctx, logging.HandlerLog, zapcore.ErrorLevel, "Invalid agent name encoding", zap.Error(err))
 			return nil, huma.Error400BadRequest("Invalid agent name encoding", err)
 		}
 		version, err := url.PathUnescape(input.Version)
 		if err != nil {
-			logging.L(ctx, logging.HandlerLog).Error("Invalid version encoding", zap.Error(err))
+			logging.Log(ctx, logging.HandlerLog, zapcore.ErrorLevel, "Invalid version encoding", zap.Error(err))
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
 		}
 
@@ -162,13 +162,13 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		}
 		if err != nil {
 			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
-				logging.L(ctx, logging.HandlerLog).Warn("Agent not found",
+				logging.Log(ctx, logging.HandlerLog, zapcore.WarnLevel, "Agent not found",
 					zap.String("agent_name", agentName),
 					zap.String("version", version),
 				)
 				return nil, huma.Error404NotFound("Agent not found")
 			}
-			logging.L(ctx, logging.HandlerLog).Error("Failed to get agent details", zap.Error(err),
+			logging.Log(ctx, logging.HandlerLog, zapcore.ErrorLevel, "Failed to get agent details", zap.Error(err),
 				zap.String("agent_name", agentName),
 				zap.String("version", version),
 			)

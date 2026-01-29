@@ -510,22 +510,23 @@ func (s *registryServiceImpl) ListAgents(ctx context.Context, filter *database.A
 	}
 	if filter != nil {
 		if err := s.ensureSemanticEmbedding(ctx, filter.Semantic); err != nil {
-			logging.L(ctx, logging.ServiceLog).Error("embedding error", zap.Error(err))
+			logging.Log(ctx, logging.ServiceLog, zapcore.ErrorLevel, "embedding error", zap.Error(err))
 			return nil, "", err
 		}
 		if filter.Semantic != nil {
-			logging.L(ctx, logging.ServiceLog).Info("semantic search enabled")
+			logging.Log(ctx, logging.ServiceLog, zapcore.InfoLevel, "semantic search enabled")
 		}
 	}
 
 	agents, next, err := s.db.ListAgents(ctx, nil, filter, cursor, limit)
 	duration := time.Since(startTime)
 	if err != nil {
-		logging.LogWithDuration(ctx, logging.ServiceLog, zapcore.ErrorLevel, "ListAgents failed", duration, zap.Error(err))
+		logging.Log(ctx, logging.ServiceLog, zapcore.ErrorLevel, "ListAgents failed", zap.Duration("duration", duration), zap.Error(err))
 		return nil, "", err
 	}
 
-	logging.LogWithDuration(ctx, logging.ServiceLog, zapcore.InfoLevel, "ListAgents completed", duration,
+	logging.Log(ctx, logging.ServiceLog, zapcore.InfoLevel, "ListAgents completed",
+		zap.Duration("duration", duration),
 		zap.Int("agents_returned", len(agents)),
 	)
 	return agents, next, nil
@@ -538,14 +539,16 @@ func (s *registryServiceImpl) GetAgentByName(ctx context.Context, agentName stri
 	agent, err := s.db.GetAgentByName(ctx, nil, agentName)
 	duration := time.Since(startTime)
 	if err != nil {
-		logging.LogWithDuration(ctx, logging.ServiceLog, zapcore.ErrorLevel, "GetAgentByName failed", duration,
+		logging.Log(ctx, logging.ServiceLog, zapcore.ErrorLevel, "GetAgentByName failed",
+			zap.Duration("duration", duration),
 			zap.Bool("not_found", errors.Is(err, database.ErrNotFound)),
 			zap.Error(err),
 		)
 		return nil, err
 	}
 
-	logging.LogWithDuration(ctx, logging.ServiceLog, zapcore.InfoLevel, "GetAgentByName completed", duration,
+	logging.Log(ctx, logging.ServiceLog, zapcore.InfoLevel, "GetAgentByName completed",
+		zap.Duration("duration", duration),
 		zap.String("result_version", agent.Agent.Version),
 		zap.Bool("is_latest", agent.Meta.Official.IsLatest),
 	)
@@ -559,11 +562,12 @@ func (s *registryServiceImpl) GetAgentByNameAndVersion(ctx context.Context, agen
 	agent, err := s.db.GetAgentByNameAndVersion(ctx, nil, agentName, version)
 	duration := time.Since(startTime)
 	if err != nil {
-		logging.LogWithDuration(ctx, logging.ServiceLog, zapcore.ErrorLevel, "GetAgentByNameAndVersion failed", duration, zap.Error(err))
+		logging.Log(ctx, logging.ServiceLog, zapcore.ErrorLevel, "GetAgentByNameAndVersion failed", zap.Duration("duration", duration), zap.Error(err))
 		return nil, err
 	}
 
-	logging.LogWithDuration(ctx, logging.ServiceLog, zapcore.InfoLevel, "GetAgentByNameAndVersion completed", duration,
+	logging.Log(ctx, logging.ServiceLog, zapcore.InfoLevel, "GetAgentByNameAndVersion completed",
+		zap.Duration("duration", duration),
 		zap.String("result_version", agent.Agent.Version),
 	)
 	return agent, nil

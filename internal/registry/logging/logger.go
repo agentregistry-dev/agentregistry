@@ -14,6 +14,7 @@ var shouldLogKey = shouldLogKeyType{}
 
 // Base loggers for each layer
 var (
+	SystemLog  = newBaseLogger("system")
 	HandlerLog = newBaseLogger("handler")
 	ServiceLog = newBaseLogger("service")
 	DBLog      = newBaseLogger("db")
@@ -33,9 +34,8 @@ func NewLogger(name string) *zap.Logger {
 }
 
 // L returns a logger with request_id from context.
-// Note: This does NOT check sampling - use Log() or LogWithDuration() for tail-based sampling.
-// Usage for direct logging: logging.L(ctx, logging.HandlerLog).Error("error", zap.Error(err))
-// Usage for sampled logging: logging.Log(ctx, logging.HandlerLog, zapcore.InfoLevel, "message", fields...)
+// This is a helper used internally by Log().
+// For application code, prefer using Log() which handles sampling automatically.
 func L(ctx context.Context, base *zap.Logger) *zap.Logger {
 	if reqID := GetRequestID(ctx); reqID != "" {
 		return base.With(zap.String("request_id", reqID))

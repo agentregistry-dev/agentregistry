@@ -139,8 +139,8 @@ func RequestLoggingMiddleware(cfg *logging.EventLoggingConfig, options ...Middle
 			newCtx = logging.SetShouldLog(newCtx, true)
 		}
 
-		logging.LogWithDuration(newCtx, logging.APIEventLog, level, "request completed",
-			duration,
+		logging.Log(newCtx, logging.APIEventLog, level, "request completed",
+			zap.Duration("duration", duration),
 			zap.String("method", ctx.Method()),
 			zap.String("path", path),
 			zap.Int("status_code", statusCode),

@@ -7,11 +7,12 @@ import (
 	"errors"
 	"fmt"
 
-	"log"
-
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/logging"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 //go:embed seed.json
@@ -71,11 +72,11 @@ func importServer(
 	if err != nil {
 		// If duplicate version and update is enabled, try update path
 		if !errors.Is(err, database.ErrInvalidVersion) {
-			log.Printf("Failed to create server %s: %v", srv.Name, err)
+			logging.Log(ctx, logging.SystemLog, zapcore.ErrorLevel, "Failed to create server", zap.String("server_name", srv.Name), zap.Error(err))
 			return
 		}
 	}
-	log.Printf("Imported server %s@%s", srv.Name, srv.Version)
+	logging.Log(ctx, logging.SystemLog, zapcore.InfoLevel, "Imported server", zap.String("server_name", srv.Name), zap.String("server_version", srv.Version))
 
 	entry, ok := readmes[Key(srv.Name, srv.Version)]
 	if !ok {
@@ -84,14 +85,14 @@ func importServer(
 
 	content, contentType, err := entry.Decode()
 	if err != nil {
-		log.Printf("Warning: invalid README seed for %s@%s: %v", srv.Name, srv.Version, err)
+		logging.Log(ctx, logging.SystemLog, zapcore.WarnLevel, "invalid README seed", zap.String("server_name", srv.Name), zap.String("server_version", srv.Version), zap.Error(err))
 		return
 	}
 
 	if len(content) > 0 {
 		if err := registry.StoreServerReadme(ctx, srv.Name, srv.Version, content, contentType); err != nil {
-			log.Printf("Warning: storing README failed for %s@%s: %v", srv.Name, srv.Version, err)
+			logging.Log(ctx, logging.SystemLog, zapcore.WarnLevel, "storing README failed", zap.String("server_name", srv.Name), zap.String("server_version", srv.Version), zap.Error(err))
 		}
-		log.Printf("Stored README for %s@%s", srv.Name, srv.Version)
+		logging.Log(ctx, logging.SystemLog, zapcore.InfoLevel, "Stored README", zap.String("server_name", srv.Name), zap.String("server_version", srv.Version))
 	}
 }

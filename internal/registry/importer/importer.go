@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"net/http"
 	"net/url"
@@ -25,10 +24,13 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/logging"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // Service handles importing seed data into the registry
@@ -134,21 +136,21 @@ func (s *Service) ImportFromPath(ctx context.Context, path string, enrichServerD
 
 	if count := s.processedCount(); count > 0 {
 		if s.progressCachePath != "" {
-			log.Printf("Progress cache loaded: %d servers already processed", count)
+			logging.Log(ctx, logging.SystemLog, zapcore.InfoLevel, "Progress cache loaded", zap.Int("processed_servers", count))
 		}
 	}
 
 	pending := make([]*apiv0.ServerJSON, 0, len(servers))
 	for _, server := range servers {
 		if s.isServerProcessed(server) {
-			log.Printf("Skipping already processed server %s@%s", server.Name, server.Version)
+			logging.Log(ctx, logging.SystemLog, zapcore.InfoLevel, "Skipping already processed server", zap.String("server_name", server.Name), zap.String("server_version", server.Version))
 			continue
 		}
 		pending = append(pending, server)
 	}
 
 	if len(pending) == 0 {
-		log.Printf("All %d servers already processed; nothing to import", len(servers))
+		logging.Log(ctx, logging.SystemLog, zapcore.InfoLevel, "All servers already processed; nothing to import", zap.Int("total_servers", len(servers)))
 		return nil
 	}
 
@@ -171,7 +173,7 @@ func (s *Service) ImportFromPath(ctx context.Context, path string, enrichServerD
 			}()
 
 			current := atomic.AddInt32(&processed, 1)
-			log.Printf("Importing %d/%d: %s@%s", current, total, srv.Name, srv.Version)
+			logging.Log(ctx, logging.SystemLog, zapcore.InfoLevel, "Importing server", zap.Int("current", int(current)), zap.Int("total", total), zap.String("server_name", srv.Name), zap.String("server_version", srv.Version))
 			s.importServer(ctx, srv, readmeSeeds, enrichServerData)
 		}()
 	}
@@ -188,25 +190,25 @@ func (s *Service) importServer(
 	enrichServerData bool,
 ) {
 	if srv != nil {
-		defer s.markServerProcessed(srv)
+		defer s.markServerProcessed(ctx, srv)
 	}
 	// check server json (schema validation) before attempting to enrich
 	if err := validators.ValidateServerJSON(srv); err != nil {
-		log.Printf("Skipping invalid server %s@%s: %v", srv.Name, srv.Version, err)
+		logging.Log(ctx, logging.SystemLog, zapcore.WarnLevel, "Skipping invalid server", zap.String("server_name", srv.Name), zap.String("server_version", srv.Version), zap.Error(err))
 		return
 	}
 
 	// Best-effort enrichment
 	if enrichServerData {
 		if err := s.enrichServer(ctx, srv); err != nil {
-			log.Printf("Warning: enrichment failed for %s@%s: %v", srv.Name, srv.Version, err)
+			logging.Log(ctx, logging.SystemLog, zapcore.WarnLevel, "Warning: enrichment failed", zap.String("server_name", srv.Name), zap.String("server_version", srv.Version), zap.Error(err))
 		}
 	}
 
 	var embeddingRecord *database.SemanticEmbedding
 	if s.generateEmbeddings && s.embeddingProvider != nil {
 		if record, err := s.buildServerEmbedding(ctx, srv); err != nil {
-			log.Printf("Warning: failed to generate embedding for %s@%s: %v", srv.Name, srv.Version, err)
+			logging.Log(ctx, logging.SystemLog, zapcore.WarnLevel, "Warning: failed to generate embedding", zap.String("server_name", srv.Name), zap.String("server_version", srv.Version), zap.Error(err))
 		} else {
 			embeddingRecord = record
 		}
@@ -217,19 +219,19 @@ func (s *Service) importServer(
 		// If duplicate version and update is enabled, try update path
 		if s.updateIfExists && errors.Is(err, database.ErrInvalidVersion) {
 			if _, uerr := s.registry.UpdateServer(ctx, srv.Name, srv.Version, srv, nil); uerr != nil {
-				log.Printf("Failed to update existing server %s: %v", srv.Name, uerr)
+				logging.Log(ctx, logging.SystemLog, zapcore.ErrorLevel, "Failed to update existing server", zap.String("server_name", srv.Name), zap.Error(uerr))
 			} else {
-				log.Printf("Updated existing server %s@%s", srv.Name, srv.Version)
+				logging.Log(ctx, logging.SystemLog, zapcore.InfoLevel, "Updated existing server", zap.String("server_name", srv.Name), zap.String("server_version", srv.Version))
 			}
 		} else {
-			log.Printf("Failed to create server %s: %v", srv.Name, err)
+			logging.Log(ctx, logging.SystemLog, zapcore.ErrorLevel, "Failed to create server", zap.String("server_name", srv.Name), zap.Error(err))
 			return
 		}
 	}
 
 	if embeddingRecord != nil {
 		if err := s.registry.UpsertServerEmbedding(ctx, srv.Name, srv.Version, embeddingRecord); err != nil {
-			log.Printf("Warning: failed to store embedding for %s@%s: %v", srv.Name, srv.Version, err)
+			logging.Log(ctx, logging.SystemLog, zapcore.WarnLevel, "Warning: failed to store embedding", zap.String("server_name", srv.Name), zap.String("server_version", srv.Version), zap.Error(err))
 		}
 	}
 
@@ -237,17 +239,17 @@ func (s *Service) importServer(
 		// Skip README fetch if enrichment is disabled
 		return
 	}
-	readmeContent, readmeContentType := s.readmeFromSeed(readmeSeeds, srv)
+	readmeContent, readmeContentType := s.readmeFromSeed(ctx, readmeSeeds, srv)
 	if len(readmeContent) == 0 {
 		var readmeErr error
 		readmeContent, readmeContentType, readmeErr = s.downloadReadme(ctx, srv)
 		if readmeErr != nil {
-			log.Printf("Warning: downloading README failed for %s@%s: %v", srv.Name, srv.Version, readmeErr)
+			logging.Log(ctx, logging.SystemLog, zapcore.WarnLevel, "Warning: downloading README failed", zap.String("server_name", srv.Name), zap.String("server_version", srv.Version), zap.Error(readmeErr))
 		}
 	}
 	if len(readmeContent) > 0 {
 		if err := s.registry.StoreServerReadme(ctx, srv.Name, srv.Version, readmeContent, readmeContentType); err != nil {
-			log.Printf("Warning: storing README failed for %s@%s: %v", srv.Name, srv.Version, err)
+			logging.Log(ctx, logging.SystemLog, zapcore.WarnLevel, "Warning: storing README failed", zap.String("server_name", srv.Name), zap.String("server_version", srv.Version), zap.Error(err))
 		}
 	}
 }
@@ -299,7 +301,7 @@ func (s *Service) readSeedFile(ctx context.Context, path string) ([]*apiv0.Serve
 			// Log warning and track invalid server instead of failing
 			invalidServers = append(invalidServers, response.Name)
 			validationFailures = append(validationFailures, fmt.Sprintf("Server '%s': %v", response.Name, err))
-			log.Printf("Warning: Skipping invalid server '%s': %v", response.Name, err)
+			logging.Log(ctx, logging.SystemLog, zapcore.WarnLevel, "Warning: Skipping invalid server", zap.String("server_name", response.Name), zap.Error(err))
 			continue
 		}
 
@@ -309,13 +311,11 @@ func (s *Service) readSeedFile(ctx context.Context, path string) ([]*apiv0.Serve
 
 	// Print summary of validation results
 	if len(invalidServers) > 0 {
-		log.Printf("Validation summary: %d servers passed validation, %d invalid servers skipped", len(validRecords), len(invalidServers))
-		log.Printf("Invalid servers: %v", invalidServers)
-		for _, failure := range validationFailures {
-			log.Printf("  - %s", failure)
-		}
+		logging.Log(ctx, logging.SystemLog, zapcore.WarnLevel, "Validation summary", zap.Int("valid_servers", len(validRecords)), zap.Int("invalid_servers", len(invalidServers)))
+		logging.Log(ctx, logging.SystemLog, zapcore.WarnLevel, "Invalid servers", zap.Strings("invalid_servers", invalidServers))
+		logging.Log(ctx, logging.SystemLog, zapcore.WarnLevel, "Validation failures", zap.Strings("validation_failures", validationFailures))
 	} else {
-		log.Printf("Validation summary: All %d servers passed validation", len(validRecords))
+		logging.Log(ctx, logging.SystemLog, zapcore.InfoLevel, "Validation summary", zap.Int("valid_servers", len(validRecords)))
 	}
 
 	return validRecords, nil
@@ -1198,7 +1198,7 @@ func (s *Service) fetchRepoContentFileWithRename(ctx context.Context, owner, rep
 			if newOwner, newRepo, renamed, renameErr := s.resolveRenamedRepo(ctx, owner, repo); renameErr != nil {
 				return nil, fmt.Errorf("content %s status %d (repo lookup failed: %w)", path, resp.StatusCode, renameErr)
 			} else if renamed {
-				log.Printf("Detected GitHub repository rename: %s/%s -> %s/%s", owner, repo, newOwner, newRepo)
+				logging.Log(ctx, logging.SystemLog, zapcore.InfoLevel, "Detected GitHub repository rename", zap.String("owner", owner), zap.String("repo", repo), zap.String("new_owner", newOwner), zap.String("new_repo", newRepo))
 				return s.fetchRepoContentFileWithRename(ctx, newOwner, newRepo, path, false)
 			}
 		}
@@ -1327,7 +1327,7 @@ func (s *Service) loadReadmeSeed(ctx context.Context) (seed.ReadmeFile, error) {
 	return readmes, nil
 }
 
-func (s *Service) readmeFromSeed(readmes seed.ReadmeFile, server *apiv0.ServerJSON) ([]byte, string) {
+func (s *Service) readmeFromSeed(ctx context.Context, readmes seed.ReadmeFile, server *apiv0.ServerJSON) ([]byte, string) {
 	if readmes == nil {
 		return nil, ""
 	}
@@ -1338,7 +1338,7 @@ func (s *Service) readmeFromSeed(readmes seed.ReadmeFile, server *apiv0.ServerJS
 
 	content, contentType, err := entry.Decode()
 	if err != nil {
-		log.Printf("Warning: invalid README seed for %s@%s: %v", server.Name, server.Version, err)
+		logging.Log(ctx, logging.SystemLog, zapcore.WarnLevel, "Warning: invalid README seed", zap.String("server_name", server.Name), zap.String("server_version", server.Version), zap.Error(err))
 		return nil, ""
 	}
 	return content, contentType
@@ -1394,7 +1394,7 @@ func (s *Service) isServerProcessed(server *apiv0.ServerJSON) bool {
 	return ok
 }
 
-func (s *Service) markServerProcessed(server *apiv0.ServerJSON) {
+func (s *Service) markServerProcessed(ctx context.Context, server *apiv0.ServerJSON) {
 	key := s.progressCacheKey(server)
 	if key == "" {
 		return
@@ -1418,7 +1418,7 @@ func (s *Service) markServerProcessed(server *apiv0.ServerJSON) {
 	}
 
 	if err := s.persistProgressCacheLocked(); err != nil {
-		log.Printf("Warning: failed to persist progress cache: %v", err)
+		logging.Log(ctx, logging.SystemLog, zapcore.WarnLevel, "Warning: failed to persist progress cache", zap.Error(err))
 	}
 }
 
