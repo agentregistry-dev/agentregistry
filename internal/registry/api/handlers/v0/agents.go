@@ -63,16 +63,6 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Description: "Get a paginated list of Agentic agents from the registry",
 		Tags:        tags,
 	}, func(ctx context.Context, input *ListAgentsInput) (*Response[agentmodels.AgentListResponse], error) {
-		// Get logger from middleware (it handles lifecycle, we just add fields)
-		reqLog := logging.EventLoggerFromContext(ctx)
-
-		logging.L(ctx, logging.HandlerLog).Info("listing agents")
-
-		reqLog.AddNamespacedFields("handler",
-			zap.Any("input", input),
-			zap.Bool("is_admin", isAdmin),
-		)
-
 		// Build filter
 		filter := &database.AgentFilter{}
 
@@ -86,11 +76,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 			if updatedTime, err := time.Parse(time.RFC3339, input.UpdatedSince); err == nil {
 				filter.UpdatedSince = &updatedTime
 			} else {
-				logging.SetEventOutcome(ctx, logging.EventOutcome{
-					Level:   zapcore.WarnLevel,
-					Error:   err,
-					Message: "Invalid updated_since format",
-				})
+				logging.L(ctx, logging.HandlerLog).Error("Invalid updated_since format", zap.Error(err))
 				return nil, huma.Error400BadRequest("Invalid updated_since format: expected RFC3339 timestamp (e.g., 2025-08-07T13:15:04.280Z)")
 			}
 		}
@@ -99,10 +85,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		}
 		if input.Semantic {
 			if strings.TrimSpace(input.Search) == "" {
-				logging.SetEventOutcome(ctx, logging.EventOutcome{
-					Level:   zapcore.WarnLevel,
-					Message: "semantic_search requires search parameter",
-				})
+				logging.L(ctx, logging.HandlerLog).Warn("semantic_search requires search parameter")
 				return nil, huma.Error400BadRequest("semantic_search requires the search parameter to be provided", nil)
 			}
 			filter.Semantic = &database.SemanticSearchOptions{
@@ -123,18 +106,10 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		agents, nextCursor, err := registry.ListAgents(ctx, filter, input.Cursor, input.Limit)
 		if err != nil {
 			if errors.Is(err, database.ErrInvalidInput) {
-				logging.SetEventOutcome(ctx, logging.EventOutcome{
-					Level:   zapcore.WarnLevel,
-					Error:   err,
-					Message: "Invalid input",
-				})
+				logging.L(ctx, logging.HandlerLog).Error("Invalid input", zap.Error(err))
 				return nil, huma.Error400BadRequest(err.Error(), err)
 			}
-			logging.SetEventOutcome(ctx, logging.EventOutcome{
-				Level:   zapcore.ErrorLevel,
-				Error:   err,
-				Message: "Failed to get agents list",
-			})
+			logging.L(ctx, logging.HandlerLog).Error("Failed to get agents list", zap.Error(err))
 			return nil, huma.Error500InternalServerError("Failed to get agents list", err)
 		}
 
@@ -143,15 +118,10 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 			agentValues[i] = *a
 		}
 
-		reqLog.AddNamespacedFields("handler",
+		logging.Log(ctx, logging.HandlerLog, zapcore.InfoLevel, "list agents completed",
 			zap.Int("result_count", len(agents)),
 			zap.Bool("has_next_page", nextCursor != ""),
 		)
-
-		logging.SetEventOutcome(ctx, logging.EventOutcome{
-			Level:   zapcore.InfoLevel,
-			Message: "Agents list retrieved",
-		})
 
 		return &Response[agentmodels.AgentListResponse]{
 			Body: agentmodels.AgentListResponse{
@@ -173,38 +143,16 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Description: "Get detailed information about a specific version of an Agentic agent. Use the special version 'latest' to get the latest version.",
 		Tags:        tags,
 	}, func(ctx context.Context, input *AgentVersionDetailInput) (*Response[agentmodels.AgentResponse], error) {
-		reqLog := logging.EventLoggerFromContext(ctx)
-
-		logging.L(ctx, logging.HandlerLog).Info("getting agent version")
-
-		reqLog.AddNamespacedFields("handler",
-			zap.Any("input", input),
-			zap.Bool("is_admin", isAdmin),
-		)
-
 		agentName, err := url.PathUnescape(input.AgentName)
 		if err != nil {
-			logging.SetEventOutcome(ctx, logging.EventOutcome{
-				Level:   zapcore.WarnLevel,
-				Error:   err,
-				Message: "Invalid agent name encoding",
-			})
+			logging.L(ctx, logging.HandlerLog).Error("Invalid agent name encoding", zap.Error(err))
 			return nil, huma.Error400BadRequest("Invalid agent name encoding", err)
 		}
 		version, err := url.PathUnescape(input.Version)
 		if err != nil {
-			logging.SetEventOutcome(ctx, logging.EventOutcome{
-				Level:   zapcore.WarnLevel,
-				Error:   err,
-				Message: "Invalid version encoding",
-			})
+			logging.L(ctx, logging.HandlerLog).Error("Invalid version encoding", zap.Error(err))
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
 		}
-
-		reqLog.AddNamespacedFields("handler",
-			zap.String("agent_name", agentName),
-			zap.String("version", version),
-		)
 
 		var agentResp *agentmodels.AgentResponse
 		if version == "latest" {
@@ -214,29 +162,23 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		}
 		if err != nil {
 			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
-				logging.SetEventOutcome(ctx, logging.EventOutcome{
-					Level:   zapcore.WarnLevel,
-					Message: "Agent not found",
-				})
+				logging.L(ctx, logging.HandlerLog).Warn("Agent not found",
+					zap.String("agent_name", agentName),
+					zap.String("version", version),
+				)
 				return nil, huma.Error404NotFound("Agent not found")
 			}
-			logging.SetEventOutcome(ctx, logging.EventOutcome{
-				Level:   zapcore.ErrorLevel,
-				Error:   err,
-				Message: "Failed to get agent details",
-			})
+			logging.L(ctx, logging.HandlerLog).Error("Failed to get agent details", zap.Error(err),
+				zap.String("agent_name", agentName),
+				zap.String("version", version),
+			)
 			return nil, huma.Error500InternalServerError("Failed to get agent details", err)
 		}
 
-		reqLog.AddNamespacedFields("handler",
-			zap.String("result_agent_name", agentResp.Agent.Name),
-			zap.String("result_version", agentResp.Agent.Version),
+		logging.Log(ctx, logging.HandlerLog, zapcore.InfoLevel, "get agent version completed",
+			zap.String("agent_name", agentResp.Agent.Name),
+			zap.String("version", agentResp.Agent.Version),
 		)
-
-		logging.SetEventOutcome(ctx, logging.EventOutcome{
-			Level:   zapcore.InfoLevel,
-			Message: "Agent version retrieved",
-		})
 
 		return &Response[agentmodels.AgentResponse]{Body: *agentResp}, nil
 	})

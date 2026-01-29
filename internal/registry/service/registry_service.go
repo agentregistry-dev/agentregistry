@@ -27,6 +27,7 @@ import (
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 const maxServerVersionsPerServer = 10000
@@ -502,54 +503,49 @@ func (s *registryServiceImpl) validateUpdateRequest(ctx context.Context, req api
 
 // ListAgents returns registry entries for agents with pagination and filtering
 func (s *registryServiceImpl) ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
-	reqLog := logging.EventLoggerFromContext(ctx)
-
-	// Add service-specific fields under "service" namespace
-	reqLog.AddNamespacedFields("service",
-		zap.String("method", "ListAgents"),
-		zap.String("cursor", cursor),
-		zap.Int("limit", limit),
-		zap.Any("filter", filter),
-	)
+	startTime := time.Now()
 
 	if limit <= 0 {
 		limit = 30
 	}
 	if filter != nil {
 		if err := s.ensureSemanticEmbedding(ctx, filter.Semantic); err != nil {
-			reqLog.AddNamespacedFields("service", zap.Bool("embedding_error", true))
+			logging.L(ctx, logging.ServiceLog).Error("embedding error", zap.Error(err))
 			return nil, "", err
 		}
 		if filter.Semantic != nil {
-			reqLog.AddNamespacedFields("service", zap.Bool("semantic_search", true))
+			logging.L(ctx, logging.ServiceLog).Info("semantic search enabled")
 		}
 	}
 
 	agents, next, err := s.db.ListAgents(ctx, nil, filter, cursor, limit)
+	duration := time.Since(startTime)
 	if err != nil {
+		logging.LogWithDuration(ctx, logging.ServiceLog, zapcore.ErrorLevel, "ListAgents failed", duration, zap.Error(err))
 		return nil, "", err
 	}
 
-	reqLog.AddNamespacedFields("service", zap.Int("agents_returned", len(agents)))
+	logging.LogWithDuration(ctx, logging.ServiceLog, zapcore.InfoLevel, "ListAgents completed", duration,
+		zap.Int("agents_returned", len(agents)),
+	)
 	return agents, next, nil
 }
 
 // GetAgentByName retrieves the latest version of an agent by its name
 func (s *registryServiceImpl) GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error) {
-	reqLog := logging.EventLoggerFromContext(ctx)
-
-	reqLog.AddNamespacedFields("service",
-		zap.String("method", "GetAgentByName"),
-		zap.String("agent_name", agentName),
-	)
+	startTime := time.Now()
 
 	agent, err := s.db.GetAgentByName(ctx, nil, agentName)
+	duration := time.Since(startTime)
 	if err != nil {
-		reqLog.AddNamespacedFields("service", zap.Bool("not_found", errors.Is(err, database.ErrNotFound)))
+		logging.LogWithDuration(ctx, logging.ServiceLog, zapcore.ErrorLevel, "GetAgentByName failed", duration,
+			zap.Bool("not_found", errors.Is(err, database.ErrNotFound)),
+			zap.Error(err),
+		)
 		return nil, err
 	}
 
-	reqLog.AddNamespacedFields("service",
+	logging.LogWithDuration(ctx, logging.ServiceLog, zapcore.InfoLevel, "GetAgentByName completed", duration,
 		zap.String("result_version", agent.Agent.Version),
 		zap.Bool("is_latest", agent.Meta.Official.IsLatest),
 	)
@@ -558,23 +554,17 @@ func (s *registryServiceImpl) GetAgentByName(ctx context.Context, agentName stri
 
 // GetAgentByNameAndVersion retrieves a specific version of an agent by name and version
 func (s *registryServiceImpl) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
-	reqLog := logging.EventLoggerFromContext(ctx)
-
-	reqLog.AddNamespacedFields("service",
-		zap.String("method", "GetAgentByNameAndVersion"),
-		zap.String("agent_name", agentName),
-		zap.String("version", version),
-	)
+	startTime := time.Now()
 
 	agent, err := s.db.GetAgentByNameAndVersion(ctx, nil, agentName, version)
+	duration := time.Since(startTime)
 	if err != nil {
-		reqLog.AddNamespacedFields("service", zap.Bool("not_found", errors.Is(err, database.ErrNotFound)))
+		logging.LogWithDuration(ctx, logging.ServiceLog, zapcore.ErrorLevel, "GetAgentByNameAndVersion failed", duration, zap.Error(err))
 		return nil, err
 	}
 
-	reqLog.AddNamespacedFields("service",
+	logging.LogWithDuration(ctx, logging.ServiceLog, zapcore.InfoLevel, "GetAgentByNameAndVersion completed", duration,
 		zap.String("result_version", agent.Agent.Version),
-		zap.Bool("is_latest", agent.Meta.Official.IsLatest),
 	)
 	return agent, nil
 }

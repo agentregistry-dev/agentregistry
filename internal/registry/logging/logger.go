@@ -7,8 +7,10 @@ import (
 )
 
 type requestIDKeyType struct{}
+type shouldLogKeyType struct{}
 
 var requestIDKey = requestIDKeyType{}
+var shouldLogKey = shouldLogKeyType{}
 
 // Base loggers for each layer
 var (
@@ -31,7 +33,9 @@ func NewLogger(name string) *zap.Logger {
 }
 
 // L returns a logger with request_id from context.
-// Usage: logging.L(ctx, logging.HandlerLog).Info("something", zap.Any("data", data))
+// Note: This does NOT check sampling - use Log() or LogWithDuration() for tail-based sampling.
+// Usage for direct logging: logging.L(ctx, logging.HandlerLog).Error("error", zap.Error(err))
+// Usage for sampled logging: logging.Log(ctx, logging.HandlerLog, zapcore.InfoLevel, "message", fields...)
 func L(ctx context.Context, base *zap.Logger) *zap.Logger {
 	if reqID := GetRequestID(ctx); reqID != "" {
 		return base.With(zap.String("request_id", reqID))
@@ -50,4 +54,18 @@ func GetRequestID(ctx context.Context) string {
 		return reqID
 	}
 	return ""
+}
+
+// SetShouldLog stores the sampling decision in context (all layers check this).
+func SetShouldLog(ctx context.Context, shouldLog bool) context.Context {
+	return context.WithValue(ctx, shouldLogKey, shouldLog)
+}
+
+// ShouldLog retrieves the sampling decision from context.
+// Returns true if not set (default to logging for safety).
+func ShouldLog(ctx context.Context) bool {
+	if shouldLog, ok := ctx.Value(shouldLogKey).(bool); ok {
+		return shouldLog
+	}
+	return true // Default to logging if not set
 }

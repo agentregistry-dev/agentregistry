@@ -12,9 +12,11 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/auth"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
+	"github.com/oklog/ulid/v2"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
@@ -54,13 +56,20 @@ func (c *requestLoggerContext) Context() context.Context {
 	return c.ctx
 }
 
-// RequestLoggingMiddleware creates a RequestLogger per request and stores it in context.
-// Handlers retrieve it via logging.EventLoggerFromContext(ctx) and add namespaced fields.
-// Handlers can set custom outcome via logging.SetEventOutcome(ctx, logging.EventOutcome).
+// RequestLoggingMiddleware sets the request ID in context and makes tail-based sampling decision.
+// All layers log together or not at all based on the sampling decision made here.
 func RequestLoggingMiddleware(cfg *logging.EventLoggingConfig, options ...MiddlewareOption) func(huma.Context, func(huma.Context)) {
 	mwCfg := &middlewareConfig{skipPaths: make(map[string]bool)}
 	for _, opt := range options {
 		opt(mwCfg)
+	}
+
+	// Parse config once
+	var parsedCfg *logging.ParsedEventLoggingConfig
+	if cfg != nil {
+		parsedCfg = logging.ParseEventLoggingConfig(cfg)
+	} else {
+		parsedCfg = logging.ParseEventLoggingConfig(logging.DefaultEventLoggingConfig())
 	}
 
 	return func(ctx huma.Context, next func(huma.Context)) {
@@ -80,47 +89,62 @@ func RequestLoggingMiddleware(cfg *logging.EventLoggingConfig, options ...Middle
 		if requestID == "" {
 			requestID = ctx.Header("X-Correlation-ID")
 		}
-
-		// Create logger
-		var reqLog *logging.EventLogger
-		if requestID != "" {
-			reqLog = logging.NewEventLoggerWithID("api", path, requestID, cfg)
-		} else {
-			reqLog = logging.NewEventLogger("api", path, cfg)
+		if requestID == "" {
+			requestID = ulid.Make().String()
 		}
 
-		// Add request metadata
-		reqLog.AddFields(
+		// Set response header for tracing
+		ctx.SetHeader("X-Request-ID", requestID)
+
+		// Make tail-based sampling decision based on request_id
+		// This ensures all logs for a request are logged together or not at all
+		shouldLog := true
+		if parsedCfg != nil {
+			// Check if path should be excluded
+			if parsedCfg.ExcludePaths[path] {
+				shouldLog = false
+			} else {
+				// For success cases, use sampling. Errors are always logged.
+				// We'll check the final status code later, but for now assume success
+				// and make the decision. If it's an error, we'll override.
+				hashValue := logging.HashRequestIDToFloat(requestID)
+				shouldLog = hashValue < parsedCfg.SuccessSampleRate
+			}
+		}
+
+		// Inject request ID and sampling decision into context
+		newCtx := logging.SetRequestID(ctx.Context(), requestID)
+		newCtx = logging.SetShouldLog(newCtx, shouldLog)
+		wrappedCtx := &requestLoggerContext{humaContext: ctx, ctx: newCtx}
+
+		// Log request start at API layer (always log start for context, but respect sampling)
+		logging.Log(newCtx, logging.APIEventLog, zapcore.InfoLevel, "request started",
 			zap.String("method", ctx.Method()),
+			zap.String("path", path),
 			zap.String("user_agent", ctx.Header("User-Agent")),
 			zap.String("remote_addr", ctx.RemoteAddr()),
 		)
 
-		// Set response header for tracing
-		ctx.SetHeader("X-Request-ID", reqLog.RequestID())
-
-		// Create mutable outcome holder that handler can update
-		outcomeHolder := &logging.EventOutcomeHolder{}
-
-		// Inject request ID, logger, and outcome holder into context
-		newCtx := logging.SetRequestID(ctx.Context(), reqLog.RequestID()) // For non-wide logging.L() pattern
-		newCtx = logging.ContextWithEventLogger(newCtx, reqLog)
-		newCtx = logging.ContextWithEventOutcomeHolder(newCtx, outcomeHolder)
-		wrappedCtx := &requestLoggerContext{humaContext: ctx, ctx: newCtx}
-
+		startTime := time.Now()
 		next(wrappedCtx)
 
-		// Use handler's outcome if set, otherwise derive from status code
-		if outcomeHolder.Outcome != nil {
-			outcomeHolder.Outcome.StatusCode = ctx.Status() // Ensure status matches response
-			reqLog.Finalize(*outcomeHolder.Outcome)
-		} else {
-			reqLog.Finalize(logging.EventOutcome{
-				Level:      logging.EventLevelFromStatusCode(ctx.Status()),
-				StatusCode: ctx.Status(),
-				Message:    "request completed",
-			})
+		// Log request completion at API layer
+		// Override sampling decision if this is an error
+		duration := time.Since(startTime)
+		statusCode := ctx.Status()
+		level := logging.EventLevelFromStatusCode(statusCode)
+
+		// If it's an error, override the sampling decision to always log
+		if level >= zapcore.WarnLevel {
+			newCtx = logging.SetShouldLog(newCtx, true)
 		}
+
+		logging.LogWithDuration(newCtx, logging.APIEventLog, level, "request completed",
+			duration,
+			zap.String("method", ctx.Method()),
+			zap.String("path", path),
+			zap.Int("status_code", statusCode),
+		)
 	}
 }
 

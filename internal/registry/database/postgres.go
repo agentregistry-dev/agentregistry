@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	models "github.com/agentregistry-dev/agentregistry/internal/models"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/logging"
@@ -1110,20 +1111,13 @@ func scanServerReadme(row pgx.Row) (*ServerReadme, error) {
 
 // ListAgents returns paginated agents with filtering
 func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
-	reqLog := logging.EventLoggerFromContext(ctx)
 	queryStart := time.Now()
-
-	// Add initial db-specific fields under "db" namespace
-	reqLog.AddNamespacedFields("db",
-		zap.String("method", "ListAgents"),
-		zap.String("table", "agents"),
-	)
 
 	if limit <= 0 {
 		limit = 10
 	}
 	if ctx.Err() != nil {
-		reqLog.AddNamespacedFields("db", zap.Bool("context_cancelled", true))
+		logging.L(ctx, logging.DBLog).Error("context cancelled", zap.Error(ctx.Err()))
 		return nil, "", ctx.Err()
 	}
 
@@ -1133,11 +1127,10 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 		var err error
 		semanticLiteral, err = vectorLiteral(filter.Semantic.QueryEmbedding)
 		if err != nil {
-			reqLog.AddNamespacedFields("db", zap.Bool("semantic_embedding_error", true))
+			logging.L(ctx, logging.DBLog).Error("semantic embedding error", zap.Error(err))
 			return nil, "", fmt.Errorf("invalid semantic embedding: %w", err)
 		}
 	}
-	reqLog.AddNamespacedFields("db", zap.Bool("semantic_active", semanticActive))
 
 	var whereConditions []string
 	args := []any{}
@@ -1240,10 +1233,12 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 
 	rows, err := db.getExecutor(tx).Query(ctx, query, args...)
 	queryDuration := time.Since(queryStart)
-	reqLog.AddNamespacedFields("db", zap.Int64("query_duration_ms", queryDuration.Milliseconds()))
 
 	if err != nil {
-		reqLog.AddNamespacedFields("db", zap.Bool("query_error", true))
+		logging.LogWithDuration(ctx, logging.DBLog, zapcore.ErrorLevel, "ListAgents query failed", queryDuration,
+			zap.String("table", "agents"),
+			zap.Error(err),
+		)
 		return nil, "", fmt.Errorf("failed to query agents: %w", err)
 	}
 	defer rows.Close()
@@ -1264,13 +1259,13 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 		}
 
 		if scanErr != nil {
-			reqLog.AddNamespacedFields("db", zap.Bool("scan_error", true))
+			logging.L(ctx, logging.DBLog).Error("scan error", zap.Error(scanErr))
 			return nil, "", fmt.Errorf("failed to scan agent row: %w", err)
 		}
 
 		var agentJSON models.AgentJSON
 		if err := json.Unmarshal(valueJSON, &agentJSON); err != nil {
-			reqLog.AddNamespacedFields("db", zap.Bool("unmarshal_error", true))
+			logging.L(ctx, logging.DBLog).Error("unmarshal error", zap.Error(err))
 			return nil, "", fmt.Errorf("failed to unmarshal agent JSON: %w", err)
 		}
 
@@ -1294,7 +1289,7 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 		results = append(results, resp)
 	}
 	if err := rows.Err(); err != nil {
-		reqLog.AddNamespacedFields("db", zap.Bool("iteration_error", true))
+		logging.L(ctx, logging.DBLog).Error("iteration error", zap.Error(err))
 		return nil, "", fmt.Errorf("error iterating agent rows: %w", err)
 	}
 
@@ -1304,19 +1299,16 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *AgentFi
 		nextCursor = last.Agent.Name + ":" + last.Agent.Version
 	}
 
-	reqLog.AddNamespacedFields("db", zap.Int("rows_returned", len(results)))
+	logging.LogWithDuration(ctx, logging.DBLog, zapcore.InfoLevel, "ListAgents completed", queryDuration,
+		zap.String("table", "agents"),
+		zap.Bool("semantic_active", semanticActive),
+		zap.Int("rows_returned", len(results)),
+	)
 	return results, nextCursor, nil
 }
 
 func (db *PostgreSQL) GetAgentByName(ctx context.Context, tx pgx.Tx, agentName string) (*models.AgentResponse, error) {
-	reqLog := logging.EventLoggerFromContext(ctx)
 	queryStart := time.Now()
-
-	reqLog.AddNamespacedFields("db",
-		zap.String("method", "GetAgentByName"),
-		zap.String("table", "agents"),
-		zap.String("agent_name", agentName),
-	)
 
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -1333,23 +1325,31 @@ func (db *PostgreSQL) GetAgentByName(ctx context.Context, tx pgx.Tx, agentName s
 	var isLatest, published bool
 	var valueJSON []byte
 	if err := db.getExecutor(tx).QueryRow(ctx, query, agentName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &published, &valueJSON); err != nil {
-		reqLog.AddNamespacedFields("db",
-			zap.Duration("query_duration", time.Since(queryStart)),
-			zap.Bool("found", false),
-		)
+		queryDuration := time.Since(queryStart)
 		if errors.Is(err, pgx.ErrNoRows) {
+			logging.LogWithDuration(ctx, logging.DBLog, zapcore.InfoLevel, "GetAgentByName not found", queryDuration,
+				zap.String("table", "agents"),
+				zap.String("agent_name", agentName),
+			)
 			return nil, ErrNotFound
 		}
+		logging.LogWithDuration(ctx, logging.DBLog, zapcore.ErrorLevel, "GetAgentByName failed", queryDuration,
+			zap.String("table", "agents"),
+			zap.String("agent_name", agentName),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to get agent by name: %w", err)
 	}
 	var agentJSON models.AgentJSON
 	if err := json.Unmarshal(valueJSON, &agentJSON); err != nil {
+		logging.L(ctx, logging.DBLog).Error("unmarshal error", zap.Error(err))
 		return nil, fmt.Errorf("failed to unmarshal agent JSON: %w", err)
 	}
 
-	reqLog.AddNamespacedFields("db",
-		zap.Duration("query_duration", time.Since(queryStart)),
-		zap.Bool("found", true),
+	queryDuration := time.Since(queryStart)
+	logging.LogWithDuration(ctx, logging.DBLog, zapcore.InfoLevel, "GetAgentByName completed", queryDuration,
+		zap.String("table", "agents"),
+		zap.String("agent_name", agentName),
 		zap.String("result_version", version),
 	)
 
@@ -1368,15 +1368,7 @@ func (db *PostgreSQL) GetAgentByName(ctx context.Context, tx pgx.Tx, agentName s
 }
 
 func (db *PostgreSQL) GetAgentByNameAndVersion(ctx context.Context, tx pgx.Tx, agentName, version string) (*models.AgentResponse, error) {
-	reqLog := logging.EventLoggerFromContext(ctx)
 	queryStart := time.Now()
-
-	reqLog.AddNamespacedFields("db",
-		zap.String("method", "GetAgentByNameAndVersion"),
-		zap.String("table", "agents"),
-		zap.String("agent_name", agentName),
-		zap.String("version", version),
-	)
 
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -1392,23 +1384,34 @@ func (db *PostgreSQL) GetAgentByNameAndVersion(ctx context.Context, tx pgx.Tx, a
 	var isLatest bool
 	var valueJSON []byte
 	if err := db.getExecutor(tx).QueryRow(ctx, query, agentName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
-		reqLog.AddNamespacedFields("db",
-			zap.Duration("query_duration", time.Since(queryStart)),
-			zap.Bool("found", false),
-		)
+		queryDuration := time.Since(queryStart)
 		if errors.Is(err, pgx.ErrNoRows) {
+			logging.LogWithDuration(ctx, logging.DBLog, zapcore.InfoLevel, "GetAgentByNameAndVersion not found", queryDuration,
+				zap.String("table", "agents"),
+				zap.String("agent_name", agentName),
+				zap.String("version", version),
+			)
 			return nil, ErrNotFound
 		}
+		logging.LogWithDuration(ctx, logging.DBLog, zapcore.ErrorLevel, "GetAgentByNameAndVersion failed", queryDuration,
+			zap.String("table", "agents"),
+			zap.String("agent_name", agentName),
+			zap.String("version", version),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to get agent by name and version: %w", err)
 	}
 	var agentJSON models.AgentJSON
 	if err := json.Unmarshal(valueJSON, &agentJSON); err != nil {
+		logging.L(ctx, logging.DBLog).Error("unmarshal error", zap.Error(err))
 		return nil, fmt.Errorf("failed to unmarshal agent JSON: %w", err)
 	}
 
-	reqLog.AddNamespacedFields("db",
-		zap.Duration("query_duration", time.Since(queryStart)),
-		zap.Bool("found", true),
+	queryDuration := time.Since(queryStart)
+	logging.LogWithDuration(ctx, logging.DBLog, zapcore.InfoLevel, "GetAgentByNameAndVersion completed", queryDuration,
+		zap.String("table", "agents"),
+		zap.String("agent_name", agentName),
+		zap.String("version", version),
 	)
 
 	return &models.AgentResponse{
