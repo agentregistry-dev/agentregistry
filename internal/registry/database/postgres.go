@@ -77,7 +77,7 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 	}
 	defer conn.Release()
 
-	migrator := NewMigrator(conn.Conn())
+	migrator := database.NewMigrator(conn.Conn(), DefaultMigratorConfig())
 	if err := migrator.Migrate(ctx); err != nil {
 		return nil, fmt.Errorf("failed to run database migrations: %w", err)
 	}
