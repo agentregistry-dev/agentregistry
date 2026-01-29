@@ -91,7 +91,7 @@ func runMCPServerPublish(cmd *cobra.Command, args []string) error {
 	}
 
 	if publishVersion == "" {
-		return fmt.Errorf("version is required")
+		return fmt.Errorf("version is required for re-publishing existing server, otherwise provide a valid path to a folder containing mcp.yaml")
 	}
 
 	// Otherwise, treat it as a server name from the registry
@@ -258,7 +258,10 @@ func buildAndPublishLocal(absPath string) error {
 		return fmt.Errorf("failed to load project manifest: %w", err)
 	}
 
-	version := projectManifest.Version
+	version := publishVersion
+	if version == "" {
+		version = projectManifest.Version
+	}
 	if version == "" {
 		version = "latest"
 	}
