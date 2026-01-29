@@ -49,6 +49,9 @@ This command supports three modes:
 Examples:
   # Build and publish from local folder
   arctl mcp publish ./my-server --docker-url docker.io/myorg --push
+  
+  # Build and publish from local folder and include a repository reference
+  arctl mcp publish ./my-server --docker-url docker.io/myorg --push --github https://github.com/repo/user
 
   # Re-publish an existing server from the registry
   arctl mcp publish io.github.example/my-server --version 1.0.0
