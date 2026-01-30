@@ -144,7 +144,10 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 
 	// Add authn middleware if configured
 	if authnProvider != nil {
-		api.UseMiddleware(auth.AuthnMiddleware(authnProvider))
+		api.UseMiddleware(auth.AuthnMiddleware(authnProvider,
+			// don't authenticate on public paths
+			auth.WithSkipPaths("/health", "/metrics", "/ping", "/docs")),
+		)
 	}
 
 	// Add OpenAPI tag metadata with descriptions
