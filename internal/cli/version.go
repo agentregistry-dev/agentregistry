@@ -32,12 +32,12 @@ var VersionCmd = &cobra.Command{
 		fmt.Printf("Server version: %s\n", serverVersion.Version)
 		fmt.Printf("Server git commit: %s\n", serverVersion.GitCommit)
 		fmt.Printf("Server build date: %s\n", serverVersion.BuildTime)
-		if !semver.IsValid(serverVersion.Version) || !semver.IsValid(version.Version) {
+		if !semver.IsValid(version.EnsureVPrefix(serverVersion.Version)) || !semver.IsValid(version.EnsureVPrefix(version.Version)) {
 			fmt.Printf("Server or local version is not a valid semantic version, not sure if update require: %s or %s\n", serverVersion.Version, version.Version)
 			return
 		}
 
-		compare := semver.Compare("v"+version.Version, "v"+serverVersion.Version)
+		compare := semver.Compare(version.EnsureVPrefix(version.Version), version.EnsureVPrefix(serverVersion.Version))
 		switch compare {
 		case 1:
 			fmt.Println("\n-------------------------------")
