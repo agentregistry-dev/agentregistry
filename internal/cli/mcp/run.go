@@ -27,7 +27,7 @@ var (
 	runInspector  bool
 	runYes        bool
 	runVerbose    bool
-	runNoBuild    bool
+	runBuildFlag  bool
 	runEnvVars    []string
 	runArgVars    []string
 	runHeaderVars []string
@@ -52,7 +52,7 @@ func init() {
 	RunCmd.Flags().BoolVar(&runInspector, "inspector", false, "Launch MCP Inspector to interact with the server")
 	RunCmd.Flags().BoolVarP(&runYes, "yes", "y", false, "Automatically accept all prompts (use default values)")
 	RunCmd.Flags().BoolVar(&runVerbose, "verbose", false, "Enable verbose logging")
-	RunCmd.Flags().BoolVar(&runNoBuild, "no-build", false, "Skip building the MCP server before running")
+	RunCmd.Flags().BoolVar(&runBuildFlag, "build", true, "Build the MCP server before running")
 	RunCmd.Flags().StringArrayVarP(&runEnvVars, "env", "e", []string{}, "Environment variables (key=value)")
 	RunCmd.Flags().StringArrayVar(&runArgVars, "arg", []string{}, "Runtime arguments (key=value)")
 	RunCmd.Flags().StringArrayVar(&runHeaderVars, "header", []string{}, "Headers for remote servers (key=value)")
@@ -315,8 +315,8 @@ func runLocalMCPServer(projectPath string) error {
 	}
 	imageName := fmt.Sprintf("%s:%s", strcase.KebabCase(projectManifest.Name), version)
 
-	// Build the MCP server before running (unless --no-build is set)
-	if !runNoBuild {
+	// Build the MCP server before running (unless --build is set)
+	if runBuildFlag {
 		fmt.Println("Building MCP server...")
 		builder := build.New()
 		opts := build.Options{

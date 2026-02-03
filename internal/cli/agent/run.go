@@ -37,10 +37,10 @@ launches the same chat interface.`,
   arctl agent run dice`,
 }
 
-var noBuild bool
+var buildFlag bool
 
 func init() {
-	RunCmd.Flags().BoolVar(&noBuild, "no-build", false, "Skip building the agent before running")
+	RunCmd.Flags().BoolVar(&buildFlag, "build", true, "Build the agent and MCP servers before running")
 }
 
 var providerAPIKeys = map[string]string{
@@ -175,7 +175,6 @@ func runFromDirectory(ctx context.Context, projectDir string) error {
 	return runFromManifest(ctx, manifest, "", &runContext{
 		composeData: data,
 		workDir:     projectDir,
-		build:       !noBuild,
 	})
 }
 
@@ -319,9 +318,7 @@ func runFromManifest(ctx context.Context, manifest *models.AgentManifest, versio
 		}
 	}
 
-	// Determine if we should build: only when running from directory and --no-build is not set
-	shouldBuild := useOverrides && overrides.build
-	err := runAgent(ctx, composeData, manifest, workDir, shouldBuild)
+	err := runAgent(ctx, composeData, manifest, workDir, buildFlag)
 
 	// Clean up temp directory for registry-run agents
 	if !useOverrides && workDir != "" && strings.Contains(workDir, "arctl-registry-resolve-") {
@@ -336,7 +333,6 @@ func runFromManifest(ctx context.Context, manifest *models.AgentManifest, versio
 type runContext struct {
 	composeData []byte
 	workDir     string
-	build       bool
 }
 
 func renderComposeFromManifest(manifest *models.AgentManifest, version string) ([]byte, error) {
