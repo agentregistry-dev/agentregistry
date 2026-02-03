@@ -48,6 +48,7 @@ func MetricTelemetryMiddleware(metrics *telemetry.Metrics, options ...Middleware
 	}
 
 	return func(ctx huma.Context, next func(huma.Context)) {
+		fmt.Println("DEBUG: Inside MetricTelemetryMiddleware")
 		path := ctx.URL().Path
 
 		// Skip instrumentation for specified paths
