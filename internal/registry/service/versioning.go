@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"golang.org/x/mod/semver"
+
+	versionpkg "github.com/agentregistry-dev/agentregistry/internal/version"
 )
 
 // IsSemanticVersion checks if a version string follows semantic versioning format
@@ -12,7 +14,7 @@ import (
 // Requires exactly three parts: major.minor.patch (optionally with prerelease/build)
 func IsSemanticVersion(version string) bool {
 	// The semver package requires a "v" prefix, so add it for validation
-	versionWithV := ensureVPrefix(version)
+	versionWithV := versionpkg.EnsureVPrefix(version)
 	if !semver.IsValid(versionWithV) {
 		return false
 	}
@@ -33,14 +35,6 @@ func IsSemanticVersion(version string) bool {
 	return len(parts) == 3
 }
 
-// ensureVPrefix adds a "v" prefix if not present
-func ensureVPrefix(version string) string {
-	if !strings.HasPrefix(version, "v") {
-		return "v" + version
-	}
-	return version
-}
-
 // compareSemanticVersions compares two semantic version strings
 // Uses the official golang.org/x/mod/semver package for comparison
 // Returns:
@@ -50,8 +44,8 @@ func ensureVPrefix(version string) string {
 //	+1 if version1 > version2
 func compareSemanticVersions(version1 string, version2 string) int {
 	// The semver package requires a "v" prefix, so add it for comparison
-	v1 := ensureVPrefix(version1)
-	v2 := ensureVPrefix(version2)
+	v1 := versionpkg.EnsureVPrefix(version1)
+	v2 := versionpkg.EnsureVPrefix(version2)
 	return semver.Compare(v1, v2)
 }
 
