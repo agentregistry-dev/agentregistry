@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/build"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/dockercompose"
@@ -26,6 +27,7 @@ var (
 	runInspector  bool
 	runYes        bool
 	runVerbose    bool
+	runNoBuild    bool
 	runEnvVars    []string
 	runArgVars    []string
 	runHeaderVars []string
@@ -40,7 +42,7 @@ You can run either:
   - A server from the registry by name (e.g., 'arctl mcp run @modelcontextprotocol/server-everything')
   - A local MCP project by path (e.g., 'arctl mcp run .' or 'arctl mcp run ./my-mcp-server')
 
-For local projects, the server must be built first using 'arctl mcp build'.`,
+For local projects, the server is automatically built before running. Use --no-build to skip the build step.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runRun,
 }
@@ -50,6 +52,7 @@ func init() {
 	RunCmd.Flags().BoolVar(&runInspector, "inspector", false, "Launch MCP Inspector to interact with the server")
 	RunCmd.Flags().BoolVarP(&runYes, "yes", "y", false, "Automatically accept all prompts (use default values)")
 	RunCmd.Flags().BoolVar(&runVerbose, "verbose", false, "Enable verbose logging")
+	RunCmd.Flags().BoolVar(&runNoBuild, "no-build", false, "Skip building the MCP server before running")
 	RunCmd.Flags().StringArrayVarP(&runEnvVars, "env", "e", []string{}, "Environment variables (key=value)")
 	RunCmd.Flags().StringArrayVar(&runArgVars, "arg", []string{}, "Runtime arguments (key=value)")
 	RunCmd.Flags().StringArrayVar(&runHeaderVars, "header", []string{}, "Headers for remote servers (key=value)")
@@ -312,9 +315,23 @@ func runLocalMCPServer(projectPath string) error {
 	}
 	imageName := fmt.Sprintf("%s:%s", strcase.KebabCase(projectManifest.Name), version)
 
-	// Check if the image exists locally
-	if err := checkDockerImageExists(imageName); err != nil {
-		return fmt.Errorf("docker image %s not found. Run 'arctl mcp build %s' first\n%w", imageName, projectPath, err)
+	// Build the MCP server before running (unless --no-build is set)
+	if !runNoBuild {
+		fmt.Println("Building MCP server...")
+		builder := build.New()
+		opts := build.Options{
+			ProjectDir: absPath,
+			Tag:        imageName,
+		}
+		if err := builder.Build(opts); err != nil {
+			return fmt.Errorf("failed to build MCP server: %w", err)
+		}
+		fmt.Println("✓ MCP server built successfully")
+	} else {
+		// Only check if image exists when skipping build
+		if err := checkDockerImageExists(imageName); err != nil {
+			return fmt.Errorf("docker image %s not found. Run 'arctl mcp build %s' first or remove --no-build flag\n%w", imageName, projectPath, err)
+		}
 	}
 
 	fmt.Printf("Running local MCP server: %s (version %s)\n", projectManifest.Name, version)

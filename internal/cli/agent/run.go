@@ -37,6 +37,12 @@ launches the same chat interface.`,
   arctl agent run dice`,
 }
 
+var noBuild bool
+
+func init() {
+	RunCmd.Flags().BoolVar(&noBuild, "no-build", false, "Skip building the agent before running")
+}
+
 var providerAPIKeys = map[string]string{
 	"openai":      "OPENAI_API_KEY",
 	"anthropic":   "ANTHROPIC_API_KEY",
@@ -169,6 +175,7 @@ func runFromDirectory(ctx context.Context, projectDir string) error {
 	return runFromManifest(ctx, manifest, "", &runContext{
 		composeData: data,
 		workDir:     projectDir,
+		build:       !noBuild,
 	})
 }
 
@@ -312,7 +319,9 @@ func runFromManifest(ctx context.Context, manifest *models.AgentManifest, versio
 		}
 	}
 
-	err := runAgent(ctx, composeData, manifest, workDir)
+	// Determine if we should build: only when running from directory and --no-build is not set
+	shouldBuild := useOverrides && overrides.build
+	err := runAgent(ctx, composeData, manifest, workDir, shouldBuild)
 
 	// Clean up temp directory for registry-run agents
 	if !useOverrides && workDir != "" && strings.Contains(workDir, "arctl-registry-resolve-") {
@@ -327,6 +336,7 @@ func runFromManifest(ctx context.Context, manifest *models.AgentManifest, versio
 type runContext struct {
 	composeData []byte
 	workDir     string
+	build       bool
 }
 
 func renderComposeFromManifest(manifest *models.AgentManifest, version string) ([]byte, error) {
@@ -367,7 +377,7 @@ func renderComposeFromManifest(manifest *models.AgentManifest, version string) (
 	return []byte(rendered), nil
 }
 
-func runAgent(ctx context.Context, composeData []byte, manifest *models.AgentManifest, workDir string) error {
+func runAgent(ctx context.Context, composeData []byte, manifest *models.AgentManifest, workDir string, shouldBuild bool) error {
 	if err := validateAPIKey(manifest.ModelProvider); err != nil {
 		return err
 	}
@@ -375,7 +385,11 @@ func runAgent(ctx context.Context, composeData []byte, manifest *models.AgentMan
 	composeCmd := docker.ComposeCommand()
 	commonArgs := append(composeCmd[1:], "-f", "-")
 
-	upCmd := exec.CommandContext(ctx, composeCmd[0], append(commonArgs, "up", "-d")...)
+	upArgs := []string{"up", "-d"}
+	if shouldBuild {
+		upArgs = append(upArgs, "--build")
+	}
+	upCmd := exec.CommandContext(ctx, composeCmd[0], append(commonArgs, upArgs...)...)
 	upCmd.Dir = workDir
 	upCmd.Stdin = bytes.NewReader(composeData)
 	if verbose {
