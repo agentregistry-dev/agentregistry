@@ -25,9 +25,8 @@ type Client struct {
 }
 
 const (
-	defaultRegistryName = "local"
-	defaultBaseURL      = "http://localhost:12121/v0"
-	DefaultBaseURL      = defaultBaseURL
+	defaultBaseURL = "http://localhost:12121/v0"
+	DefaultBaseURL = defaultBaseURL
 )
 
 // NewClientFromEnv constructs a client using environment variables

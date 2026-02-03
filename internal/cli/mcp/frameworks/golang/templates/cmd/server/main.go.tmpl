@@ -14,6 +14,7 @@ import (
 
 var (
 	httpAddr = flag.String("http", "", "if set, use streamable HTTP to serve MCP (on this address), instead of stdin/stdout")
+	statelessHTTP = flag.Bool("stateless-http", false, "enable stateless HTTP mode (default: false)")
 )
 
 func main() {
@@ -36,11 +37,15 @@ func run() error {
 	if *httpAddr != "" {
 		handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 			return server
-		}, nil)
+		}, 
+			&mcp.StreamableHTTPOptions{
+			Stateless: *statelessHTTP,
+		})
+
 		log.Printf("MCP server listening at %s", *httpAddr)
 		return http.ListenAndServe(*httpAddr, handler)
 	} else {
-		t := mcp.NewLoggingTransport(mcp.NewStdioTransport(), os.Stderr)
+		t := &mcp.LoggingTransport{Transport: &mcp.StdioTransport{}, Writer: os.Stderr}
 		return server.Run(context.Background(), t)
 	}
 }
