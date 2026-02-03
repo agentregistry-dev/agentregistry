@@ -60,7 +60,7 @@ func (g *Generator) GenerateTool(projectroot string, config templates.ToolConfig
 	fmt.Printf("\nNext steps:\n")
 	fmt.Printf("1. Edit internal/tools/%s.go to implement your tool logic\n", toolNameSnakeCase)
 	fmt.Printf("2. Configure any required environment variables in mcp.yaml\n")
-	fmt.Printf("3. Run 'go run main.go' to start the server\n")
+	fmt.Printf("3. Run 'go run cmd/server/main.go' to start the server\n")
 
 	return nil
 }

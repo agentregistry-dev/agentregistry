@@ -21,16 +21,19 @@ func Echo() MCPTool[EchoParams, EchoResult] {
 	return MCPTool[EchoParams, EchoResult]{
 		Name:        "echo",
 		Description: "Echoes a message back to the user.",
-		Handler: func(ctx context.Context, cc *mcp.ServerSession, params *mcp.CallToolParamsFor[EchoParams]) (*mcp.CallToolResultFor[EchoResult], error) {
-			echoMessage := "Echo: " + params.Arguments.Message
-			result := &mcp.CallToolResultFor[EchoResult]{
+		Handler: func(ctx context.Context, request *mcp.CallToolRequest, params EchoParams) (*mcp.CallToolResult, EchoResult, error) {
+			echoMessage := "Echo: " + params.Message
+			result := EchoResult{
+				Echo: echoMessage,
+			}
+			callToolResult := &mcp.CallToolResult{
 				Content: []mcp.Content{
 					&mcp.TextContent{
 						Text: echoMessage,
 					},
 				},
 			}
-			return result, nil
+			return callToolResult, result, nil
 		},
 	}
 }
