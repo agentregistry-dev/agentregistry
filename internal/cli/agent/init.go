@@ -22,13 +22,15 @@ var InitCmd = &cobra.Command{
 
 You can customize the root agent instructions using the --instruction-file flag.
 You can select a specific model using --model-provider and --model-name flags.
+You can specify a custom Docker image using the --image flag.
 If no custom instruction file is provided, a default dice-rolling instruction will be used.
 If no model flags are provided, defaults to Gemini (gemini-2.0-flash).
 
 Examples:
 arctl agent init adk python dice
 arctl agent init adk python dice --instruction-file instructions.md
-arctl agent init adk python dice --model-provider Gemini --model-name gemini-2.0-flash`,
+arctl agent init adk python dice --model-provider Gemini --model-name gemini-2.0-flash
+arctl agent init adk python dice --image ghcr.io/myorg/dice:v1.0`,
 	Args:    cobra.ExactArgs(3),
 	RunE:    runInit,
 	Example: `arctl agent init adk python dice`,
@@ -40,6 +42,7 @@ var (
 	initModelName         string
 	initDescription       string
 	initTelemetryEndpoint string
+	initImage             string
 )
 
 func init() {
@@ -48,6 +51,7 @@ func init() {
 	InitCmd.Flags().StringVar(&initModelName, "model-name", "gemini-2.0-flash", "Model name (e.g., gpt-4, claude-3-5-sonnet, gemini-2.0-flash)")
 	InitCmd.Flags().StringVar(&initDescription, "description", "", "Description for the agent")
 	InitCmd.Flags().StringVar(&initTelemetryEndpoint, "telemetry", "", "OTLP endpoint URL for OpenTelemetry traces (e.g., http://localhost:4318/v1/traces)")
+	InitCmd.Flags().StringVar(&initImage, "image", "", "Docker image name including tag (e.g., ghcr.io/myorg/myagent:v1.0, docker.io/user/image:latest)")
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
@@ -110,7 +114,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	agentConfig := &common.AgentConfig{
 		Name:              agentName,
 		Description:       initDescription,
-		Image:             defaultImage(agentName),
+		Image:             defaultImage(agentName, initImage),
 		Directory:         projectDir,
 		Verbose:           verbose,
 		Instruction:       instruction,
@@ -187,7 +191,13 @@ func loadInstruction(path string) (string, error) {
 	return string(content), nil
 }
 
-func defaultImage(agentName string) string {
+func defaultImage(agentName, image string) string {
+	// If a full image is provided, use it as-is
+	if image != "" {
+		return image
+	}
+
+	// Otherwise, construct the image from the registry and agent name
 	registry := strings.TrimSuffix(version.DockerRegistry, "/")
 	if registry == "" {
 		registry = "localhost:5001"
