@@ -100,12 +100,12 @@ dev-ui:
 	cd ui && npm run dev
 
 # Run Go tests (unit tests only)
-test:
+test-unit:
 	@echo "Running Go unit tests..."
 	go test -ldflags "$(LDFLAGS)" ./...
 
 # Run Go tests with integration tests
-test-integration:
+test:
 	@echo "Running Go tests with integration..."
 	go test -ldflags "$(LDFLAGS)" -tags=integration -v ./...
 

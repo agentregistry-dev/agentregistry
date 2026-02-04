@@ -455,8 +455,8 @@ When working with this codebase, AI assistants should:
 |------|---------|
 | Build CLI | `make build-cli` |
 | Build Server | `make build-server` |
-| Run Unit Tests | `make test` |
-| Run Integration Tests | `make test-integration` |
+| Run Unit Tests | `make test-unit` |
+| Run all Tests | `make test` |
 | Run Tests w/ Coverage | `make test-coverage` |
 | Coverage HTML Report | `make test-coverage-report` |
 | Run Linter | `make lint` |
