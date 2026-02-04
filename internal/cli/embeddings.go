@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/client"
+	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/spf13/cobra"
 )
 
@@ -73,7 +76,7 @@ func runEmbeddingsGenerate(ctx context.Context) error {
 	}
 	defer c.Close()
 
-	req := client.IndexRequest{
+	req := v0.IndexRequest{
 		BatchSize:      embeddingsBatchSize,
 		Force:          embeddingsForceUpdate,
 		DryRun:         embeddingsDryRun,
@@ -87,10 +90,8 @@ func runEmbeddingsGenerate(ctx context.Context) error {
 	return pollIndex(ctx, c, req)
 }
 
-func streamIndex(ctx context.Context, c *client.Client, req client.IndexRequest) error {
-	streamURL := c.StreamIndexURL(req)
-
-	httpReq, err := c.NewSSERequest(ctx, streamURL, req)
+func streamIndex(ctx context.Context, c *client.Client, req v0.IndexRequest) error {
+	httpReq, err := c.NewSSERequest(ctx, req)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -133,39 +134,21 @@ func streamIndex(ctx context.Context, c *client.Client, req client.IndexRequest)
 			case "started":
 				fmt.Printf("Job started: %s\n", event.JobID)
 			case "progress":
-				var stats struct {
-					Processed int `json:"processed"`
-					Updated   int `json:"updated"`
-					Skipped   int `json:"skipped"`
-					Failures  int `json:"failures"`
-				}
+				var stats service.IndexStats
 				if err := json.Unmarshal(event.Stats, &stats); err == nil {
 					fmt.Printf("[%s] progress: processed=%d updated=%d skipped=%d failures=%d\n",
 						event.Resource, stats.Processed, stats.Updated, stats.Skipped, stats.Failures)
 				}
 			case "completed":
 				fmt.Println("Embedding indexing complete.")
-				var result struct {
-					Servers struct {
-						Processed int `json:"processed"`
-						Updated   int `json:"updated"`
-						Skipped   int `json:"skipped"`
-						Failures  int `json:"failures"`
-					} `json:"servers"`
-					Agents struct {
-						Processed int `json:"processed"`
-						Updated   int `json:"updated"`
-						Skipped   int `json:"skipped"`
-						Failures  int `json:"failures"`
-					} `json:"agents"`
-				}
+				var result jobs.JobResult
 				if err := json.Unmarshal(event.Result, &result); err == nil {
 					fmt.Printf("  Servers: processed=%d updated=%d skipped=%d failures=%d\n",
-						result.Servers.Processed, result.Servers.Updated, result.Servers.Skipped, result.Servers.Failures)
+						result.ServersProcessed, result.ServersUpdated, result.ServersSkipped, result.ServerFailures)
 					fmt.Printf("  Agents: processed=%d updated=%d skipped=%d failures=%d\n",
-						result.Agents.Processed, result.Agents.Updated, result.Agents.Skipped, result.Agents.Failures)
+						result.AgentsProcessed, result.AgentsUpdated, result.AgentsSkipped, result.AgentFailures)
 
-					totalFailures := result.Servers.Failures + result.Agents.Failures
+					totalFailures := result.ServerFailures + result.AgentFailures
 					if totalFailures > 0 {
 						return fmt.Errorf("%d embedding(s) failed; see logs for details", totalFailures)
 					}
@@ -184,7 +167,7 @@ func streamIndex(ctx context.Context, c *client.Client, req client.IndexRequest)
 	return nil
 }
 
-func pollIndex(ctx context.Context, c *client.Client, req client.IndexRequest) error {
+func pollIndex(ctx context.Context, c *client.Client, req v0.IndexRequest) error {
 	jobResp, err := c.StartIndex(req)
 	if err != nil {
 		return fmt.Errorf("failed to start indexing: %w", err)

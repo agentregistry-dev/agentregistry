@@ -178,6 +178,6 @@ func handleSSEIndex(
 	sendEvent(SSEEvent{
 		Type:   "completed",
 		JobID:  string(job.ID),
-		Result: result,
+		Result: jobResult,
 	})
 }
