@@ -29,10 +29,9 @@ const maxServerVersionsPerServer = 10000
 // registryServiceImpl implements the RegistryService interface using our Database
 // It also implements the Reconciler interface for server-side container management
 type registryServiceImpl struct {
-	db                    database.Database
-	cfg                   *config.Config
-	embeddingsProvider    embeddings.Provider
-	onPublishEmbeddings   *embeddings.OnPublishService
+	db                 database.Database
+	cfg                *config.Config
+	embeddingsProvider embeddings.Provider
 }
 
 // NewRegistryService creates a new registry service with the provided database and configuration
@@ -41,17 +40,16 @@ func NewRegistryService(
 	cfg *config.Config,
 	embeddingProvider embeddings.Provider,
 ) RegistryService {
-	var onPublishSvc *embeddings.OnPublishService
-	if cfg != nil && cfg.Embeddings.Enabled && cfg.Embeddings.OnPublish && embeddingProvider != nil {
-		onPublishSvc = embeddings.NewOnPublishService(embeddingProvider, cfg.Embeddings.Dimensions, true)
-	}
-
 	return &registryServiceImpl{
-		db:                    db,
-		cfg:                   cfg,
-		embeddingsProvider:    embeddingProvider,
-		onPublishEmbeddings:   onPublishSvc,
+		db:                 db,
+		cfg:                cfg,
+		embeddingsProvider: embeddingProvider,
 	}
+}
+
+// shouldGenerateEmbeddingsOnPublish returns true if embeddings should be generated when resources are created.
+func (s *registryServiceImpl) shouldGenerateEmbeddingsOnPublish() bool {
+	return s.cfg != nil && s.cfg.Embeddings.Enabled && s.cfg.Embeddings.OnPublish && s.embeddingsProvider != nil
 }
 
 // ListServers returns registry entries with cursor-based pagination and optional filtering
@@ -195,10 +193,14 @@ func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx 
 	}
 
 	// Generate embedding asynchronously (non-blocking, best-effort)
-	if s.onPublishEmbeddings != nil && s.onPublishEmbeddings.IsEnabled() {
+	if s.shouldGenerateEmbeddingsOnPublish() {
 		go func() {
 			bgCtx := context.Background()
-			embedding, err := s.onPublishEmbeddings.GenerateServerEmbedding(bgCtx, &serverJSON)
+			payload := embeddings.BuildServerEmbeddingPayload(&serverJSON)
+			if strings.TrimSpace(payload) == "" {
+				return
+			}
+			embedding, err := embeddings.GenerateSemanticEmbedding(bgCtx, s.embeddingsProvider, payload, s.cfg.Embeddings.Dimensions)
 			if err != nil {
 				log.Printf("Warning: failed to generate embedding for %s@%s: %v", serverJSON.Name, serverJSON.Version, err)
 			} else if embedding != nil {
@@ -644,10 +646,14 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 	}
 
 	// Generate embedding asynchronously (non-blocking, best-effort)
-	if s.onPublishEmbeddings != nil && s.onPublishEmbeddings.IsEnabled() {
+	if s.shouldGenerateEmbeddingsOnPublish() {
 		go func() {
 			bgCtx := context.Background()
-			embedding, err := s.onPublishEmbeddings.GenerateAgentEmbedding(bgCtx, &agentJSON)
+			payload := embeddings.BuildAgentEmbeddingPayload(&agentJSON)
+			if strings.TrimSpace(payload) == "" {
+				return
+			}
+			embedding, err := embeddings.GenerateSemanticEmbedding(bgCtx, s.embeddingsProvider, payload, s.cfg.Embeddings.Dimensions)
 			if err != nil {
 				log.Printf("Warning: failed to generate embedding for agent %s@%s: %v", agentJSON.Name, agentJSON.Version, err)
 			} else if embedding != nil {
