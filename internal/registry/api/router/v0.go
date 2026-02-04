@@ -7,9 +7,16 @@ import (
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	v0auth "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 )
+
+// RouteOptions contains optional services for route registration.
+type RouteOptions struct {
+	BackfillService *service.BackfillService
+	JobManager      *jobs.Manager
+}
 
 // RegisterRoutes registers all API routes (public and admin) for all versions
 // This is the single entry point for all route registration
@@ -19,14 +26,15 @@ func RegisterRoutes(
 	registry service.RegistryService,
 	metrics *telemetry.Metrics,
 	versionInfo *v0.VersionBody,
+	opts *RouteOptions,
 ) {
 	// Public API endpoints (only show published resources)
 	registerPublicRoutes(api, "/v0", cfg, registry, metrics, versionInfo)
 	registerPublicRoutes(api, "/v0.1", cfg, registry, metrics, versionInfo)
 
 	// Admin API endpoints (show all resources, including unpublished)
-	registerAdminRoutes(api, "/admin/v0", cfg, registry, metrics, versionInfo)
-	registerAdminRoutes(api, "/admin/v0.1", cfg, registry, metrics, versionInfo)
+	registerAdminRoutes(api, "/admin/v0", cfg, registry, metrics, versionInfo, opts)
+	registerAdminRoutes(api, "/admin/v0.1", cfg, registry, metrics, versionInfo, opts)
 }
 
 // registerPublicRoutes registers public API routes for a version
@@ -68,6 +76,7 @@ func registerAdminRoutes(
 	registry service.RegistryService,
 	metrics *telemetry.Metrics,
 	versionInfo *v0.VersionBody,
+	opts *RouteOptions,
 ) {
 	// Admin endpoints show all resources
 	isAdmin := true
@@ -79,6 +88,11 @@ func registerAdminRoutes(
 	v0.RegisterPublishStatusEndpoints(api, pathPrefix, registry)
 	v0.RegisterEditEndpoints(api, pathPrefix, registry)
 	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry)
+
+	// Register embeddings endpoints if services are available
+	if opts != nil && opts.BackfillService != nil && opts.JobManager != nil {
+		v0.RegisterEmbeddingsEndpoints(api, pathPrefix, opts.BackfillService, opts.JobManager)
+	}
 
 	// v0-only admin endpoints (agents and skills)
 	if pathPrefix == "/admin/v0" {

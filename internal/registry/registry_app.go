@@ -17,10 +17,12 @@ import (
 	mcpregistry "github.com/agentregistry-dev/agentregistry/internal/mcp/registryserver"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api"
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/importer"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
@@ -187,8 +189,20 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		}
 	}
 
+	// Initialize job manager and backfill service for embeddings
+	var routeOpts *router.RouteOptions
+	if cfg.Embeddings.Enabled && embeddingProvider != nil {
+		jobManager := jobs.NewManager()
+		backfillService := service.NewBackfillService(registryService, embeddingProvider, cfg.Embeddings.Dimensions)
+		routeOpts = &router.RouteOptions{
+			BackfillService: backfillService,
+			JobManager:      jobManager,
+		}
+		log.Println("Embeddings backfill API enabled")
+	}
+
 	// Initialize HTTP server
-	baseServer := api.NewServer(cfg, registryService, metrics, versionInfo, options.UIHandler, authnProvider)
+	baseServer := api.NewServer(cfg, registryService, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts)
 
 	var server types.Server
 	if options.HTTPServerFactory != nil {

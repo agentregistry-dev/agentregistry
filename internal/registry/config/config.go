@@ -56,6 +56,7 @@ type EmbeddingsConfig struct {
 	OpenAIAPIKey  string `env:"OPENAI_API_KEY" envDefault:""`
 	OpenAIBaseURL string `env:"OPENAI_BASE_URL" envDefault:"https://api.openai.com/v1"`
 	OpenAIOrg     string `env:"OPENAI_ORG" envDefault:""`
+	OnPublish     bool   `env:"EMBEDDINGS_ON_PUBLISH" envDefault:"false"`
 }
 
 // NewConfig creates a new configuration with default values

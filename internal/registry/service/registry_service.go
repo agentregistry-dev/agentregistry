@@ -29,9 +29,10 @@ const maxServerVersionsPerServer = 10000
 // registryServiceImpl implements the RegistryService interface using our Database
 // It also implements the Reconciler interface for server-side container management
 type registryServiceImpl struct {
-	db                 database.Database
-	cfg                *config.Config
-	embeddingsProvider embeddings.Provider
+	db                    database.Database
+	cfg                   *config.Config
+	embeddingsProvider    embeddings.Provider
+	onPublishEmbeddings   *embeddings.OnPublishService
 }
 
 // NewRegistryService creates a new registry service with the provided database and configuration
@@ -40,10 +41,16 @@ func NewRegistryService(
 	cfg *config.Config,
 	embeddingProvider embeddings.Provider,
 ) RegistryService {
+	var onPublishSvc *embeddings.OnPublishService
+	if cfg != nil && cfg.Embeddings.Enabled && cfg.Embeddings.OnPublish && embeddingProvider != nil {
+		onPublishSvc = embeddings.NewOnPublishService(embeddingProvider, cfg.Embeddings.Dimensions, true)
+	}
+
 	return &registryServiceImpl{
-		db:                 db,
-		cfg:                cfg,
-		embeddingsProvider: embeddingProvider,
+		db:                    db,
+		cfg:                   cfg,
+		embeddingsProvider:    embeddingProvider,
+		onPublishEmbeddings:   onPublishSvc,
 	}
 }
 
@@ -182,7 +189,27 @@ func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx 
 	}
 
 	// Insert new server version
-	return s.db.CreateServer(ctx, tx, &serverJSON, officialMeta)
+	result, err := s.db.CreateServer(ctx, tx, &serverJSON, officialMeta)
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate embedding asynchronously (non-blocking, best-effort)
+	if s.onPublishEmbeddings != nil && s.onPublishEmbeddings.IsEnabled() {
+		go func() {
+			bgCtx := context.Background()
+			embedding, err := s.onPublishEmbeddings.GenerateServerEmbedding(bgCtx, &serverJSON)
+			if err != nil {
+				log.Printf("Warning: failed to generate embedding for %s@%s: %v", serverJSON.Name, serverJSON.Version, err)
+			} else if embedding != nil {
+				if err := s.UpsertServerEmbedding(bgCtx, serverJSON.Name, serverJSON.Version, embedding); err != nil {
+					log.Printf("Warning: failed to store embedding for %s@%s: %v", serverJSON.Name, serverJSON.Version, err)
+				}
+			}
+		}()
+	}
+
+	return result, nil
 }
 
 // validateNoDuplicateRemoteURLs checks that no other server is using the same remote URLs
@@ -611,7 +638,27 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 		IsLatest:    isNewLatest,
 	}
 
-	return s.db.CreateAgent(ctx, tx, &agentJSON, officialMeta)
+	result, err := s.db.CreateAgent(ctx, tx, &agentJSON, officialMeta)
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate embedding asynchronously (non-blocking, best-effort)
+	if s.onPublishEmbeddings != nil && s.onPublishEmbeddings.IsEnabled() {
+		go func() {
+			bgCtx := context.Background()
+			embedding, err := s.onPublishEmbeddings.GenerateAgentEmbedding(bgCtx, &agentJSON)
+			if err != nil {
+				log.Printf("Warning: failed to generate embedding for agent %s@%s: %v", agentJSON.Name, agentJSON.Version, err)
+			} else if embedding != nil {
+				if err := s.UpsertAgentEmbedding(bgCtx, agentJSON.Name, agentJSON.Version, embedding); err != nil {
+					log.Printf("Warning: failed to store embedding for agent %s@%s: %v", agentJSON.Name, agentJSON.Version, err)
+				}
+			}
+		}()
+	}
+
+	return result, nil
 }
 
 // PublishAgent marks an agent as published
