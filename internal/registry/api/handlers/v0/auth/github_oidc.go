@@ -12,9 +12,9 @@ import (
 	"slices"
 	"strings"
 
-	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -232,13 +232,13 @@ func RegisterGitHubOIDCEndpoint(api huma.API, pathPrefix string, cfg *config.Con
 		Summary:     "Exchange GitHub OIDC token for Registry JWT",
 		Description: "Exchange a GitHub Actions OIDC token for a short-lived Registry JWT token",
 		Tags:        []string{"auth"},
-	}, func(ctx context.Context, input *GitHubOIDCTokenExchangeInput) (*v0.Response[auth.TokenResponse], error) {
+	}, func(ctx context.Context, input *GitHubOIDCTokenExchangeInput) (*types.Response[auth.TokenResponse], error) {
 		response, err := handler.ExchangeToken(ctx, input.Body.OIDCToken)
 		if err != nil {
 			return nil, huma.Error401Unauthorized("Token exchange failed", err)
 		}
 
-		return &v0.Response[auth.TokenResponse]{
+		return &types.Response[auth.TokenResponse]{
 			Body: *response,
 		}, nil
 	})
