@@ -18,7 +18,7 @@ LDFLAGS := \
 # Local architecture detection to build for the current platform
 LOCALARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
 
-.PHONY: help install-ui build-ui clean-ui build-cli build install dev-ui test clean fmt lint all release-cli docker-compose-up docker-compose-down docker-compose-logs
+.PHONY: help install-ui build-ui clean-ui build-cli build install dev-ui test test-integration test-coverage test-coverage-report clean fmt lint all release-cli docker-compose-up docker-compose-down docker-compose-logs
 
 # Default target
 help:
@@ -30,7 +30,10 @@ help:
 	@echo "  build                - Build both UI and Go CLI"
 	@echo "  install              - Install the CLI to GOPATH/bin"
 	@echo "  dev-ui               - Run Next.js in development mode"
-	@echo "  test                 - Run Go tests"
+	@echo "  test                 - Run Go unit tests"
+	@echo "  test-integration     - Run Go tests with integration tests"
+	@echo "  test-coverage        - Run Go tests with coverage"
+	@echo "  test-coverage-report - Run Go tests with HTML coverage report"
 	@echo "  clean                - Clean all build artifacts"
 	@echo "  all                  - Clean and build everything"
 	@echo "  fmt                  - Run the formatter"
@@ -96,10 +99,27 @@ dev-ui:
 	@echo "Starting Next.js development server..."
 	cd ui && npm run dev
 
-# Run Go tests
+# Run Go tests (unit tests only)
 test:
-	@echo "Running Go tests..."
+	@echo "Running Go unit tests..."
+	go test -ldflags "$(LDFLAGS)" ./...
+
+# Run Go tests with integration tests
+test-integration:
+	@echo "Running Go tests with integration..."
 	go test -ldflags "$(LDFLAGS)" -tags=integration -v ./...
+
+# Run Go tests with coverage
+test-coverage:
+	@echo "Running Go tests with coverage..."
+	go test -ldflags "$(LDFLAGS)" -cover ./...
+
+# Run Go tests with coverage report
+test-coverage-report:
+	@echo "Running Go tests with coverage report..."
+	go test -ldflags "$(LDFLAGS)" -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
 
 # Clean all build artifacts
 clean: clean-ui
