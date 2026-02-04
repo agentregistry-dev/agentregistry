@@ -16,7 +16,7 @@ import (
 
 // RouteOptions contains optional services for route registration.
 type RouteOptions struct {
-	Indexer    *service.Indexer
+	Indexer    service.Indexer
 	JobManager *jobs.Manager
 	Mux        *http.ServeMux
 }

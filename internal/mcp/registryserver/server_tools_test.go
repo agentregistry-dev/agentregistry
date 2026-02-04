@@ -9,148 +9,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	servicetesting "github.com/agentregistry-dev/agentregistry/internal/registry/service/testing"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 )
-
-// A focused fake that only implements the read-only discovery methods.
-type discoveryRegistry struct {
-	servers      []*apiv0.ServerResponse
-	agents       []*models.AgentResponse
-	skills       []*models.SkillResponse
-	serverReadme *database.ServerReadme
-}
-
-func (d *discoveryRegistry) ListServers(context.Context, *database.ServerFilter, string, int) ([]*apiv0.ServerResponse, string, error) {
-	return d.servers, "", nil
-}
-func (d *discoveryRegistry) GetServerByName(context.Context, string) (*apiv0.ServerResponse, error) {
-	if len(d.servers) > 0 {
-		return d.servers[0], nil
-	}
-	return nil, database.ErrNotFound
-}
-func (d *discoveryRegistry) GetServerByNameAndVersion(context.Context, string, string, bool) (*apiv0.ServerResponse, error) {
-	return d.GetServerByName(context.Background(), "")
-}
-func (d *discoveryRegistry) GetAllVersionsByServerName(context.Context, string, bool) ([]*apiv0.ServerResponse, error) {
-	return d.servers, nil
-}
-func (d *discoveryRegistry) CreateServer(context.Context, *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
-	return nil, database.ErrNotFound
-}
-func (d *discoveryRegistry) UpdateServer(context.Context, string, string, *apiv0.ServerJSON, *string) (*apiv0.ServerResponse, error) {
-	return nil, database.ErrNotFound
-}
-func (d *discoveryRegistry) StoreServerReadme(context.Context, string, string, []byte, string) error {
-	return database.ErrNotFound
-}
-func (d *discoveryRegistry) GetServerReadmeLatest(context.Context, string) (*database.ServerReadme, error) {
-	return d.serverReadme, nil
-}
-func (d *discoveryRegistry) GetServerReadmeByVersion(context.Context, string, string) (*database.ServerReadme, error) {
-	return d.serverReadme, nil
-}
-func (d *discoveryRegistry) PublishServer(context.Context, string, string) error {
-	return database.ErrNotFound
-}
-func (d *discoveryRegistry) UnpublishServer(context.Context, string, string) error {
-	return database.ErrNotFound
-}
-func (d *discoveryRegistry) DeleteServer(context.Context, string, string) error {
-	return database.ErrNotFound
-}
-
-// Agents
-func (d *discoveryRegistry) ListAgents(context.Context, *database.AgentFilter, string, int) ([]*models.AgentResponse, string, error) {
-	return d.agents, "", nil
-}
-func (d *discoveryRegistry) GetAgentByName(context.Context, string) (*models.AgentResponse, error) {
-	if len(d.agents) > 0 {
-		return d.agents[0], nil
-	}
-	return nil, database.ErrNotFound
-}
-func (d *discoveryRegistry) GetAgentByNameAndVersion(context.Context, string, string) (*models.AgentResponse, error) {
-	return d.GetAgentByName(context.Background(), "")
-}
-func (d *discoveryRegistry) GetAllVersionsByAgentName(context.Context, string) ([]*models.AgentResponse, error) {
-	return d.agents, nil
-}
-func (d *discoveryRegistry) CreateAgent(context.Context, *models.AgentJSON) (*models.AgentResponse, error) {
-	return nil, database.ErrNotFound
-}
-func (d *discoveryRegistry) PublishAgent(context.Context, string, string) error {
-	return database.ErrNotFound
-}
-func (d *discoveryRegistry) UnpublishAgent(context.Context, string, string) error {
-	return database.ErrNotFound
-}
-func (d *discoveryRegistry) DeleteAgent(context.Context, string, string) error {
-	return database.ErrNotFound
-}
-
-// Skills
-func (d *discoveryRegistry) ListSkills(context.Context, *database.SkillFilter, string, int) ([]*models.SkillResponse, string, error) {
-	return d.skills, "", nil
-}
-func (d *discoveryRegistry) GetSkillByName(context.Context, string) (*models.SkillResponse, error) {
-	if len(d.skills) > 0 {
-		return d.skills[0], nil
-	}
-	return nil, database.ErrNotFound
-}
-func (d *discoveryRegistry) GetSkillByNameAndVersion(context.Context, string, string) (*models.SkillResponse, error) {
-	return d.GetSkillByName(context.Background(), "")
-}
-func (d *discoveryRegistry) GetAllVersionsBySkillName(context.Context, string) ([]*models.SkillResponse, error) {
-	return d.skills, nil
-}
-func (d *discoveryRegistry) CreateSkill(context.Context, *models.SkillJSON) (*models.SkillResponse, error) {
-	return nil, database.ErrNotFound
-}
-func (d *discoveryRegistry) PublishSkill(context.Context, string, string) error {
-	return database.ErrNotFound
-}
-func (d *discoveryRegistry) UnpublishSkill(context.Context, string, string) error {
-	return database.ErrNotFound
-}
-
-// Deployments and reconciler not used here.
-func (d *discoveryRegistry) GetDeployments(context.Context, *models.DeploymentFilter) ([]*models.Deployment, error) {
-	return nil, database.ErrNotFound
-}
-func (d *discoveryRegistry) GetDeploymentByNameAndVersion(context.Context, string, string, string) (*models.Deployment, error) {
-	return nil, database.ErrNotFound
-}
-func (d *discoveryRegistry) DeployServer(context.Context, string, string, map[string]string, bool, string) (*models.Deployment, error) {
-	return nil, database.ErrNotFound
-}
-func (d *discoveryRegistry) DeployAgent(context.Context, string, string, map[string]string, bool, string) (*models.Deployment, error) {
-	return nil, database.ErrNotFound
-}
-func (d *discoveryRegistry) UpdateDeploymentConfig(context.Context, string, string, string, map[string]string) (*models.Deployment, error) {
-	return nil, database.ErrNotFound
-}
-func (d *discoveryRegistry) RemoveDeployment(context.Context, string, string, string) error {
-	return database.ErrNotFound
-}
-func (d *discoveryRegistry) ReconcileAll(context.Context) error { return nil }
-func (d *discoveryRegistry) UpsertServerEmbedding(context.Context, string, string, *database.SemanticEmbedding) error {
-	return database.ErrNotFound
-}
-func (d *discoveryRegistry) GetServerEmbeddingMetadata(context.Context, string, string) (*database.SemanticEmbeddingMetadata, error) {
-	return nil, database.ErrNotFound
-}
-func (d *discoveryRegistry) UpsertAgentEmbedding(context.Context, string, string, *database.SemanticEmbedding) error {
-	return database.ErrNotFound
-}
-func (d *discoveryRegistry) GetAgentEmbeddingMetadata(context.Context, string, string) (*database.SemanticEmbeddingMetadata, error) {
-	return nil, database.ErrNotFound
-}
 
 func TestServerTools_ListAndReadme(t *testing.T) {
 	ctx := context.Background()
@@ -164,20 +29,19 @@ func TestServerTools_ListAndReadme(t *testing.T) {
 		SHA256:      []byte{0xaa, 0xbb},
 		FetchedAt:   time.Now(),
 	}
-	reg := &discoveryRegistry{
-		servers: []*apiv0.ServerResponse{
-			{
-				Server: apiv0.ServerJSON{
-					Schema:      model.CurrentSchemaURL,
-					Name:        "com.example/echo",
-					Description: "Echo server",
-					Title:       "Echo",
-					Version:     "1.0.0",
-				},
+	reg := servicetesting.NewFakeRegistry()
+	reg.Servers = []*apiv0.ServerResponse{
+		{
+			Server: apiv0.ServerJSON{
+				Schema:      model.CurrentSchemaURL,
+				Name:        "com.example/echo",
+				Description: "Echo server",
+				Title:       "Echo",
+				Version:     "1.0.0",
 			},
 		},
-		serverReadme: readme,
 	}
+	reg.ServerReadme = readme
 
 	server := NewServer(reg)
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
@@ -239,29 +103,28 @@ func TestServerTools_ListAndReadme(t *testing.T) {
 func TestAgentAndSkillTools_ListAndGet(t *testing.T) {
 	ctx := context.Background()
 
-	reg := &discoveryRegistry{
-		agents: []*models.AgentResponse{
-			{
-				Agent: models.AgentJSON{
-					AgentManifest: models.AgentManifest{
-						Name:      "com.example/agent",
-						Language:  "go",
-						Framework: "none",
-					},
-					Title:   "Agent",
-					Version: "1.0.0",
-					Status:  string(model.StatusActive),
+	reg := servicetesting.NewFakeRegistry()
+	reg.Agents = []*models.AgentResponse{
+		{
+			Agent: models.AgentJSON{
+				AgentManifest: models.AgentManifest{
+					Name:      "com.example/agent",
+					Language:  "go",
+					Framework: "none",
 				},
+				Title:   "Agent",
+				Version: "1.0.0",
+				Status:  string(model.StatusActive),
 			},
 		},
-		skills: []*models.SkillResponse{
-			{
-				Skill: models.SkillJSON{
-					Name:    "com.example/skill",
-					Title:   "Skill",
-					Version: "2.0.0",
-					Status:  string(model.StatusActive),
-				},
+	}
+	reg.Skills = []*models.SkillResponse{
+		{
+			Skill: models.SkillJSON{
+				Name:    "com.example/skill",
+				Title:   "Skill",
+				Version: "2.0.0",
+				Status:  string(model.StatusActive),
 			},
 		},
 	}

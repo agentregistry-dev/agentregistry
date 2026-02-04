@@ -37,16 +37,21 @@ type IndexResult struct {
 // resource is "servers" or "agents".
 type IndexProgressCallback func(resource string, stats IndexStats)
 
-// Indexer handles embedding indexing operations.
-type Indexer struct {
+// Indexer defines the interface for embedding indexing operations.
+type Indexer interface {
+	Run(ctx context.Context, opts IndexOptions, onProgress IndexProgressCallback) (*IndexResult, error)
+}
+
+// indexerImpl is the concrete implementation of Indexer.
+type indexerImpl struct {
 	registry   RegistryService
 	provider   embeddings.Provider
 	dimensions int
 }
 
 // NewIndexer creates a new embeddings indexer.
-func NewIndexer(registry RegistryService, provider embeddings.Provider, dimensions int) *Indexer {
-	return &Indexer{
+func NewIndexer(registry RegistryService, provider embeddings.Provider, dimensions int) Indexer {
+	return &indexerImpl{
 		registry:   registry,
 		provider:   provider,
 		dimensions: dimensions,
@@ -54,7 +59,7 @@ func NewIndexer(registry RegistryService, provider embeddings.Provider, dimensio
 }
 
 // Run executes the indexing operation with progress callbacks.
-func (s *Indexer) Run(ctx context.Context, opts IndexOptions, onProgress IndexProgressCallback) (*IndexResult, error) {
+func (s *indexerImpl) Run(ctx context.Context, opts IndexOptions, onProgress IndexProgressCallback) (*IndexResult, error) {
 	if s.provider == nil {
 		return nil, errors.New("embedding provider is not configured")
 	}
@@ -88,7 +93,7 @@ func (s *Indexer) Run(ctx context.Context, opts IndexOptions, onProgress IndexPr
 	return result, nil
 }
 
-func (s *Indexer) indexServers(ctx context.Context, opts IndexOptions, onProgress IndexProgressCallback) (IndexStats, error) {
+func (s *indexerImpl) indexServers(ctx context.Context, opts IndexOptions, onProgress IndexProgressCallback) (IndexStats, error) {
 	var (
 		stats  IndexStats
 		cursor string
@@ -186,7 +191,7 @@ func (s *Indexer) indexServers(ctx context.Context, opts IndexOptions, onProgres
 	return stats, nil
 }
 
-func (s *Indexer) indexAgents(ctx context.Context, opts IndexOptions, onProgress IndexProgressCallback) (IndexStats, error) {
+func (s *indexerImpl) indexAgents(ctx context.Context, opts IndexOptions, onProgress IndexProgressCallback) (IndexStats, error) {
 	var (
 		stats  IndexStats
 		cursor string

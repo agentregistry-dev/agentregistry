@@ -53,7 +53,7 @@ type JobStatusResponse struct {
 func RegisterEmbeddingsEndpoints(
 	api huma.API,
 	pathPrefix string,
-	indexer *service.Indexer,
+	indexer service.Indexer,
 	jobManager *jobs.Manager,
 ) {
 	registerIndexEndpoint(api, pathPrefix, indexer, jobManager)
@@ -63,7 +63,7 @@ func RegisterEmbeddingsEndpoints(
 func registerIndexEndpoint(
 	api huma.API,
 	pathPrefix string,
-	indexer *service.Indexer,
+	indexer service.Indexer,
 	jobManager *jobs.Manager,
 ) {
 	huma.Register(api, huma.Operation{
@@ -121,7 +121,7 @@ func registerIndexEndpoint(
 }
 
 func runIndexJob(
-	indexer *service.Indexer,
+	indexer service.Indexer,
 	jobManager *jobs.Manager,
 	jobID jobs.JobID,
 	req IndexRequest,

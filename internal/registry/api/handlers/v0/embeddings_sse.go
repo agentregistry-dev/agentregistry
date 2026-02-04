@@ -26,7 +26,7 @@ type SSEEvent struct {
 func RegisterEmbeddingsSSEHandler(
 	mux *http.ServeMux,
 	pathPrefix string,
-	indexer *service.Indexer,
+	indexer service.Indexer,
 	jobManager *jobs.Manager,
 ) {
 	// Use POST to accept JSON body with options, and method-specific pattern
@@ -40,7 +40,7 @@ func RegisterEmbeddingsSSEHandler(
 func handleSSEIndex(
 	w http.ResponseWriter,
 	r *http.Request,
-	indexer *service.Indexer,
+	indexer service.Indexer,
 	jobManager *jobs.Manager,
 ) {
 	if indexer == nil {
