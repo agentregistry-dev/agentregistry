@@ -13,6 +13,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
@@ -108,7 +109,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			Summary:     "Delete MCP server version",
 			Description: "Permanently delete an MCP server version from the registry.",
 			Tags:        []string{"servers", "admin"},
-		}, func(ctx context.Context, input *ServerVersionDetailInput) (*Response[EmptyResponse], error) {
+		}, func(ctx context.Context, input *ServerVersionDetailInput) (*types.Response[types.EmptyResponse], error) {
 			serverName, err := url.PathUnescape(input.ServerName)
 			if err != nil {
 				return nil, huma.Error400BadRequest("Invalid server name encoding", err)
@@ -123,8 +124,8 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 				}
 				return nil, huma.Error500InternalServerError("Failed to delete server", err)
 			}
-			return &Response[EmptyResponse]{
-				Body: EmptyResponse{
+			return &types.Response[types.EmptyResponse]{
+				Body: types.EmptyResponse{
 					Message: "Server deleted successfully",
 				},
 			}, nil
@@ -144,7 +145,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		Summary:     "Push MCP server (create unpublished)",
 		Description: "Create a new MCP server in the registry as an unpublished entry (published=false).",
 		Tags:        tags,
-	}, func(ctx context.Context, input *CreateServerInput) (*Response[models.ServerResponse], error) {
+	}, func(ctx context.Context, input *CreateServerInput) (*types.Response[models.ServerResponse], error) {
 		// Always create as unpublished (handled in service layer)
 		return createServerHandler(ctx, input, registry)
 	})
@@ -162,7 +163,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		Summary:     "List MCP servers",
 		Description: "Get a paginated list of MCP servers from the registry",
 		Tags:        tags,
-	}, func(ctx context.Context, input *ListServersInput) (*Response[models.ServerListResponse], error) {
+	}, func(ctx context.Context, input *ListServersInput) (*types.Response[models.ServerListResponse], error) {
 		// Note: Authz filtering for list operations is handled at the database layer.
 
 		// Build filter from input parameters
@@ -230,7 +231,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			serverValues[i] = normalizeServerResponse(server)
 		}
 
-		return &Response[models.ServerListResponse]{
+		return &types.Response[models.ServerListResponse]{
 			Body: models.ServerListResponse{
 				Servers: serverValues,
 				Metadata: models.ServerMetadata{
@@ -250,7 +251,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		Summary:     "Get specific MCP server version",
 		Description: "Get detailed information about a specific version of an MCP server. Set 'all=true' query parameter to get all versions. Set 'published_only=true' to filter to only published versions (only applies when all=true).",
 		Tags:        tags,
-	}, func(ctx context.Context, input *ServerVersionDetailInput) (*Response[models.ServerListResponse], error) {
+	}, func(ctx context.Context, input *ServerVersionDetailInput) (*types.Response[models.ServerListResponse], error) {
 		// URL-decode the server name
 		serverName, err := url.PathUnescape(input.ServerName)
 		if err != nil {
@@ -286,7 +287,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 				serverValues[i] = normalizeServerResponse(server)
 			}
 
-			return &Response[models.ServerListResponse]{
+			return &types.Response[models.ServerListResponse]{
 				Body: models.ServerListResponse{
 					Servers: serverValues,
 					Metadata: models.ServerMetadata{
@@ -342,7 +343,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		}
 
 		// Return single server wrapped in a list response
-		return &Response[models.ServerListResponse]{
+		return &types.Response[models.ServerListResponse]{
 			Body: models.ServerListResponse{
 				Servers: []models.ServerResponse{normalizeServerResponse(serverResponse)},
 				Metadata: models.ServerMetadata{
@@ -360,7 +361,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		Summary:     "Get all versions of an MCP server",
 		Description: "Get all available versions for a specific MCP server",
 		Tags:        tags,
-	}, func(ctx context.Context, input *ServerVersionsInput) (*Response[models.ServerListResponse], error) {
+	}, func(ctx context.Context, input *ServerVersionsInput) (*types.Response[models.ServerListResponse], error) {
 		// URL-decode the server name
 		serverName, err := url.PathUnescape(input.ServerName)
 		if err != nil {
@@ -384,7 +385,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			serverValues[i] = normalizeServerResponse(server)
 		}
 
-		return &Response[models.ServerListResponse]{
+		return &types.Response[models.ServerListResponse]{
 			Body: models.ServerListResponse{
 				Servers: serverValues,
 				Metadata: models.ServerMetadata{
@@ -402,7 +403,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		Summary:     "Get server README",
 		Description: "Fetch the README markdown document for the latest version of a server",
 		Tags:        tags,
-	}, func(ctx context.Context, input *ServerDetailInput) (*Response[ServerReadmeResponse], error) {
+	}, func(ctx context.Context, input *ServerDetailInput) (*types.Response[ServerReadmeResponse], error) {
 		serverName, err := url.PathUnescape(input.ServerName)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
@@ -416,7 +417,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			return nil, huma.Error500InternalServerError("Failed to fetch server README", err)
 		}
 
-		return &Response[ServerReadmeResponse]{
+		return &types.Response[ServerReadmeResponse]{
 			Body: toServerReadmeResponse(readme),
 		}, nil
 	})
@@ -429,7 +430,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		Summary:     "Get server README for a version",
 		Description: "Fetch the README markdown document for a specific server version",
 		Tags:        tags,
-	}, func(ctx context.Context, input *ServerVersionDetailInput) (*Response[ServerReadmeResponse], error) {
+	}, func(ctx context.Context, input *ServerVersionDetailInput) (*types.Response[ServerReadmeResponse], error) {
 		serverName, err := url.PathUnescape(input.ServerName)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
@@ -452,7 +453,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			return nil, huma.Error500InternalServerError("Failed to fetch server README", err)
 		}
 
-		return &Response[ServerReadmeResponse]{
+		return &types.Response[ServerReadmeResponse]{
 			Body: toServerReadmeResponse(readme),
 		}, nil
 	})
@@ -479,7 +480,7 @@ type CreateServerInput struct {
 }
 
 // createServerHandler is the shared handler logic for creating servers
-func createServerHandler(ctx context.Context, input *CreateServerInput, registry service.RegistryService) (*Response[models.ServerResponse], error) {
+func createServerHandler(ctx context.Context, input *CreateServerInput, registry service.RegistryService) (*types.Response[models.ServerResponse], error) {
 	// Create/update the server (published defaults to false in the service layer)
 	createdServer, err := registry.CreateServer(ctx, &input.Body)
 	if err != nil {
@@ -489,7 +490,7 @@ func createServerHandler(ctx context.Context, input *CreateServerInput, registry
 		return nil, huma.Error400BadRequest("Failed to create server", err)
 	}
 
-	return &Response[models.ServerResponse]{
+	return &types.Response[models.ServerResponse]{
 		Body: normalizeServerResponse(createdServer),
 	}, nil
 }
@@ -507,7 +508,7 @@ func RegisterCreateEndpoint(api huma.API, pathPrefix string, registry service.Re
 		Security: []map[string][]string{
 			{"bearer": {}},
 		},
-	}, func(ctx context.Context, input *CreateServerInput) (*Response[models.ServerResponse], error) {
+	}, func(ctx context.Context, input *CreateServerInput) (*types.Response[models.ServerResponse], error) {
 		return createServerHandler(ctx, input, registry)
 	})
 }
@@ -522,7 +523,7 @@ func RegisterAdminCreateEndpoint(api huma.API, pathPrefix string, registry servi
 		Summary:     "Create/update MCP server (Admin)",
 		Description: "Create a new MCP server in the registry or update an existing one. By default, servers are created as unpublished (published=false).",
 		Tags:        []string{"servers", "admin"},
-	}, func(ctx context.Context, input *CreateServerInput) (*Response[models.ServerResponse], error) {
+	}, func(ctx context.Context, input *CreateServerInput) (*types.Response[models.ServerResponse], error) {
 		return createServerHandler(ctx, input, registry)
 	})
 }
@@ -538,7 +539,7 @@ func RegisterPublishStatusEndpoints(api huma.API, pathPrefix string, registry se
 		Summary:     "Publish an existing server",
 		Description: "Mark an existing server version as published, making it visible in public listings. This acts on a server that was already created.",
 		Tags:        []string{"servers", "admin"},
-	}, func(ctx context.Context, input *ServerVersionDetailInput) (*Response[EmptyResponse], error) {
+	}, func(ctx context.Context, input *ServerVersionDetailInput) (*types.Response[types.EmptyResponse], error) {
 		// URL-decode the server name and version
 		serverName, err := url.PathUnescape(input.ServerName)
 		if err != nil {
@@ -557,8 +558,8 @@ func RegisterPublishStatusEndpoints(api huma.API, pathPrefix string, registry se
 			return nil, huma.Error500InternalServerError("Failed to publish server", err)
 		}
 
-		return &Response[EmptyResponse]{
-			Body: EmptyResponse{
+		return &types.Response[types.EmptyResponse]{
+			Body: types.EmptyResponse{
 				Message: "Server published successfully",
 			},
 		}, nil
@@ -572,7 +573,7 @@ func RegisterPublishStatusEndpoints(api huma.API, pathPrefix string, registry se
 		Summary:     "Unpublish an existing server",
 		Description: "Mark an existing server version as unpublished, hiding it from public listings. This acts on a server that was already created.",
 		Tags:        []string{"servers", "admin"},
-	}, func(ctx context.Context, input *ServerVersionDetailInput) (*Response[EmptyResponse], error) {
+	}, func(ctx context.Context, input *ServerVersionDetailInput) (*types.Response[types.EmptyResponse], error) {
 		// URL-decode the server name and version
 		serverName, err := url.PathUnescape(input.ServerName)
 		if err != nil {
@@ -591,8 +592,8 @@ func RegisterPublishStatusEndpoints(api huma.API, pathPrefix string, registry se
 			return nil, huma.Error500InternalServerError("Failed to unpublish server", err)
 		}
 
-		return &Response[EmptyResponse]{
-			Body: EmptyResponse{
+		return &types.Response[types.EmptyResponse]{
+			Body: types.EmptyResponse{
 				Message: "Server unpublished successfully",
 			},
 		}, nil

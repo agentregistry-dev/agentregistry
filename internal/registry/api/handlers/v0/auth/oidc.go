@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strings"
 
-	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -160,13 +160,13 @@ func RegisterOIDCEndpoints(api huma.API, pathPrefix string, cfg *config.Config) 
 		Summary:     "Exchange OIDC ID token for Registry JWT",
 		Description: "Exchange an OIDC ID token from any configured provider for a short-lived Registry JWT token",
 		Tags:        []string{"auth"},
-	}, func(ctx context.Context, input *OIDCTokenExchangeInput) (*v0.Response[auth.TokenResponse], error) {
+	}, func(ctx context.Context, input *OIDCTokenExchangeInput) (*types.Response[auth.TokenResponse], error) {
 		response, err := handler.ExchangeToken(ctx, input.Body.OIDCToken)
 		if err != nil {
 			return nil, huma.Error401Unauthorized("Token exchange failed", err)
 		}
 
-		return &v0.Response[auth.TokenResponse]{
+		return &types.Response[auth.TokenResponse]{
 			Body: *response,
 		}, nil
 	})
