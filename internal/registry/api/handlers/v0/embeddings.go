@@ -8,6 +8,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -72,7 +73,7 @@ func registerIndexEndpoint(
 		Summary:     "Start embeddings indexing",
 		Description: "Start a background job to generate embeddings for servers and/or agents. Use stream=true for SSE progress updates.",
 		Tags:        []string{"embeddings"},
-	}, func(ctx context.Context, input *IndexInput) (*Response[IndexJobResponse], error) {
+	}, func(ctx context.Context, input *IndexInput) (*types.Response[IndexJobResponse], error) {
 		if indexer == nil {
 			return nil, huma.Error503ServiceUnavailable("embeddings service is not configured")
 		}
@@ -110,7 +111,7 @@ func registerIndexEndpoint(
 		// Run indexing in background
 		go runIndexJob(indexer, jobManager, job.ID, req)
 
-		return &Response[IndexJobResponse]{
+		return &types.Response[IndexJobResponse]{
 			Body: IndexJobResponse{
 				JobID:  string(job.ID),
 				Status: string(job.Status),
@@ -190,7 +191,7 @@ func registerJobStatusEndpoint(
 		Summary:     "Get indexing job status",
 		Description: "Get the status and progress of an indexing job.",
 		Tags:        []string{"embeddings"},
-	}, func(ctx context.Context, input *JobStatusInput) (*Response[JobStatusResponse], error) {
+	}, func(ctx context.Context, input *JobStatusInput) (*types.Response[JobStatusResponse], error) {
 		job, err := jobManager.GetJob(jobs.JobID(input.JobID))
 		if err != nil {
 			if err == jobs.ErrJobNotFound {
@@ -199,7 +200,7 @@ func registerJobStatusEndpoint(
 			return nil, huma.Error500InternalServerError("failed to get job: " + err.Error())
 		}
 
-		return &Response[JobStatusResponse]{
+		return &types.Response[JobStatusResponse]{
 			Body: JobStatusResponse{
 				JobID:     string(job.ID),
 				Type:      job.Type,
