@@ -931,19 +931,24 @@ func (c *Client) GetIndexStatus(jobID string) (*IndexJobStatus, error) {
 }
 
 // StreamIndexURL returns the URL for SSE streaming indexing.
-func (c *Client) StreamIndexURL(req IndexRequest) string {
+func (c *Client) StreamIndexURL(_ IndexRequest) string {
 	base := c.baseURLWithoutVersion()
-	return fmt.Sprintf("%s/admin/v0/embeddings/index/stream?batchSize=%d&force=%t&dryRun=%t&includeServers=%t&includeAgents=%t",
-		base, req.BatchSize, req.Force, req.DryRun, req.IncludeServers, req.IncludeAgents)
+	return base + "/admin/v0/embeddings/index/stream"
 }
 
-// NewSSERequest creates a new HTTP request for SSE streaming with proper headers.
-func (c *Client) NewSSERequest(ctx context.Context, urlStr string) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
+// NewSSERequest creates a new HTTP POST request for SSE streaming with JSON body.
+func (c *Client) NewSSERequest(ctx context.Context, urlStr string, body IndexRequest) (*http.Request, error) {
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, urlStr, bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Content-Type", "application/json")
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}

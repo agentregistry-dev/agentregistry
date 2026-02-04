@@ -90,7 +90,7 @@ func runEmbeddingsGenerate(ctx context.Context) error {
 func streamIndex(ctx context.Context, c *client.Client, req client.IndexRequest) error {
 	streamURL := c.StreamIndexURL(req)
 
-	httpReq, err := c.NewSSERequest(ctx, streamURL)
+	httpReq, err := c.NewSSERequest(ctx, streamURL, req)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}

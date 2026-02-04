@@ -2,6 +2,8 @@
 package router
 
 import (
+	"net/http"
+
 	"github.com/danielgtaylor/huma/v2"
 
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
@@ -16,6 +18,7 @@ import (
 type RouteOptions struct {
 	Indexer    *service.Indexer
 	JobManager *jobs.Manager
+	Mux        *http.ServeMux
 }
 
 // RegisterRoutes registers all API routes (public and admin) for all versions
@@ -92,6 +95,10 @@ func registerAdminRoutes(
 	// Register embeddings endpoints if services are available
 	if opts != nil && opts.Indexer != nil && opts.JobManager != nil {
 		v0.RegisterEmbeddingsEndpoints(api, pathPrefix, opts.Indexer, opts.JobManager)
+		// Also register SSE handler on the mux if available
+		if opts.Mux != nil {
+			v0.RegisterEmbeddingsSSEHandler(opts.Mux, pathPrefix, opts.Indexer, opts.JobManager)
+		}
 	}
 
 	// v0-only admin endpoints (agents and skills)

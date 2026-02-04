@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
@@ -30,7 +29,9 @@ func RegisterEmbeddingsSSEHandler(
 	indexer *service.Indexer,
 	jobManager *jobs.Manager,
 ) {
-	path := pathPrefix + "/embeddings/index/stream"
+	// Use POST to accept JSON body with options, and method-specific pattern
+	// to avoid conflict with Huma's {jobId} route
+	path := "POST " + pathPrefix + "/embeddings/index/stream"
 	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		handleSSEIndex(w, r, indexer, jobManager)
 	})
@@ -42,11 +43,6 @@ func handleSSEIndex(
 	indexer *service.Indexer,
 	jobManager *jobs.Manager,
 ) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	if indexer == nil {
 		http.Error(w, "Embeddings service is not configured", http.StatusServiceUnavailable)
 		return
@@ -59,18 +55,21 @@ func handleSSEIndex(
 		return
 	}
 
-	// Parse query parameters
-	query := r.URL.Query()
-	batchSize := 100
-	if bs := query.Get("batchSize"); bs != "" {
-		if val, err := strconv.Atoi(bs); err == nil && val > 0 {
-			batchSize = val
-		}
+	// Parse JSON body
+	var req IndexRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
 	}
-	force := query.Get("force") == "true"
-	dryRun := query.Get("dryRun") == "true"
-	includeServers := query.Get("includeServers") != "false"
-	includeAgents := query.Get("includeAgents") != "false"
+
+	// Apply defaults
+	if req.BatchSize <= 0 {
+		req.BatchSize = 100
+	}
+	if !req.IncludeServers && !req.IncludeAgents {
+		req.IncludeServers = true
+		req.IncludeAgents = true
+	}
 
 	// Create a job for tracking
 	job, err := jobManager.CreateJob(jobs.IndexJobType)
@@ -119,11 +118,11 @@ func handleSSEIndex(
 	}
 
 	opts := service.IndexOptions{
-		BatchSize:      batchSize,
-		Force:          force,
-		DryRun:         dryRun,
-		IncludeServers: includeServers,
-		IncludeAgents:  includeAgents,
+		BatchSize:      req.BatchSize,
+		Force:          req.Force,
+		DryRun:         req.DryRun,
+		IncludeServers: req.IncludeServers,
+		IncludeAgents:  req.IncludeAgents,
 	}
 
 	// Create a context that cancels when client disconnects

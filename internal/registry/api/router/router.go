@@ -192,6 +192,11 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 		WithSkipPaths("/health", "/metrics", "/ping", "/docs"),
 	))
 
+	// Set the mux on routeOpts for SSE handlers that need direct mux access
+	if routeOpts != nil {
+		routeOpts.Mux = mux
+	}
+
 	// Register all API routes (public and admin) for all versions
 	RegisterRoutes(api, cfg, registry, metrics, versionInfo, routeOpts)
 

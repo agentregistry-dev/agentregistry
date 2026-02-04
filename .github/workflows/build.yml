@@ -58,17 +58,6 @@ jobs:
         go build -v -o bin/arctl cmd/cli/main.go
         go build -v -o bin/arctl-server cmd/server/main.go
 
-    # TODO: reenable this later when version is fast
-    # - name: Verify binary
-    #   run: |
-    #     ./bin/arctl version
-    #     ./bin/arctl-server version
-
-    # - name: Upload artifact
-    #   uses: actions/upload-artifact@v4
-    #   with:
-    #     name: arctl
-    #     path: bin/arctl
 
   lint:
     runs-on: ubuntu-latest
