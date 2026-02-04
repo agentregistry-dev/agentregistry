@@ -10,8 +10,8 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
-// BackfillOptions configures a backfill operation.
-type BackfillOptions struct {
+// IndexOptions configures an indexing operation.
+type IndexOptions struct {
 	BatchSize      int  `json:"batchSize"`
 	Force          bool `json:"force"`
 	DryRun         bool `json:"dryRun"`
@@ -19,42 +19,42 @@ type BackfillOptions struct {
 	IncludeAgents  bool `json:"includeAgents"`
 }
 
-// BackfillStats tracks progress for a resource type.
-type BackfillStats struct {
+// IndexStats tracks progress for a resource type.
+type IndexStats struct {
 	Processed int `json:"processed"`
 	Updated   int `json:"updated"`
 	Skipped   int `json:"skipped"`
 	Failures  int `json:"failures"`
 }
 
-// BackfillResult contains the final result of a backfill operation.
-type BackfillResult struct {
-	Servers BackfillStats `json:"servers"`
-	Agents  BackfillStats `json:"agents"`
+// IndexResult contains the final result of an indexing operation.
+type IndexResult struct {
+	Servers IndexStats `json:"servers"`
+	Agents  IndexStats `json:"agents"`
 }
 
-// BackfillProgressCallback is called with progress updates during backfill.
+// IndexProgressCallback is called with progress updates during indexing.
 // resource is "servers" or "agents".
-type BackfillProgressCallback func(resource string, stats BackfillStats)
+type IndexProgressCallback func(resource string, stats IndexStats)
 
-// BackfillService handles embedding backfill operations.
-type BackfillService struct {
+// Indexer handles embedding indexing operations.
+type Indexer struct {
 	registry   RegistryService
 	provider   embeddings.Provider
 	dimensions int
 }
 
-// NewBackfillService creates a new backfill service.
-func NewBackfillService(registry RegistryService, provider embeddings.Provider, dimensions int) *BackfillService {
-	return &BackfillService{
+// NewIndexer creates a new embeddings indexer.
+func NewIndexer(registry RegistryService, provider embeddings.Provider, dimensions int) *Indexer {
+	return &Indexer{
 		registry:   registry,
 		provider:   provider,
 		dimensions: dimensions,
 	}
 }
 
-// Run executes the backfill operation with progress callbacks.
-func (s *BackfillService) Run(ctx context.Context, opts BackfillOptions, onProgress BackfillProgressCallback) (*BackfillResult, error) {
+// Run executes the indexing operation with progress callbacks.
+func (s *Indexer) Run(ctx context.Context, opts IndexOptions, onProgress IndexProgressCallback) (*IndexResult, error) {
 	if s.provider == nil {
 		return nil, errors.New("embedding provider is not configured")
 	}
@@ -67,10 +67,10 @@ func (s *BackfillService) Run(ctx context.Context, opts BackfillOptions, onProgr
 		opts.BatchSize = 100
 	}
 
-	result := &BackfillResult{}
+	result := &IndexResult{}
 
 	if opts.IncludeServers {
-		stats, err := s.backfillServers(ctx, opts, onProgress)
+		stats, err := s.indexServers(ctx, opts, onProgress)
 		if err != nil {
 			return nil, err
 		}
@@ -78,7 +78,7 @@ func (s *BackfillService) Run(ctx context.Context, opts BackfillOptions, onProgr
 	}
 
 	if opts.IncludeAgents {
-		stats, err := s.backfillAgents(ctx, opts, onProgress)
+		stats, err := s.indexAgents(ctx, opts, onProgress)
 		if err != nil {
 			return nil, err
 		}
@@ -88,9 +88,9 @@ func (s *BackfillService) Run(ctx context.Context, opts BackfillOptions, onProgr
 	return result, nil
 }
 
-func (s *BackfillService) backfillServers(ctx context.Context, opts BackfillOptions, onProgress BackfillProgressCallback) (BackfillStats, error) {
+func (s *Indexer) indexServers(ctx context.Context, opts IndexOptions, onProgress IndexProgressCallback) (IndexStats, error) {
 	var (
-		stats  BackfillStats
+		stats  IndexStats
 		cursor string
 	)
 
@@ -186,9 +186,9 @@ func (s *BackfillService) backfillServers(ctx context.Context, opts BackfillOpti
 	return stats, nil
 }
 
-func (s *BackfillService) backfillAgents(ctx context.Context, opts BackfillOptions, onProgress BackfillProgressCallback) (BackfillStats, error) {
+func (s *Indexer) indexAgents(ctx context.Context, opts IndexOptions, onProgress IndexProgressCallback) (IndexStats, error) {
 	var (
-		stats  BackfillStats
+		stats  IndexStats
 		cursor string
 	)
 

@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -846,4 +847,128 @@ func (c *Client) RemoveDeployment(name string, version string, resourceType stri
 	}
 
 	return c.doJSON(req, nil)
+}
+
+// IndexRequest is the request body for starting an indexing job.
+type IndexRequest struct {
+	BatchSize      int  `json:"batchSize,omitempty"`
+	Force          bool `json:"force,omitempty"`
+	DryRun         bool `json:"dryRun,omitempty"`
+	IncludeServers bool `json:"includeServers,omitempty"`
+	IncludeAgents  bool `json:"includeAgents,omitempty"`
+}
+
+// IndexJobResponse is the response for job creation.
+type IndexJobResponse struct {
+	JobID  string `json:"jobId"`
+	Status string `json:"status"`
+}
+
+// IndexJobStatus is the response for job status.
+type IndexJobStatus struct {
+	JobID    string `json:"jobId"`
+	Type     string `json:"type"`
+	Status   string `json:"status"`
+	Progress struct {
+		Total     int `json:"total"`
+		Processed int `json:"processed"`
+		Updated   int `json:"updated"`
+		Skipped   int `json:"skipped"`
+		Failures  int `json:"failures"`
+	} `json:"progress"`
+	Result    *IndexResult `json:"result,omitempty"`
+	CreatedAt string       `json:"createdAt"`
+	UpdatedAt string       `json:"updatedAt"`
+}
+
+// IndexResult contains the final result of an indexing job.
+type IndexResult struct {
+	ServersProcessed int    `json:"serversProcessed,omitempty"`
+	ServersUpdated   int    `json:"serversUpdated,omitempty"`
+	ServersSkipped   int    `json:"serversSkipped,omitempty"`
+	ServerFailures   int    `json:"serverFailures,omitempty"`
+	AgentsProcessed  int    `json:"agentsProcessed,omitempty"`
+	AgentsUpdated    int    `json:"agentsUpdated,omitempty"`
+	AgentsSkipped    int    `json:"agentsSkipped,omitempty"`
+	AgentFailures    int    `json:"agentFailures,omitempty"`
+	Error            string `json:"error,omitempty"`
+}
+
+// StartIndex starts an embeddings indexing job.
+func (c *Client) StartIndex(req IndexRequest) (*IndexJobResponse, error) {
+	httpReq, err := c.newAdminRequest(http.MethodPost, "/admin/v0/embeddings/index")
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Body = io.NopCloser(bytes.NewReader(body))
+
+	var resp IndexJobResponse
+	if err := c.doJSON(httpReq, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// GetIndexStatus gets the status of an indexing job.
+func (c *Client) GetIndexStatus(jobID string) (*IndexJobStatus, error) {
+	encJobID := url.PathEscape(jobID)
+	httpReq, err := c.newAdminRequest(http.MethodGet, "/admin/v0/embeddings/index/"+encJobID)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp IndexJobStatus
+	if err := c.doJSON(httpReq, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// StreamIndexURL returns the URL for SSE streaming indexing.
+func (c *Client) StreamIndexURL(req IndexRequest) string {
+	base := c.baseURLWithoutVersion()
+	return fmt.Sprintf("%s/admin/v0/embeddings/index/stream?batchSize=%d&force=%t&dryRun=%t&includeServers=%t&includeAgents=%t",
+		base, req.BatchSize, req.Force, req.DryRun, req.IncludeServers, req.IncludeAgents)
+}
+
+// NewSSERequest creates a new HTTP request for SSE streaming with proper headers.
+func (c *Client) NewSSERequest(ctx context.Context, urlStr string) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "text/event-stream")
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	return req, nil
+}
+
+// SSEClient returns an HTTP client configured for SSE (no timeout).
+func (c *Client) SSEClient() *http.Client {
+	return &http.Client{Timeout: 0}
+}
+
+// Deprecated: Use IndexRequest instead.
+type BackfillRequest = IndexRequest
+
+// Deprecated: Use StartIndex instead.
+func (c *Client) StartBackfill(req BackfillRequest) (*IndexJobResponse, error) {
+	return c.StartIndex(req)
+}
+
+// Deprecated: Use GetIndexStatus instead.
+func (c *Client) GetBackfillStatus(jobID string) (*IndexJobStatus, error) {
+	return c.GetIndexStatus(jobID)
+}
+
+// Deprecated: Use StreamIndexURL instead.
+func (c *Client) StreamBackfillURL(req BackfillRequest) string {
+	return c.StreamIndexURL(req)
 }

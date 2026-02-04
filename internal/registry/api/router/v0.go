@@ -14,8 +14,8 @@ import (
 
 // RouteOptions contains optional services for route registration.
 type RouteOptions struct {
-	BackfillService *service.BackfillService
-	JobManager      *jobs.Manager
+	Indexer    *service.Indexer
+	JobManager *jobs.Manager
 }
 
 // RegisterRoutes registers all API routes (public and admin) for all versions
@@ -90,8 +90,8 @@ func registerAdminRoutes(
 	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry)
 
 	// Register embeddings endpoints if services are available
-	if opts != nil && opts.BackfillService != nil && opts.JobManager != nil {
-		v0.RegisterEmbeddingsEndpoints(api, pathPrefix, opts.BackfillService, opts.JobManager)
+	if opts != nil && opts.Indexer != nil && opts.JobManager != nil {
+		v0.RegisterEmbeddingsEndpoints(api, pathPrefix, opts.Indexer, opts.JobManager)
 	}
 
 	// v0-only admin endpoints (agents and skills)

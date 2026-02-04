@@ -22,24 +22,24 @@ type SSEEvent struct {
 	Error    string      `json:"error,omitempty"`
 }
 
-// RegisterEmbeddingsSSEHandler registers the SSE streaming endpoint for backfill.
+// RegisterEmbeddingsSSEHandler registers the SSE streaming endpoint for indexing.
 // This is registered separately as it uses raw HTTP handlers instead of huma.
 func RegisterEmbeddingsSSEHandler(
 	mux *http.ServeMux,
 	pathPrefix string,
-	backfillService *service.BackfillService,
+	indexer *service.Indexer,
 	jobManager *jobs.Manager,
 ) {
-	path := pathPrefix + "/embeddings/backfill/stream"
+	path := pathPrefix + "/embeddings/index/stream"
 	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
-		handleSSEBackfill(w, r, backfillService, jobManager)
+		handleSSEIndex(w, r, indexer, jobManager)
 	})
 }
 
-func handleSSEBackfill(
+func handleSSEIndex(
 	w http.ResponseWriter,
 	r *http.Request,
-	backfillService *service.BackfillService,
+	indexer *service.Indexer,
 	jobManager *jobs.Manager,
 ) {
 	if r.Method != http.MethodGet {
@@ -47,7 +47,7 @@ func handleSSEBackfill(
 		return
 	}
 
-	if backfillService == nil {
+	if indexer == nil {
 		http.Error(w, "Embeddings service is not configured", http.StatusServiceUnavailable)
 		return
 	}
@@ -73,10 +73,10 @@ func handleSSEBackfill(
 	includeAgents := query.Get("includeAgents") != "false"
 
 	// Create a job for tracking
-	job, err := jobManager.CreateJob(jobs.BackfillJobType)
+	job, err := jobManager.CreateJob(jobs.IndexJobType)
 	if err != nil {
 		if err == jobs.ErrJobAlreadyRunning {
-			http.Error(w, "Backfill job already running", http.StatusConflict)
+			http.Error(w, "Indexing job already running", http.StatusConflict)
 			return
 		}
 		http.Error(w, "Failed to create job: "+err.Error(), http.StatusInternalServerError)
@@ -118,7 +118,7 @@ func handleSSEBackfill(
 		return
 	}
 
-	opts := service.BackfillOptions{
+	opts := service.IndexOptions{
 		BatchSize:      batchSize,
 		Force:          force,
 		DryRun:         dryRun,
@@ -135,7 +135,7 @@ func handleSSEBackfill(
 		cancel()
 	}()
 
-	result, err := backfillService.Run(runCtx, opts, func(resource string, stats service.BackfillStats) {
+	result, err := indexer.Run(runCtx, opts, func(resource string, stats service.IndexStats) {
 		sendEvent(SSEEvent{
 			Type:     "progress",
 			JobID:    string(job.ID),

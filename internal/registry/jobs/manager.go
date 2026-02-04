@@ -12,8 +12,8 @@ const (
 	// JobTTL is how long completed jobs are retained.
 	JobTTL = 1 * time.Hour
 
-	// BackfillJobType is the type for embedding backfill jobs.
-	BackfillJobType = "embeddings-backfill"
+	// IndexJobType is the type for embedding indexing jobs.
+	IndexJobType = "embeddings-index"
 )
 
 var (

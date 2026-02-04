@@ -2,15 +2,14 @@ package cli
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"time"
 
+	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/spf13/cobra"
 )
 
@@ -20,7 +19,6 @@ var (
 	embeddingsDryRun         bool
 	embeddingsIncludeServers bool
 	embeddingsIncludeAgents  bool
-	embeddingsAPIURL         string
 	embeddingsStream         bool
 	embeddingsPollInterval   time.Duration
 )
@@ -49,53 +47,9 @@ func init() {
 	embeddingsGenerateCmd.Flags().BoolVar(&embeddingsDryRun, "dry-run", false, "Print planned changes without calling the embedding provider or writing to the database")
 	embeddingsGenerateCmd.Flags().BoolVar(&embeddingsIncludeServers, "servers", true, "Include MCP servers when generating embeddings")
 	embeddingsGenerateCmd.Flags().BoolVar(&embeddingsIncludeAgents, "agents", true, "Include agents when generating embeddings")
-	embeddingsGenerateCmd.Flags().StringVar(&embeddingsAPIURL, "api-url", "", "Registry API URL (or set AGENT_REGISTRY_API_URL)")
 	embeddingsGenerateCmd.Flags().BoolVar(&embeddingsStream, "stream", true, "Use SSE streaming for progress updates")
 	embeddingsGenerateCmd.Flags().DurationVar(&embeddingsPollInterval, "poll-interval", 2*time.Second, "Poll interval when not using streaming")
 	EmbeddingsCmd.AddCommand(embeddingsGenerateCmd)
-}
-
-// backfillRequest is the request body for starting a backfill job.
-type backfillRequest struct {
-	BatchSize      int  `json:"batchSize,omitempty"`
-	Force          bool `json:"force,omitempty"`
-	DryRun         bool `json:"dryRun,omitempty"`
-	IncludeServers bool `json:"includeServers,omitempty"`
-	IncludeAgents  bool `json:"includeAgents,omitempty"`
-	Stream         bool `json:"stream,omitempty"`
-}
-
-// backfillJobResponse is the response for job creation.
-type backfillJobResponse struct {
-	JobID  string `json:"jobId"`
-	Status string `json:"status"`
-}
-
-// jobStatusResponse is the response for job status.
-type jobStatusResponse struct {
-	JobID    string `json:"jobId"`
-	Type     string `json:"type"`
-	Status   string `json:"status"`
-	Progress struct {
-		Total     int `json:"total"`
-		Processed int `json:"processed"`
-		Updated   int `json:"updated"`
-		Skipped   int `json:"skipped"`
-		Failures  int `json:"failures"`
-	} `json:"progress"`
-	Result *struct {
-		ServersProcessed int    `json:"serversProcessed,omitempty"`
-		ServersUpdated   int    `json:"serversUpdated,omitempty"`
-		ServersSkipped   int    `json:"serversSkipped,omitempty"`
-		ServerFailures   int    `json:"serverFailures,omitempty"`
-		AgentsProcessed  int    `json:"agentsProcessed,omitempty"`
-		AgentsUpdated    int    `json:"agentsUpdated,omitempty"`
-		AgentsSkipped    int    `json:"agentsSkipped,omitempty"`
-		AgentFailures    int    `json:"agentFailures,omitempty"`
-		Error            string `json:"error,omitempty"`
-	} `json:"result,omitempty"`
-	CreatedAt string `json:"createdAt"`
-	UpdatedAt string `json:"updatedAt"`
 }
 
 // sseEvent represents a server-sent event.
@@ -108,65 +62,55 @@ type sseEvent struct {
 	Error    string          `json:"error,omitempty"`
 }
 
-func getAPIURL() string {
-	if embeddingsAPIURL != "" {
-		return embeddingsAPIURL
-	}
-	return os.Getenv("AGENT_REGISTRY_API_URL")
-}
-
 func runEmbeddingsGenerate(ctx context.Context) error {
-	apiURL := getAPIURL()
-	if apiURL == "" {
-		return fmt.Errorf("--api-url or AGENT_REGISTRY_API_URL required")
-	}
-
 	if !embeddingsIncludeServers && !embeddingsIncludeAgents {
 		return fmt.Errorf("no targets selected; use --servers or --agents")
 	}
 
-	req := backfillRequest{
+	c, err := client.NewClientFromEnv()
+	if err != nil {
+		return fmt.Errorf("failed to create client: %w", err)
+	}
+	defer c.Close()
+
+	req := client.IndexRequest{
 		BatchSize:      embeddingsBatchSize,
 		Force:          embeddingsForceUpdate,
 		DryRun:         embeddingsDryRun,
 		IncludeServers: embeddingsIncludeServers,
 		IncludeAgents:  embeddingsIncludeAgents,
-		Stream:         false, // Always false for POST, we use GET for streaming
 	}
 
 	if embeddingsStream {
-		return streamBackfill(ctx, apiURL, req)
+		return streamIndex(ctx, c, req)
 	}
-	return pollBackfill(ctx, apiURL, req)
+	return pollIndex(ctx, c, req)
 }
 
-func streamBackfill(ctx context.Context, apiURL string, req backfillRequest) error {
-	// Build SSE streaming URL with query parameters
-	streamURL := fmt.Sprintf("%s/admin/v0/embeddings/backfill/stream?batchSize=%d&force=%t&dryRun=%t&includeServers=%t&includeAgents=%t",
-		apiURL, req.BatchSize, req.Force, req.DryRun, req.IncludeServers, req.IncludeAgents)
+func streamIndex(ctx context.Context, c *client.Client, req client.IndexRequest) error {
+	streamURL := c.StreamIndexURL(req)
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, streamURL, nil)
+	httpReq, err := c.NewSSERequest(ctx, streamURL)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
-	httpReq.Header.Set("Accept", "text/event-stream")
 
-	client := &http.Client{Timeout: 0} // No timeout for SSE
-	resp, err := client.Do(httpReq)
+	sseClient := c.SSEClient()
+	resp, err := sseClient.Do(httpReq)
 	if err != nil {
 		return fmt.Errorf("failed to connect to API: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusConflict {
-		return fmt.Errorf("backfill job already running")
+		return fmt.Errorf("indexing job already running")
 	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("API error (%d): %s", resp.StatusCode, string(body))
 	}
 
-	fmt.Println("Starting embeddings backfill (streaming)...")
+	fmt.Println("Starting embeddings indexing (streaming)...")
 
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
@@ -200,7 +144,7 @@ func streamBackfill(ctx context.Context, apiURL string, req backfillRequest) err
 						event.Resource, stats.Processed, stats.Updated, stats.Skipped, stats.Failures)
 				}
 			case "completed":
-				fmt.Println("Embedding backfill complete.")
+				fmt.Println("Embedding indexing complete.")
 				var result struct {
 					Servers struct {
 						Processed int `json:"processed"`
@@ -228,7 +172,7 @@ func streamBackfill(ctx context.Context, apiURL string, req backfillRequest) err
 				}
 				return nil
 			case "error":
-				return fmt.Errorf("backfill failed: %s", event.Error)
+				return fmt.Errorf("indexing failed: %s", event.Error)
 			}
 		}
 	}
@@ -240,44 +184,14 @@ func streamBackfill(ctx context.Context, apiURL string, req backfillRequest) err
 	return nil
 }
 
-func pollBackfill(ctx context.Context, apiURL string, req backfillRequest) error {
-	// Start the backfill job
-	body, err := json.Marshal(req)
+func pollIndex(ctx context.Context, c *client.Client, req client.IndexRequest) error {
+	jobResp, err := c.StartIndex(req)
 	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
+		return fmt.Errorf("failed to start indexing: %w", err)
 	}
 
-	backfillURL := fmt.Sprintf("%s/admin/v0/embeddings/backfill", apiURL)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, backfillURL, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
+	fmt.Printf("Started indexing job: %s\n", jobResp.JobID)
 
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		return fmt.Errorf("failed to connect to API: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusConflict {
-		return fmt.Errorf("backfill job already running")
-	}
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("API error (%d): %s", resp.StatusCode, string(respBody))
-	}
-
-	var jobResp backfillJobResponse
-	if err := json.NewDecoder(resp.Body).Decode(&jobResp); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	fmt.Printf("Started backfill job: %s\n", jobResp.JobID)
-
-	// Poll for job status
-	statusURL := fmt.Sprintf("%s/admin/v0/embeddings/backfill/%s", apiURL, jobResp.JobID)
 	ticker := time.NewTicker(embeddingsPollInterval)
 	defer ticker.Stop()
 
@@ -286,7 +200,7 @@ func pollBackfill(ctx context.Context, apiURL string, req backfillRequest) error
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			status, err := getJobStatus(ctx, client, statusURL)
+			status, err := c.GetIndexStatus(jobResp.JobID)
 			if err != nil {
 				fmt.Printf("Warning: failed to get job status: %v\n", err)
 				continue
@@ -296,7 +210,7 @@ func pollBackfill(ctx context.Context, apiURL string, req backfillRequest) error
 				status.Progress.Processed, status.Progress.Updated, status.Progress.Skipped, status.Progress.Failures)
 
 			if status.Status == "completed" {
-				fmt.Println("Embedding backfill complete.")
+				fmt.Println("Embedding indexing complete.")
 				if status.Result != nil {
 					fmt.Printf("  Servers: processed=%d updated=%d skipped=%d failures=%d\n",
 						status.Result.ServersProcessed, status.Result.ServersUpdated, status.Result.ServersSkipped, status.Result.ServerFailures)
@@ -316,33 +230,8 @@ func pollBackfill(ctx context.Context, apiURL string, req backfillRequest) error
 				if status.Result != nil && status.Result.Error != "" {
 					errMsg = status.Result.Error
 				}
-				return fmt.Errorf("backfill failed: %s", errMsg)
+				return fmt.Errorf("indexing failed: %s", errMsg)
 			}
 		}
 	}
-}
-
-func getJobStatus(ctx context.Context, client *http.Client, url string) (*jobStatusResponse, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, string(body))
-	}
-
-	var status jobStatusResponse
-	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
-		return nil, err
-	}
-
-	return &status, nil
 }

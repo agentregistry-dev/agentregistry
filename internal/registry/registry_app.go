@@ -189,16 +189,16 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		}
 	}
 
-	// Initialize job manager and backfill service for embeddings
+	// Initialize job manager and indexer for embeddings
 	var routeOpts *router.RouteOptions
 	if cfg.Embeddings.Enabled && embeddingProvider != nil {
 		jobManager := jobs.NewManager()
-		backfillService := service.NewBackfillService(registryService, embeddingProvider, cfg.Embeddings.Dimensions)
+		indexer := service.NewIndexer(registryService, embeddingProvider, cfg.Embeddings.Dimensions)
 		routeOpts = &router.RouteOptions{
-			BackfillService: backfillService,
-			JobManager:      jobManager,
+			Indexer:    indexer,
+			JobManager: jobManager,
 		}
-		log.Println("Embeddings backfill API enabled")
+		log.Println("Embeddings indexing API enabled")
 	}
 
 	// Initialize HTTP server

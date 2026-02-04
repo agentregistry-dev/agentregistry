@@ -11,8 +11,8 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
-// BackfillRequest is the request body for starting a backfill job.
-type BackfillRequest struct {
+// IndexRequest is the request body for starting an indexing job.
+type IndexRequest struct {
 	BatchSize      int  `json:"batchSize,omitempty" doc:"Number of items to process per batch" default:"100" minimum:"1" maximum:"1000"`
 	Force          bool `json:"force,omitempty" doc:"Regenerate embeddings even when checksum matches" default:"false"`
 	DryRun         bool `json:"dryRun,omitempty" doc:"Preview changes without writing to database" default:"false"`
@@ -21,13 +21,13 @@ type BackfillRequest struct {
 	Stream         bool `json:"stream,omitempty" doc:"Use SSE streaming for progress updates" default:"false"`
 }
 
-// BackfillInput is the input for starting a backfill.
-type BackfillInput struct {
-	Body BackfillRequest
+// IndexInput is the input for starting an indexing job.
+type IndexInput struct {
+	Body IndexRequest
 }
 
-// BackfillJobResponse is the response for job creation.
-type BackfillJobResponse struct {
+// IndexJobResponse is the response for job creation.
+type IndexJobResponse struct {
 	JobID  string `json:"jobId" doc:"Unique job identifier"`
 	Status string `json:"status" doc:"Current job status"`
 }
@@ -39,41 +39,41 @@ type JobStatusInput struct {
 
 // JobStatusResponse is the response for job status.
 type JobStatusResponse struct {
-	JobID     string             `json:"jobId" doc:"Unique job identifier"`
-	Type      string             `json:"type" doc:"Job type"`
-	Status    string             `json:"status" doc:"Current job status (pending, running, completed, failed)"`
-	Progress  jobs.JobProgress   `json:"progress" doc:"Current progress"`
-	Result    *jobs.JobResult    `json:"result,omitempty" doc:"Final result (when completed or failed)"`
-	CreatedAt string             `json:"createdAt" doc:"Job creation timestamp"`
-	UpdatedAt string             `json:"updatedAt" doc:"Last update timestamp"`
+	JobID     string           `json:"jobId" doc:"Unique job identifier"`
+	Type      string           `json:"type" doc:"Job type"`
+	Status    string           `json:"status" doc:"Current job status (pending, running, completed, failed)"`
+	Progress  jobs.JobProgress `json:"progress" doc:"Current progress"`
+	Result    *jobs.JobResult  `json:"result,omitempty" doc:"Final result (when completed or failed)"`
+	CreatedAt string           `json:"createdAt" doc:"Job creation timestamp"`
+	UpdatedAt string           `json:"updatedAt" doc:"Last update timestamp"`
 }
 
 // RegisterEmbeddingsEndpoints registers the embeddings admin endpoints.
 func RegisterEmbeddingsEndpoints(
 	api huma.API,
 	pathPrefix string,
-	backfillService *service.BackfillService,
+	indexer *service.Indexer,
 	jobManager *jobs.Manager,
 ) {
-	registerBackfillEndpoint(api, pathPrefix, backfillService, jobManager)
+	registerIndexEndpoint(api, pathPrefix, indexer, jobManager)
 	registerJobStatusEndpoint(api, pathPrefix, jobManager)
 }
 
-func registerBackfillEndpoint(
+func registerIndexEndpoint(
 	api huma.API,
 	pathPrefix string,
-	backfillService *service.BackfillService,
+	indexer *service.Indexer,
 	jobManager *jobs.Manager,
 ) {
 	huma.Register(api, huma.Operation{
-		OperationID: "start-embeddings-backfill" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		OperationID: "start-embeddings-index" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodPost,
-		Path:        pathPrefix + "/embeddings/backfill",
-		Summary:     "Start embeddings backfill",
+		Path:        pathPrefix + "/embeddings/index",
+		Summary:     "Start embeddings indexing",
 		Description: "Start a background job to generate embeddings for servers and/or agents. Use stream=true for SSE progress updates.",
 		Tags:        []string{"embeddings"},
-	}, func(ctx context.Context, input *BackfillInput) (*Response[BackfillJobResponse], error) {
-		if backfillService == nil {
+	}, func(ctx context.Context, input *IndexInput) (*Response[IndexJobResponse], error) {
+		if indexer == nil {
 			return nil, huma.Error503ServiceUnavailable("embeddings service is not configured")
 		}
 
@@ -91,27 +91,27 @@ func registerBackfillEndpoint(
 
 		// SSE streaming is handled by a different endpoint
 		if req.Stream {
-			return nil, huma.Error400BadRequest("SSE streaming should use GET /embeddings/backfill/stream with query parameters")
+			return nil, huma.Error400BadRequest("SSE streaming should use GET /embeddings/index/stream with query parameters")
 		}
 
 		// Create a new job
-		job, err := jobManager.CreateJob(jobs.BackfillJobType)
+		job, err := jobManager.CreateJob(jobs.IndexJobType)
 		if err != nil {
 			if err == jobs.ErrJobAlreadyRunning {
-				existingJob := jobManager.GetRunningJob(jobs.BackfillJobType)
+				existingJob := jobManager.GetRunningJob(jobs.IndexJobType)
 				if existingJob != nil {
-					return nil, huma.Error409Conflict("backfill job already running: " + string(existingJob.ID))
+					return nil, huma.Error409Conflict("indexing job already running: " + string(existingJob.ID))
 				}
-				return nil, huma.Error409Conflict("backfill job already running")
+				return nil, huma.Error409Conflict("indexing job already running")
 			}
 			return nil, huma.Error500InternalServerError("failed to create job: " + err.Error())
 		}
 
-		// Run backfill in background
-		go runBackfillJob(backfillService, jobManager, job.ID, req)
+		// Run indexing in background
+		go runIndexJob(indexer, jobManager, job.ID, req)
 
-		return &Response[BackfillJobResponse]{
-			Body: BackfillJobResponse{
+		return &Response[IndexJobResponse]{
+			Body: IndexJobResponse{
 				JobID:  string(job.ID),
 				Status: string(job.Status),
 			},
@@ -119,11 +119,11 @@ func registerBackfillEndpoint(
 	})
 }
 
-func runBackfillJob(
-	backfillService *service.BackfillService,
+func runIndexJob(
+	indexer *service.Indexer,
 	jobManager *jobs.Manager,
 	jobID jobs.JobID,
-	req BackfillRequest,
+	req IndexRequest,
 ) {
 	ctx := auth.WithSystemContext(context.Background())
 
@@ -132,7 +132,7 @@ func runBackfillJob(
 		return
 	}
 
-	opts := service.BackfillOptions{
+	opts := service.IndexOptions{
 		BatchSize:      req.BatchSize,
 		Force:          req.Force,
 		DryRun:         req.DryRun,
@@ -140,9 +140,9 @@ func runBackfillJob(
 		IncludeAgents:  req.IncludeAgents,
 	}
 
-	var serverStats, agentStats service.BackfillStats
+	var serverStats, agentStats service.IndexStats
 
-	result, err := backfillService.Run(ctx, opts, func(resource string, stats service.BackfillStats) {
+	result, err := indexer.Run(ctx, opts, func(resource string, stats service.IndexStats) {
 		switch resource {
 		case "servers":
 			serverStats = stats
@@ -184,11 +184,11 @@ func registerJobStatusEndpoint(
 	jobManager *jobs.Manager,
 ) {
 	huma.Register(api, huma.Operation{
-		OperationID: "get-embeddings-backfill-status" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		OperationID: "get-embeddings-index-status" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodGet,
-		Path:        pathPrefix + "/embeddings/backfill/{jobId}",
-		Summary:     "Get backfill job status",
-		Description: "Get the status and progress of a backfill job.",
+		Path:        pathPrefix + "/embeddings/index/{jobId}",
+		Summary:     "Get indexing job status",
+		Description: "Get the status and progress of an indexing job.",
 		Tags:        []string{"embeddings"},
 	}, func(ctx context.Context, input *JobStatusInput) (*Response[JobStatusResponse], error) {
 		job, err := jobManager.GetJob(jobs.JobID(input.JobID))
