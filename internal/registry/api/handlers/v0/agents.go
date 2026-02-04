@@ -12,6 +12,7 @@ import (
 	agentmodels "github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -59,7 +60,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Summary:     "List Agentic agents",
 		Description: "Get a paginated list of Agentic agents from the registry",
 		Tags:        tags,
-	}, func(ctx context.Context, input *ListAgentsInput) (*Response[agentmodels.AgentListResponse], error) {
+	}, func(ctx context.Context, input *ListAgentsInput) (*types.Response[agentmodels.AgentListResponse], error) {
 		// Build filter
 		filter := &database.AgentFilter{}
 
@@ -113,7 +114,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		for i, a := range agents {
 			agentValues[i] = *a
 		}
-		return &Response[agentmodels.AgentListResponse]{
+		return &types.Response[agentmodels.AgentListResponse]{
 			Body: agentmodels.AgentListResponse{
 				Agents: agentValues,
 				Metadata: agentmodels.AgentMetadata{
@@ -132,7 +133,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Summary:     "Get specific Agentic agent version",
 		Description: "Get detailed information about a specific version of an Agentic agent. Use the special version 'latest' to get the latest version.",
 		Tags:        tags,
-	}, func(ctx context.Context, input *AgentVersionDetailInput) (*Response[agentmodels.AgentResponse], error) {
+	}, func(ctx context.Context, input *AgentVersionDetailInput) (*types.Response[agentmodels.AgentResponse], error) {
 		agentName, err := url.PathUnescape(input.AgentName)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid agent name encoding", err)
@@ -154,7 +155,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 			}
 			return nil, huma.Error500InternalServerError("Failed to get agent details", err)
 		}
-		return &Response[agentmodels.AgentResponse]{Body: *agentResp}, nil
+		return &types.Response[agentmodels.AgentResponse]{Body: *agentResp}, nil
 	})
 
 	huma.Register(api, huma.Operation{
@@ -164,7 +165,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Summary:     "Delete an agent version (admin)",
 		Description: "Permanently delete a specific agent version from the registry. Admin only.",
 		Tags:        tags,
-	}, func(ctx context.Context, input *AgentVersionDetailInput) (*Response[EmptyResponse], error) {
+	}, func(ctx context.Context, input *AgentVersionDetailInput) (*types.Response[types.EmptyResponse], error) {
 		agentName, err := url.PathUnescape(input.AgentName)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid agent name encoding", err)
@@ -181,8 +182,8 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 			return nil, huma.Error500InternalServerError("Failed to delete agent", err)
 		}
 
-		return &Response[EmptyResponse]{
-			Body: EmptyResponse{Message: "Agent deleted successfully"},
+		return &types.Response[types.EmptyResponse]{
+			Body: types.EmptyResponse{Message: "Agent deleted successfully"},
 		}, nil
 	})
 
@@ -194,7 +195,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Summary:     "Get all versions of an Agentic agent",
 		Description: "Get all available versions for a specific Agentic agent",
 		Tags:        tags,
-	}, func(ctx context.Context, input *AgentVersionsInput) (*Response[agentmodels.AgentListResponse], error) {
+	}, func(ctx context.Context, input *AgentVersionsInput) (*types.Response[agentmodels.AgentListResponse], error) {
 		agentName, err := url.PathUnescape(input.AgentName)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid agent name encoding", err)
@@ -212,7 +213,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		for i, a := range agents {
 			agentValues[i] = *a
 		}
-		return &Response[agentmodels.AgentListResponse]{
+		return &types.Response[agentmodels.AgentListResponse]{
 			Body: agentmodels.AgentListResponse{
 				Agents: agentValues,
 				Metadata: agentmodels.AgentMetadata{
@@ -229,7 +230,7 @@ type CreateAgentInput struct {
 }
 
 // createAgentHandler is the shared handler logic for creating agents
-func createAgentHandler(ctx context.Context, input *CreateAgentInput, registry service.RegistryService) (*Response[agentmodels.AgentResponse], error) {
+func createAgentHandler(ctx context.Context, input *CreateAgentInput, registry service.RegistryService) (*types.Response[agentmodels.AgentResponse], error) {
 	// Create/update the agent (published defaults to false in the service layer)
 	createdAgent, err := registry.CreateAgent(ctx, &input.Body)
 	if err != nil {
@@ -239,7 +240,7 @@ func createAgentHandler(ctx context.Context, input *CreateAgentInput, registry s
 		return nil, huma.Error400BadRequest("Failed to create agent", err)
 	}
 
-	return &Response[agentmodels.AgentResponse]{Body: *createdAgent}, nil
+	return &types.Response[agentmodels.AgentResponse]{Body: *createdAgent}, nil
 }
 
 // RegisterAgentsCreateEndpoint registers the public agents create/update endpoint at /agents/publish
@@ -253,7 +254,7 @@ func RegisterAgentsCreateEndpoint(api huma.API, pathPrefix string, registry serv
 		Description: "Create a new Agentic agent in the registry or update an existing one. By default, agents are created as unpublished (published=false).",
 		Tags:        []string{"agents", "publish"},
 		Security:    []map[string][]string{{"bearer": {}}},
-	}, func(ctx context.Context, input *CreateAgentInput) (*Response[agentmodels.AgentResponse], error) {
+	}, func(ctx context.Context, input *CreateAgentInput) (*types.Response[agentmodels.AgentResponse], error) {
 		return createAgentHandler(ctx, input, registry)
 	})
 
@@ -266,7 +267,7 @@ func RegisterAgentsCreateEndpoint(api huma.API, pathPrefix string, registry serv
 		Description: "Create a new Agentic agent in the registry as an unpublished entry (published=false).",
 		Tags:        []string{"agents", "publish"},
 		Security:    []map[string][]string{{"bearer": {}}},
-	}, func(ctx context.Context, input *CreateAgentInput) (*Response[agentmodels.AgentResponse], error) {
+	}, func(ctx context.Context, input *CreateAgentInput) (*types.Response[agentmodels.AgentResponse], error) {
 		return createAgentHandler(ctx, input, registry)
 	})
 }
@@ -281,7 +282,7 @@ func RegisterAdminAgentsCreateEndpoint(api huma.API, pathPrefix string, registry
 		Summary:     "Create/update Agentic agent (Admin)",
 		Description: "Create a new Agentic agent in the registry or update an existing one. By default, agents are created as unpublished (published=false).",
 		Tags:        []string{"agents", "admin"},
-	}, func(ctx context.Context, input *CreateAgentInput) (*Response[agentmodels.AgentResponse], error) {
+	}, func(ctx context.Context, input *CreateAgentInput) (*types.Response[agentmodels.AgentResponse], error) {
 		// Create/update the agent (published defaults to false in the service layer)
 		createdAgent, err := registry.CreateAgent(ctx, &input.Body)
 		if err != nil {
@@ -291,7 +292,7 @@ func RegisterAdminAgentsCreateEndpoint(api huma.API, pathPrefix string, registry
 			return nil, huma.Error400BadRequest("Failed to create agent", err)
 		}
 
-		return &Response[agentmodels.AgentResponse]{Body: *createdAgent}, nil
+		return &types.Response[agentmodels.AgentResponse]{Body: *createdAgent}, nil
 	})
 }
 
@@ -306,7 +307,7 @@ func RegisterAgentsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 		Summary:     "Publish an existing agent",
 		Description: "Mark an existing agent version as published, making it visible in public listings. This acts on an agent that was already created.",
 		Tags:        []string{"agents", "admin"},
-	}, func(ctx context.Context, input *AgentVersionDetailInput) (*Response[EmptyResponse], error) {
+	}, func(ctx context.Context, input *AgentVersionDetailInput) (*types.Response[types.EmptyResponse], error) {
 		// URL-decode the agent name and version
 		agentName, err := url.PathUnescape(input.AgentName)
 		if err != nil {
@@ -325,8 +326,8 @@ func RegisterAgentsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 			return nil, huma.Error500InternalServerError("Failed to publish agent", err)
 		}
 
-		return &Response[EmptyResponse]{
-			Body: EmptyResponse{
+		return &types.Response[types.EmptyResponse]{
+			Body: types.EmptyResponse{
 				Message: "Agent published successfully",
 			},
 		}, nil
@@ -340,7 +341,7 @@ func RegisterAgentsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 		Summary:     "Unpublish an existing agent",
 		Description: "Mark an existing agent version as unpublished, hiding it from public listings. This acts on an agent that was already created.",
 		Tags:        []string{"agents", "admin"},
-	}, func(ctx context.Context, input *AgentVersionDetailInput) (*Response[EmptyResponse], error) {
+	}, func(ctx context.Context, input *AgentVersionDetailInput) (*types.Response[types.EmptyResponse], error) {
 		// URL-decode the agent name and version
 		agentName, err := url.PathUnescape(input.AgentName)
 		if err != nil {
@@ -359,8 +360,8 @@ func RegisterAgentsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 			return nil, huma.Error500InternalServerError("Failed to unpublish agent", err)
 		}
 
-		return &Response[EmptyResponse]{
-			Body: EmptyResponse{
+		return &types.Response[types.EmptyResponse]{
+			Body: types.EmptyResponse{
 				Message: "Agent unpublished successfully",
 			},
 		}, nil

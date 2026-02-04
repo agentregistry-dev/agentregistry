@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strings"
 
-	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -62,13 +62,13 @@ func RegisterDNSEndpoint(api huma.API, pathPrefix string, cfg *config.Config) {
 		Summary:     "Exchange DNS signature for Registry JWT",
 		Description: "Authenticate using DNS TXT record public key and signed timestamp",
 		Tags:        []string{"auth"},
-	}, func(ctx context.Context, input *DNSTokenExchangeInput) (*v0.Response[auth.TokenResponse], error) {
+	}, func(ctx context.Context, input *DNSTokenExchangeInput) (*types.Response[auth.TokenResponse], error) {
 		response, err := handler.ExchangeToken(ctx, input.Body.Domain, input.Body.Timestamp, input.Body.SignedTimestamp)
 		if err != nil {
 			return nil, huma.Error401Unauthorized("DNS authentication failed", err)
 		}
 
-		return &v0.Response[auth.TokenResponse]{
+		return &types.Response[auth.TokenResponse]{
 			Body: *response,
 		}, nil
 	})

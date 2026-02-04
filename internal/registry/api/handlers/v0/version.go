@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -24,8 +25,8 @@ func RegisterVersionEndpoint(api huma.API, pathPrefix string, versionInfo *Versi
 		Summary:     "Get version information",
 		Description: "Returns the version, git commit, and build time of the registry application",
 		Tags:        []string{"version"},
-	}, func(_ context.Context, _ *struct{}) (*Response[VersionBody], error) {
-		return &Response[VersionBody]{
+	}, func(_ context.Context, _ *struct{}) (*types.Response[VersionBody], error) {
+		return &types.Response[VersionBody]{
 			Body: *versionInfo,
 		}, nil
 	})

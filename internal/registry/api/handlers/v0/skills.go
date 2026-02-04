@@ -12,6 +12,7 @@ import (
 	skillmodels "github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -57,7 +58,7 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Summary:     "List Agentic skills",
 		Description: "Get a paginated list of Agentic skills from the registry",
 		Tags:        tags,
-	}, func(ctx context.Context, input *ListSkillsInput) (*Response[skillmodels.SkillListResponse], error) {
+	}, func(ctx context.Context, input *ListSkillsInput) (*types.Response[skillmodels.SkillListResponse], error) {
 		// Note: Authz filtering for list operations is handled at the database layer.
 
 		// Build filter
@@ -100,7 +101,7 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 		for i, s := range skills {
 			skillValues[i] = *s
 		}
-		return &Response[skillmodels.SkillListResponse]{
+		return &types.Response[skillmodels.SkillListResponse]{
 			Body: skillmodels.SkillListResponse{
 				Skills: skillValues,
 				Metadata: skillmodels.SkillMetadata{
@@ -119,7 +120,7 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Summary:     "Get specific Agentic skill version",
 		Description: "Get detailed information about a specific version of an Agentic skill. Use the special version 'latest' to get the latest version.",
 		Tags:        tags,
-	}, func(ctx context.Context, input *SkillVersionDetailInput) (*Response[skillmodels.SkillResponse], error) {
+	}, func(ctx context.Context, input *SkillVersionDetailInput) (*types.Response[skillmodels.SkillResponse], error) {
 		skillName, err := url.PathUnescape(input.SkillName)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid skill name encoding", err)
@@ -141,7 +142,7 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 			}
 			return nil, huma.Error500InternalServerError("Failed to get skill details", err)
 		}
-		return &Response[skillmodels.SkillResponse]{Body: *skillResp}, nil
+		return &types.Response[skillmodels.SkillResponse]{Body: *skillResp}, nil
 	})
 
 	// Get all versions for a skill
@@ -152,7 +153,7 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 		Summary:     "Get all versions of an Agentic skill",
 		Description: "Get all available versions for a specific Agentic skill",
 		Tags:        tags,
-	}, func(ctx context.Context, input *SkillVersionsInput) (*Response[skillmodels.SkillListResponse], error) {
+	}, func(ctx context.Context, input *SkillVersionsInput) (*types.Response[skillmodels.SkillListResponse], error) {
 		skillName, err := url.PathUnescape(input.SkillName)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid skill name encoding", err)
@@ -171,7 +172,7 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 		for i, s := range skills {
 			skillValues[i] = *s
 		}
-		return &Response[skillmodels.SkillListResponse]{
+		return &types.Response[skillmodels.SkillListResponse]{
 			Body: skillmodels.SkillListResponse{
 				Skills:   skillValues,
 				Metadata: skillmodels.SkillMetadata{Count: len(skills)},
@@ -186,7 +187,7 @@ type CreateSkillInput struct {
 }
 
 // createSkillHandler is the shared handler logic for creating skills
-func createSkillHandler(ctx context.Context, input *CreateSkillInput, registry service.RegistryService) (*Response[skillmodels.SkillResponse], error) {
+func createSkillHandler(ctx context.Context, input *CreateSkillInput, registry service.RegistryService) (*types.Response[skillmodels.SkillResponse], error) {
 	// Create/update the skill (published defaults to false in the service layer)
 	createdSkill, err := registry.CreateSkill(ctx, &input.Body)
 	if err != nil {
@@ -196,7 +197,7 @@ func createSkillHandler(ctx context.Context, input *CreateSkillInput, registry s
 		return nil, huma.Error400BadRequest("Failed to create skill", err)
 	}
 
-	return &Response[skillmodels.SkillResponse]{Body: *createdSkill}, nil
+	return &types.Response[skillmodels.SkillResponse]{Body: *createdSkill}, nil
 }
 
 // RegisterSkillsCreateEndpoint registers the public skills create/update endpoint at /skills/publish
@@ -210,7 +211,7 @@ func RegisterSkillsCreateEndpoint(api huma.API, pathPrefix string, registry serv
 		Description: "Create a new Agentic skill in the registry or update an existing one. By default, skills are created as unpublished (published=false).",
 		Tags:        []string{"skills", "publish"},
 		Security:    []map[string][]string{{"bearer": {}}},
-	}, func(ctx context.Context, input *CreateSkillInput) (*Response[skillmodels.SkillResponse], error) {
+	}, func(ctx context.Context, input *CreateSkillInput) (*types.Response[skillmodels.SkillResponse], error) {
 		return createSkillHandler(ctx, input, registry)
 	})
 }
@@ -225,7 +226,7 @@ func RegisterAdminSkillsCreateEndpoint(api huma.API, pathPrefix string, registry
 		Summary:     "Create/update Agentic skill (Admin)",
 		Description: "Create a new Agentic skill in the registry or update an existing one. By default, skills are created as unpublished (published=false).",
 		Tags:        []string{"skills", "admin"},
-	}, func(ctx context.Context, input *CreateSkillInput) (*Response[skillmodels.SkillResponse], error) {
+	}, func(ctx context.Context, input *CreateSkillInput) (*types.Response[skillmodels.SkillResponse], error) {
 		// Create/update the skill (published defaults to false in the service layer)
 		createdSkill, err := registry.CreateSkill(ctx, &input.Body)
 		if err != nil {
@@ -235,7 +236,7 @@ func RegisterAdminSkillsCreateEndpoint(api huma.API, pathPrefix string, registry
 			return nil, huma.Error400BadRequest("Failed to create skill", err)
 		}
 
-		return &Response[skillmodels.SkillResponse]{Body: *createdSkill}, nil
+		return &types.Response[skillmodels.SkillResponse]{Body: *createdSkill}, nil
 	})
 }
 
@@ -250,7 +251,7 @@ func RegisterSkillsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 		Summary:     "Publish an existing skill",
 		Description: "Mark an existing skill version as published, making it visible in public listings. This acts on a skill that was already created.",
 		Tags:        []string{"skills", "admin"},
-	}, func(ctx context.Context, input *SkillVersionDetailInput) (*Response[EmptyResponse], error) {
+	}, func(ctx context.Context, input *SkillVersionDetailInput) (*types.Response[types.EmptyResponse], error) {
 		// URL-decode the skill name and version
 		skillName, err := url.PathUnescape(input.SkillName)
 		if err != nil {
@@ -269,8 +270,8 @@ func RegisterSkillsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 			return nil, huma.Error500InternalServerError("Failed to publish skill", err)
 		}
 
-		return &Response[EmptyResponse]{
-			Body: EmptyResponse{
+		return &types.Response[types.EmptyResponse]{
+			Body: types.EmptyResponse{
 				Message: "Skill published successfully",
 			},
 		}, nil
@@ -284,7 +285,7 @@ func RegisterSkillsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 		Summary:     "Unpublish an existing skill",
 		Description: "Mark an existing skill version as unpublished, hiding it from public listings. This acts on a skill that was already created.",
 		Tags:        []string{"skills", "admin"},
-	}, func(ctx context.Context, input *SkillVersionDetailInput) (*Response[EmptyResponse], error) {
+	}, func(ctx context.Context, input *SkillVersionDetailInput) (*types.Response[types.EmptyResponse], error) {
 		// URL-decode the skill name and version
 		skillName, err := url.PathUnescape(input.SkillName)
 		if err != nil {
@@ -303,8 +304,8 @@ func RegisterSkillsPublishStatusEndpoints(api huma.API, pathPrefix string, regis
 			return nil, huma.Error500InternalServerError("Failed to unpublish skill", err)
 		}
 
-		return &Response[EmptyResponse]{
-			Body: EmptyResponse{
+		return &types.Response[types.EmptyResponse]{
+			Body: types.EmptyResponse{
 				Message: "Skill unpublished successfully",
 			},
 		}, nil

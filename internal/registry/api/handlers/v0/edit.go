@@ -11,6 +11,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
@@ -37,7 +38,7 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.Reg
 		Security: []map[string][]string{
 			{"bearer": {}},
 		},
-	}, func(ctx context.Context, input *EditServerInput) (*Response[models.ServerResponse], error) {
+	}, func(ctx context.Context, input *EditServerInput) (*types.Response[models.ServerResponse], error) {
 		// URL-decode the server name
 		serverName, err := url.PathUnescape(input.ServerName)
 		if err != nil {
@@ -99,7 +100,7 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.Reg
 			return nil, huma.Error400BadRequest("Failed to edit server", err)
 		}
 
-		return &Response[models.ServerResponse]{
+		return &types.Response[models.ServerResponse]{
 			Body: normalizeServerResponse(updatedServer),
 		}, nil
 	})

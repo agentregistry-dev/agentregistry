@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -119,13 +119,13 @@ func RegisterHTTPEndpoint(api huma.API, pathPrefix string, cfg *config.Config) {
 		Summary:     "Exchange HTTP signature for Registry JWT",
 		Description: "Authenticate using HTTP-hosted public key and signed timestamp",
 		Tags:        []string{"auth"},
-	}, func(ctx context.Context, input *HTTPTokenExchangeInput) (*v0.Response[auth.TokenResponse], error) {
+	}, func(ctx context.Context, input *HTTPTokenExchangeInput) (*types.Response[auth.TokenResponse], error) {
 		response, err := handler.ExchangeToken(ctx, input.Body.Domain, input.Body.Timestamp, input.Body.SignedTimestamp)
 		if err != nil {
 			return nil, huma.Error401Unauthorized("HTTP authentication failed", err)
 		}
 
-		return &v0.Response[auth.TokenResponse]{
+		return &types.Response[auth.TokenResponse]{
 			Body: *response,
 		}, nil
 	})
