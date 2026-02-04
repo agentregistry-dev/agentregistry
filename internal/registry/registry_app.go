@@ -66,21 +66,31 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	}
 	authz := auth.Authorizer{Authz: authzProvider}
 
-	// Connect to PostgreSQL with authz (runs OSS migrations)
-	baseDB, err := internaldb.NewPostgreSQL(ctx, cfg.DatabaseURL, authz)
-	if err != nil {
-		return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
-	}
-
-	// Allow implementors to wrap the database, and run additional migrations
-	var db database.Database = baseDB
-	if options.DatabaseFactory != nil {
-		db, err = options.DatabaseFactory(ctx, cfg.DatabaseURL, baseDB, authz)
+	var db database.Database
+	if cfg.DatabaseURL == "noop" && options.DatabaseFactory != nil {
+		// No-database mode: let factory provide the database
+		log.Println("using DatabaseFactory to create database")
+		var err error
+		db, err = options.DatabaseFactory(ctx, "", nil, authz)
 		if err != nil {
-			if err := baseDB.Close(); err != nil {
-				log.Printf("Error closing base database connection: %v", err)
+			return fmt.Errorf("failed to create database via factory: %w", err)
+		}
+	} else {
+		baseDB, err := internaldb.NewPostgreSQL(ctx, cfg.DatabaseURL, authz)
+		if err != nil {
+			return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
+		}
+
+		// Allow implementors to wrap the database and run additional migrations
+		db = baseDB
+		if options.DatabaseFactory != nil {
+			db, err = options.DatabaseFactory(ctx, cfg.DatabaseURL, baseDB, authz)
+			if err != nil {
+				if err := baseDB.Close(); err != nil {
+					log.Printf("Error closing base database connection: %v", err)
+				}
+				return fmt.Errorf("failed to create extended database: %w", err)
 			}
-			return fmt.Errorf("failed to create extended database: %w", err)
 		}
 	}
 
