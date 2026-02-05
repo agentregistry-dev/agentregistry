@@ -849,7 +849,6 @@ func (c *Client) RemoveDeployment(name string, version string, resourceType stri
 	return c.doJSON(req, nil)
 }
 
-
 // StartIndex starts an embeddings indexing job.
 func (c *Client) StartIndex(req internalv0.IndexRequest) (*internalv0.IndexJobResponse, error) {
 	httpReq, err := c.newAdminRequest(http.MethodPost, "/admin/v0/embeddings/index")

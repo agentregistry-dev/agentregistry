@@ -13,12 +13,12 @@ import (
 
 // SSEEvent represents a server-sent event.
 type SSEEvent struct {
-	Type     string      `json:"type"`
-	JobID    string      `json:"jobId,omitempty"`
-	Resource string      `json:"resource,omitempty"`
-	Stats    interface{} `json:"stats,omitempty"`
-	Result   interface{} `json:"result,omitempty"`
-	Error    string      `json:"error,omitempty"`
+	Type     string `json:"type"`
+	JobID    string `json:"jobId,omitempty"`
+	Resource string `json:"resource,omitempty"`
+	Stats    any    `json:"stats,omitempty"`
+	Result   any    `json:"result,omitempty"`
+	Error    string `json:"error,omitempty"`
 }
 
 // RegisterEmbeddingsSSEHandler registers the SSE streaming endpoint for indexing.

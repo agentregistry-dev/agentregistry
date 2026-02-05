@@ -39,12 +39,6 @@ func (m *mockIndexer) Run(ctx context.Context, opts service.IndexOptions, onProg
 	return &service.IndexResult{}, nil
 }
 
-func (m *mockIndexer) getCalls() []service.IndexOptions {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return append([]service.IndexOptions{}, m.runCalls...)
-}
-
 func TestStartIndex_Success(t *testing.T) {
 	mockIdx := &mockIndexer{
 		runFunc: func(ctx context.Context, opts service.IndexOptions, onProgress service.IndexProgressCallback) (*service.IndexResult, error) {

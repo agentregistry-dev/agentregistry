@@ -31,44 +31,44 @@ type FakeRegistry struct {
 	UpsertAgentEmbeddingCalls  int
 
 	// Function hooks for custom behavior (take precedence over data fields when set)
-	ListServersFn                  func(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
-	GetServerByNameFn              func(ctx context.Context, serverName string) (*apiv0.ServerResponse, error)
-	GetServerByNameAndVersionFn    func(ctx context.Context, serverName, version string, publishedOnly bool) (*apiv0.ServerResponse, error)
-	GetAllVersionsByServerNameFn   func(ctx context.Context, serverName string, publishedOnly bool) ([]*apiv0.ServerResponse, error)
-	CreateServerFn                 func(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
-	UpdateServerFn                 func(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error)
-	StoreServerReadmeFn            func(ctx context.Context, serverName, version string, content []byte, contentType string) error
-	GetServerReadmeLatestFn        func(ctx context.Context, serverName string) (*database.ServerReadme, error)
-	GetServerReadmeByVersionFn     func(ctx context.Context, serverName, version string) (*database.ServerReadme, error)
-	PublishServerFn                func(ctx context.Context, serverName, version string) error
-	UnpublishServerFn              func(ctx context.Context, serverName, version string) error
-	DeleteServerFn                 func(ctx context.Context, serverName, version string) error
-	UpsertServerEmbeddingFn        func(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error
-	GetServerEmbeddingMetadataFn   func(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error)
-	ListAgentsFn                   func(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error)
-	GetAgentByNameFn               func(ctx context.Context, agentName string) (*models.AgentResponse, error)
-	GetAgentByNameAndVersionFn     func(ctx context.Context, agentName, version string) (*models.AgentResponse, error)
-	GetAllVersionsByAgentNameFn    func(ctx context.Context, agentName string) ([]*models.AgentResponse, error)
-	CreateAgentFn                  func(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error)
-	PublishAgentFn                 func(ctx context.Context, agentName, version string) error
-	UnpublishAgentFn               func(ctx context.Context, agentName, version string) error
-	DeleteAgentFn                  func(ctx context.Context, agentName, version string) error
-	UpsertAgentEmbeddingFn         func(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error
-	GetAgentEmbeddingMetadataFn    func(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error)
-	ListSkillsFn                   func(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error)
-	GetSkillByNameFn               func(ctx context.Context, skillName string) (*models.SkillResponse, error)
-	GetSkillByNameAndVersionFn     func(ctx context.Context, skillName, version string) (*models.SkillResponse, error)
-	GetAllVersionsBySkillNameFn    func(ctx context.Context, skillName string) ([]*models.SkillResponse, error)
-	CreateSkillFn                  func(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error)
-	PublishSkillFn                 func(ctx context.Context, skillName, version string) error
-	UnpublishSkillFn               func(ctx context.Context, skillName, version string) error
-	GetDeploymentsFn               func(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
+	ListServersFn                   func(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
+	GetServerByNameFn               func(ctx context.Context, serverName string) (*apiv0.ServerResponse, error)
+	GetServerByNameAndVersionFn     func(ctx context.Context, serverName, version string, publishedOnly bool) (*apiv0.ServerResponse, error)
+	GetAllVersionsByServerNameFn    func(ctx context.Context, serverName string, publishedOnly bool) ([]*apiv0.ServerResponse, error)
+	CreateServerFn                  func(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
+	UpdateServerFn                  func(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error)
+	StoreServerReadmeFn             func(ctx context.Context, serverName, version string, content []byte, contentType string) error
+	GetServerReadmeLatestFn         func(ctx context.Context, serverName string) (*database.ServerReadme, error)
+	GetServerReadmeByVersionFn      func(ctx context.Context, serverName, version string) (*database.ServerReadme, error)
+	PublishServerFn                 func(ctx context.Context, serverName, version string) error
+	UnpublishServerFn               func(ctx context.Context, serverName, version string) error
+	DeleteServerFn                  func(ctx context.Context, serverName, version string) error
+	UpsertServerEmbeddingFn         func(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error
+	GetServerEmbeddingMetadataFn    func(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error)
+	ListAgentsFn                    func(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error)
+	GetAgentByNameFn                func(ctx context.Context, agentName string) (*models.AgentResponse, error)
+	GetAgentByNameAndVersionFn      func(ctx context.Context, agentName, version string) (*models.AgentResponse, error)
+	GetAllVersionsByAgentNameFn     func(ctx context.Context, agentName string) ([]*models.AgentResponse, error)
+	CreateAgentFn                   func(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error)
+	PublishAgentFn                  func(ctx context.Context, agentName, version string) error
+	UnpublishAgentFn                func(ctx context.Context, agentName, version string) error
+	DeleteAgentFn                   func(ctx context.Context, agentName, version string) error
+	UpsertAgentEmbeddingFn          func(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error
+	GetAgentEmbeddingMetadataFn     func(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error)
+	ListSkillsFn                    func(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error)
+	GetSkillByNameFn                func(ctx context.Context, skillName string) (*models.SkillResponse, error)
+	GetSkillByNameAndVersionFn      func(ctx context.Context, skillName, version string) (*models.SkillResponse, error)
+	GetAllVersionsBySkillNameFn     func(ctx context.Context, skillName string) ([]*models.SkillResponse, error)
+	CreateSkillFn                   func(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error)
+	PublishSkillFn                  func(ctx context.Context, skillName, version string) error
+	UnpublishSkillFn                func(ctx context.Context, skillName, version string) error
+	GetDeploymentsFn                func(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
 	GetDeploymentByNameAndVersionFn func(ctx context.Context, resourceName, version, artifactType string) (*models.Deployment, error)
-	DeployServerFn                 func(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool, runtime string) (*models.Deployment, error)
-	DeployAgentFn                  func(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool, runtime string) (*models.Deployment, error)
-	UpdateDeploymentConfigFn       func(ctx context.Context, resourceName, version, artifactType string, config map[string]string) (*models.Deployment, error)
-	RemoveDeploymentFn             func(ctx context.Context, resourceName, version, artifactType string) error
-	ReconcileAllFn                 func(ctx context.Context) error
+	DeployServerFn                  func(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool, runtime string) (*models.Deployment, error)
+	DeployAgentFn                   func(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool, runtime string) (*models.Deployment, error)
+	UpdateDeploymentConfigFn        func(ctx context.Context, resourceName, version, artifactType string, config map[string]string) (*models.Deployment, error)
+	RemoveDeploymentFn              func(ctx context.Context, resourceName, version, artifactType string) error
+	ReconcileAllFn                  func(ctx context.Context) error
 }
 
 // NewFakeRegistry creates a new FakeRegistry with initialized maps.

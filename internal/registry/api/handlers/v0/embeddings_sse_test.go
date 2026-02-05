@@ -35,8 +35,7 @@ func parseSSEEvents(t *testing.T, body string) []sseEvent {
 	scanner := bufio.NewScanner(strings.NewReader(body))
 	for scanner.Scan() {
 		line := scanner.Text()
-		if strings.HasPrefix(line, "data: ") {
-			data := strings.TrimPrefix(line, "data: ")
+		if data, found := strings.CutPrefix(line, "data: "); found {
 			var event sseEvent
 			if err := json.Unmarshal([]byte(data), &event); err != nil {
 				t.Logf("Failed to parse SSE event: %v", err)

@@ -321,7 +321,7 @@ func TestIndexer_Run_ContextCancelled(t *testing.T) {
 func TestIndexer_Run_ProgressCallback(t *testing.T) {
 	mockRegistry := servicetesting.NewFakeRegistry()
 	// Add enough servers to trigger progress callback
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		mockRegistry.Servers = append(mockRegistry.Servers, &apiv0.ServerResponse{
 			Server: apiv0.ServerJSON{
 				Name:        "com.example/server" + string(rune('a'+i)),
