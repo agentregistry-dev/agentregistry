@@ -8,6 +8,13 @@ BUILD_DATE ?= $(shell date -u '+%Y-%m-%d')
 GIT_COMMIT ?= $(shell git rev-parse --short HEAD || echo "unknown")
 VERSION ?= $(shell git describe --tags --always 2>/dev/null | grep v || echo "v0.0.0-$(GIT_COMMIT)")
 
+# Copy .env.example to .env if it doesn't exist
+.env:
+	@if [ ! -f .env ]; then
+		cp .env.example .env
+	fi
+	@echo ".env file created"
+
 LDFLAGS := \
 	-s -w \
 	-X 'github.com/agentregistry-dev/agentregistry/internal/version.Version=$(VERSION)' \
@@ -151,7 +158,7 @@ docker-agentgateway:
 	echo "✓ Agent gateway image built successfully";
 
 
-docker-server:
+docker-server: .env
 	@echo "Building server Docker image..."
 	$(DOCKER_BUILDER) build $(DOCKER_BUILD_ARGS) -f docker/server.Dockerfile -t $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) --build-arg LDFLAGS="$(LDFLAGS)" .
 	@echo "✓ Docker image built successfully"
