@@ -66,21 +66,37 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	}
 	authz := auth.Authorizer{Authz: authzProvider}
 
-	// Connect to PostgreSQL with authz (runs OSS migrations)
-	baseDB, err := internaldb.NewPostgreSQL(ctx, cfg.DatabaseURL, authz)
-	if err != nil {
-		return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
-	}
-
-	// Allow implementors to wrap the database, and run additional migrations
-	var db database.Database = baseDB
-	if options.DatabaseFactory != nil {
-		db, err = options.DatabaseFactory(ctx, cfg.DatabaseURL, baseDB, authz)
+	// Database selection: use DATABASE_URL="noop" only when you provide the database
+	// entirely via AppOptions.DatabaseFactory (e.g. in-memory or custom backend) and
+	// do not want a real PostgreSQL connection. In that case DatabaseFactory is required.
+	// For normal deployments, set DATABASE_URL to a real Postgres connection string.
+	var db database.Database
+	if cfg.DatabaseURL == "noop" {
+		if options.DatabaseFactory == nil {
+			return fmt.Errorf("DATABASE_URL=noop requires DatabaseFactory to be set in AppOptions")
+		}
+		log.Println("using DatabaseFactory to create database (noop mode)")
+		var err error
+		db, err = options.DatabaseFactory(ctx, "", nil, authz)
 		if err != nil {
-			if err := baseDB.Close(); err != nil {
-				log.Printf("Error closing base database connection: %v", err)
+			return fmt.Errorf("failed to create database via factory: %w", err)
+		}
+	} else {
+		baseDB, err := internaldb.NewPostgreSQL(ctx, cfg.DatabaseURL, authz)
+		if err != nil {
+			return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
+		}
+
+		// Allow implementors to wrap the database and run additional migrations
+		db = baseDB
+		if options.DatabaseFactory != nil {
+			db, err = options.DatabaseFactory(ctx, cfg.DatabaseURL, baseDB, authz)
+			if err != nil {
+				if err := baseDB.Close(); err != nil {
+					log.Printf("Error closing base database connection: %v", err)
+				}
+				return fmt.Errorf("failed to create extended database: %w", err)
 			}
-			return fmt.Errorf("failed to create extended database: %w", err)
 		}
 	}
 
