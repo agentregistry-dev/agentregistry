@@ -66,10 +66,16 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	}
 	authz := auth.Authorizer{Authz: authzProvider}
 
+	// Database selection: use DATABASE_URL="noop" only when you provide the database
+	// entirely via AppOptions.DatabaseFactory (e.g. in-memory or custom backend) and
+	// do not want a real PostgreSQL connection. In that case DatabaseFactory is required.
+	// For normal deployments, set DATABASE_URL to a real Postgres connection string.
 	var db database.Database
-	if cfg.DatabaseURL == "noop" && options.DatabaseFactory != nil {
-		// No-database mode: let factory provide the database
-		log.Println("using DatabaseFactory to create database")
+	if cfg.DatabaseURL == "noop" {
+		if options.DatabaseFactory == nil {
+			return fmt.Errorf("DATABASE_URL=noop requires DatabaseFactory to be set in AppOptions")
+		}
+		log.Println("using DatabaseFactory to create database (noop mode)")
 		var err error
 		db, err = options.DatabaseFactory(ctx, "", nil, authz)
 		if err != nil {
