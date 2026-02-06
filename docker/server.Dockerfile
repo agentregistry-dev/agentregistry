@@ -74,7 +74,8 @@ RUN DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker} && \
 
 COPY --from=builder /app/bin/arctl-server /app/bin/arctl-server
 
-COPY .env.example .env
+
+COPY .env .env
 
 LABEL org.opencontainers.image.source=https://github.com/agentregistry-dev/agentregistry
 LABEL org.opencontainers.image.description="Agent Registry Server"

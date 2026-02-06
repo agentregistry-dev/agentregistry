@@ -1,20 +1,18 @@
 package cli
 
 import (
+	"bufio"
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
-	"log"
+	"io"
 	"net/http"
-	"strings"
 	"time"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
-	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	regembeddings "github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
+	"github.com/agentregistry-dev/agentregistry/internal/client"
+	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/spf13/cobra"
 )
 
@@ -24,6 +22,8 @@ var (
 	embeddingsDryRun         bool
 	embeddingsIncludeServers bool
 	embeddingsIncludeAgents  bool
+	embeddingsStream         bool
+	embeddingsPollInterval   time.Duration
 )
 
 // EmbeddingsCmd hosts semantic embedding maintenance subcommands.
@@ -50,272 +50,171 @@ func init() {
 	embeddingsGenerateCmd.Flags().BoolVar(&embeddingsDryRun, "dry-run", false, "Print planned changes without calling the embedding provider or writing to the database")
 	embeddingsGenerateCmd.Flags().BoolVar(&embeddingsIncludeServers, "servers", true, "Include MCP servers when generating embeddings")
 	embeddingsGenerateCmd.Flags().BoolVar(&embeddingsIncludeAgents, "agents", true, "Include agents when generating embeddings")
+	embeddingsGenerateCmd.Flags().BoolVar(&embeddingsStream, "stream", true, "Use SSE streaming for progress updates")
+	embeddingsGenerateCmd.Flags().DurationVar(&embeddingsPollInterval, "poll-interval", 2*time.Second, "Poll interval when not using streaming")
 	EmbeddingsCmd.AddCommand(embeddingsGenerateCmd)
 }
 
+// sseEvent represents a server-sent event.
+type sseEvent struct {
+	Type     string          `json:"type"`
+	JobID    string          `json:"jobId,omitempty"`
+	Resource string          `json:"resource,omitempty"`
+	Stats    json.RawMessage `json:"stats,omitempty"`
+	Result   json.RawMessage `json:"result,omitempty"`
+	Error    string          `json:"error,omitempty"`
+}
+
 func runEmbeddingsGenerate(ctx context.Context) error {
-	cfg := config.NewConfig()
-	if !cfg.Embeddings.Enabled {
-		return fmt.Errorf("embeddings are disabled (set AGENT_REGISTRY_EMBEDDINGS_ENABLED=true)")
-	}
-
-	if cfg.Embeddings.Dimensions <= 0 {
-		return fmt.Errorf("invalid embeddings dimensions: %d", cfg.Embeddings.Dimensions)
-	}
-
-	// TODO: instead of communicating with db directly, we should communicate through the registry service
-	// so that the authn middleware extracts the session and stores in the context. (which the db can use to authorize queries)
-	authz := auth.Authorizer{Authz: nil}
-
-	db, err := internaldb.NewPostgreSQL(ctx, cfg.DatabaseURL, authz)
-	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
-	}
-	defer func() {
-		if cerr := db.Close(); cerr != nil {
-			log.Printf("Warning: failed to close database: %v", cerr)
-		}
-	}()
-
-	httpClient := &http.Client{Timeout: 60 * time.Second}
-	embeddingProvider, err := regembeddings.Factory(&cfg.Embeddings, httpClient)
-	if err != nil {
-		return fmt.Errorf("failed to initialize embeddings provider: %w", err)
-	}
-
-	registrySvc := service.NewRegistryService(db, cfg, embeddingProvider)
-
-	limit := embeddingsBatchSize
-	if limit <= 0 {
-		limit = 100
-	}
-
-	opts := backfillOptions{
-		limit:      limit,
-		force:      embeddingsForceUpdate,
-		dryRun:     embeddingsDryRun,
-		dimensions: cfg.Embeddings.Dimensions,
-	}
-
-	var (
-		totalFailures int
-		summaries     []string
-	)
-
 	if !embeddingsIncludeServers && !embeddingsIncludeAgents {
 		return fmt.Errorf("no targets selected; use --servers or --agents")
 	}
 
-	if embeddingsIncludeServers {
-		stats, err := backfillServers(ctx, registrySvc, embeddingProvider, opts)
-		if err != nil {
-			return err
+	c, err := client.NewClientFromEnv()
+	if err != nil {
+		return fmt.Errorf("failed to create client: %w", err)
+	}
+	defer c.Close()
+
+	req := v0.IndexRequest{
+		BatchSize:      embeddingsBatchSize,
+		Force:          embeddingsForceUpdate,
+		DryRun:         embeddingsDryRun,
+		IncludeServers: embeddingsIncludeServers,
+		IncludeAgents:  embeddingsIncludeAgents,
+	}
+
+	if embeddingsStream {
+		return streamIndex(ctx, c, req)
+	}
+	return pollIndex(ctx, c, req)
+}
+
+func streamIndex(ctx context.Context, c *client.Client, req v0.IndexRequest) error {
+	httpReq, err := c.NewSSERequest(ctx, req)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	sseClient := c.SSEClient()
+	resp, err := sseClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("failed to connect to API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusConflict {
+		return fmt.Errorf("indexing job already running")
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API error (%d): %s", resp.StatusCode, string(body))
+	}
+
+	fmt.Println("Starting embeddings indexing (streaming)...")
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			continue
 		}
-		totalFailures += stats.failures
-		summaries = append(summaries, fmt.Sprintf("Servers: processed=%d updated=%d skipped=%d failures=%d", stats.processed, stats.updated, stats.skipped, stats.failures))
-	}
+		if len(line) > 5 && line[:5] == "data:" {
+			data := line[5:]
+			if len(data) > 0 && data[0] == ' ' {
+				data = data[1:]
+			}
 
-	if embeddingsIncludeAgents {
-		stats, err := backfillAgents(ctx, registrySvc, embeddingProvider, opts)
-		if err != nil {
-			return err
+			var event sseEvent
+			if err := json.Unmarshal([]byte(data), &event); err != nil {
+				continue
+			}
+
+			switch event.Type {
+			case "started":
+				fmt.Printf("Job started: %s\n", event.JobID)
+			case "progress":
+				var stats service.IndexStats
+				if err := json.Unmarshal(event.Stats, &stats); err == nil {
+					fmt.Printf("[%s] progress: processed=%d updated=%d skipped=%d failures=%d\n",
+						event.Resource, stats.Processed, stats.Updated, stats.Skipped, stats.Failures)
+				}
+			case "completed":
+				fmt.Println("Embedding indexing complete.")
+				var result jobs.JobResult
+				if err := json.Unmarshal(event.Result, &result); err == nil {
+					fmt.Printf("  Servers: processed=%d updated=%d skipped=%d failures=%d\n",
+						result.ServersProcessed, result.ServersUpdated, result.ServersSkipped, result.ServerFailures)
+					fmt.Printf("  Agents: processed=%d updated=%d skipped=%d failures=%d\n",
+						result.AgentsProcessed, result.AgentsUpdated, result.AgentsSkipped, result.AgentFailures)
+
+					totalFailures := result.ServerFailures + result.AgentFailures
+					if totalFailures > 0 {
+						return fmt.Errorf("%d embedding(s) failed; see logs for details", totalFailures)
+					}
+				}
+				return nil
+			case "error":
+				return fmt.Errorf("indexing failed: %s", event.Error)
+			}
 		}
-		totalFailures += stats.failures
-		summaries = append(summaries, fmt.Sprintf("Agents: processed=%d updated=%d skipped=%d failures=%d", stats.processed, stats.updated, stats.skipped, stats.failures))
 	}
 
-	fmt.Println("Embedding backfill complete.")
-	for _, summary := range summaries {
-		fmt.Printf("  %s\n", summary)
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("connection error: %w", err)
 	}
 
-	if totalFailures > 0 {
-		return fmt.Errorf("%d embedding(s) failed; see logs for details", totalFailures)
-	}
 	return nil
 }
 
-type backfillOptions struct {
-	limit      int
-	force      bool
-	dryRun     bool
-	dimensions int
-}
+func pollIndex(ctx context.Context, c *client.Client, req v0.IndexRequest) error {
+	jobResp, err := c.StartIndex(req)
+	if err != nil {
+		return fmt.Errorf("failed to start indexing: %w", err)
+	}
 
-type embeddingStats struct {
-	processed int
-	updated   int
-	skipped   int
-	failures  int
-}
+	fmt.Printf("Started indexing job: %s\n", jobResp.JobID)
 
-func backfillServers(ctx context.Context, registrySvc service.RegistryService, provider regembeddings.Provider, opts backfillOptions) (embeddingStats, error) {
-	var (
-		stats  embeddingStats
-		cursor string
-		limit  = opts.limit
-	)
-
-	const progressInterval = 100
+	ticker := time.NewTicker(embeddingsPollInterval)
+	defer ticker.Stop()
 
 	for {
-		servers, nextCursor, err := registrySvc.ListServers(ctx, nil, cursor, limit)
-		if err != nil {
-			return stats, fmt.Errorf("failed to list servers: %w", err)
-		}
-		if len(servers) == 0 {
-			break
-		}
-
-		for _, server := range servers {
-			stats.processed++
-			name := server.Server.Name
-			version := server.Server.Version
-			payload := regembeddings.BuildServerEmbeddingPayload(&server.Server)
-
-			if strings.TrimSpace(payload) == "" {
-				log.Printf("Skipping server %s@%s: empty embedding payload", name, version)
-				stats.skipped++
-				continue
-			}
-
-			payloadChecksum := regembeddings.PayloadChecksum(payload)
-			meta, err := registrySvc.GetServerEmbeddingMetadata(ctx, name, version)
-			if err != nil && !errors.Is(err, database.ErrNotFound) {
-				log.Printf("Failed to read server embedding metadata for %s@%s: %v", name, version, err)
-				stats.failures++
-				continue
-			}
-			if errors.Is(err, database.ErrNotFound) {
-				meta = &database.SemanticEmbeddingMetadata{}
-			}
-
-			hasEmbedding := meta != nil && meta.HasEmbedding
-			needsUpdate := opts.force || !hasEmbedding || meta.Checksum != payloadChecksum
-			if !needsUpdate {
-				stats.skipped++
-				continue
-			}
-
-			if opts.dryRun {
-				fmt.Printf("[DRY RUN] Would upsert server embedding for %s@%s (existing=%v checksum=%s)\n", name, version, hasEmbedding, meta.Checksum)
-				stats.updated++
-				continue
-			}
-
-			record, err := regembeddings.GenerateSemanticEmbedding(ctx, provider, payload, opts.dimensions)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			status, err := c.GetIndexStatus(jobResp.JobID)
 			if err != nil {
-				log.Printf("Failed to generate server embedding for %s@%s: %v", name, version, err)
-				stats.failures++
+				fmt.Printf("Warning: failed to get job status: %v\n", err)
 				continue
 			}
 
-			if err := registrySvc.UpsertServerEmbedding(ctx, name, version, record); err != nil {
-				log.Printf("Failed to persist server embedding for %s@%s: %v", name, version, err)
-				stats.failures++
-				continue
+			fmt.Printf("Progress: processed=%d updated=%d skipped=%d failures=%d\n",
+				status.Progress.Processed, status.Progress.Updated, status.Progress.Skipped, status.Progress.Failures)
+
+			if status.Status == "completed" {
+				fmt.Println("Embedding indexing complete.")
+				if status.Result != nil {
+					fmt.Printf("  Servers: processed=%d updated=%d skipped=%d failures=%d\n",
+						status.Result.ServersProcessed, status.Result.ServersUpdated, status.Result.ServersSkipped, status.Result.ServerFailures)
+					fmt.Printf("  Agents: processed=%d updated=%d skipped=%d failures=%d\n",
+						status.Result.AgentsProcessed, status.Result.AgentsUpdated, status.Result.AgentsSkipped, status.Result.AgentFailures)
+
+					totalFailures := status.Result.ServerFailures + status.Result.AgentFailures
+					if totalFailures > 0 {
+						return fmt.Errorf("%d embedding(s) failed; see logs for details", totalFailures)
+					}
+				}
+				return nil
 			}
-			stats.updated++
-		}
 
-		if stats.processed%progressInterval == 0 {
-			logProgress("servers", stats)
+			if status.Status == "failed" {
+				errMsg := "unknown error"
+				if status.Result != nil && status.Result.Error != "" {
+					errMsg = status.Result.Error
+				}
+				return fmt.Errorf("indexing failed: %s", errMsg)
+			}
 		}
-
-		if nextCursor == "" {
-			break
-		}
-		cursor = nextCursor
 	}
-
-	return stats, nil
-}
-
-func backfillAgents(ctx context.Context, registrySvc service.RegistryService, provider regembeddings.Provider, opts backfillOptions) (embeddingStats, error) {
-	var (
-		stats  embeddingStats
-		cursor string
-		limit  = opts.limit
-	)
-
-	const progressInterval = 100
-
-	for {
-		agents, nextCursor, err := registrySvc.ListAgents(ctx, nil, cursor, limit)
-		if err != nil {
-			return stats, fmt.Errorf("failed to list agents: %w", err)
-		}
-		if len(agents) == 0 {
-			break
-		}
-
-		for _, agent := range agents {
-			stats.processed++
-			name := agent.Agent.Name
-			version := agent.Agent.Version
-			payload := regembeddings.BuildAgentEmbeddingPayload(&agent.Agent)
-
-			if strings.TrimSpace(payload) == "" {
-				log.Printf("Skipping agent %s@%s: empty embedding payload", name, version)
-				stats.skipped++
-				continue
-			}
-
-			payloadChecksum := regembeddings.PayloadChecksum(payload)
-			meta, err := registrySvc.GetAgentEmbeddingMetadata(ctx, name, version)
-			if err != nil && !errors.Is(err, database.ErrNotFound) {
-				log.Printf("Failed to read agent embedding metadata for %s@%s: %v", name, version, err)
-				stats.failures++
-				continue
-			}
-			if errors.Is(err, database.ErrNotFound) {
-				meta = &database.SemanticEmbeddingMetadata{}
-			}
-
-			hasEmbedding := meta != nil && meta.HasEmbedding
-			needsUpdate := opts.force || !hasEmbedding || meta.Checksum != payloadChecksum
-			if !needsUpdate {
-				stats.skipped++
-				continue
-			}
-
-			if opts.dryRun {
-				fmt.Printf("[DRY RUN] Would upsert agent embedding for %s@%s (existing=%v checksum=%s)\n", name, version, hasEmbedding, meta.Checksum)
-				stats.updated++
-				continue
-			}
-
-			record, err := regembeddings.GenerateSemanticEmbedding(ctx, provider, payload, opts.dimensions)
-			if err != nil {
-				log.Printf("Failed to generate agent embedding for %s@%s: %v", name, version, err)
-				stats.failures++
-				continue
-			}
-
-			if err := registrySvc.UpsertAgentEmbedding(ctx, name, version, record); err != nil {
-				log.Printf("Failed to persist agent embedding for %s@%s: %v", name, version, err)
-				stats.failures++
-				continue
-			}
-			stats.updated++
-		}
-
-		if stats.processed%progressInterval == 0 {
-			logProgress("agents", stats)
-		}
-
-		if nextCursor == "" {
-			break
-		}
-		cursor = nextCursor
-	}
-
-	return stats, nil
-}
-
-func logProgress(resource string, stats embeddingStats) {
-	if stats.processed == 0 {
-		return
-	}
-	fmt.Printf("[%s] progress: processed=%d updated=%d skipped=%d failures=%d\n", resource, stats.processed, stats.updated, stats.skipped, stats.failures)
 }
