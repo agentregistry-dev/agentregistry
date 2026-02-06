@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
@@ -9,6 +10,10 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
 )
+
+// ErrCLINoStoredToken is returned when no stored authentication token is found.
+// This is expected for CLI commands that do not require authentication (e.g. artifact init).
+var ErrCLINoStoredToken = errors.New("no stored authentication token")
 
 // ServiceFactory is a function type that creates a service implementation.
 // The base service is provided as input, and the factory should return a service
