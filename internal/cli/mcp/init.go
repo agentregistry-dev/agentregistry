@@ -23,6 +23,11 @@ var InitCmd = &cobra.Command{
 This command provides subcommands to initialize a new MCP server project
 using one of the supported frameworks.`,
 	RunE: runInit,
+	// Override root's PersistentPreRunE — mcp init is a local scaffolding
+	// command that does not need a registry connection.
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		return nil
+	},
 }
 
 var (
@@ -41,6 +46,14 @@ func init() {
 	InitCmd.PersistentFlags().StringVar(&initEmail, "email", "", "Author email for the project")
 	InitCmd.PersistentFlags().StringVar(&initDescription, "description", "", "Description for the project")
 	InitCmd.PersistentFlags().BoolVar(&initNonInteractive, "non-interactive", false, "Run in non-interactive mode")
+
+	// Shadow the root-level registry flags with hidden local ones so they
+	// don't appear in "mcp init --help". The init command is purely local
+	// scaffolding and never talks to a registry.
+	InitCmd.PersistentFlags().String("registry-url", "", "")
+	InitCmd.PersistentFlags().String("registry-token", "", "")
+	_ = InitCmd.PersistentFlags().MarkHidden("registry-url")
+	_ = InitCmd.PersistentFlags().MarkHidden("registry-token")
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
