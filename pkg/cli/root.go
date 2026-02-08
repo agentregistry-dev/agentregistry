@@ -46,6 +46,11 @@ var rootCmd = &cobra.Command{
 	Short: "Agent Registry CLI",
 	Long:  `arctl is a CLI tool for managing agents, MCP servers and skills.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// Commands that work entirely offline don't need the daemon or API client.
+		if isOfflineCommand(cmd) {
+			return nil
+		}
+
 		baseURL, token := resolveRegistryTarget()
 
 		dm := cliOptions.DaemonManager
@@ -168,6 +173,24 @@ func shouldAutoStartDaemon(targetURL string) bool {
 		}
 	}
 	return port == defaultRegistryPort
+}
+
+// offlineCommands lists command path prefixes that work without the daemon
+// or API client. These commands only do local file I/O (scaffolding, etc.).
+var offlineCommands = []string{
+	"arctl agent init",
+	"arctl mcp init",
+}
+
+// isOfflineCommand returns true when cmd does not need the daemon or API client.
+func isOfflineCommand(cmd *cobra.Command) bool {
+	path := cmd.CommandPath()
+	for _, prefix := range offlineCommands {
+		if path == prefix || strings.HasPrefix(path, prefix+" ") {
+			return true
+		}
+	}
+	return false
 }
 
 func parseURL(raw string) *url.URL {
