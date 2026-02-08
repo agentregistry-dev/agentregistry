@@ -122,6 +122,31 @@ func (m *Manager) Validate(manifest *models.AgentManifest) error {
 			return fmt.Errorf("mcpServers[%d]: unsupported type '%s'", i, srv.Type)
 		}
 	}
+
+	for i, skill := range manifest.Skills {
+		if skill.Name == "" {
+			return fmt.Errorf("skills[%d]: name is required", i)
+		}
+		hasImage := skill.Image != ""
+		hasPath := skill.Path != ""
+		hasRegistry := skill.RegistrySkillName != ""
+		count := 0
+		if hasImage {
+			count++
+		}
+		if hasPath {
+			count++
+		}
+		if hasRegistry {
+			count++
+		}
+		if count == 0 {
+			return fmt.Errorf("skills[%d]: one of image, path, or registrySkillName is required", i)
+		}
+		if count > 1 {
+			return fmt.Errorf("skills[%d]: only one of image, path, or registrySkillName may be set", i)
+		}
+	}
 	return nil
 }
 
