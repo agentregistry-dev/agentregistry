@@ -84,6 +84,8 @@ type DaemonManager interface {
 	IsRunning() bool
 	// Start starts the daemon, blocking until it's ready
 	Start() error
+	// Stop stops the daemon
+	Stop() error
 }
 
 // CLIAuthnProvider provides authentication for CLI commands.

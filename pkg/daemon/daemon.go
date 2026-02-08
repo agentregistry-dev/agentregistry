@@ -151,6 +151,20 @@ func (d *DefaultDaemonManager) Start() error {
 	return nil
 }
 
+func (d *DefaultDaemonManager) Stop() error {
+	fmt.Printf("Stopping %s daemon...\n", d.config.ProjectName)
+	cmd := exec.Command("docker", "compose", "-p", d.config.ProjectName, "-f", "-", "down")
+	cmd.Stdin = strings.NewReader(d.getComposeYAML())
+	cmd.Env = append(os.Environ(), fmt.Sprintf("VERSION=%s", d.config.Version), fmt.Sprintf("DOCKER_REGISTRY=%s", d.config.DockerRegistry))
+	if byt, err := cmd.CombinedOutput(); err != nil {
+		fmt.Printf("failed to stop docker compose: %v, output: %s", err, string(byt))
+		return fmt.Errorf("failed to stop docker compose: %w", err)
+	}
+
+	fmt.Printf("✓ %s daemon stopped successfully\n", d.config.ProjectName)
+	return nil
+}
+
 func (d *DefaultDaemonManager) IsRunning() bool {
 	// First check if a server is responding on the API port (local or Docker)
 	if isServerResponding() {

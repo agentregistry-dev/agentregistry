@@ -115,6 +115,8 @@ func init() {
 	rootCmd.AddCommand(skill.SkillCmd)
 	rootCmd.AddCommand(configure.ConfigureCmd)
 	rootCmd.AddCommand(cli.VersionCmd)
+	rootCmd.AddCommand(cli.StartCmd)
+	rootCmd.AddCommand(cli.StopCmd)
 	rootCmd.AddCommand(cli.ImportCmd)
 	rootCmd.AddCommand(cli.ExportCmd)
 	rootCmd.AddCommand(cli.EmbeddingsCmd)
