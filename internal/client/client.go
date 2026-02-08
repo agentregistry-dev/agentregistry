@@ -65,11 +65,15 @@ func NewClientWithConfig(baseURL, token string) (*Client, error) {
 
 func pingWithRetry(c *Client) error {
 	var lastErr error
-	const attempts = 3
+	const attempts = 5
+	delay := time.Second
 	for i := range attempts {
 		if err := c.Ping(); err != nil {
 			lastErr = err
-			time.Sleep(time.Duration(i+1) * time.Second)
+			if i < attempts-1 {
+				time.Sleep(delay)
+				delay *= 2
+			}
 			continue
 		}
 		return nil
