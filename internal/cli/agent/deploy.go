@@ -142,5 +142,5 @@ func init() {
 	DeployCmd.Flags().String("version", "latest", "Agent version to deploy")
 	DeployCmd.Flags().String("runtime", "local", "Deployment runtime target (local, kubernetes)")
 	DeployCmd.Flags().Bool("prefer-remote", false, "Prefer using a remote source when available")
-	DeployCmd.Flags().String("namespace", "", "Kubernetes namespace for agent deployment")
+	DeployCmd.Flags().String("namespace", "default", "Kubernetes namespace for agent deployment")
 }
