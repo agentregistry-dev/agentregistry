@@ -89,7 +89,6 @@ def main() -> None:
         if transport_mode not in ["http", "stdio"]:
             raise ValueError(f"Invalid transport mode: {transport_mode}. Must be one of: http, or stdio")
 
-        print(f"Running server in stateless HTTP mode: {args.stateless_http}")
         server.run(transport_mode=transport_mode,
                    host=args.host,
                    port=args.port,
