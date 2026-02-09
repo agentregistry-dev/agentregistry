@@ -10,9 +10,7 @@ VERSION ?= $(shell git describe --tags --always 2>/dev/null | grep v || echo "v0
 
 # Copy .env.example to .env if it doesn't exist
 .env:
-	@if [ ! -f .env ]; then
-		cp .env.example .env
-	fi
+	cp .env.example .env
 	@echo ".env file created"
 
 LDFLAGS := \
