@@ -908,16 +908,24 @@ func (s *registryServiceImpl) RemoveDeployment(ctx context.Context, serverName s
 
 	// Clean up kubernetes resources
 	if deployment != nil && deployment.Runtime == "kubernetes" {
+		namespace := ""
+		if deployment.Config != nil {
+			namespace = deployment.Config["KAGENT_NAMESPACE"]
+		}
+		if namespace == "" {
+			namespace = runtime.DefaultNamespace()
+		}
+
 		if artifactType == "agent" {
-			if err := runtime.DeleteKubernetesAgent(ctx, serverName, version, ""); err != nil {
+			if err := runtime.DeleteKubernetesAgent(ctx, serverName, version, namespace); err != nil {
 				return err
 			}
 		}
 		if artifactType == "mcp" {
-			if err := runtime.DeleteKubernetesMCPServer(ctx, serverName, ""); err != nil {
+			if err := runtime.DeleteKubernetesMCPServer(ctx, serverName, namespace); err != nil {
 				return err
 			}
-			if err := runtime.DeleteKubernetesRemoteMCPServer(ctx, serverName, ""); err != nil {
+			if err := runtime.DeleteKubernetesRemoteMCPServer(ctx, serverName, namespace); err != nil {
 				return err
 			}
 		}
