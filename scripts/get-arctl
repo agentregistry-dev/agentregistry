@@ -126,7 +126,7 @@ checkDesiredVersion() {
 # if it needs to be changed.
 checkArctlInstalledVersion() {
   if [[ -f "${ARCTL_INSTALL_DIR}/${BINARY_NAME}" ]]; then
-    local version=$("${ARCTL_INSTALL_DIR}/${BINARY_NAME}" version 2>/dev/null | head -1 | awk '{print $NF}')
+    local version=$("${ARCTL_INSTALL_DIR}/${BINARY_NAME}" version --json 2>/dev/null | jq -r '.arctl_version')
     if [[ "$version" == "$TAG" ]]; then
       echo "arctl ${version} is already ${DESIRED_VERSION:-latest}"
       return 0
