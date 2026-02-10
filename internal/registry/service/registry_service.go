@@ -909,15 +909,15 @@ func (s *registryServiceImpl) RemoveDeployment(ctx context.Context, serverName s
 	// Clean up kubernetes resources
 	if deployment != nil && deployment.Runtime == "kubernetes" {
 		if artifactType == "agent" {
-			if err := runtime.DeleteKubernetesAgent(ctx, serverName, version, kagent.DefaultNamespace); err != nil {
+			if err := runtime.DeleteKubernetesAgent(ctx, serverName, version, ""); err != nil {
 				return err
 			}
 		}
 		if artifactType == "mcp" {
-			if err := runtime.DeleteKubernetesMCPServer(ctx, serverName, kagent.DefaultNamespace); err != nil {
+			if err := runtime.DeleteKubernetesMCPServer(ctx, serverName, ""); err != nil {
 				return err
 			}
-			if err := runtime.DeleteKubernetesRemoteMCPServer(ctx, serverName, kagent.DefaultNamespace); err != nil {
+			if err := runtime.DeleteKubernetesRemoteMCPServer(ctx, serverName, ""); err != nil {
 				return err
 			}
 		}

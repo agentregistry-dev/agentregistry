@@ -263,10 +263,10 @@ func TestTranslateRuntimeConfig_NamespaceConsistency(t *testing.T) {
 		expectedNamespace string
 	}{
 		{
-			name:              "no namespace provided defaults to 'default' for all resources",
+			name:              "no namespace provided defaults to '' for all resources",
 			agentEnv:          map[string]string{"SOME_KEY": "some-value"},
 			mcpNamespace:      "",
-			expectedNamespace: "default",
+			expectedNamespace: "",
 		},
 		{
 			name:              "explicit namespace via KAGENT_NAMESPACE propagates to all resources",
@@ -369,14 +369,11 @@ func TestTranslateRuntimeConfig_NamespaceConsistency(t *testing.T) {
 				}
 			}
 
-			// Every resource must land in the expected namespace (never "kagent")
+			// All resources must have the same namespace
 			for _, c := range checks {
 				if c.namespace != tt.expectedNamespace {
 					t.Errorf("%s %q namespace = %q, want %q",
 						c.kind, c.name, c.namespace, tt.expectedNamespace)
-				}
-				if c.namespace == "kagent" {
-					t.Errorf("%s %q still using old default namespace 'kagent'", c.kind, c.name)
 				}
 			}
 		})

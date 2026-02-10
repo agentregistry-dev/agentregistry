@@ -281,36 +281,24 @@ func (r *agentRegistryRuntime) ensureKubernetesRuntime(
 
 	// Apply ConfigMaps first
 	for _, configMap := range cfg.ConfigMaps {
-		if configMap.Namespace == "" {
-			configMap.Namespace = kagent.DefaultNamespace
-		}
 		if err := applyResource(ctx, c, configMap, r.verbose); err != nil {
 			return fmt.Errorf("ConfigMap %s: %w", configMap.Name, err)
 		}
 	}
 
 	for _, agent := range cfg.Agents {
-		if agent.Namespace == "" {
-			agent.Namespace = kagent.DefaultNamespace
-		}
 		if err := applyResource(ctx, c, agent, r.verbose); err != nil {
 			return fmt.Errorf("agent %s: %w", agent.Name, err)
 		}
 	}
 
 	for _, remoteMCP := range cfg.RemoteMCPServers {
-		if remoteMCP.Namespace == "" {
-			remoteMCP.Namespace = kagent.DefaultNamespace
-		}
 		if err := applyResource(ctx, c, remoteMCP, r.verbose); err != nil {
 			return fmt.Errorf("remote MCP server %s: %w", remoteMCP.Name, err)
 		}
 	}
 
 	for _, mcpServer := range cfg.MCPServers {
-		if mcpServer.Namespace == "" {
-			mcpServer.Namespace = kagent.DefaultNamespace
-		}
 		if err := applyResource(ctx, c, mcpServer, r.verbose); err != nil {
 			return fmt.Errorf("MCP server %s: %w", mcpServer.Name, err)
 		}
@@ -393,10 +381,6 @@ func ListRemoteMCPServers(ctx context.Context, namespace string) ([]*v1alpha2.Re
 
 // DeleteKubernetesAgent deletes a kagent Agent CR by name/version.
 func DeleteKubernetesAgent(ctx context.Context, name, version, namespace string) error {
-	if namespace == "" {
-		namespace = kagent.DefaultNamespace
-	}
-
 	c, err := GetKubeClient()
 	if err != nil {
 		return err
@@ -414,10 +398,6 @@ func DeleteKubernetesAgent(ctx context.Context, name, version, namespace string)
 
 // DeleteKubernetesRemoteMCPServer deletes a kagent RemoteMCPServer CR by name.
 func DeleteKubernetesRemoteMCPServer(ctx context.Context, name, namespace string) error {
-	if namespace == "" {
-		namespace = kagent.DefaultNamespace
-	}
-
 	c, err := GetKubeClient()
 	if err != nil {
 		return err
@@ -435,10 +415,6 @@ func DeleteKubernetesRemoteMCPServer(ctx context.Context, name, namespace string
 
 // DeleteKubernetesMCPServer deletes a kagent MCPServer CR by name.
 func DeleteKubernetesMCPServer(ctx context.Context, name, namespace string) error {
-	if namespace == "" {
-		namespace = kagent.DefaultNamespace
-	}
-
 	c, err := GetKubeClient()
 	if err != nil {
 		return err
