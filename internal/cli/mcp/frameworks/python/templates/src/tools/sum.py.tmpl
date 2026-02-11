@@ -1,0 +1,23 @@
+"""Example echo tool for {{.ProjectName}} MCP server.
+
+This is an example tool showing the basic structure for FastMCP tools.
+Each tool file should contain a function decorated with @mcp.tool().
+"""
+
+from core.server import mcp
+from core.utils import get_tool_config
+
+
+@mcp.tool()
+def sum(a: float | int, b: float | int) -> float | int:
+    """Add two numbers together. Use this tool when you need to sum or add two numbers.
+
+    Args:
+        a: The first number to add
+        b: The second number to add
+
+    Returns:
+        The sum of the two numbers
+    """
+
+    return a + b
