@@ -98,7 +98,7 @@ type CLIAuthnProvider interface {
 //
 // The factory receives a Server interface and should return a Server after
 // registering new routes using base.HumaAPI() or base.Mux().
-type HTTPServerFactory func(base Server) Server
+type HTTPServerFactory func(base Server, db database.Database) Server
 
 // DaemonConfig allows customization of the default daemon manager
 type DaemonConfig struct {

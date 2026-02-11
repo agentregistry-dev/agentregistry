@@ -222,7 +222,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 
 	var server types.Server
 	if options.HTTPServerFactory != nil {
-		server = options.HTTPServerFactory(baseServer)
+		server = options.HTTPServerFactory(baseServer, db)
 	} else {
 		server = baseServer
 	}
