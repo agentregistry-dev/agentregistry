@@ -64,7 +64,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("docker check failed: %w", err)
 	}
 
-	imageName := project.ConstructImageName(buildImage, manifest.Name)
+	imageName := project.ConstructImageName(buildImage, manifest.Image, manifest.Name)
 	extraArgs := []string{}
 	if buildPlatform != "" {
 		extraArgs = append(extraArgs, "--platform", buildPlatform)

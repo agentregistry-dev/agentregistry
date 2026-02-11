@@ -36,7 +36,7 @@ func init() {
 	DeployCmd.Flags().BoolVar(&deployPreferRemote, "prefer-remote", false, "Prefer remote deployment over local")
 	DeployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "Automatically accept all prompts (use default/latest version)")
 	DeployCmd.Flags().StringVar(&deployRuntime, "runtime", "local", "Deployment runtime target (local, kubernetes)")
-	DeployCmd.Flags().StringVar(&deployNamespace, "namespace", "default", "Kubernetes namespace for deployment (only used with --runtime kubernetes)")
+	DeployCmd.Flags().StringVar(&deployNamespace, "namespace", "", "Kubernetes namespace for deployment (defaults to current kubeconfig context, only used with --runtime kubernetes)")
 }
 
 func runDeploy(cmd *cobra.Command, args []string) error {
@@ -107,7 +107,11 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("\n✓ Deployed %s (v%s) to %s runtime\n", deployment.ServerName, deployment.Version, deployRuntime)
 	if deployRuntime == "kubernetes" {
-		fmt.Printf("Namespace: %s\n", deployNamespace)
+		ns := deployNamespace
+		if ns == "" {
+			ns = "(default)"
+		}
+		fmt.Printf("Namespace: %s\n", ns)
 	}
 	if len(config) > 0 {
 		fmt.Printf("Configuration: %d setting(s)\n", len(config))

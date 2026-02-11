@@ -252,3 +252,130 @@ func TestTranslateRuntimeConfig_AgentWithMCPServers(t *testing.T) {
 		t.Error("Agent spec missing '/config' volume mount")
 	}
 }
+
+// TestTranslateRuntimeConfig_NamespaceConsistency verifies that agents, MCP servers,
+// and ConfigMaps all deploy to the same namespace.
+func TestTranslateRuntimeConfig_NamespaceConsistency(t *testing.T) {
+	tests := []struct {
+		name              string
+		agentEnv          map[string]string
+		mcpNamespace      string // Namespace field on the MCPServer
+		expectedNamespace string
+	}{
+		{
+			name:              "no namespace provided defaults to '' for all resources",
+			agentEnv:          map[string]string{"SOME_KEY": "some-value"},
+			mcpNamespace:      "",
+			expectedNamespace: "",
+		},
+		{
+			name:              "explicit namespace via KAGENT_NAMESPACE propagates to all resources",
+			agentEnv:          map[string]string{"KAGENT_NAMESPACE": "my-namespace"},
+			mcpNamespace:      "my-namespace",
+			expectedNamespace: "my-namespace",
+		},
+		{
+			name:              "custom namespace via KAGENT_NAMESPACE",
+			agentEnv:          map[string]string{"KAGENT_NAMESPACE": "production"},
+			mcpNamespace:      "production",
+			expectedNamespace: "production",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			translator := NewTranslator()
+			ctx := context.Background()
+
+			desired := &api.DesiredState{
+				Agents: []*api.Agent{
+					{
+						Name:    "test-agent",
+						Version: "v1",
+						Deployment: api.AgentDeployment{
+							Image: "agent-image:latest",
+							Env:   tt.agentEnv,
+						},
+						ResolvedMCPServers: []api.ResolvedMCPServerConfig{
+							{Name: "my-mcp", Type: "remote", URL: "http://my-mcp:8080/mcp"},
+						},
+					},
+				},
+				MCPServers: []*api.MCPServer{
+					{
+						Name:          "remote-mcp",
+						MCPServerType: api.MCPServerTypeRemote,
+						Namespace:     tt.mcpNamespace,
+						Remote: &api.RemoteMCPServer{
+							Host: "remote-mcp.example.com",
+							Port: 8080,
+							Path: "/mcp",
+						},
+					},
+					{
+						Name:          "local-mcp",
+						MCPServerType: api.MCPServerTypeLocal,
+						Namespace:     tt.mcpNamespace,
+						Local: &api.LocalMCPServer{
+							TransportType: api.TransportTypeHTTP,
+							Deployment: api.MCPServerDeployment{
+								Image: "local-mcp:latest",
+								Env:   tt.agentEnv,
+							},
+							HTTP: &api.HTTPTransport{
+								Port: 3000,
+								Path: "/mcp",
+							},
+						},
+					},
+				},
+			}
+
+			config, err := translator.TranslateRuntimeConfig(ctx, desired)
+			if err != nil {
+				t.Fatalf("TranslateRuntimeConfig failed: %v", err)
+			}
+
+			// Collect all namespaces from every generated resource
+			type nsCheck struct {
+				kind      string
+				name      string
+				namespace string
+			}
+			var checks []nsCheck
+
+			for _, a := range config.Kubernetes.Agents {
+				checks = append(checks, nsCheck{"Agent", a.Name, a.Namespace})
+			}
+			for _, cm := range config.Kubernetes.ConfigMaps {
+				checks = append(checks, nsCheck{"ConfigMap", cm.Name, cm.Namespace})
+			}
+			for _, r := range config.Kubernetes.RemoteMCPServers {
+				checks = append(checks, nsCheck{"RemoteMCPServer", r.Name, r.Namespace})
+			}
+			for _, m := range config.Kubernetes.MCPServers {
+				checks = append(checks, nsCheck{"MCPServer", m.Name, m.Namespace})
+			}
+
+			// Verify we produced all expected resource types
+			expectedCounts := map[string]int{"Agent": 1, "ConfigMap": 1, "RemoteMCPServer": 1, "MCPServer": 1}
+			actualCounts := make(map[string]int)
+			for _, c := range checks {
+				actualCounts[c.kind]++
+			}
+			for kind, want := range expectedCounts {
+				if got := actualCounts[kind]; got != want {
+					t.Errorf("expected %d %s resource(s), got %d", want, kind, got)
+				}
+			}
+
+			// All resources must have the same namespace
+			for _, c := range checks {
+				if c.namespace != tt.expectedNamespace {
+					t.Errorf("%s %q namespace = %q, want %q",
+						c.kind, c.name, c.namespace, tt.expectedNamespace)
+				}
+			}
+		})
+	}
+}

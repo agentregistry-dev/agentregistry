@@ -134,7 +134,11 @@ func deployKubernetes(name, version string, config map[string]string, namespace 
 		return fmt.Errorf("failed to deploy agent: %w", err)
 	}
 
-	fmt.Printf("Agent '%s' version '%s' deployed to kubernetes runtime in namespace '%s'\n", deployment.ServerName, deployment.Version, namespace)
+	ns := namespace
+	if ns == "" {
+		ns = "(default)"
+	}
+	fmt.Printf("Agent '%s' version '%s' deployed to Kubernetes runtime in namespace '%s'\n", deployment.ServerName, deployment.Version, ns)
 	return nil
 }
 
@@ -142,5 +146,5 @@ func init() {
 	DeployCmd.Flags().String("version", "latest", "Agent version to deploy")
 	DeployCmd.Flags().String("runtime", "local", "Deployment runtime target (local, kubernetes)")
 	DeployCmd.Flags().Bool("prefer-remote", false, "Prefer using a remote source when available")
-	DeployCmd.Flags().String("namespace", "", "Kubernetes namespace for agent deployment")
+	DeployCmd.Flags().String("namespace", "", "Kubernetes namespace for agent deployment (defaults to current kubeconfig context)")
 }

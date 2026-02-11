@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -22,8 +23,8 @@ func RegisterPingEndpoint(api huma.API, pathPrefix string) {
 		Summary:     "Ping",
 		Description: "Simple ping endpoint",
 		Tags:        []string{"ping"},
-	}, func(_ context.Context, _ *struct{}) (*Response[PingBody], error) {
-		return &Response[PingBody]{
+	}, func(_ context.Context, _ *struct{}) (*types.Response[PingBody], error) {
+		return &types.Response[PingBody]{
 			Body: PingBody{
 				Pong: true,
 			},

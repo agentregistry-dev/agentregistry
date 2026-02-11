@@ -47,6 +47,11 @@ func NewRegistryService(
 	}
 }
 
+// shouldGenerateEmbeddingsOnPublish returns true if embeddings should be generated when resources are created.
+func (s *registryServiceImpl) shouldGenerateEmbeddingsOnPublish() bool {
+	return s.cfg != nil && s.cfg.Embeddings.Enabled && s.cfg.Embeddings.OnPublish && s.embeddingsProvider != nil
+}
+
 // ListServers returns registry entries with cursor-based pagination and optional filtering
 func (s *registryServiceImpl) ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
 	// If limit is not set or negative, use a default limit
@@ -182,7 +187,31 @@ func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx 
 	}
 
 	// Insert new server version
-	return s.db.CreateServer(ctx, tx, &serverJSON, officialMeta)
+	result, err := s.db.CreateServer(ctx, tx, &serverJSON, officialMeta)
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate embedding asynchronously (non-blocking, best-effort)
+	if s.shouldGenerateEmbeddingsOnPublish() {
+		go func() {
+			bgCtx := context.Background()
+			payload := embeddings.BuildServerEmbeddingPayload(&serverJSON)
+			if strings.TrimSpace(payload) == "" {
+				return
+			}
+			embedding, err := embeddings.GenerateSemanticEmbedding(bgCtx, s.embeddingsProvider, payload, s.cfg.Embeddings.Dimensions)
+			if err != nil {
+				log.Printf("Warning: failed to generate embedding for %s@%s: %v", serverJSON.Name, serverJSON.Version, err)
+			} else if embedding != nil {
+				if err := s.UpsertServerEmbedding(bgCtx, serverJSON.Name, serverJSON.Version, embedding); err != nil {
+					log.Printf("Warning: failed to store embedding for %s@%s: %v", serverJSON.Name, serverJSON.Version, err)
+				}
+			}
+		}()
+	}
+
+	return result, nil
 }
 
 // validateNoDuplicateRemoteURLs checks that no other server is using the same remote URLs
@@ -611,7 +640,31 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 		IsLatest:    isNewLatest,
 	}
 
-	return s.db.CreateAgent(ctx, tx, &agentJSON, officialMeta)
+	result, err := s.db.CreateAgent(ctx, tx, &agentJSON, officialMeta)
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate embedding asynchronously (non-blocking, best-effort)
+	if s.shouldGenerateEmbeddingsOnPublish() {
+		go func() {
+			bgCtx := context.Background()
+			payload := embeddings.BuildAgentEmbeddingPayload(&agentJSON)
+			if strings.TrimSpace(payload) == "" {
+				return
+			}
+			embedding, err := embeddings.GenerateSemanticEmbedding(bgCtx, s.embeddingsProvider, payload, s.cfg.Embeddings.Dimensions)
+			if err != nil {
+				log.Printf("Warning: failed to generate embedding for agent %s@%s: %v", agentJSON.Name, agentJSON.Version, err)
+			} else if embedding != nil {
+				if err := s.UpsertAgentEmbedding(bgCtx, agentJSON.Name, agentJSON.Version, embedding); err != nil {
+					log.Printf("Warning: failed to store embedding for agent %s@%s: %v", agentJSON.Name, agentJSON.Version, err)
+				}
+			}
+		}()
+	}
+
+	return result, nil
 }
 
 // PublishAgent marks an agent as published
@@ -855,16 +908,24 @@ func (s *registryServiceImpl) RemoveDeployment(ctx context.Context, serverName s
 
 	// Clean up kubernetes resources
 	if deployment != nil && deployment.Runtime == "kubernetes" {
+		namespace := ""
+		if deployment.Config != nil {
+			namespace = deployment.Config["KAGENT_NAMESPACE"]
+		}
+		if namespace == "" {
+			namespace = runtime.DefaultNamespace()
+		}
+
 		if artifactType == "agent" {
-			if err := runtime.DeleteKubernetesAgent(ctx, serverName, version, kagent.DefaultNamespace); err != nil {
+			if err := runtime.DeleteKubernetesAgent(ctx, serverName, version, namespace); err != nil {
 				return err
 			}
 		}
 		if artifactType == "mcp" {
-			if err := runtime.DeleteKubernetesMCPServer(ctx, serverName, kagent.DefaultNamespace); err != nil {
+			if err := runtime.DeleteKubernetesMCPServer(ctx, serverName, namespace); err != nil {
 				return err
 			}
-			if err := runtime.DeleteKubernetesRemoteMCPServer(ctx, serverName, kagent.DefaultNamespace); err != nil {
+			if err := runtime.DeleteKubernetesRemoteMCPServer(ctx, serverName, namespace); err != nil {
 				return err
 			}
 		}

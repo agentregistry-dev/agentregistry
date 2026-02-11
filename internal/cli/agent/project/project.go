@@ -32,9 +32,12 @@ func AgentNameFromManifest(projectDir string) string {
 }
 
 // ConstructImageName builds an image reference using defaults when not provided.
-func ConstructImageName(configuredImage, agentName string) string {
-	if configuredImage != "" {
-		return configuredImage
+func ConstructImageName(flagImage, manifestImage, agentName string) string {
+	if flagImage != "" {
+		return flagImage
+	}
+	if manifestImage != "" {
+		return manifestImage
 	}
 	return fmt.Sprintf("%s/%s:latest", defaultRegistry(), agentName)
 }
@@ -100,10 +103,7 @@ func RegenerateDockerCompose(projectDir string, manifest *models.AgentManifest, 
 	}
 
 	envVars := EnvVarsFromManifest(manifest)
-	image := manifest.Image
-	if image == "" {
-		image = ConstructImageName("", manifest.Name)
-	}
+	image := ConstructImageName("", manifest.Image, manifest.Name)
 	gen := python.NewPythonGenerator()
 	templateBytes, err := gen.ReadTemplateFile("docker-compose.yaml.tmpl")
 	if err != nil {

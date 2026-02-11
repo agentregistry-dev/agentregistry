@@ -14,15 +14,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type translator struct {
-	defaultNamespace string
-}
-
-const DefaultNamespace = "kagent"
+type translator struct{}
 
 // NewTranslator returns a Kubernetes runtime translator that renders kagent Agent CRs.
 func NewTranslator() api.RuntimeTranslator {
-	return &translator{defaultNamespace: DefaultNamespace}
+	return &translator{}
 }
 
 // TranslateRuntimeConfig translates the desired state into a Kubernetes runtime config supported by Kagent.
@@ -93,10 +89,9 @@ func (t *translator) translateAgent(agent *api.Agent) (*v1alpha2.Agent, error) {
 		return nil, fmt.Errorf("image must be specified for Agent %s", agent.Name)
 	}
 
-	namespace := t.defaultNamespace
-	if value, ok := agent.Deployment.Env["KAGENT_NAMESPACE"]; ok && value != "" {
-		namespace = value
-	}
+	// Use namespace from KAGENT_NAMESPACE env if set; otherwise leave empty
+	// and let the runtime layer resolve from kubeconfig context.
+	namespace := agent.Deployment.Env["KAGENT_NAMESPACE"]
 
 	envVars := make([]corev1.EnvVar, 0, len(agent.Deployment.Env))
 	if len(agent.Deployment.Env) > 0 {
@@ -178,11 +173,9 @@ func (t *translator) translateRemoteMCPServer(server *api.MCPServer) (*v1alpha2.
 	}
 
 	url := buildRemoteMCPURL(server.Remote.Host, server.Remote.Port, server.Remote.Path)
-	namespace := t.defaultNamespace
-	// Use namespace from MCPServer if set (propagated from agent's deployment config)
-	if server.Namespace != "" {
-		namespace = server.Namespace
-	}
+	// Use namespace from MCPServer if set (propagated from agent's deployment config);
+	// otherwise leave empty and let the runtime layer resolve from kubeconfig context.
+	namespace := server.Namespace
 
 	return &v1alpha2.RemoteMCPServer{
 		TypeMeta: metav1.TypeMeta{
@@ -213,15 +206,12 @@ func (t *translator) translateLocalMCPServer(server *api.MCPServer) (*kmcpv1alph
 		return nil, fmt.Errorf("HTTP transport config missing for %s", server.Name)
 	}
 
-	namespace := t.defaultNamespace
-	// Use namespace from MCPServer if set (propagated from agent's deployment config)
-	if server.Namespace != "" {
-		namespace = server.Namespace
-	} else if len(server.Local.Deployment.Env) > 0 {
-		// Fallback: check for namespace in environment variables (passed via deployment config)
-		if ns, ok := server.Local.Deployment.Env["KAGENT_NAMESPACE"]; ok && ns != "" {
-			namespace = ns
-		}
+	// Use namespace from MCPServer if set (propagated from agent's deployment config);
+	// fall back to KAGENT_NAMESPACE env; otherwise leave empty and let the runtime
+	// layer resolve from kubeconfig context.
+	namespace := server.Namespace
+	if namespace == "" {
+		namespace = server.Local.Deployment.Env["KAGENT_NAMESPACE"]
 	}
 	deployment := kmcpv1alpha1.MCPServerDeployment{
 		Image: server.Local.Deployment.Image,
@@ -273,10 +263,9 @@ func (t *translator) translateLocalMCPServer(server *api.MCPServer) (*kmcpv1alph
 // This file is mounted into the agent's pod at /config/mcp-servers.json
 // The BYO agent then reads this file and connects to the MCP servers
 func (t *translator) translateAgentConfigMap(agent *api.Agent) (*corev1.ConfigMap, error) {
-	namespace := t.defaultNamespace
-	if value, ok := agent.Deployment.Env["KAGENT_NAMESPACE"]; ok && value != "" {
-		namespace = value
-	}
+	// Use namespace from KAGENT_NAMESPACE env if set; otherwise leave empty
+	// and let the runtime layer resolve from kubeconfig context.
+	namespace := agent.Deployment.Env["KAGENT_NAMESPACE"]
 
 	// Convert ResolvedMCPServers to JSON format expected by the Python agent
 	serversJSON, err := json.MarshalIndent(agent.ResolvedMCPServers, "", "  ")

@@ -21,6 +21,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
@@ -95,6 +96,26 @@ func deleteResource(ctx context.Context, c client.Client, obj client.Object) err
 	return nil
 }
 
+// DefaultNamespace returns the namespace from the current kubeconfig context,
+// falling back to "default" if it cannot be determined.
+func DefaultNamespace() string {
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, &clientcmd.ConfigOverrides{})
+	ns, _, err := kubeConfig.Namespace()
+	if err != nil || ns == "" {
+		return "default"
+	}
+	return ns
+}
+
+// ensureNamespace sets the namespace on a resource if it is empty.
+// Namespaced Kubernetes resources require a non-empty namespace for all operations.
+func ensureNamespace(obj client.Object) {
+	if obj.GetNamespace() == "" {
+		obj.SetNamespace(DefaultNamespace())
+	}
+}
+
 type AgentRegistryRuntime interface {
 	ReconcileAll(
 		ctx context.Context,
@@ -134,6 +155,9 @@ func (r *agentRegistryRuntime) ReconcileAll(
 		mcpServer, err := r.registryTranslator.TranslateMCPServer(context.TODO(), req)
 		if err != nil {
 			return fmt.Errorf("translate mcp server %s: %w", req.RegistryServer.Name, err)
+		}
+		if ns := req.EnvValues["KAGENT_NAMESPACE"]; ns != "" && mcpServer.Namespace == "" {
+			mcpServer.Namespace = ns
 		}
 		desiredState.MCPServers = append(desiredState.MCPServers, mcpServer)
 	}
@@ -281,36 +305,28 @@ func (r *agentRegistryRuntime) ensureKubernetesRuntime(
 
 	// Apply ConfigMaps first
 	for _, configMap := range cfg.ConfigMaps {
-		if configMap.Namespace == "" {
-			configMap.Namespace = kagent.DefaultNamespace
-		}
+		ensureNamespace(configMap)
 		if err := applyResource(ctx, c, configMap, r.verbose); err != nil {
 			return fmt.Errorf("ConfigMap %s: %w", configMap.Name, err)
 		}
 	}
 
 	for _, agent := range cfg.Agents {
-		if agent.Namespace == "" {
-			agent.Namespace = kagent.DefaultNamespace
-		}
+		ensureNamespace(agent)
 		if err := applyResource(ctx, c, agent, r.verbose); err != nil {
 			return fmt.Errorf("agent %s: %w", agent.Name, err)
 		}
 	}
 
 	for _, remoteMCP := range cfg.RemoteMCPServers {
-		if remoteMCP.Namespace == "" {
-			remoteMCP.Namespace = kagent.DefaultNamespace
-		}
+		ensureNamespace(remoteMCP)
 		if err := applyResource(ctx, c, remoteMCP, r.verbose); err != nil {
 			return fmt.Errorf("remote MCP server %s: %w", remoteMCP.Name, err)
 		}
 	}
 
 	for _, mcpServer := range cfg.MCPServers {
-		if mcpServer.Namespace == "" {
-			mcpServer.Namespace = kagent.DefaultNamespace
-		}
+		ensureNamespace(mcpServer)
 		if err := applyResource(ctx, c, mcpServer, r.verbose); err != nil {
 			return fmt.Errorf("MCP server %s: %w", mcpServer.Name, err)
 		}
@@ -393,10 +409,6 @@ func ListRemoteMCPServers(ctx context.Context, namespace string) ([]*v1alpha2.Re
 
 // DeleteKubernetesAgent deletes a kagent Agent CR by name/version.
 func DeleteKubernetesAgent(ctx context.Context, name, version, namespace string) error {
-	if namespace == "" {
-		namespace = kagent.DefaultNamespace
-	}
-
 	c, err := GetKubeClient()
 	if err != nil {
 		return err
@@ -414,10 +426,6 @@ func DeleteKubernetesAgent(ctx context.Context, name, version, namespace string)
 
 // DeleteKubernetesRemoteMCPServer deletes a kagent RemoteMCPServer CR by name.
 func DeleteKubernetesRemoteMCPServer(ctx context.Context, name, namespace string) error {
-	if namespace == "" {
-		namespace = kagent.DefaultNamespace
-	}
-
 	c, err := GetKubeClient()
 	if err != nil {
 		return err
@@ -435,10 +443,6 @@ func DeleteKubernetesRemoteMCPServer(ctx context.Context, name, namespace string
 
 // DeleteKubernetesMCPServer deletes a kagent MCPServer CR by name.
 func DeleteKubernetesMCPServer(ctx context.Context, name, namespace string) error {
-	if namespace == "" {
-		namespace = kagent.DefaultNamespace
-	}
-
 	c, err := GetKubeClient()
 	if err != nil {
 		return err

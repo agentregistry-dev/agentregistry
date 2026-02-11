@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,9 +26,8 @@ type Client struct {
 }
 
 const (
-	defaultRegistryName = "local"
-	defaultBaseURL      = "http://localhost:12121/v0"
-	DefaultBaseURL      = defaultBaseURL
+	defaultBaseURL = "http://localhost:12121/v0"
+	DefaultBaseURL = defaultBaseURL
 )
 
 // NewClientFromEnv constructs a client using environment variables
@@ -847,4 +847,70 @@ func (c *Client) RemoveDeployment(name string, version string, resourceType stri
 	}
 
 	return c.doJSON(req, nil)
+}
+
+// StartIndex starts an embeddings indexing job.
+func (c *Client) StartIndex(req internalv0.IndexRequest) (*internalv0.IndexJobResponse, error) {
+	httpReq, err := c.newAdminRequest(http.MethodPost, "/admin/v0/embeddings/index")
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Body = io.NopCloser(bytes.NewReader(body))
+
+	var resp internalv0.IndexJobResponse
+	if err := c.doJSON(httpReq, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// GetIndexStatus gets the status of an indexing job.
+func (c *Client) GetIndexStatus(jobID string) (*internalv0.JobStatusResponse, error) {
+	encJobID := url.PathEscape(jobID)
+	httpReq, err := c.newAdminRequest(http.MethodGet, "/admin/v0/embeddings/index/"+encJobID)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp internalv0.JobStatusResponse
+	if err := c.doJSON(httpReq, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// StreamIndexURL returns the URL for SSE streaming indexing.
+func (c *Client) streamIndexURL() string {
+	base := c.baseURLWithoutVersion()
+	return base + "/admin/v0/embeddings/index/stream"
+}
+
+// NewSSERequest creates a new HTTP POST request for SSE streaming with JSON body.
+func (c *Client) NewSSERequest(ctx context.Context, body internalv0.IndexRequest) (*http.Request, error) {
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.streamIndexURL(), bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Content-Type", "application/json")
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	return req, nil
+}
+
+// SSEClient returns an HTTP client configured for SSE (no timeout).
+func (c *Client) SSEClient() *http.Client {
+	return &http.Client{Timeout: 0}
 }

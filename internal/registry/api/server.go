@@ -83,7 +83,7 @@ func (s *Server) Mux() *http.ServeMux {
 
 // NewServer creates a new HTTP server
 // Note: AuthZ is handled at the DB/service layer, not at the API layer.
-func NewServer(cfg *config.Config, registryService service.RegistryService, metrics *telemetry.Metrics, versionInfo *v0.VersionBody, customUIHandler http.Handler, authnProvider auth.AuthnProvider) *Server {
+func NewServer(cfg *config.Config, registryService service.RegistryService, metrics *telemetry.Metrics, versionInfo *v0.VersionBody, customUIHandler http.Handler, authnProvider auth.AuthnProvider, routeOpts *router.RouteOptions) *Server {
 	// Create HTTP mux and Huma API
 	mux := http.NewServeMux()
 
@@ -102,7 +102,7 @@ func NewServer(cfg *config.Config, registryService service.RegistryService, metr
 		}
 	}
 
-	api := router.NewHumaAPI(cfg, registryService, mux, metrics, versionInfo, uiHandler, authnProvider)
+	api := router.NewHumaAPI(cfg, registryService, mux, metrics, versionInfo, uiHandler, authnProvider, routeOpts)
 
 	// Configure CORS with permissive settings for public API
 	corsHandler := cors.New(cors.Options{

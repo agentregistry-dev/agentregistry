@@ -37,6 +37,12 @@ launches the same chat interface.`,
   arctl agent run dice`,
 }
 
+var buildFlag bool
+
+func init() {
+	RunCmd.Flags().BoolVar(&buildFlag, "build", true, "Build the agent and MCP servers before running")
+}
+
 var providerAPIKeys = map[string]string{
 	"openai":      "OPENAI_API_KEY",
 	"anthropic":   "ANTHROPIC_API_KEY",
@@ -312,7 +318,7 @@ func runFromManifest(ctx context.Context, manifest *models.AgentManifest, versio
 		}
 	}
 
-	err := runAgent(ctx, composeData, manifest, workDir)
+	err := runAgent(ctx, composeData, manifest, workDir, buildFlag)
 
 	// Clean up temp directory for registry-run agents
 	if !useOverrides && workDir != "" && strings.Contains(workDir, "arctl-registry-resolve-") {
@@ -336,10 +342,7 @@ func renderComposeFromManifest(manifest *models.AgentManifest, version string) (
 		return nil, fmt.Errorf("failed to read docker-compose template: %w", err)
 	}
 
-	image := manifest.Image
-	if image == "" {
-		image = project.ConstructImageName("", manifest.Name)
-	}
+	image := project.ConstructImageName("", manifest.Image, manifest.Name)
 
 	// Sanitize version for filesystem use in template
 	sanitizedVersion := utils.SanitizeVersion(version)
@@ -367,7 +370,7 @@ func renderComposeFromManifest(manifest *models.AgentManifest, version string) (
 	return []byte(rendered), nil
 }
 
-func runAgent(ctx context.Context, composeData []byte, manifest *models.AgentManifest, workDir string) error {
+func runAgent(ctx context.Context, composeData []byte, manifest *models.AgentManifest, workDir string, shouldBuild bool) error {
 	if err := validateAPIKey(manifest.ModelProvider); err != nil {
 		return err
 	}
@@ -375,7 +378,11 @@ func runAgent(ctx context.Context, composeData []byte, manifest *models.AgentMan
 	composeCmd := docker.ComposeCommand()
 	commonArgs := append(composeCmd[1:], "-f", "-")
 
-	upCmd := exec.CommandContext(ctx, composeCmd[0], append(commonArgs, "up", "-d")...)
+	upArgs := []string{"up", "-d"}
+	if shouldBuild {
+		upArgs = append(upArgs, "--build")
+	}
+	upCmd := exec.CommandContext(ctx, composeCmd[0], append(commonArgs, upArgs...)...)
 	upCmd.Dir = workDir
 	upCmd.Stdin = bytes.NewReader(composeData)
 	if verbose {

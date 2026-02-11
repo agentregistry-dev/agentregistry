@@ -210,6 +210,7 @@ type MCPTarget struct {
 	Name    string             `json:"name" yaml:"name"`
 	SSE     *SSETargetSpec     `json:"sse,omitempty" yaml:"sse,omitempty"`
 	Stdio   *StdioTargetSpec   `json:"stdio,omitempty" yaml:"stdio,omitempty"`
+	MCP     *MCPTargetSpec     `json:"mcp,omitempty" yaml:"mcp,omitempty"`
 	OpenAPI *OpenAPITargetSpec `json:"openapi,omitempty" yaml:"openapi,omitempty"`
 	Filters []any              `json:"filters,omitempty" yaml:"filters,omitempty"` // Skipped complex type
 }
@@ -219,6 +220,11 @@ type SSETargetSpec struct {
 	Host string `json:"host" yaml:"host"`
 	Port uint32 `json:"port" yaml:"port"`
 	Path string `json:"path" yaml:"path"`
+}
+
+// MCPTargetSpec represents MCP target specification with a full URL
+type MCPTargetSpec struct {
+	Host string `json:"host" yaml:"host"`
 }
 
 // StdioTargetSpec represents stdio target specification

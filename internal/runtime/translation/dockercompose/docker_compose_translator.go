@@ -35,6 +35,17 @@ func NewAgentGatewayTranslatorWithProjectName(composeWorkingDir string, agentGat
 	}
 }
 
+// canRunInsideAgentGateway returns true if the MCP server can be run directly inside
+// the agentgateway container. This is true for npx and uvx commands since the
+// agentgateway image includes Node.js and uv. Other commands (like those from OCI images)
+// need to run in their own container.
+func canRunInsideAgentGateway(cmd string) bool {
+	return cmd == "npx" || cmd == "uvx"
+}
+
+// ociServerPort is the default port that OCI-based MCP servers expose for HTTP transport.
+const ociServerPort = 3000
+
 func (t *agentGatewayTranslator) TranslateRuntimeConfig(
 	ctx context.Context,
 	desired *api.DesiredState,
@@ -49,8 +60,12 @@ func (t *agentGatewayTranslator) TranslateRuntimeConfig(
 	}
 
 	for _, mcpServer := range desired.MCPServers {
-		// only need to create services for local servers
-		if mcpServer.MCPServerType != api.MCPServerTypeLocal || mcpServer.Local.TransportType == api.TransportTypeStdio {
+		if mcpServer.MCPServerType != api.MCPServerTypeLocal {
+			continue
+		}
+
+		// For stdio servers with npx/uvx commands, the agentgateway runs them directly
+		if mcpServer.Local.TransportType == api.TransportTypeStdio && canRunInsideAgentGateway(mcpServer.Local.Deployment.Cmd) {
 			continue
 		}
 		// error if MCPServer name is not unique
@@ -136,6 +151,17 @@ func (t *agentGatewayTranslator) translateMCPServerToServiceConfig(server *api.M
 	for k, v := range server.Local.Deployment.Env {
 		envValues = append(envValues, fmt.Sprintf("%s=%s", k, v))
 	}
+
+	// For OCI images with stdio transport, we need to set MCP_TRANSPORT_MODE=http
+	// so the server listens on HTTP, PORT to specify the listening port, and
+	// HOST=0.0.0.0 so it binds to all interfaces (required for Docker networking).
+	// These will also be requirements for all OCI-based MCP servers.
+	if server.Local.TransportType == api.TransportTypeStdio && !canRunInsideAgentGateway(server.Local.Deployment.Cmd) {
+		envValues = append(envValues, "HOST=0.0.0.0")
+		envValues = append(envValues, "MCP_TRANSPORT_MODE=http")
+		envValues = append(envValues, fmt.Sprintf("PORT=%d", ociServerPort))
+	}
+
 	slices.SortStableFunc(envValues, func(a, b string) int {
 		return cmp.Compare(a, b)
 	})
@@ -213,10 +239,16 @@ func (t *agentGatewayTranslator) translateAgentGatewayConfig(servers []*api.MCPS
 		case api.MCPServerTypeLocal:
 			switch server.Local.TransportType {
 			case api.TransportTypeStdio:
-				mcpTarget.Stdio = &api.StdioTargetSpec{
-					Cmd:  server.Local.Deployment.Cmd,
-					Args: server.Local.Deployment.Args,
-					Env:  server.Local.Deployment.Env,
+				if canRunInsideAgentGateway(server.Local.Deployment.Cmd) {
+					mcpTarget.Stdio = &api.StdioTargetSpec{
+						Cmd:  server.Local.Deployment.Cmd,
+						Args: server.Local.Deployment.Args,
+						Env:  server.Local.Deployment.Env,
+					}
+				} else {
+					mcpTarget.MCP = &api.MCPTargetSpec{
+						Host: fmt.Sprintf("http://%s:%d/mcp", server.Name, ociServerPort),
+					}
 				}
 			case api.TransportTypeHTTP:
 				httpTransportConfig := server.Local.HTTP
