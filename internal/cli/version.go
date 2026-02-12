@@ -41,19 +41,36 @@ var VersionCmd = &cobra.Command{
 		}
 
 		serverVersion, err := apiClient.GetVersion()
-		if err == nil {
-			output.ServerVersion = serverVersion.Version
-			output.ServerGitCommit = serverVersion.GitCommit
-			output.ServerBuildDate = serverVersion.BuildTime
-
-			if semver.IsValid(version.EnsureVPrefix(serverVersion.Version)) && semver.IsValid(version.EnsureVPrefix(version.Version)) {
-				compare := semver.Compare(version.EnsureVPrefix(version.Version), version.EnsureVPrefix(serverVersion.Version))
-				switch compare {
-				case 1:
-					output.UpdateRecommendation = "CLI version is newer than server version. Consider updating the server."
-				case -1:
-					output.UpdateRecommendation = "Server version is newer than CLI version. Consider updating the CLI."
+		if err != nil {
+			// If server version fetch fails, we still output arctl version info
+			if jsonOutput {
+				jsonBytes, err := json.MarshalIndent(output, "", "  ")
+				if err != nil {
+					fmt.Printf("Error marshaling JSON: %v\n", err)
+					return
 				}
+				fmt.Println(string(jsonBytes))
+				return
+			}
+			// Human-readable output
+			fmt.Printf("arctl version %s\n", output.ArctlVersion)
+			fmt.Printf("Git commit: %s\n", output.GitCommit)
+			fmt.Printf("Build date: %s\n", output.BuildDate)
+			fmt.Printf("Error getting server version: %v\n", err)
+			return
+		}
+
+		output.ServerVersion = serverVersion.Version
+		output.ServerGitCommit = serverVersion.GitCommit
+		output.ServerBuildDate = serverVersion.BuildTime
+
+		if semver.IsValid(version.EnsureVPrefix(serverVersion.Version)) && semver.IsValid(version.EnsureVPrefix(version.Version)) {
+			compare := semver.Compare(version.EnsureVPrefix(version.Version), version.EnsureVPrefix(serverVersion.Version))
+			switch compare {
+			case 1:
+				output.UpdateRecommendation = "CLI version is newer than server version. Consider updating the server."
+			case -1:
+				output.UpdateRecommendation = "Server version is newer than CLI version. Consider updating the CLI."
 			}
 		}
 
@@ -71,18 +88,13 @@ var VersionCmd = &cobra.Command{
 		fmt.Printf("arctl version %s\n", output.ArctlVersion)
 		fmt.Printf("Git commit: %s\n", output.GitCommit)
 		fmt.Printf("Build date: %s\n", output.BuildDate)
+		fmt.Printf("Server version: %s\n", output.ServerVersion)
+		fmt.Printf("Server git commit: %s\n", output.ServerGitCommit)
+		fmt.Printf("Server build date: %s\n", output.ServerBuildDate)
 
-		if serverVersion != nil {
-			fmt.Printf("Server version: %s\n", output.ServerVersion)
-			fmt.Printf("Server git commit: %s\n", output.ServerGitCommit)
-			fmt.Printf("Server build date: %s\n", output.ServerBuildDate)
-
-			if output.UpdateRecommendation != "" {
-				fmt.Println("\n-------------------------------")
-				fmt.Println(output.UpdateRecommendation)
-			}
-		} else if err != nil {
-			fmt.Printf("Error getting server version: %v\n", err)
+		if output.UpdateRecommendation != "" {
+			fmt.Println("\n-------------------------------")
+			fmt.Println(output.UpdateRecommendation)
 		}
 	},
 }
