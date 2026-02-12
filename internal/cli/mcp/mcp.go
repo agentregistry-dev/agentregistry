@@ -20,8 +20,7 @@ var McpCmd = &cobra.Command{
 	Example: `arctl mcp list
 arctl mcp show my-mcp-server
 arctl mcp publish ./my-mcp-server
-arctl mcp deploy my-mcp-server
-arctl mcp remove my-mcp-server`,
+arctl mcp deploy my-mcp-server`,
 }
 
 func init() {
@@ -33,9 +32,7 @@ func init() {
 	McpCmd.AddCommand(PublishCmd)
 	McpCmd.AddCommand(DeleteCmd)
 	McpCmd.AddCommand(DeployCmd)
-	McpCmd.AddCommand(RemoveCmd)
 	McpCmd.AddCommand(ListCmd)
 	McpCmd.AddCommand(RunCmd)
 	McpCmd.AddCommand(ShowCmd)
-	McpCmd.AddCommand(UnpublishCmd)
 }

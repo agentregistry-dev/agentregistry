@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/spf13/cobra"
@@ -172,12 +173,12 @@ func buildSkillDockerImage(skillPath string) (*models.SkillJSON, error) {
 
 	// 2) Determine image reference and build
 	// sanitize name for docker (lowercase, slashes to dashes)
-	repoName := sanitizeRepoName(fm.Name)
+	repoName := common.BuildLocalImageName(fm.Name, ver)
 	if dockerUrl == "" {
 		return nil, fmt.Errorf("docker url is required")
 	}
 
-	imageRef := fmt.Sprintf("%s/%s:%s", strings.TrimSuffix(dockerUrl, "/"), repoName, ver)
+	imageRef := common.BuildRegistryImageName(strings.TrimSuffix(dockerUrl, "/"), repoName, ver)
 	// Build only if not dry-run
 	if dryRunFlag {
 		printer.PrintInfo("[DRY RUN] Would build Docker image: " + imageRef)

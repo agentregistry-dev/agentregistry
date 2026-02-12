@@ -34,7 +34,7 @@ func runPull(cmd *cobra.Command, args []string) error {
 	if len(args) > 1 {
 		outputDir = args[1]
 	} else {
-		outputDir = filepath.Join("skills", sanitizeRepoName(skillName))
+		outputDir = filepath.Join("skills", skillName)
 	}
 
 	printer.PrintInfo(fmt.Sprintf("Pulling skill: %s", skillName))

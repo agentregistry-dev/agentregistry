@@ -2,84 +2,139 @@ package manifest
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
 	"time"
 
-	"gopkg.in/yaml.v3"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/manifest"
 )
 
 const ManifestFileName = "mcp.yaml"
 
-// Manager handles project manifest operations
-type Manager struct {
-	projectRoot string
+// ManifestLoader interface for loading manifests.
+type ManifestLoader interface {
+	Exists() bool
+	Load() (*ProjectManifest, error)
 }
 
-// NewManager creates a new manifest manager
-func NewManager(projectRoot string) *Manager {
-	return &Manager{
-		projectRoot: projectRoot,
+// MCPManifestValidator validates MCP project manifests.
+type MCPManifestValidator struct{}
+
+// Validate checks if the manifest is valid.
+func (v *MCPManifestValidator) Validate(m *ProjectManifest) error {
+	if m.Name == "" {
+		return fmt.Errorf("project name is required")
 	}
-}
 
-// Load reads and parses the mcp.yaml file
-func (m *Manager) Load() (*ProjectManifest, error) {
-	manifestPath := filepath.Join(m.projectRoot, ManifestFileName)
+	if m.Framework == "" {
+		return fmt.Errorf("framework is required")
+	}
 
-	data, err := os.ReadFile(manifestPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("mcp.yaml not found in %s", m.projectRoot)
+	if !isValidFramework(m.Framework) {
+		return fmt.Errorf("unsupported framework: %s", m.Framework)
+	}
+
+	for toolName, tool := range m.Tools {
+		if err := validateTool(toolName, tool); err != nil {
+			return fmt.Errorf("invalid tool %s: %w", toolName, err)
 		}
-		return nil, fmt.Errorf("failed to read mcp.yaml: %w", err)
 	}
 
-	var manifest ProjectManifest
-	if err := yaml.Unmarshal(data, &manifest); err != nil {
-		return nil, fmt.Errorf("failed to parse mcp.yaml: %w", err)
-	}
-
-	// Validate the manifest
-	if err := m.Validate(&manifest); err != nil {
-		return nil, fmt.Errorf("invalid mcp.yaml: %w", err)
-	}
-
-	return &manifest, nil
-}
-
-// Save writes the manifest to mcp.yaml
-func (m *Manager) Save(manifest *ProjectManifest) error {
-	// Update timestamp
-	manifest.UpdatedAt = time.Now()
-
-	// Validate before saving
-	if err := m.Validate(manifest); err != nil {
-		return fmt.Errorf("invalid manifest: %w", err)
-	}
-
-	data, err := yaml.Marshal(manifest)
-	if err != nil {
-		return fmt.Errorf("failed to marshal manifest: %w", err)
-	}
-
-	manifestPath := filepath.Join(m.projectRoot, ManifestFileName)
-	if err := os.WriteFile(manifestPath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write mcp.yaml: %w", err)
+	if err := validateSecrets(m.Secrets); err != nil {
+		return fmt.Errorf("invalid secrets config: %w", err)
 	}
 
 	return nil
 }
 
-// Exists checks if a mcp.yaml file exists in the project root
-func (m *Manager) Exists() bool {
-	manifestPath := filepath.Join(m.projectRoot, ManifestFileName)
-	_, err := os.Stat(manifestPath)
-	return err == nil
+func validateTool(_ string, tool ToolConfig) error {
+	if tool.Name == "" {
+		return fmt.Errorf("tool name is required")
+	}
+	return nil
 }
 
-// GetDefault returns a new ProjectManifest with default values
+func validateSecrets(secrets SecretsConfig) error {
+	for env, config := range secrets {
+		if config.Provider != "" && !isValidSecretProvider(config.Provider) {
+			return fmt.Errorf("invalid secret provider for environment %s: %s", env, config.Provider)
+		}
+	}
+	return nil
+}
+
+func isValidFramework(framework string) bool {
+	validFrameworks := []string{
+		FrameworkFastMCPPython,
+		FrameworkMCPGo,
+		FrameworkTypeScript,
+		FrameworkJava,
+	}
+	return slices.Contains(validFrameworks, framework)
+}
+
+func isValidSecretProvider(provider string) bool {
+	validProviders := []string{
+		SecretProviderEnv,
+		SecretProviderKubernetes,
+	}
+	return slices.Contains(validProviders, provider)
+}
+
+// Manager wraps the generic manifest manager for MCP project manifests.
+type Manager struct {
+	*manifest.Manager[*ProjectManifest]
+}
+
+// NewManager creates a new MCP manifest manager.
+func NewManager(projectRoot string) *Manager {
+	return &Manager{
+		Manager: manifest.NewManager(
+			projectRoot,
+			ManifestFileName,
+			&MCPManifestValidator{},
+		),
+	}
+}
+
+// Save updates the timestamp and saves the manifest.
+func (m *Manager) Save(man *ProjectManifest) error {
+	man.UpdatedAt = time.Now()
+	return m.Manager.Save(man)
+}
+
+// AddTool adds a new tool to the manifest.
+func (m *Manager) AddTool(man *ProjectManifest, name string, config ToolConfig) error {
+	if name == "" {
+		return fmt.Errorf("tool name is required")
+	}
+
+	if err := validateTool(name, config); err != nil {
+		return err
+	}
+
+	if man.Tools == nil {
+		man.Tools = make(map[string]ToolConfig)
+	}
+
+	man.Tools[name] = config
+	return nil
+}
+
+// RemoveTool removes a tool from the manifest.
+func (m *Manager) RemoveTool(man *ProjectManifest, name string) error {
+	if man.Tools == nil {
+		return fmt.Errorf("tool %s not found", name)
+	}
+
+	if _, exists := man.Tools[name]; !exists {
+		return fmt.Errorf("tool %s not found", name)
+	}
+
+	delete(man.Tools, name)
+	return nil
+}
+
+// GetDefault returns a new ProjectManifest with default values.
 func GetDefault(name, framework, description, author, email string) *ProjectManifest {
 	if description == "" {
 		description = fmt.Sprintf("MCP server built with %s", framework)
@@ -109,7 +164,6 @@ func GetDefault(name, framework, description, author, email string) *ProjectMani
 	}
 }
 
-// getFrameworkRuntimeConfig returns the runtime command and arguments based on framework
 func getFrameworkRuntimeConfig(framework string) (string, []string) {
 	switch framework {
 	case FrameworkFastMCPPython:
@@ -121,108 +175,4 @@ func getFrameworkRuntimeConfig(framework string) (string, []string) {
 	default:
 		return "", nil
 	}
-}
-
-// Validate checks if the manifest is valid
-func (m *Manager) Validate(manifest *ProjectManifest) error {
-	// Basic validation
-	if manifest.Name == "" {
-		return fmt.Errorf("project name is required")
-	}
-
-	if manifest.Framework == "" {
-		return fmt.Errorf("framework is required")
-	}
-
-	if !isValidFramework(manifest.Framework) {
-		return fmt.Errorf("unsupported framework: %s", manifest.Framework)
-	}
-
-	// Validate tools
-	for toolName, tool := range manifest.Tools {
-		if err := m.validateTool(toolName, tool); err != nil {
-			return fmt.Errorf("invalid tool %s: %w", toolName, err)
-		}
-	}
-
-	// Validate secrets
-	if err := m.validateSecrets(manifest.Secrets); err != nil {
-		return fmt.Errorf("invalid secrets config: %w", err)
-	}
-
-	return nil
-}
-
-// AddTool adds a new tool to the manifest
-func (m *Manager) AddTool(manifest *ProjectManifest, name string, config ToolConfig) error {
-	if name == "" {
-		return fmt.Errorf("tool name is required")
-	}
-
-	if err := m.validateTool(name, config); err != nil {
-		return err
-	}
-
-	if manifest.Tools == nil {
-		manifest.Tools = make(map[string]ToolConfig)
-	}
-
-	manifest.Tools[name] = config
-	return nil
-}
-
-// RemoveTool removes a tool from the manifest
-func (m *Manager) RemoveTool(manifest *ProjectManifest, name string) error {
-	if manifest.Tools == nil {
-		return fmt.Errorf("tool %s not found", name)
-	}
-
-	if _, exists := manifest.Tools[name]; !exists {
-		return fmt.Errorf("tool %s not found", name)
-	}
-
-	delete(manifest.Tools, name)
-	return nil
-}
-
-// Private validation methods
-
-func (m *Manager) validateTool(_ string, tool ToolConfig) error {
-	if tool.Name == "" {
-		return fmt.Errorf("tool name is required")
-	}
-	return nil
-}
-
-func (m *Manager) validateSecrets(secrets SecretsConfig) error {
-	// Validate each secret provider configuration
-	for env, config := range secrets {
-		if config.Provider != "" && !isValidSecretProvider(config.Provider) {
-			return fmt.Errorf("invalid secret provider for environment %s: %s", env, config.Provider)
-		}
-	}
-
-	return nil
-}
-
-// Helper functions
-
-func isValidFramework(framework string) bool {
-	validFrameworks := []string{
-		FrameworkFastMCPPython,
-		FrameworkMCPGo,
-		FrameworkTypeScript,
-		FrameworkJava,
-	}
-
-	return slices.Contains(validFrameworks, framework)
-}
-
-func isValidSecretProvider(provider string) bool {
-	validProviders := []string{
-		SecretProviderEnv,
-		SecretProviderKubernetes,
-	}
-
-	return slices.Contains(validProviders, provider)
 }

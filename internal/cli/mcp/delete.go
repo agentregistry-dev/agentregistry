@@ -7,26 +7,24 @@ import (
 )
 
 var (
-	deleteForceFlag bool
-	deleteVersion   string
+	deleteVersion string
 )
 
 var DeleteCmd = &cobra.Command{
 	Use:   "delete <server-name>",
 	Short: "Delete an MCP server from the registry",
-	Long: `Delete an MCP server from the registry.
-The server must not be published or deployed unless --force is used.
+	Long: `Delete a published MCP server from the registry.
 
 Examples:
-  arctl mcp delete my-server --version 1.0.0
-  arctl mcp delete my-server --version 1.0.0 --force`,
-	Args: cobra.ExactArgs(1),
-	RunE: runDelete,
+  arctl mcp delete my-server --version 1.0.0`,
+	Args:          cobra.ExactArgs(1),
+	SilenceUsage:  true,  // Don't show usage on removal errors
+	SilenceErrors: false, // Still show error messages
+	RunE:          runDelete,
 }
 
 func init() {
 	DeleteCmd.Flags().StringVar(&deleteVersion, "version", "", "Specify the version to delete (required)")
-	DeleteCmd.Flags().BoolVar(&deleteForceFlag, "force", false, "Force delete even if published or deployed")
 	_ = DeleteCmd.MarkFlagRequired("version")
 }
 
@@ -43,27 +41,8 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to check if server is published: %w", err)
 	}
 
-	// Check if server is deployed
-	isDeployed, err := isServerDeployed(serverName, deleteVersion)
-	if err != nil {
-		return fmt.Errorf("failed to check if server is deployed: %w", err)
-	}
-
-	// Fail if published or deployed unless --force is used
-	if !deleteForceFlag {
-		if isPublished {
-			return fmt.Errorf("server %s version %s is published. Unpublish it first using 'arctl mcp unpublish %s --version %s', or use --force to delete anyway", serverName, deleteVersion, serverName, deleteVersion)
-		}
-		if isDeployed {
-			return fmt.Errorf("server %s version %s is deployed. Remove it first using 'arctl mcp remove %s --version %s', or use --force to delete anyway", serverName, deleteVersion, serverName, deleteVersion)
-		}
-	}
-
-	// Make sure to remove the deployment before deleting the server from database
-	if deleteForceFlag && isDeployed {
-		if err := apiClient.RemoveDeployment(serverName, deleteVersion, "mcp"); err != nil {
-			return fmt.Errorf("failed to remove deployment before delete: %w", err)
-		}
+	if !isPublished {
+		return fmt.Errorf("server %s version %s not found in registry", serverName, deleteVersion)
 	}
 
 	// Delete the server

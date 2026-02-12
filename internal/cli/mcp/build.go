@@ -2,12 +2,12 @@ package mcp
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/build"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
-	"github.com/stoewer/go-strcase"
+	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 
 	"github.com/spf13/cobra"
 )
@@ -19,20 +19,22 @@ var BuildCmd = &cobra.Command{
 	
 This command will detect the project type and build the appropriate
 MCP server Docker image.`,
-	Args: cobra.ExactArgs(1),
-	RunE: runBuild,
+	Args:          cobra.ExactArgs(1),
+	RunE:          runBuild,
+	SilenceUsage:  true,  // Don't show usage on deployment errors
+	SilenceErrors: false, // Still show error messages
 	Example: `  arctl mcp build                              # Build Docker image from current directory
   arctl mcp build ./my-project   # Build Docker image from specific directory`,
 }
 
 var (
-	buildTag      string
-	buildPush     bool
-	buildPlatform string
+	buildDockerImageName string
+	buildPush            bool
+	buildPlatform        string
 )
 
 func init() {
-	BuildCmd.Flags().StringVarP(&buildTag, "tag", "t", "", "Docker image tag (alias for --output)")
+	BuildCmd.Flags().StringVarP(&buildDockerImageName, "name", "n", "", "Full Docker image name")
 	BuildCmd.Flags().BoolVar(&buildPush, "push", false, "Push Docker image to registry")
 	BuildCmd.Flags().StringVar(&buildPlatform, "platform", "", "Target platform (e.g., linux/amd64,linux/arm64)")
 }
@@ -41,27 +43,14 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	// Determine build directory
 	buildDirectory := args[0]
 
-	imageName := buildTag
+	imageName := buildDockerImageName
 	if imageName == "" {
-		// Load project manifest
-		manifestManager := manifest.NewManager(buildDirectory)
-		if !manifestManager.Exists() {
-			return fmt.Errorf(
-				"mcp.yaml not found in %s. Run 'arctl mcp init' first or specify a valid path as your first argument",
-				buildDirectory,
-			)
-		}
-
-		projectManifest, err := manifestManager.Load()
+		var err error
+		loader := manifest.NewManager(buildDirectory)
+		imageName, err = common.GetImageNameFromManifest(loader)
 		if err != nil {
-			return fmt.Errorf("failed to load project manifest: %w", err)
+			return fmt.Errorf("failed to determine image name from manifest (%s): %w", buildDirectory, err)
 		}
-
-		version := projectManifest.Version
-		if version == "" {
-			version = "latest"
-		}
-		imageName = fmt.Sprintf("%s:%s", strcase.KebabCase(projectManifest.Name), version)
 	}
 
 	// Execute build
@@ -77,19 +66,12 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	}
 
 	if buildPush {
-		fmt.Printf("Pushing Docker image %s...\n", imageName)
-		if err := runDocker("push", imageName); err != nil {
-			return fmt.Errorf("docker push failed: %w", err)
+		printer.PrintInfo(fmt.Sprintf("Pushing Docker image %s...", imageName))
+		executor := docker.NewExecutor(false, "")
+		if err := executor.Push(imageName); err != nil {
+			return err
 		}
-		fmt.Printf("✅ Docker image pushed successfully\n")
 	}
 
 	return nil
-}
-
-func runDocker(args ...string) error {
-	cmd := exec.Command("docker", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
 }

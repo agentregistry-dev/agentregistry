@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/frameworks"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/templates"
@@ -55,7 +56,7 @@ func runInitFramework(
 	customizeProjectConfig func(*templates.ProjectConfig) error,
 ) error {
 	// Validate project name
-	if err := validateProjectName(projectName); err != nil {
+	if err := common.ValidateProjectName(projectName); err != nil {
 		return fmt.Errorf("invalid project name: %w", err)
 	}
 
@@ -113,24 +114,6 @@ func runInitFramework(
 	fmt.Printf("  arctl mcp build %s\n", projectPath)
 
 	return manifest.NewManager(projectPath).Save(projectManifest)
-}
-
-func validateProjectName(name string) error {
-	if name == "" {
-		return fmt.Errorf("project name cannot be empty")
-	}
-
-	// Check for invalid characters
-	if strings.ContainsAny(name, " \t\n\r/\\:*?\"<>|") {
-		return fmt.Errorf("project name contains invalid characters")
-	}
-
-	// Check if it starts with a dot
-	if strings.HasPrefix(name, ".") {
-		return fmt.Errorf("project name cannot start with a dot")
-	}
-
-	return nil
 }
 
 // Prompts for user input

@@ -61,7 +61,7 @@ func init() {
 func runRun(cmd *cobra.Command, args []string) error {
 	serverNameOrPath := args[0]
 
-	if isLocalPath(serverNameOrPath) {
+	if utils.IsLocalPath(serverNameOrPath) {
 		return runLocalMCPServer(serverNameOrPath)
 	}
 
@@ -271,23 +271,6 @@ func generateRuntimePaths(prefix string) (projectName string, runtimeDir string,
 	runtimeDir = filepath.Join(baseRuntimeDir, prefix+randomName)
 
 	return projectName, runtimeDir, nil
-}
-
-// isLocalPath checks if the given string is a path to a local directory
-func isLocalPath(path string) bool {
-	// Check for common path indicators
-	if path == "." || path == ".." || filepath.IsAbs(path) {
-		return true
-	}
-	// Check for relative paths
-	if len(path) > 0 && (path[0] == '.' || path[0] == '/') {
-		return true
-	}
-	// Check if the path exists as a directory
-	if info, err := os.Stat(path); err == nil && info.IsDir() {
-		return true
-	}
-	return false
 }
 
 // runLocalMCPServer runs a local MCP server from a project directory

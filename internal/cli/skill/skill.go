@@ -33,5 +33,4 @@ func init() {
 	SkillCmd.AddCommand(PullCmd)
 	SkillCmd.AddCommand(ShowCmd)
 	SkillCmd.AddCommand(RemoveCmd)
-	SkillCmd.AddCommand(UnpublishCmd)
 }
