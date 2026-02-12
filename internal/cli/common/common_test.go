@@ -332,5 +332,4 @@ func TestResolveVersion(t *testing.T) {
 			}
 		})
 	}
-
 }

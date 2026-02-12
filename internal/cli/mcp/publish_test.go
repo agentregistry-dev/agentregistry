@@ -150,10 +150,10 @@ func TestBuildRepository(t *testing.T) {
 					t.Errorf("expected nil but got %v", result)
 				}
 			} else {
-				if result == nil {
+				if result == nil { //nolint:staticcheck
 					t.Error("expected non-nil result")
 				}
-				if result.URL != tt.githubURL {
+				if result.URL != tt.githubURL { //nolint:staticcheck
 					t.Errorf("expected URL %s but got %s", tt.githubURL, result.URL)
 				}
 				if result.Source != "github" {
