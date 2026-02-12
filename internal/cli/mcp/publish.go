@@ -132,7 +132,7 @@ func runMCPServerPublish(cmd *cobra.Command, args []string) error {
 
 		serverName = common.BuildMCPServerRegistryName(projectManifest.Author, projectManifest.Name)
 		description = projectManifest.Description
-		version = resolveVersion(publishVersion, projectManifest.Version)
+		version = common.ResolveVersion(publishVersion, projectManifest.Version)
 	} else {
 		// Use command line arguments
 		serverName = strings.ToLower(input)
@@ -246,17 +246,6 @@ func buildArguments(args []string) []model.Argument {
 		})
 	}
 	return arguments
-}
-
-// resolveVersion returns the version to use, with fallback to default.
-func resolveVersion(flagVersion, manifestVersion string) string {
-	if flagVersion != "" {
-		return flagVersion
-	}
-	if manifestVersion != "" {
-		return manifestVersion
-	}
-	return "latest"
 }
 
 // checkAndHandleExistingServer checks if a server version is already published

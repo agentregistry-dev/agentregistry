@@ -3,6 +3,7 @@ package common
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
@@ -83,4 +84,33 @@ func BuildMCPServerRegistryName(author, name string) string {
 		author = DefaultUserName
 	}
 	return fmt.Sprintf("%s/%s", strings.ToLower(author), strings.ToLower(name))
+}
+
+// ResolveVersion returns the version to use based on priority: flag > manifest > "latest".
+func ResolveVersion(flagVersion, manifestVersion string) string {
+	if flagVersion != "" {
+		return flagVersion
+	}
+	if manifestVersion != "" {
+		return manifestVersion
+	}
+	return "latest"
+}
+
+// agentNameRegex matches the database constraint for agent names:
+// - Must start with alphanumeric
+// - Can contain alphanumeric, dots, and hyphens in the middle
+// - Must end with alphanumeric
+// - Minimum 2 characters
+var agentNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$`)
+
+// ValidateAgentName checks if the agent name matches the required format.
+func ValidateAgentName(name string) error {
+	if len(name) < 2 {
+		return fmt.Errorf("agent name must be at least 2 characters")
+	}
+	if !agentNameRegex.MatchString(name) {
+		return fmt.Errorf("invalid agent name %q: must start and end with alphanumeric, can contain letters, numbers, dots (.), and hyphens (-)", name)
+	}
+	return nil
 }

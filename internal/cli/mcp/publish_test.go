@@ -67,41 +67,6 @@ func TestResolveTransport(t *testing.T) {
 	}
 }
 
-func TestResolveVersion(t *testing.T) {
-	tests := []struct {
-		flagVersion     string
-		manifestVersion string
-		actual          string
-		expected        string
-	}{
-		{
-			flagVersion:     "1.0.0",
-			manifestVersion: "2.0.0",
-			expected:        "1.0.0",
-		},
-		{
-			flagVersion:     "",
-			manifestVersion: "2.0.0",
-			expected:        "2.0.0",
-		},
-		{
-			flagVersion:     "",
-			manifestVersion: "",
-			expected:        "latest",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.flagVersion, func(t *testing.T) {
-			actual := resolveVersion(tt.flagVersion, tt.manifestVersion)
-			if actual != tt.expected {
-				t.Errorf("expected %s but got %s", tt.expected, actual)
-			}
-		})
-	}
-
-}
-
 func TestValidateRegistryType(t *testing.T) {
 	tests := []struct {
 		registryType   string

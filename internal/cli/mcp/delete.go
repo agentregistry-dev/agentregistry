@@ -3,6 +3,7 @@ package mcp
 import (
 	"fmt"
 
+	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/spf13/cobra"
 )
 
@@ -18,8 +19,8 @@ var DeleteCmd = &cobra.Command{
 Examples:
   arctl mcp delete my-server --version 1.0.0`,
 	Args:          cobra.ExactArgs(1),
-	SilenceUsage:  true,  // Don't show usage on removal errors
-	SilenceErrors: false, // Still show error messages
+	SilenceUsage:  true,
+	SilenceErrors: false,
 	RunE:          runDelete,
 }
 
@@ -46,12 +47,11 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	// Delete the server
-	fmt.Printf("Deleting server %s version %s...\n", serverName, deleteVersion)
-	err = apiClient.DeleteMCPServer(serverName, deleteVersion)
-	if err != nil {
+	printer.PrintInfo(fmt.Sprintf("Deleting server %s version %s...", serverName, deleteVersion))
+	if err := apiClient.DeleteMCPServer(serverName, deleteVersion); err != nil {
 		return fmt.Errorf("failed to delete server: %w", err)
 	}
 
-	fmt.Printf("MCP server '%s' version %s deleted successfully\n", serverName, deleteVersion)
+	printer.PrintSuccess(fmt.Sprintf("Deleted: %s (v%s)", serverName, deleteVersion))
 	return nil
 }
