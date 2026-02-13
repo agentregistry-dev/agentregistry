@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
-	"regexp"
 	"strings"
 )
 
@@ -70,27 +69,4 @@ func IsDockerComposeAvailable() bool {
 	cmd := exec.Command("docker", "compose", "version")
 	_, err := cmd.CombinedOutput()
 	return err == nil
-}
-
-var pythonIdentifierRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
-
-var pythonKeywords = map[string]struct{}{
-	"False": {}, "None": {}, "True": {}, "and": {}, "as": {}, "assert": {},
-	"async": {}, "await": {}, "break": {}, "class": {}, "continue": {}, "def": {},
-	"del": {}, "elif": {}, "else": {}, "except": {}, "finally": {}, "for": {},
-	"from": {}, "global": {}, "if": {}, "import": {}, "in": {}, "is": {},
-	"lambda": {}, "nonlocal": {}, "not": {}, "or": {}, "pass": {}, "raise": {},
-	"return": {}, "try": {}, "while": {}, "with": {}, "yield": {},
-}
-
-// ValidatePythonIdentifier checks if the given name is a valid Python identifier.
-// It returns an error if the name doesn't match Python identifier rules or is a reserved keyword.
-func ValidatePythonIdentifier(name string) error {
-	if !pythonIdentifierRegex.MatchString(name) {
-		return fmt.Errorf("%q is not a valid Python identifier: must start with a letter or underscore and contain only letters, digits, and underscores", name)
-	}
-	if _, isKeyword := pythonKeywords[name]; isKeyword {
-		return fmt.Errorf("%q is a Python keyword and cannot be used", name)
-	}
-	return nil
 }

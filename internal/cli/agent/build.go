@@ -5,8 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/docker"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/project"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/spf13/cobra"
 )
@@ -37,7 +38,7 @@ func init() {
 
 func runBuild(cmd *cobra.Command, args []string) error {
 	projectDir := args[0]
-	if err := validateProjectDir(projectDir); err != nil {
+	if err := common.ValidateProjectDir(projectDir); err != nil {
 		return err
 	}
 
@@ -90,20 +91,6 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return nil
-}
-
-func validateProjectDir(projectDir string) error {
-	info, err := os.Stat(projectDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("project directory does not exist: %s", projectDir)
-		}
-		return err
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("project directory is not a directory: %s", projectDir)
-	}
 	return nil
 }
 

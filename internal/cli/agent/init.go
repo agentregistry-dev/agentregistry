@@ -8,8 +8,8 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
-	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
+	"github.com/agentregistry-dev/agentregistry/pkg/validators"
 	"github.com/spf13/cobra"
 )
 
@@ -67,7 +67,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := utils.ValidatePythonIdentifier(agentName); err != nil {
+	if err := validators.ValidateAgentName(agentName); err != nil {
 		return fmt.Errorf("invalid agent name: %w", err)
 	}
 

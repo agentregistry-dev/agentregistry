@@ -3,30 +3,29 @@ package agent
 import (
 	"fmt"
 
+	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/spf13/cobra"
 )
 
 var (
-	deleteForceFlag bool
-	deleteVersion   string
+	deleteVersion string
 )
 
 var DeleteCmd = &cobra.Command{
 	Use:   "delete <agent-name>",
 	Short: "Delete an agent from the registry",
 	Long: `Delete an agent from the registry.
-The agent must not be deployed unless --force is used.
 
 Examples:
-  arctl agent delete my-agent --version 1.0.0
-  arctl agent delete my-agent --version 1.0.0 --force`,
-	Args: cobra.ExactArgs(1),
-	RunE: runDelete,
+  arctl agent delete my-agent --version 1.0.0`,
+	Args:          cobra.ExactArgs(1),
+	SilenceUsage:  true,
+	SilenceErrors: false,
+	RunE:          runDelete,
 }
 
 func init() {
 	DeleteCmd.Flags().StringVar(&deleteVersion, "version", "", "Specify the version to delete (required)")
-	DeleteCmd.Flags().BoolVar(&deleteForceFlag, "force", false, "Force delete even if deployed")
 	_ = DeleteCmd.MarkFlagRequired("version")
 }
 
@@ -37,43 +36,35 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API client not initialized")
 	}
 
-	// Check if agent is deployed
-	isDeployed, err := isAgentDeployed(agentName, deleteVersion)
+	// Check if agent exists in registry
+	exists, err := isAgentPublished(agentName, deleteVersion)
 	if err != nil {
-		return fmt.Errorf("failed to check if agent is deployed: %w", err)
+		return fmt.Errorf("failed to check if agent exists: %w", err)
 	}
 
-	// Fail if deployed unless --force is used
-	if !deleteForceFlag && isDeployed {
-		return fmt.Errorf("agent %s version %s is deployed. Remove it first using 'arctl agent remove %s --version %s', or use --force to delete anyway", agentName, deleteVersion, agentName, deleteVersion)
-	}
-
-	// Make sure to remove the deployment before deleting the agent from database
-	if deleteForceFlag && isDeployed {
-		if err := apiClient.RemoveDeployment(agentName, deleteVersion, "agent"); err != nil {
-			return fmt.Errorf("failed to remove deployment before delete: %w", err)
-		}
+	if !exists {
+		return fmt.Errorf("agent %s version %s not found in registry", agentName, deleteVersion)
 	}
 
 	// Delete the agent
-	fmt.Printf("Deleting agent %s version %s...\n", agentName, deleteVersion)
-	err = apiClient.DeleteAgent(agentName, deleteVersion)
-	if err != nil {
+	printer.PrintInfo(fmt.Sprintf("Deleting agent %s version %s...", agentName, deleteVersion))
+	if err := apiClient.DeleteAgent(agentName, deleteVersion); err != nil {
 		return fmt.Errorf("failed to delete agent: %w", err)
 	}
 
-	fmt.Printf("Agent '%s' version %s deleted successfully\n", agentName, deleteVersion)
+	printer.PrintSuccess(fmt.Sprintf("Deleted: %s (v%s)", agentName, deleteVersion))
 	return nil
 }
 
-func isAgentDeployed(agentName, version string) (bool, error) {
+// isAgentPublished checks if an agent exists in the registry (all entries are visible)
+func isAgentPublished(agentName, version string) (bool, error) {
 	if apiClient == nil {
 		return false, fmt.Errorf("API client not initialized")
 	}
 
-	deployment, err := apiClient.GetDeployedServerByNameAndVersion(agentName, version, "agent")
+	agent, err := apiClient.GetAgentByNameAndVersion(agentName, version)
 	if err != nil {
-		return false, fmt.Errorf("failed to get deployment: %w", err)
+		return false, err
 	}
-	return deployment != nil, nil
+	return agent != nil, nil
 }

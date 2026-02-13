@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 )
 
 // Executor wraps docker CLI operations with a working directory and verbosity.
@@ -37,9 +39,9 @@ func (e *Executor) CheckAvailability() error {
 // Run executes docker with the provided arguments.
 func (e *Executor) Run(args ...string) error {
 	if e.Verbose {
-		fmt.Printf("Running: docker %s\n", strings.Join(args, " "))
+		printer.PrintInfo(fmt.Sprintf("Running: docker %s", strings.Join(args, " ")))
 		if e.WorkDir != "" {
-			fmt.Printf("Working directory: %s\n", e.WorkDir)
+			printer.PrintInfo(fmt.Sprintf("Working directory: %s", e.WorkDir))
 		}
 	}
 
@@ -60,7 +62,7 @@ func (e *Executor) Build(imageName, context string, extraArgs ...string) error {
 	if err := e.Run(args...); err != nil {
 		return fmt.Errorf("docker build failed: %w", err)
 	}
-	fmt.Printf("✅ Successfully built Docker image: %s\n", imageName)
+	printer.PrintSuccess(fmt.Sprintf("Successfully built Docker image: %s", imageName))
 	return nil
 }
 
@@ -69,7 +71,7 @@ func (e *Executor) Push(imageName string) error {
 	if err := e.Run("push", imageName); err != nil {
 		return fmt.Errorf("docker push failed: %w", err)
 	}
-	fmt.Printf("✅ Successfully pushed Docker image: %s\n", imageName)
+	printer.PrintSuccess(fmt.Sprintf("Successfully pushed Docker image: %s", imageName))
 	return nil
 }
 

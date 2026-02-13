@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/docker"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/adk/python"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/project"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/tui"
 	agentutils "github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/spf13/cobra"

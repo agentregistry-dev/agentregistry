@@ -10,16 +10,17 @@ import (
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
-func isServerDeployed(serverName string, version string) (bool, error) {
+// isServerPublished checks if a server exists in the registry (all entries are visible)
+func isServerPublished(serverName, version string) (bool, error) {
 	if apiClient == nil {
 		return false, errors.New("API client not initialized")
 	}
 
-	deployment, err := apiClient.GetDeployedServerByNameAndVersion(serverName, version, "mcp")
+	server, err := apiClient.GetServerByNameAndVersion(serverName, version)
 	if err != nil {
-		return false, fmt.Errorf("failed to get deployment: %w", err)
+		return false, err
 	}
-	return deployment != nil, nil
+	return server != nil, nil
 }
 
 // selectServerVersion handles server version selection logic with interactive prompts

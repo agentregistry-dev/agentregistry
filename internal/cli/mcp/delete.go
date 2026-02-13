@@ -3,30 +3,29 @@ package mcp
 import (
 	"fmt"
 
+	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/spf13/cobra"
 )
 
 var (
-	deleteForceFlag bool
-	deleteVersion   string
+	deleteVersion string
 )
 
 var DeleteCmd = &cobra.Command{
 	Use:   "delete <server-name>",
 	Short: "Delete an MCP server from the registry",
-	Long: `Delete an MCP server from the registry.
-The server must not be published or deployed unless --force is used.
+	Long: `Delete a published MCP server from the registry.
 
 Examples:
-  arctl mcp delete my-server --version 1.0.0
-  arctl mcp delete my-server --version 1.0.0 --force`,
-	Args: cobra.ExactArgs(1),
-	RunE: runDelete,
+  arctl mcp delete my-server --version 1.0.0`,
+	Args:          cobra.ExactArgs(1),
+	SilenceUsage:  true,
+	SilenceErrors: false,
+	RunE:          runDelete,
 }
 
 func init() {
 	DeleteCmd.Flags().StringVar(&deleteVersion, "version", "", "Specify the version to delete (required)")
-	DeleteCmd.Flags().BoolVar(&deleteForceFlag, "force", false, "Force delete even if published or deployed")
 	_ = DeleteCmd.MarkFlagRequired("version")
 }
 
@@ -37,33 +36,22 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API client not initialized")
 	}
 
-	// Check if server is deployed
-	isDeployed, err := isServerDeployed(serverName, deleteVersion)
+	// Check if server exists in registry
+	exists, err := isServerPublished(serverName, deleteVersion)
 	if err != nil {
-		return fmt.Errorf("failed to check if server is deployed: %w", err)
+		return fmt.Errorf("failed to check if server exists: %w", err)
 	}
 
-	// Fail if deployed unless --force is used
-	if !deleteForceFlag {
-		if isDeployed {
-			return fmt.Errorf("server %s version %s is deployed. Remove it first using 'arctl mcp remove %s --version %s', or use --force to delete anyway", serverName, deleteVersion, serverName, deleteVersion)
-		}
-	}
-
-	// Make sure to remove the deployment before deleting the server from database
-	if deleteForceFlag && isDeployed {
-		if err := apiClient.RemoveDeployment(serverName, deleteVersion, "mcp"); err != nil {
-			return fmt.Errorf("failed to remove deployment before delete: %w", err)
-		}
+	if !exists {
+		return fmt.Errorf("server %s version %s not found in registry", serverName, deleteVersion)
 	}
 
 	// Delete the server
-	fmt.Printf("Deleting server %s version %s...\n", serverName, deleteVersion)
-	err = apiClient.DeleteMCPServer(serverName, deleteVersion)
-	if err != nil {
+	printer.PrintInfo(fmt.Sprintf("Deleting server %s version %s...", serverName, deleteVersion))
+	if err := apiClient.DeleteMCPServer(serverName, deleteVersion); err != nil {
 		return fmt.Errorf("failed to delete server: %w", err)
 	}
 
-	fmt.Printf("MCP server '%s' version %s deleted successfully\n", serverName, deleteVersion)
+	printer.PrintSuccess(fmt.Sprintf("Deleted: %s (v%s)", serverName, deleteVersion))
 	return nil
 }

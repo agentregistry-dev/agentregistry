@@ -137,11 +137,6 @@ func addMcpCmd(name string) error {
 	manifest.McpServers = append(manifest.McpServers, res)
 	manager := common.NewManifestManager(resolvedDir)
 
-	if err := manager.Validate(manifest); err != nil {
-		return fmt.Errorf("invalid MCP server configuration: %w", err)
-	}
-
-	// Save back to disk
 	if err := manager.Save(manifest); err != nil {
 		return fmt.Errorf("failed to save agent.yaml: %w", err)
 	}
