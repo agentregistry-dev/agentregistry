@@ -8,10 +8,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/frameworks"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/templates"
+	"github.com/agentregistry-dev/agentregistry/pkg/validators"
 
 	"github.com/spf13/cobra"
 )
@@ -56,7 +56,7 @@ func runInitFramework(
 	customizeProjectConfig func(*templates.ProjectConfig) error,
 ) error {
 	// Validate project name
-	if err := common.ValidateProjectName(projectName); err != nil {
+	if err := validators.ValidateProjectName(projectName); err != nil {
 		return fmt.Errorf("invalid project name: %w", err)
 	}
 

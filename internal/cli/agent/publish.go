@@ -10,6 +10,7 @@ import (
 	clicommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
+	"github.com/agentregistry-dev/agentregistry/pkg/validators"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/spf13/cobra"
 )
@@ -94,7 +95,7 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	}
 
 	// Validate agent name
-	if err := clicommon.ValidateAgentName(agentJSON.Name); err != nil {
+	if err := validators.ValidateAgentName(agentJSON.Name); err != nil {
 		return err
 	}
 

@@ -61,56 +61,6 @@ func TestValidateProjectDir(t *testing.T) {
 	}
 }
 
-func TestValidateProjectName(t *testing.T) {
-	tests := []struct {
-		name        string
-		projectName string
-		wantErr     bool
-		errContain  string
-	}{
-		{
-			name:        "valid name",
-			projectName: "MyProject",
-			wantErr:     false,
-		},
-		{
-			name:        "empty name",
-			projectName: "",
-			wantErr:     true,
-			errContain:  "cannot be empty",
-		},
-		{
-			name:        "name with invalid characters",
-			projectName: "Invalid/Name",
-			wantErr:     true,
-			errContain:  "contains invalid characters",
-		},
-		{
-			name:        "name starting with dot",
-			projectName: ".hidden",
-			wantErr:     true,
-			errContain:  "cannot start with a dot",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateProjectName(tt.projectName)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("validateProjectName(%q) error = %v, wantErr %v",
-					tt.projectName, err, tt.wantErr)
-				return
-			}
-			if tt.wantErr && tt.errContain != "" {
-				if err == nil || !strings.Contains(err.Error(), tt.errContain) {
-					t.Errorf("validateProjectName(%q) error = %v, want error containing %q",
-						tt.projectName, err, tt.errContain)
-				}
-			}
-		})
-	}
-}
-
 func TestBuildLocalImageName(t *testing.T) {
 	tests := []struct {
 		name     string

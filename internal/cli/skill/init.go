@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/skill/templates"
+	"github.com/agentregistry-dev/agentregistry/pkg/validators"
 
 	"github.com/spf13/cobra"
 )
@@ -39,7 +39,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	projectName := args[0]
 
 	// Validate project name
-	if err := common.ValidateProjectName(projectName); err != nil {
+	if err := validators.ValidateProjectName(projectName); err != nil {
 		return fmt.Errorf("invalid project name: %w", err)
 	}
 
