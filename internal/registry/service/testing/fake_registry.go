@@ -33,15 +33,13 @@ type FakeRegistry struct {
 	// Function hooks for custom behavior (take precedence over data fields when set)
 	ListServersFn                   func(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
 	GetServerByNameFn               func(ctx context.Context, serverName string) (*apiv0.ServerResponse, error)
-	GetServerByNameAndVersionFn     func(ctx context.Context, serverName, version string, publishedOnly bool) (*apiv0.ServerResponse, error)
-	GetAllVersionsByServerNameFn    func(ctx context.Context, serverName string, publishedOnly bool) ([]*apiv0.ServerResponse, error)
+	GetServerByNameAndVersionFn     func(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error)
+	GetAllVersionsByServerNameFn    func(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error)
 	CreateServerFn                  func(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
 	UpdateServerFn                  func(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error)
 	StoreServerReadmeFn             func(ctx context.Context, serverName, version string, content []byte, contentType string) error
 	GetServerReadmeLatestFn         func(ctx context.Context, serverName string) (*database.ServerReadme, error)
 	GetServerReadmeByVersionFn      func(ctx context.Context, serverName, version string) (*database.ServerReadme, error)
-	PublishServerFn                 func(ctx context.Context, serverName, version string) error
-	UnpublishServerFn               func(ctx context.Context, serverName, version string) error
 	DeleteServerFn                  func(ctx context.Context, serverName, version string) error
 	UpsertServerEmbeddingFn         func(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error
 	GetServerEmbeddingMetadataFn    func(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error)
@@ -50,8 +48,6 @@ type FakeRegistry struct {
 	GetAgentByNameAndVersionFn      func(ctx context.Context, agentName, version string) (*models.AgentResponse, error)
 	GetAllVersionsByAgentNameFn     func(ctx context.Context, agentName string) ([]*models.AgentResponse, error)
 	CreateAgentFn                   func(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error)
-	PublishAgentFn                  func(ctx context.Context, agentName, version string) error
-	UnpublishAgentFn                func(ctx context.Context, agentName, version string) error
 	DeleteAgentFn                   func(ctx context.Context, agentName, version string) error
 	UpsertAgentEmbeddingFn          func(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error
 	GetAgentEmbeddingMetadataFn     func(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error)
@@ -60,8 +56,6 @@ type FakeRegistry struct {
 	GetSkillByNameAndVersionFn      func(ctx context.Context, skillName, version string) (*models.SkillResponse, error)
 	GetAllVersionsBySkillNameFn     func(ctx context.Context, skillName string) ([]*models.SkillResponse, error)
 	CreateSkillFn                   func(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error)
-	PublishSkillFn                  func(ctx context.Context, skillName, version string) error
-	UnpublishSkillFn                func(ctx context.Context, skillName, version string) error
 	GetDeploymentsFn                func(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
 	GetDeploymentByNameAndVersionFn func(ctx context.Context, resourceName, version, artifactType string) (*models.Deployment, error)
 	DeployServerFn                  func(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool, runtime string) (*models.Deployment, error)
@@ -105,16 +99,16 @@ func (f *FakeRegistry) GetServerByName(ctx context.Context, serverName string) (
 	return nil, database.ErrNotFound
 }
 
-func (f *FakeRegistry) GetServerByNameAndVersion(ctx context.Context, serverName, version string, publishedOnly bool) (*apiv0.ServerResponse, error) {
+func (f *FakeRegistry) GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
 	if f.GetServerByNameAndVersionFn != nil {
-		return f.GetServerByNameAndVersionFn(ctx, serverName, version, publishedOnly)
+		return f.GetServerByNameAndVersionFn(ctx, serverName, version)
 	}
 	return f.GetServerByName(ctx, serverName)
 }
 
-func (f *FakeRegistry) GetAllVersionsByServerName(ctx context.Context, serverName string, publishedOnly bool) ([]*apiv0.ServerResponse, error) {
+func (f *FakeRegistry) GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
 	if f.GetAllVersionsByServerNameFn != nil {
-		return f.GetAllVersionsByServerNameFn(ctx, serverName, publishedOnly)
+		return f.GetAllVersionsByServerNameFn(ctx, serverName)
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -159,20 +153,6 @@ func (f *FakeRegistry) GetServerReadmeByVersion(ctx context.Context, serverName,
 		return f.GetServerReadmeByVersionFn(ctx, serverName, version)
 	}
 	return f.GetServerReadmeLatest(ctx, serverName)
-}
-
-func (f *FakeRegistry) PublishServer(ctx context.Context, serverName, version string) error {
-	if f.PublishServerFn != nil {
-		return f.PublishServerFn(ctx, serverName, version)
-	}
-	return database.ErrNotFound
-}
-
-func (f *FakeRegistry) UnpublishServer(ctx context.Context, serverName, version string) error {
-	if f.UnpublishServerFn != nil {
-		return f.UnpublishServerFn(ctx, serverName, version)
-	}
-	return database.ErrNotFound
 }
 
 func (f *FakeRegistry) DeleteServer(ctx context.Context, serverName, version string) error {
@@ -254,20 +234,6 @@ func (f *FakeRegistry) CreateAgent(ctx context.Context, req *models.AgentJSON) (
 	return nil, database.ErrNotFound
 }
 
-func (f *FakeRegistry) PublishAgent(ctx context.Context, agentName, version string) error {
-	if f.PublishAgentFn != nil {
-		return f.PublishAgentFn(ctx, agentName, version)
-	}
-	return database.ErrNotFound
-}
-
-func (f *FakeRegistry) UnpublishAgent(ctx context.Context, agentName, version string) error {
-	if f.UnpublishAgentFn != nil {
-		return f.UnpublishAgentFn(ctx, agentName, version)
-	}
-	return database.ErrNotFound
-}
-
 func (f *FakeRegistry) DeleteAgent(ctx context.Context, agentName, version string) error {
 	if f.DeleteAgentFn != nil {
 		return f.DeleteAgentFn(ctx, agentName, version)
@@ -342,20 +308,6 @@ func (f *FakeRegistry) CreateSkill(ctx context.Context, req *models.SkillJSON) (
 		return f.CreateSkillFn(ctx, req)
 	}
 	return nil, database.ErrNotFound
-}
-
-func (f *FakeRegistry) PublishSkill(ctx context.Context, skillName, version string) error {
-	if f.PublishSkillFn != nil {
-		return f.PublishSkillFn(ctx, skillName, version)
-	}
-	return database.ErrNotFound
-}
-
-func (f *FakeRegistry) UnpublishSkill(ctx context.Context, skillName, version string) error {
-	if f.UnpublishSkillFn != nil {
-		return f.UnpublishSkillFn(ctx, skillName, version)
-	}
-	return database.ErrNotFound
 }
 
 // Deployment methods

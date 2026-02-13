@@ -31,17 +31,14 @@ func RegisterRoutes(
 	versionInfo *v0.VersionBody,
 	opts *RouteOptions,
 ) {
-	// Public API endpoints (only show published resources)
+	// Public API endpoints
 	registerPublicRoutes(api, "/v0", cfg, registry, metrics, versionInfo)
-	registerPublicRoutes(api, "/v0.1", cfg, registry, metrics, versionInfo)
 
-	// Admin API endpoints (show all resources, including unpublished)
+	// Admin API endpoints
 	registerAdminRoutes(api, "/admin/v0", cfg, registry, metrics, versionInfo, opts)
-	registerAdminRoutes(api, "/admin/v0.1", cfg, registry, metrics, versionInfo, opts)
 }
 
 // registerPublicRoutes registers public API routes for a version
-// Public routes only return published resources
 func registerPublicRoutes(
 	api huma.API,
 	pathPrefix string,
@@ -50,28 +47,22 @@ func registerPublicRoutes(
 	metrics *telemetry.Metrics,
 	versionInfo *v0.VersionBody,
 ) {
-	// Public endpoints only show published resources
 	isAdmin := false
 
-	// Common endpoints (available in all versions)
+	// Common endpoints
 	registerCommonEndpoints(api, pathPrefix, cfg, metrics, versionInfo)
 	v0.RegisterServersEndpoints(api, pathPrefix, registry, isAdmin)
-	v0.RegisterCreateEndpoint(api, pathPrefix, registry)
+	v0.RegisterAdminCreateEndpoint(api, pathPrefix, registry)
 	v0.RegisterEditEndpoints(api, pathPrefix, registry)
 	v0auth.RegisterAuthEndpoints(api, pathPrefix, cfg)
 	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry)
-
-	// v0-only endpoints (agents and skills)
-	if pathPrefix == "/v0" {
-		v0.RegisterAgentsEndpoints(api, pathPrefix, registry, isAdmin)
-		v0.RegisterAgentsCreateEndpoint(api, pathPrefix, registry)
-		v0.RegisterSkillsEndpoints(api, pathPrefix, registry, isAdmin)
-		v0.RegisterSkillsCreateEndpoint(api, pathPrefix, registry)
-	}
+	v0.RegisterAgentsEndpoints(api, pathPrefix, registry, isAdmin)
+	v0.RegisterAdminAgentsCreateEndpoint(api, pathPrefix, registry)
+	v0.RegisterSkillsEndpoints(api, pathPrefix, registry, isAdmin)
+	v0.RegisterAdminSkillsCreateEndpoint(api, pathPrefix, registry)
 }
 
 // registerAdminRoutes registers admin API routes for a version
-// Admin routes return all resources (published and unpublished)
 func registerAdminRoutes(
 	api huma.API,
 	pathPrefix string,
@@ -81,16 +72,18 @@ func registerAdminRoutes(
 	versionInfo *v0.VersionBody,
 	opts *RouteOptions,
 ) {
-	// Admin endpoints show all resources
 	isAdmin := true
 
 	// Common endpoints
 	registerCommonEndpoints(api, pathPrefix, cfg, metrics, versionInfo)
 	v0.RegisterServersEndpoints(api, pathPrefix, registry, isAdmin)
 	v0.RegisterAdminCreateEndpoint(api, pathPrefix, registry)
-	v0.RegisterPublishStatusEndpoints(api, pathPrefix, registry)
 	v0.RegisterEditEndpoints(api, pathPrefix, registry)
 	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry)
+	v0.RegisterAgentsEndpoints(api, pathPrefix, registry, isAdmin)
+	v0.RegisterAdminAgentsCreateEndpoint(api, pathPrefix, registry)
+	v0.RegisterSkillsEndpoints(api, pathPrefix, registry, isAdmin)
+	v0.RegisterAdminSkillsCreateEndpoint(api, pathPrefix, registry)
 
 	// Register embeddings endpoints if services are available
 	if opts != nil && opts.Indexer != nil && opts.JobManager != nil {
@@ -99,16 +92,6 @@ func registerAdminRoutes(
 		if opts.Mux != nil {
 			v0.RegisterEmbeddingsSSEHandler(opts.Mux, pathPrefix, opts.Indexer, opts.JobManager)
 		}
-	}
-
-	// v0-only admin endpoints (agents and skills)
-	if pathPrefix == "/admin/v0" {
-		v0.RegisterAgentsEndpoints(api, pathPrefix, registry, isAdmin)
-		v0.RegisterAdminAgentsCreateEndpoint(api, pathPrefix, registry)
-		v0.RegisterAgentsPublishStatusEndpoints(api, pathPrefix, registry)
-		v0.RegisterSkillsEndpoints(api, pathPrefix, registry, isAdmin)
-		v0.RegisterAdminSkillsCreateEndpoint(api, pathPrefix, registry)
-		v0.RegisterSkillsPublishStatusEndpoints(api, pathPrefix, registry)
 	}
 }
 

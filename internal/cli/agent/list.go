@@ -22,7 +22,7 @@ var (
 var ListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List agents",
-	Long:  `List agents that are published to the registry.`,
+	Long:  `List agents in the registry.`,
 	RunE:  runList,
 }
 
@@ -110,7 +110,7 @@ func displayPaginatedAgents(agents []*models.AgentResponse, deployedAgents []*cl
 
 func printAgentsTable(agents []*models.AgentResponse, deployedAgents []*client.DeploymentResponse) {
 	t := printer.NewTablePrinter(os.Stdout)
-	t.SetHeaders("Name", "Version", "Framework", "Language", "Provider", "Model", "Deployed", "Published")
+	t.SetHeaders("Name", "Version", "Framework", "Language", "Provider", "Model", "Deployed")
 
 	deployedMap := make(map[string]*client.DeploymentResponse)
 	for _, d := range deployedAgents {
@@ -129,11 +129,6 @@ func printAgentsTable(agents []*models.AgentResponse, deployedAgents []*client.D
 			}
 		}
 
-		publishedStatus := "False"
-		if a.Meta.Official.Published {
-			publishedStatus = "True"
-		}
-
 		t.AddRow(
 			printer.TruncateString(a.Agent.Name, 40),
 			a.Agent.Version,
@@ -142,7 +137,6 @@ func printAgentsTable(agents []*models.AgentResponse, deployedAgents []*client.D
 			printer.EmptyValueOrDefault(a.Agent.ModelProvider, "<none>"),
 			printer.TruncateString(printer.EmptyValueOrDefault(a.Agent.ModelName, "<none>"), 30),
 			deployedStatus,
-			publishedStatus,
 		)
 	}
 

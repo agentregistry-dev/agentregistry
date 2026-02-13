@@ -15,7 +15,7 @@ var DeleteCmd = &cobra.Command{
 	Use:   "delete <agent-name>",
 	Short: "Delete an agent from the registry",
 	Long: `Delete an agent from the registry.
-The agent must not be published or deployed unless --force is used.
+The agent must not be deployed unless --force is used.
 
 Examples:
   arctl agent delete my-agent --version 1.0.0
@@ -26,7 +26,7 @@ Examples:
 
 func init() {
 	DeleteCmd.Flags().StringVar(&deleteVersion, "version", "", "Specify the version to delete (required)")
-	DeleteCmd.Flags().BoolVar(&deleteForceFlag, "force", false, "Force delete even if published or deployed")
+	DeleteCmd.Flags().BoolVar(&deleteForceFlag, "force", false, "Force delete even if deployed")
 	_ = DeleteCmd.MarkFlagRequired("version")
 }
 
@@ -37,26 +37,15 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API client not initialized")
 	}
 
-	// Check if agent is published
-	isPublished, err := isAgentPublished(agentName, deleteVersion)
-	if err != nil {
-		return fmt.Errorf("failed to check if agent is published: %w", err)
-	}
-
 	// Check if agent is deployed
 	isDeployed, err := isAgentDeployed(agentName, deleteVersion)
 	if err != nil {
 		return fmt.Errorf("failed to check if agent is deployed: %w", err)
 	}
 
-	// Fail if published or deployed unless --force is used
-	if !deleteForceFlag {
-		if isPublished {
-			return fmt.Errorf("agent %s version %s is published. Unpublish it first using 'arctl agent unpublish %s --version %s', or use --force to delete anyway", agentName, deleteVersion, agentName, deleteVersion)
-		}
-		if isDeployed {
-			return fmt.Errorf("agent %s version %s is deployed. Remove it first using 'arctl agent remove %s --version %s', or use --force to delete anyway", agentName, deleteVersion, agentName, deleteVersion)
-		}
+	// Fail if deployed unless --force is used
+	if !deleteForceFlag && isDeployed {
+		return fmt.Errorf("agent %s version %s is deployed. Remove it first using 'arctl agent remove %s --version %s', or use --force to delete anyway", agentName, deleteVersion, agentName, deleteVersion)
 	}
 
 	// Make sure to remove the deployment before deleting the agent from database
@@ -75,28 +64,6 @@ func runDelete(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Agent '%s' version %s deleted successfully\n", agentName, deleteVersion)
 	return nil
-}
-
-func isAgentPublished(agentName, version string) (bool, error) {
-	if apiClient == nil {
-		return false, fmt.Errorf("API client not initialized")
-	}
-
-	// Get agent using admin endpoint to check published status
-	agent, err := apiClient.GetAgentByNameAndVersionAdmin(agentName, version)
-	if err != nil {
-		return false, err
-	}
-	if agent == nil {
-		return false, nil
-	}
-
-	// Check if published field is true
-	if agent.Meta.Official != nil && agent.Meta.Official.Published {
-		return true, nil
-	}
-
-	return false, nil
 }
 
 func isAgentDeployed(agentName, version string) (bool, error) {

@@ -86,9 +86,6 @@ func (c *Client) baseURLWithoutVersion() string {
 	if strings.HasSuffix(base, "/v0") {
 		return base[:len(base)-3]
 	}
-	if strings.HasSuffix(base, "/v0.1") {
-		return base[:len(base)-5]
-	}
 	return base
 }
 
@@ -240,19 +237,15 @@ func (c *Client) GetPublishedServers() ([]*v0.ServerResponse, error) {
 }
 
 // GetServerByName returns a server by name (latest version)
-func (c *Client) GetServerByName(name string, publishedOnly bool) (*v0.ServerResponse, error) {
-	return c.GetServerByNameAndVersion(name, "latest", publishedOnly)
+func (c *Client) GetServerByName(name string) (*v0.ServerResponse, error) {
+	return c.GetServerByNameAndVersion(name, "latest")
 }
 
 // GetServerByNameAndVersion returns a specific version of a server
-func (c *Client) GetServerByNameAndVersion(name, version string, publishedOnly bool) (*v0.ServerResponse, error) {
-	// Use the version endpoint
+func (c *Client) GetServerByNameAndVersion(name, version string) (*v0.ServerResponse, error) {
 	encName := url.PathEscape(name)
 	encVersion := url.PathEscape(version)
 	q := "/servers/" + encName + "/versions/" + encVersion
-	if publishedOnly {
-		q += "?published_only=true"
-	}
 	req, err := c.newRequest(http.MethodGet, q)
 	if err != nil {
 		return nil, err
@@ -274,7 +267,7 @@ func (c *Client) GetServerByNameAndVersion(name, version string, publishedOnly b
 	return &resp.Servers[0], nil
 }
 
-// GetServerVersions returns all versions of a server by name (public endpoint - only published)
+// GetServerVersions returns all versions of a server by name
 func (c *Client) GetServerVersions(name string) ([]v0.ServerResponse, error) {
 	encName := url.PathEscape(name)
 	req, err := c.newRequest(http.MethodGet, "/servers/"+encName+"/versions")
@@ -294,7 +287,7 @@ func (c *Client) GetServerVersions(name string) ([]v0.ServerResponse, error) {
 	return resp.Servers, nil
 }
 
-// GetAllServerVersionsAdmin returns all versions of a server by name (admin endpoint - includes unpublished)
+// GetAllServerVersionsAdmin returns all versions of a server by name (admin endpoint)
 func (c *Client) GetAllServerVersionsAdmin(name string) ([]v0.ServerResponse, error) {
 	encName := url.PathEscape(name)
 
@@ -427,148 +420,28 @@ func (c *Client) GetAgentByNameAndVersion(name, version string) (*models.AgentRe
 	return &resp, nil
 }
 
-// PushSkill creates a skill entry in the registry without publishing (published=false)
-func (c *Client) PushSkill(skill *models.SkillJSON) (*models.SkillResponse, error) {
+// CreateSkill creates a skill in the registry (immediately visible)
+func (c *Client) CreateSkill(skill *models.SkillJSON) (*models.SkillResponse, error) {
 	var resp models.SkillResponse
-	err := c.doJsonRequest(http.MethodPost, "/skills/publish", skill, &resp)
+	err := c.doJsonRequest(http.MethodPost, "/skills", skill, &resp)
 	return &resp, err
 }
 
-// PublishSkillStatus marks an existing skill as published (sets published=true)
-func (c *Client) PublishSkillStatus(name, version string) error {
-	encName := url.PathEscape(name)
-	encVersion := url.PathEscape(version)
-
-	req, err := c.newAdminRequest(http.MethodPost, "/admin/v0/skills/"+encName+"/versions/"+encVersion+"/publish")
-	if err != nil {
-		return err
-	}
-	return c.doJSON(req, nil)
-}
-
-// PublishSkill creates a skill entry and marks it as published (published=true)
-func (c *Client) PublishSkill(skill *models.SkillJSON) (*models.SkillResponse, error) {
-	if _, err := c.PushSkill(skill); err != nil {
-		return nil, err
-	}
-
-	// Then mark it as published
-	if err := c.PublishSkillStatus(skill.Name, skill.Version); err != nil {
-		return nil, fmt.Errorf("failed to publish skill: %w", err)
-	}
-
-	// Fetch the updated skill to return it
-	return c.GetSkillByNameAndVersion(skill.Name, skill.Version)
-}
-
-// PushAgent creates an agent entry in the registry without publishing (published=false)
-func (c *Client) PushAgent(agent *models.AgentJSON) (*models.AgentResponse, error) {
+// CreateAgent creates an agent in the registry (immediately visible)
+func (c *Client) CreateAgent(agent *models.AgentJSON) (*models.AgentResponse, error) {
 	var resp models.AgentResponse
-	// Use a dedicated /agents/push public endpoint for push (creates unpublished entry)
-	err := c.doJsonRequest(http.MethodPost, "/agents/push", agent, &resp)
+	err := c.doJsonRequest(http.MethodPost, "/agents", agent, &resp)
 	return &resp, err
 }
 
-// PublishAgentStatus marks an existing agent as published (sets published=true)
-func (c *Client) PublishAgentStatus(name, version string) error {
-	encName := url.PathEscape(name)
-	encVersion := url.PathEscape(version)
-
-	req, err := c.newAdminRequest(http.MethodPost, "/admin/v0/agents/"+encName+"/versions/"+encVersion+"/publish")
-	if err != nil {
-		return err
-	}
-	return c.doJSON(req, nil)
-}
-
-// UnpublishAgentStatus marks an existing agent as unpublished (sets published=false)
-func (c *Client) UnpublishAgentStatus(name, version string) error {
-	encName := url.PathEscape(name)
-	encVersion := url.PathEscape(version)
-
-	req, err := c.newAdminRequest(http.MethodPost, "/admin/v0/agents/"+encName+"/versions/"+encVersion+"/unpublish")
-	if err != nil {
-		return err
-	}
-	return c.doJSON(req, nil)
-}
-
-// PublishAgent creates an agent entry and marks it as published (published=true)
-func (c *Client) PublishAgent(agent *models.AgentJSON) (*models.AgentResponse, error) {
-	// First create the agent (published=false)
-	if _, err := c.PushAgent(agent); err != nil {
-		return nil, err
-	}
-
-	// Then mark it as published
-	if err := c.PublishAgentStatus(agent.Name, agent.Version); err != nil {
-		return nil, fmt.Errorf("failed to publish agent: %w", err)
-	}
-
-	// Fetch the updated agent to return it
-	return c.GetAgentByNameAndVersion(agent.Name, agent.Version)
-}
-
-// PushMCPServer creates an MCP server entry in the registry without publishing (published=false)
-func (c *Client) PushMCPServer(server *v0.ServerJSON) (*v0.ServerResponse, error) {
+// CreateMCPServer creates an MCP server in the registry (immediately visible)
+func (c *Client) CreateMCPServer(server *v0.ServerJSON) (*v0.ServerResponse, error) {
 	var resp v0.ServerResponse
-	err := c.doJsonRequest(http.MethodPost, "/servers/push", server, &resp)
+	err := c.doJsonRequest(http.MethodPost, "/servers", server, &resp)
 	return &resp, err
 }
 
-// PublishMCPServerStatus marks an existing MCP server as published (sets published=true)
-func (c *Client) PublishMCPServerStatus(name, version string) error {
-	encName := url.PathEscape(name)
-	encVersion := url.PathEscape(version)
-
-	req, err := c.newAdminRequest(http.MethodPost, "/admin/v0/servers/"+encName+"/versions/"+encVersion+"/publish")
-	if err != nil {
-		return err
-	}
-	return c.doJSON(req, nil)
-}
-
-// PublishMCPServer creates an MCP server entry and marks it as published (published=true)
-func (c *Client) PublishMCPServer(server *v0.ServerJSON) (*v0.ServerResponse, error) {
-	// First create the server (published=false)
-	if _, err := c.PushMCPServer(server); err != nil {
-		return nil, err
-	}
-
-	// Then mark it as published
-	if err := c.PublishMCPServerStatus(server.Name, server.Version); err != nil {
-		return nil, fmt.Errorf("failed to publish mcp server: %w", err)
-	}
-
-	// Fetch the published server to return it
-	return c.GetServerByNameAndVersion(server.Name, server.Version, true)
-}
-
-// UnpublishMCPServer unpublishes an MCP server from the registry
-func (c *Client) UnpublishMCPServer(name, version string) error {
-	encName := url.PathEscape(name)
-	encVersion := url.PathEscape(version)
-
-	req, err := c.newAdminRequest(http.MethodPost, "/admin/v0/servers/"+encName+"/versions/"+encVersion+"/unpublish")
-	if err != nil {
-		return err
-	}
-	return c.doJSON(req, nil)
-}
-
-// UnpublishSkill unpublishes a skill from the registry
-func (c *Client) UnpublishSkill(name, version string) error {
-	encName := url.PathEscape(name)
-	encVersion := url.PathEscape(version)
-
-	req, err := c.newAdminRequest(http.MethodPost, "/admin/v0/skills/"+encName+"/versions/"+encVersion+"/unpublish")
-	if err != nil {
-		return err
-	}
-	return c.doJSON(req, nil)
-}
-
-// GetSkillVersions returns all versions of a skill by name (admin endpoint - includes unpublished)
+// GetSkillVersions returns all versions of a skill by name (admin endpoint)
 func (c *Client) GetSkillVersions(name string) ([]*models.SkillResponse, error) {
 	encName := url.PathEscape(name)
 
@@ -617,7 +490,7 @@ func (c *Client) GetSkillByNameAndVersion(name, version string) (*models.SkillRe
 	return &resp, nil
 }
 
-// GetSkillByNameAndVersionAdmin returns a specific version of a skill (admin endpoint - includes unpublished)
+// GetSkillByNameAndVersionAdmin returns a specific version of a skill (admin endpoint)
 func (c *Client) GetSkillByNameAndVersionAdmin(name, version string) (*models.SkillResponse, error) {
 	encName := url.PathEscape(name)
 	encVersion := url.PathEscape(version)
@@ -639,7 +512,7 @@ func (c *Client) GetSkillByNameAndVersionAdmin(name, version string) (*models.Sk
 	return &resp, nil
 }
 
-// GetAgentByNameAndVersionAdmin returns a specific version of an agent (admin endpoint - includes unpublished)
+// GetAgentByNameAndVersionAdmin returns a specific version of an agent (admin endpoint)
 func (c *Client) GetAgentByNameAndVersionAdmin(name, version string) (*models.AgentResponse, error) {
 	encName := url.PathEscape(name)
 	encVersion := url.PathEscape(version)

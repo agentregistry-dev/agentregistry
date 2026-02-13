@@ -40,7 +40,6 @@ type SkillRegistryExtensions struct {
 	PublishedAt time.Time `json:"publishedAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 	IsLatest    bool      `json:"isLatest"`
-	Published   bool      `json:"published"`
 }
 
 type SkillResponseMeta struct {

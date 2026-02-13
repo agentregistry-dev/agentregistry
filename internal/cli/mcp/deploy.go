@@ -81,21 +81,13 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("version is required")
 	}
 
-	// Ensure the server with the specified version is published
-	server, err := apiClient.GetServerByNameAndVersion(serverName, deployVersion, true)
+	// Ensure the server with the specified version exists
+	server, err := apiClient.GetServerByNameAndVersion(serverName, deployVersion)
 	if err != nil {
 		return fmt.Errorf("failed to get server: %w", err)
 	}
 	if server == nil {
 		return fmt.Errorf("server not found: %s", serverName)
-	}
-
-	isPublished, err := isServerPublished(serverName, deployVersion)
-	if err != nil {
-		return fmt.Errorf("failed to check if server is published: %w", err)
-	}
-	if !isPublished {
-		return fmt.Errorf("server %s version %s is not published", serverName, deployVersion)
 	}
 
 	// Deploy server via API (server will handle reconciliation)

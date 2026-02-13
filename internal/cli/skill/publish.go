@@ -92,7 +92,7 @@ func runPublish(cmd *cobra.Command, args []string) error {
 			j, _ := json.Marshal(skillJson)
 			printer.PrintInfo("[DRY RUN] Would publish skill to registry " + apiClient.BaseURL + ": " + string(j))
 		} else {
-			_, err = apiClient.PublishSkill(skillJson)
+			_, err = apiClient.CreateSkill(skillJson)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("failed to publish skill '%s': %w", skill, err))
 			}

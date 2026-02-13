@@ -12,18 +12,14 @@ import (
 )
 
 var PublishCmd = &cobra.Command{
-	Use:   "publish [project-directory|agent-name]",
+	Use:   "publish [project-directory]",
 	Short: "Publish an agent project to the registry",
 	Long: `Publish an agent project to the registry.
 
-This command supports two forms:
-
-- 'arctl agent publish ./my-agent' publishes the agent defined by agent.yaml in the given folder.
-- 'arctl agent publish my-agent --version 1.2.3' publishes an agent that already exists in the registry by name and version.
+The project directory must contain an agent.yaml manifest.
 
 Examples:
-arctl agent publish ./my-agent
-arctl agent publish my-agent --version latest`,
+arctl agent publish ./my-agent`,
 	Args:    cobra.ExactArgs(1),
 	RunE:    runPublish,
 	Example: `arctl agent publish ./my-agent`,
@@ -33,7 +29,7 @@ var publishVersion string
 var githubRepository string
 
 func init() {
-	PublishCmd.Flags().StringVar(&publishVersion, "version", "", "Specify version to publish (when publishing an existing registry agent)")
+	PublishCmd.Flags().StringVar(&publishVersion, "version", "", "Override the version from the manifest")
 	PublishCmd.Flags().StringVar(&githubRepository, "github", "", "Specify the GitHub repository for the agent")
 }
 
@@ -50,32 +46,12 @@ func runPublish(cmd *cobra.Command, args []string) error {
 
 	arg := args[0]
 
-	// If --version flag was provided, treat as registry-based publish
-	// No need to push the agent, just mark as published
-	if publishCfg.Version != "" {
-		agentName := arg
-		version := publishCfg.Version
-
-		if apiClient == nil {
-			return fmt.Errorf("API client not initialized")
-		}
-
-		if err := apiClient.PublishAgentStatus(agentName, version); err != nil {
-			return fmt.Errorf("failed to publish agent: %w", err)
-		}
-
-		fmt.Printf("Agent '%s' version %s published successfully\n", agentName, version)
-
-		return nil
-	}
-
 	// If the argument is a directory containing an agent project, publish from local
 	if fi, err := os.Stat(arg); err == nil && fi.IsDir() {
 		publishCfg.ProjectDir = arg
-		// Version will be determined in publishAgent from manifest or flag
 		return publishAgent(publishCfg)
 	}
-	return nil
+	return fmt.Errorf("argument must be a directory containing an agent project")
 }
 
 type publishAgentCfg struct {
@@ -128,7 +104,7 @@ func publishAgent(cfg *publishAgentCfg) error {
 		}
 	}
 
-	_, err = apiClient.PublishAgent(jsn)
+	_, err = apiClient.CreateAgent(jsn)
 	if err != nil {
 		return fmt.Errorf("failed to publish agent: %w", err)
 	}

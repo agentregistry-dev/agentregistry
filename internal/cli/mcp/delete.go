@@ -37,23 +37,14 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API client not initialized")
 	}
 
-	// Check if server is published
-	isPublished, err := isServerPublished(serverName, deleteVersion)
-	if err != nil {
-		return fmt.Errorf("failed to check if server is published: %w", err)
-	}
-
 	// Check if server is deployed
 	isDeployed, err := isServerDeployed(serverName, deleteVersion)
 	if err != nil {
 		return fmt.Errorf("failed to check if server is deployed: %w", err)
 	}
 
-	// Fail if published or deployed unless --force is used
+	// Fail if deployed unless --force is used
 	if !deleteForceFlag {
-		if isPublished {
-			return fmt.Errorf("server %s version %s is published. Unpublish it first using 'arctl mcp unpublish %s --version %s', or use --force to delete anyway", serverName, deleteVersion, serverName, deleteVersion)
-		}
 		if isDeployed {
 			return fmt.Errorf("server %s version %s is deployed. Remove it first using 'arctl mcp remove %s --version %s', or use --force to delete anyway", serverName, deleteVersion, serverName, deleteVersion)
 		}

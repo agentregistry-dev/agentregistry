@@ -80,7 +80,6 @@ type ServerVersionDetailInput struct {
 	ServerName    string `path:"serverName" json:"serverName" doc:"URL-encoded server name" example:"com.example%2Fmy-server"`
 	Version       string `path:"version" json:"version" doc:"URL-encoded server version" example:"1.0.0"`
 	All           bool   `query:"all" json:"all,omitempty" doc:"If true, return all versions of the server instead of a single version" default:"false"`
-	PublishedOnly bool   `query:"published_only" json:"published_only,omitempty" doc:"If true, only return published versions (only applies when all=true)" default:"false"`
 }
 
 // ServerVersionsInput represents the input for listing all versions of a server
@@ -99,7 +98,7 @@ type ServerReadmeResponse struct {
 }
 
 // RegisterServersEndpoints registers all server-related endpoints with a custom path prefix
-// isAdmin: if true, shows all resources; if false, only shows published resources
+// isAdmin: if true, registers admin-only endpoints (e.g. delete) and tags operations as "admin"
 func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool) {
 	if isAdmin {
 		huma.Register(api, huma.Operation{
@@ -137,24 +136,6 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		tags = append(tags, "admin")
 	}
 
-	// Register /servers/push endpoint here
-	huma.Register(api, huma.Operation{
-		OperationID: "push-server" + strings.ReplaceAll(pathPrefix, "/", "-"),
-		Method:      http.MethodPost,
-		Path:        pathPrefix + "/servers/push",
-		Summary:     "Push MCP server (create unpublished)",
-		Description: "Create a new MCP server in the registry as an unpublished entry (published=false).",
-		Tags:        tags,
-	}, func(ctx context.Context, input *CreateServerInput) (*types.Response[models.ServerResponse], error) {
-		// Always create as unpublished (handled in service layer)
-		return createServerHandler(ctx, input, registry)
-	})
-	// Determine the tags based on whether this is admin or public
-	tags = []string{"servers"}
-	if isAdmin {
-		tags = append(tags, "admin")
-	}
-
 	// List servers endpoint
 	huma.Register(api, huma.Operation{
 		OperationID: "list-servers" + strings.ReplaceAll(pathPrefix, "/", "-"),
@@ -168,12 +149,6 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 
 		// Build filter from input parameters
 		filter := &database.ServerFilter{}
-
-		// For public endpoints, only show published resources
-		if !isAdmin {
-			published := true
-			filter.Published = &published
-		}
 
 		// Parse updated_since parameter
 		if input.UpdatedSince != "" {
@@ -249,7 +224,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		Method:      http.MethodGet,
 		Path:        pathPrefix + "/servers/{serverName}/versions/{version}",
 		Summary:     "Get specific MCP server version",
-		Description: "Get detailed information about a specific version of an MCP server. Set 'all=true' query parameter to get all versions. Set 'published_only=true' to filter to only published versions (only applies when all=true).",
+		Description: "Get detailed information about a specific version of an MCP server. Set 'all=true' query parameter to get all versions.",
 		Tags:        tags,
 	}, func(ctx context.Context, input *ServerVersionDetailInput) (*types.Response[models.ServerListResponse], error) {
 		// URL-decode the server name
@@ -266,14 +241,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 
 		// If all=true, return all versions
 		if input.All {
-			// Determine if we should filter to published only
-			onlyPublished := input.PublishedOnly
-			// For public endpoints, always filter to published only
-			if !isAdmin {
-				onlyPublished = true
-			}
-
-			servers, err := registry.GetAllVersionsByServerName(ctx, serverName, onlyPublished)
+			servers, err := registry.GetAllVersionsByServerName(ctx, serverName)
 			if err != nil {
 				if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 					return nil, huma.Error404NotFound("Server not found")
@@ -298,18 +266,12 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		}
 
 		// Default behavior: return a single version (wrapped in a list for consistency)
-		// For public endpoints, always filter to published only
-		publishedOnly := input.PublishedOnly
-		if !isAdmin {
-			publishedOnly = true
-		}
-
 		var serverResponse *apiv0.ServerResponse
 
 		// Handle "latest" as a special version string
 		if version == "latest" {
 			// Get all versions and find the latest one
-			servers, err := registry.GetAllVersionsByServerName(ctx, serverName, publishedOnly)
+			servers, err := registry.GetAllVersionsByServerName(ctx, serverName)
 			if err != nil {
 				if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 					return nil, huma.Error404NotFound("Server not found")
@@ -333,7 +295,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			}
 			serverResponse = latestServer
 		} else {
-			serverResponse, err = registry.GetServerByNameAndVersion(ctx, serverName, version, publishedOnly)
+			serverResponse, err = registry.GetServerByNameAndVersion(ctx, serverName, version)
 			if err != nil {
 				if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 					return nil, huma.Error404NotFound("Server not found")
@@ -369,9 +331,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		}
 
 		// Get all versions for this server
-		// For public endpoints, only get published versions (published = true)
-		// For admin endpoints, get all versions (published = true or false)
-		servers, err := registry.GetAllVersionsByServerName(ctx, serverName, !isAdmin)
+		servers, err := registry.GetAllVersionsByServerName(ctx, serverName)
 		if err != nil {
 			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Server not found")
@@ -495,24 +455,6 @@ func createServerHandler(ctx context.Context, input *CreateServerInput, registry
 	}, nil
 }
 
-// RegisterCreateEndpoint registers the public create/update server endpoint at /publish
-// This endpoint creates or updates a server in the registry (published defaults to false)
-func RegisterCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
-	huma.Register(api, huma.Operation{
-		OperationID: "create-server" + strings.ReplaceAll(pathPrefix, "/", "-"),
-		Method:      http.MethodPost,
-		Path:        pathPrefix + "/publish",
-		Summary:     "Create/update MCP server",
-		Description: "Create a new MCP server in the registry or update an existing one. By default, servers are created as unpublished (published=false).",
-		Tags:        []string{"servers", "publish"},
-		Security: []map[string][]string{
-			{"bearer": {}},
-		},
-	}, func(ctx context.Context, input *CreateServerInput) (*types.Response[models.ServerResponse], error) {
-		return createServerHandler(ctx, input, registry)
-	})
-}
-
 // RegisterAdminCreateEndpoint registers the admin create/update server endpoint at /servers
 // This endpoint creates or updates a server in the registry (published defaults to false)
 func RegisterAdminCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
@@ -521,81 +463,10 @@ func RegisterAdminCreateEndpoint(api huma.API, pathPrefix string, registry servi
 		Method:      http.MethodPost,
 		Path:        pathPrefix + "/servers",
 		Summary:     "Create/update MCP server (Admin)",
-		Description: "Create a new MCP server in the registry or update an existing one. By default, servers are created as unpublished (published=false).",
+		Description: "Create a new MCP server in the registry or update an existing one. Resources are immediately visible after creation.",
 		Tags:        []string{"servers", "admin"},
 	}, func(ctx context.Context, input *CreateServerInput) (*types.Response[models.ServerResponse], error) {
 		return createServerHandler(ctx, input, registry)
 	})
 }
 
-// RegisterPublishStatusEndpoints registers the publish/unpublish status endpoints for servers
-// These endpoints change the published status of existing servers
-func RegisterPublishStatusEndpoints(api huma.API, pathPrefix string, registry service.RegistryService) {
-	// Publish server endpoint - marks an existing server as published
-	huma.Register(api, huma.Operation{
-		OperationID: "publish-server-status" + strings.ReplaceAll(pathPrefix, "/", "-"),
-		Method:      http.MethodPost,
-		Path:        pathPrefix + "/servers/{serverName}/versions/{version}/publish",
-		Summary:     "Publish an existing server",
-		Description: "Mark an existing server version as published, making it visible in public listings. This acts on a server that was already created.",
-		Tags:        []string{"servers", "admin"},
-	}, func(ctx context.Context, input *ServerVersionDetailInput) (*types.Response[types.EmptyResponse], error) {
-		// URL-decode the server name and version
-		serverName, err := url.PathUnescape(input.ServerName)
-		if err != nil {
-			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
-		}
-		version, err := url.PathUnescape(input.Version)
-		if err != nil {
-			return nil, huma.Error400BadRequest("Invalid version encoding", err)
-		}
-
-		// Call the service to publish the server
-		if err := registry.PublishServer(ctx, serverName, version); err != nil {
-			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
-				return nil, huma.Error404NotFound("Server not found")
-			}
-			return nil, huma.Error500InternalServerError("Failed to publish server", err)
-		}
-
-		return &types.Response[types.EmptyResponse]{
-			Body: types.EmptyResponse{
-				Message: "Server published successfully",
-			},
-		}, nil
-	})
-
-	// Unpublish server endpoint - marks an existing server as unpublished
-	huma.Register(api, huma.Operation{
-		OperationID: "unpublish-server-status" + strings.ReplaceAll(pathPrefix, "/", "-"),
-		Method:      http.MethodPost,
-		Path:        pathPrefix + "/servers/{serverName}/versions/{version}/unpublish",
-		Summary:     "Unpublish an existing server",
-		Description: "Mark an existing server version as unpublished, hiding it from public listings. This acts on a server that was already created.",
-		Tags:        []string{"servers", "admin"},
-	}, func(ctx context.Context, input *ServerVersionDetailInput) (*types.Response[types.EmptyResponse], error) {
-		// URL-decode the server name and version
-		serverName, err := url.PathUnescape(input.ServerName)
-		if err != nil {
-			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
-		}
-		version, err := url.PathUnescape(input.Version)
-		if err != nil {
-			return nil, huma.Error400BadRequest("Invalid version encoding", err)
-		}
-
-		// Call the service to unpublish the server
-		if err := registry.UnpublishServer(ctx, serverName, version); err != nil {
-			if errors.Is(err, database.ErrNotFound) {
-				return nil, huma.Error404NotFound("Server not found")
-			}
-			return nil, huma.Error500InternalServerError("Failed to unpublish server", err)
-		}
-
-		return &types.Response[types.EmptyResponse]{
-			Body: types.EmptyResponse{
-				Message: "Server unpublished successfully",
-			},
-		}, nil
-	})
-}

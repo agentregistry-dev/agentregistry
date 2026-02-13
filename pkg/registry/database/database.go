@@ -29,7 +29,6 @@ type ServerFilter struct {
 	SubstringName *string    // for substring search on name
 	Version       *string    // for exact version matching
 	IsLatest      *bool      // for filtering latest versions only
-	Published     *bool      // for filtering by published status (nil = no filter)
 	Semantic      *SemanticSearchOptions
 }
 
@@ -52,7 +51,6 @@ type SkillFilter struct {
 	SubstringName *string    // for substring search on name
 	Version       *string    // for exact version matching
 	IsLatest      *bool      // for filtering latest versions only
-	Published     *bool      // for filtering by published status (nil = no filter)
 	Semantic      *SemanticSearchOptions
 }
 
@@ -64,7 +62,6 @@ type AgentFilter struct {
 	SubstringName *string    // for substring search on name
 	Version       *string    // for exact version matching
 	IsLatest      *bool      // for filtering latest versions only
-	Published     *bool      // for filtering by published status (nil = no filter)
 	Semantic      *SemanticSearchOptions
 }
 
@@ -115,9 +112,9 @@ type Database interface {
 	// GetServerByName retrieve a single server by its name
 	GetServerByName(ctx context.Context, tx pgx.Tx, serverName string) (*apiv0.ServerResponse, error)
 	// GetServerByNameAndVersion retrieve specific version of a server by server name and version
-	GetServerByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName string, version string, publishedOnly bool) (*apiv0.ServerResponse, error)
+	GetServerByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName string, version string) (*apiv0.ServerResponse, error)
 	// GetAllVersionsByServerName retrieve all versions of a server by server name
-	GetAllVersionsByServerName(ctx context.Context, tx pgx.Tx, serverName string, publishedOnly bool) ([]*apiv0.ServerResponse, error)
+	GetAllVersionsByServerName(ctx context.Context, tx pgx.Tx, serverName string) ([]*apiv0.ServerResponse, error)
 	// GetCurrentLatestVersion retrieve the current latest version of a server by server name
 	GetCurrentLatestVersion(ctx context.Context, tx pgx.Tx, serverName string) (*apiv0.ServerResponse, error)
 	// CountServerVersions count the number of versions for a server
@@ -126,15 +123,6 @@ type Database interface {
 	CheckVersionExists(ctx context.Context, tx pgx.Tx, serverName, version string) (bool, error)
 	// UnmarkAsLatest marks the current latest version of a server as no longer latest
 	UnmarkAsLatest(ctx context.Context, tx pgx.Tx, serverName string) error
-	// AcquirePublishLock acquires an exclusive advisory lock for publishing a server
-	// This prevents race conditions when multiple versions are published concurrently
-	AcquirePublishLock(ctx context.Context, tx pgx.Tx, serverName string) error
-	// PublishServer marks a server as published
-	PublishServer(ctx context.Context, tx pgx.Tx, serverName, version string) error
-	// UnpublishServer marks a server as unpublished
-	UnpublishServer(ctx context.Context, tx pgx.Tx, serverName, version string) error
-	// IsServerPublished checks if a server is published
-	IsServerPublished(ctx context.Context, tx pgx.Tx, serverName, version string) (bool, error)
 	// SetServerEmbedding upserts the semantic embedding metadata for a server version
 	SetServerEmbedding(ctx context.Context, tx pgx.Tx, serverName, version string, embedding *SemanticEmbedding) error
 	// GetServerEmbeddingMetadata returns metadata about a server's embedding without loading the vector
@@ -173,12 +161,6 @@ type Database interface {
 	CheckAgentVersionExists(ctx context.Context, tx pgx.Tx, agentName, version string) (bool, error)
 	// UnmarkAgentAsLatest marks the current latest version of an agent as no longer latest
 	UnmarkAgentAsLatest(ctx context.Context, tx pgx.Tx, agentName string) error
-	// PublishAgent marks an agent as published
-	PublishAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error
-	// UnpublishAgent marks an agent as unpublished
-	UnpublishAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error
-	// IsAgentPublished checks if an agent is published
-	IsAgentPublished(ctx context.Context, tx pgx.Tx, agentName, version string) (bool, error)
 	// DeleteAgent permanently removes an agent version from the database
 	DeleteAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error
 	// SetAgentEmbedding upserts the semantic embedding metadata for an agent version
@@ -209,12 +191,6 @@ type Database interface {
 	CheckSkillVersionExists(ctx context.Context, tx pgx.Tx, skillName, version string) (bool, error)
 	// UnmarkSkillAsLatest marks the current latest version of a skill as no longer latest
 	UnmarkSkillAsLatest(ctx context.Context, tx pgx.Tx, skillName string) error
-	// PublishSkill marks a skill as published
-	PublishSkill(ctx context.Context, tx pgx.Tx, skillName, version string) error
-	// UnpublishSkill marks a skill as unpublished
-	UnpublishSkill(ctx context.Context, tx pgx.Tx, skillName, version string) error
-	// IsSkillPublished checks if a skill is published
-	IsSkillPublished(ctx context.Context, tx pgx.Tx, skillName, version string) (bool, error)
 
 	// Deployments API
 	// CreateDeployment creates a new deployment record

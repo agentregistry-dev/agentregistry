@@ -44,7 +44,7 @@ type AgentVersionsInput struct {
 }
 
 // RegisterAgentsEndpoints registers all agent-related endpoints with a custom path prefix
-// isAdmin: if true, shows all resources; if false, only shows published resources
+// isAdmin: if true, registers admin-only endpoints and tags operations as "admin"
 func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool) {
 	// Determine the tags based on whether this is admin or public
 	tags := []string{"agents"}
@@ -63,12 +63,6 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 	}, func(ctx context.Context, input *ListAgentsInput) (*types.Response[agentmodels.AgentListResponse], error) {
 		// Build filter
 		filter := &database.AgentFilter{}
-
-		// For public endpoints, only show published resources
-		if !isAdmin {
-			published := true
-			filter.Published = &published
-		}
 
 		if input.UpdatedSince != "" {
 			if updatedTime, err := time.Parse(time.RFC3339, input.UpdatedSince); err == nil {
@@ -243,35 +237,6 @@ func createAgentHandler(ctx context.Context, input *CreateAgentInput, registry s
 	return &types.Response[agentmodels.AgentResponse]{Body: *createdAgent}, nil
 }
 
-// RegisterAgentsCreateEndpoint registers the public agents create/update endpoint at /agents/publish
-// This endpoint creates or updates an agent in the registry (published defaults to false)
-func RegisterAgentsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
-	huma.Register(api, huma.Operation{
-		OperationID: "create-agent" + strings.ReplaceAll(pathPrefix, "/", "-"),
-		Method:      http.MethodPost,
-		Path:        pathPrefix + "/agents/publish",
-		Summary:     "Create/update Agentic agent",
-		Description: "Create a new Agentic agent in the registry or update an existing one. By default, agents are created as unpublished (published=false).",
-		Tags:        []string{"agents", "publish"},
-		Security:    []map[string][]string{{"bearer": {}}},
-	}, func(ctx context.Context, input *CreateAgentInput) (*types.Response[agentmodels.AgentResponse], error) {
-		return createAgentHandler(ctx, input, registry)
-	})
-
-	// Also register a dedicated /agents/push endpoint for "push" operations that create an unpublished agent.
-	huma.Register(api, huma.Operation{
-		OperationID: "push-agent" + strings.ReplaceAll(pathPrefix, "/", "-"),
-		Method:      http.MethodPost,
-		Path:        pathPrefix + "/agents/push",
-		Summary:     "Push Agentic agent (create unpublished)",
-		Description: "Create a new Agentic agent in the registry as an unpublished entry (published=false).",
-		Tags:        []string{"agents", "publish"},
-		Security:    []map[string][]string{{"bearer": {}}},
-	}, func(ctx context.Context, input *CreateAgentInput) (*types.Response[agentmodels.AgentResponse], error) {
-		return createAgentHandler(ctx, input, registry)
-	})
-}
-
 // RegisterAdminAgentsCreateEndpoint registers the admin agents create/update endpoint at /agents
 // This endpoint creates or updates an agent in the registry (published defaults to false)
 func RegisterAdminAgentsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
@@ -280,7 +245,7 @@ func RegisterAdminAgentsCreateEndpoint(api huma.API, pathPrefix string, registry
 		Method:      http.MethodPost,
 		Path:        pathPrefix + "/agents",
 		Summary:     "Create/update Agentic agent (Admin)",
-		Description: "Create a new Agentic agent in the registry or update an existing one. By default, agents are created as unpublished (published=false).",
+		Description: "Create a new Agentic agent in the registry or update an existing one. Resources are immediately visible after creation.",
 		Tags:        []string{"agents", "admin"},
 	}, func(ctx context.Context, input *CreateAgentInput) (*types.Response[agentmodels.AgentResponse], error) {
 		// Create/update the agent (published defaults to false in the service layer)
@@ -296,74 +261,3 @@ func RegisterAdminAgentsCreateEndpoint(api huma.API, pathPrefix string, registry
 	})
 }
 
-// RegisterAgentsPublishStatusEndpoints registers the publish/unpublish status endpoints for agents
-// These endpoints change the published status of existing agents
-func RegisterAgentsPublishStatusEndpoints(api huma.API, pathPrefix string, registry service.RegistryService) {
-	// Publish agent endpoint - marks an existing agent as published
-	huma.Register(api, huma.Operation{
-		OperationID: "publish-agent-status" + strings.ReplaceAll(pathPrefix, "/", "-"),
-		Method:      http.MethodPost,
-		Path:        pathPrefix + "/agents/{agentName}/versions/{version}/publish",
-		Summary:     "Publish an existing agent",
-		Description: "Mark an existing agent version as published, making it visible in public listings. This acts on an agent that was already created.",
-		Tags:        []string{"agents", "admin"},
-	}, func(ctx context.Context, input *AgentVersionDetailInput) (*types.Response[types.EmptyResponse], error) {
-		// URL-decode the agent name and version
-		agentName, err := url.PathUnescape(input.AgentName)
-		if err != nil {
-			return nil, huma.Error400BadRequest("Invalid agent name encoding", err)
-		}
-		version, err := url.PathUnescape(input.Version)
-		if err != nil {
-			return nil, huma.Error400BadRequest("Invalid version encoding", err)
-		}
-
-		// Call the service to publish the agent
-		if err := registry.PublishAgent(ctx, agentName, version); err != nil {
-			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
-				return nil, huma.Error404NotFound("Agent not found")
-			}
-			return nil, huma.Error500InternalServerError("Failed to publish agent", err)
-		}
-
-		return &types.Response[types.EmptyResponse]{
-			Body: types.EmptyResponse{
-				Message: "Agent published successfully",
-			},
-		}, nil
-	})
-
-	// Unpublish agent endpoint - marks an existing agent as unpublished
-	huma.Register(api, huma.Operation{
-		OperationID: "unpublish-agent-status" + strings.ReplaceAll(pathPrefix, "/", "-"),
-		Method:      http.MethodPost,
-		Path:        pathPrefix + "/agents/{agentName}/versions/{version}/unpublish",
-		Summary:     "Unpublish an existing agent",
-		Description: "Mark an existing agent version as unpublished, hiding it from public listings. This acts on an agent that was already created.",
-		Tags:        []string{"agents", "admin"},
-	}, func(ctx context.Context, input *AgentVersionDetailInput) (*types.Response[types.EmptyResponse], error) {
-		// URL-decode the agent name and version
-		agentName, err := url.PathUnescape(input.AgentName)
-		if err != nil {
-			return nil, huma.Error400BadRequest("Invalid agent name encoding", err)
-		}
-		version, err := url.PathUnescape(input.Version)
-		if err != nil {
-			return nil, huma.Error400BadRequest("Invalid version encoding", err)
-		}
-
-		// Call the service to unpublish the agent
-		if err := registry.UnpublishAgent(ctx, agentName, version); err != nil {
-			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
-				return nil, huma.Error404NotFound("Agent not found")
-			}
-			return nil, huma.Error500InternalServerError("Failed to unpublish agent", err)
-		}
-
-		return &types.Response[types.EmptyResponse]{
-			Body: types.EmptyResponse{
-				Message: "Agent unpublished successfully",
-			},
-		}, nil
-	})
-}

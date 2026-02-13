@@ -206,7 +206,7 @@ func TestPostgreSQL_GetServerByNameAndVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := db.GetServerByNameAndVersion(ctx, nil, tt.serverName, tt.version, false)
+			result, err := db.GetServerByNameAndVersion(ctx, nil, tt.serverName, tt.version)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -613,74 +613,6 @@ func TestPostgreSQL_TransactionHandling(t *testing.T) {
 	})
 }
 
-func TestPostgreSQL_ConcurrencyAndLocking(t *testing.T) {
-	db := internaldb.NewTestDB(t)
-	ctx := context.Background()
-
-	serverName := "com.example/concurrent-server"
-
-	// Test advisory locking prevents concurrent publishes
-	t.Run("advisory locking prevents race conditions", func(t *testing.T) {
-		published := make(chan bool, 2)
-		errors := make(chan error, 2)
-
-		// Launch two concurrent publish operations
-		for range 2 {
-			go func(version string) {
-				err := db.InTransaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
-					// Acquire lock
-					if err := db.AcquirePublishLock(ctx, tx, serverName); err != nil {
-						return err
-					}
-
-					// Simulate some processing time
-					time.Sleep(100 * time.Millisecond)
-
-					serverJSON := &apiv0.ServerJSON{
-						Name:        serverName,
-						Description: "Concurrent test server",
-						Version:     version,
-					}
-					officialMeta := &apiv0.RegistryExtensions{
-						Status:      model.StatusActive,
-						PublishedAt: time.Now(),
-						UpdatedAt:   time.Now(),
-						IsLatest:    true,
-					}
-
-					_, err := db.CreateServer(ctx, tx, serverJSON, officialMeta)
-					if err != nil {
-						return err
-					}
-
-					published <- true
-					return nil
-				})
-				errors <- err
-			}(time.Now().Format("20060102150405.000000"))
-		}
-
-		// Wait for both goroutines to complete
-		err1 := <-errors
-		err2 := <-errors
-
-		// One should succeed, one should wait (or fail if timeout)
-		successCount := 0
-		if err1 == nil {
-			successCount++
-		}
-		if err2 == nil {
-			successCount++
-		}
-
-		// At least one should succeed (both can succeed if advisory lock works properly)
-		assert.GreaterOrEqual(t, successCount, 1, "At least one concurrent operation should succeed")
-
-		close(published)
-		close(errors)
-	})
-}
-
 func TestPostgreSQL_HelperMethods(t *testing.T) {
 	db := internaldb.NewTestDB(t)
 	ctx := context.Background()
@@ -736,7 +668,7 @@ func TestPostgreSQL_HelperMethods(t *testing.T) {
 	})
 
 	t.Run("GetAllVersionsByServerName", func(t *testing.T) {
-		allVersions, err := db.GetAllVersionsByServerName(ctx, nil, serverName, false)
+		allVersions, err := db.GetAllVersionsByServerName(ctx, nil, serverName)
 		assert.NoError(t, err)
 		assert.Len(t, allVersions, 3)
 
@@ -907,7 +839,7 @@ func TestPostgreSQL_PerformanceScenarios(t *testing.T) {
 		assert.Equal(t, versionCount, count)
 
 		// Test getting all versions
-		allVersions, err := db.GetAllVersionsByServerName(ctx, nil, serverName, false)
+		allVersions, err := db.GetAllVersionsByServerName(ctx, nil, serverName)
 		assert.NoError(t, err)
 		assert.Len(t, allVersions, versionCount)
 

@@ -37,7 +37,6 @@ func TestMCPListServers_HappyPath(t *testing.T) {
 		t.Skip("pgvector extension not available in local Postgres; skipping MCP integration test")
 	}
 	require.NoError(t, err, "seed server")
-	require.NoError(t, svc.PublishServer(ctx, serverName, serverVersion), "publish server")
 
 	// Wire up MCP server and client over in-memory transports.
 	server := NewServer(svc)

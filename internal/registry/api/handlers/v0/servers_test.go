@@ -174,7 +174,7 @@ func TestListServersSemanticSearch(t *testing.T) {
 			Version:     "1.0.0",
 		})
 		require.NoError(t, err)
-		require.NoError(t, registryService.PublishServer(ctx, srv.name, "1.0.0"))
+
 	}
 
 	// Seed embeddings for deterministic ordering
@@ -251,9 +251,6 @@ func TestGetLatestServerVersionEndpoint(t *testing.T) {
 		Version:     "1.0.0",
 	})
 	require.NoError(t, err)
-	// Publish the server so it's visible via public endpoints
-	err = registryService.PublishServer(ctx, "com.example/detail-server", "1.0.0")
-	require.NoError(t, err)
 
 	// Create API
 	mux := http.NewServeMux()
@@ -327,8 +324,6 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 		Version:     "1.0.0",
 	})
 	require.NoError(t, err)
-	err = registryService.PublishServer(ctx, serverName, "1.0.0")
-	require.NoError(t, err)
 
 	_, err = registryService.CreateServer(ctx, &apiv0.ServerJSON{
 		Schema:      model.CurrentSchemaURL,
@@ -336,8 +331,6 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 		Description: "Version test server v2",
 		Version:     "2.0.0",
 	})
-	require.NoError(t, err)
-	err = registryService.PublishServer(ctx, serverName, "2.0.0")
 	require.NoError(t, err)
 
 	// Add version with build metadata for URL encoding test
@@ -347,8 +340,6 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 		Description: "Version test server with build metadata",
 		Version:     "1.0.0+20130313144700",
 	})
-	require.NoError(t, err)
-	err = registryService.PublishServer(ctx, serverName, "1.0.0+20130313144700")
 	require.NoError(t, err)
 
 	// Create API
@@ -608,9 +599,6 @@ func TestGetAllVersionsEndpoint(t *testing.T) {
 			Version:     version,
 		})
 		require.NoError(t, err)
-		// Publish each version so it's visible via public endpoints
-		err = registryService.PublishServer(ctx, serverName, version)
-		require.NoError(t, err)
 	}
 
 	// Create API
@@ -717,9 +705,6 @@ func TestServersEndpointEdgeCases(t *testing.T) {
 			Description: server.description,
 			Version:     server.version,
 		})
-		require.NoError(t, err)
-		// Publish each server so it's visible via public endpoints
-		err = registryService.PublishServer(ctx, server.name, server.version)
 		require.NoError(t, err)
 	}
 

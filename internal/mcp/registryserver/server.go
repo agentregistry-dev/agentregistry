@@ -48,8 +48,6 @@ func addAgentTools(server *mcp.Server, registry service.RegistryService) {
 		Description: "List published agents with optional search and pagination",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listAgentsArgs) (*mcp.CallToolResult, models.AgentListResponse, error) {
 		filter := &database.AgentFilter{}
-		published := true
-		filter.Published = &published
 
 		if args.UpdatedSince != "" {
 			ts, err := time.Parse(time.RFC3339, args.UpdatedSince)
@@ -123,8 +121,6 @@ func addServerTools(server *mcp.Server, registry service.RegistryService) {
 		Description: "List published MCP servers with optional search and pagination",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listServersArgs) (*mcp.CallToolResult, apiv0.ServerListResponse, error) {
 		filter := &database.ServerFilter{}
-		published := true
-		filter.Published = &published
 
 		if args.UpdatedSince != "" {
 			ts, err := time.Parse(time.RFC3339, args.UpdatedSince)
@@ -177,9 +173,8 @@ func addServerTools(server *mcp.Server, registry service.RegistryService) {
 			version = "latest"
 		}
 
-		publishedOnly := true
 		if args.All {
-			servers, err := registry.GetAllVersionsByServerName(ctx, args.Name, publishedOnly)
+			servers, err := registry.GetAllVersionsByServerName(ctx, args.Name)
 			if err != nil {
 				return nil, apiv0.ServerListResponse{}, err
 			}
@@ -193,7 +188,7 @@ func addServerTools(server *mcp.Server, registry service.RegistryService) {
 			return nil, out, nil
 		}
 
-		serverResp, err := fetchSingleServer(ctx, registry, args.Name, version, publishedOnly)
+		serverResp, err := fetchSingleServer(ctx, registry, args.Name, version)
 		if err != nil {
 			return nil, apiv0.ServerListResponse{}, err
 		}
@@ -250,8 +245,6 @@ func addSkillTools(server *mcp.Server, registry service.RegistryService) {
 		Description: "List published skills with optional search and pagination",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listSkillsArgs) (*mcp.CallToolResult, models.SkillListResponse, error) {
 		filter := &database.SkillFilter{}
-		published := true
-		filter.Published = &published
 
 		if args.UpdatedSince != "" {
 			ts, err := time.Parse(time.RFC3339, args.UpdatedSince)
@@ -488,9 +481,9 @@ type ServerReadmePayload struct {
 	FetchedAt   time.Time `json:"fetched_at"`
 }
 
-func fetchSingleServer(ctx context.Context, registry service.RegistryService, name, version string, publishedOnly bool) (*apiv0.ServerResponse, error) {
+func fetchSingleServer(ctx context.Context, registry service.RegistryService, name, version string) (*apiv0.ServerResponse, error) {
 	if version == "latest" {
-		servers, err := registry.GetAllVersionsByServerName(ctx, name, publishedOnly)
+		servers, err := registry.GetAllVersionsByServerName(ctx, name)
 		if err != nil {
 			return nil, err
 		}
@@ -505,7 +498,7 @@ func fetchSingleServer(ctx context.Context, registry service.RegistryService, na
 		return servers[0], nil
 	}
 
-	return registry.GetServerByNameAndVersion(ctx, name, version, publishedOnly)
+	return registry.GetServerByNameAndVersion(ctx, name, version)
 }
 
 func clampLimit(limit int) int {

@@ -85,8 +85,8 @@ func (s *registryServiceImpl) GetServerByName(ctx context.Context, serverName st
 }
 
 // GetServerByNameAndVersion retrieves a specific version of a server by server name and version
-func (s *registryServiceImpl) GetServerByNameAndVersion(ctx context.Context, serverName string, version string, publishedOnly bool) (*apiv0.ServerResponse, error) {
-	serverRecord, err := s.db.GetServerByNameAndVersion(ctx, nil, serverName, version, publishedOnly)
+func (s *registryServiceImpl) GetServerByNameAndVersion(ctx context.Context, serverName string, version string) (*apiv0.ServerResponse, error) {
+	serverRecord, err := s.db.GetServerByNameAndVersion(ctx, nil, serverName, version)
 	if err != nil {
 		return nil, err
 	}
@@ -95,8 +95,8 @@ func (s *registryServiceImpl) GetServerByNameAndVersion(ctx context.Context, ser
 }
 
 // GetAllVersionsByServerName retrieves all versions of a server by server name
-func (s *registryServiceImpl) GetAllVersionsByServerName(ctx context.Context, serverName string, publishedOnly bool) ([]*apiv0.ServerResponse, error) {
-	serverRecords, err := s.db.GetAllVersionsByServerName(ctx, nil, serverName, publishedOnly)
+func (s *registryServiceImpl) GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
+	serverRecords, err := s.db.GetAllVersionsByServerName(ctx, nil, serverName)
 	if err != nil {
 		return nil, err
 	}
@@ -121,11 +121,6 @@ func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx 
 
 	publishTime := time.Now()
 	serverJSON := *req
-
-	// Acquire advisory lock to prevent concurrent publishes of the same server
-	if err := s.db.AcquirePublishLock(ctx, tx, serverJSON.Name); err != nil {
-		return nil, err
-	}
 
 	// Check for duplicate remote URLs
 	if err := s.validateNoDuplicateRemoteURLs(ctx, tx, serverJSON); err != nil {
@@ -284,11 +279,6 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 	publishTime := time.Now()
 	skillJSON := *req
 
-	// Acquire advisory lock per skill name
-	if err := s.db.AcquirePublishLock(ctx, tx, skillJSON.Name); err != nil {
-		return nil, err
-	}
-
 	// Check duplicate remote URLs among skills
 	for _, remote := range skillJSON.Remotes {
 		filter := &database.SkillFilter{RemoteURL: &remote.URL}
@@ -355,20 +345,6 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 	return s.db.CreateSkill(ctx, tx, &skillJSON, officialMeta)
 }
 
-// PublishSkill marks a skill as published
-func (s *registryServiceImpl) PublishSkill(ctx context.Context, skillName, version string) error {
-	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
-		return s.db.PublishSkill(txCtx, tx, skillName, version)
-	})
-}
-
-// UnpublishSkill marks a skill as unpublished
-func (s *registryServiceImpl) UnpublishSkill(ctx context.Context, skillName, version string) error {
-	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
-		return s.db.UnpublishSkill(txCtx, tx, skillName, version)
-	})
-}
-
 // UpdateServer updates an existing server with new details
 func (s *registryServiceImpl) UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
 	// Wrap the entire operation in a transaction
@@ -380,7 +356,7 @@ func (s *registryServiceImpl) UpdateServer(ctx context.Context, serverName, vers
 // updateServerInTransaction contains the actual UpdateServer logic within a transaction
 func (s *registryServiceImpl) updateServerInTransaction(ctx context.Context, tx pgx.Tx, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
 	// Get current server to check if it's deleted or being deleted
-	currentServer, err := s.db.GetServerByNameAndVersion(ctx, tx, serverName, version, false)
+	currentServer, err := s.db.GetServerByNameAndVersion(ctx, tx, serverName, version)
 	if err != nil {
 		return nil, err
 	}
@@ -394,11 +370,6 @@ func (s *registryServiceImpl) updateServerInTransaction(ctx context.Context, tx 
 
 	// Validate the request, potentially skipping registry validation for deleted servers
 	if err := s.validateUpdateRequest(ctx, *req, skipRegistryValidation); err != nil {
-		return nil, err
-	}
-
-	// Acquire advisory lock to prevent concurrent edits of servers with same name
-	if err := s.db.AcquirePublishLock(ctx, tx, serverName); err != nil {
 		return nil, err
 	}
 
@@ -437,7 +408,7 @@ func (s *registryServiceImpl) StoreServerReadme(ctx context.Context, serverName,
 	}
 
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
-		if _, err := s.db.GetServerByNameAndVersion(txCtx, tx, serverName, version, false); err != nil {
+		if _, err := s.db.GetServerByNameAndVersion(txCtx, tx, serverName, version); err != nil {
 			return err
 		}
 
@@ -464,31 +435,6 @@ func (s *registryServiceImpl) GetServerReadmeLatest(ctx context.Context, serverN
 
 func (s *registryServiceImpl) GetServerReadmeByVersion(ctx context.Context, serverName, version string) (*database.ServerReadme, error) {
 	return s.db.GetServerReadme(ctx, nil, serverName, version)
-}
-
-// PublishServer marks a server as published
-func (s *registryServiceImpl) PublishServer(ctx context.Context, serverName, version string) error {
-	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
-		return s.db.PublishServer(txCtx, tx, serverName, version)
-	})
-}
-
-// UnpublishServer marks a server as unpublished
-func (s *registryServiceImpl) UnpublishServer(ctx context.Context, serverName, version string) error {
-	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
-		// Check if the server is currently deployed
-		deployment, err := s.db.GetDeploymentByNameAndVersion(txCtx, tx, serverName, version, "mcp")
-		if err != nil && !errors.Is(err, database.ErrNotFound) {
-			return fmt.Errorf("failed to check deployment status: %w", err)
-		}
-
-		// If deployed (record exists) and it's the same version being unpublished, prevent unpublish
-		if deployment != nil && deployment.Version == version {
-			return fmt.Errorf("cannot unpublish deployed server %s (version %s): server must be removed from deployment first", serverName, version)
-		}
-
-		return s.db.UnpublishServer(txCtx, tx, serverName, version)
-	})
 }
 
 // DeleteServer permanently removes a server version from the registry
@@ -571,11 +517,6 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 
 	publishTime := time.Now()
 	agentJSON := *req
-
-	// Acquire advisory lock per agent name
-	if err := s.db.AcquirePublishLock(ctx, tx, agentJSON.Name); err != nil {
-		return nil, err
-	}
 
 	// Check duplicate remote URLs among agents
 	for _, remote := range agentJSON.Remotes {
@@ -667,20 +608,6 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 	return result, nil
 }
 
-// PublishAgent marks an agent as published
-func (s *registryServiceImpl) PublishAgent(ctx context.Context, agentName, version string) error {
-	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
-		return s.db.PublishAgent(txCtx, tx, agentName, version)
-	})
-}
-
-// UnpublishAgent marks an agent as unpublished
-func (s *registryServiceImpl) UnpublishAgent(ctx context.Context, agentName, version string) error {
-	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
-		return s.db.UnpublishAgent(txCtx, tx, agentName, version)
-	})
-}
-
 // DeleteAgent permanently removes an agent version from the registry
 func (s *registryServiceImpl) DeleteAgent(ctx context.Context, agentName, version string) error {
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
@@ -762,13 +689,9 @@ func (s *registryServiceImpl) GetDeploymentByNameAndVersion(ctx context.Context,
 	return s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version, artifactType)
 }
 
-func (s *registryServiceImpl) IsServerPublished(ctx context.Context, serverName, version string) (bool, error) {
-	return s.db.IsServerPublished(ctx, nil, serverName, version)
-}
-
 // DeployServer deploys a server with configuration
 func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool, runtimeTarget string) (*models.Deployment, error) {
-	serverResp, err := s.db.GetServerByNameAndVersion(ctx, nil, serverName, version, true)
+	serverResp, err := s.db.GetServerByNameAndVersion(ctx, nil, serverName, version)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
 			return nil, fmt.Errorf("server %s not found in registry: %w", serverName, database.ErrNotFound)
@@ -979,7 +902,7 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 
 		switch dep.ResourceType {
 		case "mcp":
-			depServer, err := s.GetServerByNameAndVersion(ctx, dep.ServerName, dep.Version, true)
+			depServer, err := s.GetServerByNameAndVersion(ctx, dep.ServerName, dep.Version)
 			if err != nil {
 				log.Printf("Warning: Failed to get server %s v%s: %v", dep.ServerName, dep.Version, err)
 				continue
@@ -1094,7 +1017,7 @@ func (s *registryServiceImpl) resolveAgentManifestMCPServers(ctx context.Context
 		}
 
 		// Use the registry service's own database instead of making HTTP calls
-		serverResp, err := s.GetServerByNameAndVersion(ctx, mcpServer.RegistryServerName, version, true)
+		serverResp, err := s.GetServerByNameAndVersion(ctx, mcpServer.RegistryServerName, version)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get server %q version %s from registry database: %w", mcpServer.RegistryServerName, version, err)
 		}

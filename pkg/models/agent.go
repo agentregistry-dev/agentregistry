@@ -33,7 +33,6 @@ type AgentRegistryExtensions struct {
 	PublishedAt time.Time `json:"publishedAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 	IsLatest    bool      `json:"isLatest"`
-	Published   bool      `json:"published"`
 }
 
 type AgentSemanticMeta struct {

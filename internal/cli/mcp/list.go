@@ -209,7 +209,7 @@ func sortServers(servers []*v0.ServerResponse, column string) {
 
 func printServersTable(servers []*v0.ServerResponse, deployedServers []*client.DeploymentResponse) {
 	t := printer.NewTablePrinter(os.Stdout)
-	t.SetHeaders("Name", "Version", "Type", "Published", "Deployed", "Updated")
+	t.SetHeaders("Name", "Version", "Type", "Deployed", "Updated")
 
 	// Create a map of deployed servers by name and version
 	deployedMap := make(map[string]map[string]*client.DeploymentResponse)
@@ -221,31 +221,19 @@ func printServersTable(servers []*v0.ServerResponse, deployedServers []*client.D
 	}
 
 	for _, s := range servers {
-		// Parse the stored combined data
 		registryType := "<none>"
 		updatedAt := ""
 
-		// Extract registry type from packages or remotes
 		if len(s.Server.Packages) > 0 {
 			registryType = s.Server.Packages[0].RegistryType
 		} else if len(s.Server.Remotes) > 0 {
 			registryType = s.Server.Remotes[0].Type
 		}
 
-		// Extract published status using the published boolean field
-		publishedStatus := "False"
-		isPublished, err := isServerPublished(s.Server.Name, s.Server.Version)
-		if err != nil {
-			log.Printf("Warning: Failed to check if server is published: %v", err)
-		}
-		if isPublished {
-			publishedStatus = "True"
-		}
 		if !s.Meta.Official.UpdatedAt.IsZero() {
 			updatedAt = printer.FormatAge(s.Meta.Official.UpdatedAt)
 		}
 
-		// Use the full server name (includes namespace if present)
 		fullName := s.Server.Name
 
 		deployedStatus := "False"
@@ -253,14 +241,12 @@ func printServersTable(servers []*v0.ServerResponse, deployedServers []*client.D
 			if _, ok := serverDeployments[s.Server.Version]; ok {
 				deployedStatus = "True"
 			}
-			// If this specific version is not deployed, show False even if another version is deployed
 		}
 
 		t.AddRow(
 			printer.TruncateString(fullName, 50),
 			s.Server.Version,
 			registryType,
-			publishedStatus,
 			deployedStatus,
 			updatedAt,
 		)

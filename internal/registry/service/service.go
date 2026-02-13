@@ -20,9 +20,9 @@ type RegistryService interface {
 	// GetServerByName retrieve latest version of a server by server name
 	GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error)
 	// GetServerByNameAndVersion retrieve specific version of a server by server name and version
-	GetServerByNameAndVersion(ctx context.Context, serverName string, version string, publishedOnly bool) (*apiv0.ServerResponse, error)
+	GetServerByNameAndVersion(ctx context.Context, serverName string, version string) (*apiv0.ServerResponse, error)
 	// GetAllVersionsByServerName retrieve all versions of a server by server name
-	GetAllVersionsByServerName(ctx context.Context, serverName string, publishedOnly bool) ([]*apiv0.ServerResponse, error)
+	GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error)
 	// CreateServer creates a new server version
 	CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
 	// UpdateServer updates an existing server and optionally its status
@@ -33,10 +33,6 @@ type RegistryService interface {
 	GetServerReadmeLatest(ctx context.Context, serverName string) (*database.ServerReadme, error)
 	// GetServerReadmeByVersion retrieves the README for a specific server version
 	GetServerReadmeByVersion(ctx context.Context, serverName, version string) (*database.ServerReadme, error)
-	// PublishServer marks a server as published
-	PublishServer(ctx context.Context, serverName, version string) error
-	// UnpublishServer marks a server as unpublished
-	UnpublishServer(ctx context.Context, serverName, version string) error
 	// DeleteServer permanently removes a server version from the registry
 	DeleteServer(ctx context.Context, serverName, version string) error
 	// UpsertServerEmbedding stores semantic embedding metadata for a server version
@@ -55,10 +51,6 @@ type RegistryService interface {
 	GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error)
 	// CreateAgent creates a new agent version
 	CreateAgent(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error)
-	// PublishAgent marks an agent as published
-	PublishAgent(ctx context.Context, agentName, version string) error
-	// UnpublishAgent marks an agent as unpublished
-	UnpublishAgent(ctx context.Context, agentName, version string) error
 	// DeleteAgent permanently removes an agent version from the registry
 	DeleteAgent(ctx context.Context, agentName, version string) error
 	// UpsertAgentEmbedding stores semantic embedding metadata for an agent version
@@ -76,10 +68,6 @@ type RegistryService interface {
 	GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error)
 	// CreateSkill creates a new skill version
 	CreateSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error)
-	// PublishSkill marks a skill as published
-	PublishSkill(ctx context.Context, skillName, version string) error
-	// UnpublishSkill marks a skill as unpublished
-	UnpublishSkill(ctx context.Context, skillName, version string) error
 
 	// Deployments APIs
 	// GetDeployments retrieves all deployed resources (MCP servers, agents)

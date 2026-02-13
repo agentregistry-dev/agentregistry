@@ -38,23 +38,19 @@ var (
 
 var PublishCmd = &cobra.Command{
 	Use:   "publish <mcp-server-folder-path|server-name>",
-	Short: "Build and publish an MCP Server or re-publish an existing server",
+	Short: "Build and publish an MCP Server to the registry",
 	Long: `Publish an MCP Server to the registry.
 
-This command supports three modes:
+This command supports two modes:
 1. Build and publish from local folder: Provide a path to a folder containing mcp.yaml
-2. Re-publish existing server: Provide a server name from the registry to change its status to published
-3. Publish package reference: Use --registry-type flag to publish NPM/PyPI/OCI package references
+2. Publish package reference: Use --registry-type flag to publish NPM/PyPI/OCI package references
 
 Examples:
   # Build and publish from local folder
   arctl mcp publish ./my-server --docker-url docker.io/myorg --push
-  
+
   # Build and publish from local folder and include a repository reference
   arctl mcp publish ./my-server --docker-url docker.io/myorg --push --github https://github.com/repo/user
-
-  # Re-publish an existing server from the registry
-  arctl mcp publish io.github.example/my-server --version 1.0.0
 
   # Publish an NPM package reference (name must be namespace/name format)
   arctl mcp publish myorg/filesystem-server \
@@ -202,7 +198,7 @@ func publishPackageReference(serverName string) error {
 	}
 
 	printer.PrintInfo(fmt.Sprintf("Publishing %s reference: %s", normalizedType, serverJSON.Name))
-	_, err := apiClient.PublishMCPServer(serverJSON)
+	_, err := apiClient.CreateMCPServer(serverJSON)
 	if err != nil {
 		return fmt.Errorf("failed to publish package reference: %w", err)
 	}
@@ -212,36 +208,17 @@ func publishPackageReference(serverName string) error {
 }
 
 func publishExistingServer(serverName string, version string) error {
-	// We need to check get all servers with the same name and version from the registry.
-	// If the specific version is not found, we should return an error.
-	// Once found, we need to check if it's already published.
-
-	isPublished, err := isServerPublished(serverName, version)
+	// Verify the server exists in the registry
+	server, err := apiClient.GetServerByNameAndVersion(serverName, version)
 	if err != nil {
-		return fmt.Errorf("failed to check if server is published: %w", err)
+		return fmt.Errorf("error querying registry: %w", err)
 	}
-	if isPublished {
-		return fmt.Errorf("server %s version %s is already published", serverName, version)
-	}
-
-	servers, err := apiClient.GetAllServers()
-	if err != nil {
-		return fmt.Errorf("failed to get servers: %w", err)
+	if server == nil {
+		return fmt.Errorf("server %s version %s not found in registry", serverName, version)
 	}
 
-	for _, server := range servers {
-		if server.Server.Name == serverName && server.Server.Version == version {
-			// We found the entry, it's not published yet, so we can publish it.
-			fmt.Printf("Publishing server: %s, Version: %s\n", server.Server.Name, server.Server.Version)
-			err = apiClient.PublishMCPServerStatus(serverName, version)
-			if err != nil {
-				return fmt.Errorf("failed to publish server: %w", err)
-			}
-			return nil
-		}
-	}
-
-	return fmt.Errorf("server %s version %s not found in registry", serverName, version)
+	fmt.Printf("Server %s version %s already exists in the registry\n", serverName, version)
+	return nil
 }
 
 func buildAndPublishLocal(absPath string) error {
@@ -329,7 +306,7 @@ func buildAndPublishLocal(absPath string) error {
 		j, _ := json.Marshal(serverJSON)
 		printer.PrintInfo("[DRY RUN] Would publish mcp server to registry " + apiClient.BaseURL + ": " + string(j))
 	} else {
-		_, err = apiClient.PublishMCPServer(serverJSON)
+		_, err = apiClient.CreateMCPServer(serverJSON)
 		if err != nil {
 			return fmt.Errorf("failed to publish mcp server to registry: %w", err)
 		}
