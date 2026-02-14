@@ -455,16 +455,15 @@ func createServerHandler(ctx context.Context, input *CreateServerInput, registry
 	}, nil
 }
 
-// RegisterAdminCreateEndpoint registers the admin create/update server endpoint at /servers
-// This endpoint creates or updates a server in the registry (published defaults to false)
-func RegisterAdminCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
+// RegisterServersCreateEndpoint registers POST /servers (create or update; immediately visible).
+func RegisterServersCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
 	huma.Register(api, huma.Operation{
-		OperationID: "admin-create-server" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		OperationID: "create-server" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodPost,
 		Path:        pathPrefix + "/servers",
-		Summary:     "Create/update MCP server (Admin)",
+		Summary:     "Create or update MCP server",
 		Description: "Create a new MCP server in the registry or update an existing one. Resources are immediately visible after creation.",
-		Tags:        []string{"servers", "admin"},
+		Tags:        []string{"servers"},
 	}, func(ctx context.Context, input *CreateServerInput) (*types.Response[models.ServerResponse], error) {
 		return createServerHandler(ctx, input, registry)
 	})

@@ -237,16 +237,15 @@ func createAgentHandler(ctx context.Context, input *CreateAgentInput, registry s
 	return &types.Response[agentmodels.AgentResponse]{Body: *createdAgent}, nil
 }
 
-// RegisterAdminAgentsCreateEndpoint registers the admin agents create/update endpoint at /agents
-// This endpoint creates or updates an agent in the registry (published defaults to false)
-func RegisterAdminAgentsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
+// RegisterAgentsCreateEndpoint registers POST /agents (create or update; immediately visible).
+func RegisterAgentsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
 	huma.Register(api, huma.Operation{
-		OperationID: "admin-create-agent" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		OperationID: "create-agent" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodPost,
 		Path:        pathPrefix + "/agents",
-		Summary:     "Create/update Agentic agent (Admin)",
+		Summary:     "Create or update agent",
 		Description: "Create a new Agentic agent in the registry or update an existing one. Resources are immediately visible after creation.",
-		Tags:        []string{"agents", "admin"},
+		Tags:        []string{"agents"},
 	}, func(ctx context.Context, input *CreateAgentInput) (*types.Response[agentmodels.AgentResponse], error) {
 		// Create/update the agent (published defaults to false in the service layer)
 		createdAgent, err := registry.CreateAgent(ctx, &input.Body)

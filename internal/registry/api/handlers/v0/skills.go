@@ -194,16 +194,15 @@ func createSkillHandler(ctx context.Context, input *CreateSkillInput, registry s
 	return &types.Response[skillmodels.SkillResponse]{Body: *createdSkill}, nil
 }
 
-// RegisterAdminSkillsCreateEndpoint registers the admin skills create/update endpoint at /skills
-// This endpoint creates or updates a skill in the registry (published defaults to false)
-func RegisterAdminSkillsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
+// RegisterSkillsCreateEndpoint registers POST /skills (create or update; immediately visible).
+func RegisterSkillsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
 	huma.Register(api, huma.Operation{
-		OperationID: "admin-create-skill" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		OperationID: "create-skill" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodPost,
 		Path:        pathPrefix + "/skills",
-		Summary:     "Create/update Agentic skill (Admin)",
+		Summary:     "Create or update skill",
 		Description: "Create a new Agentic skill in the registry or update an existing one. Resources are immediately visible after creation.",
-		Tags:        []string{"skills", "admin"},
+		Tags:        []string{"skills"},
 	}, func(ctx context.Context, input *CreateSkillInput) (*types.Response[skillmodels.SkillResponse], error) {
 		// Create/update the skill (published defaults to false in the service layer)
 		createdSkill, err := registry.CreateSkill(ctx, &input.Body)
