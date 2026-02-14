@@ -122,6 +122,11 @@ func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx 
 	publishTime := time.Now()
 	serverJSON := *req
 
+	// Serialize concurrent creates for the same server to avoid idx_unique_latest_per_server violations
+	if err := s.db.AcquireServerCreateLock(ctx, tx, serverJSON.Name); err != nil {
+		return nil, err
+	}
+
 	// Check for duplicate remote URLs
 	if err := s.validateNoDuplicateRemoteURLs(ctx, tx, serverJSON); err != nil {
 		return nil, err

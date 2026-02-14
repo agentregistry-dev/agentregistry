@@ -123,6 +123,9 @@ type Database interface {
 	CheckVersionExists(ctx context.Context, tx pgx.Tx, serverName, version string) (bool, error)
 	// UnmarkAsLatest marks the current latest version of a server as no longer latest
 	UnmarkAsLatest(ctx context.Context, tx pgx.Tx, serverName string) error
+	// AcquireServerCreateLock acquires a transaction-scoped advisory lock for creating a server version.
+	// Call at the start of a create-server transaction to serialize concurrent creates for the same server name.
+	AcquireServerCreateLock(ctx context.Context, tx pgx.Tx, serverName string) error
 	// SetServerEmbedding upserts the semantic embedding metadata for a server version
 	SetServerEmbedding(ctx context.Context, tx pgx.Tx, serverName, version string, embedding *SemanticEmbedding) error
 	// GetServerEmbeddingMetadata returns metadata about a server's embedding without loading the vector

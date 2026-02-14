@@ -810,6 +810,21 @@ func (db *PostgreSQL) UnmarkAsLatest(ctx context.Context, tx pgx.Tx, serverName 
 	return nil
 }
 
+// AcquireServerCreateLock acquires a transaction-scoped advisory lock so that concurrent
+// CreateServer calls for the same server name serialize and avoid unique constraint violations
+// on idx_unique_latest_per_server.
+func (db *PostgreSQL) AcquireServerCreateLock(ctx context.Context, tx pgx.Tx, serverName string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	lockKey := "server." + serverName
+	_, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", lockKey)
+	if err != nil {
+		return fmt.Errorf("failed to acquire server create lock: %w", err)
+	}
+	return nil
+}
+
 // DeleteServer permanently removes a server version from the database
 func (db *PostgreSQL) DeleteServer(ctx context.Context, tx pgx.Tx, serverName, version string) error {
 	if ctx.Err() != nil {
