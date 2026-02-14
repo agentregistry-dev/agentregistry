@@ -77,9 +77,9 @@ type ServerDetailInput struct {
 
 // ServerVersionDetailInput represents the input for getting a specific version
 type ServerVersionDetailInput struct {
-	ServerName    string `path:"serverName" json:"serverName" doc:"URL-encoded server name" example:"com.example%2Fmy-server"`
-	Version       string `path:"version" json:"version" doc:"URL-encoded server version" example:"1.0.0"`
-	All           bool   `query:"all" json:"all,omitempty" doc:"If true, return all versions of the server instead of a single version" default:"false"`
+	ServerName string `path:"serverName" json:"serverName" doc:"URL-encoded server name" example:"com.example%2Fmy-server"`
+	Version    string `path:"version" json:"version" doc:"URL-encoded server version" example:"1.0.0"`
+	All        bool   `query:"all" json:"all,omitempty" doc:"If true, return all versions of the server instead of a single version" default:"false"`
 }
 
 // ServerVersionsInput represents the input for listing all versions of a server
@@ -468,4 +468,3 @@ func RegisterServersCreateEndpoint(api huma.API, pathPrefix string, registry ser
 		return createServerHandler(ctx, input, registry)
 	})
 }
-

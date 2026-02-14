@@ -247,16 +247,6 @@ func RegisterAgentsCreateEndpoint(api huma.API, pathPrefix string, registry serv
 		Description: "Create a new Agentic agent in the registry or update an existing one. Resources are immediately visible after creation.",
 		Tags:        []string{"agents"},
 	}, func(ctx context.Context, input *CreateAgentInput) (*types.Response[agentmodels.AgentResponse], error) {
-		// Create/update the agent (published defaults to false in the service layer)
-		createdAgent, err := registry.CreateAgent(ctx, &input.Body)
-		if err != nil {
-			if errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
-				return nil, huma.Error404NotFound("Not found")
-			}
-			return nil, huma.Error400BadRequest("Failed to create agent", err)
-		}
-
-		return &types.Response[agentmodels.AgentResponse]{Body: *createdAgent}, nil
+		return createAgentHandler(ctx, input, registry)
 	})
 }
-

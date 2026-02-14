@@ -204,16 +204,6 @@ func RegisterSkillsCreateEndpoint(api huma.API, pathPrefix string, registry serv
 		Description: "Create a new Agentic skill in the registry or update an existing one. Resources are immediately visible after creation.",
 		Tags:        []string{"skills"},
 	}, func(ctx context.Context, input *CreateSkillInput) (*types.Response[skillmodels.SkillResponse], error) {
-		// Create/update the skill (published defaults to false in the service layer)
-		createdSkill, err := registry.CreateSkill(ctx, &input.Body)
-		if err != nil {
-			if errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
-				return nil, huma.Error404NotFound("Not found")
-			}
-			return nil, huma.Error400BadRequest("Failed to create skill", err)
-		}
-
-		return &types.Response[skillmodels.SkillResponse]{Body: *createdSkill}, nil
+		return createSkillHandler(ctx, input, registry)
 	})
 }
-

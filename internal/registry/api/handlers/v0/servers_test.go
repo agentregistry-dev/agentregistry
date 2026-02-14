@@ -174,7 +174,6 @@ func TestListServersSemanticSearch(t *testing.T) {
 			Version:     "1.0.0",
 		})
 		require.NoError(t, err)
-
 	}
 
 	// Seed embeddings for deterministic ordering
