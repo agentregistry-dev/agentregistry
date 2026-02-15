@@ -43,12 +43,10 @@ type AgentVersionsInput struct {
 	AgentName string `path:"agentName" json:"agentName" doc:"URL-encoded agent name" example:"com.example%2Fmy-agent"`
 }
 
-// RegisterAgentsEndpoints registers all agent-related endpoints with a custom path prefix
-// isAdmin: if true, registers admin-only endpoints and tags operations as "admin"
-func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool) {
-	// Determine the tags based on whether this is admin or public
+// RegisterAgentsEndpoints registers all agent-related endpoints with a custom path prefix.
+func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService) {
 	tags := []string{"agents"}
-	if isAdmin {
+	if strings.Contains(pathPrefix, "admin") {
 		tags = append(tags, "admin")
 	}
 

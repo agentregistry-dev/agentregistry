@@ -97,9 +97,9 @@ type ServerReadmeResponse struct {
 	FetchedAt   time.Time `json:"fetched_at"`
 }
 
-// RegisterServersEndpoints registers all server-related endpoints with a custom path prefix
-// isAdmin: if true, registers admin-only endpoints (e.g. delete) and tags operations as "admin"
-func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool) {
+// RegisterServersEndpoints registers all server-related endpoints with a custom path prefix.
+func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.RegistryService) {
+	isAdmin := strings.Contains(pathPrefix, "admin")
 	if isAdmin {
 		huma.Register(api, huma.Operation{
 			OperationID: "delete-server-version" + strings.ReplaceAll(pathPrefix, "/", "-"),

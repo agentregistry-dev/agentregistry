@@ -47,17 +47,15 @@ func registerPublicRoutes(
 	metrics *telemetry.Metrics,
 	versionInfo *v0.VersionBody,
 ) {
-	isAdmin := false
-
 	registerCommonEndpoints(api, pathPrefix, cfg, metrics, versionInfo)
-	v0.RegisterServersEndpoints(api, pathPrefix, registry, isAdmin)
+	v0.RegisterServersEndpoints(api, pathPrefix, registry)
 	v0.RegisterServersCreateEndpoint(api, pathPrefix, registry)
 	v0.RegisterEditEndpoints(api, pathPrefix, registry)
 	v0auth.RegisterAuthEndpoints(api, pathPrefix, cfg)
 	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry)
-	v0.RegisterAgentsEndpoints(api, pathPrefix, registry, isAdmin)
+	v0.RegisterAgentsEndpoints(api, pathPrefix, registry)
 	v0.RegisterAgentsCreateEndpoint(api, pathPrefix, registry)
-	v0.RegisterSkillsEndpoints(api, pathPrefix, registry, isAdmin)
+	v0.RegisterSkillsEndpoints(api, pathPrefix, registry)
 	v0.RegisterSkillsCreateEndpoint(api, pathPrefix, registry)
 }
 
@@ -71,17 +69,14 @@ func registerAdminRoutes(
 	versionInfo *v0.VersionBody,
 	opts *RouteOptions,
 ) {
-	// Admin endpoints show all resources
-	isAdmin := true
-
 	registerCommonEndpoints(api, pathPrefix, cfg, metrics, versionInfo)
-	v0.RegisterServersEndpoints(api, pathPrefix, registry, isAdmin)
+	v0.RegisterServersEndpoints(api, pathPrefix, registry)
 	v0.RegisterServersCreateEndpoint(api, pathPrefix, registry)
 	v0.RegisterEditEndpoints(api, pathPrefix, registry)
 	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry)
-	v0.RegisterAgentsEndpoints(api, pathPrefix, registry, isAdmin)
+	v0.RegisterAgentsEndpoints(api, pathPrefix, registry)
 	v0.RegisterAgentsCreateEndpoint(api, pathPrefix, registry)
-	v0.RegisterSkillsEndpoints(api, pathPrefix, registry, isAdmin)
+	v0.RegisterSkillsEndpoints(api, pathPrefix, registry)
 	v0.RegisterSkillsCreateEndpoint(api, pathPrefix, registry)
 
 	// Register embeddings endpoints if services are available

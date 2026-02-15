@@ -41,12 +41,10 @@ type SkillVersionsInput struct {
 	SkillName string `path:"skillName" json:"skillName" doc:"URL-encoded skill name" example:"com.example%2Fmy-skill"`
 }
 
-// RegisterSkillsEndpoints registers all skill-related endpoints with a custom path prefix
-// isAdmin: if true, registers admin-only endpoints and tags operations as "admin"
-func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService, isAdmin bool) {
-	// Determine the tags based on whether this is admin or public
+// RegisterSkillsEndpoints registers all skill-related endpoints with a custom path prefix.
+func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService) {
 	tags := []string{"skills"}
-	if isAdmin {
+	if strings.Contains(pathPrefix, "admin") {
 		tags = append(tags, "admin")
 	}
 

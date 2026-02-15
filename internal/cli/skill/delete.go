@@ -6,10 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	deleteForceFlag bool
-	deleteVersion   string
-)
+var deleteVersion string
 
 var DeleteCmd = &cobra.Command{
 	Use:   "delete <skill-name>",
@@ -24,7 +21,6 @@ Examples:
 
 func init() {
 	DeleteCmd.Flags().StringVar(&deleteVersion, "version", "", "Specify the version to delete (required)")
-	DeleteCmd.Flags().BoolVar(&deleteForceFlag, "force", false, "Force delete even if deployed")
 	_ = DeleteCmd.MarkFlagRequired("version")
 }
 

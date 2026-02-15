@@ -63,7 +63,7 @@ func TestListServersEndpoint(t *testing.T) {
 	// Create API
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", registryService, false)
+	v0.RegisterServersEndpoints(api, "/v0", registryService)
 
 	tests := []struct {
 		name           string
@@ -197,7 +197,7 @@ func TestListServersSemanticSearch(t *testing.T) {
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", registryService, false)
+	v0.RegisterServersEndpoints(api, "/v0", registryService)
 
 	t.Run("semantic search ranks by similarity", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/v0/servers?search=server&semantic_search=true", nil)
@@ -254,7 +254,7 @@ func TestGetLatestServerVersionEndpoint(t *testing.T) {
 	// Create API
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", registryService, false)
+	v0.RegisterServersEndpoints(api, "/v0", registryService)
 
 	tests := []struct {
 		name           string
@@ -344,7 +344,7 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 	// Create API
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", registryService, false)
+	v0.RegisterServersEndpoints(api, "/v0", registryService)
 
 	tests := []struct {
 		name           string
@@ -524,7 +524,7 @@ func TestGetServerReadmeEndpoints(t *testing.T) {
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", registryService, false)
+	v0.RegisterServersEndpoints(api, "/v0", registryService)
 
 	t.Run("latest readme", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/v0/servers/"+url.PathEscape(serverName)+"/readme", nil)
@@ -603,7 +603,7 @@ func TestGetAllVersionsEndpoint(t *testing.T) {
 	// Create API
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", registryService, false)
+	v0.RegisterServersEndpoints(api, "/v0", registryService)
 
 	tests := []struct {
 		name           string
@@ -710,7 +710,7 @@ func TestServersEndpointEdgeCases(t *testing.T) {
 	// Create API
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", registryService, false)
+	v0.RegisterServersEndpoints(api, "/v0", registryService)
 
 	t.Run("URL encoding edge cases", func(t *testing.T) {
 		tests := []struct {
