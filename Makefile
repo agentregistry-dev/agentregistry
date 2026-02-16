@@ -43,6 +43,7 @@ help:
 	@echo "  all                  - Clean and build everything"
 	@echo "  fmt                  - Run the formatter"
 	@echo "  lint                 - Run the linter"
+	@echo "  verify               - Verify generated code is up to date"
 	@echo "  release              - Build and release the CLI"
 
 # Install UI dependencies
@@ -232,6 +233,14 @@ release-cli: bin/arctl-windows-amd64.exe.sha256
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
 	$(GOLANGCI_LINT) run
+
+.PHONY: verify
+verify: mod-tidy ## Run all verification checks
+	git diff --exit-code
+
+.PHONY: mod-tidy
+mod-tidy: ## Run go mod tidy
+	go mod tidy
 
 .PHONY: lint-fix
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
