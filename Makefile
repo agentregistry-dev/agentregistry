@@ -23,7 +23,7 @@ LDFLAGS := \
 # Local architecture detection to build for the current platform
 LOCALARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
 
-.PHONY: help install-ui build-ui clean-ui build-cli build install dev-ui run down test test-integration test-coverage test-coverage-report clean fmt lint all release-cli docker-compose-up docker-compose-down docker-compose-logs
+.PHONY: help install-ui build-ui clean-ui build-cli build install dev-ui run down test test-integration test-coverage test-coverage-report clean lint all release-cli docker-compose-up docker-compose-down docker-compose-logs
 
 # Default target
 help:
@@ -43,8 +43,7 @@ help:
 	@echo "  test-coverage-report - Run Go tests with HTML coverage report"
 	@echo "  clean                - Clean all build artifacts"
 	@echo "  all                  - Clean and build everything"
-	@echo "  fmt                  - Run the formatter"
-	@echo "  lint                 - Run the linter"
+	@echo "  lint                 - Run the linter (GOLANGCI_LINT_ARGS=--fix to auto-fix)"
 	@echo "  verify               - Verify generated code is up to date"
 	@echo "  release              - Build and release the CLI"
 
@@ -161,11 +160,6 @@ dev-build: build-ui
 	@echo "Development build complete!"
 
 
-fmt: goimports
-	$(GOIMPORT) -w .
-	@echo "✓ Formatted code"
-
-
 # Build custom agent gateway image with npx/uvx support
 docker-agentgateway:
 	@echo "Building custom age	nt gateway image..."
@@ -246,9 +240,11 @@ release-cli: bin/arctl-darwin-amd64.sha256
 release-cli: bin/arctl-darwin-arm64.sha256  
 release-cli: bin/arctl-windows-amd64.exe.sha256
 
+GOLANGCI_LINT_ARGS ?=
+
 .PHONY: lint
-lint: golangci-lint ## Run golangci-lint linter
-	$(GOLANGCI_LINT) run
+lint: golangci-lint ## Run golangci-lint linter (use GOLANGCI_LINT_ARGS=--fix to auto-fix)
+	$(GOLANGCI_LINT) run $(GOLANGCI_LINT_ARGS)
 
 .PHONY: verify
 verify: mod-tidy ## Run all verification checks
@@ -258,32 +254,14 @@ verify: mod-tidy ## Run all verification checks
 mod-tidy: ## Run go mod tidy
 	go mod tidy
 
-.PHONY: lint-fix
-lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
-	$(GOLANGCI_LINT) run --fix
-
-.PHONY: lint-config
-lint-config: golangci-lint ## Verify golangci-lint linter configuration
-	$(GOLANGCI_LINT) config verify
-
 ##@ Dependencies
 
-## Location to install dependencies to
 LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
-
-GOIMPORT = $(LOCALBIN)/goimports
-GOIMPORT_VERSION ?= v0.41
-
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 GOLANGCI_LINT_VERSION ?= v2.8.0
-
-.PHONY: goimports
-goimports: $(GOIMPORT) ## Download goimports locally if necessary.
-$(GOIMPORT): $(LOCALBIN)
-	$(call go-install-tool,$(GOIMPORT),golang.org/x/tools/cmd/goimports,$(GOIMPORT_VERSION))
 
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
