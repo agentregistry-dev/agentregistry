@@ -38,22 +38,14 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-node-
 
-    - name: Download Go dependencies
-      run: go mod download
-
     - name: Build UI
       run: make build-ui
 
-    - name: Run Integration Tests
-      run: |
-        echo "Starting integration test services..."
-        make docker-registry docker-compose-up
-        make test
+    - name: Start environment
+      run: make run
 
-    - name: Build Go CLI
-      run: |
-        go build -v -o bin/arctl cmd/cli/main.go
-        go build -v -o bin/arctl-server cmd/server/main.go
+    - name: Run Integration Tests
+      run: make test
 
 
   lint:
