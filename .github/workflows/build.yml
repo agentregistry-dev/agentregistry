@@ -44,9 +44,6 @@ jobs:
     - name: Build UI
       run: make build-ui
 
-    - name: Download Go dependencies
-      run: go mod download
-
     - name: Run Integration Tests
       run: |
         echo "Starting integration test services..."
