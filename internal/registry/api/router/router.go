@@ -104,11 +104,10 @@ func handle404(w http.ResponseWriter, r *http.Request) {
 	detail := "Endpoint not found. See /docs for the API documentation."
 
 	// Provide suggestions for common API endpoint mistakes
-	if !strings.HasPrefix(path, "/v0/") && !strings.HasPrefix(path, "/v0.1/") {
+	if !strings.HasPrefix(path, "/v0/") && !strings.HasPrefix(path, "/admin/v0/") {
 		detail = fmt.Sprintf(
-			"Endpoint not found. Did you mean '%s' or '%s'? See /docs for the API documentation.",
-			"/v0.1"+path,
-			"/v0"+path,
+			"Endpoint not found. Did you mean '/v0%s'? See /docs for the API documentation.",
+			path,
 		)
 	}
 
@@ -210,9 +209,7 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			// Check if this is an API route - if so, return 404
 			if strings.HasPrefix(r.URL.Path, "/v0/") ||
-				strings.HasPrefix(r.URL.Path, "/v0.1/") ||
 				strings.HasPrefix(r.URL.Path, "/admin/v0/") ||
-				strings.HasPrefix(r.URL.Path, "/admin/v0.1/") ||
 				r.URL.Path == "/health" ||
 				r.URL.Path == "/ping" ||
 				r.URL.Path == "/metrics" ||

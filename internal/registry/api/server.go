@@ -41,7 +41,7 @@ func TrailingSlashMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Only apply trailing slash logic to API routes
 		isAPIRoute := strings.HasPrefix(r.URL.Path, "/v0/") ||
-			strings.HasPrefix(r.URL.Path, "/v0.1/") ||
+			strings.HasPrefix(r.URL.Path, "/admin/v0/") ||
 			r.URL.Path == "/health" ||
 			r.URL.Path == "/ping" ||
 			r.URL.Path == "/metrics" ||

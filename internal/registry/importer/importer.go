@@ -116,7 +116,7 @@ func (s *Service) SetProgressCachePath(path string) {
 // ImportFromPath imports seed data from various sources:
 // 1. Local file paths (*.json files) - expects ServerJSON array format
 // 2. Direct HTTP URLs to seed.json files - expects ServerJSON array format
-// 3. Registry API endpoints (e.g., /v0/servers, /v0.1/servers) - handles pagination automatically
+// 3. Registry API endpoints (e.g., /v0/servers) - handles pagination automatically
 func (s *Service) ImportFromPath(ctx context.Context, path string, enrichServerData bool) error {
 	servers, err := s.readSeedFile(ctx, path)
 	if err != nil {
