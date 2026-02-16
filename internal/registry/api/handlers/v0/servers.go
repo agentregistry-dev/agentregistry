@@ -90,11 +90,11 @@ type ServerVersionsInput struct {
 // ServerReadmeResponse is the payload for README fetch endpoints
 type ServerReadmeResponse struct {
 	Content     string    `json:"content"`
-	ContentType string    `json:"content_type"`
-	SizeBytes   int       `json:"size_bytes"`
+	ContentType string    `json:"contentType"`
+	SizeBytes   int       `json:"sizeBytes"`
 	Sha256      string    `json:"sha256"`
 	Version     string    `json:"version"`
-	FetchedAt   time.Time `json:"fetched_at"`
+	FetchedAt   time.Time `json:"fetchedAt"`
 }
 
 // RegisterServersEndpoints registers all server-related endpoints with a custom path prefix.
