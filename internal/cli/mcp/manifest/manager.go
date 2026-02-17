@@ -135,7 +135,7 @@ func (m *Manager) RemoveTool(man *ProjectManifest, name string) error {
 }
 
 // GetDefault returns a new ProjectManifest with default values.
-func GetDefault(name, framework, description, author, email string) *ProjectManifest {
+func GetDefault(name, framework, description, author, email, version string) *ProjectManifest {
 	if description == "" {
 		description = fmt.Sprintf("MCP server built with %s", framework)
 	}
@@ -145,7 +145,7 @@ func GetDefault(name, framework, description, author, email string) *ProjectMani
 	return &ProjectManifest{
 		Name:        name,
 		Framework:   framework,
-		Version:     "0.1.0",
+		Version:     version,
 		Description: description,
 		Author:      author,
 		Email:       email,

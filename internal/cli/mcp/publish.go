@@ -118,6 +118,8 @@ func runMCPServerPublish(cmd *cobra.Command, args []string) error {
 	}
 
 	var serverName, description, version string
+	var runtimeArgs []string
+	var runtimeHint string
 
 	// Check if input is a local path with mcp.yaml
 	absPath, _ := filepath.Abs(input)
@@ -133,6 +135,8 @@ func runMCPServerPublish(cmd *cobra.Command, args []string) error {
 		serverName = common.BuildMCPServerRegistryName(projectManifest.Author, projectManifest.Name)
 		description = projectManifest.Description
 		version = common.ResolveVersion(publishVersion, projectManifest.Version)
+		runtimeArgs = projectManifest.RuntimeArgs
+		runtimeHint = projectManifest.RuntimeHint
 	} else {
 		// Use command line arguments
 		serverName = strings.ToLower(input)
@@ -181,8 +185,9 @@ func runMCPServerPublish(cmd *cobra.Command, args []string) error {
 		RegistryType:     regType,
 		Identifier:       packageID,
 		PackageVersion:   pkgVersion,
-		RuntimeHint:      registryTypeRuntimeHints[regType],
 		PackageArguments: publishArgs,
+		RuntimeHint:      runtimeHint,
+		RuntimeArguments: runtimeArgs,
 		TransportType:    transportType,
 		TransportURL:     transportURL,
 	})
