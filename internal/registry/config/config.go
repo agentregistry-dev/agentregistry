@@ -15,7 +15,7 @@ type Config struct {
 	DatabaseURL              string `env:"DATABASE_URL" envDefault:"postgres://agentregistry:agentregistry@localhost:5432/agent-registry?sslmode=disable"`
 	SeedFrom                 string `env:"SEED_FROM" envDefault:""`
 	EnrichServerData         bool   `env:"ENRICH_SERVER_DATA" envDefault:"false"`
-	DisableBuiltinSeed       bool   `env:"DISABLE_BUILTIN_SEED" envDefault:""`
+	DisableBuiltinSeed       bool   `env:"DISABLE_BUILTIN_SEED" envDefault:"true"`
 	Version                  string `env:"VERSION" envDefault:"dev"`
 	GithubClientID           string `env:"GITHUB_CLIENT_ID" envDefault:""`
 	GithubClientSecret       string `env:"GITHUB_CLIENT_SECRET" envDefault:""`
