@@ -81,29 +81,8 @@ func pingWithRetry(c *Client) error {
 // Close is a no-op in API mode
 func (c *Client) Close() error { return nil }
 
-func (c *Client) baseURLWithoutVersion() string {
-	base := strings.TrimRight(c.BaseURL, "/")
-	if strings.HasSuffix(base, "/v0") {
-		return base[:len(base)-3]
-	}
-	return base
-}
-
 func (c *Client) newRequest(method, pathWithQuery string) (*http.Request, error) {
 	fullURL := strings.TrimRight(c.BaseURL, "/") + pathWithQuery
-	req, err := http.NewRequest(method, fullURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
-	}
-	return req, nil
-}
-
-func (c *Client) newAdminRequest(method, pathWithQuery string) (*http.Request, error) {
-	base := c.baseURLWithoutVersion()
-	fullURL := strings.TrimRight(base, "/") + pathWithQuery
 	req, err := http.NewRequest(method, fullURL, nil)
 	if err != nil {
 		return nil, err
@@ -178,7 +157,7 @@ func (c *Client) GetAllServers() ([]*v0.ServerResponse, error) {
 	var all []*v0.ServerResponse
 
 	for {
-		req, err := c.newAdminRequest(http.MethodGet, "/admin/v0/servers?limit="+strconv.Itoa(limit)+"&cursor="+url.QueryEscape(cursor))
+		req, err := c.newRequest(http.MethodGet, "/servers?limit="+strconv.Itoa(limit)+"&cursor="+url.QueryEscape(cursor))
 		if err != nil {
 			return nil, err
 		}
@@ -291,7 +270,7 @@ func (c *Client) GetServerVersions(name string) ([]v0.ServerResponse, error) {
 func (c *Client) GetAllServerVersionsAdmin(name string) ([]v0.ServerResponse, error) {
 	encName := url.PathEscape(name)
 
-	req, err := c.newAdminRequest(http.MethodGet, "/admin/v0/servers/"+encName+"/versions")
+	req, err := c.newRequest(http.MethodGet, "/servers/"+encName+"/versions")
 	if err != nil {
 		return nil, err
 	}
@@ -445,7 +424,7 @@ func (c *Client) CreateMCPServer(server *v0.ServerJSON) (*v0.ServerResponse, err
 func (c *Client) GetSkillVersions(name string) ([]*models.SkillResponse, error) {
 	encName := url.PathEscape(name)
 
-	req, err := c.newAdminRequest(http.MethodGet, "/admin/v0/skills/"+encName+"/versions")
+	req, err := c.newRequest(http.MethodGet, "/skills/"+encName+"/versions")
 	if err != nil {
 		return nil, err
 	}
@@ -495,7 +474,7 @@ func (c *Client) GetSkillByNameAndVersionAdmin(name, version string) (*models.Sk
 	encName := url.PathEscape(name)
 	encVersion := url.PathEscape(version)
 
-	req, err := c.newAdminRequest(http.MethodGet, "/admin/v0/skills/"+encName+"/versions/"+encVersion)
+	req, err := c.newRequest(http.MethodGet, "/skills/"+encName+"/versions/"+encVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -517,7 +496,7 @@ func (c *Client) GetAgentByNameAndVersionAdmin(name, version string) (*models.Ag
 	encName := url.PathEscape(name)
 	encVersion := url.PathEscape(version)
 
-	req, err := c.newAdminRequest(http.MethodGet, "/admin/v0/agents/"+encName+"/versions/"+encVersion)
+	req, err := c.newRequest(http.MethodGet, "/agents/"+encName+"/versions/"+encVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -539,7 +518,7 @@ func (c *Client) DeleteAgent(name, version string) error {
 	encName := url.PathEscape(name)
 	encVersion := url.PathEscape(version)
 
-	req, err := c.newAdminRequest(http.MethodDelete, "/admin/v0/agents/"+encName+"/versions/"+encVersion)
+	req, err := c.newRequest(http.MethodDelete, "/agents/"+encName+"/versions/"+encVersion)
 	if err != nil {
 		return err
 	}
@@ -553,7 +532,7 @@ func (c *Client) DeleteSkill(name, version string) error {
 	encName := url.PathEscape(name)
 	encVersion := url.PathEscape(version)
 
-	req, err := c.newAdminRequest(http.MethodDelete, "/admin/v0/skills/"+encName+"/versions/"+encVersion)
+	req, err := c.newRequest(http.MethodDelete, "/skills/"+encName+"/versions/"+encVersion)
 	if err != nil {
 		return err
 	}
@@ -566,7 +545,7 @@ func (c *Client) DeleteMCPServer(name, version string) error {
 	encName := url.PathEscape(name)
 	encVersion := url.PathEscape(version)
 
-	req, err := c.newAdminRequest(http.MethodDelete, "/admin/v0/servers/"+encName+"/versions/"+encVersion)
+	req, err := c.newRequest(http.MethodDelete, "/servers/"+encName+"/versions/"+encVersion)
 	if err != nil {
 		return err
 	}
@@ -724,7 +703,7 @@ func (c *Client) RemoveDeployment(name string, version string, resourceType stri
 
 // StartIndex starts an embeddings indexing job.
 func (c *Client) StartIndex(req internalv0.IndexRequest) (*internalv0.IndexJobResponse, error) {
-	httpReq, err := c.newAdminRequest(http.MethodPost, "/admin/v0/embeddings/index")
+	httpReq, err := c.newRequest(http.MethodPost, "/embeddings/index")
 	if err != nil {
 		return nil, err
 	}
@@ -746,7 +725,7 @@ func (c *Client) StartIndex(req internalv0.IndexRequest) (*internalv0.IndexJobRe
 // GetIndexStatus gets the status of an indexing job.
 func (c *Client) GetIndexStatus(jobID string) (*internalv0.JobStatusResponse, error) {
 	encJobID := url.PathEscape(jobID)
-	httpReq, err := c.newAdminRequest(http.MethodGet, "/admin/v0/embeddings/index/"+encJobID)
+	httpReq, err := c.newRequest(http.MethodGet, "/embeddings/index/"+encJobID)
 	if err != nil {
 		return nil, err
 	}
@@ -760,8 +739,7 @@ func (c *Client) GetIndexStatus(jobID string) (*internalv0.JobStatusResponse, er
 
 // StreamIndexURL returns the URL for SSE streaming indexing.
 func (c *Client) streamIndexURL() string {
-	base := c.baseURLWithoutVersion()
-	return base + "/admin/v0/embeddings/index/stream"
+	return strings.TrimRight(c.BaseURL, "/") + "/embeddings/index/stream"
 }
 
 // NewSSERequest creates a new HTTP POST request for SSE streaming with JSON body.

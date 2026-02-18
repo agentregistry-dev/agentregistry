@@ -21,8 +21,7 @@ type RouteOptions struct {
 	Mux        *http.ServeMux
 }
 
-// RegisterRoutes registers all API routes (public and admin) for all versions
-// This is the single entry point for all route registration
+// RegisterRoutes registers all API routes under /v0.
 func RegisterRoutes(
 	api huma.API,
 	cfg *config.Config,
@@ -31,23 +30,11 @@ func RegisterRoutes(
 	versionInfo *v0.VersionBody,
 	opts *RouteOptions,
 ) {
-	// Public API endpoints
-	registerPublicRoutes(api, "/v0", cfg, registry, metrics, versionInfo)
+	pathPrefix := "/v0"
 
-	// Admin API endpoints
-	registerAdminRoutes(api, "/admin/v0", cfg, registry, metrics, versionInfo, opts)
-}
-
-// registerPublicRoutes registers public API routes for a version.
-func registerPublicRoutes(
-	api huma.API,
-	pathPrefix string,
-	cfg *config.Config,
-	registry service.RegistryService,
-	metrics *telemetry.Metrics,
-	versionInfo *v0.VersionBody,
-) {
-	registerCommonEndpoints(api, pathPrefix, cfg, metrics, versionInfo)
+	v0.RegisterHealthEndpoint(api, pathPrefix, cfg, metrics)
+	v0.RegisterPingEndpoint(api, pathPrefix)
+	v0.RegisterVersionEndpoint(api, pathPrefix, versionInfo)
 	v0.RegisterServersEndpoints(api, pathPrefix, registry)
 	v0.RegisterServersCreateEndpoint(api, pathPrefix, registry)
 	v0.RegisterEditEndpoints(api, pathPrefix, registry)
@@ -57,47 +44,11 @@ func registerPublicRoutes(
 	v0.RegisterAgentsCreateEndpoint(api, pathPrefix, registry)
 	v0.RegisterSkillsEndpoints(api, pathPrefix, registry)
 	v0.RegisterSkillsCreateEndpoint(api, pathPrefix, registry)
-}
 
-// registerAdminRoutes registers admin API routes for a version
-func registerAdminRoutes(
-	api huma.API,
-	pathPrefix string,
-	cfg *config.Config,
-	registry service.RegistryService,
-	metrics *telemetry.Metrics,
-	versionInfo *v0.VersionBody,
-	opts *RouteOptions,
-) {
-	registerCommonEndpoints(api, pathPrefix, cfg, metrics, versionInfo)
-	v0.RegisterServersEndpoints(api, pathPrefix, registry)
-	v0.RegisterServersCreateEndpoint(api, pathPrefix, registry)
-	v0.RegisterEditEndpoints(api, pathPrefix, registry)
-	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry)
-	v0.RegisterAgentsEndpoints(api, pathPrefix, registry)
-	v0.RegisterAgentsCreateEndpoint(api, pathPrefix, registry)
-	v0.RegisterSkillsEndpoints(api, pathPrefix, registry)
-	v0.RegisterSkillsCreateEndpoint(api, pathPrefix, registry)
-
-	// Register embeddings endpoints if services are available
 	if opts != nil && opts.Indexer != nil && opts.JobManager != nil {
 		v0.RegisterEmbeddingsEndpoints(api, pathPrefix, opts.Indexer, opts.JobManager)
-		// Also register SSE handler on the mux if available
 		if opts.Mux != nil {
 			v0.RegisterEmbeddingsSSEHandler(opts.Mux, pathPrefix, opts.Indexer, opts.JobManager)
 		}
 	}
-}
-
-// registerCommonEndpoints registers endpoints that are common to both public and admin routes
-func registerCommonEndpoints(
-	api huma.API,
-	pathPrefix string,
-	cfg *config.Config,
-	metrics *telemetry.Metrics,
-	versionInfo *v0.VersionBody,
-) {
-	v0.RegisterHealthEndpoint(api, pathPrefix, cfg, metrics)
-	v0.RegisterPingEndpoint(api, pathPrefix)
-	v0.RegisterVersionEndpoint(api, pathPrefix, versionInfo)
 }
