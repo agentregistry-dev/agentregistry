@@ -150,7 +150,7 @@ clean: clean-ui
 	@echo "All artifacts cleaned"
 
 # Clean and build everything
-all: clean build 
+all: clean build
 	@echo "Clean build complete!"
 
 # Quick development build (skips cleaning)
@@ -234,10 +234,10 @@ bin/arctl-windows-amd64.exe:
 bin/arctl-windows-amd64.exe.sha256: bin/arctl-windows-amd64.exe
 	sha256sum bin/arctl-windows-amd64.exe > bin/arctl-windows-amd64.exe.sha256
 
-release-cli: bin/arctl-linux-amd64.sha256  
-release-cli: bin/arctl-linux-arm64.sha256  
-release-cli: bin/arctl-darwin-amd64.sha256  
-release-cli: bin/arctl-darwin-arm64.sha256  
+release-cli: bin/arctl-linux-amd64.sha256
+release-cli: bin/arctl-linux-arm64.sha256
+release-cli: bin/arctl-darwin-amd64.sha256
+release-cli: bin/arctl-darwin-arm64.sha256
 release-cli: bin/arctl-windows-amd64.exe.sha256
 
 GOLANGCI_LINT_ARGS ?=
