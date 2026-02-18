@@ -46,7 +46,7 @@ func TestPrometheusHandler(t *testing.T) {
 		},
 		Version: "2.0.0",
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	cfg := testConfig
 	shutdownTelemetry, metrics, _ := telemetry.InitMetrics("dev")

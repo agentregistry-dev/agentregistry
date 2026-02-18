@@ -36,7 +36,7 @@ func TestCORSHeaders(t *testing.T) {
 	registryService := service.NewRegistryService(db, cfg, nil)
 
 	shutdownTelemetry, metrics, err := telemetry.InitMetrics("test")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	defer func() { _ = shutdownTelemetry(nil) }()
 
 	versionInfo := &v0.VersionBody{
@@ -150,7 +150,7 @@ func TestCORSHeaderValues(t *testing.T) {
 	registryService := service.NewRegistryService(db, cfg, nil)
 
 	shutdownTelemetry, metrics, err := telemetry.InitMetrics("test")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	defer func() { _ = shutdownTelemetry(nil) }()
 
 	versionInfo := &v0.VersionBody{

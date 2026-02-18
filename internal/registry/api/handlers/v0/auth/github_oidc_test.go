@@ -92,13 +92,13 @@ func TestGitHubOIDCHandler_ExchangeToken(t *testing.T) {
 			response, err := handler.ExchangeToken(context.Background(), "test-oidc-token")
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, response)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, response)
 				assert.NotEmpty(t, response.RegistryToken)
-				assert.Greater(t, response.ExpiresAt, 0)
+				assert.Positive(t, response.ExpiresAt)
 
 				// Validate the generated JWT token
 				jwtManager := internalauth.NewJWTManager(cfg)
@@ -193,16 +193,16 @@ func TestBuildPermissionsFromOIDC(t *testing.T) {
 
 			if tt.expectedPerms == nil {
 				// For invalid names, we expect empty permissions but successful token generation
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, response)
 
 				// Validate the JWT to check permissions
 				jwtManager := internalauth.NewJWTManager(cfg)
 				claims, err := jwtManager.ValidateToken(context.Background(), response.RegistryToken)
 				require.NoError(t, err)
-				assert.Len(t, claims.Permissions, 0)
+				assert.Empty(t, claims.Permissions)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, response)
 
 				// Validate the JWT to check permissions

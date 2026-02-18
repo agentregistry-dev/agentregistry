@@ -187,13 +187,13 @@ func TestDNSAuthHandler_ExchangeToken(t *testing.T) {
 			result, err := handler.ExchangeToken(context.Background(), tt.domain, tt.timestamp, signedTimestamp)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				if tt.errorContains != "" {
 					assert.Contains(t, err.Error(), tt.errorContains)
 				}
 				assert.Nil(t, result)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, result)
 				assert.NotEmpty(t, result.RegistryToken)
 
@@ -621,13 +621,13 @@ func TestDNSAuthHandler_ExchangeToken_ECDSAP384(t *testing.T) {
 			result, err := handler.ExchangeToken(context.Background(), tt.domain, tt.timestamp, signedTimestamp)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				if tt.errorContains != "" {
 					assert.Contains(t, err.Error(), tt.errorContains)
 				}
 				assert.Nil(t, result)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, result)
 				assert.NotEmpty(t, result.RegistryToken)
 
@@ -892,7 +892,7 @@ func TestDNSAuthHandler_Ed25519_vs_ECDSAP384_Equivalence(t *testing.T) {
 			// Compare claims (excluding token-specific fields like timestamps)
 			assert.Equal(t, ed25519Claims.AuthMethod, ecdsaClaims.AuthMethod)
 			assert.Equal(t, ed25519Claims.AuthMethodSubject, ecdsaClaims.AuthMethodSubject)
-			assert.Equal(t, len(ed25519Claims.Permissions), len(ecdsaClaims.Permissions))
+			assert.Len(t, ecdsaClaims.Permissions, len(ed25519Claims.Permissions))
 
 			// Compare permission patterns
 			ed25519Patterns := make([]string, len(ed25519Claims.Permissions))

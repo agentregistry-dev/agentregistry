@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
@@ -34,7 +35,7 @@ func TestNewMetrics(t *testing.T) {
 			metrics, err := telemetry.NewMetrics(tt.meter)
 
 			// Ensure the metric is registered correctly
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.NotNil(t, metrics)
 			assert.NotNil(t, metrics.Requests)
 		})
@@ -74,9 +75,9 @@ func TestNewPrometheusMeterProvider(t *testing.T) {
 			mp, err := telemetry.NewPrometheusMeterProvider(res, exp)
 
 			if tt.wantErr {
-				assert.NotNil(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, mp)
 			}
 		})

@@ -3,7 +3,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 
@@ -57,7 +56,7 @@ func TestIndexer_Run_ProviderNil(t *testing.T) {
 	result, err := indexer.Run(context.Background(), opts, nil)
 
 	assert.Nil(t, result)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not configured")
 }
 
@@ -74,7 +73,7 @@ func TestIndexer_Run_NoTargetsSelected(t *testing.T) {
 	result, err := indexer.Run(context.Background(), opts, nil)
 
 	assert.Nil(t, result)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no targets")
 }
 
@@ -314,8 +313,8 @@ func TestIndexer_Run_ContextCancelled(t *testing.T) {
 	result, err := indexer.Run(ctx, opts, nil)
 
 	assert.Nil(t, result)
-	assert.Error(t, err)
-	assert.True(t, errors.Is(err, context.Canceled))
+	require.Error(t, err)
+	require.ErrorIs(t, err, context.Canceled)
 }
 
 func TestIndexer_Run_ProgressCallback(t *testing.T) {

@@ -44,7 +44,7 @@ func TestJWTManager_GenerateAndVerifyToken(t *testing.T) {
 		tokenResponse, err := jwtManager.GenerateTokenResponse(ctx, claims)
 		require.NoError(t, err)
 		assert.NotEmpty(t, tokenResponse.RegistryToken)
-		assert.Greater(t, tokenResponse.ExpiresAt, 0)
+		assert.Positive(t, tokenResponse.ExpiresAt)
 
 		// Verify token
 		verifiedClaims, err := jwtManager.ValidateToken(ctx, tokenResponse.RegistryToken)
@@ -109,7 +109,7 @@ func TestJWTManager_GenerateAndVerifyToken(t *testing.T) {
 
 		// Verify token should fail
 		_, err = jwtManager.ValidateToken(ctx, tokenResponse.RegistryToken)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to parse token")
 	})
 
@@ -135,14 +135,14 @@ func TestJWTManager_GenerateAndVerifyToken(t *testing.T) {
 
 		// Try to verify with original key - should fail
 		_, err = jwtManager.ValidateToken(ctx, tokenResponse.RegistryToken)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to parse token")
 	})
 
 	t.Run("malformed token should fail", func(t *testing.T) {
 		// Try to validate a malformed token
 		_, err := jwtManager.ValidateToken(ctx, "not.a.valid.token")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to parse token")
 	})
 
@@ -315,7 +315,7 @@ func TestJWTManager_BlockedNamespaces(t *testing.T) {
 		}
 
 		tokenResponse, err := jwtManager.GenerateTokenResponse(ctx, claims)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "your namespace is blocked")
 		assert.Nil(t, tokenResponse)
 	})
@@ -368,7 +368,7 @@ func TestJWTManager_BlockedNamespaces(t *testing.T) {
 		}
 
 		tokenResponse, err := jwtManager.GenerateTokenResponse(ctx, claims)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "your namespace is blocked")
 		assert.Nil(t, tokenResponse)
 	})

@@ -23,6 +23,7 @@ linters:
     - nakedret
     - nestif
     - nolintlint
+    - testifylint
     - staticcheck
     - unused
     - whitespace

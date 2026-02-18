@@ -117,7 +117,7 @@ func TestListServersEndpoint(t *testing.T) {
 			if tt.expectedStatus == http.StatusOK {
 				var resp models.ServerListResponse
 				err := json.NewDecoder(w.Body).Decode(&resp)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Len(t, resp.Servers, tt.expectedCount)
 				assert.Equal(t, tt.expectedCount, resp.Metadata.Count)
 
@@ -289,7 +289,7 @@ func TestGetLatestServerVersionEndpoint(t *testing.T) {
 			if tt.expectedStatus == http.StatusOK {
 				var resp models.ServerListResponse
 				err := json.NewDecoder(w.Body).Decode(&resp)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				require.Len(t, resp.Servers, 1, "Should return exactly one server")
 				server := resp.Servers[0]
 				assert.Equal(t, tt.serverName, server.Server.Name)
@@ -419,7 +419,7 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 			if tt.expectedStatus == http.StatusOK {
 				var resp models.ServerListResponse
 				err := json.NewDecoder(w.Body).Decode(&resp)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				require.Len(t, resp.Servers, 1, "Should return exactly one server")
 				server := resp.Servers[0]
 				assert.Equal(t, tt.serverName, server.Server.Name)
@@ -640,7 +640,7 @@ func TestGetAllVersionsEndpoint(t *testing.T) {
 			if tt.expectedStatus == http.StatusOK {
 				var resp models.ServerListResponse
 				err := json.NewDecoder(w.Body).Decode(&resp)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Len(t, resp.Servers, tt.expectedCount)
 				assert.Equal(t, tt.expectedCount, resp.Metadata.Count)
 
@@ -735,7 +735,7 @@ func TestServersEndpointEdgeCases(t *testing.T) {
 
 				var resp models.ServerListResponse
 				err := json.NewDecoder(w.Body).Decode(&resp)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				require.Len(t, resp.Servers, 1, "Should return exactly one server")
 				assert.Equal(t, tt.serverName, resp.Servers[0].Server.Name)
 			})
@@ -771,7 +771,7 @@ func TestServersEndpointEdgeCases(t *testing.T) {
 				if tt.expectedStatus == http.StatusOK {
 					var resp models.ServerListResponse
 					err := json.NewDecoder(w.Body).Decode(&resp)
-					assert.NoError(t, err)
+					require.NoError(t, err)
 					assert.NotNil(t, resp.Metadata)
 				} else if tt.expectedError != "" {
 					assert.Contains(t, w.Body.String(), tt.expectedError)
@@ -791,7 +791,7 @@ func TestServersEndpointEdgeCases(t *testing.T) {
 
 		var resp models.ServerListResponse
 		err := json.NewDecoder(w.Body).Decode(&resp)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Verify metadata structure
 		assert.NotNil(t, resp.Metadata)

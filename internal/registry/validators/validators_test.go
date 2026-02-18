@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
@@ -738,9 +739,9 @@ func TestValidate(t *testing.T) {
 			err := validators.ValidateServerJSON(&tt.serverDetail)
 
 			if tt.expectedError == "" {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			} else {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError)
 			}
 		})
@@ -894,10 +895,10 @@ func TestValidate_RemoteNamespaceMatch(t *testing.T) {
 			err := validators.ValidateServerJSON(&tt.serverDetail)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errorMsg)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -978,10 +979,10 @@ func TestValidate_ServerNameFormat(t *testing.T) {
 			err := validators.ValidateServerJSON(&tt.serverDetail)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errorMsg)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -1057,10 +1058,10 @@ func TestValidate_MultipleSlashesInServerName(t *testing.T) {
 			err := validators.ValidateServerJSON(&serverDetail)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errorMsg)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -1109,7 +1110,7 @@ func TestValidateArgument_ValidNamedArguments(t *testing.T) {
 		t.Run("Valid_"+arg.Name, func(t *testing.T) {
 			server := createValidServerWithArgument(arg)
 			err := validators.ValidateServerJSON(&server)
-			assert.NoError(t, err, "Expected valid argument %+v", arg)
+			require.NoError(t, err, "Expected valid argument %+v", arg)
 		})
 	}
 }
@@ -1128,7 +1129,7 @@ func TestValidateArgument_ValidPositionalArguments(t *testing.T) {
 		t.Run(fmt.Sprintf("ValidPositional_%d", i), func(t *testing.T) {
 			server := createValidServerWithArgument(arg)
 			err := validators.ValidateServerJSON(&server)
-			assert.NoError(t, err, "Expected valid positional argument %+v", arg)
+			require.NoError(t, err, "Expected valid positional argument %+v", arg)
 		})
 	}
 }
@@ -1150,7 +1151,7 @@ func TestValidateArgument_InvalidNamedArgumentNames(t *testing.T) {
 		t.Run("Invalid_"+tc.name, func(t *testing.T) {
 			server := createValidServerWithArgument(tc.arg)
 			err := validators.ValidateServerJSON(&server)
-			assert.Error(t, err, "Expected error for invalid named argument name: %+v", tc.arg)
+			require.Error(t, err, "Expected error for invalid named argument name: %+v", tc.arg)
 		})
 	}
 }
@@ -1198,7 +1199,7 @@ func TestValidateArgument_InvalidValueFields(t *testing.T) {
 		t.Run("Invalid_"+tc.name, func(t *testing.T) {
 			server := createValidServerWithArgument(tc.arg)
 			err := validators.ValidateServerJSON(&server)
-			assert.Error(t, err, "Expected error for argument with value starting with name: %+v", tc.arg)
+			require.Error(t, err, "Expected error for argument with value starting with name: %+v", tc.arg)
 		})
 	}
 }
@@ -1254,7 +1255,7 @@ func TestValidateArgument_ValidValueFields(t *testing.T) {
 		t.Run("Valid_"+tc.name, func(t *testing.T) {
 			server := createValidServerWithArgument(tc.arg)
 			err := validators.ValidateServerJSON(&server)
-			assert.NoError(t, err, "Expected valid argument %+v", tc.arg)
+			require.NoError(t, err, "Expected valid argument %+v", tc.arg)
 		})
 	}
 }
@@ -1591,9 +1592,9 @@ func TestValidate_TransportValidation(t *testing.T) {
 			err := validators.ValidateServerJSON(&tt.serverDetail)
 
 			if tt.expectedError == "" {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			} else {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError)
 			}
 		})
@@ -1669,9 +1670,9 @@ func TestValidate_RegistryTypesAndUrls(t *testing.T) {
 				EnableRegistryValidation: true,
 			})
 			if tc.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -2019,9 +2020,9 @@ func TestValidateTitle(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := validators.ValidateServerJSON(&tt.serverDetail)
 			if tt.expectedError == "" {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			} else {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError)
 			}
 		})

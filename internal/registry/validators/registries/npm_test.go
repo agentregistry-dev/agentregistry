@@ -7,6 +7,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators/registries"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateNPM_RealPackages(t *testing.T) {
@@ -127,10 +128,10 @@ func TestValidateNPM_RealPackages(t *testing.T) {
 			err := registries.ValidateNPM(ctx, pkg, tt.serverName)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errorMessage)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}

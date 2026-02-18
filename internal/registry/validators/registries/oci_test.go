@@ -7,6 +7,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators/registries"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateOCI_RegistryAllowlist(t *testing.T) {
@@ -103,11 +104,11 @@ func TestValidateOCI_RegistryAllowlist(t *testing.T) {
 			err := registries.ValidateOCI(ctx, pkg, "com.example/test")
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				// Should contain the specific error message
 				assert.Contains(t, err.Error(), tt.errorMsg)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -154,7 +155,7 @@ func TestValidateOCI_RejectsOldFormat(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := registries.ValidateOCI(ctx, tt.pkg, "com.example/test")
 
-			assert.Error(t, err)
+			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.errorMessage)
 		})
 	}
@@ -185,7 +186,7 @@ func TestValidateOCI_InvalidReferences(t *testing.T) {
 			}
 
 			err := registries.ValidateOCI(ctx, pkg, "com.example/test")
-			assert.Error(t, err)
+			require.Error(t, err)
 			assert.Contains(t, err.Error(), "invalid OCI reference")
 		})
 	}
@@ -200,7 +201,7 @@ func TestValidateOCI_EmptyIdentifier(t *testing.T) {
 	}
 
 	err := registries.ValidateOCI(ctx, pkg, "com.example/test")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "package identifier is required")
 }
 
@@ -214,7 +215,7 @@ func TestValidateOCI_SuccessfulValidation(t *testing.T) {
 	}
 
 	err := registries.ValidateOCI(ctx, pkg, "io.github.github/github-mcp-server")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestValidateOCI_LabelMismatch(t *testing.T) {
@@ -228,7 +229,7 @@ func TestValidateOCI_LabelMismatch(t *testing.T) {
 	}
 
 	err := registries.ValidateOCI(ctx, pkg, "io.github.github/github-mcp-server-mismatch")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ownership validation failed")
 	assert.Contains(t, err.Error(), "Expected annotation")
 }

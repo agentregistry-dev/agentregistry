@@ -233,12 +233,12 @@ func TestImportService_ErrorHandling(t *testing.T) {
 			err := importerService.ImportFromPath(context.Background(), tt.path, false)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				if tt.errorMsg != "" {
 					assert.Contains(t, err.Error(), tt.errorMsg)
 				}
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}

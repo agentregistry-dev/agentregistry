@@ -119,10 +119,10 @@ func TestValidateNoDuplicateRemoteURLs(t *testing.T) {
 			err := impl.validateNoDuplicateRemoteURLs(ctx, nil, tt.serverDetail)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errorMsg)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -181,13 +181,13 @@ func TestGetServerByName(t *testing.T) {
 			result, err := service.GetServerByName(ctx, tt.serverName)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				if tt.errorMsg != "" {
 					assert.Contains(t, err.Error(), tt.errorMsg)
 				}
 				assert.Nil(t, result)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, result)
 				if tt.checkResult != nil {
 					tt.checkResult(t, result)
@@ -274,13 +274,13 @@ func TestGetServerByNameAndVersion(t *testing.T) {
 			result, err := service.GetServerByNameAndVersion(ctx, tt.serverName, tt.version)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				if tt.errorMsg != "" {
 					assert.Contains(t, err.Error(), tt.errorMsg)
 				}
 				assert.Nil(t, result)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, result)
 				if tt.checkResult != nil {
 					tt.checkResult(t, result)
@@ -362,11 +362,11 @@ func TestGetServerReadmeMissing(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = svc.GetServerReadmeByVersion(ctx, serverName, "1.0.0")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Equal(t, database.ErrNotFound, err)
 
 	_, err = svc.GetServerReadmeLatest(ctx, serverName)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Equal(t, database.ErrNotFound, err)
 }
 
@@ -450,13 +450,13 @@ func TestGetAllVersionsByServerName(t *testing.T) {
 			result, err := service.GetAllVersionsByServerName(ctx, tt.serverName)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				if tt.errorMsg != "" {
 					assert.Contains(t, err.Error(), tt.errorMsg)
 				}
 				assert.Empty(t, result)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotEmpty(t, result)
 				if tt.checkResult != nil {
 					tt.checkResult(t, result)
@@ -495,7 +495,7 @@ func TestCreateServerConcurrentVersionsNoRace(t *testing.T) {
 
 	// All publishes should succeed
 	for i, err := range errors {
-		assert.NoError(t, err, "create server %d failed", i)
+		require.NoError(t, err, "create server %d failed", i)
 	}
 
 	// All results should have the same server name
@@ -613,13 +613,13 @@ func TestUpdateServer(t *testing.T) {
 			result, err := service.UpdateServer(ctxWithAuth, tt.serverName, tt.version, tt.updatedServer, tt.newStatus)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				if tt.errorMsg != "" {
 					assert.Contains(t, err.Error(), tt.errorMsg)
 				}
 				assert.Nil(t, result)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, result)
 				if tt.checkResult != nil {
 					tt.checkResult(t, result)
@@ -690,7 +690,7 @@ func TestUpdateServer_SkipValidationForDeletedServers(t *testing.T) {
 
 	// This should succeed despite invalid packages because server is deleted
 	result, err := service.UpdateServer(ctxWithAuth, serverName, version, updatedInvalidServer, nil)
-	assert.NoError(t, err, "updating deleted server should skip registry validation")
+	require.NoError(t, err, "updating deleted server should skip registry validation")
 	assert.NotNil(t, result)
 	assert.Equal(t, "Updated description for deleted server", result.Server.Description)
 	assert.Equal(t, model.StatusDeleted, result.Meta.Official.Status)
@@ -720,7 +720,7 @@ func TestUpdateServer_SkipValidationForDeletedServers(t *testing.T) {
 	// Update server and set to deleted in same operation - should skip validation
 	newDeletedStatus := string(model.StatusDeleted)
 	result2, err := service.UpdateServer(ctxWithAuth, "com.example/being-deleted-test", "1.0.0", activeServer, &newDeletedStatus)
-	assert.NoError(t, err, "updating server being set to deleted should skip registry validation")
+	require.NoError(t, err, "updating server being set to deleted should skip registry validation")
 	assert.NotNil(t, result2)
 	assert.Equal(t, model.StatusDeleted, result2.Meta.Official.Status)
 }
@@ -802,11 +802,11 @@ func TestListServers(t *testing.T) {
 			results, nextCursor, err := service.ListServers(ctx, tt.filter, tt.cursor, tt.limit)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				return
 			}
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Len(t, results, tt.expectedCount)
 
 			// Test cursor behavior

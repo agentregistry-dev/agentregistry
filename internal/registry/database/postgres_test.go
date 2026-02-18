@@ -73,13 +73,13 @@ func TestPostgreSQL_CreateServer(t *testing.T) {
 			result, err := db.CreateServer(ctx, nil, tt.serverJSON, tt.officialMeta)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				if tt.errorType != nil {
-					assert.ErrorIs(t, err, tt.errorType)
+					require.ErrorIs(t, err, tt.errorType)
 				}
 				assert.Nil(t, result)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, result)
 				assert.Equal(t, tt.serverJSON.Name, result.Server.Name)
 				assert.Equal(t, tt.serverJSON.Version, result.Server.Version)
@@ -136,13 +136,13 @@ func TestPostgreSQL_GetServerByName(t *testing.T) {
 			result, err := db.GetServerByName(ctx, nil, tt.serverName)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				if tt.errorType != nil {
-					assert.ErrorIs(t, err, tt.errorType)
+					require.ErrorIs(t, err, tt.errorType)
 				}
 				assert.Nil(t, result)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, result)
 				assert.Equal(t, tt.serverName, result.Server.Name)
 				assert.NotNil(t, result.Meta.Official)
@@ -209,13 +209,13 @@ func TestPostgreSQL_GetServerByNameAndVersion(t *testing.T) {
 			result, err := db.GetServerByNameAndVersion(ctx, nil, tt.serverName, tt.version)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				if tt.errorType != nil {
-					assert.ErrorIs(t, err, tt.errorType)
+					require.ErrorIs(t, err, tt.errorType)
 				}
 				assert.Nil(t, result)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, result)
 				assert.Equal(t, tt.serverName, result.Server.Name)
 				assert.Equal(t, tt.version, result.Server.Version)
@@ -373,11 +373,11 @@ func TestPostgreSQL_ListServers(t *testing.T) {
 			results, nextCursor, err := db.ListServers(ctx, nil, tt.filter, tt.cursor, tt.limit)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				return
 			}
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Len(t, results, tt.expectedCount)
 
 			if len(tt.expectedNames) > 0 {
@@ -459,13 +459,13 @@ func TestPostgreSQL_UpdateServer(t *testing.T) {
 			result, err := db.UpdateServer(ctxWithAuth, nil, tt.serverName, tt.version, tt.updatedServer)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				if tt.errorType != nil {
-					assert.ErrorIs(t, err, tt.errorType)
+					require.ErrorIs(t, err, tt.errorType)
 				}
 				assert.Nil(t, result)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, result)
 				assert.Equal(t, tt.updatedServer.Description, result.Server.Description)
 				assert.NotNil(t, result.Meta.Official)
@@ -534,13 +534,13 @@ func TestPostgreSQL_SetServerStatus(t *testing.T) {
 			result, err := db.SetServerStatus(ctxWithAuth, nil, tt.serverName, tt.version, tt.newStatus)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				if tt.errorType != nil {
-					assert.ErrorIs(t, err, tt.errorType)
+					require.ErrorIs(t, err, tt.errorType)
 				}
 				assert.Nil(t, result)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, result)
 				assert.Equal(t, model.Status(tt.newStatus), result.Meta.Official.Status)
 				assert.NotZero(t, result.Meta.Official.UpdatedAt)
@@ -571,11 +571,11 @@ func TestPostgreSQL_TransactionHandling(t *testing.T) {
 			return err
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Verify server was created
 		result, err := db.GetServerByName(ctx, nil, "com.example/transaction-success")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, result)
 	})
 
@@ -602,13 +602,13 @@ func TestPostgreSQL_TransactionHandling(t *testing.T) {
 			return assert.AnError
 		})
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, assert.AnError, err)
 
 		// Verify server was NOT created due to rollback
 		result, err := db.GetServerByName(ctx, nil, "com.example/transaction-rollback")
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, database.ErrNotFound)
+		require.Error(t, err)
+		require.ErrorIs(t, err, database.ErrNotFound)
 		assert.Nil(t, result)
 	})
 }
@@ -640,28 +640,28 @@ func TestPostgreSQL_HelperMethods(t *testing.T) {
 
 	t.Run("CountServerVersions", func(t *testing.T) {
 		count, err := db.CountServerVersions(ctx, nil, serverName)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 3, count)
 
 		// Test non-existent server
 		count, err = db.CountServerVersions(ctx, nil, "com.example/non-existent")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 0, count)
 	})
 
 	t.Run("CheckVersionExists", func(t *testing.T) {
 		exists, err := db.CheckVersionExists(ctx, nil, serverName, "1.1.0")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, exists)
 
 		exists, err = db.CheckVersionExists(ctx, nil, serverName, "3.0.0")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.False(t, exists)
 	})
 
 	t.Run("GetCurrentLatestVersion", func(t *testing.T) {
 		latest, err := db.GetCurrentLatestVersion(ctx, nil, serverName)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, latest)
 		assert.Equal(t, "2.0.0", latest.Server.Version)
 		assert.True(t, latest.Meta.Official.IsLatest)
@@ -669,7 +669,7 @@ func TestPostgreSQL_HelperMethods(t *testing.T) {
 
 	t.Run("GetAllVersionsByServerName", func(t *testing.T) {
 		allVersions, err := db.GetAllVersionsByServerName(ctx, nil, serverName)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, allVersions, 3)
 
 		// Check versions are present
@@ -684,12 +684,12 @@ func TestPostgreSQL_HelperMethods(t *testing.T) {
 
 	t.Run("UnmarkAsLatest", func(t *testing.T) {
 		err := db.UnmarkAsLatest(ctx, nil, serverName)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Verify no version is marked as latest
 		latest, err := db.GetCurrentLatestVersion(ctx, nil, serverName)
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, database.ErrNotFound)
+		require.Error(t, err)
+		require.ErrorIs(t, err, database.ErrNotFound)
 		assert.Nil(t, latest)
 	})
 }
@@ -701,12 +701,12 @@ func TestPostgreSQL_EdgeCases(t *testing.T) {
 	t.Run("input validation", func(t *testing.T) {
 		// Test nil inputs
 		_, err := db.CreateServer(ctx, nil, nil, nil)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "serverJSON and officialMeta are required")
 
 		// Test empty required fields
 		_, err = db.CreateServer(ctx, nil, &apiv0.ServerJSON{}, &apiv0.RegistryExtensions{})
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "server name and version are required")
 	})
 
@@ -725,7 +725,7 @@ func TestPostgreSQL_EdgeCases(t *testing.T) {
 		}
 
 		_, err := db.CreateServer(ctx, nil, invalidServer, officialMeta)
-		assert.Error(t, err, "Should fail due to server name format constraint")
+		require.Error(t, err, "Should fail due to server name format constraint")
 	})
 
 	t.Run("pagination edge cases", func(t *testing.T) {
@@ -733,13 +733,13 @@ func TestPostgreSQL_EdgeCases(t *testing.T) {
 		results, cursor, err := db.ListServers(ctx, nil, &database.ServerFilter{
 			Name: stringPtr("com.example/non-existent-server"),
 		}, "", 10)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, results)
 		assert.Empty(t, cursor)
 
 		// Test pagination with limit 0 (should use default)
 		_, _, err = db.ListServers(ctx, nil, nil, "", 0)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		// Should still work with default limit
 	})
 
@@ -772,7 +772,7 @@ func TestPostgreSQL_EdgeCases(t *testing.T) {
 		}
 
 		results, _, err := db.ListServers(ctx, nil, filter, "", 10)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, results, 1)
 		assert.Equal(t, serverName, results[0].Server.Name)
 	})
@@ -804,7 +804,7 @@ func TestPostgreSQL_EdgeCases(t *testing.T) {
 		ctxWithAuth := internaldb.WithTestSession(ctx)
 		for _, status := range statuses {
 			result, err := db.SetServerStatus(ctxWithAuth, nil, serverName, version, status)
-			assert.NoError(t, err, "Should allow transition to %s", status)
+			require.NoError(t, err, "Should allow transition to %s", status)
 			assert.Equal(t, model.Status(status), result.Meta.Official.Status)
 		}
 	})
@@ -835,12 +835,12 @@ func TestPostgreSQL_PerformanceScenarios(t *testing.T) {
 
 		// Test counting versions
 		count, err := db.CountServerVersions(ctx, nil, serverName)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, versionCount, count)
 
 		// Test getting all versions
 		allVersions, err := db.GetAllVersionsByServerName(ctx, nil, serverName)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, allVersions, versionCount)
 
 		// Test only one is marked as latest
@@ -877,7 +877,7 @@ func TestPostgreSQL_PerformanceScenarios(t *testing.T) {
 
 		for {
 			results, nextCursor, err := db.ListServers(ctx, nil, nil, cursor, pageSize)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			allResults = append(allResults, results...)
 
 			if nextCursor == "" || len(results) < pageSize {

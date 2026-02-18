@@ -7,6 +7,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators/registries"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateMCPB(t *testing.T) {
@@ -111,10 +112,10 @@ func TestValidateMCPB(t *testing.T) {
 			err := registries.ValidateMCPB(ctx, pkg, tt.serverName)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errorMessage)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -178,10 +179,10 @@ func TestValidateMCPB_OptionalFields(t *testing.T) {
 			err := registries.ValidateMCPB(ctx, tt.pkg, "io.github.domdomegg/airtable-mcp-server")
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errorMessage)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}

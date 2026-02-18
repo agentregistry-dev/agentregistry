@@ -94,13 +94,13 @@ func TestOIDCHandler_ExchangeToken(t *testing.T) {
 			response, err := handler.ExchangeToken(ctx, tt.token)
 
 			if tt.expectedError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, response)
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, response)
 				assert.NotEmpty(t, response.RegistryToken)
-				assert.Greater(t, response.ExpiresAt, 0)
+				assert.Positive(t, response.ExpiresAt)
 			}
 		})
 	}

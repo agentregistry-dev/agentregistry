@@ -71,7 +71,7 @@ func TestGitHubHandler_ExchangeToken(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, response)
 		assert.NotEmpty(t, response.RegistryToken)
-		assert.Greater(t, response.ExpiresAt, 0)
+		assert.Positive(t, response.ExpiresAt)
 
 		// Validate the JWT token
 		jwtManager := auth.NewJWTManager(cfg)

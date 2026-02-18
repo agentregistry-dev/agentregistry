@@ -32,7 +32,7 @@ func TestNoneHandler_GetAnonymousToken(t *testing.T) {
 	tokenResponse, err := handler.GetAnonymousToken(ctx)
 	require.NoError(t, err)
 	assert.NotEmpty(t, tokenResponse.RegistryToken)
-	assert.Greater(t, tokenResponse.ExpiresAt, 0)
+	assert.Positive(t, tokenResponse.ExpiresAt)
 
 	// Validate the token claims
 	jwtManager := auth.NewJWTManager(cfg)
