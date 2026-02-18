@@ -1,0 +1,62 @@
+name: Stalebot
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # Daily at 6am EST
+    - cron: "0 10 * * *"
+
+env:
+  DAYS_BEFORE_ISSUE_STALE: 60
+  DAYS_BEFORE_ISSUE_CLOSE: 14
+  DAYS_BEFORE_PR_STALE: 14
+  DAYS_BEFORE_PR_CLOSE: 3
+
+jobs:
+  close-stale-issues:
+    name: Close Stale Issues
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          days-before-issue-stale: ${{ env.DAYS_BEFORE_ISSUE_STALE }}
+          days-before-issue-close: ${{ env.DAYS_BEFORE_ISSUE_CLOSE }}
+          stale-issue-message: >
+            This issue has been marked as stale due to no activity in the last ${{ env.DAYS_BEFORE_ISSUE_STALE }} days.
+            It will be closed in ${{ env.DAYS_BEFORE_ISSUE_CLOSE }} days unless it is tagged "no stalebot" or other activity occurs.
+          close-issue-message: >
+            This issue has been closed due to inactivity.
+          stale-issue-label: "stale"
+          exempt-issue-labels: "no stalebot"
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
+          enable-statistics: true
+          operations-per-run: 1000
+          ascending: true
+
+  close-stale-prs:
+    name: Close Stale PRs
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          days-before-pr-stale: ${{ env.DAYS_BEFORE_PR_STALE }}
+          days-before-pr-close: ${{ env.DAYS_BEFORE_PR_CLOSE }}
+          stale-pr-message: >
+            This pull request has been marked as stale due to no activity in the last ${{ env.DAYS_BEFORE_PR_STALE }} days.
+            It will be closed in ${{ env.DAYS_BEFORE_PR_CLOSE }} days unless it is tagged "no stalebot" or other activity occurs.
+          close-pr-message: >
+            This pull request has been closed due to inactivity.
+          stale-pr-label: "stale"
+          exempt-pr-labels: "no stalebot"
+          days-before-issue-stale: -1
+          days-before-issue-close: -1
+          enable-statistics: true
+          operations-per-run: 1000
+          ascending: true
