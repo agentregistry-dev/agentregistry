@@ -240,10 +240,10 @@ release-cli: bin/arctl-darwin-amd64.sha256
 release-cli: bin/arctl-darwin-arm64.sha256
 release-cli: bin/arctl-windows-amd64.exe.sha256
 
-GOLANGCI_LINT_ARGS ?=
+GOLANGCI_LINT_ARGS ?= --fix
 
 .PHONY: lint
-lint: golangci-lint ## Run golangci-lint linter (use GOLANGCI_LINT_ARGS=--fix to auto-fix)
+lint: golangci-lint ## Run golangci-lint linter
 	$(GOLANGCI_LINT) run $(GOLANGCI_LINT_ARGS)
 
 .PHONY: verify
