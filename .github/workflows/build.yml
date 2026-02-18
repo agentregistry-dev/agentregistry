@@ -47,7 +47,6 @@ jobs:
     - name: Run Integration Tests
       run: make test
 
-
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -65,9 +64,8 @@ jobs:
     - name: Build UI
       run: make build-ui
 
-    - name: golangci-lint
+    - name: Lint Go
       run: make lint
 
     - name: Lint UI
       run: cd ui && npm run lint
-
