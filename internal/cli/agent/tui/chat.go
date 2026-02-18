@@ -300,7 +300,7 @@ func (m *chatModel) handleMessageParts(msg protocol.Message, shouldDisplay bool)
 	var toolResults []toolResult
 
 	for _, part := range msg.Parts {
-		if tp, ok := part.(*protocol.TextPart); ok {
+		if tp, ok := part.(*protocol.TextPart); ok { //nolint:nestif
 			textParts = append(textParts, tp.Text)
 		} else if dp, ok := part.(*protocol.DataPart); ok {
 			if m.verbose {

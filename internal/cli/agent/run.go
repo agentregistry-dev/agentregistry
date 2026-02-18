@@ -87,7 +87,7 @@ func runFromDirectory(ctx context.Context, projectDir string) error {
 	var serversForConfig []common.PythonMCPServer
 
 	// Resolve registry-type MCP servers if present
-	if hasRegistryServers(manifest) {
+	if hasRegistryServers(manifest) { //nolint:nestif
 		if verbose {
 			fmt.Println("[registry-resolve] Detected registry-type MCP servers in manifest")
 			fmt.Printf("[registry-resolve] Total MCP servers in manifest: %d\n", len(manifest.McpServers))
@@ -204,7 +204,7 @@ func runFromManifest(ctx context.Context, manifest *models.AgentManifest, versio
 	useOverrides := overrides != nil
 	var serversForConfig []common.PythonMCPServer
 
-	if useOverrides {
+	if useOverrides { //nolint:nestif
 		// servers already resolved, compose already generated (i.e. from runFromDirectory)
 		if verbose {
 			fmt.Println("[registry-resolve] Using pre-resolved overrides from runFromDirectory")

@@ -73,7 +73,7 @@ func addMcpCmd(name string) error {
 
 	// If flags provided, build non-interactively; else run wizard
 	var res models.McpServerType
-	if remoteURL != "" || command != "" || image != "" || build != "" || registryURL != "" || registryServerName != "" {
+	if remoteURL != "" || command != "" || image != "" || build != "" || registryURL != "" || registryServerName != "" { //nolint:nestif
 		if remoteURL != "" {
 			headerMap, err := utils.ParseKeyValuePairs(headers)
 			if err != nil {

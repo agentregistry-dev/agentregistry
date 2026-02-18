@@ -57,7 +57,7 @@ func selectServerVersion(resourceName, requestedVersion string, autoYes bool) (*
 	}
 
 	// If there are multiple versions, prompt the user (unless --yes is set)
-	if len(allVersions) > 1 {
+	if len(allVersions) > 1 { //nolint:nestif
 		fmt.Printf("✓ Found %d version(s) of MCP server '%s':\n", len(allVersions), resourceName)
 		for i, v := range allVersions {
 			marker := ""

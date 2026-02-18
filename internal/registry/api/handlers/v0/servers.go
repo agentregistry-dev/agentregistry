@@ -31,7 +31,7 @@ func normalizeServerResponse(src *apiv0.ServerResponse) models.ServerResponse {
 	server := src.Server
 	var semanticScore *float64
 
-	if server.Meta != nil && server.Meta.PublisherProvided != nil {
+	if server.Meta != nil && server.Meta.PublisherProvided != nil { //nolint:nestif
 		if raw, ok := server.Meta.PublisherProvided[semanticMetadataKey]; ok {
 			if m, okm := raw.(map[string]any); okm {
 				if v, okv := m["score"].(float64); okv {
@@ -100,7 +100,7 @@ type ServerReadmeResponse struct {
 // RegisterServersEndpoints registers all server-related endpoints with a custom path prefix.
 func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.RegistryService) {
 	isAdmin := strings.Contains(pathPrefix, "admin")
-	if isAdmin {
+	if isAdmin { //nolint:nestif
 		huma.Register(api, huma.Operation{
 			OperationID: "delete-server-version" + strings.ReplaceAll(pathPrefix, "/", "-"),
 			Method:      http.MethodDelete,
@@ -269,7 +269,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		var serverResponse *apiv0.ServerResponse
 
 		// Handle "latest" as a special version string
-		if version == "latest" {
+		if version == "latest" { //nolint:nestif
 			// Get all versions and find the latest one
 			servers, err := registry.GetAllVersionsByServerName(ctx, serverName)
 			if err != nil {

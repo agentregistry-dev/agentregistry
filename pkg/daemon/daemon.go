@@ -38,7 +38,7 @@ var _ types.DaemonManager = (*DefaultDaemonManager)(nil)
 
 func NewDaemonManager(config *types.DaemonConfig) *DefaultDaemonManager {
 	cfg := DefaultConfig()
-	if config != nil {
+	if config != nil { //nolint:nestif
 		if config.ProjectName != "" {
 			cfg.ProjectName = config.ProjectName
 		}

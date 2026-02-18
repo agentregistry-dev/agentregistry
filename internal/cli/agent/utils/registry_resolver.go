@@ -123,7 +123,7 @@ func resolveRegistryServer(mcpServer models.McpServerType, verbose bool) (*model
 	manifestEnvVars := parseManifestEnvVars(mcpServer.Env)
 	maps.Copy(envOverrides, manifestEnvVars)
 
-	if verbose {
+	if verbose { //nolint:nestif
 		if len(envOverrides) > 0 {
 			fmt.Printf("[registry-resolver]   Collected %d environment variable overrides (from environment and manifest):\n", len(envOverrides))
 			for k, v := range envOverrides {

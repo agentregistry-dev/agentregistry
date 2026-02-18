@@ -117,7 +117,7 @@ func (db *PostgreSQL) ListServers(
 	args := []any{}
 	argIndex := 1
 
-	if filter != nil {
+	if filter != nil { //nolint:nestif
 		if filter.Name != nil {
 			whereConditions = append(whereConditions, fmt.Sprintf("server_name = $%d", argIndex))
 			args = append(args, *filter.Name)
@@ -1151,7 +1151,7 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *databas
 	args := []any{}
 	argIndex := 1
 
-	if filter != nil {
+	if filter != nil { //nolint:nestif
 		if filter.Name != nil {
 			whereConditions = append(whereConditions, fmt.Sprintf("agent_name = $%d", argIndex))
 			args = append(args, *filter.Name)
@@ -1860,7 +1860,7 @@ func (db *PostgreSQL) ListSkills(ctx context.Context, tx pgx.Tx, filter *databas
 	args := []any{}
 	argIndex := 1
 
-	if filter != nil {
+	if filter != nil { //nolint:nestif
 		if filter.Name != nil {
 			whereConditions = append(whereConditions, fmt.Sprintf("skill_name = $%d", argIndex))
 			args = append(args, *filter.Name)

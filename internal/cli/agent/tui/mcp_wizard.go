@@ -985,7 +985,7 @@ func (w *McpServerWizard) buildFinalResult(name string) {
 		return
 	}
 
-	if w.chosenType == serverTypes.Command.ID {
+	if w.chosenType == serverTypes.Command.ID { //nolint:nestif
 		w.result.Type = serverTypes.Command.ID
 		w.result.Name = name
 
@@ -1071,7 +1071,7 @@ func (w *McpServerWizard) tabRegistryServerPreferRemote(_ bool) tea.Cmd { return
 
 // tabRegistryEnv toggles focus between env key and value inputs.
 func (w *McpServerWizard) tabRegistryEnv(reverse bool) tea.Cmd {
-	if reverse {
+	if reverse { //nolint:nestif
 		if w.registryEnvValueInput.Focused() {
 			w.registryEnvKeyInput.Focus()
 			w.registryEnvValueInput.Blur()
@@ -1093,7 +1093,7 @@ func (w *McpServerWizard) tabRegistryEnv(reverse bool) tea.Cmd {
 
 // tabRemoteHeaders toggles focus between header key and value inputs.
 func (w *McpServerWizard) tabRemoteHeaders(reverse bool) tea.Cmd {
-	if reverse {
+	if reverse { //nolint:nestif
 		if w.headerValueInput.Focused() {
 			w.headerKeyInput.Focus()
 			w.headerValueInput.Blur()
@@ -1137,7 +1137,7 @@ func (w *McpServerWizard) tabCommandDetails(reverse bool) tea.Cmd {
 
 // tabArgsEnv toggles focus between args and env.
 func (w *McpServerWizard) tabArgsEnv(reverse bool) tea.Cmd {
-	if reverse {
+	if reverse { //nolint:nestif
 		if w.envInput.Focused() {
 			w.argsInput.Focus()
 			w.envInput.Blur()
@@ -1255,7 +1255,7 @@ func (w *McpServerWizard) renderCommandDetails() string {
 func (w *McpServerWizard) renderHeader() string {
 	idx := 1
 	var total int
-	if w.chosenType == serverTypes.Remote.ID || w.step == stepRemoteURL || w.step == stepRemoteHeaders {
+	if w.chosenType == serverTypes.Remote.ID || w.step == stepRemoteURL || w.step == stepRemoteHeaders { //nolint:nestif
 		// remote flow
 		if v, ok := wizardFlows.Remote.StepPositions[w.step]; ok {
 			idx = v

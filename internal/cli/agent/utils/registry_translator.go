@@ -21,7 +21,7 @@ func TranslateRegistryServer(
 	}
 
 	useRemote := len(serverSpec.Remotes) > 0 && (preferRemote || len(serverSpec.Packages) == 0)
-	if useRemote {
+	if useRemote { //nolint:nestif
 		remote := serverSpec.Remotes[0]
 		if remote.URL == "" {
 			return nil, fmt.Errorf("server %q remote has no URL", serverSpec.Name)

@@ -377,7 +377,7 @@ func TestDefaultHTTPKeyFetcher(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.handler != nil {
+			if tt.handler != nil { //nolint:nestif
 				srv := httptest.NewTLSServer(tt.handler)
 				defer srv.Close()
 				c := newClientForTLSServer(t, srv)

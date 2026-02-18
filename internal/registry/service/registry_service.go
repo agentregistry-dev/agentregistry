@@ -193,7 +193,7 @@ func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx 
 	}
 
 	// Generate embedding asynchronously (non-blocking, best-effort)
-	if s.shouldGenerateEmbeddingsOnPublish() {
+	if s.shouldGenerateEmbeddingsOnPublish() { //nolint:nestif
 		go func() {
 			bgCtx := context.Background()
 			payload := embeddings.BuildServerEmbeddingPayload(&serverJSON)
@@ -592,7 +592,7 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 	}
 
 	// Generate embedding asynchronously (non-blocking, best-effort)
-	if s.shouldGenerateEmbeddingsOnPublish() {
+	if s.shouldGenerateEmbeddingsOnPublish() { //nolint:nestif
 		go func() {
 			bgCtx := context.Background()
 			payload := embeddings.BuildAgentEmbeddingPayload(&agentJSON)
@@ -664,7 +664,7 @@ func (s *registryServiceImpl) GetDeployments(ctx context.Context, filter *models
 
 	// If runtime filter includes kubernetes (or no filter i.e. default), fetch from K8s
 	includeK8s := filter == nil || filter.Runtime == nil || *filter.Runtime == "kubernetes"
-	if includeK8s {
+	if includeK8s { //nolint:nestif
 		// Use empty namespace to list all (or default)
 		k8sResources, err := s.listKubernetesDeployments(ctx, "")
 		if err != nil {
@@ -835,7 +835,7 @@ func (s *registryServiceImpl) RemoveDeployment(ctx context.Context, serverName s
 	}
 
 	// Clean up kubernetes resources
-	if deployment != nil && deployment.Runtime == "kubernetes" {
+	if deployment != nil && deployment.Runtime == "kubernetes" { //nolint:nestif
 		namespace := ""
 		if deployment.Config != nil {
 			namespace = deployment.Config["KAGENT_NAMESPACE"]

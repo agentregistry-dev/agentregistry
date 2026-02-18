@@ -55,7 +55,7 @@ func runAddTool(_ *cobra.Command, args []string) error {
 
 	// Determine project directory
 	projectDirectory := addToolDir
-	if projectDirectory == "" {
+	if projectDirectory == "" { //nolint:nestif
 		var err error
 		projectDirectory, err = os.Getwd()
 		if err != nil {
@@ -131,7 +131,7 @@ func isValidIdentifier(name string) bool {
 	// Remaining characters must be letters, digits, or underscores
 	for i := 1; i < len(name); i++ {
 		c := name[i]
-		if c < 'a' || c > 'z' {
+		if c < 'a' || c > 'z' { //nolint:nestif
 			if c < 'A' || c > 'Z' {
 				if c < '0' || c > '9' {
 					if c != '_' {

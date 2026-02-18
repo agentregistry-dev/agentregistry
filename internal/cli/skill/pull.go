@@ -161,7 +161,7 @@ func copyNonEmptyContents(src, dst string) error {
 			continue
 		}
 
-		if entry.IsDir() {
+		if entry.IsDir() { //nolint:nestif
 			// Check if directory has any non-empty content
 			if !hasNonEmptyContent(srcPath, skipDirs) {
 				continue
@@ -207,7 +207,7 @@ func hasNonEmptyContent(dir string, skipDirs map[string]bool) bool {
 	for _, entry := range entries {
 		path := filepath.Join(dir, entry.Name())
 
-		if entry.IsDir() {
+		if entry.IsDir() { //nolint:nestif
 			if skipDirs[entry.Name()] {
 				continue
 			}

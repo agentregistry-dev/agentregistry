@@ -119,7 +119,7 @@ func streamIndex(ctx context.Context, c *client.Client, req v0.IndexRequest) err
 		if line == "" {
 			continue
 		}
-		if len(line) > 5 && line[:5] == "data:" {
+		if len(line) > 5 && line[:5] == "data:" { //nolint:nestif
 			data := line[5:]
 			if len(data) > 0 && data[0] == ' ' {
 				data = data[1:]

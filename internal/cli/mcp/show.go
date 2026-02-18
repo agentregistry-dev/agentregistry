@@ -66,7 +66,7 @@ func runShow(cmd *cobra.Command, args []string) error {
 	}
 
 	// Handle JSON output format
-	if showOutputFormat == "json" {
+	if showOutputFormat == "json" { //nolint:nestif
 		if len(servers) == 1 {
 			// Single server - output as object
 			fmt.Println(servers[0])
@@ -89,7 +89,7 @@ func runShow(cmd *cobra.Command, args []string) error {
 	// Group servers by base name (same server, different versions)
 	serverGroups := groupServersByBaseName(servers)
 
-	if len(serverGroups) == 1 && len(serverGroups[0].Servers) == 1 {
+	if len(serverGroups) == 1 && len(serverGroups[0].Servers) == 1 { //nolint:nestif
 		// Single server, single version - show detailed view
 		showServerDetails(serverGroups[0].Servers[0], nil)
 	} else if len(serverGroups) == 1 {

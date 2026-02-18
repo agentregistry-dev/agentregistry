@@ -52,16 +52,16 @@ func TestResolveTransport(t *testing.T) {
 				if err == nil {
 					t.Errorf("expected error but got none")
 				}
-			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-				if transport != tt.expectedTransportType {
-					t.Errorf("expected %s but got %s", tt.expectedTransportType, transport)
-				}
-				if url != tt.expectedTransportURL {
-					t.Errorf("expected %s but got %s", tt.expectedTransportURL, url)
-				}
+				return
+			}
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if transport != tt.expectedTransportType {
+				t.Errorf("expected %s but got %s", tt.expectedTransportType, transport)
+			}
+			if url != tt.expectedTransportURL {
+				t.Errorf("expected %s but got %s", tt.expectedTransportURL, url)
 			}
 		})
 	}
@@ -149,16 +149,16 @@ func TestBuildRepository(t *testing.T) {
 				if result != nil {
 					t.Errorf("expected nil but got %v", result)
 				}
-			} else {
-				if result == nil { //nolint:staticcheck
-					t.Error("expected non-nil result")
-				}
-				if result.URL != tt.githubURL { //nolint:staticcheck
-					t.Errorf("expected URL %s but got %s", tt.githubURL, result.URL)
-				}
-				if result.Source != "github" {
-					t.Errorf("expected source 'github' but got %s", result.Source)
-				}
+				return
+			}
+			if result == nil { //nolint:staticcheck
+				t.Error("expected non-nil result")
+			}
+			if result.URL != tt.githubURL { //nolint:staticcheck
+				t.Errorf("expected URL %s but got %s", tt.githubURL, result.URL)
+			}
+			if result.Source != "github" {
+				t.Errorf("expected source 'github' but got %s", result.Source)
 			}
 		})
 	}

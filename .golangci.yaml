@@ -21,6 +21,7 @@ linters:
     - misspell
     - modernize
     - nakedret
+    - nestif
     - nolintlint
     - staticcheck
     - unused

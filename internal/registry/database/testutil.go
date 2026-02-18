@@ -81,7 +81,7 @@ func ensureTemplateDB(ctx context.Context, adminConn *pgx.Conn) error {
 		return fmt.Errorf("failed to check template database: %w", err)
 	}
 
-	if !exists {
+	if !exists { //nolint:nestif
 		_, err = adminConn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s", templateDBName))
 		if err != nil {
 			// Ignore duplicate database name error - another process created it concurrently

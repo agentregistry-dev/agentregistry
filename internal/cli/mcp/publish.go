@@ -125,7 +125,7 @@ func runMCPServerPublish(cmd *cobra.Command, args []string) error {
 	absPath, _ := filepath.Abs(input)
 	manifestManager := manifest.NewManager(absPath)
 
-	if manifestManager.Exists() {
+	if manifestManager.Exists() { //nolint:nestif
 		// Load metadata from mcp.yaml
 		projectManifest, err := manifestManager.Load()
 		if err != nil {

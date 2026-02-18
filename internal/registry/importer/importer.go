@@ -213,7 +213,7 @@ func (s *Service) importServer(
 	}
 
 	_, err := s.registry.CreateServer(ctx, srv)
-	if err != nil {
+	if err != nil { //nolint:nestif
 		// If duplicate version and update is enabled, try update path
 		if s.updateIfExists && errors.Is(err, database.ErrInvalidVersion) {
 			if _, uerr := s.registry.UpdateServer(ctx, srv.Name, srv.Version, srv, nil); uerr != nil {
