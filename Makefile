@@ -71,20 +71,18 @@ clean-ui:
 	@echo "UI artifacts cleaned"
 
 # Build the Go CLI
-build-cli:
+build-cli: mod-download
 	@echo "Building Go CLI..."
 	@echo "Downloading Go dependencies..."
-	go mod download
 	@echo "Building binary..."
 	go build -ldflags "$(LDFLAGS)" \
 		-o bin/arctl cmd/cli/main.go
 	@echo "Binary built successfully: bin/arctl"
 
 # Build the Go server (with embedded UI)
-build-server:
+build-server: mod-download
 	@echo "Building Go CLI..."
 	@echo "Downloading Go dependencies..."
-	go mod download
 	@echo "Building binary..."
 	go build -ldflags "$(LDFLAGS)" \
 		-o bin/arctl-server cmd/server/main.go
@@ -253,6 +251,10 @@ verify: mod-tidy ## Run all verification checks
 .PHONY: mod-tidy
 mod-tidy: ## Run go mod tidy
 	go mod tidy
+
+.PHONY: mod-download
+mod-download: ## Run go mod download
+	go mod download
 
 ##@ Dependencies
 
