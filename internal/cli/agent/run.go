@@ -34,7 +34,7 @@ launches the same chat interface.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runRun,
 	Example: `arctl agent run ./my-agent
-  arctl agent run dice`,
+arctl agent run dice`,
 }
 
 var buildFlag bool
