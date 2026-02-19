@@ -66,6 +66,46 @@ func Execute() {
 	}
 }
 
+var rootCmd = &cobra.Command{
+	Use:   "arctl",
+	Short: "Agent Registry CLI",
+	Long:  `arctl is a CLI tool for managing agents, MCP servers and skills.`,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		baseURL, token := resolveRegistryTarget(os.Getenv)
+		skipSetup, autoStartDaemon := preRunBehavior(cmd, baseURL)
+		if skipSetup {
+			return nil
+		}
+
+		c, err := preRunSetup(cmd.Context(), baseURL, token, autoStartDaemon)
+		if err != nil {
+			return err
+		}
+
+		APIClient = c
+		mcp.SetAPIClient(c)
+		agent.SetAPIClient(c)
+		agentutils.SetDefaultRegistryURL(c.BaseURL)
+		skill.SetAPIClient(c)
+		cli.SetAPIClient(c)
+		return nil
+	},
+}
+
+func init() {
+	rootCmd.PersistentFlags().StringVar(&registryURL, "registry-url", os.Getenv("ARCTL_API_BASE_URL"), "Registry base URL (overrides ARCTL_API_BASE_URL; default http://localhost:12121)")
+	rootCmd.PersistentFlags().StringVar(&registryToken, "registry-token", os.Getenv("ARCTL_API_TOKEN"), "Registry bearer token (overrides ARCTL_API_TOKEN)")
+
+	rootCmd.AddCommand(mcp.McpCmd)
+	rootCmd.AddCommand(agent.AgentCmd)
+	rootCmd.AddCommand(skill.SkillCmd)
+	rootCmd.AddCommand(configure.ConfigureCmd)
+	rootCmd.AddCommand(cli.VersionCmd)
+	rootCmd.AddCommand(cli.ImportCmd)
+	rootCmd.AddCommand(cli.ExportCmd)
+	rootCmd.AddCommand(cli.EmbeddingsCmd)
+}
+
 // resolveRegistryTarget returns base URL and token from flags and env.
 // getEnv is typically os.Getenv; injected for tests.
 func resolveRegistryTarget(getEnv func(string) string) (baseURL, token string) {
@@ -197,48 +237,4 @@ func preRunSetup(ctx context.Context, baseURL, token string, autoStartDaemon boo
 		return nil, fmt.Errorf("API client not initialized: %w", err)
 	}
 	return c, nil
-}
-
-func applyAPIClientToSubcommands(c *client.Client) {
-	APIClient = c
-	mcp.SetAPIClient(c)
-	agent.SetAPIClient(c)
-	agentutils.SetDefaultRegistryURL(c.BaseURL)
-	skill.SetAPIClient(c)
-	cli.SetAPIClient(c)
-}
-
-var rootCmd = &cobra.Command{
-	Use:   "arctl",
-	Short: "Agent Registry CLI",
-	Long:  `arctl is a CLI tool for managing agents, MCP servers and skills.`,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		baseURL, token := resolveRegistryTarget(os.Getenv)
-		skipSetup, autoStartDaemon := preRunBehavior(cmd, baseURL)
-		if skipSetup {
-			return nil
-		}
-
-		c, err := preRunSetup(cmd.Context(), baseURL, token, autoStartDaemon)
-		if err != nil {
-			return err
-		}
-
-		applyAPIClientToSubcommands(c)
-		return nil
-	},
-}
-
-func init() {
-	rootCmd.PersistentFlags().StringVar(&registryURL, "registry-url", os.Getenv("ARCTL_API_BASE_URL"), "Registry base URL (overrides ARCTL_API_BASE_URL; default http://localhost:12121)")
-	rootCmd.PersistentFlags().StringVar(&registryToken, "registry-token", os.Getenv("ARCTL_API_TOKEN"), "Registry bearer token (overrides ARCTL_API_TOKEN)")
-
-	rootCmd.AddCommand(mcp.McpCmd)
-	rootCmd.AddCommand(agent.AgentCmd)
-	rootCmd.AddCommand(skill.SkillCmd)
-	rootCmd.AddCommand(configure.ConfigureCmd)
-	rootCmd.AddCommand(cli.VersionCmd)
-	rootCmd.AddCommand(cli.ImportCmd)
-	rootCmd.AddCommand(cli.ExportCmd)
-	rootCmd.AddCommand(cli.EmbeddingsCmd)
 }

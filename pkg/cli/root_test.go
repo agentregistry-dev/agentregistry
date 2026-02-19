@@ -276,18 +276,6 @@ func TestPreRunSetup(t *testing.T) {
 	})
 }
 
-func TestApplyAPIClientToSubcommands(t *testing.T) {
-	c := client.NewClient("http://localhost:12121/v0", "")
-	old := APIClient
-	defer func() { APIClient = old }()
-
-	applyAPIClientToSubcommands(c)
-
-	if APIClient != c {
-		t.Errorf("APIClient = %p, want %p", APIClient, c)
-	}
-}
-
 // mockDaemonManager for unit tests.
 type mockDaemonManager struct {
 	running     bool
