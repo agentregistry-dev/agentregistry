@@ -3,7 +3,7 @@
 This document provides guidelines for both AI coding assistants (Claude, Copilot, Cursor, etc.) and human developers working on the AgentRegistry codebase.
 
 ## Project Overview
-
+asdf
 AgentRegistry is a centralized registry for securely curating, discovering, deploying, and managing agentic infrastructure including MCP (Model Context Protocol) servers, agents, and skills.
 
 **Tech Stack:**
