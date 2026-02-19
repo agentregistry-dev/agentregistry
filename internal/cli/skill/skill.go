@@ -20,7 +20,7 @@ var SkillCmd = &cobra.Command{
 	Example: `arctl skill list
 arctl skill show my-skill
 arctl skill publish ./my-skill
-arctl skill remove my-skill`,
+arctl skill delete my-skill --version 1.0.0`,
 }
 
 func init() {
@@ -32,5 +32,4 @@ func init() {
 	SkillCmd.AddCommand(DeleteCmd)
 	SkillCmd.AddCommand(PullCmd)
 	SkillCmd.AddCommand(ShowCmd)
-	SkillCmd.AddCommand(RemoveCmd)
 }
