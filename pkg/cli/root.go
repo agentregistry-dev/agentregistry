@@ -26,9 +26,8 @@ type CLIOptions struct {
 	// DaemonManager handles daemon lifecycle. If nil, uses default.
 	DaemonManager types.DaemonManager
 
-	// AuthnProvider provides CLI-specific authentication.
-	// If nil, uses ARCTL_API_TOKEN env var.
-	AuthnProvider types.CLIAuthnProvider
+	// AuthnProviderFactory provides CLI-specific authentication.
+	AuthnProviderFactory types.CLIAuthnProviderFactory
 }
 
 var cliOptions CLIOptions
@@ -69,18 +68,24 @@ var rootCmd = &cobra.Command{
 		}
 
 		// Get authentication token if no token override was provided
-		if token == "" && cliOptions.AuthnProvider != nil {
-			var err error
-			token, err = cliOptions.AuthnProvider.Authenticate(cmd.Context())
+		if token == "" && cliOptions.AuthnProviderFactory != nil {
+			provider, err := cliOptions.AuthnProviderFactory(cmd.Root())
 			if err != nil {
-				// missing stored token is a sentinel error, and should not block all commands (e.g. artifact init)
-				if errors.Is(err, types.ErrCLINoStoredToken) {
-					if verbose {
-						fmt.Println("No stored authentication token found. Continuing without authentication.")
-					}
+				if errors.Is(err, types.ErrNoOIDCDefined) {
+					// non-blocking, user may be running a command that does not require authentication
 				} else {
-					// in this case, there is a valid issue with authentication, so block the command execution
-					return fmt.Errorf("CLI authentication failed: %w", err)
+					return fmt.Errorf("failed to create CLI authentication provider: %w", err)
+				}
+			} else {
+				if provider != nil {
+					token, err = provider.Authenticate(cmd.Context())
+					if err != nil {
+						if errors.Is(err, types.ErrCLINoStoredToken) {
+							// non-blocking, user may be running a command that does not require authentication
+						} else {
+							return fmt.Errorf("CLI authentication failed: %w", err)
+						}
+					}
 				}
 			}
 		}
