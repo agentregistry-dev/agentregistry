@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -19,83 +20,45 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// CLIOptions configures the CLI behavior
-// We could extend this to include more extensibility options in the future (e.g. client factory)
+const defaultRegistryPort = "12121"
+
+// ClientFactory creates an API client for the given base URL and token.
+// Used for testing when nil; production uses client.NewClientWithConfig.
+type ClientFactory func(ctx context.Context, baseURL, token string) (*client.Client, error)
+
+// CLIOptions configures the CLI behavior.
+// Can be extended for more options (e.g. client factory).
 type CLIOptions struct {
 	// DaemonManager handles daemon lifecycle. If nil, uses default.
 	DaemonManager types.DaemonManager
-
 	// AuthnProvider provides CLI-specific authentication.
-	// If nil, uses ARCTL_API_TOKEN env var.
+	// If nil, token comes from flags/env (ARCTL_API_TOKEN).
 	AuthnProvider types.CLIAuthnProvider
+	// ClientFactory creates the API client. If nil, uses client.NewClientWithConfig (requires network).
+	ClientFactory ClientFactory
 }
 
-var cliOptions CLIOptions
-var registryURL string
-var registryToken string
+var (
+	cliOptions    CLIOptions
+	registryURL   string
+	registryToken string
+	verbose       bool
+)
 
-const defaultRegistryPort = "12121"
+// APIClient is the shared API client used by CLI commands after pre-run.
+var APIClient *client.Client
 
-// Configure applies options to the root command
+// Configure applies options to the root command (e.g. for tests or alternate entry points).
 func Configure(opts CLIOptions) {
 	cliOptions = opts
 }
 
-var rootCmd = &cobra.Command{
-	Use:   "arctl",
-	Short: "Agent Registry CLI",
-	Long:  `arctl is a CLI tool for managing agents, MCP servers and skills.`,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		baseURL, token := resolveRegistryTarget()
-
-		dm := cliOptions.DaemonManager
-		if dm == nil {
-			dm = daemon.NewDaemonManager(nil)
-		}
-
-		if shouldAutoStartDaemon(baseURL) {
-			if !utils.IsDockerComposeAvailable() {
-				fmt.Println("Docker compose is not available. Please install docker compose and try again.")
-				fmt.Println("See https://docs.docker.com/compose/install/ for installation instructions.")
-				fmt.Println("agent registry uses docker compose to start the server and the agent gateway.")
-				return fmt.Errorf("docker compose is not available")
-			}
-			if !dm.IsRunning() {
-				if err := dm.Start(); err != nil {
-					return fmt.Errorf("failed to start daemon: %w", err)
-				}
-			}
-		}
-
-		// Get authentication token if no token override was provided
-		if token == "" && cliOptions.AuthnProvider != nil {
-			var err error
-			token, err = cliOptions.AuthnProvider.Authenticate(cmd.Context())
-			if err != nil {
-				return fmt.Errorf("CLI authentication failed: %w", err)
-			}
-		}
-
-		// Check if local registry is running and create API client
-		c, err := client.NewClientWithConfig(baseURL, token)
-		if err != nil {
-			return fmt.Errorf("API client not initialized: %w", err)
-		}
-
-		APIClient = c
-		mcp.SetAPIClient(APIClient)
-		agent.SetAPIClient(APIClient)
-		agentutils.SetDefaultRegistryURL(APIClient.BaseURL)
-		skill.SetAPIClient(APIClient)
-		cli.SetAPIClient(APIClient)
-		return nil
-	},
+// Root returns the root cobra command. Used by main and tests.
+func Root() *cobra.Command {
+	return rootCmd
 }
 
-// APIClient is the shared API client used by CLI commands
-var APIClient *client.Client
-var verbose bool
-
+// Execute runs the root command with default flags (e.g. verbose) and exits on error.
 func Execute() {
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "V", false, "Verbose output")
 	if err := rootCmd.Execute(); err != nil {
@@ -103,39 +66,19 @@ func Execute() {
 	}
 }
 
-func init() {
-	envBaseURL := os.Getenv("ARCTL_API_BASE_URL")
-	envToken := os.Getenv("ARCTL_API_TOKEN")
-	rootCmd.PersistentFlags().StringVar(&registryURL, "registry-url", envBaseURL, "Registry base URL (overrides ARCTL_API_BASE_URL; default http://localhost:12121)")
-	rootCmd.PersistentFlags().StringVar(&registryToken, "registry-token", envToken, "Registry bearer token (overrides ARCTL_API_TOKEN)")
-
-	// Add subcommands
-	rootCmd.AddCommand(mcp.McpCmd)
-	rootCmd.AddCommand(agent.AgentCmd)
-	rootCmd.AddCommand(skill.SkillCmd)
-	rootCmd.AddCommand(configure.ConfigureCmd)
-	rootCmd.AddCommand(cli.VersionCmd)
-	rootCmd.AddCommand(cli.ImportCmd)
-	rootCmd.AddCommand(cli.ExportCmd)
-	rootCmd.AddCommand(cli.EmbeddingsCmd)
-}
-
-func Root() *cobra.Command {
-	return rootCmd
-}
-
-func resolveRegistryTarget() (string, string) {
+// resolveRegistryTarget returns base URL and token from flags and env.
+// getEnv is typically os.Getenv; injected for tests.
+func resolveRegistryTarget(getEnv func(string) string) (baseURL, token string) {
 	base := strings.TrimSpace(registryURL)
 	if base == "" {
-		base = strings.TrimSpace(os.Getenv("ARCTL_API_BASE_URL"))
+		base = strings.TrimSpace(getEnv("ARCTL_API_BASE_URL"))
 	}
 	base = normalizeBaseURL(base)
 
-	token := registryToken
+	token = registryToken
 	if token == "" {
-		token = os.Getenv("ARCTL_API_TOKEN")
+		token = getEnv("ARCTL_API_TOKEN")
 	}
-
 	return base, token
 }
 
@@ -150,27 +93,7 @@ func normalizeBaseURL(raw string) string {
 	return "http://" + trimmed
 }
 
-func shouldAutoStartDaemon(targetURL string) bool {
-	parsed := parseURL(targetURL)
-	if parsed == nil {
-		return false
-	}
-	host := strings.ToLower(parsed.Hostname())
-	if host != "localhost" && host != "127.0.0.1" && host != "::1" {
-		return false
-	}
-	port := parsed.Port()
-	if port == "" {
-		if parsed.Scheme == "https" {
-			port = "443"
-		} else {
-			port = "80"
-		}
-	}
-	return port == defaultRegistryPort
-}
-
-func parseURL(raw string) *url.URL {
+func parseRegistryURL(raw string) *url.URL {
 	if strings.TrimSpace(raw) == "" {
 		raw = client.DefaultBaseURL
 	}
@@ -183,4 +106,139 @@ func parseURL(raw string) *url.URL {
 		return nil
 	}
 	return parsed
+}
+
+// preRunDaemonBehavior defines which commands skip setup and when to auto-start the daemon.
+// Key: parent name; value: set of subcommand names that skip daemon/client setup.
+var preRunDaemonBehavior = struct {
+	skipCommands map[string]map[string]bool
+}{
+	skipCommands: map[string]map[string]bool{
+		"agent": {"init": true},
+		"mcp":   {"init": true},
+		"skill": {"init": true},
+	},
+}
+
+// preRunBehavior returns whether to skip pre-run setup (e.g. agent/mcp/skill init) and
+// whether to auto-start the daemon when the registry target is localhost:12121.
+func preRunBehavior(cmd *cobra.Command, baseURL string) (skipSetup bool, autoStartDaemon bool) {
+	// Skip daemon and client setup for specific commands and any of their subcommand
+	if cmd != nil {
+		for c := cmd; c != nil; c = c.Parent() {
+			parent := c.Parent()
+			if parent == nil {
+				break
+			}
+			if subcommands, ok := preRunDaemonBehavior.skipCommands[parent.Name()]; ok && subcommands[c.Name()] {
+				return true, false
+			}
+		}
+	}
+
+	// Auto-start daemon only for localhost on default registry port
+	parsed := parseRegistryURL(baseURL)
+	if parsed == nil {
+		return false, false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host != "localhost" && host != "127.0.0.1" && host != "::1" {
+		return false, false
+	}
+	port := parsed.Port()
+	if port == "" {
+		if parsed.Scheme == "https" {
+			port = "443"
+		} else {
+			port = "80"
+		}
+	}
+	autoStartDaemon = (port == defaultRegistryPort)
+	return false, autoStartDaemon
+}
+
+// preRunSetup ensures daemon is running when autoStartDaemon is true, resolves auth, and creates the API client.
+func preRunSetup(ctx context.Context, baseURL, token string, autoStartDaemon bool) (*client.Client, error) {
+	dm := cliOptions.DaemonManager
+	if dm == nil {
+		dm = daemon.NewDaemonManager(nil)
+	}
+
+	if autoStartDaemon {
+		if !utils.IsDockerComposeAvailable() {
+			fmt.Println("Docker compose is not available. Please install docker compose and try again.")
+			fmt.Println("See https://docs.docker.com/compose/install/ for installation instructions.")
+			fmt.Println("agent registry uses docker compose to start the server and the agent gateway.")
+			return nil, fmt.Errorf("docker compose is not available")
+		}
+		if !dm.IsRunning() {
+			if err := dm.Start(); err != nil {
+				return nil, fmt.Errorf("failed to start daemon: %w", err)
+			}
+		}
+	}
+
+	if token == "" && cliOptions.AuthnProvider != nil {
+		var err error
+		token, err = cliOptions.AuthnProvider.Authenticate(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("CLI authentication failed: %w", err)
+		}
+	}
+
+	var c *client.Client
+	var err error
+	if cliOptions.ClientFactory != nil {
+		c, err = cliOptions.ClientFactory(ctx, baseURL, token)
+	} else {
+		c, err = client.NewClientWithConfig(baseURL, token)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("API client not initialized: %w", err)
+	}
+	return c, nil
+}
+
+func applyAPIClientToSubcommands(c *client.Client) {
+	APIClient = c
+	mcp.SetAPIClient(c)
+	agent.SetAPIClient(c)
+	agentutils.SetDefaultRegistryURL(c.BaseURL)
+	skill.SetAPIClient(c)
+	cli.SetAPIClient(c)
+}
+
+var rootCmd = &cobra.Command{
+	Use:   "arctl",
+	Short: "Agent Registry CLI",
+	Long:  `arctl is a CLI tool for managing agents, MCP servers and skills.`,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		baseURL, token := resolveRegistryTarget(os.Getenv)
+		skipSetup, autoStartDaemon := preRunBehavior(cmd, baseURL)
+		if skipSetup {
+			return nil
+		}
+
+		c, err := preRunSetup(cmd.Context(), baseURL, token, autoStartDaemon)
+		if err != nil {
+			return err
+		}
+
+		applyAPIClientToSubcommands(c)
+		return nil
+	},
+}
+
+func init() {
+	rootCmd.PersistentFlags().StringVar(&registryURL, "registry-url", os.Getenv("ARCTL_API_BASE_URL"), "Registry base URL (overrides ARCTL_API_BASE_URL; default http://localhost:12121)")
+	rootCmd.PersistentFlags().StringVar(&registryToken, "registry-token", os.Getenv("ARCTL_API_TOKEN"), "Registry bearer token (overrides ARCTL_API_TOKEN)")
+
+	rootCmd.AddCommand(mcp.McpCmd)
+	rootCmd.AddCommand(agent.AgentCmd)
+	rootCmd.AddCommand(skill.SkillCmd)
+	rootCmd.AddCommand(configure.ConfigureCmd)
+	rootCmd.AddCommand(cli.VersionCmd)
+	rootCmd.AddCommand(cli.ImportCmd)
+	rootCmd.AddCommand(cli.ExportCmd)
+	rootCmd.AddCommand(cli.EmbeddingsCmd)
 }
