@@ -64,6 +64,9 @@ var rootCmd = &cobra.Command{
 				if err := dm.Start(); err != nil {
 					return fmt.Errorf("failed to start daemon: %w", err)
 				}
+				if err := dm.WaitForReady(); err != nil {
+					return fmt.Errorf("daemon started but not ready: %w", err)
+				}
 			}
 		}
 
