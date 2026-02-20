@@ -21,9 +21,7 @@ var InitCmd = &cobra.Command{
 	Long: `Initialize a new agent project using the specified framework and language.
 
 Supported frameworks and languages:
-  Framework  Languages
-  ---------  ---------
-  adk        python
+  - adk (python)
 
 You can customize the root agent instructions using the --instruction-file flag.
 You can select a specific model using --model-provider and --model-name flags.
