@@ -309,6 +309,16 @@ func init() {
 }
 ```
 
+### CLI Output
+
+Use the `printer` package (`pkg/printer`) for user-facing output instead of raw `fmt.Printf`:
+
+```go
+printer.PrintSuccess("Added skill 'my-skill' to agent.yaml")
+printer.PrintInfo("Processing...")
+printer.PrintError("something went wrong")
+```
+
 ---
 
 ## API Development
