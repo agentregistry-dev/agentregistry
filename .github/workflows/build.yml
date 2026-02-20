@@ -46,26 +46,3 @@ jobs:
 
     - name: Run Integration Tests
       run: make test
-
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-
-    - uses: actions/setup-go@v6
-      with:
-        go-version-file: "go.mod"
-
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: 20.9.x
-
-    - name: Build UI
-      run: make build-ui
-
-    - name: Lint Go
-      run: make lint
-
-    - name: Lint UI
-      run: cd ui && npm run lint

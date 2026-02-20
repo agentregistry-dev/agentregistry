@@ -245,6 +245,10 @@ GOLANGCI_LINT_ARGS ?= --fix
 lint: ## Run golangci-lint linter
 	$(GOLANGCI_LINT) run $(GOLANGCI_LINT_ARGS)
 
+.PHONY: lint-ui
+lint-ui: install-ui ## Run eslint on UI code
+	cd ui && npm run lint
+
 .PHONY: verify
 verify: mod-tidy ## Run all verification checks
 	git diff --exit-code
