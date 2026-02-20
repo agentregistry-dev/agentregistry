@@ -11,38 +11,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func writeTestManifest(t *testing.T, dir string, manifest *models.AgentManifest) {
-	t.Helper()
-	data, err := yaml.Marshal(manifest)
-	if err != nil {
-		t.Fatalf("failed to marshal manifest: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "agent.yaml"), data, 0o644); err != nil {
-		t.Fatalf("failed to write agent.yaml: %v", err)
-	}
-}
-
-func readTestManifest(t *testing.T, dir string) *models.AgentManifest {
-	t.Helper()
-	data, err := os.ReadFile(filepath.Join(dir, "agent.yaml"))
-	if err != nil {
-		t.Fatalf("failed to read agent.yaml: %v", err)
-	}
-	var manifest models.AgentManifest
-	if err := yaml.Unmarshal(data, &manifest); err != nil {
-		t.Fatalf("failed to parse agent.yaml: %v", err)
-	}
-	return &manifest
-}
-
-func baseManifest() *models.AgentManifest {
-	return &models.AgentManifest{
-		Name:      "test-agent",
-		Language:  "python",
-		Framework: "adk",
-	}
-}
-
 func TestAddSkillWithImage(t *testing.T) {
 	dir := t.TempDir()
 	writeTestManifest(t, dir, baseManifest())
@@ -50,7 +18,6 @@ func TestAddSkillWithImage(t *testing.T) {
 	// Override package-level flags for test
 	skillProjectDir = dir
 	skillImage = "docker.io/org/my-skill:v1"
-	skillScaffold = false
 	skillRegistrySkillName = ""
 	skillRegistrySkillVersion = ""
 	skillRegistryURL = ""
@@ -77,7 +44,6 @@ func TestAddSkillWithRegistry(t *testing.T) {
 
 	skillProjectDir = dir
 	skillImage = ""
-	skillScaffold = false
 	skillRegistrySkillName = "cool-skill"
 	skillRegistrySkillVersion = "1.0.0"
 	skillRegistryURL = "https://registry.example.com"
@@ -101,42 +67,6 @@ func TestAddSkillWithRegistry(t *testing.T) {
 	}
 }
 
-func TestAddSkillWithScaffold(t *testing.T) {
-	dir := t.TempDir()
-	writeTestManifest(t, dir, baseManifest())
-
-	skillProjectDir = dir
-	skillImage = ""
-	skillScaffold = true
-	skillRegistrySkillName = ""
-	skillRegistrySkillVersion = ""
-	skillRegistryURL = ""
-
-	if err := addSkillCmd("new-skill"); err != nil {
-		t.Fatalf("addSkillCmd() error: %v", err)
-	}
-
-	manifest := readTestManifest(t, dir)
-	if len(manifest.Skills) != 1 {
-		t.Fatalf("expected 1 skill, got %d", len(manifest.Skills))
-	}
-	if manifest.Skills[0].Path != filepath.Join("skills", "new-skill") {
-		t.Errorf("expected path 'skills/new-skill', got '%s'", manifest.Skills[0].Path)
-	}
-
-	// Verify the scaffolded directory exists
-	skillDir := filepath.Join(dir, "skills", "new-skill")
-	if _, err := os.Stat(skillDir); os.IsNotExist(err) {
-		// Scaffold creates files in the project name subdirectory
-		skillDir = filepath.Join(dir, "skills", "new-skill", "new-skill")
-	}
-	// The scaffold at minimum should create something in the skills dir
-	skillsDir := filepath.Join(dir, "skills")
-	if _, err := os.Stat(skillsDir); os.IsNotExist(err) {
-		t.Errorf("expected skills directory to exist at %s", skillsDir)
-	}
-}
-
 func TestAddSkillDuplicateName(t *testing.T) {
 	dir := t.TempDir()
 	m := baseManifest()
@@ -147,7 +77,6 @@ func TestAddSkillDuplicateName(t *testing.T) {
 
 	skillProjectDir = dir
 	skillImage = "docker.io/org/another:v2"
-	skillScaffold = false
 	skillRegistrySkillName = ""
 
 	err := addSkillCmd("existing-skill")
@@ -165,14 +94,13 @@ func TestAddSkillNoFlags(t *testing.T) {
 
 	skillProjectDir = dir
 	skillImage = ""
-	skillScaffold = false
 	skillRegistrySkillName = ""
 
 	err := addSkillCmd("no-flags")
 	if err == nil {
 		t.Fatal("expected error when no flags set, got nil")
 	}
-	if !strings.Contains(err.Error(), "one of --image, --scaffold, or --registry-skill-name is required") {
+	if !strings.Contains(err.Error(), "one of --image or --registry-skill-name is required") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -183,8 +111,7 @@ func TestAddSkillMultipleFlags(t *testing.T) {
 
 	skillProjectDir = dir
 	skillImage = "docker.io/org/skill:v1"
-	skillScaffold = true
-	skillRegistrySkillName = ""
+	skillRegistrySkillName = "some-skill"
 
 	err := addSkillCmd("conflict")
 	if err == nil {
@@ -192,6 +119,44 @@ func TestAddSkillMultipleFlags(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "only one of") {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestAddSkillSortsAlphabetically(t *testing.T) {
+	dir := t.TempDir()
+	writeTestManifest(t, dir, baseManifest())
+
+	skillProjectDir = dir
+	skillRegistrySkillName = ""
+	skillRegistrySkillVersion = ""
+	skillRegistryURL = ""
+
+	// Add skills in reverse alphabetical order
+	skillImage = "z:latest"
+	if err := addSkillCmd("zulu"); err != nil {
+		t.Fatalf("addSkillCmd(zulu) error: %v", err)
+	}
+
+	skillImage = "a:latest"
+	if err := addSkillCmd("alpha"); err != nil {
+		t.Fatalf("addSkillCmd(alpha) error: %v", err)
+	}
+
+	skillImage = "m:latest"
+	if err := addSkillCmd("mike"); err != nil {
+		t.Fatalf("addSkillCmd(mike) error: %v", err)
+	}
+
+	manifest := readTestManifest(t, dir)
+	if len(manifest.Skills) != 3 {
+		t.Fatalf("expected 3 skills, got %d", len(manifest.Skills))
+	}
+
+	expected := []string{"alpha", "mike", "zulu"}
+	for i, want := range expected {
+		if manifest.Skills[i].Name != want {
+			t.Errorf("skills[%d]: expected %q, got %q", i, want, manifest.Skills[i].Name)
+		}
 	}
 }
 
@@ -239,11 +204,10 @@ func TestSkillValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dir := t.TempDir()
 			manifest := baseManifest()
 			manifest.Skills = tt.skills
-			manager := common.NewManifestManager(dir)
-			err := manager.Validate(manifest)
+			validator := &common.AgentManifestValidator{}
+			err := validator.Validate(manifest)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -254,4 +218,36 @@ func TestSkillValidation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func baseManifest() *models.AgentManifest {
+	return &models.AgentManifest{
+		Name:      "test-agent",
+		Language:  "python",
+		Framework: "adk",
+	}
+}
+
+func writeTestManifest(t *testing.T, dir string, manifest *models.AgentManifest) {
+	t.Helper()
+	data, err := yaml.Marshal(manifest)
+	if err != nil {
+		t.Fatalf("failed to marshal manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "agent.yaml"), data, 0o644); err != nil {
+		t.Fatalf("failed to write agent.yaml: %v", err)
+	}
+}
+
+func readTestManifest(t *testing.T, dir string) *models.AgentManifest {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(dir, "agent.yaml"))
+	if err != nil {
+		t.Fatalf("failed to read agent.yaml: %v", err)
+	}
+	var manifest models.AgentManifest
+	if err := yaml.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("failed to parse agent.yaml: %v", err)
+	}
+	return &manifest
 }
