@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -16,39 +17,88 @@ func SetAPIClient(client *client.Client) {
 	apiClient = client
 }
 
+type VersionOutput struct {
+	ArctlVersion     string `json:"arctl_version"`
+	GitCommit        string `json:"git_commit"`
+	BuildDate        string `json:"build_date"`
+	ServerVersion    string `json:"server_version,omitempty"`
+	ServerGitCommit  string `json:"server_git_commit,omitempty"`
+	ServerBuildDate  string `json:"server_build_date,omitempty"`
+	UpdateRecommendation string `json:"update_recommendation,omitempty"`
+}
+
+var jsonOutput bool
+
 var VersionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show version information",
 	Long:  `Displays the version of arctl.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("arctl version %s\n", version.Version)
-		fmt.Printf("Git commit: %s\n", version.GitCommit)
-		fmt.Printf("Build date: %s\n", version.BuildDate)
+		output := VersionOutput{
+			ArctlVersion: version.Version,
+			GitCommit:    version.GitCommit,
+			BuildDate:    version.BuildDate,
+		}
+
 		serverVersion, err := apiClient.GetVersion()
 		if err != nil {
+			// If server version fetch fails, we still output arctl version info
+			if jsonOutput {
+				jsonBytes, err := json.MarshalIndent(output, "", "  ")
+				if err != nil {
+					fmt.Printf("Error marshaling JSON: %v\n", err)
+					return
+				}
+				fmt.Println(string(jsonBytes))
+				return
+			}
+			// Human-readable output
+			fmt.Printf("arctl version %s\n", output.ArctlVersion)
+			fmt.Printf("Git commit: %s\n", output.GitCommit)
+			fmt.Printf("Build date: %s\n", output.BuildDate)
 			fmt.Printf("Error getting server version: %v\n", err)
 			return
 		}
-		fmt.Printf("Server version: %s\n", serverVersion.Version)
-		fmt.Printf("Server git commit: %s\n", serverVersion.GitCommit)
-		fmt.Printf("Server build date: %s\n", serverVersion.BuildTime)
-		if !semver.IsValid(version.EnsureVPrefix(serverVersion.Version)) || !semver.IsValid(version.EnsureVPrefix(version.Version)) {
-			fmt.Printf("Server or local version is not a valid semantic version, not sure if update require: %s or %s\n", serverVersion.Version, version.Version)
+
+		output.ServerVersion = serverVersion.Version
+		output.ServerGitCommit = serverVersion.GitCommit
+		output.ServerBuildDate = serverVersion.BuildTime
+
+		if semver.IsValid(version.EnsureVPrefix(serverVersion.Version)) && semver.IsValid(version.EnsureVPrefix(version.Version)) {
+			compare := semver.Compare(version.EnsureVPrefix(version.Version), version.EnsureVPrefix(serverVersion.Version))
+			switch compare {
+			case 1:
+				output.UpdateRecommendation = "CLI version is newer than server version. Consider updating the server."
+			case -1:
+				output.UpdateRecommendation = "Server version is newer than CLI version. Consider updating the CLI."
+			}
+		}
+
+		if jsonOutput {
+			jsonBytes, err := json.MarshalIndent(output, "", "  ")
+			if err != nil {
+				fmt.Printf("Error marshaling JSON: %v\n", err)
+				return
+			}
+			fmt.Println(string(jsonBytes))
 			return
 		}
 
-		compare := semver.Compare(version.EnsureVPrefix(version.Version), version.EnsureVPrefix(serverVersion.Version))
-		switch compare {
-		case 1:
-			fmt.Println("\n-------------------------------")
-			fmt.Printf("CLI version is newer than server version: %s > %s\n", version.Version, serverVersion.Version)
-			fmt.Println("We recommend updating your server version")
-		case -1:
-			fmt.Println("\n-------------------------------")
-			fmt.Printf("Server version is newer than local version: %s > %s\n", serverVersion.Version, version.Version)
-			fmt.Println("We recommend updating your CLI version")
-		case 0:
-		}
+		// Human-readable output
+		fmt.Printf("arctl version %s\n", output.ArctlVersion)
+		fmt.Printf("Git commit: %s\n", output.GitCommit)
+		fmt.Printf("Build date: %s\n", output.BuildDate)
+		fmt.Printf("Server version: %s\n", output.ServerVersion)
+		fmt.Printf("Server git commit: %s\n", output.ServerGitCommit)
+		fmt.Printf("Server build date: %s\n", output.ServerBuildDate)
 
+		if output.UpdateRecommendation != "" {
+			fmt.Println("\n-------------------------------")
+			fmt.Println(output.UpdateRecommendation)
+		}
 	},
+}
+
+func init() {
+	VersionCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output version information in JSON format")
 }
