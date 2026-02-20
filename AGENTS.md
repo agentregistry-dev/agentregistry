@@ -369,40 +369,6 @@ Use shadcn/ui components. Check `ui/components/ui/` for available components.
 
 ---
 
-## Git Workflow
-
-### Commit Messages
-
-Use conventional commits:
-
-```
-type(scope): subject
-
-body (optional)
-
-footer (optional)
-```
-
-**Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
-
-**Examples:**
-```
-feat(agents): add agent deployment status tracking
-fix(mcp): handle connection timeout gracefully
-test(registry): add unit tests for validation logic
-refactor(database): extract interface for agent repository
-```
-
-### Branch Naming
-
-```
-feature/agent-deployment
-fix/mcp-connection-timeout
-refactor/database-interfaces
-```
-
----
-
 ## AI Assistant Guidelines
 
 When working with this codebase, AI assistants should:
@@ -454,7 +420,6 @@ When working with this codebase, AI assistants should:
 - [ ] Unit tests with mocks included
 - [ ] Table-driven tests for multiple cases
 - [ ] No mixed responsibilities in components
-- [ ] Conventional commit message format
 - [ ] No hardcoded values that should be configurable
 
 ---
