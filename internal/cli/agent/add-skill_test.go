@@ -172,11 +172,7 @@ func TestSkillValidation(t *testing.T) {
 			skills:  []models.SkillRef{{Name: "s1", Image: "img:latest"}},
 			wantErr: false,
 		},
-		{
-			name:    "valid path skill",
-			skills:  []models.SkillRef{{Name: "s1", Path: "skills/s1"}},
-			wantErr: false,
-		},
+
 		{
 			name:    "valid registry skill",
 			skills:  []models.SkillRef{{Name: "s1", RegistrySkillName: "remote-skill"}},
@@ -192,11 +188,11 @@ func TestSkillValidation(t *testing.T) {
 			name:       "no source specified",
 			skills:     []models.SkillRef{{Name: "s1"}},
 			wantErr:    true,
-			errContain: "one of image, path, or registrySkillName is required",
+			errContain: "one of image or registrySkillName is required",
 		},
 		{
 			name:       "multiple sources",
-			skills:     []models.SkillRef{{Name: "s1", Image: "img", Path: "path"}},
+			skills:     []models.SkillRef{{Name: "s1", Image: "img", RegistrySkillName: "remote"}},
 			wantErr:    true,
 			errContain: "only one of",
 		},

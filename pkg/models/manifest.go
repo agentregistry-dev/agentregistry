@@ -24,8 +24,6 @@ type SkillRef struct {
 	Name string `yaml:"name" json:"name"`
 	// Image is a Docker image containing the skill (for image type).
 	Image string `yaml:"image,omitempty" json:"image,omitempty"`
-	// Path is the local directory path for a scaffolded skill (for local type).
-	Path string `yaml:"path,omitempty" json:"path,omitempty"`
 	// RegistryURL is the registry URL for pulling the skill (for registry type).
 	RegistryURL string `yaml:"registryURL,omitempty" json:"registryURL,omitempty"`
 	// RegistrySkillName is the skill name in the registry.
