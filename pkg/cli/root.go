@@ -83,7 +83,7 @@ var rootCmd = &cobra.Command{
 			return nil
 		}
 
-		c, err := preRunSetup(cmd.Context(), baseURL, token, autoStartDaemon)
+		c, err := preRunSetup(cmd.Context(), cmd, baseURL, token, autoStartDaemon)
 		if err != nil {
 			return err
 		}
@@ -204,7 +204,7 @@ func preRunBehavior(cmd *cobra.Command, baseURL string) (skipSetup bool, autoSta
 }
 
 // preRunSetup ensures daemon is running when autoStartDaemon is true, resolves auth, and creates the API client.
-func preRunSetup(ctx context.Context, baseURL, token string, autoStartDaemon bool) (*client.Client, error) {
+func preRunSetup(ctx context.Context, cmd *cobra.Command, baseURL, token string, autoStartDaemon bool) (*client.Client, error) {
 	dm := cliOptions.DaemonManager
 	if dm == nil {
 		dm = daemon.NewDaemonManager(nil)
@@ -231,16 +231,16 @@ func preRunSetup(ctx context.Context, baseURL, token string, autoStartDaemon boo
 			if errors.Is(err, types.ErrNoOIDCDefined) {
 				// non-blocking, user may be running a command that does not require authentication
 			} else {
-				return fmt.Errorf("failed to create CLI authentication provider: %w", err)
+				return nil, fmt.Errorf("failed to create CLI authentication provider: %w", err)
 			}
 		} else {
 			if provider != nil {
-				token, err = provider.Authenticate(cmd.Context())
+				token, err = provider.Authenticate(ctx)
 				if err != nil {
 					if errors.Is(err, types.ErrCLINoStoredToken) {
 						// non-blocking, user may be running a command that does not require authentication
 					} else {
-						return fmt.Errorf("CLI authentication failed: %w", err)
+						return nil, fmt.Errorf("CLI authentication failed: %w", err)
 					}
 				}
 			}
@@ -249,7 +249,7 @@ func preRunSetup(ctx context.Context, baseURL, token string, autoStartDaemon boo
 
 	if cliOptions.OnTokenResolved != nil {
 		if err := cliOptions.OnTokenResolved(token); err != nil {
-			return fmt.Errorf("failed to resolve token: %w", err)
+			return nil, fmt.Errorf("failed to call resolve token callback: %w", err)
 		}
 	}
 
