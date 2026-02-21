@@ -115,6 +115,20 @@ func TestBuildRegistryImageName(t *testing.T) {
 			version:     "",
 			expected:    "gcr.io/another-project:latest",
 		},
+		{
+			name:        "registry URL with path component",
+			registryURL: "docker.io/user",
+			project:     "MyProject",
+			version:     "latest",
+			expected:    "docker.io/user/my-project:latest",
+		},
+		{
+			name:        "explicit version with path",
+			registryURL: "docker.io/user",
+			project:     "MyProject",
+			version:     "1.0.0",
+			expected:    "docker.io/user/my-project:1.0.0",
+		},
 	}
 
 	for _, tt := range tests {
@@ -279,6 +293,49 @@ func TestResolveVersion(t *testing.T) {
 			actual := ResolveVersion(tt.flagVersion, tt.manifestVersion)
 			if actual != tt.expected {
 				t.Errorf("expected %s but got %s", tt.expected, actual)
+			}
+		})
+	}
+}
+
+// TestBuildRegistryImageName_NoDoubleTag is a regression test for
+// https://github.com/agentregistry-dev/agentregistry/issues/178.
+// BuildRegistryImageName must produce a single tag, not ":latest:latest".
+func TestBuildRegistryImageName_NoDoubleTag(t *testing.T) {
+	tests := []struct {
+		name        string
+		registryURL string
+		project     string
+		version     string
+	}{
+		{
+			name:        "latest tag",
+			registryURL: "docker.io/user",
+			project:     "MyProject",
+			version:     "latest",
+		},
+		{
+			name:        "explicit version",
+			registryURL: "docker.io/user",
+			project:     "MyProject",
+			version:     "1.0.0",
+		},
+		{
+			name:        "empty version defaults to latest",
+			registryURL: "docker.io/user",
+			project:     "MyProject",
+			version:     "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := BuildRegistryImageName(tt.registryURL, tt.project, tt.version)
+			if strings.Count(result, ":") != 1 {
+				t.Errorf("expected exactly one colon in image ref, got %q", result)
+			}
+			if strings.Contains(result, ":latest:latest") {
+				t.Errorf("double tag detected in image ref: %q", result)
 			}
 		})
 	}
