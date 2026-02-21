@@ -46,23 +46,25 @@ func TestValidateAgentName(t *testing.T) {
 		input   string
 		wantErr bool
 	}{
-		// Valid cases - letters and digits only, starts with letter, min 2 chars
+		// Valid cases - starts with letter, ends with letter or digit, min 2 chars
 		{"valid simple", "myagent", false},
 		{"valid alphanumeric", "agent123", false},
 		{"valid mixed case", "MyAgent2", false},
 		{"valid two chars", "ab", false},
+		{"valid with hyphen", "my-agent", false},
+		{"valid multi-hyphen", "my-cool-agent", false},
 
-		// Invalid - special characters not allowed
-		{"hyphen not allowed", "my-agent", true},
+		// Invalid - special characters not allowed (except hyphens)
 		{"dot not allowed", "my.agent", true},
 		{"underscore not allowed", "my_agent", true},
 		{"contains slash", "my/agent", true},
 		{"contains space", "my agent", true},
 
-		// Invalid - must start with letter
+		// Invalid - must start with letter, end with letter or digit
 		{"starts with number", "123agent", true},
 		{"starts with dot", ".agent", true},
 		{"starts with hyphen", "-agent", true},
+		{"trailing hyphen rejected", "agent-", true},
 
 		// Invalid - too short
 		{"single char", "a", true},
@@ -145,6 +147,28 @@ func TestValidateSkillName(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateSkillName(%q) error = %v, wantErr %v",
 					tt.input, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestPythonSafeName(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"converts hyphens", "my-agent", "my_agent"},
+		{"no hyphens unchanged", "myagent", "myagent"},
+		{"multiple hyphens", "my-cool-agent", "my_cool_agent"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := PythonSafeName(tt.input)
+			if result != tt.expected {
+				t.Errorf("PythonSafeName(%q) = %q, want %q",
+					tt.input, result, tt.expected)
 			}
 		})
 	}

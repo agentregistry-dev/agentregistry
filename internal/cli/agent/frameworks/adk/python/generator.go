@@ -8,6 +8,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/validators"
 )
 
 //go:embed templates/* templates/agent/* templates/mcp_server/* dice-agent-instruction.md
@@ -30,6 +31,9 @@ func (g *PythonGenerator) Generate(agentConfig *common.AgentConfig) error {
 	if agentConfig == nil {
 		return fmt.Errorf("agent config is required")
 	}
+
+	// Convert agent name to Python-safe identifier (hyphens to underscores)
+	agentConfig.Name = validators.PythonSafeName(agentConfig.Name)
 
 	projectPackageDir := filepath.Join(agentConfig.Directory, agentConfig.Name)
 	if err := os.MkdirAll(projectPackageDir, 0o755); err != nil {
