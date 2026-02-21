@@ -172,13 +172,12 @@ func buildSkillDockerImage(skillPath string) (*models.SkillJSON, error) {
 	}
 
 	// 2) Determine image reference and build
-	// sanitize name for docker (lowercase, slashes to dashes)
-	repoName := common.BuildLocalImageName(fm.Name, ver)
 	if dockerUrl == "" {
 		return nil, fmt.Errorf("docker url is required")
 	}
 
-	imageRef := common.BuildRegistryImageName(strings.TrimSuffix(dockerUrl, "/"), repoName, ver)
+	// BuildRegistryImageName sanitizes the name for docker (lowercase, kebab-case)
+	imageRef := common.BuildRegistryImageName(strings.TrimSuffix(dockerUrl, "/"), fm.Name, ver)
 	// Build only if not dry-run
 	if dryRunFlag {
 		printer.PrintInfo("[DRY RUN] Would build Docker image: " + imageRef)
