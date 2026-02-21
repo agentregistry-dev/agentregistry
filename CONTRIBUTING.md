@@ -260,7 +260,7 @@ refactor(db): simplify query methods
 1. Update documentation
 2. Add/update tests
 3. Ensure CI passes
-4. Update CHANGELOG.md
+4. Include a `release-note` block in your PR description (see PR template)
 5. Request review
 
 ### PR Checklist
