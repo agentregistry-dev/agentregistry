@@ -1,5 +1,5 @@
 // Admin API client for the registry management UI
-// This client communicates with the /admin/v0 API endpoints
+// This client communicates with the /v0 API endpoints
 
 // In development mode with Next.js dev server, use relative URL to leverage proxy
 // In production (static export), API_BASE_URL is set via environment variable or defaults to current origin
@@ -253,7 +253,7 @@ class AdminApiClient {
     if (params?.version) queryParams.append('version', params.version)
     if (params?.updated_since) queryParams.append('updated_since', params.updated_since)
 
-    const url = `${this.baseUrl}/admin/v0/servers${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+    const url = `${this.baseUrl}/v0/servers${queryParams.toString() ? '?' + queryParams.toString() : ''}`
     const response = await fetch(url)
     if (!response.ok) {
       throw new Error('Failed to fetch servers')
@@ -288,7 +288,7 @@ class AdminApiClient {
   async getServer(serverName: string, version: string = 'latest'): Promise<ServerResponse> {
     const encodedName = encodeURIComponent(serverName)
     const encodedVersion = encodeURIComponent(version)
-    const response = await fetch(`${this.baseUrl}/admin/v0/servers/${encodedName}/versions/${encodedVersion}`)
+    const response = await fetch(`${this.baseUrl}/v0/servers/${encodedName}/versions/${encodedVersion}`)
     if (!response.ok) {
       throw new Error('Failed to fetch server')
     }
@@ -298,7 +298,7 @@ class AdminApiClient {
   // Get all versions of a server
   async getServerVersions(serverName: string): Promise<ServerListResponse> {
     const encodedName = encodeURIComponent(serverName)
-    const response = await fetch(`${this.baseUrl}/admin/v0/servers/${encodedName}/versions`)
+    const response = await fetch(`${this.baseUrl}/v0/servers/${encodedName}/versions`)
     if (!response.ok) {
       throw new Error('Failed to fetch server versions')
     }
@@ -307,7 +307,7 @@ class AdminApiClient {
 
   // Import servers from an external registry
   async importServers(request: ImportRequest): Promise<ImportResponse> {
-    const response = await fetch(`${this.baseUrl}/admin/v0/import`, {
+    const response = await fetch(`${this.baseUrl}/v0/import`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -324,7 +324,7 @@ class AdminApiClient {
   // Create a new server
   async createServer(server: ServerJSON): Promise<ServerResponse> {
     console.log('Creating server:', server)
-    const response = await fetch(`${this.baseUrl}/admin/v0/servers`, {
+    const response = await fetch(`${this.baseUrl}/v0/servers`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -367,7 +367,7 @@ class AdminApiClient {
   async deleteServer(serverName: string, version: string): Promise<void> {
     const encodedName = encodeURIComponent(serverName)
     const encodedVersion = encodeURIComponent(version)
-    const response = await fetch(`${this.baseUrl}/admin/v0/servers/${encodedName}/versions/${encodedVersion}`, {
+    const response = await fetch(`${this.baseUrl}/v0/servers/${encodedName}/versions/${encodedVersion}`, {
       method: 'DELETE',
     })
     if (!response.ok) {
@@ -378,7 +378,7 @@ class AdminApiClient {
 
   // Get registry statistics
   async getStats(): Promise<ServerStats> {
-    const response = await fetch(`${this.baseUrl}/admin/v0/stats`)
+    const response = await fetch(`${this.baseUrl}/v0/stats`)
     if (!response.ok) {
       throw new Error('Failed to fetch statistics')
     }
@@ -387,7 +387,7 @@ class AdminApiClient {
 
   // Health check
   async healthCheck(): Promise<{ status: string }> {
-    const response = await fetch(`${this.baseUrl}/admin/v0/health`)
+    const response = await fetch(`${this.baseUrl}/v0/health`)
     if (!response.ok) {
       throw new Error('Health check failed')
     }
@@ -411,7 +411,7 @@ class AdminApiClient {
     if (params?.version) queryParams.append('version', params.version)
     if (params?.updated_since) queryParams.append('updated_since', params.updated_since)
 
-    const url = `${this.baseUrl}/admin/v0/skills${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+    const url = `${this.baseUrl}/v0/skills${queryParams.toString() ? '?' + queryParams.toString() : ''}`
     const response = await fetch(url)
     if (!response.ok) {
       throw new Error('Failed to fetch skills')
@@ -446,7 +446,7 @@ class AdminApiClient {
   async getSkill(skillName: string, version: string = 'latest'): Promise<SkillResponse> {
     const encodedName = encodeURIComponent(skillName)
     const encodedVersion = encodeURIComponent(version)
-    const response = await fetch(`${this.baseUrl}/admin/v0/skills/${encodedName}/versions/${encodedVersion}`)
+    const response = await fetch(`${this.baseUrl}/v0/skills/${encodedName}/versions/${encodedVersion}`)
     if (!response.ok) {
       throw new Error('Failed to fetch skill')
     }
@@ -456,7 +456,7 @@ class AdminApiClient {
   // Get all versions of a skill
   async getSkillVersions(skillName: string): Promise<SkillListResponse> {
     const encodedName = encodeURIComponent(skillName)
-    const response = await fetch(`${this.baseUrl}/admin/v0/skills/${encodedName}/versions`)
+    const response = await fetch(`${this.baseUrl}/v0/skills/${encodedName}/versions`)
     if (!response.ok) {
       throw new Error('Failed to fetch skill versions')
     }
@@ -465,7 +465,7 @@ class AdminApiClient {
 
   // Create a new skill
   async createSkill(skill: SkillJSON): Promise<SkillResponse> {
-    const response = await fetch(`${this.baseUrl}/admin/v0/skills`, {
+    const response = await fetch(`${this.baseUrl}/v0/skills`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -496,7 +496,7 @@ class AdminApiClient {
     if (params?.version) queryParams.append('version', params.version)
     if (params?.updated_since) queryParams.append('updated_since', params.updated_since)
 
-    const url = `${this.baseUrl}/admin/v0/agents${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+    const url = `${this.baseUrl}/v0/agents${queryParams.toString() ? '?' + queryParams.toString() : ''}`
     const response = await fetch(url)
     if (!response.ok) {
       throw new Error('Failed to fetch agents')
@@ -531,7 +531,7 @@ class AdminApiClient {
   async getAgent(agentName: string, version: string = 'latest'): Promise<AgentResponse> {
     const encodedName = encodeURIComponent(agentName)
     const encodedVersion = encodeURIComponent(version)
-    const response = await fetch(`${this.baseUrl}/admin/v0/agents/${encodedName}/versions/${encodedVersion}`)
+    const response = await fetch(`${this.baseUrl}/v0/agents/${encodedName}/versions/${encodedVersion}`)
     if (!response.ok) {
       throw new Error('Failed to fetch agent')
     }
@@ -541,7 +541,7 @@ class AdminApiClient {
   // Get all versions of an agent
   async getAgentVersions(agentName: string): Promise<AgentListResponse> {
     const encodedName = encodeURIComponent(agentName)
-    const response = await fetch(`${this.baseUrl}/admin/v0/agents/${encodedName}/versions`)
+    const response = await fetch(`${this.baseUrl}/v0/agents/${encodedName}/versions`)
     if (!response.ok) {
       throw new Error('Failed to fetch agent versions')
     }
@@ -550,7 +550,7 @@ class AdminApiClient {
 
   // Create an agent in the registry
   async createAgent(agent: AgentJSON): Promise<AgentResponse> {
-    const response = await fetch(`${this.baseUrl}/admin/v0/agents`, {
+    const response = await fetch(`${this.baseUrl}/v0/agents`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -570,7 +570,7 @@ class AdminApiClient {
   async publishServerStatus(serverName: string, version: string): Promise<void> {
     const encodedName = encodeURIComponent(serverName)
     const encodedVersion = encodeURIComponent(version)
-    const response = await fetch(`${this.baseUrl}/admin/v0/servers/${encodedName}/versions/${encodedVersion}/publish`, {
+    const response = await fetch(`${this.baseUrl}/v0/servers/${encodedName}/versions/${encodedVersion}/publish`, {
       method: 'POST',
     })
     if (!response.ok) {
@@ -583,7 +583,7 @@ class AdminApiClient {
   async unpublishServerStatus(serverName: string, version: string): Promise<void> {
     const encodedName = encodeURIComponent(serverName)
     const encodedVersion = encodeURIComponent(version)
-    const response = await fetch(`${this.baseUrl}/admin/v0/servers/${encodedName}/versions/${encodedVersion}/unpublish`, {
+    const response = await fetch(`${this.baseUrl}/v0/servers/${encodedName}/versions/${encodedVersion}/unpublish`, {
       method: 'POST',
     })
     if (!response.ok) {
@@ -596,7 +596,7 @@ class AdminApiClient {
   async publishSkillStatus(skillName: string, version: string): Promise<void> {
     const encodedName = encodeURIComponent(skillName)
     const encodedVersion = encodeURIComponent(version)
-    const response = await fetch(`${this.baseUrl}/admin/v0/skills/${encodedName}/versions/${encodedVersion}/publish`, {
+    const response = await fetch(`${this.baseUrl}/v0/skills/${encodedName}/versions/${encodedVersion}/publish`, {
       method: 'POST',
     })
     if (!response.ok) {
@@ -609,7 +609,7 @@ class AdminApiClient {
   async unpublishSkillStatus(skillName: string, version: string): Promise<void> {
     const encodedName = encodeURIComponent(skillName)
     const encodedVersion = encodeURIComponent(version)
-    const response = await fetch(`${this.baseUrl}/admin/v0/skills/${encodedName}/versions/${encodedVersion}/unpublish`, {
+    const response = await fetch(`${this.baseUrl}/v0/skills/${encodedName}/versions/${encodedVersion}/unpublish`, {
       method: 'POST',
     })
     if (!response.ok) {
@@ -622,7 +622,7 @@ class AdminApiClient {
   async publishAgentStatus(agentName: string, version: string): Promise<void> {
     const encodedName = encodeURIComponent(agentName)
     const encodedVersion = encodeURIComponent(version)
-    const response = await fetch(`${this.baseUrl}/admin/v0/agents/${encodedName}/versions/${encodedVersion}/publish`, {
+    const response = await fetch(`${this.baseUrl}/v0/agents/${encodedName}/versions/${encodedVersion}/publish`, {
       method: 'POST',
     })
     if (!response.ok) {
@@ -635,7 +635,7 @@ class AdminApiClient {
   async unpublishAgentStatus(agentName: string, version: string): Promise<void> {
     const encodedName = encodeURIComponent(agentName)
     const encodedVersion = encodeURIComponent(version)
-    const response = await fetch(`${this.baseUrl}/admin/v0/agents/${encodedName}/versions/${encodedVersion}/unpublish`, {
+    const response = await fetch(`${this.baseUrl}/v0/agents/${encodedName}/versions/${encodedVersion}/unpublish`, {
       method: 'POST',
     })
     if (!response.ok) {
@@ -655,7 +655,7 @@ class AdminApiClient {
     resourceType?: 'mcp' | 'agent'
     runtime?: 'local' | 'kubernetes'
   }): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/admin/v0/deployments`, {
+    const response = await fetch(`${this.baseUrl}/v0/deployments`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -695,7 +695,7 @@ class AdminApiClient {
     if (params?.runtime) queryParams.append('runtime', params.runtime)
     if (params?.resourceType) queryParams.append('resourceType', params.resourceType)
     
-    const url = `${this.baseUrl}/admin/v0/deployments${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+    const url = `${this.baseUrl}/v0/deployments${queryParams.toString() ? '?' + queryParams.toString() : ''}`
     const response = await fetch(url)
     if (!response.ok) {
       throw new Error('Failed to fetch deployments')
@@ -708,7 +708,7 @@ class AdminApiClient {
   async removeDeployment(serverName: string, version: string, resourceType: string): Promise<void> {
     const encodedName = encodeURIComponent(serverName)
     const encodedVersion = encodeURIComponent(version)
-    const response = await fetch(`${this.baseUrl}/admin/v0/deployments/${encodedName}/versions/${encodedVersion}?resourceType=${resourceType}`, {
+    const response = await fetch(`${this.baseUrl}/v0/deployments/${encodedName}/versions/${encodedVersion}?resourceType=${resourceType}`, {
       method: 'DELETE',
     })
     if (!response.ok) {
