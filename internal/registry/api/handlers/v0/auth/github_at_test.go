@@ -80,7 +80,7 @@ func TestGitHubHandler_ExchangeToken(t *testing.T) {
 		assert.Equal(t, auth.MethodGitHubAT, claims.AuthMethod)
 		assert.Equal(t, "testuser", claims.AuthMethodSubject)
 		assert.Len(t, claims.Permissions, 1)
-		assert.Equal(t, auth.PermissionActionPublish, claims.Permissions[0].Action)
+		assert.Equal(t, auth.PermissionActionPush, claims.Permissions[0].Action)
 		assert.Equal(t, "io.github.testuser/*", claims.Permissions[0].ResourcePattern)
 	})
 
@@ -133,7 +133,7 @@ func TestGitHubHandler_ExchangeToken(t *testing.T) {
 			"io.github.test-org-2/*",
 		}
 		for i, perm := range claims.Permissions {
-			assert.Equal(t, auth.PermissionActionPublish, perm.Action)
+			assert.Equal(t, auth.PermissionActionPush, perm.Action)
 			assert.Equal(t, expectedPatterns[i], perm.ResourcePattern)
 		}
 	})
@@ -336,7 +336,7 @@ func TestJWTTokenValidation(t *testing.T) {
 			AuthMethodSubject: "testuser",
 			Permissions: []auth.Permission{
 				{
-					Action:          auth.PermissionActionPublish,
+					Action:          auth.PermissionActionPush,
 					ResourcePattern: "io.github.testuser/*",
 				},
 			},
@@ -419,28 +419,28 @@ func TestPermissionResourceMatching(t *testing.T) {
 			name:          "exact match",
 			resource:      "io.github.testuser/myrepo",
 			pattern:       "io.github.testuser/myrepo",
-			action:        auth.PermissionActionPublish,
+			action:        auth.PermissionActionPush,
 			expectedMatch: true,
 		},
 		{
 			name:          "wildcard match",
 			resource:      "io.github.testuser/myrepo",
 			pattern:       "io.github.testuser/*",
-			action:        auth.PermissionActionPublish,
+			action:        auth.PermissionActionPush,
 			expectedMatch: true,
 		},
 		{
 			name:          "global wildcard",
 			resource:      "io.github.anyuser/anyrepo",
 			pattern:       "*",
-			action:        auth.PermissionActionPublish,
+			action:        auth.PermissionActionPush,
 			expectedMatch: true,
 		},
 		{
 			name:          "no match different user",
 			resource:      "io.github.otheruser/repo",
 			pattern:       "io.github.testuser/*",
-			action:        auth.PermissionActionPublish,
+			action:        auth.PermissionActionPush,
 			expectedMatch: false,
 		},
 		{
@@ -456,7 +456,7 @@ func TestPermissionResourceMatching(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			permissions := []auth.Permission{
 				{
-					Action:          auth.PermissionActionPublish,
+					Action:          auth.PermissionActionPush,
 					ResourcePattern: tc.pattern,
 				},
 			}

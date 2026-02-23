@@ -340,7 +340,7 @@ func TestDNSAuthHandler_Permissions(t *testing.T) {
 			for i, perm := range claims.Permissions {
 				patterns[i] = perm.ResourcePattern
 				// All permissions should be for publish action
-				assert.Equal(t, intauth.PermissionActionPublish, perm.Action)
+				assert.Equal(t, intauth.PermissionActionPush, perm.Action)
 			}
 
 			// Check expected patterns are present
@@ -369,12 +369,12 @@ func TestDNSAuthHandler_Permissions(t *testing.T) {
 				if basePattern, found := strings.CutSuffix(expectedPattern, "/*"); found {
 					// Exact domain permissions (e.g., "com.example/*")
 					testResource := basePattern + "/my-package"
-					assert.True(t, jwtManager.HasPermission(testResource, intauth.PermissionActionPublish, claims.Permissions),
+					assert.True(t, jwtManager.HasPermission(testResource, intauth.PermissionActionPush, claims.Permissions),
 						"Should have permission for %s with pattern %s", testResource, expectedPattern)
 				} else if basePattern, found := strings.CutSuffix(expectedPattern, ".*"); found {
 					// Subdomain permissions (e.g., "com.example.*")
 					testResource := basePattern + ".subdomain/my-package"
-					assert.True(t, jwtManager.HasPermission(testResource, intauth.PermissionActionPublish, claims.Permissions),
+					assert.True(t, jwtManager.HasPermission(testResource, intauth.PermissionActionPush, claims.Permissions),
 						"Should have permission for %s with pattern %s", testResource, expectedPattern)
 				}
 			}
@@ -427,37 +427,37 @@ func TestDNSAuthHandler_PermissionValidation(t *testing.T) {
 		{
 			name:       "exact domain resource with publish action",
 			resource:   "com.example/my-package",
-			action:     intauth.PermissionActionPublish,
+			action:     intauth.PermissionActionPush,
 			shouldPass: true,
 		},
 		{
 			name:       "subdomain resource with publish action",
 			resource:   "com.example.api/my-package",
-			action:     intauth.PermissionActionPublish,
+			action:     intauth.PermissionActionPush,
 			shouldPass: true,
 		},
 		{
 			name:       "deep subdomain resource with publish action",
 			resource:   "com.example.v1.api/my-package",
-			action:     intauth.PermissionActionPublish,
+			action:     intauth.PermissionActionPush,
 			shouldPass: true,
 		},
 		{
 			name:       "different domain should fail",
 			resource:   "com.otherdomain/my-package",
-			action:     intauth.PermissionActionPublish,
+			action:     intauth.PermissionActionPush,
 			shouldPass: false,
 		},
 		{
 			name:       "partial domain match should fail",
 			resource:   "com.example-other/my-package",
-			action:     intauth.PermissionActionPublish,
+			action:     intauth.PermissionActionPush,
 			shouldPass: false,
 		},
 		{
 			name:       "parent domain should fail",
 			resource:   "com/my-package",
-			action:     intauth.PermissionActionPublish,
+			action:     intauth.PermissionActionPush,
 			shouldPass: false,
 		},
 		{
@@ -469,7 +469,7 @@ func TestDNSAuthHandler_PermissionValidation(t *testing.T) {
 		{
 			name:       "resource without package separator should fail",
 			resource:   "com.example",
-			action:     intauth.PermissionActionPublish,
+			action:     intauth.PermissionActionPush,
 			shouldPass: false,
 		},
 	}
@@ -737,7 +737,7 @@ func TestDNSAuthHandler_ECDSAP384_Permissions(t *testing.T) {
 			for i, perm := range claims.Permissions {
 				patterns[i] = perm.ResourcePattern
 				// All permissions should be for publish action
-				assert.Equal(t, intauth.PermissionActionPublish, perm.Action)
+				assert.Equal(t, intauth.PermissionActionPush, perm.Action)
 			}
 
 			// Check expected patterns are present
@@ -796,25 +796,25 @@ func TestDNSAuthHandler_ECDSAP384_PermissionValidation(t *testing.T) {
 		{
 			name:       "exact domain resource with publish action",
 			resource:   "com.example/my-package",
-			action:     intauth.PermissionActionPublish,
+			action:     intauth.PermissionActionPush,
 			shouldPass: true,
 		},
 		{
 			name:       "subdomain resource with publish action",
 			resource:   "com.example.api/my-package",
-			action:     intauth.PermissionActionPublish,
+			action:     intauth.PermissionActionPush,
 			shouldPass: true,
 		},
 		{
 			name:       "deep subdomain resource with publish action",
 			resource:   "com.example.v1.api/my-package",
-			action:     intauth.PermissionActionPublish,
+			action:     intauth.PermissionActionPush,
 			shouldPass: true,
 		},
 		{
 			name:       "different domain should fail",
 			resource:   "com.otherdomain/my-package",
-			action:     intauth.PermissionActionPublish,
+			action:     intauth.PermissionActionPush,
 			shouldPass: false,
 		},
 		{
@@ -916,8 +916,8 @@ func TestDNSAuthHandler_Ed25519_vs_ECDSAP384_Equivalence(t *testing.T) {
 			}
 
 			for _, resource := range testResources {
-				ed25519HasPerm := jwtManager.HasPermission(resource, intauth.PermissionActionPublish, ed25519Claims.Permissions)
-				ecdsaHasPerm := jwtManager.HasPermission(resource, intauth.PermissionActionPublish, ecdsaClaims.Permissions)
+				ed25519HasPerm := jwtManager.HasPermission(resource, intauth.PermissionActionPush, ed25519Claims.Permissions)
+				ecdsaHasPerm := jwtManager.HasPermission(resource, intauth.PermissionActionPush, ecdsaClaims.Permissions)
 				assert.Equal(t, ed25519HasPerm, ecdsaHasPerm, "Permission mismatch for resource %s between Ed25519 and ECDSA P-384", resource)
 			}
 		})

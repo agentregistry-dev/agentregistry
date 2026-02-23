@@ -141,14 +141,14 @@ func BuildPermissions(domain string, includeSubdomains bool) []auth.Permission {
 	permissions := []auth.Permission{
 		// Grant permissions for the exact domain (e.g., com.example/*)
 		{
-			Action:          auth.PermissionActionPublish,
+			Action:          auth.PermissionActionPush,
 			ResourcePattern: fmt.Sprintf("%s/*", reverseDomain),
 		},
 	}
 
 	if includeSubdomains {
 		permissions = append(permissions, auth.Permission{
-			Action:          auth.PermissionActionPublish,
+			Action:          auth.PermissionActionPush,
 			ResourcePattern: fmt.Sprintf("%s.*", reverseDomain),
 		})
 	}

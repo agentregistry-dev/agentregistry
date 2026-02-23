@@ -229,7 +229,7 @@ func TestEditServerEndpoint(t *testing.T) {
 				AuthMethod:        auth.MethodGitHubAT,
 				AuthMethodSubject: "testuser",
 				Permissions: []auth.Permission{
-					{Action: auth.PermissionActionPublish, ResourcePattern: "io.github.testuser/*"}, // Only publish, not edit
+					{Action: auth.PermissionActionPush, ResourcePattern: "io.github.testuser/*"}, // Only push, not edit
 				},
 			},
 			requestBody: apiv0.ServerJSON{

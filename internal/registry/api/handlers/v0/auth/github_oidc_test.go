@@ -110,7 +110,7 @@ func TestGitHubOIDCHandler_ExchangeToken(t *testing.T) {
 				assert.Len(t, claims.Permissions, tt.expectedPerms)
 
 				if tt.expectedPerms > 0 {
-					assert.Equal(t, internalauth.PermissionActionPublish, claims.Permissions[0].Action)
+					assert.Equal(t, internalauth.PermissionActionPush, claims.Permissions[0].Action)
 					assert.True(t, strings.HasPrefix(claims.Permissions[0].ResourcePattern, "io.github."))
 				}
 			}
@@ -141,7 +141,7 @@ func TestBuildPermissionsFromOIDC(t *testing.T) {
 			},
 			expectedPerms: []internalauth.Permission{
 				{
-					Action:          internalauth.PermissionActionPublish,
+					Action:          internalauth.PermissionActionPush,
 					ResourcePattern: "io.github.octo-org/*",
 				},
 			},
@@ -170,7 +170,7 @@ func TestBuildPermissionsFromOIDC(t *testing.T) {
 			},
 			expectedPerms: []internalauth.Permission{
 				{
-					Action:          internalauth.PermissionActionPublish,
+					Action:          internalauth.PermissionActionPush,
 					ResourcePattern: "io.github.username/*",
 				},
 			},

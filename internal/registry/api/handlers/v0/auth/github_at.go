@@ -180,14 +180,14 @@ func (h *GitHubHandler) buildPermissions(username string, orgs []GitHubUserOrOrg
 
 	// Add permission for user's own namespace
 	permissions = append(permissions, auth.Permission{
-		Action:          auth.PermissionActionPublish,
+		Action:          auth.PermissionActionPush,
 		ResourcePattern: fmt.Sprintf("io.github.%s/*", username),
 	})
 
 	// Add permissions for each organization
 	for _, org := range orgs {
 		permissions = append(permissions, auth.Permission{
-			Action:          auth.PermissionActionPublish,
+			Action:          auth.PermissionActionPush,
 			ResourcePattern: fmt.Sprintf("io.github.%s/*", org.Login),
 		})
 	}

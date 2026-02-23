@@ -279,7 +279,7 @@ func (h *OIDCHandler) buildPermissions(_ *OIDCClaims) []auth.Permission {
 			pattern = strings.TrimSpace(pattern)
 			if pattern != "" {
 				permissions = append(permissions, auth.Permission{
-					Action:          auth.PermissionActionPublish,
+					Action:          auth.PermissionActionPush,
 					ResourcePattern: pattern,
 				})
 			}
