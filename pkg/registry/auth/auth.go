@@ -2,7 +2,7 @@ package auth
 
 import (
 	"context"
-	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -92,7 +92,7 @@ func AuthnMiddleware(authn AuthnProvider, options ...MiddlewareOption) func(ctx 
 		url := ctx.URL()
 		session, err := authn.Authenticate(ctx.Context(), ctx.Header, url.Query())
 		if err != nil {
-			fmt.Printf("Authentication error: %v\n", err)
+			slog.Warn("authentication failed", "path", path, "error", err)
 			ctx.SetStatus(http.StatusUnauthorized)
 			_, _ = ctx.BodyWriter().Write([]byte("Unauthorized"))
 			return
