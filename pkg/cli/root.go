@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -31,9 +32,14 @@ type ClientFactory func(ctx context.Context, baseURL, token string) (*client.Cli
 type CLIOptions struct {
 	// DaemonManager handles daemon lifecycle. If nil, uses default.
 	DaemonManager types.DaemonManager
-	// AuthnProvider provides CLI-specific authentication.
-	// If nil, token comes from flags/env (ARCTL_API_TOKEN).
-	AuthnProvider types.CLIAuthnProvider
+
+	// AuthnProviderFactory provides CLI-specific authentication.
+	AuthnProviderFactory types.CLIAuthnProviderFactory
+
+	// OnTokenResolved is called when a token is resolved.
+	// This allows extensions to perform additional actions when a token is resolved (e.g. storing locally).
+	OnTokenResolved func(token string) error
+
 	// ClientFactory creates the API client. If nil, uses client.NewClientWithConfig (requires network).
 	ClientFactory ClientFactory
 }
@@ -77,7 +83,7 @@ var rootCmd = &cobra.Command{
 			return nil
 		}
 
-		c, err := preRunSetup(cmd.Context(), baseURL, token, autoStartDaemon)
+		c, err := preRunSetup(cmd.Context(), cmd, baseURL, token, autoStartDaemon)
 		if err != nil {
 			return err
 		}
@@ -120,6 +126,29 @@ func resolveRegistryTarget(getEnv func(string) string) (baseURL, token string) {
 		token = getEnv("ARCTL_API_TOKEN")
 	}
 	return base, token
+}
+
+// resolveAuthToken resolves the authentication token from the CLI authentication provider.
+func resolveAuthToken(ctx context.Context, cmd *cobra.Command, factory types.CLIAuthnProviderFactory) (string, error) {
+	provider, err := factory(cmd.Root())
+	if err != nil {
+		if errors.Is(err, types.ErrNoOIDCDefined) {
+			return "", nil // non-blocking, user may be running a command that does not require authentication
+		}
+		return "", fmt.Errorf("failed to create CLI authentication provider: %w", err)
+	}
+	if provider == nil {
+		return "", nil // non-blocking, user may be running a command that does not require authentication
+	}
+
+	token, err := provider.Authenticate(ctx)
+	if err != nil {
+		if errors.Is(err, types.ErrCLINoStoredToken) {
+			return "", nil // non-blocking, user may be running a command that does not require authentication
+		}
+		return "", fmt.Errorf("CLI authentication failed: %w", err)
+	}
+	return token, nil
 }
 
 func normalizeBaseURL(raw string) string {
@@ -198,7 +227,7 @@ func preRunBehavior(cmd *cobra.Command, baseURL string) (skipSetup bool, autoSta
 }
 
 // preRunSetup ensures daemon is running when autoStartDaemon is true, resolves auth, and creates the API client.
-func preRunSetup(ctx context.Context, baseURL, token string, autoStartDaemon bool) (*client.Client, error) {
+func preRunSetup(ctx context.Context, cmd *cobra.Command, baseURL, token string, autoStartDaemon bool) (*client.Client, error) {
 	dm := cliOptions.DaemonManager
 	if dm == nil {
 		dm = daemon.NewDaemonManager(nil)
@@ -218,11 +247,19 @@ func preRunSetup(ctx context.Context, baseURL, token string, autoStartDaemon boo
 		}
 	}
 
-	if token == "" && cliOptions.AuthnProvider != nil {
-		var err error
-		token, err = cliOptions.AuthnProvider.Authenticate(ctx)
+	// Get authentication token if no token override was provided
+	if token == "" && cliOptions.AuthnProviderFactory != nil {
+		resolvedToken, err := resolveAuthToken(ctx, cmd, cliOptions.AuthnProviderFactory)
 		if err != nil {
-			return nil, fmt.Errorf("CLI authentication failed: %w", err)
+			return nil, err
+		}
+
+		token = resolvedToken
+	}
+
+	if cliOptions.OnTokenResolved != nil {
+		if err := cliOptions.OnTokenResolved(token); err != nil {
+			return nil, fmt.Errorf("failed to call resolve token callback: %w", err)
 		}
 	}
 

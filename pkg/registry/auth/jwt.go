@@ -28,7 +28,6 @@ type PermissionAction string
 
 const (
 	PermissionActionRead    PermissionAction = "read"
-	PermissionActionPush    PermissionAction = "push"
 	PermissionActionPublish PermissionAction = "publish"
 	PermissionActionEdit    PermissionAction = "edit"
 	PermissionActionDelete  PermissionAction = "delete"

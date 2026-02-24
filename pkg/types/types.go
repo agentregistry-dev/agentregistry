@@ -2,13 +2,23 @@ package types
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/spf13/cobra"
 )
+
+// ErrCLINoStoredToken is returned when no stored authentication token is found.
+// This is expected for CLI commands that do not require authentication (e.g. artifact init).
+var ErrCLINoStoredToken = errors.New("no stored authentication token")
+
+// ErrNoOIDCDefined is returned when OIDC is not defined.
+// This is expected for CLI commands that do not require authentication (e.g. artifact init) and a user/extension does not define OIDC.
+var ErrNoOIDCDefined = errors.New("OIDC is not defined")
 
 // ServiceFactory is a function type that creates a service implementation.
 // The base service is provided as input, and the factory should return a service
@@ -92,6 +102,10 @@ type CLIAuthnProvider interface {
 	// Authenticate returns credentials for API calls.
 	Authenticate(ctx context.Context) (token string, err error)
 }
+
+// CLIAuthnProviderFactory is a function type that creates a CLI authentication provider.
+// The factory optionally receives the root command, which can be used to access command-specific configuration (e.g. flags).
+type CLIAuthnProviderFactory func(root *cobra.Command) (CLIAuthnProvider, error)
 
 // HTTPServerFactory is a function type that creates a server implementation that
 // adds new API routes and handlers.

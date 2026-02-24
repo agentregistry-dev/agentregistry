@@ -200,6 +200,9 @@ func TestPreRunSetup(t *testing.T) {
 	// Mock daemon that is already running (so Start is not called)
 	dm := &mockDaemonManager{running: true}
 
+	// Use a dummy command for testing, since some code paths may access cmd.Root() for authn provider
+	mockCmd := &cobra.Command{Use: "test"}
+
 	oldOpts := cliOptions
 	defer func() { Configure(oldOpts) }()
 	Configure(CLIOptions{
@@ -208,7 +211,7 @@ func TestPreRunSetup(t *testing.T) {
 	})
 
 	t.Run("no_auto_start_skips_daemon", func(t *testing.T) {
-		c, err := preRunSetup(ctx, baseURL, token, false)
+		c, err := preRunSetup(ctx, nil, baseURL, token, false)
 		if err != nil {
 			t.Fatalf("preRunSetup: %v", err)
 		}
@@ -221,10 +224,14 @@ func TestPreRunSetup(t *testing.T) {
 	})
 
 	t.Run("authn_provider_supplies_token", func(t *testing.T) {
+		var mockAuthnProviderFactory = func(_ *cobra.Command) (types.CLIAuthnProvider, error) {
+			return &mockAuthnProvider{token: "authn-token"}, nil
+		}
+
 		var authnToken string
 		Configure(CLIOptions{
-			DaemonManager: dm,
-			AuthnProvider: &mockAuthnProvider{token: "authn-token"},
+			DaemonManager:        dm,
+			AuthnProviderFactory: mockAuthnProviderFactory,
 			ClientFactory: func(_ context.Context, u, tok string) (*client.Client, error) {
 				authnToken = tok
 				return dummyClient, nil
@@ -232,7 +239,7 @@ func TestPreRunSetup(t *testing.T) {
 		})
 		defer func() { Configure(oldOpts) }()
 
-		_, err := preRunSetup(ctx, baseURL, "", true)
+		_, err := preRunSetup(ctx, mockCmd, baseURL, "", true)
 		if err != nil {
 			t.Fatalf("preRunSetup: %v", err)
 		}
@@ -243,19 +250,59 @@ func TestPreRunSetup(t *testing.T) {
 
 	t.Run("authn_provider_error", func(t *testing.T) {
 		authnErr := errors.New("auth failed")
+		var mockAuthnProviderFactory = func(_ *cobra.Command) (types.CLIAuthnProvider, error) {
+			return &mockAuthnProvider{err: authnErr}, nil
+		}
+
 		Configure(CLIOptions{
-			DaemonManager: dm,
-			AuthnProvider: &mockAuthnProvider{err: authnErr},
-			ClientFactory: clientFactory,
+			DaemonManager:        dm,
+			AuthnProviderFactory: mockAuthnProviderFactory,
+			ClientFactory:        clientFactory,
 		})
 		defer func() { Configure(oldOpts) }()
 
-		_, err := preRunSetup(ctx, baseURL, "", false)
+		_, err := preRunSetup(ctx, mockCmd, baseURL, "", false)
 		if err == nil {
 			t.Fatal("expected error from AuthnProvider")
 		}
 		if !errors.Is(err, authnErr) {
 			t.Errorf("expected auth error (wrapped), got %v", err)
+		}
+	})
+
+	t.Run("token_resolved_callback_success", func(t *testing.T) {
+		var resolvedToken string
+		Configure(CLIOptions{
+			DaemonManager:   dm,
+			ClientFactory:   clientFactory,
+			OnTokenResolved: func(tok string) error { resolvedToken = tok; return nil },
+		})
+		defer func() { Configure(oldOpts) }()
+
+		_, err := preRunSetup(ctx, mockCmd, baseURL, token, false)
+		if err != nil {
+			t.Fatalf("preRunSetup: %v", err)
+		}
+		if resolvedToken != token {
+			t.Errorf("expected OnTokenResolved to receive token %q, got %q", token, resolvedToken)
+		}
+	})
+
+	t.Run("token_resolved_callback_error", func(t *testing.T) {
+		callbackErr := errors.New("callback failed")
+		Configure(CLIOptions{
+			DaemonManager:   dm,
+			ClientFactory:   clientFactory,
+			OnTokenResolved: func(tok string) error { return callbackErr },
+		})
+		defer func() { Configure(oldOpts) }()
+
+		_, err := preRunSetup(ctx, mockCmd, baseURL, token, false)
+		if err == nil {
+			t.Fatal("expected error from OnTokenResolved callback")
+		}
+		if !errors.Is(err, callbackErr) {
+			t.Errorf("expected callback error (wrapped), got %v", err)
 		}
 	})
 
@@ -269,7 +316,7 @@ func TestPreRunSetup(t *testing.T) {
 		})
 		defer func() { Configure(oldOpts) }()
 
-		_, err := preRunSetup(ctx, baseURL, token, false)
+		_, err := preRunSetup(ctx, mockCmd, baseURL, token, false)
 		if err == nil {
 			t.Fatal("expected error from ClientFactory")
 		}

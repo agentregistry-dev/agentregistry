@@ -479,7 +479,7 @@ func (db *PostgreSQL) CreateServer(ctx context.Context, tx pgx.Tx, serverJSON *a
 		return nil, fmt.Errorf("server name and version are required")
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionPush, auth.Resource{
+	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
 		Name: serverJSON.Name,
 		Type: auth.PermissionArtifactTypeServer,
 	}); err != nil {
@@ -789,9 +789,9 @@ func (db *PostgreSQL) UnmarkAsLatest(ctx context.Context, tx pgx.Tx, serverName 
 		return ctx.Err()
 	}
 
-	// note: we do a push check because this is called during an artifact's creation operation, which automatically marks the new version as latest.
+	// note: we do a publish check because this is called during an artifact's creation operation, which automatically marks the new version as latest.
 	// maybe we should add a parameter to the function to indicate if it's from a creation operation or not? this would be important if we allow manual marking of latest.
-	if err := db.authz.Check(ctx, auth.PermissionActionPush, auth.Resource{
+	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
 		Name: serverName,
 		Type: auth.PermissionArtifactTypeServer,
 	}); err != nil {
@@ -1456,7 +1456,7 @@ func (db *PostgreSQL) CreateAgent(ctx context.Context, tx pgx.Tx, agentJSON *mod
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionPush, auth.Resource{
+	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
 		Name: agentJSON.Name,
 		Type: auth.PermissionArtifactTypeAgent,
 	}); err != nil {
@@ -1686,7 +1686,7 @@ func (db *PostgreSQL) UnmarkAgentAsLatest(ctx context.Context, tx pgx.Tx, agentN
 
 	// note: we do a push check because this is called during an artifact's creation operation, which automatically marks the new version as latest.
 	// maybe we should add a parameter to the function to indicate if it's from a creation operation or not? this would be important if we allow manual marking of latest.
-	if err := db.authz.Check(ctx, auth.PermissionActionPush, auth.Resource{
+	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
 		Name: agentName,
 		Type: auth.PermissionArtifactTypeAgent,
 	}); err != nil {
@@ -2122,7 +2122,7 @@ func (db *PostgreSQL) CreateSkill(ctx context.Context, tx pgx.Tx, skillJSON *mod
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionPush, auth.Resource{
+	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
 		Name: skillJSON.Name,
 		Type: auth.PermissionArtifactTypeSkill,
 	}); err != nil {
@@ -2352,7 +2352,7 @@ func (db *PostgreSQL) UnmarkSkillAsLatest(ctx context.Context, tx pgx.Tx, skillN
 
 	// note: we do a push check because this is called during an artifact's creation operation, which automatically marks the new version as latest.
 	// maybe we should add a parameter to the function to indicate if it's from a creation operation or not? this would be important if we allow manual marking of latest.
-	if err := db.authz.Check(ctx, auth.PermissionActionPush, auth.Resource{
+	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
 		Name: skillName,
 		Type: auth.PermissionArtifactTypeSkill,
 	}); err != nil {
