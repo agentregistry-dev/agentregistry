@@ -130,6 +130,32 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		registryService = baseRegistryService
 	}
 
+	// Initialize extension registries once and use them for both routing and service behavior.
+	providerPlatforms := v0.DefaultProviderPlatformAdapters(registryService)
+	for platform, adapter := range options.ProviderPlatforms {
+		providerPlatforms[platform] = adapter
+	}
+	deploymentPlatforms := v0.DefaultDeploymentPlatformAdapters(registryService)
+	for platform, adapter := range options.DeploymentPlatforms {
+		deploymentPlatforms[platform] = adapter
+	}
+
+	type platformAdapterConfigurer interface {
+		SetPlatformAdapters(
+			map[string]service.DeploymentPlatformDeployer,
+		)
+	}
+	deploymentDeployers := make(map[string]service.DeploymentPlatformDeployer, len(deploymentPlatforms))
+	for platform, adapter := range deploymentPlatforms {
+		deploymentDeployers[platform] = adapter
+	}
+	if cfgSvc, ok := baseRegistryService.(platformAdapterConfigurer); ok {
+		cfgSvc.SetPlatformAdapters(deploymentDeployers)
+	}
+	if cfgSvc, ok := registryService.(platformAdapterConfigurer); ok {
+		cfgSvc.SetPlatformAdapters(deploymentDeployers)
+	}
+
 	if options.OnServiceCreated != nil {
 		options.OnServiceCreated(registryService)
 	}
@@ -205,15 +231,17 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		}
 	}
 
-	// Initialize job manager and indexer for embeddings
-	var routeOpts *router.RouteOptions
+	routeOpts := &router.RouteOptions{
+		ProviderPlatforms:   providerPlatforms,
+		DeploymentPlatforms: deploymentPlatforms,
+	}
+
+	// Initialize job manager and indexer for embeddings.
 	if cfg.Embeddings.Enabled && embeddingProvider != nil {
 		jobManager := jobs.NewManager()
 		indexer := service.NewIndexer(registryService, embeddingProvider, cfg.Embeddings.Dimensions)
-		routeOpts = &router.RouteOptions{
-			Indexer:    indexer,
-			JobManager: jobManager,
-		}
+		routeOpts.Indexer = indexer
+		routeOpts.JobManager = jobManager
 		log.Println("Embeddings indexing API enabled")
 	}
 

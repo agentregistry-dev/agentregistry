@@ -336,16 +336,11 @@ type listDeploymentsArgs struct {
 }
 
 type getDeploymentArgs struct {
-	restv0.DeploymentInput
+	ID string `json:"id"`
 }
 
 type deployArgs struct {
 	restv0.DeploymentRequest
-}
-
-type updateDeploymentConfigArgs struct {
-	restv0.DeploymentInput
-	restv0.DeploymentConfigUpdate
 }
 
 type deploymentsResponse struct {
@@ -383,12 +378,12 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService) {
 	// Get deployment
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_deployment",
-		Description: "Get a deployment by name/version",
+		Description: "Get a deployment by ID",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args getDeploymentArgs) (*mcp.CallToolResult, models.Deployment, error) {
-		if args.ServerName == "" || args.Version == "" {
-			return nil, models.Deployment{}, errors.New("name and version are required")
+		if args.ID == "" {
+			return nil, models.Deployment{}, errors.New("id is required")
 		}
-		deployment, err := registry.GetDeploymentByNameAndVersion(ctx, args.ServerName, args.Version, args.ResourceType)
+		deployment, err := registry.GetDeploymentByID(ctx, args.ID)
 		if err != nil {
 			return nil, models.Deployment{}, err
 		}
@@ -404,12 +399,11 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService) {
 			return nil, models.Deployment{}, errors.New("name and version are required")
 		}
 
-		runtimeTarget := args.Runtime
-		if runtimeTarget == "" {
-			runtimeTarget = "local"
+		providerID := args.ProviderID
+		if providerID == "" {
+			providerID = "local"
 		}
-
-		deployment, err := registry.DeployServer(ctx, args.ServerName, args.Version, args.Config, args.PreferRemote, runtimeTarget)
+		deployment, err := registry.DeployServer(ctx, args.ServerName, args.Version, args.Config, args.PreferRemote, providerID)
 		if err != nil {
 			return nil, models.Deployment{}, err
 		}
@@ -425,27 +419,11 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService) {
 			return nil, models.Deployment{}, errors.New("name and version are required")
 		}
 
-		runtimeTarget := args.Runtime
-		if runtimeTarget == "" {
-			runtimeTarget = "local"
+		providerID := args.ProviderID
+		if providerID == "" {
+			providerID = "local"
 		}
-
-		deployment, err := registry.DeployAgent(ctx, args.ServerName, args.Version, args.Config, args.PreferRemote, runtimeTarget)
-		if err != nil {
-			return nil, models.Deployment{}, err
-		}
-		return nil, *deployment, nil
-	})
-
-	// Update deployment config
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "update_deployment_config",
-		Description: "Update deployment configuration",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, args updateDeploymentConfigArgs) (*mcp.CallToolResult, models.Deployment, error) {
-		if args.ServerName == "" || args.Version == "" {
-			return nil, models.Deployment{}, errors.New("name and version are required")
-		}
-		deployment, err := registry.UpdateDeploymentConfig(ctx, args.ServerName, args.Version, args.ResourceType, args.Config)
+		deployment, err := registry.DeployAgent(ctx, args.ServerName, args.Version, args.Config, args.PreferRemote, providerID)
 		if err != nil {
 			return nil, models.Deployment{}, err
 		}
@@ -455,15 +433,12 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService) {
 	// Remove deployment
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "remove_deployment",
-		Description: "Remove a deployment by name/version",
+		Description: "Remove a deployment by ID",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args getDeploymentArgs) (*mcp.CallToolResult, map[string]string, error) {
-		if args.ServerName == "" || args.Version == "" {
-			return nil, nil, errors.New("name and version are required")
+		if args.ID == "" {
+			return nil, nil, errors.New("id is required")
 		}
-		if _, err := registry.GetDeploymentByNameAndVersion(ctx, args.ServerName, args.Version, args.ResourceType); err != nil {
-			return nil, nil, err
-		}
-		if err := registry.RemoveDeployment(ctx, args.ServerName, args.Version, args.ResourceType); err != nil {
+		if err := registry.RemoveDeploymentByID(ctx, args.ID); err != nil {
 			return nil, nil, err
 		}
 		return nil, map[string]string{"status": "deleted"}, nil

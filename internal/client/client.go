@@ -578,15 +578,18 @@ func asHTTPStatus(err error) int {
 
 // DeploymentResponse represents a deployment returned by the API
 type DeploymentResponse struct {
+	ID            string            `json:"id"`
+	Platform      string            `json:"platform"`
+	ProviderID    string            `json:"providerId,omitempty"`
 	ServerName   string            `json:"serverName"`
 	Version      string            `json:"version"`
+	Origin        string            `json:"origin"`
 	DeployedAt   string            `json:"deployedAt"`
 	UpdatedAt    string            `json:"updatedAt"`
 	Status       string            `json:"status"`
 	Config       map[string]string `json:"config"`
 	PreferRemote bool              `json:"preferRemote"`
 	ResourceType string            `json:"resourceType"`
-	Runtime      string            `json:"runtime"`
 }
 
 // DeploymentsListResponse represents the list of deployments
@@ -615,36 +618,18 @@ func (c *Client) GetDeployedServers() ([]*DeploymentResponse, error) {
 	return result, nil
 }
 
-// GetDeployedServerByNameAndVersion retrieves a specific deployment by name and version
-func (c *Client) GetDeployedServerByNameAndVersion(name string, version string, resourceType string) (*DeploymentResponse, error) {
-	encName := url.PathEscape(name)
-	encVersion := url.PathEscape(version)
-	url := fmt.Sprintf("/deployments/%s/versions/%s?resourceType=%s", encName, encVersion, resourceType)
-	req, err := c.newRequest(http.MethodGet, url)
-	if err != nil {
-		return nil, err
+// DeployServer deploys a server with configuration.
+func (c *Client) DeployServer(name, version string, config map[string]string, preferRemote bool, providerID string) (*DeploymentResponse, error) {
+	if providerID == "" {
+		providerID = "local"
 	}
-
-	var deployment DeploymentResponse
-	if err := c.doJSON(req, &deployment); err != nil {
-		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "Not Found") {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get deployment: %w", err)
-	}
-
-	return &deployment, nil
-}
-
-// DeployServer deploys a server with configuration
-func (c *Client) DeployServer(name, version string, config map[string]string, preferRemote bool, runtimeTarget string) (*DeploymentResponse, error) {
 	payload := internalv0.DeploymentRequest{
 		ServerName:   name,
 		Version:      version,
 		Config:       config,
 		PreferRemote: preferRemote,
 		ResourceType: "mcp",
-		Runtime:      runtimeTarget,
+		ProviderID:   providerID,
 	}
 
 	var deployment DeploymentResponse
@@ -656,13 +641,16 @@ func (c *Client) DeployServer(name, version string, config map[string]string, pr
 }
 
 // DeployAgent deploys an agent with configuration
-func (c *Client) DeployAgent(name, version string, config map[string]string, runtimeTarget string) (*DeploymentResponse, error) {
+func (c *Client) DeployAgent(name, version string, config map[string]string, providerID string) (*DeploymentResponse, error) {
+	if providerID == "" {
+		providerID = "local"
+	}
 	payload := internalv0.DeploymentRequest{
 		ServerName:   name,
 		Version:      version,
 		Config:       config,
 		ResourceType: "agent",
-		Runtime:      runtimeTarget,
+		ProviderID:   providerID,
 	}
 
 	var deployment DeploymentResponse
@@ -673,31 +661,30 @@ func (c *Client) DeployAgent(name, version string, config map[string]string, run
 	return &deployment, nil
 }
 
-// UpdateDeploymentConfig updates deployment configuration
-func (c *Client) UpdateDeploymentConfig(name string, version string, resourceType string, config map[string]string) (*DeploymentResponse, error) {
-	encName := url.PathEscape(name)
-	encVersion := url.PathEscape(version)
-	payload := map[string]any{
-		"config": config,
-	}
-
-	var deployment DeploymentResponse
-	if err := c.doJsonRequest(http.MethodPut, "/deployments/"+encName+"/versions/"+encVersion+"?resourceType="+resourceType, payload, &deployment); err != nil {
+// GetDeploymentByID retrieves a deployment by ID.
+func (c *Client) GetDeploymentByID(id string) (*DeploymentResponse, error) {
+	encID := url.PathEscape(id)
+	req, err := c.newRequest(http.MethodGet, "/deployments/"+encID)
+	if err != nil {
 		return nil, err
 	}
-
+	var deployment DeploymentResponse
+	if err := c.doJSON(req, &deployment); err != nil {
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "Not Found") {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get deployment by id: %w", err)
+	}
 	return &deployment, nil
 }
 
-// RemoveDeployment removes a deployment
-func (c *Client) RemoveDeployment(name string, version string, resourceType string) error {
-	encName := url.PathEscape(name)
-	encVersion := url.PathEscape(version)
-	req, err := c.newRequest(http.MethodDelete, "/deployments/"+encName+"/versions/"+encVersion+"?resourceType="+resourceType)
+// RemoveDeploymentByID removes a deployment by ID.
+func (c *Client) RemoveDeploymentByID(id string) error {
+	encID := url.PathEscape(id)
+	req, err := c.newRequest(http.MethodDelete, "/deployments/"+encID)
 	if err != nil {
 		return err
 	}
-
 	return c.doJSON(req, nil)
 }
 

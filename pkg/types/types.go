@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
@@ -14,6 +15,49 @@ import (
 // The base service is provided as input, and the factory should return a service
 // that implements RegistryService (and optionally additional interfaces).
 type ServiceFactory func(base service.RegistryService) service.RegistryService
+
+// DeploymentTarget defines deployment behavior for a provider platform type.
+// OSS can provide built-ins while enterprise can register cloud platform handlers.
+type DeploymentTarget interface {
+	Provider() string
+	SupportedResourceTypes() []string
+	Deploy(ctx context.Context, req *models.Deployment) (*models.Deployment, error)
+	Undeploy(ctx context.Context, deployment *models.Deployment) error
+}
+
+// AsyncDeploymentTarget extends DeploymentTarget with async job operations.
+type AsyncDeploymentTarget interface {
+	DeploymentTarget
+	GetLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
+	Cancel(ctx context.Context, deployment *models.Deployment) error
+}
+
+// Discoverer can be implemented by provider platform handlers that support discovery.
+type Discoverer interface {
+	Discover(ctx context.Context, providerID string) ([]*models.Deployment, error)
+}
+
+// ProviderPlatformAdapter defines provider CRUD behavior for a provider platform type.
+type ProviderPlatformAdapter interface {
+	Platform() string
+	ListProviders(ctx context.Context) ([]*models.Provider, error)
+	CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error)
+	GetProvider(ctx context.Context, providerID string) (*models.Provider, error)
+	UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error)
+	DeleteProvider(ctx context.Context, providerID string) error
+}
+
+// DeploymentPlatformAdapter defines deployment behavior for a provider platform type.
+// This is the intended long-term adapter contract for /v0/deployments dispatch.
+type DeploymentPlatformAdapter interface {
+	Platform() string
+	SupportedResourceTypes() []string
+	Deploy(ctx context.Context, req *models.Deployment) (*models.Deployment, error)
+	Undeploy(ctx context.Context, deployment *models.Deployment) error
+	GetLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
+	Cancel(ctx context.Context, deployment *models.Deployment) error
+	Discover(ctx context.Context, providerID string) ([]*models.Deployment, error)
+}
 
 // DatabaseFactory is a function type that creates a database implementation.
 // This allows implementors to run additional migrations and wrap the database.
@@ -33,6 +77,16 @@ type AppOptions struct {
 	// ServiceFactory is an optional function to create a service that adds new functionality.
 	// The factory receives the base service and should return an extended service.
 	ServiceFactory ServiceFactory
+
+	// DeploymentTargets registers additional deployment targets.
+	// OSS provides built-in local runtimes; enterprise can register cloud providers.
+	DeploymentTargets map[string]DeploymentTarget
+
+	// ProviderPlatforms registers adapters for provider CRUD by provider platform type.
+	ProviderPlatforms map[string]ProviderPlatformAdapter
+
+	// DeploymentPlatforms registers adapters for deployment lifecycle by provider platform type.
+	DeploymentPlatforms map[string]DeploymentPlatformAdapter
 
 	// OnServiceCreated is an optional callback that receives the created service
 	// (potentially extended via ServiceFactory).

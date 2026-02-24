@@ -2367,6 +2367,173 @@ func (db *PostgreSQL) UnmarkSkillAsLatest(ctx context.Context, tx pgx.Tx, skillN
 	return nil
 }
 
+// CreateProvider creates a provider record.
+func (db *PostgreSQL) CreateProvider(ctx context.Context, tx pgx.Tx, in *models.CreateProviderInput) (*models.Provider, error) {
+	if in == nil {
+		return nil, database.ErrInvalidInput
+	}
+	if strings.TrimSpace(in.ID) == "" || strings.TrimSpace(in.Name) == "" || strings.TrimSpace(in.Platform) == "" {
+		return nil, database.ErrInvalidInput
+	}
+	executor := db.getExecutor(tx)
+	configJSON, err := json.Marshal(in.Config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal provider config: %w", err)
+	}
+	query := `
+		INSERT INTO providers (id, name, platform, config)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, name, platform, COALESCE(config, '{}'::jsonb), created_at, updated_at
+	`
+	var provider models.Provider
+	var configOut []byte
+	err = executor.QueryRow(ctx, query, in.ID, in.Name, in.Platform, configJSON).Scan(
+		&provider.ID,
+		&provider.Name,
+		&provider.Platform,
+		&configOut,
+		&provider.CreatedAt,
+		&provider.UpdatedAt,
+	)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, database.ErrAlreadyExists
+		}
+		return nil, fmt.Errorf("failed to create provider: %w", err)
+	}
+	if len(configOut) > 0 {
+		if err := json.Unmarshal(configOut, &provider.Config); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal provider config: %w", err)
+		}
+	}
+	if provider.Config == nil {
+		provider.Config = map[string]any{}
+	}
+	return &provider, nil
+}
+
+// ListProviders lists providers, optionally filtered by platform.
+func (db *PostgreSQL) ListProviders(ctx context.Context, tx pgx.Tx, platform *string) ([]*models.Provider, error) {
+	executor := db.getExecutor(tx)
+	query := `SELECT id, name, platform, COALESCE(config, '{}'::jsonb), created_at, updated_at FROM providers`
+	args := []any{}
+	if platform != nil && strings.TrimSpace(*platform) != "" {
+		query += ` WHERE platform = $1`
+		args = append(args, strings.TrimSpace(*platform))
+	}
+	query += ` ORDER BY created_at ASC`
+	rows, err := executor.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list providers: %w", err)
+	}
+	defer rows.Close()
+	var out []*models.Provider
+	for rows.Next() {
+		var p models.Provider
+		var configJSON []byte
+		if err := rows.Scan(&p.ID, &p.Name, &p.Platform, &configJSON, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan provider: %w", err)
+		}
+		if len(configJSON) > 0 {
+			if err := json.Unmarshal(configJSON, &p.Config); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal provider config: %w", err)
+			}
+		}
+		if p.Config == nil {
+			p.Config = map[string]any{}
+		}
+		out = append(out, &p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate providers: %w", err)
+	}
+	return out, nil
+}
+
+// GetProviderByID gets a provider by ID.
+func (db *PostgreSQL) GetProviderByID(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error) {
+	executor := db.getExecutor(tx)
+	query := `SELECT id, name, platform, COALESCE(config, '{}'::jsonb), created_at, updated_at FROM providers WHERE id = $1`
+	var p models.Provider
+	var configJSON []byte
+	if err := executor.QueryRow(ctx, query, providerID).Scan(&p.ID, &p.Name, &p.Platform, &configJSON, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, database.ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get provider: %w", err)
+	}
+	if len(configJSON) > 0 {
+		if err := json.Unmarshal(configJSON, &p.Config); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal provider config: %w", err)
+		}
+	}
+	if p.Config == nil {
+		p.Config = map[string]any{}
+	}
+	return &p, nil
+}
+
+// UpdateProvider updates mutable provider fields.
+func (db *PostgreSQL) UpdateProvider(ctx context.Context, tx pgx.Tx, providerID string, in *models.UpdateProviderInput) (*models.Provider, error) {
+	if in == nil {
+		return db.GetProviderByID(ctx, tx, providerID)
+	}
+	current, err := db.GetProviderByID(ctx, tx, providerID)
+	if err != nil {
+		return nil, err
+	}
+	name := current.Name
+	if in.Name != nil {
+		name = *in.Name
+	}
+	config := current.Config
+	if in.Config != nil {
+		config = in.Config
+	}
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal provider config: %w", err)
+	}
+	executor := db.getExecutor(tx)
+	query := `
+		UPDATE providers
+		SET name = $2, config = $3, updated_at = NOW()
+		WHERE id = $1
+		RETURNING id, name, platform, COALESCE(config, '{}'::jsonb), created_at, updated_at
+	`
+	var p models.Provider
+	var configOut []byte
+	if err := executor.QueryRow(ctx, query, providerID, name, configJSON).Scan(&p.ID, &p.Name, &p.Platform, &configOut, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, database.ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to update provider: %w", err)
+	}
+	if len(configOut) > 0 {
+		if err := json.Unmarshal(configOut, &p.Config); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal provider config: %w", err)
+		}
+	}
+	if p.Config == nil {
+		p.Config = map[string]any{}
+	}
+	return &p, nil
+}
+
+// DeleteProvider removes a provider by ID.
+func (db *PostgreSQL) DeleteProvider(ctx context.Context, tx pgx.Tx, providerID string) error {
+	executor := db.getExecutor(tx)
+	result, err := executor.Exec(ctx, `DELETE FROM providers WHERE id = $1`, providerID)
+	if err != nil {
+		return fmt.Errorf("failed to delete provider: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return database.ErrNotFound
+	}
+	return nil
+}
+
 // CreateDeployment creates a new deployment record
 func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deployment *models.Deployment) error {
 	// Authz check (determine resource type)
@@ -2388,29 +2555,53 @@ func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deploymen
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	query := `
-		INSERT INTO deployments (server_name, version, status, config, prefer_remote, resource_type, runtime)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`
+	cloudMetadataJSON, err := json.Marshal(deployment.CloudMetadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal cloud metadata: %w", err)
+	}
 
 	// Default to 'mcp' if not specified
 	resourceType := deployment.ResourceType
 	if resourceType == "" {
 		resourceType = "mcp"
 	}
-	runtime := deployment.Runtime
-	if runtime == "" {
-		runtime = "local"
+	providerID := strings.TrimSpace(deployment.ProviderID)
+	if providerID == "" {
+		providerID = "local"
+	}
+	origin := deployment.Origin
+	if origin == "" {
+		origin = "managed"
+	}
+	deployment.ProviderID = providerID
+
+	if deployment.ID == "" {
+		_ = db.getExecutor(tx).QueryRow(ctx, "SELECT uuid_generate_v4()::text").Scan(&deployment.ID)
 	}
 
+	query := `
+		INSERT INTO deployments (
+			id, server_name, version, status, config, prefer_remote, resource_type,
+			origin, provider_id, region, cloud_resource_id, cloud_metadata, deployed_by, error
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, ''), NULLIF($10, ''), NULLIF($11, ''), $12, $13, $14)
+	`
+
 	_, err = executor.Exec(ctx, query,
+		deployment.ID,
 		deployment.ServerName,
 		deployment.Version,
 		deployment.Status,
 		configJSON,
 		deployment.PreferRemote,
 		resourceType,
-		runtime,
+		origin,
+		providerID,
+		deployment.Region,
+		deployment.CloudResourceID,
+		cloudMetadataJSON,
+		deployment.DeployedBy,
+		deployment.Error,
 	)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -2424,16 +2615,62 @@ func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deploymen
 }
 
 // GetDeployments retrieves all deployed servers
-func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx) ([]*models.Deployment, error) {
+func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	executor := db.getExecutor(tx)
 
-	query := `
-		SELECT server_name, version, deployed_at, updated_at, status, config, prefer_remote, resource_type, runtime
-		FROM deployments
-		ORDER BY deployed_at DESC
-	`
+	where := make([]string, 0)
+	args := make([]any, 0)
+	nextArg := 1
+	needsProviderJoin := false
 
-	rows, err := executor.Query(ctx, query)
+	if filter != nil {
+		if filter.Platform != nil {
+			platform := strings.ToLower(strings.TrimSpace(*filter.Platform))
+			needsProviderJoin = true
+			where = append(where, fmt.Sprintf("p.platform = $%d", nextArg))
+			args = append(args, platform)
+			nextArg++
+		}
+		if filter.ResourceType != nil {
+			where = append(where, fmt.Sprintf("resource_type = $%d", nextArg))
+			args = append(args, *filter.ResourceType)
+			nextArg++
+		}
+		if filter.Status != nil {
+			where = append(where, fmt.Sprintf("status = $%d", nextArg))
+			args = append(args, *filter.Status)
+			nextArg++
+		}
+		if filter.Origin != nil {
+			where = append(where, fmt.Sprintf("origin = $%d", nextArg))
+			args = append(args, *filter.Origin)
+			nextArg++
+		}
+		if filter.ResourceName != nil {
+			where = append(where, fmt.Sprintf("server_name ILIKE $%d", nextArg))
+			args = append(args, "%"+*filter.ResourceName+"%")
+			nextArg++
+		}
+		if filter.ProviderID != nil {
+			where = append(where, fmt.Sprintf("d.provider_id = $%d", nextArg))
+			args = append(args, *filter.ProviderID)
+			nextArg++
+		}
+	}
+
+	query := `SELECT
+			d.id, d.server_name, d.version, d.deployed_at, d.updated_at, d.status, d.config, d.prefer_remote, d.resource_type,
+			d.origin, COALESCE(d.provider_id, ''), COALESCE(d.region, ''), COALESCE(d.cloud_resource_id, ''), COALESCE(d.cloud_metadata, '{}'::jsonb), COALESCE(d.deployed_by, ''), COALESCE(d.error, '')
+		FROM deployments d`
+	if needsProviderJoin {
+		query += ` LEFT JOIN providers p ON p.id = d.provider_id`
+	}
+	if len(where) > 0 {
+		query += " WHERE " + strings.Join(where, " AND ")
+	}
+	query += " ORDER BY d.deployed_at DESC"
+
+	rows, err := executor.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query deployments: %w", err)
 	}
@@ -2443,8 +2680,10 @@ func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx) ([]*models.
 	for rows.Next() {
 		var d models.Deployment
 		var configJSON []byte
+		var cloudMetadataJSON []byte
 
 		err := rows.Scan(
+			&d.ID,
 			&d.ServerName,
 			&d.Version,
 			&d.DeployedAt,
@@ -2453,7 +2692,13 @@ func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx) ([]*models.
 			&configJSON,
 			&d.PreferRemote,
 			&d.ResourceType,
-			&d.Runtime,
+			&d.Origin,
+			&d.ProviderID,
+			&d.Region,
+			&d.CloudResourceID,
+			&cloudMetadataJSON,
+			&d.DeployedBy,
+			&d.Error,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan deployment: %w", err)
@@ -2467,6 +2712,14 @@ func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx) ([]*models.
 		if d.Config == nil {
 			d.Config = make(map[string]string)
 		}
+		if len(cloudMetadataJSON) > 0 {
+			if err := json.Unmarshal(cloudMetadataJSON, &d.CloudMetadata); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal cloud metadata: %w", err)
+			}
+		}
+		if d.CloudMetadata == nil {
+			d.CloudMetadata = make(map[string]any)
+		}
 
 		deployments = append(deployments, &d)
 	}
@@ -2478,32 +2731,20 @@ func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx) ([]*models.
 	return deployments, nil
 }
 
-// GetDeploymentByName retrieves a specific deployment
-func (db *PostgreSQL) GetDeploymentByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName string, version string, resourceType string) (*models.Deployment, error) {
-	// Authz check (determine resource type)
-	artifactType := auth.PermissionArtifactTypeServer
-	if resourceType == "agent" {
-		artifactType = auth.PermissionArtifactTypeAgent
-	}
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
-		Name: serverName,
-		Type: artifactType,
-	}); err != nil {
-		return nil, err
-	}
-
+// GetDeploymentByID retrieves a specific deployment by UUID.
+func (db *PostgreSQL) GetDeploymentByID(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error) {
 	executor := db.getExecutor(tx)
-
-	query := `
-		SELECT server_name, version, deployed_at, updated_at, status, config, prefer_remote, resource_type, runtime
+	query := `SELECT
+			id, server_name, version, deployed_at, updated_at, status, config, prefer_remote, resource_type,
+			origin, COALESCE(provider_id, ''), COALESCE(region, ''), COALESCE(cloud_resource_id, ''), COALESCE(cloud_metadata, '{}'::jsonb), COALESCE(deployed_by, ''), COALESCE(error, '')
 		FROM deployments
-		WHERE server_name = $1 AND version = $2 AND resource_type = $3
-	`
+		WHERE id = $1`
 
 	var d models.Deployment
 	var configJSON []byte
-
-	err := executor.QueryRow(ctx, query, serverName, version, resourceType).Scan(
+	var cloudMetadataJSON []byte
+	err := executor.QueryRow(ctx, query, id).Scan(
+		&d.ID,
 		&d.ServerName,
 		&d.Version,
 		&d.DeployedAt,
@@ -2512,64 +2753,47 @@ func (db *PostgreSQL) GetDeploymentByNameAndVersion(ctx context.Context, tx pgx.
 		&configJSON,
 		&d.PreferRemote,
 		&d.ResourceType,
-		&d.Runtime,
+		&d.Origin,
+		&d.ProviderID,
+		&d.Region,
+		&d.CloudResourceID,
+		&cloudMetadataJSON,
+		&d.DeployedBy,
+		&d.Error,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, database.ErrNotFound
 		}
-		return nil, fmt.Errorf("failed to get deployment: %w", err)
+		return nil, fmt.Errorf("failed to get deployment by id: %w", err)
 	}
-
 	if len(configJSON) > 0 {
 		if err := json.Unmarshal(configJSON, &d.Config); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 		}
 	}
+	if len(cloudMetadataJSON) > 0 {
+		if err := json.Unmarshal(cloudMetadataJSON, &d.CloudMetadata); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal cloud metadata: %w", err)
+		}
+	}
 	if d.Config == nil {
 		d.Config = make(map[string]string)
 	}
-
-	return &d, nil
-}
-
-// UpdateDeploymentConfig updates the configuration for a deployment
-func (db *PostgreSQL) UpdateDeploymentConfig(ctx context.Context, tx pgx.Tx, serverName string, version string, resourceType string, config map[string]string) error {
-	// Authz check (determine resource type)
+	if d.CloudMetadata == nil {
+		d.CloudMetadata = make(map[string]any)
+	}
 	artifactType := auth.PermissionArtifactTypeServer
-	if resourceType == "agent" {
+	if d.ResourceType == "agent" {
 		artifactType = auth.PermissionArtifactTypeAgent
 	}
-	if err := db.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
-		Name: serverName,
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: d.ServerName,
 		Type: artifactType,
 	}); err != nil {
-		return err
+		return nil, err
 	}
-
-	executor := db.getExecutor(tx)
-
-	configJSON, err := json.Marshal(config)
-	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
-	}
-
-	query := `
-		UPDATE deployments
-		SET config = $4
-		WHERE server_name = $1 AND version = $2 AND resource_type = $3
-	`
-
-	result, err := executor.Exec(ctx, query, serverName, version, resourceType, configJSON)
-	if err != nil {
-		return fmt.Errorf("failed to update deployment config: %w", err)
-	}
-
-	if result.RowsAffected() == 0 {
-		return database.ErrNotFound
-	}
-
-	return nil
+	return &d, nil
 }
 
 // UpdateDeploymentStatus updates the status of a deployment
@@ -2606,33 +2830,33 @@ func (db *PostgreSQL) UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, ser
 	return nil
 }
 
-// RemoveDeployment removes a deployment
-func (db *PostgreSQL) RemoveDeployment(ctx context.Context, tx pgx.Tx, serverName string, version string, resourceType string) error {
-	// Authz check (determine resource type)
+// RemoveDeploymentByID removes a deployment by UUID.
+func (db *PostgreSQL) RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id string) error {
+	deployment, err := db.GetDeploymentByID(ctx, tx, id)
+	if err != nil {
+		return err
+	}
 	artifactType := auth.PermissionArtifactTypeServer
-	if resourceType == "agent" {
+	if deployment.ResourceType == "agent" {
 		artifactType = auth.PermissionArtifactTypeAgent
 	}
 	if err := db.authz.Check(ctx, auth.PermissionActionDeploy, auth.Resource{
-		Name: serverName,
+		Name: deployment.ServerName,
 		Type: artifactType,
 	}); err != nil {
 		return err
 	}
 
 	executor := db.getExecutor(tx)
+	query := `DELETE FROM deployments WHERE id = $1`
 
-	query := `DELETE FROM deployments WHERE server_name = $1 AND version = $2 AND resource_type = $3`
-
-	result, err := executor.Exec(ctx, query, serverName, version, resourceType)
+	result, err := executor.Exec(ctx, query, id)
 	if err != nil {
-		return fmt.Errorf("failed to delete deployment: %w", err)
+		return fmt.Errorf("failed to delete deployment by id: %w", err)
 	}
-
 	if result.RowsAffected() == 0 {
 		return database.ErrNotFound
 	}
-
 	return nil
 }
 

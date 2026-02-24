@@ -20,6 +20,7 @@ type FakeRegistry struct {
 	Agents       []*models.AgentResponse
 	Skills       []*models.SkillResponse
 	Deployments  []*models.Deployment
+	Providers    []*models.Provider
 	ServerReadme *database.ServerReadme
 
 	// Embedding metadata maps (keyed by "name@version")
@@ -57,11 +58,15 @@ type FakeRegistry struct {
 	GetAllVersionsBySkillNameFn     func(ctx context.Context, skillName string) ([]*models.SkillResponse, error)
 	CreateSkillFn                   func(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error)
 	GetDeploymentsFn                func(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
-	GetDeploymentByNameAndVersionFn func(ctx context.Context, resourceName, version, artifactType string) (*models.Deployment, error)
-	DeployServerFn                  func(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool, runtime string) (*models.Deployment, error)
-	DeployAgentFn                   func(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool, runtime string) (*models.Deployment, error)
-	UpdateDeploymentConfigFn        func(ctx context.Context, resourceName, version, artifactType string, config map[string]string) (*models.Deployment, error)
-	RemoveDeploymentFn              func(ctx context.Context, resourceName, version, artifactType string) error
+	ListProvidersFn                func(ctx context.Context, platform *string) ([]*models.Provider, error)
+	GetProviderByIDFn              func(ctx context.Context, providerID string) (*models.Provider, error)
+	CreateProviderFn               func(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error)
+	UpdateProviderFn               func(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error)
+	DeleteProviderFn               func(ctx context.Context, providerID string) error
+	GetDeploymentByIDFn             func(ctx context.Context, id string) (*models.Deployment, error)
+	DeployServerFn                  func(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error)
+	DeployAgentFn                   func(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error)
+	RemoveDeploymentByIDFn          func(ctx context.Context, id string) error
 	ReconcileAllFn                  func(ctx context.Context) error
 }
 
@@ -312,6 +317,60 @@ func (f *FakeRegistry) CreateSkill(ctx context.Context, req *models.SkillJSON) (
 
 // Deployment methods
 
+func (f *FakeRegistry) ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error) {
+	if f.ListProvidersFn != nil {
+		return f.ListProvidersFn(ctx, platform)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]*models.Provider, 0, len(f.Providers))
+	for _, p := range f.Providers {
+		if p == nil {
+			continue
+		}
+		if platform != nil && *platform != "" && p.Platform != *platform {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+func (f *FakeRegistry) GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error) {
+	if f.GetProviderByIDFn != nil {
+		return f.GetProviderByIDFn(ctx, providerID)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, p := range f.Providers {
+		if p != nil && p.ID == providerID {
+			return p, nil
+		}
+	}
+	return nil, database.ErrNotFound
+}
+
+func (f *FakeRegistry) CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error) {
+	if f.CreateProviderFn != nil {
+		return f.CreateProviderFn(ctx, in)
+	}
+	return nil, database.ErrNotFound
+}
+
+func (f *FakeRegistry) UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error) {
+	if f.UpdateProviderFn != nil {
+		return f.UpdateProviderFn(ctx, providerID, in)
+	}
+	return nil, database.ErrNotFound
+}
+
+func (f *FakeRegistry) DeleteProvider(ctx context.Context, providerID string) error {
+	if f.DeleteProviderFn != nil {
+		return f.DeleteProviderFn(ctx, providerID)
+	}
+	return database.ErrNotFound
+}
+
 func (f *FakeRegistry) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	if f.GetDeploymentsFn != nil {
 		return f.GetDeploymentsFn(ctx, filter)
@@ -321,37 +380,30 @@ func (f *FakeRegistry) GetDeployments(ctx context.Context, filter *models.Deploy
 	return f.Deployments, nil
 }
 
-func (f *FakeRegistry) GetDeploymentByNameAndVersion(ctx context.Context, resourceName, version, artifactType string) (*models.Deployment, error) {
-	if f.GetDeploymentByNameAndVersionFn != nil {
-		return f.GetDeploymentByNameAndVersionFn(ctx, resourceName, version, artifactType)
+func (f *FakeRegistry) GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error) {
+	if f.GetDeploymentByIDFn != nil {
+		return f.GetDeploymentByIDFn(ctx, id)
 	}
 	return nil, database.ErrNotFound
 }
 
-func (f *FakeRegistry) DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool, runtime string) (*models.Deployment, error) {
+func (f *FakeRegistry) DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
 	if f.DeployServerFn != nil {
-		return f.DeployServerFn(ctx, serverName, version, config, preferRemote, runtime)
+		return f.DeployServerFn(ctx, serverName, version, config, preferRemote, providerID)
 	}
 	return nil, database.ErrNotFound
 }
 
-func (f *FakeRegistry) DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool, runtime string) (*models.Deployment, error) {
+func (f *FakeRegistry) DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
 	if f.DeployAgentFn != nil {
-		return f.DeployAgentFn(ctx, agentName, version, config, preferRemote, runtime)
+		return f.DeployAgentFn(ctx, agentName, version, config, preferRemote, providerID)
 	}
 	return nil, database.ErrNotFound
 }
 
-func (f *FakeRegistry) UpdateDeploymentConfig(ctx context.Context, resourceName, version, artifactType string, config map[string]string) (*models.Deployment, error) {
-	if f.UpdateDeploymentConfigFn != nil {
-		return f.UpdateDeploymentConfigFn(ctx, resourceName, version, artifactType, config)
-	}
-	return nil, database.ErrNotFound
-}
-
-func (f *FakeRegistry) RemoveDeployment(ctx context.Context, resourceName, version, artifactType string) error {
-	if f.RemoveDeploymentFn != nil {
-		return f.RemoveDeploymentFn(ctx, resourceName, version, artifactType)
+func (f *FakeRegistry) RemoveDeploymentByID(ctx context.Context, id string) error {
+	if f.RemoveDeploymentByIDFn != nil {
+		return f.RemoveDeploymentByIDFn(ctx, id)
 	}
 	return database.ErrNotFound
 }

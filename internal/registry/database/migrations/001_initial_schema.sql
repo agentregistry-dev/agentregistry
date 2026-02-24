@@ -253,8 +253,8 @@ CREATE TABLE deployments (
     -- Resource type (mcp server or agent)
     resource_type VARCHAR(50) NOT NULL DEFAULT 'mcp',
     
-    -- Runtime target
-    runtime VARCHAR(50) NOT NULL DEFAULT 'local',
+    -- Deployment platform type
+    provider VARCHAR(50) NOT NULL DEFAULT 'local',
     
     -- Primary key
     CONSTRAINT deployments_pkey PRIMARY KEY (server_name, version)
@@ -266,7 +266,7 @@ CREATE INDEX idx_deployments_status ON deployments (status);
 CREATE INDEX idx_deployments_deployed_at ON deployments (deployed_at DESC);
 CREATE INDEX idx_deployments_updated_at ON deployments (updated_at DESC);
 CREATE INDEX idx_deployments_resource_type ON deployments (resource_type);
-CREATE INDEX idx_deployments_runtime ON deployments (runtime);
+CREATE INDEX idx_deployments_provider ON deployments (provider);
 
 -- GIN index for config JSONB queries
 CREATE INDEX idx_deployments_config_gin ON deployments USING GIN(config);
@@ -298,12 +298,12 @@ ALTER TABLE deployments ADD CONSTRAINT check_deployment_version_not_empty
 ALTER TABLE deployments ADD CONSTRAINT check_deployment_resource_type_valid
     CHECK (resource_type IN ('mcp', 'agent'));
 
-ALTER TABLE deployments ADD CONSTRAINT check_deployment_runtime_valid
-    CHECK (runtime IN ('local', 'kubernetes'));
+ALTER TABLE deployments ADD CONSTRAINT check_deployment_provider_valid
+    CHECK (provider IN ('local', 'kubernetes'));
 
 -- Add comments for documentation
 COMMENT ON COLUMN deployments.resource_type IS 'Type of resource deployed: mcp (MCP server) or agent';
-COMMENT ON COLUMN deployments.runtime IS 'Deployment runtime target: local or kubernetes';
+COMMENT ON COLUMN deployments.provider IS 'Deployment platform type: local or kubernetes';
 
 -- =============================================================================
 -- SERVER_READMES TABLE

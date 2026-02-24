@@ -14,14 +14,14 @@ var (
 	deployHeaders      []string
 	deployPreferRemote bool
 	deployYes          bool
-	deployRuntime      string
+	deployProviderID   string
 	deployNamespace    string
 )
 
 var DeployCmd = &cobra.Command{
 	Use:           "deploy <server-name>",
 	Short:         "Deploy an MCP server",
-	Long:          `Deploy an MCP server to the runtime.`,
+	Long:          `Deploy an MCP server to a provider.`,
 	Args:          cobra.ExactArgs(1),
 	RunE:          runDeploy,
 	SilenceUsage:  true,  // Don't show usage on deployment errors
@@ -35,8 +35,8 @@ func init() {
 	DeployCmd.Flags().StringArrayVar(&deployHeaders, "header", []string{}, "HTTP headers for remote servers (KEY=VALUE)")
 	DeployCmd.Flags().BoolVar(&deployPreferRemote, "prefer-remote", false, "Prefer remote deployment over local")
 	DeployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "Automatically accept all prompts (use default/latest version)")
-	DeployCmd.Flags().StringVar(&deployRuntime, "runtime", "local", "Deployment runtime target (local, kubernetes)")
-	DeployCmd.Flags().StringVar(&deployNamespace, "namespace", "", "Kubernetes namespace for deployment (defaults to current kubeconfig context, only used with --runtime kubernetes)")
+	DeployCmd.Flags().StringVar(&deployProviderID, "provider-id", "", "Deployment target provider ID (defaults to local when omitted)")
+	DeployCmd.Flags().StringVar(&deployNamespace, "namespace", "", "Kubernetes namespace for deployment (if provider targets Kubernetes)")
 }
 
 func runDeploy(cmd *cobra.Command, args []string) error {
@@ -47,6 +47,10 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	config := make(map[string]string)
+
+	if deployProviderID == "" {
+		deployProviderID = "local"
+	}
 
 	for _, env := range deployEnv {
 		parts := strings.SplitN(env, "=", 2)
@@ -73,7 +77,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	// Add namespace to config for Kubernetes deployments
-	if deployRuntime == "kubernetes" && deployNamespace != "" {
+	if deployNamespace != "" {
 		config["KAGENT_NAMESPACE"] = deployNamespace
 	}
 
@@ -92,23 +96,20 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	// Deploy server via API (server will handle reconciliation)
 	fmt.Println("\nDeploying server...")
-	deployment, err := apiClient.DeployServer(server.Server.Name, deployVersion, config, deployPreferRemote, deployRuntime)
+	deployment, err := apiClient.DeployServer(server.Server.Name, deployVersion, config, deployPreferRemote, deployProviderID)
 	if err != nil {
 		return fmt.Errorf("failed to deploy server: %w", err)
 	}
 
-	fmt.Printf("\n✓ Deployed %s (v%s) to %s runtime\n", deployment.ServerName, deployment.Version, deployRuntime)
-	if deployRuntime == "kubernetes" {
+	fmt.Printf("\n✓ Deployed %s (v%s) with providerId=%s\n", deployment.ServerName, deployment.Version, deployProviderID)
+	if deployNamespace != "" {
 		ns := deployNamespace
-		if ns == "" {
-			ns = "(default)"
-		}
 		fmt.Printf("Namespace: %s\n", ns)
 	}
 	if len(config) > 0 {
 		fmt.Printf("Configuration: %d setting(s)\n", len(config))
 	}
-	if deployRuntime == "local" {
+	if deployProviderID == "local" {
 		fmt.Printf("\nServer deployment recorded. The registry will reconcile containers automatically.\n")
 		fmt.Printf("Agent Gateway endpoint: http://localhost:21212/mcp\n")
 	}

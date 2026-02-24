@@ -4,15 +4,16 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/url"
+	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
-	"github.com/agentregistry-dev/agentregistry/internal/runtime"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
 )
+
+const LocalProviderID = "local"
 
 // DeploymentRequest represents the input for deploying a server
 type DeploymentRequest struct {
@@ -21,17 +22,17 @@ type DeploymentRequest struct {
 	Config       map[string]string `json:"config,omitempty" doc:"Configuration key-value pairs (env vars, args, headers)"`
 	PreferRemote bool              `json:"preferRemote,omitempty" doc:"Prefer remote deployment over local" default:"false"`
 	ResourceType string            `json:"resourceType,omitempty" doc:"Type of resource to deploy (mcp, agent)" default:"mcp" example:"mcp" enum:"mcp,agent"`
-	Runtime      string            `json:"runtime,omitempty" doc:"Runtime target (local, kubernetes)" default:"local" example:"local" enum:"local,kubernetes"`
-}
-
-// DeploymentConfigUpdate represents the input for updating deployment configuration
-type DeploymentConfigUpdate struct {
-	Config map[string]string `json:"config" doc:"Configuration key-value pairs to set"`
+	ProviderID   string            `json:"providerId,omitempty" doc:"Concrete provider instance ID. Defaults to local singleton when omitted."`
 }
 
 // DeploymentResponse represents a deployment
 type DeploymentResponse struct {
 	Body models.Deployment
+}
+
+type DeploymentLogsResponse struct {
+	DeploymentID string   `json:"deploymentId"`
+	Logs         []string `json:"logs"`
 }
 
 // DeploymentsListResponse represents a list of deployments
@@ -41,21 +42,49 @@ type DeploymentsListResponse struct {
 	}
 }
 
-// DeploymentInput represents path parameters for deployment operations
-type DeploymentInput struct {
-	ServerName   string `path:"serverName" json:"serverName" doc:"URL-encoded server name" example:"io.github.user%2Fweather"`
-	Version      string `path:"version" json:"version" doc:"Version of the deployment to get" example:"1.0.0"`
-	ResourceType string `query:"resourceType" json:"resourceType" doc:"Resource type (mcp, agent)" example:"mcp" enum:"mcp,agent"`
+// DeploymentByIDInput represents path parameters for ID-based deployment operations.
+type DeploymentByIDInput struct {
+	ID string `path:"id" json:"id" doc:"Deployment ID" example:"6b7ce4ab-ec3d-4789-95f4-8be5fac2e6be"`
 }
 
 // DeploymentsListInput represents query parameters for listing deployments
 type DeploymentsListInput struct {
+	Platform     string `query:"platform" json:"platform,omitempty" doc:"Filter by provider platform type (for OSS: local or kubernetes)" example:"local"`
+	ProviderID   string `query:"providerId" json:"providerId,omitempty" doc:"Filter by provider instance ID"`
 	ResourceType string `query:"resourceType" json:"resourceType,omitempty" doc:"Filter by resource type (mcp, agent)" example:"mcp" enum:"mcp,agent"`
-	Runtime      string `query:"runtime" json:"runtime,omitempty" doc:"Filter by runtime (local, kubernetes)" example:"local" enum:"local,kubernetes"`
+	Status       string `query:"status" json:"status,omitempty" doc:"Filter by deployment status"`
+	Origin       string `query:"origin" json:"origin,omitempty" doc:"Filter by deployment origin (managed, discovered)" enum:"managed,discovered"`
+	ResourceName string `query:"resourceName" json:"resourceName,omitempty" doc:"Case-insensitive substring filter on resource name"`
+}
+
+func normalizePlatform(platform string) string {
+	return strings.ToLower(strings.TrimSpace(platform))
+}
+
+func deploymentPlatform(ctx context.Context, registry service.RegistryService, deployment *models.Deployment) string {
+	if deployment == nil {
+		return ""
+	}
+	if strings.TrimSpace(deployment.ProviderID) == "" {
+		return ""
+	}
+	provider, err := registry.GetProviderByID(ctx, deployment.ProviderID)
+	if err != nil || provider == nil {
+		return ""
+	}
+	return normalizePlatform(provider.Platform)
+}
+
+func unsupportedDeploymentPlatformError(platform string) error {
+	p := strings.TrimSpace(platform)
+	if p == "" {
+		p = "unknown"
+	}
+	return huma.Error400BadRequest("Deployment platform is not supported: " + p)
 }
 
 // RegisterDeploymentsEndpoints registers all deployment-related endpoints
-func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry service.RegistryService) {
+func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry service.RegistryService, extensions PlatformExtensions) {
 	// List all deployments
 	huma.Register(api, huma.Operation{
 		OperationID: "list-deployments",
@@ -66,13 +95,29 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		Tags:        []string{"deployments"},
 	}, func(ctx context.Context, input *DeploymentsListInput) (*DeploymentsListResponse, error) {
 		filter := &models.DeploymentFilter{}
+		if input.Platform != "" {
+			p := normalizePlatform(input.Platform)
+			filter.Platform = &p
+		}
+		if input.ProviderID != "" {
+			id := input.ProviderID
+			filter.ProviderID = &id
+		}
 		if input.ResourceType != "" {
 			t := input.ResourceType
 			filter.ResourceType = &t
 		}
-		if input.Runtime != "" {
-			r := input.Runtime
-			filter.Runtime = &r
+		if input.Status != "" {
+			s := input.Status
+			filter.Status = &s
+		}
+		if input.Origin != "" {
+			o := input.Origin
+			filter.Origin = &o
+		}
+		if input.ResourceName != "" {
+			n := input.ResourceName
+			filter.ResourceName = &n
 		}
 
 		deployments, err := registry.GetDeployments(ctx, filter)
@@ -96,24 +141,12 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 	huma.Register(api, huma.Operation{
 		OperationID: "get-deployment",
 		Method:      http.MethodGet,
-		Path:        basePath + "/deployments/{serverName}/versions/{version}",
+		Path:        basePath + "/deployments/{id}",
 		Summary:     "Get deployment details",
-		Description: "Retrieve details for a specific deployed resource (MCP server or agent)",
+		Description: "Retrieve details for a specific deployment by ID",
 		Tags:        []string{"deployments"},
-	}, func(ctx context.Context, input *struct {
-		DeploymentInput
-	}) (*DeploymentResponse, error) {
-		serverName, err := url.PathUnescape(input.ServerName)
-		if err != nil {
-			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
-		}
-
-		version, err := url.PathUnescape(input.Version)
-		if err != nil {
-			return nil, huma.Error400BadRequest("Invalid version encoding", err)
-		}
-
-		deployment, err := registry.GetDeploymentByNameAndVersion(ctx, serverName, version, input.ResourceType)
+	}, func(ctx context.Context, input *DeploymentByIDInput) (*DeploymentResponse, error) {
+		deployment, err := registry.GetDeploymentByID(ctx, input.ID)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Deployment not found")
@@ -146,24 +179,32 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			return nil, huma.Error400BadRequest("Invalid resource type. Must be 'mcp' or 'agent'")
 		}
 
-		runtimeTarget := input.Body.Runtime
-		if runtimeTarget == "" {
-			runtimeTarget = "local"
+		providerID := strings.TrimSpace(input.Body.ProviderID)
+		if providerID == "" {
+			providerID = LocalProviderID
 		}
-		if err := runtime.ValidateRuntime(runtimeTarget); err != nil {
-			return nil, huma.Error400BadRequest("Invalid runtime target", err)
+		provider, err := getProviderByID(ctx, registry, extensions, providerID, "")
+		if err != nil {
+			return nil, err
 		}
+		platform := normalizePlatform(provider.Platform)
 
 		var deployment *models.Deployment
-		var err error
 
-		// Route to appropriate service method based on resource type
-		switch resourceType {
-		case "mcp":
-			deployment, err = registry.DeployServer(ctx, input.Body.ServerName, input.Body.Version, input.Body.Config, input.Body.PreferRemote, runtimeTarget)
-		case "agent":
-			deployment, err = registry.DeployAgent(ctx, input.Body.ServerName, input.Body.Version, input.Body.Config, input.Body.PreferRemote, runtimeTarget)
+		// Use adapter dispatch when present (built-ins + enterprise extensions).
+		adapter, ok := extensions.ResolveDeploymentAdapter(platform)
+		if !ok {
+			return nil, unsupportedDeploymentPlatformError(platform)
 		}
+		deploymentReq := &models.Deployment{
+			ServerName:   input.Body.ServerName,
+			Version:      input.Body.Version,
+			Config:       input.Body.Config,
+			PreferRemote: input.Body.PreferRemote,
+			ResourceType: resourceType,
+			ProviderID:   providerID,
+		}
+		deployment, err = adapter.Deploy(ctx, deploymentReq)
 
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
@@ -182,73 +223,109 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		return &DeploymentResponse{Body: *deployment}, nil
 	})
 
-	// Update deployment configuration
-	huma.Register(api, huma.Operation{
-		OperationID: "update-deployment-config",
-		Method:      http.MethodPut,
-		Path:        basePath + "/deployments/{serverName}/versions/{version}",
-		Summary:     "Update deployment configuration",
-		Description: "Update the configuration (env vars, args, headers) for a deployed resource (MCP server or agent)",
-		Tags:        []string{"deployments"},
-	}, func(ctx context.Context, input *struct {
-		DeploymentInput
-		Body DeploymentConfigUpdate
-	}) (*DeploymentResponse, error) {
-		serverName, err := url.PathUnescape(input.ServerName)
-		if err != nil {
-			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
-		}
-
-		version, err := url.PathUnescape(input.Version)
-		if err != nil {
-			return nil, huma.Error400BadRequest("Invalid version encoding", err)
-		}
-
-		deployment, err := registry.UpdateDeploymentConfig(ctx, serverName, version, input.ResourceType, input.Body.Config)
-		if err != nil {
-			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
-				return nil, huma.Error404NotFound("Deployment not found")
-			}
-			return nil, huma.Error500InternalServerError("Failed to update deployment configuration", err)
-		}
-
-		return &DeploymentResponse{Body: *deployment}, nil
-	})
-
 	// Remove a deployment
 	huma.Register(api, huma.Operation{
 		OperationID: "remove-deployment",
 		Method:      http.MethodDelete,
-		Path:        basePath + "/deployments/{serverName}/versions/{version}",
+		Path:        basePath + "/deployments/{id}",
 		Summary:     "Remove a deployed resource",
-		Description: "Remove a deployment from deployed state",
+		Description: "Remove a deployment by ID",
 		Tags:        []string{"deployments"},
-	}, func(ctx context.Context, input *DeploymentInput) (*struct{}, error) {
-		switch input.ResourceType {
-		case "mcp", "agent":
-			// Valid resource types
-		default:
-			return nil, huma.Error400BadRequest("Invalid resource type. Must be 'mcp' or 'agent'. Got: " + input.ResourceType)
+	}, func(ctx context.Context, input *DeploymentByIDInput) (*struct{}, error) {
+		deployment, err := registry.GetDeploymentByID(ctx, input.ID)
+		if err != nil {
+			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error404NotFound("Deployment not found")
+			}
+			return nil, huma.Error500InternalServerError("Failed to retrieve deployment", err)
 		}
 
-		serverName, err := url.PathUnescape(input.ServerName)
-		if err != nil {
-			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
+		platform := deploymentPlatform(ctx, registry, deployment)
+		adapter, ok := extensions.ResolveDeploymentAdapter(platform)
+		if !ok {
+			return nil, unsupportedDeploymentPlatformError(platform)
 		}
-
-		version, err := url.PathUnescape(input.Version)
+		err = adapter.Undeploy(ctx, deployment)
 		if err != nil {
-			return nil, huma.Error400BadRequest("Invalid version encoding", err)
-		}
-
-		err = registry.RemoveDeployment(ctx, serverName, version, input.ResourceType)
-		if err != nil {
+			if errors.Is(err, database.ErrInvalidInput) {
+				return nil, huma.Error409Conflict("Discovered deployments cannot be deleted directly")
+			}
 			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Deployment not found")
 			}
 			return nil, huma.Error500InternalServerError("Failed to remove deployment", err)
 		}
 
+		return &struct{}{}, nil
+	})
+
+	// Get deployment logs (async providers)
+	huma.Register(api, huma.Operation{
+		OperationID: "get-deployment-logs",
+		Method:      http.MethodGet,
+		Path:        basePath + "/deployments/{id}/logs",
+		Summary:     "Get deployment logs",
+		Description: "Get logs for async deployments when supported by the provider",
+		Tags:        []string{"deployments"},
+	}, func(ctx context.Context, input *DeploymentByIDInput) (*DeploymentLogsResponse, error) {
+		deployment, err := registry.GetDeploymentByID(ctx, input.ID)
+		if err != nil {
+			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error404NotFound("Deployment not found")
+			}
+			return nil, huma.Error500InternalServerError("Failed to retrieve deployment", err)
+		}
+
+		platform := deploymentPlatform(ctx, registry, deployment)
+		adapter, ok := extensions.ResolveDeploymentAdapter(platform)
+		if !ok {
+			return nil, unsupportedDeploymentPlatformError(platform)
+		}
+		logs, err := adapter.GetLogs(ctx, deployment)
+		if err != nil {
+			if errors.Is(err, errDeploymentNotSupported) {
+				return nil, huma.Error501NotImplemented("Deployment logs are not supported for this provider")
+			}
+			return nil, huma.Error500InternalServerError("Failed to fetch deployment logs", err)
+		}
+		return &DeploymentLogsResponse{
+			DeploymentID: deployment.ID,
+			Logs:         logs,
+		}, nil
+	})
+
+	// Cancel in-progress deployment (async providers)
+	huma.Register(api, huma.Operation{
+		OperationID: "cancel-deployment",
+		Method:      http.MethodPost,
+		Path:        basePath + "/deployments/{id}/cancel",
+		Summary:     "Cancel deployment",
+		Description: "Cancel an in-progress deployment when supported by the provider",
+		Tags:        []string{"deployments"},
+	}, func(ctx context.Context, input *DeploymentByIDInput) (*struct{}, error) {
+		deployment, err := registry.GetDeploymentByID(ctx, input.ID)
+		if err != nil {
+			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error404NotFound("Deployment not found")
+			}
+			return nil, huma.Error500InternalServerError("Failed to retrieve deployment", err)
+		}
+
+		if deployment.Status != "deploying" {
+			return nil, huma.Error400BadRequest("Deployment is not in progress")
+		}
+
+		platform := deploymentPlatform(ctx, registry, deployment)
+		adapter, ok := extensions.ResolveDeploymentAdapter(platform)
+		if !ok {
+			return nil, unsupportedDeploymentPlatformError(platform)
+		}
+		if err := adapter.Cancel(ctx, deployment); err != nil {
+			if errors.Is(err, errDeploymentNotSupported) {
+				return nil, huma.Error501NotImplemented("Deployment cancel is not supported for this provider")
+			}
+			return nil, huma.Error500InternalServerError("Failed to cancel deployment", err)
+		}
 		return &struct{}{}, nil
 	})
 }

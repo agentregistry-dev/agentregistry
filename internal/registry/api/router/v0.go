@@ -4,6 +4,7 @@ package router
 import (
 	"net/http"
 
+	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
@@ -19,6 +20,10 @@ type RouteOptions struct {
 	Indexer    service.Indexer
 	JobManager *jobs.Manager
 	Mux        *http.ServeMux
+
+	// Optional deployment adapters keyed by provider platform type.
+	ProviderPlatforms   map[string]registrytypes.ProviderPlatformAdapter
+	DeploymentPlatforms map[string]registrytypes.DeploymentPlatformAdapter
 }
 
 // RegisterRoutes registers all API routes under /v0.
@@ -39,7 +44,13 @@ func RegisterRoutes(
 	v0.RegisterServersCreateEndpoint(api, pathPrefix, registry)
 	v0.RegisterEditEndpoints(api, pathPrefix, registry)
 	v0auth.RegisterAuthEndpoints(api, pathPrefix, cfg)
-	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry)
+	platformExt := v0.PlatformExtensions{}
+	if opts != nil {
+		platformExt.ProviderPlatforms = opts.ProviderPlatforms
+		platformExt.DeploymentPlatforms = opts.DeploymentPlatforms
+	}
+	v0.RegisterProvidersEndpoints(api, pathPrefix, registry, platformExt)
+	v0.RegisterDeploymentsEndpoints(api, pathPrefix, registry, platformExt)
 	v0.RegisterAgentsEndpoints(api, pathPrefix, registry)
 	v0.RegisterAgentsCreateEndpoint(api, pathPrefix, registry)
 	v0.RegisterSkillsEndpoints(api, pathPrefix, registry)

@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/runtime"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/spf13/cobra"
 )
@@ -18,17 +17,8 @@ var DeployCmd = &cobra.Command{
 Example:
   arctl agent deploy my-agent --version latest
   arctl agent deploy my-agent --version 1.2.3
-  arctl agent deploy my-agent --version latest --runtime kubernetes`,
+  arctl agent deploy my-agent --version latest --provider-id kubernetes-default`,
 	Args: cobra.ExactArgs(1),
-	PreRunE: func(cmd *cobra.Command, args []string) error {
-		runtimeFlag, _ := cmd.Flags().GetString("runtime")
-		if runtimeFlag != "" {
-			if err := runtime.ValidateRuntime(runtimeFlag); err != nil {
-				return err
-			}
-		}
-		return nil
-	},
 	RunE: runDeploy,
 }
 
@@ -39,15 +29,15 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	name := args[0]
 	version, _ := cmd.Flags().GetString("version")
-	runtime, _ := cmd.Flags().GetString("runtime")
+	providerID, _ := cmd.Flags().GetString("provider-id")
 	namespace, _ := cmd.Flags().GetString("namespace")
 
 	if version == "" {
 		version = "latest"
 	}
 
-	if runtime == "" {
-		runtime = "local"
+	if providerID == "" {
+		providerID = "local"
 	}
 
 	if apiClient == nil {
@@ -79,16 +69,10 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		config["KAGENT_NAMESPACE"] = namespace
 	}
 
-	// Handle runtime-specific deployment logic
-	switch runtime {
-	case "local":
-		return deployLocal(name, version, config)
-	case "kubernetes":
-		return deployKubernetes(name, version, config, namespace)
-	default:
-		// This shouldn't happen due to PreRunE validation, but handle gracefully
-		return fmt.Errorf("unimplemented runtime: %s", runtime)
+	if providerID == "local" {
+		return deployLocal(name, version, config, providerID)
 	}
+	return deployToProvider(name, version, config, namespace, providerID)
 }
 
 // buildDeployConfig creates the configuration map with all necessary environment variables
@@ -116,20 +100,20 @@ func buildDeployConfig(manifest *models.AgentManifest) map[string]string {
 	return config
 }
 
-// deployLocal deploys an agent to the local/docker runtime
-func deployLocal(name, version string, config map[string]string) error {
-	deployment, err := apiClient.DeployAgent(name, version, config, "local")
+// deployLocal deploys an agent to the local provider
+func deployLocal(name, version string, config map[string]string, providerID string) error {
+	deployment, err := apiClient.DeployAgent(name, version, config, providerID)
 	if err != nil {
 		return fmt.Errorf("failed to deploy agent: %w", err)
 	}
 
-	fmt.Printf("Agent '%s' version '%s' deployed to local runtime\n", deployment.ServerName, deployment.Version)
+	fmt.Printf("Agent '%s' version '%s' deployed to local provider (providerId=%s)\n", deployment.ServerName, deployment.Version, providerID)
 	return nil
 }
 
-// deployKubernetes deploys an agent to the kubernetes runtime
-func deployKubernetes(name, version string, config map[string]string, namespace string) error {
-	deployment, err := apiClient.DeployAgent(name, version, config, "kubernetes")
+// deployToProvider deploys an agent to a non-local provider.
+func deployToProvider(name, version string, config map[string]string, namespace string, providerID string) error {
+	deployment, err := apiClient.DeployAgent(name, version, config, providerID)
 	if err != nil {
 		return fmt.Errorf("failed to deploy agent: %w", err)
 	}
@@ -138,13 +122,13 @@ func deployKubernetes(name, version string, config map[string]string, namespace 
 	if ns == "" {
 		ns = "(default)"
 	}
-	fmt.Printf("Agent '%s' version '%s' deployed to Kubernetes runtime in namespace '%s'\n", deployment.ServerName, deployment.Version, ns)
+	fmt.Printf("Agent '%s' version '%s' deployed to providerId=%s in namespace '%s'\n", deployment.ServerName, deployment.Version, providerID, ns)
 	return nil
 }
 
 func init() {
 	DeployCmd.Flags().String("version", "latest", "Agent version to deploy")
-	DeployCmd.Flags().String("runtime", "local", "Deployment runtime target (local, kubernetes)")
+	DeployCmd.Flags().String("provider-id", "", "Deployment target provider ID (defaults to local when omitted)")
 	DeployCmd.Flags().Bool("prefer-remote", false, "Prefer using a remote source when available")
 	DeployCmd.Flags().String("namespace", "", "Kubernetes namespace for agent deployment (defaults to current kubeconfig context)")
 }

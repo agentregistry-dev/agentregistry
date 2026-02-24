@@ -70,18 +70,27 @@ type RegistryService interface {
 	CreateSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error)
 
 	// Deployments APIs
+	// ListProviders retrieves deployment target providers, optionally filtered by provider platform type.
+	ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error)
+	// GetProviderByID retrieves a provider by ID.
+	GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error)
+	// CreateProvider creates a deployment target provider.
+	CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error)
+	// UpdateProvider updates mutable fields for a provider.
+	UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error)
+	// DeleteProvider deletes a provider by ID.
+	DeleteProvider(ctx context.Context, providerID string) error
+
 	// GetDeployments retrieves all deployed resources (MCP servers, agents)
 	GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
-	// GetDeploymentByName retrieves a specific deployment by resource name
-	GetDeploymentByNameAndVersion(ctx context.Context, resourceName string, version string, artifactType string) (*models.Deployment, error)
+	// GetDeploymentByID retrieves a specific deployment by UUID.
+	GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error)
 	// DeployServer deploys an MCP server with configuration
-	DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool, runtime string) (*models.Deployment, error)
+	DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error)
 	// DeployAgent deploys an agent with configuration (to be implemented)
-	DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool, runtime string) (*models.Deployment, error)
-	// UpdateDeploymentConfig updates the configuration for a deployment
-	UpdateDeploymentConfig(ctx context.Context, resourceName string, version string, artifactType string, config map[string]string) (*models.Deployment, error)
-	// RemoveDeployment removes a deployment (works for any resource type)
-	RemoveDeployment(ctx context.Context, resourceName string, version string, artifactType string) error
+	DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error)
+	// RemoveDeploymentByID removes a deployment by UUID.
+	RemoveDeploymentByID(ctx context.Context, id string) error
 
 	Reconciler
 }

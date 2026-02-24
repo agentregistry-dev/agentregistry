@@ -196,18 +196,27 @@ type Database interface {
 	UnmarkSkillAsLatest(ctx context.Context, tx pgx.Tx, skillName string) error
 
 	// Deployments API
+	// CreateProvider creates a new provider record.
+	CreateProvider(ctx context.Context, tx pgx.Tx, in *models.CreateProviderInput) (*models.Provider, error)
+	// ListProviders lists provider records, optionally filtered by platform.
+	ListProviders(ctx context.Context, tx pgx.Tx, platform *string) ([]*models.Provider, error)
+	// GetProviderByID returns a provider by ID.
+	GetProviderByID(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error)
+	// UpdateProvider updates mutable provider fields.
+	UpdateProvider(ctx context.Context, tx pgx.Tx, providerID string, in *models.UpdateProviderInput) (*models.Provider, error)
+	// DeleteProvider removes a provider by ID.
+	DeleteProvider(ctx context.Context, tx pgx.Tx, providerID string) error
+
 	// CreateDeployment creates a new deployment record
 	CreateDeployment(ctx context.Context, tx pgx.Tx, deployment *models.Deployment) error
 	// GetDeployments retrieves all deployed servers
-	GetDeployments(ctx context.Context, tx pgx.Tx) ([]*models.Deployment, error)
-	// GetDeploymentByName retrieves a specific deployment
-	GetDeploymentByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName string, version string, artifactType string) (*models.Deployment, error)
-	// UpdateDeploymentConfig updates the configuration for a deployment
-	UpdateDeploymentConfig(ctx context.Context, tx pgx.Tx, serverName string, version string, artifactType string, config map[string]string) error
+	GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
+	// GetDeploymentByID retrieves a specific deployment by UUID.
+	GetDeploymentByID(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error)
 	// UpdateDeploymentStatus updates the status of a deployment
 	UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, serverName, version, artifactType, status string) error
-	// RemoveDeployment removes a deployment
-	RemoveDeployment(ctx context.Context, tx pgx.Tx, serverName string, version string, artifactType string) error
+	// RemoveDeploymentByID removes a deployment by ID.
+	RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id string) error
 }
 
 // InTransactionT is a generic helper that wraps InTransaction for functions returning a value

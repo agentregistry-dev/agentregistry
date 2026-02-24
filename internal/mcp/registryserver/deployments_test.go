@@ -19,6 +19,7 @@ func TestDeploymentTools_ListAndGet(t *testing.T) {
 
 	// No authz provider configured; auth is bypassed.
 	dep := &models.Deployment{
+		ID:           "dep-1",
 		ServerName:   "com.example/echo",
 		Version:      "1.0.0",
 		ResourceType: "mcp",
@@ -30,8 +31,8 @@ func TestDeploymentTools_ListAndGet(t *testing.T) {
 	reg.GetDeploymentsFn = func(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 		return []*models.Deployment{dep}, nil
 	}
-	reg.GetDeploymentByNameAndVersionFn = func(ctx context.Context, name, version, artifactType string) (*models.Deployment, error) {
-		if name == dep.ServerName && version == dep.Version {
+	reg.GetDeploymentByIDFn = func(ctx context.Context, id string) (*models.Deployment, error) {
+		if id == dep.ID {
 			return dep, nil
 		}
 		return nil, errors.New("not found")
@@ -70,9 +71,7 @@ func TestDeploymentTools_ListAndGet(t *testing.T) {
 	res, err = clientSession.CallTool(ctx, &mcp.CallToolParams{
 		Name: "get_deployment",
 		Arguments: map[string]any{
-			"serverName":   dep.ServerName,
-			"version":      dep.Version,
-			"resourceType": "mcp",
+			"id": dep.ID,
 		},
 	})
 	require.NoError(t, err)
@@ -91,8 +90,8 @@ func TestDeploymentTools_NoAuthConfigured_AllowsRequests(t *testing.T) {
 			{ServerName: "com.example/no-auth", Version: "1.0.0", ResourceType: "mcp", Config: map[string]string{}},
 		}, nil
 	}
-	reg.GetDeploymentByNameAndVersionFn = func(ctx context.Context, name, version, artifactType string) (*models.Deployment, error) {
-		return &models.Deployment{ServerName: name, Version: version, ResourceType: "mcp", Config: map[string]string{}}, nil
+	reg.GetDeploymentByIDFn = func(ctx context.Context, id string) (*models.Deployment, error) {
+		return &models.Deployment{ID: id, ServerName: "com.example/no-auth", Version: "1.0.0", ResourceType: "mcp", Config: map[string]string{}}, nil
 	}
 
 	server := NewServer(reg)
@@ -130,9 +129,7 @@ func TestDeploymentTools_NoAuthConfigured_AllowsRequests(t *testing.T) {
 	res, err = clientSession.CallTool(ctx, &mcp.CallToolParams{
 		Name: "get_deployment",
 		Arguments: map[string]any{
-			"serverName":   "com.example/no-auth",
-			"version":      "1.0.0",
-			"resourceType": "mcp",
+			"id": "dep-no-auth",
 		},
 	})
 	require.NoError(t, err)
@@ -142,21 +139,16 @@ func TestDeploymentTools_NoAuthConfigured_AllowsRequests(t *testing.T) {
 	assert.Equal(t, "com.example/no-auth", single.ServerName)
 }
 
-func TestDeploymentTools_DeployUpdateRemove(t *testing.T) {
+func TestDeploymentTools_DeployRemove(t *testing.T) {
 	ctx := context.Background()
 	// No authz provider -> easy happy path
 
 	deployed := &models.Deployment{
+		ID:           "dep-remove-1",
 		ServerName:   "com.example/echo",
 		Version:      "1.0.0",
 		ResourceType: "mcp",
 		Config:       map[string]string{"ENV": "prod"},
-	}
-	updated := &models.Deployment{
-		ServerName:   "com.example/echo",
-		Version:      "1.0.0",
-		ResourceType: "mcp",
-		Config:       map[string]string{"ENV": "staging"},
 	}
 	agentDep := &models.Deployment{
 		ServerName:   "com.example/agent",
@@ -167,23 +159,14 @@ func TestDeploymentTools_DeployUpdateRemove(t *testing.T) {
 
 	var removed bool
 	reg := servicetesting.NewFakeRegistry()
-	reg.DeployServerFn = func(ctx context.Context, name, version string, config map[string]string, preferRemote bool, runtime string) (*models.Deployment, error) {
+	reg.DeployServerFn = func(ctx context.Context, name, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
 		return deployed, nil
 	}
-	reg.DeployAgentFn = func(ctx context.Context, name, version string, config map[string]string, preferRemote bool, runtime string) (*models.Deployment, error) {
+	reg.DeployAgentFn = func(ctx context.Context, name, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
 		return agentDep, nil
 	}
-	reg.UpdateDeploymentConfigFn = func(ctx context.Context, name, version, artifactType string, config map[string]string) (*models.Deployment, error) {
-		return updated, nil
-	}
-	reg.GetDeploymentByNameAndVersionFn = func(ctx context.Context, name, version, artifactType string) (*models.Deployment, error) {
-		if name == deployed.ServerName && version == deployed.Version {
-			return deployed, nil
-		}
-		return nil, errors.New("not found")
-	}
-	reg.RemoveDeploymentFn = func(ctx context.Context, name, version, artifactType string) error {
-		if name == deployed.ServerName && version == deployed.Version {
+	reg.RemoveDeploymentByIDFn = func(ctx context.Context, id string) error {
+		if id == deployed.ID {
 			removed = true
 			return nil
 		}
@@ -238,29 +221,11 @@ func TestDeploymentTools_DeployUpdateRemove(t *testing.T) {
 	assert.Equal(t, "agent", depAgent.ResourceType)
 	assert.Equal(t, "com.example/agent", depAgent.ServerName)
 
-	// update_deployment_config
-	res, err = clientSession.CallTool(ctx, &mcp.CallToolParams{
-		Name: "update_deployment_config",
-		Arguments: map[string]any{
-			"serverName":   "com.example/echo",
-			"version":      "1.0.0",
-			"resourceType": "mcp",
-			"config":       map[string]string{"ENV": "staging"},
-		},
-	})
-	require.NoError(t, err)
-	raw, _ = json.Marshal(res.StructuredContent)
-	var depUpdated models.Deployment
-	require.NoError(t, json.Unmarshal(raw, &depUpdated))
-	assert.Equal(t, "staging", depUpdated.Config["ENV"])
-
 	// remove_deployment
 	res, err = clientSession.CallTool(ctx, &mcp.CallToolParams{
 		Name: "remove_deployment",
 		Arguments: map[string]any{
-			"serverName":   "com.example/echo",
-			"version":      "1.0.0",
-			"resourceType": "mcp",
+			"id": deployed.ID,
 		},
 	})
 	require.NoError(t, err)
@@ -325,4 +290,58 @@ func TestDeploymentTools_FilterResourceType(t *testing.T) {
 	require.Len(t, out.Deployments, 1)
 	assert.Equal(t, "agent", out.Deployments[0].ResourceType)
 	assert.Equal(t, "com.example/echo-agent", out.Deployments[0].ServerName)
+}
+
+func TestDeploymentTools_GetDeploymentRequiresID(t *testing.T) {
+	ctx := context.Background()
+	reg := servicetesting.NewFakeRegistry()
+
+	server := NewServer(reg)
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	require.NoError(t, err)
+	defer func() {
+		_ = serverSession.Wait()
+	}()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	require.NoError(t, err)
+	defer func() {
+		_ = clientSession.Close()
+	}()
+
+	_, err = clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "get_deployment",
+		Arguments: map[string]any{},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `missing properties: ["id"]`)
+}
+
+func TestDeploymentTools_RemoveDeploymentRequiresID(t *testing.T) {
+	ctx := context.Background()
+	reg := servicetesting.NewFakeRegistry()
+
+	server := NewServer(reg)
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	require.NoError(t, err)
+	defer func() {
+		_ = serverSession.Wait()
+	}()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	require.NoError(t, err)
+	defer func() {
+		_ = clientSession.Close()
+	}()
+
+	_, err = clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "remove_deployment",
+		Arguments: map[string]any{},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `missing properties: ["id"]`)
 }
