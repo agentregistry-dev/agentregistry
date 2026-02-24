@@ -99,42 +99,37 @@ type ServerReadmeResponse struct {
 
 // RegisterServersEndpoints registers all server-related endpoints with a custom path prefix.
 func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.RegistryService) {
-	isAdmin := strings.Contains(pathPrefix, "admin")
-	if isAdmin { //nolint:nestif
-		huma.Register(api, huma.Operation{
-			OperationID: "delete-server-version" + strings.ReplaceAll(pathPrefix, "/", "-"),
-			Method:      http.MethodDelete,
-			Path:        pathPrefix + "/servers/{serverName}/versions/{version}",
-			Summary:     "Delete MCP server version",
-			Description: "Permanently delete an MCP server version from the registry.",
-			Tags:        []string{"servers", "admin"},
-		}, func(ctx context.Context, input *ServerVersionDetailInput) (*types.Response[types.EmptyResponse], error) {
-			serverName, err := url.PathUnescape(input.ServerName)
-			if err != nil {
-				return nil, huma.Error400BadRequest("Invalid server name encoding", err)
+	huma.Register(api, huma.Operation{
+		OperationID: "delete-server-version" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		Method:      http.MethodDelete,
+		Path:        pathPrefix + "/servers/{serverName}/versions/{version}",
+		Summary:     "Delete MCP server version",
+		Description: "Permanently delete an MCP server version from the registry.",
+		Tags:        []string{"servers", "admin"},
+	}, func(ctx context.Context, input *ServerVersionDetailInput) (*types.Response[types.EmptyResponse], error) {
+		serverName, err := url.PathUnescape(input.ServerName)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
+		}
+		version, err := url.PathUnescape(input.Version)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid version encoding", err)
+		}
+		if err := registry.DeleteServer(ctx, serverName, version); err != nil {
+			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error404NotFound("Server not found")
 			}
-			version, err := url.PathUnescape(input.Version)
-			if err != nil {
-				return nil, huma.Error400BadRequest("Invalid version encoding", err)
-			}
-			if err := registry.DeleteServer(ctx, serverName, version); err != nil {
-				if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
-					return nil, huma.Error404NotFound("Server not found")
-				}
-				return nil, huma.Error500InternalServerError("Failed to delete server", err)
-			}
-			return &types.Response[types.EmptyResponse]{
-				Body: types.EmptyResponse{
-					Message: "Server deleted successfully",
-				},
-			}, nil
-		})
-	}
+			return nil, huma.Error500InternalServerError("Failed to delete server", err)
+		}
+		return &types.Response[types.EmptyResponse]{
+			Body: types.EmptyResponse{
+				Message: "Server deleted successfully",
+			},
+		}, nil
+	})
+
 	var tags []string
 	tags = []string{"servers"}
-	if isAdmin {
-		tags = append(tags, "admin")
-	}
 
 	// List servers endpoint
 	huma.Register(api, huma.Operation{
