@@ -529,7 +529,7 @@ func TestHTTPAuthHandler_Permissions(t *testing.T) {
 			patterns := make([]string, len(claims.Permissions))
 			for i, perm := range claims.Permissions {
 				patterns[i] = perm.ResourcePattern
-				// All permissions should be for push action
+				// All permissions should be for publish action
 				assert.Equal(t, intauth.PermissionActionPublish, perm.Action)
 			}
 
