@@ -34,7 +34,7 @@ func TestJWTManager_GenerateAndVerifyToken(t *testing.T) {
 			AuthMethodSubject: "testuser",
 			Permissions: []auth.Permission{
 				{
-					Action:          auth.PermissionActionPush,
+					Action:          auth.PermissionActionPublish,
 					ResourcePattern: "io.github.testuser/*",
 				},
 			},
@@ -53,7 +53,7 @@ func TestJWTManager_GenerateAndVerifyToken(t *testing.T) {
 		assert.Equal(t, "testuser", verifiedClaims.AuthMethodSubject)
 		assert.Equal(t, "agent-registry", verifiedClaims.Issuer)
 		assert.Len(t, verifiedClaims.Permissions, 1)
-		assert.Equal(t, auth.PermissionActionPush, verifiedClaims.Permissions[0].Action)
+		assert.Equal(t, auth.PermissionActionPublish, verifiedClaims.Permissions[0].Action)
 		assert.Equal(t, "io.github.testuser/*", verifiedClaims.Permissions[0].ResourcePattern)
 	})
 
@@ -152,7 +152,7 @@ func TestJWTManager_GenerateAndVerifyToken(t *testing.T) {
 			AuthMethodSubject: "admin",
 			Permissions: []auth.Permission{
 				{
-					Action:          auth.PermissionActionPush,
+					Action:          auth.PermissionActionPublish,
 					ResourcePattern: "io.github.admin/*",
 				},
 				{
@@ -160,7 +160,7 @@ func TestJWTManager_GenerateAndVerifyToken(t *testing.T) {
 					ResourcePattern: "*",
 				},
 				{
-					Action:          auth.PermissionActionPush,
+					Action:          auth.PermissionActionPublish,
 					ResourcePattern: "io.github.org/*",
 				},
 			},
@@ -174,9 +174,9 @@ func TestJWTManager_GenerateAndVerifyToken(t *testing.T) {
 		verifiedClaims, err := jwtManager.ValidateToken(ctx, tokenResponse.RegistryToken)
 		require.NoError(t, err)
 		assert.Len(t, verifiedClaims.Permissions, 3)
-		assert.Equal(t, auth.PermissionActionPush, verifiedClaims.Permissions[0].Action)
+		assert.Equal(t, auth.PermissionActionPublish, verifiedClaims.Permissions[0].Action)
 		assert.Equal(t, auth.PermissionActionEdit, verifiedClaims.Permissions[1].Action)
-		assert.Equal(t, auth.PermissionActionPush, verifiedClaims.Permissions[2].Action)
+		assert.Equal(t, auth.PermissionActionPublish, verifiedClaims.Permissions[2].Action)
 	})
 }
 
@@ -202,18 +202,18 @@ func TestJWTManager_HasPermission(t *testing.T) {
 		{
 			name:     "exact match",
 			resource: "io.github.testuser/server1",
-			action:   auth.PermissionActionPush,
+			action:   auth.PermissionActionPublish,
 			permissions: []auth.Permission{
-				{Action: auth.PermissionActionPush, ResourcePattern: "io.github.testuser/server1"},
+				{Action: auth.PermissionActionPublish, ResourcePattern: "io.github.testuser/server1"},
 			},
 			expected: true,
 		},
 		{
 			name:     "wildcard match",
 			resource: "io.github.testuser/server2",
-			action:   auth.PermissionActionPush,
+			action:   auth.PermissionActionPublish,
 			permissions: []auth.Permission{
-				{Action: auth.PermissionActionPush, ResourcePattern: "io.github.testuser/*"},
+				{Action: auth.PermissionActionPublish, ResourcePattern: "io.github.testuser/*"},
 			},
 			expected: true,
 		},
@@ -231,34 +231,34 @@ func TestJWTManager_HasPermission(t *testing.T) {
 			resource: "io.github.testuser/server1",
 			action:   auth.PermissionActionEdit,
 			permissions: []auth.Permission{
-				{Action: auth.PermissionActionPush, ResourcePattern: "io.github.testuser/*"},
+				{Action: auth.PermissionActionPublish, ResourcePattern: "io.github.testuser/*"},
 			},
 			expected: false,
 		},
 		{
 			name:     "no match",
 			resource: "io.github.otheruser/server1",
-			action:   auth.PermissionActionPush,
+			action:   auth.PermissionActionPublish,
 			permissions: []auth.Permission{
-				{Action: auth.PermissionActionPush, ResourcePattern: "io.github.testuser/*"},
+				{Action: auth.PermissionActionPublish, ResourcePattern: "io.github.testuser/*"},
 			},
 			expected: false,
 		},
 		{
 			name:     "multiple permissions with match",
 			resource: "io.github.org/server1",
-			action:   auth.PermissionActionPush,
+			action:   auth.PermissionActionPublish,
 			permissions: []auth.Permission{
-				{Action: auth.PermissionActionPush, ResourcePattern: "io.github.testuser/*"},
+				{Action: auth.PermissionActionPublish, ResourcePattern: "io.github.testuser/*"},
 				{Action: auth.PermissionActionEdit, ResourcePattern: "*"},
-				{Action: auth.PermissionActionPush, ResourcePattern: "io.github.org/*"},
+				{Action: auth.PermissionActionPublish, ResourcePattern: "io.github.org/*"},
 			},
 			expected: true,
 		},
 		{
 			name:        "empty permissions",
 			resource:    "io.github.testuser/server1",
-			action:      auth.PermissionActionPush,
+			action:      auth.PermissionActionPublish,
 			permissions: []auth.Permission{},
 			expected:    false,
 		},
@@ -308,7 +308,7 @@ func TestJWTManager_BlockedNamespaces(t *testing.T) {
 			AuthMethodSubject: "spammer",
 			Permissions: []auth.Permission{
 				{
-					Action:          auth.PermissionActionPush,
+					Action:          auth.PermissionActionPublish,
 					ResourcePattern: "io.github.spammer/*",
 				},
 			},
@@ -333,7 +333,7 @@ func TestJWTManager_BlockedNamespaces(t *testing.T) {
 			AuthMethodSubject: "gooduser",
 			Permissions: []auth.Permission{
 				{
-					Action:          auth.PermissionActionPush,
+					Action:          auth.PermissionActionPublish,
 					ResourcePattern: "io.github.gooduser/*",
 				},
 			},
@@ -357,11 +357,11 @@ func TestJWTManager_BlockedNamespaces(t *testing.T) {
 			AuthMethodSubject: "user",
 			Permissions: []auth.Permission{
 				{
-					Action:          auth.PermissionActionPush,
+					Action:          auth.PermissionActionPublish,
 					ResourcePattern: "io.github.user/*", // allowed
 				},
 				{
-					Action:          auth.PermissionActionPush,
+					Action:          auth.PermissionActionPublish,
 					ResourcePattern: "io.github.badorg/*", // blocked
 				},
 			},
@@ -386,7 +386,7 @@ func TestJWTManager_BlockedNamespaces(t *testing.T) {
 			AuthMethodSubject: "admin",
 			Permissions: []auth.Permission{
 				{
-					Action:          auth.PermissionActionPush,
+					Action:          auth.PermissionActionPublish,
 					ResourcePattern: "*", // global permission should bypass blocking
 				},
 			},

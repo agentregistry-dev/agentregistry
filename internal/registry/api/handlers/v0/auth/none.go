@@ -65,7 +65,7 @@ func (h *NoneHandler) GetAnonymousToken(ctx context.Context) (*auth.TokenRespons
 			ResourcePattern: "io.modelcontextprotocol.anonymous/*",
 		},
 		{
-			Action:          auth.PermissionActionPush,
+			Action:          auth.PermissionActionPublish,
 			ResourcePattern: "io.modelcontextprotocol.anonymous/*",
 		},
 		{

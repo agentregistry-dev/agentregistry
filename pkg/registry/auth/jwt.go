@@ -27,11 +27,11 @@ const (
 type PermissionAction string
 
 const (
-	PermissionActionRead   PermissionAction = "read"
-	PermissionActionPush   PermissionAction = "push"
-	PermissionActionEdit   PermissionAction = "edit"
-	PermissionActionDelete PermissionAction = "delete"
-	PermissionActionDeploy PermissionAction = "deploy"
+	PermissionActionRead    PermissionAction = "read"
+	PermissionActionPublish PermissionAction = "publish"
+	PermissionActionEdit    PermissionAction = "edit"
+	PermissionActionDelete  PermissionAction = "delete"
+	PermissionActionDeploy  PermissionAction = "deploy"
 )
 
 type Permission struct {
@@ -96,7 +96,7 @@ func (j *JWTManager) GenerateTokenResponse(_ context.Context, claims JWTClaims) 
 	// Check permissions against denylist, provided they are not an admin
 	if !hasGlobalPermissions {
 		for _, blockedNamespace := range BlockedNamespaces {
-			if j.HasPermission(blockedNamespace+"/test", PermissionActionPush, claims.Permissions) {
+			if j.HasPermission(blockedNamespace+"/test", PermissionActionPublish, claims.Permissions) {
 				return nil, fmt.Errorf("your namespace is blocked. raise an issue at https://github.com/modelcontextprotocol/registry/ if you think this is a mistake")
 			}
 		}

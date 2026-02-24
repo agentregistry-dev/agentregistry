@@ -279,11 +279,11 @@ func (h *GitHubOIDCHandler) buildPermissions(claims *GitHubOIDCClaims) []auth.Pe
 		return nil
 	}
 
-	// Grant push permissions for the repository owner's namespace
+	// Grant publish permissions for the repository owner's namespace
 	// We grant io.github.<owner>/* rather than io.github./repo/* because many people have monorepo setups where they want to deploy multiple servers from
 	// This also reflects GitHub's permission model, in that GitHub Actions can push to any GitHub package in the repository owner's namespace (e.g. for GHCR)
 	permissions = append(permissions, auth.Permission{
-		Action:          auth.PermissionActionPush,
+		Action:          auth.PermissionActionPublish,
 		ResourcePattern: fmt.Sprintf("io.github.%s/*", claims.RepositoryOwner),
 	})
 

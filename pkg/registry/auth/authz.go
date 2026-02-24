@@ -51,8 +51,8 @@ func (a *Authorizer) IsRegistryAdmin(ctx context.Context) bool {
 // NOTE: In the meantime, we'll allow all actions to be performed locally without authentication.
 // Once we implement better authN/authZ handling, we'll want to remove these, and just have read-only (above) actions as "public".
 var PublicActions = map[PermissionAction]bool{
-	PermissionActionRead: true,
-	PermissionActionPush: true,
+	PermissionActionRead:    true,
+	PermissionActionPublish: true,
 	// PermissionActionEdit:    true,
 	PermissionActionDelete: true,
 	PermissionActionDeploy: true,
