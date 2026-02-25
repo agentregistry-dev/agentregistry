@@ -32,7 +32,9 @@ func (g *PythonGenerator) Generate(agentConfig *common.AgentConfig) error {
 		return fmt.Errorf("agent config is required")
 	}
 
-	// Convert agent name to Python-safe identifier (hyphens to underscores)
+	// Python identifiers cannot contain hyphens (e.g., "my-agent" is parsed as
+	// "my minus agent"), so convert to underscores for the package directory and
+	// module name.
 	agentConfig.Name = validators.PythonSafeName(agentConfig.Name)
 
 	projectPackageDir := filepath.Join(agentConfig.Directory, agentConfig.Name)
