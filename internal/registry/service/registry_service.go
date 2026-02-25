@@ -694,6 +694,32 @@ func (s *registryServiceImpl) GetDeploymentByNameAndVersion(ctx context.Context,
 	return s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version, artifactType)
 }
 
+// cleanupKubernetesResources deletes Kubernetes runtime resources for a stale deployment.
+// Errors are logged but not returned, since the resources may already be gone.
+func (s *registryServiceImpl) cleanupKubernetesResources(ctx context.Context, existing *models.Deployment, serverName, version, resourceType string) {
+	namespace := ""
+	if existing.Config != nil {
+		namespace = existing.Config["KAGENT_NAMESPACE"]
+	}
+	if namespace == "" {
+		namespace = runtime.DefaultNamespace()
+	}
+
+	switch resourceType {
+	case "agent":
+		if err := runtime.DeleteKubernetesAgent(ctx, serverName, version, namespace); err != nil {
+			log.Printf("Warning: failed to clean up kubernetes agent %s: %v", serverName, err)
+		}
+	case "mcp":
+		if err := runtime.DeleteKubernetesMCPServer(ctx, serverName, namespace); err != nil {
+			log.Printf("Warning: failed to clean up kubernetes MCP server %s: %v", serverName, err)
+		}
+		if err := runtime.DeleteKubernetesRemoteMCPServer(ctx, serverName, namespace); err != nil {
+			log.Printf("Warning: failed to clean up kubernetes remote MCP server %s: %v", serverName, err)
+		}
+	}
+}
+
 // cleanupExistingDeployment removes a stale deployment record and its associated runtime resources.
 // Errors from runtime cleanup are logged but not fatal, since the resources may already be gone.
 func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, serverName, version, resourceType string) error {
@@ -703,27 +729,7 @@ func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, ser
 	}
 
 	if existing != nil && existing.Runtime == "kubernetes" {
-		namespace := ""
-		if existing.Config != nil {
-			namespace = existing.Config["KAGENT_NAMESPACE"]
-		}
-		if namespace == "" {
-			namespace = runtime.DefaultNamespace()
-		}
-
-		switch resourceType {
-		case "agent":
-			if err := runtime.DeleteKubernetesAgent(ctx, serverName, version, namespace); err != nil {
-				log.Printf("Warning: failed to clean up kubernetes agent %s: %v", serverName, err)
-			}
-		case "mcp":
-			if err := runtime.DeleteKubernetesMCPServer(ctx, serverName, namespace); err != nil {
-				log.Printf("Warning: failed to clean up kubernetes MCP server %s: %v", serverName, err)
-			}
-			if err := runtime.DeleteKubernetesRemoteMCPServer(ctx, serverName, namespace); err != nil {
-				log.Printf("Warning: failed to clean up kubernetes remote MCP server %s: %v", serverName, err)
-			}
-		}
+		s.cleanupKubernetesResources(ctx, existing, serverName, version, resourceType)
 	}
 
 	if err := s.db.RemoveDeployment(ctx, nil, serverName, version, resourceType); err != nil && !errors.Is(err, database.ErrNotFound) {

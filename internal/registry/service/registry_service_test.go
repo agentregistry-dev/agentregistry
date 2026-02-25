@@ -875,13 +875,13 @@ func TestCleanupExistingDeployment(t *testing.T) {
 	ctx := context.Background()
 
 	tests := []struct {
-		name                string
-		existingDeployment  *models.Deployment
-		lookupErr           error
-		removeErr           error
-		expectError         bool
-		expectRemoveCalled  bool
-		resourceType        string
+		name               string
+		existingDeployment *models.Deployment
+		lookupErr          error
+		removeErr          error
+		expectError        bool
+		expectRemoveCalled bool
+		resourceType       string
 	}{
 		{
 			name: "removes stale local deployment",
@@ -983,7 +983,7 @@ func TestCleanupExistingDeployment(t *testing.T) {
 // deploymentMockDB is a minimal mock for database.Database that only implements
 // the methods needed for testing deployment cleanup logic. All other methods panic.
 type deploymentMockDB struct {
-	database.Database // embed interface so unimplemented methods panic
+	database.Database               // embed interface so unimplemented methods panic
 	getDeploymentByNameAndVersionFn func(ctx context.Context, tx pgx.Tx, serverName, version, artifactType string) (*models.Deployment, error)
 	removeDeploymentFn              func(ctx context.Context, tx pgx.Tx, serverName, version, resourceType string) error
 }
