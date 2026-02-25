@@ -2618,45 +2618,7 @@ func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deploymen
 func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	executor := db.getExecutor(tx)
 
-	where := make([]string, 0)
-	args := make([]any, 0)
-	nextArg := 1
-	needsProviderJoin := false
-
-	if filter != nil {
-		if filter.Platform != nil {
-			platform := strings.ToLower(strings.TrimSpace(*filter.Platform))
-			needsProviderJoin = true
-			where = append(where, fmt.Sprintf("p.platform = $%d", nextArg))
-			args = append(args, platform)
-			nextArg++
-		}
-		if filter.ResourceType != nil {
-			where = append(where, fmt.Sprintf("resource_type = $%d", nextArg))
-			args = append(args, *filter.ResourceType)
-			nextArg++
-		}
-		if filter.Status != nil {
-			where = append(where, fmt.Sprintf("status = $%d", nextArg))
-			args = append(args, *filter.Status)
-			nextArg++
-		}
-		if filter.Origin != nil {
-			where = append(where, fmt.Sprintf("origin = $%d", nextArg))
-			args = append(args, *filter.Origin)
-			nextArg++
-		}
-		if filter.ResourceName != nil {
-			where = append(where, fmt.Sprintf("server_name ILIKE $%d", nextArg))
-			args = append(args, "%"+*filter.ResourceName+"%")
-			nextArg++
-		}
-		if filter.ProviderID != nil {
-			where = append(where, fmt.Sprintf("d.provider_id = $%d", nextArg))
-			args = append(args, *filter.ProviderID)
-			nextArg++
-		}
-	}
+	where, args, needsProviderJoin := buildDeploymentFilters(filter)
 
 	query := `SELECT
 			d.id, d.server_name, d.version, d.deployed_at, d.updated_at, d.status, d.config, d.prefer_remote, d.resource_type,
@@ -2729,6 +2691,50 @@ func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx, filter *mod
 	}
 
 	return deployments, nil
+}
+
+func buildDeploymentFilters(filter *models.DeploymentFilter) ([]string, []any, bool) {
+	where := make([]string, 0)
+	args := make([]any, 0)
+	nextArg := 1
+	needsProviderJoin := false
+	if filter == nil {
+		return where, args, needsProviderJoin
+	}
+
+	if filter.Platform != nil {
+		platform := strings.ToLower(strings.TrimSpace(*filter.Platform))
+		needsProviderJoin = true
+		where = append(where, fmt.Sprintf("p.platform = $%d", nextArg))
+		args = append(args, platform)
+		nextArg++
+	}
+	if filter.ResourceType != nil {
+		where = append(where, fmt.Sprintf("resource_type = $%d", nextArg))
+		args = append(args, *filter.ResourceType)
+		nextArg++
+	}
+	if filter.Status != nil {
+		where = append(where, fmt.Sprintf("status = $%d", nextArg))
+		args = append(args, *filter.Status)
+		nextArg++
+	}
+	if filter.Origin != nil {
+		where = append(where, fmt.Sprintf("origin = $%d", nextArg))
+		args = append(args, *filter.Origin)
+		nextArg++
+	}
+	if filter.ResourceName != nil {
+		where = append(where, fmt.Sprintf("server_name ILIKE $%d", nextArg))
+		args = append(args, "%"+*filter.ResourceName+"%")
+		nextArg++
+	}
+	if filter.ProviderID != nil {
+		where = append(where, fmt.Sprintf("d.provider_id = $%d", nextArg))
+		args = append(args, *filter.ProviderID)
+	}
+
+	return where, args, needsProviderJoin
 }
 
 // GetDeploymentByID retrieves a specific deployment by UUID.

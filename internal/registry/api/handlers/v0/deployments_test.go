@@ -16,6 +16,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type fakeDeploymentAdapter struct {
@@ -126,7 +127,7 @@ func TestCreateDeployment_UsesAdapterWhenRegistered(t *testing.T) {
 		"providerId":   "local",
 	}
 	payload, err := json.Marshal(body)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodPost, "/v0/deployments", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
@@ -234,4 +235,3 @@ func TestCancelDeployment_UsesAdapterWhenRegistered(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, w.Code)
 	assert.True(t, adapter.cancelCalled)
 }
-

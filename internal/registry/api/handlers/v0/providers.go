@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
@@ -51,7 +51,7 @@ func adapterPlatformKeys(extensions PlatformExtensions) []string {
 	for platform := range extensions.ProviderPlatforms {
 		keys = append(keys, platform)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	return keys
 }
 
@@ -63,24 +63,60 @@ func unsupportedProviderPlatformError(platform string) error {
 	return huma.Error400BadRequest("Provider platform is not supported: " + p)
 }
 
-func getProviderByID(ctx context.Context, registry service.RegistryService, extensions PlatformExtensions, providerID, platformHint string) (*models.Provider, error) {
-	if platformHint != "" {
-		platform := strings.ToLower(strings.TrimSpace(platformHint))
+func getProviderByHint(ctx context.Context, extensions PlatformExtensions, providerID, platformHint string) (*models.Provider, error) {
+	if strings.TrimSpace(platformHint) == "" {
+		return nil, nil
+	}
+	platform := strings.ToLower(strings.TrimSpace(platformHint))
+	adapter, ok := extensions.ResolveProviderAdapter(platform)
+	if !ok {
+		return nil, unsupportedProviderPlatformError(platform)
+	}
+	provider, err := adapter.GetProvider(ctx, providerID)
+	if err == nil && provider != nil {
+		return provider, nil
+	}
+	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			return nil, huma.Error404NotFound("Provider not found")
+		}
+		return nil, huma.Error500InternalServerError("Failed to get provider", err)
+	}
+	return nil, huma.Error404NotFound("Provider not found")
+}
+
+func listProvidersForAllPlatforms(ctx context.Context, extensions PlatformExtensions) ([]*models.Provider, error) {
+	out := make([]*models.Provider, 0)
+	for _, platform := range adapterPlatformKeys(extensions) {
 		adapter, ok := extensions.ResolveProviderAdapter(platform)
 		if !ok {
-			return nil, unsupportedProviderPlatformError(platform)
+			continue
 		}
-		provider, err := adapter.GetProvider(ctx, providerID)
-		if err == nil && provider != nil {
-			return provider, nil
-		}
+		providers, err := adapter.ListProviders(ctx)
 		if err != nil {
-			if errors.Is(err, database.ErrNotFound) {
-				return nil, huma.Error404NotFound("Provider not found")
-			}
-			return nil, huma.Error500InternalServerError("Failed to get provider", err)
+			return nil, huma.Error500InternalServerError("Failed to list providers", err)
 		}
-		return nil, huma.Error404NotFound("Provider not found")
+		out = append(out, providers...)
+	}
+	return out, nil
+}
+
+func listProvidersForPlatform(ctx context.Context, extensions PlatformExtensions, platform string) ([]*models.Provider, error) {
+	adapter, ok := extensions.ResolveProviderAdapter(platform)
+	if !ok {
+		return nil, unsupportedProviderPlatformError(platform)
+	}
+	providers, err := adapter.ListProviders(ctx)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Failed to list providers", err)
+	}
+	return providers, nil
+}
+
+func getProviderByID(ctx context.Context, registry service.RegistryService, extensions PlatformExtensions, providerID, platformHint string) (*models.Provider, error) {
+	hintedProvider, err := getProviderByHint(ctx, extensions, providerID, platformHint)
+	if hintedProvider != nil || err != nil {
+		return hintedProvider, err
 	}
 
 	for _, platform := range adapterPlatformKeys(extensions) {
@@ -134,33 +170,19 @@ func RegisterProvidersEndpoints(api huma.API, basePath string, registry service.
 			resp.Body.Providers = append(resp.Body.Providers, *p)
 		}
 
-		if input.Platform != "" {
-			platform := strings.ToLower(strings.TrimSpace(input.Platform))
-			adapter, ok := extensions.ResolveProviderAdapter(platform)
-			if !ok {
-				return nil, unsupportedProviderPlatformError(platform)
-			}
-			providers, err := adapter.ListProviders(ctx)
-			if err != nil {
-				return nil, huma.Error500InternalServerError("Failed to list providers", err)
-			}
-			for _, p := range providers {
-				appendProvider(p)
-			}
+		platform := strings.ToLower(strings.TrimSpace(input.Platform))
+		var providers []*models.Provider
+		var err error
+		if platform != "" {
+			providers, err = listProvidersForPlatform(ctx, extensions, platform)
 		} else {
-			for _, platform := range adapterPlatformKeys(extensions) {
-				adapter, ok := extensions.ResolveProviderAdapter(platform)
-				if !ok {
-					continue
-				}
-				providers, err := adapter.ListProviders(ctx)
-				if err != nil {
-					return nil, huma.Error500InternalServerError("Failed to list providers", err)
-				}
-				for _, p := range providers {
-					appendProvider(p)
-				}
-			}
+			providers, err = listProvidersForAllPlatforms(ctx, extensions)
+		}
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range providers {
+			appendProvider(p)
 		}
 		resp.Body.Count = len(resp.Body.Providers)
 		return resp, nil

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"net/http"
 	"os"
 	"os/signal"
@@ -132,13 +133,9 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 
 	// Initialize extension registries once and use them for both routing and service behavior.
 	providerPlatforms := v0.DefaultProviderPlatformAdapters(registryService)
-	for platform, adapter := range options.ProviderPlatforms {
-		providerPlatforms[platform] = adapter
-	}
+	maps.Copy(providerPlatforms, options.ProviderPlatforms)
 	deploymentPlatforms := v0.DefaultDeploymentPlatformAdapters(registryService)
-	for platform, adapter := range options.DeploymentPlatforms {
-		deploymentPlatforms[platform] = adapter
-	}
+	maps.Copy(deploymentPlatforms, options.DeploymentPlatforms)
 
 	type platformAdapterConfigurer interface {
 		SetPlatformAdapters(

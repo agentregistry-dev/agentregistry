@@ -180,6 +180,7 @@ func TestRoot(t *testing.T) {
 	cmd := Root()
 	if cmd == nil {
 		t.Fatal("Root() returned nil")
+		return
 	}
 	if cmd.Use != "arctl" {
 		t.Errorf("Root().Use = %q, want %q", cmd.Use, "arctl")
