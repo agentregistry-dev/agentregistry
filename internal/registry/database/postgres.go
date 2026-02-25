@@ -18,6 +18,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	dbUtils "github.com/agentregistry-dev/agentregistry/pkg/registry/database/utils"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 )
@@ -27,8 +28,6 @@ type PostgreSQL struct {
 	pool  *pgxpool.Pool
 	authz auth.Authorizer
 }
-
-const semanticMetadataKey = "aregistry.ai/semantic"
 
 // Executor is an interface for executing queries (satisfied by both pgx.Tx and pgxpool.Pool)
 type Executor interface {
@@ -107,7 +106,7 @@ func (db *PostgreSQL) ListServers(
 	var semanticLiteral string
 	if semanticActive {
 		var err error
-		semanticLiteral, err = vectorLiteral(filter.Semantic.QueryEmbedding)
+		semanticLiteral, err = dbUtils.VectorLiteral(filter.Semantic.QueryEmbedding)
 		if err != nil {
 			return nil, "", fmt.Errorf("invalid semantic embedding: %w", err)
 		}
@@ -236,7 +235,7 @@ func (db *PostgreSQL) ListServers(
 		}
 
 		if semanticActive && semanticScore.Valid {
-			annotateServerSemanticScore(&serverJSON, semanticScore.Float64)
+			dbUtils.AnnotateServerSemanticScore(&serverJSON, semanticScore.Float64)
 		}
 
 		serverResponse := &apiv0.ServerResponse{
@@ -265,21 +264,6 @@ func (db *PostgreSQL) ListServers(
 	}
 
 	return results, nextCursor, nil
-}
-
-func annotateServerSemanticScore(server *apiv0.ServerJSON, score float64) {
-	if server == nil {
-		return
-	}
-	if server.Meta == nil {
-		server.Meta = &apiv0.ServerMeta{}
-	}
-	if server.Meta.PublisherProvided == nil {
-		server.Meta.PublisherProvided = map[string]any{}
-	}
-	server.Meta.PublisherProvided[semanticMetadataKey] = map[string]any{
-		"score": score,
-	}
 }
 
 // GetServerByName retrieves the latest version of a server by server name
@@ -884,7 +868,7 @@ func (db *PostgreSQL) SetServerEmbedding(ctx context.Context, tx pgx.Tx, serverN
 		`
 		args = []any{serverName, version}
 	} else {
-		vectorLiteral, err := vectorLiteral(embedding.Vector)
+		vectorLiteral, err := dbUtils.VectorLiteral(embedding.Vector)
 		if err != nil {
 			return err
 		}
@@ -1141,7 +1125,7 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *databas
 	var semanticLiteral string
 	if semanticActive {
 		var err error
-		semanticLiteral, err = vectorLiteral(filter.Semantic.QueryEmbedding)
+		semanticLiteral, err = dbUtils.VectorLiteral(filter.Semantic.QueryEmbedding)
 		if err != nil {
 			return nil, "", fmt.Errorf("invalid semantic embedding: %w", err)
 		}
@@ -1734,7 +1718,7 @@ func (db *PostgreSQL) SetAgentEmbedding(ctx context.Context, tx pgx.Tx, agentNam
 		`
 		args = []any{agentName, version}
 	} else {
-		vectorLiteral, err := vectorLiteral(embedding.Vector)
+		vectorLiteral, err := dbUtils.VectorLiteral(embedding.Vector)
 		if err != nil {
 			return err
 		}
