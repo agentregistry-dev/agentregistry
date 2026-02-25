@@ -694,6 +694,45 @@ func (s *registryServiceImpl) GetDeploymentByNameAndVersion(ctx context.Context,
 	return s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version, artifactType)
 }
 
+// cleanupExistingDeployment removes a stale deployment record and its associated runtime resources.
+// Errors from runtime cleanup are logged but not fatal, since the resources may already be gone.
+func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, serverName, version, resourceType string) error {
+	existing, err := s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version, resourceType)
+	if err != nil && !errors.Is(err, database.ErrNotFound) {
+		return fmt.Errorf("looking up existing deployment: %w", err)
+	}
+
+	if existing != nil && existing.Runtime == "kubernetes" {
+		namespace := ""
+		if existing.Config != nil {
+			namespace = existing.Config["KAGENT_NAMESPACE"]
+		}
+		if namespace == "" {
+			namespace = runtime.DefaultNamespace()
+		}
+
+		switch resourceType {
+		case "agent":
+			if err := runtime.DeleteKubernetesAgent(ctx, serverName, version, namespace); err != nil {
+				log.Printf("Warning: failed to clean up kubernetes agent %s: %v", serverName, err)
+			}
+		case "mcp":
+			if err := runtime.DeleteKubernetesMCPServer(ctx, serverName, namespace); err != nil {
+				log.Printf("Warning: failed to clean up kubernetes MCP server %s: %v", serverName, err)
+			}
+			if err := runtime.DeleteKubernetesRemoteMCPServer(ctx, serverName, namespace); err != nil {
+				log.Printf("Warning: failed to clean up kubernetes remote MCP server %s: %v", serverName, err)
+			}
+		}
+	}
+
+	if err := s.db.RemoveDeployment(ctx, nil, serverName, version, resourceType); err != nil && !errors.Is(err, database.ErrNotFound) {
+		return fmt.Errorf("removing stale deployment record: %w", err)
+	}
+
+	return nil
+}
+
 // DeployServer deploys a server with configuration
 func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool, runtimeTarget string) (*models.Deployment, error) {
 	serverResp, err := s.db.GetServerByNameAndVersion(ctx, nil, serverName, version)
@@ -720,10 +759,19 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 		deployment.Config = make(map[string]string)
 	}
 
-	fmt.Println("creating deployment", deployment)
 	err = s.db.CreateDeployment(ctx, nil, deployment)
 	if err != nil {
-		return nil, err
+		if !errors.Is(err, database.ErrAlreadyExists) {
+			return nil, err
+		}
+		// Deployment record already exists — clean up stale record and retry
+		log.Printf("Deployment for %s/%s already exists, replacing stale record", serverName, deployment.Version)
+		if cleanupErr := s.cleanupExistingDeployment(ctx, serverName, deployment.Version, "mcp"); cleanupErr != nil {
+			return nil, fmt.Errorf("failed to replace existing deployment: %w", cleanupErr)
+		}
+		if err := s.db.CreateDeployment(ctx, nil, deployment); err != nil {
+			return nil, fmt.Errorf("failed to recreate deployment: %w", err)
+		}
 	}
 
 	if err := s.ReconcileAll(ctx); err != nil {
@@ -764,7 +812,17 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 	}
 
 	if err := s.db.CreateDeployment(ctx, nil, deployment); err != nil {
-		return nil, err
+		if !errors.Is(err, database.ErrAlreadyExists) {
+			return nil, err
+		}
+		// Deployment record already exists — clean up stale record and retry
+		log.Printf("Deployment for agent %s/%s already exists, replacing stale record", agentName, deployment.Version)
+		if cleanupErr := s.cleanupExistingDeployment(ctx, agentName, deployment.Version, "agent"); cleanupErr != nil {
+			return nil, fmt.Errorf("failed to replace existing deployment: %w", cleanupErr)
+		}
+		if err := s.db.CreateDeployment(ctx, nil, deployment); err != nil {
+			return nil, fmt.Errorf("failed to recreate deployment: %w", err)
+		}
 	}
 
 	// Resolve and create deployment records for registry-type MCP servers from agent manifest

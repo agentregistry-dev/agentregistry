@@ -10,7 +10,9 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/stretchr/testify/assert"
@@ -867,6 +869,131 @@ func TestVersionComparison(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, latestCount, "Exactly one version should be marked as latest")
+}
+
+func TestCleanupExistingDeployment(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name                string
+		existingDeployment  *models.Deployment
+		lookupErr           error
+		removeErr           error
+		expectError         bool
+		expectRemoveCalled  bool
+		resourceType        string
+	}{
+		{
+			name: "removes stale local deployment",
+			existingDeployment: &models.Deployment{
+				ServerName:   "com.example/test-server",
+				Version:      "1.0.0",
+				Status:       "active",
+				ResourceType: "mcp",
+				Runtime:      "local",
+				Config:       map[string]string{},
+			},
+			resourceType:       "mcp",
+			expectError:        false,
+			expectRemoveCalled: true,
+		},
+		{
+			name: "removes stale kubernetes agent deployment",
+			existingDeployment: &models.Deployment{
+				ServerName:   "com.example/test-agent",
+				Version:      "1.0.0",
+				Status:       "active",
+				ResourceType: "agent",
+				Runtime:      "kubernetes",
+				Config:       map[string]string{"KAGENT_NAMESPACE": "test-ns"},
+			},
+			resourceType:       "agent",
+			expectError:        false,
+			expectRemoveCalled: true,
+		},
+		{
+			name:               "handles not found (already cleaned up)",
+			existingDeployment: nil,
+			lookupErr:          database.ErrNotFound,
+			removeErr:          database.ErrNotFound,
+			resourceType:       "mcp",
+			expectError:        false,
+			expectRemoveCalled: true,
+		},
+		{
+			name:               "propagates lookup error",
+			existingDeployment: nil,
+			lookupErr:          fmt.Errorf("connection refused"),
+			resourceType:       "mcp",
+			expectError:        true,
+			expectRemoveCalled: false,
+		},
+		{
+			name: "propagates remove error",
+			existingDeployment: &models.Deployment{
+				ServerName:   "com.example/test-server",
+				Version:      "1.0.0",
+				Status:       "active",
+				ResourceType: "mcp",
+				Runtime:      "local",
+				Config:       map[string]string{},
+			},
+			removeErr:          fmt.Errorf("connection refused"),
+			resourceType:       "mcp",
+			expectError:        true,
+			expectRemoveCalled: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			removeCalled := false
+
+			mockDB := &deploymentMockDB{
+				getDeploymentByNameAndVersionFn: func(_ context.Context, _ pgx.Tx, serverName, version, artifactType string) (*models.Deployment, error) {
+					if tt.lookupErr != nil {
+						return nil, tt.lookupErr
+					}
+					return tt.existingDeployment, nil
+				},
+				removeDeploymentFn: func(_ context.Context, _ pgx.Tx, serverName, version, resourceType string) error {
+					removeCalled = true
+					if tt.removeErr != nil {
+						return tt.removeErr
+					}
+					return nil
+				},
+			}
+
+			svc := &registryServiceImpl{db: mockDB}
+
+			err := svc.cleanupExistingDeployment(ctx, "com.example/test", "1.0.0", tt.resourceType)
+
+			if tt.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+
+			assert.Equal(t, tt.expectRemoveCalled, removeCalled, "RemoveDeployment called mismatch")
+		})
+	}
+}
+
+// deploymentMockDB is a minimal mock for database.Database that only implements
+// the methods needed for testing deployment cleanup logic. All other methods panic.
+type deploymentMockDB struct {
+	database.Database // embed interface so unimplemented methods panic
+	getDeploymentByNameAndVersionFn func(ctx context.Context, tx pgx.Tx, serverName, version, artifactType string) (*models.Deployment, error)
+	removeDeploymentFn              func(ctx context.Context, tx pgx.Tx, serverName, version, resourceType string) error
+}
+
+func (m *deploymentMockDB) GetDeploymentByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName, version, artifactType string) (*models.Deployment, error) {
+	return m.getDeploymentByNameAndVersionFn(ctx, tx, serverName, version, artifactType)
+}
+
+func (m *deploymentMockDB) RemoveDeployment(ctx context.Context, tx pgx.Tx, serverName, version, resourceType string) error {
+	return m.removeDeploymentFn(ctx, tx, serverName, version, resourceType)
 }
 
 // Helper functions
