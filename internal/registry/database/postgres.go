@@ -44,8 +44,10 @@ func (db *PostgreSQL) getExecutor(tx pgx.Tx) Executor {
 	return db.pool
 }
 
-// NewPostgreSQL creates a new instance of the PostgreSQL database
-func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authorizer) (*PostgreSQL, error) {
+// NewPostgreSQL creates a new instance of the PostgreSQL database.
+// embeddingDimensions configures the pgvector column size for semantic search.
+// Pass 0 to skip dimension reconciliation (e.g., when embeddings are disabled).
+func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authorizer, embeddingDimensions int) (*PostgreSQL, error) {
 	// Parse connection config for pool settings
 	config, err := pgxpool.ParseConfig(connectionURI)
 	if err != nil {
@@ -81,10 +83,110 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 		return nil, fmt.Errorf("failed to run database migrations: %w", err)
 	}
 
+	// After migrations, ensure the semantic_embedding vector columns exist with
+	// the configured dimension. The initial schema deliberately omits these
+	// columns so the dimension is never hardcoded in SQL. This function creates
+	// them on first run and reconciles the dimension if it changes later.
+	if embeddingDimensions > 0 {
+		if err := ensureVectorDimensions(ctx, conn.Conn(), embeddingDimensions); err != nil {
+			return nil, fmt.Errorf("failed to reconcile vector dimensions: %w", err)
+		}
+	}
+
 	return &PostgreSQL{
 		pool:  pool,
 		authz: authz,
 	}, nil
+}
+
+// ensureVectorDimensions creates or reconciles the semantic_embedding vector
+// columns to match the configured EMBEDDINGS_DIMENSIONS. The initial SQL
+// migration deliberately omits these columns so the dimension is never
+// hardcoded in SQL. This function:
+//   - Creates the columns + HNSW indexes on first startup (fresh install)
+//   - Alters the columns if the configured dimension changes (provider switch)
+//   - No-ops if the columns already exist with the correct dimension
+func ensureVectorDimensions(ctx context.Context, conn *pgx.Conn, dimensions int) error {
+	// Check whether the column exists and, if so, its current dimension.
+	// pgvector stores dimension+4 in atttypmod (the 4 accounts for the typmod header).
+	var currentDim int
+	columnExists := true
+	err := conn.QueryRow(ctx, `
+		SELECT a.atttypmod - 4
+		FROM pg_attribute a
+		JOIN pg_class c ON a.attrelid = c.oid
+		JOIN pg_namespace n ON c.relnamespace = n.oid
+		WHERE n.nspname = 'public'
+		  AND c.relname = 'servers'
+		  AND a.attname = 'semantic_embedding'
+		  AND a.atttypmod > 0
+	`).Scan(&currentDim)
+	if err != nil {
+		// Column doesn't exist yet (fresh install or pre-embeddings schema).
+		columnExists = false
+	}
+
+	if columnExists && currentDim == dimensions {
+		return nil // Already correct, nothing to do.
+	}
+
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			log.Printf("Failed to rollback dimension migration: %v", err)
+		}
+	}()
+
+	for _, table := range []string{"servers", "agents"} {
+		idx := fmt.Sprintf("idx_%s_semantic_embedding_hnsw", table)
+
+		if columnExists {
+			// Column exists with wrong dimension: drop index, clear data, alter type.
+			log.Printf("Reconciling %s.semantic_embedding: %d -> %d dimensions", table, currentDim, dimensions)
+
+			if _, err := tx.Exec(ctx, fmt.Sprintf("DROP INDEX IF EXISTS %s", idx)); err != nil {
+				return fmt.Errorf("failed to drop index %s: %w", idx, err)
+			}
+			if _, err := tx.Exec(ctx, fmt.Sprintf("UPDATE %s SET semantic_embedding = NULL", table)); err != nil {
+				return fmt.Errorf("failed to clear embeddings in %s: %w", table, err)
+			}
+			alter := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN semantic_embedding TYPE vector(%d)", table, dimensions)
+			if _, err := tx.Exec(ctx, alter); err != nil {
+				return fmt.Errorf("failed to alter %s.semantic_embedding to vector(%d): %w", table, dimensions, err)
+			}
+		} else {
+			// Column doesn't exist: add it.
+			log.Printf("Creating %s.semantic_embedding as vector(%d)", table, dimensions)
+
+			addCol := fmt.Sprintf("ALTER TABLE %s ADD COLUMN semantic_embedding vector(%d)", table, dimensions)
+			if _, err := tx.Exec(ctx, addCol); err != nil {
+				return fmt.Errorf("failed to add semantic_embedding to %s: %w", table, err)
+			}
+		}
+
+		// Create (or recreate) the HNSW index.
+		createIdx := fmt.Sprintf(
+			"CREATE INDEX IF NOT EXISTS %s ON %s USING hnsw (semantic_embedding vector_cosine_ops)",
+			idx, table,
+		)
+		if _, err := tx.Exec(ctx, createIdx); err != nil {
+			return fmt.Errorf("failed to create index %s: %w", idx, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit vector dimension setup: %w", err)
+	}
+
+	if columnExists {
+		log.Printf("Vector dimensions reconciled to %d (embeddings cleared; regeneration required)", dimensions)
+	} else {
+		log.Printf("Vector columns created with %d dimensions", dimensions)
+	}
+	return nil
 }
 
 func (db *PostgreSQL) ListServers(

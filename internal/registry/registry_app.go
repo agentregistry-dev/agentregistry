@@ -84,7 +84,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 			return fmt.Errorf("failed to create database via factory: %w", err)
 		}
 	} else {
-		baseDB, err := internaldb.NewPostgreSQL(ctx, cfg.DatabaseURL, authz)
+		baseDB, err := internaldb.NewPostgreSQL(ctx, cfg.DatabaseURL, authz, cfg.Embeddings.Dimensions)
 		if err != nil {
 			return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
 		}
