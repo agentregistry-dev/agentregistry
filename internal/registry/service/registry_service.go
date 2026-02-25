@@ -24,7 +24,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const maxServerVersionsPerServer = 10000
+const (
+	maxServerVersionsPerServer = 10000
+
+	localProviderID      = "local"
+	kubernetesProviderID = "kubernetes-default"
+	platformLocal        = "local"
+	platformKubernetes   = "kubernetes"
+	resourceTypeMCP      = "mcp"
+	resourceTypeAgent    = "agent"
+	originDiscovered     = "discovered"
+)
 
 // registryServiceImpl implements the RegistryService interface using our Database
 // It also implements the Reconciler interface for server-side container management
@@ -696,7 +706,7 @@ func (s *registryServiceImpl) GetDeployments(ctx context.Context, filter *models
 	if filter != nil {
 		includeK8s = filter.Platform == nil
 	}
-	if filter != nil && filter.Platform != nil && *filter.Platform == "kubernetes" {
+	if filter != nil && filter.Platform != nil && *filter.Platform == platformKubernetes {
 		includeK8s = true
 	}
 	if includeK8s {
@@ -745,7 +755,7 @@ func (s *registryServiceImpl) resolveProviderByID(ctx context.Context, providerI
 // DeployServer deploys a server with configuration
 func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
 	if providerID == "" {
-		providerID = "local"
+		providerID = localProviderID
 	}
 	if _, err := s.resolveProviderByID(ctx, providerID); err != nil {
 		return nil, err
@@ -764,7 +774,7 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 		Status:       "deployed",
 		Config:       config,
 		PreferRemote: preferRemote,
-		ResourceType: "mcp",
+		ResourceType: resourceTypeMCP,
 		ProviderID:   providerID,
 		Origin:       "managed",
 		DeployedAt:   time.Now(),
@@ -799,7 +809,7 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 // DeployAgent deploys an agent with configuration
 func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
 	if providerID == "" {
-		providerID = "local"
+		providerID = localProviderID
 	}
 	if _, err := s.resolveProviderByID(ctx, providerID); err != nil {
 		return nil, err
@@ -818,7 +828,7 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 		Status:       "deployed",
 		Config:       config,
 		PreferRemote: preferRemote,
-		ResourceType: "agent",
+		ResourceType: resourceTypeAgent,
 		ProviderID:   providerID,
 		Origin:       "managed",
 		DeployedAt:   time.Now(),
@@ -847,7 +857,7 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 				Status:       "deployed",
 				Config:       make(map[string]string),
 				PreferRemote: serverReq.PreferRemote,
-				ResourceType: "mcp",
+				ResourceType: resourceTypeMCP,
 				ProviderID:   providerID,
 				Origin:       "managed",
 				DeployedAt:   time.Now(),
@@ -885,7 +895,7 @@ func (s *registryServiceImpl) removeDeploymentRecord(ctx context.Context, deploy
 	if deployment.ID == "" {
 		return database.ErrInvalidInput
 	}
-	if deployment.Origin == "discovered" {
+	if deployment.Origin == originDiscovered {
 		return database.ErrInvalidInput
 	}
 
@@ -898,7 +908,7 @@ func (s *registryServiceImpl) removeDeploymentRecord(ctx context.Context, deploy
 		}
 		platform = provider.Platform
 	}
-	if strings.ToLower(strings.TrimSpace(platform)) == "kubernetes" {
+	if strings.ToLower(strings.TrimSpace(platform)) == platformKubernetes {
 		namespace := ""
 		if deployment.Config != nil {
 			namespace = deployment.Config["KAGENT_NAMESPACE"]
@@ -907,12 +917,12 @@ func (s *registryServiceImpl) removeDeploymentRecord(ctx context.Context, deploy
 			namespace = runtime.DefaultNamespace()
 		}
 
-		if deployment.ResourceType == "agent" {
+		if deployment.ResourceType == resourceTypeAgent {
 			if err := runtime.DeleteKubernetesAgent(ctx, deployment.ServerName, deployment.Version, namespace); err != nil {
 				return err
 			}
 		}
-		if deployment.ResourceType == "mcp" {
+		if deployment.ResourceType == resourceTypeMCP {
 			if err := runtime.DeleteKubernetesMCPServer(ctx, deployment.ServerName, namespace); err != nil {
 				return err
 			}
@@ -1010,12 +1020,12 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 		targetRequests.deployments = append(targetRequests.deployments, dep)
 
 		// Non-OSS provider platform types are delegated to registered deployment adapters.
-		if providerPlatform != "local" && providerPlatform != "kubernetes" {
+		if providerPlatform != platformLocal && providerPlatform != platformKubernetes {
 			continue
 		}
 
 		switch dep.ResourceType {
-		case "mcp":
+		case resourceTypeMCP:
 			depServer, err := s.GetServerByNameAndVersion(ctx, dep.ServerName, dep.Version)
 			if err != nil {
 				log.Printf("Warning: Failed to get server %s v%s: %v", dep.ServerName, dep.Version, err)
@@ -1045,7 +1055,7 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 				HeaderValues:   headerValues,
 			})
 
-		case "agent":
+		case resourceTypeAgent:
 			depAgent, err := s.GetAgentByNameAndVersion(ctx, dep.ServerName, dep.Version)
 			if err != nil {
 				log.Printf("Warning: Failed to get agent %s v%s: %v", dep.ServerName, dep.Version, err)
@@ -1070,7 +1080,7 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 	for providerPlatform, requests := range requestsByProviderPlatform {
 		if len(requests.servers) == 0 && len(requests.agents) == 0 {
 			// For non-local provider platform types, delegate reconciliation to adapters.
-			if providerPlatform != "local" && providerPlatform != "kubernetes" {
+			if providerPlatform != platformLocal && providerPlatform != platformKubernetes {
 				adapter, ok := s.deploymentAdapters[providerPlatform]
 				if !ok {
 					return fmt.Errorf("%w: no deployment adapter registered for provider platform %q", database.ErrInvalidInput, providerPlatform)
@@ -1111,7 +1121,7 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 
 		// Create the runtime translator for the selected provider platform and reconcile requests.
 		var agentRuntime runtime.AgentRegistryRuntime
-		if providerPlatform == "kubernetes" {
+		if providerPlatform == platformKubernetes {
 			k8sTranslator := kagent.NewTranslator()
 			agentRuntime = runtime.NewAgentRegistryRuntime(regTranslator, k8sTranslator, s.cfg.RuntimeDir, s.cfg.Verbose)
 		} else {
@@ -1209,9 +1219,9 @@ func (s *registryServiceImpl) listKubernetesDeployments(ctx context.Context, nam
 		creation time.Time,
 		_ []metav1.Condition,
 	) {
-		resourceType := "agent"
+		resourceType := resourceTypeAgent
 		if resType == "mcpserver" || resType == "remotemcpserver" {
-			resourceType = "mcp"
+			resourceType = resourceTypeMCP
 		}
 
 		preferRemote := resType == "remotemcpserver"
@@ -1225,7 +1235,7 @@ func (s *registryServiceImpl) listKubernetesDeployments(ctx context.Context, nam
 			Config:       labels,
 			PreferRemote: preferRemote,
 			ResourceType: resourceType,
-			ProviderID:   "kubernetes-default",
+			ProviderID:   kubernetesProviderID,
 			Origin:       "managed",
 			IsExternal:   !isManaged(labels),
 		}

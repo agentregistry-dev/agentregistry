@@ -240,6 +240,11 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			return nil, huma.Error500InternalServerError("Failed to retrieve deployment", err)
 		}
 
+		// Guard discovered deployments before provider/adapter resolution.
+		if deployment.Origin == "discovered" {
+			return nil, huma.Error409Conflict("Discovered deployments cannot be deleted directly")
+		}
+
 		platform := deploymentPlatform(ctx, registry, deployment)
 		adapter, ok := extensions.ResolveDeploymentAdapter(platform)
 		if !ok {

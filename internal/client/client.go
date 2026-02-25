@@ -30,6 +30,14 @@ const (
 	DefaultBaseURL = defaultBaseURL
 )
 
+// ProviderPlatform represents a provider platform type.
+type ProviderPlatform string
+
+const (
+	ProviderPlatformLocal      ProviderPlatform = "local"
+	ProviderPlatformKubernetes ProviderPlatform = "kubernetes"
+)
+
 // NewClientFromEnv constructs a client using environment variables
 func NewClientFromEnv() (*Client, error) {
 	return NewClientWithConfig(os.Getenv("ARCTL_API_BASE_URL"), os.Getenv("ARCTL_API_TOKEN"))
@@ -578,12 +586,11 @@ func asHTTPStatus(err error) int {
 
 // DeploymentResponse represents a deployment returned by the API
 type DeploymentResponse struct {
-	ID            string            `json:"id"`
-	Platform      string            `json:"platform"`
-	ProviderID    string            `json:"providerId,omitempty"`
+	ID           string            `json:"id"`
+	ProviderID   string            `json:"providerId,omitempty"`
 	ServerName   string            `json:"serverName"`
 	Version      string            `json:"version"`
-	Origin        string            `json:"origin"`
+	Origin       string            `json:"origin"`
 	DeployedAt   string            `json:"deployedAt"`
 	UpdatedAt    string            `json:"updatedAt"`
 	Status       string            `json:"status"`
@@ -621,7 +628,7 @@ func (c *Client) GetDeployedServers() ([]*DeploymentResponse, error) {
 // DeployServer deploys a server with configuration.
 func (c *Client) DeployServer(name, version string, config map[string]string, preferRemote bool, providerID string) (*DeploymentResponse, error) {
 	if providerID == "" {
-		providerID = "local"
+		providerID = string(ProviderPlatformLocal)
 	}
 	payload := internalv0.DeploymentRequest{
 		ServerName:   name,
@@ -643,7 +650,7 @@ func (c *Client) DeployServer(name, version string, config map[string]string, pr
 // DeployAgent deploys an agent with configuration
 func (c *Client) DeployAgent(name, version string, config map[string]string, providerID string) (*DeploymentResponse, error) {
 	if providerID == "" {
-		providerID = "local"
+		providerID = string(ProviderPlatformLocal)
 	}
 	payload := internalv0.DeploymentRequest{
 		ServerName:   name,
