@@ -21,6 +21,7 @@ import (
 
 type fakeDeploymentAdapter struct {
 	deployCalled   bool
+	deployErr      error
 	undeployErr    error
 	getLogsErr     error
 	cancelErr      error
@@ -37,6 +38,9 @@ func (f *fakeDeploymentAdapter) SupportedResourceTypes() []string {
 func (f *fakeDeploymentAdapter) Deploy(_ context.Context, req *models.Deployment) (*models.Deployment, error) {
 	f.deployCalled = true
 	f.lastDeployReq = req
+	if f.deployErr != nil {
+		return nil, f.deployErr
+	}
 	return &models.Deployment{
 		ID:           "adapter-dep-1",
 		ServerName:   req.ServerName,
@@ -224,6 +228,39 @@ func TestCreateDeployment_UsesAdapterWhenRegistered(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "adapter-dep-1")
 }
 
+func TestCreateDeployment_InvalidInputFromAdapterReturnsBadRequest(t *testing.T) {
+	reg := servicetesting.NewFakeRegistry()
+	reg.GetProviderByIDFn = func(ctx context.Context, providerID string) (*models.Provider, error) {
+		return &models.Provider{ID: providerID, Platform: "local"}, nil
+	}
+	adapter := &fakeDeploymentAdapter{deployErr: database.ErrInvalidInput}
+
+	mux := http.NewServeMux()
+	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
+	v0.RegisterDeploymentsEndpoints(api, "/v0", reg, v0.PlatformExtensions{
+		ProviderPlatforms: v0.DefaultProviderPlatformAdapters(reg),
+		DeploymentPlatforms: map[string]registrytypes.DeploymentPlatformAdapter{
+			"local": adapter,
+		},
+	})
+
+	body := map[string]any{
+		"serverName":   "io.github.user/weather",
+		"version":      "1.0.0",
+		"resourceType": "mcp",
+		"providerId":   "local",
+	}
+	payload, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/v0/deployments", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
 func TestDeleteDeployment_UsesAdapterWhenRegistered(t *testing.T) {
 	reg := servicetesting.NewFakeRegistry()
 	reg.GetDeploymentByIDFn = func(ctx context.Context, id string) (*models.Deployment, error) {
@@ -290,6 +327,37 @@ func TestGetDeploymentLogs_UsesAdapterWhenRegistered(t *testing.T) {
 	assert.True(t, adapter.getLogsCalled)
 }
 
+func TestGetDeploymentLogs_NotFoundFromAdapterReturnsNotFound(t *testing.T) {
+	reg := servicetesting.NewFakeRegistry()
+	reg.GetDeploymentByIDFn = func(ctx context.Context, id string) (*models.Deployment, error) {
+		return &models.Deployment{
+			ID:         id,
+			ProviderID: "local",
+			Status:     "deployed",
+		}, nil
+	}
+	reg.GetProviderByIDFn = func(ctx context.Context, providerID string) (*models.Provider, error) {
+		return &models.Provider{ID: providerID, Platform: "local"}, nil
+	}
+
+	adapter := &fakeDeploymentAdapter{getLogsErr: database.ErrNotFound}
+	mux := http.NewServeMux()
+	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
+	v0.RegisterDeploymentsEndpoints(api, "/v0", reg, v0.PlatformExtensions{
+		ProviderPlatforms: v0.DefaultProviderPlatformAdapters(reg),
+		DeploymentPlatforms: map[string]registrytypes.DeploymentPlatformAdapter{
+			"local": adapter,
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v0/deployments/dep-2/logs", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.True(t, adapter.getLogsCalled)
+}
+
 func TestCancelDeployment_UsesAdapterWhenRegistered(t *testing.T) {
 	reg := servicetesting.NewFakeRegistry()
 	reg.GetDeploymentByIDFn = func(ctx context.Context, id string) (*models.Deployment, error) {
@@ -318,5 +386,36 @@ func TestCancelDeployment_UsesAdapterWhenRegistered(t *testing.T) {
 	mux.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.True(t, adapter.cancelCalled)
+}
+
+func TestCancelDeployment_InvalidInputFromAdapterReturnsBadRequest(t *testing.T) {
+	reg := servicetesting.NewFakeRegistry()
+	reg.GetDeploymentByIDFn = func(ctx context.Context, id string) (*models.Deployment, error) {
+		return &models.Deployment{
+			ID:         id,
+			ProviderID: "local",
+			Status:     "deploying",
+		}, nil
+	}
+	reg.GetProviderByIDFn = func(ctx context.Context, providerID string) (*models.Provider, error) {
+		return &models.Provider{ID: providerID, Platform: "local"}, nil
+	}
+
+	adapter := &fakeDeploymentAdapter{cancelErr: database.ErrInvalidInput}
+	mux := http.NewServeMux()
+	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
+	v0.RegisterDeploymentsEndpoints(api, "/v0", reg, v0.PlatformExtensions{
+		ProviderPlatforms: v0.DefaultProviderPlatformAdapters(reg),
+		DeploymentPlatforms: map[string]registrytypes.DeploymentPlatformAdapter{
+			"local": adapter,
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v0/deployments/dep-3/cancel", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.True(t, adapter.cancelCalled)
 }

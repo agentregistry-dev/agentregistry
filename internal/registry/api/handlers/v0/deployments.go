@@ -212,6 +212,9 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			if errors.Is(err, errProviderConfigNotSupported) {
 				return nil, huma.Error400BadRequest("providerConfig is not supported for this provider platform")
 			}
+			if errors.Is(err, database.ErrInvalidInput) {
+				return nil, huma.Error400BadRequest("Invalid deployment request")
+			}
 			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Resource not found in registry")
 			}
@@ -293,6 +296,12 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		}
 		logs, err := adapter.GetLogs(ctx, deployment)
 		if err != nil {
+			if errors.Is(err, database.ErrInvalidInput) {
+				return nil, huma.Error400BadRequest("Invalid deployment logs request")
+			}
+			if errors.Is(err, database.ErrNotFound) {
+				return nil, huma.Error404NotFound("Deployment logs not found")
+			}
 			if errors.Is(err, errDeploymentNotSupported) {
 				return nil, huma.Error501NotImplemented("Deployment logs are not supported for this provider")
 			}
@@ -331,6 +340,12 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			return nil, unsupportedDeploymentPlatformError(platform)
 		}
 		if err := adapter.Cancel(ctx, deployment); err != nil {
+			if errors.Is(err, database.ErrInvalidInput) {
+				return nil, huma.Error400BadRequest("Invalid deployment cancel request")
+			}
+			if errors.Is(err, database.ErrNotFound) {
+				return nil, huma.Error404NotFound("Deployment job not found")
+			}
 			if errors.Is(err, errDeploymentNotSupported) {
 				return nil, huma.Error501NotImplemented("Deployment cancel is not supported for this provider")
 			}
