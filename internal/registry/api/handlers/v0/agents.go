@@ -106,6 +106,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		for i, a := range agents {
 			agentValues[i] = *a
 		}
+		agentValues = attachAgentDeploymentMeta(agentValues, deploymentResourceIndex(ctx, registry))
 		return &types.Response[agentmodels.AgentListResponse]{
 			Body: agentmodels.AgentListResponse{
 				Agents: agentValues,
@@ -147,7 +148,12 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 			}
 			return nil, huma.Error500InternalServerError("Failed to get agent details", err)
 		}
-		return &types.Response[agentmodels.AgentResponse]{Body: *agentResp}, nil
+		return &types.Response[agentmodels.AgentResponse]{
+			Body: attachAgentDeploymentMeta(
+				[]agentmodels.AgentResponse{*agentResp},
+				deploymentResourceIndex(ctx, registry),
+			)[0],
+		}, nil
 	})
 
 	huma.Register(api, huma.Operation{
@@ -205,6 +211,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		for i, a := range agents {
 			agentValues[i] = *a
 		}
+		agentValues = attachAgentDeploymentMeta(agentValues, deploymentResourceIndex(ctx, registry))
 		return &types.Response[agentmodels.AgentListResponse]{
 			Body: agentmodels.AgentListResponse{
 				Agents: agentValues,
@@ -232,7 +239,12 @@ func createAgentHandler(ctx context.Context, input *CreateAgentInput, registry s
 		return nil, huma.Error400BadRequest("Failed to create agent", err)
 	}
 
-	return &types.Response[agentmodels.AgentResponse]{Body: *createdAgent}, nil
+	return &types.Response[agentmodels.AgentResponse]{
+		Body: attachAgentDeploymentMeta(
+			[]agentmodels.AgentResponse{*createdAgent},
+			deploymentResourceIndex(ctx, registry),
+		)[0],
+	}, nil
 }
 
 // RegisterAgentsCreateEndpoint registers POST /agents (create or update; immediately visible).

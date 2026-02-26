@@ -14,7 +14,7 @@ type Deployment struct {
 	Region          string            `json:"region,omitempty"`
 	CloudResourceID string            `json:"cloudResourceId,omitempty"`
 	CloudMetadata   map[string]any    `json:"cloudMetadata,omitempty"`
-	Config          map[string]string `json:"config"`
+	Env             map[string]string `json:"env"`
 	ProviderConfig  map[string]any    `json:"providerConfig,omitempty"`
 	PreferRemote    bool              `json:"preferRemote"`
 	DeployedBy      string            `json:"deployedBy,omitempty"`
@@ -34,4 +34,21 @@ type DeploymentFilter struct {
 	Origin        *string
 	ResourceName  *string // case-insensitive substring filter
 	CloudResource *string
+}
+
+// DeploymentSummary is a compact deployment view embedded in catalog metadata.
+type DeploymentSummary struct {
+	ID         string    `json:"id"`
+	ProviderID string    `json:"providerId,omitempty"`
+	Status     string    `json:"status"`
+	Origin     string    `json:"origin"`
+	Version    string    `json:"version,omitempty"`
+	DeployedAt time.Time `json:"deployedAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+}
+
+// ResourceDeploymentsMeta is the `_meta["aregistry.ai/deployments"]` payload.
+type ResourceDeploymentsMeta struct {
+	Deployments []DeploymentSummary `json:"deployments"`
+	Count       int                 `json:"count"`
 }

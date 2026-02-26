@@ -764,8 +764,8 @@ func (s *registryServiceImpl) resolveProviderByID(ctx context.Context, providerI
 	return s.db.GetProviderByID(ctx, nil, providerID)
 }
 
-// DeployServer deploys a server with configuration
-func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
+// DeployServer deploys a server with environment variables.
+func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, version string, env map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
 	if providerID == "" {
 		providerID = localProviderID
 	}
@@ -784,7 +784,7 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 		ServerName:   serverName,
 		Version:      serverResp.Server.Version,
 		Status:       "deployed",
-		Config:       config,
+		Env:          env,
 		PreferRemote: preferRemote,
 		ResourceType: resourceTypeMCP,
 		ProviderID:   providerID,
@@ -793,8 +793,8 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 		UpdatedAt:    time.Now(),
 	}
 
-	if config == nil {
-		deployment.Config = make(map[string]string)
+	if env == nil {
+		deployment.Env = make(map[string]string)
 	}
 
 	fmt.Println("creating deployment", deployment)
@@ -818,8 +818,8 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 	return s.db.GetDeploymentByID(ctx, nil, deployment.ID)
 }
 
-// DeployAgent deploys an agent with configuration
-func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
+// DeployAgent deploys an agent with environment variables.
+func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, version string, env map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
 	if providerID == "" {
 		providerID = localProviderID
 	}
@@ -838,7 +838,7 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 		ServerName:   agentName,
 		Version:      agentResp.Agent.Version,
 		Status:       "deployed",
-		Config:       config,
+		Env:          env,
 		PreferRemote: preferRemote,
 		ResourceType: resourceTypeAgent,
 		ProviderID:   providerID,
@@ -847,8 +847,8 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 		UpdatedAt:    time.Now(),
 	}
 
-	if config == nil {
-		deployment.Config = make(map[string]string)
+	if env == nil {
+		deployment.Env = make(map[string]string)
 	}
 
 	if err := s.db.CreateDeployment(ctx, nil, deployment); err != nil {
@@ -867,7 +867,7 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 				ServerName:   serverReq.RegistryServer.Name,
 				Version:      serverReq.RegistryServer.Version,
 				Status:       "deployed",
-				Config:       make(map[string]string),
+				Env:          make(map[string]string),
 				PreferRemote: serverReq.PreferRemote,
 				ResourceType: resourceTypeMCP,
 				ProviderID:   providerID,
@@ -902,8 +902,8 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 
 func cleanupKubernetesResourcesForDeployment(ctx context.Context, deployment *models.Deployment) error {
 	namespace := ""
-	if deployment.Config != nil {
-		namespace = deployment.Config["KAGENT_NAMESPACE"]
+	if deployment.Env != nil {
+		namespace = deployment.Env["KAGENT_NAMESPACE"]
 	}
 	if namespace == "" {
 		namespace = runtime.DefaultNamespace()
@@ -1071,7 +1071,7 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 			envValues := make(map[string]string)
 			argValues := make(map[string]string)
 			headerValues := make(map[string]string)
-			for k, v := range dep.Config {
+			for k, v := range dep.Env {
 				switch {
 				case len(k) > 7 && k[:7] == "HEADER_":
 					headerValues[k[7:]] = v
@@ -1098,7 +1098,7 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 			}
 
 			depEnvValues := make(map[string]string)
-			maps.Copy(depEnvValues, dep.Config)
+			maps.Copy(depEnvValues, dep.Env)
 
 			targetRequests.agents = append(targetRequests.agents, &registry.AgentRunRequest{
 				RegistryAgent: &depAgent.Agent,
@@ -1256,7 +1256,7 @@ func (s *registryServiceImpl) listKubernetesDeployments(ctx context.Context, nam
 			DeployedAt:   creation,
 			UpdatedAt:    creation,
 			Status:       "deployed",
-			Config:       labels,
+			Env:          labels,
 			PreferRemote: preferRemote,
 			ResourceType: resourceType,
 			ProviderID:   kubernetesProviderID,

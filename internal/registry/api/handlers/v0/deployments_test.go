@@ -49,7 +49,7 @@ func (f *fakeDeploymentAdapter) Deploy(_ context.Context, req *models.Deployment
 		ProviderID:   req.ProviderID,
 		Status:       "deployed",
 		Origin:       "managed",
-		Config:       req.Config,
+		Env:          req.Env,
 	}, nil
 }
 
@@ -93,7 +93,7 @@ func TestCreateDeployment_PassesEnvAndProviderConfigSeparately(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.True(t, adapter.deployCalled)
 	require.NotNil(t, adapter.lastDeployReq)
-	assert.Equal(t, "abc", adapter.lastDeployReq.Config["API_KEY"])
+	assert.Equal(t, "abc", adapter.lastDeployReq.Env["API_KEY"])
 	assert.Equal(t, "sg-123", adapter.lastDeployReq.ProviderConfig["securityGroupId"])
 }
 

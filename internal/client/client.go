@@ -594,7 +594,7 @@ type DeploymentResponse struct {
 	DeployedAt     string            `json:"deployedAt"`
 	UpdatedAt      string            `json:"updatedAt"`
 	Status         string            `json:"status"`
-	Config         map[string]string `json:"config"`
+	Env            map[string]string `json:"env"`
 	ProviderConfig map[string]any    `json:"providerConfig,omitempty"`
 	PreferRemote   bool              `json:"preferRemote"`
 	ResourceType   string            `json:"resourceType"`

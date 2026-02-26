@@ -98,6 +98,10 @@ type AppOptions struct {
 	// DeploymentPlatforms registers adapters for deployment lifecycle by provider platform type.
 	DeploymentPlatforms map[string]DeploymentPlatformAdapter
 
+	// ExtraRoutes allows external integrations to register additional HTTP routes
+	// using the same API instance and path prefix as OSS core routes.
+	ExtraRoutes func(api huma.API, pathPrefix string)
+
 	// OnServiceCreated is an optional callback that receives the created service
 	// (potentially extended via ServiceFactory).
 	OnServiceCreated func(service.RegistryService)

@@ -200,7 +200,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		deploymentReq := &models.Deployment{
 			ServerName:     input.Body.ServerName,
 			Version:        input.Body.Version,
-			Config:         input.Body.Env,
+			Env:            input.Body.Env,
 			ProviderConfig: input.Body.ProviderConfig,
 			PreferRemote:   input.Body.PreferRemote,
 			ResourceType:   resourceType,

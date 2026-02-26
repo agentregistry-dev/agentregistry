@@ -200,6 +200,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		for i, server := range servers {
 			serverValues[i] = normalizeServerResponse(server)
 		}
+		serverValues = attachServerDeploymentMeta(serverValues, deploymentResourceIndex(ctx, registry))
 
 		return &types.Response[models.ServerListResponse]{
 			Body: models.ServerListResponse{
@@ -249,6 +250,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			for i, server := range servers {
 				serverValues[i] = normalizeServerResponse(server)
 			}
+			serverValues = attachServerDeploymentMeta(serverValues, deploymentResourceIndex(ctx, registry))
 
 			return &types.Response[models.ServerListResponse]{
 				Body: models.ServerListResponse{
@@ -302,7 +304,10 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		// Return single server wrapped in a list response
 		return &types.Response[models.ServerListResponse]{
 			Body: models.ServerListResponse{
-				Servers: []models.ServerResponse{normalizeServerResponse(serverResponse)},
+				Servers: attachServerDeploymentMeta(
+					[]models.ServerResponse{normalizeServerResponse(serverResponse)},
+					deploymentResourceIndex(ctx, registry),
+				),
 				Metadata: models.ServerMetadata{
 					Count: 1,
 				},
@@ -339,6 +344,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		for i, server := range servers {
 			serverValues[i] = normalizeServerResponse(server)
 		}
+		serverValues = attachServerDeploymentMeta(serverValues, deploymentResourceIndex(ctx, registry))
 
 		return &types.Response[models.ServerListResponse]{
 			Body: models.ServerListResponse{
@@ -446,7 +452,10 @@ func createServerHandler(ctx context.Context, input *CreateServerInput, registry
 	}
 
 	return &types.Response[models.ServerResponse]{
-		Body: normalizeServerResponse(createdServer),
+		Body: attachServerDeploymentMeta(
+			[]models.ServerResponse{normalizeServerResponse(createdServer)},
+			deploymentResourceIndex(ctx, registry),
+		)[0],
 	}, nil
 }
 

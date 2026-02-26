@@ -36,16 +36,16 @@ func (a *deploymentAdapterBase) Deploy(ctx context.Context, req *models.Deployme
 	if req.ProviderID == "" && a.providerPlatform == "local" {
 		req.ProviderID = LocalProviderID
 	}
-	config, err := normalizeStringConfig(req.Config, req.ProviderConfig)
+	env, err := normalizeDeploymentEnv(req.Env, req.ProviderConfig)
 	if err != nil {
 		return nil, err
 	}
 
 	switch resourceType {
 	case "mcp":
-		return a.registry.DeployServer(ctx, req.ServerName, req.Version, config, req.PreferRemote, req.ProviderID)
+		return a.registry.DeployServer(ctx, req.ServerName, req.Version, env, req.PreferRemote, req.ProviderID)
 	case "agent":
-		return a.registry.DeployAgent(ctx, req.ServerName, req.Version, config, req.PreferRemote, req.ProviderID)
+		return a.registry.DeployAgent(ctx, req.ServerName, req.Version, env, req.PreferRemote, req.ProviderID)
 	default:
 		return nil, errors.New("invalid resource type")
 	}
@@ -102,12 +102,14 @@ func DefaultDeploymentPlatformAdapters(registry service.RegistryService) map[str
 	}
 }
 
-func normalizeStringConfig(config map[string]string, providerConfig map[string]any) (map[string]string, error) {
+// normalizeDeploymentEnv validates and returns deployment env vars.
+// providerConfig is explicitly unsupported for OSS built-in adapters.
+func normalizeDeploymentEnv(env map[string]string, providerConfig map[string]any) (map[string]string, error) {
 	if len(providerConfig) > 0 {
 		return nil, errProviderConfigNotSupported
 	}
-	if len(config) > 0 {
-		return config, nil
+	if len(env) > 0 {
+		return env, nil
 	}
 	return map[string]string{}, nil
 }
