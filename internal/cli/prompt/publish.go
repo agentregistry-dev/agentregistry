@@ -69,29 +69,24 @@ func runPublish(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("%s is a directory; pass a file path instead (e.g., prompt.txt or prompt.yaml)", absPath)
 	}
 
-	var promptJSON *models.PromptJSON
-
 	ext := strings.ToLower(filepath.Ext(absPath))
-	if ext == ".yaml" || ext == ".yml" {
+	isYAML := ext == ".yaml" || ext == ".yml"
+
+	var promptJSON *models.PromptJSON
+	if isYAML {
 		promptJSON, err = readPromptYAML(absPath)
-		if err != nil {
-			return fmt.Errorf("failed to read YAML prompt: %w", err)
-		}
-		// CLI flags override YAML values when set
-		if publishName != "" {
-			promptJSON.Name = publishName
-		}
-		if publishVersion != "" {
-			promptJSON.Version = publishVersion
-		}
-		if publishDescription != "" {
-			promptJSON.Description = publishDescription
-		}
 	} else {
 		promptJSON, err = readTextPrompt(absPath)
-		if err != nil {
-			return fmt.Errorf("failed to read prompt file: %w", err)
+	}
+	if err != nil {
+		msg := "failed to read prompt file"
+		if isYAML {
+			msg = "failed to read YAML prompt"
 		}
+		return fmt.Errorf("%s: %w", msg, err)
+	}
+	if isYAML {
+		applyPublishFlags(promptJSON)
 	}
 
 	if promptJSON.Name == "" {
@@ -143,4 +138,17 @@ func readPromptYAML(filePath string) (*models.PromptJSON, error) {
 	}
 
 	return &promptJSON, nil
+}
+
+// applyPublishFlags overwrites YAML fields with CLI flags when set.
+func applyPublishFlags(p *models.PromptJSON) {
+	if publishName != "" {
+		p.Name = publishName
+	}
+	if publishVersion != "" {
+		p.Version = publishVersion
+	}
+	if publishDescription != "" {
+		p.Description = publishDescription
+	}
 }

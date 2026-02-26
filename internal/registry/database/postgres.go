@@ -2883,7 +2883,7 @@ func (db *PostgreSQL) ListPrompts(ctx context.Context, tx pgx.Tx, filter *databa
 	args := []any{}
 	argIndex := 1
 
-	if filter != nil {
+	if filter != nil { //nolint:nestif
 		if filter.Name != nil {
 			whereConditions = append(whereConditions, fmt.Sprintf("prompt_name = $%d", argIndex))
 			args = append(args, *filter.Name)
