@@ -647,15 +647,15 @@ func (c *Client) DeployServer(name, version string, deploymentEnv map[string]str
 	return &deployment, nil
 }
 
-// DeployAgent deploys an agent with configuration
-func (c *Client) DeployAgent(name, version string, config map[string]string, providerID string) (*DeploymentResponse, error) {
+// DeployAgent deploys an agent with deployment environment variables.
+func (c *Client) DeployAgent(name, version string, deploymentEnv map[string]string, providerID string) (*DeploymentResponse, error) {
 	if providerID == "" {
 		providerID = string(ProviderPlatformLocal)
 	}
 	payload := internalv0.DeploymentRequest{
 		ServerName:   name,
 		Version:      version,
-		Env:          config,
+		Env:          deploymentEnv,
 		ResourceType: "agent",
 		ProviderID:   providerID,
 	}

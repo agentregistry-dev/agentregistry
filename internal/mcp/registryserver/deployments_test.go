@@ -194,7 +194,7 @@ func TestDeploymentTools_DeployRemove(t *testing.T) {
 		Arguments: map[string]any{
 			"serverName": "com.example/echo",
 			"version":    "1.0.0",
-			"config":     map[string]string{"ENV": "prod"},
+			"env":        map[string]string{"ENV": "prod"},
 		},
 	})
 	require.NoError(t, err)
@@ -211,7 +211,7 @@ func TestDeploymentTools_DeployRemove(t *testing.T) {
 		Arguments: map[string]any{
 			"serverName": "com.example/agent",
 			"version":    "2.0.0",
-			"config":     map[string]string{"FOO": "bar"},
+			"env":        map[string]string{"FOO": "bar"},
 		},
 	})
 	require.NoError(t, err)
