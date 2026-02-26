@@ -32,6 +32,9 @@ services:
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT}
       - MODEL_PROVIDER={{.ModelProvider}}
       - MODEL_NAME={{.ModelName}}
+{{- if .HasSkills }}
+      - KAGENT_SKILLS_FOLDER=/skills
+{{- end }}
 {{- if eq .ModelProvider "anthropic" }}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
 {{- else if eq .ModelProvider "openai" }}
@@ -46,6 +49,12 @@ services:
       - type: bind
         source: ./{{.Name}}{{if .Version}}/{{.Version}}{{end}}
         target: /config
+{{- if .HasSkills }}
+      - type: bind
+        source: ./{{.Name}}{{if .Version}}/{{.Version}}{{end}}/skills
+        target: /skills
+        read_only: true
+{{- end }}
 {{- if .TelemetryEndpoint}}
     networks:
       - agentregistry-network
@@ -81,4 +90,3 @@ networks:
   agentregistry-network:
     driver: bridge
 {{- end}}
-

@@ -98,6 +98,61 @@ func TestHasRegistryServers(t *testing.T) {
 	}
 }
 
+func TestResolveMCPServersForRuntime(t *testing.T) {
+	tests := []struct {
+		name         string
+		manifest     *models.AgentManifest
+		wantErr      bool
+		wantResolved int
+		wantConfig   int
+	}{
+		{
+			name:     "nil manifest",
+			manifest: nil,
+			wantErr:  true,
+		},
+		{
+			name: "no registry servers",
+			manifest: &models.AgentManifest{
+				Name: "test-agent",
+				McpServers: []models.McpServerType{
+					{Type: "command", Name: "cmd"},
+					{Type: "remote", Name: "remote"},
+				},
+			},
+			wantResolved: 0,
+			wantConfig:   0,
+		},
+		{
+			name: "empty mcp servers",
+			manifest: &models.AgentManifest{
+				Name:       "test-agent",
+				McpServers: []models.McpServerType{},
+			},
+			wantResolved: 0,
+			wantConfig:   0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolved, config, err := resolveMCPServersForRuntime(tt.manifest)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("resolveMCPServersForRuntime() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if len(resolved) != tt.wantResolved {
+				t.Fatalf("resolveMCPServersForRuntime() resolved count = %d, want %d", len(resolved), tt.wantResolved)
+			}
+			if len(config) != tt.wantConfig {
+				t.Fatalf("resolveMCPServersForRuntime() config count = %d, want %d", len(config), tt.wantConfig)
+			}
+		})
+	}
+}
+
 func TestValidateAPIKey(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -217,5 +272,55 @@ func TestValidateAPIKey(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRenderComposeFromManifest_WithSkills(t *testing.T) {
+	manifest := &models.AgentManifest{
+		Name:          "test-agent",
+		Image:         "docker.io/org/test-agent:latest",
+		ModelProvider: "openai",
+		ModelName:     "gpt-4o",
+		Skills: []models.SkillRef{
+			{Name: "skill-a", Image: "docker.io/org/skill-a:latest"},
+		},
+	}
+
+	data, err := renderComposeFromManifest(manifest, "1.2.3")
+	if err != nil {
+		t.Fatalf("renderComposeFromManifest() error = %v", err)
+	}
+
+	rendered := string(data)
+	if !strings.Contains(rendered, "KAGENT_SKILLS_FOLDER=/skills") {
+		t.Fatalf("expected rendered compose to include KAGENT_SKILLS_FOLDER")
+	}
+	if !strings.Contains(rendered, "source: ./test-agent/1.2.3/skills") {
+		t.Fatalf("expected rendered compose to include skills bind mount source path")
+	}
+	if !strings.Contains(rendered, "target: /skills") {
+		t.Fatalf("expected rendered compose to include /skills mount target")
+	}
+}
+
+func TestRenderComposeFromManifest_WithoutSkills(t *testing.T) {
+	manifest := &models.AgentManifest{
+		Name:          "test-agent",
+		Image:         "docker.io/org/test-agent:latest",
+		ModelProvider: "openai",
+		ModelName:     "gpt-4o",
+	}
+
+	data, err := renderComposeFromManifest(manifest, "1.2.3")
+	if err != nil {
+		t.Fatalf("renderComposeFromManifest() error = %v", err)
+	}
+
+	rendered := string(data)
+	if strings.Contains(rendered, "KAGENT_SKILLS_FOLDER=/skills") {
+		t.Fatalf("expected rendered compose not to include KAGENT_SKILLS_FOLDER")
+	}
+	if strings.Contains(rendered, "source: ./test-agent/1.2.3/skills") {
+		t.Fatalf("expected rendered compose not to include skills bind mount source path")
 	}
 }

@@ -2,12 +2,12 @@ package skill
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/spf13/cobra"
 )
@@ -124,132 +124,10 @@ func runPull(cmd *cobra.Command, args []string) error {
 	}
 
 	// Copy only non-empty files and folders to the final destination
-	if err := copyNonEmptyContents(tempDir, absOutputDir); err != nil {
+	if err := docker.CopyNonEmptyContents(tempDir, absOutputDir); err != nil {
 		return fmt.Errorf("failed to copy non-empty contents: %w", err)
 	}
 
 	printer.PrintSuccess(fmt.Sprintf("Successfully pulled skill to: %s", absOutputDir))
 	return nil
-}
-
-// copyNonEmptyContents recursively copies only non-empty files and directories
-func copyNonEmptyContents(src, dst string) error {
-	// Skip system directories that Docker creates
-	skipDirs := map[string]bool{
-		"dev":  true,
-		"etc":  true,
-		"proc": true,
-		"sys":  true,
-	}
-
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return fmt.Errorf("failed to read source directory: %w", err)
-	}
-
-	for _, entry := range entries {
-		srcPath := filepath.Join(src, entry.Name())
-		dstPath := filepath.Join(dst, entry.Name())
-
-		// Skip system directories at root level
-		if src == filepath.Dir(srcPath) && skipDirs[entry.Name()] {
-			continue
-		}
-
-		// Skip hidden Docker files
-		if entry.Name() == ".dockerenv" {
-			continue
-		}
-
-		if entry.IsDir() { //nolint:nestif
-			// Check if directory has any non-empty content
-			if !hasNonEmptyContent(srcPath, skipDirs) {
-				continue
-			}
-
-			// Create directory in destination
-			if err := os.MkdirAll(dstPath, 0755); err != nil {
-				return fmt.Errorf("failed to create directory %s: %w", dstPath, err)
-			}
-
-			// Recursively copy contents
-			if err := copyNonEmptyContents(srcPath, dstPath); err != nil {
-				return err
-			}
-		} else {
-			// Check if file is non-empty
-			info, err := os.Stat(srcPath)
-			if err != nil {
-				return fmt.Errorf("failed to stat file %s: %w", srcPath, err)
-			}
-
-			if info.Size() == 0 {
-				continue
-			}
-
-			// Copy file
-			if err := copyFile(srcPath, dstPath); err != nil {
-				return fmt.Errorf("failed to copy file %s: %w", srcPath, err)
-			}
-		}
-	}
-
-	return nil
-}
-
-// hasNonEmptyContent checks if a directory contains any non-empty files
-func hasNonEmptyContent(dir string, skipDirs map[string]bool) bool {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return false
-	}
-
-	for _, entry := range entries {
-		path := filepath.Join(dir, entry.Name())
-
-		if entry.IsDir() { //nolint:nestif
-			if skipDirs[entry.Name()] {
-				continue
-			}
-			if hasNonEmptyContent(path, skipDirs) {
-				return true
-			}
-		} else {
-			if entry.Name() == ".dockerenv" {
-				continue
-			}
-			info, err := entry.Info()
-			if err == nil && info.Size() > 0 {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
-// copyFile copies a single file from src to dst
-func copyFile(src, dst string) error {
-	sourceFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = sourceFile.Close() }()
-
-	destFile, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = destFile.Close() }()
-
-	if _, err := io.Copy(destFile, sourceFile); err != nil {
-		return err
-	}
-
-	// Copy permissions
-	sourceInfo, err := os.Stat(src)
-	if err != nil {
-		return err
-	}
-	return os.Chmod(dst, sourceInfo.Mode())
 }

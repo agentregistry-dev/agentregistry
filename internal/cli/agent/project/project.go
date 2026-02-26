@@ -120,6 +120,7 @@ func RegenerateDockerCompose(projectDir string, manifest *models.AgentManifest, 
 		ModelProvider     string
 		ModelName         string
 		TelemetryEndpoint string
+		HasSkills         bool
 		EnvVars           []string
 		McpServers        []models.McpServerType
 	}{
@@ -129,6 +130,7 @@ func RegenerateDockerCompose(projectDir string, manifest *models.AgentManifest, 
 		ModelProvider:     manifest.ModelProvider,
 		ModelName:         manifest.ModelName,
 		TelemetryEndpoint: manifest.TelemetryEndpoint,
+		HasSkills:         len(manifest.Skills) > 0,
 		EnvVars:           envVars,
 		McpServers:        manifest.McpServers,
 	})
