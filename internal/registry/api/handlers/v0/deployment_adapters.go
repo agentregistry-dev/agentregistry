@@ -35,12 +35,16 @@ func (a *deploymentAdapterBase) Deploy(ctx context.Context, req *models.Deployme
 	if req.ProviderID == "" && a.providerPlatform == "local" {
 		req.ProviderID = LocalProviderID
 	}
+	config, err := normalizeStringConfig(req.Config, req.ProviderConfig)
+	if err != nil {
+		return nil, err
+	}
 
 	switch resourceType {
 	case "mcp":
-		return a.registry.DeployServer(ctx, req.ServerName, req.Version, req.Config, req.PreferRemote, req.ProviderID)
+		return a.registry.DeployServer(ctx, req.ServerName, req.Version, config, req.PreferRemote, req.ProviderID)
 	case "agent":
-		return a.registry.DeployAgent(ctx, req.ServerName, req.Version, req.Config, req.PreferRemote, req.ProviderID)
+		return a.registry.DeployAgent(ctx, req.ServerName, req.Version, config, req.PreferRemote, req.ProviderID)
 	default:
 		return nil, errors.New("invalid resource type")
 	}
@@ -95,4 +99,12 @@ func DefaultDeploymentPlatformAdapters(registry service.RegistryService) map[str
 			},
 		},
 	}
+}
+
+func normalizeStringConfig(config map[string]string, providerConfig map[string]any) (map[string]string, error) {
+	_ = providerConfig // built-in adapters currently only support deployment env vars.
+	if len(config) > 0 {
+		return config, nil
+	}
+	return map[string]string{}, nil
 }

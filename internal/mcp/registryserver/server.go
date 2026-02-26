@@ -403,7 +403,7 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService) {
 		if providerID == "" {
 			providerID = "local"
 		}
-		deployment, err := registry.DeployServer(ctx, args.ServerName, args.Version, args.Config, args.PreferRemote, providerID)
+		deployment, err := registry.DeployServer(ctx, args.ServerName, args.Version, args.Env, args.PreferRemote, providerID)
 		if err != nil {
 			return nil, models.Deployment{}, err
 		}
@@ -423,7 +423,7 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService) {
 		if providerID == "" {
 			providerID = "local"
 		}
-		deployment, err := registry.DeployAgent(ctx, args.ServerName, args.Version, args.Config, args.PreferRemote, providerID)
+		deployment, err := registry.DeployAgent(ctx, args.ServerName, args.Version, args.Env, args.PreferRemote, providerID)
 		if err != nil {
 			return nil, models.Deployment{}, err
 		}

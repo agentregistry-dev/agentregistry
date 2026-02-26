@@ -626,14 +626,14 @@ func (c *Client) GetDeployedServers() ([]*DeploymentResponse, error) {
 }
 
 // DeployServer deploys a server with configuration.
-func (c *Client) DeployServer(name, version string, config map[string]string, preferRemote bool, providerID string) (*DeploymentResponse, error) {
+func (c *Client) DeployServer(name, version string, deploymentEnv map[string]string, preferRemote bool, providerID string) (*DeploymentResponse, error) {
 	if providerID == "" {
 		providerID = string(ProviderPlatformLocal)
 	}
 	payload := internalv0.DeploymentRequest{
 		ServerName:   name,
 		Version:      version,
-		Config:       config,
+		Env:          deploymentEnv,
 		PreferRemote: preferRemote,
 		ResourceType: "mcp",
 		ProviderID:   providerID,
@@ -655,7 +655,7 @@ func (c *Client) DeployAgent(name, version string, config map[string]string, pro
 	payload := internalv0.DeploymentRequest{
 		ServerName:   name,
 		Version:      version,
-		Config:       config,
+		Env:          config,
 		ResourceType: "agent",
 		ProviderID:   providerID,
 	}

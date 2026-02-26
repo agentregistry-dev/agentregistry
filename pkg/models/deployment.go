@@ -15,6 +15,7 @@ type Deployment struct {
 	CloudResourceID string            `json:"cloudResourceId,omitempty"`
 	CloudMetadata   map[string]any    `json:"cloudMetadata,omitempty"`
 	Config          map[string]string `json:"config"`
+	ProviderConfig  map[string]any    `json:"providerConfig,omitempty"`
 	PreferRemote    bool              `json:"preferRemote"`
 	DeployedBy      string            `json:"deployedBy,omitempty"`
 	Error           string            `json:"error,omitempty"`

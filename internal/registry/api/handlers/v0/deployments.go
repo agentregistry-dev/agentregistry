@@ -17,12 +17,13 @@ const LocalProviderID = "local"
 
 // DeploymentRequest represents the input for deploying a server
 type DeploymentRequest struct {
-	ServerName   string            `json:"serverName" doc:"Server name to deploy" example:"io.github.user/weather"`
-	Version      string            `json:"version" doc:"Version to deploy (use 'latest' for latest version)" default:"latest" example:"1.0.0"`
-	Config       map[string]string `json:"config,omitempty" doc:"Configuration key-value pairs (env vars, args, headers)"`
-	PreferRemote bool              `json:"preferRemote,omitempty" doc:"Prefer remote deployment over local" default:"false"`
-	ResourceType string            `json:"resourceType,omitempty" doc:"Type of resource to deploy (mcp, agent)" default:"mcp" example:"mcp" enum:"mcp,agent"`
-	ProviderID   string            `json:"providerId,omitempty" doc:"Concrete provider instance ID. Defaults to local singleton when omitted."`
+	ServerName     string            `json:"serverName" doc:"Server name to deploy" example:"io.github.user/weather"`
+	Version        string            `json:"version" doc:"Version to deploy (use 'latest' for latest version)" default:"latest" example:"1.0.0"`
+	Env            map[string]string `json:"env,omitempty" doc:"Deployment environment variables."`
+	ProviderConfig map[string]any    `json:"providerConfig,omitempty" doc:"Optional provider-specific deployment configuration."`
+	PreferRemote   bool              `json:"preferRemote,omitempty" doc:"Prefer remote deployment over local" default:"false"`
+	ResourceType   string            `json:"resourceType,omitempty" doc:"Type of resource to deploy (mcp, agent)" default:"mcp" example:"mcp" enum:"mcp,agent"`
+	ProviderID     string            `json:"providerId,omitempty" doc:"Concrete provider instance ID. Defaults to local singleton when omitted."`
 }
 
 // DeploymentResponse represents a deployment
@@ -197,12 +198,13 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			return nil, unsupportedDeploymentPlatformError(platform)
 		}
 		deploymentReq := &models.Deployment{
-			ServerName:   input.Body.ServerName,
-			Version:      input.Body.Version,
-			Config:       input.Body.Config,
-			PreferRemote: input.Body.PreferRemote,
-			ResourceType: resourceType,
-			ProviderID:   providerID,
+			ServerName:     input.Body.ServerName,
+			Version:        input.Body.Version,
+			Config:         input.Body.Env,
+			ProviderConfig: input.Body.ProviderConfig,
+			PreferRemote:   input.Body.PreferRemote,
+			ResourceType:   resourceType,
+			ProviderID:     providerID,
 		}
 		deployment, err = adapter.Deploy(ctx, deploymentReq)
 

@@ -46,7 +46,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API client not initialized")
 	}
 
-	config := make(map[string]string)
+	deploymentEnv := make(map[string]string)
 
 	if deployProviderID == "" {
 		deployProviderID = "local"
@@ -57,7 +57,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		if len(parts) != 2 {
 			return fmt.Errorf("invalid env format (expected KEY=VALUE): %s", env)
 		}
-		config[parts[0]] = parts[1]
+		deploymentEnv[parts[0]] = parts[1]
 	}
 
 	for _, arg := range deployArgs {
@@ -65,7 +65,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		if len(parts) != 2 {
 			return fmt.Errorf("invalid arg format (expected KEY=VALUE): %s", arg)
 		}
-		config["ARG_"+parts[0]] = parts[1]
+		deploymentEnv["ARG_"+parts[0]] = parts[1]
 	}
 
 	for _, header := range deployHeaders {
@@ -73,12 +73,12 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		if len(parts) != 2 {
 			return fmt.Errorf("invalid header format (expected KEY=VALUE): %s", header)
 		}
-		config["HEADER_"+parts[0]] = parts[1]
+		deploymentEnv["HEADER_"+parts[0]] = parts[1]
 	}
 
-	// Add namespace to config for Kubernetes deployments
+	// Add namespace to deployment env for Kubernetes deployments
 	if deployNamespace != "" {
-		config["KAGENT_NAMESPACE"] = deployNamespace
+		deploymentEnv["KAGENT_NAMESPACE"] = deployNamespace
 	}
 
 	if deployVersion == "" {
@@ -96,7 +96,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	// Deploy server via API (server will handle reconciliation)
 	fmt.Println("\nDeploying server...")
-	deployment, err := apiClient.DeployServer(server.Server.Name, deployVersion, config, deployPreferRemote, deployProviderID)
+	deployment, err := apiClient.DeployServer(server.Server.Name, deployVersion, deploymentEnv, deployPreferRemote, deployProviderID)
 	if err != nil {
 		return fmt.Errorf("failed to deploy server: %w", err)
 	}
@@ -106,8 +106,8 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		ns := deployNamespace
 		fmt.Printf("Namespace: %s\n", ns)
 	}
-	if len(config) > 0 {
-		fmt.Printf("Configuration: %d setting(s)\n", len(config))
+	if len(deploymentEnv) > 0 {
+		fmt.Printf("Deployment Env: %d setting(s)\n", len(deploymentEnv))
 	}
 	if deployProviderID == "local" {
 		fmt.Printf("\nServer deployment recorded. The registry will reconcile containers automatically.\n")
