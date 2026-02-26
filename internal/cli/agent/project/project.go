@@ -96,6 +96,35 @@ func RegenerateMcpTools(projectDir string, manifest *models.AgentManifest, verbo
 	return nil
 }
 
+// RegeneratePromptsLoader updates the generated prompts_loader.py file.
+func RegeneratePromptsLoader(projectDir string, manifest *models.AgentManifest, verbose bool) error {
+	if manifest == nil || manifest.Name == "" {
+		return fmt.Errorf("manifest missing name")
+	}
+
+	agentPackageDir := filepath.Join(projectDir, manifest.Name)
+	if _, err := os.Stat(agentPackageDir); err != nil {
+		// Not an ADK layout; nothing to do.
+		return nil
+	}
+
+	gen := python.NewPythonGenerator()
+	templateBytes, err := gen.ReadTemplateFile("agent/prompts_loader.py.tmpl")
+	if err != nil {
+		return fmt.Errorf("failed to read prompts_loader template: %w", err)
+	}
+
+	// The template is static (no Go template directives), just write it as-is
+	target := filepath.Join(agentPackageDir, "prompts_loader.py")
+	if err := os.WriteFile(target, templateBytes, 0o644); err != nil {
+		return fmt.Errorf("failed to write %s: %w", target, err)
+	}
+	if verbose {
+		fmt.Printf("Regenerated %s\n", target)
+	}
+	return nil
+}
+
 // RegenerateDockerCompose rewrites docker-compose.yaml using the embedded template.
 func RegenerateDockerCompose(projectDir string, manifest *models.AgentManifest, version string, verbose bool) error {
 	if manifest == nil {

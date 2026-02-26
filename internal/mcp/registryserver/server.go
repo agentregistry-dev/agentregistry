@@ -28,7 +28,8 @@ func NewServer(registry service.RegistryService) *mcp.Server {
 		Name:    "agentregistry-mcp",
 		Version: version.Version,
 	}, &mcp.ServerOptions{
-		HasTools: true,
+		HasTools:   true,
+		HasPrompts: true,
 	})
 
 	addAgentTools(server, registry)
@@ -36,6 +37,7 @@ func NewServer(registry service.RegistryService) *mcp.Server {
 	addSkillTools(server, registry)
 	addDeploymentTools(server, registry)
 	addMetaTools(server)
+	addServerPrompts(server)
 
 	return server
 }
@@ -484,4 +486,76 @@ func clampLimit(limit int) int {
 		return maxPageLimit
 	}
 	return limit
+}
+
+// addServerPrompts registers MCP prompts that describe how to use the registry server's tools.
+// These are user-facing prompts (per the MCP spec) that help users discover and interact with the registry.
+func addServerPrompts(server *mcp.Server) {
+	server.AddPrompt(&mcp.Prompt{
+		Name:        "search_registry",
+		Description: "Search the agent registry for MCP servers, agents, skills, or prompts by keyword",
+		Arguments: []*mcp.PromptArgument{
+			{Name: "query", Description: "Search term or keyword", Required: true},
+			{Name: "type", Description: "Resource type to search: servers, agents, skills, or prompts (default: all)"},
+		},
+	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+		query := req.Params.Arguments["query"]
+		resourceType := req.Params.Arguments["type"]
+
+		instruction := "Search the agent registry for \"" + query + "\""
+		if resourceType != "" {
+			instruction += " (filter to " + resourceType + " only)"
+		}
+		instruction += ". Use the appropriate list tool (list_servers, list_agents, list_skills) with the search parameter. Summarize what you find including names, descriptions, and versions."
+
+		return &mcp.GetPromptResult{
+			Description: "Search the registry for resources matching a query",
+			Messages: []*mcp.PromptMessage{
+				{Role: "user", Content: &mcp.TextContent{Text: instruction}},
+			},
+		}, nil
+	})
+
+	server.AddPrompt(&mcp.Prompt{
+		Name:        "deploy_mcp_server",
+		Description: "Deploy an MCP server from the registry",
+		Arguments: []*mcp.PromptArgument{
+			{Name: "name", Description: "Name of the MCP server to deploy", Required: true},
+			{Name: "version", Description: "Version to deploy (default: latest)"},
+		},
+	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+		name := req.Params.Arguments["name"]
+		ver := req.Params.Arguments["version"]
+		if ver == "" {
+			ver = "latest"
+		}
+
+		return &mcp.GetPromptResult{
+			Description: "Deploy an MCP server from the registry",
+			Messages: []*mcp.PromptMessage{
+				{Role: "user", Content: &mcp.TextContent{
+					Text: "Deploy the MCP server \"" + name + "\" (version: " + ver + ") from the registry. " +
+						"First use get_server to look up the server details, then use deploy_server to deploy it. " +
+						"Show me the deployment status when done.",
+				}},
+			},
+		}, nil
+	})
+
+	server.AddPrompt(&mcp.Prompt{
+		Name:        "registry_overview",
+		Description: "Get an overview of everything available in the agent registry",
+	}, func(_ context.Context, _ *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+		return &mcp.GetPromptResult{
+			Description: "Overview of registry contents",
+			Messages: []*mcp.PromptMessage{
+				{Role: "user", Content: &mcp.TextContent{
+					Text: "Give me an overview of what's available in the agent registry. " +
+						"Use list_servers, list_agents, and list_skills to see what's published. " +
+						"Also check list_deployments to see what's currently deployed. " +
+						"Summarize the results in a clear table format showing name, description, and latest version for each resource type.",
+				}},
+			},
+		}, nil
+	})
 }
