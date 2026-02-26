@@ -20,7 +20,7 @@ type DeploymentRequest struct {
 	ServerName     string            `json:"serverName" doc:"Server name to deploy" example:"io.github.user/weather"`
 	Version        string            `json:"version" doc:"Version to deploy (use 'latest' for latest version)" default:"latest" example:"1.0.0"`
 	Env            map[string]string `json:"env,omitempty" doc:"Deployment environment variables."`
-	ProviderConfig map[string]any    `json:"providerConfig,omitempty" doc:"Optional provider-specific deployment configuration."`
+	ProviderConfig map[string]any    `json:"providerConfig,omitempty" doc:"Optional provider-specific deployment settings (not env vars)."`
 	PreferRemote   bool              `json:"preferRemote,omitempty" doc:"Prefer remote deployment over local" default:"false"`
 	ResourceType   string            `json:"resourceType,omitempty" doc:"Type of resource to deploy (mcp, agent)" default:"mcp" example:"mcp" enum:"mcp,agent"`
 	ProviderID     string            `json:"providerId,omitempty" doc:"Concrete provider instance ID. Defaults to local singleton when omitted."`
@@ -164,7 +164,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		Method:      http.MethodPost,
 		Path:        basePath + "/deployments",
 		Summary:     "Deploy a resource",
-		Description: "Deploy a resource (MCP server or agent) with optional configuration. Defaults to MCP server if resourceType is not specified.",
+		Description: "Deploy a resource (MCP server or agent) with deployment env vars (`env`) and optional provider-specific settings (`providerConfig`). Defaults to MCP server if resourceType is not specified.",
 		Tags:        []string{"deployments"},
 	}, func(ctx context.Context, input *struct {
 		Body DeploymentRequest
@@ -209,6 +209,9 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		deployment, err = adapter.Deploy(ctx, deploymentReq)
 
 		if err != nil {
+			if errors.Is(err, errProviderConfigNotSupported) {
+				return nil, huma.Error400BadRequest("providerConfig is not supported for this provider platform")
+			}
 			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Resource not found in registry")
 			}

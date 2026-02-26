@@ -10,6 +10,7 @@ import (
 )
 
 var errDeploymentNotSupported = errors.New("deployment operation is not supported for this provider platform type")
+var errProviderConfigNotSupported = errors.New("providerConfig is not supported for this provider platform type")
 
 type deploymentAdapterBase struct {
 	providerPlatform string
@@ -102,7 +103,9 @@ func DefaultDeploymentPlatformAdapters(registry service.RegistryService) map[str
 }
 
 func normalizeStringConfig(config map[string]string, providerConfig map[string]any) (map[string]string, error) {
-	_ = providerConfig // built-in adapters currently only support deployment env vars.
+	if len(providerConfig) > 0 {
+		return nil, errProviderConfigNotSupported
+	}
 	if len(config) > 0 {
 		return config, nil
 	}
