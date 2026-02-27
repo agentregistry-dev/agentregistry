@@ -1,13 +1,16 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
@@ -277,15 +280,15 @@ func (r *agentRegistryRuntime) ensureLocalRuntime(
 	// Using --force-recreate ensures all containers are recreated even if config hasn't changed
 	cmd := exec.CommandContext(ctx, "docker", "compose", "up", "-d", "--remove-orphans", "--force-recreate")
 	cmd.Dir = r.runtimeDir
+	var stderrBuf bytes.Buffer
 	if r.verbose {
 		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
 	} else {
-		cmd.Stdout = nil
-		cmd.Stderr = nil
+		cmd.Stderr = &stderrBuf
 	}
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to start docker compose: %w", err)
+		return fmt.Errorf("failed to start docker compose: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
 	}
 	return nil
 }

@@ -886,7 +886,8 @@ func TestCleanupExistingDeployment(t *testing.T) {
 		{
 			name: "removes stale local deployment",
 			existingDeployment: &models.Deployment{
-				ServerName:   "com.example/test-server",
+				ID:           "dep-1",
+				ServerName:   "com.example/test",
 				Version:      "1.0.0",
 				Status:       "active",
 				ResourceType: "mcp",
@@ -898,9 +899,10 @@ func TestCleanupExistingDeployment(t *testing.T) {
 			expectRemoveCalled: true,
 		},
 		{
-			name: "removes stale kubernetes agent deployment",
+			name: "removes stale agent deployment",
 			existingDeployment: &models.Deployment{
-				ServerName:   "com.example/test-agent",
+				ID:           "dep-2",
+				ServerName:   "com.example/test",
 				Version:      "1.0.0",
 				Status:       "active",
 				ResourceType: "agent",
@@ -914,11 +916,10 @@ func TestCleanupExistingDeployment(t *testing.T) {
 		{
 			name:               "handles not found (already cleaned up)",
 			existingDeployment: nil,
-			lookupErr:          database.ErrNotFound,
-			removeErr:          database.ErrNotFound,
+			lookupErr:          nil,
 			resourceType:       "mcp",
 			expectError:        false,
-			expectRemoveCalled: true,
+			expectRemoveCalled: false,
 		},
 		{
 			name:               "propagates lookup error",
@@ -931,7 +932,8 @@ func TestCleanupExistingDeployment(t *testing.T) {
 		{
 			name: "propagates remove error",
 			existingDeployment: &models.Deployment{
-				ServerName:   "com.example/test-server",
+				ID:           "dep-3",
+				ServerName:   "com.example/test",
 				Version:      "1.0.0",
 				Status:       "active",
 				ResourceType: "mcp",
@@ -969,7 +971,7 @@ func TestCleanupExistingDeployment(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			assert.Equal(t, tt.expectRemoveCalled, removeCalled, "RemoveDeployment called mismatch")
+			assert.Equal(t, tt.expectRemoveCalled, removeCalled, "RemoveDeploymentByID called mismatch")
 		})
 	}
 }

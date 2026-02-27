@@ -815,11 +815,14 @@ func (s *registryServiceImpl) cleanupKubernetesResources(ctx context.Context, ex
 // Errors from runtime cleanup are logged but not fatal, since the resources may already be gone.
 func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, deploymentId, platform string) error {
 	existing, err := s.db.GetDeploymentByID(ctx, nil, deploymentId)
-	if err != nil && !errors.Is(err, database.ErrNotFound) {
+	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			return nil
+		}
 		return fmt.Errorf("looking up existing deployment: %w", err)
 	}
 
-	if existing != nil && platform == "kubernetes" {
+	if existing != nil && platform == platformKubernetes {
 		s.cleanupKubernetesResources(ctx, existing)
 	}
 

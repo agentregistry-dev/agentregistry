@@ -31,7 +31,13 @@ type AgentConfig struct {
 
 	McpServers []models.McpServerType
 	EnvVars    []string
+	Skills     []models.SkillRef
 	InitGit    bool
+}
+
+// HasSkills returns true when the agent has at least one skill configured.
+func (c AgentConfig) HasSkills() bool {
+	return len(c.Skills) > 0
 }
 
 func (c AgentConfig) shouldInitGit() bool {

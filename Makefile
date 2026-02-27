@@ -128,6 +128,9 @@ test:
 	@echo "Running Go tests with integration..."
 	go test -ldflags "$(LDFLAGS)" -tags=integration -v ./...
 
+e2e: build-cli
+	go tool gotestsum --format testdox -- -tags=e2e -timeout 45m ./e2e/...
+
 # Run Go tests with coverage
 test-coverage:
 	@echo "Running Go tests with coverage..."
@@ -201,6 +204,11 @@ docker-compose-down:
 
 docker-compose-rm:
 	VERSION=$(VERSION) DOCKER_REGISTRY=$(DOCKER_REGISTRY) docker compose -p agentregistry -f internal/daemon/docker-compose.yml rm --volumes --force
+
+.PHONY: create-kind-cluster
+create-kind-cluster:
+	bash ./scripts/kind/setup-kind.sh
+	bash ./scripts/kind/setup-metallb.sh
 
 bin/arctl-linux-amd64:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bin/arctl-linux-amd64 cmd/cli/main.go

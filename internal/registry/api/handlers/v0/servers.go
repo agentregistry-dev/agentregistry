@@ -128,8 +128,7 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		}, nil
 	})
 
-	var tags []string
-	tags = []string{"servers"}
+	var tags []string = []string{"servers"}
 
 	// List servers endpoint
 	huma.Register(api, huma.Operation{

@@ -142,10 +142,15 @@ func (t *agentGatewayTranslator) translateMCPServerToServiceConfig(server *api.M
 	if image == "" {
 		return nil, fmt.Errorf("image must be specified for MCPServer %s or the command must be 'uvx' or 'npx'", server.Name)
 	}
-	cmd := append(
-		[]string{server.Local.Deployment.Cmd},
-		server.Local.Deployment.Args...,
-	)
+	// Only set command when Cmd is non-empty; OCI images with their own
+	// entrypoint should use the image's default CMD/ENTRYPOINT.
+	var cmd types.ShellCommand
+	if server.Local.Deployment.Cmd != "" {
+		cmd = append(
+			[]string{server.Local.Deployment.Cmd},
+			server.Local.Deployment.Args...,
+		)
+	}
 
 	var envValues []string
 	for k, v := range server.Local.Deployment.Env {
