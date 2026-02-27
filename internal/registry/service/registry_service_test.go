@@ -886,11 +886,11 @@ func TestCleanupExistingDeployment(t *testing.T) {
 		{
 			name: "removes stale local deployment",
 			existingDeployment: &models.Deployment{
-				ServerName:   "com.example/test-server",
+				ID:           "dep-1",
+				ServerName:   "com.example/test",
 				Version:      "1.0.0",
 				Status:       "active",
 				ResourceType: "mcp",
-				Runtime:      "local",
 				Config:       map[string]string{},
 			},
 			resourceType:       "mcp",
@@ -898,13 +898,13 @@ func TestCleanupExistingDeployment(t *testing.T) {
 			expectRemoveCalled: true,
 		},
 		{
-			name: "removes stale kubernetes agent deployment",
+			name: "removes stale agent deployment",
 			existingDeployment: &models.Deployment{
-				ServerName:   "com.example/test-agent",
+				ID:           "dep-2",
+				ServerName:   "com.example/test",
 				Version:      "1.0.0",
 				Status:       "active",
 				ResourceType: "agent",
-				Runtime:      "kubernetes",
 				Config:       map[string]string{"KAGENT_NAMESPACE": "test-ns"},
 			},
 			resourceType:       "agent",
@@ -914,11 +914,10 @@ func TestCleanupExistingDeployment(t *testing.T) {
 		{
 			name:               "handles not found (already cleaned up)",
 			existingDeployment: nil,
-			lookupErr:          database.ErrNotFound,
-			removeErr:          database.ErrNotFound,
+			lookupErr:          nil,
 			resourceType:       "mcp",
 			expectError:        false,
-			expectRemoveCalled: true,
+			expectRemoveCalled: false,
 		},
 		{
 			name:               "propagates lookup error",
@@ -931,11 +930,11 @@ func TestCleanupExistingDeployment(t *testing.T) {
 		{
 			name: "propagates remove error",
 			existingDeployment: &models.Deployment{
-				ServerName:   "com.example/test-server",
+				ID:           "dep-3",
+				ServerName:   "com.example/test",
 				Version:      "1.0.0",
 				Status:       "active",
 				ResourceType: "mcp",
-				Runtime:      "local",
 				Config:       map[string]string{},
 			},
 			removeErr:          fmt.Errorf("connection refused"),
@@ -950,13 +949,16 @@ func TestCleanupExistingDeployment(t *testing.T) {
 			removeCalled := false
 
 			mockDB := &deploymentMockDB{
-				getDeploymentByNameAndVersionFn: func(_ context.Context, _ pgx.Tx, serverName, version, artifactType string) (*models.Deployment, error) {
+				getDeploymentsFn: func(_ context.Context, _ pgx.Tx, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
 					if tt.lookupErr != nil {
 						return nil, tt.lookupErr
 					}
-					return tt.existingDeployment, nil
+					if tt.existingDeployment != nil {
+						return []*models.Deployment{tt.existingDeployment}, nil
+					}
+					return nil, nil
 				},
-				removeDeploymentFn: func(_ context.Context, _ pgx.Tx, serverName, version, resourceType string) error {
+				removeDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, id string) error {
 					removeCalled = true
 					if tt.removeErr != nil {
 						return tt.removeErr
@@ -975,7 +977,7 @@ func TestCleanupExistingDeployment(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			assert.Equal(t, tt.expectRemoveCalled, removeCalled, "RemoveDeployment called mismatch")
+			assert.Equal(t, tt.expectRemoveCalled, removeCalled, "RemoveDeploymentByID called mismatch")
 		})
 	}
 }
@@ -983,17 +985,17 @@ func TestCleanupExistingDeployment(t *testing.T) {
 // deploymentMockDB is a minimal mock for database.Database that only implements
 // the methods needed for testing deployment cleanup logic. All other methods panic.
 type deploymentMockDB struct {
-	database.Database               // embed interface so unimplemented methods panic
-	getDeploymentByNameAndVersionFn func(ctx context.Context, tx pgx.Tx, serverName, version, artifactType string) (*models.Deployment, error)
-	removeDeploymentFn              func(ctx context.Context, tx pgx.Tx, serverName, version, resourceType string) error
+	database.Database      // embed interface so unimplemented methods panic
+	getDeploymentsFn       func(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
+	removeDeploymentByIDFn func(ctx context.Context, tx pgx.Tx, id string) error
 }
 
-func (m *deploymentMockDB) GetDeploymentByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName, version, artifactType string) (*models.Deployment, error) {
-	return m.getDeploymentByNameAndVersionFn(ctx, tx, serverName, version, artifactType)
+func (m *deploymentMockDB) GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+	return m.getDeploymentsFn(ctx, tx, filter)
 }
 
-func (m *deploymentMockDB) RemoveDeployment(ctx context.Context, tx pgx.Tx, serverName, version, resourceType string) error {
-	return m.removeDeploymentFn(ctx, tx, serverName, version, resourceType)
+func (m *deploymentMockDB) RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id string) error {
+	return m.removeDeploymentByIDFn(ctx, tx, id)
 }
 
 // Helper functions

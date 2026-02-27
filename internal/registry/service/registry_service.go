@@ -793,16 +793,22 @@ func (s *registryServiceImpl) cleanupKubernetesResources(ctx context.Context, ex
 // cleanupExistingDeployment removes a stale deployment record and its associated runtime resources.
 // Errors from runtime cleanup are logged but not fatal, since the resources may already be gone.
 func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, serverName, version, resourceType string) error {
-	existing, err := s.db.GetDeploymentByNameAndVersion(ctx, nil, serverName, version, resourceType)
-	if err != nil && !errors.Is(err, database.ErrNotFound) {
+	existing, err := s.findDeploymentByIdentity(ctx, serverName, version, resourceType)
+	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			return nil
+		}
 		return fmt.Errorf("looking up existing deployment: %w", err)
 	}
 
-	if existing != nil && existing.Runtime == "kubernetes" {
-		s.cleanupKubernetesResources(ctx, existing, serverName, version, resourceType)
+	if strings.TrimSpace(existing.ProviderID) != "" {
+		provider, err := s.resolveProviderByID(ctx, existing.ProviderID)
+		if err == nil && strings.ToLower(strings.TrimSpace(provider.Platform)) == platformKubernetes {
+			s.cleanupKubernetesResources(ctx, existing, serverName, version, resourceType)
+		}
 	}
 
-	if err := s.db.RemoveDeployment(ctx, nil, serverName, version, resourceType); err != nil && !errors.Is(err, database.ErrNotFound) {
+	if err := s.db.RemoveDeploymentByID(ctx, nil, existing.ID); err != nil && !errors.Is(err, database.ErrNotFound) {
 		return fmt.Errorf("removing stale deployment record: %w", err)
 	}
 
