@@ -785,12 +785,58 @@ func (s *registryServiceImpl) resolveProviderByID(ctx context.Context, providerI
 	return s.db.GetProviderByID(ctx, nil, providerID)
 }
 
+// cleanupKubernetesResources deletes Kubernetes runtime resources for a stale deployment.
+// Errors are logged but not returned, since the resources may already be gone.
+func (s *registryServiceImpl) cleanupKubernetesResources(ctx context.Context, existing *models.Deployment) {
+	namespace := ""
+	if existing.Env != nil {
+		namespace = existing.Env["KAGENT_NAMESPACE"]
+	}
+	if namespace == "" {
+		namespace = runtime.DefaultNamespace()
+	}
+
+	switch existing.ResourceType {
+	case "agent":
+		if err := runtime.DeleteKubernetesAgent(ctx, existing.ServerName, existing.Version, namespace); err != nil {
+			log.Printf("Warning: failed to clean up kubernetes agent %s: %v", existing.ServerName, err)
+		}
+	case "mcp":
+		if err := runtime.DeleteKubernetesMCPServer(ctx, existing.ServerName, namespace); err != nil {
+			log.Printf("Warning: failed to clean up kubernetes MCP server %s: %v", existing.ServerName, err)
+		}
+		if err := runtime.DeleteKubernetesRemoteMCPServer(ctx, existing.ServerName, namespace); err != nil {
+			log.Printf("Warning: failed to clean up kubernetes remote MCP server %s: %v", existing.ServerName, err)
+		}
+	}
+}
+
+// cleanupExistingDeployment removes a stale deployment record and its associated runtime resources.
+// Errors from runtime cleanup are logged but not fatal, since the resources may already be gone.
+func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, deploymentId, platform string) error {
+	existing, err := s.db.GetDeploymentByID(ctx, nil, deploymentId)
+	if err != nil && !errors.Is(err, database.ErrNotFound) {
+		return fmt.Errorf("looking up existing deployment: %w", err)
+	}
+
+	if existing != nil && platform == "kubernetes" {
+		s.cleanupKubernetesResources(ctx, existing)
+	}
+
+	if err := s.db.RemoveDeploymentByID(ctx, nil, existing.ID); err != nil && !errors.Is(err, database.ErrNotFound) {
+		return fmt.Errorf("removing stale deployment record: %w", err)
+	}
+
+	return nil
+}
+
 // DeployServer deploys a server with environment variables.
 func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, version string, env map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
 	if providerID == "" {
 		providerID = localProviderID
 	}
-	if _, err := s.resolveProviderByID(ctx, providerID); err != nil {
+	provider, err := s.resolveProviderByID(ctx, providerID)
+	if err != nil {
 		return nil, err
 	}
 	serverResp, err := s.db.GetServerByNameAndVersion(ctx, nil, serverName, version)
@@ -818,10 +864,19 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 		deployment.Env = make(map[string]string)
 	}
 
-	fmt.Println("creating deployment", deployment)
 	err = s.db.CreateDeployment(ctx, nil, deployment)
 	if err != nil {
-		return nil, err
+		if !errors.Is(err, database.ErrAlreadyExists) {
+			return nil, err
+		}
+		// Deployment record already exists — clean up stale record and retry
+		log.Printf("Deployment for %s/%s already exists, replacing stale record", serverName, deployment.Version)
+		if cleanupErr := s.cleanupExistingDeployment(ctx, deployment.ID, provider.Platform); cleanupErr != nil {
+			return nil, fmt.Errorf("failed to replace existing deployment: %w", cleanupErr)
+		}
+		if err := s.db.CreateDeployment(ctx, nil, deployment); err != nil {
+			return nil, fmt.Errorf("failed to recreate deployment: %w", err)
+		}
 	}
 
 	if err := s.ReconcileAll(ctx); err != nil {

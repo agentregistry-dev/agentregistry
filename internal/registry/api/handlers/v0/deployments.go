@@ -12,6 +12,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/google/uuid"
 )
 
 const LocalProviderID = "local"
@@ -184,7 +185,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		platform := normalizePlatform(provider.Platform)
 
 		deploymentReq := &models.Deployment{
-			ID:               "",
+			ID:               uuid.NewString(),
 			ServerName:       input.Body.ServerName,
 			Version:          input.Body.Version,
 			ProviderID:       providerID,
@@ -218,6 +219,8 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			}
 			return nil, huma.Error500InternalServerError("Failed to deploy resource", err)
 		}
+
+		deployment.ID = deploymentReq.ID
 
 		return &DeploymentResponse{Body: *deployment}, nil
 	})
