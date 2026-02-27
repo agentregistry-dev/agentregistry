@@ -113,6 +113,13 @@ func findProjectRoot() string {
 func setupInfrastructure(projectRoot string) func() {
 	log.Printf("Setting up e2e infrastructure...")
 
+	// In CI the agentregistry server runs inside a Docker container on a
+	// bridge network. Kind must bind the API server to all interfaces
+	// (not just 127.0.0.1) so the server container can reach it.
+	if os.Getenv("CI") == "true" {
+		patchKindConfigForCI(projectRoot)
+	}
+
 	// Step 1: Create Kind cluster (includes local registry + MetalLB)
 	log.Printf("Step 1/5: Creating Kind cluster %q...", e2eClusterName)
 	runMake(projectRoot, "create-kind-cluster",
@@ -120,6 +127,12 @@ func setupInfrastructure(projectRoot string) func() {
 
 	// Switch context explicitly to ensure kubectl uses the right cluster
 	runShell(projectRoot, "kubectl", "config", "use-context", e2eKubeContext)
+
+	// After cluster creation, patch the kubeconfig so the server container
+	// can reach the Kind API server via the Docker bridge gateway IP.
+	if os.Getenv("CI") == "true" {
+		patchKubeconfigForCI()
+	}
 
 	// Step 2: Install kagent (required for agent/mcp deploy --runtime kubernetes)
 	log.Printf("Step 2/5: Installing kagent...")
@@ -281,6 +294,70 @@ func waitForKagent(projectRoot string) {
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		log.Printf("Warning: kagent not fully ready: %v", err)
+	}
+}
+
+// patchKindConfigForCI modifies the Kind config to bind the API server on
+// 0.0.0.0 instead of 127.0.0.1 so it's reachable from Docker bridge networks.
+func patchKindConfigForCI(projectRoot string) {
+	cfgPath := filepath.Join(projectRoot, "scripts", "kind", "kind-config.yaml")
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		log.Printf("Warning: failed to read Kind config: %v", err)
+		return
+	}
+	updated := strings.ReplaceAll(string(data),
+		`apiServerAddress: "127.0.0.1"`,
+		`apiServerAddress: "0.0.0.0"`)
+	if err := os.WriteFile(cfgPath, []byte(updated), 0644); err != nil {
+		log.Printf("Warning: failed to patch Kind config: %v", err)
+		return
+	}
+	log.Printf("CI: patched Kind config to bind API server on 0.0.0.0")
+}
+
+// patchKubeconfigForCI replaces the API server address in the kubeconfig with
+// the Docker bridge gateway IP so the agentregistry server container can reach
+// the Kind API server. Also disables TLS verification since the gateway IP
+// won't be in the API server's certificate SANs.
+func patchKubeconfigForCI() {
+	// Get Docker bridge gateway IP (typically 172.17.0.1 on Linux)
+	cmd := exec.Command("docker", "network", "inspect", "bridge",
+		"-f", "{{range .IPAM.Config}}{{.Gateway}}{{end}}")
+	out, err := cmd.Output()
+	if err != nil {
+		log.Printf("Warning: failed to get Docker gateway IP: %v", err)
+		return
+	}
+	gatewayIP := strings.TrimSpace(string(out))
+	if gatewayIP == "" {
+		log.Printf("Warning: Docker gateway IP is empty, skipping kubeconfig patch")
+		return
+	}
+
+	log.Printf("CI: patching kubeconfig to use Docker gateway %s", gatewayIP)
+
+	kubeconfigPath := filepath.Join(os.Getenv("HOME"), ".kube", "config")
+	data, err := os.ReadFile(kubeconfigPath)
+	if err != nil {
+		log.Printf("Warning: failed to read kubeconfig: %v", err)
+		return
+	}
+
+	// Kind writes 0.0.0.0 when apiServerAddress is 0.0.0.0
+	updated := strings.ReplaceAll(string(data),
+		"server: https://0.0.0.0:",
+		"server: https://"+gatewayIP+":")
+	if err := os.WriteFile(kubeconfigPath, []byte(updated), 0600); err != nil {
+		log.Printf("Warning: failed to write kubeconfig: %v", err)
+		return
+	}
+
+	// Disable TLS verification — the gateway IP is not in the cert SANs
+	cmd = exec.Command("kubectl", "config", "set-cluster",
+		"kind-"+e2eClusterName, "--insecure-skip-tls-verify=true")
+	if err := cmd.Run(); err != nil {
+		log.Printf("Warning: failed to set insecure-skip-tls-verify: %v", err)
 	}
 }
 
