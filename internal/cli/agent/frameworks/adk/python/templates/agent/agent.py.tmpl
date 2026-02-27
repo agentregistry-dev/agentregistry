@@ -7,6 +7,7 @@ from google.adk.tools.tool_context import ToolContext
 from google.adk.models.lite_llm import LiteLlm
 {{end}}
 from .mcp_tools import get_mcp_tools
+from .prompts_loader import build_instruction
 
 # Initialize OpenTelemetry
 # Set service name from environment variable for OpenTelemetry
@@ -71,9 +72,9 @@ root_agent = Agent(
     model=create_model(),
     name="{{.Name}}_agent",
     description="{{if .Description}}{{.Description}}{{else}}{{.Name}} agent.{{end}}",
-    instruction="""
+    instruction=build_instruction("""
 {{.Instruction}}
-    """,
+    """),
     tools=[
         roll_die,
         check_prime,

@@ -2871,6 +2871,443 @@ func (db *PostgreSQL) DeleteAgent(ctx context.Context, tx pgx.Tx, agentName, ver
 	return nil
 }
 
+func (db *PostgreSQL) ListPrompts(ctx context.Context, tx pgx.Tx, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if ctx.Err() != nil {
+		return nil, "", ctx.Err()
+	}
+
+	var whereConditions []string
+	args := []any{}
+	argIndex := 1
+
+	if filter != nil { //nolint:nestif
+		if filter.Name != nil {
+			whereConditions = append(whereConditions, fmt.Sprintf("prompt_name = $%d", argIndex))
+			args = append(args, *filter.Name)
+			argIndex++
+		}
+		if filter.UpdatedSince != nil {
+			whereConditions = append(whereConditions, fmt.Sprintf("updated_at > $%d", argIndex))
+			args = append(args, *filter.UpdatedSince)
+			argIndex++
+		}
+		if filter.SubstringName != nil {
+			whereConditions = append(whereConditions, fmt.Sprintf("prompt_name ILIKE $%d", argIndex))
+			args = append(args, "%"+*filter.SubstringName+"%")
+			argIndex++
+		}
+		if filter.Version != nil {
+			whereConditions = append(whereConditions, fmt.Sprintf("version = $%d", argIndex))
+			args = append(args, *filter.Version)
+			argIndex++
+		}
+		if filter.IsLatest != nil {
+			whereConditions = append(whereConditions, fmt.Sprintf("is_latest = $%d", argIndex))
+			args = append(args, *filter.IsLatest)
+			argIndex++
+		}
+	}
+
+	if cursor != "" {
+		parts := strings.SplitN(cursor, ":", 2)
+		if len(parts) == 2 {
+			cursorName := parts[0]
+			cursorVersion := parts[1]
+			whereConditions = append(whereConditions, fmt.Sprintf("(prompt_name > $%d OR (prompt_name = $%d AND version > $%d))", argIndex, argIndex+1, argIndex+2))
+			args = append(args, cursorName, cursorName, cursorVersion)
+			argIndex += 3
+		} else {
+			whereConditions = append(whereConditions, fmt.Sprintf("prompt_name > $%d", argIndex))
+			args = append(args, cursor)
+			argIndex++
+		}
+	}
+
+	whereClause := ""
+	if len(whereConditions) > 0 {
+		whereClause = "WHERE " + strings.Join(whereConditions, " AND ")
+	}
+
+	query := fmt.Sprintf(`
+        SELECT prompt_name, version, status, published_at, updated_at, is_latest, value
+        FROM prompts
+        %s
+        ORDER BY prompt_name, version
+        LIMIT $%d
+    `, whereClause, argIndex)
+	args = append(args, limit)
+
+	rows, err := db.getExecutor(tx).Query(ctx, query, args...)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to query prompts: %w", err)
+	}
+	defer rows.Close()
+
+	var results []*models.PromptResponse
+	for rows.Next() {
+		var name, version, status string
+		var publishedAt, updatedAt time.Time
+		var isLatest bool
+		var valueJSON []byte
+
+		if err := rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+			return nil, "", fmt.Errorf("failed to scan prompt row: %w", err)
+		}
+
+		var promptJSON models.PromptJSON
+		if err := json.Unmarshal(valueJSON, &promptJSON); err != nil {
+			return nil, "", fmt.Errorf("failed to unmarshal prompt JSON: %w", err)
+		}
+
+		resp := &models.PromptResponse{
+			Prompt: promptJSON,
+			Meta: models.PromptResponseMeta{
+				Official: &models.PromptRegistryExtensions{
+					Status:      status,
+					PublishedAt: publishedAt,
+					UpdatedAt:   updatedAt,
+					IsLatest:    isLatest,
+				},
+			},
+		}
+		results = append(results, resp)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, "", fmt.Errorf("error iterating prompt rows: %w", err)
+	}
+
+	nextCursor := ""
+	if len(results) > 0 && len(results) >= limit {
+		last := results[len(results)-1]
+		nextCursor = last.Prompt.Name + ":" + last.Prompt.Version
+	}
+	return results, nextCursor, nil
+}
+
+func (db *PostgreSQL) GetPromptByName(ctx context.Context, tx pgx.Tx, promptName string) (*models.PromptResponse, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: promptName,
+		Type: auth.PermissionArtifactTypePrompt,
+	}); err != nil {
+		return nil, err
+	}
+
+	query := `
+        SELECT prompt_name, version, status, published_at, updated_at, is_latest, value
+        FROM prompts
+        WHERE prompt_name = $1 AND is_latest = true
+        ORDER BY published_at DESC
+        LIMIT 1
+    `
+	var name, version, status string
+	var publishedAt, updatedAt time.Time
+	var isLatest bool
+	var valueJSON []byte
+	if err := db.getExecutor(tx).QueryRow(ctx, query, promptName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, database.ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get prompt by name: %w", err)
+	}
+	var promptJSON models.PromptJSON
+	if err := json.Unmarshal(valueJSON, &promptJSON); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal prompt JSON: %w", err)
+	}
+	return &models.PromptResponse{
+		Prompt: promptJSON,
+		Meta: models.PromptResponseMeta{
+			Official: &models.PromptRegistryExtensions{
+				Status:      status,
+				PublishedAt: publishedAt,
+				UpdatedAt:   updatedAt,
+				IsLatest:    isLatest,
+			},
+		},
+	}, nil
+}
+
+func (db *PostgreSQL) GetPromptByNameAndVersion(ctx context.Context, tx pgx.Tx, promptName, version string) (*models.PromptResponse, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: promptName,
+		Type: auth.PermissionArtifactTypePrompt,
+	}); err != nil {
+		return nil, err
+	}
+
+	query := `
+        SELECT prompt_name, version, status, published_at, updated_at, is_latest, value
+        FROM prompts
+        WHERE prompt_name = $1 AND version = $2
+        LIMIT 1
+    `
+	var name, vers, status string
+	var publishedAt, updatedAt time.Time
+	var isLatest bool
+	var valueJSON []byte
+	if err := db.getExecutor(tx).QueryRow(ctx, query, promptName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, database.ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get prompt by name and version: %w", err)
+	}
+	var promptJSON models.PromptJSON
+	if err := json.Unmarshal(valueJSON, &promptJSON); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal prompt JSON: %w", err)
+	}
+	return &models.PromptResponse{
+		Prompt: promptJSON,
+		Meta: models.PromptResponseMeta{
+			Official: &models.PromptRegistryExtensions{
+				Status:      status,
+				PublishedAt: publishedAt,
+				UpdatedAt:   updatedAt,
+				IsLatest:    isLatest,
+			},
+		},
+	}, nil
+}
+
+func (db *PostgreSQL) GetAllVersionsByPromptName(ctx context.Context, tx pgx.Tx, promptName string) ([]*models.PromptResponse, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: promptName,
+		Type: auth.PermissionArtifactTypePrompt,
+	}); err != nil {
+		return nil, err
+	}
+
+	query := `
+        SELECT prompt_name, version, status, published_at, updated_at, is_latest, value
+        FROM prompts
+        WHERE prompt_name = $1
+        ORDER BY published_at DESC
+    `
+	rows, err := db.getExecutor(tx).Query(ctx, query, promptName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query prompt versions: %w", err)
+	}
+	defer rows.Close()
+	var results []*models.PromptResponse
+	for rows.Next() {
+		var name, version, status string
+		var publishedAt, updatedAt time.Time
+		var isLatest bool
+		var valueJSON []byte
+		if err := rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+			return nil, fmt.Errorf("failed to scan prompt row: %w", err)
+		}
+		var promptJSON models.PromptJSON
+		if err := json.Unmarshal(valueJSON, &promptJSON); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal prompt JSON: %w", err)
+		}
+		results = append(results, &models.PromptResponse{
+			Prompt: promptJSON,
+			Meta: models.PromptResponseMeta{
+				Official: &models.PromptRegistryExtensions{
+					Status:      status,
+					PublishedAt: publishedAt,
+					UpdatedAt:   updatedAt,
+					IsLatest:    isLatest,
+				},
+			},
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating prompt rows: %w", err)
+	}
+	if len(results) == 0 {
+		return nil, database.ErrNotFound
+	}
+	return results, nil
+}
+
+func (db *PostgreSQL) CreatePrompt(ctx context.Context, tx pgx.Tx, promptJSON *models.PromptJSON, officialMeta *models.PromptRegistryExtensions) (*models.PromptResponse, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
+		Name: promptJSON.Name,
+		Type: auth.PermissionArtifactTypePrompt,
+	}); err != nil {
+		return nil, err
+	}
+
+	if promptJSON == nil || officialMeta == nil {
+		return nil, fmt.Errorf("promptJSON and officialMeta are required")
+	}
+	if promptJSON.Name == "" || promptJSON.Version == "" {
+		return nil, fmt.Errorf("prompt name and version are required")
+	}
+	valueJSON, err := json.Marshal(promptJSON)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal prompt JSON: %w", err)
+	}
+	insert := `
+        INSERT INTO prompts (prompt_name, version, status, published_at, updated_at, is_latest, value)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `
+	if _, err := db.getExecutor(tx).Exec(ctx, insert,
+		promptJSON.Name,
+		promptJSON.Version,
+		officialMeta.Status,
+		officialMeta.PublishedAt,
+		officialMeta.UpdatedAt,
+		officialMeta.IsLatest,
+		valueJSON,
+	); err != nil {
+		return nil, fmt.Errorf("failed to insert prompt: %w", err)
+	}
+	return &models.PromptResponse{
+		Prompt: *promptJSON,
+		Meta: models.PromptResponseMeta{
+			Official: officialMeta,
+		},
+	}, nil
+}
+
+func (db *PostgreSQL) GetCurrentLatestPromptVersion(ctx context.Context, tx pgx.Tx, promptName string) (*models.PromptResponse, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: promptName,
+		Type: auth.PermissionArtifactTypePrompt,
+	}); err != nil {
+		return nil, err
+	}
+
+	executor := db.getExecutor(tx)
+	query := `
+        SELECT prompt_name, version, status, value, published_at, updated_at, is_latest
+        FROM prompts
+        WHERE prompt_name = $1 AND is_latest = true
+    `
+	row := executor.QueryRow(ctx, query, promptName)
+	var name, version, status string
+	var publishedAt, updatedAt time.Time
+	var isLatest bool
+	var jsonValue []byte
+	if err := row.Scan(&name, &version, &status, &jsonValue, &publishedAt, &updatedAt, &isLatest); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, database.ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to scan prompt row: %w", err)
+	}
+	var promptJSON models.PromptJSON
+	if err := json.Unmarshal(jsonValue, &promptJSON); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal prompt JSON: %w", err)
+	}
+	return &models.PromptResponse{
+		Prompt: promptJSON,
+		Meta: models.PromptResponseMeta{
+			Official: &models.PromptRegistryExtensions{
+				PublishedAt: publishedAt,
+				UpdatedAt:   updatedAt,
+				IsLatest:    isLatest,
+				Status:      status,
+			},
+		},
+	}, nil
+}
+
+func (db *PostgreSQL) CountPromptVersions(ctx context.Context, tx pgx.Tx, promptName string) (int, error) {
+	if ctx.Err() != nil {
+		return 0, ctx.Err()
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: promptName,
+		Type: auth.PermissionArtifactTypePrompt,
+	}); err != nil {
+		return 0, err
+	}
+
+	executor := db.getExecutor(tx)
+	query := `SELECT COUNT(*) FROM prompts WHERE prompt_name = $1`
+	var count int
+	if err := executor.QueryRow(ctx, query, promptName).Scan(&count); err != nil {
+		return 0, fmt.Errorf("failed to count prompt versions: %w", err)
+	}
+	return count, nil
+}
+
+func (db *PostgreSQL) CheckPromptVersionExists(ctx context.Context, tx pgx.Tx, promptName, version string) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: promptName,
+		Type: auth.PermissionArtifactTypePrompt,
+	}); err != nil {
+		return false, err
+	}
+
+	executor := db.getExecutor(tx)
+	query := `SELECT EXISTS(SELECT 1 FROM prompts WHERE prompt_name = $1 AND version = $2)`
+	var exists bool
+	if err := executor.QueryRow(ctx, query, promptName, version).Scan(&exists); err != nil {
+		return false, fmt.Errorf("failed to check prompt version existence: %w", err)
+	}
+	return exists, nil
+}
+
+func (db *PostgreSQL) UnmarkPromptAsLatest(ctx context.Context, tx pgx.Tx, promptName string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
+		Name: promptName,
+		Type: auth.PermissionArtifactTypePrompt,
+	}); err != nil {
+		return err
+	}
+
+	executor := db.getExecutor(tx)
+	query := `UPDATE prompts SET is_latest = false WHERE prompt_name = $1 AND is_latest = true`
+	if _, err := executor.Exec(ctx, query, promptName); err != nil {
+		return fmt.Errorf("failed to unmark latest prompt version: %w", err)
+	}
+	return nil
+}
+
+func (db *PostgreSQL) DeletePrompt(ctx context.Context, tx pgx.Tx, promptName, version string) error {
+	if err := db.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
+		Name: promptName,
+		Type: auth.PermissionArtifactTypePrompt,
+	}); err != nil {
+		return err
+	}
+
+	executor := db.getExecutor(tx)
+	query := `DELETE FROM prompts WHERE prompt_name = $1 AND version = $2`
+	result, err := executor.Exec(ctx, query, promptName, version)
+	if err != nil {
+		return fmt.Errorf("failed to delete prompt: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return database.ErrNotFound
+	}
+	return nil
+}
+
 // Close closes the database connection
 func (db *PostgreSQL) Close() error {
 	db.pool.Close()

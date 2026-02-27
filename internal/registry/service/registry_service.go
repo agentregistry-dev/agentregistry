@@ -1428,3 +1428,100 @@ func (s *registryServiceImpl) listKubernetesDeployments(ctx context.Context, nam
 
 	return deployments, nil
 }
+
+// ListPrompts returns registry entries for prompts with pagination and filtering
+func (s *registryServiceImpl) ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
+	if limit <= 0 {
+		limit = 30
+	}
+	prompts, next, err := s.db.ListPrompts(ctx, nil, filter, cursor, limit)
+	if err != nil {
+		return nil, "", err
+	}
+	return prompts, next, nil
+}
+
+// GetPromptByName retrieves the latest version of a prompt by its name
+func (s *registryServiceImpl) GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error) {
+	return s.db.GetPromptByName(ctx, nil, promptName)
+}
+
+// GetPromptByNameAndVersion retrieves a specific version of a prompt by name and version
+func (s *registryServiceImpl) GetPromptByNameAndVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
+	return s.db.GetPromptByNameAndVersion(ctx, nil, promptName, version)
+}
+
+// GetAllVersionsByPromptName retrieves all versions for a prompt
+func (s *registryServiceImpl) GetAllVersionsByPromptName(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
+	return s.db.GetAllVersionsByPromptName(ctx, nil, promptName)
+}
+
+// CreatePrompt creates a new prompt version
+func (s *registryServiceImpl) CreatePrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error) {
+	return database.InTransactionT(ctx, s.db, func(ctx context.Context, tx pgx.Tx) (*models.PromptResponse, error) {
+		return s.createPromptInTransaction(ctx, tx, req)
+	})
+}
+
+func (s *registryServiceImpl) createPromptInTransaction(ctx context.Context, tx pgx.Tx, req *models.PromptJSON) (*models.PromptResponse, error) {
+	if req == nil || req.Name == "" || req.Version == "" {
+		return nil, fmt.Errorf("invalid prompt payload: name and version are required")
+	}
+
+	publishTime := time.Now()
+	promptJSON := *req
+
+	versionCount, err := s.db.CountPromptVersions(ctx, tx, promptJSON.Name)
+	if err != nil && !errors.Is(err, database.ErrNotFound) {
+		return nil, err
+	}
+	if versionCount >= maxServerVersionsPerServer {
+		return nil, database.ErrMaxServersReached
+	}
+
+	exists, err := s.db.CheckPromptVersionExists(ctx, tx, promptJSON.Name, promptJSON.Version)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return nil, database.ErrInvalidVersion
+	}
+
+	currentLatest, err := s.db.GetCurrentLatestPromptVersion(ctx, tx, promptJSON.Name)
+	if err != nil && !errors.Is(err, database.ErrNotFound) {
+		return nil, err
+	}
+
+	isNewLatest := true
+	if currentLatest != nil {
+		var existingPublishedAt time.Time
+		if currentLatest.Meta.Official != nil {
+			existingPublishedAt = currentLatest.Meta.Official.PublishedAt
+		}
+		if CompareVersions(promptJSON.Version, currentLatest.Prompt.Version, publishTime, existingPublishedAt) <= 0 {
+			isNewLatest = false
+		}
+	}
+
+	if isNewLatest && currentLatest != nil {
+		if err := s.db.UnmarkPromptAsLatest(ctx, tx, promptJSON.Name); err != nil {
+			return nil, err
+		}
+	}
+
+	officialMeta := &models.PromptRegistryExtensions{
+		Status:      string(model.StatusActive),
+		PublishedAt: publishTime,
+		UpdatedAt:   publishTime,
+		IsLatest:    isNewLatest,
+	}
+
+	return s.db.CreatePrompt(ctx, tx, &promptJSON, officialMeta)
+}
+
+// DeletePrompt permanently removes a prompt version from the registry
+func (s *registryServiceImpl) DeletePrompt(ctx context.Context, promptName, version string) error {
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		return s.db.DeletePrompt(txCtx, tx, promptName, version)
+	})
+}

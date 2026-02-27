@@ -72,6 +72,15 @@ type FakeRegistry struct {
 	GetDeploymentLogsFn          func(ctx context.Context, deployment *models.Deployment, platform string) ([]string, error)
 	CancelDeploymentFn           func(ctx context.Context, deployment *models.Deployment, platform string) error
 	ReconcileAllFn               func(ctx context.Context) error
+
+	// Prompt fields and hooks
+	Prompts                      []*models.PromptResponse
+	ListPromptsFn                func(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error)
+	GetPromptByNameFn            func(ctx context.Context, promptName string) (*models.PromptResponse, error)
+	GetPromptByNameAndVersionFn  func(ctx context.Context, promptName, version string) (*models.PromptResponse, error)
+	GetAllVersionsByPromptNameFn func(ctx context.Context, promptName string) ([]*models.PromptResponse, error)
+	CreatePromptFn               func(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error)
+	DeletePromptFn               func(ctx context.Context, promptName, version string) error
 }
 
 // NewFakeRegistry creates a new FakeRegistry with initialized maps.
@@ -419,6 +428,29 @@ func (f *FakeRegistry) CreateDeployment(ctx context.Context, req *models.Deploym
 	return nil, database.ErrNotFound
 }
 
+// Prompt methods
+
+func (f *FakeRegistry) ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
+	if f.ListPromptsFn != nil {
+		return f.ListPromptsFn(ctx, filter, cursor, limit)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.Prompts, "", nil
+}
+
+func (f *FakeRegistry) GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error) {
+	if f.GetPromptByNameFn != nil {
+		return f.GetPromptByNameFn(ctx, promptName)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.Prompts) > 0 {
+		return f.Prompts[0], nil
+	}
+	return nil, database.ErrNotFound
+}
+
 func (f *FakeRegistry) UndeployDeployment(ctx context.Context, deployment *models.Deployment, platform string) error {
 	if f.UndeployDeploymentFn != nil {
 		return f.UndeployDeploymentFn(ctx, deployment, platform)
@@ -436,6 +468,36 @@ func (f *FakeRegistry) GetDeploymentLogs(ctx context.Context, deployment *models
 func (f *FakeRegistry) CancelDeployment(ctx context.Context, deployment *models.Deployment, platform string) error {
 	if f.CancelDeploymentFn != nil {
 		return f.CancelDeploymentFn(ctx, deployment, platform)
+	}
+	return database.ErrNotFound
+}
+
+func (f *FakeRegistry) GetPromptByNameAndVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
+	if f.GetPromptByNameAndVersionFn != nil {
+		return f.GetPromptByNameAndVersionFn(ctx, promptName, version)
+	}
+	return f.GetPromptByName(ctx, promptName)
+}
+
+func (f *FakeRegistry) GetAllVersionsByPromptName(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
+	if f.GetAllVersionsByPromptNameFn != nil {
+		return f.GetAllVersionsByPromptNameFn(ctx, promptName)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.Prompts, nil
+}
+
+func (f *FakeRegistry) CreatePrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error) {
+	if f.CreatePromptFn != nil {
+		return f.CreatePromptFn(ctx, req)
+	}
+	return nil, database.ErrNotFound
+}
+
+func (f *FakeRegistry) DeletePrompt(ctx context.Context, promptName, version string) error {
+	if f.DeletePromptFn != nil {
+		return f.DeletePromptFn(ctx, promptName, version)
 	}
 	return database.ErrNotFound
 }

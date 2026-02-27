@@ -119,6 +119,32 @@ func runFromDirectory(ctx context.Context, projectDir string) error {
 		return fmt.Errorf("failed to refresh resolved MCP server config: %w", err)
 	}
 
+	var promptsForConfig []common.PythonPrompt
+	if hasManifestPrompts(manifest) {
+		if verbose {
+			fmt.Printf("[prompt-resolve] Detected %d prompts in manifest\n", len(manifest.Prompts))
+		}
+		resolved, err := agentutils.ResolveManifestPrompts(manifest, verbose)
+		if err != nil {
+			return fmt.Errorf("failed to resolve prompts: %w", err)
+		}
+		promptsForConfig = resolved
+	}
+
+	if err := common.RefreshPromptsConfig(
+		&common.MCPConfigTarget{BaseDir: projectDir, AgentName: manifest.Name},
+		promptsForConfig,
+		verbose,
+	); err != nil {
+		return fmt.Errorf("failed to refresh prompts config: %w", err)
+	}
+
+	if err := project.RegeneratePromptsLoader(projectDir, manifest, verbose); err != nil {
+		if verbose {
+			fmt.Printf("[prompt-resolve] Warning: could not regenerate prompts_loader.py: %v\n", err)
+		}
+	}
+
 	if err := project.RegenerateDockerCompose(projectDir, manifest, "", verbose); err != nil {
 		return fmt.Errorf("failed to refresh docker-compose.yaml: %w", err)
 	}
@@ -145,6 +171,11 @@ func skillsDirForAgentConfig(baseDir, agentName, version string) string {
 		return ""
 	}
 	return filepath.Join(configDir, "skills")
+}
+
+// hasManifestPrompts checks if the manifest has any prompt references.
+func hasManifestPrompts(manifest *models.AgentManifest) bool {
+	return len(manifest.Prompts) > 0
 }
 
 // runFromManifest runs an agent based on a manifest, with optional pre-resolved data.
@@ -296,6 +327,27 @@ func runFromManifest(ctx context.Context, manifest *models.AgentManifest, versio
 		if err := common.RefreshMCPConfig(
 			&common.MCPConfigTarget{BaseDir: workDir, AgentName: manifest.Name, Version: version},
 			serversForConfig,
+			verbose,
+		); err != nil {
+			return err
+		}
+
+		// Resolve prompts from registry if present
+		var promptsForConfig []common.PythonPrompt
+		if hasManifestPrompts(manifest) {
+			if verbose {
+				fmt.Printf("[prompt-resolve] Detected %d prompts in manifest\n", len(manifest.Prompts))
+			}
+			resolved, err := agentutils.ResolveManifestPrompts(manifest, verbose)
+			if err != nil {
+				return fmt.Errorf("failed to resolve prompts: %w", err)
+			}
+			promptsForConfig = resolved
+		}
+
+		if err := common.RefreshPromptsConfig(
+			&common.MCPConfigTarget{BaseDir: workDir, AgentName: manifest.Name, Version: version},
+			promptsForConfig,
 			verbose,
 		); err != nil {
 			return err
