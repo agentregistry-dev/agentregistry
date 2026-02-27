@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { adminApiClient, SkillJSON } from "@/lib/admin-api"
+import { createSkillV0, type SkillJson } from "@/lib/admin-api"
 
 interface AddSkillDialogProps {
   open: boolean
@@ -44,7 +44,7 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
       }
 
       // Construct the SkillJSON object
-      const skillData: SkillJSON = {
+      const skillData: SkillJson = {
         name: name.trim(),
         description: description.trim(),
         version: version.trim(),
@@ -65,7 +65,7 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
       }
 
       // Create the skill
-      await adminApiClient.createSkill(skillData)
+      await createSkillV0({ body: skillData, throwOnError: true })
 
       // Reset form
       setName("")

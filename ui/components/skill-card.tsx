@@ -9,19 +9,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Package, Calendar, Tag, ExternalLink, GitBranch, Github, Globe, Trash2, Zap, Upload } from "lucide-react"
+import { Package, Calendar, Tag, ExternalLink, GitBranch, Github, Globe, Trash2, Zap } from "lucide-react"
 
 interface SkillCardProps {
   skill: SkillResponse
   onDelete?: (skill: SkillResponse) => void
-  onPublish?: (skill: SkillResponse) => void
   showDelete?: boolean
-  showPublish?: boolean
   showExternalLinks?: boolean
   onClick?: () => void
 }
 
-export function SkillCard({ skill, onDelete, onPublish, showDelete = false, showPublish = false, showExternalLinks = true, onClick }: SkillCardProps) {
+export function SkillCard({ skill, onDelete, showDelete = false, showExternalLinks = true, onClick }: SkillCardProps) {
   const { skill: skillData, _meta } = skill
   const official = _meta?.['io.modelcontextprotocol.registry/official']
 
@@ -61,26 +59,6 @@ export function SkillCard({ skill, onDelete, onPublish, showDelete = false, show
           </div>
         </div>
         <div className="flex items-center gap-1 ml-2">
-          {showPublish && onPublish && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onPublish(skill)
-                  }}
-                >
-                  <Upload className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Publish this skill to your registry</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
           {showExternalLinks && skillData.repository?.url && (
             <Button
               variant="ghost"

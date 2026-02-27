@@ -10,19 +10,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Calendar, Tag, Bot, Upload, Container, Cpu, Brain, Github } from "lucide-react"
+import { Calendar, Tag, Bot, Container, Cpu, Brain, Github } from "lucide-react"
 
 interface AgentCardProps {
   agent: AgentResponse
   onDelete?: (agent: AgentResponse) => void
-  onPublish?: (agent: AgentResponse) => void
   showDelete?: boolean
-  showPublish?: boolean
   showExternalLinks?: boolean
   onClick?: () => void
 }
 
-export function AgentCard({ agent, onDelete, onPublish, showDelete = false, showPublish = false, onClick }: AgentCardProps) {
+export function AgentCard({ agent, onDelete, showDelete = false, onClick }: AgentCardProps) {
   const { agent: agentData, _meta } = agent
   const official = _meta?.['io.modelcontextprotocol.registry/official']
 
@@ -69,26 +67,6 @@ export function AgentCard({ agent, onDelete, onPublish, showDelete = false, show
           </div>
         </div>
         <div className="flex items-center gap-1 ml-2">
-          {showPublish && onPublish && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onPublish(agent)
-                  }}
-                >
-                  <Upload className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Publish this agent to your registry</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
         </div>
       </div>
 

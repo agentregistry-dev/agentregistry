@@ -7,13 +7,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
-import { toast } from "sonner"
-import {
   X,
   Package,
   Calendar,
@@ -25,16 +18,14 @@ import {
   Link,
   ArrowLeft,
   Zap,
-  Upload,
 } from "lucide-react"
 
 interface SkillDetailProps {
   skill: SkillResponse
   onClose: () => void
-  onPublish?: (skill: SkillResponse) => void
 }
 
-export function SkillDetail({ skill, onClose, onPublish }: SkillDetailProps) {
+export function SkillDetail({ skill, onClose }: SkillDetailProps) {
   const [activeTab, setActiveTab] = useState("overview")
   
   const { skill: skillData, _meta } = skill
@@ -95,23 +86,6 @@ export function SkillDetail({ skill, onClose, onPublish }: SkillDetailProps) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    onClick={() => onPublish && onPublish(skill)}
-                    className="gap-2"
-                  >
-                    <Upload className="h-4 w-4" />
-                    Publish
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Publish this skill to your registry</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
             <Button variant="ghost" size="icon" onClick={onClose}>
               <X className="h-5 w-5" />
             </Button>
