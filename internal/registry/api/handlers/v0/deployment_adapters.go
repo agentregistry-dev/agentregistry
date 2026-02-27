@@ -93,7 +93,7 @@ func (a *kubernetesDeploymentAdapter) Deploy(ctx context.Context, req *models.De
 		env = map[string]string{}
 	}
 	switch req.ResourceType {
-	case "", "mcp":
+	case "mcp":
 		return a.registry.DeployServer(ctx, req.ServerName, req.Version, env, req.PreferRemote, providerID)
 	case "agent":
 		return a.registry.DeployAgent(ctx, req.ServerName, req.Version, env, req.PreferRemote, providerID)

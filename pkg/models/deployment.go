@@ -18,7 +18,6 @@ type Deployment struct {
 	ProviderConfig   JSONObject        `json:"providerConfig,omitempty"`
 	ProviderMetadata JSONObject        `json:"providerMetadata,omitempty"`
 	PreferRemote     bool              `json:"preferRemote"`
-	DeployedBy       string            `json:"deployedBy,omitempty"`
 	Error            string            `json:"error,omitempty"`
 	DeployedAt       time.Time         `json:"deployedAt"`
 	UpdatedAt        time.Time         `json:"updatedAt"`

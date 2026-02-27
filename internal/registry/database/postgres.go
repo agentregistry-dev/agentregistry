@@ -2570,9 +2570,9 @@ func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deploymen
 	query := `
 		INSERT INTO deployments (
 			id, server_name, version, status, config, prefer_remote, resource_type,
-			origin, provider_id, provider_config, provider_metadata, deployed_by, error
+			origin, provider_id, provider_config, provider_metadata, error
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, ''), $10, $11, $12, $13)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, ''), $10, $11, $12)
 	`
 
 	_, err = executor.Exec(ctx, query,
@@ -2587,7 +2587,6 @@ func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deploymen
 		providerID,
 		providerConfigJSON,
 		providerMetadataJSON,
-		deployment.DeployedBy,
 		deployment.Error,
 	)
 	if err != nil {
@@ -2609,7 +2608,7 @@ func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx, filter *mod
 
 	query := `SELECT
 			d.id, d.server_name, d.version, d.deployed_at, d.updated_at, d.status, d.config, d.prefer_remote, d.resource_type,
-			d.origin, COALESCE(d.provider_id, ''), COALESCE(d.provider_config, '{}'::jsonb), COALESCE(d.provider_metadata, '{}'::jsonb), COALESCE(d.deployed_by, ''), COALESCE(d.error, '')
+			d.origin, COALESCE(d.provider_id, ''), COALESCE(d.provider_config, '{}'::jsonb), COALESCE(d.provider_metadata, '{}'::jsonb), COALESCE(d.error, '')
 		FROM deployments d`
 	if needsProviderJoin {
 		query += ` LEFT JOIN providers p ON p.id = d.provider_id`
@@ -2646,7 +2645,6 @@ func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx, filter *mod
 			&d.ProviderID,
 			&providerConfigJSON,
 			&providerMetadataJSON,
-			&d.DeployedBy,
 			&d.Error,
 		)
 		if err != nil {
@@ -2727,7 +2725,7 @@ func (db *PostgreSQL) GetDeploymentByID(ctx context.Context, tx pgx.Tx, id strin
 	executor := db.getExecutor(tx)
 	query := `SELECT
 			id, server_name, version, deployed_at, updated_at, status, config, prefer_remote, resource_type,
-			origin, COALESCE(provider_id, ''), COALESCE(provider_config, '{}'::jsonb), COALESCE(provider_metadata, '{}'::jsonb), COALESCE(deployed_by, ''), COALESCE(error, '')
+			origin, COALESCE(provider_id, ''), COALESCE(provider_config, '{}'::jsonb), COALESCE(provider_metadata, '{}'::jsonb), COALESCE(error, '')
 		FROM deployments
 		WHERE id = $1`
 
@@ -2749,7 +2747,6 @@ func (db *PostgreSQL) GetDeploymentByID(ctx context.Context, tx pgx.Tx, id strin
 		&d.ProviderID,
 		&providerConfigJSON,
 		&providerMetadataJSON,
-		&d.DeployedBy,
 		&d.Error,
 	)
 	if err != nil {
