@@ -25,8 +25,11 @@ func TestDeploymentResourceIndexFiltersInactiveStatuses(t *testing.T) {
 	index := deploymentResourceIndex(context.Background(), reg)
 	key := deploymentResourceKey{resourceType: "mcp", resourceName: "io.test/server"}
 
-	require.Len(t, index[key], 1)
+	require.Len(t, index[key], 2)
 	assert.Equal(t, "dep-active", index[key][0].ID)
+	assert.Equal(t, "deployed", index[key][0].Status)
+	assert.Equal(t, "dep-cancelled", index[key][1].ID)
+	assert.Equal(t, "cancelled", index[key][1].Status)
 }
 
 func TestAttachServerDeploymentMetaMatchesVersionAndLatest(t *testing.T) {

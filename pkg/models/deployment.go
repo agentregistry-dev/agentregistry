@@ -30,7 +30,7 @@ type KubernetesProviderMetadata struct {
 
 type JSONObject map[string]any
 
-func (o JSONObject) UnmarshalInto(v interface{}) error {
+func (o JSONObject) UnmarshalInto(v any) error {
 	if o == nil {
 		return nil
 	}
@@ -42,7 +42,7 @@ func (o JSONObject) UnmarshalInto(v interface{}) error {
 	return json.Unmarshal(b, v)
 }
 
-func UnmarshalFrom(v interface{}) (JSONObject, error) {
+func UnmarshalFrom(v any) (JSONObject, error) {
 	if v == nil {
 		return JSONObject{}, nil
 	}

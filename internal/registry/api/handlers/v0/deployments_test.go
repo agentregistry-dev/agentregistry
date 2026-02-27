@@ -196,7 +196,10 @@ func TestCreateDeployment_UsesAdapterWhenRegistered(t *testing.T) {
 
 	assert.True(t, adapter.deployCalled)
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), "adapter-dep-1")
+	var got models.Deployment
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+	assert.NotEmpty(t, got.ID)
+	assert.Equal(t, "io.github.user/weather", got.ServerName)
 }
 
 func TestCreateDeployment_InvalidInputFromAdapterReturnsBadRequest(t *testing.T) {

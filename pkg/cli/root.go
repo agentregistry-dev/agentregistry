@@ -48,11 +48,7 @@ var (
 	cliOptions    CLIOptions
 	registryURL   string
 	registryToken string
-	verbose       bool
 )
-
-// APIClient is the shared API client used by CLI commands after pre-run.
-var APIClient *client.Client
 
 // Configure applies options to the root command (e.g. for tests or alternate entry points).
 func Configure(opts CLIOptions) {
@@ -80,7 +76,6 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
-		APIClient = c
 		agentutils.SetDefaultRegistryURL(c.BaseURL)
 		mcp.SetAPIClient(c)
 		agent.SetAPIClient(c)

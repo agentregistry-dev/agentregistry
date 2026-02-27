@@ -952,6 +952,15 @@ func TestCleanupExistingDeployment(t *testing.T) {
 			removeCalled := false
 
 			mockDB := &deploymentMockDB{
+				getDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, _ string) (*models.Deployment, error) {
+					if tt.lookupErr != nil {
+						return nil, tt.lookupErr
+					}
+					if tt.existingDeployment != nil {
+						return tt.existingDeployment, nil
+					}
+					return nil, database.ErrNotFound
+				},
 				removeDeploymentByIdFn: func(_ context.Context, _ pgx.Tx, id string) error {
 					removeCalled = true
 					if tt.removeErr != nil {
@@ -980,7 +989,12 @@ func TestCleanupExistingDeployment(t *testing.T) {
 // the methods needed for testing deployment cleanup logic. All other methods panic.
 type deploymentMockDB struct {
 	database.Database      // embed interface so unimplemented methods panic
+	getDeploymentByIDFn    func(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error)
 	removeDeploymentByIdFn func(ctx context.Context, tx pgx.Tx, id string) error
+}
+
+func (m *deploymentMockDB) GetDeploymentByID(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error) {
+	return m.getDeploymentByIDFn(ctx, tx, id)
 }
 
 func (m *deploymentMockDB) RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id string) error {
