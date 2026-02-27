@@ -35,9 +35,7 @@ jobs:
           driver-opts: network=host
 
       - name: Install Go tool dependencies
-        working-directory: go
-        run: |
-          go install tool
+        run: go install tool
 
       - name: Run E2E tests
         env:
