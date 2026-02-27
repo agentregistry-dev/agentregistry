@@ -9,27 +9,26 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Package, Calendar, Tag, ExternalLink, GitBranch, Star, Github, Globe, Trash2, Upload, ShieldCheck, BadgeCheck, Play } from "lucide-react"
+import { Package, Calendar, Tag, ExternalLink, GitBranch, Star, Github, Globe, Trash2, ShieldCheck, BadgeCheck, Play } from "lucide-react"
 
 interface ServerCardProps {
   server: ServerResponse
   onDelete?: (server: ServerResponse) => void
-  onPublish?: (server: ServerResponse) => void
   onDeploy?: (server: ServerResponse) => void
   showDelete?: boolean
-  showPublish?: boolean
   showDeploy?: boolean
   showExternalLinks?: boolean
   onClick?: () => void
   versionCount?: number
 }
 
-export function ServerCard({ server, onDelete, onPublish, onDeploy, showDelete = false, showPublish = false, showDeploy = false, showExternalLinks = true, onClick, versionCount }: ServerCardProps) {
+export function ServerCard({ server, onDelete, onDeploy, showDelete = false, showDeploy = false, showExternalLinks = true, onClick, versionCount }: ServerCardProps) {
   const { server: serverData, _meta } = server
   const official = _meta?.['io.modelcontextprotocol.registry/official']
   
-  // Extract metadata
-  const publisherMetadata = serverData._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['aregistry.ai/metadata']
+  // Extract metadata - cast through Record<string, any> since the generated types use { [key: string]: unknown }
+  const publisherProvided = serverData._meta?.['io.modelcontextprotocol.registry/publisher-provided'] as Record<string, any> | undefined
+  const publisherMetadata = publisherProvided?.['aregistry.ai/metadata'] as Record<string, any> | undefined
   const githubStars = publisherMetadata?.stars
   const identityData = publisherMetadata?.identity
 
@@ -124,26 +123,6 @@ export function ServerCard({ server, onDelete, onPublish, onDeploy, showDelete =
               </TooltipTrigger>
               <TooltipContent>
                 <p>Deploy this server</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
-          {showPublish && onPublish && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onPublish(server)
-                  }}
-                >
-                  <Upload className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Publish this server to your registry</p>
               </TooltipContent>
             </Tooltip>
           )}
