@@ -64,14 +64,6 @@ func Root() *cobra.Command {
 	return rootCmd
 }
 
-// Execute runs the root command with default flags (e.g. verbose) and exits on error.
-func Execute() {
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "V", false, "Verbose output")
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
-	}
-}
-
 var rootCmd = &cobra.Command{
 	Use:   "arctl",
 	Short: "Agent Registry CLI",
@@ -89,9 +81,9 @@ var rootCmd = &cobra.Command{
 		}
 
 		APIClient = c
+		agentutils.SetDefaultRegistryURL(c.BaseURL)
 		mcp.SetAPIClient(c)
 		agent.SetAPIClient(c)
-		agentutils.SetDefaultRegistryURL(c.BaseURL)
 		skill.SetAPIClient(c)
 		cli.SetAPIClient(c)
 		return nil

@@ -231,6 +231,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	routeOpts := &router.RouteOptions{
 		ProviderPlatforms:   providerPlatforms,
 		DeploymentPlatforms: deploymentPlatforms,
+		ExtraRoutes:         options.ExtraRoutes,
 	}
 
 	// Initialize job manager and indexer for embeddings.

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
@@ -20,7 +21,7 @@ type DeploymentRequest struct {
 	ServerName     string            `json:"serverName" doc:"Server name to deploy" example:"io.github.user/weather"`
 	Version        string            `json:"version" doc:"Version to deploy (use 'latest' for latest version)" default:"latest" example:"1.0.0"`
 	Env            map[string]string `json:"env,omitempty" doc:"Deployment environment variables."`
-	ProviderConfig map[string]any    `json:"providerConfig,omitempty" doc:"Optional provider-specific deployment configuration."`
+	ProviderConfig map[string]any    `json:"providerConfig,omitempty" doc:"Optional provider-specific deployment settings (not env vars)."`
 	PreferRemote   bool              `json:"preferRemote,omitempty" doc:"Prefer remote deployment over local" default:"false"`
 	ResourceType   string            `json:"resourceType,omitempty" doc:"Type of resource to deploy (mcp, agent)" default:"mcp" example:"mcp" enum:"mcp,agent"`
 	ProviderID     string            `json:"providerId,omitempty" doc:"Concrete provider instance ID. Defaults to local singleton when omitted."`
@@ -74,14 +75,6 @@ func deploymentPlatform(ctx context.Context, registry service.RegistryService, d
 		return ""
 	}
 	return normalizePlatform(provider.Platform)
-}
-
-func unsupportedDeploymentPlatformError(platform string) error {
-	p := strings.TrimSpace(platform)
-	if p == "" {
-		p = "unknown"
-	}
-	return huma.Error400BadRequest("Deployment platform is not supported: " + p)
 }
 
 // RegisterDeploymentsEndpoints registers all deployment-related endpoints
@@ -164,7 +157,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		Method:      http.MethodPost,
 		Path:        basePath + "/deployments",
 		Summary:     "Deploy a resource",
-		Description: "Deploy a resource (MCP server or agent) with optional configuration. Defaults to MCP server if resourceType is not specified.",
+		Description: "Deploy a resource (MCP server or agent) with deployment env vars (`env`) and optional provider-specific settings (`providerConfig`). Defaults to MCP server if resourceType is not specified.",
 		Tags:        []string{"deployments"},
 	}, func(ctx context.Context, input *struct {
 		Body DeploymentRequest
@@ -190,25 +183,29 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		}
 		platform := normalizePlatform(provider.Platform)
 
-		var deployment *models.Deployment
-
-		// Use adapter dispatch when present (built-ins + enterprise extensions).
-		adapter, ok := extensions.ResolveDeploymentAdapter(platform)
-		if !ok {
-			return nil, unsupportedDeploymentPlatformError(platform)
-		}
 		deploymentReq := &models.Deployment{
-			ServerName:     input.Body.ServerName,
-			Version:        input.Body.Version,
-			Config:         input.Body.Env,
-			ProviderConfig: input.Body.ProviderConfig,
-			PreferRemote:   input.Body.PreferRemote,
-			ResourceType:   resourceType,
-			ProviderID:     providerID,
+			ID:               "",
+			ServerName:       input.Body.ServerName,
+			Version:          input.Body.Version,
+			ProviderID:       providerID,
+			ResourceType:     resourceType,
+			Status:           "",
+			Origin:           "",
+			Env:              input.Body.Env,
+			ProviderConfig:   input.Body.ProviderConfig,
+			ProviderMetadata: nil,
+			PreferRemote:     input.Body.PreferRemote,
+			DeployedBy:       "",
+			Error:            "",
+			DeployedAt:       time.Time{},
+			UpdatedAt:        time.Time{},
 		}
-		deployment, err = adapter.Deploy(ctx, deploymentReq)
 
+		deployment, err := registry.CreateDeployment(ctx, deploymentReq, platform)
 		if err != nil {
+			if errors.Is(err, database.ErrInvalidInput) {
+				return nil, huma.Error400BadRequest("Invalid deployment request")
+			}
 			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Resource not found in registry")
 			}
@@ -248,11 +245,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		}
 
 		platform := deploymentPlatform(ctx, registry, deployment)
-		adapter, ok := extensions.ResolveDeploymentAdapter(platform)
-		if !ok {
-			return nil, unsupportedDeploymentPlatformError(platform)
-		}
-		err = adapter.Undeploy(ctx, deployment)
+		err = registry.UndeployDeployment(ctx, deployment, platform)
 		if err != nil {
 			if errors.Is(err, database.ErrInvalidInput) {
 				return nil, huma.Error409Conflict("Discovered deployments cannot be deleted directly")
@@ -284,12 +277,14 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		}
 
 		platform := deploymentPlatform(ctx, registry, deployment)
-		adapter, ok := extensions.ResolveDeploymentAdapter(platform)
-		if !ok {
-			return nil, unsupportedDeploymentPlatformError(platform)
-		}
-		logs, err := adapter.GetLogs(ctx, deployment)
+		logs, err := registry.GetDeploymentLogs(ctx, deployment, platform)
 		if err != nil {
+			if errors.Is(err, database.ErrInvalidInput) {
+				return nil, huma.Error400BadRequest("Invalid deployment logs request")
+			}
+			if errors.Is(err, database.ErrNotFound) {
+				return nil, huma.Error404NotFound("Deployment logs not found")
+			}
 			if errors.Is(err, errDeploymentNotSupported) {
 				return nil, huma.Error501NotImplemented("Deployment logs are not supported for this provider")
 			}
@@ -323,11 +318,13 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		}
 
 		platform := deploymentPlatform(ctx, registry, deployment)
-		adapter, ok := extensions.ResolveDeploymentAdapter(platform)
-		if !ok {
-			return nil, unsupportedDeploymentPlatformError(platform)
-		}
-		if err := adapter.Cancel(ctx, deployment); err != nil {
+		if err := registry.CancelDeployment(ctx, deployment, platform); err != nil {
+			if errors.Is(err, database.ErrInvalidInput) {
+				return nil, huma.Error400BadRequest("Invalid deployment cancel request")
+			}
+			if errors.Is(err, database.ErrNotFound) {
+				return nil, huma.Error404NotFound("Deployment job not found")
+			}
 			if errors.Is(err, errDeploymentNotSupported) {
 				return nil, huma.Error501NotImplemented("Deployment cancel is not supported for this provider")
 			}

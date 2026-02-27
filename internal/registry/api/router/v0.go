@@ -24,6 +24,9 @@ type RouteOptions struct {
 	// Optional deployment adapters keyed by provider platform type.
 	ProviderPlatforms   map[string]registrytypes.ProviderPlatformAdapter
 	DeploymentPlatforms map[string]registrytypes.DeploymentPlatformAdapter
+
+	// Optional callback for integration-owned route registration.
+	ExtraRoutes func(api huma.API, pathPrefix string)
 }
 
 // RegisterRoutes registers all API routes under /v0.
@@ -61,5 +64,8 @@ func RegisterRoutes(
 		if opts.Mux != nil {
 			v0.RegisterEmbeddingsSSEHandler(opts.Mux, pathPrefix, opts.Indexer, opts.JobManager)
 		}
+	}
+	if opts != nil && opts.ExtraRoutes != nil {
+		opts.ExtraRoutes(api, pathPrefix)
 	}
 }

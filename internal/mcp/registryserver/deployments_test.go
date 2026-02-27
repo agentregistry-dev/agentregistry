@@ -24,7 +24,7 @@ func TestDeploymentTools_ListAndGet(t *testing.T) {
 		Version:      "1.0.0",
 		ResourceType: "mcp",
 		PreferRemote: false,
-		Config:       map[string]string{"ENV_FOO": "bar"},
+		Env:          map[string]string{"ENV_FOO": "bar"},
 	}
 
 	reg := servicetesting.NewFakeRegistry()
@@ -87,11 +87,11 @@ func TestDeploymentTools_NoAuthConfigured_AllowsRequests(t *testing.T) {
 	reg := servicetesting.NewFakeRegistry()
 	reg.GetDeploymentsFn = func(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 		return []*models.Deployment{
-			{ServerName: "com.example/no-auth", Version: "1.0.0", ResourceType: "mcp", Config: map[string]string{}},
+			{ServerName: "com.example/no-auth", Version: "1.0.0", ResourceType: "mcp", Env: map[string]string{}},
 		}, nil
 	}
 	reg.GetDeploymentByIDFn = func(ctx context.Context, id string) (*models.Deployment, error) {
-		return &models.Deployment{ID: id, ServerName: "com.example/no-auth", Version: "1.0.0", ResourceType: "mcp", Config: map[string]string{}}, nil
+		return &models.Deployment{ID: id, ServerName: "com.example/no-auth", Version: "1.0.0", ResourceType: "mcp", Env: map[string]string{}}, nil
 	}
 
 	server := NewServer(reg)
@@ -148,13 +148,13 @@ func TestDeploymentTools_DeployRemove(t *testing.T) {
 		ServerName:   "com.example/echo",
 		Version:      "1.0.0",
 		ResourceType: "mcp",
-		Config:       map[string]string{"ENV": "prod"},
+		Env:          map[string]string{"ENV": "prod"},
 	}
 	agentDep := &models.Deployment{
 		ServerName:   "com.example/agent",
 		Version:      "2.0.0",
 		ResourceType: "agent",
-		Config:       map[string]string{"FOO": "bar"},
+		Env:          map[string]string{"FOO": "bar"},
 	}
 
 	var removed bool
@@ -203,7 +203,7 @@ func TestDeploymentTools_DeployRemove(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &dep))
 	assert.Equal(t, "com.example/echo", dep.ServerName)
 	assert.Equal(t, "mcp", dep.ResourceType)
-	assert.Equal(t, "prod", dep.Config["ENV"])
+	assert.Equal(t, "prod", dep.Env["ENV"])
 
 	// deploy_agent
 	res, err = clientSession.CallTool(ctx, &mcp.CallToolParams{
@@ -243,13 +243,13 @@ func TestDeploymentTools_FilterResourceType(t *testing.T) {
 			ServerName:   "com.example/echo",
 			Version:      "1.0.0",
 			ResourceType: "mcp",
-			Config:       map[string]string{},
+			Env:          map[string]string{},
 		},
 		{
 			ServerName:   "com.example/echo-agent",
 			Version:      "2.0.0",
 			ResourceType: "agent",
-			Config:       map[string]string{},
+			Env:          map[string]string{},
 		},
 	}
 

@@ -2534,14 +2534,18 @@ func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deploymen
 
 	executor := db.getExecutor(tx)
 
-	configJSON, err := json.Marshal(deployment.Config)
+	envJSON, err := json.Marshal(deployment.Env)
 	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
+		return fmt.Errorf("failed to marshal deployment env: %w", err)
 	}
 
-	cloudMetadataJSON, err := json.Marshal(deployment.CloudMetadata)
+	providerConfigJSON, err := json.Marshal(deployment.ProviderConfig)
 	if err != nil {
-		return fmt.Errorf("failed to marshal cloud metadata: %w", err)
+		return fmt.Errorf("failed to marshal provider config: %w", err)
+	}
+	providerMetadataJSON, err := json.Marshal(deployment.ProviderMetadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal provider metadata: %w", err)
 	}
 
 	// Default to 'mcp' if not specified
@@ -2566,9 +2570,9 @@ func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deploymen
 	query := `
 		INSERT INTO deployments (
 			id, server_name, version, status, config, prefer_remote, resource_type,
-			origin, provider_id, region, cloud_resource_id, cloud_metadata, deployed_by, error
+			origin, provider_id, provider_config, provider_metadata, deployed_by, error
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, ''), NULLIF($10, ''), NULLIF($11, ''), $12, $13, $14)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, ''), $10, $11, $12, $13)
 	`
 
 	_, err = executor.Exec(ctx, query,
@@ -2576,14 +2580,13 @@ func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deploymen
 		deployment.ServerName,
 		deployment.Version,
 		deployment.Status,
-		configJSON,
+		envJSON,
 		deployment.PreferRemote,
 		resourceType,
 		origin,
 		providerID,
-		deployment.Region,
-		deployment.CloudResourceID,
-		cloudMetadataJSON,
+		providerConfigJSON,
+		providerMetadataJSON,
 		deployment.DeployedBy,
 		deployment.Error,
 	)
@@ -2606,7 +2609,7 @@ func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx, filter *mod
 
 	query := `SELECT
 			d.id, d.server_name, d.version, d.deployed_at, d.updated_at, d.status, d.config, d.prefer_remote, d.resource_type,
-			d.origin, COALESCE(d.provider_id, ''), COALESCE(d.region, ''), COALESCE(d.cloud_resource_id, ''), COALESCE(d.cloud_metadata, '{}'::jsonb), COALESCE(d.deployed_by, ''), COALESCE(d.error, '')
+			d.origin, COALESCE(d.provider_id, ''), COALESCE(d.provider_config, '{}'::jsonb), COALESCE(d.provider_metadata, '{}'::jsonb), COALESCE(d.deployed_by, ''), COALESCE(d.error, '')
 		FROM deployments d`
 	if needsProviderJoin {
 		query += ` LEFT JOIN providers p ON p.id = d.provider_id`
@@ -2625,8 +2628,9 @@ func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx, filter *mod
 	var deployments []*models.Deployment
 	for rows.Next() {
 		var d models.Deployment
-		var configJSON []byte
-		var cloudMetadataJSON []byte
+		var envJSON []byte
+		var providerConfigJSON []byte
+		var providerMetadataJSON []byte
 
 		err := rows.Scan(
 			&d.ID,
@@ -2635,14 +2639,13 @@ func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx, filter *mod
 			&d.DeployedAt,
 			&d.UpdatedAt,
 			&d.Status,
-			&configJSON,
+			&envJSON,
 			&d.PreferRemote,
 			&d.ResourceType,
 			&d.Origin,
 			&d.ProviderID,
-			&d.Region,
-			&d.CloudResourceID,
-			&cloudMetadataJSON,
+			&providerConfigJSON,
+			&providerMetadataJSON,
 			&d.DeployedBy,
 			&d.Error,
 		)
@@ -2650,21 +2653,19 @@ func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx, filter *mod
 			return nil, fmt.Errorf("failed to scan deployment: %w", err)
 		}
 
-		if len(configJSON) > 0 {
-			if err := json.Unmarshal(configJSON, &d.Config); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+		if len(envJSON) > 0 {
+			if err := json.Unmarshal(envJSON, &d.Env); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal deployment env: %w", err)
 			}
 		}
-		if d.Config == nil {
-			d.Config = make(map[string]string)
+		if d.Env == nil {
+			d.Env = make(map[string]string)
 		}
-		if len(cloudMetadataJSON) > 0 {
-			if err := json.Unmarshal(cloudMetadataJSON, &d.CloudMetadata); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal cloud metadata: %w", err)
-			}
+		if err := json.Unmarshal(providerConfigJSON, &d.ProviderConfig); err != nil {
+			return nil, fmt.Errorf("failed to scan provider config: %w", err)
 		}
-		if d.CloudMetadata == nil {
-			d.CloudMetadata = make(map[string]any)
+		if err := json.Unmarshal(providerMetadataJSON, &d.ProviderMetadata); err != nil {
+			return nil, fmt.Errorf("failed to scan provider metadata: %w", err)
 		}
 
 		deployments = append(deployments, &d)
@@ -2726,13 +2727,14 @@ func (db *PostgreSQL) GetDeploymentByID(ctx context.Context, tx pgx.Tx, id strin
 	executor := db.getExecutor(tx)
 	query := `SELECT
 			id, server_name, version, deployed_at, updated_at, status, config, prefer_remote, resource_type,
-			origin, COALESCE(provider_id, ''), COALESCE(region, ''), COALESCE(cloud_resource_id, ''), COALESCE(cloud_metadata, '{}'::jsonb), COALESCE(deployed_by, ''), COALESCE(error, '')
+			origin, COALESCE(provider_id, ''), COALESCE(provider_config, '{}'::jsonb), COALESCE(provider_metadata, '{}'::jsonb), COALESCE(deployed_by, ''), COALESCE(error, '')
 		FROM deployments
 		WHERE id = $1`
 
 	var d models.Deployment
-	var configJSON []byte
-	var cloudMetadataJSON []byte
+	var envJSON []byte
+	var providerConfigJSON []byte
+	var providerMetadataJSON []byte
 	err := executor.QueryRow(ctx, query, id).Scan(
 		&d.ID,
 		&d.ServerName,
@@ -2740,14 +2742,13 @@ func (db *PostgreSQL) GetDeploymentByID(ctx context.Context, tx pgx.Tx, id strin
 		&d.DeployedAt,
 		&d.UpdatedAt,
 		&d.Status,
-		&configJSON,
+		&envJSON,
 		&d.PreferRemote,
 		&d.ResourceType,
 		&d.Origin,
 		&d.ProviderID,
-		&d.Region,
-		&d.CloudResourceID,
-		&cloudMetadataJSON,
+		&providerConfigJSON,
+		&providerMetadataJSON,
 		&d.DeployedBy,
 		&d.Error,
 	)
@@ -2757,21 +2758,19 @@ func (db *PostgreSQL) GetDeploymentByID(ctx context.Context, tx pgx.Tx, id strin
 		}
 		return nil, fmt.Errorf("failed to get deployment by id: %w", err)
 	}
-	if len(configJSON) > 0 {
-		if err := json.Unmarshal(configJSON, &d.Config); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	if len(envJSON) > 0 {
+		if err := json.Unmarshal(envJSON, &d.Env); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal deployment env: %w", err)
 		}
 	}
-	if len(cloudMetadataJSON) > 0 {
-		if err := json.Unmarshal(cloudMetadataJSON, &d.CloudMetadata); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal cloud metadata: %w", err)
-		}
+	if d.Env == nil {
+		d.Env = make(map[string]string)
 	}
-	if d.Config == nil {
-		d.Config = make(map[string]string)
+	if err := json.Unmarshal(providerConfigJSON, &d.ProviderConfig); err != nil {
+		return nil, fmt.Errorf("failed to scan provider config: %w", err)
 	}
-	if d.CloudMetadata == nil {
-		d.CloudMetadata = make(map[string]any)
+	if err := json.Unmarshal(providerMetadataJSON, &d.ProviderMetadata); err != nil {
+		return nil, fmt.Errorf("failed to scan provider metadata: %w", err)
 	}
 	artifactType := auth.PermissionArtifactTypeServer
 	if d.ResourceType == "agent" {

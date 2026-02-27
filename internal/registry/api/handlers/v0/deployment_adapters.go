@@ -3,108 +3,128 @@ package v0
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 var errDeploymentNotSupported = errors.New("deployment operation is not supported for this provider platform type")
 
-type deploymentAdapterBase struct {
-	providerPlatform string
-	registry         service.RegistryService
+type localDeploymentAdapter struct {
+	registry service.RegistryService
 }
 
-func (a *deploymentAdapterBase) Platform() string {
-	return a.providerPlatform
+type kubernetesDeploymentAdapter struct {
+	registry service.RegistryService
 }
 
-func (a *deploymentAdapterBase) SupportedResourceTypes() []string {
+func (a *localDeploymentAdapter) Platform() string { return "local" }
+
+func (a *localDeploymentAdapter) SupportedResourceTypes() []string {
 	return []string{"mcp", "agent"}
 }
 
-func (a *deploymentAdapterBase) Deploy(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
+func (a *localDeploymentAdapter) Deploy(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
 	if req == nil {
-		return nil, errors.New("deployment request is required")
+		return nil, fmt.Errorf("deployment request is required: %w", database.ErrInvalidInput)
 	}
-	resourceType := req.ResourceType
-	if resourceType == "" {
-		resourceType = "mcp"
+	if len(req.ProviderConfig) > 0 {
+		return nil, fmt.Errorf("providerConfig is not supported for local deployments: %w", database.ErrInvalidInput)
 	}
-	if req.ProviderID == "" && a.providerPlatform == "local" {
-		req.ProviderID = LocalProviderID
+	providerID := req.ProviderID
+	if providerID == "" {
+		providerID = LocalProviderID
 	}
-	config, err := normalizeStringConfig(req.Config, req.ProviderConfig)
-	if err != nil {
-		return nil, err
+	env := req.Env
+	if env == nil {
+		env = map[string]string{}
 	}
-
-	switch resourceType {
+	switch req.ResourceType {
 	case "mcp":
-		return a.registry.DeployServer(ctx, req.ServerName, req.Version, config, req.PreferRemote, req.ProviderID)
+		return a.registry.DeployServer(ctx, req.ServerName, req.Version, env, req.PreferRemote, providerID)
 	case "agent":
-		return a.registry.DeployAgent(ctx, req.ServerName, req.Version, config, req.PreferRemote, req.ProviderID)
+		return a.registry.DeployAgent(ctx, req.ServerName, req.Version, env, req.PreferRemote, providerID)
 	default:
-		return nil, errors.New("invalid resource type")
+		return nil, fmt.Errorf("invalid resource type %q: %w", req.ResourceType, database.ErrInvalidInput)
 	}
 }
 
-func (a *deploymentAdapterBase) Undeploy(ctx context.Context, deployment *models.Deployment) error {
+func (a *localDeploymentAdapter) Undeploy(ctx context.Context, deployment *models.Deployment) error {
 	if deployment == nil || deployment.ID == "" {
-		return errors.New("deployment id is required")
+		return fmt.Errorf("deployment id is required: %w", database.ErrInvalidInput)
 	}
 	return a.registry.RemoveDeploymentByID(ctx, deployment.ID)
 }
 
-func (a *deploymentAdapterBase) GetLogs(_ context.Context, _ *models.Deployment) ([]string, error) {
+func (a *localDeploymentAdapter) GetLogs(_ context.Context, _ *models.Deployment) ([]string, error) {
 	return nil, errDeploymentNotSupported
 }
 
-func (a *deploymentAdapterBase) Cancel(_ context.Context, _ *models.Deployment) error {
+func (a *localDeploymentAdapter) Cancel(_ context.Context, _ *models.Deployment) error {
 	return errDeploymentNotSupported
 }
 
-func (a *deploymentAdapterBase) Discover(_ context.Context, _ string) ([]*models.Deployment, error) {
-	// Built-in local/kubernetes runtime discovery is handled through existing
-	// reconciliation flows today; this adapter method is a no-op placeholder.
+func (a *localDeploymentAdapter) Discover(_ context.Context, _ string) ([]*models.Deployment, error) {
 	return []*models.Deployment{}, nil
 }
 
-type localDeploymentAdapter struct {
-	deploymentAdapterBase
+func (a *kubernetesDeploymentAdapter) Platform() string { return "kubernetes" }
+
+func (a *kubernetesDeploymentAdapter) SupportedResourceTypes() []string {
+	return []string{"mcp", "agent"}
 }
 
-type kubernetesDeploymentAdapter struct {
-	deploymentAdapterBase
+func (a *kubernetesDeploymentAdapter) Deploy(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
+	if req == nil {
+		return nil, fmt.Errorf("deployment request is required: %w", database.ErrInvalidInput)
+	}
+	if len(req.ProviderConfig) > 0 {
+		return nil, fmt.Errorf("providerConfig is not supported for kubernetes deployments: %w", database.ErrInvalidInput)
+	}
+	providerID := req.ProviderID
+	if providerID == "" {
+		providerID = "kubernetes-default"
+	}
+	env := req.Env
+	if env == nil {
+		env = map[string]string{}
+	}
+	switch req.ResourceType {
+	case "", "mcp":
+		return a.registry.DeployServer(ctx, req.ServerName, req.Version, env, req.PreferRemote, providerID)
+	case "agent":
+		return a.registry.DeployAgent(ctx, req.ServerName, req.Version, env, req.PreferRemote, providerID)
+	default:
+		return nil, fmt.Errorf("invalid resource type %q: %w", req.ResourceType, database.ErrInvalidInput)
+	}
 }
 
-// NOTE: local and kubernetes currently share the same adapter base behavior.
-// The registry service handles the runtime-specific paths today; keep these
-// concrete adapter types as explicit extension points for future divergence.
+func (a *kubernetesDeploymentAdapter) Undeploy(ctx context.Context, deployment *models.Deployment) error {
+	if deployment == nil || deployment.ID == "" {
+		return fmt.Errorf("deployment id is required: %w", database.ErrInvalidInput)
+	}
+	return a.registry.RemoveDeploymentByID(ctx, deployment.ID)
+}
+
+func (a *kubernetesDeploymentAdapter) GetLogs(_ context.Context, _ *models.Deployment) ([]string, error) {
+	return nil, errDeploymentNotSupported
+}
+
+func (a *kubernetesDeploymentAdapter) Cancel(_ context.Context, _ *models.Deployment) error {
+	return errDeploymentNotSupported
+}
+
+func (a *kubernetesDeploymentAdapter) Discover(_ context.Context, _ string) ([]*models.Deployment, error) {
+	return []*models.Deployment{}, nil
+}
 
 // DefaultDeploymentPlatformAdapters returns OSS deployment adapters for local and kubernetes.
 func DefaultDeploymentPlatformAdapters(registry service.RegistryService) map[string]registrytypes.DeploymentPlatformAdapter {
 	return map[string]registrytypes.DeploymentPlatformAdapter{
-		"local": &localDeploymentAdapter{
-			deploymentAdapterBase: deploymentAdapterBase{
-				providerPlatform: "local",
-				registry:         registry,
-			},
-		},
-		"kubernetes": &kubernetesDeploymentAdapter{
-			deploymentAdapterBase: deploymentAdapterBase{
-				providerPlatform: "kubernetes",
-				registry:         registry,
-			},
-		},
+		"local":      &localDeploymentAdapter{registry: registry},
+		"kubernetes": &kubernetesDeploymentAdapter{registry: registry},
 	}
-}
-
-func normalizeStringConfig(config map[string]string, providerConfig map[string]any) (map[string]string, error) {
-	_ = providerConfig // built-in adapters currently only support deployment env vars.
-	if len(config) > 0 {
-		return config, nil
-	}
-	return map[string]string{}, nil
 }
