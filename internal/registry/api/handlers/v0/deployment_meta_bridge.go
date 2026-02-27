@@ -2,7 +2,7 @@ package v0
 
 import (
 	"context"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
@@ -48,8 +48,15 @@ func deploymentResourceIndex(ctx context.Context, registry service.RegistryServi
 	}
 
 	for key := range index {
-		sort.Slice(index[key], func(i, j int) bool {
-			return index[key][i].UpdatedAt.After(index[key][j].UpdatedAt)
+		slices.SortFunc(index[key], func(a, b models.DeploymentSummary) int {
+			switch {
+			case a.UpdatedAt.After(b.UpdatedAt):
+				return -1
+			case a.UpdatedAt.Before(b.UpdatedAt):
+				return 1
+			default:
+				return 0
+			}
 		})
 	}
 
