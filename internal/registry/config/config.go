@@ -1,7 +1,10 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"log"
+	"os"
 
 	env "github.com/caarlos0/env/v11"
 	"github.com/joho/godotenv"
@@ -72,5 +75,26 @@ func NewConfig() *Config {
 	if err != nil {
 		log.Fatalf("failed to parse config: %v", err)
 	}
+
+	// Append a random suffix to RuntimeDir when the user has not set an
+	// explicit override via the AGENT_REGISTRY_RUNTIME_DIR env var. This
+	// prevents concurrent runs from sharing the same directory.
+	if os.Getenv("AGENT_REGISTRY_RUNTIME_DIR") == "" {
+		suffix, err := randomHex(8)
+		if err != nil {
+			log.Fatalf("failed to generate random runtime dir suffix: %v", err)
+		}
+		cfg.RuntimeDir = cfg.RuntimeDir + "-" + suffix
+	}
+
 	return &cfg
+}
+
+// randomHex returns a hex-encoded string of n random bytes.
+func randomHex(n int) (string, error) {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
