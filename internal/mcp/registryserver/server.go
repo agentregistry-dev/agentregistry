@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	restv0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
@@ -364,10 +365,14 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService) {
 		}
 		outIdx := 0
 		for _, d := range deployments {
-			if args.ResourceType != "" && d.ResourceType != args.ResourceType {
+			if args.ResourceType != "" && !strings.EqualFold(d.ResourceType, args.ResourceType) {
 				continue
 			}
-			resp.Deployments[outIdx] = *d
+			dep := *d
+			if dep.Config == nil {
+				dep.Config = map[string]string{}
+			}
+			resp.Deployments[outIdx] = dep
 			outIdx++
 		}
 		resp.Deployments = resp.Deployments[:outIdx]
@@ -387,7 +392,11 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService) {
 		if err != nil {
 			return nil, models.Deployment{}, err
 		}
-		return nil, *deployment, nil
+		dep := *deployment
+		if dep.Config == nil {
+			dep.Config = map[string]string{}
+		}
+		return nil, dep, nil
 	})
 
 	// Deploy server

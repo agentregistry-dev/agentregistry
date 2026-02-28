@@ -18,6 +18,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/kagent"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -234,7 +235,7 @@ func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx 
 	// Generate embedding asynchronously (non-blocking, best-effort)
 	if s.shouldGenerateEmbeddingsOnPublish() { //nolint:nestif
 		go func() {
-			bgCtx := context.Background()
+			bgCtx := auth.WithSystemContext(context.Background())
 			payload := embeddings.BuildServerEmbeddingPayload(&serverJSON)
 			if strings.TrimSpace(payload) == "" {
 				return
@@ -633,7 +634,7 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 	// Generate embedding asynchronously (non-blocking, best-effort)
 	if s.shouldGenerateEmbeddingsOnPublish() { //nolint:nestif
 		go func() {
-			bgCtx := context.Background()
+			bgCtx := auth.WithSystemContext(context.Background())
 			payload := embeddings.BuildAgentEmbeddingPayload(&agentJSON)
 			if strings.TrimSpace(payload) == "" {
 				return

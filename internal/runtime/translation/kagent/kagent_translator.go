@@ -239,6 +239,10 @@ func (t *translator) translateLocalMCPServer(server *api.MCPServer) (*kmcpv1alph
 	case api.TransportTypeStdio:
 		spec.TransportType = kmcpv1alpha1.TransportType("stdio")
 		spec.StdioTransport = &kmcpv1alpha1.StdioTransport{}
+		// Default port for transport adapter (matches KMCP CLI default)
+		if spec.Deployment.Port == 0 {
+			spec.Deployment.Port = 3000
+		}
 	default:
 		return nil, fmt.Errorf("unsupported MCP transport type %q for %s", server.Local.TransportType, server.Name)
 	}
