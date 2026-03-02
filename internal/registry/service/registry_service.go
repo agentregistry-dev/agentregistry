@@ -87,6 +87,16 @@ type DeploymentPlatformRuntimeTranslator interface {
 	RuntimeTranslator() api.RuntimeTranslator
 }
 
+// DeploymentPlatformResolvedMCPServerHook is an optional adapter hook that can
+// customize resolved registry MCP server requests per-platform.
+type DeploymentPlatformResolvedMCPServerHook interface {
+	ConfigureResolvedMCPServers(
+		ctx context.Context,
+		agent *registry.AgentRunRequest,
+		resolved []*registry.MCPServerRunRequest,
+	) ([]*registry.MCPServerRunRequest, error)
+}
+
 // NewRegistryService creates a new registry service with the provided database and configuration
 func NewRegistryService(
 	db database.Database,
@@ -1264,6 +1274,10 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 			}
 			continue
 		}
+		adapter, err := s.resolveDeploymentAdapter(providerPlatform)
+		if err != nil {
+			return fmt.Errorf("failed to resolve deployment adapter for platform %s: %w", providerPlatform, err)
+		}
 
 		// Resolve registry-type MCP servers from agent manifests
 		for _, agentReq := range requests.agents {
@@ -1271,12 +1285,10 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("failed to resolve MCP servers for agent %s: %w", agentReq.RegistryAgent.Name, err)
 			}
-
-			// Propagate KAGENT_NAMESPACE from agent to resolved MCP servers
-			// so they deploy in the same namespace as the agent
-			if ns, ok := agentReq.EnvValues["KAGENT_NAMESPACE"]; ok && ns != "" {
-				for _, server := range resolvedServers {
-					server.EnvValues["KAGENT_NAMESPACE"] = ns
+			if hook, ok := adapter.(DeploymentPlatformResolvedMCPServerHook); ok {
+				resolvedServers, err = hook.ConfigureResolvedMCPServers(ctx, agentReq, resolvedServers)
+				if err != nil {
+					return fmt.Errorf("failed to configure resolved MCP servers for platform %s: %w", providerPlatform, err)
 				}
 			}
 			// Scope resolved runtime servers to the owning agent deployment when available.

@@ -13,6 +13,7 @@ import (
 	runtimeapi "github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/kagent"
+	runtimeregistry "github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
@@ -156,6 +157,30 @@ func (a *kubernetesDeploymentAdapter) CleanupStale(ctx context.Context, deployme
 
 func (a *kubernetesDeploymentAdapter) RuntimeTranslator() runtimeapi.RuntimeTranslator {
 	return kagent.NewTranslator()
+}
+
+func (a *kubernetesDeploymentAdapter) ConfigureResolvedMCPServers(
+	_ context.Context,
+	agentReq *runtimeregistry.AgentRunRequest,
+	resolved []*runtimeregistry.MCPServerRunRequest,
+) ([]*runtimeregistry.MCPServerRunRequest, error) {
+	if agentReq == nil || len(resolved) == 0 {
+		return resolved, nil
+	}
+	namespace := strings.TrimSpace(agentReq.EnvValues["KAGENT_NAMESPACE"])
+	if namespace == "" {
+		return resolved, nil
+	}
+	for _, serverReq := range resolved {
+		if serverReq == nil {
+			continue
+		}
+		if serverReq.EnvValues == nil {
+			serverReq.EnvValues = map[string]string{}
+		}
+		serverReq.EnvValues["KAGENT_NAMESPACE"] = namespace
+	}
+	return resolved, nil
 }
 
 func (a *kubernetesDeploymentAdapter) GetLogs(_ context.Context, _ *models.Deployment) ([]string, error) {
