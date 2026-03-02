@@ -473,21 +473,6 @@ func TestRunPublish_NilClient(t *testing.T) {
 	}
 }
 
-func TestRunPublish_NoFlags(t *testing.T) {
-	savePublishFlags(t)
-	apiClient = client.NewClient("http://localhost:0", "")
-	dockerUrl = ""
-	githubRepository = ""
-
-	err := runPublish(nil, []string{"."})
-	if err == nil {
-		t.Fatal("expected error when neither flag is set, got nil")
-	}
-	if !contains(err.Error(), "either --docker-url or --github is required") {
-		t.Errorf("error = %q, want it to contain 'either --docker-url or --github is required'", err.Error())
-	}
-}
-
 func TestRunPublish_NonExistentPathUsesDirectMode(t *testing.T) {
 	savePublishFlags(t)
 	mockGitHubSkillMdCheck(t)
@@ -890,8 +875,8 @@ func TestRunPublish_DirectMissingGithub(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when neither flag is set, got nil")
 	}
-	if !contains(err.Error(), "either --docker-url or --github is required") {
-		t.Errorf("error = %q, want it to contain 'either --docker-url or --github is required'", err.Error())
+	if !contains(err.Error(), "--github is required") {
+		t.Errorf("error = %q, want it to contain '--github is required'", err.Error())
 	}
 }
 

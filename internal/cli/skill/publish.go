@@ -61,10 +61,11 @@ If the path contains multiple subdirectories with SKILL.md files, all will be pu
 
 func init() {
 	// Common flags
-	PublishCmd.Flags().StringVar(&githubRepository, "github", "", "GitHub repository URL (alternative to --docker-url). Supports tree URLs: https://github.com/owner/repo/tree/branch/path")
 	PublishCmd.Flags().StringVar(&versionFlag, "version", "", "Version to publish (required for --github, optional override for --docker-url)")
-	PublishCmd.Flags().StringVar(&publishDesc, "description", "", "Skill description (used with direct registration, i.e. without SKILL.md)")
 	PublishCmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Show what would be done without actually doing it")
+
+	PublishCmd.Flags().StringVar(&publishDesc, "description", "", "Skill description (optional, used with direct registration)")
+	PublishCmd.Flags().StringVar(&githubRepository, "github", "", "GitHub repository URL (alternative to --docker-url). Supports tree URLs: https://github.com/owner/repo/tree/branch/path")
 
 	// Docker-only flags
 	PublishCmd.Flags().StringVar(&dockerUrl, "docker-url", "", "Docker registry URL. For example: docker.io/myorg. The final image name will be <docker-url>/<skill-name>:<tag>")
@@ -73,6 +74,7 @@ func init() {
 	PublishCmd.Flags().StringVar(&platformFlag, "platform", "", "Target platform for Docker build (only used with --docker-url, e.g. linux/amd64,linux/arm64)")
 
 	PublishCmd.MarkFlagsMutuallyExclusive("docker-url", "github")
+	PublishCmd.MarkFlagsOneRequired("docker-url", "github")
 }
 
 func runPublish(cmd *cobra.Command, args []string) error {
@@ -80,10 +82,6 @@ func runPublish(cmd *cobra.Command, args []string) error {
 
 	if apiClient == nil {
 		return fmt.Errorf("API client not initialized")
-	}
-
-	if dockerUrl == "" && githubRepository == "" {
-		return fmt.Errorf("either --docker-url or --github is required")
 	}
 
 	// Detect whether input is a skill folder or a skill name.
@@ -134,10 +132,13 @@ func runPublishFromFolder(absPath string) error {
 		printer.PrintInfo(fmt.Sprintf("Processing skill: %s", skill))
 
 		var skillJson *models.SkillJSON
-		if githubRepository != "" {
+		switch {
+		case githubRepository != "":
 			skillJson, err = buildSkillFromGitHub(skill)
-		} else {
+		case dockerUrl != "":
 			skillJson, err = buildSkillDockerImage(skill)
+		default:
+			return fmt.Errorf("no build method specified")
 		}
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to build skill '%s': %w", skill, err))
