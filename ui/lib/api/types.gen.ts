@@ -1364,7 +1364,7 @@ export type GetPromptVersionsV0Data = {
     body?: never;
     path: {
         /**
-         * URL-encoded prompt name
+         * Prompt name (letters, digits, hyphens, underscores)
          */
         promptName: string;
     };
@@ -1394,7 +1394,7 @@ export type DeletePromptVersionV0Data = {
     body?: never;
     path: {
         /**
-         * URL-encoded prompt name
+         * Prompt name (letters, digits, hyphens, underscores)
          */
         promptName: string;
         /**
@@ -1428,7 +1428,7 @@ export type GetPromptVersionV0Data = {
     body?: never;
     path: {
         /**
-         * URL-encoded prompt name
+         * Prompt name (letters, digits, hyphens, underscores)
          */
         promptName: string;
         /**

@@ -703,14 +703,14 @@ paths:
             parameters:
                 - name: promptName
                   in: path
-                  description: URL-encoded prompt name
+                  description: Prompt name (letters, digits, hyphens, underscores)
                   required: true
                   schema:
                     type: string
-                    description: URL-encoded prompt name
+                    description: Prompt name (letters, digits, hyphens, underscores)
                     examples:
-                        - com.example%2Fmy-prompt
-                  example: com.example%2Fmy-prompt
+                        - my-prompt
+                  example: my-prompt
             responses:
                 "200":
                     description: OK
@@ -734,14 +734,14 @@ paths:
             parameters:
                 - name: promptName
                   in: path
-                  description: URL-encoded prompt name
+                  description: Prompt name (letters, digits, hyphens, underscores)
                   required: true
                   schema:
                     type: string
-                    description: URL-encoded prompt name
+                    description: Prompt name (letters, digits, hyphens, underscores)
                     examples:
-                        - com.example%2Fmy-prompt
-                  example: com.example%2Fmy-prompt
+                        - my-prompt
+                  example: my-prompt
                 - name: version
                   in: path
                   description: URL-encoded prompt version
@@ -774,14 +774,14 @@ paths:
             parameters:
                 - name: promptName
                   in: path
-                  description: URL-encoded prompt name
+                  description: Prompt name (letters, digits, hyphens, underscores)
                   required: true
                   schema:
                     type: string
-                    description: URL-encoded prompt name
+                    description: Prompt name (letters, digits, hyphens, underscores)
                     examples:
-                        - com.example%2Fmy-prompt
-                  example: com.example%2Fmy-prompt
+                        - my-prompt
+                  example: my-prompt
                 - name: version
                   in: path
                   description: URL-encoded prompt version

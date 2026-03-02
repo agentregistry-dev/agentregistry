@@ -12,13 +12,13 @@ import (
 
 // Common database errors
 var (
-	ErrNotFound          = errors.New("record not found")
-	ErrForbidden         = errors.New("forbidden")
-	ErrAlreadyExists     = errors.New("record already exists")
-	ErrInvalidInput      = errors.New("invalid input")
-	ErrDatabase          = errors.New("database error")
-	ErrInvalidVersion    = errors.New("invalid version: cannot publish duplicate version")
-	ErrMaxServersReached = errors.New("maximum number of versions for this server reached (10000): please reach out at https://github.com/modelcontextprotocol/registry to explain your use case")
+	ErrNotFound           = errors.New("record not found")
+	ErrForbidden          = errors.New("forbidden")
+	ErrAlreadyExists      = errors.New("record already exists")
+	ErrInvalidInput       = errors.New("invalid input")
+	ErrDatabase           = errors.New("database error")
+	ErrInvalidVersion     = errors.New("invalid version: cannot publish duplicate version")
+	ErrMaxVersionsReached = errors.New("maximum number of versions reached (10000): please reach out at https://github.com/modelcontextprotocol/registry to explain your use case")
 )
 
 // ServerFilter defines filtering options for server queries

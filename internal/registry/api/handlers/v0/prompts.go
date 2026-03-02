@@ -27,18 +27,18 @@ type ListPromptsInput struct {
 
 // PromptDetailInput represents the input for getting prompt details
 type PromptDetailInput struct {
-	PromptName string `path:"promptName" json:"promptName" doc:"URL-encoded prompt name" example:"com.example%2Fmy-prompt"`
+	PromptName string `path:"promptName" json:"promptName" doc:"Prompt name (letters, digits, hyphens, underscores)" example:"my-prompt"`
 }
 
 // PromptVersionDetailInput represents the input for getting a specific version
 type PromptVersionDetailInput struct {
-	PromptName string `path:"promptName" json:"promptName" doc:"URL-encoded prompt name" example:"com.example%2Fmy-prompt"`
+	PromptName string `path:"promptName" json:"promptName" doc:"Prompt name (letters, digits, hyphens, underscores)" example:"my-prompt"`
 	Version    string `path:"version" json:"version" doc:"URL-encoded prompt version" example:"1.0.0"`
 }
 
 // PromptVersionsInput represents the input for listing all versions of a prompt
 type PromptVersionsInput struct {
-	PromptName string `path:"promptName" json:"promptName" doc:"URL-encoded prompt name" example:"com.example%2Fmy-prompt"`
+	PromptName string `path:"promptName" json:"promptName" doc:"Prompt name (letters, digits, hyphens, underscores)" example:"my-prompt"`
 }
 
 // RegisterPromptsEndpoints registers all prompt-related endpoints with a custom path prefix.

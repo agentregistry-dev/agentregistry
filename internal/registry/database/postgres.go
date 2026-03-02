@@ -809,7 +809,9 @@ func (db *PostgreSQL) AcquireServerCreateLock(ctx context.Context, tx pgx.Tx, se
 	return nil
 }
 
-// DeleteServer permanently removes a server version from the database
+// DeleteServer permanently removes a server version from the database.
+// If the deleted version was the current latest, the most recently published
+// remaining version is promoted to latest.
 func (db *PostgreSQL) DeleteServer(ctx context.Context, tx pgx.Tx, serverName, version string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -823,6 +825,20 @@ func (db *PostgreSQL) DeleteServer(ctx context.Context, tx pgx.Tx, serverName, v
 	}
 
 	executor := db.getExecutor(tx)
+
+	// Check if the version being deleted is the current latest.
+	var wasLatest bool
+	err := executor.QueryRow(ctx,
+		`SELECT is_latest FROM servers WHERE server_name = $1 AND version = $2`,
+		serverName, version,
+	).Scan(&wasLatest)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return database.ErrNotFound
+		}
+		return fmt.Errorf("failed to check server latest status: %w", err)
+	}
+
 	query := `DELETE FROM servers WHERE server_name = $1 AND version = $2`
 	result, err := executor.Exec(ctx, query, serverName, version)
 	if err != nil {
@@ -831,6 +847,23 @@ func (db *PostgreSQL) DeleteServer(ctx context.Context, tx pgx.Tx, serverName, v
 	if result.RowsAffected() == 0 {
 		return database.ErrNotFound
 	}
+
+	if wasLatest {
+		promoteQuery := `
+			UPDATE servers SET is_latest = true
+			WHERE server_name = $1
+			  AND version = (
+			    SELECT version FROM servers
+			    WHERE server_name = $1
+			    ORDER BY published_at DESC
+			    LIMIT 1
+			  )
+		`
+		if _, err := executor.Exec(ctx, promoteQuery, serverName); err != nil {
+			return fmt.Errorf("failed to promote next latest server version: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -1440,18 +1473,18 @@ func (db *PostgreSQL) CreateAgent(ctx context.Context, tx pgx.Tx, agentJSON *mod
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
-		Name: agentJSON.Name,
-		Type: auth.PermissionArtifactTypeAgent,
-	}); err != nil {
-		return nil, err
-	}
-
 	if agentJSON == nil || officialMeta == nil {
 		return nil, fmt.Errorf("agentJSON and officialMeta are required")
 	}
 	if agentJSON.Name == "" || agentJSON.Version == "" {
 		return nil, fmt.Errorf("agent name and version are required")
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
+		Name: agentJSON.Name,
+		Type: auth.PermissionArtifactTypeAgent,
+	}); err != nil {
+		return nil, err
 	}
 	valueJSON, err := json.Marshal(agentJSON)
 	if err != nil {
@@ -2846,7 +2879,9 @@ func (db *PostgreSQL) RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id st
 	return nil
 }
 
-// DeleteAgent permanently removes an agent version from the database
+// DeleteAgent permanently removes an agent version from the database.
+// If the deleted version was the current latest, the most recently published
+// remaining version is promoted to latest.
 func (db *PostgreSQL) DeleteAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error {
 	if err := db.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
 		Name: agentName,
@@ -2857,15 +2892,42 @@ func (db *PostgreSQL) DeleteAgent(ctx context.Context, tx pgx.Tx, agentName, ver
 
 	executor := db.getExecutor(tx)
 
-	query := `DELETE FROM agents WHERE agent_name = $1 AND version = $2`
+	// Check if the version being deleted is the current latest.
+	var wasLatest bool
+	err := executor.QueryRow(ctx,
+		`SELECT is_latest FROM agents WHERE agent_name = $1 AND version = $2`,
+		agentName, version,
+	).Scan(&wasLatest)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return database.ErrNotFound
+		}
+		return fmt.Errorf("failed to check agent latest status: %w", err)
+	}
 
+	query := `DELETE FROM agents WHERE agent_name = $1 AND version = $2`
 	result, err := executor.Exec(ctx, query, agentName, version)
 	if err != nil {
 		return fmt.Errorf("failed to delete agent: %w", err)
 	}
-
 	if result.RowsAffected() == 0 {
 		return database.ErrNotFound
+	}
+
+	if wasLatest {
+		promoteQuery := `
+			UPDATE agents SET is_latest = true
+			WHERE agent_name = $1
+			  AND version = (
+			    SELECT version FROM agents
+			    WHERE agent_name = $1
+			    ORDER BY published_at DESC
+			    LIMIT 1
+			  )
+		`
+		if _, err := executor.Exec(ctx, promoteQuery, agentName); err != nil {
+			return fmt.Errorf("failed to promote next latest agent version: %w", err)
+		}
 	}
 
 	return nil
@@ -3140,18 +3202,18 @@ func (db *PostgreSQL) CreatePrompt(ctx context.Context, tx pgx.Tx, promptJSON *m
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
-		Name: promptJSON.Name,
-		Type: auth.PermissionArtifactTypePrompt,
-	}); err != nil {
-		return nil, err
-	}
-
 	if promptJSON == nil || officialMeta == nil {
 		return nil, fmt.Errorf("promptJSON and officialMeta are required")
 	}
 	if promptJSON.Name == "" || promptJSON.Version == "" {
 		return nil, fmt.Errorf("prompt name and version are required")
+	}
+
+	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
+		Name: promptJSON.Name,
+		Type: auth.PermissionArtifactTypePrompt,
+	}); err != nil {
+		return nil, err
 	}
 	valueJSON, err := json.Marshal(promptJSON)
 	if err != nil {
@@ -3297,6 +3359,21 @@ func (db *PostgreSQL) DeletePrompt(ctx context.Context, tx pgx.Tx, promptName, v
 	}
 
 	executor := db.getExecutor(tx)
+
+	// Check if the version being deleted is the current latest.
+	var wasLatest bool
+	err := executor.QueryRow(ctx,
+		`SELECT is_latest FROM prompts WHERE prompt_name = $1 AND version = $2`,
+		promptName, version,
+	).Scan(&wasLatest)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return database.ErrNotFound
+		}
+		return fmt.Errorf("failed to check prompt latest status: %w", err)
+	}
+
+	// Delete the requested version.
 	query := `DELETE FROM prompts WHERE prompt_name = $1 AND version = $2`
 	result, err := executor.Exec(ctx, query, promptName, version)
 	if err != nil {
@@ -3305,6 +3382,25 @@ func (db *PostgreSQL) DeletePrompt(ctx context.Context, tx pgx.Tx, promptName, v
 	if result.RowsAffected() == 0 {
 		return database.ErrNotFound
 	}
+
+	// If the deleted version was latest, promote the most recently published
+	// remaining version so that GetPromptByName keeps working.
+	if wasLatest {
+		promoteQuery := `
+			UPDATE prompts SET is_latest = true
+			WHERE prompt_name = $1
+			  AND version = (
+			    SELECT version FROM prompts
+			    WHERE prompt_name = $1
+			    ORDER BY published_at DESC
+			    LIMIT 1
+			  )
+		`
+		if _, err := executor.Exec(ctx, promoteQuery, promptName); err != nil {
+			return fmt.Errorf("failed to promote next latest prompt version: %w", err)
+		}
+	}
+
 	return nil
 }
 

@@ -177,7 +177,7 @@ func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx 
 		return nil, err
 	}
 	if versionCount >= maxServerVersionsPerServer {
-		return nil, database.ErrMaxServersReached
+		return nil, database.ErrMaxVersionsReached
 	}
 
 	// Check this isn't a duplicate version
@@ -343,7 +343,7 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 		return nil, err
 	}
 	if versionCount >= maxServerVersionsPerServer {
-		return nil, database.ErrMaxServersReached
+		return nil, database.ErrMaxVersionsReached
 	}
 
 	// Prevent duplicate version
@@ -582,7 +582,7 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 		return nil, err
 	}
 	if versionCount >= maxServerVersionsPerServer {
-		return nil, database.ErrMaxServersReached
+		return nil, database.ErrMaxVersionsReached
 	}
 
 	// Prevent duplicate version
@@ -1476,7 +1476,7 @@ func (s *registryServiceImpl) createPromptInTransaction(ctx context.Context, tx 
 		return nil, err
 	}
 	if versionCount >= maxServerVersionsPerServer {
-		return nil, database.ErrMaxServersReached
+		return nil, database.ErrMaxVersionsReached
 	}
 
 	exists, err := s.db.CheckPromptVersionExists(ctx, tx, promptJSON.Name, promptJSON.Version)
