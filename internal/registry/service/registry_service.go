@@ -37,6 +37,31 @@ const (
 	originDiscovered     = "discovered"
 )
 
+// UnsupportedDeploymentPlatformError is returned when no deployment adapter is
+// registered for a provider platform.
+type UnsupportedDeploymentPlatformError struct {
+	Platform string
+}
+
+func (e *UnsupportedDeploymentPlatformError) Error() string {
+	platform := strings.TrimSpace(e.Platform)
+	if platform == "" {
+		platform = "unknown"
+	}
+	return fmt.Sprintf("unsupported deployment platform: %s", platform)
+}
+
+func (e *UnsupportedDeploymentPlatformError) Unwrap() error {
+	return database.ErrInvalidInput
+}
+
+// IsUnsupportedDeploymentPlatformError reports whether err indicates an
+// unsupported deployment platform.
+func IsUnsupportedDeploymentPlatformError(err error) bool {
+	var target *UnsupportedDeploymentPlatformError
+	return errors.As(err, &target)
+}
+
 // registryServiceImpl implements the RegistryService interface using our Database
 // It also implements the Reconciler interface for server-side container management
 type registryServiceImpl struct {
@@ -81,7 +106,7 @@ func (s *registryServiceImpl) resolveDeploymentAdapter(platform string) (Deploym
 	}
 	adapter, ok := s.deploymentAdapters[providerPlatform]
 	if !ok {
-		return nil, fmt.Errorf("%w: no deployment adapter registered for provider platform %q", database.ErrInvalidInput, providerPlatform)
+		return nil, &UnsupportedDeploymentPlatformError{Platform: providerPlatform}
 	}
 	return adapter, nil
 }
@@ -822,8 +847,20 @@ func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, res
 		return fmt.Errorf("looking up existing deployment: %w", err)
 	}
 
-	if existing != nil && platform == platformKubernetes {
-		s.cleanupKubernetesResources(ctx, existing)
+	cleanupPlatform := strings.ToLower(strings.TrimSpace(platform))
+	if existing != nil {
+		if providerID := strings.TrimSpace(existing.ProviderID); providerID != "" {
+			provider, err := s.resolveProviderByID(ctx, providerID)
+			if err != nil && !errors.Is(err, database.ErrNotFound) {
+				return fmt.Errorf("resolving provider for existing deployment: %w", err)
+			}
+			if err == nil && provider != nil {
+				cleanupPlatform = strings.ToLower(strings.TrimSpace(provider.Platform))
+			}
+		}
+		if cleanupPlatform == platformKubernetes {
+			s.cleanupKubernetesResources(ctx, existing)
+		}
 	}
 
 	if err := s.db.RemoveDeploymentByID(ctx, nil, existing.ID); err != nil && !errors.Is(err, database.ErrNotFound) {

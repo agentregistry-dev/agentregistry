@@ -195,8 +195,11 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 
 		deployment, err := registry.CreateDeployment(ctx, deploymentReq, platform)
 		if err != nil {
+			if service.IsUnsupportedDeploymentPlatformError(err) {
+				return nil, huma.Error400BadRequest("Unsupported provider or platform for deployment")
+			}
 			if errors.Is(err, database.ErrInvalidInput) {
-				return nil, huma.Error400BadRequest("Invalid deployment request")
+				return nil, huma.Error400BadRequest(err.Error())
 			}
 			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Resource not found in registry")

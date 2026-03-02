@@ -3,6 +3,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -961,6 +962,12 @@ func TestCleanupExistingDeployment(t *testing.T) {
 					}
 					return []*models.Deployment{}, nil
 				},
+				getProviderByIDFn: func(_ context.Context, _ pgx.Tx, id string) (*models.Provider, error) {
+					if id == "kubernetes" {
+						return &models.Provider{ID: id, Platform: "kubernetes"}, nil
+					}
+					return &models.Provider{ID: id, Platform: "local"}, nil
+				},
 				removeDeploymentByIdFn: func(_ context.Context, _ pgx.Tx, id string) error {
 					removeCalled = true
 					if tt.removeErr != nil {
@@ -990,6 +997,7 @@ func TestCleanupExistingDeployment(t *testing.T) {
 type deploymentMockDB struct {
 	database.Database      // embed interface so unimplemented methods panic
 	getDeploymentsFn       func(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
+	getProviderByIDFn      func(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error)
 	removeDeploymentByIdFn func(ctx context.Context, tx pgx.Tx, id string) error
 }
 
@@ -1001,7 +1009,33 @@ func (m *deploymentMockDB) RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, 
 	return m.removeDeploymentByIdFn(ctx, tx, id)
 }
 
+func (m *deploymentMockDB) GetProviderByID(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error) {
+	return m.getProviderByIDFn(ctx, tx, providerID)
+}
+
 // Helper functions
 func stringPtr(s string) *string {
 	return &s
+}
+
+func TestIsUnsupportedDeploymentPlatformError(t *testing.T) {
+	baseErr := &UnsupportedDeploymentPlatformError{Platform: "acme"}
+	wrappedErr := fmt.Errorf("wrapped: %w", baseErr)
+
+	assert.True(t, IsUnsupportedDeploymentPlatformError(baseErr))
+	assert.True(t, IsUnsupportedDeploymentPlatformError(wrappedErr))
+	assert.True(t, errors.Is(baseErr, database.ErrInvalidInput))
+	assert.True(t, errors.Is(wrappedErr, database.ErrInvalidInput))
+	assert.False(t, IsUnsupportedDeploymentPlatformError(database.ErrInvalidInput))
+}
+
+func TestResolveDeploymentAdapter_UnsupportedPlatformReturnsTypedError(t *testing.T) {
+	svc := &registryServiceImpl{
+		deploymentAdapters: map[string]DeploymentPlatformDeployer{},
+	}
+
+	_, err := svc.resolveDeploymentAdapter("unknown-platform")
+	require.Error(t, err)
+	assert.True(t, IsUnsupportedDeploymentPlatformError(err))
+	assert.True(t, errors.Is(err, database.ErrInvalidInput))
 }

@@ -12,12 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDeploymentResourceIndexFiltersInactiveStatuses(t *testing.T) {
+func TestDeploymentResourceIndexIncludesAllStatuses(t *testing.T) {
+	now := time.Now().UTC()
 	reg := &servicetest.FakeRegistry{
 		GetDeploymentsFn: func(_ context.Context, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
 			return []*models.Deployment{
-				{ID: "dep-active", ServerName: "io.test/server", ResourceType: "mcp", Status: "deployed"},
-				{ID: "dep-cancelled", ServerName: "io.test/server", ResourceType: "mcp", Status: "cancelled"},
+				{ID: "dep-active", ServerName: "io.test/server", ResourceType: "mcp", Status: "deployed", UpdatedAt: now},
+				{ID: "dep-cancelled", ServerName: "io.test/server", ResourceType: "mcp", Status: "cancelled", UpdatedAt: now.Add(-time.Minute)},
 			}, nil
 		},
 	}
