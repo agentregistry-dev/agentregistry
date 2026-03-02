@@ -267,12 +267,14 @@ func TestCopyDir(t *testing.T) {
 }
 
 // newTestServer creates an httptest server that serves skill API responses.
-// The handler map keys are URL paths, values are the response to return.
+// The handler map keys are URL paths (without the /v0 prefix), values are the
+// handlers to invoke. The /v0 prefix is prepended automatically to match the
+// client which appends /v0 to the base URL.
 func newTestServer(t *testing.T, handlers map[string]http.HandlerFunc) (*httptest.Server, *client.Client) {
 	t.Helper()
 	mux := http.NewServeMux()
 	for pattern, handler := range handlers {
-		mux.HandleFunc(pattern, handler)
+		mux.HandleFunc("/v0"+pattern, handler)
 	}
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)

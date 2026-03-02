@@ -552,7 +552,7 @@ func TestRunPublish_GitHubSuccess(t *testing.T) {
 	mockGitHubSkillMdCheck(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/skills" {
+		if r.Method == http.MethodPost && r.URL.Path == "/v0/skills" {
 			var skill models.SkillJSON
 			if err := json.NewDecoder(r.Body).Decode(&skill); err != nil {
 				t.Errorf("failed to decode request body: %v", err)
@@ -622,7 +622,7 @@ func TestRunPublish_GitHubMultipleSkills(t *testing.T) {
 
 	var publishedNames []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/skills" {
+		if r.Method == http.MethodPost && r.URL.Path == "/v0/skills" {
 			var skill models.SkillJSON
 			json.NewDecoder(r.Body).Decode(&skill)
 			publishedNames = append(publishedNames, skill.Name)
@@ -816,7 +816,7 @@ func TestRunPublish_DirectGitHub(t *testing.T) {
 	mockGitHubSkillMdCheck(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/skills" {
+		if r.Method == http.MethodPost && r.URL.Path == "/v0/skills" {
 			var skill models.SkillJSON
 			json.NewDecoder(r.Body).Decode(&skill)
 			if skill.Name != "remote-skill" {
