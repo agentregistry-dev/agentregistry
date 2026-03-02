@@ -99,11 +99,25 @@ func TestParseGitHubURL(t *testing.T) {
 			wantPath: "src",
 		},
 		{
-			name:     "encoded slash in branch treated as path separator",
+			name:     "encoded slash in branch preserved",
 			rawURL:   "https://github.com/owner/repo/tree/feature%2Fmy-branch/path",
 			wantURL:  "https://github.com/owner/repo.git",
-			wantRef:  "feature",
-			wantPath: "my-branch/path",
+			wantRef:  "feature/my-branch",
+			wantPath: "path",
+		},
+		{
+			name:     "repo URL ending with .git",
+			rawURL:   "https://github.com/owner/repo.git",
+			wantURL:  "https://github.com/owner/repo.git",
+			wantRef:  "",
+			wantPath: "",
+		},
+		{
+			name:     "repo URL with .git and tree path",
+			rawURL:   "https://github.com/owner/repo.git/tree/main/src",
+			wantURL:  "https://github.com/owner/repo.git",
+			wantRef:  "main",
+			wantPath: "src",
 		},
 		{
 			name:    "non-github host",
@@ -711,6 +725,102 @@ func TestCopyRepoContents(t *testing.T) {
 		// .git must not be present
 		if _, err := os.Stat(filepath.Join(outDir, ".git")); !os.IsNotExist(err) {
 			t.Error(".git should not be copied")
+		}
+	})
+
+	t.Run("skips file symlinks", func(t *testing.T) {
+		repoDir := t.TempDir()
+		outDir := filepath.Join(t.TempDir(), "output")
+		os.MkdirAll(outDir, 0755)
+
+		// Create a real file and a symlink to it
+		os.WriteFile(filepath.Join(repoDir, "real.txt"), []byte("real"), 0644)
+		os.Symlink(filepath.Join(repoDir, "real.txt"), filepath.Join(repoDir, "link.txt"))
+
+		if err := copyRepoContents(repoDir, "", outDir); err != nil {
+			t.Fatalf("copyRepoContents() error = %v", err)
+		}
+
+		// Real file should be copied
+		if _, err := os.Stat(filepath.Join(outDir, "real.txt")); os.IsNotExist(err) {
+			t.Error("expected real.txt to be copied")
+		}
+		// Symlink should be skipped
+		if _, err := os.Lstat(filepath.Join(outDir, "link.txt")); !os.IsNotExist(err) {
+			t.Error("expected link.txt (symlink) to be skipped")
+		}
+	})
+
+	t.Run("skips directory symlinks", func(t *testing.T) {
+		repoDir := t.TempDir()
+		outDir := filepath.Join(t.TempDir(), "output")
+		os.MkdirAll(outDir, 0755)
+
+		// Create a real dir and a symlink to it
+		realDir := filepath.Join(repoDir, "real-dir")
+		os.MkdirAll(realDir, 0755)
+		os.WriteFile(filepath.Join(realDir, "file.txt"), []byte("inside"), 0644)
+		os.Symlink(realDir, filepath.Join(repoDir, "link-dir"))
+
+		if err := copyRepoContents(repoDir, "", outDir); err != nil {
+			t.Fatalf("copyRepoContents() error = %v", err)
+		}
+
+		// Real dir should be copied
+		if _, err := os.Stat(filepath.Join(outDir, "real-dir", "file.txt")); os.IsNotExist(err) {
+			t.Error("expected real-dir/file.txt to be copied")
+		}
+		// Symlinked dir should be skipped
+		if _, err := os.Lstat(filepath.Join(outDir, "link-dir")); !os.IsNotExist(err) {
+			t.Error("expected link-dir (symlink) to be skipped")
+		}
+	})
+
+	t.Run("skips symlinks pointing outside repo", func(t *testing.T) {
+		repoDir := t.TempDir()
+		outDir := filepath.Join(t.TempDir(), "output")
+		os.MkdirAll(outDir, 0755)
+
+		// Create a symlink pointing to an absolute path outside the repo
+		os.WriteFile(filepath.Join(repoDir, "safe.txt"), []byte("safe"), 0644)
+		os.Symlink("/etc/hosts", filepath.Join(repoDir, "malicious-link"))
+
+		if err := copyRepoContents(repoDir, "", outDir); err != nil {
+			t.Fatalf("copyRepoContents() error = %v", err)
+		}
+
+		// Safe file should be copied
+		if _, err := os.Stat(filepath.Join(outDir, "safe.txt")); os.IsNotExist(err) {
+			t.Error("expected safe.txt to be copied")
+		}
+		// Malicious symlink should be skipped
+		if _, err := os.Lstat(filepath.Join(outDir, "malicious-link")); !os.IsNotExist(err) {
+			t.Error("expected malicious symlink to be skipped")
+		}
+	})
+
+	t.Run("skips nested symlinks in subdirectories", func(t *testing.T) {
+		repoDir := t.TempDir()
+		outDir := filepath.Join(t.TempDir(), "output")
+		os.MkdirAll(outDir, 0755)
+
+		// Create a nested structure with a symlink inside a subdirectory
+		subDir := filepath.Join(repoDir, "sub")
+		os.MkdirAll(subDir, 0755)
+		os.WriteFile(filepath.Join(subDir, "real.txt"), []byte("real"), 0644)
+		os.Symlink("/etc/passwd", filepath.Join(subDir, "sneaky-link"))
+
+		if err := copyRepoContents(repoDir, "", outDir); err != nil {
+			t.Fatalf("copyRepoContents() error = %v", err)
+		}
+
+		// Real file in subdirectory should be copied
+		if _, err := os.Stat(filepath.Join(outDir, "sub", "real.txt")); os.IsNotExist(err) {
+			t.Error("expected sub/real.txt to be copied")
+		}
+		// Nested symlink should be skipped by copyDir
+		if _, err := os.Lstat(filepath.Join(outDir, "sub", "sneaky-link")); !os.IsNotExist(err) {
+			t.Error("expected sub/sneaky-link (symlink) to be skipped")
 		}
 	})
 }

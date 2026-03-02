@@ -220,6 +220,7 @@ func pullFromGitHub(repoURL, absOutputDir string) error {
 
 // copyRepoContents copies files from a cloned repository to the output directory.
 // It navigates to the subPath if specified and skips the .git directory.
+// Symlinks are skipped to prevent symlink traversal attacks from untrusted repos.
 func copyRepoContents(repoDir, subPath, absOutputDir string) error {
 	srcDir := repoDir
 	if subPath != "" {
@@ -239,6 +240,12 @@ func copyRepoContents(repoDir, subPath, absOutputDir string) error {
 	for _, entry := range entries {
 		// Skip .git directory
 		if entry.Name() == ".git" {
+			continue
+		}
+
+		// Skip symlinks to prevent traversal attacks from untrusted repos
+		if entry.Type()&os.ModeSymlink != 0 {
+			printer.PrintInfo(fmt.Sprintf("Skipping symlink: %s", entry.Name()))
 			continue
 		}
 
@@ -263,6 +270,10 @@ func copyRepoContents(repoDir, subPath, absOutputDir string) error {
 // Supported formats:
 //   - https://github.com/owner/repo/tree/branch/path/to/dir
 //   - https://github.com/owner/repo
+//
+// Branch names containing slashes (e.g. feature/my-branch) are supported when
+// encoded as %2F in the URL. The raw (escaped) path is used for splitting so
+// the encoded branch segment is preserved, then unescaped for the return value.
 func parseGitHubURL(rawURL string) (cloneURL, branch, subPath string, err error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -273,28 +284,35 @@ func parseGitHubURL(rawURL string) (cloneURL, branch, subPath string, err error)
 		return "", "", "", fmt.Errorf("unsupported host %q, only github.com is supported", u.Host)
 	}
 
+	// Use EscapedPath so that percent-encoded segments (e.g. %2F in branch
+	// names) are not decoded before splitting on "/".
+	rawPath := u.EscapedPath()
+
 	// Path is like /owner/repo or /owner/repo/tree/branch/sub/path
-	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	parts := strings.Split(strings.Trim(rawPath, "/"), "/")
 	if len(parts) < 2 {
 		return "", "", "", fmt.Errorf("invalid GitHub URL: expected at least owner/repo in path")
 	}
 
 	owner := parts[0]
-	repo := parts[1]
+	repo := strings.TrimSuffix(parts[1], ".git")
 	cloneURL = fmt.Sprintf("https://github.com/%s/%s.git", owner, repo)
 
-	// If URL contains /tree/<branch>/..., extract branch and subpath
+	// If URL contains /tree/<branch>/..., extract branch and subpath.
+	// The branch segment is unescaped so encoded slashes (%2F) become real
+	// slashes in the returned branch name.
 	if len(parts) >= 4 && parts[2] == "tree" {
-		branch = parts[3]
+		branch, _ = url.PathUnescape(parts[3])
 		if len(parts) > 4 {
-			subPath = strings.Join(parts[4:], "/")
+			raw := strings.Join(parts[4:], "/")
+			subPath, _ = url.PathUnescape(raw)
 		}
 	}
 
 	return cloneURL, branch, subPath, nil
 }
 
-// copyDir recursively copies a directory tree.
+// copyDir recursively copies a directory tree, skipping symlinks.
 func copyDir(src, dst string) error {
 	if err := os.MkdirAll(dst, 0755); err != nil {
 		return err
@@ -306,6 +324,11 @@ func copyDir(src, dst string) error {
 	}
 
 	for _, entry := range entries {
+		// Skip symlinks to prevent traversal attacks
+		if entry.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+
 		srcPath := filepath.Join(src, entry.Name())
 		dstPath := filepath.Join(dst, entry.Name())
 
@@ -323,7 +346,17 @@ func copyDir(src, dst string) error {
 	return nil
 }
 
+// copyFile copies a single regular file. The caller must ensure src is not a symlink.
 func copyFile(src, dst string) error {
+	// Verify the source is a regular file via Lstat (does not follow symlinks)
+	srcInfo, err := os.Lstat(src)
+	if err != nil {
+		return err
+	}
+	if srcInfo.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to copy symlink: %s", src)
+	}
+
 	sourceFile, err := os.Open(src)
 	if err != nil {
 		return err
@@ -340,9 +373,5 @@ func copyFile(src, dst string) error {
 		return err
 	}
 
-	sourceInfo, err := os.Stat(src)
-	if err != nil {
-		return err
-	}
-	return os.Chmod(dst, sourceInfo.Mode())
+	return os.Chmod(dst, srcInfo.Mode().Perm())
 }

@@ -885,6 +885,21 @@ func TestRunPublish_DirectMissingVersion(t *testing.T) {
 	}
 }
 
+func TestRunPublish_DockerUrlWithoutFolder(t *testing.T) {
+	savePublishFlags(t)
+	apiClient = client.NewClient("http://localhost:0", "")
+	dockerUrl = "docker.io/myorg"
+	githubRepository = ""
+
+	err := runPublish(nil, []string{"not-a-folder"})
+	if err == nil {
+		t.Fatal("expected error when --docker-url is used without a skill folder, got nil")
+	}
+	if !contains(err.Error(), "--docker-url requires a local skill folder") {
+		t.Errorf("error = %q, want it to contain '--docker-url requires a local skill folder'", err.Error())
+	}
+}
+
 func TestRunPublish_FolderModeStillWorks(t *testing.T) {
 	savePublishFlags(t)
 

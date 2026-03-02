@@ -82,7 +82,10 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	// Detect whether input is a skill folder or a skill name.
 	// If it's a directory that contains (or has subdirectories with) SKILL.md, use folder mode.
 	// Otherwise, treat it as a skill name for direct registration.
-	absPath, _ := filepath.Abs(input)
+	absPath, err := filepath.Abs(input)
+	if err != nil {
+		return fmt.Errorf("failed to resolve path %q: %w", input, err)
+	}
 	isFolder := false
 	if info, err := os.Stat(absPath); err == nil && info.IsDir() {
 		if _, detectErr := detectSkills(absPath); detectErr == nil {
@@ -93,6 +96,13 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	if isFolder {
 		return runPublishFromFolder(absPath)
 	}
+
+	// Direct mode only supports GitHub. If --docker-url was specified but
+	// the input isn't a folder with SKILL.md, give a targeted error.
+	if dockerUrl != "" {
+		return fmt.Errorf("--docker-url requires a local skill folder containing SKILL.md, but %q is not a valid skill folder", input)
+	}
+
 	return runPublishDirect(input)
 }
 
