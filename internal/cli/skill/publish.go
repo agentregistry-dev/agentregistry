@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,6 +31,10 @@ var (
 	publishDesc      string
 )
 
+// githubRawBaseURL is the base URL for raw GitHub content checks.
+// Exposed as a variable for testing.
+var githubRawBaseURL = "https://raw.githubusercontent.com"
+
 var PublishCmd = &cobra.Command{
 	Use:   "publish <skill-name|skill-folder-path>",
 	Short: "Publish a skill to the registry",
@@ -40,13 +46,14 @@ This command supports two modes:
    arctl skill publish ./my-skill --docker-url docker.io/myorg
    arctl skill publish ./my-skill --github https://github.com/org/repo --version 1.0.0
 
-2. Direct registration (without SKILL.md, GitHub only):
+2. Direct registration (without a local SKILL.md, GitHub only):
    arctl skill publish my-skill \
      --github https://github.com/org/repo/tree/main/skills/my-skill \
      --version 1.0.0 \
      --description "My remote skill"
 
-In folder mode, the skill folder must contain a SKILL.md file with proper YAML frontmatter.
+In both modes, SKILL.md must exist at the specified GitHub path.
+In folder mode, the local skill folder must also contain a SKILL.md file with proper YAML frontmatter.
 If the path contains multiple subdirectories with SKILL.md files, all will be published.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runPublish,
@@ -198,8 +205,8 @@ func buildSkillDirect(skillName string) (*models.SkillJSON, error) {
 		return nil, fmt.Errorf("--version is required when publishing without SKILL.md")
 	}
 
-	if _, _, _, err := parseGitHubURL(githubRepository); err != nil {
-		return nil, fmt.Errorf("invalid --github URL: %w", err)
+	if err := checkGitHubSkillMdExists(githubRepository); err != nil {
+		return nil, fmt.Errorf("--github validation failed: %w", err)
 	}
 
 	return &models.SkillJSON{
@@ -300,6 +307,49 @@ func resolveGitHubVersion() (string, error) {
 	return versionFlag, nil
 }
 
+// checkGitHubSkillMdExists verifies that a SKILL.md file exists at the given
+// GitHub repository URL by making an HTTP request to raw.githubusercontent.com.
+func checkGitHubSkillMdExists(rawURL string) error {
+	cloneURL, branch, subPath, err := parseGitHubURL(rawURL)
+	if err != nil {
+		return err
+	}
+
+	// Extract owner/repo from clone URL (https://github.com/{owner}/{repo}.git)
+	cu, _ := url.Parse(cloneURL)
+	cloneParts := strings.Split(strings.Trim(cu.Path, "/"), "/")
+	owner := cloneParts[0]
+	repo := strings.TrimSuffix(cloneParts[1], ".git")
+
+	skillMdPath := "SKILL.md"
+	if subPath != "" {
+		skillMdPath = subPath + "/SKILL.md"
+	}
+
+	ref := branch
+	if ref == "" {
+		ref = "HEAD"
+	}
+
+	checkURL := fmt.Sprintf("%s/%s/%s/%s/%s", githubRawBaseURL, owner, repo, ref, skillMdPath)
+
+	resp, err := http.Get(checkURL) //nolint:gosec // URL is constructed from validated GitHub components
+	if err != nil {
+		return fmt.Errorf("failed to verify SKILL.md at GitHub: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("SKILL.md not found at %s (ensure the file exists and the repository is public)", rawURL)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to verify SKILL.md at GitHub (HTTP %d)", resp.StatusCode)
+	}
+
+	return nil
+}
+
 func buildSkillDockerImage(skillPath string) (*models.SkillJSON, error) {
 	name, description, err := resolveSkillMeta(skillPath)
 	if err != nil {
@@ -387,9 +437,9 @@ func buildSkillFromGitHub(skillPath string) (*models.SkillJSON, error) {
 		return nil, err
 	}
 
-	// Validate the GitHub URL early so users get clear feedback
-	if _, _, _, err := parseGitHubURL(githubRepository); err != nil {
-		return nil, fmt.Errorf("invalid --github URL: %w", err)
+	// Validate the GitHub URL and verify SKILL.md exists at the remote path
+	if err := checkGitHubSkillMdExists(githubRepository); err != nil {
+		return nil, fmt.Errorf("--github validation failed: %w", err)
 	}
 
 	skill := &models.SkillJSON{

@@ -129,10 +129,13 @@ func TestBuildSkillFromGitHub(t *testing.T) {
 	// Save and restore package-level vars
 	origGithub := githubRepository
 	origVersion := versionFlag
+	origGithubRawBase := githubRawBaseURL
 	t.Cleanup(func() {
 		githubRepository = origGithub
 		versionFlag = origVersion
+		githubRawBaseURL = origGithubRawBase
 	})
+	mockGitHubSkillMdCheck(t)
 
 	tests := []struct {
 		name        string
@@ -430,6 +433,7 @@ func savePublishFlags(t *testing.T) {
 	origDryRunFlag := dryRunFlag
 	origGithubRepo := githubRepository
 	origClient := apiClient
+	origGithubRawBaseURL := githubRawBaseURL
 
 	t.Cleanup(func() {
 		dockerUrl = origDockerUrl
@@ -440,7 +444,19 @@ func savePublishFlags(t *testing.T) {
 		dryRunFlag = origDryRunFlag
 		githubRepository = origGithubRepo
 		apiClient = origClient
+		githubRawBaseURL = origGithubRawBaseURL
 	})
+}
+
+// mockGitHubSkillMdCheck sets up an httptest server that always returns 200
+// for SKILL.md checks, simulating a repository where SKILL.md exists.
+func mockGitHubSkillMdCheck(t *testing.T) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+	githubRawBaseURL = srv.URL
 }
 
 func TestRunPublish_NilClient(t *testing.T) {
@@ -474,6 +490,7 @@ func TestRunPublish_NoFlags(t *testing.T) {
 
 func TestRunPublish_NonExistentPathUsesDirectMode(t *testing.T) {
 	savePublishFlags(t)
+	mockGitHubSkillMdCheck(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var skill models.SkillJSON
@@ -499,6 +516,7 @@ func TestRunPublish_NonExistentPathUsesDirectMode(t *testing.T) {
 
 func TestRunPublish_DirWithoutSkillMdUsesDirectMode(t *testing.T) {
 	savePublishFlags(t)
+	mockGitHubSkillMdCheck(t)
 
 	var publishedName string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -529,6 +547,7 @@ func TestRunPublish_DirWithoutSkillMdUsesDirectMode(t *testing.T) {
 
 func TestRunPublish_GitHubDryRun(t *testing.T) {
 	savePublishFlags(t)
+	mockGitHubSkillMdCheck(t)
 	apiClient = client.NewClient("http://localhost:0", "")
 	githubRepository = "https://github.com/org/repo"
 	versionFlag = "1.0.0"
@@ -545,6 +564,7 @@ func TestRunPublish_GitHubDryRun(t *testing.T) {
 
 func TestRunPublish_GitHubSuccess(t *testing.T) {
 	savePublishFlags(t)
+	mockGitHubSkillMdCheck(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && r.URL.Path == "/skills" {
@@ -587,6 +607,7 @@ func TestRunPublish_GitHubSuccess(t *testing.T) {
 
 func TestRunPublish_GitHubAPIError(t *testing.T) {
 	savePublishFlags(t)
+	mockGitHubSkillMdCheck(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -612,6 +633,7 @@ func TestRunPublish_GitHubAPIError(t *testing.T) {
 
 func TestRunPublish_GitHubMultipleSkills(t *testing.T) {
 	savePublishFlags(t)
+	mockGitHubSkillMdCheck(t)
 
 	var publishedNames []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -672,6 +694,7 @@ func TestRunPublish_GitHubMissingVersion(t *testing.T) {
 
 func TestBuildSkillDirect(t *testing.T) {
 	savePublishFlags(t)
+	mockGitHubSkillMdCheck(t)
 
 	tests := []struct {
 		name        string
@@ -805,6 +828,7 @@ func TestBuildSkillDirect_InvalidURL(t *testing.T) {
 
 func TestRunPublish_DirectGitHub(t *testing.T) {
 	savePublishFlags(t)
+	mockGitHubSkillMdCheck(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && r.URL.Path == "/skills" {
@@ -842,6 +866,7 @@ func TestRunPublish_DirectGitHub(t *testing.T) {
 
 func TestRunPublish_DirectDryRun(t *testing.T) {
 	savePublishFlags(t)
+	mockGitHubSkillMdCheck(t)
 	apiClient = client.NewClient("http://localhost:0", "")
 	githubRepository = "https://github.com/org/repo"
 	versionFlag = "1.0.0"
@@ -902,6 +927,7 @@ func TestRunPublish_DockerUrlWithoutFolder(t *testing.T) {
 
 func TestRunPublish_FolderModeStillWorks(t *testing.T) {
 	savePublishFlags(t)
+	mockGitHubSkillMdCheck(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var skill models.SkillJSON
@@ -953,6 +979,124 @@ func TestResolveDockerVersion(t *testing.T) {
 			got := resolveDockerVersion()
 			if got != tt.want {
 				t.Errorf("resolveDockerVersion() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// --- checkGitHubSkillMdExists tests ---
+
+func TestCheckGitHubSkillMdExists(t *testing.T) {
+	tests := []struct {
+		name        string
+		ghURL       string
+		serverCode  int
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:       "SKILL.md exists at repo root",
+			ghURL:      "https://github.com/org/repo",
+			serverCode: http.StatusOK,
+		},
+		{
+			name:       "SKILL.md exists at subpath",
+			ghURL:      "https://github.com/org/repo/tree/main/skills/my-skill",
+			serverCode: http.StatusOK,
+		},
+		{
+			name:        "SKILL.md not found",
+			ghURL:       "https://github.com/org/repo",
+			serverCode:  http.StatusNotFound,
+			wantErr:     true,
+			errContains: "SKILL.md not found",
+		},
+		{
+			name:        "server error",
+			ghURL:       "https://github.com/org/repo",
+			serverCode:  http.StatusInternalServerError,
+			wantErr:     true,
+			errContains: "HTTP 500",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tt.serverCode)
+			}))
+			t.Cleanup(srv.Close)
+
+			origBaseURL := githubRawBaseURL
+			githubRawBaseURL = srv.URL
+			t.Cleanup(func() { githubRawBaseURL = origBaseURL })
+
+			err := checkGitHubSkillMdExists(tt.ghURL)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("checkGitHubSkillMdExists() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && tt.errContains != "" {
+				if !contains(err.Error(), tt.errContains) {
+					t.Errorf("error = %q, want it to contain %q", err.Error(), tt.errContains)
+				}
+			}
+		})
+	}
+}
+
+func TestCheckGitHubSkillMdExists_InvalidURL(t *testing.T) {
+	err := checkGitHubSkillMdExists("https://gitlab.com/org/repo")
+	if err == nil {
+		t.Fatal("expected error for non-GitHub URL, got nil")
+	}
+	if !contains(err.Error(), "unsupported host") {
+		t.Errorf("error = %q, want it to contain 'unsupported host'", err.Error())
+	}
+}
+
+func TestCheckGitHubSkillMdExists_VerifiesCorrectPath(t *testing.T) {
+	var requestedPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	origBaseURL := githubRawBaseURL
+	githubRawBaseURL = srv.URL
+	t.Cleanup(func() { githubRawBaseURL = origBaseURL })
+
+	tests := []struct {
+		name     string
+		ghURL    string
+		wantPath string
+	}{
+		{
+			name:     "repo root",
+			ghURL:    "https://github.com/org/repo",
+			wantPath: "/org/repo/HEAD/SKILL.md",
+		},
+		{
+			name:     "with branch",
+			ghURL:    "https://github.com/org/repo/tree/main",
+			wantPath: "/org/repo/main/SKILL.md",
+		},
+		{
+			name:     "with branch and subpath",
+			ghURL:    "https://github.com/org/repo/tree/main/skills/my-skill",
+			wantPath: "/org/repo/main/skills/my-skill/SKILL.md",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			requestedPath = ""
+			err := checkGitHubSkillMdExists(tt.ghURL)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if requestedPath != tt.wantPath {
+				t.Errorf("requested path = %q, want %q", requestedPath, tt.wantPath)
 			}
 		})
 	}
