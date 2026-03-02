@@ -134,7 +134,10 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	// Initialize extension registries once and use them for both routing and service behavior.
 	providerPlatforms := v0.DefaultProviderPlatformAdapters(registryService)
 	maps.Copy(providerPlatforms, options.ProviderPlatforms)
-	deploymentPlatforms := v0.DefaultDeploymentPlatformAdapters(registryService)
+	deploymentPlatforms := v0.DefaultDeploymentPlatformAdapters(registryService, v0.DefaultDeploymentAdapterConfig{
+		RuntimeDir:       cfg.RuntimeDir,
+		AgentGatewayPort: cfg.AgentGatewayPort,
+	})
 	maps.Copy(deploymentPlatforms, options.DeploymentPlatforms)
 
 	type platformAdapterConfigurer interface {

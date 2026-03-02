@@ -16,27 +16,21 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
-	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/dockercompose"
-	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/kagent"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
 	maxServerVersionsPerServer = 10000
 
-	localProviderID      = "local"
-	kubernetesProviderID = "kubernetes-default"
-	platformLocal        = "local"
-	platformKubernetes   = "kubernetes"
-	resourceTypeMCP      = "mcp"
-	resourceTypeAgent    = "agent"
-	originDiscovered     = "discovered"
+	localProviderID   = "local"
+	resourceTypeMCP   = "mcp"
+	resourceTypeAgent = "agent"
+	originDiscovered  = "discovered"
 )
 
 // UnsupportedDeploymentPlatformError is returned when no deployment adapter is
@@ -79,6 +73,18 @@ type DeploymentPlatformDeployer interface {
 	Undeploy(ctx context.Context, deployment *models.Deployment) error
 	GetLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
 	Cancel(ctx context.Context, deployment *models.Deployment) error
+	Discover(ctx context.Context, providerID string) ([]*models.Deployment, error)
+}
+
+// DeploymentPlatformStaleCleaner is an optional adapter hook for stale deployment replacement.
+type DeploymentPlatformStaleCleaner interface {
+	CleanupStale(ctx context.Context, deployment *models.Deployment) error
+}
+
+// DeploymentPlatformRuntimeTranslator is an optional adapter hook that provides
+// runtime translation for platform-managed reconciliation.
+type DeploymentPlatformRuntimeTranslator interface {
+	RuntimeTranslator() api.RuntimeTranslator
 }
 
 // NewRegistryService creates a new registry service with the provided database and configuration
@@ -111,6 +117,22 @@ func (s *registryServiceImpl) resolveDeploymentAdapter(platform string) (Deploym
 		return nil, &UnsupportedDeploymentPlatformError{Platform: providerPlatform}
 	}
 	return adapter, nil
+}
+
+func (s *registryServiceImpl) resolveRuntimeTranslator(platform string) (api.RuntimeTranslator, error) {
+	adapter, err := s.resolveDeploymentAdapter(platform)
+	if err != nil {
+		return nil, err
+	}
+	provider, ok := adapter.(DeploymentPlatformRuntimeTranslator)
+	if !ok {
+		return nil, fmt.Errorf("%w: deployment adapter for platform %q does not provide runtime translation", database.ErrInvalidInput, platform)
+	}
+	translator := provider.RuntimeTranslator()
+	if translator == nil {
+		return nil, fmt.Errorf("%w: deployment adapter for platform %q returned a nil runtime translator", database.ErrInvalidInput, platform)
+	}
+	return translator, nil
 }
 
 // shouldGenerateEmbeddingsOnPublish returns true if embeddings should be generated when resources are created.
@@ -731,14 +753,14 @@ func (s *registryServiceImpl) DeleteProvider(ctx context.Context, providerID str
 	return s.db.DeleteProvider(ctx, nil, providerID)
 }
 
-func shouldIncludeKubernetesDeployments(filter *models.DeploymentFilter) bool {
+func shouldIncludeDiscoveredDeployments(filter *models.DeploymentFilter) bool {
 	if filter == nil {
 		return true
 	}
-	if filter.Platform == nil {
+	if filter.Origin == nil {
 		return true
 	}
-	return *filter.Platform == platformKubernetes
+	return strings.EqualFold(strings.TrimSpace(*filter.Origin), originDiscovered)
 }
 
 func discoveredDeploymentID(resourceKind, namespace, name string) string {
@@ -747,14 +769,23 @@ func discoveredDeploymentID(resourceKind, namespace, name string) string {
 	return "k8s-discovered-" + hex.EncodeToString(sum[:8])
 }
 
-func matchesKubernetesDeploymentFilter(filter *models.DeploymentFilter, dep *models.Deployment) bool {
+func matchesDiscoveredDeploymentFilter(filter *models.DeploymentFilter, dep *models.Deployment, provider *models.Provider) bool {
 	if filter == nil {
 		return true
+	}
+	if filter.ProviderID != nil && strings.TrimSpace(dep.ProviderID) != strings.TrimSpace(*filter.ProviderID) {
+		return false
+	}
+	if filter.Platform != nil && provider != nil && !strings.EqualFold(strings.TrimSpace(provider.Platform), strings.TrimSpace(*filter.Platform)) {
+		return false
 	}
 	if filter.ResourceType != nil && dep.ResourceType != *filter.ResourceType {
 		return false
 	}
 	if filter.Status != nil && dep.Status != *filter.Status {
+		return false
+	}
+	if filter.Origin != nil && !strings.EqualFold(strings.TrimSpace(dep.Origin), strings.TrimSpace(*filter.Origin)) {
 		return false
 	}
 	if filter.ResourceName != nil && !strings.Contains(strings.ToLower(dep.ServerName), strings.ToLower(*filter.ResourceName)) {
@@ -763,27 +794,51 @@ func matchesKubernetesDeploymentFilter(filter *models.DeploymentFilter, dep *mod
 	return true
 }
 
-func (s *registryServiceImpl) appendExternalKubernetesDeployments(ctx context.Context, deployments []*models.Deployment, filter *models.DeploymentFilter) []*models.Deployment {
-	k8sResources, err := s.listKubernetesDeployments(ctx, "")
+func (s *registryServiceImpl) appendDiscoveredDeployments(ctx context.Context, deployments []*models.Deployment, filter *models.DeploymentFilter) []*models.Deployment {
+	var platformFilter *string
+	if filter != nil {
+		platformFilter = filter.Platform
+	}
+	providers, err := s.db.ListProviders(ctx, nil, platformFilter)
 	if err != nil {
-		log.Printf("Warning: Failed to list kubernetes deployments: %v", err)
+		log.Printf("Warning: Failed to list providers for discovery: %v", err)
 		return deployments
 	}
 
-	for _, k8sDep := range k8sResources {
-		// Skip internal resources, they are covered in the DB
-		var kubeData models.KubernetesProviderMetadata
-		if err := k8sDep.ProviderMetadata.UnmarshalInto(&kubeData); err != nil {
-			log.Printf("Warning: Failed to unmarshal kubernetes provider metadata: %v", err)
+	for _, provider := range providers {
+		if provider == nil {
 			continue
 		}
-		if !kubeData.IsExternal {
+		if filter != nil && filter.ProviderID != nil && strings.TrimSpace(*filter.ProviderID) != "" &&
+			!strings.EqualFold(strings.TrimSpace(provider.ID), strings.TrimSpace(*filter.ProviderID)) {
 			continue
 		}
-		if !matchesKubernetesDeploymentFilter(filter, k8sDep) {
+
+		adapter, err := s.resolveDeploymentAdapter(provider.Platform)
+		if err != nil {
+			log.Printf("Warning: Failed to resolve deployment adapter for provider %s (%s): %v", provider.ID, provider.Platform, err)
 			continue
 		}
-		deployments = append(deployments, k8sDep)
+		discovered, err := adapter.Discover(ctx, provider.ID)
+		if err != nil {
+			log.Printf("Warning: Failed to discover deployments for provider %s: %v", provider.ID, err)
+			continue
+		}
+		for _, dep := range discovered {
+			if dep == nil {
+				continue
+			}
+			if strings.TrimSpace(dep.ProviderID) == "" {
+				dep.ProviderID = provider.ID
+			}
+			if strings.TrimSpace(dep.Origin) == "" {
+				dep.Origin = originDiscovered
+			}
+			if !matchesDiscoveredDeploymentFilter(filter, dep, provider) {
+				continue
+			}
+			deployments = append(deployments, dep)
+		}
 	}
 	return deployments
 }
@@ -799,8 +854,8 @@ func (s *registryServiceImpl) GetDeployments(ctx context.Context, filter *models
 	var deployments []*models.Deployment
 	deployments = append(deployments, dbDeployments...)
 
-	if shouldIncludeKubernetesDeployments(filter) {
-		deployments = s.appendExternalKubernetesDeployments(ctx, deployments, filter)
+	if shouldIncludeDiscoveredDeployments(filter) {
+		deployments = s.appendDiscoveredDeployments(ctx, deployments, filter)
 	}
 
 	return deployments, nil
@@ -816,6 +871,66 @@ func (s *registryServiceImpl) resolveProviderByID(ctx context.Context, providerI
 		return nil, fmt.Errorf("%w: provider id is required", database.ErrInvalidInput)
 	}
 	return s.db.GetProviderByID(ctx, nil, providerID)
+}
+
+func (s *registryServiceImpl) findDeploymentByIdentity(ctx context.Context, resourceName, version, artifactType string) (*models.Deployment, error) {
+	filter := &models.DeploymentFilter{
+		ResourceType: &artifactType,
+		ResourceName: &resourceName,
+	}
+	deployments, err := s.db.GetDeployments(ctx, nil, filter)
+	if err != nil {
+		return nil, err
+	}
+	for _, deployment := range deployments {
+		if deployment.ServerName == resourceName &&
+			deployment.Version == version &&
+			deployment.ResourceType == artifactType {
+			return deployment, nil
+		}
+	}
+	return nil, database.ErrNotFound
+}
+
+// cleanupExistingDeployment removes a stale deployment record and its associated runtime resources.
+// Errors from runtime cleanup are logged but not fatal, since the resources may already be gone.
+func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, resourceName, version, resourceType, platform string) error {
+	existing, err := s.findDeploymentByIdentity(ctx, resourceName, version, resourceType)
+	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			return nil
+		}
+		return fmt.Errorf("looking up existing deployment: %w", err)
+	}
+
+	cleanupPlatform := strings.ToLower(strings.TrimSpace(platform))
+	if existing == nil {
+		return nil
+	}
+	if providerID := strings.TrimSpace(existing.ProviderID); providerID != "" {
+		provider, err := s.resolveProviderByID(ctx, providerID)
+		if err != nil && !errors.Is(err, database.ErrNotFound) {
+			return fmt.Errorf("resolving provider for existing deployment: %w", err)
+		}
+		if err == nil && provider != nil {
+			cleanupPlatform = strings.ToLower(strings.TrimSpace(provider.Platform))
+		}
+	}
+	if adapter, err := s.resolveDeploymentAdapter(cleanupPlatform); err == nil {
+		if cleaner, ok := adapter.(DeploymentPlatformStaleCleaner); ok {
+			if err := cleaner.CleanupStale(ctx, existing); err != nil {
+				log.Printf("Warning: failed stale cleanup for deployment %s on platform %s: %v", existing.ID, cleanupPlatform, err)
+			}
+		}
+	} else {
+		log.Printf("Warning: failed to resolve deployment adapter for stale cleanup on platform %s: %v", cleanupPlatform, err)
+	}
+
+	if err := s.db.RemoveDeploymentByID(ctx, nil, existing.ID); err != nil && !errors.Is(err, database.ErrNotFound) {
+		return fmt.Errorf("removing stale deployment record: %w", err)
+	}
+
+	return nil
 }
 
 // DeployServer deploys a server with environment variables.
@@ -1032,10 +1147,6 @@ func (s *registryServiceImpl) CancelDeployment(ctx context.Context, deployment *
 }
 
 func (s *registryServiceImpl) reconcileAdapterOnlyDeployments(ctx context.Context, providerPlatform string, deployments []*models.Deployment) error {
-	if providerPlatform == platformLocal || providerPlatform == platformKubernetes {
-		return nil
-	}
-
 	adapter, ok := s.deploymentAdapters[providerPlatform]
 	if !ok {
 		return fmt.Errorf("%w: no deployment adapter registered for provider platform %q", database.ErrInvalidInput, providerPlatform)
@@ -1147,7 +1258,7 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 
 	for providerPlatform, requests := range requestsByProviderPlatform {
 		if len(requests.servers) == 0 && len(requests.agents) == 0 {
-			// For non-local provider platform types, delegate reconciliation to adapters.
+			// Delegate adapter-only reconciliation when no runtime request set was built.
 			if err := s.reconcileAdapterOnlyDeployments(ctx, providerPlatform, requests.deployments); err != nil {
 				return err
 			}
@@ -1181,12 +1292,10 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 			}
 		}
 
-		// Create the runtime translator for the selected provider platform and reconcile requests.
-		var runtimeTranslator api.RuntimeTranslator
-		if providerPlatform == platformKubernetes {
-			runtimeTranslator = kagent.NewTranslator()
-		} else {
-			runtimeTranslator = dockercompose.NewAgentGatewayTranslator(s.cfg.RuntimeDir, s.cfg.AgentGatewayPort)
+		// Runtime translation is adapter-provided so platform behavior stays in adapters.
+		runtimeTranslator, err := s.resolveRuntimeTranslator(providerPlatform)
+		if err != nil {
+			return fmt.Errorf("failed to resolve runtime translator for platform %s: %w", providerPlatform, err)
 		}
 		agentRuntime := runtime.NewAgentRegistryRuntime(regTranslator, runtimeTranslator, s.cfg.RuntimeDir, s.cfg.Verbose)
 
@@ -1262,88 +1371,6 @@ func (s *registryServiceImpl) ensureSemanticEmbedding(ctx context.Context, opts 
 
 	opts.QueryEmbedding = result.Vector
 	return nil
-}
-
-// listKubernetesDeployments lists all agents and MCP servers from Kubernetes as Deployments
-func (s *registryServiceImpl) listKubernetesDeployments(ctx context.Context, namespace string) ([]*models.Deployment, error) {
-	var deployments []*models.Deployment
-
-	// Helper to check if a resource is managed by the registry
-	isManaged := func(labels map[string]string) bool {
-		return labels != nil && labels["aregistry.ai/managed"] == "true"
-	}
-
-	// Helper to append a generic resource to the list
-	addResource := func(
-		resType, name, ns string,
-		labels map[string]string,
-		creation time.Time,
-		_ []metav1.Condition,
-	) {
-		resourceType := resourceTypeAgent
-		if resType == "mcpserver" || resType == "remotemcpserver" {
-			resourceType = resourceTypeMCP
-		}
-
-		preferRemote := resType == "remotemcpserver"
-		external := !isManaged(labels)
-		origin := "managed"
-		if external {
-			origin = originDiscovered
-		}
-
-		kubeData, _ := models.UnmarshalFrom(models.KubernetesProviderMetadata{
-			IsExternal: external,
-		})
-
-		d := &models.Deployment{
-			ID:               discoveredDeploymentID(resType, ns, name),
-			ServerName:       name,
-			Version:          "unknown",
-			DeployedAt:       creation,
-			UpdatedAt:        creation,
-			Status:           "deployed",
-			Env:              labels,
-			PreferRemote:     preferRemote,
-			ResourceType:     resourceType,
-			ProviderID:       kubernetesProviderID,
-			Origin:           origin,
-			ProviderMetadata: kubeData,
-		}
-		deployments = append(deployments, d)
-	}
-
-	// List agents from Kubernetes
-	agents, err := runtime.ListAgents(ctx, namespace)
-	if err != nil {
-		log.Printf("Warning: Failed to list agents from Kubernetes: %v", err)
-	} else {
-		for _, agent := range agents {
-			addResource("agent", agent.Name, agent.Namespace, agent.Labels, agent.CreationTimestamp.Time, agent.Status.Conditions)
-		}
-	}
-
-	// List MCP servers from Kubernetes
-	mcpServers, err := runtime.ListMCPServers(ctx, namespace)
-	if err != nil {
-		log.Printf("Warning: Failed to list MCP servers from Kubernetes: %v", err)
-	} else {
-		for _, mcp := range mcpServers {
-			addResource("mcpserver", mcp.Name, mcp.Namespace, mcp.Labels, mcp.CreationTimestamp.Time, mcp.Status.Conditions)
-		}
-	}
-
-	// List remote MCP servers from Kubernetes
-	remoteMCPs, err := runtime.ListRemoteMCPServers(ctx, namespace)
-	if err != nil {
-		log.Printf("Warning: Failed to list remote MCP servers from Kubernetes: %v", err)
-	} else {
-		for _, remoteMCP := range remoteMCPs {
-			addResource("remotemcpserver", remoteMCP.Name, remoteMCP.Namespace, remoteMCP.Labels, remoteMCP.CreationTimestamp.Time, remoteMCP.Status.Conditions)
-		}
-	}
-
-	return deployments, nil
 }
 
 // ListPrompts returns registry entries for prompts with pagination and filtering

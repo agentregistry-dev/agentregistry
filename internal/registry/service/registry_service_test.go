@@ -10,6 +10,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	runtimeapi "github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/jackc/pgx/v5"
@@ -961,6 +962,16 @@ type deployCreateMockDB struct {
 	removeDeploymentByIDFn      func(ctx context.Context, tx pgx.Tx, id string) error
 }
 
+// deploymentMockDB is a minimal mock for database.Database that only implements
+// the methods needed for testing deployment cleanup logic. All other methods panic.
+type deploymentMockDB struct {
+	database.Database      // embed interface so unimplemented methods panic
+	getDeploymentsFn       func(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
+	listProvidersFn        func(ctx context.Context, tx pgx.Tx, platform *string) ([]*models.Provider, error)
+	getProviderByIDFn      func(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error)
+	removeDeploymentByIdFn func(ctx context.Context, tx pgx.Tx, id string) error
+}
+
 func (m *deployCreateMockDB) GetProviderByID(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error) {
 	return m.getProviderByIDFn(ctx, tx, providerID)
 }
@@ -983,6 +994,22 @@ func (m *deployCreateMockDB) GetDeployments(ctx context.Context, tx pgx.Tx, filt
 
 func (m *deployCreateMockDB) RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id string) error {
 	return m.removeDeploymentByIDFn(ctx, tx, id)
+}
+
+func (m *deploymentMockDB) ListProviders(ctx context.Context, tx pgx.Tx, platform *string) ([]*models.Provider, error) {
+	return m.listProvidersFn(ctx, tx, platform)
+}
+
+func (m *deploymentMockDB) GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+	return m.getDeploymentsFn(ctx, tx, filter)
+}
+
+func (m *deploymentMockDB) GetProviderByID(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error) {
+	return m.getProviderByIDFn(ctx, tx, providerID)
+}
+
+func (m *deploymentMockDB) RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id string) error {
+	return m.removeDeploymentByIdFn(ctx, tx, id)
 }
 
 // Helper functions
@@ -1010,4 +1037,258 @@ func TestResolveDeploymentAdapter_UnsupportedPlatformReturnsTypedError(t *testin
 	require.Error(t, err)
 	assert.True(t, IsUnsupportedDeploymentPlatformError(err))
 	assert.ErrorIs(t, err, database.ErrInvalidInput)
+}
+
+type testRuntimeTranslator struct{}
+
+func (t *testRuntimeTranslator) TranslateRuntimeConfig(
+	_ context.Context,
+	_ *runtimeapi.DesiredState,
+) (*runtimeapi.AIRuntimeConfig, error) {
+	return &runtimeapi.AIRuntimeConfig{}, nil
+}
+
+type testDeploymentAdapter struct {
+	deployFn            func(ctx context.Context, req *models.Deployment) (*models.Deployment, error)
+	undeployFn          func(ctx context.Context, deployment *models.Deployment) error
+	getLogsFn           func(ctx context.Context, deployment *models.Deployment) ([]string, error)
+	cancelFn            func(ctx context.Context, deployment *models.Deployment) error
+	discoverFn          func(ctx context.Context, providerID string) ([]*models.Deployment, error)
+	cleanupStaleFn      func(ctx context.Context, deployment *models.Deployment) error
+	runtimeTranslatorFn func() runtimeapi.RuntimeTranslator
+}
+
+func (a *testDeploymentAdapter) Deploy(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
+	if a.deployFn == nil {
+		return req, nil
+	}
+	return a.deployFn(ctx, req)
+}
+
+func (a *testDeploymentAdapter) Undeploy(ctx context.Context, deployment *models.Deployment) error {
+	if a.undeployFn == nil {
+		return nil
+	}
+	return a.undeployFn(ctx, deployment)
+}
+
+func (a *testDeploymentAdapter) GetLogs(ctx context.Context, deployment *models.Deployment) ([]string, error) {
+	if a.getLogsFn == nil {
+		return []string{}, nil
+	}
+	return a.getLogsFn(ctx, deployment)
+}
+
+func (a *testDeploymentAdapter) Cancel(ctx context.Context, deployment *models.Deployment) error {
+	if a.cancelFn == nil {
+		return nil
+	}
+	return a.cancelFn(ctx, deployment)
+}
+
+func (a *testDeploymentAdapter) Discover(ctx context.Context, providerID string) ([]*models.Deployment, error) {
+	if a.discoverFn == nil {
+		return []*models.Deployment{}, nil
+	}
+	return a.discoverFn(ctx, providerID)
+}
+
+func (a *testDeploymentAdapter) CleanupStale(ctx context.Context, deployment *models.Deployment) error {
+	if a.cleanupStaleFn == nil {
+		return nil
+	}
+	return a.cleanupStaleFn(ctx, deployment)
+}
+
+func (a *testDeploymentAdapter) RuntimeTranslator() runtimeapi.RuntimeTranslator {
+	if a.runtimeTranslatorFn == nil {
+		return nil
+	}
+	return a.runtimeTranslatorFn()
+}
+
+func TestCleanupExistingDeployment_UsesAdapterStaleCleanerWhenAvailable(t *testing.T) {
+	ctx := context.Background()
+	cleanupCalled := false
+	removeCalled := false
+
+	mockDB := &deploymentMockDB{
+		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
+			return []*models.Deployment{
+				{
+					ID:           "dep-cleanup-1",
+					ServerName:   "com.example/test",
+					Version:      "1.0.0",
+					ResourceType: "mcp",
+					ProviderID:   "local",
+				},
+			}, nil
+		},
+		getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {
+			return &models.Provider{ID: providerID, Platform: "local"}, nil
+		},
+		removeDeploymentByIdFn: func(_ context.Context, _ pgx.Tx, _ string) error {
+			removeCalled = true
+			return nil
+		},
+	}
+
+	adapter := &testDeploymentAdapter{
+		cleanupStaleFn: func(_ context.Context, deployment *models.Deployment) error {
+			cleanupCalled = deployment != nil && deployment.ID == "dep-cleanup-1"
+			return nil
+		},
+	}
+
+	svc := &registryServiceImpl{
+		db: mockDB,
+		deploymentAdapters: map[string]DeploymentPlatformDeployer{
+			"local": adapter,
+		},
+	}
+
+	err := svc.cleanupExistingDeployment(ctx, "com.example/test", "1.0.0", "mcp", "local")
+	require.NoError(t, err)
+	assert.True(t, cleanupCalled)
+	assert.True(t, removeCalled, "db record should still be removed after adapter stale cleanup")
+}
+
+func TestUndeployDeployment_UsesAdapterForLocalPlatform(t *testing.T) {
+	undeployCalled := false
+	adapter := &testDeploymentAdapter{
+		undeployFn: func(_ context.Context, deployment *models.Deployment) error {
+			undeployCalled = deployment != nil && deployment.ID == "dep-local-1"
+			return nil
+		},
+	}
+
+	svc := &registryServiceImpl{
+		deploymentAdapters: map[string]DeploymentPlatformDeployer{
+			"local": adapter,
+		},
+	}
+
+	err := svc.UndeployDeployment(context.Background(), &models.Deployment{ID: "dep-local-1"}, "local")
+	require.NoError(t, err)
+	assert.True(t, undeployCalled)
+}
+
+func TestResolveRuntimeTranslator_UsesAdapterProvider(t *testing.T) {
+	translator := &testRuntimeTranslator{}
+	adapter := &testDeploymentAdapter{
+		runtimeTranslatorFn: func() runtimeapi.RuntimeTranslator {
+			return translator
+		},
+	}
+	svc := &registryServiceImpl{
+		deploymentAdapters: map[string]DeploymentPlatformDeployer{
+			"local": adapter,
+		},
+	}
+
+	got, err := svc.resolveRuntimeTranslator("local")
+	require.NoError(t, err)
+	assert.Same(t, translator, got)
+}
+
+func TestGetDeployments_AppendsDiscoveredDeploymentsFromAdapters(t *testing.T) {
+	discoverCalled := false
+	mockDB := &deploymentMockDB{
+		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
+			return []*models.Deployment{
+				{
+					ID:           "dep-managed-1",
+					ServerName:   "io.test/managed",
+					Version:      "1.0.0",
+					ResourceType: "mcp",
+					ProviderID:   "local",
+					Origin:       "managed",
+				},
+			}, nil
+		},
+		listProvidersFn: func(_ context.Context, _ pgx.Tx, _ *string) ([]*models.Provider, error) {
+			return []*models.Provider{
+				{ID: "kubernetes-default", Platform: "kubernetes"},
+			}, nil
+		},
+	}
+
+	adapter := &testDeploymentAdapter{
+		discoverFn: func(_ context.Context, providerID string) ([]*models.Deployment, error) {
+			discoverCalled = true
+			return []*models.Deployment{
+				{
+					ServerName:   "io.test/external",
+					Version:      "unknown",
+					ResourceType: "mcp",
+					Status:       "deployed",
+					Origin:       "discovered",
+					ProviderID:   providerID,
+				},
+			}, nil
+		},
+	}
+
+	svc := &registryServiceImpl{
+		db: mockDB,
+		deploymentAdapters: map[string]DeploymentPlatformDeployer{
+			"kubernetes": adapter,
+		},
+	}
+
+	got, err := svc.GetDeployments(context.Background(), nil)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.True(t, discoverCalled)
+	assert.Equal(t, "dep-managed-1", got[0].ID)
+	assert.Equal(t, "discovered", got[1].Origin)
+	assert.Equal(t, "kubernetes-default", got[1].ProviderID)
+}
+
+func TestGetDeployments_ManagedOriginSkipsDiscovery(t *testing.T) {
+	discoverCalled := false
+	originManaged := "managed"
+	mockDB := &deploymentMockDB{
+		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+			require.NotNil(t, filter)
+			require.NotNil(t, filter.Origin)
+			require.Equal(t, originManaged, *filter.Origin)
+			return []*models.Deployment{
+				{
+					ID:           "dep-managed-only",
+					ServerName:   "io.test/managed",
+					Version:      "1.0.0",
+					ResourceType: "mcp",
+					ProviderID:   "local",
+					Origin:       "managed",
+				},
+			}, nil
+		},
+		listProvidersFn: func(_ context.Context, _ pgx.Tx, _ *string) ([]*models.Provider, error) {
+			return []*models.Provider{
+				{ID: "kubernetes-default", Platform: "kubernetes"},
+			}, nil
+		},
+	}
+
+	adapter := &testDeploymentAdapter{
+		discoverFn: func(_ context.Context, _ string) ([]*models.Deployment, error) {
+			discoverCalled = true
+			return []*models.Deployment{}, nil
+		},
+	}
+
+	svc := &registryServiceImpl{
+		db: mockDB,
+		deploymentAdapters: map[string]DeploymentPlatformDeployer{
+			"kubernetes": adapter,
+		},
+	}
+
+	filter := &models.DeploymentFilter{Origin: &originManaged}
+	got, err := svc.GetDeployments(context.Background(), filter)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.False(t, discoverCalled)
+	assert.Equal(t, "dep-managed-only", got[0].ID)
 }
