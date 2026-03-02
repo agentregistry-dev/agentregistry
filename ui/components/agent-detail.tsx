@@ -7,13 +7,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
-import { toast } from "sonner"
-import {
   X,
   Calendar,
   Tag,
@@ -26,7 +19,6 @@ import {
   Languages,
   Box,
   Clock,
-  Upload,
   Github,
   ExternalLink,
 } from "lucide-react"
@@ -34,10 +26,9 @@ import {
 interface AgentDetailProps {
   agent: AgentResponse
   onClose: () => void
-  onPublish?: (agent: AgentResponse) => void
 }
 
-export function AgentDetail({ agent, onClose, onPublish }: AgentDetailProps) {
+export function AgentDetail({ agent, onClose }: AgentDetailProps) {
   const [activeTab, setActiveTab] = useState("overview")
   
   const { agent: agentData, _meta } = agent
@@ -106,23 +97,6 @@ export function AgentDetail({ agent, onClose, onPublish }: AgentDetailProps) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    onClick={() => onPublish && onPublish(agent)}
-                    className="gap-2"
-                  >
-                    <Upload className="h-4 w-4" />
-                    Publish
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Publish this agent to your registry</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
             <Button variant="ghost" size="icon" onClick={onClose}>
               <X className="h-5 w-5" />
             </Button>

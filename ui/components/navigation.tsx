@@ -36,19 +36,13 @@ export function Navigation() {
           </Link>
           
           <div className="flex items-center gap-6">
-            <Link 
-              href="/" 
+            <Link
+              href="/"
               className={getLinkClasses("/")}
             >
-              Admin
+              Catalog
             </Link>
-            <Link 
-              href="/published" 
-              className={getLinkClasses("/published")}
-            >
-              Published
-            </Link>
-            <Link 
+            <Link
               href="/deployed" 
               className={getLinkClasses("/deployed")}
             >

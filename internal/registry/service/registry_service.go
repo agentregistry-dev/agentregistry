@@ -1376,7 +1376,7 @@ func (s *registryServiceImpl) listKubernetesDeployments(ctx context.Context, nam
 
 	// Helper to append a generic resource to the list
 	addResource := func(
-		resType, name, ns string,
+		resType, name string, _ string,
 		labels map[string]string,
 		creation time.Time,
 		_ []metav1.Condition,

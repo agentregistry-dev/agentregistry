@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { adminApiClient, ServerResponse } from "@/lib/admin-api"
+import { deployServer as deployServerApi, type ServerResponse } from "@/lib/admin-api"
 import { Play, Plus, X, Loader2 } from "lucide-react"
 
 interface DeployServerDialogProps {
@@ -45,11 +45,14 @@ export function DeployServerDialog({ open, onOpenChange, server, onDeploySuccess
       setDeploying(true)
       setError(null)
       
-      await adminApiClient.deployServer({
-        serverName: server.server.name,
-        version: server.server.version,
-        config,
-        preferRemote: false,
+      await deployServerApi({
+        body: {
+          serverName: server.server.name,
+          version: server.server.version,
+          env: config,
+          preferRemote: false,
+        },
+        throwOnError: true,
       })
 
       setSuccess(true)

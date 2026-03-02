@@ -454,17 +454,18 @@ func asHTTPStatus(err error) int {
 
 // DeploymentResponse represents a deployment returned by the API
 type DeploymentResponse struct {
-	ID           string            `json:"id"`
-	ServerName   string            `json:"serverName"`
-	Version      string            `json:"version"`
-	DeployedAt   string            `json:"deployedAt"`
-	UpdatedAt    string            `json:"updatedAt"`
-	Status       string            `json:"status"`
-	Env          map[string]string `json:"env,omitempty"`
-	PreferRemote bool              `json:"preferRemote"`
-	ResourceType string            `json:"resourceType"`
-	ProviderID   string            `json:"providerId,omitempty"`
-	Origin       string            `json:"origin,omitempty"`
+	ID             string            `json:"id"`
+	ProviderID     string            `json:"providerId,omitempty"`
+	ServerName     string            `json:"serverName"`
+	Version        string            `json:"version"`
+	Origin         string            `json:"origin"`
+	DeployedAt     string            `json:"deployedAt"`
+	UpdatedAt      string            `json:"updatedAt"`
+	Status         string            `json:"status"`
+	Env            map[string]string `json:"env"`
+	ProviderConfig map[string]any    `json:"providerConfig,omitempty"`
+	PreferRemote   bool              `json:"preferRemote"`
+	ResourceType   string            `json:"resourceType"`
 }
 
 // DeploymentsListResponse represents the list of deployments

@@ -131,6 +131,14 @@ test:
 e2e: build-cli
 	go tool gotestsum --format testdox -- -tags=e2e -timeout 45m ./e2e/...
 
+gen-openapi:
+	@echo "Generating OpenAPI spec..."
+	go run ./cmd/tools/gen-openapi -output openapi.yaml
+
+gen-client: gen-openapi install-ui
+	@echo "Generating TypeScript client..."
+	cd ui && npm run generate
+
 # Run Go tests with coverage
 test-coverage:
 	@echo "Running Go tests with coverage..."
@@ -258,7 +266,7 @@ lint-ui: install-ui ## Run eslint on UI code
 	cd ui && npm run lint
 
 .PHONY: verify
-verify: mod-tidy ## Run all verification checks
+verify: mod-tidy gen-client ## Run all verification checks
 	git diff --exit-code
 
 .PHONY: mod-tidy

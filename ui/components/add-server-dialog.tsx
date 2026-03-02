@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { adminApiClient, ServerJSON } from "@/lib/admin-api"
+import { createServerV0, type ServerJson } from "@/lib/admin-api"
 import { Loader2, AlertCircle, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -68,7 +68,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
       }
 
       // Build server object
-      const server: ServerJSON = {
+      const server: ServerJson = {
         $schema: schema.trim(),
         name: name.trim(),
         description: description.trim(),
@@ -111,10 +111,10 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
       }
 
       // Create server
-      const result = await adminApiClient.createServer(server)
-      
+      const { data } = await createServerV0({ body: server, throwOnError: true })
+
       // Show success toast
-      toast.success(`Server "${result.server.name}" created successfully!`)
+      toast.success(`Server "${data?.server.name}" created successfully!`)
 
       // Close dialog and refresh
       onOpenChange(false)

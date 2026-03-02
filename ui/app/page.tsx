@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   Select,
   SelectContent,
@@ -33,9 +32,8 @@ import { ImportSkillsDialog } from "@/components/import-skills-dialog"
 import { AddSkillDialog } from "@/components/add-skill-dialog"
 import { ImportAgentsDialog } from "@/components/import-agents-dialog"
 import { AddAgentDialog } from "@/components/add-agent-dialog"
-import { adminApiClient, ServerResponse, SkillResponse, AgentResponse, ServerStats } from "@/lib/admin-api"
+import { listServersV0, listSkillsV0, listAgentsV0, ServerResponse, SkillResponse, AgentResponse } from "@/lib/admin-api"
 import MCPIcon from "@/components/icons/mcp"
-import { toast } from "sonner"
 import {
   Search,
   Download,
@@ -65,7 +63,7 @@ export default function AdminPage() {
   const [filteredServers, setFilteredServers] = useState<GroupedServer[]>([])
   const [filteredSkills, setFilteredSkills] = useState<SkillResponse[]>([])
   const [filteredAgents, setFilteredAgents] = useState<AgentResponse[]>([])
-  const [stats, setStats] = useState<ServerStats | null>(null)
+  const [stats, setStats] = useState<{ total_servers: number; total_server_names: number } | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [sortBy, setSortBy] = useState<"name" | "stars" | "date">("name")
   const [filterVerifiedOrg, setFilterVerifiedOrg] = useState(false)
@@ -88,8 +86,9 @@ export default function AdminPage() {
 
   // Helper function to extract GitHub stars from server metadata
   const getStars = (server: ServerResponse): number => {
-    const publisherMetadata = server.server._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['aregistry.ai/metadata']
-    return publisherMetadata?.stars ?? 0
+    const publisherProvided = server.server._meta?.['io.modelcontextprotocol.registry/publisher-provided'] as Record<string, unknown> | undefined
+    const metadata = publisherProvided?.['aregistry.ai/metadata'] as Record<string, unknown> | undefined
+    return (metadata?.stars as number) ?? 0
   }
 
   // Helper function to get published date
@@ -147,44 +146,44 @@ export default function AdminPage() {
       // Fetch all servers (with pagination if needed)
       const allServers: ServerResponse[] = []
       let serverCursor: string | undefined
-      
+
       do {
-        const response = await adminApiClient.listServers({ 
-          cursor: serverCursor, 
-          limit: 100,
+        const { data: serverData } = await listServersV0({
+          query: { cursor: serverCursor, limit: 100 },
+          throwOnError: true,
         })
-        allServers.push(...response.servers)
-        serverCursor = response.metadata.nextCursor
+        allServers.push(...serverData.servers)
+        serverCursor = serverData.metadata.nextCursor
       } while (serverCursor)
-      
+
       setServers(allServers)
 
       // Fetch all skills (with pagination if needed)
       const allSkills: SkillResponse[] = []
       let skillCursor: string | undefined
-      
+
       do {
-        const response = await adminApiClient.listSkills({ 
-          cursor: skillCursor, 
-          limit: 100,
+        const { data: skillData } = await listSkillsV0({
+          query: { cursor: skillCursor, limit: 100 },
+          throwOnError: true,
         })
-        allSkills.push(...response.skills)
-        skillCursor = response.metadata.nextCursor
+        allSkills.push(...skillData.skills)
+        skillCursor = skillData.metadata.nextCursor
       } while (skillCursor)
-      
+
       setSkills(allSkills)
 
       // Fetch all agents (with pagination if needed)
       const allAgents: AgentResponse[] = []
       let agentCursor: string | undefined
-      
+
       do {
-        const response = await adminApiClient.listAgents({ 
-          cursor: agentCursor, 
-          limit: 100,
+        const { data: agentData } = await listAgentsV0({
+          query: { cursor: agentCursor, limit: 100 },
+          throwOnError: true,
         })
-        allAgents.push(...response.agents)
-        agentCursor = response.metadata.nextCursor
+        allAgents.push(...agentData.agents)
+        agentCursor = agentData.metadata.nextCursor
       } while (agentCursor)
       
       setAgents(allAgents)
@@ -197,9 +196,6 @@ export default function AdminPage() {
       setStats({
         total_servers: allServers.length,
         total_server_names: grouped.length,
-        active_servers: allServers.length,
-        deprecated_servers: 0,
-        deleted_servers: 0,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch data")
@@ -238,39 +234,6 @@ export default function AdminPage() {
     setSelectedServer(null)
   }
 
-  // Handle server publishing
-  const handlePublish = async (server: ServerResponse) => {
-    try {
-      await adminApiClient.publishServerStatus(server.server.name, server.server.version)
-      await fetchData() // Refresh data
-      toast.success(`Successfully published ${server.server.name}`)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to publish server")
-    }
-  }
-
-  const handlePublishSkill = async (skill: SkillResponse) => {
-    try {
-      await adminApiClient.publishSkillStatus(skill.skill.name, skill.skill.version)
-      await fetchData() // Refresh data
-      toast.success(`Successfully published ${skill.skill.name}`)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to publish skill")
-    }
-  }
-
-  const handlePublishAgent = async (agentResponse: AgentResponse) => {
-    const {agent } = agentResponse;
-
-    try {
-      await adminApiClient.publishAgentStatus(agent.name, agent.version)
-      await fetchData() // Refresh data
-      toast.success(`Successfully published ${agent.name}`)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to publish agent")
-    }
-  }
-
   // Filter and sort servers based on search query and sort option
   useEffect(() => {
     let filtered = [...groupedServers]
@@ -289,7 +252,9 @@ export default function AdminPage() {
     // Filter by verified organization
     if (filterVerifiedOrg) {
       filtered = filtered.filter((s) => {
-        const identityData = s.server._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['aregistry.ai/metadata']?.identity
+        const publisherProvided = s.server._meta?.['io.modelcontextprotocol.registry/publisher-provided'] as Record<string, unknown> | undefined
+        const metadata = publisherProvided?.['aregistry.ai/metadata'] as Record<string, unknown> | undefined
+        const identityData = metadata?.identity as Record<string, unknown> | undefined
         return identityData?.org_is_verified === true
       })
     }
@@ -297,7 +262,9 @@ export default function AdminPage() {
     // Filter by verified publisher
     if (filterVerifiedPublisher) {
       filtered = filtered.filter((s) => {
-        const identityData = s.server._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['aregistry.ai/metadata']?.identity
+        const publisherProvided = s.server._meta?.['io.modelcontextprotocol.registry/publisher-provided'] as Record<string, unknown> | undefined
+        const metadata = publisherProvided?.['aregistry.ai/metadata'] as Record<string, unknown> | undefined
+        const identityData = metadata?.identity as Record<string, unknown> | undefined
         return identityData?.publisher_identity_verified_by_jwt === true
       })
     }
@@ -383,7 +350,6 @@ export default function AdminPage() {
         server={selectedServer as ServerResponse & { allVersions?: ServerResponse[] }}
         onClose={handleCloseServerDetail}
         onServerCopied={fetchData}
-        onPublish={handlePublish}
       />
     )
   }
@@ -394,7 +360,6 @@ export default function AdminPage() {
       <SkillDetail
         skill={selectedSkill}
         onClose={() => setSelectedSkill(null)}
-        onPublish={handlePublishSkill}
       />
     )
   }
@@ -405,19 +370,21 @@ export default function AdminPage() {
       <AgentDetail
         agent={selectedAgent}
         onClose={() => setSelectedAgent(null)}
-        onPublish={handlePublishAgent}
       />
     )
   }
 
   return (
     <main className="min-h-screen bg-background">
-      {/* Stats Section */}
+      {/* Category Cards */}
       {stats && (
         <div className="bg-muted/30 border-b">
           <div className="container mx-auto px-6 py-6">
             <div className="grid gap-4 md:grid-cols-3">
-              <Card className="p-4 hover:shadow-md transition-all duration-200 border hover:border-primary/20">
+              <Card
+                className={`p-4 cursor-pointer transition-all duration-200 border ${activeTab === "servers" ? "border-primary ring-1 ring-primary shadow-md" : "hover:border-primary/20 hover:shadow-md"}`}
+                onClick={() => setActiveTab("servers")}
+              >
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-primary/10 rounded-lg flex items-center justify-center">
                     <span className="h-5 w-5 text-primary flex items-center justify-center">
@@ -431,7 +398,10 @@ export default function AdminPage() {
                 </div>
               </Card>
 
-              <Card className="p-4 hover:shadow-md transition-all duration-200 border hover:border-primary/20">
+              <Card
+                className={`p-4 cursor-pointer transition-all duration-200 border ${activeTab === "skills" ? "border-primary ring-1 ring-primary shadow-md" : "hover:border-primary/20 hover:shadow-md"}`}
+                onClick={() => setActiveTab("skills")}
+              >
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-primary/20 rounded-lg flex items-center justify-center">
                     <Zap className="h-5 w-5 text-primary" />
@@ -443,7 +413,10 @@ export default function AdminPage() {
                 </div>
               </Card>
 
-              <Card className="p-4 hover:shadow-md transition-all duration-200 border hover:border-primary/20">
+              <Card
+                className={`p-4 cursor-pointer transition-all duration-200 border ${activeTab === "agents" ? "border-primary ring-1 ring-primary shadow-md" : "hover:border-primary/20 hover:shadow-md"}`}
+                onClick={() => setActiveTab("agents")}
+              >
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-primary/30 rounded-lg flex items-center justify-center">
                     <Bot className="h-5 w-5 text-primary" />
@@ -460,25 +433,8 @@ export default function AdminPage() {
       )}
 
       <div className="container mx-auto px-6 py-8">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <div className="w-full">
           <div className="flex items-center gap-4 mb-8">
-            <TabsList>
-              <TabsTrigger value="servers" className="gap-2">
-                <span className="h-4 w-4 flex items-center justify-center">
-                  <MCPIcon />
-                </span>
-                Servers
-              </TabsTrigger>
-              <TabsTrigger value="skills" className="gap-2">
-                <Zap className="h-4 w-4" />
-                Skills
-              </TabsTrigger>
-              <TabsTrigger value="agents" className="gap-2">
-                <Bot className="h-4 w-4" />
-                Agents
-              </TabsTrigger>
-            </TabsList>
-
             {/* Search */}
             <div className="flex-1 max-w-md">
               <div className="relative">
@@ -557,112 +513,109 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* Servers Tab */}
-          <TabsContent value="servers">
-            {/* Sort and Filter controls */}
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-2">
-                <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
-                <Select value={sortBy} onValueChange={(value: "name" | "stars" | "date") => setSortBy(value)}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Sort by..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="name">Name (A-Z)</SelectItem>
-                    <SelectItem value="stars">GitHub Stars</SelectItem>
-                    <SelectItem value="date">Date Published</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex items-center gap-4">
-                <Filter className="h-4 w-4 text-muted-foreground" />
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="filter-verified-org" 
-                    checked={filterVerifiedOrg}
-                    onCheckedChange={(checked: boolean) => setFilterVerifiedOrg(checked)}
-                  />
-                  <Label 
-                    htmlFor="filter-verified-org" 
-                    className="text-sm font-normal cursor-pointer"
-                  >
-                    Verified Organization
-                  </Label>
+          {/* Servers */}
+          {activeTab === "servers" && (
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2">
+                  <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+                  <Select value={sortBy} onValueChange={(value: "name" | "stars" | "date") => setSortBy(value)}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Sort by..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="name">Name (A-Z)</SelectItem>
+                      <SelectItem value="stars">GitHub Stars</SelectItem>
+                      <SelectItem value="date">Date Published</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="filter-verified-publisher" 
-                    checked={filterVerifiedPublisher}
-                    onCheckedChange={(checked: boolean) => setFilterVerifiedPublisher(checked)}
-                  />
-                  <Label 
-                    htmlFor="filter-verified-publisher" 
-                    className="text-sm font-normal cursor-pointer"
-                  >
-                    Verified Publisher
-                  </Label>
-                </div>
-              </div>
-            </div>
 
-            {/* Server List */}
-            <div>
-              <h2 className="text-lg font-semibold mb-4">
-                Servers
-                <span className="text-muted-foreground ml-2">
-                  ({filteredServers.length})
-                </span>
-              </h2>
-
-              {filteredServers.length === 0 ? (
-                <Card className="p-12">
-                  <div className="text-center text-muted-foreground">
-                    <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center">
-                      <MCPIcon />
-                    </div>
-                    <p className="text-lg font-medium mb-2">
-                      {groupedServers.length === 0
-                        ? "No servers in registry"
-                        : "No servers match your filters"}
-                    </p>
-                    <p className="text-sm mb-4">
-                      {groupedServers.length === 0
-                        ? "Import servers from external registries to get started"
-                        : "Try adjusting your search or filter criteria"}
-                    </p>
-                    {groupedServers.length === 0 && (
-                      <Button
-                        variant="outline"
-                        className="gap-2"
-                        onClick={() => setImportDialogOpen(true)}
-                      >
-                        <Download className="h-4 w-4" />
-                        Import Servers
-                      </Button>
-                    )}
-                  </div>
-                </Card>
-              ) : (
-                <div className="grid gap-4">
-                  {filteredServers.map((server, index) => (
-                    <ServerCard
-                      key={`${server.server.name}-${server.server.version}-${index}`}
-                      server={server}
-                      versionCount={server.versionCount}
-                      onClick={() => handleServerClick(server)}
-                      showPublish={true}
-                      onPublish={handlePublish}
+                <div className="flex items-center gap-4">
+                  <Filter className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="filter-verified-org"
+                      checked={filterVerifiedOrg}
+                      onCheckedChange={(checked: boolean) => setFilterVerifiedOrg(checked)}
                     />
-                  ))}
+                    <Label
+                      htmlFor="filter-verified-org"
+                      className="text-sm font-normal cursor-pointer"
+                    >
+                      Verified Organization
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="filter-verified-publisher"
+                      checked={filterVerifiedPublisher}
+                      onCheckedChange={(checked: boolean) => setFilterVerifiedPublisher(checked)}
+                    />
+                    <Label
+                      htmlFor="filter-verified-publisher"
+                      className="text-sm font-normal cursor-pointer"
+                    >
+                      Verified Publisher
+                    </Label>
+                  </div>
                 </div>
-              )}
-            </div>
-          </TabsContent>
+              </div>
 
-          {/* Skills Tab */}
-          <TabsContent value="skills">
-            {/* Skills List */}
+              <div>
+                <h2 className="text-lg font-semibold mb-4">
+                  Servers
+                  <span className="text-muted-foreground ml-2">
+                    ({filteredServers.length})
+                  </span>
+                </h2>
+
+                {filteredServers.length === 0 ? (
+                  <Card className="p-12">
+                    <div className="text-center text-muted-foreground">
+                      <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center">
+                        <MCPIcon />
+                      </div>
+                      <p className="text-lg font-medium mb-2">
+                        {groupedServers.length === 0
+                          ? "No servers in registry"
+                          : "No servers match your filters"}
+                      </p>
+                      <p className="text-sm mb-4">
+                        {groupedServers.length === 0
+                          ? "Import servers from external registries to get started"
+                          : "Try adjusting your search or filter criteria"}
+                      </p>
+                      {groupedServers.length === 0 && (
+                        <Button
+                          variant="outline"
+                          className="gap-2"
+                          onClick={() => setImportDialogOpen(true)}
+                        >
+                          <Download className="h-4 w-4" />
+                          Import Servers
+                        </Button>
+                      )}
+                    </div>
+                  </Card>
+                ) : (
+                  <div className="grid gap-4">
+                    {filteredServers.map((server, index) => (
+                      <ServerCard
+                        key={`${server.server.name}-${server.server.version}-${index}`}
+                        server={server}
+                        versionCount={server.versionCount}
+                        onClick={() => handleServerClick(server)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Skills */}
+          {activeTab === "skills" && (
             <div>
               <h2 className="text-lg font-semibold mb-4">
                 Skills
@@ -706,18 +659,15 @@ export default function AdminPage() {
                       key={`${skill.skill.name}-${skill.skill.version}-${index}`}
                       skill={skill}
                       onClick={() => setSelectedSkill(skill)}
-                      showPublish={true}
-                      onPublish={handlePublishSkill}
                     />
                   ))}
                 </div>
               )}
             </div>
-          </TabsContent>
+          )}
 
-          {/* Agents Tab */}
-          <TabsContent value="agents">
-            {/* Agents List */}
+          {/* Agents */}
+          {activeTab === "agents" && (
             <div>
               <h2 className="text-lg font-semibold mb-4">
                 Agents
@@ -761,15 +711,13 @@ export default function AdminPage() {
                       key={`${agent.agent.name}-${agent.agent.version}-${index}`}
                       agent={agent}
                       onClick={() => setSelectedAgent(agent)}
-                      showPublish={true}
-                      onPublish={handlePublishAgent}
                     />
                   ))}
                 </div>
               )}
             </div>
-          </TabsContent>
-        </Tabs>
+          )}
+        </div>
       </div>
 
       {/* Server Dialogs */}

@@ -1,12 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ServerResponse, adminApiClient } from "@/lib/admin-api"
+import { ServerResponse } from "@/lib/admin-api"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { toast } from "sonner"
 import {
   Select,
   SelectContent,
@@ -36,9 +35,6 @@ import {
   Star,
   TrendingUp,
   Copy,
-  Loader2,
-  CheckCircle2,
-  AlertCircle,
   ArrowLeft,
   History,
   Check,
@@ -56,14 +52,10 @@ interface ServerDetailProps {
   server: ServerResponse & { allVersions?: ServerResponse[] }
   onClose: () => void
   onServerCopied?: () => void
-  onPublish?: (server: ServerResponse) => void
 }
 
-export function ServerDetail({ server, onClose, onServerCopied, onPublish }: ServerDetailProps) {
+export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailProps) {
   const [activeTab, setActiveTab] = useState("overview")
-  const [copying, setCopying] = useState(false)
-  const [copySuccess, setCopySuccess] = useState(false)
-  const [copyError, setCopyError] = useState<string | null>(null)
   const [selectedVersion, setSelectedVersion] = useState<ServerResponse>(server)
   const [jsonCopied, setJsonCopied] = useState(false)
   
@@ -73,17 +65,17 @@ export function ServerDetail({ server, onClose, onServerCopied, onPublish }: Ser
   const { server: serverData, _meta } = selectedVersion
   const official = _meta?.['io.modelcontextprotocol.registry/official']
   
-  // Extract metadata
-  const publisherMetadata = serverData._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.['aregistry.ai/metadata']
-  const githubStars = publisherMetadata?.stars
-  const overallScore = publisherMetadata?.score
-  const openSSFScore = publisherMetadata?.scorecard?.openssf
-  const repoData = publisherMetadata?.repo
-  const endpointHealth = publisherMetadata?.endpoint_health
-  const scanData = publisherMetadata?.scans
-  const identityData = publisherMetadata?.identity
-  const semverData = publisherMetadata?.semver
-  const securityScanning = publisherMetadata?.security_scanning
+  // Extract metadata — publisher-provided is typed as { [key: string]: unknown }
+  const publisherProvided = serverData._meta?.['io.modelcontextprotocol.registry/publisher-provided'] as Record<string, unknown> | undefined
+  const publisherMetadata = publisherProvided?.['aregistry.ai/metadata'] as Record<string, any> | undefined
+  const githubStars = publisherMetadata?.stars as number | undefined
+  const overallScore = publisherMetadata?.score as number | undefined
+  const openSSFScore = (publisherMetadata?.scorecard as Record<string, any>)?.openssf as number | undefined
+  const repoData = publisherMetadata?.repo as Record<string, any> | undefined
+  const endpointHealth = publisherMetadata?.endpoint_health as Record<string, any> | undefined
+  const scanData = publisherMetadata?.scans as Record<string, any> | undefined
+  const identityData = publisherMetadata?.identity as Record<string, any> | undefined
+  const securityScanning = publisherMetadata?.security_scanning as Record<string, any> | undefined
 
   // Get the first icon if available
   const icon = serverData.icons?.[0]
@@ -118,30 +110,6 @@ export function ServerDetail({ server, onClose, onServerCopied, onPublish }: Ser
     const newVersion = allVersions.find(v => v.server.version === version)
     if (newVersion) {
       setSelectedVersion(newVersion)
-    }
-  }
-
-  const handlePublishServer = async () => {
-    if (onPublish) {
-      onPublish(selectedVersion)
-      return
-    }
-
-    setCopying(true)
-    setCopyError(null)
-    setCopySuccess(false)
-
-    try {
-      // Copy the server data to create a new entry
-      await adminApiClient.publishServerStatus(serverData.name, serverData.version)
-      toast.success(`Successfully published ${serverData.name}`)
-      setCopySuccess(true)
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Failed to publish server"
-      toast.error(errorMsg)
-      setCopyError(errorMsg)
-    } finally {
-      setCopying(false)
     }
   }
 
@@ -244,54 +212,11 @@ export function ServerDetail({ server, onClose, onServerCopied, onPublish }: Ser
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  onClick={handlePublishServer}
-                  disabled={copying}
-                  className="gap-2"
-                >
-                  {copying ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                  Publish
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Publish this server to your registry</p>
-              </TooltipContent>
-            </Tooltip>
             <Button variant="ghost" size="icon" onClick={onClose}>
               <X className="h-5 w-5" />
             </Button>
           </div>
         </div>
-
-        {/* Copy Status Messages */}
-        {copySuccess && (
-          <Card className="p-4 mb-4 bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
-              <p className="text-sm font-medium text-green-900 dark:text-green-100">
-                Server successfully publish to your registry!
-              </p>
-            </div>
-          </Card>
-        )}
-
-        {copyError && (
-          <Card className="p-4 mb-4 bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-              <p className="text-sm font-medium text-red-900 dark:text-red-100">
-                {copyError}
-              </p>
-            </div>
-          </Card>
-        )}
 
         {/* Version Selector and Quick Info */}
         {allVersions.length > 1 && (
@@ -604,7 +529,7 @@ export function ServerDetail({ server, onClose, onServerCopied, onPublish }: Ser
                           <p className="text-xs text-muted-foreground mb-1">Ecosystems</p>
                           <div className="text-sm font-bold space-y-1">
                             {Object.entries(scanData.dependency_health.ecosystems).map(([key, value]) => (
-                              <div key={key}>{key}: {value}</div>
+                              <div key={key}>{key}: {String(value)}</div>
                             ))}
                           </div>
                         </div>

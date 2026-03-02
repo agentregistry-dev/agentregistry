@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { adminApiClient } from "@/lib/admin-api"
+import { listDeployments, removeDeployment, Deployment } from "@/lib/admin-api"
 import { Trash2, AlertCircle, Calendar, Package, Copy, Check } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -17,25 +17,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 
-type DeploymentResponse = {
-  serverName: string
-  version: string
-  deployedAt: string
-  updatedAt: string
-  status: string
-  config: Record<string, string>
-  preferRemote: boolean
-  resourceType: string // "mcp" or "agent"
-  runtime: string
-  isExternal?: boolean // true if not managed by registry
-}
-
 export default function DeployedPage() {
-  const [deployments, setDeployments] = useState<DeploymentResponse[]>([])
+  const [deployments, setDeployments] = useState<Deployment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [removing, setRemoving] = useState(false)
-  const [serverToRemove, setServerToRemove] = useState<{ name: string, version: string, resourceType: string } | null>(null)
+  const [serverToRemove, setServerToRemove] = useState<{ id: string, name: string, version: string, resourceType: string } | null>(null)
   const [copied, setCopied] = useState(false)
 
   const gatewayUrl = "http://localhost:21212/mcp"
@@ -51,8 +38,8 @@ export default function DeployedPage() {
     try {
       setError(null)
       // listDeployments now returns both managed and external K8s resources
-      const deployData = await adminApiClient.listDeployments()
-      setDeployments(deployData)
+      const { data: deployData } = await listDeployments({ throwOnError: true })
+      setDeployments(deployData.deployments)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch deployments')
     } finally {
@@ -67,8 +54,8 @@ export default function DeployedPage() {
     return () => clearInterval(interval)
   }, [])
 
-  const handleRemove = async (serverName: string, version: string, resourceType: string) => {
-    setServerToRemove({ name: serverName, version, resourceType })
+  const handleRemove = async (deployment: Deployment) => {
+    setServerToRemove({ id: deployment.id, name: deployment.serverName, version: deployment.version, resourceType: deployment.resourceType })
   }
 
   const confirmRemove = async () => {
@@ -76,9 +63,9 @@ export default function DeployedPage() {
 
     try {
       setRemoving(true)
-      await adminApiClient.removeDeployment(serverToRemove.name, serverToRemove.version, serverToRemove.resourceType)
+      await removeDeployment({ path: { id: serverToRemove.id }, throwOnError: true })
       // Remove from local state
-      setDeployments(prev => prev.filter(d => d.serverName !== serverToRemove.name || d.version !== serverToRemove.version || d.resourceType !== serverToRemove.resourceType))
+      setDeployments(prev => prev.filter(d => d.id !== serverToRemove.id))
       setServerToRemove(null)
       fetchDeployments()
     } catch (err) {
@@ -267,9 +254,9 @@ export default function DeployedPage() {
                           <div className="flex items-center gap-3 mb-3">
                             <h3 className="text-xl font-semibold">{item.serverName}</h3>
                             <Badge variant="outline">
-                              {item.runtime || "local"}
+                              {item.providerId || "local"}
                             </Badge>
-                            {!item.isExternal ? (
+                            {item.origin === 'registry' ? (
                               <Badge className="bg-primary/10 text-primary hover:bg-primary/20 border-primary/20">
                                 Managed
                               </Badge>
@@ -291,23 +278,23 @@ export default function DeployedPage() {
                               <Package className="h-4 w-4" />
                               <span>
                                 Version: {item.version}
-                                {item.config?.namespace && ` • ${item.config.namespace}`}
+                                {item.env?.namespace && ` • ${item.env.namespace}`}
                               </span>
                             </div>
                           </div>
 
-                          {Object.keys(item.config || {}).length > 0 && (
+                          {Object.keys(item.env || {}).length > 0 && (
                             <div className="mt-3 pt-3 border-t">
                               <p className="text-xs text-muted-foreground mb-2">Configuration:</p>
                               <div className="flex flex-wrap gap-2">
-                                {Object.entries(item.config || {}).slice(0, 3).map(([key]) => (
+                                {Object.entries(item.env || {}).slice(0, 3).map(([key]) => (
                                   <span key={key} className="text-xs px-2 py-1 bg-muted rounded">
                                     {key}
                                   </span>
                                 ))}
-                                {Object.keys(item.config || {}).length > 3 && (
+                                {Object.keys(item.env || {}).length > 3 && (
                                   <span className="text-xs px-2 py-1 bg-muted rounded text-muted-foreground">
-                                    +{Object.keys(item.config || {}).length - 3} more
+                                    +{Object.keys(item.env || {}).length - 3} more
                                   </span>
                                 )}
                               </div>
@@ -315,12 +302,12 @@ export default function DeployedPage() {
                           )}
                         </div>
 
-                        {!item.isExternal && (
+                        {item.origin === 'registry' && (
                           <Button
                             variant="destructive"
                             size="sm"
                             className="ml-4"
-                            onClick={() => handleRemove(item.serverName, item.version, item.resourceType)}
+                            onClick={() => handleRemove(item)}
                             disabled={removing}
                           >
                             <Trash2 className="h-4 w-4 mr-2" />
@@ -347,9 +334,9 @@ export default function DeployedPage() {
                           <div className="flex items-center gap-3 mb-3">
                             <h3 className="text-xl font-semibold">{item.serverName}</h3>
                             <Badge variant="outline">
-                              {item.runtime || "local"}
+                              {item.providerId || "local"}
                             </Badge>
-                            {!item.isExternal ? (
+                            {item.origin === 'registry' ? (
                               <Badge className="bg-primary/10 text-primary hover:bg-primary/20 border-primary/20">
                                 Managed
                               </Badge>
@@ -371,23 +358,23 @@ export default function DeployedPage() {
                               <Package className="h-4 w-4" />
                               <span>
                                 Version: {item.version}
-                                {item.config?.namespace && ` • ${item.config.namespace}`}
+                                {item.env?.namespace && ` • ${item.env.namespace}`}
                               </span>
                             </div>
                           </div>
 
-                          {Object.keys(item.config || {}).length > 0 && (
+                          {Object.keys(item.env || {}).length > 0 && (
                             <div className="mt-3 pt-3 border-t">
                               <p className="text-xs text-muted-foreground mb-2">Configuration:</p>
                               <div className="flex flex-wrap gap-2">
-                                {Object.entries(item.config || {}).slice(0, 3).map(([key]) => (
+                                {Object.entries(item.env || {}).slice(0, 3).map(([key]) => (
                                   <span key={key} className="text-xs px-2 py-1 bg-muted rounded">
                                     {key}
                                   </span>
                                 ))}
-                                {Object.keys(item.config || {}).length > 3 && (
+                                {Object.keys(item.env || {}).length > 3 && (
                                   <span className="text-xs px-2 py-1 bg-muted rounded text-muted-foreground">
-                                    +{Object.keys(item.config || {}).length - 3} more
+                                    +{Object.keys(item.env || {}).length - 3} more
                                   </span>
                                 )}
                               </div>
@@ -395,12 +382,12 @@ export default function DeployedPage() {
                           )}
                         </div>
 
-                        {!item.isExternal && (
+                        {item.origin === 'registry' && (
                           <Button
                             variant="destructive"
                             size="sm"
                             className="ml-4"
-                            onClick={() => handleRemove(item.serverName, item.version, item.resourceType)}
+                            onClick={() => handleRemove(item)}
                             disabled={removing}
                           >
                             <Trash2 className="h-4 w-4 mr-2" />

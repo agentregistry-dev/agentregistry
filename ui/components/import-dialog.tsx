@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { adminApiClient } from "@/lib/admin-api"
+import { client } from "@/lib/admin-api"
 import { Loader2, CheckCircle2, XCircle, AlertCircle } from "lucide-react"
 
 interface ImportDialogProps {
@@ -49,11 +49,23 @@ export function ImportDialog({ open, onOpenChange, onImportComplete }: ImportDia
       }
 
       // Import servers
-      const response = await adminApiClient.importServers({
-        source: source.trim(),
-        headers: Object.keys(headerMap).length > 0 ? headerMap : undefined,
-        update: updateExisting,
+      const baseUrl = (client.getConfig().baseUrl as string) || ''
+      const res = await fetch(`${baseUrl}/v0/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: source.trim(),
+          headers: Object.keys(headerMap).length > 0 ? headerMap : undefined,
+          update: updateExisting,
+        }),
       })
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}))
+        throw new Error(errBody.message || `Import failed with status ${res.status}`)
+      }
+
+      const response = await res.json()
 
       setImportStatus({
         success: response.success,
