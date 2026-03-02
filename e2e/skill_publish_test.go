@@ -22,7 +22,7 @@ func TestSkillPublishGitHub(t *testing.T) {
 	tmpDir := t.TempDir()
 	skillName := UniqueNameWithPrefix("e2e-gh-skill")
 	version := "0.0.1-e2e"
-	githubRepo := "https://github.com/e2etest/sample-skill"
+	githubRepo := "https://github.com/agentregistry-dev/skills/tree/main/artifacts-builder"
 
 	// Create a skill folder with SKILL.md
 	skillDir := filepath.Join(tmpDir, skillName)
@@ -129,7 +129,7 @@ func TestSkillPublishValidation(t *testing.T) {
 	t.Run("missing_both_flags", func(t *testing.T) {
 		result := RunArctl(t, tmpDir, "skill", "publish", skillDir)
 		RequireFailure(t, result)
-		RequireOutputContains(t, result, "either --docker-url or --github is required")
+		RequireOutputContains(t, result, "at least one of the flags")
 	})
 
 	t.Run("mutually_exclusive_flags", func(t *testing.T) {
@@ -157,7 +157,7 @@ func TestSkillPublishDryRunGitHub(t *testing.T) {
 
 	result := RunArctl(t, tmpDir,
 		"skill", "publish", skillDir,
-		"--github", "https://github.com/test/repo",
+		"--github", "https://github.com/agentregistry-dev/skills/tree/main/artifacts-builder",
 		"--version", "1.0.0",
 		"--dry-run",
 	)
@@ -173,7 +173,7 @@ func TestSkillPublishDirectDryRun(t *testing.T) {
 
 	result := RunArctl(t, tmpDir,
 		"skill", "publish", "direct-test-skill",
-		"--github", "https://github.com/test/repo/tree/main/skills/my-skill",
+		"--github", "https://github.com/agentregistry-dev/skills/tree/main/artifacts-builder",
 		"--version", "1.0.0",
 		"--description", "A remotely hosted skill",
 		"--dry-run",
