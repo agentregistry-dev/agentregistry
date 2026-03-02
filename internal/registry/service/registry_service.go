@@ -813,8 +813,8 @@ func (s *registryServiceImpl) cleanupKubernetesResources(ctx context.Context, ex
 
 // cleanupExistingDeployment removes a stale deployment record and its associated runtime resources.
 // Errors from runtime cleanup are logged but not fatal, since the resources may already be gone.
-func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, deploymentId, platform string) error {
-	existing, err := s.db.GetDeploymentByID(ctx, nil, deploymentId)
+func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, resourceName, version, resourceType, platform string) error {
+	existing, err := s.findDeploymentByIdentity(ctx, resourceName, version, resourceType)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
 			return nil
@@ -874,7 +874,7 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 		}
 		// Deployment record already exists — clean up stale record and retry
 		log.Printf("Deployment for %s/%s already exists, replacing stale record", serverName, deployment.Version)
-		if cleanupErr := s.cleanupExistingDeployment(ctx, deployment.ID, provider.Platform); cleanupErr != nil {
+		if cleanupErr := s.cleanupExistingDeployment(ctx, serverName, deployment.Version, resourceTypeMCP, provider.Platform); cleanupErr != nil {
 			return nil, fmt.Errorf("failed to replace existing deployment: %w", cleanupErr)
 		}
 		if err := s.db.CreateDeployment(ctx, nil, deployment); err != nil {
@@ -902,7 +902,8 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 	if providerID == "" {
 		providerID = localProviderID
 	}
-	if _, err := s.resolveProviderByID(ctx, providerID); err != nil {
+	provider, err := s.resolveProviderByID(ctx, providerID)
+	if err != nil {
 		return nil, err
 	}
 	agentResp, err := s.db.GetAgentByNameAndVersion(ctx, nil, agentName, version)
@@ -931,7 +932,18 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 	}
 
 	if err := s.db.CreateDeployment(ctx, nil, deployment); err != nil {
-		return nil, err
+		if !errors.Is(err, database.ErrAlreadyExists) {
+			return nil, err
+		}
+
+		// Deployment record already exists — clean up stale record and retry
+		log.Printf("Deployment for agent %s/%s already exists, replacing stale record", agentName, deployment.Version)
+		if cleanupErr := s.cleanupExistingDeployment(ctx, agentName, deployment.Version, resourceTypeAgent, provider.Platform); cleanupErr != nil {
+			return nil, fmt.Errorf("failed to replace existing deployment: %w", cleanupErr)
+		}
+		if err := s.db.CreateDeployment(ctx, nil, deployment); err != nil {
+			return nil, fmt.Errorf("failed to recreate deployment: %w", err)
+		}
 	}
 
 	// Resolve and create deployment records for registry-type MCP servers from agent manifest
@@ -1375,9 +1387,14 @@ func (s *registryServiceImpl) listKubernetesDeployments(ctx context.Context, nam
 		}
 
 		preferRemote := resType == "remotemcpserver"
+		external := !isManaged(labels)
+		origin := "managed"
+		if external {
+			origin = originDiscovered
+		}
 
 		kubeData, _ := models.UnmarshalFrom(models.KubernetesProviderMetadata{
-			IsExternal: isManaged(labels),
+			IsExternal: external,
 		})
 
 		d := &models.Deployment{
@@ -1390,7 +1407,7 @@ func (s *registryServiceImpl) listKubernetesDeployments(ctx context.Context, nam
 			PreferRemote:     preferRemote,
 			ResourceType:     resourceType,
 			ProviderID:       kubernetesProviderID,
-			Origin:           "managed",
+			Origin:           origin,
 			ProviderMetadata: kubeData,
 		}
 		deployments = append(deployments, d)

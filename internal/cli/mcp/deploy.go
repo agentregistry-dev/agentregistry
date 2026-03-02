@@ -85,18 +85,9 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("version is required")
 	}
 
-	// Ensure the server with the specified version exists
-	server, err := apiClient.GetServerByNameAndVersion(serverName, deployVersion)
-	if err != nil {
-		return fmt.Errorf("failed to get server: %w", err)
-	}
-	if server == nil {
-		return fmt.Errorf("server not found: %s", serverName)
-	}
-
 	// Deploy server via API (server will handle reconciliation)
 	fmt.Println("\nDeploying server...")
-	deployment, err := apiClient.DeployServer(server.Server.Name, deployVersion, deploymentEnv, deployPreferRemote, deployProviderID)
+	deployment, err := apiClient.DeployServer(serverName, deployVersion, deploymentEnv, deployPreferRemote, deployProviderID)
 	if err != nil {
 		return fmt.Errorf("failed to deploy server: %w", err)
 	}

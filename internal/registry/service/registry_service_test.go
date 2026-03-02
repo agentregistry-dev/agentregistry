@@ -952,14 +952,14 @@ func TestCleanupExistingDeployment(t *testing.T) {
 			removeCalled := false
 
 			mockDB := &deploymentMockDB{
-				getDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, _ string) (*models.Deployment, error) {
+				getDeploymentsFn: func(_ context.Context, _ pgx.Tx, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
 					if tt.lookupErr != nil {
 						return nil, tt.lookupErr
 					}
 					if tt.existingDeployment != nil {
-						return tt.existingDeployment, nil
+						return []*models.Deployment{tt.existingDeployment}, nil
 					}
-					return nil, database.ErrNotFound
+					return []*models.Deployment{}, nil
 				},
 				removeDeploymentByIdFn: func(_ context.Context, _ pgx.Tx, id string) error {
 					removeCalled = true
@@ -972,7 +972,7 @@ func TestCleanupExistingDeployment(t *testing.T) {
 
 			svc := &registryServiceImpl{db: mockDB}
 
-			err := svc.cleanupExistingDeployment(ctx, "1234", "local")
+			err := svc.cleanupExistingDeployment(ctx, "com.example/test", "1.0.0", tt.resourceType, "local")
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -989,12 +989,12 @@ func TestCleanupExistingDeployment(t *testing.T) {
 // the methods needed for testing deployment cleanup logic. All other methods panic.
 type deploymentMockDB struct {
 	database.Database      // embed interface so unimplemented methods panic
-	getDeploymentByIDFn    func(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error)
+	getDeploymentsFn       func(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
 	removeDeploymentByIdFn func(ctx context.Context, tx pgx.Tx, id string) error
 }
 
-func (m *deploymentMockDB) GetDeploymentByID(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error) {
-	return m.getDeploymentByIDFn(ctx, tx, id)
+func (m *deploymentMockDB) GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+	return m.getDeploymentsFn(ctx, tx, filter)
 }
 
 func (m *deploymentMockDB) RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id string) error {
