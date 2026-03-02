@@ -167,13 +167,15 @@ func TestSkillPublishFlags(t *testing.T) {
 	tests := []struct {
 		flag     string
 		defValue string
-		required bool
 	}{
-		{"docker-url", "", true},
-		{"push", "false", false},
-		{"dry-run", "false", false},
-		{"tag", "latest", false},
-		{"platform", "", false},
+		{"docker-url", ""},
+		{"github", ""},
+		{"version", ""},
+		{"description", ""},
+		{"push", "false"},
+		{"dry-run", "false"},
+		{"tag", "latest"},
+		{"platform", ""},
 	}
 
 	for _, tt := range tests {
@@ -184,11 +186,6 @@ func TestSkillPublishFlags(t *testing.T) {
 			}
 			if f.DefValue != tt.defValue {
 				t.Errorf("flag --%s default = %q, want %q", tt.flag, f.DefValue, tt.defValue)
-			}
-			if tt.required {
-				if _, ok := f.Annotations[cobra.BashCompOneRequiredFlag]; !ok {
-					t.Errorf("flag --%s should be marked as required", tt.flag)
-				}
 			}
 		})
 	}
@@ -203,7 +200,6 @@ func TestRequiredFlags(t *testing.T) {
 		command  string
 		required []string
 	}{
-		{"skill", "publish", []string{"docker-url"}},
 		{"skill", "delete", []string{"version"}},
 		{"mcp", "publish", []string{"package-id", "type"}},
 		{"agent", "delete", []string{"version"}},

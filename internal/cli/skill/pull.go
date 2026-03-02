@@ -215,9 +215,15 @@ func pullFromGitHub(repoURL, absOutputDir string) error {
 		return fmt.Errorf("failed to clone GitHub repository: %w", err)
 	}
 
-	srcDir := tempDir
+	return copyRepoContents(tempDir, subPath, absOutputDir)
+}
+
+// copyRepoContents copies files from a cloned repository to the output directory.
+// It navigates to the subPath if specified and skips the .git directory.
+func copyRepoContents(repoDir, subPath, absOutputDir string) error {
+	srcDir := repoDir
 	if subPath != "" {
-		srcDir = filepath.Join(tempDir, subPath)
+		srcDir = filepath.Join(repoDir, subPath)
 		if _, err := os.Stat(srcDir); os.IsNotExist(err) {
 			return fmt.Errorf("subdirectory %q not found in repository", subPath)
 		}
