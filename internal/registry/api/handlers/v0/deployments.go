@@ -76,6 +76,23 @@ func deploymentPlatform(ctx context.Context, registry service.RegistryService, d
 	return normalizePlatform(provider.Platform)
 }
 
+func createDeploymentHTTPError(err error) error {
+	switch {
+	case service.IsUnsupportedDeploymentPlatformError(err):
+		return huma.Error400BadRequest("Unsupported provider or platform for deployment")
+	case errors.Is(err, database.ErrInvalidInput):
+		return huma.Error400BadRequest(err.Error())
+	case errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated):
+		return huma.Error404NotFound("Resource not found in registry")
+	case errors.Is(err, database.ErrAlreadyExists):
+		return huma.Error409Conflict("Resource is already deployed")
+	case err.Error() == "agent deployment is not yet implemented":
+		return huma.Error501NotImplemented("Agent deployment is not yet supported")
+	default:
+		return huma.Error500InternalServerError("Failed to deploy resource", err)
+	}
+}
+
 // RegisterDeploymentsEndpoints registers all deployment-related endpoints
 func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry service.RegistryService, extensions PlatformExtensions) {
 	// List all deployments
@@ -195,23 +212,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 
 		deployment, err := registry.CreateDeployment(ctx, deploymentReq, platform)
 		if err != nil {
-			if service.IsUnsupportedDeploymentPlatformError(err) {
-				return nil, huma.Error400BadRequest("Unsupported provider or platform for deployment")
-			}
-			if errors.Is(err, database.ErrInvalidInput) {
-				return nil, huma.Error400BadRequest(err.Error())
-			}
-			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
-				return nil, huma.Error404NotFound("Resource not found in registry")
-			}
-			if errors.Is(err, database.ErrAlreadyExists) {
-				return nil, huma.Error409Conflict("Resource is already deployed")
-			}
-			// Check for "not yet implemented" error
-			if err.Error() == "agent deployment is not yet implemented" {
-				return nil, huma.Error501NotImplemented("Agent deployment is not yet supported")
-			}
-			return nil, huma.Error500InternalServerError("Failed to deploy resource", err)
+			return nil, createDeploymentHTTPError(err)
 		}
 
 		return &DeploymentResponse{Body: *deployment}, nil

@@ -848,19 +848,20 @@ func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, res
 	}
 
 	cleanupPlatform := strings.ToLower(strings.TrimSpace(platform))
-	if existing != nil {
-		if providerID := strings.TrimSpace(existing.ProviderID); providerID != "" {
-			provider, err := s.resolveProviderByID(ctx, providerID)
-			if err != nil && !errors.Is(err, database.ErrNotFound) {
-				return fmt.Errorf("resolving provider for existing deployment: %w", err)
-			}
-			if err == nil && provider != nil {
-				cleanupPlatform = strings.ToLower(strings.TrimSpace(provider.Platform))
-			}
+	if existing == nil {
+		return nil
+	}
+	if providerID := strings.TrimSpace(existing.ProviderID); providerID != "" {
+		provider, err := s.resolveProviderByID(ctx, providerID)
+		if err != nil && !errors.Is(err, database.ErrNotFound) {
+			return fmt.Errorf("resolving provider for existing deployment: %w", err)
 		}
-		if cleanupPlatform == platformKubernetes {
-			s.cleanupKubernetesResources(ctx, existing)
+		if err == nil && provider != nil {
+			cleanupPlatform = strings.ToLower(strings.TrimSpace(provider.Platform))
 		}
+	}
+	if cleanupPlatform == platformKubernetes {
+		s.cleanupKubernetesResources(ctx, existing)
 	}
 
 	if err := s.db.RemoveDeploymentByID(ctx, nil, existing.ID); err != nil && !errors.Is(err, database.ErrNotFound) {

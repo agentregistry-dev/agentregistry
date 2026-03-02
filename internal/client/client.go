@@ -26,7 +26,7 @@ type Client struct {
 }
 
 const (
-	DefaultBaseURL = "http://localhost:12121/v0"
+	DefaultBaseURL    = "http://localhost:12121/v0"
 	pingRetryAttempts = 3
 )
 

@@ -3,7 +3,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -1024,8 +1023,8 @@ func TestIsUnsupportedDeploymentPlatformError(t *testing.T) {
 
 	assert.True(t, IsUnsupportedDeploymentPlatformError(baseErr))
 	assert.True(t, IsUnsupportedDeploymentPlatformError(wrappedErr))
-	assert.True(t, errors.Is(baseErr, database.ErrInvalidInput))
-	assert.True(t, errors.Is(wrappedErr, database.ErrInvalidInput))
+	require.ErrorIs(t, baseErr, database.ErrInvalidInput)
+	require.ErrorIs(t, wrappedErr, database.ErrInvalidInput)
 	assert.False(t, IsUnsupportedDeploymentPlatformError(database.ErrInvalidInput))
 }
 
@@ -1037,5 +1036,5 @@ func TestResolveDeploymentAdapter_UnsupportedPlatformReturnsTypedError(t *testin
 	_, err := svc.resolveDeploymentAdapter("unknown-platform")
 	require.Error(t, err)
 	assert.True(t, IsUnsupportedDeploymentPlatformError(err))
-	assert.True(t, errors.Is(err, database.ErrInvalidInput))
+	assert.ErrorIs(t, err, database.ErrInvalidInput)
 }
