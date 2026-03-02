@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -317,10 +318,17 @@ func TestClientIntegration_DeploymentRoutes_HappyPath(t *testing.T) {
 
 	var createdDeployments []*models.Deployment
 	var createPlatforms []string
+	createdByID := map[string]*models.Deployment{}
+	var removedIDs []string
 	fake.CreateDeploymentFn = func(_ context.Context, req *models.Deployment, platform string) (*models.Deployment, error) {
 		createdDeployments = append(createdDeployments, req)
 		createPlatforms = append(createPlatforms, platform)
-		return &models.Deployment{
+		id := req.ID
+		if id == "" {
+			id = "dep-created-" + strconv.Itoa(len(createdDeployments))
+		}
+		created := &models.Deployment{
+			ID:           id,
 			ServerName:   req.ServerName,
 			Version:      req.Version,
 			ProviderID:   req.ProviderID,
@@ -330,7 +338,35 @@ func TestClientIntegration_DeploymentRoutes_HappyPath(t *testing.T) {
 			PreferRemote: req.PreferRemote,
 			DeployedAt:   now,
 			UpdatedAt:    now,
-		}, nil
+		}
+		createdByID[created.ID] = created
+		return created, nil
+	}
+	fake.GetDeploymentByIDFn = func(_ context.Context, id string) (*models.Deployment, error) {
+		deployment, ok := createdByID[id]
+		if !ok {
+			return nil, database.ErrNotFound
+		}
+		return deployment, nil
+	}
+	fake.RemoveDeploymentByIDFn = func(_ context.Context, id string) error {
+		if _, ok := createdByID[id]; !ok {
+			return database.ErrNotFound
+		}
+		removedIDs = append(removedIDs, id)
+		delete(createdByID, id)
+		return nil
+	}
+	fake.UndeployDeploymentFn = func(_ context.Context, deployment *models.Deployment, _ string) error {
+		if deployment == nil {
+			return database.ErrNotFound
+		}
+		if _, ok := createdByID[deployment.ID]; !ok {
+			return database.ErrNotFound
+		}
+		removedIDs = append(removedIDs, deployment.ID)
+		delete(createdByID, deployment.ID)
+		return nil
 	}
 
 	client, cleanup := newClientWithInProcessServer(t, fake)
@@ -357,6 +393,19 @@ func TestClientIntegration_DeploymentRoutes_HappyPath(t *testing.T) {
 	if deployedServer == nil || deployedServer.ResourceType != "mcp" {
 		t.Fatalf("DeployServer() returned unexpected payload: %#v", deployedServer)
 	}
+	if deployedServer.ID == "" {
+		t.Fatalf("DeployServer() returned empty deployment id: %#v", deployedServer)
+	}
+	createdByGet, err := client.GetDeploymentByID(deployedServer.ID)
+	if err != nil {
+		t.Fatalf("GetDeploymentByID() failed: %v", err)
+	}
+	if createdByGet == nil || createdByGet.ID != deployedServer.ID {
+		t.Fatalf("GetDeploymentByID() returned unexpected payload: %#v", createdByGet)
+	}
+	if err := client.RemoveDeploymentByID(deployedServer.ID); err != nil {
+		t.Fatalf("RemoveDeploymentByID() failed: %v", err)
+	}
 
 	deployedAgent, err := client.DeployAgent(
 		"acme/planner",
@@ -379,6 +428,9 @@ func TestClientIntegration_DeploymentRoutes_HappyPath(t *testing.T) {
 	}
 	if len(createPlatforms) != 2 || createPlatforms[0] != "local" || createPlatforms[1] != "local" {
 		t.Fatalf("unexpected deployment platforms: %#v", createPlatforms)
+	}
+	if len(removedIDs) != 1 || removedIDs[0] != deployedServer.ID {
+		t.Fatalf("expected removal of deployment %q, got %#v", deployedServer.ID, removedIDs)
 	}
 }
 

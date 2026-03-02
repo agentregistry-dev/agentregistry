@@ -5,14 +5,12 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/google/uuid"
 )
 
 const LocalProviderID = "local"
@@ -185,20 +183,14 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		platform := normalizePlatform(provider.Platform)
 
 		deploymentReq := &models.Deployment{
-			ID:               uuid.NewString(),
-			ServerName:       input.Body.ServerName,
-			Version:          input.Body.Version,
-			ProviderID:       providerID,
-			ResourceType:     resourceType,
-			Status:           "",
-			Origin:           "managed",
-			Env:              input.Body.Env,
-			ProviderConfig:   input.Body.ProviderConfig,
-			ProviderMetadata: nil,
-			PreferRemote:     input.Body.PreferRemote,
-			Error:            "",
-			DeployedAt:       time.Time{},
-			UpdatedAt:        time.Time{},
+			ServerName:     input.Body.ServerName,
+			Version:        input.Body.Version,
+			ProviderID:     providerID,
+			ResourceType:   resourceType,
+			Origin:         "managed",
+			Env:            input.Body.Env,
+			ProviderConfig: input.Body.ProviderConfig,
+			PreferRemote:   input.Body.PreferRemote,
 		}
 
 		deployment, err := registry.CreateDeployment(ctx, deploymentReq, platform)
@@ -218,8 +210,6 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			}
 			return nil, huma.Error500InternalServerError("Failed to deploy resource", err)
 		}
-
-		deployment.ID = deploymentReq.ID
 
 		return &DeploymentResponse{Body: *deployment}, nil
 	})

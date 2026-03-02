@@ -198,7 +198,7 @@ func TestCreateDeployment_UsesAdapterWhenRegistered(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	var got models.Deployment
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
-	assert.NotEmpty(t, got.ID)
+	assert.Equal(t, "adapter-dep-1", got.ID)
 	assert.Equal(t, "io.github.user/weather", got.ServerName)
 }
 

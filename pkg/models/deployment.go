@@ -8,7 +8,7 @@ import (
 // Deployment represents a deployed resource with unified deployment metadata.
 type Deployment struct {
 	ID               string            `json:"id"`
-	ServerName       string            `json:"serverName"` // resource name (legacy field name retained for compatibility)
+	ServerName       string            `json:"serverName"` // deployed resource name
 	Version          string            `json:"version"`
 	ProviderID       string            `json:"providerId,omitempty"`
 	ResourceType     string            `json:"resourceType"`
@@ -50,7 +50,7 @@ func UnmarshalFrom(v any) (JSONObject, error) {
 		return nil, err
 	}
 
-	var o JSONObject
+	o := JSONObject{}
 	return o, json.Unmarshal(b, &o)
 }
 
