@@ -7,6 +7,7 @@ import (
 	"time"
 
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -889,6 +890,98 @@ func TestPostgreSQL_PerformanceScenarios(t *testing.T) {
 		// Should have retrieved all servers including the ones we just created
 		assert.GreaterOrEqual(t, len(allResults), serverCount)
 	})
+}
+
+func TestPostgreSQL_CreateDeployment_AllowsDuplicateArtifactIdentity(t *testing.T) {
+	db := internaldb.NewTestDB(t)
+	ctx := context.Background()
+
+	first := &models.Deployment{
+		ServerName:   "com.example/multi-weather",
+		Version:      "1.0.0",
+		Status:       "deployed",
+		Env:          map[string]string{"API_KEY": "secret"},
+		PreferRemote: false,
+		ResourceType: "mcp",
+		ProviderID:   "local",
+		Origin:       "managed",
+	}
+	second := &models.Deployment{
+		ServerName:   "com.example/multi-weather",
+		Version:      "1.0.0",
+		Status:       "deployed",
+		Env:          map[string]string{"API_KEY": "secret"},
+		PreferRemote: false,
+		ResourceType: "mcp",
+		ProviderID:   "local",
+		Origin:       "managed",
+	}
+
+	require.NoError(t, db.CreateDeployment(ctx, nil, first))
+	require.NoError(t, db.CreateDeployment(ctx, nil, second))
+	require.NotEmpty(t, first.ID)
+	require.NotEmpty(t, second.ID)
+	require.NotEqual(t, first.ID, second.ID)
+
+	filter := &models.DeploymentFilter{
+		ResourceType: stringPtr("mcp"),
+		ResourceName: stringPtr("com.example/multi-weather"),
+	}
+	deployments, err := db.GetDeployments(ctx, nil, filter)
+	require.NoError(t, err)
+
+	count := 0
+	for _, deployment := range deployments {
+		if deployment.ServerName == "com.example/multi-weather" &&
+			deployment.Version == "1.0.0" &&
+			deployment.ResourceType == "mcp" {
+			count++
+		}
+	}
+	assert.Equal(t, 2, count)
+}
+
+func TestPostgreSQL_UpdateDeploymentStatus_UsesID(t *testing.T) {
+	db := internaldb.NewTestDB(t)
+	ctx := context.Background()
+	ctxWithAuth := internaldb.WithTestSession(ctx)
+
+	first := &models.Deployment{
+		ServerName:   "com.example/multi-status",
+		Version:      "1.0.0",
+		Status:       "deploying",
+		Env:          map[string]string{},
+		PreferRemote: false,
+		ResourceType: "mcp",
+		ProviderID:   "local",
+		Origin:       "managed",
+	}
+	second := &models.Deployment{
+		ServerName:   "com.example/multi-status",
+		Version:      "1.0.0",
+		Status:       "deploying",
+		Env:          map[string]string{},
+		PreferRemote: false,
+		ResourceType: "mcp",
+		ProviderID:   "local",
+		Origin:       "managed",
+	}
+
+	require.NoError(t, db.CreateDeployment(ctx, nil, first))
+	require.NoError(t, db.CreateDeployment(ctx, nil, second))
+
+	require.NoError(t, db.UpdateDeploymentStatus(ctxWithAuth, nil, first.ID, "failed"))
+
+	firstUpdated, err := db.GetDeploymentByID(ctxWithAuth, nil, first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "failed", firstUpdated.Status)
+
+	secondUnchanged, err := db.GetDeploymentByID(ctxWithAuth, nil, second.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "deploying", secondUnchanged.Status)
+
+	err = db.UpdateDeploymentStatus(ctxWithAuth, nil, "missing-deployment-id", "failed")
+	require.ErrorIs(t, err, database.ErrNotFound)
 }
 
 // Helper functions for creating pointers to basic types

@@ -211,14 +211,7 @@ func printServersTable(servers []*v0.ServerResponse, deployedServers []*client.D
 	t := printer.NewTablePrinter(os.Stdout)
 	t.SetHeaders("Name", "Version", "Type", "Deployed", "Updated")
 
-	// Create a map of deployed servers by name and version
-	deployedMap := make(map[string]map[string]*client.DeploymentResponse)
-	for _, d := range deployedServers {
-		if deployedMap[d.ServerName] == nil {
-			deployedMap[d.ServerName] = make(map[string]*client.DeploymentResponse)
-		}
-		deployedMap[d.ServerName][d.Version] = d
-	}
+	deploymentCounts := buildMCPDeploymentCounts(deployedServers)
 
 	for _, s := range servers {
 		registryType := "<none>"
@@ -236,12 +229,7 @@ func printServersTable(servers []*v0.ServerResponse, deployedServers []*client.D
 
 		fullName := s.Server.Name
 
-		deployedStatus := "False"
-		if serverDeployments, ok := deployedMap[s.Server.Name]; ok {
-			if _, ok := serverDeployments[s.Server.Version]; ok {
-				deployedStatus = "True"
-			}
-		}
+		deployedStatus := deployedStatusForMCP(deploymentCounts, s.Server.Name, s.Server.Version)
 
 		t.AddRow(
 			printer.TruncateString(fullName, 50),
@@ -254,6 +242,36 @@ func printServersTable(servers []*v0.ServerResponse, deployedServers []*client.D
 
 	if err := t.Render(); err != nil {
 		printer.PrintError(fmt.Sprintf("failed to render table: %v", err))
+	}
+}
+
+func buildMCPDeploymentCounts(deployedServers []*client.DeploymentResponse) map[string]map[string]int {
+	counts := make(map[string]map[string]int)
+	for _, deployment := range deployedServers {
+		if deployment == nil || deployment.ResourceType != "mcp" {
+			continue
+		}
+		if counts[deployment.ServerName] == nil {
+			counts[deployment.ServerName] = make(map[string]int)
+		}
+		counts[deployment.ServerName][deployment.Version]++
+	}
+	return counts
+}
+
+func deployedStatusForMCP(counts map[string]map[string]int, serverName, version string) string {
+	serverDeployments := counts[serverName]
+	if serverDeployments == nil {
+		return "False"
+	}
+	totalForVersion := serverDeployments[version]
+	switch {
+	case totalForVersion <= 0:
+		return "False"
+	case totalForVersion == 1:
+		return "True"
+	default:
+		return fmt.Sprintf("True (%d)", totalForVersion)
 	}
 }
 

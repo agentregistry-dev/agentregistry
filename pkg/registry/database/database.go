@@ -213,8 +213,8 @@ type Database interface {
 	GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
 	// GetDeploymentByID retrieves a specific deployment by UUID.
 	GetDeploymentByID(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error)
-	// UpdateDeploymentStatus updates the status of a deployment
-	UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, serverName, version, artifactType, status string) error
+	// UpdateDeploymentStatus updates the status of a deployment by ID.
+	UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, id, status string) error
 	// RemoveDeploymentByID removes a deployment by ID.
 	RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id string) error
 }

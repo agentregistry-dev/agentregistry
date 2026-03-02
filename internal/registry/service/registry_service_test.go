@@ -871,145 +871,236 @@ func TestVersionComparison(t *testing.T) {
 	assert.Equal(t, 1, latestCount, "Exactly one version should be marked as latest")
 }
 
-func TestCleanupExistingDeployment(t *testing.T) {
+func TestHasSiblingDeploymentForRuntime(t *testing.T) {
 	ctx := context.Background()
+	base := &models.Deployment{
+		ID:           "dep-1",
+		ServerName:   "com.example/test",
+		Version:      "1.0.0",
+		ResourceType: "mcp",
+		ProviderID:   "provider-a",
+	}
 
 	tests := []struct {
-		name               string
-		existingDeployment *models.Deployment
-		lookupErr          error
-		removeErr          error
-		expectError        bool
-		expectRemoveCalled bool
-		resourceType       string
+		name       string
+		listed     []*models.Deployment
+		listErr    error
+		expect     bool
+		expectErr  bool
 	}{
 		{
-			name: "removes stale local deployment",
-			existingDeployment: &models.Deployment{
-				ID:           "dep-1",
-				ServerName:   "com.example/test",
-				Version:      "1.0.0",
-				Status:       "active",
-				ResourceType: "mcp",
-				ProviderID:   "local",
-				Env:          map[string]string{},
+			name:   "no sibling for same runtime identity",
+			listed: []*models.Deployment{base},
+			expect: false,
+		},
+		{
+			name: "sibling exists with same identity and provider",
+			listed: []*models.Deployment{
+				base,
+				{
+					ID:           "dep-2",
+					ServerName:   "com.example/test",
+					Version:      "1.0.0",
+					ResourceType: "mcp",
+					ProviderID:   "provider-a",
+				},
 			},
-			resourceType:       "mcp",
-			expectError:        false,
-			expectRemoveCalled: true,
+			expect: true,
 		},
 		{
-			name: "removes stale agent deployment",
-			existingDeployment: &models.Deployment{
-				ID:           "dep-2",
-				ServerName:   "com.example/test",
-				Version:      "1.0.0",
-				Status:       "active",
-				ResourceType: "agent",
-				ProviderID:   "kubernetes",
-				Env:          map[string]string{"KAGENT_NAMESPACE": "test-ns"},
+			name: "same artifact identity on different provider is not sibling",
+			listed: []*models.Deployment{
+				base,
+				{
+					ID:           "dep-2",
+					ServerName:   "com.example/test",
+					Version:      "1.0.0",
+					ResourceType: "mcp",
+					ProviderID:   "provider-b",
+				},
 			},
-			resourceType:       "agent",
-			expectError:        false,
-			expectRemoveCalled: true,
+			expect: false,
 		},
 		{
-			name:               "handles not found (already cleaned up)",
-			existingDeployment: nil,
-			lookupErr:          nil,
-			resourceType:       "mcp",
-			expectError:        false,
-			expectRemoveCalled: false,
-		},
-		{
-			name:               "propagates lookup error",
-			existingDeployment: nil,
-			lookupErr:          fmt.Errorf("connection refused"),
-			resourceType:       "mcp",
-			expectError:        true,
-			expectRemoveCalled: false,
-		},
-		{
-			name: "propagates remove error",
-			existingDeployment: &models.Deployment{
-				ID:           "dep-3",
-				ServerName:   "com.example/test",
-				Version:      "1.0.0",
-				Status:       "active",
-				ResourceType: "mcp",
-				ProviderID:   "local",
-				Env:          map[string]string{},
+			name: "different version is not sibling",
+			listed: []*models.Deployment{
+				base,
+				{
+					ID:           "dep-2",
+					ServerName:   "com.example/test",
+					Version:      "2.0.0",
+					ResourceType: "mcp",
+					ProviderID:   "provider-a",
+				},
 			},
-			removeErr:          fmt.Errorf("connection refused"),
-			resourceType:       "mcp",
-			expectError:        true,
-			expectRemoveCalled: true,
+			expect: false,
+		},
+		{
+			name:      "propagates query error",
+			listErr:   fmt.Errorf("connection refused"),
+			expectErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			removeCalled := false
-
 			mockDB := &deploymentMockDB{
-				getDeploymentsFn: func(_ context.Context, _ pgx.Tx, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
-					if tt.lookupErr != nil {
-						return nil, tt.lookupErr
+				getDeploymentsFn: func(_ context.Context, _ pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+					require.NotNil(t, filter)
+					require.NotNil(t, filter.ResourceName)
+					require.NotNil(t, filter.ResourceType)
+					require.NotNil(t, filter.ProviderID)
+					require.Equal(t, base.ServerName, *filter.ResourceName)
+					require.Equal(t, base.ResourceType, *filter.ResourceType)
+					require.Equal(t, base.ProviderID, *filter.ProviderID)
+					if tt.listErr != nil {
+						return nil, tt.listErr
 					}
-					if tt.existingDeployment != nil {
-						return []*models.Deployment{tt.existingDeployment}, nil
-					}
-					return []*models.Deployment{}, nil
-				},
-				getProviderByIDFn: func(_ context.Context, _ pgx.Tx, id string) (*models.Provider, error) {
-					if id == "kubernetes" {
-						return &models.Provider{ID: id, Platform: "kubernetes"}, nil
-					}
-					return &models.Provider{ID: id, Platform: "local"}, nil
-				},
-				removeDeploymentByIdFn: func(_ context.Context, _ pgx.Tx, id string) error {
-					removeCalled = true
-					if tt.removeErr != nil {
-						return tt.removeErr
-					}
-					return nil
+					return tt.listed, nil
 				},
 			}
 
 			svc := &registryServiceImpl{db: mockDB}
-
-			err := svc.cleanupExistingDeployment(ctx, "com.example/test", "1.0.0", tt.resourceType, "local")
-
-			if tt.expectError {
+			got, err := svc.hasSiblingDeploymentForRuntime(ctx, base)
+			if tt.expectErr {
 				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
+				return
 			}
-
-			assert.Equal(t, tt.expectRemoveCalled, removeCalled, "RemoveDeploymentByID called mismatch")
+			require.NoError(t, err)
+			assert.Equal(t, tt.expect, got)
 		})
 	}
 }
 
+func TestHasSiblingDeploymentForRuntime_NilDeployment(t *testing.T) {
+	svc := &registryServiceImpl{}
+	_, err := svc.hasSiblingDeploymentForRuntime(context.Background(), nil)
+	require.ErrorIs(t, err, database.ErrInvalidInput)
+}
+
+func TestDeployServer_AlreadyExistsDoesNotAttemptIdentityCleanup(t *testing.T) {
+	ctx := context.Background()
+	createCalls := 0
+	getDeploymentsCalls := 0
+	removeCalls := 0
+
+	mockDB := &deployCreateMockDB{
+		getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {
+			return &models.Provider{ID: providerID, Platform: "local"}, nil
+		},
+		getServerByNameAndVersionFn: func(_ context.Context, _ pgx.Tx, serverName, version string) (*apiv0.ServerResponse, error) {
+			return &apiv0.ServerResponse{
+				Server: apiv0.ServerJSON{
+					Name:    serverName,
+					Version: version,
+				},
+			}, nil
+		},
+		createDeploymentFn: func(_ context.Context, _ pgx.Tx, _ *models.Deployment) error {
+			createCalls++
+			return database.ErrAlreadyExists
+		},
+		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
+			getDeploymentsCalls++
+			return []*models.Deployment{}, nil
+		},
+		removeDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, _ string) error {
+			removeCalls++
+			return nil
+		},
+	}
+
+	svc := &registryServiceImpl{db: mockDB}
+	_, err := svc.DeployServer(ctx, "com.example/weather", "1.0.0", map[string]string{}, false, "local")
+	require.ErrorIs(t, err, database.ErrAlreadyExists)
+	assert.Equal(t, 1, createCalls)
+	assert.Equal(t, 0, getDeploymentsCalls)
+	assert.Equal(t, 0, removeCalls)
+}
+
+func TestDeployAgent_AlreadyExistsDoesNotAttemptIdentityCleanup(t *testing.T) {
+	ctx := context.Background()
+	createCalls := 0
+	getDeploymentsCalls := 0
+	removeCalls := 0
+
+	mockDB := &deployCreateMockDB{
+		getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {
+			return &models.Provider{ID: providerID, Platform: "local"}, nil
+		},
+		getAgentByNameAndVersionFn: func(_ context.Context, _ pgx.Tx, agentName, version string) (*models.AgentResponse, error) {
+			return &models.AgentResponse{
+				Agent: models.AgentJSON{
+					AgentManifest: models.AgentManifest{Name: agentName},
+					Version:       version,
+				},
+			}, nil
+		},
+		createDeploymentFn: func(_ context.Context, _ pgx.Tx, _ *models.Deployment) error {
+			createCalls++
+			return database.ErrAlreadyExists
+		},
+		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
+			getDeploymentsCalls++
+			return []*models.Deployment{}, nil
+		},
+		removeDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, _ string) error {
+			removeCalls++
+			return nil
+		},
+	}
+
+	svc := &registryServiceImpl{db: mockDB}
+	_, err := svc.DeployAgent(ctx, "com.example/planner", "1.0.0", map[string]string{}, false, "local")
+	require.ErrorIs(t, err, database.ErrAlreadyExists)
+	assert.Equal(t, 1, createCalls)
+	assert.Equal(t, 0, getDeploymentsCalls)
+	assert.Equal(t, 0, removeCalls)
+}
+
+type deployCreateMockDB struct {
+	database.Database
+	getProviderByIDFn           func(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error)
+	getServerByNameAndVersionFn func(ctx context.Context, tx pgx.Tx, serverName, version string) (*apiv0.ServerResponse, error)
+	getAgentByNameAndVersionFn  func(ctx context.Context, tx pgx.Tx, agentName, version string) (*models.AgentResponse, error)
+	createDeploymentFn          func(ctx context.Context, tx pgx.Tx, deployment *models.Deployment) error
+	getDeploymentsFn            func(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
+	removeDeploymentByIDFn      func(ctx context.Context, tx pgx.Tx, id string) error
+}
+
+func (m *deployCreateMockDB) GetProviderByID(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error) {
+	return m.getProviderByIDFn(ctx, tx, providerID)
+}
+
+func (m *deployCreateMockDB) GetServerByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName, version string) (*apiv0.ServerResponse, error) {
+	return m.getServerByNameAndVersionFn(ctx, tx, serverName, version)
+}
+
+func (m *deployCreateMockDB) GetAgentByNameAndVersion(ctx context.Context, tx pgx.Tx, agentName, version string) (*models.AgentResponse, error) {
+	return m.getAgentByNameAndVersionFn(ctx, tx, agentName, version)
+}
+
+func (m *deployCreateMockDB) CreateDeployment(ctx context.Context, tx pgx.Tx, deployment *models.Deployment) error {
+	return m.createDeploymentFn(ctx, tx, deployment)
+}
+
+func (m *deployCreateMockDB) GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+	return m.getDeploymentsFn(ctx, tx, filter)
+}
+
+func (m *deployCreateMockDB) RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id string) error {
+	return m.removeDeploymentByIDFn(ctx, tx, id)
+}
+
 // deploymentMockDB is a minimal mock for database.Database that only implements
-// the methods needed for testing deployment cleanup logic. All other methods panic.
+// the methods needed for deployment runtime-identity tests.
 type deploymentMockDB struct {
-	database.Database      // embed interface so unimplemented methods panic
-	getDeploymentsFn       func(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
-	getProviderByIDFn      func(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error)
-	removeDeploymentByIdFn func(ctx context.Context, tx pgx.Tx, id string) error
+	database.Database // embed interface so unimplemented methods panic
+	getDeploymentsFn  func(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
 }
 
 func (m *deploymentMockDB) GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	return m.getDeploymentsFn(ctx, tx, filter)
-}
-
-func (m *deploymentMockDB) RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id string) error {
-	return m.removeDeploymentByIdFn(ctx, tx, id)
-}
-
-func (m *deploymentMockDB) GetProviderByID(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error) {
-	return m.getProviderByIDFn(ctx, tx, providerID)
 }
 
 // Helper functions

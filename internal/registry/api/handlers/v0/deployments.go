@@ -85,7 +85,7 @@ func createDeploymentHTTPError(err error) error {
 	case errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated):
 		return huma.Error404NotFound("Resource not found in registry")
 	case errors.Is(err, database.ErrAlreadyExists):
-		return huma.Error409Conflict("Resource is already deployed")
+		return huma.Error409Conflict("Deployment with this ID already exists")
 	case err.Error() == "agent deployment is not yet implemented":
 		return huma.Error501NotImplemented("Agent deployment is not yet supported")
 	default:

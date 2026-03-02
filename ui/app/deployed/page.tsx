@@ -248,7 +248,7 @@ export default function DeployedPage() {
                     <Badge variant="secondary" className="ml-2">{agents.length}</Badge>
                   </h2>
                   {agents.map((item) => (
-                    <Card key={`${item.serverName}-${item.version}`} className="p-6 hover:shadow-md transition-all duration-200">
+                    <Card key={item.id} className="p-6 hover:shadow-md transition-all duration-200">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-3">
@@ -256,7 +256,7 @@ export default function DeployedPage() {
                             <Badge variant="outline">
                               {item.providerId || "local"}
                             </Badge>
-                            {item.origin === 'registry' ? (
+                            {item.origin === 'managed' ? (
                               <Badge className="bg-primary/10 text-primary hover:bg-primary/20 border-primary/20">
                                 Managed
                               </Badge>
@@ -302,7 +302,7 @@ export default function DeployedPage() {
                           )}
                         </div>
 
-                        {item.origin === 'registry' && (
+                        {item.origin === 'managed' && (
                           <Button
                             variant="destructive"
                             size="sm"
@@ -328,7 +328,7 @@ export default function DeployedPage() {
                     <Badge variant="secondary" className="ml-2">{mcpServers.length}</Badge>
                   </h2>
                   {mcpServers.map((item) => (
-                    <Card key={`${item.serverName}-${item.version}`} className="p-6 hover:shadow-md transition-all duration-200">
+                    <Card key={item.id} className="p-6 hover:shadow-md transition-all duration-200">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-3">
@@ -336,7 +336,7 @@ export default function DeployedPage() {
                             <Badge variant="outline">
                               {item.providerId || "local"}
                             </Badge>
-                            {item.origin === 'registry' ? (
+                            {item.origin === 'managed' ? (
                               <Badge className="bg-primary/10 text-primary hover:bg-primary/20 border-primary/20">
                                 Managed
                               </Badge>
@@ -382,7 +382,7 @@ export default function DeployedPage() {
                           )}
                         </div>
 
-                        {item.origin === 'registry' && (
+                        {item.origin === 'managed' && (
                           <Button
                             variant="destructive"
                             size="sm"

@@ -2782,29 +2782,31 @@ func (db *PostgreSQL) GetDeploymentByID(ctx context.Context, tx pgx.Tx, id strin
 	return &d, nil
 }
 
-// UpdateDeploymentStatus updates the status of a deployment
-func (db *PostgreSQL) UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, serverName, version string, resourceType string, status string) error {
-	// Authz check (determine resource type)
+// UpdateDeploymentStatus updates the status of a deployment by ID.
+func (db *PostgreSQL) UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, id, status string) error {
+	deployment, err := db.GetDeploymentByID(ctx, tx, id)
+	if err != nil {
+		return err
+	}
 	artifactType := auth.PermissionArtifactTypeServer
-	if resourceType == "agent" {
+	if deployment.ResourceType == "agent" {
 		artifactType = auth.PermissionArtifactTypeAgent
 	}
 	if err := db.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
-		Name: serverName,
+		Name: deployment.ServerName,
 		Type: artifactType,
 	}); err != nil {
 		return err
 	}
 
 	executor := db.getExecutor(tx)
-
 	query := `
 		UPDATE deployments
-		SET status = $4
-		WHERE server_name = $1 AND version = $2 AND resource_type = $3
+		SET status = $2
+		WHERE id = $1
 	`
 
-	result, err := executor.Exec(ctx, query, serverName, version, resourceType, status)
+	result, err := executor.Exec(ctx, query, id, status)
 	if err != nil {
 		return fmt.Errorf("failed to update deployment status: %w", err)
 	}

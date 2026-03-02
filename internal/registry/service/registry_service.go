@@ -810,74 +810,12 @@ func (s *registryServiceImpl) resolveProviderByID(ctx context.Context, providerI
 	return s.db.GetProviderByID(ctx, nil, providerID)
 }
 
-// cleanupKubernetesResources deletes Kubernetes runtime resources for a stale deployment.
-// Errors are logged but not returned, since the resources may already be gone.
-func (s *registryServiceImpl) cleanupKubernetesResources(ctx context.Context, existing *models.Deployment) {
-	namespace := ""
-	if existing.Env != nil {
-		namespace = existing.Env["KAGENT_NAMESPACE"]
-	}
-	if namespace == "" {
-		namespace = runtime.DefaultNamespace()
-	}
-
-	switch existing.ResourceType {
-	case "agent":
-		if err := runtime.DeleteKubernetesAgent(ctx, existing.ServerName, existing.Version, namespace); err != nil {
-			log.Printf("Warning: failed to clean up kubernetes agent %s: %v", existing.ServerName, err)
-		}
-	case "mcp":
-		if err := runtime.DeleteKubernetesMCPServer(ctx, existing.ServerName, namespace); err != nil {
-			log.Printf("Warning: failed to clean up kubernetes MCP server %s: %v", existing.ServerName, err)
-		}
-		if err := runtime.DeleteKubernetesRemoteMCPServer(ctx, existing.ServerName, namespace); err != nil {
-			log.Printf("Warning: failed to clean up kubernetes remote MCP server %s: %v", existing.ServerName, err)
-		}
-	}
-}
-
-// cleanupExistingDeployment removes a stale deployment record and its associated runtime resources.
-// Errors from runtime cleanup are logged but not fatal, since the resources may already be gone.
-func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, resourceName, version, resourceType, platform string) error {
-	existing, err := s.findDeploymentByIdentity(ctx, resourceName, version, resourceType)
-	if err != nil {
-		if errors.Is(err, database.ErrNotFound) {
-			return nil
-		}
-		return fmt.Errorf("looking up existing deployment: %w", err)
-	}
-
-	cleanupPlatform := strings.ToLower(strings.TrimSpace(platform))
-	if existing == nil {
-		return nil
-	}
-	if providerID := strings.TrimSpace(existing.ProviderID); providerID != "" {
-		provider, err := s.resolveProviderByID(ctx, providerID)
-		if err != nil && !errors.Is(err, database.ErrNotFound) {
-			return fmt.Errorf("resolving provider for existing deployment: %w", err)
-		}
-		if err == nil && provider != nil {
-			cleanupPlatform = strings.ToLower(strings.TrimSpace(provider.Platform))
-		}
-	}
-	if cleanupPlatform == platformKubernetes {
-		s.cleanupKubernetesResources(ctx, existing)
-	}
-
-	if err := s.db.RemoveDeploymentByID(ctx, nil, existing.ID); err != nil && !errors.Is(err, database.ErrNotFound) {
-		return fmt.Errorf("removing stale deployment record: %w", err)
-	}
-
-	return nil
-}
-
 // DeployServer deploys a server with environment variables.
 func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, version string, env map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
 	if providerID == "" {
 		providerID = localProviderID
 	}
-	provider, err := s.resolveProviderByID(ctx, providerID)
-	if err != nil {
+	if _, err := s.resolveProviderByID(ctx, providerID); err != nil {
 		return nil, err
 	}
 	serverResp, err := s.db.GetServerByNameAndVersion(ctx, nil, serverName, version)
@@ -907,17 +845,7 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 
 	err = s.db.CreateDeployment(ctx, nil, deployment)
 	if err != nil {
-		if !errors.Is(err, database.ErrAlreadyExists) {
-			return nil, err
-		}
-		// Deployment record already exists — clean up stale record and retry
-		log.Printf("Deployment for %s/%s already exists, replacing stale record", serverName, deployment.Version)
-		if cleanupErr := s.cleanupExistingDeployment(ctx, serverName, deployment.Version, resourceTypeMCP, provider.Platform); cleanupErr != nil {
-			return nil, fmt.Errorf("failed to replace existing deployment: %w", cleanupErr)
-		}
-		if err := s.db.CreateDeployment(ctx, nil, deployment); err != nil {
-			return nil, fmt.Errorf("failed to recreate deployment: %w", err)
-		}
+		return nil, err
 	}
 
 	if err := s.ReconcileAll(ctx); err != nil {
@@ -940,8 +868,7 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 	if providerID == "" {
 		providerID = localProviderID
 	}
-	provider, err := s.resolveProviderByID(ctx, providerID)
-	if err != nil {
+	if _, err := s.resolveProviderByID(ctx, providerID); err != nil {
 		return nil, err
 	}
 	agentResp, err := s.db.GetAgentByNameAndVersion(ctx, nil, agentName, version)
@@ -970,18 +897,7 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 	}
 
 	if err := s.db.CreateDeployment(ctx, nil, deployment); err != nil {
-		if !errors.Is(err, database.ErrAlreadyExists) {
-			return nil, err
-		}
-
-		// Deployment record already exists — clean up stale record and retry
-		log.Printf("Deployment for agent %s/%s already exists, replacing stale record", agentName, deployment.Version)
-		if cleanupErr := s.cleanupExistingDeployment(ctx, agentName, deployment.Version, resourceTypeAgent, provider.Platform); cleanupErr != nil {
-			return nil, fmt.Errorf("failed to replace existing deployment: %w", cleanupErr)
-		}
-		if err := s.db.CreateDeployment(ctx, nil, deployment); err != nil {
-			return nil, fmt.Errorf("failed to recreate deployment: %w", err)
-		}
+		return nil, err
 	}
 
 	// Resolve and create deployment records for registry-type MCP servers from agent manifest
@@ -1004,11 +920,9 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 				DeployedAt:   time.Now(),
 				UpdatedAt:    time.Now(),
 			}
-			// Try to create deployment, but ignore if it already exists (idempotent)
+			// Create a managed deployment record for each resolved MCP server.
 			if err := s.db.CreateDeployment(ctx, nil, mcpDeployment); err != nil {
-				if !errors.Is(err, database.ErrAlreadyExists) {
-					log.Printf("Warning: Failed to create deployment for MCP server %s: %v", serverReq.RegistryServer.Name, err)
-				}
+				log.Printf("Warning: Failed to create deployment for MCP server %s: %v", serverReq.RegistryServer.Name, err)
 			}
 		}
 	}
@@ -1050,6 +964,46 @@ func cleanupKubernetesResourcesForDeployment(ctx context.Context, deployment *mo
 	return nil
 }
 
+func (s *registryServiceImpl) hasSiblingDeploymentForRuntime(ctx context.Context, deployment *models.Deployment) (bool, error) {
+	if deployment == nil {
+		return false, database.ErrInvalidInput
+	}
+
+	resourceType := deployment.ResourceType
+	resourceName := deployment.ServerName
+	filter := &models.DeploymentFilter{
+		ResourceType: &resourceType,
+		ResourceName: &resourceName,
+	}
+
+	providerID := strings.TrimSpace(deployment.ProviderID)
+	if providerID != "" {
+		filter.ProviderID = &providerID
+	}
+
+	deployments, err := s.db.GetDeployments(ctx, nil, filter)
+	if err != nil {
+		return false, err
+	}
+
+	for _, candidate := range deployments {
+		if candidate == nil || candidate.ID == deployment.ID {
+			continue
+		}
+		if candidate.ResourceType != deployment.ResourceType ||
+			candidate.ServerName != deployment.ServerName ||
+			candidate.Version != deployment.Version {
+			continue
+		}
+		if strings.TrimSpace(candidate.ProviderID) != providerID {
+			continue
+		}
+		return true, nil
+	}
+
+	return false, nil
+}
+
 func (s *registryServiceImpl) removeDeploymentRecord(ctx context.Context, deployment *models.Deployment) error {
 	if deployment == nil {
 		return database.ErrNotFound
@@ -1071,8 +1025,14 @@ func (s *registryServiceImpl) removeDeploymentRecord(ctx context.Context, deploy
 		platform = provider.Platform
 	}
 	if strings.ToLower(strings.TrimSpace(platform)) == platformKubernetes {
-		if err := cleanupKubernetesResourcesForDeployment(ctx, deployment); err != nil {
-			return err
+		hasSibling, err := s.hasSiblingDeploymentForRuntime(ctx, deployment)
+		if err != nil {
+			return fmt.Errorf("failed to check sibling deployments for %s: %w", deployment.ID, err)
+		}
+		if !hasSibling {
+			if err := cleanupKubernetesResourcesForDeployment(ctx, deployment); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -1085,25 +1045,6 @@ func (s *registryServiceImpl) removeDeploymentRecord(ctx context.Context, deploy
 	}
 
 	return nil
-}
-
-func (s *registryServiceImpl) findDeploymentByIdentity(ctx context.Context, resourceName string, version string, artifactType string) (*models.Deployment, error) {
-	filter := &models.DeploymentFilter{
-		ResourceType: &artifactType,
-		ResourceName: &resourceName,
-	}
-	deployments, err := s.db.GetDeployments(ctx, nil, filter)
-	if err != nil {
-		return nil, err
-	}
-	for _, deployment := range deployments {
-		if deployment.ServerName == resourceName &&
-			deployment.Version == version &&
-			deployment.ResourceType == artifactType {
-			return deployment, nil
-		}
-	}
-	return nil, database.ErrNotFound
 }
 
 // RemoveDeploymentByID removes a deployment by UUID.
@@ -1166,15 +1107,6 @@ func (s *registryServiceImpl) CancelDeployment(ctx context.Context, deployment *
 		return err
 	}
 	return adapter.Cancel(ctx, deployment)
-}
-
-// RemoveAgent removes an agent deployment
-func (s *registryServiceImpl) RemoveAgent(ctx context.Context, agentName string, version string) error {
-	deployment, err := s.findDeploymentByIdentity(ctx, agentName, version, "agent")
-	if err != nil {
-		return err
-	}
-	return s.removeDeploymentRecord(ctx, deployment)
 }
 
 func (s *registryServiceImpl) reconcileAdapterOnlyDeployments(ctx context.Context, providerPlatform string, deployments []*models.Deployment) error {

@@ -112,22 +112,10 @@ func printAgentsTable(agents []*models.AgentResponse, deployedAgents []*client.D
 	t := printer.NewTablePrinter(os.Stdout)
 	t.SetHeaders("Name", "Version", "Framework", "Language", "Provider", "Model", "Deployed")
 
-	deployedMap := make(map[string]*client.DeploymentResponse)
-	for _, d := range deployedAgents {
-		if d.ResourceType == "agent" {
-			deployedMap[d.ServerName] = d
-		}
-	}
+	deploymentCounts := buildAgentDeploymentCounts(deployedAgents)
 
 	for _, a := range agents {
-		deployedStatus := "False"
-		if deployment, ok := deployedMap[a.Agent.Name]; ok {
-			if deployment.Version == a.Agent.Version {
-				deployedStatus = "True"
-			} else {
-				deployedStatus = fmt.Sprintf("True (v%s)", deployment.Version)
-			}
-		}
+		deployedStatus := deployedStatusForAgent(deploymentCounts, a.Agent.Name, a.Agent.Version)
 
 		t.AddRow(
 			printer.TruncateString(a.Agent.Name, 40),
@@ -142,6 +130,36 @@ func printAgentsTable(agents []*models.AgentResponse, deployedAgents []*client.D
 
 	if err := t.Render(); err != nil {
 		printer.PrintError(fmt.Sprintf("failed to render table: %v", err))
+	}
+}
+
+func buildAgentDeploymentCounts(deployedAgents []*client.DeploymentResponse) map[string]map[string]int {
+	counts := make(map[string]map[string]int)
+	for _, deployment := range deployedAgents {
+		if deployment == nil || deployment.ResourceType != "agent" {
+			continue
+		}
+		if counts[deployment.ServerName] == nil {
+			counts[deployment.ServerName] = make(map[string]int)
+		}
+		counts[deployment.ServerName][deployment.Version]++
+	}
+	return counts
+}
+
+func deployedStatusForAgent(counts map[string]map[string]int, agentName, version string) string {
+	agentDeployments := counts[agentName]
+	if agentDeployments == nil {
+		return "False"
+	}
+	totalForVersion := agentDeployments[version]
+	switch {
+	case totalForVersion > 1:
+		return fmt.Sprintf("True (%d)", totalForVersion)
+	case totalForVersion == 1:
+		return "True"
+	default:
+		return "False (other versions deployed)"
 	}
 }
 

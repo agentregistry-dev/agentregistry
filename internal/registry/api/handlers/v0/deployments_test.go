@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -236,6 +237,66 @@ func TestCreateDeployment_InvalidInputFromAdapterReturnsBadRequest(t *testing.T)
 	mux.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestCreateDeployment_AllowsMultipleDeploymentsForSameArtifact(t *testing.T) {
+	reg := servicetesting.NewFakeRegistry()
+	reg.GetProviderByIDFn = func(ctx context.Context, providerID string) (*models.Provider, error) {
+		return &models.Provider{ID: providerID, Platform: "local"}, nil
+	}
+	createCount := 0
+	reg.CreateDeploymentFn = func(ctx context.Context, req *models.Deployment, platform string) (*models.Deployment, error) {
+		createCount++
+		return &models.Deployment{
+			ID:           fmt.Sprintf("adapter-dep-%d", createCount),
+			ServerName:   req.ServerName,
+			Version:      req.Version,
+			ResourceType: req.ResourceType,
+			ProviderID:   req.ProviderID,
+			Status:       "deployed",
+			Origin:       "managed",
+			Env:          req.Env,
+		}, nil
+	}
+
+	mux := http.NewServeMux()
+	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
+	v0.RegisterDeploymentsEndpoints(api, "/v0", reg, v0.PlatformExtensions{
+		ProviderPlatforms: v0.DefaultProviderPlatformAdapters(reg),
+		DeploymentPlatforms: map[string]registrytypes.DeploymentPlatformAdapter{
+			"local": &fakeDeploymentAdapter{},
+		},
+	})
+
+	body := map[string]any{
+		"serverName":   "io.github.user/weather",
+		"version":      "1.0.0",
+		"resourceType": "mcp",
+		"providerId":   "local",
+	}
+	payload, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	req1 := httptest.NewRequest(http.MethodPost, "/v0/deployments", bytes.NewReader(payload))
+	req1.Header.Set("Content-Type", "application/json")
+	w1 := httptest.NewRecorder()
+	mux.ServeHTTP(w1, req1)
+
+	req2 := httptest.NewRequest(http.MethodPost, "/v0/deployments", bytes.NewReader(payload))
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+	mux.ServeHTTP(w2, req2)
+
+	require.Equal(t, http.StatusOK, w1.Code)
+	require.Equal(t, http.StatusOK, w2.Code)
+
+	var first models.Deployment
+	var second models.Deployment
+	require.NoError(t, json.Unmarshal(w1.Body.Bytes(), &first))
+	require.NoError(t, json.Unmarshal(w2.Body.Bytes(), &second))
+	assert.NotEmpty(t, first.ID)
+	assert.NotEmpty(t, second.ID)
+	assert.NotEqual(t, first.ID, second.ID)
 }
 
 func TestDeleteDeployment_UsesAdapterWhenRegistered(t *testing.T) {
