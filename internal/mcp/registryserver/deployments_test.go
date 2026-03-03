@@ -165,8 +165,17 @@ func TestDeploymentTools_DeployRemove(t *testing.T) {
 	reg.DeployAgentFn = func(ctx context.Context, name, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
 		return agentDep, nil
 	}
-	reg.RemoveDeploymentByIDFn = func(ctx context.Context, id string) error {
+	reg.GetDeploymentByIDFn = func(_ context.Context, id string) (*models.Deployment, error) {
 		if id == deployed.ID {
+			return deployed, nil
+		}
+		return nil, errors.New("not found")
+	}
+	reg.GetProviderByIDFn = func(_ context.Context, providerID string) (*models.Provider, error) {
+		return &models.Provider{ID: providerID, Platform: "local"}, nil
+	}
+	reg.UndeployDeploymentFn = func(_ context.Context, deployment *models.Deployment, platform string) error {
+		if deployment != nil && deployment.ID == deployed.ID && platform == "local" {
 			removed = true
 			return nil
 		}

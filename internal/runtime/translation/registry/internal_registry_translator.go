@@ -20,6 +20,7 @@ import (
 
 type MCPServerRunRequest struct {
 	RegistryServer *apiv0.ServerJSON
+	DeploymentID   string
 	PreferRemote   bool
 	EnvValues      map[string]string
 	ArgValues      map[string]string
@@ -28,6 +29,7 @@ type MCPServerRunRequest struct {
 
 type AgentRunRequest struct {
 	RegistryAgent *models.AgentJSON
+	DeploymentID  string
 	EnvValues     map[string]string
 	// Registry-type MCP servers resolved from agent manifest at deploy time to inject into the agent
 	ResolvedMCPServers []*MCPServerRunRequest
@@ -80,8 +82,9 @@ func (t *registryTranslator) TranslateAgent(
 		return nil, fmt.Errorf("failed to find available port: %w", err)
 	}
 	return &api.Agent{
-		Name:    req.RegistryAgent.Name,
-		Version: req.RegistryAgent.Version,
+		Name:         req.RegistryAgent.Name,
+		Version:      req.RegistryAgent.Version,
+		DeploymentID: req.DeploymentID,
 		Deployment: api.AgentDeployment{
 			Image: req.RegistryAgent.Image,
 			Port:  port,
@@ -102,12 +105,14 @@ func (t *registryTranslator) TranslateMCPServer(
 		return translateRemoteMCPServer(
 			ctx,
 			req.RegistryServer,
+			req.DeploymentID,
 			req.HeaderValues,
 		)
 	case usePackage:
 		return translateLocalMCPServer(
 			ctx,
 			req.RegistryServer,
+			req.DeploymentID,
 			req.EnvValues,
 			req.ArgValues,
 		)
@@ -119,6 +124,7 @@ func (t *registryTranslator) TranslateMCPServer(
 func translateRemoteMCPServer(
 	ctx context.Context,
 	registryServer *apiv0.ServerJSON,
+	deploymentID string,
 	headerValues map[string]string,
 ) (*api.MCPServer, error) {
 	remoteInfo := registryServer.Remotes[0]
@@ -144,6 +150,7 @@ func translateRemoteMCPServer(
 
 	return &api.MCPServer{
 		Name:          GenerateInternalName(registryServer.Name),
+		DeploymentID:  deploymentID,
 		MCPServerType: api.MCPServerTypeRemote,
 		Remote: &api.RemoteMCPServer{
 			Host:    u.host,
@@ -157,6 +164,7 @@ func translateRemoteMCPServer(
 func translateLocalMCPServer(
 	ctx context.Context,
 	registryServer *apiv0.ServerJSON,
+	deploymentID string,
 	envValues map[string]string,
 	argValues map[string]string,
 ) (*api.MCPServer, error) {
@@ -239,6 +247,7 @@ func translateLocalMCPServer(
 
 	return &api.MCPServer{
 		Name:          GenerateInternalName(registryServer.Name),
+		DeploymentID:  deploymentID,
 		MCPServerType: api.MCPServerTypeLocal,
 		Local: &api.LocalMCPServer{
 			Deployment: api.MCPServerDeployment{

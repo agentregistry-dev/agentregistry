@@ -379,3 +379,81 @@ func TestTranslateRuntimeConfig_NamespaceConsistency(t *testing.T) {
 		})
 	}
 }
+
+func TestTranslateRuntimeConfig_DeploymentIDMetadataAndNaming(t *testing.T) {
+	translator := NewTranslator()
+	ctx := context.Background()
+
+	desired := &api.DesiredState{
+		Agents: []*api.Agent{
+			{
+				Name:         "demo-agent",
+				Version:      "1.0.0",
+				DeploymentID: "dep-agent-123",
+				Deployment: api.AgentDeployment{
+					Image: "agent-image:latest",
+					Env: map[string]string{
+						"KAGENT_NAMESPACE": "demo-ns",
+					},
+				},
+				ResolvedMCPServers: []api.ResolvedMCPServerConfig{
+					{Name: "mcp-a", Type: "command"},
+				},
+			},
+		},
+		MCPServers: []*api.MCPServer{
+			{
+				Name:          "demo-mcp",
+				DeploymentID:  "dep-mcp-123",
+				MCPServerType: api.MCPServerTypeRemote,
+				Namespace:     "demo-ns",
+				Remote: &api.RemoteMCPServer{
+					Host: "example.com",
+					Port: 80,
+					Path: "/mcp",
+				},
+			},
+		},
+	}
+
+	config, err := translator.TranslateRuntimeConfig(ctx, desired)
+	if err != nil {
+		t.Fatalf("TranslateRuntimeConfig failed: %v", err)
+	}
+
+	if len(config.Kubernetes.Agents) != 1 {
+		t.Fatalf("expected 1 agent, got %d", len(config.Kubernetes.Agents))
+	}
+	agent := config.Kubernetes.Agents[0]
+	if agent.Name != "demo-agent-1-0-0-dep-agent-123" {
+		t.Fatalf("unexpected agent name: %s", agent.Name)
+	}
+	if got := agent.Labels[DeploymentIDLabelKey]; got != "dep-agent-123" {
+		t.Fatalf("agent deployment-id label = %q, want %q", got, "dep-agent-123")
+	}
+	if got := agent.Annotations[DeploymentIDAnnotationKey]; got != "dep-agent-123" {
+		t.Fatalf("agent deployment-id annotation = %q, want %q", got, "dep-agent-123")
+	}
+
+	if len(config.Kubernetes.ConfigMaps) != 1 {
+		t.Fatalf("expected 1 configmap, got %d", len(config.Kubernetes.ConfigMaps))
+	}
+	configMap := config.Kubernetes.ConfigMaps[0]
+	if configMap.Name != "demo-agent-1-0-0-mcp-config-dep-agent-123" {
+		t.Fatalf("unexpected configmap name: %s", configMap.Name)
+	}
+	if got := configMap.Labels[DeploymentIDLabelKey]; got != "dep-agent-123" {
+		t.Fatalf("configmap deployment-id label = %q, want %q", got, "dep-agent-123")
+	}
+
+	if len(config.Kubernetes.RemoteMCPServers) != 1 {
+		t.Fatalf("expected 1 remote mcp server, got %d", len(config.Kubernetes.RemoteMCPServers))
+	}
+	remote := config.Kubernetes.RemoteMCPServers[0]
+	if remote.Name != "demo-mcp-dep-mcp-123" {
+		t.Fatalf("unexpected remote mcp name: %s", remote.Name)
+	}
+	if got := remote.Labels[DeploymentIDLabelKey]; got != "dep-mcp-123" {
+		t.Fatalf("remote mcp deployment-id label = %q, want %q", got, "dep-mcp-123")
+	}
+}

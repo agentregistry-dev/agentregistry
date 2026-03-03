@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -20,6 +21,7 @@ import (
 	v1alpha2 "github.com/kagent-dev/kagent/go/api/v1alpha2"
 	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
 	"go.yaml.in/yaml/v3"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -410,55 +412,88 @@ func ListRemoteMCPServers(ctx context.Context, namespace string) ([]*v1alpha2.Re
 	return servers, nil
 }
 
-// DeleteKubernetesAgent deletes a kagent Agent CR by name/version.
-func DeleteKubernetesAgent(ctx context.Context, name, version, namespace string) error {
+// DeleteKubernetesResourcesByDeploymentID removes runtime resources tagged to one deployment row.
+func DeleteKubernetesResourcesByDeploymentID(ctx context.Context, deploymentID, resourceType, namespace string) error {
+	if strings.TrimSpace(deploymentID) == "" {
+		return fmt.Errorf("deployment id is required")
+	}
 	c, err := GetKubeClient()
 	if err != nil {
 		return err
 	}
 
-	agent := &v1alpha2.Agent{}
-	agent.Name = kagent.AgentResourceName(name, version)
-	agent.Namespace = namespace
-
-	if err := deleteResource(ctx, c, agent); err != nil {
-		return fmt.Errorf("failed to delete agent %s: %w", agent.Name, err)
+	switch strings.ToLower(strings.TrimSpace(resourceType)) {
+	case "agent":
+		return deleteKubernetesAgentResourcesByDeploymentID(ctx, c, deploymentID, namespace)
+	case "mcp":
+		return deleteKubernetesMCPResourcesByDeploymentID(ctx, c, deploymentID, namespace)
+	default:
+		return nil
 	}
-	return nil
 }
 
-// DeleteKubernetesRemoteMCPServer deletes a kagent RemoteMCPServer CR by name.
-func DeleteKubernetesRemoteMCPServer(ctx context.Context, name, namespace string) error {
-	c, err := GetKubeClient()
-	if err != nil {
-		return err
+func deploymentSelectorOpts(deploymentID, namespace string) []client.ListOption {
+	opts := []client.ListOption{
+		client.MatchingLabels{kagent.DeploymentIDLabelKey: deploymentID},
 	}
-
-	remoteMCP := &v1alpha2.RemoteMCPServer{}
-	remoteMCP.Name = kagent.RemoteMCPResourceName(name)
-	remoteMCP.Namespace = namespace
-
-	if err := deleteResource(ctx, c, remoteMCP); err != nil {
-		return fmt.Errorf("failed to delete remote MCP server %s: %w", remoteMCP.Name, err)
+	if strings.TrimSpace(namespace) != "" {
+		opts = append(opts, client.InNamespace(namespace))
 	}
-	return nil
+	return opts
 }
 
-// DeleteKubernetesMCPServer deletes a kagent MCPServer CR by name.
-func DeleteKubernetesMCPServer(ctx context.Context, name, namespace string) error {
-	c, err := GetKubeClient()
-	if err != nil {
-		return err
+func deleteKubernetesAgentResourcesByDeploymentID(ctx context.Context, c client.Client, deploymentID, namespace string) error {
+	opts := deploymentSelectorOpts(deploymentID, namespace)
+	var errs []error
+
+	agentList := &v1alpha2.AgentList{}
+	if err := c.List(ctx, agentList, opts...); err != nil {
+		return fmt.Errorf("failed to list agents by deployment id %s: %w", deploymentID, err)
+	}
+	for i := range agentList.Items {
+		if err := deleteResource(ctx, c, &agentList.Items[i]); err != nil {
+			errs = append(errs, fmt.Errorf("failed to delete agent %s: %w", agentList.Items[i].Name, err))
+		}
 	}
 
-	mcpServer := &kmcpv1alpha1.MCPServer{}
-	mcpServer.Name = kagent.MCPServerResourceName(name)
-	mcpServer.Namespace = namespace
-
-	if err := deleteResource(ctx, c, mcpServer); err != nil {
-		return fmt.Errorf("failed to delete MCP server %s: %w", mcpServer.Name, err)
+	configMapList := &corev1.ConfigMapList{}
+	if err := c.List(ctx, configMapList, opts...); err != nil {
+		return fmt.Errorf("failed to list configmaps by deployment id %s: %w", deploymentID, err)
 	}
-	return nil
+	for i := range configMapList.Items {
+		if err := deleteResource(ctx, c, &configMapList.Items[i]); err != nil {
+			errs = append(errs, fmt.Errorf("failed to delete configmap %s: %w", configMapList.Items[i].Name, err))
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+func deleteKubernetesMCPResourcesByDeploymentID(ctx context.Context, c client.Client, deploymentID, namespace string) error {
+	opts := deploymentSelectorOpts(deploymentID, namespace)
+	var errs []error
+
+	mcpList := &kmcpv1alpha1.MCPServerList{}
+	if err := c.List(ctx, mcpList, opts...); err != nil {
+		return fmt.Errorf("failed to list mcp servers by deployment id %s: %w", deploymentID, err)
+	}
+	for i := range mcpList.Items {
+		if err := deleteResource(ctx, c, &mcpList.Items[i]); err != nil {
+			errs = append(errs, fmt.Errorf("failed to delete mcp server %s: %w", mcpList.Items[i].Name, err))
+		}
+	}
+
+	remoteMCPList := &v1alpha2.RemoteMCPServerList{}
+	if err := c.List(ctx, remoteMCPList, opts...); err != nil {
+		return fmt.Errorf("failed to list remote mcp servers by deployment id %s: %w", deploymentID, err)
+	}
+	for i := range remoteMCPList.Items {
+		if err := deleteResource(ctx, c, &remoteMCPList.Items[i]); err != nil {
+			errs = append(errs, fmt.Errorf("failed to delete remote mcp server %s: %w", remoteMCPList.Items[i].Name, err))
+		}
+	}
+
+	return errors.Join(errs...)
 }
 
 // createResolvedMCPServerConfigs converts server run requests into API ResolvedMCPServerConfig

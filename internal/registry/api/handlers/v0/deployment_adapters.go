@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	"github.com/agentregistry-dev/agentregistry/internal/runtime"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
@@ -105,6 +107,15 @@ func (a *kubernetesDeploymentAdapter) Deploy(ctx context.Context, req *models.De
 func (a *kubernetesDeploymentAdapter) Undeploy(ctx context.Context, deployment *models.Deployment) error {
 	if deployment == nil || deployment.ID == "" {
 		return fmt.Errorf("deployment id is required: %w", database.ErrInvalidInput)
+	}
+	namespace := runtime.DefaultNamespace()
+	if deployment.Env != nil {
+		if ns := strings.TrimSpace(deployment.Env["KAGENT_NAMESPACE"]); ns != "" {
+			namespace = ns
+		}
+	}
+	if err := runtime.DeleteKubernetesResourcesByDeploymentID(ctx, deployment.ID, deployment.ResourceType, namespace); err != nil {
+		return err
 	}
 	return a.registry.RemoveDeploymentByID(ctx, deployment.ID)
 }

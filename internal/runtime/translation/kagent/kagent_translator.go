@@ -16,6 +16,12 @@ import (
 
 type translator struct{}
 
+const (
+	ManagedLabelKey           = "aregistry.ai/managed"
+	DeploymentIDLabelKey      = "aregistry.ai/deployment-id"
+	DeploymentIDAnnotationKey = "aregistry.ai/deployment-id"
+)
+
 // NewTranslator returns a Kubernetes runtime translator that renders kagent Agent CRs.
 func NewTranslator() api.RuntimeTranslator {
 	return &translator{}
@@ -115,7 +121,7 @@ func (t *translator) translateAgent(agent *api.Agent) (*v1alpha2.Agent, error) {
 
 	// If agent has resolved MCP servers, add ConfigMap volume mount
 	if len(agent.ResolvedMCPServers) > 0 {
-		configMapName := AgentConfigMapName(agent.Name, agent.Version)
+		configMapName := AgentConfigMapName(agent.Name, agent.Version, agent.DeploymentID)
 		volumeName := "mcp-config"
 
 		sharedSpec.Volumes = []corev1.Volume{{
@@ -146,12 +152,10 @@ func (t *translator) translateAgent(agent *api.Agent) (*v1alpha2.Agent, error) {
 			Kind:       "Agent",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      AgentResourceName(agent.Name, agent.Version),
-			Namespace: namespace,
-			// Add a label to identify this resource as managed by agentregistry
-			Labels: map[string]string{
-				"aregistry.ai/managed": "true",
-			},
+			Name:        AgentResourceName(agent.Name, agent.Version, agent.DeploymentID),
+			Namespace:   namespace,
+			Labels:      deploymentManagedLabels(agent.DeploymentID),
+			Annotations: deploymentManagedAnnotations(agent.DeploymentID),
 		},
 		Spec: v1alpha2.AgentSpec{
 			Description: agent.Name,
@@ -183,11 +187,10 @@ func (t *translator) translateRemoteMCPServer(server *api.MCPServer) (*v1alpha2.
 			Kind:       "RemoteMCPServer",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      RemoteMCPResourceName(server.Name),
-			Namespace: namespace,
-			Labels: map[string]string{
-				"aregistry.ai/managed": "true",
-			},
+			Name:        RemoteMCPResourceName(server.Name, server.DeploymentID),
+			Namespace:   namespace,
+			Labels:      deploymentManagedLabels(server.DeploymentID),
+			Annotations: deploymentManagedAnnotations(server.DeploymentID),
 		},
 		Spec: v1alpha2.RemoteMCPServerSpec{
 			Description: server.Name,
@@ -249,11 +252,10 @@ func (t *translator) translateLocalMCPServer(server *api.MCPServer) (*kmcpv1alph
 			Kind:       "MCPServer",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      MCPServerResourceName(server.Name),
-			Namespace: namespace,
-			Labels: map[string]string{
-				"aregistry.ai/managed": "true",
-			},
+			Name:        MCPServerResourceName(server.Name, server.DeploymentID),
+			Namespace:   namespace,
+			Labels:      deploymentManagedLabels(server.DeploymentID),
+			Annotations: deploymentManagedAnnotations(server.DeploymentID),
 		},
 		Spec: spec,
 	}, nil
@@ -273,7 +275,15 @@ func (t *translator) translateAgentConfigMap(agent *api.Agent) (*corev1.ConfigMa
 		return nil, fmt.Errorf("failed to marshal MCP servers config: %w", err)
 	}
 
-	configMapName := AgentConfigMapName(agent.Name, agent.Version)
+	configMapName := AgentConfigMapName(agent.Name, agent.Version, agent.DeploymentID)
+	labels := map[string]string{
+		"app.kubernetes.io/managed-by": "agentregistry",
+		"app.kubernetes.io/component":  "agent-config",
+		"agentregistry.dev/agent":      sanitizeK8sName(agent.Name),
+	}
+	for k, v := range deploymentManagedLabels(agent.DeploymentID) {
+		labels[k] = v
+	}
 
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
@@ -281,13 +291,10 @@ func (t *translator) translateAgentConfigMap(agent *api.Agent) (*corev1.ConfigMa
 			Kind:       "ConfigMap",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      configMapName,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": "agentregistry",
-				"app.kubernetes.io/component":  "agent-config",
-				"agentregistry.dev/agent":      sanitizeK8sName(agent.Name),
-			},
+			Name:        configMapName,
+			Namespace:   namespace,
+			Labels:      labels,
+			Annotations: deploymentManagedAnnotations(agent.DeploymentID),
 		},
 		Data: map[string]string{
 			"mcp-servers.json": string(serversJSON),
@@ -296,10 +303,13 @@ func (t *translator) translateAgentConfigMap(agent *api.Agent) (*corev1.ConfigMa
 }
 
 // AgentConfigMapName returns the ConfigMap name for an agent
-func AgentConfigMapName(name, version string) string {
+func AgentConfigMapName(name, version, deploymentID string) string {
 	base := fmt.Sprintf("%s-mcp-config", name)
 	if version != "" {
 		base = fmt.Sprintf("%s-%s-mcp-config", name, version)
+	}
+	if deploymentID != "" {
+		base = fmt.Sprintf("%s-%s", base, deploymentID)
 	}
 	return sanitizeK8sName(base)
 }
@@ -318,20 +328,50 @@ func buildRemoteMCPURL(host string, port uint32, path string) string {
 	return fmt.Sprintf("http://%s:%d%s", host, port, path)
 }
 
-func AgentResourceName(name, version string) string {
+func AgentResourceName(name, version, deploymentID string) string {
 	base := name
 	if version != "" {
 		base = fmt.Sprintf("%s-%s", name, version)
 	}
+	if deploymentID != "" {
+		base = fmt.Sprintf("%s-%s", base, deploymentID)
+	}
 	return sanitizeK8sName(base)
 }
 
-func RemoteMCPResourceName(name string) string {
-	return sanitizeK8sName(name)
+func RemoteMCPResourceName(name, deploymentID string) string {
+	base := name
+	if deploymentID != "" {
+		base = fmt.Sprintf("%s-%s", base, deploymentID)
+	}
+	return sanitizeK8sName(base)
 }
 
-func MCPServerResourceName(name string) string {
-	return sanitizeK8sName(name)
+func MCPServerResourceName(name, deploymentID string) string {
+	base := name
+	if deploymentID != "" {
+		base = fmt.Sprintf("%s-%s", base, deploymentID)
+	}
+	return sanitizeK8sName(base)
+}
+
+func deploymentManagedLabels(deploymentID string) map[string]string {
+	labels := map[string]string{
+		ManagedLabelKey: "true",
+	}
+	if deploymentID != "" {
+		labels[DeploymentIDLabelKey] = deploymentID
+	}
+	return labels
+}
+
+func deploymentManagedAnnotations(deploymentID string) map[string]string {
+	if deploymentID == "" {
+		return nil
+	}
+	return map[string]string{
+		DeploymentIDAnnotationKey: deploymentID,
+	}
 }
 
 // sanitizeK8sName sanitizes a string to a valid Kubernetes name

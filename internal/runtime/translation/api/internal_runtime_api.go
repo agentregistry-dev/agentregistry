@@ -14,9 +14,10 @@ type DesiredState struct {
 
 // Agent represents a single Agent configuration
 type Agent struct {
-	Name       string          `json:"name"`
-	Version    string          `json:"version"`
-	Deployment AgentDeployment `json:"deployment"`
+	Name         string          `json:"name"`
+	Version      string          `json:"version"`
+	DeploymentID string          `json:"deploymentId,omitempty"`
+	Deployment   AgentDeployment `json:"deployment"`
 	// ResolvedMCPServers contains the MCP server connection info for this agent
 	// Used to generate ConfigMap for Kubernetes deployments
 	ResolvedMCPServers []ResolvedMCPServerConfig `json:"resolvedMCPServers,omitempty"`
@@ -34,6 +35,8 @@ type ResolvedMCPServerConfig struct {
 type MCPServer struct {
 	// Name is the unique name of the MCPServer
 	Name string `json:"name"`
+	// DeploymentID is the registry deployment row id backing this runtime object.
+	DeploymentID string `json:"deploymentId,omitempty"`
 	// MCPServerType represents whether the MCP server is remote or local
 	MCPServerType MCPServerType `json:"mcpServerType"`
 	// Remote defines how to route to a remote MCP server

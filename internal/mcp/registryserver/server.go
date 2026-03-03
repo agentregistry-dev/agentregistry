@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	restv0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
@@ -438,7 +439,19 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService) {
 		if args.ID == "" {
 			return nil, nil, errors.New("id is required")
 		}
-		if err := registry.RemoveDeploymentByID(ctx, args.ID); err != nil {
+		deployment, err := registry.GetDeploymentByID(ctx, args.ID)
+		if err != nil {
+			return nil, nil, err
+		}
+		provider, err := registry.GetProviderByID(ctx, deployment.ProviderID)
+		if err != nil {
+			return nil, nil, err
+		}
+		platform := strings.TrimSpace(provider.Platform)
+		if platform == "" {
+			return nil, nil, fmt.Errorf("provider platform is required for deployment %s", deployment.ID)
+		}
+		if err := registry.UndeployDeployment(ctx, deployment, platform); err != nil {
 			return nil, nil, err
 		}
 		return nil, map[string]string{"status": "deleted"}, nil

@@ -943,67 +943,6 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 	return s.db.GetDeploymentByID(ctx, nil, deployment.ID)
 }
 
-func cleanupKubernetesResourcesForDeployment(ctx context.Context, deployment *models.Deployment) error {
-	namespace := ""
-	if deployment.Env != nil {
-		namespace = deployment.Env["KAGENT_NAMESPACE"]
-	}
-	if namespace == "" {
-		namespace = runtime.DefaultNamespace()
-	}
-
-	if deployment.ResourceType == resourceTypeAgent {
-		return runtime.DeleteKubernetesAgent(ctx, deployment.ServerName, deployment.Version, namespace)
-	}
-	if deployment.ResourceType == resourceTypeMCP {
-		if err := runtime.DeleteKubernetesMCPServer(ctx, deployment.ServerName, namespace); err != nil {
-			return err
-		}
-		return runtime.DeleteKubernetesRemoteMCPServer(ctx, deployment.ServerName, namespace)
-	}
-	return nil
-}
-
-func (s *registryServiceImpl) hasSiblingDeploymentForRuntime(ctx context.Context, deployment *models.Deployment) (bool, error) {
-	if deployment == nil {
-		return false, database.ErrInvalidInput
-	}
-
-	resourceType := deployment.ResourceType
-	resourceName := deployment.ServerName
-	filter := &models.DeploymentFilter{
-		ResourceType: &resourceType,
-		ResourceName: &resourceName,
-	}
-
-	providerID := strings.TrimSpace(deployment.ProviderID)
-	if providerID != "" {
-		filter.ProviderID = &providerID
-	}
-
-	deployments, err := s.db.GetDeployments(ctx, nil, filter)
-	if err != nil {
-		return false, err
-	}
-
-	for _, candidate := range deployments {
-		if candidate == nil || candidate.ID == deployment.ID {
-			continue
-		}
-		if candidate.ResourceType != deployment.ResourceType ||
-			candidate.ServerName != deployment.ServerName ||
-			candidate.Version != deployment.Version {
-			continue
-		}
-		if strings.TrimSpace(candidate.ProviderID) != providerID {
-			continue
-		}
-		return true, nil
-	}
-
-	return false, nil
-}
-
 func (s *registryServiceImpl) removeDeploymentRecord(ctx context.Context, deployment *models.Deployment) error {
 	if deployment == nil {
 		return database.ErrNotFound
@@ -1013,27 +952,6 @@ func (s *registryServiceImpl) removeDeploymentRecord(ctx context.Context, deploy
 	}
 	if deployment.Origin == originDiscovered {
 		return database.ErrInvalidInput
-	}
-
-	// Clean up kubernetes resources
-	platform := ""
-	if strings.TrimSpace(deployment.ProviderID) != "" {
-		provider, err := s.resolveProviderByID(ctx, deployment.ProviderID)
-		if err != nil {
-			return fmt.Errorf("failed to resolve provider %q for deployment %s: %w", deployment.ProviderID, deployment.ID, err)
-		}
-		platform = provider.Platform
-	}
-	if strings.ToLower(strings.TrimSpace(platform)) == platformKubernetes {
-		hasSibling, err := s.hasSiblingDeploymentForRuntime(ctx, deployment)
-		if err != nil {
-			return fmt.Errorf("failed to check sibling deployments for %s: %w", deployment.ID, err)
-		}
-		if !hasSibling {
-			if err := cleanupKubernetesResourcesForDeployment(ctx, deployment); err != nil {
-				return err
-			}
-		}
 	}
 
 	if err := s.db.RemoveDeploymentByID(ctx, nil, deployment.ID); err != nil {
@@ -1074,10 +992,6 @@ func (s *registryServiceImpl) UndeployDeployment(ctx context.Context, deployment
 		return database.ErrNotFound
 	}
 	normalized := strings.ToLower(strings.TrimSpace(platform))
-	if normalized == platformLocal || normalized == platformKubernetes {
-		// Local/kubernetes built-ins are managed directly by registry cleanup + DB removal.
-		return s.removeDeploymentRecord(ctx, deployment)
-	}
 	adapter, err := s.resolveDeploymentAdapter(normalized)
 	if err != nil {
 		return err
@@ -1193,6 +1107,7 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 
 			targetRequests.servers = append(targetRequests.servers, &registry.MCPServerRunRequest{
 				RegistryServer: &depServer.Server,
+				DeploymentID:   dep.ID,
 				PreferRemote:   dep.PreferRemote,
 				EnvValues:      envValues,
 				ArgValues:      argValues,
@@ -1211,6 +1126,7 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 
 			targetRequests.agents = append(targetRequests.agents, &registry.AgentRunRequest{
 				RegistryAgent: &depAgent.Agent,
+				DeploymentID:  dep.ID,
 				EnvValues:     depEnvValues,
 			})
 
@@ -1246,7 +1162,6 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 			}
 
 			agentReq.ResolvedMCPServers = resolvedServers
-			requests.servers = append(requests.servers, resolvedServers...)
 			if s.cfg.Verbose && len(resolvedServers) > 0 {
 				log.Printf("Resolved %d MCP server(s) of type 'registry' for %s agent %s", len(resolvedServers), providerPlatform, agentReq.RegistryAgent.Name)
 			}
