@@ -18,6 +18,7 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [version, setVersion] = useState("latest")
+  const [publishSource, setPublishSource] = useState<"github" | "docker">("github")
   const [repositoryUrl, setRepositoryUrl] = useState("")
   const [dockerImage, setDockerImage] = useState("")
   const [loading, setLoading] = useState(false)
@@ -41,8 +42,11 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
       }
       const trimmedRepositoryUrl = repositoryUrl.trim()
       const trimmedDockerImage = dockerImage.trim()
-      if (!trimmedRepositoryUrl && !trimmedDockerImage) {
-        throw new Error("Either GitHub repository URL or Docker image is required")
+      if (publishSource === "github" && !trimmedRepositoryUrl) {
+        throw new Error("GitHub repository URL is required for GitHub publish")
+      }
+      if (publishSource === "docker" && !trimmedDockerImage) {
+        throw new Error("Docker image is required for Docker publish")
       }
 
       // Construct the SkillJSON object
@@ -50,11 +54,11 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
         name: name.trim(),
         description: description.trim(),
         version: version.trim(),
-        repository: trimmedRepositoryUrl ? {
+        repository: publishSource === "github" ? {
           url: trimmedRepositoryUrl,
           source: "github"
         } : undefined,
-        packages: trimmedDockerImage ? [
+        packages: publishSource === "docker" ? [
           {
             registryType: "docker",
             identifier: trimmedDockerImage,
@@ -73,6 +77,7 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
       setName("")
       setDescription("")
       setVersion("latest")
+      setPublishSource("github")
       setRepositoryUrl("")
       setDockerImage("")
 
@@ -90,6 +95,7 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
     setName("")
     setDescription("")
     setVersion("latest")
+    setPublishSource("github")
     setRepositoryUrl("")
     setDockerImage("")
     setError(null)
@@ -140,6 +146,33 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
           </div>
 
           <div className="space-y-2">
+            <Label>
+              Publish Source <span className="text-red-500">*</span>
+            </Label>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={publishSource === "github" ? "default" : "outline"}
+                onClick={() => setPublishSource("github")}
+                disabled={loading}
+              >
+                GitHub Repository
+              </Button>
+              <Button
+                type="button"
+                variant={publishSource === "docker" ? "default" : "outline"}
+                onClick={() => setPublishSource("docker")}
+                disabled={loading}
+              >
+                Docker Image
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Select one publish source mode for this skill version
+            </p>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="version">
               Version <span className="text-red-500">*</span>
             </Label>
@@ -156,38 +189,42 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
             </p>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="repositoryUrl">
-              GitHub Repository URL
-            </Label>
-            <Input
-              id="repositoryUrl"
-              placeholder="https://github.com/username/repo"
-              value={repositoryUrl}
-              onChange={(e) => setRepositoryUrl(e.target.value)}
-              disabled={loading}
-              type="url"
-            />
-            <p className="text-xs text-muted-foreground">
-              Optional: Link to the skill&apos;s source code repository
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="dockerImage">
-              Docker Image
-            </Label>
-            <Input
-              id="dockerImage"
-              placeholder="docker.io/username/my-skill:latest"
-              value={dockerImage}
-              onChange={(e) => setDockerImage(e.target.value)}
-              disabled={loading}
-            />
-            <p className="text-xs text-muted-foreground">
-              Optional: Provide a Docker image for runtime distribution (not required for GitHub-only publish)
-            </p>
-          </div>
+          {publishSource === "github" ? (
+            <div className="space-y-2">
+              <Label htmlFor="repositoryUrl">
+                GitHub Repository URL <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="repositoryUrl"
+                placeholder="https://github.com/username/repo"
+                value={repositoryUrl}
+                onChange={(e) => setRepositoryUrl(e.target.value)}
+                disabled={loading}
+                type="url"
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Link to the skill&apos;s public GitHub source
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="dockerImage">
+                Docker Image <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="dockerImage"
+                placeholder="docker.io/username/my-skill:latest"
+                value={dockerImage}
+                onChange={(e) => setDockerImage(e.target.value)}
+                disabled={loading}
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Full image reference including registry, repository, and tag
+              </p>
+            </div>
+          )}
 
           {error && (
             <div className="rounded-md bg-red-50 p-3 text-sm text-red-800">
