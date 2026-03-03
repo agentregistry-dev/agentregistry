@@ -12,13 +12,13 @@ import (
 
 // Common database errors
 var (
-	ErrNotFound          = errors.New("record not found")
-	ErrForbidden         = errors.New("forbidden")
-	ErrAlreadyExists     = errors.New("record already exists")
-	ErrInvalidInput      = errors.New("invalid input")
-	ErrDatabase          = errors.New("database error")
-	ErrInvalidVersion    = errors.New("invalid version: cannot publish duplicate version")
-	ErrMaxServersReached = errors.New("maximum number of versions for this server reached (10000): please reach out at https://github.com/modelcontextprotocol/registry to explain your use case")
+	ErrNotFound           = errors.New("record not found")
+	ErrForbidden          = errors.New("forbidden")
+	ErrAlreadyExists      = errors.New("record already exists")
+	ErrInvalidInput       = errors.New("invalid input")
+	ErrDatabase           = errors.New("database error")
+	ErrInvalidVersion     = errors.New("invalid version: cannot publish duplicate version")
+	ErrMaxVersionsReached = errors.New("maximum number of versions reached (10000): please reach out at https://github.com/modelcontextprotocol/registry to explain your use case")
 )
 
 // ServerFilter defines filtering options for server queries
@@ -63,6 +63,15 @@ type AgentFilter struct {
 	Version       *string    // for exact version matching
 	IsLatest      *bool      // for filtering latest versions only
 	Semantic      *SemanticSearchOptions
+}
+
+// PromptFilter defines filtering options for prompt queries
+type PromptFilter struct {
+	Name          *string    // for finding versions of same prompt
+	UpdatedSince  *time.Time // for incremental sync filtering
+	SubstringName *string    // for substring search on name
+	Version       *string    // for exact version matching
+	IsLatest      *bool      // for filtering latest versions only
 }
 
 // SemanticEmbedding captures data stored alongside registry resources for semantic search.
@@ -194,6 +203,28 @@ type Database interface {
 	CheckSkillVersionExists(ctx context.Context, tx pgx.Tx, skillName, version string) (bool, error)
 	// UnmarkSkillAsLatest marks the current latest version of a skill as no longer latest
 	UnmarkSkillAsLatest(ctx context.Context, tx pgx.Tx, skillName string) error
+
+	// Prompts API
+	// CreatePrompt inserts a new prompt version with official metadata
+	CreatePrompt(ctx context.Context, tx pgx.Tx, promptJSON *models.PromptJSON, officialMeta *models.PromptRegistryExtensions) (*models.PromptResponse, error)
+	// ListPrompts retrieve prompt entries with optional filtering
+	ListPrompts(ctx context.Context, tx pgx.Tx, filter *PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error)
+	// GetPromptByName retrieve a single prompt by its name (latest)
+	GetPromptByName(ctx context.Context, tx pgx.Tx, promptName string) (*models.PromptResponse, error)
+	// GetPromptByNameAndVersion retrieve specific version of a prompt by name and version
+	GetPromptByNameAndVersion(ctx context.Context, tx pgx.Tx, promptName string, version string) (*models.PromptResponse, error)
+	// GetAllVersionsByPromptName retrieve all versions of a prompt
+	GetAllVersionsByPromptName(ctx context.Context, tx pgx.Tx, promptName string) ([]*models.PromptResponse, error)
+	// GetCurrentLatestPromptVersion retrieve current latest version of a prompt
+	GetCurrentLatestPromptVersion(ctx context.Context, tx pgx.Tx, promptName string) (*models.PromptResponse, error)
+	// CountPromptVersions count the number of versions for a prompt
+	CountPromptVersions(ctx context.Context, tx pgx.Tx, promptName string) (int, error)
+	// CheckPromptVersionExists check if a specific version exists for a prompt
+	CheckPromptVersionExists(ctx context.Context, tx pgx.Tx, promptName, version string) (bool, error)
+	// UnmarkPromptAsLatest marks the current latest version of a prompt as no longer latest
+	UnmarkPromptAsLatest(ctx context.Context, tx pgx.Tx, promptName string) error
+	// DeletePrompt permanently removes a prompt version from the database
+	DeletePrompt(ctx context.Context, tx pgx.Tx, promptName, version string) error
 
 	// Deployments API
 	// CreateProvider creates a new provider record.

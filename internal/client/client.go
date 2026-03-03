@@ -26,7 +26,8 @@ type Client struct {
 }
 
 const (
-	DefaultBaseURL    = "http://localhost:12121/v0"
+	defaultBaseURL    = "http://localhost:12121/v0"
+	DefaultBaseURL    = defaultBaseURL
 	pingRetryAttempts = 3
 )
 
@@ -37,11 +38,14 @@ func NewClientFromEnv() (*Client, error) {
 	return NewClientWithConfig(base, token)
 }
 
-// NewClient constructs a client with explicit baseURL and token
+// NewClient constructs a client with explicit baseURL and token.
+// The baseURL can be provided with or without the /v0 API prefix;
+// if missing, /v0 is appended automatically.
 func NewClient(baseURL, token string) *Client {
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
+	baseURL = ensureV0Suffix(baseURL)
 	return &Client{
 		BaseURL: baseURL,
 		token:   token,
@@ -51,7 +55,16 @@ func NewClient(baseURL, token string) *Client {
 	}
 }
 
-// NewClientWithConfig constructs a client and validates API reachability.
+// ensureV0Suffix appends /v0 to the URL if not already present.
+func ensureV0Suffix(u string) string {
+	u = strings.TrimRight(u, "/")
+	if !strings.HasSuffix(u, "/v0") {
+		u += "/v0"
+	}
+	return u
+}
+
+// NewClientWithConfig constructs a client from explicit inputs (flag/env), applies defaults, and verifies connectivity.
 func NewClientWithConfig(baseURL, token string) (*Client, error) {
 	c := NewClient(baseURL, token)
 	if err := pingWithRetry(c, pingRetryAttempts); err != nil {
@@ -346,7 +359,94 @@ func (c *Client) GetAgentByNameAndVersion(name, version string) (*models.AgentRe
 	return &resp, nil
 }
 
-// CreateSkill creates or updates a skill entry.
+// GetPrompts returns all prompts from the registry
+func (c *Client) GetPrompts() ([]*models.PromptResponse, error) {
+	limit := 100
+	cursor := ""
+	var all []*models.PromptResponse
+
+	for {
+		q := fmt.Sprintf("/prompts?limit=%d", limit)
+		if cursor != "" {
+			q += "&cursor=" + url.QueryEscape(cursor)
+		}
+		req, err := c.newRequest(http.MethodGet, q)
+		if err != nil {
+			return nil, err
+		}
+
+		var resp models.PromptListResponse
+		if err := c.doJSON(req, &resp); err != nil {
+			return nil, err
+		}
+		for _, p := range resp.Prompts {
+			all = append(all, &p)
+		}
+		if resp.Metadata.NextCursor == "" {
+			break
+		}
+		cursor = resp.Metadata.NextCursor
+	}
+
+	return all, nil
+}
+
+// GetPromptByName returns a prompt by name (latest version)
+func (c *Client) GetPromptByName(name string) (*models.PromptResponse, error) {
+	encName := url.PathEscape(name)
+	req, err := c.newRequest(http.MethodGet, "/prompts/"+encName+"/versions/latest")
+	if err != nil {
+		return nil, err
+	}
+	var resp models.PromptResponse
+	if err := c.doJSON(req, &resp); err != nil {
+		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get prompt by name: %w", err)
+	}
+	return &resp, nil
+}
+
+// GetPromptByNameAndVersion returns a specific version of a prompt
+func (c *Client) GetPromptByNameAndVersion(name, version string) (*models.PromptResponse, error) {
+	encName := url.PathEscape(name)
+	encVersion := url.PathEscape(version)
+	req, err := c.newRequest(http.MethodGet, "/prompts/"+encName+"/versions/"+encVersion)
+	if err != nil {
+		return nil, err
+	}
+	var resp models.PromptResponse
+	if err := c.doJSON(req, &resp); err != nil {
+		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get prompt by name and version: %w", err)
+	}
+	return &resp, nil
+}
+
+// CreatePrompt creates a prompt in the registry (immediately visible)
+func (c *Client) CreatePrompt(prompt *models.PromptJSON) (*models.PromptResponse, error) {
+	var resp models.PromptResponse
+	err := c.doJsonRequest(http.MethodPost, "/prompts", prompt, &resp)
+	return &resp, err
+}
+
+// DeletePrompt deletes a prompt from the registry
+func (c *Client) DeletePrompt(name, version string) error {
+	encName := url.PathEscape(name)
+	encVersion := url.PathEscape(version)
+
+	req, err := c.newRequest(http.MethodDelete, "/prompts/"+encName+"/versions/"+encVersion)
+	if err != nil {
+		return err
+	}
+
+	return c.doJSON(req, nil)
+}
+
+// CreateSkill creates a skill in the registry (immediately visible)
 func (c *Client) CreateSkill(skill *models.SkillJSON) (*models.SkillResponse, error) {
 	var resp models.SkillResponse
 	err := c.doJsonRequest(http.MethodPost, "/skills", skill, &resp)

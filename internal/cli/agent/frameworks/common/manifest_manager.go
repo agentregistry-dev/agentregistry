@@ -45,6 +45,15 @@ func (v *AgentManifestValidator) Validate(m *models.AgentManifest) error {
 			return fmt.Errorf("skills[%d]: only one of image or registrySkillName may be set", i)
 		}
 	}
+
+	for i, prompt := range m.Prompts {
+		if prompt.Name == "" {
+			return fmt.Errorf("prompts[%d]: name is required", i)
+		}
+		if prompt.RegistryPromptName == "" {
+			return fmt.Errorf("prompts[%d]: registryPromptName is required", i)
+		}
+	}
 	return nil
 }
 

@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
+	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/registry"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/modelcontextprotocol/registry/pkg/model"
@@ -19,6 +21,12 @@ func SetDefaultRegistryURL(url string) {
 		return
 	}
 	defaultRegistryURL = url
+}
+
+// GetDefaultRegistryURL returns the current default registry URL (without /v0 suffix).
+// This is the form stored in agent.yaml manifest entries.
+func GetDefaultRegistryURL() string {
+	return strings.TrimSuffix(strings.TrimSuffix(defaultRegistryURL, "/"), "/v0")
 }
 
 // ParseAgentManifestServers resolves registry-type MCP servers in an agent manifest, keeping non-registry servers as-is.
@@ -191,6 +199,70 @@ func collectEnvOverrides(packages []model.Package) map[string]string {
 	}
 
 	return overrides
+}
+
+// ResolveManifestPrompts fetches prompts referenced in the agent manifest from the registry
+// and returns them as PythonPrompt structs ready to be written to prompts.json.
+func ResolveManifestPrompts(manifest *models.AgentManifest, verbose bool) ([]common.PythonPrompt, error) {
+	if manifest == nil || len(manifest.Prompts) == 0 {
+		return nil, nil
+	}
+
+	if verbose {
+		fmt.Printf("[prompt-resolver] Processing %d prompts from manifest\n", len(manifest.Prompts))
+	}
+
+	// Cache API clients by registry URL to avoid creating one per prompt.
+	clients := make(map[string]*client.Client)
+
+	var resolved []common.PythonPrompt
+	for i, ref := range manifest.Prompts {
+		registryURL := ref.RegistryURL
+		if registryURL == "" {
+			registryURL = defaultRegistryURL
+		}
+
+		promptName := ref.RegistryPromptName
+		promptVersion := ref.RegistryPromptVersion
+
+		if verbose {
+			fmt.Printf("[prompt-resolver] [%d] Resolving prompt %q (registryPromptName=%q version=%q registryURL=%q)\n",
+				i, ref.Name, promptName, promptVersion, registryURL)
+		}
+
+		apiClient, ok := clients[registryURL]
+		if !ok {
+			apiClient = client.NewClient(registryURL, "")
+			clients[registryURL] = apiClient
+		}
+
+		var promptResp *models.PromptResponse
+		var err error
+		if promptVersion != "" {
+			promptResp, err = apiClient.GetPromptByNameAndVersion(promptName, promptVersion)
+		} else {
+			promptResp, err = apiClient.GetPromptByName(promptName)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch prompt %q from registry: %w", promptName, err)
+		}
+		if promptResp == nil {
+			return nil, fmt.Errorf("prompt %q not found in registry at %s", promptName, registryURL)
+		}
+
+		if verbose {
+			fmt.Printf("[prompt-resolver] [%d] Successfully resolved prompt %q (version=%q, content length=%d)\n",
+				i, ref.Name, promptResp.Prompt.Version, len(promptResp.Prompt.Content))
+		}
+
+		resolved = append(resolved, common.PythonPromptFromResponse(ref.Name, &promptResp.Prompt))
+	}
+
+	if verbose {
+		fmt.Printf("[prompt-resolver] Resolved %d prompts total\n", len(resolved))
+	}
+
+	return resolved, nil
 }
 
 // parseManifestEnvVars parses environment variables from the manifest's Env field.

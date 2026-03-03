@@ -256,7 +256,7 @@ func buildArguments(args []string) []model.Argument {
 // checkAndHandleExistingServer checks if a server version already exists in the registry
 // and handles the overwrite logic if needed.
 func checkAndHandleExistingServer(serverName, version string) error {
-	printer.PrintInfo(fmt.Sprintf("Publishing MCP server: %s (v%s)", serverName, version))
+	printer.PrintInfo(fmt.Sprintf("Publishing MCP server: %s (%s)", serverName, common.FormatVersionForDisplay(version)))
 
 	isPublished, err := isServerPublished(serverName, version)
 	if err != nil {
@@ -286,7 +286,7 @@ func publishToRegistry(serverJSON *apiv0.ServerJSON, dryRun bool) error {
 	if err != nil {
 		return fmt.Errorf("failed to publish to registry: %w", err)
 	}
-	printer.PrintSuccess(fmt.Sprintf("Published: %s (v%s)", serverJSON.Name, serverJSON.Version))
+	printer.PrintSuccess(fmt.Sprintf("Published: %s (%s)", serverJSON.Name, common.FormatVersionForDisplay(serverJSON.Version)))
 	return nil
 }
 

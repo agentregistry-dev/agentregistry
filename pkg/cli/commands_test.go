@@ -19,6 +19,7 @@ func TestCommandTree(t *testing.T) {
 		"export",
 		"import",
 		"mcp",
+		"prompt",
 		"skill",
 		"version",
 	}
@@ -41,12 +42,14 @@ func TestCommandTree(t *testing.T) {
 
 	// Verify subcommand counts for parent commands
 	expectedSubcmdCounts := map[string]int{
-		// init, build, run, add-skill, add-mcp, publish, delete, deploy, list, show
-		"agent": 10,
+		// init, build, run, add-skill, add-prompt, add-mcp, publish, delete, deploy, list, show
+		"agent": 11,
 		// init, build, add-tool, publish, delete, deploy, list, run, show
 		"mcp": 9,
 		// init, list, publish, delete, pull, show
 		"skill": 6,
+		// list, publish, delete, show
+		"prompt": 4,
 		// generate
 		"embeddings": 1,
 	}
@@ -167,13 +170,15 @@ func TestSkillPublishFlags(t *testing.T) {
 	tests := []struct {
 		flag     string
 		defValue string
-		required bool
 	}{
-		{"docker-url", "", true},
-		{"push", "false", false},
-		{"dry-run", "false", false},
-		{"tag", "latest", false},
-		{"platform", "", false},
+		{"docker-url", ""},
+		{"github", ""},
+		{"version", ""},
+		{"description", ""},
+		{"push", "false"},
+		{"dry-run", "false"},
+		{"tag", "latest"},
+		{"platform", ""},
 	}
 
 	for _, tt := range tests {
@@ -184,11 +189,6 @@ func TestSkillPublishFlags(t *testing.T) {
 			}
 			if f.DefValue != tt.defValue {
 				t.Errorf("flag --%s default = %q, want %q", tt.flag, f.DefValue, tt.defValue)
-			}
-			if tt.required {
-				if _, ok := f.Annotations[cobra.BashCompOneRequiredFlag]; !ok {
-					t.Errorf("flag --%s should be marked as required", tt.flag)
-				}
 			}
 		})
 	}
@@ -203,7 +203,6 @@ func TestRequiredFlags(t *testing.T) {
 		command  string
 		required []string
 	}{
-		{"skill", "publish", []string{"docker-url"}},
 		{"skill", "delete", []string{"version"}},
 		{"mcp", "publish", []string{"package-id", "type"}},
 		{"agent", "delete", []string{"version"}},

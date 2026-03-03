@@ -593,6 +593,218 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
+    /v0/prompts:
+        get:
+            tags:
+                - prompts
+            summary: List prompts
+            description: Get a paginated list of prompts from the registry
+            operationId: list-prompts-v0
+            parameters:
+                - name: cursor
+                  in: query
+                  description: Pagination cursor
+                  explode: false
+                  schema:
+                    type: string
+                    description: Pagination cursor
+                    examples:
+                        - prompt-cursor-123
+                  example: prompt-cursor-123
+                - name: limit
+                  in: query
+                  description: Number of items per page
+                  explode: false
+                  schema:
+                    type: integer
+                    description: Number of items per page
+                    format: int64
+                    default: 30
+                    examples:
+                        - 50
+                    minimum: 1
+                    maximum: 100
+                  example: 50
+                - name: updated_since
+                  in: query
+                  description: Filter prompts updated since timestamp (RFC3339 datetime)
+                  explode: false
+                  schema:
+                    type: string
+                    description: Filter prompts updated since timestamp (RFC3339 datetime)
+                    examples:
+                        - "2025-08-07T13:15:04.280Z"
+                  example: "2025-08-07T13:15:04.280Z"
+                - name: search
+                  in: query
+                  description: Search prompts by name (substring match)
+                  explode: false
+                  schema:
+                    type: string
+                    description: Search prompts by name (substring match)
+                    examples:
+                        - code-review
+                  example: code-review
+                - name: version
+                  in: query
+                  description: Filter by version ('latest' for latest version, or an exact version like '1.2.3')
+                  explode: false
+                  schema:
+                    type: string
+                    description: Filter by version ('latest' for latest version, or an exact version like '1.2.3')
+                    examples:
+                        - latest
+                  example: latest
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PromptListResponse'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        post:
+            tags:
+                - prompts
+            summary: Create or update prompt
+            description: Create a new prompt in the registry or update an existing one. Resources are immediately visible after creation.
+            operationId: create-prompt-v0
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PromptJSON'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PromptResponse'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/prompts/{promptName}/versions:
+        get:
+            tags:
+                - prompts
+            summary: Get all versions of a prompt
+            description: Get all available versions for a specific prompt
+            operationId: get-prompt-versions-v0
+            parameters:
+                - name: promptName
+                  in: path
+                  description: Prompt name (letters, digits, hyphens, underscores)
+                  required: true
+                  schema:
+                    type: string
+                    description: Prompt name (letters, digits, hyphens, underscores)
+                    examples:
+                        - my-prompt
+                  example: my-prompt
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PromptListResponse'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/prompts/{promptName}/versions/{version}:
+        get:
+            tags:
+                - prompts
+            summary: Get specific prompt version
+            description: Get detailed information about a specific version of a prompt. Use the special version 'latest' to get the latest version.
+            operationId: get-prompt-version-v0
+            parameters:
+                - name: promptName
+                  in: path
+                  description: Prompt name (letters, digits, hyphens, underscores)
+                  required: true
+                  schema:
+                    type: string
+                    description: Prompt name (letters, digits, hyphens, underscores)
+                    examples:
+                        - my-prompt
+                  example: my-prompt
+                - name: version
+                  in: path
+                  description: URL-encoded prompt version
+                  required: true
+                  schema:
+                    type: string
+                    description: URL-encoded prompt version
+                    examples:
+                        - 1.0.0
+                  example: 1.0.0
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PromptResponse'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        delete:
+            tags:
+                - prompts
+            summary: Delete a prompt version
+            description: Permanently delete a specific prompt version from the registry.
+            operationId: delete-prompt-version-v0
+            parameters:
+                - name: promptName
+                  in: path
+                  description: Prompt name (letters, digits, hyphens, underscores)
+                  required: true
+                  schema:
+                    type: string
+                    description: Prompt name (letters, digits, hyphens, underscores)
+                    examples:
+                        - my-prompt
+                  example: my-prompt
+                - name: version
+                  in: path
+                  description: URL-encoded prompt version
+                  required: true
+                  schema:
+                    type: string
+                    description: URL-encoded prompt version
+                    examples:
+                        - 1.0.0
+                  example: 1.0.0
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/EmptyResponse'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
     /v0/providers:
         get:
             tags:
@@ -1356,6 +1568,10 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/AgentPackageInfo'
+                prompts:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PromptRef'
                 remotes:
                     type: array
                     items:
@@ -2013,6 +2229,96 @@ components:
                         - true
             required:
                 - pong
+        PromptJSON:
+            type: object
+            additionalProperties: false
+            properties:
+                content:
+                    type: string
+                description:
+                    type: string
+                name:
+                    type: string
+                version:
+                    type: string
+            required:
+                - name
+                - version
+                - content
+        PromptListResponse:
+            type: object
+            additionalProperties: false
+            properties:
+                metadata:
+                    $ref: '#/components/schemas/PromptMetadata'
+                prompts:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PromptResponse'
+            required:
+                - prompts
+                - metadata
+        PromptMetadata:
+            type: object
+            additionalProperties: false
+            properties:
+                count:
+                    type: integer
+                    format: int64
+                nextCursor:
+                    type: string
+            required:
+                - count
+        PromptRef:
+            type: object
+            additionalProperties: false
+            properties:
+                name:
+                    type: string
+                registryPromptName:
+                    type: string
+                registryPromptVersion:
+                    type: string
+                registryURL:
+                    type: string
+            required:
+                - name
+        PromptRegistryExtensions:
+            type: object
+            additionalProperties: false
+            properties:
+                isLatest:
+                    type: boolean
+                publishedAt:
+                    type: string
+                    format: date-time
+                status:
+                    type: string
+                updatedAt:
+                    type: string
+                    format: date-time
+            required:
+                - status
+                - publishedAt
+                - updatedAt
+                - isLatest
+        PromptResponse:
+            type: object
+            additionalProperties: false
+            properties:
+                _meta:
+                    $ref: '#/components/schemas/PromptResponseMeta'
+                prompt:
+                    $ref: '#/components/schemas/PromptJSON'
+            required:
+                - prompt
+                - _meta
+        PromptResponseMeta:
+            type: object
+            additionalProperties: false
+            properties:
+                io.modelcontextprotocol.registry/official:
+                    $ref: '#/components/schemas/PromptRegistryExtensions'
         Provider:
             type: object
             additionalProperties: false

@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
@@ -113,10 +113,10 @@ func printAgentsTable(agents []*models.AgentResponse, deployedAgents []*client.D
 	t := printer.NewTablePrinter(os.Stdout)
 	t.SetHeaders("Name", "Version", "Framework", "Language", "Provider", "Model", "Deployed")
 
-	deploymentCounts := cliCommon.BuildDeploymentCounts(deployedAgents, "agent")
+	deploymentCounts := common.BuildDeploymentCounts(deployedAgents, "agent")
 
 	for _, a := range agents {
-		deployedStatus := cliCommon.DeployedStatus(deploymentCounts, a.Agent.Name, a.Agent.Version, true)
+		deployedStatus := common.DeployedStatus(deploymentCounts, a.Agent.Name, a.Agent.Version, true)
 
 		t.AddRow(
 			printer.TruncateString(a.Agent.Name, 40),

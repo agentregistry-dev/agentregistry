@@ -14,6 +14,7 @@ export type AgentJson = {
     modelProvider: string;
     name: string;
     packages?: Array<AgentPackageInfo>;
+    prompts?: Array<PromptRef>;
     remotes?: Array<Transport>;
     /**
      * Optional repository metadata for the agent source code.
@@ -451,6 +452,46 @@ export type PingBody = {
      * Ping response
      */
     pong: boolean;
+};
+
+export type PromptJson = {
+    content: string;
+    description?: string;
+    name: string;
+    version: string;
+};
+
+export type PromptListResponse = {
+    metadata: PromptMetadata;
+    prompts: Array<PromptResponse>;
+};
+
+export type PromptMetadata = {
+    count: number;
+    nextCursor?: string;
+};
+
+export type PromptRef = {
+    name: string;
+    registryPromptName?: string;
+    registryPromptVersion?: string;
+    registryURL?: string;
+};
+
+export type PromptRegistryExtensions = {
+    isLatest: boolean;
+    publishedAt: string;
+    status: string;
+    updatedAt: string;
+};
+
+export type PromptResponse = {
+    _meta: PromptResponseMeta;
+    prompt: PromptJson;
+};
+
+export type PromptResponseMeta = {
+    'io.modelcontextprotocol.registry/official'?: PromptRegistryExtensions;
 };
 
 export type Provider = {
@@ -1247,6 +1288,175 @@ export type PingV0Responses = {
 };
 
 export type PingV0Response = PingV0Responses[keyof PingV0Responses];
+
+export type ListPromptsV0Data = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Pagination cursor
+         */
+        cursor?: string;
+        /**
+         * Number of items per page
+         */
+        limit?: number;
+        /**
+         * Filter prompts updated since timestamp (RFC3339 datetime)
+         */
+        updated_since?: string;
+        /**
+         * Search prompts by name (substring match)
+         */
+        search?: string;
+        /**
+         * Filter by version ('latest' for latest version, or an exact version like '1.2.3')
+         */
+        version?: string;
+    };
+    url: '/v0/prompts';
+};
+
+export type ListPromptsV0Errors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ListPromptsV0Error = ListPromptsV0Errors[keyof ListPromptsV0Errors];
+
+export type ListPromptsV0Responses = {
+    /**
+     * OK
+     */
+    200: PromptListResponse;
+};
+
+export type ListPromptsV0Response = ListPromptsV0Responses[keyof ListPromptsV0Responses];
+
+export type CreatePromptV0Data = {
+    body: PromptJson;
+    path?: never;
+    query?: never;
+    url: '/v0/prompts';
+};
+
+export type CreatePromptV0Errors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type CreatePromptV0Error = CreatePromptV0Errors[keyof CreatePromptV0Errors];
+
+export type CreatePromptV0Responses = {
+    /**
+     * OK
+     */
+    200: PromptResponse;
+};
+
+export type CreatePromptV0Response = CreatePromptV0Responses[keyof CreatePromptV0Responses];
+
+export type GetPromptVersionsV0Data = {
+    body?: never;
+    path: {
+        /**
+         * Prompt name (letters, digits, hyphens, underscores)
+         */
+        promptName: string;
+    };
+    query?: never;
+    url: '/v0/prompts/{promptName}/versions';
+};
+
+export type GetPromptVersionsV0Errors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetPromptVersionsV0Error = GetPromptVersionsV0Errors[keyof GetPromptVersionsV0Errors];
+
+export type GetPromptVersionsV0Responses = {
+    /**
+     * OK
+     */
+    200: PromptListResponse;
+};
+
+export type GetPromptVersionsV0Response = GetPromptVersionsV0Responses[keyof GetPromptVersionsV0Responses];
+
+export type DeletePromptVersionV0Data = {
+    body?: never;
+    path: {
+        /**
+         * Prompt name (letters, digits, hyphens, underscores)
+         */
+        promptName: string;
+        /**
+         * URL-encoded prompt version
+         */
+        version: string;
+    };
+    query?: never;
+    url: '/v0/prompts/{promptName}/versions/{version}';
+};
+
+export type DeletePromptVersionV0Errors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type DeletePromptVersionV0Error = DeletePromptVersionV0Errors[keyof DeletePromptVersionV0Errors];
+
+export type DeletePromptVersionV0Responses = {
+    /**
+     * OK
+     */
+    200: EmptyResponse;
+};
+
+export type DeletePromptVersionV0Response = DeletePromptVersionV0Responses[keyof DeletePromptVersionV0Responses];
+
+export type GetPromptVersionV0Data = {
+    body?: never;
+    path: {
+        /**
+         * Prompt name (letters, digits, hyphens, underscores)
+         */
+        promptName: string;
+        /**
+         * URL-encoded prompt version
+         */
+        version: string;
+    };
+    query?: never;
+    url: '/v0/prompts/{promptName}/versions/{version}';
+};
+
+export type GetPromptVersionV0Errors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetPromptVersionV0Error = GetPromptVersionV0Errors[keyof GetPromptVersionV0Errors];
+
+export type GetPromptVersionV0Responses = {
+    /**
+     * OK
+     */
+    200: PromptResponse;
+};
+
+export type GetPromptVersionV0Response = GetPromptVersionV0Responses[keyof GetPromptVersionV0Responses];
 
 export type ListProvidersData = {
     body?: never;

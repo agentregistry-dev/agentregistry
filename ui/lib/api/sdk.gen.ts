@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CancelDeploymentData, CancelDeploymentErrors, CancelDeploymentResponses, CreateAgentV0Data, CreateAgentV0Errors, CreateAgentV0Responses, CreateProviderData, CreateProviderErrors, CreateProviderResponses, CreateServerV0Data, CreateServerV0Errors, CreateServerV0Responses, CreateSkillV0Data, CreateSkillV0Errors, CreateSkillV0Responses, DeleteAgentVersionV0Data, DeleteAgentVersionV0Errors, DeleteAgentVersionV0Responses, DeleteProviderData, DeleteProviderErrors, DeleteProviderResponses, DeleteServerVersionV0Data, DeleteServerVersionV0Errors, DeleteServerVersionV0Responses, DeployServerData, DeployServerErrors, DeployServerResponses, EditServerV0Data, EditServerV0Errors, EditServerV0Responses, ExchangeDnsTokenV0Data, ExchangeDnsTokenV0Errors, ExchangeDnsTokenV0Responses, ExchangeGithubOidcTokenV0Data, ExchangeGithubOidcTokenV0Errors, ExchangeGithubOidcTokenV0Responses, ExchangeGithubTokenV0Data, ExchangeGithubTokenV0Errors, ExchangeGithubTokenV0Responses, ExchangeHttpTokenV0Data, ExchangeHttpTokenV0Errors, ExchangeHttpTokenV0Responses, GetAgentVersionsV0Data, GetAgentVersionsV0Errors, GetAgentVersionsV0Responses, GetAgentVersionV0Data, GetAgentVersionV0Errors, GetAgentVersionV0Responses, GetDeploymentData, GetDeploymentErrors, GetDeploymentLogsData, GetDeploymentLogsErrors, GetDeploymentLogsResponses, GetDeploymentResponses, GetHealthV0Data, GetHealthV0Errors, GetHealthV0Responses, GetProviderData, GetProviderErrors, GetProviderResponses, GetServerReadmeV0Data, GetServerReadmeV0Errors, GetServerReadmeV0Responses, GetServerVersionReadmeV0Data, GetServerVersionReadmeV0Errors, GetServerVersionReadmeV0Responses, GetServerVersionsV0Data, GetServerVersionsV0Errors, GetServerVersionsV0Responses, GetServerVersionV0Data, GetServerVersionV0Errors, GetServerVersionV0Responses, GetSkillVersionsV0Data, GetSkillVersionsV0Errors, GetSkillVersionsV0Responses, GetSkillVersionV0Data, GetSkillVersionV0Errors, GetSkillVersionV0Responses, GetVersionV0Data, GetVersionV0Errors, GetVersionV0Responses, ListAgentsV0Data, ListAgentsV0Errors, ListAgentsV0Responses, ListDeploymentsData, ListDeploymentsErrors, ListDeploymentsResponses, ListProvidersData, ListProvidersErrors, ListProvidersResponses, ListServersV0Data, ListServersV0Errors, ListServersV0Responses, ListSkillsV0Data, ListSkillsV0Errors, ListSkillsV0Responses, PingV0Data, PingV0Errors, PingV0Responses, RemoveDeploymentData, RemoveDeploymentErrors, RemoveDeploymentResponses, UpdateProviderData, UpdateProviderErrors, UpdateProviderResponses } from './types.gen';
+import type { CancelDeploymentData, CancelDeploymentErrors, CancelDeploymentResponses, CreateAgentV0Data, CreateAgentV0Errors, CreateAgentV0Responses, CreatePromptV0Data, CreatePromptV0Errors, CreatePromptV0Responses, CreateProviderData, CreateProviderErrors, CreateProviderResponses, CreateServerV0Data, CreateServerV0Errors, CreateServerV0Responses, CreateSkillV0Data, CreateSkillV0Errors, CreateSkillV0Responses, DeleteAgentVersionV0Data, DeleteAgentVersionV0Errors, DeleteAgentVersionV0Responses, DeletePromptVersionV0Data, DeletePromptVersionV0Errors, DeletePromptVersionV0Responses, DeleteProviderData, DeleteProviderErrors, DeleteProviderResponses, DeleteServerVersionV0Data, DeleteServerVersionV0Errors, DeleteServerVersionV0Responses, DeployServerData, DeployServerErrors, DeployServerResponses, EditServerV0Data, EditServerV0Errors, EditServerV0Responses, ExchangeDnsTokenV0Data, ExchangeDnsTokenV0Errors, ExchangeDnsTokenV0Responses, ExchangeGithubOidcTokenV0Data, ExchangeGithubOidcTokenV0Errors, ExchangeGithubOidcTokenV0Responses, ExchangeGithubTokenV0Data, ExchangeGithubTokenV0Errors, ExchangeGithubTokenV0Responses, ExchangeHttpTokenV0Data, ExchangeHttpTokenV0Errors, ExchangeHttpTokenV0Responses, GetAgentVersionsV0Data, GetAgentVersionsV0Errors, GetAgentVersionsV0Responses, GetAgentVersionV0Data, GetAgentVersionV0Errors, GetAgentVersionV0Responses, GetDeploymentData, GetDeploymentErrors, GetDeploymentLogsData, GetDeploymentLogsErrors, GetDeploymentLogsResponses, GetDeploymentResponses, GetHealthV0Data, GetHealthV0Errors, GetHealthV0Responses, GetPromptVersionsV0Data, GetPromptVersionsV0Errors, GetPromptVersionsV0Responses, GetPromptVersionV0Data, GetPromptVersionV0Errors, GetPromptVersionV0Responses, GetProviderData, GetProviderErrors, GetProviderResponses, GetServerReadmeV0Data, GetServerReadmeV0Errors, GetServerReadmeV0Responses, GetServerVersionReadmeV0Data, GetServerVersionReadmeV0Errors, GetServerVersionReadmeV0Responses, GetServerVersionsV0Data, GetServerVersionsV0Errors, GetServerVersionsV0Responses, GetServerVersionV0Data, GetServerVersionV0Errors, GetServerVersionV0Responses, GetSkillVersionsV0Data, GetSkillVersionsV0Errors, GetSkillVersionsV0Responses, GetSkillVersionV0Data, GetSkillVersionV0Errors, GetSkillVersionV0Responses, GetVersionV0Data, GetVersionV0Errors, GetVersionV0Responses, ListAgentsV0Data, ListAgentsV0Errors, ListAgentsV0Responses, ListDeploymentsData, ListDeploymentsErrors, ListDeploymentsResponses, ListPromptsV0Data, ListPromptsV0Errors, ListPromptsV0Responses, ListProvidersData, ListProvidersErrors, ListProvidersResponses, ListServersV0Data, ListServersV0Errors, ListServersV0Responses, ListSkillsV0Data, ListSkillsV0Errors, ListSkillsV0Responses, PingV0Data, PingV0Errors, PingV0Responses, RemoveDeploymentData, RemoveDeploymentErrors, RemoveDeploymentResponses, UpdateProviderData, UpdateProviderErrors, UpdateProviderResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -178,6 +178,48 @@ export const getHealthV0 = <ThrowOnError extends boolean = false>(options?: Opti
  * Simple ping endpoint
  */
 export const pingV0 = <ThrowOnError extends boolean = false>(options?: Options<PingV0Data, ThrowOnError>) => (options?.client ?? client).get<PingV0Responses, PingV0Errors, ThrowOnError>({ url: '/v0/ping', ...options });
+
+/**
+ * List prompts
+ *
+ * Get a paginated list of prompts from the registry
+ */
+export const listPromptsV0 = <ThrowOnError extends boolean = false>(options?: Options<ListPromptsV0Data, ThrowOnError>) => (options?.client ?? client).get<ListPromptsV0Responses, ListPromptsV0Errors, ThrowOnError>({ url: '/v0/prompts', ...options });
+
+/**
+ * Create or update prompt
+ *
+ * Create a new prompt in the registry or update an existing one. Resources are immediately visible after creation.
+ */
+export const createPromptV0 = <ThrowOnError extends boolean = false>(options: Options<CreatePromptV0Data, ThrowOnError>) => (options.client ?? client).post<CreatePromptV0Responses, CreatePromptV0Errors, ThrowOnError>({
+    url: '/v0/prompts',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get all versions of a prompt
+ *
+ * Get all available versions for a specific prompt
+ */
+export const getPromptVersionsV0 = <ThrowOnError extends boolean = false>(options: Options<GetPromptVersionsV0Data, ThrowOnError>) => (options.client ?? client).get<GetPromptVersionsV0Responses, GetPromptVersionsV0Errors, ThrowOnError>({ url: '/v0/prompts/{promptName}/versions', ...options });
+
+/**
+ * Delete a prompt version
+ *
+ * Permanently delete a specific prompt version from the registry.
+ */
+export const deletePromptVersionV0 = <ThrowOnError extends boolean = false>(options: Options<DeletePromptVersionV0Data, ThrowOnError>) => (options.client ?? client).delete<DeletePromptVersionV0Responses, DeletePromptVersionV0Errors, ThrowOnError>({ url: '/v0/prompts/{promptName}/versions/{version}', ...options });
+
+/**
+ * Get specific prompt version
+ *
+ * Get detailed information about a specific version of a prompt. Use the special version 'latest' to get the latest version.
+ */
+export const getPromptVersionV0 = <ThrowOnError extends boolean = false>(options: Options<GetPromptVersionV0Data, ThrowOnError>) => (options.client ?? client).get<GetPromptVersionV0Responses, GetPromptVersionV0Errors, ThrowOnError>({ url: '/v0/prompts/{promptName}/versions/{version}', ...options });
 
 /**
  * List providers

@@ -1,0 +1,34 @@
+# Version control
+.git/
+.github/
+
+# Node modules
+ui/node_modules/
+ui/.next/
+
+# Go build artifacts
+bin/
+vendor/
+*.test
+*.out
+
+# Build artifacts
+internal/registry/api/ui/dist/
+
+# IDE and editor files
+.vscode/
+.idea/
+.cursor/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation and non-essential files
+*.md
+img/
+scripts/
+e2e/

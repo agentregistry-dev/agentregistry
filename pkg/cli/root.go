@@ -13,6 +13,7 @@ import (
 	agentutils "github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/configure"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/prompt"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
@@ -80,6 +81,7 @@ var rootCmd = &cobra.Command{
 		mcp.SetAPIClient(c)
 		agent.SetAPIClient(c)
 		skill.SetAPIClient(c)
+		prompt.SetAPIClient(c)
 		cli.SetAPIClient(c)
 		return nil
 	},
@@ -92,6 +94,7 @@ func init() {
 	rootCmd.AddCommand(mcp.McpCmd)
 	rootCmd.AddCommand(agent.AgentCmd)
 	rootCmd.AddCommand(skill.SkillCmd)
+	rootCmd.AddCommand(prompt.PromptCmd)
 	rootCmd.AddCommand(configure.ConfigureCmd)
 	rootCmd.AddCommand(cli.VersionCmd)
 	rootCmd.AddCommand(cli.ImportCmd)

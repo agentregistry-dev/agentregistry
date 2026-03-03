@@ -21,6 +21,7 @@ const (
 	PermissionArtifactTypeAgent  PermissionArtifactType = "agent"
 	PermissionArtifactTypeSkill  PermissionArtifactType = "skill"
 	PermissionArtifactTypeServer PermissionArtifactType = "server"
+	PermissionArtifactTypePrompt PermissionArtifactType = "prompt"
 )
 
 // PermissionAction represents the type of action that can be performed

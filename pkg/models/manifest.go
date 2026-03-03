@@ -15,6 +15,7 @@ type AgentManifest struct {
 	TelemetryEndpoint string          `yaml:"telemetryEndpoint,omitempty" json:"telemetryEndpoint,omitempty"`
 	McpServers        []McpServerType `yaml:"mcpServers,omitempty" json:"mcpServers,omitempty"`
 	Skills            []SkillRef      `yaml:"skills,omitempty" json:"skills,omitempty"`
+	Prompts           []PromptRef     `yaml:"prompts,omitempty" json:"prompts,omitempty"`
 	UpdatedAt         time.Time       `yaml:"updatedAt,omitempty" json:"updatedAt,omitempty"`
 }
 
@@ -30,6 +31,18 @@ type SkillRef struct {
 	RegistrySkillName string `yaml:"registrySkillName,omitempty" json:"registrySkillName,omitempty"`
 	// RegistrySkillVersion is the version of the skill to pull.
 	RegistrySkillVersion string `yaml:"registrySkillVersion,omitempty" json:"registrySkillVersion,omitempty"`
+}
+
+// PromptRef represents a prompt reference in the agent manifest.
+type PromptRef struct {
+	// Name is the local name for the prompt in this agent project.
+	Name string `yaml:"name" json:"name"`
+	// RegistryURL is the registry URL for pulling the prompt (for registry type).
+	RegistryURL string `yaml:"registryURL,omitempty" json:"registryURL,omitempty"`
+	// RegistryPromptName is the prompt name in the registry.
+	RegistryPromptName string `yaml:"registryPromptName,omitempty" json:"registryPromptName,omitempty"`
+	// RegistryPromptVersion is the version of the prompt to pull.
+	RegistryPromptVersion string `yaml:"registryPromptVersion,omitempty" json:"registryPromptVersion,omitempty"`
 }
 
 // McpServerType represents a single MCP server configuration.
