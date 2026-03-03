@@ -39,8 +39,10 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
       if (!version.trim()) {
         throw new Error("Version is required")
       }
-      if (!dockerImage.trim()) {
-        throw new Error("Docker image is required")
+      const trimmedRepositoryUrl = repositoryUrl.trim()
+      const trimmedDockerImage = dockerImage.trim()
+      if (!trimmedRepositoryUrl && !trimmedDockerImage) {
+        throw new Error("Either GitHub repository URL or Docker image is required")
       }
 
       // Construct the SkillJSON object
@@ -48,20 +50,20 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
         name: name.trim(),
         description: description.trim(),
         version: version.trim(),
-        repository: repositoryUrl.trim() ? {
-          url: repositoryUrl.trim(),
+        repository: trimmedRepositoryUrl ? {
+          url: trimmedRepositoryUrl,
           source: "github"
         } : undefined,
-        packages: [
+        packages: trimmedDockerImage ? [
           {
             registryType: "docker",
-            identifier: dockerImage.trim(),
+            identifier: trimmedDockerImage,
             version: version.trim(),
             transport: {
               type: "docker"
             }
           }
-        ]
+        ] : undefined
       }
 
       // Create the skill
@@ -173,7 +175,7 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
 
           <div className="space-y-2">
             <Label htmlFor="dockerImage">
-              Docker Image <span className="text-red-500">*</span>
+              Docker Image
             </Label>
             <Input
               id="dockerImage"
@@ -181,10 +183,9 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
               value={dockerImage}
               onChange={(e) => setDockerImage(e.target.value)}
               disabled={loading}
-              required
             />
             <p className="text-xs text-muted-foreground">
-              Full Docker image identifier including registry, repository, and tag
+              Optional: Provide a Docker image for runtime distribution (not required for GitHub-only publish)
             </p>
           </div>
 
