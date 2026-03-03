@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -281,9 +282,7 @@ func (t *translator) translateAgentConfigMap(agent *api.Agent) (*corev1.ConfigMa
 		"app.kubernetes.io/component":  "agent-config",
 		"agentregistry.dev/agent":      sanitizeK8sName(agent.Name),
 	}
-	for k, v := range deploymentManagedLabels(agent.DeploymentID) {
-		labels[k] = v
-	}
+	maps.Copy(labels, deploymentManagedLabels(agent.DeploymentID))
 
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{

@@ -985,17 +985,6 @@ func (m *deployCreateMockDB) RemoveDeploymentByID(ctx context.Context, tx pgx.Tx
 	return m.removeDeploymentByIDFn(ctx, tx, id)
 }
 
-// deploymentMockDB is a minimal mock for database.Database that only implements
-// the methods needed for deployment runtime-identity tests.
-type deploymentMockDB struct {
-	database.Database // embed interface so unimplemented methods panic
-	getDeploymentsFn  func(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
-}
-
-func (m *deploymentMockDB) GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
-	return m.getDeploymentsFn(ctx, tx, filter)
-}
-
 // Helper functions
 func stringPtr(s string) *string {
 	return &s
