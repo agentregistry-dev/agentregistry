@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
@@ -112,10 +113,10 @@ func printAgentsTable(agents []*models.AgentResponse, deployedAgents []*client.D
 	t := printer.NewTablePrinter(os.Stdout)
 	t.SetHeaders("Name", "Version", "Framework", "Language", "Provider", "Model", "Deployed")
 
-	deploymentCounts := buildAgentDeploymentCounts(deployedAgents)
+	deploymentCounts := cliCommon.BuildDeploymentCounts(deployedAgents, "agent")
 
 	for _, a := range agents {
-		deployedStatus := deployedStatusForAgent(deploymentCounts, a.Agent.Name, a.Agent.Version)
+		deployedStatus := cliCommon.DeployedStatus(deploymentCounts, a.Agent.Name, a.Agent.Version, true)
 
 		t.AddRow(
 			printer.TruncateString(a.Agent.Name, 40),
@@ -130,36 +131,6 @@ func printAgentsTable(agents []*models.AgentResponse, deployedAgents []*client.D
 
 	if err := t.Render(); err != nil {
 		printer.PrintError(fmt.Sprintf("failed to render table: %v", err))
-	}
-}
-
-func buildAgentDeploymentCounts(deployedAgents []*client.DeploymentResponse) map[string]map[string]int {
-	counts := make(map[string]map[string]int)
-	for _, deployment := range deployedAgents {
-		if deployment == nil || deployment.ResourceType != "agent" {
-			continue
-		}
-		if counts[deployment.ServerName] == nil {
-			counts[deployment.ServerName] = make(map[string]int)
-		}
-		counts[deployment.ServerName][deployment.Version]++
-	}
-	return counts
-}
-
-func deployedStatusForAgent(counts map[string]map[string]int, agentName, version string) string {
-	agentDeployments := counts[agentName]
-	if agentDeployments == nil {
-		return "False"
-	}
-	totalForVersion := agentDeployments[version]
-	switch {
-	case totalForVersion > 1:
-		return fmt.Sprintf("True (%d)", totalForVersion)
-	case totalForVersion == 1:
-		return "True"
-	default:
-		return "False (other versions deployed)"
 	}
 }
 

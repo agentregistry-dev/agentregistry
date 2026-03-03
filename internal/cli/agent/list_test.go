@@ -3,11 +3,12 @@ package agent
 import (
 	"testing"
 
+	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestBuildAgentDeploymentCounts(t *testing.T) {
+func TestBuildDeploymentCounts_Agent(t *testing.T) {
 	deployments := []*client.DeploymentResponse{
 		{ServerName: "acme/planner", Version: "1.0.0", ResourceType: "agent"},
 		{ServerName: "acme/planner", Version: "1.0.0", ResourceType: "agent"},
@@ -16,7 +17,7 @@ func TestBuildAgentDeploymentCounts(t *testing.T) {
 		nil,
 	}
 
-	counts := buildAgentDeploymentCounts(deployments)
+	counts := cliCommon.BuildDeploymentCounts(deployments, "agent")
 	assert.Equal(t, 2, counts["acme/planner"]["1.0.0"])
 	assert.Equal(t, 1, counts["acme/planner"]["2.0.0"])
 	assert.Nil(t, counts["acme/weather"])
@@ -30,8 +31,8 @@ func TestDeployedStatusForAgent(t *testing.T) {
 		},
 	}
 
-	assert.Equal(t, "True (2)", deployedStatusForAgent(counts, "acme/planner", "1.0.0"))
-	assert.Equal(t, "True", deployedStatusForAgent(counts, "acme/planner", "2.0.0"))
-	assert.Equal(t, "False (other versions deployed)", deployedStatusForAgent(counts, "acme/planner", "3.0.0"))
-	assert.Equal(t, "False", deployedStatusForAgent(counts, "acme/unknown", "1.0.0"))
+	assert.Equal(t, "True (2)", cliCommon.DeployedStatus(counts, "acme/planner", "1.0.0", true))
+	assert.Equal(t, "True", cliCommon.DeployedStatus(counts, "acme/planner", "2.0.0", true))
+	assert.Equal(t, "False (other versions deployed)", cliCommon.DeployedStatus(counts, "acme/planner", "3.0.0", true))
+	assert.Equal(t, "False", cliCommon.DeployedStatus(counts, "acme/unknown", "1.0.0", true))
 }
