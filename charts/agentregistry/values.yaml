@@ -16,8 +16,6 @@ fullnameOverride: ""
 commonLabels: {}
 ## @param commonAnnotations Annotations to add to all deployed resources
 commonAnnotations: {}
-## @param clusterDomain Kubernetes cluster domain
-clusterDomain: cluster.local
 ## @param extraDeploy Array of extra objects to deploy with the release (evaluated as a template)
 extraDeploy: []
 
@@ -308,9 +306,15 @@ serviceAccount:
 rbac:
   ## @param rbac.create Create RBAC resources
   create: true
+  ## @param rbac.clusterScoped Use ClusterRole/ClusterRoleBinding (true) or namespace-scoped Role/RoleBinding (false).
+  ## Agent Registry manages MCP servers, agents, deployments, and supporting resources across namespaces,
+  ## so cluster-scoped RBAC is the default. Set to false to restrict permissions to the release namespace only
+  ## (suitable for single-namespace or multi-tenant deployments, but cross-namespace operations will fail).
+  clusterScoped: true
   ## @param rbac.clusterAdminBinding Grant cluster-admin to the ServiceAccount (DANGEROUS -- dev/demo only)
   clusterAdminBinding: false
-  ## @param rbac.rules Custom rules for the ClusterRole (used when clusterAdminBinding is false)
+  ## @param rbac.rules Custom RBAC rules (used when clusterAdminBinding is false). Applied to a ClusterRole when
+  ## clusterScoped is true, or a Role when clusterScoped is false.
   rules:
     - apiGroups: ["kagent.dev"]
       resources: ["mcpservers"]
@@ -359,6 +363,10 @@ networkPolicy:
   ## @param networkPolicy.allowExternal Allow connections from outside the cluster
   allowExternal: true
   ## @param networkPolicy.allowExternalEgress Allow egress to outside the cluster
+  ## NOTE: When using an external database (postgresql.enabled: false) and setting
+  ## allowExternalEgress to false, you MUST add an egress rule to extraEgress that
+  ## allows traffic to your database host on port 5432. Without this rule the
+  ## NetworkPolicy will block database connections and the application will fail.
   allowExternalEgress: true
   ## @param networkPolicy.extraIngress Additional NetworkPolicy ingress rules
   extraIngress: []

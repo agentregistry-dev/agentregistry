@@ -193,11 +193,28 @@ Create the name of the service account to use.
    ====================================================================== */}}
 
 {{/*
-Return the secret name containing credentials.
+Return the secret name containing credentials (JWT key, etc.).
 */}}
 {{- define "agentregistry.secretName" -}}
 {{- if .Values.existingSecret }}
 {{- .Values.existingSecret }}
+{{- else }}
+{{- include "agentregistry.fullname" . }}
+{{- end }}
+{{- end }}
+
+{{/*
+Return the secret name that holds POSTGRES_PASSWORD.
+Priority:
+  1. Top-level existingSecret (user manages all credentials in one secret)
+  2. externalDatabase.existingSecret (when postgresql.enabled is false)
+  3. Chart-managed secret (agentregistry.fullname)
+*/}}
+{{- define "agentregistry.passwordSecretName" -}}
+{{- if .Values.existingSecret }}
+{{- .Values.existingSecret }}
+{{- else if and (not .Values.postgresql.enabled) .Values.externalDatabase.existingSecret }}
+{{- .Values.externalDatabase.existingSecret }}
 {{- else }}
 {{- include "agentregistry.fullname" . }}
 {{- end }}
@@ -514,8 +531,22 @@ storageClassName: {{ $sc | quote }}
    ====================================================================== */}}
 
 {{/*
-Compile all validation warnings into a single message.
-Call from NOTES.txt: include "agentregistry.validateValues" .
+Compile hard-error validations. Any non-empty result triggers fail.
+Called from templates/validate.yaml so it fires during helm template/install.
+*/}}
+{{- define "agentregistry.validateValues.errors" -}}
+{{- $errors := list }}
+{{- if and .Values.networkPolicy.enabled (not .Values.networkPolicy.allowExternalEgress) (not .Values.postgresql.enabled) (not .Values.networkPolicy.extraEgress) }}
+{{- $errors = append $errors "networkPolicy.allowExternalEgress is false and postgresql.enabled is false (external database), but no networkPolicy.extraEgress rules are defined. The NetworkPolicy will block egress to the external database and the application will fail to connect. Either set networkPolicy.allowExternalEgress=true, or add an egress rule to networkPolicy.extraEgress allowing traffic to your database host on port 5432." }}
+{{- end }}
+{{- range $errors }}
+{{ . }}
+{{- end }}
+{{- end }}
+
+{{/*
+Compile soft validation warnings into a single message.
+Called from NOTES.txt (only shown during helm install/upgrade).
 */}}
 {{- define "agentregistry.validateValues" -}}
 {{- $messages := list }}
