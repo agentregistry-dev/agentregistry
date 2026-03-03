@@ -572,6 +572,76 @@ func TestTranslateRuntimeConfig(t *testing.T) {
 			errorMsg:    "duplicate Agent name",
 		},
 		{
+			name: "duplicate names with distinct deployment ids",
+			desiredState: &api.DesiredState{
+				MCPServers: []*api.MCPServer{
+					{
+						Name:          "duplicate",
+						DeploymentID:  "dep-1",
+						MCPServerType: api.MCPServerTypeLocal,
+						Local: &api.LocalMCPServer{
+							Deployment: api.MCPServerDeployment{
+								Image: "test:v1",
+								Cmd:   "cmd",
+							},
+							TransportType: api.TransportTypeHTTP,
+							HTTP: &api.HTTPTransport{
+								Port: 3000,
+							},
+						},
+					},
+					{
+						Name:          "duplicate",
+						DeploymentID:  "dep-2",
+						MCPServerType: api.MCPServerTypeLocal,
+						Local: &api.LocalMCPServer{
+							Deployment: api.MCPServerDeployment{
+								Image: "test:v2",
+								Cmd:   "cmd",
+							},
+							TransportType: api.TransportTypeHTTP,
+							HTTP: &api.HTTPTransport{
+								Port: 3001,
+							},
+						},
+					},
+				},
+				Agents: []*api.Agent{
+					{
+						Name:         "agent-dup",
+						DeploymentID: "dep-1",
+						Deployment: api.AgentDeployment{
+							Image: "agent:v1",
+							Port:  8080,
+						},
+					},
+					{
+						Name:         "agent-dup",
+						DeploymentID: "dep-2",
+						Deployment: api.AgentDeployment{
+							Image: "agent:v2",
+							Port:  8081,
+						},
+					},
+				},
+			},
+			expectError: false,
+			checkFunc: func(t *testing.T, config *api.AIRuntimeConfig) {
+				if _, ok := config.Local.DockerCompose.Services["duplicate-dep-1"]; !ok {
+					t.Error("missing deployment-scoped mcp service duplicate-dep-1")
+				}
+				if _, ok := config.Local.DockerCompose.Services["duplicate-dep-2"]; !ok {
+					t.Error("missing deployment-scoped mcp service duplicate-dep-2")
+				}
+				if _, ok := config.Local.DockerCompose.Services["agent-dup-dep-1"]; !ok {
+					t.Error("missing deployment-scoped agent service agent-dup-dep-1")
+				}
+				if _, ok := config.Local.DockerCompose.Services["agent-dup-dep-2"]; !ok {
+					t.Error("missing deployment-scoped agent service agent-dup-dep-2")
+				}
+			},
+		},
+		{
 			name: "agent and server with same name",
 			desiredState: &api.DesiredState{
 				MCPServers: []*api.MCPServer{

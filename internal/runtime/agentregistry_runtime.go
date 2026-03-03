@@ -511,7 +511,7 @@ func createResolvedMCPServerConfigs(requests []*registry.MCPServerRunRequest) []
 		}
 
 		config := api.ResolvedMCPServerConfig{
-			Name: registry.GenerateInternalName(server.Name),
+			Name: registry.GenerateInternalNameForDeployment(server.Name, serverReq.DeploymentID),
 		}
 
 		useRemote := len(server.Remotes) > 0 && (serverReq.PreferRemote || len(server.Packages) == 0)

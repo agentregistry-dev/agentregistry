@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	api "github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
+	registrytranslation "github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/compose-spec/compose-go/v2/types"
@@ -46,6 +47,14 @@ func canRunInsideAgentGateway(cmd string) bool {
 // ociServerPort is the default port that OCI-based MCP servers expose for HTTP transport.
 const ociServerPort = 3000
 
+func runtimeMCPServiceName(server *api.MCPServer) string {
+	return registrytranslation.GenerateInternalNameForDeployment(server.Name, server.DeploymentID)
+}
+
+func runtimeAgentServiceName(agent *api.Agent) string {
+	return registrytranslation.GenerateInternalNameForDeployment(agent.Name, agent.DeploymentID)
+}
+
 func (t *agentGatewayTranslator) TranslateRuntimeConfig(
 	ctx context.Context,
 	desired *api.DesiredState,
@@ -68,8 +77,9 @@ func (t *agentGatewayTranslator) TranslateRuntimeConfig(
 		if mcpServer.Local.TransportType == api.TransportTypeStdio && canRunInsideAgentGateway(mcpServer.Local.Deployment.Cmd) {
 			continue
 		}
+		serviceName := runtimeMCPServiceName(mcpServer)
 		// error if MCPServer name is not unique
-		if _, exists := dockerComposeServices[mcpServer.Name]; exists {
+		if _, exists := dockerComposeServices[serviceName]; exists {
 			return nil, fmt.Errorf("duplicate MCPServer name found: %s", mcpServer.Name)
 		}
 
@@ -77,11 +87,12 @@ func (t *agentGatewayTranslator) TranslateRuntimeConfig(
 		if err != nil {
 			return nil, fmt.Errorf("failed to translate MCPServer %s to service config: %w", mcpServer.Name, err)
 		}
-		dockerComposeServices[mcpServer.Name] = *serviceConfig
+		dockerComposeServices[serviceName] = *serviceConfig
 	}
 
 	for _, agent := range desired.Agents {
-		if _, exists := dockerComposeServices[agent.Name]; exists {
+		serviceName := runtimeAgentServiceName(agent)
+		if _, exists := dockerComposeServices[serviceName]; exists {
 			return nil, fmt.Errorf("duplicate Agent name found: %s", agent.Name)
 		}
 
@@ -89,7 +100,7 @@ func (t *agentGatewayTranslator) TranslateRuntimeConfig(
 		if err != nil {
 			return nil, fmt.Errorf("failed to translate Agent %s to service config: %w", agent.Name, err)
 		}
-		dockerComposeServices[agent.Name] = *serviceConfig
+		dockerComposeServices[serviceName] = *serviceConfig
 	}
 
 	dockerCompose := &api.DockerComposeConfig{
@@ -172,7 +183,7 @@ func (t *agentGatewayTranslator) translateMCPServerToServiceConfig(server *api.M
 	})
 
 	return &types.ServiceConfig{
-		Name:        server.Name,
+		Name:        runtimeMCPServiceName(server),
 		Image:       image,
 		Command:     cmd,
 		Environment: types.NewMappingWithEquals(envValues),
@@ -210,7 +221,7 @@ func (t *agentGatewayTranslator) translateAgentToServiceConfig(agent *api.Agent)
 	}
 
 	return &types.ServiceConfig{
-		Name:        agent.Name,
+		Name:        runtimeAgentServiceName(agent),
 		Image:       image,
 		Command:     []string{agent.Name, "--local", "--port", fmt.Sprintf("%d", port)},
 		Environment: types.NewMappingWithEquals(envValues),
@@ -230,8 +241,9 @@ func (t *agentGatewayTranslator) translateAgentGatewayConfig(servers []*api.MCPS
 	var targets []api.MCPTarget
 
 	for _, server := range servers {
+		targetName := runtimeMCPServiceName(server)
 		mcpTarget := api.MCPTarget{
-			Name: server.Name,
+			Name: targetName,
 		}
 
 		switch server.MCPServerType {
@@ -252,7 +264,7 @@ func (t *agentGatewayTranslator) translateAgentGatewayConfig(servers []*api.MCPS
 					}
 				} else {
 					mcpTarget.MCP = &api.MCPTargetSpec{
-						Host: fmt.Sprintf("http://%s:%d/mcp", server.Name, ociServerPort),
+						Host: fmt.Sprintf("http://%s:%d/mcp", targetName, ociServerPort),
 					}
 				}
 			case api.TransportTypeHTTP:
@@ -261,7 +273,7 @@ func (t *agentGatewayTranslator) translateAgentGatewayConfig(servers []*api.MCPS
 					return nil, fmt.Errorf("HTTP transport requires a target port")
 				}
 				mcpTarget.SSE = &api.SSETargetSpec{
-					Host: server.Name,
+					Host: targetName,
 					Port: httpTransportConfig.Port,
 					Path: httpTransportConfig.Path,
 				}
@@ -276,18 +288,19 @@ func (t *agentGatewayTranslator) translateAgentGatewayConfig(servers []*api.MCPS
 	// create route for each agent
 	var agentRoutes []api.LocalRoute
 	for _, agent := range agents {
+		agentServiceName := runtimeAgentServiceName(agent)
 		route := api.LocalRoute{
-			RouteName: fmt.Sprintf("%s_route", agent.Name),
+			RouteName: fmt.Sprintf("%s_route", agentServiceName),
 			Matches: []api.RouteMatch{
 				{
 					Path: api.PathMatch{
-						PathPrefix: fmt.Sprintf("/agents/%s", agent.Name),
+						PathPrefix: fmt.Sprintf("/agents/%s", agentServiceName),
 					},
 				},
 			},
 			Backends: []api.RouteBackend{{
 				Weight: 100,
-				Host:   fmt.Sprintf("%s:%d", agent.Name, agent.Deployment.Port),
+				Host:   fmt.Sprintf("%s:%d", agentServiceName, agent.Deployment.Port),
 			}},
 			Policies: &api.FilterOrPolicy{
 				A2A: &api.A2APolicy{},

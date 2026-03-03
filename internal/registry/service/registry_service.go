@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -739,6 +741,12 @@ func shouldIncludeKubernetesDeployments(filter *models.DeploymentFilter) bool {
 	return *filter.Platform == platformKubernetes
 }
 
+func discoveredDeploymentID(resourceKind, namespace, name string) string {
+	raw := strings.ToLower(strings.TrimSpace(resourceKind)) + "|" + strings.TrimSpace(namespace) + "|" + strings.TrimSpace(name)
+	sum := sha256.Sum256([]byte(raw))
+	return "k8s-discovered-" + hex.EncodeToString(sum[:8])
+}
+
 func matchesKubernetesDeploymentFilter(filter *models.DeploymentFilter, dep *models.Deployment) bool {
 	if filter == nil {
 		return true
@@ -1160,6 +1168,12 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 					server.EnvValues["KAGENT_NAMESPACE"] = ns
 				}
 			}
+			// Scope resolved runtime servers to the owning agent deployment when available.
+			for _, server := range resolvedServers {
+				if strings.TrimSpace(server.DeploymentID) == "" {
+					server.DeploymentID = agentReq.DeploymentID
+				}
+			}
 
 			agentReq.ResolvedMCPServers = resolvedServers
 			if s.cfg.Verbose && len(resolvedServers) > 0 {
@@ -1261,7 +1275,7 @@ func (s *registryServiceImpl) listKubernetesDeployments(ctx context.Context, nam
 
 	// Helper to append a generic resource to the list
 	addResource := func(
-		resType, name string, _ string,
+		resType, name, ns string,
 		labels map[string]string,
 		creation time.Time,
 		_ []metav1.Condition,
@@ -1283,6 +1297,7 @@ func (s *registryServiceImpl) listKubernetesDeployments(ctx context.Context, nam
 		})
 
 		d := &models.Deployment{
+			ID:               discoveredDeploymentID(resType, ns, name),
 			ServerName:       name,
 			Version:          "unknown",
 			DeployedAt:       creation,

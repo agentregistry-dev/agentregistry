@@ -140,3 +140,45 @@ func parseServerReqUnit(
 	}
 	return &registry.MCPServerRunRequest{RegistryServer: &server}
 }
+
+func TestCreateResolvedMCPServerConfigs_UsesDeploymentScopedNames(t *testing.T) {
+	reqWithDeployment := parseServerReqUnit(t, `{
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+        "name": "io.github.estruyf/vscode-demo-time",
+        "description": "Demo",
+        "version": "0.0.55",
+        "packages": [{
+          "registryType": "npm",
+          "registryBaseUrl": "https://registry.npmjs.org",
+          "identifier": "@demotime/mcp",
+          "version": "0.0.55",
+          "transport": {"type": "stdio"}
+        }]
+      }`)
+	reqWithDeployment.DeploymentID = "dep-123"
+
+	reqWithoutDeployment := parseServerReqUnit(t, `{
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+        "name": "io.github.estruyf/vscode-demo-time",
+        "description": "Demo",
+        "version": "0.0.55",
+        "packages": [{
+          "registryType": "npm",
+          "registryBaseUrl": "https://registry.npmjs.org",
+          "identifier": "@demotime/mcp",
+          "version": "0.0.55",
+          "transport": {"type": "stdio"}
+        }]
+      }`)
+
+	configs := createResolvedMCPServerConfigs([]*registry.MCPServerRunRequest{reqWithDeployment, reqWithoutDeployment})
+	if len(configs) != 2 {
+		t.Fatalf("expected 2 resolved configs, got %d", len(configs))
+	}
+	if configs[0].Name != "io-github-estruyf-vscode-demo-time-dep-123" {
+		t.Fatalf("expected deployment-scoped name for first config, got %q", configs[0].Name)
+	}
+	if configs[1].Name != "io-github-estruyf-vscode-demo-time" {
+		t.Fatalf("expected non-scoped name for second config, got %q", configs[1].Name)
+	}
+}

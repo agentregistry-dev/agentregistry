@@ -243,8 +243,11 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		platform := deploymentPlatform(ctx, registry, deployment)
 		err = registry.UndeployDeployment(ctx, deployment, platform)
 		if err != nil {
+			if service.IsUnsupportedDeploymentPlatformError(err) {
+				return nil, huma.Error400BadRequest("Unsupported provider or platform for deployment")
+			}
 			if errors.Is(err, database.ErrInvalidInput) {
-				return nil, huma.Error409Conflict("Discovered deployments cannot be deleted directly")
+				return nil, huma.Error400BadRequest("Invalid deployment removal request")
 			}
 			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error404NotFound("Deployment not found")

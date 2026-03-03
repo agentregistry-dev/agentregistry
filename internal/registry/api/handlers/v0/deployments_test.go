@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	servicetesting "github.com/agentregistry-dev/agentregistry/internal/registry/service/testing"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -335,6 +336,40 @@ func TestDeleteDeployment_UsesAdapterWhenRegistered(t *testing.T) {
 
 	assert.Equal(t, http.StatusNoContent, w.Code)
 	assert.True(t, adapter.undeployCalled)
+}
+
+func TestDeleteDeployment_UnsupportedPlatformReturnsBadRequest(t *testing.T) {
+	reg := servicetesting.NewFakeRegistry()
+	reg.GetDeploymentByIDFn = func(ctx context.Context, id string) (*models.Deployment, error) {
+		return &models.Deployment{
+			ID:         id,
+			ProviderID: "local",
+			Status:     "deployed",
+			Origin:     "managed",
+		}, nil
+	}
+	reg.GetProviderByIDFn = func(ctx context.Context, providerID string) (*models.Provider, error) {
+		return &models.Provider{ID: providerID, Platform: "local"}, nil
+	}
+	reg.UndeployDeploymentFn = func(ctx context.Context, deployment *models.Deployment, platform string) error {
+		return &service.UnsupportedDeploymentPlatformError{Platform: platform}
+	}
+
+	mux := http.NewServeMux()
+	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
+	v0.RegisterDeploymentsEndpoints(api, "/v0", reg, v0.PlatformExtensions{
+		ProviderPlatforms: v0.DefaultProviderPlatformAdapters(reg),
+		DeploymentPlatforms: map[string]registrytypes.DeploymentPlatformAdapter{
+			"local": &fakeDeploymentAdapter{},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodDelete, "/v0/deployments/dep-unsupported", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "Unsupported provider or platform for deployment")
 }
 
 func TestGetDeploymentLogs_UsesAdapterWhenRegistered(t *testing.T) {

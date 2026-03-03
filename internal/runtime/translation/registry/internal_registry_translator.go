@@ -328,3 +328,14 @@ func GenerateInternalName(server string) string {
 	name = strings.ReplaceAll(name, " ", "-")
 	return name
 }
+
+// GenerateInternalNameForDeployment returns an internal runtime-safe name scoped
+// to a deployment ID when provided.
+func GenerateInternalNameForDeployment(name, deploymentID string) string {
+	base := GenerateInternalName(name)
+	deploymentID = strings.TrimSpace(deploymentID)
+	if deploymentID == "" {
+		return base
+	}
+	return fmt.Sprintf("%s-%s", base, GenerateInternalName(deploymentID))
+}
