@@ -16,8 +16,6 @@ fullnameOverride: ""
 commonLabels: {}
 ## @param commonAnnotations Annotations to add to all deployed resources
 commonAnnotations: {}
-## @param clusterDomain Kubernetes cluster domain
-clusterDomain: cluster.local
 ## @param extraDeploy Array of extra objects to deploy with the release (evaluated as a template)
 extraDeploy: []
 
