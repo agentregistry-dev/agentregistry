@@ -222,6 +222,40 @@ func waitForComposeService(t *testing.T, serviceName string, timeout time.Durati
 				serviceName, localDeployComposeProject, strings.TrimSpace(string(out)))
 			return
 		}
+
+		// Deployment-scoped local runtime names append the deployment ID,
+		// e.g. "<service>-<deployment-id>". Accept those for e2e verification.
+		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
+		cmd2 := exec.CommandContext(ctx2, "docker", "ps",
+			"--filter", projectFilter,
+			"--filter", "status=running",
+			"--format", `{{.Label "com.docker.compose.service"}}	{{.Names}}`)
+		out2, err2 := cmd2.Output()
+		cancel2()
+
+		if err2 == nil {
+			lines := strings.Split(strings.TrimSpace(string(out2)), "\n")
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if line == "" {
+					continue
+				}
+				parts := strings.SplitN(line, "\t", 2)
+				if len(parts) == 0 {
+					continue
+				}
+				actualService := strings.TrimSpace(parts[0])
+				if actualService == serviceName || strings.HasPrefix(actualService, serviceName+"-") {
+					containerName := ""
+					if len(parts) > 1 {
+						containerName = strings.TrimSpace(parts[1])
+					}
+					t.Logf("Service %q is running in project %s via deployment-scoped service %q (%s)",
+						serviceName, localDeployComposeProject, actualService, containerName)
+					return
+				}
+			}
+		}
 		time.Sleep(3 * time.Second)
 	}
 
