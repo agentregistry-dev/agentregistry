@@ -445,18 +445,66 @@ func TestClientIntegration_DeploymentRoutes_HappyPath(t *testing.T) {
 	if deployedAgent == nil || deployedAgent.ResourceType != "agent" {
 		t.Fatalf("DeployAgent() returned unexpected payload: %#v", deployedAgent)
 	}
-
-	if len(createdDeployments) != 3 {
-		t.Fatalf("expected 3 CreateDeployment() calls, got %d", len(createdDeployments))
+	if deployedAgent.ID == "" {
+		t.Fatalf("DeployAgent() returned empty deployment id: %#v", deployedAgent)
 	}
-	if createdDeployments[0].ResourceType != "mcp" || createdDeployments[1].ResourceType != "mcp" || createdDeployments[2].ResourceType != "agent" {
+
+	// Regression: redeploying the same agent/version should produce a new deployment ID.
+	deployedAgentSecond, err := client.DeployAgent(
+		"acme/planner",
+		"2.0.0",
+		map[string]string{"MODE": "fast"},
+		v0handlers.LocalProviderID,
+	)
+	if err != nil {
+		t.Fatalf("second DeployAgent() failed: %v", err)
+	}
+	if deployedAgentSecond == nil || deployedAgentSecond.ResourceType != "agent" {
+		t.Fatalf("second DeployAgent() returned unexpected payload: %#v", deployedAgentSecond)
+	}
+	if deployedAgentSecond.ID == "" {
+		t.Fatalf("second DeployAgent() returned empty deployment id: %#v", deployedAgentSecond)
+	}
+	if deployedAgentSecond.ID == deployedAgent.ID {
+		t.Fatalf("expected distinct agent deployment IDs, got %q", deployedAgent.ID)
+	}
+
+	if err := client.RemoveDeploymentByID(deployedAgent.ID); err != nil {
+		t.Fatalf("RemoveDeploymentByID(agent) failed: %v", err)
+	}
+	if err := client.RemoveDeploymentByID(deployedAgentSecond.ID); err != nil {
+		t.Fatalf("RemoveDeploymentByID(agent second) failed: %v", err)
+	}
+
+	if len(createdDeployments) != 4 {
+		t.Fatalf("expected 4 CreateDeployment() calls, got %d", len(createdDeployments))
+	}
+	if createdDeployments[0].ResourceType != "mcp" ||
+		createdDeployments[1].ResourceType != "mcp" ||
+		createdDeployments[2].ResourceType != "agent" ||
+		createdDeployments[3].ResourceType != "agent" {
 		t.Fatalf("unexpected deployment resource types: %#v", createdDeployments)
 	}
-	if len(createPlatforms) != 3 || createPlatforms[0] != "local" || createPlatforms[1] != "local" || createPlatforms[2] != "local" {
+	if len(createPlatforms) != 4 ||
+		createPlatforms[0] != "local" ||
+		createPlatforms[1] != "local" ||
+		createPlatforms[2] != "local" ||
+		createPlatforms[3] != "local" {
 		t.Fatalf("unexpected deployment platforms: %#v", createPlatforms)
 	}
-	if len(removedIDs) != 2 || removedIDs[0] != deployedServer.ID || removedIDs[1] != deployedServerSecond.ID {
-		t.Fatalf("expected removal of deployments %q and %q, got %#v", deployedServer.ID, deployedServerSecond.ID, removedIDs)
+	if len(removedIDs) != 4 ||
+		removedIDs[0] != deployedServer.ID ||
+		removedIDs[1] != deployedServerSecond.ID ||
+		removedIDs[2] != deployedAgent.ID ||
+		removedIDs[3] != deployedAgentSecond.ID {
+		t.Fatalf(
+			"expected removal of deployments %q, %q, %q, %q; got %#v",
+			deployedServer.ID,
+			deployedServerSecond.ID,
+			deployedAgent.ID,
+			deployedAgentSecond.ID,
+			removedIDs,
+		)
 	}
 }
 

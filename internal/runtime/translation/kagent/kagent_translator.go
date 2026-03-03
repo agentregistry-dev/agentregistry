@@ -308,10 +308,7 @@ func AgentConfigMapName(name, version, deploymentID string) string {
 	if version != "" {
 		base = fmt.Sprintf("%s-%s-mcp-config", name, version)
 	}
-	if deploymentID != "" {
-		base = fmt.Sprintf("%s-%s", base, deploymentID)
-	}
-	return sanitizeK8sName(base)
+	return sanitizeK8sName(nameWithDeploymentID(base, deploymentID))
 }
 
 func buildRemoteMCPURL(host string, port uint32, path string) string {
@@ -333,26 +330,15 @@ func AgentResourceName(name, version, deploymentID string) string {
 	if version != "" {
 		base = fmt.Sprintf("%s-%s", name, version)
 	}
-	if deploymentID != "" {
-		base = fmt.Sprintf("%s-%s", base, deploymentID)
-	}
-	return sanitizeK8sName(base)
+	return sanitizeK8sName(nameWithDeploymentID(base, deploymentID))
 }
 
 func RemoteMCPResourceName(name, deploymentID string) string {
-	base := name
-	if deploymentID != "" {
-		base = fmt.Sprintf("%s-%s", base, deploymentID)
-	}
-	return sanitizeK8sName(base)
+	return sanitizeK8sName(nameWithDeploymentID(name, deploymentID))
 }
 
 func MCPServerResourceName(name, deploymentID string) string {
-	base := name
-	if deploymentID != "" {
-		base = fmt.Sprintf("%s-%s", base, deploymentID)
-	}
-	return sanitizeK8sName(base)
+	return sanitizeK8sName(nameWithDeploymentID(name, deploymentID))
 }
 
 func deploymentManagedLabels(deploymentID string) map[string]string {
@@ -372,6 +358,13 @@ func deploymentManagedAnnotations(deploymentID string) map[string]string {
 	return map[string]string{
 		DeploymentIDAnnotationKey: deploymentID,
 	}
+}
+
+func nameWithDeploymentID(base, deploymentID string) string {
+	if deploymentID == "" {
+		return base
+	}
+	return fmt.Sprintf("%s-%s", base, deploymentID)
 }
 
 // sanitizeK8sName sanitizes a string to a valid Kubernetes name
