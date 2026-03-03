@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
+	versionpkg "github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/stoewer/go-strcase"
 )
@@ -75,4 +76,9 @@ func ResolveVersion(flagVersion, manifestVersion string) string {
 		return manifestVersion
 	}
 	return "latest"
+}
+
+// FormatVersionForDisplay normalizes version display with a leading "v".
+func FormatVersionForDisplay(version string) string {
+	return versionpkg.EnsureVPrefix(version)
 }

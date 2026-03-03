@@ -164,7 +164,7 @@ func buildAgentJSONDirect(agentName string) (*models.AgentJSON, error) {
 // checkAndHandleExistingAgent checks if an agent version already exists in the registry
 // and handles the overwrite logic if needed.
 func checkAndHandleExistingAgent(agentName, version string) error {
-	printer.PrintInfo(fmt.Sprintf("Publishing agent: %s (v%s)", agentName, version))
+	printer.PrintInfo(fmt.Sprintf("Publishing agent: %s (%s)", agentName, clicommon.FormatVersionForDisplay(version)))
 
 	exists, err := isAgentPublished(agentName, version)
 	if err != nil {
@@ -194,6 +194,6 @@ func publishToRegistry(agentJSON *models.AgentJSON) error {
 	if err != nil {
 		return fmt.Errorf("failed to publish to registry: %w", err)
 	}
-	printer.PrintSuccess(fmt.Sprintf("Published: %s (v%s)", agentJSON.Name, agentJSON.Version))
+	printer.PrintSuccess(fmt.Sprintf("Published: %s (%s)", agentJSON.Name, clicommon.FormatVersionForDisplay(agentJSON.Version)))
 	return nil
 }

@@ -174,7 +174,7 @@ func runPublishDirect(skillName string) error {
 	}
 
 	if !dryRunFlag {
-		printer.PrintSuccess(fmt.Sprintf("Published: %s (v%s)", skillJson.Name, skillJson.Version))
+		printer.PrintSuccess(fmt.Sprintf("Published: %s (%s)", skillJson.Name, common.FormatVersionForDisplay(skillJson.Version)))
 	}
 
 	return nil

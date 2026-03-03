@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/spf13/cobra"
 )
@@ -52,7 +53,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to delete agent: %w", err)
 	}
 
-	printer.PrintSuccess(fmt.Sprintf("Deleted: %s (v%s)", agentName, deleteVersion))
+	printer.PrintSuccess(fmt.Sprintf("Deleted: %s (%s)", agentName, common.FormatVersionForDisplay(deleteVersion)))
 	return nil
 }
 

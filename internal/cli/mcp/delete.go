@@ -3,6 +3,7 @@ package mcp
 import (
 	"fmt"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/spf13/cobra"
 )
@@ -52,6 +53,6 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to delete server: %w", err)
 	}
 
-	printer.PrintSuccess(fmt.Sprintf("Deleted: %s (v%s)", serverName, deleteVersion))
+	printer.PrintSuccess(fmt.Sprintf("Deleted: %s (%s)", serverName, common.FormatVersionForDisplay(deleteVersion)))
 	return nil
 }

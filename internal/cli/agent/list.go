@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
@@ -125,7 +126,7 @@ func printAgentsTable(agents []*models.AgentResponse, deployedAgents []*client.D
 			if deployment.Version == a.Agent.Version {
 				deployedStatus = "True"
 			} else {
-				deployedStatus = fmt.Sprintf("True (v%s)", deployment.Version)
+				deployedStatus = fmt.Sprintf("True (%s)", common.FormatVersionForDisplay(deployment.Version))
 			}
 		}
 

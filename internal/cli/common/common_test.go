@@ -298,6 +298,26 @@ func TestResolveVersion(t *testing.T) {
 	}
 }
 
+func TestFormatVersionForDisplay(t *testing.T) {
+	tests := []struct {
+		name    string
+		version string
+		want    string
+	}{
+		{name: "adds v prefix when missing", version: "1.0.0", want: "v1.0.0"},
+		{name: "keeps existing v prefix", version: "v1.0.0", want: "v1.0.0"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FormatVersionForDisplay(tt.version)
+			if got != tt.want {
+				t.Errorf("FormatVersionForDisplay(%q) = %q, want %q", tt.version, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestBuildRegistryImageName_NoDoubleTag is a regression test for
 // https://github.com/agentregistry-dev/agentregistry/issues/178.
 // BuildRegistryImageName must produce a single tag, not ":latest:latest".

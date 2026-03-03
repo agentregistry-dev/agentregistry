@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/spf13/cobra"
 )
 
@@ -101,7 +102,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to deploy server: %w", err)
 	}
 
-	fmt.Printf("\n✓ Deployed %s (v%s) with providerId=%s\n", deployment.ServerName, deployment.Version, deployProviderID)
+	fmt.Printf("\n✓ Deployed %s (%s) with providerId=%s\n", deployment.ServerName, common.FormatVersionForDisplay(deployment.Version), deployProviderID)
 	if deployNamespace != "" {
 		ns := deployNamespace
 		fmt.Printf("Namespace: %s\n", ns)
