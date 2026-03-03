@@ -108,13 +108,15 @@ func registerIndexEndpoint(
 			return nil, huma.Error500InternalServerError("failed to create job: " + err.Error())
 		}
 
+		initialStatus := string(job.Status)
+
 		// Run indexing in background
 		go runIndexJob(indexer, jobManager, job.ID, req)
 
 		return &types.Response[IndexJobResponse]{
 			Body: IndexJobResponse{
 				JobID:  string(job.ID),
-				Status: string(job.Status),
+				Status: initialStatus,
 			},
 		}, nil
 	})
