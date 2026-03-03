@@ -296,6 +296,32 @@ func (c *Client) GetSkillByName(name string) (*models.SkillResponse, error) {
 	return &resp, nil
 }
 
+// GetSkillVersions returns all versions for a skill by name.
+func (c *Client) GetSkillVersions(name string) ([]*models.SkillResponse, error) {
+	encName := url.PathEscape(name)
+	req, err := c.newRequest(http.MethodGet, "/skills/"+encName+"/versions")
+	if err != nil {
+		return nil, err
+	}
+
+	var resp models.SkillListResponse
+	if err := c.doJSON(req, &resp); err != nil {
+		// 404 -> not found returns empty list
+		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get skill versions: %w", err)
+	}
+
+	// Convert to pointer slice to match existing client method conventions.
+	result := make([]*models.SkillResponse, len(resp.Skills))
+	for i := range resp.Skills {
+		result[i] = &resp.Skills[i]
+	}
+
+	return result, nil
+}
+
 // GetAgents returns all agents from connected registries
 func (c *Client) GetAgents() ([]*models.AgentResponse, error) {
 	limit := 100
