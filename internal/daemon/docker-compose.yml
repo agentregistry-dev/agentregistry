@@ -21,6 +21,22 @@ services:
   agentregistry:
     image: ${DOCKER_REGISTRY}/agentregistry-dev/agentregistry/server:${VERSION}
     container_name: agentregistry-server
+    # Rewrite the kubeconfig so that 127.0.0.1/localhost server addresses resolve
+    # to the Docker host. This is required for local k8s clusters (kind, minikube,
+    # Docker Desktop) where the API server listens on the host machine.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        if [ -f /root/.kube/config.orig ]; then
+          mkdir -p /root/.kube
+          sed -E \
+            -e 's|https://127\.0\.0\.1|https://host.docker.internal|g' \
+            -e 's|https://localhost|https://host.docker.internal|g' \
+            -e 's|certificate-authority-data:.*|insecure-skip-tls-verify: true|g' \
+            /root/.kube/config.orig > /root/.kube/config
+        fi
+        exec /app/bin/arctl-server
     environment:
       AGENT_REGISTRY_DATABASE_URL: "postgres://agentregistry:agentregistry@postgres:5432/agent-registry?sslmode=disable"
       AGENT_REGISTRY_SERVER_ADDRESS: ":8080"
@@ -34,14 +50,15 @@ services:
       # AGENT_REGISTRY_ENABLE_REGISTRY_VALIDATION: "true"
     ports:
       - "12121:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       # Mount Docker socket to allow the server to manage containers
       - /var/run/docker.sock:/var/run/docker.sock
       # Mount /tmp so the registry can write configs accessible to Docker on the host
       - /tmp:/tmp
-      # Mount kubeconfig so kubectl can access the local context
-      # NOTE: This might not work on MacOS with a local cluster using Docker
-      - ~/.kube/config:/root/.kube/config:ro
+      # Mount kubeconfig as read-only source; the entrypoint rewrites it for Docker networking
+      - ~/.kube/config:/root/.kube/config.orig:ro
     depends_on:
       postgres:
         condition: service_healthy
