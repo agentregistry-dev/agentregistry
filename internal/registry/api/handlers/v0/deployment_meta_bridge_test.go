@@ -36,10 +36,12 @@ func TestDeploymentResourceIndexFiltersInactiveStatuses(t *testing.T) {
 
 func TestAttachServerDeploymentMetaMatchesVersionAndLatest(t *testing.T) {
 	now := time.Now().UTC()
-	index := map[deploymentResourceKey][]models.DeploymentSummary{
-		{resourceType: "mcp", resourceName: "io.test/server"}: {
-			{ID: "dep-v1", Version: "1.0.0", Status: "deployed", UpdatedAt: now},
-			{ID: "dep-latest", Version: "latest", Status: "deploying", UpdatedAt: now.Add(-time.Minute)},
+	reg := &servicetest.FakeRegistry{
+		GetDeploymentsFn: func(_ context.Context, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
+			return []*models.Deployment{
+				{ID: "dep-v1", ServerName: "io.test/server", ResourceType: "mcp", Version: "1.0.0", Status: "deployed", UpdatedAt: now},
+				{ID: "dep-latest", ServerName: "io.test/server", ResourceType: "mcp", Version: "latest", Status: "deployed", UpdatedAt: now.Add(-time.Minute)},
+			}, nil
 		},
 	}
 
@@ -58,7 +60,7 @@ func TestAttachServerDeploymentMetaMatchesVersionAndLatest(t *testing.T) {
 		},
 	}
 
-	enriched := attachServerDeploymentMeta(servers, index)
+	enriched := attachServerDeploymentMeta(context.Background(), reg, servers)
 	require.NotNil(t, enriched[0].Meta.Deployments)
 	require.NotNil(t, enriched[1].Meta.Deployments)
 	assert.Equal(t, 1, enriched[0].Meta.Deployments.Count)

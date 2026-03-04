@@ -183,7 +183,6 @@ func TestCreateResolvedMCPServerConfigs_UsesDeploymentScopedNames(t *testing.T) 
 		t.Fatalf("expected non-scoped name for second config, got %q", configs[1].Name)
 	}
 }
-
 func TestBuildDesiredState_IncludesResolvedMCPServersForAgent(t *testing.T) {
 	r := &agentRegistryRuntime{
 		registryTranslator: registry.NewTranslator(),
