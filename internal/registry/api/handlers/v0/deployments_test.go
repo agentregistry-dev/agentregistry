@@ -62,7 +62,7 @@ func TestCreateDeployment_PassesEnvAndProviderConfigSeparately(t *testing.T) {
 	}
 
 	adapter := &fakeDeploymentAdapter{}
-	reg.CreateDeploymentFn = func(ctx context.Context, req *models.Deployment, platform string) (*models.Deployment, error) {
+	reg.CreateDeploymentFn = func(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
 		return adapter.Deploy(ctx, req)
 	}
 
@@ -103,6 +103,37 @@ func TestCreateDeployment_PassesEnvAndProviderConfigSeparately(t *testing.T) {
 	err = adapter.lastDeployReq.ProviderConfig.UnmarshalInto(&providerCfg)
 	require.NoError(t, err)
 	assert.Equal(t, "sg-123", providerCfg["securityGroupId"])
+}
+
+func TestCreateDeployment_MissingProviderIDReturnsBadRequest(t *testing.T) {
+	reg := servicetesting.NewFakeRegistry()
+	reg.CreateDeploymentFn = func(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
+		t.Fatalf("expected providerId validation failure before service call")
+		return nil, nil
+	}
+
+	mux := http.NewServeMux()
+	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
+	v0.RegisterDeploymentsEndpoints(api, "/v0", reg, v0.PlatformExtensions{
+		ProviderPlatforms:   v0.DefaultProviderPlatformAdapters(reg),
+		DeploymentPlatforms: map[string]registrytypes.DeploymentPlatformAdapter{"local": &fakeDeploymentAdapter{}},
+	})
+
+	body := map[string]any{
+		"serverName":   "io.github.user/weather",
+		"version":      "1.0.0",
+		"resourceType": "mcp",
+	}
+	payload, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/v0/deployments", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "providerId is required")
 }
 
 func (f *fakeDeploymentAdapter) Undeploy(_ context.Context, _ *models.Deployment) error {
@@ -169,7 +200,7 @@ func TestCreateDeployment_UsesAdapterWhenRegistered(t *testing.T) {
 	}
 
 	adapter := &fakeDeploymentAdapter{}
-	reg.CreateDeploymentFn = func(ctx context.Context, req *models.Deployment, platform string) (*models.Deployment, error) {
+	reg.CreateDeploymentFn = func(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
 		return adapter.Deploy(ctx, req)
 	}
 
@@ -210,7 +241,7 @@ func TestCreateDeployment_InvalidInputFromAdapterReturnsBadRequest(t *testing.T)
 		return &models.Provider{ID: providerID, Platform: "local"}, nil
 	}
 	adapter := &fakeDeploymentAdapter{deployErr: database.ErrInvalidInput}
-	reg.CreateDeploymentFn = func(ctx context.Context, req *models.Deployment, platform string) (*models.Deployment, error) {
+	reg.CreateDeploymentFn = func(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
 		return adapter.Deploy(ctx, req)
 	}
 
@@ -246,7 +277,7 @@ func TestCreateDeployment_AllowsMultipleDeploymentsForSameArtifact(t *testing.T)
 		return &models.Provider{ID: providerID, Platform: "local"}, nil
 	}
 	createCount := 0
-	reg.CreateDeploymentFn = func(ctx context.Context, req *models.Deployment, platform string) (*models.Deployment, error) {
+	reg.CreateDeploymentFn = func(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
 		createCount++
 		return &models.Deployment{
 			ID:           fmt.Sprintf("adapter-dep-%d", createCount),
@@ -318,7 +349,7 @@ func TestDeleteDeployment_UsesAdapterWhenRegistered(t *testing.T) {
 	}
 
 	adapter := &fakeDeploymentAdapter{}
-	reg.UndeployDeploymentFn = func(ctx context.Context, deployment *models.Deployment, platform string) error {
+	reg.UndeployDeploymentFn = func(ctx context.Context, deployment *models.Deployment) error {
 		return adapter.Undeploy(ctx, deployment)
 	}
 	mux := http.NewServeMux()
@@ -351,8 +382,8 @@ func TestDeleteDeployment_UnsupportedPlatformReturnsBadRequest(t *testing.T) {
 	reg.GetProviderByIDFn = func(ctx context.Context, providerID string) (*models.Provider, error) {
 		return &models.Provider{ID: providerID, Platform: "local"}, nil
 	}
-	reg.UndeployDeploymentFn = func(ctx context.Context, deployment *models.Deployment, platform string) error {
-		return &service.UnsupportedDeploymentPlatformError{Platform: platform}
+	reg.UndeployDeploymentFn = func(ctx context.Context, deployment *models.Deployment) error {
+		return &service.UnsupportedDeploymentPlatformError{Platform: "local"}
 	}
 
 	mux := http.NewServeMux()
@@ -386,7 +417,7 @@ func TestGetDeploymentLogs_UsesAdapterWhenRegistered(t *testing.T) {
 	}
 
 	adapter := &fakeDeploymentAdapter{}
-	reg.GetDeploymentLogsFn = func(ctx context.Context, deployment *models.Deployment, platform string) ([]string, error) {
+	reg.GetDeploymentLogsFn = func(ctx context.Context, deployment *models.Deployment) ([]string, error) {
 		return adapter.GetLogs(ctx, deployment)
 	}
 	mux := http.NewServeMux()
@@ -420,7 +451,7 @@ func TestGetDeploymentLogs_NotFoundFromAdapterReturnsNotFound(t *testing.T) {
 	}
 
 	adapter := &fakeDeploymentAdapter{getLogsErr: database.ErrNotFound}
-	reg.GetDeploymentLogsFn = func(ctx context.Context, deployment *models.Deployment, platform string) ([]string, error) {
+	reg.GetDeploymentLogsFn = func(ctx context.Context, deployment *models.Deployment) ([]string, error) {
 		return adapter.GetLogs(ctx, deployment)
 	}
 	mux := http.NewServeMux()
@@ -454,7 +485,7 @@ func TestCancelDeployment_UsesAdapterWhenRegistered(t *testing.T) {
 	}
 
 	adapter := &fakeDeploymentAdapter{}
-	reg.CancelDeploymentFn = func(ctx context.Context, deployment *models.Deployment, platform string) error {
+	reg.CancelDeploymentFn = func(ctx context.Context, deployment *models.Deployment) error {
 		return adapter.Cancel(ctx, deployment)
 	}
 	mux := http.NewServeMux()
@@ -488,7 +519,7 @@ func TestCancelDeployment_InvalidInputFromAdapterReturnsBadRequest(t *testing.T)
 	}
 
 	adapter := &fakeDeploymentAdapter{cancelErr: database.ErrInvalidInput}
-	reg.CancelDeploymentFn = func(ctx context.Context, deployment *models.Deployment, platform string) error {
+	reg.CancelDeploymentFn = func(ctx context.Context, deployment *models.Deployment) error {
 		return adapter.Cancel(ctx, deployment)
 	}
 	mux := http.NewServeMux()

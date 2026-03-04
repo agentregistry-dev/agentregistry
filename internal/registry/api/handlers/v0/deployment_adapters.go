@@ -57,9 +57,9 @@ func (a *localDeploymentAdapter) Deploy(ctx context.Context, req *models.Deploym
 	if len(req.ProviderConfig) > 0 {
 		return nil, fmt.Errorf("providerConfig is not supported for local deployments: %w", database.ErrInvalidInput)
 	}
-	providerID := req.ProviderID
+	providerID := strings.TrimSpace(req.ProviderID)
 	if providerID == "" {
-		providerID = LocalProviderID
+		return nil, fmt.Errorf("provider id is required: %w", database.ErrInvalidInput)
 	}
 	env := req.Env
 	if env == nil {
@@ -116,9 +116,9 @@ func (a *kubernetesDeploymentAdapter) Deploy(ctx context.Context, req *models.De
 	if len(req.ProviderConfig) > 0 {
 		return nil, fmt.Errorf("providerConfig is not supported for kubernetes deployments: %w", database.ErrInvalidInput)
 	}
-	providerID := req.ProviderID
+	providerID := strings.TrimSpace(req.ProviderID)
 	if providerID == "" {
-		providerID = defaultKubernetesProviderID
+		return nil, fmt.Errorf("provider id is required: %w", database.ErrInvalidInput)
 	}
 	env := req.Env
 	if env == nil {

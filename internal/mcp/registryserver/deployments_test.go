@@ -174,8 +174,8 @@ func TestDeploymentTools_DeployRemove(t *testing.T) {
 	reg.GetProviderByIDFn = func(_ context.Context, providerID string) (*models.Provider, error) {
 		return &models.Provider{ID: providerID, Platform: "local"}, nil
 	}
-	reg.UndeployDeploymentFn = func(_ context.Context, deployment *models.Deployment, platform string) error {
-		if deployment != nil && deployment.ID == deployed.ID && platform == "local" {
+	reg.UndeployDeploymentFn = func(_ context.Context, deployment *models.Deployment) error {
+		if deployment != nil && deployment.ID == deployed.ID {
 			removed = true
 			return nil
 		}

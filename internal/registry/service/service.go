@@ -105,14 +105,14 @@ type RegistryService interface {
 	DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error)
 	// RemoveDeploymentByID removes a deployment by UUID.
 	RemoveDeploymentByID(ctx context.Context, id string) error
-	// CreateDeployment dispatches deployment creation via platform adapter.
-	CreateDeployment(ctx context.Context, req *models.Deployment, platform string) (*models.Deployment, error)
-	// UndeployDeployment dispatches undeploy via platform adapter.
-	UndeployDeployment(ctx context.Context, deployment *models.Deployment, platform string) error
-	// GetDeploymentLogs dispatches deployment log retrieval via platform adapter.
-	GetDeploymentLogs(ctx context.Context, deployment *models.Deployment, platform string) ([]string, error)
-	// CancelDeployment dispatches deployment cancellation via platform adapter.
-	CancelDeployment(ctx context.Context, deployment *models.Deployment, platform string) error
+	// CreateDeployment dispatches deployment creation via provider-resolved platform adapter.
+	CreateDeployment(ctx context.Context, req *models.Deployment) (*models.Deployment, error)
+	// UndeployDeployment dispatches undeploy via provider-resolved platform adapter.
+	UndeployDeployment(ctx context.Context, deployment *models.Deployment) error
+	// GetDeploymentLogs dispatches deployment log retrieval via provider-resolved platform adapter.
+	GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
+	// CancelDeployment dispatches deployment cancellation via provider-resolved platform adapter.
+	CancelDeployment(ctx context.Context, deployment *models.Deployment) error
 
 	Reconciler
 }

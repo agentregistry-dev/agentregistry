@@ -67,10 +67,10 @@ type FakeRegistry struct {
 	DeployServerFn               func(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error)
 	DeployAgentFn                func(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error)
 	RemoveDeploymentByIDFn       func(ctx context.Context, id string) error
-	CreateDeploymentFn           func(ctx context.Context, req *models.Deployment, platform string) (*models.Deployment, error)
-	UndeployDeploymentFn         func(ctx context.Context, deployment *models.Deployment, platform string) error
-	GetDeploymentLogsFn          func(ctx context.Context, deployment *models.Deployment, platform string) ([]string, error)
-	CancelDeploymentFn           func(ctx context.Context, deployment *models.Deployment, platform string) error
+	CreateDeploymentFn           func(ctx context.Context, req *models.Deployment) (*models.Deployment, error)
+	UndeployDeploymentFn         func(ctx context.Context, deployment *models.Deployment) error
+	GetDeploymentLogsFn          func(ctx context.Context, deployment *models.Deployment) ([]string, error)
+	CancelDeploymentFn           func(ctx context.Context, deployment *models.Deployment) error
 	ReconcileAllFn               func(ctx context.Context) error
 
 	// Prompt fields and hooks
@@ -421,9 +421,9 @@ func (f *FakeRegistry) RemoveDeploymentByID(ctx context.Context, id string) erro
 	return database.ErrNotFound
 }
 
-func (f *FakeRegistry) CreateDeployment(ctx context.Context, req *models.Deployment, platform string) (*models.Deployment, error) {
+func (f *FakeRegistry) CreateDeployment(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
 	if f.CreateDeploymentFn != nil {
-		return f.CreateDeploymentFn(ctx, req, platform)
+		return f.CreateDeploymentFn(ctx, req)
 	}
 	return nil, database.ErrNotFound
 }
@@ -451,23 +451,23 @@ func (f *FakeRegistry) GetPromptByName(ctx context.Context, promptName string) (
 	return nil, database.ErrNotFound
 }
 
-func (f *FakeRegistry) UndeployDeployment(ctx context.Context, deployment *models.Deployment, platform string) error {
+func (f *FakeRegistry) UndeployDeployment(ctx context.Context, deployment *models.Deployment) error {
 	if f.UndeployDeploymentFn != nil {
-		return f.UndeployDeploymentFn(ctx, deployment, platform)
+		return f.UndeployDeploymentFn(ctx, deployment)
 	}
 	return database.ErrNotFound
 }
 
-func (f *FakeRegistry) GetDeploymentLogs(ctx context.Context, deployment *models.Deployment, platform string) ([]string, error) {
+func (f *FakeRegistry) GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error) {
 	if f.GetDeploymentLogsFn != nil {
-		return f.GetDeploymentLogsFn(ctx, deployment, platform)
+		return f.GetDeploymentLogsFn(ctx, deployment)
 	}
 	return nil, database.ErrNotFound
 }
 
-func (f *FakeRegistry) CancelDeployment(ctx context.Context, deployment *models.Deployment, platform string) error {
+func (f *FakeRegistry) CancelDeployment(ctx context.Context, deployment *models.Deployment) error {
 	if f.CancelDeploymentFn != nil {
-		return f.CancelDeploymentFn(ctx, deployment, platform)
+		return f.CancelDeploymentFn(ctx, deployment)
 	}
 	return database.ErrNotFound
 }

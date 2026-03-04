@@ -952,6 +952,28 @@ func TestDeployAgent_AlreadyExistsDoesNotAttemptIdentityCleanup(t *testing.T) {
 	assert.Equal(t, 0, removeCalls)
 }
 
+func TestDeployServer_MissingProviderIDReturnsInvalidInput(t *testing.T) {
+	svc := &registryServiceImpl{}
+	_, err := svc.DeployServer(context.Background(), "com.example/weather", "1.0.0", map[string]string{}, false, "")
+	require.ErrorIs(t, err, database.ErrInvalidInput)
+}
+
+func TestDeployAgent_MissingProviderIDReturnsInvalidInput(t *testing.T) {
+	svc := &registryServiceImpl{}
+	_, err := svc.DeployAgent(context.Background(), "com.example/planner", "1.0.0", map[string]string{}, false, "")
+	require.ErrorIs(t, err, database.ErrInvalidInput)
+}
+
+func TestCreateDeployment_MissingProviderIDReturnsInvalidInput(t *testing.T) {
+	svc := &registryServiceImpl{}
+	_, err := svc.CreateDeployment(context.Background(), &models.Deployment{
+		ServerName:   "com.example/weather",
+		Version:      "1.0.0",
+		ResourceType: "mcp",
+	})
+	require.ErrorIs(t, err, database.ErrInvalidInput)
+}
+
 type deployCreateMockDB struct {
 	database.Database
 	getProviderByIDFn           func(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error)
@@ -1147,7 +1169,7 @@ func TestCleanupExistingDeployment_UsesAdapterStaleCleanerWhenAvailable(t *testi
 		},
 	}
 
-	err := svc.cleanupExistingDeployment(ctx, "com.example/test", "1.0.0", "mcp", "local")
+	err := svc.cleanupExistingDeployment(ctx, "com.example/test", "1.0.0", "mcp")
 	require.NoError(t, err)
 	assert.True(t, cleanupCalled)
 	assert.True(t, removeCalled, "db record should still be removed after adapter stale cleanup")
@@ -1155,6 +1177,11 @@ func TestCleanupExistingDeployment_UsesAdapterStaleCleanerWhenAvailable(t *testi
 
 func TestUndeployDeployment_UsesAdapterForLocalPlatform(t *testing.T) {
 	undeployCalled := false
+	mockDB := &deploymentMockDB{
+		getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {
+			return &models.Provider{ID: providerID, Platform: "local"}, nil
+		},
+	}
 	adapter := &testDeploymentAdapter{
 		undeployFn: func(_ context.Context, deployment *models.Deployment) error {
 			undeployCalled = deployment != nil && deployment.ID == "dep-local-1"
@@ -1163,12 +1190,13 @@ func TestUndeployDeployment_UsesAdapterForLocalPlatform(t *testing.T) {
 	}
 
 	svc := &registryServiceImpl{
+		db: mockDB,
 		deploymentAdapters: map[string]DeploymentPlatformDeployer{
 			"local": adapter,
 		},
 	}
 
-	err := svc.UndeployDeployment(context.Background(), &models.Deployment{ID: "dep-local-1"}, "local")
+	err := svc.UndeployDeployment(context.Background(), &models.Deployment{ID: "dep-local-1", ProviderID: "local"})
 	require.NoError(t, err)
 	assert.True(t, undeployCalled)
 }

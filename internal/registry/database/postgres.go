@@ -2588,7 +2588,7 @@ func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deploymen
 	}
 	providerID := strings.TrimSpace(deployment.ProviderID)
 	if providerID == "" {
-		providerID = "local"
+		return fmt.Errorf("%w: provider id is required", database.ErrInvalidInput)
 	}
 	origin := deployment.Origin
 	if origin == "" {

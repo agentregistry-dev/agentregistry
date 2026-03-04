@@ -26,27 +26,6 @@ var ErrNoOIDCDefined = errors.New("OIDC is not defined")
 // that implements RegistryService (and optionally additional interfaces).
 type ServiceFactory func(base service.RegistryService) service.RegistryService
 
-// DeploymentTarget defines deployment behavior for a provider platform type.
-// OSS can provide built-ins while enterprise can register cloud platform handlers.
-type DeploymentTarget interface {
-	Provider() string
-	SupportedResourceTypes() []string
-	Deploy(ctx context.Context, req *models.Deployment) (*models.Deployment, error)
-	Undeploy(ctx context.Context, deployment *models.Deployment) error
-}
-
-// AsyncDeploymentTarget extends DeploymentTarget with async job operations.
-type AsyncDeploymentTarget interface {
-	DeploymentTarget
-	GetLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
-	Cancel(ctx context.Context, deployment *models.Deployment) error
-}
-
-// Discoverer can be implemented by provider platform handlers that support discovery.
-type Discoverer interface {
-	Discover(ctx context.Context, providerID string) ([]*models.Deployment, error)
-}
-
 // ProviderPlatformAdapter defines provider CRUD behavior for a provider platform type.
 type ProviderPlatformAdapter interface {
 	Platform() string
@@ -87,10 +66,6 @@ type AppOptions struct {
 	// ServiceFactory is an optional function to create a service that adds new functionality.
 	// The factory receives the base service and should return an extended service.
 	ServiceFactory ServiceFactory
-
-	// DeploymentTargets registers additional deployment targets.
-	// OSS provides built-in local runtimes; enterprise can register cloud providers.
-	DeploymentTargets map[string]DeploymentTarget
 
 	// ProviderPlatforms registers adapters for provider CRUD by provider platform type.
 	ProviderPlatforms map[string]ProviderPlatformAdapter

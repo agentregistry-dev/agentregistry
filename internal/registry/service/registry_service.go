@@ -27,7 +27,6 @@ import (
 const (
 	maxServerVersionsPerServer = 10000
 
-	localProviderID   = "local"
 	resourceTypeMCP   = "mcp"
 	resourceTypeAgent = "agent"
 	originDiscovered  = "discovered"
@@ -883,6 +882,22 @@ func (s *registryServiceImpl) resolveProviderByID(ctx context.Context, providerI
 	return s.db.GetProviderByID(ctx, nil, providerID)
 }
 
+func (s *registryServiceImpl) resolveDeploymentAdapterByProviderID(ctx context.Context, providerID string) (DeploymentPlatformDeployer, error) {
+	resolvedProviderID := strings.TrimSpace(providerID)
+	if resolvedProviderID == "" {
+		return nil, fmt.Errorf("%w: provider id is required", database.ErrInvalidInput)
+	}
+	provider, err := s.resolveProviderByID(ctx, resolvedProviderID)
+	if err != nil {
+		return nil, err
+	}
+	providerPlatform := strings.ToLower(strings.TrimSpace(provider.Platform))
+	if providerPlatform == "" {
+		return nil, fmt.Errorf("%w: provider platform is required", database.ErrInvalidInput)
+	}
+	return s.resolveDeploymentAdapter(providerPlatform)
+}
+
 func (s *registryServiceImpl) findDeploymentByIdentity(ctx context.Context, resourceName, version, artifactType string) (*models.Deployment, error) {
 	filter := &models.DeploymentFilter{
 		ResourceType: &artifactType,
@@ -904,7 +919,7 @@ func (s *registryServiceImpl) findDeploymentByIdentity(ctx context.Context, reso
 
 // cleanupExistingDeployment removes a stale deployment record and its associated runtime resources.
 // Errors from runtime cleanup are logged but not fatal, since the resources may already be gone.
-func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, resourceName, version, resourceType, platform string) error {
+func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, resourceName, version, resourceType string) error {
 	existing, err := s.findDeploymentByIdentity(ctx, resourceName, version, resourceType)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
@@ -913,7 +928,7 @@ func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, res
 		return fmt.Errorf("looking up existing deployment: %w", err)
 	}
 
-	cleanupPlatform := strings.ToLower(strings.TrimSpace(platform))
+	cleanupPlatform := ""
 	if existing == nil {
 		return nil
 	}
@@ -926,14 +941,18 @@ func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, res
 			cleanupPlatform = strings.ToLower(strings.TrimSpace(provider.Platform))
 		}
 	}
-	if adapter, err := s.resolveDeploymentAdapter(cleanupPlatform); err == nil {
-		if cleaner, ok := adapter.(DeploymentPlatformStaleCleaner); ok {
-			if err := cleaner.CleanupStale(ctx, existing); err != nil {
-				log.Printf("Warning: failed stale cleanup for deployment %s on platform %s: %v", existing.ID, cleanupPlatform, err)
+	if cleanupPlatform != "" {
+		if adapter, err := s.resolveDeploymentAdapter(cleanupPlatform); err == nil {
+			if cleaner, ok := adapter.(DeploymentPlatformStaleCleaner); ok {
+				if err := cleaner.CleanupStale(ctx, existing); err != nil {
+					log.Printf("Warning: failed stale cleanup for deployment %s on platform %s: %v", existing.ID, cleanupPlatform, err)
+				}
 			}
+		} else {
+			log.Printf("Warning: failed to resolve deployment adapter for stale cleanup on platform %s: %v", cleanupPlatform, err)
 		}
 	} else {
-		log.Printf("Warning: failed to resolve deployment adapter for stale cleanup on platform %s: %v", cleanupPlatform, err)
+		log.Printf("Warning: skipping stale cleanup for deployment %s: provider platform unavailable", existing.ID)
 	}
 
 	if err := s.db.RemoveDeploymentByID(ctx, nil, existing.ID); err != nil && !errors.Is(err, database.ErrNotFound) {
@@ -945,9 +964,6 @@ func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, res
 
 // DeployServer deploys a server with environment variables.
 func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, version string, env map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
-	if providerID == "" {
-		providerID = localProviderID
-	}
 	if _, err := s.resolveProviderByID(ctx, providerID); err != nil {
 		return nil, err
 	}
@@ -998,9 +1014,6 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 
 // DeployAgent deploys an agent with environment variables.
 func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, version string, env map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
-	if providerID == "" {
-		providerID = localProviderID
-	}
 	if _, err := s.resolveProviderByID(ctx, providerID); err != nil {
 		return nil, err
 	}
@@ -1108,11 +1121,11 @@ func (s *registryServiceImpl) RemoveDeploymentByID(ctx context.Context, id strin
 }
 
 // CreateDeployment dispatches deployment creation to the platform adapter.
-func (s *registryServiceImpl) CreateDeployment(ctx context.Context, req *models.Deployment, platform string) (*models.Deployment, error) {
+func (s *registryServiceImpl) CreateDeployment(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
 	if req == nil {
 		return nil, fmt.Errorf("%w: deployment request is required", database.ErrInvalidInput)
 	}
-	adapter, err := s.resolveDeploymentAdapter(platform)
+	adapter, err := s.resolveDeploymentAdapterByProviderID(ctx, req.ProviderID)
 	if err != nil {
 		return nil, err
 	}
@@ -1120,12 +1133,11 @@ func (s *registryServiceImpl) CreateDeployment(ctx context.Context, req *models.
 }
 
 // UndeployDeployment dispatches undeploy to the platform adapter.
-func (s *registryServiceImpl) UndeployDeployment(ctx context.Context, deployment *models.Deployment, platform string) error {
+func (s *registryServiceImpl) UndeployDeployment(ctx context.Context, deployment *models.Deployment) error {
 	if deployment == nil {
 		return database.ErrNotFound
 	}
-	normalized := strings.ToLower(strings.TrimSpace(platform))
-	adapter, err := s.resolveDeploymentAdapter(normalized)
+	adapter, err := s.resolveDeploymentAdapterByProviderID(ctx, deployment.ProviderID)
 	if err != nil {
 		return err
 	}
@@ -1133,11 +1145,11 @@ func (s *registryServiceImpl) UndeployDeployment(ctx context.Context, deployment
 }
 
 // GetDeploymentLogs dispatches logs retrieval to the platform adapter.
-func (s *registryServiceImpl) GetDeploymentLogs(ctx context.Context, deployment *models.Deployment, platform string) ([]string, error) {
+func (s *registryServiceImpl) GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error) {
 	if deployment == nil {
 		return nil, database.ErrNotFound
 	}
-	adapter, err := s.resolveDeploymentAdapter(platform)
+	adapter, err := s.resolveDeploymentAdapterByProviderID(ctx, deployment.ProviderID)
 	if err != nil {
 		return nil, err
 	}
@@ -1145,11 +1157,11 @@ func (s *registryServiceImpl) GetDeploymentLogs(ctx context.Context, deployment 
 }
 
 // CancelDeployment dispatches cancellation to the platform adapter.
-func (s *registryServiceImpl) CancelDeployment(ctx context.Context, deployment *models.Deployment, platform string) error {
+func (s *registryServiceImpl) CancelDeployment(ctx context.Context, deployment *models.Deployment) error {
 	if deployment == nil {
 		return database.ErrNotFound
 	}
-	adapter, err := s.resolveDeploymentAdapter(platform)
+	adapter, err := s.resolveDeploymentAdapterByProviderID(ctx, deployment.ProviderID)
 	if err != nil {
 		return err
 	}

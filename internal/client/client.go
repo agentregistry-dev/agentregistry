@@ -641,6 +641,9 @@ func (c *Client) GetDeploymentByID(id string) (*DeploymentResponse, error) {
 
 // DeployServer deploys a server with deployment environment variables.
 func (c *Client) DeployServer(name, version string, env map[string]string, preferRemote bool, providerID string) (*DeploymentResponse, error) {
+	if strings.TrimSpace(providerID) == "" {
+		providerID = internalv0.LocalProviderID
+	}
 	payload := internalv0.DeploymentRequest{
 		ServerName:   name,
 		Version:      version,
@@ -660,6 +663,9 @@ func (c *Client) DeployServer(name, version string, env map[string]string, prefe
 
 // DeployAgent deploys an agent with deployment environment variables.
 func (c *Client) DeployAgent(name, version string, env map[string]string, providerID string) (*DeploymentResponse, error) {
+	if strings.TrimSpace(providerID) == "" {
+		providerID = internalv0.LocalProviderID
+	}
 	payload := internalv0.DeploymentRequest{
 		ServerName:   name,
 		Version:      version,
