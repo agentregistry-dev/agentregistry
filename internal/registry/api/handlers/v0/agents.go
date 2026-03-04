@@ -106,7 +106,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		for i, a := range agents {
 			agentValues[i] = *a
 		}
-		agentValues = attachAgentDeploymentMeta(agentValues, deploymentResourceIndex(ctx, registry))
+		agentValues = attachAgentDeploymentMeta(ctx, registry, agentValues)
 		return &types.Response[agentmodels.AgentListResponse]{
 			Body: agentmodels.AgentListResponse{
 				Agents: agentValues,
@@ -150,8 +150,9 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		}
 		return &types.Response[agentmodels.AgentResponse]{
 			Body: attachAgentDeploymentMeta(
+				ctx,
+				registry,
 				[]agentmodels.AgentResponse{*agentResp},
-				deploymentResourceIndex(ctx, registry),
 			)[0],
 		}, nil
 	})
@@ -211,7 +212,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		for i, a := range agents {
 			agentValues[i] = *a
 		}
-		agentValues = attachAgentDeploymentMeta(agentValues, deploymentResourceIndex(ctx, registry))
+		agentValues = attachAgentDeploymentMeta(ctx, registry, agentValues)
 		return &types.Response[agentmodels.AgentListResponse]{
 			Body: agentmodels.AgentListResponse{
 				Agents: agentValues,
@@ -241,8 +242,9 @@ func createAgentHandler(ctx context.Context, input *CreateAgentInput, registry s
 
 	return &types.Response[agentmodels.AgentResponse]{
 		Body: attachAgentDeploymentMeta(
+			ctx,
+			registry,
 			[]agentmodels.AgentResponse{*createdAgent},
-			deploymentResourceIndex(ctx, registry),
 		)[0],
 	}, nil
 }

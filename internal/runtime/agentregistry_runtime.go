@@ -155,11 +155,32 @@ func (r *agentRegistryRuntime) ReconcileAll(
 	serverRequests []*registry.MCPServerRunRequest,
 	agentRequests []*registry.AgentRunRequest,
 ) error {
+	desiredState, err := r.buildDesiredState(serverRequests, agentRequests)
+	if err != nil {
+		return err
+	}
+
+	runtimeCfg, err := r.runtimeTranslator.TranslateRuntimeConfig(ctx, desiredState)
+	if err != nil {
+		return fmt.Errorf("translate runtime config: %w", err)
+	}
+
+	if r.verbose {
+		fmt.Printf("desired state: agents=%d MCP servers=%d\n", len(desiredState.Agents), len(desiredState.MCPServers))
+	}
+
+	return r.ensureRuntime(ctx, runtimeCfg)
+}
+
+func (r *agentRegistryRuntime) buildDesiredState(
+	serverRequests []*registry.MCPServerRunRequest,
+	agentRequests []*registry.AgentRunRequest,
+) (*api.DesiredState, error) {
 	desiredState := &api.DesiredState{}
 	for _, req := range serverRequests {
 		mcpServer, err := r.registryTranslator.TranslateMCPServer(context.TODO(), req)
 		if err != nil {
-			return fmt.Errorf("translate mcp server %s: %w", req.RegistryServer.Name, err)
+			return nil, fmt.Errorf("translate mcp server %s: %w", req.RegistryServer.Name, err)
 		}
 		if ns := req.EnvValues["KAGENT_NAMESPACE"]; ns != "" && mcpServer.Namespace == "" {
 			mcpServer.Namespace = ns
@@ -170,7 +191,7 @@ func (r *agentRegistryRuntime) ReconcileAll(
 	for _, req := range agentRequests {
 		agent, err := r.registryTranslator.TranslateAgent(context.TODO(), req)
 		if err != nil {
-			return fmt.Errorf("translate agent %s: %w", req.RegistryAgent.Name, err)
+			return nil, fmt.Errorf("translate agent %s: %w", req.RegistryAgent.Name, err)
 		}
 
 		// Extract namespace from agent's env (if set) to propagate to MCP servers
@@ -183,7 +204,7 @@ func (r *agentRegistryRuntime) ReconcileAll(
 		for _, serverReq := range req.ResolvedMCPServers {
 			mcpServer, err := r.registryTranslator.TranslateMCPServer(context.TODO(), serverReq)
 			if err != nil {
-				return fmt.Errorf("translate resolved MCP server %s for agent %s: %w", serverReq.RegistryServer.Name, req.RegistryAgent.Name, err)
+				return nil, fmt.Errorf("translate resolved MCP server %s for agent %s: %w", serverReq.RegistryServer.Name, req.RegistryAgent.Name, err)
 			}
 			// Propagate namespace from agent to MCP server for co-location
 			if agentNamespace != "" {
@@ -198,7 +219,7 @@ func (r *agentRegistryRuntime) ReconcileAll(
 
 		desiredState.Agents = append(desiredState.Agents, agent)
 
-		// Convert back to PythonMCPServer for local runtime backward compatibility
+		// Convert back to PythonMCPServer for local runtime backward compatibility.
 		var pythonServers []common.PythonMCPServer
 		for _, cfg := range resolvedConfigs {
 			pythonServers = append(pythonServers, common.PythonMCPServer{
@@ -218,20 +239,11 @@ func (r *agentRegistryRuntime) ReconcileAll(
 			pythonServers,
 			r.verbose,
 		); err != nil {
-			return fmt.Errorf("failed to refresh resolved MCP server config for agent %s: %w", req.RegistryAgent.Name, err)
+			return nil, fmt.Errorf("failed to refresh resolved MCP server config for agent %s: %w", req.RegistryAgent.Name, err)
 		}
 	}
 
-	runtimeCfg, err := r.runtimeTranslator.TranslateRuntimeConfig(ctx, desiredState)
-	if err != nil {
-		return fmt.Errorf("translate runtime config: %w", err)
-	}
-
-	if r.verbose {
-		fmt.Printf("desired state: agents=%d MCP servers=%d\n", len(desiredState.Agents), len(desiredState.MCPServers))
-	}
-
-	return r.ensureRuntime(ctx, runtimeCfg)
+	return desiredState, nil
 }
 
 func (r *agentRegistryRuntime) ensureRuntime(
