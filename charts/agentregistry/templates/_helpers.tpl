@@ -132,16 +132,16 @@ Digest takes precedence over tag.
 Return the proper PostgreSQL image name.
 */}}
 {{- define "agentregistry.postgresql.image" -}}
-{{- $registry := .Values.postgresql.image.registry -}}
+{{- $registry := .Values.database.bundled.image.registry -}}
 {{- if .Values.global }}
   {{- if .Values.global.imageRegistry }}
     {{- $registry = .Values.global.imageRegistry -}}
   {{- end }}
 {{- end }}
-{{- if .Values.postgresql.image.digest }}
-{{- printf "%s/%s@%s" $registry .Values.postgresql.image.repository .Values.postgresql.image.digest }}
+{{- if .Values.database.bundled.image.digest }}
+{{- printf "%s/%s@%s" $registry .Values.database.bundled.image.repository .Values.database.bundled.image.digest }}
 {{- else }}
-{{- printf "%s/%s:%s" $registry .Values.postgresql.image.repository .Values.postgresql.image.tag }}
+{{- printf "%s/%s:%s" $registry .Values.database.bundled.image.repository .Values.database.bundled.image.tag }}
 {{- end }}
 {{- end }}
 
@@ -207,14 +207,14 @@ Return the secret name containing credentials (JWT key, etc.).
 Return the secret name that holds POSTGRES_PASSWORD.
 Priority:
   1. Top-level existingSecret (user manages all credentials in one secret)
-  2. externalDatabase.existingSecret (when postgresql.enabled is false)
+  2. database.external.existingSecret (when database.bundled.enabled is false)
   3. Chart-managed secret (agentregistry.fullname)
 */}}
 {{- define "agentregistry.passwordSecretName" -}}
 {{- if .Values.existingSecret }}
 {{- .Values.existingSecret }}
-{{- else if and (not .Values.postgresql.enabled) .Values.externalDatabase.existingSecret }}
-{{- .Values.externalDatabase.existingSecret }}
+{{- else if and (not .Values.database.bundled.enabled) .Values.database.external.existingSecret }}
+{{- .Values.database.external.existingSecret }}
 {{- else }}
 {{- include "agentregistry.fullname" . }}
 {{- end }}
@@ -281,25 +281,25 @@ In both cases, the password is injected at runtime via the $(POSTGRES_PASSWORD)
 env-var expansion.
 */}}
 {{- define "agentregistry.databaseUrl" -}}
-{{- if .Values.postgresql.enabled }}
+{{- if .Values.database.bundled.enabled }}
 {{- printf "postgres://%s:$(%s)@%s:%s/%s?sslmode=%s"
-      .Values.postgresql.auth.username
+      .Values.database.bundled.auth.username
       "POSTGRES_PASSWORD"
       (include "agentregistry.postgresql.fullname" .)
-      (toString .Values.postgresql.service.port)
-      .Values.postgresql.auth.database
-      .Values.postgresql.sslMode }}
+      (toString .Values.database.bundled.service.port)
+      .Values.database.bundled.auth.database
+      .Values.database.bundled.sslMode }}
 {{- else }}
-  {{- if .Values.externalDatabase.url }}
-{{- .Values.externalDatabase.url }}
+  {{- if .Values.database.external.url }}
+{{- .Values.database.external.url }}
   {{- else }}
 {{- printf "postgres://%s:$(%s)@%s:%s/%s?sslmode=%s"
-      .Values.externalDatabase.username
+      .Values.database.external.username
       "POSTGRES_PASSWORD"
-      .Values.externalDatabase.host
-      (toString .Values.externalDatabase.port)
-      .Values.externalDatabase.database
-      .Values.externalDatabase.sslMode }}
+      .Values.database.external.host
+      (toString .Values.database.external.port)
+      .Values.database.external.database
+      .Values.database.external.sslMode }}
   {{- end }}
 {{- end }}
 {{- end }}
@@ -505,7 +505,7 @@ If .Values.affinity is set it wins entirely. Otherwise build from presets.
 {{/*
 Return the proper StorageClass name.
 Uses global.storageClass as override, then per-component, then empty (default).
-Usage: include "agentregistry.storageClass" (dict "storageClass" .Values.postgresql.persistence.storageClass "global" .Values.global)
+Usage: include "agentregistry.storageClass" (dict "storageClass" .Values.database.bundled.persistence.storageClass "global" .Values.global)
 */}}
 {{- define "agentregistry.storageClass" -}}
 {{- $sc := "" }}
@@ -536,8 +536,8 @@ Called from templates/validate.yaml so it fires during helm template/install.
 */}}
 {{- define "agentregistry.validateValues.errors" -}}
 {{- $errors := list }}
-{{- if and .Values.networkPolicy.enabled (not .Values.networkPolicy.allowExternalEgress) (not .Values.postgresql.enabled) (not .Values.networkPolicy.extraEgress) }}
-{{- $errors = append $errors "networkPolicy.allowExternalEgress is false and postgresql.enabled is false (external database), but no networkPolicy.extraEgress rules are defined. The NetworkPolicy will block egress to the external database and the application will fail to connect. Either set networkPolicy.allowExternalEgress=true, or add an egress rule to networkPolicy.extraEgress allowing traffic to your database host on port 5432." }}
+{{- if and .Values.networkPolicy.enabled (not .Values.networkPolicy.allowExternalEgress) (not .Values.database.bundled.enabled) (not .Values.networkPolicy.extraEgress) }}
+{{- $errors = append $errors "networkPolicy.allowExternalEgress is false and database.bundled.enabled is false (external database), but no networkPolicy.extraEgress rules are defined. The NetworkPolicy will block egress to the external database and the application will fail to connect. Either set networkPolicy.allowExternalEgress=true, or add an egress rule to networkPolicy.extraEgress allowing traffic to your database host on port 5432." }}
 {{- end }}
 {{- range $errors }}
 {{ . }}
@@ -550,8 +550,8 @@ Called from NOTES.txt (only shown during helm install/upgrade).
 */}}
 {{- define "agentregistry.validateValues" -}}
 {{- $messages := list }}
-{{- if and (not .Values.postgresql.enabled) (not .Values.externalDatabase.url) (not .Values.externalDatabase.host) }}
-{{- $messages = append $messages "WARNING: postgresql.enabled is false but no externalDatabase.url or externalDatabase.host is set. The application will fail to start without a database connection." }}
+{{- if and (not .Values.database.bundled.enabled) (not .Values.database.external.url) (not .Values.database.external.host) }}
+{{- $messages = append $messages "WARNING: database.bundled.enabled is false but no database.external.url or database.external.host is set. The application will fail to start without a database connection." }}
 {{- end }}
 {{- if and .Values.rbac.create .Values.rbac.clusterAdminBinding }}
 {{- $messages = append $messages "WARNING: rbac.clusterAdminBinding is true. This grants cluster-admin privileges to the ServiceAccount. This is intended for development/demo environments only." }}

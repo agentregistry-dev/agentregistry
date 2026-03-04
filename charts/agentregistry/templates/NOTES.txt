@@ -10,11 +10,11 @@ Chart:     {{ include "agentregistry.chart" . }}
 Release:   {{ .Release.Name }}
 Namespace: {{ .Release.Namespace }}
 
-{{- if .Values.postgresql.enabled }}
+{{- if .Values.database.bundled.enabled }}
 PostgreSQL: bundled ({{ include "agentregistry.postgresql.image" . }})
-{{- else if .Values.externalDatabase.host }}
-PostgreSQL: external ({{ .Values.externalDatabase.host }}:{{ .Values.externalDatabase.port }}/{{ .Values.externalDatabase.database }})
-{{- else if .Values.externalDatabase.url }}
+{{- else if .Values.database.external.host }}
+PostgreSQL: external ({{ .Values.database.external.host }}:{{ .Values.database.external.port }}/{{ .Values.database.external.database }})
+{{- else if .Values.database.external.url }}
 PostgreSQL: external (connection string provided)
 {{- else }}
 PostgreSQL: *** NOT CONFIGURED ***
@@ -27,12 +27,6 @@ To access the Agent Registry UI and API:
    kubectl -n {{ .Release.Namespace }} port-forward svc/{{ $fullName }} {{ $httpPort }}:{{ $httpPort }}
 
    Then open: http://localhost:{{ $httpPort }}
-
-{{- if .Values.ingress.enabled }}
-
-2. Via Ingress:
-   http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.hostname }}
-{{- end }}
 
 Useful endpoints (after port-forward):
   - Interactive docs:    http://localhost:{{ $httpPort }}/docs

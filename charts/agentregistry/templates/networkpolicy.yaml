@@ -43,7 +43,7 @@ spec:
         - port: 53
           protocol: TCP
     {{/* Allow connections to PostgreSQL */}}
-    {{- if .Values.postgresql.enabled }}
+    {{- if .Values.database.bundled.enabled }}
     - to:
         - podSelector:
             matchLabels:

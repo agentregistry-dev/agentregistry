@@ -10,9 +10,7 @@ metadata:
     {{- $annotations | nindent 4 }}
   {{- end }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
-  {{- end }}
   {{- if .Values.revisionHistoryLimit }}
   revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   {{- end }}
@@ -88,12 +86,12 @@ spec:
       topologySpreadConstraints:
         {{- toYaml .Values.topologySpreadConstraints | nindent 8 }}
       {{- end }}
-      {{- if or .Values.postgresql.enabled .Values.initContainers }}
+      {{- if or .Values.database.bundled.enabled .Values.initContainers }}
       initContainers:
-        {{- if .Values.postgresql.enabled }}
+        {{- if .Values.database.bundled.enabled }}
         - name: wait-for-postgres
           image: {{ include "agentregistry.postgresql.image" . }}
-          imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.database.bundled.image.pullPolicy }}
           {{- $initSec := include "agentregistry.containerSecurityContext" .Values.containerSecurityContext }}
           {{- if $initSec }}
           securityContext:
@@ -105,7 +103,7 @@ spec:
             - |
               timeout=${WAIT_TIMEOUT:-300}
               elapsed=0
-              until pg_isready -h {{ include "agentregistry.postgresql.fullname" . }} -p {{ .Values.postgresql.service.port }} -U {{ .Values.postgresql.auth.username }} -d {{ .Values.postgresql.auth.database }}; do
+              until pg_isready -h {{ include "agentregistry.postgresql.fullname" . }} -p {{ .Values.database.bundled.service.port }} -U {{ .Values.database.bundled.auth.username }} -d {{ .Values.database.bundled.auth.database }}; do
                 echo "waiting for postgres... ($elapsed/$timeout s)"
                 sleep 2
                 elapsed=$((elapsed + 2))

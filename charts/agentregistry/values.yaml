@@ -40,7 +40,7 @@ diagnosticMode:
 image:
   registry: ghcr.io
   repository: agentregistry-dev/agentregistry/server
-  tag: "0.1.25"
+  tag: "0.2.0"
   digest: ""
   pullPolicy: IfNotPresent
   pullSecrets: []
@@ -329,33 +329,6 @@ rbac:
       resources: ["namespaces"]
       verbs: ["get", "list", "watch"]
 
-## @section Ingress
-ingress:
-  ## @param ingress.enabled Enable Ingress
-  enabled: false
-  ## @param ingress.className IngressClass name
-  className: ""
-  ## @param ingress.annotations Ingress annotations
-  annotations: {}
-  ## @param ingress.hostname Default Ingress hostname
-  hostname: agentregistry.local
-  ## @param ingress.path Default Ingress path
-  path: /
-  ## @param ingress.pathType Ingress path type
-  pathType: ImplementationSpecific
-  ## @param ingress.extraHosts Additional Ingress host rules
-  extraHosts: []
-  ## @param ingress.extraPaths Additional Ingress paths
-  extraPaths: []
-  ## @param ingress.extraTls Ingress TLS configuration
-  extraTls: []
-  ## @param ingress.tls Enable TLS for the default hostname
-  tls: false
-  ## @param ingress.tlsSecretName Name of the TLS secret for the default hostname
-  tlsSecretName: ""
-  ## @param ingress.extraRules Additional Ingress rules
-  extraRules: []
-
 ## @section Network Policy
 networkPolicy:
   ## @param networkPolicy.enabled Enable NetworkPolicy
@@ -373,165 +346,143 @@ networkPolicy:
   ## @param networkPolicy.extraEgress Additional NetworkPolicy egress rules
   extraEgress: []
 
-## @section Pod Disruption Budget
-pdb:
-  ## @param pdb.create Create a PodDisruptionBudget
-  create: false
-  ## @param pdb.minAvailable Minimum available pods
-  minAvailable: ""
-  ## @param pdb.maxUnavailable Maximum unavailable pods (defaults to 1 if minAvailable is empty)
-  maxUnavailable: ""
+## @section Database
+database:
+  bundled:
+    ## @param database.bundled.enabled Deploy a PostgreSQL instance as part of this chart
+    enabled: true
 
-## @section Horizontal Pod Autoscaler
-autoscaling:
-  ## @param autoscaling.enabled Enable HPA
-  enabled: false
-  ## @param autoscaling.minReplicas Minimum replicas
-  minReplicas: 1
-  ## @param autoscaling.maxReplicas Maximum replicas
-  maxReplicas: 11
-  ## @param autoscaling.targetCPU Target CPU utilization percentage
-  targetCPU: 50
-  ## @param autoscaling.targetMemory Target memory utilization percentage
-  targetMemory: ""
+    ## @param database.bundled.image.registry PostgreSQL image registry
+    ## @param database.bundled.image.repository PostgreSQL image repository (pgvector/pgvector)
+    ## @param database.bundled.image.tag PostgreSQL image tag — MUST use immutable tags (not `pg17` or `latest`)
+    ## @param database.bundled.image.digest PostgreSQL image digest (overrides tag if set)
+    ## @param database.bundled.image.pullPolicy PostgreSQL image pull policy
+    ##
+    ## The image uses pgvector/pgvector which bundles PostgreSQL + pgvector extension.
+    ## Tags follow the pattern: <pgvector_version>-pg<pg_major>[-variant]
+    ##
+    ## To change the PostgreSQL major version, set the tag accordingly:
+    ##   PostgreSQL 13: "0.8.2-pg13"
+    ##   PostgreSQL 14: "0.8.2-pg14"
+    ##   PostgreSQL 15: "0.8.2-pg15"
+    ##   PostgreSQL 16: "0.8.2-pg16"
+    ##   PostgreSQL 17: "0.8.2-pg17"  (default)
+    ##   PostgreSQL 18: "0.8.2-pg18"
+    ##
+    ## Optional Debian variants are also available: "0.8.2-pg17-bookworm", "0.8.2-pg17-trixie"
+    ## Browse all tags: https://hub.docker.com/r/pgvector/pgvector/tags
+    ##
+    image:
+      registry: docker.io
+      repository: pgvector/pgvector
+      tag: "0.8.2-pg17"
+      digest: ""
+      pullPolicy: IfNotPresent
 
-## @section PostgreSQL sub-deployment (bundled)
-postgresql:
-  ## @param postgresql.enabled Deploy a PostgreSQL instance as part of this chart
-  enabled: true
+    ## @param database.bundled.auth.database Database name to create
+    ## @param database.bundled.auth.username Database user
+    auth:
+      database: "agent-registry"
+      username: "agentregistry"
 
-  ## @param postgresql.image.registry PostgreSQL image registry
-  ## @param postgresql.image.repository PostgreSQL image repository (pgvector/pgvector)
-  ## @param postgresql.image.tag PostgreSQL image tag — MUST use immutable tags (not `pg17` or `latest`)
-  ## @param postgresql.image.digest PostgreSQL image digest (overrides tag if set)
-  ## @param postgresql.image.pullPolicy PostgreSQL image pull policy
-  ##
-  ## The image uses pgvector/pgvector which bundles PostgreSQL + pgvector extension.
-  ## Tags follow the pattern: <pgvector_version>-pg<pg_major>[-variant]
-  ##
-  ## To change the PostgreSQL major version, set the tag accordingly:
-  ##   PostgreSQL 13: "0.8.2-pg13"
-  ##   PostgreSQL 14: "0.8.2-pg14"
-  ##   PostgreSQL 15: "0.8.2-pg15"
-  ##   PostgreSQL 16: "0.8.2-pg16"
-  ##   PostgreSQL 17: "0.8.2-pg17"  (default)
-  ##   PostgreSQL 18: "0.8.2-pg18"
-  ##
-  ## Optional Debian variants are also available: "0.8.2-pg17-bookworm", "0.8.2-pg17-trixie"
-  ## Browse all tags: https://hub.docker.com/r/pgvector/pgvector/tags
-  ##
-  image:
-    registry: docker.io
-    repository: pgvector/pgvector
-    tag: "0.8.2-pg17"
-    digest: ""
-    pullPolicy: IfNotPresent
+    ## @param database.bundled.sslMode PostgreSQL SSL mode for the connection string
+    sslMode: "disable"
 
-  ## @param postgresql.auth.database Database name to create
-  ## @param postgresql.auth.username Database user
-  auth:
-    database: "agent-registry"
-    username: "agentregistry"
+    service:
+      ## @param database.bundled.service.type PostgreSQL Service type
+      type: ClusterIP
+      ## @param database.bundled.service.port PostgreSQL Service port
+      port: 5432
 
-  ## @param postgresql.sslMode PostgreSQL SSL mode for the connection string
-  sslMode: "disable"
+    persistence:
+      ## @param database.bundled.persistence.enabled Enable PersistentVolumeClaim for database storage
+      enabled: true
+      ## @param database.bundled.persistence.size PVC storage request
+      size: 10Gi
+      ## @param database.bundled.persistence.storageClass StorageClass name (empty = default)
+      storageClass: ""
+      ## @param database.bundled.persistence.accessModes PVC access modes
+      accessModes:
+        - ReadWriteOnce
+      ## @param database.bundled.persistence.existingClaim Name of an existing PVC to use
+      existingClaim: ""
+      ## @param database.bundled.persistence.annotations Annotations for the PVC
+      annotations: {}
+      ## @param database.bundled.persistence.keepOnUninstall Add helm.sh/resource-policy: keep to the PVC
+      keepOnUninstall: false
 
-  service:
-    ## @param postgresql.service.type PostgreSQL Service type
-    type: ClusterIP
-    ## @param postgresql.service.port PostgreSQL Service port
+    ## @param database.bundled.podSecurityContext.enabled Enable pod security context for PostgreSQL
+    ## @param database.bundled.podSecurityContext.fsGroup Filesystem group ID for PostgreSQL
+    podSecurityContext:
+      enabled: true
+      fsGroup: 999
+
+    ## @param database.bundled.containerSecurityContext.enabled Enable container security context for PostgreSQL
+    ## @param database.bundled.containerSecurityContext.runAsUser User ID for PostgreSQL container
+    ## @param database.bundled.containerSecurityContext.runAsGroup Group ID for PostgreSQL container
+    ## @param database.bundled.containerSecurityContext.runAsNonRoot Prevent running as root
+    ## @param database.bundled.containerSecurityContext.allowPrivilegeEscalation Allow privilege escalation
+    containerSecurityContext:
+      enabled: true
+      runAsUser: 999
+      runAsGroup: 999
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+
+    ## @param database.bundled.resources Resource requests and limits for PostgreSQL
+    ## @param database.bundled.resourcesPreset Resource preset for PostgreSQL (none, nano, micro, small, medium, large)
+    resources: {}
+    resourcesPreset: "small"
+
+    probes:
+      liveness:
+        ## @param database.bundled.probes.liveness.initialDelaySeconds Initial delay before liveness check
+        ## @param database.bundled.probes.liveness.periodSeconds Period between liveness checks
+        ## @param database.bundled.probes.liveness.timeoutSeconds Timeout for liveness check
+        ## @param database.bundled.probes.liveness.failureThreshold Failure threshold
+        ## @param database.bundled.probes.liveness.successThreshold Success threshold
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 6
+        successThreshold: 1
+      readiness:
+        ## @param database.bundled.probes.readiness.initialDelaySeconds Initial delay before readiness check
+        ## @param database.bundled.probes.readiness.periodSeconds Period between readiness checks
+        ## @param database.bundled.probes.readiness.timeoutSeconds Timeout for readiness check
+        ## @param database.bundled.probes.readiness.failureThreshold Failure threshold
+        ## @param database.bundled.probes.readiness.successThreshold Success threshold
+        initialDelaySeconds: 5
+        periodSeconds: 5
+        timeoutSeconds: 3
+        failureThreshold: 3
+        successThreshold: 1
+
+    ## @param database.bundled.podAnnotations Extra annotations for PostgreSQL pods
+    podAnnotations: {}
+    ## @param database.bundled.podLabels Extra labels for PostgreSQL pods
+    podLabels: {}
+    ## @param database.bundled.nodeSelector Node labels for PostgreSQL pod assignment
+    nodeSelector: {}
+    ## @param database.bundled.tolerations Tolerations for PostgreSQL pod assignment
+    tolerations: []
+    ## @param database.bundled.affinity Affinity rules for PostgreSQL pod assignment
+    affinity: {}
+
+  external:
+    ## @param database.external.url Full PostgreSQL connection string (overrides all other external DB fields)
+    url: ""
+    ## @param database.external.host External database host
+    host: ""
+    ## @param database.external.port External database port
     port: 5432
-
-  persistence:
-    ## @param postgresql.persistence.enabled Enable PersistentVolumeClaim for database storage
-    enabled: true
-    ## @param postgresql.persistence.size PVC storage request
-    size: 10Gi
-    ## @param postgresql.persistence.storageClass StorageClass name (empty = default)
-    storageClass: ""
-    ## @param postgresql.persistence.accessModes PVC access modes
-    accessModes:
-      - ReadWriteOnce
-    ## @param postgresql.persistence.existingClaim Name of an existing PVC to use
-    existingClaim: ""
-    ## @param postgresql.persistence.annotations Annotations for the PVC
-    annotations: {}
-    ## @param postgresql.persistence.keepOnUninstall Add helm.sh/resource-policy: keep to the PVC
-    keepOnUninstall: false
-
-  ## @param postgresql.podSecurityContext.enabled Enable pod security context for PostgreSQL
-  ## @param postgresql.podSecurityContext.fsGroup Filesystem group ID for PostgreSQL
-  podSecurityContext:
-    enabled: true
-    fsGroup: 999
-
-  ## @param postgresql.containerSecurityContext.enabled Enable container security context for PostgreSQL
-  ## @param postgresql.containerSecurityContext.runAsUser User ID for PostgreSQL container
-  ## @param postgresql.containerSecurityContext.runAsGroup Group ID for PostgreSQL container
-  ## @param postgresql.containerSecurityContext.runAsNonRoot Prevent running as root
-  ## @param postgresql.containerSecurityContext.allowPrivilegeEscalation Allow privilege escalation
-  containerSecurityContext:
-    enabled: true
-    runAsUser: 999
-    runAsGroup: 999
-    runAsNonRoot: true
-    allowPrivilegeEscalation: false
-
-  ## @param postgresql.resources Resource requests and limits for PostgreSQL
-  ## @param postgresql.resourcesPreset Resource preset for PostgreSQL (none, nano, micro, small, medium, large)
-  resources: {}
-  resourcesPreset: "small"
-
-  probes:
-    liveness:
-      ## @param postgresql.probes.liveness.initialDelaySeconds Initial delay before liveness check
-      ## @param postgresql.probes.liveness.periodSeconds Period between liveness checks
-      ## @param postgresql.probes.liveness.timeoutSeconds Timeout for liveness check
-      ## @param postgresql.probes.liveness.failureThreshold Failure threshold
-      ## @param postgresql.probes.liveness.successThreshold Success threshold
-      initialDelaySeconds: 20
-      periodSeconds: 10
-      timeoutSeconds: 5
-      failureThreshold: 6
-      successThreshold: 1
-    readiness:
-      ## @param postgresql.probes.readiness.initialDelaySeconds Initial delay before readiness check
-      ## @param postgresql.probes.readiness.periodSeconds Period between readiness checks
-      ## @param postgresql.probes.readiness.timeoutSeconds Timeout for readiness check
-      ## @param postgresql.probes.readiness.failureThreshold Failure threshold
-      ## @param postgresql.probes.readiness.successThreshold Success threshold
-      initialDelaySeconds: 5
-      periodSeconds: 5
-      timeoutSeconds: 3
-      failureThreshold: 3
-      successThreshold: 1
-
-  ## @param postgresql.podAnnotations Extra annotations for PostgreSQL pods
-  podAnnotations: {}
-  ## @param postgresql.podLabels Extra labels for PostgreSQL pods
-  podLabels: {}
-  ## @param postgresql.nodeSelector Node labels for PostgreSQL pod assignment
-  nodeSelector: {}
-  ## @param postgresql.tolerations Tolerations for PostgreSQL pod assignment
-  tolerations: []
-  ## @param postgresql.affinity Affinity rules for PostgreSQL pod assignment
-  affinity: {}
-
-## @section External database (used when postgresql.enabled is false)
-externalDatabase:
-  ## @param externalDatabase.url Full PostgreSQL connection string (overrides all other external DB fields)
-  url: ""
-  ## @param externalDatabase.host External database host
-  host: ""
-  ## @param externalDatabase.port External database port
-  port: 5432
-  ## @param externalDatabase.database External database name
-  database: "agent-registry"
-  ## @param externalDatabase.username External database user
-  username: "agentregistry"
-  ## @param externalDatabase.password External database password (ignored when existingSecret is set)
-  password: ""
-  ## @param externalDatabase.existingSecret Name of an existing Secret containing the external DB password (key: POSTGRES_PASSWORD)
-  existingSecret: ""
-  ## @param externalDatabase.sslMode External database SSL mode
-  sslMode: "disable"
+    ## @param database.external.database External database name
+    database: "agent-registry"
+    ## @param database.external.username External database user
+    username: "agentregistry"
+    ## @param database.external.password External database password (ignored when existingSecret is set)
+    password: ""
+    ## @param database.external.existingSecret Name of an existing Secret containing the external DB password (key: POSTGRES_PASSWORD)
+    existingSecret: ""
+    ## @param database.external.sslMode External database SSL mode
+    sslMode: "disable"
