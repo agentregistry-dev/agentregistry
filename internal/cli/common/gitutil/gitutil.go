@@ -116,36 +116,46 @@ func CloneAndCopy(repoURL, targetDir string, verbose bool) error {
 	return CopyRepoContents(tempDir, subPath, targetDir)
 }
 
+// resolveSubPath validates and resolves a subPath within repoDir, returning
+// the resolved source directory. It rejects absolute paths and paths that
+// escape the repository root via directory traversal.
+func resolveSubPath(repoDir, subPath string) (string, error) {
+	if filepath.IsAbs(subPath) {
+		return "", fmt.Errorf("subpath %q must be relative", subPath)
+	}
+
+	srcDir := filepath.Join(repoDir, filepath.Clean(subPath))
+
+	absRepo, err := filepath.Abs(repoDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve repo directory: %w", err)
+	}
+	absSrc, err := filepath.Abs(srcDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve subpath directory: %w", err)
+	}
+	if !strings.HasPrefix(absSrc, absRepo+string(filepath.Separator)) && absSrc != absRepo {
+		return "", fmt.Errorf("subpath %q escapes repository directory", subPath)
+	}
+
+	if _, err := os.Stat(srcDir); os.IsNotExist(err) {
+		return "", fmt.Errorf("subdirectory %q not found in repository", subPath)
+	}
+
+	return srcDir, nil
+}
+
 // CopyRepoContents copies files from a cloned repository to the output directory.
 // It navigates to the subPath if specified and skips the .git directory.
 // Symlinks are skipped to prevent symlink traversal attacks from untrusted repos.
 func CopyRepoContents(repoDir, subPath, targetDir string) error {
 	srcDir := repoDir
 	if subPath != "" {
-		// Reject absolute paths outright.
-		if filepath.IsAbs(subPath) {
-			return fmt.Errorf("subpath %q must be relative", subPath)
-		}
-
-		// Clean and resolve the subpath, then verify it stays within repoDir
-		// to prevent directory traversal (e.g. "../../etc/passwd").
-		srcDir = filepath.Join(repoDir, filepath.Clean(subPath))
-		absRepo, err := filepath.Abs(repoDir)
+		resolved, err := resolveSubPath(repoDir, subPath)
 		if err != nil {
-			return fmt.Errorf("resolve repo directory: %w", err)
+			return err
 		}
-		absSrc, err := filepath.Abs(srcDir)
-		if err != nil {
-			return fmt.Errorf("resolve subpath directory: %w", err)
-		}
-		// The resolved source must be equal to or nested under the repo root.
-		if !strings.HasPrefix(absSrc, absRepo+string(filepath.Separator)) && absSrc != absRepo {
-			return fmt.Errorf("subpath %q escapes repository directory", subPath)
-		}
-
-		if _, err := os.Stat(srcDir); os.IsNotExist(err) {
-			return fmt.Errorf("subdirectory %q not found in repository", subPath)
-		}
+		srcDir = resolved
 	}
 
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {

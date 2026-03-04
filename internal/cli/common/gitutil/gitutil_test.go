@@ -414,6 +414,66 @@ func TestCopyRepoContents(t *testing.T) {
 	})
 }
 
+func TestResolveSubPath(t *testing.T) {
+	t.Run("valid subpath returns resolved directory", func(t *testing.T) {
+		repoDir := t.TempDir()
+		os.MkdirAll(filepath.Join(repoDir, "skills", "my-skill"), 0o755)
+
+		got, err := resolveSubPath(repoDir, "skills/my-skill")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := filepath.Join(repoDir, "skills", "my-skill")
+		if got != want {
+			t.Errorf("resolved = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("rejects absolute path", func(t *testing.T) {
+		_, err := resolveSubPath(t.TempDir(), "/etc/passwd")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "must be relative") {
+			t.Errorf("error = %q, want 'must be relative'", err.Error())
+		}
+	})
+
+	t.Run("rejects dotdot traversal", func(t *testing.T) {
+		_, err := resolveSubPath(t.TempDir(), "../../etc")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "escapes repository") {
+			t.Errorf("error = %q, want 'escapes repository'", err.Error())
+		}
+	})
+
+	t.Run("rejects nonexistent subpath", func(t *testing.T) {
+		_, err := resolveSubPath(t.TempDir(), "does-not-exist")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "not found in repository") {
+			t.Errorf("error = %q, want 'not found in repository'", err.Error())
+		}
+	})
+
+	t.Run("cleans redundant path segments", func(t *testing.T) {
+		repoDir := t.TempDir()
+		os.MkdirAll(filepath.Join(repoDir, "a"), 0o755)
+
+		got, err := resolveSubPath(repoDir, "a/./b/../")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := filepath.Join(repoDir, "a")
+		if got != want {
+			t.Errorf("resolved = %q, want %q", got, want)
+		}
+	})
+}
+
 func TestCopyFile(t *testing.T) {
 	t.Run("copies content and preserves permissions", func(t *testing.T) {
 		srcDir := t.TempDir()
