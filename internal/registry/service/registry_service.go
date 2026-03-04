@@ -1183,12 +1183,11 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 			// Resolve registry-type skills from agent manifest
 			resolvedSkills, err := s.resolveAgentManifestSkills(ctx, &agentReq.RegistryAgent.AgentManifest)
 			if err != nil {
-				log.Printf("Warning: failed to resolve skills for agent %s: %v", agentReq.RegistryAgent.Name, err)
-			} else {
-				agentReq.ResolvedSkills = resolvedSkills
-				if s.cfg.Verbose && len(resolvedSkills) > 0 {
-					log.Printf("Resolved %d skill(s) for %s agent %s", len(resolvedSkills), providerPlatform, agentReq.RegistryAgent.Name)
-				}
+				return fmt.Errorf("failed to resolve skills for agent %s: %w", agentReq.RegistryAgent.Name, err)
+			}
+			agentReq.ResolvedSkills = resolvedSkills
+			if s.cfg.Verbose && len(resolvedSkills) > 0 {
+				log.Printf("Resolved %d skill(s) for %s agent %s", len(resolvedSkills), providerPlatform, agentReq.RegistryAgent.Name)
 			}
 		}
 
@@ -1268,14 +1267,18 @@ func (s *registryServiceImpl) resolveAgentManifestSkills(ctx context.Context, ma
 func (s *registryServiceImpl) resolveSkillRef(ctx context.Context, skill models.SkillRef) (api.AgentSkillRef, error) {
 	image := strings.TrimSpace(skill.Image)
 	registrySkillName := strings.TrimSpace(skill.RegistrySkillName)
+	hasImage := image != ""
+	hasRegistry := registrySkillName != ""
 
-	// Direct image reference - use as-is.
-	if image != "" {
-		return api.AgentSkillRef{Name: skill.Name, Image: image}, nil
+	if !hasImage && !hasRegistry {
+		return api.AgentSkillRef{}, fmt.Errorf("one of image or registrySkillName is required")
+	}
+	if hasImage && hasRegistry {
+		return api.AgentSkillRef{}, fmt.Errorf("only one of image or registrySkillName may be set")
 	}
 
-	if registrySkillName == "" {
-		return api.AgentSkillRef{}, fmt.Errorf("one of image or registrySkillName is required")
+	if hasImage {
+		return api.AgentSkillRef{Name: skill.Name, Image: image}, nil
 	}
 
 	version := strings.TrimSpace(skill.RegistrySkillVersion)

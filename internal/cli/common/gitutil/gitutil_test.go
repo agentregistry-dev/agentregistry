@@ -3,6 +3,7 @@ package gitutil
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -206,6 +207,32 @@ func TestCopyRepoContents(t *testing.T) {
 		err := CopyRepoContents(repoDir, "nonexistent/path", outDir)
 		if err == nil {
 			t.Fatal("expected error for missing subpath")
+		}
+	})
+
+	t.Run("rejects dotdot traversal in subpath", func(t *testing.T) {
+		repoDir := t.TempDir()
+		outDir := filepath.Join(t.TempDir(), "output")
+
+		err := CopyRepoContents(repoDir, "../../etc", outDir)
+		if err == nil {
+			t.Fatal("expected error for traversal subpath")
+		}
+		if !strings.Contains(err.Error(), "escapes repository") {
+			t.Errorf("error = %q, want it to contain 'escapes repository'", err.Error())
+		}
+	})
+
+	t.Run("rejects absolute subpath", func(t *testing.T) {
+		repoDir := t.TempDir()
+		outDir := filepath.Join(t.TempDir(), "output")
+
+		err := CopyRepoContents(repoDir, "/etc/passwd", outDir)
+		if err == nil {
+			t.Fatal("expected error for absolute subpath")
+		}
+		if !strings.Contains(err.Error(), "must be relative") {
+			t.Errorf("error = %q, want it to contain 'must be relative'", err.Error())
 		}
 	})
 
@@ -438,6 +465,31 @@ func TestCopyFile(t *testing.T) {
 			t.Fatal("expected error for missing dest directory")
 		}
 	})
+}
+
+func TestRepoNameFromCloneURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		cloneURL string
+		want     string
+	}{
+		{"standard clone URL", "https://github.com/org/my-repo.git", "my-repo"},
+		{"no .git suffix", "https://github.com/org/my-repo", "my-repo"},
+		{"nested path", "https://github.com/deep/nested/repo-name.git", "repo-name"},
+		{"dots and hyphens", "https://github.com/org/my-repo.v2.git", "my-repo.v2"},
+		{"no slash", "my-repo.git", ""},
+		{"empty string", "", ""},
+		{"trailing slash stripped", "https://github.com/org/repo.git/", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := RepoNameFromCloneURL(tt.cloneURL)
+			if got != tt.want {
+				t.Errorf("RepoNameFromCloneURL(%q) = %q, want %q", tt.cloneURL, got, tt.want)
+			}
+		})
+	}
 }
 
 func TestCopyDir(t *testing.T) {

@@ -3,6 +3,7 @@ package kagent
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
@@ -460,14 +461,20 @@ func TestTranslateRuntimeConfig_DeploymentIDMetadataAndNaming(t *testing.T) {
 
 func TestTranslateSkillsForAgent(t *testing.T) {
 	t.Run("nil skills returns nil", func(t *testing.T) {
-		result := translateSkillsForAgent(nil)
+		result, err := translateSkillsForAgent(nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if result != nil {
 			t.Fatalf("expected nil, got %+v", result)
 		}
 	})
 
 	t.Run("empty skills returns nil", func(t *testing.T) {
-		result := translateSkillsForAgent([]api.AgentSkillRef{})
+		result, err := translateSkillsForAgent([]api.AgentSkillRef{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if result != nil {
 			t.Fatalf("expected nil, got %+v", result)
 		}
@@ -478,7 +485,10 @@ func TestTranslateSkillsForAgent(t *testing.T) {
 			{Name: "skill-a", Image: "docker.io/org/skill-a:latest"},
 			{Name: "skill-b", Image: "ghcr.io/org/skill-b:1.0"},
 		}
-		result := translateSkillsForAgent(skills)
+		result, err := translateSkillsForAgent(skills)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if result == nil {
 			t.Fatal("expected non-nil result")
 		}
@@ -497,7 +507,10 @@ func TestTranslateSkillsForAgent(t *testing.T) {
 		skills := []api.AgentSkillRef{
 			{Name: "git-skill", RepoURL: "https://github.com/org/skill", Ref: "main", Path: "skills/my-skill"},
 		}
-		result := translateSkillsForAgent(skills)
+		result, err := translateSkillsForAgent(skills)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if result == nil {
 			t.Fatal("expected non-nil result")
 		}
@@ -524,7 +537,10 @@ func TestTranslateSkillsForAgent(t *testing.T) {
 		skills := []api.AgentSkillRef{
 			{Name: "parsed-skill", RepoURL: "https://github.com/org/skills/tree/develop/skills/argocd"},
 		}
-		result := translateSkillsForAgent(skills)
+		result, err := translateSkillsForAgent(skills)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if result == nil {
 			t.Fatal("expected non-nil result")
 		}
@@ -543,12 +559,80 @@ func TestTranslateSkillsForAgent(t *testing.T) {
 		}
 	})
 
+	t.Run("empty skill name returns error", func(t *testing.T) {
+		skills := []api.AgentSkillRef{
+			{RepoURL: "https://github.com/org/skills/tree/main/skill-1"},
+		}
+		_, err := translateSkillsForAgent(skills)
+		if err == nil {
+			t.Fatal("expected error for empty skill name")
+		}
+		if !strings.Contains(err.Error(), "skill name is required") {
+			t.Errorf("error = %q, want it to contain 'skill name is required'", err.Error())
+		}
+	})
+
+	t.Run("duplicate image refs returns error", func(t *testing.T) {
+		skills := []api.AgentSkillRef{
+			{Name: "skill-a", Image: "docker.io/org/skill:latest"},
+			{Name: "skill-b", Image: "docker.io/org/skill:latest"},
+		}
+		_, err := translateSkillsForAgent(skills)
+		if err == nil {
+			t.Fatal("expected error for duplicate image ref")
+		}
+		if !strings.Contains(err.Error(), "duplicate skill image ref") {
+			t.Errorf("error = %q, want it to contain 'duplicate skill image ref'", err.Error())
+		}
+	})
+
+	t.Run("duplicate git names returns error", func(t *testing.T) {
+		skills := []api.AgentSkillRef{
+			{Name: "skill", RepoURL: "https://github.com/org/skill"},
+			{Name: "skill", RepoURL: "https://github.com/other-org/skill"},
+		}
+		_, err := translateSkillsForAgent(skills)
+		if err == nil {
+			t.Fatal("expected error for duplicate git name")
+		}
+		if !strings.Contains(err.Error(), "duplicate skill git name") {
+			t.Errorf("error = %q, want it to contain 'duplicate skill git name'", err.Error())
+		}
+	})
+
+	t.Run("same repo different names is allowed", func(t *testing.T) {
+		skills := []api.AgentSkillRef{
+			{Name: "skill-a", RepoURL: "https://github.com/org/skill/tree/main/a"},
+			{Name: "skill-b", RepoURL: "https://github.com/org/skill/tree/main/b"},
+		}
+		result, err := translateSkillsForAgent(skills)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result == nil || len(result.GitRefs) != 2 {
+			t.Fatalf("expected 2 gitRefs, got %v", result)
+		}
+	})
+
+	t.Run("invalid repo URL returns error", func(t *testing.T) {
+		skills := []api.AgentSkillRef{
+			{Name: "bad-skill", RepoURL: "https://gitlab.com/org/skill"},
+		}
+		_, err := translateSkillsForAgent(skills)
+		if err == nil {
+			t.Fatal("expected error for non-github URL")
+		}
+	})
+
 	t.Run("mixed skills populates both Refs and GitRefs", func(t *testing.T) {
 		skills := []api.AgentSkillRef{
 			{Name: "docker-skill", Image: "docker.io/org/skill:latest"},
 			{Name: "git-skill", RepoURL: "https://github.com/org/skill"},
 		}
-		result := translateSkillsForAgent(skills)
+		result, err := translateSkillsForAgent(skills)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if result == nil {
 			t.Fatal("expected non-nil result")
 		}

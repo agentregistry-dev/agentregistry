@@ -22,6 +22,7 @@ import (
 	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
 	"go.yaml.in/yaml/v3"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -74,21 +75,24 @@ func GetKubeClient() (client.Client, error) {
 
 // applyResource uses server-side apply to create or update a Kubernetes resource.
 func applyResource(ctx context.Context, c client.Client, obj client.Object, verbose bool) error {
+	kind := obj.GetObjectKind().GroupVersionKind().Kind
 	if verbose {
-		fmt.Printf("Applying %s %s in namespace %s\n",
-			obj.GetObjectKind().GroupVersionKind().Kind,
-			obj.GetName(),
-			obj.GetNamespace())
+		fmt.Printf("Applying %s %s in namespace %s\n", kind, obj.GetName(), obj.GetNamespace())
 	}
 
-	// Server-side apply: single declarative call, no need to check if exists
-	if err := c.Patch(ctx, obj, client.Apply, client.FieldOwner(fieldManager), client.ForceOwnership); err != nil {
-		return fmt.Errorf("failed to apply %s %s: %w",
-			obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName(), err)
+	raw, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+	if err != nil {
+		return fmt.Errorf("failed to convert %s %s to unstructured: %w", kind, obj.GetName(), err)
+	}
+	u := &unstructured.Unstructured{Object: raw}
+	applyCfg := client.ApplyConfigurationFromUnstructured(u)
+
+	if err := c.Apply(ctx, applyCfg, client.FieldOwner(fieldManager), client.ForceOwnership); err != nil {
+		return fmt.Errorf("failed to apply %s %s: %w", kind, obj.GetName(), err)
 	}
 
 	if verbose {
-		fmt.Printf("Applied %s %s\n", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
+		fmt.Printf("Applied %s %s\n", kind, obj.GetName())
 	}
 	return nil
 }

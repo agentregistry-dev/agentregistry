@@ -160,7 +160,11 @@ func (t *translator) translateAgent(agent *api.Agent) (*v1alpha2.Agent, error) {
 	}
 
 	// Map resolved skills to the Agent CRD's Skills field
-	if skills := translateSkillsForAgent(agent.Skills); skills != nil {
+	if len(agent.Skills) > 0 {
+		skills, err := translateSkillsForAgent(agent.Skills)
+		if err != nil {
+			return nil, fmt.Errorf("translate skills for agent %s: %w", agent.Name, err)
+		}
 		agentSpec.Skills = skills
 	}
 
@@ -182,10 +186,13 @@ func (t *translator) translateAgent(agent *api.Agent) (*v1alpha2.Agent, error) {
 // translateSkillsForAgent converts resolved skill refs into the kagent
 // SkillForAgent CRD structure. Docker/OCI images go to Refs, GitHub repos
 // go to GitRefs.
-func translateSkillsForAgent(skills []api.AgentSkillRef) *v1alpha2.SkillForAgent {
+func translateSkillsForAgent(skills []api.AgentSkillRef) (*v1alpha2.SkillForAgent, error) {
 	if len(skills) == 0 {
-		return nil
+		return nil, nil
 	}
+
+	seenRefs := make(map[string]bool)
+	seenGitNames := make(map[string]bool)
 
 	var refs []string
 	var gitRefs []v1alpha2.GitRepo
@@ -193,18 +200,26 @@ func translateSkillsForAgent(skills []api.AgentSkillRef) *v1alpha2.SkillForAgent
 	for _, skill := range skills {
 		switch {
 		case skill.Image != "":
+			if seenRefs[skill.Image] {
+				return nil, fmt.Errorf("duplicate skill image ref %q", skill.Image)
+			}
+			seenRefs[skill.Image] = true
 			refs = append(refs, skill.Image)
 		case skill.RepoURL != "":
 			gr, err := buildGitRepo(skill)
 			if err != nil {
-				continue
+				return nil, err
 			}
+			if seenGitNames[gr.Name] {
+				return nil, fmt.Errorf("duplicate skill git name %q (from repo %q)", gr.Name, skill.RepoURL)
+			}
+			seenGitNames[gr.Name] = true
 			gitRefs = append(gitRefs, gr)
 		}
 	}
 
 	if len(refs) == 0 && len(gitRefs) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	result := &v1alpha2.SkillForAgent{}
@@ -214,15 +229,25 @@ func translateSkillsForAgent(skills []api.AgentSkillRef) *v1alpha2.SkillForAgent
 	if len(gitRefs) > 0 {
 		result.GitRefs = gitRefs
 	}
-	return result
+	return result, nil
 }
 
 // buildGitRepo parses an AgentSkillRef into a kagent GitRepo, splitting the
 // full GitHub URL into its clone URL, ref, and path components.
 func buildGitRepo(skill api.AgentSkillRef) (v1alpha2.GitRepo, error) {
+	if skill.Name == "" {
+		return v1alpha2.GitRepo{}, fmt.Errorf("skill name is required for git-based skill (repo %q)", skill.RepoURL)
+	}
+
 	cloneURL, ref, path, err := gitutil.ParseGitHubURL(skill.RepoURL)
 	if err != nil {
 		return v1alpha2.GitRepo{}, fmt.Errorf("parse skill repo URL %q: %w", skill.RepoURL, err)
+	}
+
+	// Resolve the effective path (explicit takes precedence over parsed).
+	effectivePath := skill.Path
+	if effectivePath == "" {
+		effectivePath = path
 	}
 
 	gr := v1alpha2.GitRepo{
@@ -236,10 +261,8 @@ func buildGitRepo(skill api.AgentSkillRef) (v1alpha2.GitRepo, error) {
 	} else if ref != "" {
 		gr.Ref = ref
 	}
-	if skill.Path != "" {
-		gr.Path = skill.Path
-	} else if path != "" {
-		gr.Path = path
+	if effectivePath != "" {
+		gr.Path = effectivePath
 	}
 
 	return gr, nil

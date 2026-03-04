@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -72,8 +73,12 @@ func CloneAndCopy(repoURL, targetDir string, verbose bool) error {
 	}
 	defer func() { _ = os.RemoveAll(tempDir) }()
 
+	// git clone --branch works for branches and tags but not commit SHAs.
+	// For SHAs, clone the default branch then checkout the specific commit.
+	isSHA := isCommitSHA(branch)
+
 	cloneArgs := []string{"clone", "--depth", "1"}
-	if branch != "" {
+	if branch != "" && !isSHA {
 		cloneArgs = append(cloneArgs, "--branch", branch)
 	}
 	cloneArgs = append(cloneArgs, cloneURL, tempDir)
@@ -87,6 +92,27 @@ func CloneAndCopy(repoURL, targetDir string, verbose bool) error {
 		return fmt.Errorf("clone repository: %w", err)
 	}
 
+	// For commit SHAs, fetch the specific commit and check it out.
+	if isSHA {
+		fetchCmd := exec.Command("git", "-C", tempDir, "fetch", "--depth", "1", "origin", branch)
+		if verbose {
+			fetchCmd.Stdout = os.Stdout
+			fetchCmd.Stderr = os.Stderr
+		}
+		if err := fetchCmd.Run(); err != nil {
+			return fmt.Errorf("fetch commit %s: %w", branch, err)
+		}
+
+		checkoutCmd := exec.Command("git", "-C", tempDir, "checkout", "FETCH_HEAD")
+		if verbose {
+			checkoutCmd.Stdout = os.Stdout
+			checkoutCmd.Stderr = os.Stderr
+		}
+		if err := checkoutCmd.Run(); err != nil {
+			return fmt.Errorf("checkout commit %s: %w", branch, err)
+		}
+	}
+
 	return CopyRepoContents(tempDir, subPath, targetDir)
 }
 
@@ -96,7 +122,27 @@ func CloneAndCopy(repoURL, targetDir string, verbose bool) error {
 func CopyRepoContents(repoDir, subPath, targetDir string) error {
 	srcDir := repoDir
 	if subPath != "" {
-		srcDir = filepath.Join(repoDir, subPath)
+		// Reject absolute paths outright.
+		if filepath.IsAbs(subPath) {
+			return fmt.Errorf("subpath %q must be relative", subPath)
+		}
+
+		// Clean and resolve the subpath, then verify it stays within repoDir
+		// to prevent directory traversal (e.g. "../../etc/passwd").
+		srcDir = filepath.Join(repoDir, filepath.Clean(subPath))
+		absRepo, err := filepath.Abs(repoDir)
+		if err != nil {
+			return fmt.Errorf("resolve repo directory: %w", err)
+		}
+		absSrc, err := filepath.Abs(srcDir)
+		if err != nil {
+			return fmt.Errorf("resolve subpath directory: %w", err)
+		}
+		// The resolved source must be equal to or nested under the repo root.
+		if !strings.HasPrefix(absSrc, absRepo+string(filepath.Separator)) && absSrc != absRepo {
+			return fmt.Errorf("subpath %q escapes repository directory", subPath)
+		}
+
 		if _, err := os.Stat(srcDir); os.IsNotExist(err) {
 			return fmt.Errorf("subdirectory %q not found in repository", subPath)
 		}
@@ -200,4 +246,24 @@ func CopyFile(src, dst string) error {
 	}
 
 	return os.Chmod(dst, srcInfo.Mode().Perm())
+}
+
+// RepoNameFromCloneURL extracts the repository name from a clone URL
+// (e.g., "https://github.com/org/my-repo.git" -> "my-repo").
+func RepoNameFromCloneURL(cloneURL string) string {
+	idx := strings.LastIndex(cloneURL, "/")
+	if idx < 0 {
+		return ""
+	}
+	return strings.TrimSuffix(cloneURL[idx+1:], ".git")
+}
+
+// commitSHAPattern matches full (40-char) and abbreviated (7-40 char)
+// hexadecimal commit SHAs.
+var commitSHAPattern = regexp.MustCompile(`^[0-9a-fA-F]{7,40}$`)
+
+// isCommitSHA returns true if ref looks like a Git commit SHA rather than a
+// branch or tag name. This is a heuristic: a 7-40 character hex string.
+func isCommitSHA(ref string) bool {
+	return commitSHAPattern.MatchString(ref)
 }
