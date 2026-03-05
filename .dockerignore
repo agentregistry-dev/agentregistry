@@ -23,6 +23,10 @@ internal/registry/api/ui/dist/
 *.swo
 *~
 
+# Environment files (may contain secrets)
+.env
+.env.*
+
 # OS files
 .DS_Store
 Thumbs.db
