@@ -82,8 +82,15 @@ func createDeploymentHTTPError(err error) error {
 		return huma.Error400BadRequest("Unsupported provider or platform for deployment")
 	case errors.Is(err, database.ErrInvalidInput):
 		return huma.Error400BadRequest(err.Error())
-	case errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated):
+	case errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated):
 		return huma.Error404NotFound("Resource not found in registry")
+	case errors.Is(err, database.ErrNotFound):
+		// Preserve the descriptive message from the service layer (e.g. "server X not found in registry")
+		msg := err.Error()
+		if msg == "" || msg == database.ErrNotFound.Error() {
+			msg = "Resource not found in registry"
+		}
+		return huma.Error404NotFound(msg)
 	case errors.Is(err, database.ErrAlreadyExists):
 		return huma.Error409Conflict("Deployment with this ID already exists")
 	case err.Error() == "agent deployment is not yet implemented":
