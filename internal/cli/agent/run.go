@@ -145,6 +145,10 @@ func runFromDirectory(ctx context.Context, projectDir string) error {
 		}
 	}
 
+	if err := ensureOtelCollectorConfig(projectDir, manifest); err != nil {
+		return err
+	}
+
 	if err := project.RegenerateDockerCompose(projectDir, manifest, "", verbose); err != nil {
 		return fmt.Errorf("failed to refresh docker-compose.yaml: %w", err)
 	}
@@ -315,6 +319,10 @@ func runFromManifest(ctx context.Context, manifest *models.AgentManifest, versio
 			verbose,
 		); err != nil {
 			return fmt.Errorf("failed to materialize skills: %w", err)
+		}
+
+		if err := ensureOtelCollectorConfig(workDir, manifest); err != nil {
+			return err
 		}
 
 		data, err := renderComposeFromManifest(manifest, version)
@@ -576,6 +584,39 @@ func buildRegistryResolvedServers(tempDir string, manifest *models.AgentManifest
 		if err := exec.Build(imageName, "."); err != nil {
 			return fmt.Errorf("docker build failed for registry server %s: %w", srv.Name, err)
 		}
+	}
+
+	return nil
+}
+
+const otelCollectorConfigFile = "otel-collector-config.yaml"
+
+// ensureOtelCollectorConfig generates the OpenTelemetry collector config file
+// when the manifest has a telemetryEndpoint but the file is missing. This
+// handles the case where a user manually adds telemetryEndpoint to agent.yaml
+// without going through arctl agent init --telemetry.
+func ensureOtelCollectorConfig(dir string, manifest *models.AgentManifest) error {
+	if manifest.TelemetryEndpoint == "" {
+		return nil
+	}
+
+	configPath := filepath.Join(dir, otelCollectorConfigFile)
+	if _, err := os.Stat(configPath); err == nil {
+		return nil
+	}
+
+	gen := python.NewPythonGenerator()
+	content, err := gen.ReadTemplateFile(otelCollectorConfigFile)
+	if err != nil {
+		return fmt.Errorf("failed to read otel collector config template: %w", err)
+	}
+
+	if verbose {
+		fmt.Printf("Generating %s (telemetryEndpoint is set but file was missing)\n", otelCollectorConfigFile)
+	}
+
+	if err := os.WriteFile(configPath, content, 0o644); err != nil {
+		return fmt.Errorf("failed to write %s: %w", otelCollectorConfigFile, err)
 	}
 
 	return nil
