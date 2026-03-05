@@ -154,11 +154,8 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			}
 		}
 
-		// Handle search parameter
-		if input.Search != "" {
-			filter.SubstringName = &input.Search
-		}
-
+		// Handle search parameter — when semantic search is active, use pure
+		// vector similarity instead of AND-ing with a substring name filter.
 		if input.Semantic {
 			if strings.TrimSpace(input.Search) == "" {
 				return nil, huma.Error400BadRequest("semantic_search requires the search parameter to be set", nil)
@@ -167,7 +164,8 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 				RawQuery:  input.Search,
 				Threshold: input.SemanticMatchThreshold,
 			}
-			filter.Semantic.HybridSubstring = filter.SubstringName
+		} else if input.Search != "" {
+			filter.SubstringName = &input.Search
 		}
 
 		// Handle version parameter

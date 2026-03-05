@@ -1,0 +1,39 @@
+{{- $fullName := include "agentregistry.fullname" . -}}
+{{- $httpPort := .Values.service.ports.http -}}
+{{- $grpcPort := .Values.service.ports.grpc -}}
+
+========================================================================
+  Agent Registry has been deployed!
+========================================================================
+
+Chart:     {{ include "agentregistry.chart" . }}
+Release:   {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+{{- if .Values.database.bundled.enabled }}
+PostgreSQL: bundled ({{ include "agentregistry.postgresql.image" . }})
+{{- else if .Values.database.external.host }}
+PostgreSQL: external ({{ .Values.database.external.host }}:{{ .Values.database.external.port }}/{{ .Values.database.external.database }})
+{{- else if .Values.database.external.url }}
+PostgreSQL: external (connection string provided)
+{{- else }}
+PostgreSQL: *** NOT CONFIGURED ***
+{{- end }}
+
+To access the Agent Registry UI and API:
+
+1. Port-forward (quickest):
+
+   kubectl -n {{ .Release.Namespace }} port-forward svc/{{ $fullName }} {{ $httpPort }}:{{ $httpPort }}
+
+   Then open: http://localhost:{{ $httpPort }}
+
+Useful endpoints (after port-forward):
+  - Interactive docs:    http://localhost:{{ $httpPort }}/docs
+  - OpenAPI spec (JSON): http://localhost:{{ $httpPort }}/openapi.json
+  - Deployments list:    http://localhost:{{ $httpPort }}/v0/deployments?limit=200
+
+gRPC endpoint (Agent Gateway):
+  - kubectl -n {{ .Release.Namespace }} port-forward svc/{{ $fullName }} {{ $grpcPort }}:{{ $grpcPort }}
+
+{{ include "agentregistry.validateValues" . }}

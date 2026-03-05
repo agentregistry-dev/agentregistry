@@ -1,0 +1,8 @@
+{{/*
+Validation template — triggers a hard fail during helm template / install / upgrade
+when critical misconfigurations are detected. This renders no resources.
+*/}}
+{{- $errors := include "agentregistry.validateValues.errors" . | trim }}
+{{- if $errors }}
+{{- fail (printf "\n\nCHART CONFIGURATION ERROR:\n%s" $errors) }}
+{{- end }}

@@ -47,7 +47,7 @@ type listAgentsArgs = restv0.ListAgentsInput
 func addAgentTools(server *mcp.Server, registry service.RegistryService) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_agents",
-		Description: "List published agents with optional search and pagination",
+		Description: "List published agents with optional search and pagination. Set semantic_search=true for natural-language queries.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listAgentsArgs) (*mcp.CallToolResult, models.AgentListResponse, error) {
 		filter := &database.AgentFilter{}
 
@@ -58,7 +58,17 @@ func addAgentTools(server *mcp.Server, registry service.RegistryService) {
 			}
 			filter.UpdatedSince = &ts
 		}
-		if args.Search != "" {
+		// When semantic search is active, use pure vector similarity.
+		// Otherwise fall back to substring name matching.
+		if args.Semantic {
+			if args.Search == "" {
+				return nil, models.AgentListResponse{}, fmt.Errorf("semantic_search requires the search parameter")
+			}
+			filter.Semantic = &database.SemanticSearchOptions{
+				RawQuery:  args.Search,
+				Threshold: args.SemanticMatchThreshold,
+			}
+		} else if args.Search != "" {
 			filter.SubstringName = &args.Search
 		}
 		if args.Version != "" {
@@ -120,7 +130,7 @@ type listServersArgs = restv0.ListServersInput
 func addServerTools(server *mcp.Server, registry service.RegistryService) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_servers",
-		Description: "List published MCP servers with optional search and pagination",
+		Description: "List published MCP servers with optional search and pagination. Set semantic_search=true for natural-language queries (e.g. 'database management tools').",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listServersArgs) (*mcp.CallToolResult, apiv0.ServerListResponse, error) {
 		filter := &database.ServerFilter{}
 
@@ -131,7 +141,17 @@ func addServerTools(server *mcp.Server, registry service.RegistryService) {
 			}
 			filter.UpdatedSince = &ts
 		}
-		if args.Search != "" {
+		// When semantic search is active, use pure vector similarity.
+		// Otherwise fall back to substring name matching.
+		if args.Semantic {
+			if args.Search == "" {
+				return nil, apiv0.ServerListResponse{}, fmt.Errorf("semantic_search requires the search parameter")
+			}
+			filter.Semantic = &database.SemanticSearchOptions{
+				RawQuery:  args.Search,
+				Threshold: args.SemanticMatchThreshold,
+			}
+		} else if args.Search != "" {
 			filter.SubstringName = &args.Search
 		}
 		if args.Version != "" {

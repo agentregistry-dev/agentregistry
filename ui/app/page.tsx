@@ -23,16 +23,19 @@ import {
 import { ServerCard } from "@/components/server-card"
 import { SkillCard } from "@/components/skill-card"
 import { AgentCard } from "@/components/agent-card"
+import { PromptCard } from "@/components/prompt-card"
 import { ServerDetail } from "@/components/server-detail"
 import { SkillDetail } from "@/components/skill-detail"
 import { AgentDetail } from "@/components/agent-detail"
+import { PromptDetail } from "@/components/prompt-detail"
 import { ImportDialog } from "@/components/import-dialog"
 import { AddServerDialog } from "@/components/add-server-dialog"
 import { ImportSkillsDialog } from "@/components/import-skills-dialog"
 import { AddSkillDialog } from "@/components/add-skill-dialog"
 import { ImportAgentsDialog } from "@/components/import-agents-dialog"
 import { AddAgentDialog } from "@/components/add-agent-dialog"
-import { listServersV0, listSkillsV0, listAgentsV0, ServerResponse, SkillResponse, AgentResponse } from "@/lib/admin-api"
+import { AddPromptDialog } from "@/components/add-prompt-dialog"
+import { listServersV0, listSkillsV0, listAgentsV0, listPromptsV0, ServerResponse, SkillResponse, AgentResponse, PromptResponse } from "@/lib/admin-api"
 import MCPIcon from "@/components/icons/mcp"
 import {
   Search,
@@ -46,6 +49,7 @@ import {
   X,
   ChevronDown,
   Filter,
+  FileText,
 } from "lucide-react"
 
 // Grouped server type
@@ -60,9 +64,11 @@ export default function AdminPage() {
   const [groupedServers, setGroupedServers] = useState<GroupedServer[]>([])
   const [skills, setSkills] = useState<SkillResponse[]>([])
   const [agents, setAgents] = useState<AgentResponse[]>([])
+  const [prompts, setPrompts] = useState<PromptResponse[]>([])
   const [filteredServers, setFilteredServers] = useState<GroupedServer[]>([])
   const [filteredSkills, setFilteredSkills] = useState<SkillResponse[]>([])
   const [filteredAgents, setFilteredAgents] = useState<AgentResponse[]>([])
+  const [filteredPrompts, setFilteredPrompts] = useState<PromptResponse[]>([])
   const [stats, setStats] = useState<{ total_servers: number; total_server_names: number } | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [sortBy, setSortBy] = useState<"name" | "stars" | "date">("name")
@@ -74,11 +80,13 @@ export default function AdminPage() {
   const [addSkillDialogOpen, setAddSkillDialogOpen] = useState(false)
   const [importAgentsDialogOpen, setImportAgentsDialogOpen] = useState(false)
   const [addAgentDialogOpen, setAddAgentDialogOpen] = useState(false)
+  const [addPromptDialogOpen, setAddPromptDialogOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedServer, setSelectedServer] = useState<ServerResponse | null>(null)
   const [selectedSkill, setSelectedSkill] = useState<SkillResponse | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<AgentResponse | null>(null)
+  const [selectedPrompt, setSelectedPrompt] = useState<PromptResponse | null>(null)
   
   // Track scroll position for restoring after navigation
   const scrollPositionRef = useRef<number>(0)
@@ -187,7 +195,22 @@ export default function AdminPage() {
       } while (agentCursor)
       
       setAgents(allAgents)
-      
+
+      // Fetch all prompts (with pagination if needed)
+      const allPrompts: PromptResponse[] = []
+      let promptCursor: string | undefined
+
+      do {
+        const { data: promptData } = await listPromptsV0({
+          query: { cursor: promptCursor, limit: 100, version: 'latest' },
+          throwOnError: true,
+        })
+        allPrompts.push(...promptData.prompts)
+        promptCursor = promptData.metadata.nextCursor
+      } while (promptCursor)
+
+      setPrompts(allPrompts)
+
       // Group servers by name
       const grouped = groupServersByName(allServers)
       setGroupedServers(grouped)
@@ -313,11 +336,21 @@ export default function AdminPage() {
           agent.description.toLowerCase().includes(query)
       )
       setFilteredAgents(filteredA)
+
+      // Filter prompts
+      const filteredP = prompts.filter(
+        ({prompt}) =>
+          prompt.name?.toLowerCase().includes(query) ||
+          prompt.description?.toLowerCase().includes(query) ||
+          prompt.content?.toLowerCase().includes(query)
+      )
+      setFilteredPrompts(filteredP)
     } else {
       setFilteredSkills(skills)
       setFilteredAgents(agents)
+      setFilteredPrompts(prompts)
     }
-  }, [searchQuery, skills, agents])
+  }, [searchQuery, skills, agents, prompts])
 
   if (loading) {
     return (
@@ -374,13 +407,23 @@ export default function AdminPage() {
     )
   }
 
+  // Show prompt detail view if a prompt is selected
+  if (selectedPrompt) {
+    return (
+      <PromptDetail
+        prompt={selectedPrompt}
+        onClose={() => setSelectedPrompt(null)}
+      />
+    )
+  }
+
   return (
     <main className="min-h-screen bg-background">
       {/* Category Cards */}
       {stats && (
         <div className="bg-muted/30 border-b">
           <div className="container mx-auto px-6 py-6">
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-4">
               <Card
                 className={`p-4 cursor-pointer transition-all duration-200 border ${activeTab === "servers" ? "border-primary ring-1 ring-primary shadow-md" : "hover:border-primary/20 hover:shadow-md"}`}
                 onClick={() => setActiveTab("servers")}
@@ -424,6 +467,21 @@ export default function AdminPage() {
                   <div>
                     <p className="text-2xl font-bold">{agents.length}</p>
                     <p className="text-xs text-muted-foreground">Agents</p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card
+                className={`p-4 cursor-pointer transition-all duration-200 border ${activeTab === "prompts" ? "border-primary ring-1 ring-primary shadow-md" : "hover:border-primary/20 hover:shadow-md"}`}
+                onClick={() => setActiveTab("prompts")}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/15 rounded-lg flex items-center justify-center">
+                    <FileText className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{prompts.length}</p>
+                    <p className="text-xs text-muted-foreground">Prompts</p>
                   </div>
                 </div>
               </Card>
@@ -472,6 +530,10 @@ export default function AdminPage() {
                   <DropdownMenuItem onClick={() => setAddAgentDialogOpen(true)}>
                     <Bot className="mr-2 h-4 w-4" />
                     Add Agent
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setAddPromptDialogOpen(true)}>
+                    <FileText className="mr-2 h-4 w-4" />
+                    Add Prompt
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -717,6 +779,58 @@ export default function AdminPage() {
               )}
             </div>
           )}
+
+          {/* Prompts */}
+          {activeTab === "prompts" && (
+            <div>
+              <h2 className="text-lg font-semibold mb-4">
+                Prompts
+                <span className="text-muted-foreground ml-2">
+                  ({filteredPrompts.length})
+                </span>
+              </h2>
+
+              {filteredPrompts.length === 0 ? (
+                <Card className="p-12">
+                  <div className="text-center text-muted-foreground">
+                    <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center text-primary">
+                      <FileText className="w-12 h-12" />
+                    </div>
+                    <p className="text-lg font-medium mb-2">
+                      {prompts.length === 0
+                        ? "No prompts in registry"
+                        : "No prompts match your filters"}
+                    </p>
+                    <p className="text-sm mb-4">
+                      {prompts.length === 0
+                        ? "Add prompts to the registry to get started"
+                        : "Try adjusting your search or filter criteria"}
+                    </p>
+                    {prompts.length === 0 && (
+                      <Button
+                        variant="outline"
+                        className="gap-2"
+                        onClick={() => setAddPromptDialogOpen(true)}
+                      >
+                        <Plus className="h-4 w-4" />
+                        Add Prompt
+                      </Button>
+                    )}
+                  </div>
+                </Card>
+              ) : (
+                <div className="grid gap-4">
+                  {filteredPrompts.map((prompt, index) => (
+                    <PromptCard
+                      key={`${prompt.prompt.name}-${prompt.prompt.version}-${index}`}
+                      prompt={prompt}
+                      onClick={() => setSelectedPrompt(prompt)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -754,6 +868,13 @@ export default function AdminPage() {
         open={addAgentDialogOpen}
         onOpenChange={setAddAgentDialogOpen}
         onAgentAdded={() => {}}
+      />
+
+      {/* Prompt Dialogs */}
+      <AddPromptDialog
+        open={addPromptDialogOpen}
+        onOpenChange={setAddPromptDialogOpen}
+        onPromptAdded={fetchData}
       />
 
     </main>

@@ -1,0 +1,151 @@
+suite: RBAC
+templates:
+  - rbac.yaml
+
+tests:
+  # ── Default: clusterScoped=true, clusterAdminBinding=false ──────────────────
+
+  - it: renders ClusterRole and ClusterRoleBinding by default
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: first document is a ClusterRole by default
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: ClusterRole
+
+  - it: second document is a ClusterRoleBinding by default
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: ClusterRoleBinding
+
+  - it: ClusterRole name includes namespace suffix
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-agentregistry-NAMESPACE
+
+  - it: ClusterRoleBinding name includes namespace suffix
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-agentregistry-NAMESPACE
+
+  - it: ClusterRoleBinding references the correct ClusterRole
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: roleRef.kind
+          value: ClusterRole
+      - equal:
+          path: roleRef.name
+          value: RELEASE-NAME-agentregistry-NAMESPACE
+
+  - it: ClusterRoleBinding subject uses the ServiceAccount
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: subjects
+          content:
+            kind: ServiceAccount
+            name: RELEASE-NAME-agentregistry
+            namespace: NAMESPACE
+
+  - it: ClusterRole has standard labels
+    documentIndex: 0
+    asserts:
+      - isSubset:
+          path: metadata.labels
+          content:
+            app.kubernetes.io/name: agentregistry
+            app.kubernetes.io/instance: RELEASE-NAME
+
+  - it: ClusterRole includes expected RBAC rules
+    documentIndex: 0
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["kagent.dev"]
+            resources: ["mcpservers"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # ── Namespace-scoped: clusterScoped=false ───────────────────────────────────
+
+  - it: renders Role and RoleBinding when clusterScoped is false
+    set:
+      rbac.clusterScoped: false
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: first document is a Role when clusterScoped is false
+    set:
+      rbac.clusterScoped: false
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Role
+
+  - it: second document is a RoleBinding when clusterScoped is false
+    set:
+      rbac.clusterScoped: false
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: RoleBinding
+
+  - it: Role has no namespace suffix in name when namespace-scoped
+    set:
+      rbac.clusterScoped: false
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-agentregistry
+
+  - it: RoleBinding references the Role correctly
+    set:
+      rbac.clusterScoped: false
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: roleRef.kind
+          value: Role
+      - equal:
+          path: roleRef.name
+          value: RELEASE-NAME-agentregistry
+
+  # ── clusterAdminBinding=true ────────────────────────────────────────────────
+
+  - it: renders only a ClusterRoleBinding when clusterAdminBinding is true
+    set:
+      rbac.clusterAdminBinding: true
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: ClusterRoleBinding references cluster-admin when clusterAdminBinding is true
+    set:
+      rbac.clusterAdminBinding: true
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: ClusterRoleBinding
+      - equal:
+          path: roleRef.name
+          value: cluster-admin
+
+  # ── rbac.create=false ───────────────────────────────────────────────────────
+
+  - it: renders nothing when rbac.create is false
+    set:
+      rbac.create: false
+    asserts:
+      - hasDocuments:
+          count: 0

@@ -254,7 +254,7 @@ release-cli: bin/arctl-darwin-amd64.sha256
 release-cli: bin/arctl-darwin-arm64.sha256
 release-cli: bin/arctl-windows-amd64.exe.sha256
 
-GOLANGCI_LINT ?= go tool golangci-lint
+GOLANGCI_LINT ?= golangci-lint
 GOLANGCI_LINT_ARGS ?= --fix
 
 .PHONY: lint

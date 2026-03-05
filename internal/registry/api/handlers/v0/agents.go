@@ -69,9 +69,8 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 				return nil, huma.Error400BadRequest("Invalid updated_since format: expected RFC3339 timestamp (e.g., 2025-08-07T13:15:04.280Z)")
 			}
 		}
-		if input.Search != "" {
-			filter.SubstringName = &input.Search
-		}
+		// When semantic search is active, use pure vector similarity instead of
+		// AND-ing with a substring name filter.
 		if input.Semantic {
 			if strings.TrimSpace(input.Search) == "" {
 				return nil, huma.Error400BadRequest("semantic_search requires the search parameter to be provided", nil)
@@ -80,7 +79,8 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 				RawQuery:  input.Search,
 				Threshold: input.SemanticMatchThreshold,
 			}
-			filter.Semantic.HybridSubstring = filter.SubstringName
+		} else if input.Search != "" {
+			filter.SubstringName = &input.Search
 		}
 		if input.Version != "" {
 			if input.Version == "latest" {
