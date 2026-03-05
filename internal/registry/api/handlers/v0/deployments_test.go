@@ -37,22 +37,13 @@ func (f *fakeDeploymentAdapter) Platform() string { return "local" }
 func (f *fakeDeploymentAdapter) SupportedResourceTypes() []string {
 	return []string{"mcp", "agent"}
 }
-func (f *fakeDeploymentAdapter) Deploy(_ context.Context, req *models.Deployment) (*models.Deployment, error) {
+func (f *fakeDeploymentAdapter) Deploy(_ context.Context, req *models.Deployment) (*models.DeploymentActionResult, error) {
 	f.deployCalled = true
 	f.lastDeployReq = req
 	if f.deployErr != nil {
 		return nil, f.deployErr
 	}
-	return &models.Deployment{
-		ID:           "adapter-dep-1",
-		ServerName:   req.ServerName,
-		Version:      req.Version,
-		ResourceType: req.ResourceType,
-		ProviderID:   req.ProviderID,
-		Status:       "deployed",
-		Origin:       "managed",
-		Env:          req.Env,
-	}, nil
+	return &models.DeploymentActionResult{Status: "deployed"}, nil
 }
 
 func TestCreateDeployment_PassesEnvAndProviderConfigSeparately(t *testing.T) {
@@ -63,7 +54,20 @@ func TestCreateDeployment_PassesEnvAndProviderConfigSeparately(t *testing.T) {
 
 	adapter := &fakeDeploymentAdapter{}
 	reg.CreateDeploymentFn = func(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
-		return adapter.Deploy(ctx, req)
+		if _, err := adapter.Deploy(ctx, req); err != nil {
+			return nil, err
+		}
+		return &models.Deployment{
+			ID:             "adapter-dep-1",
+			ServerName:     req.ServerName,
+			Version:        req.Version,
+			ResourceType:   req.ResourceType,
+			ProviderID:     req.ProviderID,
+			Status:         "deployed",
+			Origin:         "managed",
+			Env:            req.Env,
+			ProviderConfig: req.ProviderConfig,
+		}, nil
 	}
 
 	mux := http.NewServeMux()
@@ -201,7 +205,19 @@ func TestCreateDeployment_UsesAdapterWhenRegistered(t *testing.T) {
 
 	adapter := &fakeDeploymentAdapter{}
 	reg.CreateDeploymentFn = func(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
-		return adapter.Deploy(ctx, req)
+		if _, err := adapter.Deploy(ctx, req); err != nil {
+			return nil, err
+		}
+		return &models.Deployment{
+			ID:           "adapter-dep-1",
+			ServerName:   req.ServerName,
+			Version:      req.Version,
+			ResourceType: req.ResourceType,
+			ProviderID:   req.ProviderID,
+			Status:       "deployed",
+			Origin:       "managed",
+			Env:          req.Env,
+		}, nil
 	}
 
 	mux := http.NewServeMux()
@@ -242,7 +258,19 @@ func TestCreateDeployment_InvalidInputFromAdapterReturnsBadRequest(t *testing.T)
 	}
 	adapter := &fakeDeploymentAdapter{deployErr: database.ErrInvalidInput}
 	reg.CreateDeploymentFn = func(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
-		return adapter.Deploy(ctx, req)
+		if _, err := adapter.Deploy(ctx, req); err != nil {
+			return nil, err
+		}
+		return &models.Deployment{
+			ID:           "adapter-dep-1",
+			ServerName:   req.ServerName,
+			Version:      req.Version,
+			ResourceType: req.ResourceType,
+			ProviderID:   req.ProviderID,
+			Status:       "deployed",
+			Origin:       "managed",
+			Env:          req.Env,
+		}, nil
 	}
 
 	mux := http.NewServeMux()
@@ -477,7 +505,7 @@ func TestCancelDeployment_UsesAdapterWhenRegistered(t *testing.T) {
 		return &models.Deployment{
 			ID:         id,
 			ProviderID: "local",
-			Status:     "deploying",
+			Status:     "queued",
 		}, nil
 	}
 	reg.GetProviderByIDFn = func(ctx context.Context, providerID string) (*models.Provider, error) {
@@ -511,7 +539,7 @@ func TestCancelDeployment_InvalidInputFromAdapterReturnsBadRequest(t *testing.T)
 		return &models.Deployment{
 			ID:         id,
 			ProviderID: "local",
-			Status:     "deploying",
+			Status:     "queued",
 		}, nil
 	}
 	reg.GetProviderByIDFn = func(ctx context.Context, providerID string) (*models.Provider, error) {

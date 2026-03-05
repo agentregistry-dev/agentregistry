@@ -8,11 +8,6 @@ import (
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
-// Reconciler handles server-side reconciliation of deployed resources (MCP servers, agents)
-type Reconciler interface {
-	ReconcileAll(ctx context.Context) error
-}
-
 // RegistryService defines the interface for registry operations
 type RegistryService interface {
 	// ListServers retrieve all servers with optional filtering
@@ -113,6 +108,4 @@ type RegistryService interface {
 	GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
 	// CancelDeployment dispatches deployment cancellation via provider-resolved platform adapter.
 	CancelDeployment(ctx context.Context, deployment *models.Deployment) error
-
-	Reconciler
 }

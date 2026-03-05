@@ -41,7 +41,7 @@ type ProviderPlatformAdapter interface {
 type DeploymentPlatformAdapter interface {
 	Platform() string
 	SupportedResourceTypes() []string
-	Deploy(ctx context.Context, req *models.Deployment) (*models.Deployment, error)
+	Deploy(ctx context.Context, req *models.Deployment) (*models.DeploymentActionResult, error)
 	Undeploy(ctx context.Context, deployment *models.Deployment) error
 	GetLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
 	Cancel(ctx context.Context, deployment *models.Deployment) error

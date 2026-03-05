@@ -217,18 +217,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	}()
 
 	if cfg.ReconcileOnStartup {
-		log.Println("Reconciling existing deployments at startup...")
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-
-		ctx = auth.WithSystemContext(ctx)
-
-		if err := registryService.ReconcileAll(ctx); err != nil {
-			log.Printf("Warning: Failed to reconcile deployments at startup: %v", err)
-			log.Println("Server will continue starting, but deployments may not be in sync")
-		} else {
-			log.Println("Startup reconciliation completed successfully")
-		}
+		log.Println("Startup deployment reconciliation is currently disabled; skipping")
 	}
 
 	routeOpts := &router.RouteOptions{

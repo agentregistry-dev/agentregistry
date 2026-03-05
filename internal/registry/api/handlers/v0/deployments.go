@@ -284,7 +284,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		Method:      http.MethodPost,
 		Path:        basePath + "/deployments/{id}/cancel",
 		Summary:     "Cancel deployment",
-		Description: "Cancel an in-progress deployment when supported by the provider",
+		Description: "Cancel a deployment when supported by the provider",
 		Tags:        []string{"deployments"},
 	}, func(ctx context.Context, input *DeploymentByIDInput) (*struct{}, error) {
 		deployment, err := registry.GetDeploymentByID(ctx, input.ID)
@@ -293,10 +293,6 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 				return nil, huma.Error404NotFound("Deployment not found")
 			}
 			return nil, huma.Error500InternalServerError("Failed to retrieve deployment", err)
-		}
-
-		if deployment.Status != "deploying" {
-			return nil, huma.Error400BadRequest("Deployment is not in progress")
 		}
 
 		if err := registry.CancelDeployment(ctx, deployment); err != nil {
