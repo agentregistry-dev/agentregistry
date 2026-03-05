@@ -17,17 +17,19 @@ var registryFlagNames = []string{"registry-url", "registry-token"}
 
 // hideRegistryFlags marks the inherited registry-url and registry-token flags
 // as hidden so they do not appear in the --help output of commands that do not
-// interact with the registry.
-func hideRegistryFlags(cmd *cobra.Command) {
-	original := cmd.HelpFunc()
-	cmd.SetHelpFunc(func(c *cobra.Command, args []string) {
-		for _, name := range registryFlagNames {
-			if f := c.InheritedFlags().Lookup(name); f != nil {
-				f.Hidden = true
+// interact with the registry. Multiple commands can be passed at once.
+func hideRegistryFlags(cmds ...*cobra.Command) {
+	for _, cmd := range cmds {
+		original := cmd.HelpFunc()
+		cmd.SetHelpFunc(func(c *cobra.Command, args []string) {
+			for _, name := range registryFlagNames {
+				if f := c.InheritedFlags().Lookup(name); f != nil {
+					f.Hidden = true
+				}
 			}
-		}
-		original(c, args)
-	})
+			original(c, args)
+		})
+	}
 }
 
 // isServerPublished checks if a server exists in the registry (all entries are visible)
