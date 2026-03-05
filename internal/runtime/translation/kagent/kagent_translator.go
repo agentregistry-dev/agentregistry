@@ -21,6 +21,8 @@ const (
 	ManagedLabelKey           = "aregistry.ai/managed"
 	DeploymentIDLabelKey      = "aregistry.ai/deployment-id"
 	DeploymentIDAnnotationKey = "aregistry.ai/deployment-id"
+	maxK8sNameLength          = 63
+	maxDeploymentSuffixLength = 16
 )
 
 // NewTranslator returns a Kubernetes runtime translator that renders kagent Agent CRs.
@@ -307,7 +309,7 @@ func AgentConfigMapName(name, version, deploymentID string) string {
 	if version != "" {
 		base = fmt.Sprintf("%s-%s-mcp-config", name, version)
 	}
-	return sanitizeK8sName(nameWithDeploymentID(base, deploymentID))
+	return deploymentScopedName(base, deploymentID)
 }
 
 func buildRemoteMCPURL(host string, port uint32, path string) string {
@@ -329,15 +331,15 @@ func AgentResourceName(name, version, deploymentID string) string {
 	if version != "" {
 		base = fmt.Sprintf("%s-%s", name, version)
 	}
-	return sanitizeK8sName(nameWithDeploymentID(base, deploymentID))
+	return deploymentScopedName(base, deploymentID)
 }
 
 func RemoteMCPResourceName(name, deploymentID string) string {
-	return sanitizeK8sName(nameWithDeploymentID(name, deploymentID))
+	return deploymentScopedName(name, deploymentID)
 }
 
 func MCPServerResourceName(name, deploymentID string) string {
-	return sanitizeK8sName(nameWithDeploymentID(name, deploymentID))
+	return deploymentScopedName(name, deploymentID)
 }
 
 func deploymentManagedLabels(deploymentID string) map[string]string {
@@ -359,11 +361,58 @@ func deploymentManagedAnnotations(deploymentID string) map[string]string {
 	}
 }
 
-func nameWithDeploymentID(base, deploymentID string) string {
-	if deploymentID == "" {
-		return base
+func deploymentScopedName(base, deploymentID string) string {
+	sanitizedBase := sanitizeK8sName(base)
+	suffix := deploymentIDSuffix(deploymentID)
+	if suffix == "" {
+		return truncateK8sName(sanitizedBase)
 	}
-	return fmt.Sprintf("%s-%s", base, deploymentID)
+	maxBaseLen := maxK8sNameLength - len(suffix) - 1
+	if maxBaseLen < 1 {
+		return truncateK8sName(suffix)
+	}
+	truncatedBase := truncateK8sNamePart(sanitizedBase, maxBaseLen)
+	if truncatedBase == "" {
+		return truncateK8sName(suffix)
+	}
+	return truncatedBase + "-" + suffix
+}
+
+func deploymentIDSuffix(deploymentID string) string {
+	deploymentID = strings.TrimSpace(deploymentID)
+	if deploymentID == "" {
+		return ""
+	}
+	id := sanitizeK8sName(deploymentID)
+	if id == "" {
+		return ""
+	}
+	// UUID IDs are long; use first segment to keep generated resource names within DNS limits.
+	if len(id) == 36 && strings.Count(id, "-") == 4 {
+		if idx := strings.IndexByte(id, '-'); idx > 0 {
+			id = id[:idx]
+		}
+	}
+	return truncateK8sNamePart(id, maxDeploymentSuffixLength)
+}
+
+func truncateK8sName(value string) string {
+	trimmed := truncateK8sNamePart(value, maxK8sNameLength)
+	if trimmed == "" {
+		return "agent"
+	}
+	return trimmed
+}
+
+func truncateK8sNamePart(value string, maxLen int) string {
+	value = strings.Trim(value, "-")
+	if maxLen <= 0 || value == "" {
+		return ""
+	}
+	if len(value) <= maxLen {
+		return value
+	}
+	return strings.Trim(value[:maxLen], "-")
 }
 
 // sanitizeK8sName sanitizes a string to a valid Kubernetes name
@@ -386,5 +435,5 @@ func sanitizeK8sName(value string) string {
 	if result == "" {
 		return "agent"
 	}
-	return result
+	return truncateK8sName(result)
 }
