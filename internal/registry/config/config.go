@@ -1,7 +1,8 @@
 package config
 
 import (
-	"log"
+	"log/slog"
+	"os"
 
 	env "github.com/caarlos0/env/v11"
 	"github.com/joho/godotenv"
@@ -63,14 +64,15 @@ type EmbeddingsConfig struct {
 func NewConfig() *Config {
 	err := godotenv.Load()
 	if err != nil {
-		log.Printf("No .env file found or error loading .env file: %v", err)
+		slog.Info("no .env file found or error loading .env file", "error", err)
 	}
 	var cfg Config
 	err = env.ParseWithOptions(&cfg, env.Options{
 		Prefix: "AGENT_REGISTRY_",
 	})
 	if err != nil {
-		log.Fatalf("failed to parse config: %v", err)
+		slog.Error("failed to parse config", "error", err)
+		os.Exit(1)
 	}
 	return &cfg
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -101,7 +101,7 @@ func ValidateOCI(ctx context.Context, pkg model.Package, serverName string) erro
 			case http.StatusTooManyRequests:
 				// Rate limited - skip validation to avoid blocking publishers
 				// This is intentional: we prioritize UX over strict validation during high traffic
-				log.Printf("Skipping OCI validation for %s due to rate limiting", pkg.Identifier)
+				slog.Info("skipping OCI validation due to rate limiting", "identifier", pkg.Identifier)
 				return nil
 			case http.StatusNotFound:
 				return fmt.Errorf("OCI image '%s' does not exist in the registry", pkg.Identifier)

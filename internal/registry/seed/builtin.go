@@ -6,8 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-
-	"log"
+	"log/slog"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -70,11 +69,11 @@ func importServer(
 	if err != nil {
 		// If duplicate version and update is enabled, try update path
 		if !errors.Is(err, database.ErrInvalidVersion) {
-			log.Printf("Failed to create server %s: %v", srv.Name, err)
+			slog.Error("failed to create server", "name", srv.Name, "error", err)
 			return
 		}
 	}
-	log.Printf("Imported server %s@%s", srv.Name, srv.Version)
+	slog.Info("imported server", "name", srv.Name, "version", srv.Version)
 
 	entry, ok := readmes[Key(srv.Name, srv.Version)]
 	if !ok {
@@ -83,14 +82,14 @@ func importServer(
 
 	content, contentType, err := entry.Decode()
 	if err != nil {
-		log.Printf("Warning: invalid README seed for %s@%s: %v", srv.Name, srv.Version, err)
+		slog.Warn("invalid README seed", "name", srv.Name, "version", srv.Version, "error", err)
 		return
 	}
 
 	if len(content) > 0 {
 		if err := registry.StoreServerReadme(ctx, srv.Name, srv.Version, content, contentType); err != nil {
-			log.Printf("Warning: storing README failed for %s@%s: %v", srv.Name, srv.Version, err)
+			slog.Warn("storing README failed", "name", srv.Name, "version", srv.Version, "error", err)
 		}
-		log.Printf("Stored README for %s@%s", srv.Name, srv.Version)
+		slog.Info("stored README", "name", srv.Name, "version", srv.Version)
 	}
 }
