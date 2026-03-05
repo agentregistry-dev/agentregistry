@@ -141,6 +141,43 @@ func TestTranslateRuntimeConfig_LocalMCP(t *testing.T) {
 	}
 }
 
+func TestTranslateRuntimeConfig_StdioDefaultPort(t *testing.T) {
+	translator := NewTranslator()
+	ctx := context.Background()
+
+	desired := &api.DesiredState{
+		MCPServers: []*api.MCPServer{
+			{
+				Name:          "stdio-server",
+				MCPServerType: api.MCPServerTypeLocal,
+				Local: &api.LocalMCPServer{
+					TransportType: api.TransportTypeStdio,
+					Deployment: api.MCPServerDeployment{
+						Image: "stdio-image:latest",
+					},
+				},
+			},
+		},
+	}
+
+	config, err := translator.TranslateRuntimeConfig(ctx, desired)
+	if err != nil {
+		t.Fatalf("TranslateRuntimeConfig failed: %v", err)
+	}
+
+	if len(config.Kubernetes.MCPServers) != 1 {
+		t.Fatalf("Expected 1 MCPServer, got %d", len(config.Kubernetes.MCPServers))
+	}
+
+	server := config.Kubernetes.MCPServers[0]
+	if server.Spec.Deployment.Port != 3000 {
+		t.Errorf("Expected default port 3000 for stdio transport, got %d", server.Spec.Deployment.Port)
+	}
+	if server.Spec.TransportType != "stdio" {
+		t.Errorf("Expected transport stdio, got %s", server.Spec.TransportType)
+	}
+}
+
 func TestTranslateRuntimeConfig_AgentWithMCPServers(t *testing.T) {
 	translator := NewTranslator()
 	ctx := context.Background()

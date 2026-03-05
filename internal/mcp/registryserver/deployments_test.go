@@ -301,6 +301,63 @@ func TestDeploymentTools_FilterResourceType(t *testing.T) {
 	assert.Equal(t, "com.example/echo-agent", out.Deployments[0].ServerName)
 }
 
+func TestDeploymentTools_FilterResourceTypeCaseInsensitive(t *testing.T) {
+	ctx := context.Background()
+
+	deployments := []*models.Deployment{
+		{
+			ID:           "dep-mcp",
+			ServerName:   "com.example/weather",
+			ResourceType: "mcp",
+			Env:          map[string]string{},
+		},
+		{
+			ID:           "dep-agent",
+			ServerName:   "com.example/echo-agent",
+			ResourceType: "agent",
+			Env:          map[string]string{},
+		},
+	}
+
+	reg := servicetesting.NewFakeRegistry()
+	reg.GetDeploymentsFn = func(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+		return deployments, nil
+	}
+
+	server := NewServer(reg)
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, serverSession.Wait())
+	}()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	require.NoError(t, err)
+	defer func() {
+		_ = clientSession.Close()
+	}()
+
+	// Filter with different casing should still match
+	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "list_deployments",
+		Arguments: map[string]any{
+			"resourceType": "MCP",
+		},
+	})
+	require.NoError(t, err)
+	raw, _ := json.Marshal(res.StructuredContent)
+	var out struct {
+		Deployments []models.Deployment `json:"deployments"`
+		Count       int                 `json:"count"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &out))
+	assert.Equal(t, 1, out.Count)
+	require.Len(t, out.Deployments, 1)
+	assert.Equal(t, "com.example/weather", out.Deployments[0].ServerName)
+}
+
 func TestDeploymentTools_GetDeploymentRequiresID(t *testing.T) {
 	ctx := context.Background()
 	reg := servicetesting.NewFakeRegistry()

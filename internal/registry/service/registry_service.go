@@ -13,6 +13,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
@@ -261,7 +262,7 @@ func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx 
 	// Generate embedding asynchronously (non-blocking, best-effort)
 	if s.shouldGenerateEmbeddingsOnPublish() { //nolint:nestif
 		go func() {
-			bgCtx := context.Background()
+			bgCtx := auth.WithSystemContext(context.Background())
 			payload := embeddings.BuildServerEmbeddingPayload(&serverJSON)
 			if strings.TrimSpace(payload) == "" {
 				return
@@ -660,7 +661,7 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 	// Generate embedding asynchronously (non-blocking, best-effort)
 	if s.shouldGenerateEmbeddingsOnPublish() { //nolint:nestif
 		go func() {
-			bgCtx := context.Background()
+			bgCtx := auth.WithSystemContext(context.Background())
 			payload := embeddings.BuildAgentEmbeddingPayload(&agentJSON)
 			if strings.TrimSpace(payload) == "" {
 				return

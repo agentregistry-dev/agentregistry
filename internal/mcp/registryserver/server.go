@@ -387,8 +387,11 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService) {
 		}
 		outIdx := 0
 		for _, d := range deployments {
-			if args.ResourceType != "" && d.ResourceType != args.ResourceType {
+			if args.ResourceType != "" && !strings.EqualFold(d.ResourceType, args.ResourceType) {
 				continue
+			}
+			if d.Env == nil {
+				d.Env = map[string]string{}
 			}
 			resp.Deployments[outIdx] = *d
 			outIdx++
@@ -409,6 +412,9 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService) {
 		deployment, err := registry.GetDeploymentByID(ctx, args.ID)
 		if err != nil {
 			return nil, models.Deployment{}, err
+		}
+		if deployment.Env == nil {
+			deployment.Env = map[string]string{}
 		}
 		return nil, *deployment, nil
 	})
