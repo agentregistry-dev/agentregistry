@@ -6,6 +6,7 @@ import nextVitals from 'eslint-config-next/core-web-vitals'
 
 const eslintConfig = defineConfig([
   ...nextVitals,
+  ...storybook.configs['flat/recommended'],
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

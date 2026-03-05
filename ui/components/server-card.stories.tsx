@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react"
+import type { Meta, StoryObj } from "@storybook/react-vite"
 import { ServerCard } from "./server-card"
 import type { ServerResponse } from "@/lib/api/types.gen"
 
