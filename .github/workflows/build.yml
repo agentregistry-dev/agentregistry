@@ -41,6 +41,10 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-node-
 
+    - name: Run UI Tests
+      run: npm test
+      working-directory: ui
+
     - name: Build UI
       run: make build-ui
 
