@@ -1,0 +1,155 @@
+# {{ template "chart.name" . }}
+
+{{ template "chart.deprecationWarning" . }}
+
+{{ template "chart.badgesSection" . }}
+
+{{ template "chart.description" . }}
+
+## TL;DR
+
+```console
+helm install my-agentregistry oci://ghcr.io/agentregistry-dev/helm/agentregistry
+```
+
+## Introduction
+
+This chart bootstraps an [Agent Registry](https://github.com/agentregistry-dev/agentregistry) deployment on a [Kubernetes](https://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
+
+It includes a bundled [pgvector/pgvector](https://hub.docker.com/r/pgvector/pgvector) sidecar (PostgreSQL + pgvector extension) and exposes both an HTTP REST API and an Agent Gateway gRPC endpoint.
+
+## Prerequisites
+
+- Kubernetes 1.19+
+- Helm 3.8+
+- PV provisioner support in the underlying infrastructure (for bundled PostgreSQL persistence)
+
+## Installing the Chart
+
+```console
+helm install my-agentregistry oci://ghcr.io/agentregistry-dev/helm/agentregistry
+```
+
+The command deploys Agent Registry on the Kubernetes cluster using the default configuration. The [Parameters](#parameters) section lists the values that can be configured during installation.
+
+> **Tip**: List all releases using `helm list`
+
+## Uninstalling the Chart
+
+```console
+helm uninstall my-agentregistry
+```
+
+> **Note**: If `database.bundled.persistence.keepOnUninstall` is `false` (the default), the PersistentVolumeClaim **will be deleted** and all database data will be lost. Set it to `true` to retain data across `helm uninstall`.
+
+## Architecture
+
+The chart deploys the following Kubernetes resources:
+
+| Resource | Description |
+|---|---|
+| Deployment | Agent Registry application + bundled PostgreSQL containers |
+| Service | Exposes HTTP (`:12121`) and gRPC (`:21212`) ports |
+| ConfigMap | Application configuration injected as environment variables |
+| Secret | PostgreSQL password and JWT signing key |
+| Secret | Kubeconfig for in-cluster agent management |
+| ServiceAccount | Dedicated service account for the workload |
+| ClusterRole / ClusterRoleBinding | RBAC rules for managing MCP servers, deployments, and services |
+| NetworkPolicy | Optional egress/ingress policy (disabled by default) |
+
+## Database
+
+By default the chart deploys a bundled PostgreSQL instance using the `pgvector/pgvector` image (PostgreSQL + pgvector extension). To use an external database instead, disable the bundled instance and provide connection details:
+
+```yaml
+database:
+  bundled:
+    enabled: false
+  external:
+    host: "my-postgres.example.com"
+    database: "agent-registry"
+    username: "agentregistry"
+    password: "changeme"
+```
+
+Or supply a full connection URL:
+
+```yaml
+database:
+  bundled:
+    enabled: false
+  external:
+    url: "postgresql://agentregistry:changeme@my-postgres.example.com:5432/agent-registry?sslmode=require"
+```
+
+## Secrets
+
+By default (`secrets.autoGenerate: true`) the chart generates a random PostgreSQL password and JWT key on first install using Helm's `lookup` function. Alternatively, supply an existing Secret:
+
+```yaml
+existingSecret: "my-agentregistry-secret"
+```
+
+The Secret must contain the keys `POSTGRES_PASSWORD` and `AGENT_REGISTRY_JWT_PRIVATE_KEY`.
+
+## RBAC
+
+Agent Registry manages MCP servers, agents, deployments, and related resources across namespaces. The chart therefore creates a `ClusterRole`/`ClusterRoleBinding` by default (`rbac.clusterScoped: true`). For single-namespace or multi-tenant deployments, set `rbac.clusterScoped: false` to use a namespace-scoped `Role`/`RoleBinding`.
+
+## Parameters
+
+{{ template "chart.valuesSection" . }}
+
+## Configuration examples
+
+### Minimal production values
+
+```yaml
+image:
+  tag: "0.2.0"
+
+secrets:
+  autoGenerate: false
+
+existingSecret: "agentregistry-secrets"
+
+database:
+  bundled:
+    persistence:
+      storageClass: "standard"
+      size: 20Gi
+      keepOnUninstall: true
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+```
+
+### External database
+
+```yaml
+database:
+  bundled:
+    enabled: false
+  external:
+    host: "pg.example.com"
+    database: "agent-registry"
+    username: "agentregistry"
+    existingSecret: "pg-secret"
+    sslMode: "require"
+```
+
+### Namespace-scoped RBAC
+
+```yaml
+rbac:
+  clusterScoped: false
+```
+
+{{ template "chart.maintainersSection" . }}
+
+{{ template "chart.sourcesSection" . }}

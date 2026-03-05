@@ -1,0 +1,514 @@
+# @section Global parameters
+
+global:
+  # -- Global container image registry override
+  imageRegistry: ""
+  # -- Global Docker registry secret names
+  imagePullSecrets: []
+  # -- Global StorageClass for PersistentVolumeClaims
+  storageClass: ""
+
+# @section Common parameters
+
+# -- Override the name of the chart
+nameOverride: ""
+# -- Override the full name of the chart
+fullnameOverride: ""
+# -- Labels to add to all deployed resources
+commonLabels: {}
+# -- Annotations to add to all deployed resources
+commonAnnotations: {}
+# -- Array of extra objects to deploy with the release (evaluated as a template)
+extraDeploy: []
+
+# @section Diagnostic mode
+
+diagnosticMode:
+  # -- Enable diagnostic mode (overrides command, disables probes)
+  enabled: false
+  # -- Command override for diagnostic mode
+  command:
+    - sleep
+  # -- Args override for diagnostic mode
+  args:
+    - infinity
+
+# @section Agent Registry image parameters
+
+image:
+  # -- Agent Registry image registry
+  registry: ghcr.io
+  # -- Agent Registry image repository
+  repository: agentregistry-dev/agentregistry/server
+  # -- Agent Registry image tag (immutable tags recommended)
+  tag: "0.2.0"
+  # -- Agent Registry image digest (overrides tag if set)
+  digest: ""
+  # -- Agent Registry image pull policy
+  pullPolicy: IfNotPresent
+  # -- Agent Registry image pull secrets
+  pullSecrets: []
+
+# @section Agent Registry configuration
+
+# -- Number of Agent Registry replicas
+replicaCount: 1
+
+config:
+  # -- Listen address for the HTTP server
+  serverAddress: ":8080"
+  # -- Agent Gateway gRPC port
+  agentGatewayPort: "21212"
+  # -- Enable reconciliation of runtime state on startup
+  reconcileOnStartup: "true"
+  # -- Enable input validation on the registry API
+  enableRegistryValidation: "false"
+  # -- Allow unauthenticated access to the API
+  enableAnonymousAuth: "false"
+  # -- Disable the builtin seed data import on startup (363 bundled MCP server entries)
+  disableBuiltinSeed: "true"
+  # -- Path or URL to external seed data file (leave empty to disable external seeding)
+  seedFrom: ""
+  # -- In-container path to the kubeconfig file
+  kubeconfigPath: "/home/agentregistry/.kube/config"
+  # -- Additional key-value pairs injected into the ConfigMap
+  extraConfig: {}
+
+# @section Secrets
+
+# -- Name of an existing Secret containing POSTGRES_PASSWORD and AGENT_REGISTRY_JWT_PRIVATE_KEY
+existingSecret: ""
+
+secrets:
+  # -- PostgreSQL password (ignored when existingSecret is set). WARNING: change from default for production!
+  postgresPassword: ""
+  # -- Hex-encoded HMAC key for signing JWT tokens (must be valid hex, e.g. "a3f4b2c1..."). Ignored when existingSecret is set. Auto-generated as 64-char hex when autoGenerate is true.
+  jwtPrivateKey: ""
+  # -- Auto-generate secrets on first install (requires lookup capability)
+  autoGenerate: true
+
+# @section Kubeconfig secret
+
+kubeconfig:
+  # -- Name of an existing Secret containing a `config` key with kubeconfig data
+  existingSecret: ""
+  # -- Literal kubeconfig YAML (only used when existingSecret is empty)
+  content: |
+    apiVersion: v1
+    kind: Config
+    clusters: []
+    contexts: []
+    current-context: ""
+    users: []
+
+# @section Deployment parameters
+
+# -- Override default container command (evaluated as a template)
+command: []
+# -- Override default container args (evaluated as a template)
+args: []
+
+updateStrategy:
+  # -- Deployment strategy type
+  type: RollingUpdate
+
+# -- Number of old ReplicaSets to retain
+revisionHistoryLimit: 10
+# -- Mount the service account token in the pod
+automountServiceAccountToken: true
+# -- Add custom entries to /etc/hosts
+hostAliases: []
+# -- Extra labels for Agent Registry pods
+podLabels: {}
+# -- Extra annotations for Agent Registry pods
+podAnnotations: {}
+# -- Lifecycle hooks for the Agent Registry container
+lifecycleHooks: {}
+# -- Seconds the pod needs to terminate gracefully
+terminationGracePeriodSeconds: ""
+# -- Priority class name for the Agent Registry pods
+priorityClassName: ""
+# -- Name of the scheduler to use
+schedulerName: ""
+# -- DNS policy for the pod
+dnsPolicy: ""
+# -- DNS configuration for the pod
+dnsConfig: {}
+# -- Topology spread constraints for pod assignment
+topologySpreadConstraints: []
+
+# @section Security context
+
+podSecurityContext:
+  # -- Enable pod-level security context
+  enabled: true
+  # -- Group ID for the pod filesystem
+  fsGroup: 1001
+  # -- Policy for changing fsGroup ownership
+  fsGroupChangePolicy: Always
+
+containerSecurityContext:
+  # -- Enable container-level security context
+  enabled: true
+  # -- User ID to run the container as
+  runAsUser: 1001
+  # -- Group ID to run the container as
+  runAsGroup: 1001
+  # -- Prevent running as root
+  runAsNonRoot: true
+  # -- Mount root filesystem as read-only
+  readOnlyRootFilesystem: true
+  # -- Allow privilege escalation
+  allowPrivilegeEscalation: false
+  capabilities:
+    # -- Linux capabilities to drop
+    drop:
+      - ALL
+  seccompProfile:
+    # -- Seccomp profile type
+    type: RuntimeDefault
+
+# @section Resource management
+
+# -- Resource requests and limits for the Agent Registry container
+resources: {}
+# -- Resource preset to use when resources is empty (none, nano, micro, small, medium, large, xlarge, 2xlarge)
+resourcesPreset: "small"
+
+# @section Host-path volume mounts (development / Docker-in-Docker)
+
+hostVolumes:
+  # -- Mount the Docker socket (/var/run/docker.sock) inside the pod. INSECURE — dev/DinD only
+  dockerSocket: false
+  # -- Mount the host /tmp directory inside the pod. INSECURE — dev only
+  hostTmp: false
+
+# @section Liveness probe
+
+livenessProbe:
+  # -- Enable liveness probe
+  enabled: true
+  # -- Initial delay before liveness check
+  initialDelaySeconds: 30
+  # -- Period between liveness checks
+  periodSeconds: 10
+  # -- Timeout for the liveness check
+  timeoutSeconds: 5
+  # -- Failure threshold for liveness check
+  failureThreshold: 6
+  # -- Success threshold for liveness check
+  successThreshold: 1
+
+# -- Custom liveness probe (overrides the default entirely)
+customLivenessProbe: {}
+
+# @section Readiness probe
+
+readinessProbe:
+  # -- Enable readiness probe
+  enabled: true
+  # -- Initial delay before readiness check
+  initialDelaySeconds: 10
+  # -- Period between readiness checks
+  periodSeconds: 5
+  # -- Timeout for the readiness check
+  timeoutSeconds: 3
+  # -- Failure threshold for readiness check
+  failureThreshold: 3
+  # -- Success threshold for readiness check
+  successThreshold: 1
+
+# -- Custom readiness probe (overrides the default entirely)
+customReadinessProbe: {}
+
+# @section Startup probe
+
+startupProbe:
+  # -- Enable startup probe
+  enabled: true
+  # -- Initial delay before startup check
+  initialDelaySeconds: 5
+  # -- Period between startup checks
+  periodSeconds: 5
+  # -- Timeout for the startup check
+  timeoutSeconds: 3
+  # -- Failure threshold for startup check (controls max startup time)
+  failureThreshold: 30
+  # -- Success threshold for startup check
+  successThreshold: 1
+
+# -- Custom startup probe (overrides the default entirely)
+customStartupProbe: {}
+
+# @section Extensibility
+
+# -- Array of extra environment variables for the Agent Registry container
+extraEnvVars: []
+# -- Name of a ConfigMap containing extra env vars
+extraEnvVarsCM: ""
+# -- Name of a Secret containing extra env vars
+extraEnvVarsSecret: ""
+# -- Array of extra volumes to add to the pod
+extraVolumes: []
+# -- Array of extra volume mounts for the Agent Registry container
+extraVolumeMounts: []
+# -- Extra init containers to add to the pod (evaluated as a template)
+initContainers: []
+# -- Extra sidecar containers to add to the pod (evaluated as a template)
+sidecars: []
+
+# @section Scheduling
+
+# -- Node labels for pod assignment
+nodeSelector: {}
+# -- Tolerations for pod assignment
+tolerations: []
+# -- Affinity rules for pod assignment (overrides preset if set)
+affinity: {}
+# -- Pod affinity preset (soft or hard)
+podAffinityPreset: ""
+# -- Pod anti-affinity preset (soft or hard)
+podAntiAffinityPreset: soft
+
+nodeAffinityPreset:
+  # -- Node affinity preset type (soft or hard)
+  type: ""
+  # -- Node label key for affinity
+  key: ""
+  # -- Node label values for affinity
+  values: []
+
+# @section Service configuration
+
+service:
+  # -- Kubernetes Service type
+  type: ClusterIP
+  ports:
+    # -- HTTP port
+    http: 12121
+    # -- Agent Gateway gRPC port
+    grpc: 21212
+  targetPorts:
+    # -- HTTP container target port
+    http: 8080
+    # -- gRPC container target port
+    grpc: 21212
+  nodePorts:
+    # -- NodePort for HTTP (when type is NodePort)
+    http: ""
+    # -- NodePort for gRPC (when type is NodePort)
+    grpc: ""
+  # -- Specific cluster IP (set to None for headless)
+  clusterIP: ""
+  # -- LoadBalancer IP
+  loadBalancerIP: ""
+  # -- LoadBalancer allowed source ranges
+  loadBalancerSourceRanges: []
+  # -- External traffic policy
+  externalTrafficPolicy: Cluster
+  # -- Service annotations
+  annotations: {}
+  # -- Extra ports to expose on the Service
+  extraPorts: []
+  # -- Session affinity (None or ClientIP)
+  sessionAffinity: None
+  # -- Session affinity configuration
+  sessionAffinityConfig: {}
+
+# @section Service account
+
+serviceAccount:
+  # -- Create a dedicated ServiceAccount
+  create: true
+  # -- Override the auto-generated ServiceAccount name
+  name: ""
+  # -- ServiceAccount annotations
+  annotations: {}
+  # -- Mount API token in the ServiceAccount
+  automountServiceAccountToken: true
+
+# @section RBAC
+
+rbac:
+  # -- Create RBAC resources
+  create: true
+  # -- Use ClusterRole/ClusterRoleBinding (true) or namespace-scoped Role/RoleBinding (false).
+  # Agent Registry manages MCP servers, agents, deployments, and supporting resources across namespaces,
+  # so cluster-scoped RBAC is the default. Set to false to restrict permissions to the release namespace only
+  # (suitable for single-namespace or multi-tenant deployments, but cross-namespace operations will fail).
+  clusterScoped: true
+  # -- Grant cluster-admin ClusterRoleBinding to the ServiceAccount. DANGEROUS — dev/demo only; never use in production
+  clusterAdminBinding: false
+  # -- Custom RBAC rules (used when clusterAdminBinding is false). Applied to a ClusterRole when
+  # clusterScoped is true, or a Role when clusterScoped is false.
+  rules:
+    - apiGroups: ["kagent.dev"]
+      resources: ["mcpservers"]
+      verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    - apiGroups: ["apps"]
+      resources: ["deployments"]
+      verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    - apiGroups: [""]
+      resources: ["services", "secrets", "configmaps"]
+      verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    - apiGroups: [""]
+      resources: ["namespaces"]
+      verbs: ["get", "list", "watch"]
+
+# @section Network Policy
+
+networkPolicy:
+  # -- Enable NetworkPolicy
+  enabled: false
+  # -- Allow connections from outside the cluster
+  allowExternal: true
+  # -- Allow egress to outside the cluster.
+  # NOTE: When using an external database (database.bundled.enabled: false) and setting
+  # allowExternalEgress to false, you MUST add an egress rule to extraEgress that
+  # allows traffic to your database host on port 5432. Without this rule the
+  # NetworkPolicy will block database connections and the application will fail.
+  allowExternalEgress: true
+  # -- Additional NetworkPolicy ingress rules
+  extraIngress: []
+  # -- Additional NetworkPolicy egress rules
+  extraEgress: []
+
+# @section Database
+
+database:
+  bundled:
+    # -- Deploy a PostgreSQL instance as part of this chart
+    enabled: true
+
+    # The image uses pgvector/pgvector which bundles PostgreSQL + pgvector extension.
+    # Tags follow the pattern: <pgvector_version>-pg<pg_major>[-variant]
+    #
+    # To change the PostgreSQL major version, set the tag accordingly:
+    #   PostgreSQL 13: "0.8.2-pg13"
+    #   PostgreSQL 14: "0.8.2-pg14"
+    #   PostgreSQL 15: "0.8.2-pg15"
+    #   PostgreSQL 16: "0.8.2-pg16"
+    #   PostgreSQL 17: "0.8.2-pg17"  (default)
+    #   PostgreSQL 18: "0.8.2-pg18"
+    #
+    # Optional Debian variants: "0.8.2-pg17-bookworm", "0.8.2-pg17-trixie"
+    # Browse all tags: https://hub.docker.com/r/pgvector/pgvector/tags
+    image:
+      # -- PostgreSQL image registry
+      registry: docker.io
+      # -- PostgreSQL image repository (pgvector/pgvector)
+      repository: pgvector/pgvector
+      # -- PostgreSQL image tag — MUST use immutable tags (not `pg17` or `latest`)
+      tag: "0.8.2-pg17"
+      # -- PostgreSQL image digest (overrides tag if set)
+      digest: ""
+      # -- PostgreSQL image pull policy
+      pullPolicy: IfNotPresent
+
+    auth:
+      # -- Database name to create
+      database: "agent-registry"
+      # -- Database user
+      username: "agentregistry"
+
+    # -- PostgreSQL SSL mode for the connection string
+    sslMode: "disable"
+
+    service:
+      # -- PostgreSQL Service type
+      type: ClusterIP
+      # -- PostgreSQL Service port
+      port: 5432
+
+    persistence:
+      # -- Enable PersistentVolumeClaim for database storage
+      enabled: true
+      # -- PVC storage request
+      size: 10Gi
+      # -- StorageClass name (empty = cluster default)
+      storageClass: ""
+      # -- PVC access modes
+      accessModes:
+        - ReadWriteOnce
+      # -- Name of an existing PVC to use
+      existingClaim: ""
+      # -- Annotations for the PVC
+      annotations: {}
+      # -- Add helm.sh/resource-policy: keep to the PVC (data survives helm uninstall)
+      keepOnUninstall: false
+
+    podSecurityContext:
+      # -- Enable pod security context for PostgreSQL
+      enabled: true
+      # -- Filesystem group ID for PostgreSQL
+      fsGroup: 999
+
+    containerSecurityContext:
+      # -- Enable container security context for PostgreSQL
+      enabled: true
+      # -- User ID for PostgreSQL container
+      runAsUser: 999
+      # -- Group ID for PostgreSQL container
+      runAsGroup: 999
+      # -- Prevent running as root
+      runAsNonRoot: true
+      # -- Allow privilege escalation
+      allowPrivilegeEscalation: false
+
+    # -- Resource requests and limits for PostgreSQL
+    resources: {}
+    # -- Resource preset for PostgreSQL (none, nano, micro, small, medium, large)
+    resourcesPreset: "small"
+
+    probes:
+      liveness:
+        # -- Initial delay before liveness check
+        initialDelaySeconds: 20
+        # -- Period between liveness checks
+        periodSeconds: 10
+        # -- Timeout for liveness check
+        timeoutSeconds: 5
+        # -- Failure threshold
+        failureThreshold: 6
+        # -- Success threshold
+        successThreshold: 1
+      readiness:
+        # -- Initial delay before readiness check
+        initialDelaySeconds: 5
+        # -- Period between readiness checks
+        periodSeconds: 5
+        # -- Timeout for readiness check
+        timeoutSeconds: 3
+        # -- Failure threshold
+        failureThreshold: 3
+        # -- Success threshold
+        successThreshold: 1
+
+    # -- Extra annotations for PostgreSQL pods
+    podAnnotations: {}
+    # -- Extra labels for PostgreSQL pods
+    podLabels: {}
+    # -- Node labels for PostgreSQL pod assignment
+    nodeSelector: {}
+    # -- Tolerations for PostgreSQL pod assignment
+    tolerations: []
+    # -- Affinity rules for PostgreSQL pod assignment
+    affinity: {}
+
+  external:
+    # -- Full PostgreSQL connection string (overrides all other external DB fields when set)
+    url: ""
+    # -- External database host
+    host: ""
+    # -- External database port
+    port: 5432
+    # -- External database name
+    database: "agent-registry"
+    # -- External database user
+    username: "agentregistry"
+    # -- External database password (ignored when existingSecret is set)
+    password: ""
+    # -- Name of an existing Secret containing the external DB password (key: POSTGRES_PASSWORD)
+    existingSecret: ""
+    # -- External database SSL mode
+    sslMode: "disable"
