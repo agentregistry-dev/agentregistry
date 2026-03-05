@@ -46,9 +46,11 @@ type CLIOptions struct {
 }
 
 var (
-	cliOptions    CLIOptions
-	registryURL   string
-	registryToken string
+	cliOptions               CLIOptions
+	registryURL              string
+	registryToken            string
+	// Package-level var so tests can stub out the real docker-compose check.
+	isDockerComposeAvailable = utils.IsDockerComposeAvailable
 )
 
 // Configure applies options to the root command (e.g. for tests or alternate entry points).
@@ -224,19 +226,8 @@ func preRunSetup(ctx context.Context, cmd *cobra.Command, baseURL, token string,
 	}
 
 	if autoStartDaemon {
-		if !utils.IsDockerComposeAvailable() {
-			fmt.Println("Docker compose is not available. Please install docker compose and try again.")
-			fmt.Println("See https://docs.docker.com/compose/install/ for installation instructions.")
-			fmt.Println("agent registry uses docker compose to start the server and the agent gateway.")
-			return nil, fmt.Errorf("docker compose is not available")
-		}
-		if !dm.IsRunning() {
-			if err := dm.Start(); err != nil {
-				return nil, fmt.Errorf("failed to start daemon: %w", err)
-			}
-			if err := dm.WaitForReady(baseURL); err != nil {
-				return nil, fmt.Errorf("daemon started but not ready: %w", err)
-			}
+		if err := ensureDaemonRunning(dm, baseURL); err != nil {
+			return nil, err
 		}
 	}
 
@@ -267,4 +258,23 @@ func preRunSetup(ctx context.Context, cmd *cobra.Command, baseURL, token string,
 		return nil, fmt.Errorf("API client not initialized: %w", err)
 	}
 	return c, nil
+}
+
+func ensureDaemonRunning(dm types.DaemonManager, baseURL string) error {
+	if !isDockerComposeAvailable() {
+		fmt.Println("Docker compose is not available. Please install docker compose and try again.")
+		fmt.Println("See https://docs.docker.com/compose/install/ for installation instructions.")
+		fmt.Println("agent registry uses docker compose to start the server and the agent gateway.")
+		return fmt.Errorf("docker compose is not available")
+	}
+	if dm.IsRunning() {
+		return nil
+	}
+	if err := dm.Start(); err != nil {
+		return fmt.Errorf("failed to start daemon: %w", err)
+	}
+	if err := dm.WaitForReady(baseURL); err != nil {
+		return fmt.Errorf("daemon started but not ready: %w", err)
+	}
+	return nil
 }
