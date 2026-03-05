@@ -42,7 +42,7 @@ func init() {
 	AddPromptCmd.Flags().StringVar(&promptProjectDir, "project-dir", ".", "Project directory")
 	AddPromptCmd.Flags().StringVar(&promptRegistryURL, "registry-url", "", "Registry URL (defaults to the currently configured registry)")
 	AddPromptCmd.Flags().StringVar(&promptRegistryPromptName, "registry-prompt-name", "", "Prompt name in the registry")
-	AddPromptCmd.Flags().StringVar(&promptRegistryPromptVersion, "registry-prompt-version", "", "Prompt version to pull from the registry (defaults to latest)")
+	AddPromptCmd.Flags().StringVar(&promptRegistryPromptVersion, "registry-prompt-version", "latest", "Prompt version to pull from the registry (defaults to latest)")
 
 	_ = AddPromptCmd.MarkFlagRequired("registry-prompt-name")
 }
