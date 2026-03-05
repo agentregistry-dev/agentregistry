@@ -116,7 +116,7 @@ func displayPaginatedSkills(skills []*models.SkillResponse, pageSize int, showAl
 
 func printSkillsTable(skills []*models.SkillResponse) {
 	t := printer.NewTablePrinter(os.Stdout)
-	t.SetHeaders("Name", "Title", "Version", "Category", "Website")
+	t.SetHeaders("Name", "Title", "Version", "Category")
 
 	for _, s := range skills {
 		t.AddRow(
@@ -124,7 +124,6 @@ func printSkillsTable(skills []*models.SkillResponse) {
 			printer.TruncateString(s.Skill.Title, 40),
 			s.Skill.Version,
 			printer.EmptyValueOrDefault(s.Skill.Category, "<none>"),
-			s.Skill.WebsiteURL,
 		)
 	}
 
