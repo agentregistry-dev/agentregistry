@@ -123,13 +123,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	}
 
 	baseRegistryService := service.NewRegistryService(db, cfg, embeddingProvider)
-
-	var registryService service.RegistryService
-	if options.ServiceFactory != nil {
-		registryService = options.ServiceFactory(baseRegistryService)
-	} else {
-		registryService = baseRegistryService
-	}
+	registryService := baseRegistryService
 
 	// Initialize extension registries once and use them for both routing and service behavior.
 	providerPlatforms := v0.DefaultProviderPlatformAdapters(registryService)
@@ -142,22 +136,11 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 
 	type platformAdapterConfigurer interface {
 		SetPlatformAdapters(
-			map[string]service.DeploymentPlatformDeployer,
+			map[string]types.DeploymentPlatformAdapter,
 		)
 	}
-	deploymentDeployers := make(map[string]service.DeploymentPlatformDeployer, len(deploymentPlatforms))
-	for platform, adapter := range deploymentPlatforms {
-		deploymentDeployers[platform] = adapter
-	}
-	if cfgSvc, ok := baseRegistryService.(platformAdapterConfigurer); ok {
-		cfgSvc.SetPlatformAdapters(deploymentDeployers)
-	}
 	if cfgSvc, ok := registryService.(platformAdapterConfigurer); ok {
-		cfgSvc.SetPlatformAdapters(deploymentDeployers)
-	}
-
-	if options.OnServiceCreated != nil {
-		options.OnServiceCreated(registryService)
+		cfgSvc.SetPlatformAdapters(deploymentPlatforms)
 	}
 
 	// Import builtin seed data unless it is disabled

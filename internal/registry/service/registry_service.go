@@ -16,6 +16,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
@@ -59,16 +60,7 @@ type registryServiceImpl struct {
 	db                 database.Database
 	cfg                *config.Config
 	embeddingsProvider embeddings.Provider
-	deploymentAdapters map[string]DeploymentPlatformDeployer
-}
-
-// DeploymentPlatformDeployer is the deployment adapter contract used by service orchestration.
-type DeploymentPlatformDeployer interface {
-	Deploy(ctx context.Context, req *models.Deployment) (*models.DeploymentActionResult, error)
-	Undeploy(ctx context.Context, deployment *models.Deployment) error
-	GetLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
-	Cancel(ctx context.Context, deployment *models.Deployment) error
-	Discover(ctx context.Context, providerID string) ([]*models.Deployment, error)
+	deploymentAdapters map[string]registrytypes.DeploymentPlatformAdapter
 }
 
 // DeploymentPlatformStaleCleaner is an optional adapter hook for stale deployment replacement.
@@ -91,12 +83,12 @@ func NewRegistryService(
 
 // SetPlatformAdapters wires platform extension adapters into the service.
 func (s *registryServiceImpl) SetPlatformAdapters(
-	deploymentPlatforms map[string]DeploymentPlatformDeployer,
+	deploymentPlatforms map[string]registrytypes.DeploymentPlatformAdapter,
 ) {
 	s.deploymentAdapters = deploymentPlatforms
 }
 
-func (s *registryServiceImpl) resolveDeploymentAdapter(platform string) (DeploymentPlatformDeployer, error) {
+func (s *registryServiceImpl) resolveDeploymentAdapter(platform string) (registrytypes.DeploymentPlatformAdapter, error) {
 	providerPlatform := strings.ToLower(strings.TrimSpace(platform))
 	if providerPlatform == "" {
 		return nil, fmt.Errorf("%w: deployment platform is required", database.ErrInvalidInput)
@@ -866,7 +858,7 @@ func (s *registryServiceImpl) resolveProviderByID(ctx context.Context, providerI
 	return s.db.GetProviderByID(ctx, nil, providerID)
 }
 
-func (s *registryServiceImpl) resolveDeploymentAdapterByProviderID(ctx context.Context, providerID string) (DeploymentPlatformDeployer, error) {
+func (s *registryServiceImpl) resolveDeploymentAdapterByProviderID(ctx context.Context, providerID string) (registrytypes.DeploymentPlatformAdapter, error) {
 	resolvedProviderID := strings.TrimSpace(providerID)
 	if resolvedProviderID == "" {
 		return nil, fmt.Errorf("%w: provider id is required", database.ErrInvalidInput)

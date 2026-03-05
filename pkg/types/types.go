@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -20,11 +19,6 @@ var ErrCLINoStoredToken = errors.New("no stored authentication token")
 // ErrNoOIDCDefined is returned when OIDC is not defined.
 // This is expected for CLI commands that do not require authentication (e.g. artifact init) and a user/extension does not define OIDC.
 var ErrNoOIDCDefined = errors.New("OIDC is not defined")
-
-// ServiceFactory is a function type that creates a service implementation.
-// The base service is provided as input, and the factory should return a service
-// that implements RegistryService (and optionally additional interfaces).
-type ServiceFactory func(base service.RegistryService) service.RegistryService
 
 // ProviderPlatformAdapter defines provider CRUD behavior for a provider platform type.
 type ProviderPlatformAdapter interface {
@@ -63,10 +57,6 @@ type AppOptions struct {
 	// If nil, uses the default PostgreSQL database.
 	DatabaseFactory DatabaseFactory
 
-	// ServiceFactory is an optional function to create a service that adds new functionality.
-	// The factory receives the base service and should return an extended service.
-	ServiceFactory ServiceFactory
-
 	// ProviderPlatforms registers adapters for provider CRUD by provider platform type.
 	ProviderPlatforms map[string]ProviderPlatformAdapter
 
@@ -76,10 +66,6 @@ type AppOptions struct {
 	// ExtraRoutes allows external integrations to register additional HTTP routes
 	// using the same API instance and path prefix as OSS core routes.
 	ExtraRoutes func(api huma.API, pathPrefix string)
-
-	// OnServiceCreated is an optional callback that receives the created service
-	// (potentially extended via ServiceFactory).
-	OnServiceCreated func(service.RegistryService)
 
 	// HTTPServerFactory is an optional function to create a server that adds new API routes.
 	HTTPServerFactory HTTPServerFactory

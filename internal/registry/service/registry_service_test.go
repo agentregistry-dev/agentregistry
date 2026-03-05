@@ -12,6 +12,7 @@ import (
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
@@ -905,7 +906,7 @@ func TestDeployServer_AlreadyExistsDoesNotAttemptIdentityCleanup(t *testing.T) {
 
 	svc := &registryServiceImpl{
 		db: mockDB,
-		deploymentAdapters: map[string]DeploymentPlatformDeployer{
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
 			"local": &testDeploymentAdapter{},
 		},
 	}
@@ -950,7 +951,7 @@ func TestDeployAgent_AlreadyExistsDoesNotAttemptIdentityCleanup(t *testing.T) {
 
 	svc := &registryServiceImpl{
 		db: mockDB,
-		deploymentAdapters: map[string]DeploymentPlatformDeployer{
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
 			"local": &testDeploymentAdapter{},
 		},
 	}
@@ -1061,7 +1062,7 @@ func TestIsUnsupportedDeploymentPlatformError(t *testing.T) {
 
 func TestResolveDeploymentAdapter_UnsupportedPlatformReturnsTypedError(t *testing.T) {
 	svc := &registryServiceImpl{
-		deploymentAdapters: map[string]DeploymentPlatformDeployer{},
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{},
 	}
 
 	_, err := svc.resolveDeploymentAdapter("unknown-platform")
@@ -1077,6 +1078,12 @@ type testDeploymentAdapter struct {
 	cancelFn            func(ctx context.Context, deployment *models.Deployment) error
 	discoverFn          func(ctx context.Context, providerID string) ([]*models.Deployment, error)
 	cleanupStaleFn      func(ctx context.Context, deployment *models.Deployment) error
+}
+
+func (a *testDeploymentAdapter) Platform() string { return "test" }
+
+func (a *testDeploymentAdapter) SupportedResourceTypes() []string {
+	return []string{"mcp", "agent"}
 }
 
 func (a *testDeploymentAdapter) Deploy(ctx context.Context, req *models.Deployment) (*models.DeploymentActionResult, error) {
@@ -1156,7 +1163,7 @@ func TestCleanupExistingDeployment_UsesAdapterStaleCleanerWhenAvailable(t *testi
 
 	svc := &registryServiceImpl{
 		db: mockDB,
-		deploymentAdapters: map[string]DeploymentPlatformDeployer{
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
 			"local": adapter,
 		},
 	}
@@ -1188,7 +1195,7 @@ func TestUndeployDeployment_UsesAdapterForLocalPlatform(t *testing.T) {
 
 	svc := &registryServiceImpl{
 		db: mockDB,
-		deploymentAdapters: map[string]DeploymentPlatformDeployer{
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
 			"local": adapter,
 		},
 	}
@@ -1239,7 +1246,7 @@ func TestGetDeployments_AppendsDiscoveredDeploymentsFromAdapters(t *testing.T) {
 
 	svc := &registryServiceImpl{
 		db: mockDB,
-		deploymentAdapters: map[string]DeploymentPlatformDeployer{
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
 			"kubernetes": adapter,
 		},
 	}
@@ -1289,7 +1296,7 @@ func TestGetDeployments_DedupesDiscoveredDeploymentsByIdentity(t *testing.T) {
 
 	svc := &registryServiceImpl{
 		db: mockDB,
-		deploymentAdapters: map[string]DeploymentPlatformDeployer{
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
 			"kubernetes": adapter,
 		},
 	}
@@ -1336,7 +1343,7 @@ func TestGetDeployments_ManagedOriginSkipsDiscovery(t *testing.T) {
 
 	svc := &registryServiceImpl{
 		db: mockDB,
-		deploymentAdapters: map[string]DeploymentPlatformDeployer{
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
 			"kubernetes": adapter,
 		},
 	}
