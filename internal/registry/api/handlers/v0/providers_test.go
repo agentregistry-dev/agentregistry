@@ -161,7 +161,7 @@ func TestListProviders_WithData(t *testing.T) {
 	k8sAdapter := &fakeProviderAdapter{
 		platform: "kubernetes",
 		providers: map[string]*models.Provider{
-			"kubernetes-default": {ID: "kubernetes-default", Name: "Kubernetes Default", Platform: "kubernetes"},
+			"kubernetes": {ID: "kubernetes", Name: "Kubernetes Default", Platform: "kubernetes"},
 		},
 	}
 	v0.RegisterProvidersEndpoints(api, "/v0", fake, v0.PlatformExtensions{
@@ -178,7 +178,7 @@ func TestListProviders_WithData(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), `"id":"local"`)
 	assert.Contains(t, w.Body.String(), `"platform":"local"`)
-	assert.Contains(t, w.Body.String(), `"id":"kubernetes-default"`)
+	assert.Contains(t, w.Body.String(), `"id":"kubernetes"`)
 	assert.Contains(t, w.Body.String(), `"platform":"kubernetes"`)
 }
 

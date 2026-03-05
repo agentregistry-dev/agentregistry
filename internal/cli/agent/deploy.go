@@ -17,7 +17,7 @@ var DeployCmd = &cobra.Command{
 Example:
   arctl agent deploy my-agent --version latest
   arctl agent deploy my-agent --version 1.2.3
-  arctl agent deploy my-agent --version latest --provider-id kubernetes-default`,
+  arctl agent deploy my-agent --version latest --provider-id kubernetes`,
 	Args: cobra.ExactArgs(1),
 	RunE: runDeploy,
 }

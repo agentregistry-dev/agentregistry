@@ -31,7 +31,7 @@ const (
 	maxServerVersionsPerServer = 10000
 
 	localProviderID      = "local"
-	kubernetesProviderID = "kubernetes-default"
+	kubernetesProviderID = "kubernetes"
 	platformLocal        = "local"
 	platformKubernetes   = "kubernetes"
 	resourceTypeMCP      = "mcp"
