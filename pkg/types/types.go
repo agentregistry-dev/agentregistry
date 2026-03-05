@@ -152,6 +152,8 @@ type DaemonManager interface {
 	IsRunning() bool
 	// Start starts the daemon, blocking until it's ready
 	Start() error
+	// WaitForReady polls the daemon API until it responds or the timeout expires
+	WaitForReady(baseURL string) error
 }
 
 // CLIAuthnProvider provides authentication for CLI commands.

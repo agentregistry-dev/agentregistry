@@ -335,6 +335,7 @@ func (m *mockDaemonManager) Start() error {
 	m.startCalled = true
 	return nil
 }
+func (m *mockDaemonManager) WaitForReady(baseURL string) error { return nil }
 
 // mockAuthnProvider for unit tests.
 type mockAuthnProvider struct {

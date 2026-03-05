@@ -234,6 +234,9 @@ func preRunSetup(ctx context.Context, cmd *cobra.Command, baseURL, token string,
 			if err := dm.Start(); err != nil {
 				return nil, fmt.Errorf("failed to start daemon: %w", err)
 			}
+			if err := dm.WaitForReady(baseURL); err != nil {
+				return nil, fmt.Errorf("daemon started but not ready: %w", err)
+			}
 		}
 	}
 
