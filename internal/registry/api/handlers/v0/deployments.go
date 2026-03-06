@@ -97,6 +97,23 @@ func createDeploymentHTTPError(err error) error {
 	}
 }
 
+func removeDeploymentHTTPError(err error) error {
+	switch {
+	case service.IsUnsupportedDeploymentPlatformError(err):
+		return huma.Error400BadRequest("Unsupported provider or platform for deployment")
+	case errors.Is(err, database.ErrInvalidInput):
+		return huma.Error400BadRequest("Invalid deployment removal request")
+	case errors.Is(err, database.ErrNotFound):
+		return huma.Error404NotFound("Deployment not found")
+	case errors.Is(err, auth.ErrUnauthenticated):
+		return huma.Error401Unauthorized("Authentication required")
+	case errors.Is(err, auth.ErrForbidden):
+		return huma.Error403Forbidden("Forbidden")
+	default:
+		return huma.Error500InternalServerError("Failed to remove deployment", err)
+	}
+}
+
 // RegisterDeploymentsEndpoints registers all deployment-related endpoints
 func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry service.RegistryService, extensions PlatformExtensions) {
 	// List all deployments
@@ -262,22 +279,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		platform := deploymentPlatform(ctx, registry, deployment)
 		err = registry.UndeployDeployment(ctx, deployment, platform)
 		if err != nil {
-			if service.IsUnsupportedDeploymentPlatformError(err) {
-				return nil, huma.Error400BadRequest("Unsupported provider or platform for deployment")
-			}
-			if errors.Is(err, database.ErrInvalidInput) {
-				return nil, huma.Error400BadRequest("Invalid deployment removal request")
-			}
-			if errors.Is(err, database.ErrNotFound) {
-				return nil, huma.Error404NotFound("Deployment not found")
-			}
-			if errors.Is(err, auth.ErrUnauthenticated) {
-				return nil, huma.Error401Unauthorized("Authentication required")
-			}
-			if errors.Is(err, auth.ErrForbidden) {
-				return nil, huma.Error403Forbidden("Forbidden")
-			}
-			return nil, huma.Error500InternalServerError("Failed to remove deployment", err)
+			return nil, removeDeploymentHTTPError(err)
 		}
 
 		return &struct{}{}, nil

@@ -245,16 +245,16 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		if input.All {
 			servers, err := registry.GetAllVersionsByServerName(ctx, serverName)
 			if err != nil {
-				if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
+				switch {
+				case err.Error() == errRecordNotFound, errors.Is(err, database.ErrNotFound):
 					return nil, huma.Error404NotFound("Server not found")
-				}
-				if errors.Is(err, auth.ErrUnauthenticated) {
+				case errors.Is(err, auth.ErrUnauthenticated):
 					return nil, huma.Error401Unauthorized("Authentication required")
-				}
-				if errors.Is(err, auth.ErrForbidden) {
+				case errors.Is(err, auth.ErrForbidden):
 					return nil, huma.Error403Forbidden("Forbidden")
+				default:
+					return nil, huma.Error500InternalServerError("Failed to get server versions", err)
 				}
-				return nil, huma.Error500InternalServerError("Failed to get server versions", err)
 			}
 
 			// Convert []*ServerResponse to []ServerResponse
