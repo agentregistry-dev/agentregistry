@@ -57,6 +57,7 @@ type FakeRegistry struct {
 	GetSkillByNameAndVersionFn   func(ctx context.Context, skillName, version string) (*models.SkillResponse, error)
 	GetAllVersionsBySkillNameFn  func(ctx context.Context, skillName string) ([]*models.SkillResponse, error)
 	CreateSkillFn                func(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error)
+	DeleteSkillFn                func(ctx context.Context, skillName, version string) error
 	GetDeploymentsFn             func(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
 	ListProvidersFn              func(ctx context.Context, platform *string) ([]*models.Provider, error)
 	GetProviderByIDFn            func(ctx context.Context, providerID string) (*models.Provider, error)
@@ -326,6 +327,13 @@ func (f *FakeRegistry) CreateSkill(ctx context.Context, req *models.SkillJSON) (
 		return f.CreateSkillFn(ctx, req)
 	}
 	return nil, database.ErrNotFound
+}
+
+func (f *FakeRegistry) DeleteSkill(ctx context.Context, skillName, version string) error {
+	if f.DeleteSkillFn != nil {
+		return f.DeleteSkillFn(ctx, skillName, version)
+	}
+	return database.ErrNotFound
 }
 
 // Deployment methods

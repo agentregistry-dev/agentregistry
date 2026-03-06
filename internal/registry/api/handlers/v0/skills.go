@@ -104,6 +104,34 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 		}, nil
 	})
 
+	// Delete a specific skill version
+	huma.Register(api, huma.Operation{
+		OperationID: "delete-skill-version" + strings.ReplaceAll(pathPrefix, "/", "-"),
+		Method:      http.MethodDelete,
+		Path:        pathPrefix + "/skills/{skillName}/versions/{version}",
+		Summary:     "Delete skill version",
+		Description: "Permanently delete a specific skill version from the registry.",
+		Tags:        tags,
+	}, func(ctx context.Context, input *SkillVersionDetailInput) (*types.Response[types.EmptyResponse], error) {
+		skillName, err := url.PathUnescape(input.SkillName)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid skill name encoding", err)
+		}
+		version, err := url.PathUnescape(input.Version)
+		if err != nil {
+			return nil, huma.Error400BadRequest("Invalid version encoding", err)
+		}
+		if err := registry.DeleteSkill(ctx, skillName, version); err != nil {
+			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error404NotFound("Skill not found")
+			}
+			return nil, huma.Error500InternalServerError("Failed to delete skill", err)
+		}
+		return &types.Response[types.EmptyResponse]{
+			Body: types.EmptyResponse{Message: "Skill deleted successfully"},
+		}, nil
+	})
+
 	// Get specific skill version (supports "latest")
 	huma.Register(api, huma.Operation{
 		OperationID: "get-skill-version" + strings.ReplaceAll(pathPrefix, "/", "-"),

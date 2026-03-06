@@ -68,6 +68,8 @@ type RegistryService interface {
 	GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error)
 	// CreateSkill creates a new skill version
 	CreateSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error)
+	// DeleteSkill permanently removes a skill version from the registry
+	DeleteSkill(ctx context.Context, skillName, version string) error
 
 	// Prompts APIs
 	// ListPrompts retrieve all prompts with optional filtering
