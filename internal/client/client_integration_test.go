@@ -399,7 +399,7 @@ func TestClientIntegration_DeploymentRoutes_HappyPath(t *testing.T) {
 		"1.0.0",
 		map[string]string{"API_KEY": "secret"},
 		true,
-		v0handlers.LocalProviderID,
+		defaultDeployProviderID,
 	)
 	if err != nil {
 		t.Fatalf("second DeployServer() failed: %v", err)
@@ -452,7 +452,7 @@ func TestClientIntegration_DeploymentRoutes_HappyPath(t *testing.T) {
 		"acme/planner",
 		"2.0.0",
 		map[string]string{"MODE": "fast"},
-		v0handlers.LocalProviderID,
+		defaultDeployProviderID,
 	)
 	if err != nil {
 		t.Fatalf("second DeployAgent() failed: %v", err)
@@ -530,7 +530,7 @@ func newClientWithInProcessServer(t *testing.T, fake *servicetesting.FakeRegistr
 		ProviderPlatforms: map[string]registrytypes.ProviderPlatformAdapter{
 			"local": &testProviderAdapter{
 				provider: &models.Provider{
-					ID:       v0handlers.LocalProviderID,
+					ID:       defaultDeployProviderID,
 					Name:     "Local provider",
 					Platform: "local",
 				},

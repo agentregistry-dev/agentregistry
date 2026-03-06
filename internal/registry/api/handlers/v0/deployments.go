@@ -50,7 +50,7 @@ type DeploymentByIDInput struct {
 
 // DeploymentsListInput represents query parameters for listing deployments
 type DeploymentsListInput struct {
-	Platform     string `query:"platform" json:"platform,omitempty" doc:"Filter by provider platform type (for OSS: local or kubernetes)" example:"local"`
+	Platform     string `query:"platform" json:"platform,omitempty" doc:"Filter by provider platform type (matches registered provider platforms)" example:"local"`
 	ProviderID   string `query:"providerId" json:"providerId,omitempty" doc:"Filter by provider instance ID"`
 	ResourceType string `query:"resourceType" json:"resourceType,omitempty" doc:"Filter by resource type (mcp, agent)" example:"mcp" enum:"mcp,agent"`
 	Status       string `query:"status" json:"status,omitempty" doc:"Filter by deployment status"`

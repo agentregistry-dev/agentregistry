@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/client"
-	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/spf13/cobra"
@@ -76,7 +75,7 @@ func runEmbeddingsGenerate(ctx context.Context) error {
 	}
 	defer c.Close()
 
-	req := v0.IndexRequest{
+	req := client.IndexRequest{
 		BatchSize:      embeddingsBatchSize,
 		Force:          embeddingsForceUpdate,
 		DryRun:         embeddingsDryRun,
@@ -90,7 +89,7 @@ func runEmbeddingsGenerate(ctx context.Context) error {
 	return pollIndex(ctx, c, req)
 }
 
-func streamIndex(ctx context.Context, c *client.Client, req v0.IndexRequest) error {
+func streamIndex(ctx context.Context, c *client.Client, req client.IndexRequest) error {
 	httpReq, err := c.NewSSERequest(ctx, req)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -167,7 +166,7 @@ func streamIndex(ctx context.Context, c *client.Client, req v0.IndexRequest) err
 	return nil
 }
 
-func pollIndex(ctx context.Context, c *client.Client, req v0.IndexRequest) error {
+func pollIndex(ctx context.Context, c *client.Client, req client.IndexRequest) error {
 	jobResp, err := c.StartIndex(req)
 	if err != nil {
 		return fmt.Errorf("failed to start indexing: %w", err)

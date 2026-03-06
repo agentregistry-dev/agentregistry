@@ -13,7 +13,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
-	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
@@ -66,6 +65,11 @@ type registryServiceImpl struct {
 // DeploymentPlatformStaleCleaner is an optional adapter hook for stale deployment replacement.
 type DeploymentPlatformStaleCleaner interface {
 	CleanupStale(ctx context.Context, deployment *models.Deployment) error
+}
+
+type resolvedManifestMCPServer struct {
+	Server       *apiv0.ServerJSON
+	PreferRemote bool
 }
 
 // NewRegistryService creates a new registry service with the provided database and configuration
@@ -1212,8 +1216,8 @@ func (s *registryServiceImpl) createResolvedMCPDeploymentsForAgent(
 
 	for _, serverReq := range resolvedServers {
 		mcpDeployment := &models.Deployment{
-			ServerName:   serverReq.RegistryServer.Name,
-			Version:      serverReq.RegistryServer.Version,
+			ServerName:   serverReq.Server.Name,
+			Version:      serverReq.Server.Version,
 			Status:       status,
 			Env:          map[string]string{},
 			PreferRemote: serverReq.PreferRemote,
@@ -1225,7 +1229,7 @@ func (s *registryServiceImpl) createResolvedMCPDeploymentsForAgent(
 		}
 		// Create a managed deployment record for each resolved MCP server.
 		if err := s.db.CreateDeployment(ctx, nil, mcpDeployment); err != nil {
-			log.Printf("Warning: Failed to create deployment for MCP server %s: %v", serverReq.RegistryServer.Name, err)
+			log.Printf("Warning: Failed to create deployment for MCP server %s: %v", serverReq.Server.Name, err)
 		}
 	}
 }
@@ -1258,8 +1262,8 @@ func (s *registryServiceImpl) CancelDeployment(ctx context.Context, deployment *
 // This follows the same logic as the CLI-side resolveRegistryServer
 // TODO: Should we also be resolving the other types (i.e. command)? I didn't see my command server configured in the agent-gateway yaml, unsure if expected or a bug.
 // cat /tmp/arctl-runtime/agent-gateway.yaml only had an mcp route for the registry-resolved (since we added it to the run requests).
-func (s *registryServiceImpl) resolveAgentManifestMCPServers(ctx context.Context, manifest *models.AgentManifest) ([]*registry.MCPServerRunRequest, error) {
-	var resolvedServers []*registry.MCPServerRunRequest
+func (s *registryServiceImpl) resolveAgentManifestMCPServers(ctx context.Context, manifest *models.AgentManifest) ([]*resolvedManifestMCPServer, error) {
+	var resolvedServers []*resolvedManifestMCPServer
 
 	for _, mcpServer := range manifest.McpServers {
 		// Only process registry-type servers (non-registry servers are baked into the image)
@@ -1278,13 +1282,9 @@ func (s *registryServiceImpl) resolveAgentManifestMCPServers(ctx context.Context
 			return nil, fmt.Errorf("failed to get server %q version %s from registry database: %w", mcpServer.RegistryServerName, version, err)
 		}
 
-		// Create MCPServerRunRequest so that this resolved server is ran/deployed
-		resolvedServers = append(resolvedServers, &registry.MCPServerRunRequest{
-			RegistryServer: &serverResp.Server,
-			PreferRemote:   mcpServer.RegistryServerPreferRemote,
-			EnvValues:      make(map[string]string),
-			ArgValues:      make(map[string]string),
-			HeaderValues:   make(map[string]string),
+		resolvedServers = append(resolvedServers, &resolvedManifestMCPServer{
+			Server:       &serverResp.Server,
+			PreferRemote: mcpServer.RegistryServerPreferRemote,
 		})
 	}
 
