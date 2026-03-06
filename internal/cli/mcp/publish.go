@@ -28,6 +28,7 @@ var (
 	dryRunFlag          bool
 	overwriteFlag       bool
 	publishVersion      string
+	publishTag          string
 	githubRepository    string
 	publishTransport    string
 	publishTransportURL string
@@ -44,6 +45,7 @@ func init() {
 	PublishCmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Show what would be done without actually doing it")
 	PublishCmd.Flags().BoolVar(&overwriteFlag, "overwrite", false, "Overwrite if the version is already published")
 	PublishCmd.Flags().StringVar(&publishVersion, "version", "", "Server version")
+	PublishCmd.Flags().StringVar(&publishTag, "tag", "", "Server version (alias for --version)")
 	PublishCmd.Flags().StringVar(&githubRepository, "github", "", "GitHub repository URL")
 	PublishCmd.Flags().StringVar(&publishTransport, "transport", "", "Transport type: stdio or streamable-http")
 	PublishCmd.Flags().StringVar(&publishTransportURL, "transport-url", "", "Transport URL for streamable-http transport")
@@ -115,6 +117,11 @@ func runMCPServerPublish(cmd *cobra.Command, args []string) error {
 	input := "."
 	if len(args) > 0 {
 		input = args[0]
+	}
+
+	// Resolve --tag as alias for --version
+	if publishVersion == "" && publishTag != "" {
+		publishVersion = publishTag
 	}
 
 	var serverName, description, version string

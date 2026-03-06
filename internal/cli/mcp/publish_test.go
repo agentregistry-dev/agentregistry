@@ -265,6 +265,64 @@ func TestBuildServerJSON(t *testing.T) {
 	}
 }
 
+func TestTagFlagResolvesToVersion(t *testing.T) {
+	tests := []struct {
+		name            string
+		version         string
+		tag             string
+		expectedVersion string
+	}{
+		{
+			name:            "version takes precedence over tag",
+			version:         "2.0.0",
+			tag:             "1.0.0",
+			expectedVersion: "2.0.0",
+		},
+		{
+			name:            "tag used when version is empty",
+			version:         "",
+			tag:             "1.0.0",
+			expectedVersion: "1.0.0",
+		},
+		{
+			name:            "both empty stays empty",
+			version:         "",
+			tag:             "",
+			expectedVersion: "",
+		},
+		{
+			name:            "version set, tag empty",
+			version:         "3.0.0",
+			tag:             "",
+			expectedVersion: "3.0.0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Simulate the resolution logic from runMCPServerPublish
+			version := tt.version
+			tag := tt.tag
+			if version == "" && tag != "" {
+				version = tag
+			}
+			if version != tt.expectedVersion {
+				t.Errorf("expected version %q but got %q", tt.expectedVersion, version)
+			}
+		})
+	}
+}
+
+func TestPublishCmdHasTagFlag(t *testing.T) {
+	flag := PublishCmd.Flags().Lookup("tag")
+	if flag == nil {
+		t.Fatal("expected --tag flag to be registered on PublishCmd")
+	}
+	if flag.DefValue != "" {
+		t.Errorf("expected --tag default to be empty but got %q", flag.DefValue)
+	}
+}
+
 func TestRegistryTypeRuntimeHints(t *testing.T) {
 	tests := []struct {
 		regType  string
