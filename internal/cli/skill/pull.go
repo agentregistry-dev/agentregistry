@@ -2,14 +2,13 @@ package skill
 
 import (
 	"fmt"
-	"io"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/spf13/cobra"
 )
@@ -189,189 +188,6 @@ func pullFromDocker(dockerImage, absOutputDir string) error {
 
 // pullFromGitHub clones a GitHub repository and copies the skill files to the output directory.
 func pullFromGitHub(repoURL, absOutputDir string) error {
-	cloneURL, branch, subPath, err := parseGitHubURL(repoURL)
-	if err != nil {
-		return fmt.Errorf("failed to parse GitHub URL: %w", err)
-	}
-
-	printer.PrintInfo(fmt.Sprintf("Cloning from GitHub: %s", cloneURL))
-
-	tempDir, err := os.MkdirTemp("", "skill-github-*")
-	if err != nil {
-		return fmt.Errorf("failed to create temp directory: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
-
-	cloneArgs := []string{"clone", "--depth", "1"}
-	if branch != "" {
-		cloneArgs = append(cloneArgs, "--branch", branch)
-	}
-	cloneArgs = append(cloneArgs, cloneURL, tempDir)
-
-	gitCmd := exec.Command("git", cloneArgs...)
-	gitCmd.Stdout = os.Stdout
-	gitCmd.Stderr = os.Stderr
-	if err := gitCmd.Run(); err != nil {
-		return fmt.Errorf("failed to clone GitHub repository: %w", err)
-	}
-
-	return copyRepoContents(tempDir, subPath, absOutputDir)
-}
-
-// copyRepoContents copies files from a cloned repository to the output directory.
-// It navigates to the subPath if specified and skips the .git directory.
-// Symlinks are skipped to prevent symlink traversal attacks from untrusted repos.
-func copyRepoContents(repoDir, subPath, absOutputDir string) error {
-	srcDir := repoDir
-	if subPath != "" {
-		srcDir = filepath.Join(repoDir, subPath)
-		if _, err := os.Stat(srcDir); os.IsNotExist(err) {
-			return fmt.Errorf("subdirectory %q not found in repository", subPath)
-		}
-	}
-
-	printer.PrintInfo(fmt.Sprintf("Copying skill contents to: %s", absOutputDir))
-
-	entries, err := os.ReadDir(srcDir)
-	if err != nil {
-		return fmt.Errorf("failed to read source directory: %w", err)
-	}
-
-	for _, entry := range entries {
-		// Skip .git directory
-		if entry.Name() == ".git" {
-			continue
-		}
-
-		// Skip symlinks to prevent traversal attacks from untrusted repos
-		if entry.Type()&os.ModeSymlink != 0 {
-			printer.PrintInfo(fmt.Sprintf("Skipping symlink: %s", entry.Name()))
-			continue
-		}
-
-		srcPath := filepath.Join(srcDir, entry.Name())
-		dstPath := filepath.Join(absOutputDir, entry.Name())
-
-		if entry.IsDir() {
-			if err := copyDir(srcPath, dstPath); err != nil {
-				return fmt.Errorf("failed to copy directory %s: %w", entry.Name(), err)
-			}
-		} else {
-			if err := copyFile(srcPath, dstPath); err != nil {
-				return fmt.Errorf("failed to copy file %s: %w", entry.Name(), err)
-			}
-		}
-	}
-
-	return nil
-}
-
-// parseGitHubURL parses a GitHub URL into its clone URL, branch, and subdirectory path.
-// Supported formats:
-//   - https://github.com/owner/repo/tree/branch/path/to/dir
-//   - https://github.com/owner/repo
-//
-// Branch names containing slashes (e.g. feature/my-branch) are supported when
-// encoded as %2F in the URL. The raw (escaped) path is used for splitting so
-// the encoded branch segment is preserved, then unescaped for the return value.
-func parseGitHubURL(rawURL string) (cloneURL, branch, subPath string, err error) {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return "", "", "", fmt.Errorf("invalid URL: %w", err)
-	}
-
-	if u.Host != "github.com" {
-		return "", "", "", fmt.Errorf("unsupported host %q, only github.com is supported", u.Host)
-	}
-
-	// Use EscapedPath so that percent-encoded segments (e.g. %2F in branch
-	// names) are not decoded before splitting on "/".
-	rawPath := u.EscapedPath()
-
-	// Path is like /owner/repo or /owner/repo/tree/branch/sub/path
-	parts := strings.Split(strings.Trim(rawPath, "/"), "/")
-	if len(parts) < 2 {
-		return "", "", "", fmt.Errorf("invalid GitHub URL: expected at least owner/repo in path")
-	}
-
-	owner := parts[0]
-	repo := strings.TrimSuffix(parts[1], ".git")
-	cloneURL = fmt.Sprintf("https://github.com/%s/%s.git", owner, repo)
-
-	// If URL contains /tree/<branch>/..., extract branch and subpath.
-	// The branch segment is unescaped so encoded slashes (%2F) become real
-	// slashes in the returned branch name.
-	if len(parts) >= 4 && parts[2] == "tree" {
-		branch, _ = url.PathUnescape(parts[3])
-		if len(parts) > 4 {
-			raw := strings.Join(parts[4:], "/")
-			subPath, _ = url.PathUnescape(raw)
-		}
-	}
-
-	return cloneURL, branch, subPath, nil
-}
-
-// copyDir recursively copies a directory tree, skipping symlinks.
-func copyDir(src, dst string) error {
-	if err := os.MkdirAll(dst, 0755); err != nil {
-		return err
-	}
-
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return err
-	}
-
-	for _, entry := range entries {
-		// Skip symlinks to prevent traversal attacks
-		if entry.Type()&os.ModeSymlink != 0 {
-			continue
-		}
-
-		srcPath := filepath.Join(src, entry.Name())
-		dstPath := filepath.Join(dst, entry.Name())
-
-		if entry.IsDir() {
-			if err := copyDir(srcPath, dstPath); err != nil {
-				return err
-			}
-		} else {
-			if err := copyFile(srcPath, dstPath); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-// copyFile copies a single regular file. The caller must ensure src is not a symlink.
-func copyFile(src, dst string) error {
-	// Verify the source is a regular file via Lstat (does not follow symlinks)
-	srcInfo, err := os.Lstat(src)
-	if err != nil {
-		return err
-	}
-	if srcInfo.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("refusing to copy symlink: %s", src)
-	}
-
-	sourceFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = sourceFile.Close() }()
-
-	destFile, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = destFile.Close() }()
-
-	if _, err := io.Copy(destFile, sourceFile); err != nil {
-		return err
-	}
-
-	return os.Chmod(dst, srcInfo.Mode().Perm())
+	printer.PrintInfo(fmt.Sprintf("Cloning from GitHub: %s", repoURL))
+	return gitutil.CloneAndCopy(repoURL, absOutputDir, true)
 }

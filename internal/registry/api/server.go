@@ -3,8 +3,9 @@ package api
 import (
 	"context"
 	"embed"
+	"fmt"
 	"io/fs"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -94,10 +95,10 @@ func NewServer(cfg *config.Config, registryService service.RegistryService, metr
 		var err error
 		uiHandler, err = createUIHandler()
 		if err != nil {
-			log.Printf("Warning: Failed to create UI handler: %v. UI will not be served.", err)
+			slog.Warn("failed to create UI handler; UI will not be served", "error", err)
 			uiHandler = nil
 		} else {
-			log.Println("UI handler initialized - web interface will be available")
+			slog.Info("UI handler initialized; web interface will be available")
 		}
 	}
 
@@ -140,9 +141,9 @@ func NewServer(cfg *config.Config, registryService service.RegistryService, metr
 
 // Start begins listening for incoming HTTP requests
 func (s *Server) Start() error {
-	log.Printf("HTTP server starting on %s", s.config.ServerAddress)
-	log.Printf("Web UI available at http://localhost%s/", s.config.ServerAddress)
-	log.Printf("API documentation at http://localhost%s/docs", s.config.ServerAddress)
+	slog.Info("HTTP server starting", "address", s.config.ServerAddress)
+	slog.Info("web UI available", "url", fmt.Sprintf("http://localhost%s/", s.config.ServerAddress))
+	slog.Info("API documentation available", "url", fmt.Sprintf("http://localhost%s/docs", s.config.ServerAddress))
 	return s.server.ListenAndServe()
 }
 

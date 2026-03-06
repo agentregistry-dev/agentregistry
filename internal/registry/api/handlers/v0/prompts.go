@@ -81,8 +81,11 @@ func RegisterPromptsEndpoints(api huma.API, pathPrefix string, registry service.
 
 		prompts, nextCursor, err := registry.ListPrompts(ctx, filter, input.Cursor, input.Limit)
 		if err != nil {
-			if errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
-				return nil, huma.Error404NotFound("Not found")
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to get prompts list", err)
 		}
@@ -127,8 +130,14 @@ func RegisterPromptsEndpoints(api huma.API, pathPrefix string, registry service.
 			promptResp, err = registry.GetPromptByNameAndVersion(ctx, promptName, version)
 		}
 		if err != nil {
-			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Prompt not found")
+			}
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to get prompt details", err)
 		}
@@ -154,8 +163,14 @@ func RegisterPromptsEndpoints(api huma.API, pathPrefix string, registry service.
 		}
 
 		if err := registry.DeletePrompt(ctx, promptName, version); err != nil {
-			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Prompt not found")
+			}
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to delete prompt", err)
 		}
@@ -181,8 +196,14 @@ func RegisterPromptsEndpoints(api huma.API, pathPrefix string, registry service.
 
 		prompts, err := registry.GetAllVersionsByPromptName(ctx, promptName)
 		if err != nil {
-			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Prompt not found")
+			}
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to get prompt versions", err)
 		}
@@ -209,8 +230,14 @@ type CreatePromptInput struct {
 func createPromptHandler(ctx context.Context, input *CreatePromptInput, registry service.RegistryService) (*types.Response[promptmodels.PromptResponse], error) {
 	createdPrompt, err := registry.CreatePrompt(ctx, &input.Body)
 	if err != nil {
-		if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+		if errors.Is(err, database.ErrNotFound) {
 			return nil, huma.Error404NotFound("Not found")
+		}
+		if errors.Is(err, auth.ErrUnauthenticated) {
+			return nil, huma.Error401Unauthorized("Authentication required")
+		}
+		if errors.Is(err, auth.ErrForbidden) {
+			return nil, huma.Error403Forbidden("Forbidden")
 		}
 		return nil, huma.Error400BadRequest("Failed to create prompt", err)
 	}

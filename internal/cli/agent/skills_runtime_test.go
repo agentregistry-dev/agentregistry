@@ -99,22 +99,25 @@ func TestNormalizeSkillRegistryURL(t *testing.T) {
 	}
 }
 
-func TestResolveSkillImageRefImagePassthrough(t *testing.T) {
+func TestResolveSkillSourceImagePassthrough(t *testing.T) {
 	ref := models.SkillRef{
 		Name:  "local",
 		Image: "docker.io/org/skill:latest",
 	}
 
-	got, err := resolveSkillImageRef(ref)
+	got, err := resolveSkillSource(ref)
 	if err != nil {
-		t.Fatalf("resolveSkillImageRef() error = %v", err)
+		t.Fatalf("resolveSkillSource() error = %v", err)
 	}
-	if got != ref.Image {
-		t.Fatalf("resolveSkillImageRef() = %q, want %q", got, ref.Image)
+	if got.image != ref.Image {
+		t.Fatalf("resolveSkillSource().image = %q, want %q", got.image, ref.Image)
+	}
+	if got.repoURL != "" {
+		t.Fatalf("resolveSkillSource().repoURL = %q, want empty", got.repoURL)
 	}
 }
 
-func TestResolveSkillImageRefValidation(t *testing.T) {
+func TestResolveSkillSourceValidation(t *testing.T) {
 	tests := []struct {
 		name       string
 		ref        models.SkillRef
@@ -140,12 +143,65 @@ func TestResolveSkillImageRefValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := resolveSkillImageRef(tt.ref)
+			_, err := resolveSkillSource(tt.ref)
 			if err == nil {
-				t.Fatalf("resolveSkillImageRef() expected error, got nil")
+				t.Fatalf("resolveSkillSource() expected error, got nil")
 			}
 			if !strings.Contains(err.Error(), tt.errContain) {
-				t.Fatalf("resolveSkillImageRef() error = %q, want substring %q", err.Error(), tt.errContain)
+				t.Fatalf("resolveSkillSource() error = %q, want substring %q", err.Error(), tt.errContain)
+			}
+		})
+	}
+}
+
+func TestExtractSkillRepoURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		resp    *models.SkillResponse
+		wantURL string
+		wantErr bool
+	}{
+		{
+			name: "github repository",
+			resp: &models.SkillResponse{
+				Skill: models.SkillJSON{
+					Repository: &models.SkillRepository{
+						Source: "github",
+						URL:    "https://github.com/org/skill/tree/main/skills/my-skill",
+					},
+				},
+			},
+			wantURL: "https://github.com/org/skill/tree/main/skills/my-skill",
+		},
+		{
+			name: "no repository",
+			resp: &models.SkillResponse{
+				Skill: models.SkillJSON{},
+			},
+			wantErr: true,
+		},
+		{
+			name: "non-github source",
+			resp: &models.SkillResponse{
+				Skill: models.SkillJSON{
+					Repository: &models.SkillRepository{
+						Source: "gitlab",
+						URL:    "https://gitlab.com/org/skill",
+					},
+				},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := extractSkillRepoURL(tt.resp)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("extractSkillRepoURL() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.wantURL {
+				t.Fatalf("extractSkillRepoURL() = %q, want %q", got, tt.wantURL)
 			}
 		})
 	}

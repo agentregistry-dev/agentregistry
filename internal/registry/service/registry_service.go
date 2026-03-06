@@ -7,12 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
+	api "github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
@@ -60,6 +62,7 @@ type registryServiceImpl struct {
 	cfg                *config.Config
 	embeddingsProvider embeddings.Provider
 	deploymentAdapters map[string]registrytypes.DeploymentPlatformAdapter
+	logger             *slog.Logger
 }
 
 // DeploymentPlatformStaleCleaner is an optional adapter hook for stale deployment replacement.
@@ -82,6 +85,7 @@ func NewRegistryService(
 		db:                 db,
 		cfg:                cfg,
 		embeddingsProvider: embeddingProvider,
+		logger:             slog.Default().With("component", "registry"),
 	}
 }
 
@@ -259,10 +263,10 @@ func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx 
 			}
 			embedding, err := embeddings.GenerateSemanticEmbedding(bgCtx, s.embeddingsProvider, payload, s.cfg.Embeddings.Dimensions)
 			if err != nil {
-				log.Printf("Warning: failed to generate embedding for %s@%s: %v", serverJSON.Name, serverJSON.Version, err)
+				s.logger.Warn("failed to generate embedding for server", "name", serverJSON.Name, "version", serverJSON.Version, "error", err)
 			} else if embedding != nil {
 				if err := s.UpsertServerEmbedding(bgCtx, serverJSON.Name, serverJSON.Version, embedding); err != nil {
-					log.Printf("Warning: failed to store embedding for %s@%s: %v", serverJSON.Name, serverJSON.Version, err)
+					s.logger.Warn("failed to store embedding for server", "name", serverJSON.Name, "version", serverJSON.Version, "error", err)
 				}
 			}
 		}()
@@ -658,10 +662,10 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 			}
 			embedding, err := embeddings.GenerateSemanticEmbedding(bgCtx, s.embeddingsProvider, payload, s.cfg.Embeddings.Dimensions)
 			if err != nil {
-				log.Printf("Warning: failed to generate embedding for agent %s@%s: %v", agentJSON.Name, agentJSON.Version, err)
+				s.logger.Warn("failed to generate embedding for agent", "name", agentJSON.Name, "version", agentJSON.Version, "error", err)
 			} else if embedding != nil {
 				if err := s.UpsertAgentEmbedding(bgCtx, agentJSON.Name, agentJSON.Version, embedding); err != nil {
-					log.Printf("Warning: failed to store embedding for agent %s@%s: %v", agentJSON.Name, agentJSON.Version, err)
+					s.logger.Warn("failed to store embedding for agent", "name", agentJSON.Name, "version", agentJSON.Version, "error", err)
 				}
 			}
 		}()
@@ -1289,6 +1293,73 @@ func (s *registryServiceImpl) resolveAgentManifestMCPServers(ctx context.Context
 	}
 
 	return resolvedServers, nil
+}
+
+// resolveAgentManifestSkills resolves registry-type skill references from the
+// agent manifest into concrete skill refs (Docker images or GitHub repos) that
+// can be passed to the runtime translator and ultimately to the Agent CRD.
+func (s *registryServiceImpl) resolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]api.AgentSkillRef, error) {
+	if manifest == nil || len(manifest.Skills) == 0 {
+		return nil, nil
+	}
+
+	var resolved []api.AgentSkillRef
+	for _, skill := range manifest.Skills {
+		ref, err := s.resolveSkillRef(ctx, skill)
+		if err != nil {
+			return nil, fmt.Errorf("resolve skill %q: %w", skill.Name, err)
+		}
+		resolved = append(resolved, ref)
+	}
+	return resolved, nil
+}
+
+func (s *registryServiceImpl) resolveSkillRef(ctx context.Context, skill models.SkillRef) (api.AgentSkillRef, error) {
+	image := strings.TrimSpace(skill.Image)
+	registrySkillName := strings.TrimSpace(skill.RegistrySkillName)
+	hasImage := image != ""
+	hasRegistry := registrySkillName != ""
+
+	if !hasImage && !hasRegistry {
+		return api.AgentSkillRef{}, fmt.Errorf("one of image or registrySkillName is required")
+	}
+	if hasImage && hasRegistry {
+		return api.AgentSkillRef{}, fmt.Errorf("only one of image or registrySkillName may be set")
+	}
+
+	if hasImage {
+		return api.AgentSkillRef{Name: skill.Name, Image: image}, nil
+	}
+
+	version := strings.TrimSpace(skill.RegistrySkillVersion)
+	if version == "" {
+		version = "latest"
+	}
+
+	skillResp, err := s.GetSkillByNameAndVersion(ctx, registrySkillName, version)
+	if err != nil {
+		return api.AgentSkillRef{}, fmt.Errorf("fetch skill %q version %q: %w", registrySkillName, version, err)
+	}
+
+	// Prefer Docker/OCI image if available.
+	for _, pkg := range skillResp.Skill.Packages {
+		typ := strings.ToLower(strings.TrimSpace(pkg.RegistryType))
+		if (typ == "docker" || typ == "oci") && strings.TrimSpace(pkg.Identifier) != "" {
+			return api.AgentSkillRef{Name: skill.Name, Image: strings.TrimSpace(pkg.Identifier)}, nil
+		}
+	}
+
+	// Fall back to GitHub repository.
+	if skillResp.Skill.Repository != nil &&
+		strings.EqualFold(skillResp.Skill.Repository.Source, "github") &&
+		strings.TrimSpace(skillResp.Skill.Repository.URL) != "" {
+		return api.AgentSkillRef{
+			Name:    skill.Name,
+			RepoURL: strings.TrimSpace(skillResp.Skill.Repository.URL),
+		}, nil
+	}
+
+	return api.AgentSkillRef{}, fmt.Errorf("skill %q (version %s): no docker/oci package or github repository found", registrySkillName, version)
 }
 
 func (s *registryServiceImpl) ensureSemanticEmbedding(ctx context.Context, opts *database.SemanticSearchOptions) error {

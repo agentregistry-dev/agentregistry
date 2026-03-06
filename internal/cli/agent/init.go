@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const adkBaseImageVersion = "0.7.12"
+const adkBaseImageVersion = "0.7.22"
 
 var InitCmd = &cobra.Command{
 	Use:   "init [framework] [language] [agent-name]",

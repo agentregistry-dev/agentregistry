@@ -6,7 +6,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"path"
 	"slices"
 	"strconv"
@@ -45,6 +45,7 @@ type MigratorConfig struct {
 type Migrator struct {
 	conn   *pgx.Conn
 	config MigratorConfig
+	logger *slog.Logger
 }
 
 // NewMigrator creates a new migrator instance with the given configuration.
@@ -52,6 +53,7 @@ func NewMigrator(conn *pgx.Conn, config MigratorConfig) *Migrator {
 	return &Migrator{
 		conn:   conn,
 		config: config,
+		logger: slog.Default().With("component", "database.migrate"),
 	}
 }
 
@@ -110,13 +112,13 @@ func (m *Migrator) loadMigrations() ([]Migration, error) {
 		name := entry.Name()
 		parts := strings.SplitN(name, "_", 2)
 		if len(parts) != 2 {
-			log.Printf("Skipping migration file with invalid name format: %s", name)
+			m.logger.Error("skipping migration file with invalid name format", "name", name)
 			continue
 		}
 
 		version, err := strconv.Atoi(parts[0])
 		if err != nil {
-			log.Printf("Skipping migration file with invalid version: %s", name)
+			m.logger.Error("skipping migration file with invalid version", "name", name)
 			continue
 		}
 
@@ -183,21 +185,21 @@ func (m *Migrator) Migrate(ctx context.Context) error {
 	}
 
 	if len(pending) == 0 {
-		log.Println("No pending migrations")
+		m.logger.Info("no pending migrations")
 		return nil
 	}
 
-	log.Printf("Applying %d pending migrations", len(pending))
+	m.logger.Info("applying pending migrations", "count", len(pending))
 
 	// Apply each pending migration in a transaction
 	for _, migration := range pending {
 		if err := m.applyMigration(ctx, migration); err != nil {
 			return fmt.Errorf("failed to apply migration %s (v%d): %w", migration.Name, migration.Version, err)
 		}
-		log.Printf("Applied migration %d: %s", migration.Version, migration.Name)
+		m.logger.Info("applied migration", "version", migration.Version, "name", migration.Name)
 	}
 
-	log.Println("All migrations applied successfully")
+	m.logger.Info("all migrations applied successfully")
 	return nil
 }
 
@@ -210,7 +212,7 @@ func (m *Migrator) applyMigration(ctx context.Context, migration Migration) erro
 	defer func() {
 		// Rollback is safe to be called after a transaction is committed, where it won't be rolled back (ErrTxClosed).
 		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			log.Printf("Failed to rollback migration transaction: %v", err)
+			m.logger.Error("failed to rollback migration transaction", "error", err)
 		}
 	}()
 

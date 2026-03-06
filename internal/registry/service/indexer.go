@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
@@ -47,6 +47,7 @@ type indexerImpl struct {
 	registry   RegistryService
 	provider   embeddings.Provider
 	dimensions int
+	logger     *slog.Logger
 }
 
 // NewIndexer creates a new embeddings indexer.
@@ -55,6 +56,7 @@ func NewIndexer(registry RegistryService, provider embeddings.Provider, dimensio
 		registry:   registry,
 		provider:   provider,
 		dimensions: dimensions,
+		logger:     slog.Default().With("component", "indexer"),
 	}
 }
 
@@ -129,7 +131,7 @@ func (s *indexerImpl) indexServers(ctx context.Context, opts IndexOptions, onPro
 			payload := embeddings.BuildServerEmbeddingPayload(&server.Server)
 
 			if strings.TrimSpace(payload) == "" {
-				log.Printf("Skipping server %s@%s: empty embedding payload", name, version)
+				s.logger.Info("skipping server: empty embedding payload", "name", name, "version", version)
 				stats.Skipped++
 				continue
 			}
@@ -137,7 +139,7 @@ func (s *indexerImpl) indexServers(ctx context.Context, opts IndexOptions, onPro
 			payloadChecksum := embeddings.PayloadChecksum(payload)
 			meta, err := s.registry.GetServerEmbeddingMetadata(ctx, name, version)
 			if err != nil && !errors.Is(err, database.ErrNotFound) {
-				log.Printf("Failed to read server embedding metadata for %s@%s: %v", name, version, err)
+				s.logger.Error("failed to read server embedding metadata", "name", name, "version", version, "error", err)
 				stats.Failures++
 				continue
 			}
@@ -153,20 +155,20 @@ func (s *indexerImpl) indexServers(ctx context.Context, opts IndexOptions, onPro
 			}
 
 			if opts.DryRun {
-				log.Printf("[DRY RUN] Would upsert server embedding for %s@%s (existing=%v checksum=%s)", name, version, hasEmbedding, meta.Checksum)
+				s.logger.Info("dry run: would upsert server embedding", "name", name, "version", version, "existing", hasEmbedding, "checksum", meta.Checksum)
 				stats.Updated++
 				continue
 			}
 
 			record, err := embeddings.GenerateSemanticEmbedding(ctx, s.provider, payload, s.dimensions)
 			if err != nil {
-				log.Printf("Failed to generate server embedding for %s@%s: %v", name, version, err)
+				s.logger.Error("failed to generate server embedding", "name", name, "version", version, "error", err)
 				stats.Failures++
 				continue
 			}
 
 			if err := s.registry.UpsertServerEmbedding(ctx, name, version, record); err != nil {
-				log.Printf("Failed to persist server embedding for %s@%s: %v", name, version, err)
+				s.logger.Error("failed to persist server embedding", "name", name, "version", version, "error", err)
 				stats.Failures++
 				continue
 			}
@@ -227,7 +229,7 @@ func (s *indexerImpl) indexAgents(ctx context.Context, opts IndexOptions, onProg
 			payload := embeddings.BuildAgentEmbeddingPayload(&agent.Agent)
 
 			if strings.TrimSpace(payload) == "" {
-				log.Printf("Skipping agent %s@%s: empty embedding payload", name, version)
+				s.logger.Info("skipping agent: empty embedding payload", "name", name, "version", version)
 				stats.Skipped++
 				continue
 			}
@@ -235,7 +237,7 @@ func (s *indexerImpl) indexAgents(ctx context.Context, opts IndexOptions, onProg
 			payloadChecksum := embeddings.PayloadChecksum(payload)
 			meta, err := s.registry.GetAgentEmbeddingMetadata(ctx, name, version)
 			if err != nil && !errors.Is(err, database.ErrNotFound) {
-				log.Printf("Failed to read agent embedding metadata for %s@%s: %v", name, version, err)
+				s.logger.Error("failed to read agent embedding metadata", "name", name, "version", version, "error", err)
 				stats.Failures++
 				continue
 			}
@@ -251,20 +253,20 @@ func (s *indexerImpl) indexAgents(ctx context.Context, opts IndexOptions, onProg
 			}
 
 			if opts.DryRun {
-				log.Printf("[DRY RUN] Would upsert agent embedding for %s@%s (existing=%v checksum=%s)", name, version, hasEmbedding, meta.Checksum)
+				s.logger.Info("dry run: would upsert agent embedding", "name", name, "version", version, "existing", hasEmbedding, "checksum", meta.Checksum)
 				stats.Updated++
 				continue
 			}
 
 			record, err := embeddings.GenerateSemanticEmbedding(ctx, s.provider, payload, s.dimensions)
 			if err != nil {
-				log.Printf("Failed to generate agent embedding for %s@%s: %v", name, version, err)
+				s.logger.Error("failed to generate agent embedding", "name", name, "version", version, "error", err)
 				stats.Failures++
 				continue
 			}
 
 			if err := s.registry.UpsertAgentEmbedding(ctx, name, version, record); err != nil {
-				log.Printf("Failed to persist agent embedding for %s@%s: %v", name, version, err)
+				s.logger.Error("failed to persist agent embedding", "name", name, "version", version, "error", err)
 				stats.Failures++
 				continue
 			}

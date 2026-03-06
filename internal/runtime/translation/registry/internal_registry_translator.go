@@ -33,6 +33,8 @@ type AgentRunRequest struct {
 	EnvValues     map[string]string
 	// Registry-type MCP servers resolved from agent manifest at deploy time to inject into the agent
 	ResolvedMCPServers []*MCPServerRunRequest
+	// ResolvedSkills contains skill references resolved from the agent manifest.
+	ResolvedSkills []api.AgentSkillRef
 }
 
 // Translator is the interface for translating MCPServer objects to AgentGateway objects.
@@ -90,6 +92,7 @@ func (t *registryTranslator) TranslateAgent(
 			Port:  port,
 			Env:   env,
 		},
+		Skills: req.ResolvedSkills,
 	}, nil
 }
 

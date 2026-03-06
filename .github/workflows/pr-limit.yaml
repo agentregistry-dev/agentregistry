@@ -1,0 +1,25 @@
+# this workflow limits the number of open PRs created by a user
+name: PR Limiter
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  pr-limiter:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: Homebrew/actions/limit-pull-requests@50b8c2ab4a835c38897ed2c56c293b07167c0b59
+      with:
+        # https://docs.github.com/en/graphql/reference/enums#commentauthorassociation
+        except-author-associations: |
+          MEMBER
+          OWNER
+          COLLABORATOR
+        comment-limit: 3
+        comment: >
+          You already have 3 pull requests open. Please consider working on getting
+          the existing ones merged before opening new ones. Thanks!

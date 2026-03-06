@@ -44,6 +44,9 @@ func init() {
 	InitCmd.PersistentFlags().StringVar(&initDescription, "description", "", "Description for the project")
 	InitCmd.PersistentFlags().BoolVar(&initNonInteractive, "non-interactive", false, "Run in non-interactive mode")
 	InitCmd.PersistentFlags().StringVar(&initVersion, "version", "0.1.0", "Version for the project (default: 0.1.0)")
+
+	// Hide inherited registry flags that are not used by offline commands (#115).
+	hideRegistryFlags(InitCmd, BuildCmd, AddToolCmd)
 }
 
 func runInit(cmd *cobra.Command, args []string) error {

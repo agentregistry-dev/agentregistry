@@ -42,11 +42,11 @@ var (
 )
 
 func init() {
-	AddSkillCmd.Flags().StringVar(&skillProjectDir, "project-dir", ".", "Project directory (default: current directory)")
+	AddSkillCmd.Flags().StringVar(&skillProjectDir, "project-dir", ".", "Project directory")
 	AddSkillCmd.Flags().StringVar(&skillImage, "image", "", "Docker image containing the skill")
-	AddSkillCmd.Flags().StringVar(&skillRegistryURL, "registry-url", "", "Registry URL for pulling the skill")
+	AddSkillCmd.Flags().StringVar(&skillRegistryURL, "registry-url", "", "Registry URL (defaults to the currently configured registry)")
 	AddSkillCmd.Flags().StringVar(&skillRegistrySkillName, "registry-skill-name", "", "Skill name in the registry")
-	AddSkillCmd.Flags().StringVar(&skillRegistrySkillVersion, "registry-skill-version", "", "Version of the skill to pull from the registry")
+	AddSkillCmd.Flags().StringVar(&skillRegistrySkillVersion, "registry-skill-version", "", "Skill version to pull from the registry (defaults to latest)")
 }
 
 func runAddSkill(cmd *cobra.Command, args []string) error {

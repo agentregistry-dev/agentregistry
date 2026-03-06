@@ -176,7 +176,7 @@ docker-agentgateway:
 	echo "✓ Agent gateway image built successfully";
 
 
-docker-server: .env
+docker-server:
 	@echo "Building server Docker image..."
 	$(DOCKER_BUILDER) build $(DOCKER_BUILD_ARGS) -f docker/server.Dockerfile -t $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) --build-arg LDFLAGS="$(LDFLAGS)" .
 	@echo "✓ Docker image built successfully"

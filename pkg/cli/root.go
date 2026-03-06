@@ -88,7 +88,7 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&registryURL, "registry-url", os.Getenv("ARCTL_API_BASE_URL"), "Registry base URL (overrides ARCTL_API_BASE_URL; default http://localhost:12121)")
+	rootCmd.PersistentFlags().StringVar(&registryURL, "registry-url", os.Getenv("ARCTL_API_BASE_URL"), "Registry URL (overrides ARCTL_API_BASE_URL env var; defaults to http://localhost:12121)")
 	rootCmd.PersistentFlags().StringVar(&registryToken, "registry-token", os.Getenv("ARCTL_API_TOKEN"), "Registry bearer token (overrides ARCTL_API_TOKEN)")
 
 	rootCmd.AddCommand(mcp.McpCmd)
