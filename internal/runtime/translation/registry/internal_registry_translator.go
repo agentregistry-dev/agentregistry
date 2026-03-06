@@ -25,6 +25,9 @@ type MCPServerRunRequest struct {
 	EnvValues      map[string]string
 	ArgValues      map[string]string
 	HeaderValues   map[string]string
+	// Name is the user-provided name from agent.yaml. When set, it is used as
+	// the Kubernetes service/resource name instead of the registry server name.
+	Name string
 }
 
 type AgentRunRequest struct {
@@ -100,11 +103,18 @@ func (t *registryTranslator) TranslateMCPServer(
 	useRemote := len(req.RegistryServer.Remotes) > 0 && (req.PreferRemote || len(req.RegistryServer.Packages) == 0)
 	usePackage := len(req.RegistryServer.Packages) > 0 && (!req.PreferRemote || len(req.RegistryServer.Remotes) == 0)
 
+	// Use user-provided name when available, otherwise fall back to registry name
+	effectiveName := req.Name
+	if effectiveName == "" {
+		effectiveName = req.RegistryServer.Name
+	}
+
 	switch {
 	case useRemote:
 		return translateRemoteMCPServer(
 			ctx,
 			req.RegistryServer,
+			effectiveName,
 			req.DeploymentID,
 			req.HeaderValues,
 		)
@@ -112,6 +122,7 @@ func (t *registryTranslator) TranslateMCPServer(
 		return translateLocalMCPServer(
 			ctx,
 			req.RegistryServer,
+			effectiveName,
 			req.DeploymentID,
 			req.EnvValues,
 			req.ArgValues,
@@ -124,6 +135,7 @@ func (t *registryTranslator) TranslateMCPServer(
 func translateRemoteMCPServer(
 	ctx context.Context,
 	registryServer *apiv0.ServerJSON,
+	name string,
 	deploymentID string,
 	headerValues map[string]string,
 ) (*api.MCPServer, error) {
@@ -149,7 +161,7 @@ func translateRemoteMCPServer(
 	}
 
 	return &api.MCPServer{
-		Name:          GenerateInternalName(registryServer.Name),
+		Name:          GenerateInternalName(name),
 		DeploymentID:  deploymentID,
 		MCPServerType: api.MCPServerTypeRemote,
 		Remote: &api.RemoteMCPServer{
@@ -164,6 +176,7 @@ func translateRemoteMCPServer(
 func translateLocalMCPServer(
 	ctx context.Context,
 	registryServer *apiv0.ServerJSON,
+	name string,
 	deploymentID string,
 	envValues map[string]string,
 	argValues map[string]string,
@@ -246,7 +259,7 @@ func translateLocalMCPServer(
 	}
 
 	return &api.MCPServer{
-		Name:          GenerateInternalName(registryServer.Name),
+		Name:          GenerateInternalName(name),
 		DeploymentID:  deploymentID,
 		MCPServerType: api.MCPServerTypeLocal,
 		Local: &api.LocalMCPServer{
