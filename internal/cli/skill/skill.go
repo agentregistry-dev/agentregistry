@@ -19,6 +19,7 @@ var SkillCmd = &cobra.Command{
 	Args:  cobra.ArbitraryArgs,
 	Example: `arctl skill list
 arctl skill show my-skill
+arctl skill build ./my-skill
 arctl skill publish ./my-skill
 arctl skill delete my-skill --version 1.0.0`,
 }
@@ -27,6 +28,7 @@ func init() {
 	SkillCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 
 	SkillCmd.AddCommand(InitCmd)
+	SkillCmd.AddCommand(BuildCmd)
 	SkillCmd.AddCommand(ListCmd)
 	SkillCmd.AddCommand(PublishCmd)
 	SkillCmd.AddCommand(DeleteCmd)
