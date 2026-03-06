@@ -39,12 +39,12 @@ var PublishCmd = &cobra.Command{
 This command supports three modes:
 
 1. From a local skill folder (with SKILL.md):
-   arctl skill publish ./my-skill --github https://github.com/org/repo --version 1.0.0
+   arctl skill publish ./my-skill --git https://github.com/org/repo --version 1.0.0
    arctl skill publish ./my-skill --docker-image docker.io/myorg/my-skill:v1.0.0 --version 1.0.0
 
-2. Direct registration with GitHub:
+2. Direct registration with Git repository:
    arctl skill publish my-skill \
-     --github https://github.com/org/repo/tree/main/skills/my-skill \
+     --git https://github.com/org/repo/tree/main/skills/my-skill \
      --version 1.0.0 \
      --description "My remote skill"
 
@@ -54,7 +54,7 @@ This command supports three modes:
      --version 1.0.0 \
      --description "My Docker skill"
 
-For GitHub modes, SKILL.md must exist at the specified GitHub path.
+For Git modes, SKILL.md must exist at the specified Git repository path.
 In folder mode, the local skill folder must also contain a SKILL.md file with proper YAML frontmatter.
 
 To build a skill as a Docker image, use "arctl skill build" instead.`,
@@ -63,14 +63,16 @@ To build a skill as a Docker image, use "arctl skill build" instead.`,
 }
 
 func init() {
-	PublishCmd.Flags().StringVar(&versionFlag, "version", "", "Version to publish (required)")
+	// Common flags
+	PublishCmd.Flags().StringVar(&versionFlag, "version", "", "Version to publish (required for --git or --docker-image)")
 	PublishCmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Show what would be done without actually doing it")
 	PublishCmd.Flags().StringVar(&publishDesc, "description", "", "Skill description (optional, used with direct registration)")
-	PublishCmd.Flags().StringVar(&githubRepository, "github", "", "GitHub repository URL. Supports tree URLs: https://github.com/owner/repo/tree/branch/path")
-	PublishCmd.Flags().StringVar(&dockerImageFlag, "docker-image", "", "Pre-built Docker image reference (e.g., docker.io/myorg/my-skill:v1.0.0)")
+	PublishCmd.Flags().StringVar(&githubRepository, "git", "", "GitHub repository URL (alternative to --docker-image). Supports tree URLs: https://github.com/owner/repo/tree/branch/path")
 
-	PublishCmd.MarkFlagsMutuallyExclusive("github", "docker-image")
-	PublishCmd.MarkFlagsOneRequired("github", "docker-image")
+	// Docker-only flags
+	PublishCmd.Flags().StringVar(&dockerImageFlag, "docker-image", "", "Docker image URL. For example: docker.io/myorg/my-skill:v1.0.0")
+
+	PublishCmd.MarkFlagsOneRequired("git", "docker-image")
 }
 
 func runPublish(cmd *cobra.Command, args []string) error {
@@ -123,7 +125,7 @@ func runPublishFromFolder(skillFolderPath string) error {
 	return nil
 }
 
-// runPublishDirect publishes a skill by name using --github or --docker-image flags
+// runPublishDirect publishes a skill by name using --git or --docker-image flags
 // without requiring a local SKILL.md.
 func runPublishDirect(skillName string) error {
 	var skillJson *models.SkillJSON
@@ -172,14 +174,14 @@ func buildSkillDirectGitHub(skillName string) (*models.SkillJSON, error) {
 	skillName = strings.ToLower(skillName)
 
 	if githubRepository == "" {
-		return nil, fmt.Errorf("--github is required when publishing without SKILL.md")
+		return nil, fmt.Errorf("--git is required when publishing without SKILL.md")
 	}
 	if versionFlag == "" {
 		return nil, fmt.Errorf("--version is required when publishing without SKILL.md")
 	}
 
 	if err := checkGitHubSkillMdExists(githubRepository); err != nil {
-		return nil, fmt.Errorf("--github validation failed: %w", err)
+		return nil, fmt.Errorf("--git validation failed: %w", err)
 	}
 
 	return &models.SkillJSON{
@@ -188,7 +190,7 @@ func buildSkillDirectGitHub(skillName string) (*models.SkillJSON, error) {
 		Version:     versionFlag,
 		Repository: &models.SkillRepository{
 			URL:    githubRepository,
-			Source: "github",
+			Source: "git",
 		},
 	}, nil
 }
@@ -292,7 +294,7 @@ func resolveSkillMeta(skillPath string) (name, description string, err error) {
 // Requires --version to be set.
 func resolveGitHubVersion() (string, error) {
 	if versionFlag == "" {
-		return "", fmt.Errorf("--version is required when publishing with --github")
+		return "", fmt.Errorf("--version is required when publishing with --git")
 	}
 	return versionFlag, nil
 }
@@ -352,9 +354,9 @@ func buildSkillFromGitHub(skillPath string) (*models.SkillJSON, error) {
 		return nil, err
 	}
 
-	// Validate the GitHub URL and verify SKILL.md exists at the remote path
+	// Validate the Git URL and verify SKILL.md exists at the remote path
 	if err := checkGitHubSkillMdExists(githubRepository); err != nil {
-		return nil, fmt.Errorf("--github validation failed: %w", err)
+		return nil, fmt.Errorf("--git validation failed: %w", err)
 	}
 
 	skill := &models.SkillJSON{
@@ -363,7 +365,7 @@ func buildSkillFromGitHub(skillPath string) (*models.SkillJSON, error) {
 		Version:     ver,
 		Repository: &models.SkillRepository{
 			URL:    githubRepository,
-			Source: "github",
+			Source: "git",
 		},
 	}
 
