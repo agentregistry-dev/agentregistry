@@ -276,3 +276,7 @@ mod-tidy: ## Run go mod tidy
 .PHONY: mod-download
 mod-download: ## Run go mod download
 	go mod download
+
+.PHONY: test-helm
+test-helm: ## Run helm unittest
+	@helm unittest charts/agentregistry

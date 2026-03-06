@@ -41,6 +41,9 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-node-
 
+    - name: Run Helm Tests
+      run: make test-helm
+
     - name: Install UI Dependencies
       run: npm ci
       working-directory: ui
