@@ -82,8 +82,12 @@ func createDeploymentHTTPError(err error) error {
 		return huma.Error400BadRequest("Unsupported provider or platform for deployment")
 	case errors.Is(err, database.ErrInvalidInput):
 		return huma.Error400BadRequest(err.Error())
-	case errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated):
+	case errors.Is(err, database.ErrNotFound):
 		return huma.Error404NotFound("Resource not found in registry")
+	case errors.Is(err, auth.ErrUnauthenticated):
+		return huma.Error401Unauthorized("Authentication required")
+	case errors.Is(err, auth.ErrForbidden):
+		return huma.Error403Forbidden("Forbidden")
 	case errors.Is(err, database.ErrAlreadyExists):
 		return huma.Error409Conflict("Deployment with this ID already exists")
 	case err.Error() == "agent deployment is not yet implemented":
@@ -132,8 +136,11 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 
 		deployments, err := registry.GetDeployments(ctx, filter)
 		if err != nil {
-			if errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
-				return nil, huma.Error404NotFound("Not found")
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to retrieve deployments", err)
 		}
@@ -158,8 +165,14 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 	}, func(ctx context.Context, input *DeploymentByIDInput) (*DeploymentResponse, error) {
 		deployment, err := registry.GetDeploymentByID(ctx, input.ID)
 		if err != nil {
-			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Deployment not found")
+			}
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to retrieve deployment", err)
 		}
@@ -229,8 +242,14 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 	}, func(ctx context.Context, input *DeploymentByIDInput) (*struct{}, error) {
 		deployment, err := registry.GetDeploymentByID(ctx, input.ID)
 		if err != nil {
-			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Deployment not found")
+			}
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to retrieve deployment", err)
 		}
@@ -249,8 +268,14 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			if errors.Is(err, database.ErrInvalidInput) {
 				return nil, huma.Error400BadRequest("Invalid deployment removal request")
 			}
-			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Deployment not found")
+			}
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to remove deployment", err)
 		}
@@ -269,8 +294,14 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 	}, func(ctx context.Context, input *DeploymentByIDInput) (*DeploymentLogsResponse, error) {
 		deployment, err := registry.GetDeploymentByID(ctx, input.ID)
 		if err != nil {
-			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Deployment not found")
+			}
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to retrieve deployment", err)
 		}
@@ -306,8 +337,14 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 	}, func(ctx context.Context, input *DeploymentByIDInput) (*struct{}, error) {
 		deployment, err := registry.GetDeploymentByID(ctx, input.ID)
 		if err != nil {
-			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Deployment not found")
+			}
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to retrieve deployment", err)
 		}

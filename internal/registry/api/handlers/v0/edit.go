@@ -54,8 +54,14 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.Reg
 		// Get current server to check permissions against existing name
 		currentServer, err := registry.GetServerByNameAndVersion(ctx, serverName, version)
 		if err != nil {
-			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Server not found")
+			}
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to get current server", err)
 		}
@@ -93,8 +99,14 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.Reg
 		}
 		updatedServer, err := registry.UpdateServer(ctx, serverName, version, &input.Body, statusPtr)
 		if err != nil {
-			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Server not found")
+			}
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error400BadRequest("Failed to edit server", err)
 		}
