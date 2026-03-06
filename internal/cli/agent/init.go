@@ -11,6 +11,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/validators"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 const adkBaseImageVersion = "0.7.12"
@@ -55,6 +56,23 @@ func init() {
 	InitCmd.Flags().StringVar(&initDescription, "description", "", "Description for the agent")
 	InitCmd.Flags().StringVar(&initTelemetryEndpoint, "telemetry", "", "OTLP endpoint URL for OpenTelemetry traces (e.g., http://localhost:4318/v1/traces)")
 	InitCmd.Flags().StringVar(&initImage, "image", "", "Docker image name including tag (e.g., ghcr.io/myorg/myagent:v1.0, docker.io/user/image:latest)")
+
+	hideRegistryFlags(InitCmd)
+}
+
+// hideRegistryFlags hides the inherited --registry-url and --registry-token
+// flags from the help output of commands that don't interact with the registry.
+func hideRegistryFlags(cmd *cobra.Command) {
+	origHelp := cmd.HelpFunc()
+	cmd.SetHelpFunc(func(c *cobra.Command, args []string) {
+		for _, name := range []string{"registry-url", "registry-token"} {
+			if f := c.InheritedFlags().Lookup(name); f != nil {
+				f.Hidden = true
+				defer func(fl *pflag.Flag) { fl.Hidden = false }(f)
+			}
+		}
+		origHelp(c, args)
+	})
 }
 
 func runInit(cmd *cobra.Command, args []string) error {

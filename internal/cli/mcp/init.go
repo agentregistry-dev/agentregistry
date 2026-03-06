@@ -14,6 +14,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/validators"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var InitCmd = &cobra.Command{
@@ -44,6 +45,23 @@ func init() {
 	InitCmd.PersistentFlags().StringVar(&initDescription, "description", "", "Description for the project")
 	InitCmd.PersistentFlags().BoolVar(&initNonInteractive, "non-interactive", false, "Run in non-interactive mode")
 	InitCmd.PersistentFlags().StringVar(&initVersion, "version", "0.1.0", "Version for the project (default: 0.1.0)")
+
+	hideRegistryFlags(InitCmd)
+}
+
+// hideRegistryFlags hides the inherited --registry-url and --registry-token
+// flags from the help output of commands that don't interact with the registry.
+func hideRegistryFlags(cmd *cobra.Command) {
+	origHelp := cmd.HelpFunc()
+	cmd.SetHelpFunc(func(c *cobra.Command, args []string) {
+		for _, name := range []string{"registry-url", "registry-token"} {
+			if f := c.InheritedFlags().Lookup(name); f != nil {
+				f.Hidden = true
+				defer func(fl *pflag.Flag) { fl.Hidden = false }(f)
+			}
+		}
+		origHelp(c, args)
+	})
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
