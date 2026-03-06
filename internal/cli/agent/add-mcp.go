@@ -48,8 +48,8 @@ func init() {
 	AddMcpCmd.Flags().StringVar(&build, "build", "", "Container build (mutually exclusive with --image)")
 	AddMcpCmd.Flags().StringVar(&registryURL, "registry-url", "", "Registry URL (defaults to the currently configured registry; mutually exclusive with --remote, --command, --image, --build)")
 	AddMcpCmd.Flags().StringVar(&registryServerName, "registry-server-name", "", "MCP server name in the registry (mutually exclusive with --remote, --command, --image, --build)")
-	AddMcpCmd.Flags().StringVar(&registryServerVersion, "registry-server-version", "", "MCP server version to pull from the registry (defaults to latest)")
-	AddMcpCmd.Flags().BoolVar(&registryServerPreferRemote, "registry-server-prefer-remote", false, "Prefer remote MCP server (optional)")
+	AddMcpCmd.Flags().StringVar(&registryServerVersion, "registry-server-version", "latest", "MCP server version to pull from the registry (defaults to latest)")
+	AddMcpCmd.Flags().BoolVar(&registryServerPreferRemote, "registry-server-prefer-remote", false, "When the MCP server has multiple packages, prefer the remote package")
 }
 
 // addMcpCmd runs the interactive flow to append an MCP server to agent.yaml
