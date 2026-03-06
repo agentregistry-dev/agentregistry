@@ -17,6 +17,7 @@ var (
 	deployYes          bool
 	deployProviderID   string
 	deployNamespace    string
+	deployNoWait       bool
 )
 
 var DeployCmd = &cobra.Command{
@@ -38,6 +39,7 @@ func init() {
 	DeployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "Automatically accept all prompts (use default/latest version)")
 	DeployCmd.Flags().StringVar(&deployProviderID, "provider-id", "", "Deployment target provider ID (defaults to local when omitted)")
 	DeployCmd.Flags().StringVar(&deployNamespace, "namespace", "", "Kubernetes namespace for deployment (if provider targets Kubernetes)")
+	DeployCmd.Flags().BoolVar(&deployNoWait, "no-wait", false, "Return immediately without waiting for the deployment to become ready")
 }
 
 func runDeploy(cmd *cobra.Command, args []string) error {
@@ -91,6 +93,13 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	deployment, err := apiClient.DeployServer(serverName, deployVersion, deploymentEnv, deployPreferRemote, deployProviderID)
 	if err != nil {
 		return fmt.Errorf("failed to deploy server: %w", err)
+	}
+
+	if deployProviderID != "local" && !deployNoWait {
+		fmt.Printf("Waiting for server '%s' to become ready...\n", deployment.ServerName)
+		if err := common.WaitForDeploymentReady(apiClient, deployment.ID); err != nil {
+			return err
+		}
 	}
 
 	fmt.Printf("\n✓ Deployed %s (%s) with providerId=%s\n", deployment.ServerName, common.FormatVersionForDisplay(deployment.Version), deployProviderID)
