@@ -362,7 +362,7 @@ func TestSkillPublishValidation(t *testing.T) {
 			"--registry-url", "http://localhost:12121/v0",
 		)
 		RequireFailure(t, result)
-		RequireOutputContains(t, result, "does not contain a SKILL.md")
+		RequireOutputContains(t, result, "no SKILL.md found")
 	})
 }
 

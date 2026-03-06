@@ -3,15 +3,16 @@ package skill
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/spf13/cobra"
 )
+
+// skillDockerfile is the minimal Dockerfile used for skill images.
+const skillDockerfile = "FROM scratch\nCOPY . .\n"
 
 var BuildCmd = &cobra.Command{
 	Use:   "build <skill-folder-path>",
@@ -90,26 +91,28 @@ func buildSkillImage(skillPath string, dockerExec *docker.Executor) error {
 
 	printer.PrintInfo(fmt.Sprintf("Building skill %q as Docker image: %s", name, imageName))
 
-	args := []string{"build", "-t", imageName}
+	// Write the inline Dockerfile to a temp file so we can use the standard Build method.
+	tmpFile, err := os.CreateTemp("", "skill-dockerfile-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp Dockerfile: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	if _, err := tmpFile.WriteString(skillDockerfile); err != nil {
+		tmpFile.Close()
+		return fmt.Errorf("failed to write temp Dockerfile: %w", err)
+	}
+	tmpFile.Close()
+
+	var extraArgs []string
+	extraArgs = append(extraArgs, "-f", tmpFile.Name())
 	if buildPlatform != "" {
-		args = append(args, "--platform", buildPlatform)
-	}
-	args = append(args, "-f", "-", skillPath)
-
-	if verbose {
-		printer.PrintInfo("Running: docker " + strings.Join(args, " "))
+		extraArgs = append(extraArgs, "--platform", buildPlatform)
 	}
 
-	cmd := exec.Command("docker", args...)
-	cmd.Dir = skillPath
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = strings.NewReader("FROM scratch\nCOPY . .\n")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("docker build failed for skill %q: %w", name, err)
+	exec := docker.NewExecutor(verbose, skillPath)
+	if err := exec.Build(imageName, skillPath, extraArgs...); err != nil {
+		return fmt.Errorf("build failed for skill %q: %w", name, err)
 	}
-
-	printer.PrintSuccess(fmt.Sprintf("Successfully built Docker image: %s", imageName))
 
 	if buildPush {
 		printer.PrintInfo(fmt.Sprintf("Pushing Docker image %s...", imageName))

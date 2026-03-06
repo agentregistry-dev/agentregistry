@@ -335,10 +335,11 @@ func TestBuildSkillFromGitHub_InvalidURL(t *testing.T) {
 
 func TestDetectSkills(t *testing.T) {
 	tests := []struct {
-		name      string
-		setup     func(dir string) // creates files/dirs under dir
-		wantCount int
-		wantErr   bool
+		name        string
+		setup       func(dir string) // creates files/dirs under dir
+		wantCount   int
+		wantErr     bool
+		errContains string
 	}{
 		{
 			name: "single skill in root",
@@ -391,21 +392,24 @@ func TestDetectSkills(t *testing.T) {
 				os.MkdirAll(sub, 0755)
 				writeFile(t, filepath.Join(sub, "SKILL.md"), "no frontmatter here")
 			},
-			wantErr: true,
+			wantErr:     true,
+			errContains: "invalid or missing YAML frontmatter",
 		},
 		{
 			name: "root SKILL.md with invalid frontmatter",
 			setup: func(dir string) {
 				writeFile(t, filepath.Join(dir, "SKILL.md"), "no frontmatter here")
 			},
-			wantErr: true,
+			wantErr:     true,
+			errContains: "invalid or missing YAML frontmatter",
 		},
 		{
 			name: "no skills found",
 			setup: func(dir string) {
 				writeFile(t, filepath.Join(dir, "README.md"), "no skills here")
 			},
-			wantErr: true,
+			wantErr:     true,
+			errContains: "no SKILL.md found",
 		},
 	}
 
@@ -419,6 +423,9 @@ func TestDetectSkills(t *testing.T) {
 				t.Fatalf("detectSkills() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if tt.wantErr {
+				if tt.errContains != "" && !contains(err.Error(), tt.errContains) {
+					t.Errorf("error = %q, want it to contain %q", err.Error(), tt.errContains)
+				}
 				return
 			}
 			if len(skills) != tt.wantCount {
@@ -427,7 +434,6 @@ func TestDetectSkills(t *testing.T) {
 		})
 	}
 }
-
 
 // savePublishFlags saves all publish-related package-level vars and returns a cleanup function.
 func savePublishFlags(t *testing.T) {
@@ -539,8 +545,8 @@ func TestRunPublish_DirWithoutSkillMdReturnsError(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected error for directory without SKILL.md, got nil")
 			}
-			if !contains(err.Error(), "does not contain a SKILL.md") {
-				t.Errorf("error = %q, want it to contain 'does not contain a SKILL.md'", err.Error())
+			if !contains(err.Error(), "no SKILL.md found") {
+				t.Errorf("error = %q, want it to contain 'no SKILL.md found'", err.Error())
 			}
 		})
 	}
@@ -832,7 +838,7 @@ func TestRunPublish_DirectGitHub(t *testing.T) {
 	mockGitHubSkillMdCheck(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/v0/skills" {
+		if r.Method == http.MethodPost && r.URL.Path == "/v0/skills" { //nolint:nestif
 			var skill models.SkillJSON
 			json.NewDecoder(r.Body).Decode(&skill)
 			if skill.Name != "remote-skill" {
@@ -910,7 +916,6 @@ func TestRunPublish_DirectMissingVersion(t *testing.T) {
 		t.Errorf("error = %q, want it to contain '--version is required'", err.Error())
 	}
 }
-
 
 // --- Direct Docker mode tests ---
 
@@ -1017,7 +1022,7 @@ func TestRunPublish_DirectDockerSuccess(t *testing.T) {
 	savePublishFlags(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/v0/skills" {
+		if r.Method == http.MethodPost && r.URL.Path == "/v0/skills" { //nolint:nestif
 			var skill models.SkillJSON
 			if err := json.NewDecoder(r.Body).Decode(&skill); err != nil {
 				t.Errorf("failed to decode request body: %v", err)
@@ -1074,7 +1079,7 @@ func TestRunPublish_DockerImageWithFolder(t *testing.T) {
 	savePublishFlags(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/v0/skills" {
+		if r.Method == http.MethodPost && r.URL.Path == "/v0/skills" { //nolint:nestif
 			var skill models.SkillJSON
 			if err := json.NewDecoder(r.Body).Decode(&skill); err != nil {
 				t.Errorf("failed to decode request body: %v", err)
@@ -1141,7 +1146,6 @@ func TestRunPublish_FolderModeStillWorks(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
-
 
 // --- checkGitHubSkillMdExists tests ---
 

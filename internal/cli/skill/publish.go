@@ -92,10 +92,7 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	if info, err := os.Stat(absPath); err == nil && info.IsDir() {
 		skills, detectErr := detectSkills(absPath)
 		if detectErr != nil {
-			if verbose {
-				printer.PrintInfo(fmt.Sprintf("Directory %q is not a valid skill folder: no SKILL.md found", absPath))
-			}
-			return fmt.Errorf("directory %q does not contain a SKILL.md file (or any immediate subdirectory with one)", input)
+			return fmt.Errorf("directory %q: %w", input, detectErr)
 		}
 		return runPublishFromFolder(absPath, skills)
 	}
@@ -434,6 +431,7 @@ func detectSkills(path string) ([]string, error) {
 	}
 
 	var skills []string
+	var invalidCount int
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -442,12 +440,23 @@ func detectSkills(path string) ([]string, error) {
 		subPath := filepath.Join(path, entry.Name())
 		if isValidSkillDir(subPath) {
 			skills = append(skills, subPath)
-		} else if hasSkillMd(subPath) && verbose {
-			printer.PrintInfo(fmt.Sprintf("Skipping %s: SKILL.md exists but has invalid frontmatter", subPath))
+		} else if hasSkillMd(subPath) {
+			invalidCount++
+			if verbose {
+				printer.PrintInfo(fmt.Sprintf("Skipping %s: SKILL.md exists but has invalid frontmatter", subPath))
+			}
 		}
 	}
+	// The root path SKILL.md was already checked via isValidSkillDir above;
+	// if we're here the root either has no SKILL.md or it was invalid.
+	if hasSkillMd(path) {
+		invalidCount++
+	}
 	if len(skills) == 0 {
-		return nil, errors.New("SKILL.md not found in this folder or in any immediate subfolder")
+		if invalidCount > 0 {
+			return nil, fmt.Errorf("SKILL.md found but has invalid or missing YAML frontmatter (%d file(s))", invalidCount)
+		}
+		return nil, errors.New("no SKILL.md found in this folder or any immediate subfolder")
 	}
 	return skills, nil
 }
