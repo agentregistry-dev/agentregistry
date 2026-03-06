@@ -38,7 +38,7 @@ var agentDeployTargets = []deployTarget{
 	},
 	{
 		name:     "kubernetes",
-		deplArgs: []string{"--provider-id", "kubernetes-default", "--namespace", "default"},
+		deplArgs: []string{"--provider-id", "kubernetes", "--namespace", "default"},
 		cleanup: func(t *testing.T, agentName string) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
@@ -65,7 +65,7 @@ var mcpDeployTargets = []deployTarget{
 	},
 	{
 		name:     "kubernetes",
-		deplArgs: []string{"--provider-id", "kubernetes-default", "--namespace", "default"},
+		deplArgs: []string{"--provider-id", "kubernetes", "--namespace", "default"},
 		cleanup: func(t *testing.T, mcpName string) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()

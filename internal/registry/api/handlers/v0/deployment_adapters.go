@@ -88,7 +88,7 @@ func (a *kubernetesDeploymentAdapter) Deploy(ctx context.Context, req *models.De
 	}
 	providerID := req.ProviderID
 	if providerID == "" {
-		providerID = "kubernetes-default"
+		providerID = "kubernetes"
 	}
 	env := req.Env
 	if env == nil {
