@@ -11,10 +11,14 @@ import (
 )
 
 var InitCmd = &cobra.Command{
-	Use:   "init [skill-name]",
+	Use:   "init [skill-name] [output-directory]",
 	Short: "Initialize a new agentic skill project",
-	Long:  `Initialize a new agentic skill project.`,
-	RunE:  runInit,
+	Long: `Initialize a new agentic skill project.
+
+If output-directory is provided, the project is created inside that directory
+(e.g. "arctl skill init myskill ./skills/" creates ./skills/myskill/).
+Otherwise, the project is created in the current directory.`,
+	RunE: runInit,
 }
 
 var (
@@ -43,14 +47,24 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid project name: %w", err)
 	}
 
-	// Check if directory exists
-	projectPath, err := filepath.Abs(projectName)
-	if err != nil {
-		return fmt.Errorf("failed to get absolute path for project: %w", err)
+	// Determine output path: if a second arg is given, create inside that directory
+	var projectPath string
+	if len(args) >= 2 {
+		base, err := filepath.Abs(args[1])
+		if err != nil {
+			return fmt.Errorf("failed to get absolute path for output directory: %w", err)
+		}
+		projectPath = filepath.Join(base, projectName)
+	} else {
+		var err error
+		projectPath, err = filepath.Abs(projectName)
+		if err != nil {
+			return fmt.Errorf("failed to get absolute path for project: %w", err)
+		}
 	}
 
 	// Generate project files
-	err = templates.NewGenerator().GenerateProject(templates.ProjectConfig{
+	err := templates.NewGenerator().GenerateProject(templates.ProjectConfig{
 		NoGit:       initNoGit,
 		Directory:   projectPath,
 		Verbose:     false,
