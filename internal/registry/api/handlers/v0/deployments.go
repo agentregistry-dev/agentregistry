@@ -83,7 +83,7 @@ func createDeploymentHTTPError(err error) error {
 	case errors.Is(err, database.ErrInvalidInput):
 		return huma.Error400BadRequest(err.Error())
 	case errors.Is(err, database.ErrNotFound):
-		return huma.Error404NotFound("Resource not found in registry")
+		return huma.Error404NotFound(err.Error())
 	case errors.Is(err, auth.ErrUnauthenticated):
 		return huma.Error401Unauthorized("Authentication required")
 	case errors.Is(err, auth.ErrForbidden):
