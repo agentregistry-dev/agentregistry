@@ -23,7 +23,7 @@ type DeploymentRequest struct {
 	ProviderConfig map[string]any    `json:"providerConfig,omitempty" doc:"Optional provider-specific deployment settings (not env vars)."`
 	PreferRemote   bool              `json:"preferRemote,omitempty" doc:"Prefer remote deployment over local" default:"false"`
 	ResourceType   string            `json:"resourceType,omitempty" doc:"Type of resource to deploy (mcp, agent)" default:"mcp" example:"mcp" enum:"mcp,agent"`
-	ProviderID     string            `json:"providerId,omitempty" doc:"Concrete provider instance ID. Defaults to local singleton when omitted."`
+	ProviderID     string            `json:"providerId" doc:"Concrete provider instance ID." required:"true"`
 }
 
 // DeploymentResponse represents a deployment
@@ -50,7 +50,7 @@ type DeploymentByIDInput struct {
 
 // DeploymentsListInput represents query parameters for listing deployments
 type DeploymentsListInput struct {
-	Platform     string `query:"platform" json:"platform,omitempty" doc:"Filter by provider platform type (for OSS: local or kubernetes)" example:"local"`
+	Platform     string `query:"platform" json:"platform,omitempty" doc:"Filter by provider platform type (matches registered provider platforms)" example:"local"`
 	ProviderID   string `query:"providerId" json:"providerId,omitempty" doc:"Filter by provider instance ID"`
 	ResourceType string `query:"resourceType" json:"resourceType,omitempty" doc:"Filter by resource type (mcp, agent)" example:"mcp" enum:"mcp,agent"`
 	Status       string `query:"status" json:"status,omitempty" doc:"Filter by deployment status"`
@@ -60,20 +60,6 @@ type DeploymentsListInput struct {
 
 func normalizePlatform(platform string) string {
 	return strings.ToLower(strings.TrimSpace(platform))
-}
-
-func deploymentPlatform(ctx context.Context, registry service.RegistryService, deployment *models.Deployment) string {
-	if deployment == nil {
-		return ""
-	}
-	if strings.TrimSpace(deployment.ProviderID) == "" {
-		return ""
-	}
-	provider, err := registry.GetProviderByID(ctx, deployment.ProviderID)
-	if err != nil || provider == nil {
-		return ""
-	}
-	return normalizePlatform(provider.Platform)
 }
 
 func createDeploymentHTTPError(err error) error {
@@ -221,13 +207,12 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 
 		providerID := strings.TrimSpace(input.Body.ProviderID)
 		if providerID == "" {
-			providerID = LocalProviderID
+			return nil, huma.Error400BadRequest("providerId is required")
 		}
-		provider, err := getProviderByID(ctx, registry, extensions, providerID, "")
+		_, err := getProviderByID(ctx, registry, extensions, providerID, "")
 		if err != nil {
 			return nil, err
 		}
-		platform := normalizePlatform(provider.Platform)
 
 		deploymentReq := &models.Deployment{
 			ServerName:     input.Body.ServerName,
@@ -240,7 +225,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			PreferRemote:   input.Body.PreferRemote,
 		}
 
-		deployment, err := registry.CreateDeployment(ctx, deploymentReq, platform)
+		deployment, err := registry.CreateDeployment(ctx, deploymentReq)
 		if err != nil {
 			return nil, createDeploymentHTTPError(err)
 		}
@@ -276,8 +261,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			return nil, huma.Error409Conflict("Discovered deployments cannot be deleted directly")
 		}
 
-		platform := deploymentPlatform(ctx, registry, deployment)
-		err = registry.UndeployDeployment(ctx, deployment, platform)
+		err = registry.UndeployDeployment(ctx, deployment)
 		if err != nil {
 			return nil, removeDeploymentHTTPError(err)
 		}
@@ -308,8 +292,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			return nil, huma.Error500InternalServerError("Failed to retrieve deployment", err)
 		}
 
-		platform := deploymentPlatform(ctx, registry, deployment)
-		logs, err := registry.GetDeploymentLogs(ctx, deployment, platform)
+		logs, err := registry.GetDeploymentLogs(ctx, deployment)
 		if err != nil {
 			if errors.Is(err, database.ErrInvalidInput) {
 				return nil, huma.Error400BadRequest("Invalid deployment logs request")
@@ -334,7 +317,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 		Method:      http.MethodPost,
 		Path:        basePath + "/deployments/{id}/cancel",
 		Summary:     "Cancel deployment",
-		Description: "Cancel an in-progress deployment when supported by the provider",
+		Description: "Cancel a deployment when supported by the provider",
 		Tags:        []string{"deployments"},
 	}, func(ctx context.Context, input *DeploymentByIDInput) (*struct{}, error) {
 		deployment, err := registry.GetDeploymentByID(ctx, input.ID)
@@ -351,12 +334,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			return nil, huma.Error500InternalServerError("Failed to retrieve deployment", err)
 		}
 
-		if deployment.Status != "deploying" {
-			return nil, huma.Error400BadRequest("Deployment is not in progress")
-		}
-
-		platform := deploymentPlatform(ctx, registry, deployment)
-		if err := registry.CancelDeployment(ctx, deployment, platform); err != nil {
+		if err := registry.CancelDeployment(ctx, deployment); err != nil {
 			if errors.Is(err, database.ErrInvalidInput) {
 				return nil, huma.Error400BadRequest("Invalid deployment cancel request")
 			}

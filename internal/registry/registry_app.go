@@ -123,38 +123,24 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	}
 
 	baseRegistryService := service.NewRegistryService(db, cfg, embeddingProvider)
-
-	var registryService service.RegistryService
-	if options.ServiceFactory != nil {
-		registryService = options.ServiceFactory(baseRegistryService)
-	} else {
-		registryService = baseRegistryService
-	}
+	registryService := baseRegistryService
 
 	// Initialize extension registries once and use them for both routing and service behavior.
 	providerPlatforms := v0.DefaultProviderPlatformAdapters(registryService)
 	maps.Copy(providerPlatforms, options.ProviderPlatforms)
-	deploymentPlatforms := v0.DefaultDeploymentPlatformAdapters(registryService)
+	deploymentPlatforms := v0.DefaultDeploymentPlatformAdapters(registryService, v0.DefaultDeploymentAdapterConfig{
+		RuntimeDir:       cfg.RuntimeDir,
+		AgentGatewayPort: cfg.AgentGatewayPort,
+	})
 	maps.Copy(deploymentPlatforms, options.DeploymentPlatforms)
 
 	type platformAdapterConfigurer interface {
 		SetPlatformAdapters(
-			map[string]service.DeploymentPlatformDeployer,
+			map[string]types.DeploymentPlatformAdapter,
 		)
 	}
-	deploymentDeployers := make(map[string]service.DeploymentPlatformDeployer, len(deploymentPlatforms))
-	for platform, adapter := range deploymentPlatforms {
-		deploymentDeployers[platform] = adapter
-	}
-	if cfgSvc, ok := baseRegistryService.(platformAdapterConfigurer); ok {
-		cfgSvc.SetPlatformAdapters(deploymentDeployers)
-	}
 	if cfgSvc, ok := registryService.(platformAdapterConfigurer); ok {
-		cfgSvc.SetPlatformAdapters(deploymentDeployers)
-	}
-
-	if options.OnServiceCreated != nil {
-		options.OnServiceCreated(registryService)
+		cfgSvc.SetPlatformAdapters(deploymentPlatforms)
 	}
 
 	// Import builtin seed data unless it is disabled
@@ -212,21 +198,6 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 			slog.Error("failed to shutdown telemetry", "error", err)
 		}
 	}()
-
-	if cfg.ReconcileOnStartup {
-		slog.Info("reconciling existing deployments at startup")
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-
-		ctx = auth.WithSystemContext(ctx)
-
-		if err := registryService.ReconcileAll(ctx); err != nil {
-			slog.Warn("failed to reconcile deployments at startup", "error", err)
-			slog.Warn("server will continue starting, but deployments may not be in sync")
-		} else {
-			slog.Info("startup reconciliation completed successfully")
-		}
-	}
 
 	routeOpts := &router.RouteOptions{
 		ProviderPlatforms:   providerPlatforms,

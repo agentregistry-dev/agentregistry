@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	internalv0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	v0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
@@ -26,10 +25,77 @@ type Client struct {
 }
 
 const (
-	defaultBaseURL    = "http://localhost:12121/v0"
-	DefaultBaseURL    = defaultBaseURL
-	pingRetryAttempts = 3
+	defaultBaseURL          = "http://localhost:12121/v0"
+	DefaultBaseURL          = defaultBaseURL
+	pingRetryAttempts       = 3
+	defaultDeployProviderID = "local"
 )
+
+// VersionBody represents API version information.
+type VersionBody struct {
+	Version   string `json:"version"`
+	GitCommit string `json:"git_commit"`
+	BuildTime string `json:"build_time"`
+}
+
+type deploymentRequest struct {
+	ServerName     string            `json:"serverName"`
+	Version        string            `json:"version"`
+	Env            map[string]string `json:"env,omitempty"`
+	ProviderConfig map[string]any    `json:"providerConfig,omitempty"`
+	PreferRemote   bool              `json:"preferRemote,omitempty"`
+	ResourceType   string            `json:"resourceType,omitempty"`
+	ProviderID     string            `json:"providerId"`
+}
+
+// IndexRequest is the request body for embeddings indexing.
+type IndexRequest struct {
+	BatchSize      int  `json:"batchSize,omitempty"`
+	Force          bool `json:"force,omitempty"`
+	DryRun         bool `json:"dryRun,omitempty"`
+	IncludeServers bool `json:"includeServers,omitempty"`
+	IncludeAgents  bool `json:"includeAgents,omitempty"`
+	Stream         bool `json:"stream,omitempty"`
+}
+
+// IndexJobResponse is the response body returned when creating an index job.
+type IndexJobResponse struct {
+	JobID  string `json:"jobId"`
+	Status string `json:"status"`
+}
+
+// JobProgress contains job progress counters for index jobs.
+type JobProgress struct {
+	Total     int `json:"total"`
+	Processed int `json:"processed"`
+	Updated   int `json:"updated"`
+	Skipped   int `json:"skipped"`
+	Failures  int `json:"failures"`
+}
+
+// JobResult contains the final result for an index job.
+type JobResult struct {
+	ServersProcessed int    `json:"serversProcessed,omitempty"`
+	ServersUpdated   int    `json:"serversUpdated,omitempty"`
+	ServersSkipped   int    `json:"serversSkipped,omitempty"`
+	ServerFailures   int    `json:"serverFailures,omitempty"`
+	AgentsProcessed  int    `json:"agentsProcessed,omitempty"`
+	AgentsUpdated    int    `json:"agentsUpdated,omitempty"`
+	AgentsSkipped    int    `json:"agentsSkipped,omitempty"`
+	AgentFailures    int    `json:"agentFailures,omitempty"`
+	Error            string `json:"error,omitempty"`
+}
+
+// JobStatusResponse is the status payload for an index job.
+type JobStatusResponse struct {
+	JobID     string      `json:"jobId"`
+	Type      string      `json:"type"`
+	Status    string      `json:"status"`
+	Progress  JobProgress `json:"progress"`
+	Result    *JobResult  `json:"result,omitempty"`
+	CreatedAt string      `json:"createdAt"`
+	UpdatedAt string      `json:"updatedAt"`
+}
 
 // NewClientFromEnv constructs a client using environment variables
 func NewClientFromEnv() (*Client, error) {
@@ -149,12 +215,12 @@ func (c *Client) Ping() error {
 	return c.doJSON(req, nil)
 }
 
-func (c *Client) GetVersion() (*internalv0.VersionBody, error) {
+func (c *Client) GetVersion() (*VersionBody, error) {
 	req, err := c.newRequest(http.MethodGet, "/version")
 	if err != nil {
 		return nil, err
 	}
-	var resp internalv0.VersionBody
+	var resp VersionBody
 	if err := c.doJSON(req, &resp); err != nil {
 		return nil, err
 	}
@@ -641,7 +707,10 @@ func (c *Client) GetDeploymentByID(id string) (*DeploymentResponse, error) {
 
 // DeployServer deploys a server with deployment environment variables.
 func (c *Client) DeployServer(name, version string, env map[string]string, preferRemote bool, providerID string) (*DeploymentResponse, error) {
-	payload := internalv0.DeploymentRequest{
+	if strings.TrimSpace(providerID) == "" {
+		providerID = defaultDeployProviderID
+	}
+	payload := deploymentRequest{
 		ServerName:   name,
 		Version:      version,
 		Env:          env,
@@ -660,7 +729,10 @@ func (c *Client) DeployServer(name, version string, env map[string]string, prefe
 
 // DeployAgent deploys an agent with deployment environment variables.
 func (c *Client) DeployAgent(name, version string, env map[string]string, providerID string) (*DeploymentResponse, error) {
-	payload := internalv0.DeploymentRequest{
+	if strings.TrimSpace(providerID) == "" {
+		providerID = defaultDeployProviderID
+	}
+	payload := deploymentRequest{
 		ServerName:   name,
 		Version:      version,
 		Env:          env,
@@ -698,7 +770,7 @@ func (c *Client) SSEClient() *http.Client {
 }
 
 // NewSSERequest creates a request for streaming embedding indexing events.
-func (c *Client) NewSSERequest(ctx context.Context, reqBody internalv0.IndexRequest) (*http.Request, error) {
+func (c *Client) NewSSERequest(ctx context.Context, reqBody IndexRequest) (*http.Request, error) {
 	req, err := c.newRequest(http.MethodPost, "/embeddings/index/stream")
 	if err != nil {
 		return nil, err
@@ -715,8 +787,8 @@ func (c *Client) NewSSERequest(ctx context.Context, reqBody internalv0.IndexRequ
 }
 
 // StartIndex starts a non-streaming indexing job.
-func (c *Client) StartIndex(req internalv0.IndexRequest) (*internalv0.IndexJobResponse, error) {
-	var resp internalv0.IndexJobResponse
+func (c *Client) StartIndex(req IndexRequest) (*IndexJobResponse, error) {
+	var resp IndexJobResponse
 	if err := c.doJsonRequest(http.MethodPost, "/embeddings/index", req, &resp); err != nil {
 		return nil, err
 	}
@@ -724,13 +796,13 @@ func (c *Client) StartIndex(req internalv0.IndexRequest) (*internalv0.IndexJobRe
 }
 
 // GetIndexStatus fetches indexing job status by job ID.
-func (c *Client) GetIndexStatus(jobID string) (*internalv0.JobStatusResponse, error) {
+func (c *Client) GetIndexStatus(jobID string) (*JobStatusResponse, error) {
 	encJobID := url.PathEscape(jobID)
 	req, err := c.newRequest(http.MethodGet, "/embeddings/index/"+encJobID)
 	if err != nil {
 		return nil, err
 	}
-	var resp internalv0.JobStatusResponse
+	var resp JobStatusResponse
 	if err := c.doJSON(req, &resp); err != nil {
 		return nil, err
 	}

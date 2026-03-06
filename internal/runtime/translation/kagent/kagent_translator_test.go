@@ -763,3 +763,39 @@ func TestTranslateRuntimeConfig_DuplicateArtifactIdentityUsesDistinctDeploymentS
 		t.Fatalf("missing deployment-scoped configmap name for dep-new: %v", configMapNames)
 	}
 }
+
+func TestDeploymentScopedName_UsesShortUUIDSuffixAndMaxLength(t *testing.T) {
+	deploymentID := "2d6d0c54-f8d5-4fc5-908f-f0ae5744871b"
+
+	agentName := AgentResourceName("manualk8sdel1772656991", "latest", deploymentID)
+	if agentName != "manualk8sdel1772656991-latest-2d6d0c54" {
+		t.Fatalf("unexpected agent name: %s", agentName)
+	}
+	if len(agentName) > maxK8sNameLength {
+		t.Fatalf("agent name exceeds %d chars: %d (%s)", maxK8sNameLength, len(agentName), agentName)
+	}
+	if strings.Contains(agentName, deploymentID) {
+		t.Fatalf("agent name should not include full uuid suffix: %s", agentName)
+	}
+
+	configMapName := AgentConfigMapName("manualk8sdel1772656991", "latest", deploymentID)
+	if !strings.HasSuffix(configMapName, "-2d6d0c54") {
+		t.Fatalf("configmap name should end with short uuid suffix: %s", configMapName)
+	}
+	if len(configMapName) > maxK8sNameLength {
+		t.Fatalf("configmap name exceeds %d chars: %d (%s)", maxK8sNameLength, len(configMapName), configMapName)
+	}
+}
+
+func TestDeploymentScopedName_TruncatesLongBaseButPreservesSuffix(t *testing.T) {
+	deploymentID := "2d6d0c54-f8d5-4fc5-908f-f0ae5744871b"
+	longName := strings.Repeat("verylongagentname", 6)
+
+	got := AgentResourceName(longName, "latest", deploymentID)
+	if len(got) > maxK8sNameLength {
+		t.Fatalf("name exceeds %d chars: %d (%s)", maxK8sNameLength, len(got), got)
+	}
+	if !strings.HasSuffix(got, "-2d6d0c54") {
+		t.Fatalf("expected uuid short suffix to be preserved, got %s", got)
+	}
+}

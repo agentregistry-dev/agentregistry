@@ -8,6 +8,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
+	"github.com/agentregistry-dev/agentregistry/pkg/models"
 
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
@@ -180,5 +181,68 @@ func TestCreateResolvedMCPServerConfigs_UsesDeploymentScopedNames(t *testing.T) 
 	}
 	if configs[1].Name != "io-github-estruyf-vscode-demo-time" {
 		t.Fatalf("expected non-scoped name for second config, got %q", configs[1].Name)
+	}
+}
+func TestBuildDesiredState_IncludesResolvedMCPServersForAgent(t *testing.T) {
+	r := &agentRegistryRuntime{
+		registryTranslator: registry.NewTranslator(),
+		runtimeDir:         t.TempDir(),
+		verbose:            false,
+	}
+
+	resolvedReq := parseServerReqUnit(t, `{
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+        "name": "io.github.estruyf/vscode-demo-time",
+        "description": "Demo",
+        "version": "0.0.55",
+        "packages": [{
+          "registryType": "npm",
+          "registryBaseUrl": "https://registry.npmjs.org",
+          "identifier": "@demotime/mcp",
+          "version": "0.0.55",
+          "transport": {"type": "stdio"}
+        }]
+      }`)
+	resolvedReq.DeploymentID = "dep-agent-123"
+
+	agentReq := &registry.AgentRunRequest{
+		RegistryAgent: &models.AgentJSON{
+			AgentManifest: models.AgentManifest{
+				Name:          "planner-agent",
+				Image:         "ghcr.io/example/planner:1.0.0",
+				ModelProvider: "anthropic",
+				ModelName:     "claude-sonnet-4-5",
+			},
+			Version: "1.0.0",
+		},
+		DeploymentID:       "dep-agent-123",
+		EnvValues:          map[string]string{"KAGENT_NAMESPACE": "demo-ns"},
+		ResolvedMCPServers: []*registry.MCPServerRunRequest{resolvedReq},
+	}
+
+	desired, err := r.buildDesiredState(nil, []*registry.AgentRunRequest{agentReq})
+	if err != nil {
+		t.Fatalf("buildDesiredState failed: %v", err)
+	}
+	if len(desired.Agents) != 1 {
+		t.Fatalf("expected 1 agent in desired state, got %d", len(desired.Agents))
+	}
+	if len(desired.MCPServers) != 1 {
+		t.Fatalf("expected 1 resolved mcp server in desired state, got %d", len(desired.MCPServers))
+	}
+	if desired.Agents[0].DeploymentID != "dep-agent-123" {
+		t.Fatalf("expected agent deployment id dep-agent-123, got %q", desired.Agents[0].DeploymentID)
+	}
+	if desired.MCPServers[0].DeploymentID != "dep-agent-123" {
+		t.Fatalf("expected resolved mcp deployment id dep-agent-123, got %q", desired.MCPServers[0].DeploymentID)
+	}
+	if desired.MCPServers[0].Namespace != "demo-ns" {
+		t.Fatalf("expected resolved mcp namespace demo-ns, got %q", desired.MCPServers[0].Namespace)
+	}
+	if len(desired.Agents[0].ResolvedMCPServers) != 1 {
+		t.Fatalf("expected 1 resolved mcp config on agent, got %d", len(desired.Agents[0].ResolvedMCPServers))
+	}
+	if desired.Agents[0].ResolvedMCPServers[0].Name != "io-github-estruyf-vscode-demo-time-dep-agent-123" {
+		t.Fatalf("expected deployment-scoped resolved config name, got %q", desired.Agents[0].ResolvedMCPServers[0].Name)
 	}
 }
