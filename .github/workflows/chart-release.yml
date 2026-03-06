@@ -55,7 +55,7 @@ jobs:
           if helm plugin list | awk '{print $1}' | grep -q '^unittest$'; then
             echo "helm-unittest already installed"
           else
-            helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.0.3 --verify=false
+            helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.0.3
           fi
 
       - name: Build chart dependencies

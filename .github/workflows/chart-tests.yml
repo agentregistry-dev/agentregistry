@@ -51,7 +51,7 @@ jobs:
             echo "helm-unittest already installed (from cache or prior install)"
           else
             echo "Installing helm-unittest plugin..."
-            helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.0.3 --verify=false
+            helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.0.3
           fi
 
       - name: Show Helm and plugin versions
