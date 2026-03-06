@@ -1,9 +1,12 @@
 package project
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/agentregistry-dev/agentregistry/internal/version"
+	"github.com/agentregistry-dev/agentregistry/pkg/models"
 )
 
 func TestConstructImageName(t *testing.T) {
@@ -160,6 +163,71 @@ func TestConstructMCPServerImageName(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("ConstructMCPServerImageName(%q, %q) = %q, want %q",
 					tt.agentName, tt.serverName, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEnsureOtelCollectorConfig(t *testing.T) {
+	tests := []struct {
+		name          string
+		telemetry     string
+		preCreate     bool
+		wantFileExist bool
+	}{
+		{
+			name:          "no telemetry endpoint - file not created",
+			telemetry:     "",
+			preCreate:     false,
+			wantFileExist: false,
+		},
+		{
+			name:          "telemetry set and file missing - file created",
+			telemetry:     "http://localhost:4318/v1/traces",
+			preCreate:     false,
+			wantFileExist: true,
+		},
+		{
+			name:          "telemetry set and file exists - file preserved",
+			telemetry:     "http://localhost:4318/v1/traces",
+			preCreate:     true,
+			wantFileExist: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			manifest := &models.AgentManifest{
+				Name:              "test-agent",
+				TelemetryEndpoint: tt.telemetry,
+			}
+
+			configPath := filepath.Join(dir, "otel-collector-config.yaml")
+			if tt.preCreate {
+				if err := os.WriteFile(configPath, []byte("custom-config"), 0o644); err != nil {
+					t.Fatalf("failed to pre-create config: %v", err)
+				}
+			}
+
+			err := EnsureOtelCollectorConfig(dir, manifest, false)
+			if err != nil {
+				t.Fatalf("EnsureOtelCollectorConfig() error = %v", err)
+			}
+
+			_, statErr := os.Stat(configPath)
+			fileExists := statErr == nil
+
+			if fileExists != tt.wantFileExist {
+				t.Errorf("file exists = %v, want %v", fileExists, tt.wantFileExist)
+			}
+
+			// If file was pre-created, ensure it wasn't overwritten
+			if tt.preCreate && fileExists {
+				content, _ := os.ReadFile(configPath)
+				if string(content) != "custom-config" {
+					t.Errorf("pre-existing file was overwritten")
+				}
 			}
 		})
 	}
