@@ -532,10 +532,16 @@ func launchChat(ctx context.Context, agentName string) error {
 	return tui.RunChat(agentName, sessionID, sendFn, verbose)
 }
 
-func validateAPIKey(modelProvider string) error {
+func validateAPIKey(modelProvider string, extraEnv ...map[string]string) error {
 	envVar, ok := providerAPIKeys[strings.ToLower(modelProvider)]
 	if !ok || envVar == "" {
 		return nil
+	}
+	// Check extra env maps first (e.g. from --env flags)
+	for _, m := range extraEnv {
+		if v, exists := m[envVar]; exists && v != "" {
+			return nil
+		}
 	}
 	if os.Getenv(envVar) == "" {
 		return fmt.Errorf("required API key %s not set for model provider %s", envVar, modelProvider)
