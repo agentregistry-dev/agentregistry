@@ -67,7 +67,6 @@ jobs:
       - name: Run helm-unittest
         run: |
           helm unittest charts/agentregistry \
-            --helm3 \
             --file "tests/*_test.yaml"
 
   # ─────────────────────────────────────────────────────────────────────────────

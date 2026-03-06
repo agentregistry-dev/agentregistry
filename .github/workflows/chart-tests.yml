@@ -86,7 +86,6 @@ jobs:
         run: |
           set -euo pipefail
           helm unittest charts/agentregistry \
-            --helm3 \
             --file "tests/*_test.yaml"
 
       - name: Upload rendered manifests (on failure)
