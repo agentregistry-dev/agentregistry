@@ -6,12 +6,14 @@ on:
     paths:
       - 'charts/**'
       - '.github/workflows/chart-tests.yml'
+      - '.github/workflows/chart-release.yml'
       - 'Makefile'
   pull_request:
     branches: [ main ]
     paths:
       - 'charts/**'
       - '.github/workflows/chart-tests.yml'
+      - '.github/workflows/chart-release.yml'
       - 'Makefile'
   workflow_dispatch:
 

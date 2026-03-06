@@ -139,6 +139,31 @@ jobs:
           echo "--- packaged files ---"
           ls -lh build/charts/
 
+      # ── Release-time exact image check (generate one-off test)
+      - name: Generate exact-image test for release
+        if: always()
+        run: |
+          set -euo pipefail
+          TARGET_VER="${{ steps.version.outputs.target_version }}"
+          SERVER_IMAGE="ghcr.io/agentregistry-dev/agentregistry/server:${TARGET_VER}"
+          mkdir -p build/tests
+          printf '%s\n' \
+            'suite: server image exact match' \
+            'templates:' \
+            '  - deployment.yaml' \
+            'tests:' \
+            '  - it: uses the exact server image' \
+            '    asserts:' \
+            '      - equal:' \
+            '          path: spec.template.spec.containers[0].image' \
+            "          value: \"${SERVER_IMAGE}\"" \
+            > build/tests/server_exact_test.yaml
+
+      - name: Run release-only exact-image test
+        run: |
+          set -euo pipefail
+          helm unittest charts/agentregistry --file "build/tests/*_test.yaml"
+
       - name: Generate checksum
         run: |
           set -euo pipefail
