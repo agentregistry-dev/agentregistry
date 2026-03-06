@@ -398,7 +398,8 @@ database:
       registry: docker.io
       # -- PostgreSQL image repository (pgvector/pgvector)
       repository: pgvector/pgvector
-      # -- PostgreSQL image tag — MUST use immutable tags (not `pg17` or `latest`)
+      # -- PostgreSQL image tag — immutable tags are recommended for reproducible builds;
+      #    using floating tags (e.g. `pg16`, `pg17`, `latest`) may lead to non-reproducible deployments
       tag: "pg16"
       # -- PostgreSQL image digest (overrides tag if set)
       digest: ""
