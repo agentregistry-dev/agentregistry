@@ -80,10 +80,7 @@ func TestBuildSkillImage_InvalidFrontmatter(t *testing.T) {
 	}
 }
 
-func TestRunBuild_DetectsMultipleSkills(t *testing.T) {
-	saveBuildFlags(t)
-	buildImage = "test:latest"
-
+func TestDetectSkills_MultipleSubdirs(t *testing.T) {
 	dir := t.TempDir()
 	for _, name := range []string{"skill-a", "skill-b"} {
 		sub := filepath.Join(dir, name)
@@ -91,13 +88,11 @@ func TestRunBuild_DetectsMultipleSkills(t *testing.T) {
 		writeFile(t, filepath.Join(sub, "SKILL.md"), "---\nname: "+name+"\n---\n")
 	}
 
-	// This will fail at docker check (docker not available in test),
-	// but it confirms skills are detected properly before that point.
-	err := runBuild(nil, []string{dir})
-	if err == nil {
-		t.Fatal("expected error (docker not available in test), got nil")
+	skills, err := detectSkills(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !contains(err.Error(), "docker") {
-		t.Errorf("error = %q, want it to contain 'docker'", err.Error())
+	if len(skills) != 2 {
+		t.Errorf("got %d skills, want 2", len(skills))
 	}
 }

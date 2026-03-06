@@ -46,8 +46,8 @@ func TestCommandTree(t *testing.T) {
 		"agent": 11,
 		// init, build, add-tool, publish, delete, deploy, list, run, show
 		"mcp": 9,
-		// init, list, publish, delete, pull, show
-		"skill": 6,
+		// init, build, list, publish, delete, pull, show
+		"skill": 7,
 		// list, publish, delete, show
 		"prompt": 4,
 		// generate
@@ -171,14 +171,11 @@ func TestSkillPublishFlags(t *testing.T) {
 		flag     string
 		defValue string
 	}{
-		{"docker-url", ""},
 		{"github", ""},
+		{"docker-image", ""},
 		{"version", ""},
 		{"description", ""},
-		{"push", "false"},
 		{"dry-run", "false"},
-		{"tag", "latest"},
-		{"platform", ""},
 	}
 
 	for _, tt := range tests {
