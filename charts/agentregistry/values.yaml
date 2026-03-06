@@ -41,7 +41,7 @@ image:
   # -- Agent Registry image repository
   repository: agentregistry-dev/agentregistry/server
   # -- Agent Registry image tag (immutable tags recommended)
-  tag: "0.2.0"
+  tag: "0.2.1"
   # -- Agent Registry image digest (overrides tag if set)
   digest: ""
   # -- Agent Registry image pull policy
