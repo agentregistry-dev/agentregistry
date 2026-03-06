@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  labeler:
+  pr-limiter:
     runs-on: ubuntu-latest
     steps:
     - uses: Homebrew/actions/limit-pull-requests@master
