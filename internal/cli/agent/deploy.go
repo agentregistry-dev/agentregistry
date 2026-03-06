@@ -70,12 +70,12 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		config["KAGENT_NAMESPACE"] = namespace
 	}
 
-	noWait, _ := cmd.Flags().GetBool("no-wait")
+	wait, _ := cmd.Flags().GetBool("wait")
 
 	if providerID == "local" {
 		return deployLocal(name, version, config, providerID)
 	}
-	return deployToProvider(name, version, config, namespace, providerID, noWait)
+	return deployToProvider(name, version, config, namespace, providerID, wait)
 }
 
 // buildDeployConfig creates the configuration map with all necessary environment variables
@@ -115,7 +115,7 @@ func deployLocal(name, version string, config map[string]string, providerID stri
 }
 
 // deployToProvider deploys an agent to a non-local provider.
-func deployToProvider(name, version string, config map[string]string, namespace string, providerID string, noWait bool) error {
+func deployToProvider(name, version string, config map[string]string, namespace string, providerID string, wait bool) error {
 	deployment, err := apiClient.DeployAgent(name, version, config, providerID)
 	if err != nil {
 		return fmt.Errorf("failed to deploy agent: %w", err)
@@ -126,14 +126,11 @@ func deployToProvider(name, version string, config map[string]string, namespace 
 		ns = "(default)"
 	}
 
-	if noWait {
-		fmt.Printf("Agent '%s' version '%s' submitted to providerId=%s in namespace '%s'\n", deployment.ServerName, deployment.Version, providerID, ns)
-		return nil
-	}
-
-	fmt.Printf("Waiting for agent '%s' to become ready...\n", deployment.ServerName)
-	if err := cliCommon.WaitForDeploymentReady(apiClient, deployment.ID); err != nil {
-		return err
+	if wait {
+		fmt.Printf("Waiting for agent '%s' to become ready...\n", deployment.ServerName)
+		if err := cliCommon.WaitForDeploymentReady(apiClient, deployment.ID); err != nil {
+			return err
+		}
 	}
 
 	fmt.Printf("Agent '%s' version '%s' deployed to providerId=%s in namespace '%s'\n", deployment.ServerName, deployment.Version, providerID, ns)
@@ -145,5 +142,5 @@ func init() {
 	DeployCmd.Flags().String("provider-id", "", "Deployment target provider ID (defaults to local when omitted)")
 	DeployCmd.Flags().Bool("prefer-remote", false, "Prefer using a remote source when available")
 	DeployCmd.Flags().String("namespace", "", "Kubernetes namespace for agent deployment (defaults to current kubeconfig context)")
-	DeployCmd.Flags().Bool("no-wait", false, "Return immediately without waiting for the deployment to become ready")
+	DeployCmd.Flags().Bool("wait", true, "Wait for the deployment to become ready before returning")
 }
