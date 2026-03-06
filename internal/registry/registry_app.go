@@ -90,6 +90,15 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 			return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
 		}
 
+		// Reconcile embedding vector column dimensions if embeddings are enabled.
+		// This ensures the database schema matches EMBEDDINGS_DIMENSIONS, allowing
+		// providers with non-1536 dimensions (e.g., Voyage AI 1024, OpenAI 3072).
+		if cfg.Embeddings.Enabled {
+			if err := baseDB.ReconcileEmbeddingDimensions(ctx, cfg.Embeddings.Dimensions); err != nil {
+				return fmt.Errorf("failed to reconcile embedding dimensions: %w", err)
+			}
+		}
+
 		// Allow implementors to wrap the database and run additional migrations
 		db = baseDB
 		if options.DatabaseFactory != nil {
