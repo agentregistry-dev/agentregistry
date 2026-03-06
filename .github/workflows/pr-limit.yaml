@@ -3,18 +3,16 @@ name: PR Limiter
 on:
   pull_request_target:
     types: [opened, edited, reopened, synchronize]
-  merge_group:
-    types: [checks_requested]
 
 permissions:
   pull-requests: write
   contents: read
 
 jobs:
-  labeler:
+  pr-limiter:
     runs-on: ubuntu-latest
     steps:
-    - uses: Homebrew/actions/limit-pull-requests@master
+    - uses: Homebrew/actions/limit-pull-requests@50b8c2ab4a835c38897ed2c56c293b07167c0b59
       with:
         # https://docs.github.com/en/graphql/reference/enums#commentauthorassociation
         except-author-associations: |
