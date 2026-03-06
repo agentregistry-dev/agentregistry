@@ -37,12 +37,6 @@ tests:
           path: data.AGENT_REGISTRY_AGENT_GATEWAY_PORT
           value: "21212"
 
-  - it: sets AGENT_REGISTRY_RECONCILE_ON_STARTUP
-    asserts:
-      - equal:
-          path: data.AGENT_REGISTRY_RECONCILE_ON_STARTUP
-          value: "true"
-
   - it: sets AGENT_REGISTRY_ENABLE_REGISTRY_VALIDATION
     asserts:
       - equal:

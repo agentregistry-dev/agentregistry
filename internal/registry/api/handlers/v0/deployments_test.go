@@ -136,8 +136,8 @@ func TestCreateDeployment_MissingProviderIDReturnsBadRequest(t *testing.T) {
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "providerId is required")
+	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	assert.Contains(t, w.Body.String(), "required property providerId")
 }
 
 func (f *fakeDeploymentAdapter) Undeploy(_ context.Context, _ *models.Deployment) error {

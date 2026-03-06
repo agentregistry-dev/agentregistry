@@ -199,10 +199,6 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		}
 	}()
 
-	if cfg.ReconcileOnStartup {
-		log.Println("Startup deployment reconciliation is currently disabled; skipping")
-	}
-
 	routeOpts := &router.RouteOptions{
 		ProviderPlatforms:   providerPlatforms,
 		DeploymentPlatforms: deploymentPlatforms,

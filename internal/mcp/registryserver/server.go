@@ -361,8 +361,12 @@ type getDeploymentArgs struct {
 	ID string `json:"id"`
 }
 
-type deployArgs struct {
-	restv0.DeploymentRequest
+type deployToolArgs struct {
+	ServerName   string            `json:"serverName" required:"true"`
+	Version      string            `json:"version" required:"true"`
+	Env          map[string]string `json:"env,omitempty"`
+	PreferRemote bool              `json:"preferRemote,omitempty"`
+	ProviderID   string            `json:"providerId,omitempty"`
 }
 
 type deploymentsResponse struct {
@@ -416,7 +420,7 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "deploy_server",
 		Description: "Deploy a server by name/version with optional config",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, args deployArgs) (*mcp.CallToolResult, models.Deployment, error) {
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, args deployToolArgs) (*mcp.CallToolResult, models.Deployment, error) {
 		if args.ServerName == "" || args.Version == "" {
 			return nil, models.Deployment{}, errors.New("name and version are required")
 		}
@@ -436,7 +440,7 @@ func addDeploymentTools(server *mcp.Server, registry service.RegistryService) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "deploy_agent",
 		Description: "Deploy an agent by name/version with optional config",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, args deployArgs) (*mcp.CallToolResult, models.Deployment, error) {
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, args deployToolArgs) (*mcp.CallToolResult, models.Deployment, error) {
 		if args.ServerName == "" || args.Version == "" {
 			return nil, models.Deployment{}, errors.New("name and version are required")
 		}

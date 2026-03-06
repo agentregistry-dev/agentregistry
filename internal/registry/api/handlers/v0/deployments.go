@@ -23,7 +23,7 @@ type DeploymentRequest struct {
 	ProviderConfig map[string]any    `json:"providerConfig,omitempty" doc:"Optional provider-specific deployment settings (not env vars)."`
 	PreferRemote   bool              `json:"preferRemote,omitempty" doc:"Prefer remote deployment over local" default:"false"`
 	ResourceType   string            `json:"resourceType,omitempty" doc:"Type of resource to deploy (mcp, agent)" default:"mcp" example:"mcp" enum:"mcp,agent"`
-	ProviderID     string            `json:"providerId,omitempty" doc:"Concrete provider instance ID. Required."`
+	ProviderID     string            `json:"providerId" doc:"Concrete provider instance ID." required:"true"`
 }
 
 // DeploymentResponse represents a deployment

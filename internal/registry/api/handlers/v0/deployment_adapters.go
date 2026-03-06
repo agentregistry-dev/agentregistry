@@ -10,6 +10,9 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/runtime"
+	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/dockercompose"
+	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/kagent"
+	runtimeregistry "github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
@@ -25,9 +28,13 @@ const (
 )
 
 type localDeploymentAdapter struct {
+	registry         service.RegistryService
+	runtimeDir       string
+	agentGatewayPort uint16
 }
 
 type kubernetesDeploymentAdapter struct {
+	registry service.RegistryService
 }
 
 // DefaultDeploymentAdapterConfig configures built-in deployment adapters.
@@ -42,7 +49,7 @@ func (a *localDeploymentAdapter) SupportedResourceTypes() []string {
 	return []string{"mcp", "agent"}
 }
 
-func (a *localDeploymentAdapter) Deploy(_ context.Context, req *models.Deployment) (*models.DeploymentActionResult, error) {
+func (a *localDeploymentAdapter) Deploy(ctx context.Context, req *models.Deployment) (*models.DeploymentActionResult, error) {
 	if req == nil {
 		return nil, fmt.Errorf("deployment request is required: %w", database.ErrInvalidInput)
 	}
@@ -55,8 +62,14 @@ func (a *localDeploymentAdapter) Deploy(_ context.Context, req *models.Deploymen
 	}
 	switch req.ResourceType {
 	case "mcp":
+		if err := a.reconcileProviderDeployments(ctx, providerID, ""); err != nil {
+			return nil, err
+		}
 		return &models.DeploymentActionResult{Status: "deployed"}, nil
 	case "agent":
+		if err := a.reconcileProviderDeployments(ctx, providerID, ""); err != nil {
+			return nil, err
+		}
 		return &models.DeploymentActionResult{Status: "deployed"}, nil
 	default:
 		return nil, fmt.Errorf("invalid resource type %q: %w", req.ResourceType, database.ErrInvalidInput)
@@ -67,7 +80,7 @@ func (a *localDeploymentAdapter) Undeploy(ctx context.Context, deployment *model
 	if deployment == nil || deployment.ID == "" {
 		return fmt.Errorf("deployment id is required: %w", database.ErrInvalidInput)
 	}
-	return nil
+	return a.reconcileProviderDeployments(ctx, deployment.ProviderID, deployment.ID)
 }
 
 func (a *localDeploymentAdapter) CleanupStale(ctx context.Context, deployment *models.Deployment) error {
@@ -87,13 +100,30 @@ func (a *localDeploymentAdapter) Discover(_ context.Context, _ string) ([]*model
 	return []*models.Deployment{}, nil
 }
 
+func (a *localDeploymentAdapter) reconcileProviderDeployments(ctx context.Context, providerID, excludeDeploymentID string) error {
+	servers, agents, err := buildRuntimeRequestsForProvider(ctx, a.registry, providerID, excludeDeploymentID)
+	if err != nil {
+		return err
+	}
+	agentRuntime := runtime.NewAgentRegistryRuntime(
+		runtimeregistry.NewTranslator(),
+		dockercompose.NewAgentGatewayTranslator(a.runtimeDir, a.agentGatewayPort),
+		a.runtimeDir,
+		false,
+	)
+	if err := agentRuntime.ReconcileAll(ctx, servers, agents); err != nil {
+		return fmt.Errorf("failed to reconcile local runtime: %w", err)
+	}
+	return nil
+}
+
 func (a *kubernetesDeploymentAdapter) Platform() string { return "kubernetes" }
 
 func (a *kubernetesDeploymentAdapter) SupportedResourceTypes() []string {
 	return []string{"mcp", "agent"}
 }
 
-func (a *kubernetesDeploymentAdapter) Deploy(_ context.Context, req *models.Deployment) (*models.DeploymentActionResult, error) {
+func (a *kubernetesDeploymentAdapter) Deploy(ctx context.Context, req *models.Deployment) (*models.DeploymentActionResult, error) {
 	if req == nil {
 		return nil, fmt.Errorf("deployment request is required: %w", database.ErrInvalidInput)
 	}
@@ -106,8 +136,14 @@ func (a *kubernetesDeploymentAdapter) Deploy(_ context.Context, req *models.Depl
 	}
 	switch req.ResourceType {
 	case "mcp":
+		if err := a.reconcileProviderDeployments(ctx, providerID); err != nil {
+			return nil, err
+		}
 		return &models.DeploymentActionResult{Status: "deployed"}, nil
 	case "agent":
+		if err := a.reconcileProviderDeployments(ctx, providerID); err != nil {
+			return nil, err
+		}
 		return &models.DeploymentActionResult{Status: "deployed"}, nil
 	default:
 		return nil, fmt.Errorf("invalid resource type %q: %w", req.ResourceType, database.ErrInvalidInput)
@@ -216,6 +252,23 @@ func (a *kubernetesDeploymentAdapter) Discover(ctx context.Context, providerID s
 	return discovered, nil
 }
 
+func (a *kubernetesDeploymentAdapter) reconcileProviderDeployments(ctx context.Context, providerID string) error {
+	servers, agents, err := buildRuntimeRequestsForProvider(ctx, a.registry, providerID, "")
+	if err != nil {
+		return err
+	}
+	agentRuntime := runtime.NewAgentRegistryRuntime(
+		runtimeregistry.NewTranslator(),
+		kagent.NewTranslator(),
+		"",
+		false,
+	)
+	if err := agentRuntime.ReconcileAll(ctx, servers, agents); err != nil {
+		return fmt.Errorf("failed to reconcile kubernetes runtime: %w", err)
+	}
+	return nil
+}
+
 func cleanupKubernetesDeploymentResources(ctx context.Context, deployment *models.Deployment) error {
 	if deployment == nil || strings.TrimSpace(deployment.ID) == "" {
 		return fmt.Errorf("deployment id is required: %w", database.ErrInvalidInput)
@@ -234,13 +287,186 @@ func cleanupKubernetesDeploymentResources(ctx context.Context, deployment *model
 
 // DefaultDeploymentPlatformAdapters returns OSS deployment adapters for local and kubernetes.
 func DefaultDeploymentPlatformAdapters(
-	_ service.RegistryService,
+	registry service.RegistryService,
 	cfg ...DefaultDeploymentAdapterConfig,
 ) map[string]registrytypes.DeploymentPlatformAdapter {
-	_ = cfg
+	settings := DefaultDeploymentAdapterConfig{}
+	if len(cfg) > 0 {
+		settings = cfg[0]
+	}
 
 	return map[string]registrytypes.DeploymentPlatformAdapter{
-		"local":      &localDeploymentAdapter{},
-		"kubernetes": &kubernetesDeploymentAdapter{},
+		"local": &localDeploymentAdapter{
+			registry:         registry,
+			runtimeDir:       settings.RuntimeDir,
+			agentGatewayPort: settings.AgentGatewayPort,
+		},
+		"kubernetes": &kubernetesDeploymentAdapter{registry: registry},
 	}
+}
+
+func buildRuntimeRequestsForProvider(
+	ctx context.Context,
+	registryService service.RegistryService,
+	providerID string,
+	excludeDeploymentID string,
+) ([]*runtimeregistry.MCPServerRunRequest, []*runtimeregistry.AgentRunRequest, error) {
+	provider := strings.TrimSpace(providerID)
+	if provider == "" {
+		return nil, nil, fmt.Errorf("provider id is required: %w", database.ErrInvalidInput)
+	}
+	originManaged := "managed"
+	filter := &models.DeploymentFilter{
+		ProviderID: &provider,
+		Origin:     &originManaged,
+	}
+	deployments, err := registryService.GetDeployments(ctx, filter)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to list managed deployments for provider %s: %w", provider, err)
+	}
+
+	serverRequests := make([]*runtimeregistry.MCPServerRunRequest, 0)
+	agentRequests := make([]*runtimeregistry.AgentRunRequest, 0)
+	for _, deployment := range deployments {
+		if deployment == nil || strings.TrimSpace(deployment.ID) == strings.TrimSpace(excludeDeploymentID) {
+			continue
+		}
+		if !isRuntimeManagedDeploymentStatus(deployment.Status) {
+			continue
+		}
+		switch deployment.ResourceType {
+		case "mcp":
+			serverResp, err := registryService.GetServerByNameAndVersion(ctx, deployment.ServerName, deployment.Version)
+			if err != nil {
+				if errors.Is(err, database.ErrNotFound) {
+					log.Printf("Warning: skipping stale mcp deployment %s (%s@%s): server not found", deployment.ID, deployment.ServerName, deployment.Version)
+					continue
+				}
+				return nil, nil, fmt.Errorf("failed to load mcp server %s@%s: %w", deployment.ServerName, deployment.Version, err)
+			}
+			envValues, argValues, headerValues := splitDeploymentRuntimeInputs(deployment.Env)
+			serverRequests = append(serverRequests, &runtimeregistry.MCPServerRunRequest{
+				RegistryServer: &serverResp.Server,
+				DeploymentID:   deployment.ID,
+				PreferRemote:   deployment.PreferRemote,
+				EnvValues:      envValues,
+				ArgValues:      argValues,
+				HeaderValues:   headerValues,
+			})
+		case "agent":
+			agentResp, err := registryService.GetAgentByNameAndVersion(ctx, deployment.ServerName, deployment.Version)
+			if err != nil {
+				if errors.Is(err, database.ErrNotFound) {
+					log.Printf("Warning: skipping stale agent deployment %s (%s@%s): agent not found", deployment.ID, deployment.ServerName, deployment.Version)
+					continue
+				}
+				return nil, nil, fmt.Errorf("failed to load agent %s@%s: %w", deployment.ServerName, deployment.Version, err)
+			}
+			envValues := copyStringMap(deployment.Env)
+			resolvedMCPServers, err := resolveAgentManifestMCPServers(
+				ctx,
+				registryService,
+				deployment.ID,
+				&agentResp.Agent.AgentManifest,
+				envValues["KAGENT_NAMESPACE"],
+			)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to resolve agent MCP servers for %s@%s: %w", deployment.ServerName, deployment.Version, err)
+			}
+			agentRequests = append(agentRequests, &runtimeregistry.AgentRunRequest{
+				RegistryAgent:      &agentResp.Agent,
+				DeploymentID:       deployment.ID,
+				EnvValues:          envValues,
+				ResolvedMCPServers: resolvedMCPServers,
+			})
+		}
+	}
+
+	return serverRequests, agentRequests, nil
+}
+
+func resolveAgentManifestMCPServers(
+	ctx context.Context,
+	registryService service.RegistryService,
+	deploymentID string,
+	manifest *models.AgentManifest,
+	kagentNamespace string,
+) ([]*runtimeregistry.MCPServerRunRequest, error) {
+	if manifest == nil {
+		return nil, nil
+	}
+	resolvedServers := make([]*runtimeregistry.MCPServerRunRequest, 0)
+	for _, mcpServer := range manifest.McpServers {
+		if mcpServer.Type != "registry" {
+			continue
+		}
+
+		version := mcpServer.RegistryServerVersion
+		if version == "" {
+			version = "latest"
+		}
+		serverResp, err := registryService.GetServerByNameAndVersion(ctx, mcpServer.RegistryServerName, version)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get server %q version %s: %w", mcpServer.RegistryServerName, version, err)
+		}
+		envValues := map[string]string{}
+		if strings.TrimSpace(kagentNamespace) != "" {
+			envValues["KAGENT_NAMESPACE"] = strings.TrimSpace(kagentNamespace)
+		}
+		resolvedServers = append(resolvedServers, &runtimeregistry.MCPServerRunRequest{
+			RegistryServer: &serverResp.Server,
+			DeploymentID:   deploymentID,
+			PreferRemote:   mcpServer.RegistryServerPreferRemote,
+			EnvValues:      envValues,
+			ArgValues:      map[string]string{},
+			HeaderValues:   map[string]string{},
+		})
+	}
+	return resolvedServers, nil
+}
+
+func isRuntimeManagedDeploymentStatus(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "", "pending", "active", "deploying", "deployed":
+		return true
+	default:
+		return false
+	}
+}
+
+func copyStringMap(input map[string]string) map[string]string {
+	if len(input) == 0 {
+		return map[string]string{}
+	}
+	out := make(map[string]string, len(input))
+	for k, v := range input {
+		out[k] = v
+	}
+	return out
+}
+
+func splitDeploymentRuntimeInputs(input map[string]string) (map[string]string, map[string]string, map[string]string) {
+	if len(input) == 0 {
+		return map[string]string{}, map[string]string{}, map[string]string{}
+	}
+	envValues := make(map[string]string, len(input))
+	argValues := map[string]string{}
+	headerValues := map[string]string{}
+	for key, value := range input {
+		switch {
+		case strings.HasPrefix(key, "ARG_"):
+			name := strings.TrimPrefix(key, "ARG_")
+			if name != "" {
+				argValues[name] = value
+			}
+		case strings.HasPrefix(key, "HEADER_"):
+			name := strings.TrimPrefix(key, "HEADER_")
+			if name != "" {
+				headerValues[name] = value
+			}
+		default:
+			envValues[key] = value
+		}
+	}
+	return envValues, argValues, headerValues
 }
