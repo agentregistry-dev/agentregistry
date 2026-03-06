@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"math"
 	"net/http"
 	"net/url"
@@ -45,6 +45,7 @@ type Service struct {
 	generateEmbeddings  bool
 	embeddingProvider   embeddings.Provider
 	embeddingDimensions int
+	logger              *slog.Logger
 }
 
 // NewService creates a new importer service with sane defaults
@@ -61,6 +62,7 @@ func NewService(registry service.RegistryService) *Service {
 		httpClient:       &http.Client{Timeout: timeout},
 		requestHeaders:   map[string]string{},
 		processedServers: map[string]struct{}{},
+		logger:           slog.Default().With("component", "importer"),
 	}
 }
 
@@ -134,21 +136,21 @@ func (s *Service) ImportFromPath(ctx context.Context, path string, enrichServerD
 
 	if count := s.processedCount(); count > 0 {
 		if s.progressCachePath != "" {
-			log.Printf("Progress cache loaded: %d servers already processed", count)
+			s.logger.Info("progress cache loaded", "processed_count", count)
 		}
 	}
 
 	pending := make([]*apiv0.ServerJSON, 0, len(servers))
 	for _, server := range servers {
 		if s.isServerProcessed(server) {
-			log.Printf("Skipping already processed server %s@%s", server.Name, server.Version)
+			s.logger.Info("skipping already processed server", "name", server.Name, "version", server.Version)
 			continue
 		}
 		pending = append(pending, server)
 	}
 
 	if len(pending) == 0 {
-		log.Printf("All %d servers already processed; nothing to import", len(servers))
+		s.logger.Info("all servers already processed; nothing to import", "count", len(servers))
 		return nil
 	}
 
@@ -171,7 +173,7 @@ func (s *Service) ImportFromPath(ctx context.Context, path string, enrichServerD
 			}()
 
 			current := atomic.AddInt32(&processed, 1)
-			log.Printf("Importing %d/%d: %s@%s", current, total, srv.Name, srv.Version)
+			s.logger.Info("importing server", "current", current, "total", total, "name", srv.Name, "version", srv.Version)
 			s.importServer(ctx, srv, readmeSeeds, enrichServerData)
 		}()
 	}
@@ -192,21 +194,21 @@ func (s *Service) importServer(
 	}
 	// check server json (schema validation) before attempting to enrich
 	if err := validators.ValidateServerJSON(srv); err != nil {
-		log.Printf("Skipping invalid server %s@%s: %v", srv.Name, srv.Version, err)
+		s.logger.Warn("skipping invalid server", "name", srv.Name, "version", srv.Version, "error", err)
 		return
 	}
 
 	// Best-effort enrichment
 	if enrichServerData {
 		if err := s.enrichServer(ctx, srv); err != nil {
-			log.Printf("Warning: enrichment failed for %s@%s: %v", srv.Name, srv.Version, err)
+			s.logger.Warn("enrichment failed", "name", srv.Name, "version", srv.Version, "error", err)
 		}
 	}
 
 	var embeddingRecord *database.SemanticEmbedding
 	if s.generateEmbeddings && s.embeddingProvider != nil {
 		if record, err := s.buildServerEmbedding(ctx, srv); err != nil {
-			log.Printf("Warning: failed to generate embedding for %s@%s: %v", srv.Name, srv.Version, err)
+			s.logger.Warn("failed to generate embedding", "name", srv.Name, "version", srv.Version, "error", err)
 		} else {
 			embeddingRecord = record
 		}
@@ -217,19 +219,19 @@ func (s *Service) importServer(
 		// If duplicate version and update is enabled, try update path
 		if s.updateIfExists && errors.Is(err, database.ErrInvalidVersion) {
 			if _, uerr := s.registry.UpdateServer(ctx, srv.Name, srv.Version, srv, nil); uerr != nil {
-				log.Printf("Failed to update existing server %s: %v", srv.Name, uerr)
+				s.logger.Error("failed to update existing server", "name", srv.Name, "error", uerr)
 			} else {
-				log.Printf("Updated existing server %s@%s", srv.Name, srv.Version)
+				s.logger.Info("updated existing server", "name", srv.Name, "version", srv.Version)
 			}
 		} else {
-			log.Printf("Failed to create server %s: %v", srv.Name, err)
+			s.logger.Error("failed to create server", "name", srv.Name, "error", err)
 			return
 		}
 	}
 
 	if embeddingRecord != nil {
 		if err := s.registry.UpsertServerEmbedding(ctx, srv.Name, srv.Version, embeddingRecord); err != nil {
-			log.Printf("Warning: failed to store embedding for %s@%s: %v", srv.Name, srv.Version, err)
+			s.logger.Warn("failed to store embedding", "name", srv.Name, "version", srv.Version, "error", err)
 		}
 	}
 
@@ -242,12 +244,12 @@ func (s *Service) importServer(
 		var readmeErr error
 		readmeContent, readmeContentType, readmeErr = s.downloadReadme(ctx, srv)
 		if readmeErr != nil {
-			log.Printf("Warning: downloading README failed for %s@%s: %v", srv.Name, srv.Version, readmeErr)
+			s.logger.Warn("downloading README failed", "name", srv.Name, "version", srv.Version, "error", readmeErr)
 		}
 	}
 	if len(readmeContent) > 0 {
 		if err := s.registry.StoreServerReadme(ctx, srv.Name, srv.Version, readmeContent, readmeContentType); err != nil {
-			log.Printf("Warning: storing README failed for %s@%s: %v", srv.Name, srv.Version, err)
+			s.logger.Warn("storing README failed", "name", srv.Name, "version", srv.Version, "error", err)
 		}
 	}
 }
@@ -299,7 +301,7 @@ func (s *Service) readSeedFile(ctx context.Context, path string) ([]*apiv0.Serve
 			// Log warning and track invalid server instead of failing
 			invalidServers = append(invalidServers, response.Name)
 			validationFailures = append(validationFailures, fmt.Sprintf("Server '%s': %v", response.Name, err))
-			log.Printf("Warning: Skipping invalid server '%s': %v", response.Name, err)
+			s.logger.Warn("skipping invalid server", "name", response.Name, "error", err)
 			continue
 		}
 
@@ -309,13 +311,9 @@ func (s *Service) readSeedFile(ctx context.Context, path string) ([]*apiv0.Serve
 
 	// Print summary of validation results
 	if len(invalidServers) > 0 {
-		log.Printf("Validation summary: %d servers passed validation, %d invalid servers skipped", len(validRecords), len(invalidServers))
-		log.Printf("Invalid servers: %v", invalidServers)
-		for _, failure := range validationFailures {
-			log.Printf("  - %s", failure)
-		}
+		s.logger.Warn("validation summary: some servers skipped", "valid", len(validRecords), "invalid", len(invalidServers), "invalid_servers", invalidServers, "failures", validationFailures)
 	} else {
-		log.Printf("Validation summary: All %d servers passed validation", len(validRecords))
+		s.logger.Info("validation summary: all servers passed", "count", len(validRecords))
 	}
 
 	return validRecords, nil
@@ -1198,7 +1196,7 @@ func (s *Service) fetchRepoContentFileWithRename(ctx context.Context, owner, rep
 			if newOwner, newRepo, renamed, renameErr := s.resolveRenamedRepo(ctx, owner, repo); renameErr != nil {
 				return nil, fmt.Errorf("content %s status %d (repo lookup failed: %w)", path, resp.StatusCode, renameErr)
 			} else if renamed {
-				log.Printf("Detected GitHub repository rename: %s/%s -> %s/%s", owner, repo, newOwner, newRepo)
+				s.logger.Info("detected GitHub repository rename", "old", owner+"/"+repo, "new", newOwner+"/"+newRepo)
 				return s.fetchRepoContentFileWithRename(ctx, newOwner, newRepo, path, false)
 			}
 		}
@@ -1338,7 +1336,7 @@ func (s *Service) readmeFromSeed(readmes seed.ReadmeFile, server *apiv0.ServerJS
 
 	content, contentType, err := entry.Decode()
 	if err != nil {
-		log.Printf("Warning: invalid README seed for %s@%s: %v", server.Name, server.Version, err)
+		s.logger.Warn("invalid README seed", "name", server.Name, "version", server.Version, "error", err)
 		return nil, ""
 	}
 	return content, contentType
@@ -1417,7 +1415,7 @@ func (s *Service) markServerProcessed(server *apiv0.ServerJSON) {
 	}
 
 	if err := s.persistProgressCacheLocked(); err != nil {
-		log.Printf("Warning: failed to persist progress cache: %v", err)
+		s.logger.Warn("failed to persist progress cache", "error", err)
 	}
 }
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"maps"
 	"net/http"
 	"os"
@@ -64,7 +64,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	// Resolve authz provider: use provided, or default to public authz
 	authzProvider := options.AuthzProvider
 	if authzProvider == nil {
-		log.Println("Using public authz provider")
+		slog.Info("using public authz provider")
 		authzProvider = auth.NewPublicAuthzProvider(jwtManager)
 	}
 	authz := auth.Authorizer{Authz: authzProvider}
@@ -78,7 +78,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		if options.DatabaseFactory == nil {
 			return fmt.Errorf("DATABASE_URL=noop requires DatabaseFactory to be set in AppOptions")
 		}
-		log.Println("using DatabaseFactory to create database (noop mode)")
+		slog.Info("using DatabaseFactory to create database", "mode", "noop")
 		var err error
 		db, err = options.DatabaseFactory(ctx, "", nil, authz)
 		if err != nil {
@@ -96,7 +96,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 			db, err = options.DatabaseFactory(ctx, cfg.DatabaseURL, baseDB, authz)
 			if err != nil {
 				if err := baseDB.Close(); err != nil {
-					log.Printf("Error closing base database connection: %v", err)
+					slog.Error("error closing base database connection", "error", err)
 				}
 				return fmt.Errorf("failed to create extended database: %w", err)
 			}
@@ -106,9 +106,9 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	// Store the database instance for later cleanup
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Printf("Error closing database connection: %v", err)
+			slog.Error("error closing database connection", "error", err)
 		} else {
-			log.Println("Database connection closed successfully")
+			slog.Info("database connection closed successfully")
 		}
 	}()
 
@@ -116,7 +116,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	if cfg.Embeddings.Enabled {
 		client := &http.Client{Timeout: 30 * time.Second}
 		if provider, err := embeddings.Factory(&cfg.Embeddings, client); err != nil {
-			log.Printf("Warning: semantic embeddings disabled: %v", err)
+			slog.Warn("semantic embeddings disabled", "error", err)
 		} else {
 			embeddingProvider = provider
 		}
@@ -159,7 +159,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 
 	// Import builtin seed data unless it is disabled
 	if !cfg.DisableBuiltinSeed {
-		log.Printf("Importing builtin seed data in the background...")
+		slog.Info("importing builtin seed data in the background")
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
@@ -167,14 +167,14 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 			ctx = auth.WithSystemContext(ctx)
 
 			if err := seed.ImportBuiltinSeedData(ctx, registryService); err != nil {
-				log.Printf("Failed to import builtin seed data: %v", err)
+				slog.Error("failed to import builtin seed data", "error", err)
 			}
 		}()
 	}
 
 	// Import seed data if seed source is provided
 	if cfg.SeedFrom != "" {
-		log.Printf("Importing data from %s in the background...", cfg.SeedFrom)
+		slog.Info("importing data in the background", "seed_from", cfg.SeedFrom)
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
@@ -188,12 +188,12 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 				importerService.SetGenerateEmbeddings(cfg.Embeddings.Enabled)
 			}
 			if err := importerService.ImportFromPath(ctx, cfg.SeedFrom, cfg.EnrichServerData); err != nil {
-				log.Printf("Failed to import seed data: %v", err)
+				slog.Error("failed to import seed data", "error", err)
 			}
 		}()
 	}
 
-	log.Printf("Starting agentregistry %s (commit: %s)", version.Version, version.GitCommit)
+	slog.Info("starting agentregistry", "version", version.Version, "commit", version.GitCommit)
 
 	// Prepare version information
 	versionInfo := &v0.VersionBody{
@@ -209,22 +209,22 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 
 	defer func() {
 		if err := shutdownTelemetry(context.Background()); err != nil {
-			log.Printf("Failed to shutdown telemetry: %v", err)
+			slog.Error("failed to shutdown telemetry", "error", err)
 		}
 	}()
 
 	if cfg.ReconcileOnStartup {
-		log.Println("Reconciling existing deployments at startup...")
+		slog.Info("reconciling existing deployments at startup")
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 
 		ctx = auth.WithSystemContext(ctx)
 
 		if err := registryService.ReconcileAll(ctx); err != nil {
-			log.Printf("Warning: Failed to reconcile deployments at startup: %v", err)
-			log.Println("Server will continue starting, but deployments may not be in sync")
+			slog.Warn("failed to reconcile deployments at startup", "error", err)
+			slog.Warn("server will continue starting, but deployments may not be in sync")
 		} else {
-			log.Println("Startup reconciliation completed successfully")
+			slog.Info("startup reconciliation completed successfully")
 		}
 	}
 
@@ -240,7 +240,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		indexer := service.NewIndexer(registryService, embeddingProvider, cfg.Embeddings.Dimensions)
 		routeOpts.Indexer = indexer
 		routeOpts.JobManager = jobManager
-		log.Println("Embeddings indexing API enabled")
+		slog.Info("embeddings indexing API enabled")
 	}
 
 	// Initialize HTTP server
@@ -278,9 +278,9 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		}
 
 		go func() {
-			log.Printf("MCP HTTP server starting on %s", addr)
+			slog.Info("MCP HTTP server starting", "address", addr)
 			if err := mcpHTTPServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				log.Printf("Failed to start MCP server: %v", err)
+				slog.Error("failed to start MCP server", "error", err)
 				os.Exit(1)
 			}
 		}()
@@ -289,7 +289,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	// Start server in a goroutine so it doesn't block signal handling
 	go func() {
 		if err := server.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("Failed to start server: %v", err)
+			slog.Error("failed to start server", "error", err)
 			os.Exit(1)
 		}
 	}()
@@ -299,7 +299,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("Shutting down server...")
+	slog.Info("shutting down server")
 
 	// Create context with timeout for shutdown
 	sctx, scancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -307,15 +307,15 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 
 	// Gracefully shutdown the server
 	if err := server.Shutdown(sctx); err != nil {
-		log.Printf("Server forced to shutdown: %v", err)
+		slog.Error("server forced to shutdown", "error", err)
 	}
 	if mcpHTTPServer != nil {
 		if err := mcpHTTPServer.Shutdown(sctx); err != nil {
-			log.Printf("MCP server forced to shutdown: %v", err)
+			slog.Error("MCP server forced to shutdown", "error", err)
 		}
 	}
 
-	log.Println("Server exiting")
+	slog.Info("server exiting")
 	return nil
 }
 

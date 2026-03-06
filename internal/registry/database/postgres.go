@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -643,7 +643,7 @@ func (db *PostgreSQL) InTransaction(ctx context.Context, fn func(ctx context.Con
 		rollbackCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
 		if rbErr := tx.Rollback(rollbackCtx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
-			log.Printf("failed to rollback transaction: %v", rbErr)
+			slog.Error("failed to rollback transaction", "error", rbErr)
 		}
 	}()
 

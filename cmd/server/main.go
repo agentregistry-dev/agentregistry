@@ -2,14 +2,22 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
+	"os"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/registry"
 )
 
 func main() {
+	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+
 	ctx := context.Background()
 	if err := registry.App(ctx); err != nil {
-		log.Fatalf("Failed to start registry: %v", err)
+		slog.Error("failed to start registry", "error", err)
+		os.Exit(1)
 	}
 }
