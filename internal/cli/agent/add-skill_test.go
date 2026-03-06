@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
+	agentutils "github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"gopkg.in/yaml.v3"
 )
@@ -157,6 +158,32 @@ func TestAddSkillSortsAlphabetically(t *testing.T) {
 		if manifest.Skills[i].Name != want {
 			t.Errorf("skills[%d]: expected %q, got %q", i, want, manifest.Skills[i].Name)
 		}
+	}
+}
+
+func TestAddSkillDefaultRegistryURL(t *testing.T) {
+	dir := t.TempDir()
+	writeTestManifest(t, dir, baseManifest())
+
+	// Set a default registry URL, leave --registry-url empty
+	agentutils.SetDefaultRegistryURL("http://localhost:12121")
+
+	skillProjectDir = dir
+	skillImage = ""
+	skillRegistrySkillName = "cool-skill"
+	skillRegistrySkillVersion = "2.0.0"
+	skillRegistryURL = ""
+
+	if err := addSkillCmd("default-url-skill"); err != nil {
+		t.Fatalf("addSkillCmd() error: %v", err)
+	}
+
+	manifest := readTestManifest(t, dir)
+	if len(manifest.Skills) != 1 {
+		t.Fatalf("expected 1 skill, got %d", len(manifest.Skills))
+	}
+	if manifest.Skills[0].RegistryURL != "http://localhost:12121" {
+		t.Errorf("expected registryURL 'http://localhost:12121', got '%s'", manifest.Skills[0].RegistryURL)
 	}
 }
 

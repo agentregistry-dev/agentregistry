@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/tui/theme"
+	agentutils "github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/registry"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
@@ -864,8 +865,12 @@ func (w *McpServerWizard) chooseRemoteType() {
 func (w *McpServerWizard) chooseRegistryType() {
 	w.chosenType = serverTypes.Registry.ID
 	w.step = stepRegistryURL
-	// Clear any stale input value when entering URL step
-	w.registryURLInput.SetValue("")
+	// Pre-populate with the current registry URL if available
+	if defaultURL := agentutils.GetDefaultRegistryURL(); defaultURL != "" {
+		w.registryURLInput.SetValue(defaultURL)
+	} else {
+		w.registryURLInput.SetValue("")
+	}
 	w.registryURLInput.Focus()
 }
 
