@@ -2,9 +2,11 @@ package skill
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -382,13 +384,18 @@ func buildSkillDockerImage(skillPath string) (*models.SkillJSON, error) {
 		args = append(args, "-f", "-", skillPath)
 
 		printer.PrintInfo("Building Docker image (Dockerfile via stdin): docker " + strings.Join(args, " "))
+		var stderrBuf bytes.Buffer
 		cmd := exec.Command("docker", args...)
 		cmd.Dir = skillPath
 		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
 		// Minimal inline Dockerfile; avoids requiring a Dockerfile in the skill folder
 		cmd.Stdin = strings.NewReader("FROM scratch\nCOPY . .\n")
 		if err := cmd.Run(); err != nil {
+			captured := strings.TrimSpace(stderrBuf.String())
+			if captured != "" {
+				return nil, fmt.Errorf("docker build failed: %w\n%s", err, captured)
+			}
 			return nil, fmt.Errorf("docker build failed: %w", err)
 		}
 	}
@@ -399,10 +406,15 @@ func buildSkillDockerImage(skillPath string) (*models.SkillJSON, error) {
 			printer.PrintInfo("[DRY RUN] Would push Docker image: " + imageRef)
 		} else {
 			printer.PrintInfo("Pushing Docker image: docker push " + imageRef)
+			var pushStderrBuf bytes.Buffer
 			pushCmd := exec.Command("docker", "push", imageRef)
 			pushCmd.Stdout = os.Stdout
-			pushCmd.Stderr = os.Stderr
+			pushCmd.Stderr = io.MultiWriter(os.Stderr, &pushStderrBuf)
 			if err := pushCmd.Run(); err != nil {
+				captured := strings.TrimSpace(pushStderrBuf.String())
+				if captured != "" {
+					return nil, fmt.Errorf("docker push failed for %s: %w\n%s", imageRef, err, captured)
+				}
 				return nil, fmt.Errorf("docker push failed for %s: %w", imageRef, err)
 			}
 		}

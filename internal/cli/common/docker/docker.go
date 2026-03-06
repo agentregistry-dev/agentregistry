@@ -1,7 +1,9 @@
 package docker
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -37,6 +39,8 @@ func (e *Executor) CheckAvailability() error {
 }
 
 // Run executes docker with the provided arguments.
+// Stderr is both displayed to the user and captured so it can be included
+// in the returned error message when the command fails.
 func (e *Executor) Run(args ...string) error {
 	if e.Verbose {
 		printer.PrintInfo(fmt.Sprintf("Running: docker %s", strings.Join(args, " ")))
@@ -45,13 +49,21 @@ func (e *Executor) Run(args ...string) error {
 		}
 	}
 
+	var stderrBuf bytes.Buffer
 	cmd := exec.Command("docker", args...)
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
 	if e.WorkDir != "" {
 		cmd.Dir = e.WorkDir
 	}
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		captured := strings.TrimSpace(stderrBuf.String())
+		if captured != "" {
+			return fmt.Errorf("%w\n%s", err, captured)
+		}
+		return err
+	}
+	return nil
 }
 
 // Build runs docker build with the supplied tag, context, and additional args.
