@@ -14,7 +14,16 @@ jobs:
   pr-limiter:
     runs-on: ubuntu-latest
     steps:
-    - uses: Homebrew/actions/limit-pull-requests@master
+    # only run this step on PRs, not in the merge queue (we need to explicitly add the merge queue logic because making this check required
+    # causes it to get run in the merge queue as well)
+    - name: Conditional skip for merge queue
+      if: github.event_name == 'merge_group'
+      run: |
+        echo "Skipping check in merge queue"
+        exit 0
+
+    - if: github.event_name != 'merge_group'
+      uses: Homebrew/actions/limit-pull-requests@master
       with:
         # https://docs.github.com/en/graphql/reference/enums#commentauthorassociation
         except-author-associations: |
