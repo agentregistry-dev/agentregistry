@@ -333,108 +333,6 @@ func TestBuildSkillFromGitHub_InvalidURL(t *testing.T) {
 	}
 }
 
-func TestDetectSkills(t *testing.T) {
-	tests := []struct {
-		name        string
-		setup       func(dir string) // creates files/dirs under dir
-		wantCount   int
-		wantErr     bool
-		errContains string
-	}{
-		{
-			name: "single skill in root",
-			setup: func(dir string) {
-				writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: s\n---\n")
-			},
-			wantCount: 1,
-		},
-		{
-			name: "multiple skills in subdirs",
-			setup: func(dir string) {
-				for _, name := range []string{"skill-a", "skill-b", "skill-c"} {
-					sub := filepath.Join(dir, name)
-					os.MkdirAll(sub, 0755)
-					writeFile(t, filepath.Join(sub, "SKILL.md"), "---\nname: "+name+"\n---\n")
-				}
-			},
-			wantCount: 3,
-		},
-		{
-			name: "ignores subdirs without SKILL.md",
-			setup: func(dir string) {
-				sub := filepath.Join(dir, "has-skill")
-				os.MkdirAll(sub, 0755)
-				writeFile(t, filepath.Join(sub, "SKILL.md"), "---\nname: s\n---\n")
-
-				noSkill := filepath.Join(dir, "no-skill")
-				os.MkdirAll(noSkill, 0755)
-				writeFile(t, filepath.Join(noSkill, "README.md"), "not a skill")
-			},
-			wantCount: 1,
-		},
-		{
-			name: "ignores subdirs with invalid SKILL.md frontmatter",
-			setup: func(dir string) {
-				valid := filepath.Join(dir, "valid-skill")
-				os.MkdirAll(valid, 0755)
-				writeFile(t, filepath.Join(valid, "SKILL.md"), "---\nname: valid\n---\n")
-
-				invalid := filepath.Join(dir, "invalid-skill")
-				os.MkdirAll(invalid, 0755)
-				writeFile(t, filepath.Join(invalid, "SKILL.md"), "no frontmatter here")
-			},
-			wantCount: 1,
-		},
-		{
-			name: "all subdirs have invalid SKILL.md frontmatter",
-			setup: func(dir string) {
-				sub := filepath.Join(dir, "bad-skill")
-				os.MkdirAll(sub, 0755)
-				writeFile(t, filepath.Join(sub, "SKILL.md"), "no frontmatter here")
-			},
-			wantErr:     true,
-			errContains: "invalid or missing YAML frontmatter",
-		},
-		{
-			name: "root SKILL.md with invalid frontmatter",
-			setup: func(dir string) {
-				writeFile(t, filepath.Join(dir, "SKILL.md"), "no frontmatter here")
-			},
-			wantErr:     true,
-			errContains: "invalid or missing YAML frontmatter",
-		},
-		{
-			name: "no skills found",
-			setup: func(dir string) {
-				writeFile(t, filepath.Join(dir, "README.md"), "no skills here")
-			},
-			wantErr:     true,
-			errContains: "no SKILL.md found",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir := t.TempDir()
-			tt.setup(dir)
-
-			skills, err := detectSkills(dir)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("detectSkills() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if tt.wantErr {
-				if tt.errContains != "" && !contains(err.Error(), tt.errContains) {
-					t.Errorf("error = %q, want it to contain %q", err.Error(), tt.errContains)
-				}
-				return
-			}
-			if len(skills) != tt.wantCount {
-				t.Errorf("got %d skills, want %d", len(skills), tt.wantCount)
-			}
-		})
-	}
-}
-
 // savePublishFlags saves all publish-related package-level vars and returns a cleanup function.
 func savePublishFlags(t *testing.T) {
 	t.Helper()
@@ -545,8 +443,8 @@ func TestRunPublish_DirWithoutSkillMdReturnsError(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected error for directory without SKILL.md, got nil")
 			}
-			if !contains(err.Error(), "no SKILL.md found") {
-				t.Errorf("error = %q, want it to contain 'no SKILL.md found'", err.Error())
+			if !contains(err.Error(), "no valid skills found at path") {
+				t.Errorf("error = %q, want it to contain 'no valid skills found at path'", err.Error())
 			}
 		})
 	}
@@ -638,30 +536,15 @@ func TestRunPublish_GitHubAPIError(t *testing.T) {
 	}
 }
 
-func TestRunPublish_GitHubMultipleSkills(t *testing.T) {
+func TestRunPublish_ParentDirWithSubSkillsReturnsError(t *testing.T) {
 	savePublishFlags(t)
-	mockGitHubSkillMdCheck(t)
-
-	var publishedNames []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/v0/skills" {
-			var skill models.SkillJSON
-			json.NewDecoder(r.Body).Decode(&skill)
-			publishedNames = append(publishedNames, skill.Name)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(models.SkillResponse{Skill: skill})
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	t.Cleanup(srv.Close)
-
-	apiClient = client.NewClient(srv.URL, "")
+	apiClient = client.NewClient("http://localhost:0", "")
 	githubRepository = "https://github.com/org/repo"
 	versionFlag = "1.0.0"
 	dryRunFlag = false
 
-	// Create a parent dir with multiple skill subdirs
+	// Parent dir has subdirectories with SKILL.md, but no SKILL.md itself.
+	// isValidSkillDir only checks the given directory, not subdirectories.
 	dir := t.TempDir()
 	for _, name := range []string{"skill-a", "skill-b"} {
 		sub := filepath.Join(dir, name)
@@ -670,11 +553,11 @@ func TestRunPublish_GitHubMultipleSkills(t *testing.T) {
 	}
 
 	err := runPublish(nil, []string{dir})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatal("expected error for parent dir without SKILL.md, got nil")
 	}
-	if len(publishedNames) != 2 {
-		t.Fatalf("expected 2 skills published, got %d: %v", len(publishedNames), publishedNames)
+	if !contains(err.Error(), "no valid skills found at path") {
+		t.Errorf("error = %q, want it to contain 'no valid skills found at path'", err.Error())
 	}
 }
 
@@ -1262,6 +1145,104 @@ func TestCheckGitHubSkillMdExists_VerifiesCorrectPath(t *testing.T) {
 				t.Errorf("requested path = %q, want %q", requestedPath, tt.wantPath)
 			}
 		})
+	}
+}
+
+// --- isValidSkillDir tests ---
+
+func TestIsValidSkillDir(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(dir string)
+		want    bool
+	}{
+		{
+			name: "valid SKILL.md with name and description",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: my-skill\ndescription: A test skill\n---\n# My Skill\n")
+			},
+			want: true,
+		},
+		{
+			name: "valid SKILL.md with name only",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: simple\n---\nBody.\n")
+			},
+			want: true,
+		},
+		{
+			name: "valid SKILL.md with description only (no name)",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "SKILL.md"), "---\ndescription: no name\n---\nBody.\n")
+			},
+			want: true,
+		},
+		{
+			name:  "no SKILL.md file",
+			setup: func(dir string) {},
+			want:  false,
+		},
+		{
+			name: "other files but no SKILL.md",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "README.md"), "# README")
+			},
+			want: false,
+		},
+		{
+			name: "empty SKILL.md",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "SKILL.md"), "")
+			},
+			want: false,
+		},
+		{
+			name: "SKILL.md without frontmatter delimiters",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "SKILL.md"), "just some text\nno yaml here\n")
+			},
+			want: false,
+		},
+		{
+			name: "SKILL.md with only opening delimiter",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: orphan\n")
+			},
+			want: false,
+		},
+		{
+			name: "SKILL.md with invalid YAML in frontmatter",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: [invalid\n---\n")
+			},
+			want: false,
+		},
+		{
+			name: "SKILL.md with empty frontmatter block",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "SKILL.md"), "---\n---\nBody content.\n")
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			tt.setup(dir)
+
+			got := isValidSkillDir(dir)
+			if got != tt.want {
+				t.Errorf("isValidSkillDir() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsValidSkillDir_NonExistentDir(t *testing.T) {
+	got := isValidSkillDir("/nonexistent/path/that/does/not/exist")
+	if got {
+		t.Error("isValidSkillDir() = true for non-existent directory, want false")
 	}
 }
 

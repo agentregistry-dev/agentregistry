@@ -3,7 +3,6 @@ package skill
 import (
 	"bufio"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -56,8 +55,6 @@ This command supports three modes:
 
 For GitHub modes, SKILL.md must exist at the specified GitHub path.
 In folder mode, the local skill folder must also contain a SKILL.md file with proper YAML frontmatter.
-If the given directory itself does not contain a SKILL.md but has immediate subdirectories
-that do, all matching subdirectories will be published.
 
 To build a skill as a Docker image, use "arctl skill build" instead.`,
 	Args: cobra.ExactArgs(1),
@@ -90,52 +87,36 @@ func runPublish(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to resolve path %q: %w", input, err)
 	}
 	if info, err := os.Stat(absPath); err == nil && info.IsDir() {
-		skills, detectErr := detectSkills(absPath)
-		if detectErr != nil {
-			return fmt.Errorf("directory %q: %w", input, detectErr)
+		isValid := isValidSkillDir(absPath)
+		if !isValid {
+			return fmt.Errorf("no valid skills found at path: %s", absPath)
 		}
-		return runPublishFromFolder(absPath, skills)
+		return runPublishFromFolder(absPath)
 	}
 
 	return runPublishDirect(input)
 }
 
 // runPublishFromFolder publishes the pre-detected skills from the given directory.
-func runPublishFromFolder(absPath string, skills []string) error {
-	printer.PrintInfo(fmt.Sprintf("Publishing skill from: %s", absPath))
-	printer.PrintInfo(fmt.Sprintf("Found %d skill(s) to publish", len(skills)))
+func runPublishFromFolder(skillFolderPath string) error {
+	printer.PrintInfo(fmt.Sprintf("Publishing skill from: %s", skillFolderPath))
 
-	var errs []error
-
-	for _, skill := range skills {
-		printer.PrintInfo(fmt.Sprintf("Processing skill: %s", skill))
-
-		var skillJson *models.SkillJSON
-		var err error
-		switch {
-		case githubRepository != "":
-			skillJson, err = buildSkillFromGitHub(skill)
-		case dockerImageFlag != "":
-			skillJson, err = buildSkillFromDocker(skill)
-		default:
-			return fmt.Errorf("--github or --docker-image is required")
-		}
-		if err != nil {
-			errs = append(errs, fmt.Errorf("failed to build skill '%s': %w", skill, err))
-			continue
-		}
-
-		if err := publishSkillJSON(skillJson); err != nil {
-			errs = append(errs, err)
-		}
+	var skillJson *models.SkillJSON
+	var err error
+	switch {
+	case githubRepository != "":
+		skillJson, err = buildSkillFromGitHub(skillFolderPath)
+	case dockerImageFlag != "":
+		skillJson, err = buildSkillFromDocker(skillFolderPath)
+	default:
+		return fmt.Errorf("--github or --docker-image is required")
+	}
+	if err != nil {
+		return fmt.Errorf("failed to build skill '%s': %w", skillFolderPath, err)
 	}
 
-	if len(errs) > 0 {
-		return fmt.Errorf("one or more errors occurred during publishing: %w", errors.Join(errs...))
-	}
-
-	if !dryRunFlag {
-		printer.PrintSuccess("Skill publishing complete!")
+	if err := publishSkillJSON(skillJson); err != nil {
+		return err
 	}
 
 	return nil
@@ -413,52 +394,6 @@ func buildSkillFromDocker(skillPath string) (*models.SkillJSON, error) {
 	skill.Packages = append(skill.Packages, pkg)
 
 	return skill, nil
-}
-
-// detectSkills scans the given path for skill folders containing a valid SKILL.md
-// with parseable YAML frontmatter. It checks the path itself first (single skill mode),
-// then scans immediate subdirectories (multi skill mode).
-func detectSkills(path string) ([]string, error) {
-	// Check if path contains SKILL.md directly (single skill mode)
-	if isValidSkillDir(path) {
-		return []string{path}, nil
-	}
-
-	// Multi mode: scan subdirectories for SKILL.md
-	entries, err := os.ReadDir(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read directory: %w", err)
-	}
-
-	var skills []string
-	var invalidCount int
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-
-		subPath := filepath.Join(path, entry.Name())
-		if isValidSkillDir(subPath) {
-			skills = append(skills, subPath)
-		} else if hasSkillMd(subPath) {
-			invalidCount++
-			if verbose {
-				printer.PrintInfo(fmt.Sprintf("Skipping %s: SKILL.md exists but has invalid frontmatter", subPath))
-			}
-		}
-	}
-	// The root path SKILL.md was already checked via isValidSkillDir above;
-	// if we're here the root either has no SKILL.md or it was invalid.
-	if hasSkillMd(path) {
-		invalidCount++
-	}
-	if len(skills) == 0 {
-		if invalidCount > 0 {
-			return nil, fmt.Errorf("SKILL.md found but has invalid or missing YAML frontmatter (%d file(s))", invalidCount)
-		}
-		return nil, errors.New("no SKILL.md found in this folder or any immediate subfolder")
-	}
-	return skills, nil
 }
 
 // isValidSkillDir checks whether a directory contains a SKILL.md with valid YAML frontmatter.

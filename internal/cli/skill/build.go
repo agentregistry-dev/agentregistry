@@ -40,8 +40,10 @@ var (
 
 func init() {
 	BuildCmd.Flags().StringVar(&buildImage, "image", "", "Full image specification (e.g., docker.io/myorg/my-skill:v1.0.0)")
-	BuildCmd.Flags().BoolVar(&buildPush, "push", false, "Push the image to the registry")
+	BuildCmd.Flags().BoolVar(&buildPush, "push", false, "Push the image to the container registry, specififed by --image")
 	BuildCmd.Flags().StringVar(&buildPlatform, "platform", "", "Target platform for Docker build (e.g., linux/amd64, linux/arm64)")
+
+	BuildCmd.MarkFlagRequired("image")
 }
 
 func runBuild(cmd *cobra.Command, args []string) error {
@@ -55,12 +57,9 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to resolve path %q: %w", buildDir, err)
 	}
 
-	skills, err := detectSkills(absPath)
-	if err != nil {
-		return fmt.Errorf("failed to detect skills: %w", err)
-	}
+	isValid := isValidSkillDir(absPath)
 
-	if len(skills) == 0 {
+	if !isValid {
 		return fmt.Errorf("no valid skills found at path: %s", absPath)
 	}
 
@@ -69,10 +68,8 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("docker check failed: %w", err)
 	}
 
-	for _, skillPath := range skills {
-		if err := buildSkillImage(skillPath, dockerExec); err != nil {
-			return err
-		}
+	if err := buildSkillImage(absPath, dockerExec); err != nil {
+		return err
 	}
 
 	return nil

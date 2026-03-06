@@ -1,7 +1,6 @@
 package skill
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 )
@@ -43,8 +42,8 @@ func TestRunBuild_NoSkillsFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when no skills found, got nil")
 	}
-	if !contains(err.Error(), "failed to detect skills") {
-		t.Errorf("error = %q, want it to contain 'failed to detect skills'", err.Error())
+	if !contains(err.Error(), "no valid skills found at path") {
+		t.Errorf("error = %q, want it to contain 'no valid skills found at path'", err.Error())
 	}
 }
 
@@ -77,22 +76,5 @@ func TestBuildSkillImage_InvalidFrontmatter(t *testing.T) {
 	}
 	if !contains(err.Error(), "failed to resolve skill metadata") {
 		t.Errorf("error = %q, want it to contain 'failed to resolve skill metadata'", err.Error())
-	}
-}
-
-func TestDetectSkills_MultipleSubdirs(t *testing.T) {
-	dir := t.TempDir()
-	for _, name := range []string{"skill-a", "skill-b"} {
-		sub := filepath.Join(dir, name)
-		os.MkdirAll(sub, 0755)
-		writeFile(t, filepath.Join(sub, "SKILL.md"), "---\nname: "+name+"\n---\n")
-	}
-
-	skills, err := detectSkills(dir)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(skills) != 2 {
-		t.Errorf("got %d skills, want 2", len(skills))
 	}
 }
