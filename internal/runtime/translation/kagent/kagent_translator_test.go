@@ -40,8 +40,8 @@ func TestTranslateRuntimeConfig_AgentOnly(t *testing.T) {
 	}
 
 	agent := config.Kubernetes.Agents[0]
-	if agent.Name != "test-agent-v1" {
-		t.Errorf("Expected agent name test-agent-v1, got %s", agent.Name)
+	if agent.Name != "test-agent" {
+		t.Errorf("Expected agent name test-agent, got %s", agent.Name)
 	}
 
 	// Verify no config maps or volumes for simple agent
@@ -196,7 +196,7 @@ func TestTranslateRuntimeConfig_AgentWithMCPServers(t *testing.T) {
 	}
 
 	cm := config.Kubernetes.ConfigMaps[0]
-	expectedCMName := "test-agent-v1-mcp-config"
+	expectedCMName := "test-agent-mcp-config"
 	if cm.Name != expectedCMName {
 		t.Errorf("Expected ConfigMap name %s, got %s", expectedCMName, cm.Name)
 	}
@@ -425,7 +425,7 @@ func TestTranslateRuntimeConfig_DeploymentIDMetadataAndNaming(t *testing.T) {
 		t.Fatalf("expected 1 agent, got %d", len(config.Kubernetes.Agents))
 	}
 	agent := config.Kubernetes.Agents[0]
-	if agent.Name != "demo-agent-1-0-0-dep-agent-123" {
+	if agent.Name != "demo-agent" {
 		t.Fatalf("unexpected agent name: %s", agent.Name)
 	}
 	if got := agent.Labels[DeploymentIDLabelKey]; got != "dep-agent-123" {
@@ -439,7 +439,7 @@ func TestTranslateRuntimeConfig_DeploymentIDMetadataAndNaming(t *testing.T) {
 		t.Fatalf("expected 1 configmap, got %d", len(config.Kubernetes.ConfigMaps))
 	}
 	configMap := config.Kubernetes.ConfigMaps[0]
-	if configMap.Name != "demo-agent-1-0-0-mcp-config-dep-agent-123" {
+	if configMap.Name != "demo-agent-mcp-config" {
 		t.Fatalf("unexpected configmap name: %s", configMap.Name)
 	}
 	if got := configMap.Labels[DeploymentIDLabelKey]; got != "dep-agent-123" {
@@ -450,7 +450,7 @@ func TestTranslateRuntimeConfig_DeploymentIDMetadataAndNaming(t *testing.T) {
 		t.Fatalf("expected 1 remote mcp server, got %d", len(config.Kubernetes.RemoteMCPServers))
 	}
 	remote := config.Kubernetes.RemoteMCPServers[0]
-	if remote.Name != "demo-mcp-dep-mcp-123" {
+	if remote.Name != "demo-mcp" {
 		t.Fatalf("unexpected remote mcp name: %s", remote.Name)
 	}
 	if got := remote.Labels[DeploymentIDLabelKey]; got != "dep-mcp-123" {
@@ -458,7 +458,7 @@ func TestTranslateRuntimeConfig_DeploymentIDMetadataAndNaming(t *testing.T) {
 	}
 }
 
-func TestTranslateRuntimeConfig_DuplicateArtifactIdentityUsesDistinctDeploymentScopedNames(t *testing.T) {
+func TestTranslateRuntimeConfig_SameAgentNameProducesSameCRDName(t *testing.T) {
 	translator := NewTranslator()
 	ctx := context.Background()
 
@@ -503,29 +503,20 @@ func TestTranslateRuntimeConfig_DuplicateArtifactIdentityUsesDistinctDeploymentS
 	if len(config.Kubernetes.Agents) != 2 {
 		t.Fatalf("expected 2 agents, got %d", len(config.Kubernetes.Agents))
 	}
-	if len(config.Kubernetes.ConfigMaps) != 2 {
-		t.Fatalf("expected 2 configmaps, got %d", len(config.Kubernetes.ConfigMaps))
+
+	// Both agents share the same name (derived from agent name only, not deployment ID)
+	expectedName := "com-example-planner"
+	for i, agent := range config.Kubernetes.Agents {
+		if agent.Name != expectedName {
+			t.Errorf("agent[%d] name = %q, want %q", i, agent.Name, expectedName)
+		}
 	}
 
-	agentNames := map[string]struct{}{}
-	for _, agent := range config.Kubernetes.Agents {
-		agentNames[agent.Name] = struct{}{}
+	// Deployment IDs are tracked via labels, not resource names
+	if got := config.Kubernetes.Agents[0].Labels[DeploymentIDLabelKey]; got != "dep-old" {
+		t.Errorf("agent[0] deployment-id label = %q, want %q", got, "dep-old")
 	}
-	if _, ok := agentNames["com-example-planner-1-0-0-dep-old"]; !ok {
-		t.Fatalf("missing deployment-scoped agent name for dep-old: %v", agentNames)
-	}
-	if _, ok := agentNames["com-example-planner-1-0-0-dep-new"]; !ok {
-		t.Fatalf("missing deployment-scoped agent name for dep-new: %v", agentNames)
-	}
-
-	configMapNames := map[string]struct{}{}
-	for _, cm := range config.Kubernetes.ConfigMaps {
-		configMapNames[cm.Name] = struct{}{}
-	}
-	if _, ok := configMapNames["com-example-planner-1-0-0-mcp-config-dep-old"]; !ok {
-		t.Fatalf("missing deployment-scoped configmap name for dep-old: %v", configMapNames)
-	}
-	if _, ok := configMapNames["com-example-planner-1-0-0-mcp-config-dep-new"]; !ok {
-		t.Fatalf("missing deployment-scoped configmap name for dep-new: %v", configMapNames)
+	if got := config.Kubernetes.Agents[1].Labels[DeploymentIDLabelKey]; got != "dep-new" {
+		t.Errorf("agent[1] deployment-id label = %q, want %q", got, "dep-new")
 	}
 }
