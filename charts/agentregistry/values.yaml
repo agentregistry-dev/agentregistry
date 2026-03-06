@@ -381,15 +381,15 @@ database:
     enabled: true
 
     # The image uses pgvector/pgvector which bundles PostgreSQL + pgvector extension.
-    # Tags follow the pattern: <pgvector_version>-pg<pg_major>[-variant]
+    # Tags follow the pattern: pg<pg_major>
     #
     # To change the PostgreSQL major version, set the tag accordingly:
-    #   PostgreSQL 13: "0.8.2-pg13"
-    #   PostgreSQL 14: "0.8.2-pg14"
-    #   PostgreSQL 15: "0.8.2-pg15"
-    #   PostgreSQL 16: "0.8.2-pg16"
-    #   PostgreSQL 17: "0.8.2-pg17"  (default)
-    #   PostgreSQL 18: "0.8.2-pg18"
+    #   PostgreSQL 13: "pg13"
+    #   PostgreSQL 14: "pg14"
+    #   PostgreSQL 15: "pg15"
+    #   PostgreSQL 16: "pg16" (default)
+    #   PostgreSQL 17: "pg17"
+    #   PostgreSQL 18: "pg18"
     #
     # Optional Debian variants: "0.8.2-pg17-bookworm", "0.8.2-pg17-trixie"
     # Browse all tags: https://hub.docker.com/r/pgvector/pgvector/tags
@@ -399,7 +399,7 @@ database:
       # -- PostgreSQL image repository (pgvector/pgvector)
       repository: pgvector/pgvector
       # -- PostgreSQL image tag — MUST use immutable tags (not `pg17` or `latest`)
-      tag: "0.8.2-pg17"
+      tag: "pg16"
       # -- PostgreSQL image digest (overrides tag if set)
       digest: ""
       # -- PostgreSQL image pull policy
