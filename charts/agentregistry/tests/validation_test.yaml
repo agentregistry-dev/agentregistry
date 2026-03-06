@@ -1,0 +1,64 @@
+suite: Validation
+templates:
+  - validate.yaml
+
+tests:
+  # ── Default — no errors ──────────────────────────────────────────────────────
+
+  - it: renders nothing and produces no errors with default values
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing with bundled database enabled (default)
+    set:
+      database.bundled.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing with external DB when allowExternalEgress is true (default)
+    set:
+      database.bundled.enabled: false
+      database.external.host: mydb.example.com
+      networkPolicy.enabled: true
+      networkPolicy.allowExternalEgress: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing with external DB and extraEgress rule when allowExternalEgress is false
+    set:
+      database.bundled.enabled: false
+      database.external.host: mydb.example.com
+      networkPolicy.enabled: true
+      networkPolicy.allowExternalEgress: false
+      networkPolicy.extraEgress:
+        - ports:
+            - port: 5432
+              protocol: TCP
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing when networkPolicy is disabled regardless of egress settings
+    set:
+      database.bundled.enabled: false
+      database.external.host: mydb.example.com
+      networkPolicy.enabled: false
+      networkPolicy.allowExternalEgress: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ── Hard error: external DB + networkPolicy + no egress route ─────────────────
+
+  - it: fails when networkPolicy blocks egress to external database
+    set:
+      database.bundled.enabled: false
+      database.external.host: mydb.example.com
+      networkPolicy.enabled: true
+      networkPolicy.allowExternalEgress: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "CHART CONFIGURATION ERROR"
