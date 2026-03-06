@@ -18,7 +18,8 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [version, setVersion] = useState("latest")
-  const [publishSource, setPublishSource] = useState<"github" | "docker">("github")
+  const [publishSource, setPublishSource] = useState<"repository" | "docker">("repository")
+  const [repositorySource, setRepositorySource] = useState<"github" | "gitlab" | "bitbucket">("github")
   const [repositoryUrl, setRepositoryUrl] = useState("")
   const [dockerImage, setDockerImage] = useState("")
   const [loading, setLoading] = useState(false)
@@ -42,8 +43,8 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
       }
       const trimmedRepositoryUrl = repositoryUrl.trim()
       const trimmedDockerImage = dockerImage.trim()
-      if (publishSource === "github" && !trimmedRepositoryUrl) {
-        throw new Error("GitHub repository URL is required for GitHub publish")
+      if (publishSource === "repository" && !trimmedRepositoryUrl) {
+        throw new Error("Repository URL is required")
       }
       if (publishSource === "docker" && !trimmedDockerImage) {
         throw new Error("Docker image is required for Docker publish")
@@ -54,9 +55,9 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
         name: name.trim(),
         description: description.trim(),
         version: version.trim(),
-        repository: publishSource === "github" ? {
+        repository: publishSource === "repository" ? {
           url: trimmedRepositoryUrl,
-          source: "github"
+          source: repositorySource
         } : undefined,
         packages: publishSource === "docker" ? [
           {
@@ -77,7 +78,7 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
       setName("")
       setDescription("")
       setVersion("latest")
-      setPublishSource("github")
+      setPublishSource("repository")
       setRepositoryUrl("")
       setDockerImage("")
 
@@ -95,7 +96,7 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
     setName("")
     setDescription("")
     setVersion("latest")
-    setPublishSource("github")
+    setPublishSource("repository")
     setRepositoryUrl("")
     setDockerImage("")
     setError(null)
@@ -152,11 +153,11 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
             <div className="flex gap-2">
               <Button
                 type="button"
-                variant={publishSource === "github" ? "default" : "outline"}
-                onClick={() => setPublishSource("github")}
+                variant={publishSource === "repository" ? "default" : "outline"}
+                onClick={() => setPublishSource("repository")}
                 disabled={loading}
               >
-                GitHub Repository
+                Git Repository
               </Button>
               <Button
                 type="button"
@@ -189,22 +190,35 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
             </p>
           </div>
 
-          {publishSource === "github" ? (
+          {publishSource === "repository" ? (
             <div className="space-y-2">
               <Label htmlFor="repositoryUrl">
-                GitHub Repository URL <span className="text-red-500">*</span>
+                Repository URL <span className="text-red-500">*</span>
               </Label>
-              <Input
-                id="repositoryUrl"
-                placeholder="https://github.com/username/repo"
-                value={repositoryUrl}
-                onChange={(e) => setRepositoryUrl(e.target.value)}
-                disabled={loading}
-                type="url"
-                required
-              />
+              <div className="flex gap-2">
+                <select
+                  value={repositorySource}
+                  onChange={(e) => setRepositorySource(e.target.value as "github" | "gitlab" | "bitbucket")}
+                  className="px-3 py-2 border rounded-md bg-background text-foreground border-input focus:outline-none focus:ring-2 focus:ring-ring"
+                  disabled={loading}
+                >
+                  <option value="github">GitHub</option>
+                  <option value="gitlab">GitLab</option>
+                  <option value="bitbucket">Bitbucket</option>
+                </select>
+                <Input
+                  id="repositoryUrl"
+                  placeholder="https://github.com/username/repo"
+                  value={repositoryUrl}
+                  onChange={(e) => setRepositoryUrl(e.target.value)}
+                  disabled={loading}
+                  type="url"
+                  required
+                  className="flex-1"
+                />
+              </div>
               <p className="text-xs text-muted-foreground">
-                Link to the skill&apos;s public GitHub source
+                Link to the skill&apos;s source repository
               </p>
             </div>
           ) : (
