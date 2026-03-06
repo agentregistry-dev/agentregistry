@@ -228,8 +228,8 @@ description: Branch
 			if skill.Repository.URL != tt.wantRepoURL {
 				t.Errorf("Repository.URL = %q, want %q", skill.Repository.URL, tt.wantRepoURL)
 			}
-			if skill.Repository.Source != "github" {
-				t.Errorf("Repository.Source = %q, want %q", skill.Repository.Source, "github")
+			if skill.Repository.Source != "git" {
+				t.Errorf("Repository.Source = %q, want %q", skill.Repository.Source, "git")
 			}
 			if len(skill.Packages) != 0 {
 				t.Errorf("Packages should be empty for GitHub publish, got %d", len(skill.Packages))
@@ -759,8 +759,8 @@ func TestBuildSkillDirect(t *testing.T) {
 			if skill.Repository.URL != tt.wantRepoURL {
 				t.Errorf("Repository.URL = %q, want %q", skill.Repository.URL, tt.wantRepoURL)
 			}
-			if skill.Repository.Source != "github" {
-				t.Errorf("Repository.Source = %q, want %q", skill.Repository.Source, "github")
+			if skill.Repository.Source != "git" {
+				t.Errorf("Repository.Source = %q, want %q", skill.Repository.Source, "git")
 			}
 			if len(skill.Packages) != 0 {
 				t.Errorf("Packages should be empty, got %d", len(skill.Packages))
@@ -776,10 +776,10 @@ func TestBuildSkillDirect_MissingGithub(t *testing.T) {
 
 	_, err := buildSkillDirect("my-skill")
 	if err == nil {
-		t.Fatal("expected error when --github is missing, got nil")
+		t.Fatal("expected error when --git is missing, got nil")
 	}
-	if !contains(err.Error(), "--github is required") {
-		t.Errorf("error = %q, want it to contain '--github is required'", err.Error())
+	if !contains(err.Error(), "--git is required") {
+		t.Errorf("error = %q, want it to contain '--git is required'", err.Error())
 	}
 }
 
@@ -875,8 +875,8 @@ func TestRunPublish_DirectMissingGithub(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when neither flag is set, got nil")
 	}
-	if !contains(err.Error(), "--github is required") {
-		t.Errorf("error = %q, want it to contain '--github is required'", err.Error())
+	if !contains(err.Error(), "--git is required") {
+		t.Errorf("error = %q, want it to contain '--git is required'", err.Error())
 	}
 }
 
