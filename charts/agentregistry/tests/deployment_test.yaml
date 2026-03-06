@@ -31,7 +31,7 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].image
-          pattern: "^ghcr.io/agentregistry-dev/agentregistry/server@sha256:[0-9a-f]{64}$"
+          pattern: "^ghcr.io/agentregistry-dev/agentregistry/server@sha256:[0-9a-fA-F]{64}"
 
 
 
