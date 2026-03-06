@@ -116,8 +116,14 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
 		}
 		if err := registry.DeleteServer(ctx, serverName, version); err != nil {
-			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Server not found")
+			}
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to delete server", err)
 		}
@@ -186,8 +192,11 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			if errors.Is(err, database.ErrInvalidInput) {
 				return nil, huma.Error400BadRequest(err.Error(), err)
 			}
-			if errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
-				return nil, huma.Error404NotFound("Not found")
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to get registry list", err)
 		}
@@ -236,10 +245,16 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		if input.All {
 			servers, err := registry.GetAllVersionsByServerName(ctx, serverName)
 			if err != nil {
-				if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+				switch {
+				case err.Error() == errRecordNotFound, errors.Is(err, database.ErrNotFound):
 					return nil, huma.Error404NotFound("Server not found")
+				case errors.Is(err, auth.ErrUnauthenticated):
+					return nil, huma.Error401Unauthorized("Authentication required")
+				case errors.Is(err, auth.ErrForbidden):
+					return nil, huma.Error403Forbidden("Forbidden")
+				default:
+					return nil, huma.Error500InternalServerError("Failed to get server versions", err)
 				}
-				return nil, huma.Error500InternalServerError("Failed to get server versions", err)
 			}
 
 			// Convert []*ServerResponse to []ServerResponse
@@ -267,8 +282,14 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			// Get all versions and find the latest one
 			servers, err := registry.GetAllVersionsByServerName(ctx, serverName)
 			if err != nil {
-				if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+				if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
 					return nil, huma.Error404NotFound("Server not found")
+				}
+				if errors.Is(err, auth.ErrUnauthenticated) {
+					return nil, huma.Error401Unauthorized("Authentication required")
+				}
+				if errors.Is(err, auth.ErrForbidden) {
+					return nil, huma.Error403Forbidden("Forbidden")
 				}
 				return nil, huma.Error500InternalServerError("Failed to get server versions", err)
 			}
@@ -291,8 +312,14 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		} else {
 			serverResponse, err = registry.GetServerByNameAndVersion(ctx, serverName, version)
 			if err != nil {
-				if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+				if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
 					return nil, huma.Error404NotFound("Server not found")
+				}
+				if errors.Is(err, auth.ErrUnauthenticated) {
+					return nil, huma.Error401Unauthorized("Authentication required")
+				}
+				if errors.Is(err, auth.ErrForbidden) {
+					return nil, huma.Error403Forbidden("Forbidden")
 				}
 				return nil, huma.Error500InternalServerError("Failed to get server details", err)
 			}
@@ -330,8 +357,14 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 		// Get all versions for this server
 		servers, err := registry.GetAllVersionsByServerName(ctx, serverName)
 		if err != nil {
-			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Server not found")
+			}
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to get server versions", err)
 		}
@@ -369,8 +402,14 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 
 		readme, err := registry.GetServerReadmeLatest(ctx, serverName)
 		if err != nil {
-			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("README not found")
+			}
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to fetch server README", err)
 		}
@@ -405,8 +444,14 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, registry service.
 			readme, err = registry.GetServerReadmeByVersion(ctx, serverName, version)
 		}
 		if err != nil {
-			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("README not found")
+			}
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to fetch server README", err)
 		}
@@ -442,8 +487,14 @@ func createServerHandler(ctx context.Context, input *CreateServerInput, registry
 	// Create/update the server (published defaults to false in the service layer)
 	createdServer, err := registry.CreateServer(ctx, &input.Body)
 	if err != nil {
-		if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+		if errors.Is(err, database.ErrNotFound) {
 			return nil, huma.Error404NotFound("Not found")
+		}
+		if errors.Is(err, auth.ErrUnauthenticated) {
+			return nil, huma.Error401Unauthorized("Authentication required")
+		}
+		if errors.Is(err, auth.ErrForbidden) {
+			return nil, huma.Error403Forbidden("Forbidden")
 		}
 		return nil, huma.Error400BadRequest("Failed to create server", err)
 	}

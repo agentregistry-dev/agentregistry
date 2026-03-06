@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	api "github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
 	v1alpha2 "github.com/kagent-dev/kagent/go/api/v1alpha2"
 	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
@@ -147,6 +148,26 @@ func (t *translator) translateAgent(agent *api.Agent) (*v1alpha2.Agent, error) {
 		}}
 	}
 
+	agentSpec := v1alpha2.AgentSpec{
+		Description: agent.Name,
+		Type:        v1alpha2.AgentType_BYO,
+		BYO: &v1alpha2.BYOAgentSpec{
+			Deployment: &v1alpha2.ByoDeploymentSpec{
+				Image:                agent.Deployment.Image,
+				SharedDeploymentSpec: sharedSpec,
+			},
+		},
+	}
+
+	// Map resolved skills to the Agent CRD's Skills field
+	if len(agent.Skills) > 0 {
+		skills, err := translateSkillsForAgent(agent.Skills)
+		if err != nil {
+			return nil, fmt.Errorf("translate skills for agent %s: %w", agent.Name, err)
+		}
+		agentSpec.Skills = skills
+	}
+
 	return &v1alpha2.Agent{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "kagent.dev/v1alpha2",
@@ -158,17 +179,93 @@ func (t *translator) translateAgent(agent *api.Agent) (*v1alpha2.Agent, error) {
 			Labels:      deploymentManagedLabels(agent.DeploymentID),
 			Annotations: deploymentManagedAnnotations(agent.DeploymentID),
 		},
-		Spec: v1alpha2.AgentSpec{
-			Description: agent.Name,
-			Type:        v1alpha2.AgentType_BYO,
-			BYO: &v1alpha2.BYOAgentSpec{
-				Deployment: &v1alpha2.ByoDeploymentSpec{
-					Image:                agent.Deployment.Image,
-					SharedDeploymentSpec: sharedSpec,
-				},
-			},
-		},
+		Spec: agentSpec,
 	}, nil
+}
+
+// translateSkillsForAgent converts resolved skill refs into the kagent
+// SkillForAgent CRD structure. Docker/OCI images go to Refs, GitHub repos
+// go to GitRefs.
+func translateSkillsForAgent(skills []api.AgentSkillRef) (*v1alpha2.SkillForAgent, error) {
+	if len(skills) == 0 {
+		return nil, nil
+	}
+
+	seenRefs := make(map[string]bool)
+	seenGitNames := make(map[string]bool)
+
+	var refs []string
+	var gitRefs []v1alpha2.GitRepo
+
+	for _, skill := range skills {
+		switch {
+		case skill.Image != "":
+			if seenRefs[skill.Image] {
+				return nil, fmt.Errorf("duplicate skill image ref %q", skill.Image)
+			}
+			seenRefs[skill.Image] = true
+			refs = append(refs, skill.Image)
+		case skill.RepoURL != "":
+			gr, err := buildGitRepo(skill)
+			if err != nil {
+				return nil, err
+			}
+			if seenGitNames[gr.Name] {
+				return nil, fmt.Errorf("duplicate skill git name %q (from repo %q)", gr.Name, skill.RepoURL)
+			}
+			seenGitNames[gr.Name] = true
+			gitRefs = append(gitRefs, gr)
+		}
+	}
+
+	if len(refs) == 0 && len(gitRefs) == 0 {
+		return nil, nil
+	}
+
+	result := &v1alpha2.SkillForAgent{}
+	if len(refs) > 0 {
+		result.Refs = refs
+	}
+	if len(gitRefs) > 0 {
+		result.GitRefs = gitRefs
+	}
+	return result, nil
+}
+
+// buildGitRepo parses an AgentSkillRef into a kagent GitRepo, splitting the
+// full GitHub URL into its clone URL, ref, and path components.
+func buildGitRepo(skill api.AgentSkillRef) (v1alpha2.GitRepo, error) {
+	if skill.Name == "" {
+		return v1alpha2.GitRepo{}, fmt.Errorf("skill name is required for git-based skill (repo %q)", skill.RepoURL)
+	}
+
+	cloneURL, ref, path, err := gitutil.ParseGitHubURL(skill.RepoURL)
+	if err != nil {
+		return v1alpha2.GitRepo{}, fmt.Errorf("parse skill repo URL %q: %w", skill.RepoURL, err)
+	}
+
+	// Resolve the effective path (explicit takes precedence over parsed).
+	effectivePath := skill.Path
+	if effectivePath == "" {
+		effectivePath = path
+	}
+
+	gr := v1alpha2.GitRepo{
+		URL:  cloneURL,
+		Name: skill.Name,
+	}
+
+	// Prefer explicitly set values from the AgentSkillRef over parsed ones.
+	if skill.Ref != "" {
+		gr.Ref = skill.Ref
+	} else if ref != "" {
+		gr.Ref = ref
+	}
+	if effectivePath != "" {
+		gr.Path = effectivePath
+	}
+
+	return gr, nil
 }
 
 // translateRemoteMCPServer translates a remote MCP server into a Kagent RemoteMCPServer CRD

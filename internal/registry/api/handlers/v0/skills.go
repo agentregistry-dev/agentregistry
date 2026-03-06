@@ -83,8 +83,11 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 
 		skills, nextCursor, err := registry.ListSkills(ctx, filter, input.Cursor, input.Limit)
 		if err != nil {
-			if errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
-				return nil, huma.Error404NotFound("Not found")
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to get skills list", err)
 		}
@@ -129,8 +132,14 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 			skillResp, err = registry.GetSkillByNameAndVersion(ctx, skillName, version)
 		}
 		if err != nil {
-			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Skill not found")
+			}
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to get skill details", err)
 		}
@@ -154,8 +163,14 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 		// Get all versions of the skill
 		skills, err := registry.GetAllVersionsBySkillName(ctx, skillName)
 		if err != nil {
-			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Skill not found")
+			}
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to get skill versions", err)
 		}
@@ -183,8 +198,14 @@ func createSkillHandler(ctx context.Context, input *CreateSkillInput, registry s
 	// Create/update the skill (published defaults to false in the service layer)
 	createdSkill, err := registry.CreateSkill(ctx, &input.Body)
 	if err != nil {
-		if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+		if errors.Is(err, database.ErrNotFound) {
 			return nil, huma.Error404NotFound("Not found")
+		}
+		if errors.Is(err, auth.ErrUnauthenticated) {
+			return nil, huma.Error401Unauthorized("Authentication required")
+		}
+		if errors.Is(err, auth.ErrForbidden) {
+			return nil, huma.Error403Forbidden("Forbidden")
 		}
 		return nil, huma.Error400BadRequest("Failed to create skill", err)
 	}

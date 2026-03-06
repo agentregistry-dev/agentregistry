@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/spf13/cobra"
@@ -311,7 +312,7 @@ func resolveGitHubVersion() (string, error) {
 // checkGitHubSkillMdExists verifies that a SKILL.md file exists at the given
 // GitHub repository URL by making an HTTP request to raw.githubusercontent.com.
 func checkGitHubSkillMdExists(rawURL string) error {
-	cloneURL, branch, subPath, err := parseGitHubURL(rawURL)
+	cloneURL, branch, subPath, err := gitutil.ParseGitHubURL(rawURL)
 	if err != nil {
 		return err
 	}

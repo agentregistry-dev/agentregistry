@@ -96,8 +96,11 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 			if errors.Is(err, database.ErrInvalidInput) {
 				return nil, huma.Error400BadRequest(err.Error(), err)
 			}
-			if errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
-				return nil, huma.Error404NotFound("Agent not found")
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to get agents list", err)
 		}
@@ -143,8 +146,14 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 			agentResp, err = registry.GetAgentByNameAndVersion(ctx, agentName, version)
 		}
 		if err != nil {
-			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Agent not found")
+			}
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to get agent details", err)
 		}
@@ -174,8 +183,14 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 		}
 
 		if err := registry.DeleteAgent(ctx, agentName, version); err != nil {
-			if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Agent not found")
+			}
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to delete agent", err)
 		}
@@ -201,8 +216,14 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 
 		agents, err := registry.GetAllVersionsByAgentName(ctx, agentName)
 		if err != nil {
-			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Agent not found")
+			}
+			if errors.Is(err, auth.ErrUnauthenticated) {
+				return nil, huma.Error401Unauthorized("Authentication required")
+			}
+			if errors.Is(err, auth.ErrForbidden) {
+				return nil, huma.Error403Forbidden("Forbidden")
 			}
 			return nil, huma.Error500InternalServerError("Failed to get agent versions", err)
 		}
@@ -233,8 +254,14 @@ func createAgentHandler(ctx context.Context, input *CreateAgentInput, registry s
 	// Create/update the agent (published defaults to false in the service layer)
 	createdAgent, err := registry.CreateAgent(ctx, &input.Body)
 	if err != nil {
-		if errors.Is(err, database.ErrNotFound) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated) {
+		if errors.Is(err, database.ErrNotFound) {
 			return nil, huma.Error404NotFound("Not found")
+		}
+		if errors.Is(err, auth.ErrUnauthenticated) {
+			return nil, huma.Error401Unauthorized("Authentication required")
+		}
+		if errors.Is(err, auth.ErrForbidden) {
+			return nil, huma.Error403Forbidden("Forbidden")
 		}
 		return nil, huma.Error400BadRequest("Failed to create agent", err)
 	}

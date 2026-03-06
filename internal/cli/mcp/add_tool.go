@@ -42,7 +42,7 @@ func init() {
 	AddToolCmd.Flags().StringVarP(&addToolDescription, "description", "d", "", "Tool description")
 	AddToolCmd.Flags().BoolVarP(&addToolForce, "force", "f", false, "Overwrite existing tool file")
 	AddToolCmd.Flags().BoolVarP(&addToolInteractive, "interactive", "i", false, "Interactive tool creation")
-	AddToolCmd.Flags().StringVar(&addToolDir, "project-dir", "", "Project directory (default: current directory)")
+	AddToolCmd.Flags().StringVar(&addToolDir, "project-dir", "", "Project directory")
 }
 
 func runAddTool(_ *cobra.Command, args []string) error {
