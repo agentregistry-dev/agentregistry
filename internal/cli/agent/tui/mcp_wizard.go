@@ -866,11 +866,7 @@ func (w *McpServerWizard) chooseRegistryType() {
 	w.chosenType = serverTypes.Registry.ID
 	w.step = stepRegistryURL
 	// Pre-populate with the current registry URL if available
-	if defaultURL := agentutils.GetDefaultRegistryURL(); defaultURL != "" {
-		w.registryURLInput.SetValue(defaultURL)
-	} else {
-		w.registryURLInput.SetValue("")
-	}
+	w.registryURLInput.SetValue(agentutils.GetDefaultRegistryURL())
 	w.registryURLInput.Focus()
 }
 
