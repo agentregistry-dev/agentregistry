@@ -473,3 +473,63 @@ func fetchSkillFromAPI(t *testing.T, regURL, skillName, version string) skillAPI
 
 	return wrapper.Skill
 }
+
+// TestSkillDelete tests publishing a skill and then deleting it via the
+// DELETE /v0/skills/{name}/versions/{version} endpoint.
+func TestSkillDelete(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+
+	skillName := UniqueNameWithPrefix("e2e-del-skill")
+	version := "0.0.1-e2e"
+	githubRepo := "https://github.com/agentregistry-dev/skills/tree/main/artifacts-builder"
+
+	// Create a skill folder with SKILL.md
+	skillDir := filepath.Join(tmpDir, skillName)
+	if err := os.MkdirAll(skillDir, 0755); err != nil {
+		t.Fatalf("failed to create skill dir: %v", err)
+	}
+	skillMd := "---\nname: " + skillName + "\ndescription: E2E delete test\n---\n# Test\n"
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMd), 0644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	// Step 1: Publish the skill
+	t.Run("publish", func(t *testing.T) {
+		result := RunArctl(t, tmpDir,
+			"skill", "publish", skillDir,
+			"--github", githubRepo,
+			"--version", version,
+			"--registry-url", regURL,
+		)
+		RequireSuccess(t, result)
+	})
+
+	// Step 2: Verify it exists
+	t.Run("exists_before_delete", func(t *testing.T) {
+		resp := RegistryGet(t, regURL+"/skills/"+skillName)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200 before delete, got %d", resp.StatusCode)
+		}
+	})
+
+	// Step 3: Delete via CLI
+	t.Run("delete", func(t *testing.T) {
+		result := RunArctl(t, tmpDir,
+			"skill", "delete", skillName,
+			"--version", version,
+			"--registry-url", regURL,
+		)
+		RequireSuccess(t, result)
+	})
+
+	// Step 4: Verify it's gone
+	t.Run("gone_after_delete", func(t *testing.T) {
+		resp := RegistryGet(t, regURL+"/skills/"+skillName+"/versions/"+version)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("expected 404 after delete, got %d", resp.StatusCode)
+		}
+	})
+}
