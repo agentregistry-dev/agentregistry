@@ -31,6 +31,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	version, _ := cmd.Flags().GetString("version")
 	providerID, _ := cmd.Flags().GetString("provider-id")
 	namespace, _ := cmd.Flags().GetString("namespace")
+	envFlags, _ := cmd.Flags().GetStringArray("env")
 
 	if version == "" {
 		version = "latest"
@@ -44,6 +45,16 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API client not initialized")
 	}
 
+	// Parse --env flags into a map
+	envMap := make(map[string]string)
+	for _, e := range envFlags {
+		parts := strings.SplitN(e, "=", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid env format (expected KEY=VALUE): %s", e)
+		}
+		envMap[parts[0]] = parts[1]
+	}
+
 	agentModel, err := apiClient.GetAgentByNameAndVersion(name, version)
 	if err != nil {
 		return fmt.Errorf("failed to fetch agent %q: %w", name, err)
@@ -54,8 +65,8 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	manifest := &agentModel.Agent.AgentManifest
 
-	// Validate that required API keys are set
-	if err := validateAPIKey(manifest.ModelProvider); err != nil {
+	// Validate that required API keys are set (check --env flags and OS env)
+	if err := validateAPIKey(manifest.ModelProvider, envMap); err != nil {
 		return err
 	}
 
@@ -64,7 +75,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	// store/configure MCP servers agents is referencing.
 	// They are part of the agent.yaml, so we should store them
 	// in the config, then when doing reconciliation, we can deploy them as well.
-	config := buildDeployConfig(manifest)
+	config := buildDeployConfig(manifest, envMap)
 	if namespace != "" {
 		config["KAGENT_NAMESPACE"] = namespace
 	}
@@ -75,11 +86,17 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	return deployToProvider(name, version, config, namespace, providerID)
 }
 
-// buildDeployConfig creates the configuration map with all necessary environment variables
-func buildDeployConfig(manifest *models.AgentManifest) map[string]string {
+// buildDeployConfig creates the configuration map with all necessary environment variables.
+// Values from envOverrides take precedence over OS environment variables.
+func buildDeployConfig(manifest *models.AgentManifest, envOverrides map[string]string) map[string]string {
 	config := make(map[string]string)
 
-	// Add model provider API key if available
+	// Include all --env overrides in config
+	for k, v := range envOverrides {
+		config[k] = v
+	}
+
+	// Add model provider API key from OS env if not already provided via --env
 	providerAPIKeys := map[string]string{
 		"openai":      "OPENAI_API_KEY",
 		"anthropic":   "ANTHROPIC_API_KEY",
@@ -88,8 +105,10 @@ func buildDeployConfig(manifest *models.AgentManifest) map[string]string {
 	}
 
 	if envVar, ok := providerAPIKeys[strings.ToLower(manifest.ModelProvider)]; ok && envVar != "" {
-		if value := os.Getenv(envVar); value != "" {
-			config[envVar] = value
+		if _, exists := config[envVar]; !exists {
+			if value := os.Getenv(envVar); value != "" {
+				config[envVar] = value
+			}
 		}
 	}
 
@@ -131,4 +150,5 @@ func init() {
 	DeployCmd.Flags().String("provider-id", "", "Deployment target provider ID (defaults to local when omitted)")
 	DeployCmd.Flags().Bool("prefer-remote", false, "Prefer using a remote source when available")
 	DeployCmd.Flags().String("namespace", "", "Kubernetes namespace for agent deployment (defaults to current kubeconfig context)")
+	DeployCmd.Flags().StringArrayP("env", "e", []string{}, "Environment variables to set (KEY=VALUE)")
 }
