@@ -83,7 +83,8 @@ func NewConfig() *Config {
 	if os.Getenv("AGENT_REGISTRY_RUNTIME_DIR") == "" {
 		suffix, err := randomHex(8)
 		if err != nil {
-			log.Fatalf("failed to generate random runtime dir suffix: %v", err)
+			slog.Error("failed to generate random runtime dir suffix", "error", err)
+			os.Exit(1)
 		}
 		cfg.RuntimeDir = cfg.RuntimeDir + "-" + suffix
 	}
