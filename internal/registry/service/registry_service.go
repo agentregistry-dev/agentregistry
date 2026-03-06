@@ -1189,7 +1189,7 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 			}
 			agentReq.ResolvedSkills = resolvedSkills
 			if s.cfg.Verbose && len(resolvedSkills) > 0 {
-				log.Printf("Resolved %d skill(s) for %s agent %s", len(resolvedSkills), providerPlatform, agentReq.RegistryAgent.Name)
+				s.logger.Info("resolved skills for agent", "count", len(resolvedSkills), "provider_platform", providerPlatform, "agent", agentReq.RegistryAgent.Name)
 			}
 		}
 
