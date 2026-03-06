@@ -57,28 +57,41 @@ func ValidateProjectName(name string) error {
 	return nil
 }
 
-// agentNameRegex enforces the strictest rule - names that work BOTH as Python identifiers AND as publishable agent names.
-// Must start with a letter, followed by alphanumeric only, minimum 2 characters.
-var agentNameRegex = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9]+$`)
+// agentNameRegex allows names with letters, digits, hyphens, and underscores.
+// Must start with a letter, minimum 2 characters. Hyphens/underscores cannot be
+// consecutive or appear at the end.
+var agentNameRegex = regexp.MustCompile(`^[a-zA-Z]([a-zA-Z0-9]|[-_][a-zA-Z0-9])*[a-zA-Z0-9]$`)
 
 // ValidateAgentName checks if the agent name is valid.
-// Allowed: letters and digits only, must start with a letter, minimum 2 characters.
-// Not allowed: underscores, dots, hyphens, or Python keywords.
+// Allowed: letters, digits, hyphens, and underscores. Must start with a letter,
+// end with a letter or digit, minimum 2 characters.
+// Hyphens are converted to underscores for Python package names automatically.
+// Not allowed: dots, consecutive hyphens/underscores, or Python keywords.
 func ValidateAgentName(name string) error {
 	if name == "" {
 		return fmt.Errorf("agent name cannot be empty")
 	}
 
 	if !agentNameRegex.MatchString(name) {
-		return fmt.Errorf("agent name must start with a letter and contain only letters and digits (minimum 2 characters)")
+		return fmt.Errorf("agent name must start with a letter, end with a letter or digit, and contain only letters, digits, hyphens (-), and underscores (_) (minimum 2 characters)")
 	}
 
-	// Reject Python keywords to avoid issues in generated code
+	// Reject Python keywords (check the underscore-normalized form too)
+	normalized := strings.ReplaceAll(name, "-", "_")
 	if _, isKeyword := pythonKeywords[name]; isKeyword {
 		return fmt.Errorf("agent name %q is a Python keyword and cannot be used", name)
 	}
+	if _, isKeyword := pythonKeywords[normalized]; isKeyword {
+		return fmt.Errorf("agent name %q normalizes to Python keyword %q and cannot be used", name, normalized)
+	}
 
 	return nil
+}
+
+// AgentNameToPackage converts an agent name to a valid Python package name
+// by replacing hyphens with underscores.
+func AgentNameToPackage(name string) string {
+	return strings.ReplaceAll(name, "-", "_")
 }
 
 // ValidateMCPServerName checks if the MCP server name matches the required format.

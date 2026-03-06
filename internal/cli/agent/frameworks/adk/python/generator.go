@@ -31,7 +31,7 @@ func (g *PythonGenerator) Generate(agentConfig *common.AgentConfig) error {
 		return fmt.Errorf("agent config is required")
 	}
 
-	projectPackageDir := filepath.Join(agentConfig.Directory, agentConfig.Name)
+	projectPackageDir := filepath.Join(agentConfig.Directory, agentConfig.PackageName())
 	if err := os.MkdirAll(projectPackageDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create package directory: %w", err)
 	}
@@ -111,7 +111,7 @@ func printSummary(cfg *common.AgentConfig) {
 	fmt.Printf("🤖 Model configuration: %s (%s)\n", cfg.ModelProvider, cfg.ModelName)
 	fmt.Printf("📁 Project structure:\n")
 	fmt.Printf("   %s/\n", cfg.Name)
-	fmt.Printf("   ├── %s/\n", cfg.Name)
+	fmt.Printf("   ├── %s/\n", cfg.PackageName())
 	fmt.Printf("   │   ├── __init__.py\n")
 	fmt.Printf("   │   ├── agent.py\n")
 	fmt.Printf("   │   ├── mcp_tools.py\n")

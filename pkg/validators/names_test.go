@@ -46,16 +46,18 @@ func TestValidateAgentName(t *testing.T) {
 		input   string
 		wantErr bool
 	}{
-		// Valid cases - letters and digits only, starts with letter, min 2 chars
+		// Valid cases
 		{"valid simple", "myagent", false},
 		{"valid alphanumeric", "agent123", false},
 		{"valid mixed case", "MyAgent2", false},
 		{"valid two chars", "ab", false},
+		{"valid with hyphen", "my-agent", false},
+		{"valid with underscore", "my_agent", false},
+		{"valid complex", "my-cool-agent123", false},
+		{"valid mixed separators", "my_cool-agent", false},
 
-		// Invalid - special characters not allowed
-		{"hyphen not allowed", "my-agent", true},
+		// Invalid - dots and other special characters not allowed
 		{"dot not allowed", "my.agent", true},
-		{"underscore not allowed", "my_agent", true},
 		{"contains slash", "my/agent", true},
 		{"contains space", "my agent", true},
 
@@ -63,6 +65,16 @@ func TestValidateAgentName(t *testing.T) {
 		{"starts with number", "123agent", true},
 		{"starts with dot", ".agent", true},
 		{"starts with hyphen", "-agent", true},
+		{"starts with underscore", "_agent", true},
+
+		// Invalid - must end with letter or digit
+		{"ends with hyphen", "agent-", true},
+		{"ends with underscore", "agent_", true},
+
+		// Invalid - consecutive separators
+		{"double hyphen", "my--agent", true},
+		{"double underscore", "my__agent", true},
+		{"hyphen underscore", "my-_agent", true},
 
 		// Invalid - too short
 		{"single char", "a", true},
@@ -72,6 +84,9 @@ func TestValidateAgentName(t *testing.T) {
 		{"python keyword class", "class", true},
 		{"python keyword import", "import", true},
 		{"python keyword return", "return", true},
+
+		// Invalid - normalizes to Python keyword
+		{"normalizes to keyword", "or", true},
 	}
 
 	for _, tt := range tests {
@@ -80,6 +95,28 @@ func TestValidateAgentName(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateAgentName(%q) error = %v, wantErr %v",
 					tt.input, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestAgentNameToPackage(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"myagent", "myagent"},
+		{"my-agent", "my_agent"},
+		{"my-cool-agent", "my_cool_agent"},
+		{"my_agent", "my_agent"},
+		{"agent123", "agent123"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := AgentNameToPackage(tt.input)
+			if got != tt.want {
+				t.Errorf("AgentNameToPackage(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}

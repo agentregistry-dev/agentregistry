@@ -7,7 +7,7 @@ FROM $DOCKER_REGISTRY/kagent-dev/kagent/kagent-adk:$VERSION
 
 WORKDIR /app
 
-COPY {{.Name}}/ {{.Name}}/
+COPY {{.PackageName}}/ {{.PackageName}}/
 COPY pyproject.toml pyproject.toml
 COPY README.md README.md
 COPY .python-version .python-version
@@ -16,5 +16,5 @@ RUN uv sync
 
 ENV OTEL_SERVICE_NAME={{.Name}}
 
-CMD ["{{.Name}}"]
+CMD ["{{.PackageName}}"]
 

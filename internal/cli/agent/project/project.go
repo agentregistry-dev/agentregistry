@@ -13,6 +13,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/validators"
 )
 
 // LoadManifest loads the agent manifest from the project directory.
@@ -65,7 +66,7 @@ func RegenerateMcpTools(projectDir string, manifest *models.AgentManifest, verbo
 		return fmt.Errorf("manifest missing name")
 	}
 
-	agentPackageDir := filepath.Join(projectDir, manifest.Name)
+	agentPackageDir := filepath.Join(projectDir, validators.AgentNameToPackage(manifest.Name))
 	if _, err := os.Stat(agentPackageDir); err != nil {
 		// Not an ADK layout; nothing to do.
 		return nil
@@ -102,7 +103,7 @@ func RegeneratePromptsLoader(projectDir string, manifest *models.AgentManifest, 
 		return fmt.Errorf("manifest missing name")
 	}
 
-	agentPackageDir := filepath.Join(projectDir, manifest.Name)
+	agentPackageDir := filepath.Join(projectDir, validators.AgentNameToPackage(manifest.Name))
 	if _, err := os.Stat(agentPackageDir); err != nil {
 		// Not an ADK layout; nothing to do.
 		return nil
@@ -152,6 +153,7 @@ func RegenerateDockerCompose(projectDir string, manifest *models.AgentManifest, 
 		HasSkills         bool
 		EnvVars           []string
 		McpServers        []models.McpServerType
+		PackageName       string
 	}{
 		Name:              manifest.Name,
 		Version:           sanitizedVersion,
@@ -162,6 +164,7 @@ func RegenerateDockerCompose(projectDir string, manifest *models.AgentManifest, 
 		HasSkills:         len(manifest.Skills) > 0,
 		EnvVars:           envVars,
 		McpServers:        manifest.McpServers,
+		PackageName:       validators.AgentNameToPackage(manifest.Name),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to render docker-compose: %w", err)

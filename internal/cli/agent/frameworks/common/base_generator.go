@@ -10,6 +10,7 @@ import (
 	"text/template"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/validators"
 )
 
 // AgentConfig captures the data required to render an agent project from templates.
@@ -33,6 +34,12 @@ type AgentConfig struct {
 	EnvVars    []string
 	Skills     []models.SkillRef
 	InitGit    bool
+}
+
+// PackageName returns the agent name normalized for use as a Python package name
+// (hyphens replaced with underscores).
+func (c AgentConfig) PackageName() string {
+	return validators.AgentNameToPackage(c.Name)
 }
 
 // HasSkills returns true when the agent has at least one skill configured.

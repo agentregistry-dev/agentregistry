@@ -20,6 +20,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/validators"
 	"github.com/spf13/cobra"
 	a2aclient "trpc.group/trpc-go/trpc-a2a-go/client"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
@@ -393,6 +394,7 @@ func renderComposeFromManifest(manifest *models.AgentManifest, version string) (
 		HasSkills         bool
 		EnvVars           []string
 		McpServers        []models.McpServerType
+		PackageName       string
 	}{
 		Name:              manifest.Name,
 		Version:           sanitizedVersion,
@@ -403,6 +405,7 @@ func renderComposeFromManifest(manifest *models.AgentManifest, version string) (
 		HasSkills:         len(manifest.Skills) > 0,
 		EnvVars:           project.EnvVarsFromManifest(manifest),
 		McpServers:        manifest.McpServers,
+		PackageName:       validators.AgentNameToPackage(manifest.Name),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to render docker-compose template: %w", err)
