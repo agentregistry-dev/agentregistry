@@ -151,6 +151,26 @@ func (d *DefaultDaemonManager) Start() error {
 	return nil
 }
 
+func (d *DefaultDaemonManager) WaitForReady(baseURL string) error {
+	pingURL := strings.TrimRight(baseURL, "/") + "/ping"
+	httpClient := &http.Client{Timeout: 2 * time.Second}
+	deadline := time.Now().Add(30 * time.Second)
+	delay := 500 * time.Millisecond
+
+	for time.Now().Before(deadline) {
+		resp, err := httpClient.Get(pingURL)
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				return nil
+			}
+		}
+		time.Sleep(delay)
+		delay = min(delay*2, 4*time.Second)
+	}
+	return fmt.Errorf("daemon did not become ready within 30 seconds")
+}
+
 func (d *DefaultDaemonManager) IsRunning() bool {
 	// First check if a server is responding on the API port (local or Docker)
 	if isServerResponding() {

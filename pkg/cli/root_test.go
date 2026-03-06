@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/agentregistry-dev/agentregistry/internal/client"
@@ -326,15 +327,18 @@ func TestPreRunSetup(t *testing.T) {
 
 // mockDaemonManager for unit tests.
 type mockDaemonManager struct {
-	running     bool
-	startCalled bool
+	running       bool
+	startCalled   bool
+	startErr      error
+	waitReadyErr  error
 }
 
 func (m *mockDaemonManager) IsRunning() bool { return m.running }
 func (m *mockDaemonManager) Start() error {
 	m.startCalled = true
-	return nil
+	return m.startErr
 }
+func (m *mockDaemonManager) WaitForReady(baseURL string) error { return m.waitReadyErr }
 
 // mockAuthnProvider for unit tests.
 type mockAuthnProvider struct {
@@ -351,3 +355,81 @@ func (m *mockAuthnProvider) Authenticate(context.Context) (string, error) {
 
 var _ types.DaemonManager = (*mockDaemonManager)(nil)
 var _ types.CLIAuthnProvider = (*mockAuthnProvider)(nil)
+
+func TestEnsureDaemonRunning(t *testing.T) {
+	startErr := errors.New("start failed")
+	waitErr := errors.New("not ready")
+
+	tests := []struct {
+		name           string
+		dockerAvail    bool
+		dm             *mockDaemonManager
+		wantErr        string
+		wantStartCalled bool
+	}{
+		{
+			name:        "docker compose not available",
+			dockerAvail: false,
+			dm:          &mockDaemonManager{},
+			wantErr:     "docker compose is not available",
+		},
+		{
+			name:        "daemon already running",
+			dockerAvail: true,
+			dm:          &mockDaemonManager{running: true},
+			wantErr:     "",
+			wantStartCalled: false,
+		},
+		{
+			name:        "daemon not running starts successfully",
+			dockerAvail: true,
+			dm:          &mockDaemonManager{running: false},
+			wantErr:     "",
+			wantStartCalled: true,
+		},
+		{
+			name:        "daemon start fails",
+			dockerAvail: true,
+			dm:          &mockDaemonManager{running: false, startErr: startErr},
+			wantErr:     "failed to start daemon",
+			wantStartCalled: true,
+		},
+		{
+			name:        "daemon started but not ready",
+			dockerAvail: true,
+			dm:          &mockDaemonManager{running: false, waitReadyErr: waitErr},
+			wantErr:     "daemon started but not ready",
+			wantStartCalled: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			origCheck := isDockerComposeAvailable
+			isDockerComposeAvailable = func() bool { return tt.dockerAvail }
+			defer func() { isDockerComposeAvailable = origCheck }()
+
+			err := ensureDaemonRunning(tt.dm, "http://localhost:12121")
+
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			} else {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+				}
+				if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Errorf("error %q does not contain %q", err.Error(), tt.wantErr)
+				}
+			}
+
+			if tt.wantStartCalled && !tt.dm.startCalled {
+				t.Error("expected Start() to be called")
+			}
+			if !tt.wantStartCalled && tt.dm.startCalled {
+				t.Error("expected Start() not to be called")
+			}
+		})
+	}
+}
