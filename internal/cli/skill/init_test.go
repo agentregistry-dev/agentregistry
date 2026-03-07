@@ -30,6 +30,18 @@ func TestResolveProjectPath(t *testing.T) {
 			extraArgs:   []string{"./out"},
 			wantSuffix:  filepath.Join("out", "myskill"),
 		},
+		{
+			name:        "empty extraArgs slice",
+			projectName: "myskill",
+			extraArgs:   []string{},
+			wantSuffix:  "myskill",
+		},
+		{
+			name:        "empty string extraArg",
+			projectName: "myskill",
+			extraArgs:   []string{""},
+			wantSuffix:  "myskill",
+		},
 	}
 
 	for _, tt := range tests {
