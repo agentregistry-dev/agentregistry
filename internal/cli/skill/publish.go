@@ -28,7 +28,7 @@ var (
 	platformFlag     string
 	pushFlag         bool
 	dryRunFlag       bool
-	githubRepository string
+	gitRepository string
 	publishDesc      string
 )
 
@@ -66,7 +66,7 @@ func init() {
 	PublishCmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Show what would be done without actually doing it")
 
 	PublishCmd.Flags().StringVar(&publishDesc, "description", "", "Skill description (optional, used with direct registration)")
-	PublishCmd.Flags().StringVar(&githubRepository, "git", "", "Git repository URL (alternative to --docker-url). Supports tree URLs: https://github.com/owner/repo/tree/branch/path")
+	PublishCmd.Flags().StringVar(&gitRepository, "git", "", "Git repository URL (alternative to --docker-url). Supports tree URLs: https://github.com/owner/repo/tree/branch/path")
 
 	// Docker-only flags
 	PublishCmd.Flags().StringVar(&dockerUrl, "docker-url", "", "Docker registry URL. For example: docker.io/myorg. The final image name will be <docker-url>/<skill-name>:<tag>")
@@ -134,7 +134,7 @@ func runPublishFromFolder(absPath string) error {
 
 		var skillJson *models.SkillJSON
 		switch {
-		case githubRepository != "":
+		case gitRepository != "":
 			skillJson, err = buildSkillFromGitHub(skill)
 		case dockerUrl != "":
 			skillJson, err = buildSkillDockerImage(skill)
@@ -200,14 +200,14 @@ func publishSkillJSON(skillJson *models.SkillJSON) error {
 func buildSkillDirect(skillName string) (*models.SkillJSON, error) {
 	skillName = strings.ToLower(skillName)
 
-	if githubRepository == "" {
+	if gitRepository == "" {
 		return nil, fmt.Errorf("--git is required when publishing without SKILL.md")
 	}
 	if versionFlag == "" {
 		return nil, fmt.Errorf("--version is required when publishing without SKILL.md")
 	}
 
-	if err := checkGitHubSkillMdExists(githubRepository); err != nil {
+	if err := checkGitHubSkillMdExists(gitRepository); err != nil {
 		return nil, fmt.Errorf("--git validation failed: %w", err)
 	}
 
@@ -216,7 +216,7 @@ func buildSkillDirect(skillName string) (*models.SkillJSON, error) {
 		Description: publishDesc,
 		Version:     versionFlag,
 		Repository: &models.SkillRepository{
-			URL:    githubRepository,
+			URL:    gitRepository,
 			Source: "git",
 		},
 	}, nil
@@ -440,7 +440,7 @@ func buildSkillFromGitHub(skillPath string) (*models.SkillJSON, error) {
 	}
 
 	// Validate the Git URL and verify SKILL.md exists at the remote path
-	if err := checkGitHubSkillMdExists(githubRepository); err != nil {
+	if err := checkGitHubSkillMdExists(gitRepository); err != nil {
 		return nil, fmt.Errorf("--git validation failed: %w", err)
 	}
 
@@ -449,7 +449,7 @@ func buildSkillFromGitHub(skillPath string) (*models.SkillJSON, error) {
 		Description: description,
 		Version:     ver,
 		Repository: &models.SkillRepository{
-			URL:    githubRepository,
+			URL:    gitRepository,
 			Source: "git",
 		},
 	}
