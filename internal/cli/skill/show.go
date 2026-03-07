@@ -51,11 +51,18 @@ func runShow(cmd *cobra.Command, args []string) error {
 	t := printer.NewTablePrinter(os.Stdout)
 	t.SetHeaders("Property", "Value")
 	t.AddRow("Name", skill.Skill.Name)
-	t.AddRow("Description", skill.Skill.Description)
+	t.AddRow("Title", printer.EmptyValueOrDefault(skill.Skill.Title, "<none>"))
+	t.AddRow("Description", printer.EmptyValueOrDefault(skill.Skill.Description, "<none>"))
 	t.AddRow("Version", skill.Skill.Version)
-	t.AddRow("Category", skill.Skill.Category)
-	t.AddRow("Status", skill.Meta.Official.Status)
-	t.AddRow("Website", skill.Skill.WebsiteURL)
+
+	typ, src := skillSource(skill)
+	t.AddRow("Type", printer.EmptyValueOrDefault(typ, "<none>"))
+	t.AddRow("Source", printer.EmptyValueOrDefault(src, "<none>"))
+
+	if skill.Meta.Official != nil {
+		t.AddRow("Status", printer.EmptyValueOrDefault(skill.Meta.Official.Status, "<none>"))
+	}
+
 	if err := t.Render(); err != nil {
 		return fmt.Errorf("failed to render table: %w", err)
 	}
