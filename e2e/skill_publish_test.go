@@ -1,8 +1,7 @@
 //go:build e2e
 
-// Tests for the "skill build" and "skill publish" commands. These tests verify
-// building skills as Docker images and publishing skills to the registry via
-// both --github and --docker-image flags.
+// Tests for the "skill publish" command. These tests verify publishing skills
+// to the registry via both --git and --docker-image flags.
 
 package e2e
 
@@ -70,7 +69,7 @@ func TestSkillBuildWithPlatform(t *testing.T) {
 
 // --- skill publish tests ---
 
-// TestSkillPublishGitHub tests publishing a skill with --github flag and
+// TestSkillPublishGitHub tests publishing a skill with --git flag and
 // verifying it appears in the registry with the correct repository metadata.
 func TestSkillPublishGitHub(t *testing.T) {
 	regURL := RegistryURL(t)
@@ -84,11 +83,11 @@ func TestSkillPublishGitHub(t *testing.T) {
 	skillDir := filepath.Join(tmpDir, skillName)
 	createSkillDir(t, skillDir, skillName, "E2E test skill from GitHub")
 
-	// Step 1: Publish with --github
+	// Step 1: Publish with --git
 	t.Run("publish", func(t *testing.T) {
 		result := RunArctl(t, tmpDir,
 			"skill", "publish", skillDir,
-			"--github", githubRepo,
+			"--git", githubRepo,
 			"--version", version,
 			"--registry-url", regURL,
 		)
@@ -118,8 +117,8 @@ func TestSkillPublishGitHub(t *testing.T) {
 		if skillResp.Repository.URL != githubRepo {
 			t.Errorf("repository.url = %q, want %q", skillResp.Repository.URL, githubRepo)
 		}
-		if skillResp.Repository.Source != "github" {
-			t.Errorf("repository.source = %q, want %q", skillResp.Repository.Source, "github")
+		if skillResp.Skill.Repository.Source != "github" {
+			t.Errorf("repository.source = %q, want %q", skillResp.Skill.Repository.Source, "github")
 		}
 		if len(skillResp.Packages) != 0 {
 			t.Errorf("expected no packages for GitHub-published skill, got %d", len(skillResp.Packages))
@@ -308,7 +307,7 @@ func TestSkillBuildAndPublish(t *testing.T) {
 // --- validation tests ---
 
 // TestSkillPublishValidation verifies that "skill publish" rejects requests
-// when neither --github nor --docker-image is provided.
+// when neither --docker-url nor --github is provided.
 func TestSkillPublishValidation(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -325,7 +324,7 @@ func TestSkillPublishValidation(t *testing.T) {
 	t.Run("mutually_exclusive_flags", func(t *testing.T) {
 		result := RunArctl(t, tmpDir,
 			"skill", "publish", skillDir,
-			"--docker-image", "docker.io/test/test:latest",
+			"--docker-url", "docker.io/test",
 			"--github", "https://github.com/test/repo",
 		)
 		RequireFailure(t, result)
@@ -368,7 +367,7 @@ func TestSkillPublishValidation(t *testing.T) {
 
 // --- dry-run tests ---
 
-// TestSkillPublishDryRunGitHub verifies that --dry-run with --github shows
+// TestSkillPublishDryRunGitHub verifies that --dry-run with --git shows
 // the intended action without actually publishing.
 func TestSkillPublishDryRunGitHub(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -378,7 +377,7 @@ func TestSkillPublishDryRunGitHub(t *testing.T) {
 
 	result := RunArctl(t, tmpDir,
 		"skill", "publish", skillDir,
-		"--github", "https://github.com/agentregistry-dev/skills/tree/main/artifacts-builder",
+		"--git", "https://github.com/agentregistry-dev/skills/tree/main/artifacts-builder",
 		"--version", "1.0.0",
 		"--dry-run",
 	)
@@ -411,84 +410,14 @@ func TestSkillPublishDryRunDockerImage(t *testing.T) {
 func TestSkillPublishDirectDryRun(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	t.Run("github_direct", func(t *testing.T) {
-		result := RunArctl(t, tmpDir,
-			"skill", "publish", "direct-test-skill",
-			"--github", "https://github.com/agentregistry-dev/skills/tree/main/artifacts-builder",
-			"--version", "1.0.0",
-			"--description", "A remotely hosted skill",
-			"--dry-run",
-		)
-		RequireSuccess(t, result)
-		RequireOutputContains(t, result, "DRY RUN")
-		RequireOutputContains(t, result, "direct-test-skill")
-	})
-
-	t.Run("docker_direct", func(t *testing.T) {
-		result := RunArctl(t, tmpDir,
-			"skill", "publish", "direct-docker-skill",
-			"--docker-image", "docker.io/test/direct:v1.0.0",
-			"--version", "1.0.0",
-			"--description", "A Docker skill",
-			"--dry-run",
-		)
-		RequireSuccess(t, result)
-		RequireOutputContains(t, result, "DRY RUN")
-		RequireOutputContains(t, result, "direct-docker-skill")
-	})
-}
-
-// --- helpers ---
-
-// createSkillDir creates a skill directory with a valid SKILL.md file.
-func createSkillDir(t *testing.T, dir, name, description string) {
-	t.Helper()
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		t.Fatalf("failed to create skill dir: %v", err)
-	}
-	skillMd := "---\nname: " + name + "\ndescription: " + description + "\n---\n# " + name + "\n"
-	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(skillMd), 0644); err != nil {
-		t.Fatalf("failed to write SKILL.md: %v", err)
-	}
-}
-
-// skillAPIResponse represents the shape of the skill API response for verification.
-type skillAPIResponse struct {
-	Name       string `json:"name"`
-	Version    string `json:"version"`
-	Repository *struct {
-		URL    string `json:"url"`
-		Source string `json:"source"`
-	} `json:"repository"`
-	Packages []struct {
-		RegistryType string `json:"registryType"`
-		Identifier   string `json:"identifier"`
-		Version      string `json:"version"`
-	} `json:"packages"`
-}
-
-// fetchSkillFromAPI retrieves a skill from the registry API and returns the parsed response.
-func fetchSkillFromAPI(t *testing.T, regURL, skillName, version string) skillAPIResponse {
-	t.Helper()
-	url := regURL + "/skills/" + skillName + "/versions/" + version
-	resp := RegistryGet(t, url)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 from skill endpoint %s, got %d", url, resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("failed to read response body: %v", err)
-	}
-
-	var wrapper struct {
-		Skill skillAPIResponse `json:"skill"`
-	}
-	if err := json.Unmarshal(body, &wrapper); err != nil {
-		t.Fatalf("failed to parse skill response: %v\nbody: %s", err, string(body))
-	}
-
-	return wrapper.Skill
+	result := RunArctl(t, tmpDir,
+		"skill", "publish", "direct-test-skill",
+		"--github", "https://github.com/agentregistry-dev/skills/tree/main/artifacts-builder",
+		"--version", "1.0.0",
+		"--description", "A remotely hosted skill",
+		"--dry-run",
+	)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "DRY RUN")
+	RequireOutputContains(t, result, "direct-test-skill")
 }

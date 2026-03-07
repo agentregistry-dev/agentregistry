@@ -171,8 +171,8 @@ func TestSkillPublishFlags(t *testing.T) {
 		flag     string
 		defValue string
 	}{
-		{"github", ""},
 		{"docker-image", ""},
+		{"git", ""},
 		{"version", ""},
 		{"description", ""},
 		{"dry-run", "false"},
