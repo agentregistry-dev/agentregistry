@@ -42,6 +42,13 @@ tests:
           path: spec.replicas
           value: 3
 
+  - it: has hardcoded RollingUpdate strategy
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: RollingUpdate
+
   - it: has standard labels
     template: deployment.yaml
     asserts:
@@ -54,22 +61,6 @@ tests:
           path: spec.template.metadata.labels
           content:
             app.kubernetes.io/name: agentregistry
-
-  - it: mounts kubeconfig volume
-    template: deployment.yaml
-    asserts:
-      - contains:
-          path: spec.template.spec.volumes
-          content:
-            name: kubeconfig
-          any: true
-      - contains:
-          path: spec.template.spec.containers[0].volumeMounts
-          content:
-            name: kubeconfig
-            subPath: config
-            readOnly: true
-          any: true
 
   - it: injects POSTGRES_PASSWORD from secret
     template: deployment.yaml
@@ -95,24 +86,14 @@ tests:
                 name: RELEASE-NAME-agentregistry
                 key: AGENT_REGISTRY_JWT_PRIVATE_KEY
 
-  - it: sets AGENT_REGISTRY_DATABASE_URL with bundled postgres
-    template: deployment.yaml
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: AGENT_REGISTRY_DATABASE_URL
-            value: "postgres://agentregistry:$(POSTGRES_PASSWORD)@RELEASE-NAME-agentregistry-postgresql:5432/agent-registry?sslmode=disable"
-
   - it: sets AGENT_REGISTRY_DATABASE_URL with external host
     template: deployment.yaml
     set:
-      database.bundled.enabled: false
-      database.external.host: mydb.example.com
-      database.external.port: 5432
-      database.external.database: mydb
-      database.external.username: myuser
-      database.external.sslMode: require
+      database.host: mydb.example.com
+      database.port: 5432
+      database.database: mydb
+      database.username: myuser
+      database.sslMode: require
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -123,32 +104,13 @@ tests:
   - it: sets AGENT_REGISTRY_DATABASE_URL with external url
     template: deployment.yaml
     set:
-      database.bundled.enabled: false
-      database.external.url: "postgres://user:pass@host:5432/db?sslmode=disable"
+      database.url: "postgres://user:pass@host:5432/db?sslmode=disable"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: AGENT_REGISTRY_DATABASE_URL
             value: "postgres://user:pass@host:5432/db?sslmode=disable"
-
-  - it: has wait-for-postgres init container when bundled database is enabled
-    template: deployment.yaml
-    asserts:
-      - contains:
-          path: spec.template.spec.initContainers
-          content:
-            name: wait-for-postgres
-          any: true
-
-  - it: has no init container when bundled database is disabled
-    template: deployment.yaml
-    set:
-      database.bundled.enabled: false
-      database.external.host: mydb.example.com
-    asserts:
-      - notExists:
-          path: spec.template.spec.initContainers
 
   - it: applies pod security context by default
     template: deployment.yaml
@@ -214,34 +176,24 @@ tests:
       - isNotNull:
           path: spec.template.spec.containers[0].startupProbe
 
-  - it: disables probes in diagnostic mode
+  - it: uses config.existingSecret for AGENT_REGISTRY_JWT_PRIVATE_KEY when set
     template: deployment.yaml
     set:
-      diagnosticMode.enabled: true
+      config.existingSecret: my-existing-secret
     asserts:
-      - notExists:
-          path: spec.template.spec.containers[0].livenessProbe
-      - notExists:
-          path: spec.template.spec.containers[0].readinessProbe
-      - notExists:
-          path: spec.template.spec.containers[0].startupProbe
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AGENT_REGISTRY_JWT_PRIVATE_KEY
+            valueFrom:
+              secretKeyRef:
+                name: my-existing-secret
+                key: AGENT_REGISTRY_JWT_PRIVATE_KEY
 
-  - it: overrides command and args in diagnostic mode
+  - it: uses database.existingSecret for POSTGRES_PASSWORD when set
     template: deployment.yaml
     set:
-      diagnosticMode.enabled: true
-    asserts:
-      - equal:
-          path: spec.template.spec.containers[0].command
-          value: ["sleep"]
-      - equal:
-          path: spec.template.spec.containers[0].args
-          value: ["infinity"]
-
-  - it: uses existing secret for POSTGRES_PASSWORD when existingSecret is set
-    template: deployment.yaml
-    set:
-      existingSecret: my-existing-secret
+      database.existingSecret: db-secret
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -249,7 +201,29 @@ tests:
             name: POSTGRES_PASSWORD
             valueFrom:
               secretKeyRef:
-                name: my-existing-secret
+                name: db-secret
+                key: POSTGRES_PASSWORD
+
+  - it: uses global.existingSecret for both AGENT_REGISTRY_JWT_PRIVATE_KEY and POSTGRES_PASSWORD
+    template: deployment.yaml
+    set:
+      global.existingSecret: global-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AGENT_REGISTRY_JWT_PRIVATE_KEY
+            valueFrom:
+              secretKeyRef:
+                name: global-secret
+                key: AGENT_REGISTRY_JWT_PRIVATE_KEY
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: global-secret
                 key: POSTGRES_PASSWORD
 
   - it: adds checksum annotations for config and secret

@@ -19,7 +19,3 @@ data:
   {{- if .Values.config.seedFrom }}
   AGENT_REGISTRY_SEED_FROM: {{ .Values.config.seedFrom | quote }}
   {{- end }}
-  KUBECONFIG: {{ .Values.config.kubeconfigPath | quote }}
-  {{- range $key, $value := .Values.config.extraConfig }}
-  {{ $key }}: {{ $value | quote }}
-  {{- end }}
