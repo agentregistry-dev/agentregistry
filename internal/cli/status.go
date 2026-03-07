@@ -43,6 +43,12 @@ func runStatus() error {
 		return nil
 	}
 
+	// When PersistentPreRunE is skipped (status is in skipCommands),
+	// apiClient is nil. Create a lightweight client for querying the daemon.
+	if apiClient == nil {
+		apiClient = client.NewClient(baseURL, "")
+	}
+
 	// Server version
 	serverVersion, err := apiClient.GetVersion()
 	if err != nil {
