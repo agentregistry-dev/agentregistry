@@ -74,6 +74,11 @@ var rootCmd = &cobra.Command{
 
 		c, err := preRunSetup(cmd.Context(), cmd, baseURL, token, autoStartDaemon)
 		if err != nil {
+			// For commands that should not auto-start the daemon (e.g. status),
+			// let them run with a nil client so they can report the status gracefully.
+			if cmd != nil && preRunDaemonBehavior.noAutoStartCommands[cmd.Name()] {
+				return nil
+			}
 			return err
 		}
 

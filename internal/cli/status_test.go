@@ -28,8 +28,7 @@ func TestCheckDaemonHealth_Healthy(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	apiClient = client.NewClient(ts.URL, "")
-	result := checkDaemonHealth()
+	result := checkDaemonHealth(ts.URL + "/v0")
 	if !result.healthy {
 		t.Errorf("expected healthy=true, got false (err=%s)", result.err)
 	}
@@ -42,25 +41,23 @@ func TestCheckDaemonHealth_Unhealthy(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	apiClient = client.NewClient(ts.URL, "")
-	result := checkDaemonHealth()
+	result := checkDaemonHealth(ts.URL + "/v0")
 	if result.healthy {
 		t.Error("expected healthy=false, got true")
 	}
 }
 
 func TestCheckDaemonHealth_Unreachable(t *testing.T) {
-	apiClient = client.NewClient("http://localhost:19999", "")
-	result := checkDaemonHealth()
+	result := checkDaemonHealth("http://localhost:19999/v0")
 	if result.healthy {
 		t.Error("expected healthy=false for unreachable server, got true")
 	}
 }
 
 func TestRunStatus_DaemonDown(t *testing.T) {
-	apiClient = client.NewClient("http://localhost:19999", "")
+	apiClient = nil
 
-	// Should not error; prints "not reachable" and returns nil
+	// Should not error; prints "not running" and returns nil
 	err := runStatus()
 	if err != nil {
 		t.Errorf("runStatus() returned error for unreachable daemon: %v", err)
