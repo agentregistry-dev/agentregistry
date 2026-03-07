@@ -217,7 +217,7 @@ func TestSkillDelete(t *testing.T) {
 
 	// Step 2: Verify it exists
 	t.Run("exists_before_delete", func(t *testing.T) {
-		resp := RegistryGet(t, regURL+"/skills/"+skillName)
+		resp := RegistryGet(t, regURL+"/skills/"+skillName+"/versions/"+version)
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("expected 200 before delete, got %d", resp.StatusCode)
