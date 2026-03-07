@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/adk/python"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 )
 
@@ -354,5 +356,44 @@ func TestFreePort(t *testing.T) {
 	}
 	if port <= 0 || port > 65535 {
 		t.Fatalf("freePort() returned invalid port: %d", port)
+	}
+}
+
+// TestAgentInitRendersDockerComposeWithPort verifies that the agent init flow
+// (GenerateProject via PythonGenerator) correctly renders docker-compose.yaml
+// with the Port field from AgentConfig. This ensures the {{.Port}} template
+// variable works for the static file written to disk during `arctl agent init`.
+func TestAgentInitRendersDockerComposeWithPort(t *testing.T) {
+	gen := python.NewPythonGenerator()
+	templateBytes, err := gen.ReadTemplateFile("docker-compose.yaml.tmpl")
+	if err != nil {
+		t.Fatalf("failed to read docker-compose template: %v", err)
+	}
+
+	config := common.AgentConfig{
+		Name:          "test-agent",
+		Image:         "docker.io/org/test-agent:latest",
+		ModelProvider: "openai",
+		ModelName:     "gpt-4o",
+		Port:          8080,
+	}
+
+	rendered, err := gen.RenderTemplate(string(templateBytes), config)
+	if err != nil {
+		t.Fatalf("failed to render docker-compose template with AgentConfig: %v", err)
+	}
+
+	if !strings.Contains(rendered, "\"8080:8080\"") {
+		t.Fatalf("expected agent init docker-compose to contain \"8080:8080\", got:\n%s", rendered)
+	}
+
+	// Verify that a zero Port value would produce "0:8080" (ensuring the field is used)
+	config.Port = 0
+	rendered, err = gen.RenderTemplate(string(templateBytes), config)
+	if err != nil {
+		t.Fatalf("failed to render docker-compose template with Port=0: %v", err)
+	}
+	if !strings.Contains(rendered, "\"0:8080\"") {
+		t.Fatalf("expected Port=0 to render as \"0:8080\", got:\n%s", rendered)
 	}
 }
