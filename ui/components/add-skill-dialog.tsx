@@ -56,8 +56,7 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
         version: version.trim(),
         repository: publishSource === "git" ? {
           url: trimmedRepositoryUrl,
-          source: trimmedRepositoryUrl.includes("gitlab") ? "gitlab" :
-                  trimmedRepositoryUrl.includes("bitbucket") ? "bitbucket" : "github"
+          source: "git"
         } : undefined,
         packages: publishSource === "docker" ? [
           {
