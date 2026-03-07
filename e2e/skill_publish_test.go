@@ -1,7 +1,7 @@
 //go:build e2e
 
 // Tests for the "skill publish" command. These tests verify publishing skills
-// to the registry via both --github and --docker-url flags.
+// to the registry via both --git and --docker-url flags.
 
 package e2e
 
@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-// TestSkillPublishGitHub tests publishing a skill with --github flag and
+// TestSkillPublishGitHub tests publishing a skill with --git flag and
 // verifying it appears in the registry with the correct repository metadata.
 func TestSkillPublishGitHub(t *testing.T) {
 	regURL := RegistryURL(t)
@@ -34,11 +34,11 @@ func TestSkillPublishGitHub(t *testing.T) {
 		t.Fatalf("failed to write SKILL.md: %v", err)
 	}
 
-	// Step 1: Publish with --github
+	// Step 1: Publish with --git
 	t.Run("publish", func(t *testing.T) {
 		result := RunArctl(t, tmpDir,
 			"skill", "publish", skillDir,
-			"--github", githubRepo,
+			"--git", githubRepo,
 			"--version", version,
 			"--registry-url", regURL,
 		)
@@ -94,8 +94,8 @@ func TestSkillPublishGitHub(t *testing.T) {
 		if skillResp.Skill.Repository.URL != githubRepo {
 			t.Errorf("repository.url = %q, want %q", skillResp.Skill.Repository.URL, githubRepo)
 		}
-		if skillResp.Skill.Repository.Source != "github" {
-			t.Errorf("repository.source = %q, want %q", skillResp.Skill.Repository.Source, "github")
+		if skillResp.Skill.Repository.Source != "git" {
+			t.Errorf("repository.source = %q, want %q", skillResp.Skill.Repository.Source, "git")
 		}
 		if len(skillResp.Skill.Packages) != 0 {
 			t.Errorf("expected no packages for GitHub-published skill, got %d", len(skillResp.Skill.Packages))
@@ -113,7 +113,7 @@ func TestSkillPublishGitHub(t *testing.T) {
 }
 
 // TestSkillPublishValidation verifies that "skill publish" rejects requests
-// when neither --docker-url nor --github is provided.
+// when neither --docker-url nor --git is provided.
 func TestSkillPublishValidation(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -136,13 +136,13 @@ func TestSkillPublishValidation(t *testing.T) {
 		result := RunArctl(t, tmpDir,
 			"skill", "publish", skillDir,
 			"--docker-url", "docker.io/test",
-			"--github", "https://github.com/test/repo",
+			"--git", "https://github.com/test/repo",
 		)
 		RequireFailure(t, result)
 	})
 }
 
-// TestSkillPublishDryRunGitHub verifies that --dry-run with --github shows
+// TestSkillPublishDryRunGitHub verifies that --dry-run with --git shows
 // the intended action without actually publishing.
 func TestSkillPublishDryRunGitHub(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -157,7 +157,7 @@ func TestSkillPublishDryRunGitHub(t *testing.T) {
 
 	result := RunArctl(t, tmpDir,
 		"skill", "publish", skillDir,
-		"--github", "https://github.com/agentregistry-dev/skills/tree/main/artifacts-builder",
+		"--git", "https://github.com/agentregistry-dev/skills/tree/main/artifacts-builder",
 		"--version", "1.0.0",
 		"--dry-run",
 	)
@@ -173,7 +173,7 @@ func TestSkillPublishDirectDryRun(t *testing.T) {
 
 	result := RunArctl(t, tmpDir,
 		"skill", "publish", "direct-test-skill",
-		"--github", "https://github.com/agentregistry-dev/skills/tree/main/artifacts-builder",
+		"--git", "https://github.com/agentregistry-dev/skills/tree/main/artifacts-builder",
 		"--version", "1.0.0",
 		"--description", "A remotely hosted skill",
 		"--dry-run",
