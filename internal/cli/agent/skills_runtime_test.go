@@ -162,11 +162,11 @@ func TestExtractSkillRepoURL(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "github repository",
+			name: "git repository",
 			resp: &models.SkillResponse{
 				Skill: models.SkillJSON{
 					Repository: &models.SkillRepository{
-						Source: "github",
+						Source: "git",
 						URL:    "https://github.com/org/skill/tree/main/skills/my-skill",
 					},
 				},
@@ -181,11 +181,11 @@ func TestExtractSkillRepoURL(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "non-github source",
+			name: "non-git source",
 			resp: &models.SkillResponse{
 				Skill: models.SkillJSON{
 					Repository: &models.SkillRepository{
-						Source: "gitlab",
+						Source: "svn",
 						URL:    "https://gitlab.com/org/skill",
 					},
 				},

@@ -82,22 +82,22 @@ func resolveSkillSource(skill models.SkillRef) (resolvedSkillRef, error) {
 	// Fall back to GitHub repository.
 	repoURL, err := extractSkillRepoURL(skillResp)
 	if err != nil {
-		return resolvedSkillRef{}, fmt.Errorf("skill %s (version %s): no docker/oci package or github repository found", registrySkillName, version)
+		return resolvedSkillRef{}, fmt.Errorf("skill %s (version %s): no docker/oci package or git repository found", registrySkillName, version)
 	}
 	return resolvedSkillRef{name: skill.Name, repoURL: repoURL}, nil
 }
 
-// extractSkillRepoURL extracts a GitHub repository URL from a skill response.
+// extractSkillRepoURL extracts a git repository URL from a skill response.
 func extractSkillRepoURL(skillResp *models.SkillResponse) (string, error) {
 	if skillResp == nil {
 		return "", fmt.Errorf("skill response is required")
 	}
 	if skillResp.Skill.Repository != nil &&
-		strings.EqualFold(skillResp.Skill.Repository.Source, "github") &&
+		(strings.EqualFold(skillResp.Skill.Repository.Source, "git") || strings.EqualFold(skillResp.Skill.Repository.Source, "github")) &&
 		strings.TrimSpace(skillResp.Skill.Repository.URL) != "" {
 		return strings.TrimSpace(skillResp.Skill.Repository.URL), nil
 	}
-	return "", fmt.Errorf("no github repository found")
+	return "", fmt.Errorf("no git repository found")
 }
 
 func fetchSkillFromRegistry(registryURL, skillName, version string) (*models.SkillResponse, error) {

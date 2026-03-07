@@ -127,11 +127,11 @@ func TestParseSkillFrontmatter_MissingFile(t *testing.T) {
 
 func TestBuildSkillFromGitHub(t *testing.T) {
 	// Save and restore package-level vars
-	origGithub := githubRepository
+	origGithub := gitRepository
 	origVersion := versionFlag
 	origGithubRawBase := githubRawBaseURL
 	t.Cleanup(func() {
-		githubRepository = origGithub
+		gitRepository = origGithub
 		versionFlag = origVersion
 		githubRawBaseURL = origGithubRawBase
 	})
@@ -194,7 +194,7 @@ description: Branch
 				t.Fatalf("failed to write SKILL.md: %v", err)
 			}
 
-			githubRepository = tt.github
+			gitRepository = tt.github
 			versionFlag = tt.version
 
 			skill, err := buildSkillFromGitHub(dir)
@@ -225,14 +225,14 @@ description: Branch
 }
 
 func TestBuildSkillFromGitHub_MissingVersion(t *testing.T) {
-	origGithub := githubRepository
+	origGithub := gitRepository
 	origVersion := versionFlag
 	t.Cleanup(func() {
-		githubRepository = origGithub
+		gitRepository = origGithub
 		versionFlag = origVersion
 	})
 
-	githubRepository = "https://github.com/org/repo"
+	gitRepository = "https://github.com/org/repo"
 	versionFlag = ""
 
 	dir := t.TempDir()
@@ -248,14 +248,14 @@ func TestBuildSkillFromGitHub_MissingVersion(t *testing.T) {
 }
 
 func TestBuildSkillFromGitHub_InvalidFrontmatter(t *testing.T) {
-	origGithub := githubRepository
+	origGithub := gitRepository
 	origVersion := versionFlag
 	t.Cleanup(func() {
-		githubRepository = origGithub
+		gitRepository = origGithub
 		versionFlag = origVersion
 	})
 
-	githubRepository = "https://github.com/org/repo"
+	gitRepository = "https://github.com/org/repo"
 	versionFlag = "1.0.0"
 
 	dir := t.TempDir()
@@ -270,10 +270,10 @@ func TestBuildSkillFromGitHub_InvalidFrontmatter(t *testing.T) {
 }
 
 func TestBuildSkillFromGitHub_InvalidURL(t *testing.T) {
-	origGithub := githubRepository
+	origGithub := gitRepository
 	origVersion := versionFlag
 	t.Cleanup(func() {
-		githubRepository = origGithub
+		gitRepository = origGithub
 		versionFlag = origVersion
 	})
 
@@ -306,7 +306,7 @@ func TestBuildSkillFromGitHub_InvalidURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			githubRepository = tt.github
+			gitRepository = tt.github
 
 			_, err := buildSkillFromGitHub(dir)
 			if err == nil {
@@ -324,7 +324,7 @@ func savePublishFlags(t *testing.T) {
 	t.Helper()
 	origVersionFlag := versionFlag
 	origDryRunFlag := dryRunFlag
-	origGithubRepo := githubRepository
+	origGithubRepo := gitRepository
 	origDockerImage := dockerImageFlag
 	origClient := apiClient
 	origGithubRawBaseURL := githubRawBaseURL
@@ -332,7 +332,7 @@ func savePublishFlags(t *testing.T) {
 	t.Cleanup(func() {
 		versionFlag = origVersionFlag
 		dryRunFlag = origDryRunFlag
-		githubRepository = origGithubRepo
+		gitRepository = origGithubRepo
 		dockerImageFlag = origDockerImage
 		apiClient = origClient
 		githubRawBaseURL = origGithubRawBaseURL
@@ -353,7 +353,7 @@ func mockGitHubSkillMdCheck(t *testing.T) {
 func TestRunPublish_NilClient(t *testing.T) {
 	savePublishFlags(t)
 	apiClient = nil
-	githubRepository = "https://github.com/org/repo"
+	gitRepository = "https://github.com/org/repo"
 
 	err := runPublish(nil, []string{"."})
 	if err == nil {
@@ -381,7 +381,7 @@ func TestRunPublish_NonExistentPathUsesDirectMode(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	apiClient = client.NewClient(srv.URL, "")
-	githubRepository = "https://github.com/org/repo"
+	gitRepository = "https://github.com/org/repo"
 	versionFlag = "1.0.0"
 
 	err := runPublish(nil, []string{"/nonexistent/path/to/skill"})
@@ -419,7 +419,7 @@ func TestRunPublish_DirWithoutSkillMdReturnsError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			savePublishFlags(t)
 			apiClient = client.NewClient("http://localhost:0", "")
-			githubRepository = "https://github.com/org/repo"
+			gitRepository = "https://github.com/org/repo"
 			versionFlag = "1.0.0"
 
 			dir := t.TempDir()
@@ -440,7 +440,7 @@ func TestRunPublish_GitHubDryRun(t *testing.T) {
 	savePublishFlags(t)
 	mockGitHubSkillMdCheck(t)
 	apiClient = client.NewClient("http://localhost:0", "")
-	githubRepository = "https://github.com/org/repo"
+	gitRepository = "https://github.com/org/repo"
 	versionFlag = "1.0.0"
 	dryRunFlag = true
 
@@ -483,7 +483,7 @@ func TestRunPublish_GitHubSuccess(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	apiClient = client.NewClient(srv.URL, "")
-	githubRepository = "https://github.com/org/repo"
+	gitRepository = "https://github.com/org/repo"
 	versionFlag = "1.0.0"
 	dryRunFlag = false
 
@@ -506,7 +506,7 @@ func TestRunPublish_GitHubAPIError(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	apiClient = client.NewClient(srv.URL, "")
-	githubRepository = "https://github.com/org/repo"
+	gitRepository = "https://github.com/org/repo"
 	versionFlag = "1.0.0"
 	dryRunFlag = false
 
@@ -525,7 +525,7 @@ func TestRunPublish_GitHubAPIError(t *testing.T) {
 func TestRunPublish_ParentDirWithSubSkillsReturnsError(t *testing.T) {
 	savePublishFlags(t)
 	apiClient = client.NewClient("http://localhost:0", "")
-	githubRepository = "https://github.com/org/repo"
+	gitRepository = "https://github.com/org/repo"
 	versionFlag = "1.0.0"
 	dryRunFlag = false
 
@@ -550,7 +550,7 @@ func TestRunPublish_ParentDirWithSubSkillsReturnsError(t *testing.T) {
 func TestRunPublish_GitHubMissingVersion(t *testing.T) {
 	savePublishFlags(t)
 	apiClient = client.NewClient("http://localhost:0", "")
-	githubRepository = "https://github.com/org/repo"
+	gitRepository = "https://github.com/org/repo"
 	versionFlag = ""
 	dryRunFlag = false
 
@@ -626,7 +626,7 @@ func TestBuildSkillDirect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			githubRepository = tt.github
+			gitRepository = tt.github
 			versionFlag = tt.version
 			publishDesc = tt.desc
 
@@ -662,7 +662,7 @@ func TestBuildSkillDirect(t *testing.T) {
 
 func TestBuildSkillDirect_MissingGithub(t *testing.T) {
 	savePublishFlags(t)
-	githubRepository = ""
+	gitRepository = ""
 	versionFlag = "1.0.0"
 
 	_, err := buildSkillDirectGitHub("my-skill")
@@ -676,7 +676,7 @@ func TestBuildSkillDirect_MissingGithub(t *testing.T) {
 
 func TestBuildSkillDirect_MissingVersion(t *testing.T) {
 	savePublishFlags(t)
-	githubRepository = "https://github.com/org/repo"
+	gitRepository = "https://github.com/org/repo"
 	versionFlag = ""
 
 	_, err := buildSkillDirectGitHub("my-skill")
@@ -690,7 +690,7 @@ func TestBuildSkillDirect_MissingVersion(t *testing.T) {
 
 func TestBuildSkillDirect_InvalidURL(t *testing.T) {
 	savePublishFlags(t)
-	githubRepository = "https://gitlab.com/org/repo"
+	gitRepository = "https://gitlab.com/org/repo"
 	versionFlag = "1.0.0"
 
 	_, err := buildSkillDirectGitHub("my-skill")
@@ -728,7 +728,7 @@ func TestRunPublish_DirectGitHub(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	apiClient = client.NewClient(srv.URL, "")
-	githubRepository = "https://github.com/org/repo"
+	gitRepository = "https://github.com/org/repo"
 	versionFlag = "1.0.0"
 	publishDesc = "A remote skill"
 	dryRunFlag = false
@@ -744,7 +744,7 @@ func TestRunPublish_DirectDryRun(t *testing.T) {
 	savePublishFlags(t)
 	mockGitHubSkillMdCheck(t)
 	apiClient = client.NewClient("http://localhost:0", "")
-	githubRepository = "https://github.com/org/repo"
+	gitRepository = "https://github.com/org/repo"
 	versionFlag = "1.0.0"
 	publishDesc = "test"
 	dryRunFlag = true
@@ -758,7 +758,7 @@ func TestRunPublish_DirectDryRun(t *testing.T) {
 func TestRunPublish_DirectMissingBothFlags(t *testing.T) {
 	savePublishFlags(t)
 	apiClient = client.NewClient("http://localhost:0", "")
-	githubRepository = ""
+	gitRepository = ""
 	dockerImageFlag = ""
 	versionFlag = "1.0.0"
 
@@ -766,7 +766,7 @@ func TestRunPublish_DirectMissingBothFlags(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when neither flag is set, got nil")
 	}
-	if !contains(err.Error(), "--git  or --docker-imageis required") {
+	if !contains(err.Error(), "--git or --docker-image is required") {
 		t.Errorf("error = %q, want it to contain '--git or --docker-image is required'", err.Error())
 	}
 }
@@ -774,7 +774,7 @@ func TestRunPublish_DirectMissingBothFlags(t *testing.T) {
 func TestRunPublish_DirectMissingVersion(t *testing.T) {
 	savePublishFlags(t)
 	apiClient = client.NewClient("http://localhost:0", "")
-	githubRepository = "https://github.com/org/repo"
+	gitRepository = "https://github.com/org/repo"
 	versionFlag = ""
 
 	err := runPublish(nil, []string{"my-skill"})
@@ -919,7 +919,7 @@ func TestRunPublish_DirectDockerSuccess(t *testing.T) {
 
 	apiClient = client.NewClient(srv.URL, "")
 	dockerImageFlag = "docker.io/myorg/docker-skill:v1.0.0"
-	githubRepository = ""
+	gitRepository = ""
 	versionFlag = "1.0.0"
 	dryRunFlag = false
 
@@ -933,7 +933,7 @@ func TestRunPublish_DirectDockerDryRun(t *testing.T) {
 	savePublishFlags(t)
 	apiClient = client.NewClient("http://localhost:0", "")
 	dockerImageFlag = "docker.io/myorg/my-skill:v1.0.0"
-	githubRepository = ""
+	gitRepository = ""
 	versionFlag = "1.0.0"
 	publishDesc = "test"
 	dryRunFlag = true
@@ -976,7 +976,7 @@ func TestRunPublish_DockerImageWithFolder(t *testing.T) {
 
 	apiClient = client.NewClient(srv.URL, "")
 	dockerImageFlag = "docker.io/myorg/my-skill:v1.0.0"
-	githubRepository = ""
+	gitRepository = ""
 	versionFlag = "1.0.0"
 	dryRunFlag = false
 
@@ -1002,7 +1002,7 @@ func TestRunPublish_FolderModeStillWorks(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	apiClient = client.NewClient(srv.URL, "")
-	githubRepository = "https://github.com/org/repo"
+	gitRepository = "https://github.com/org/repo"
 	versionFlag = "1.0.0"
 	dryRunFlag = false
 

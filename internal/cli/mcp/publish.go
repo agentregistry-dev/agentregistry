@@ -28,7 +28,7 @@ var (
 	dryRunFlag          bool
 	overwriteFlag       bool
 	publishVersion      string
-	githubRepository    string
+	gitRepository       string
 	publishTransport    string
 	publishTransportURL string
 
@@ -47,7 +47,7 @@ func init() {
 	PublishCmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Show what would be done without actually doing it")
 	PublishCmd.Flags().BoolVar(&overwriteFlag, "overwrite", false, "Overwrite if the version is already published")
 	PublishCmd.Flags().StringVar(&publishVersion, "version", "", "Server version")
-	PublishCmd.Flags().StringVar(&githubRepository, "github", "", "GitHub repository URL")
+	PublishCmd.Flags().StringVar(&gitRepository, "git", "", "Git repository URL (GitHub, GitLab, Bitbucket)")
 	PublishCmd.Flags().StringVar(&publishTransport, "transport", "", "Transport type: stdio or streamable-http (package mode); streamable-http or sse (--remote-url mode)")
 	PublishCmd.Flags().StringVar(&publishTransportURL, "transport-url", "", "Transport URL for streamable-http transport")
 
@@ -195,7 +195,7 @@ func runMCPServerPublish(cmd *cobra.Command, args []string) error {
 			Description:   description,
 			Title:         serverName,
 			Version:       version,
-			GithubURL:     githubRepository,
+			GitURL:        gitRepository,
 			TransportType: remoteTransportType,
 			TransportURL:  publishRemoteURL,
 		})
@@ -230,7 +230,7 @@ func runMCPServerPublish(cmd *cobra.Command, args []string) error {
 		Description:      description,
 		Title:            serverName,
 		Version:          version,
-		GithubURL:        githubRepository,
+		GitURL:        gitRepository,
 		RegistryType:     regType,
 		Identifier:       packageID,
 		PackageVersion:   pkgVersion,
@@ -272,14 +272,14 @@ func resolveTransport(transportType, transportURL string) (string, string, error
 	return transportType, transportURL, nil
 }
 
-// buildRepository creates a Repository from a GitHub URL, or nil if empty.
-func buildRepository(githubURL string) *model.Repository {
-	if githubURL == "" {
+// buildRepository creates a Repository from a Git URL, or nil if empty.
+func buildRepository(gitURL string) *model.Repository {
+	if gitURL == "" {
 		return nil
 	}
 	return &model.Repository{
-		URL:    githubURL,
-		Source: "github",
+		URL:    gitURL,
+		Source: "git",
 	}
 }
 
@@ -345,7 +345,7 @@ type ServerJSONParams struct {
 	Description string
 	Title       string
 	Version     string
-	GithubURL   string
+	GitURL   string
 
 	// Package info
 	RegistryType     string
@@ -365,7 +365,7 @@ func buildServerJSON(p ServerJSONParams) *apiv0.ServerJSON {
 		Name:        p.Name,
 		Description: p.Description,
 		Title:       p.Title,
-		Repository:  buildRepository(p.GithubURL),
+		Repository:  buildRepository(p.GitURL),
 		Version:     p.Version,
 		Packages: []model.Package{{
 			RegistryType:     p.RegistryType,
@@ -389,7 +389,7 @@ func buildRemoteServerJSON(p ServerJSONParams) *apiv0.ServerJSON {
 		Name:        p.Name,
 		Description: p.Description,
 		Title:       p.Title,
-		Repository:  buildRepository(p.GithubURL),
+		Repository:  buildRepository(p.GitURL),
 		Version:     p.Version,
 		Remotes: []model.Transport{{
 			Type: p.TransportType,

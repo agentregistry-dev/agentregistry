@@ -66,7 +66,7 @@ func runPull(cmd *cobra.Command, args []string) error {
 
 	printer.PrintSuccess(fmt.Sprintf("Found skill: %s (version %s)", skillResp.Skill.Name, skillResp.Skill.Version))
 
-	// 2. Determine source: Docker package or GitHub repository
+	// 2. Determine source: Docker package or git repository
 	var dockerImage string
 	for _, pkg := range skillResp.Skill.Packages {
 		if pkg.RegistryType == "docker" {
