@@ -1,4 +1,4 @@
-package dockercompose
+package local
 
 import (
 	"cmp"
@@ -7,58 +7,53 @@ import (
 	"path/filepath"
 	"slices"
 
-	api "github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
-	registrytranslation "github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
+	platformshared "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/shared"
+	api "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/compose-spec/compose-go/v2/types"
 )
 
-type agentGatewayTranslator struct {
+type AgentGatewayTranslator struct {
 	composeWorkingDir string
 	agentGatewayPort  uint16
 	projectName       string
 }
 
-func NewAgentGatewayTranslator(composeWorkingDir string, agentGatewayPort uint16) api.RuntimeTranslator {
-	return &agentGatewayTranslator{
+func NewAgentGatewayTranslator(composeWorkingDir string, agentGatewayPort uint16) *AgentGatewayTranslator {
+	return &AgentGatewayTranslator{
 		composeWorkingDir: composeWorkingDir,
 		agentGatewayPort:  agentGatewayPort,
 		projectName:       "agentregistry_runtime",
 	}
 }
 
-func NewAgentGatewayTranslatorWithProjectName(composeWorkingDir string, agentGatewayPort uint16, projectName string) api.RuntimeTranslator {
-	return &agentGatewayTranslator{
+func NewAgentGatewayTranslatorWithProjectName(composeWorkingDir string, agentGatewayPort uint16, projectName string) *AgentGatewayTranslator {
+	return &AgentGatewayTranslator{
 		composeWorkingDir: composeWorkingDir,
 		agentGatewayPort:  agentGatewayPort,
 		projectName:       projectName,
 	}
 }
 
-// canRunInsideAgentGateway returns true if the MCP server can be run directly inside
-// the agentgateway container. This is true for npx and uvx commands since the
-// agentgateway image includes Node.js and uv. Other commands (like those from OCI images)
-// need to run in their own container.
 func canRunInsideAgentGateway(cmd string) bool {
 	return cmd == "npx" || cmd == "uvx"
 }
 
-// ociServerPort is the default port that OCI-based MCP servers expose for HTTP transport.
 const ociServerPort = 3000
 
 func runtimeMCPServiceName(server *api.MCPServer) string {
-	return registrytranslation.GenerateInternalNameForDeployment(server.Name, server.DeploymentID)
+	return platformshared.GenerateInternalNameForDeployment(server.Name, server.DeploymentID)
 }
 
 func runtimeAgentServiceName(agent *api.Agent) string {
-	return registrytranslation.GenerateInternalNameForDeployment(agent.Name, agent.DeploymentID)
+	return platformshared.GenerateInternalNameForDeployment(agent.Name, agent.DeploymentID)
 }
 
-func (t *agentGatewayTranslator) TranslateRuntimeConfig(
+func (t *AgentGatewayTranslator) TranslatePlatformConfig(
 	ctx context.Context,
 	desired *api.DesiredState,
-) (*api.AIRuntimeConfig, error) {
+) (*api.LocalPlatformConfig, error) {
 	agentGatewayService, err := t.translateAgentGatewayService()
 	if err != nil {
 		return nil, fmt.Errorf("failed to translate agent gateway service: %w", err)
@@ -72,13 +67,10 @@ func (t *agentGatewayTranslator) TranslateRuntimeConfig(
 		if mcpServer.MCPServerType != api.MCPServerTypeLocal {
 			continue
 		}
-
-		// For stdio servers with npx/uvx commands, the agentgateway runs them directly
 		if mcpServer.Local.TransportType == api.TransportTypeStdio && canRunInsideAgentGateway(mcpServer.Local.Deployment.Cmd) {
 			continue
 		}
 		serviceName := runtimeMCPServiceName(mcpServer)
-		// error if MCPServer name is not unique
 		if _, exists := dockerComposeServices[serviceName]; exists {
 			return nil, fmt.Errorf("duplicate MCPServer name found: %s", mcpServer.Name)
 		}
@@ -114,24 +106,19 @@ func (t *agentGatewayTranslator) TranslateRuntimeConfig(
 		return nil, fmt.Errorf("failed to translate agent gateway config: %w", err)
 	}
 
-	return &api.AIRuntimeConfig{
-		Type: api.RuntimeConfigTypeLocal,
-		Local: &api.LocalRuntimeConfig{
-			DockerCompose: dockerCompose,
-			AgentGateway:  gwConfig,
-		},
+	return &api.LocalPlatformConfig{
+		DockerCompose: dockerCompose,
+		AgentGateway:  gwConfig,
 	}, nil
 }
 
-func (t *agentGatewayTranslator) translateAgentGatewayService() (*types.ServiceConfig, error) {
+func (t *AgentGatewayTranslator) translateAgentGatewayService() (*types.ServiceConfig, error) {
 	port := t.agentGatewayPort
 	if port == 0 {
 		return nil, fmt.Errorf("agent gateway port must be specified")
 	}
 
-	// Use custom image with npx and uvx support for stdio MCP servers
 	image := fmt.Sprintf("%s/agentregistry-dev/agentregistry/arctl-agentgateway:%s", version.DockerRegistry, version.Version)
-
 	return &types.ServiceConfig{
 		Name:    "agent_gateway",
 		Image:   image,
@@ -148,30 +135,20 @@ func (t *agentGatewayTranslator) translateAgentGatewayService() (*types.ServiceC
 	}, nil
 }
 
-func (t *agentGatewayTranslator) translateMCPServerToServiceConfig(server *api.MCPServer) (*types.ServiceConfig, error) {
+func (t *AgentGatewayTranslator) translateMCPServerToServiceConfig(server *api.MCPServer) (*types.ServiceConfig, error) {
 	image := server.Local.Deployment.Image
 	if image == "" {
 		return nil, fmt.Errorf("image must be specified for MCPServer %s or the command must be 'uvx' or 'npx'", server.Name)
 	}
-	// Only set command when Cmd is non-empty; OCI images with their own
-	// entrypoint should use the image's default CMD/ENTRYPOINT.
 	var cmd types.ShellCommand
 	if server.Local.Deployment.Cmd != "" {
-		cmd = append(
-			[]string{server.Local.Deployment.Cmd},
-			server.Local.Deployment.Args...,
-		)
+		cmd = append([]string{server.Local.Deployment.Cmd}, server.Local.Deployment.Args...)
 	}
 
 	var envValues []string
 	for k, v := range server.Local.Deployment.Env {
 		envValues = append(envValues, fmt.Sprintf("%s=%s", k, v))
 	}
-
-	// For OCI images with stdio transport, we need to set MCP_TRANSPORT_MODE=http
-	// so the server listens on HTTP, PORT to specify the listening port, and
-	// HOST=0.0.0.0 so it binds to all interfaces (required for Docker networking).
-	// These will also be requirements for all OCI-based MCP servers.
 	if server.Local.TransportType == api.TransportTypeStdio && !canRunInsideAgentGateway(server.Local.Deployment.Cmd) {
 		envValues = append(envValues, "HOST=0.0.0.0")
 		envValues = append(envValues, "MCP_TRANSPORT_MODE=http")
@@ -190,7 +167,7 @@ func (t *agentGatewayTranslator) translateMCPServerToServiceConfig(server *api.M
 	}, nil
 }
 
-func (t *agentGatewayTranslator) translateAgentToServiceConfig(agent *api.Agent) (*types.ServiceConfig, error) {
+func (t *AgentGatewayTranslator) translateAgentToServiceConfig(agent *api.Agent) (*types.ServiceConfig, error) {
 	image := agent.Deployment.Image
 	if image == "" {
 		return nil, fmt.Errorf("image must be specified for Agent %s", agent.Name)
@@ -206,17 +183,14 @@ func (t *agentGatewayTranslator) translateAgentToServiceConfig(agent *api.Agent)
 
 	port := agent.Deployment.Port
 	if port == 0 {
-		port = 8080 // default port
+		port = 8080
 	}
 
-	// Mount agent-specific subdirectory: {composeWorkingDir}/{agentName}/{version} -> /config
-	// Runtime agents should always have a version, but handle empty gracefully
 	var agentConfigDir string
 	if agent.Version != "" {
 		sanitizedVersion := utils.SanitizeVersion(agent.Version)
 		agentConfigDir = filepath.Join(t.composeWorkingDir, agent.Name, sanitizedVersion)
 	} else {
-		// Fallback to non-versioned directory for safety (shouldn't happen for runtime agents)
 		agentConfigDir = filepath.Join(t.composeWorkingDir, agent.Name)
 	}
 
@@ -237,14 +211,12 @@ func (t *agentGatewayTranslator) translateAgentToServiceConfig(agent *api.Agent)
 	}, nil
 }
 
-func (t *agentGatewayTranslator) translateAgentGatewayConfig(servers []*api.MCPServer, agents []*api.Agent) (*api.AgentGatewayConfig, error) {
+func (t *AgentGatewayTranslator) translateAgentGatewayConfig(servers []*api.MCPServer, agents []*api.Agent) (*api.AgentGatewayConfig, error) {
 	var targets []api.MCPTarget
 
 	for _, server := range servers {
 		targetName := runtimeMCPServiceName(server)
-		mcpTarget := api.MCPTarget{
-			Name: targetName,
-		}
+		mcpTarget := api.MCPTarget{Name: targetName}
 
 		switch server.MCPServerType {
 		case api.MCPServerTypeRemote:
@@ -285,19 +257,16 @@ func (t *agentGatewayTranslator) translateAgentGatewayConfig(servers []*api.MCPS
 		targets = append(targets, mcpTarget)
 	}
 
-	// create route for each agent
 	var agentRoutes []api.LocalRoute
 	for _, agent := range agents {
 		agentServiceName := runtimeAgentServiceName(agent)
 		route := api.LocalRoute{
 			RouteName: fmt.Sprintf("%s_route", agentServiceName),
-			Matches: []api.RouteMatch{
-				{
-					Path: api.PathMatch{
-						PathPrefix: fmt.Sprintf("/agents/%s", agentServiceName),
-					},
+			Matches: []api.RouteMatch{{
+				Path: api.PathMatch{
+					PathPrefix: fmt.Sprintf("/agents/%s", agentServiceName),
 				},
-			},
+			}},
 			Backends: []api.RouteBackend{{
 				Weight: 100,
 				Host:   fmt.Sprintf("%s:%d", agentServiceName, agent.Deployment.Port),
@@ -305,33 +274,27 @@ func (t *agentGatewayTranslator) translateAgentGatewayConfig(servers []*api.MCPS
 			Policies: &api.FilterOrPolicy{
 				A2A: &api.A2APolicy{},
 				URLRewrite: &api.URLRewrite{
-					Path: &api.PathRedirect{
-						Prefix: "/",
-					},
+					Path: &api.PathRedirect{Prefix: "/"},
 				},
 			},
 		}
 		agentRoutes = append(agentRoutes, route)
 	}
 
-	// sort for idempotence
 	slices.SortStableFunc(agentRoutes, func(a, b api.LocalRoute) int {
 		return cmp.Compare(a.RouteName, b.RouteName)
 	})
-
 	slices.SortStableFunc(targets, func(a, b api.MCPTarget) int {
 		return cmp.Compare(a.Name, b.Name)
 	})
 
 	mcpRoute := api.LocalRoute{
 		RouteName: "mcp_route",
-		Matches: []api.RouteMatch{
-			{
-				Path: api.PathMatch{
-					PathPrefix: "/mcp",
-				},
+		Matches: []api.RouteMatch{{
+			Path: api.PathMatch{
+				PathPrefix: "/mcp",
 			},
-		},
+		}},
 		Backends: []api.RouteBackend{{
 			Weight: 100,
 			MCP: &api.MCPBackend{
@@ -348,17 +311,13 @@ func (t *agentGatewayTranslator) translateAgentGatewayConfig(servers []*api.MCPS
 
 	return &api.AgentGatewayConfig{
 		Config: struct{}{},
-		Binds: []api.LocalBind{
-			{
-				Port: t.agentGatewayPort,
-				Listeners: []api.LocalListener{
-					{
-						Name:     "default",
-						Protocol: "HTTP",
-						Routes:   allRoutes,
-					},
-				},
-			},
-		},
+		Binds: []api.LocalBind{{
+			Port: t.agentGatewayPort,
+			Listeners: []api.LocalListener{{
+				Name:     "default",
+				Protocol: "HTTP",
+				Routes:   allRoutes,
+			}},
+		}},
 	}, nil
 }

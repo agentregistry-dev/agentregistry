@@ -1,4 +1,4 @@
-package kagent
+package kubernetes
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
-	api "github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
+	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	v1alpha2 "github.com/kagent-dev/kagent/go/api/v1alpha2"
 	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -26,17 +26,16 @@ const (
 	maxDeploymentSuffixLength = 16
 )
 
-// NewTranslator returns a Kubernetes runtime translator that renders kagent Agent CRs.
-func NewTranslator() api.RuntimeTranslator {
-	return &translator{}
+func TranslatePlatformConfig(ctx context.Context, desired *platformtypes.DesiredState) (*platformtypes.KubernetesPlatformConfig, error) {
+	return (&translator{}).TranslatePlatformConfig(ctx, desired)
 }
 
-// TranslateRuntimeConfig translates the desired state into a Kubernetes runtime config supported by Kagent.
-// This handles agent, local and remote MCP servers.
-func (t *translator) TranslateRuntimeConfig(
+func (t *translator) TranslatePlatformConfig(
 	ctx context.Context,
-	desired *api.DesiredState,
-) (*api.AIRuntimeConfig, error) {
+	desired *platformtypes.DesiredState,
+) (*platformtypes.KubernetesPlatformConfig, error) {
+	_ = ctx
+
 	agents := make([]*v1alpha2.Agent, 0, len(desired.Agents))
 	configMaps := make([]*corev1.ConfigMap, 0)
 
@@ -47,7 +46,6 @@ func (t *translator) TranslateRuntimeConfig(
 		}
 		agents = append(agents, resource)
 
-		// Generate ConfigMap for agent's resolved MCP server connections
 		if len(agent.ResolvedMCPServers) > 0 {
 			configMap, err := t.translateAgentConfigMap(agent)
 			if err != nil {
@@ -61,7 +59,7 @@ func (t *translator) TranslateRuntimeConfig(
 	mcpServers := make([]*kmcpv1alpha1.MCPServer, 0)
 	for _, server := range desired.MCPServers {
 		switch server.MCPServerType {
-		case api.MCPServerTypeRemote:
+		case platformtypes.MCPServerTypeRemote:
 			if server.Remote == nil {
 				continue
 			}
@@ -70,7 +68,7 @@ func (t *translator) TranslateRuntimeConfig(
 				return nil, err
 			}
 			remoteMCPs = append(remoteMCPs, resource)
-		case api.MCPServerTypeLocal:
+		case platformtypes.MCPServerTypeLocal:
 			if server.Local == nil {
 				continue
 			}
@@ -82,25 +80,19 @@ func (t *translator) TranslateRuntimeConfig(
 		}
 	}
 
-	return &api.AIRuntimeConfig{
-		Type: api.RuntimeConfigTypeKubernetes,
-		Kubernetes: &api.KubernetesRuntimeConfig{
-			Agents:           agents,
-			RemoteMCPServers: remoteMCPs,
-			MCPServers:       mcpServers,
-			ConfigMaps:       configMaps,
-		},
+	return &platformtypes.KubernetesPlatformConfig{
+		Agents:           agents,
+		RemoteMCPServers: remoteMCPs,
+		MCPServers:       mcpServers,
+		ConfigMaps:       configMaps,
 	}, nil
 }
 
-// translateAgent translates an Agent into a Kagent Agent CRD
-func (t *translator) translateAgent(agent *api.Agent) (*v1alpha2.Agent, error) {
+func (t *translator) translateAgent(agent *platformtypes.Agent) (*v1alpha2.Agent, error) {
 	if agent.Deployment.Image == "" {
 		return nil, fmt.Errorf("image must be specified for Agent %s", agent.Name)
 	}
 
-	// Use namespace from KAGENT_NAMESPACE env if set; otherwise leave empty
-	// and let the runtime layer resolve from kubeconfig context.
 	namespace := agent.Deployment.Env["KAGENT_NAMESPACE"]
 
 	envVars := make([]corev1.EnvVar, 0, len(agent.Deployment.Env))
@@ -118,23 +110,15 @@ func (t *translator) translateAgent(agent *api.Agent) (*v1alpha2.Agent, error) {
 		}
 	}
 
-	// Build SharedDeploymentSpec with optional ConfigMap volume mount for resolved MCP servers
-	sharedSpec := v1alpha2.SharedDeploymentSpec{
-		Env: envVars,
-	}
-
-	// If agent has resolved MCP servers, add ConfigMap volume mount
+	sharedSpec := v1alpha2.SharedDeploymentSpec{Env: envVars}
 	if len(agent.ResolvedMCPServers) > 0 {
 		configMapName := AgentConfigMapName(agent.Name, agent.Version, agent.DeploymentID)
 		volumeName := "mcp-config"
-
 		sharedSpec.Volumes = []corev1.Volume{{
 			Name: volumeName,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: configMapName,
-					},
+					LocalObjectReference: corev1.LocalObjectReference{Name: configMapName},
 					Items: []corev1.KeyToPath{{
 						Key:  "mcp-servers.json",
 						Path: "mcp-servers.json",
@@ -142,7 +126,6 @@ func (t *translator) translateAgent(agent *api.Agent) (*v1alpha2.Agent, error) {
 				},
 			},
 		}}
-
 		sharedSpec.VolumeMounts = []corev1.VolumeMount{{
 			Name:      volumeName,
 			MountPath: "/config",
@@ -160,8 +143,6 @@ func (t *translator) translateAgent(agent *api.Agent) (*v1alpha2.Agent, error) {
 			},
 		},
 	}
-
-	// Map resolved skills to the Agent CRD's Skills field
 	if len(agent.Skills) > 0 {
 		skills, err := translateSkillsForAgent(agent.Skills)
 		if err != nil {
@@ -185,17 +166,13 @@ func (t *translator) translateAgent(agent *api.Agent) (*v1alpha2.Agent, error) {
 	}, nil
 }
 
-// translateSkillsForAgent converts resolved skill refs into the kagent
-// SkillForAgent CRD structure. Docker/OCI images go to Refs, GitHub repos
-// go to GitRefs.
-func translateSkillsForAgent(skills []api.AgentSkillRef) (*v1alpha2.SkillForAgent, error) {
+func translateSkillsForAgent(skills []platformtypes.AgentSkillRef) (*v1alpha2.SkillForAgent, error) {
 	if len(skills) == 0 {
 		return nil, nil
 	}
 
 	seenRefs := make(map[string]bool)
 	seenGitNames := make(map[string]bool)
-
 	var refs []string
 	var gitRefs []v1alpha2.GitRepo
 
@@ -234,9 +211,7 @@ func translateSkillsForAgent(skills []api.AgentSkillRef) (*v1alpha2.SkillForAgen
 	return result, nil
 }
 
-// buildGitRepo parses an AgentSkillRef into a kagent GitRepo, splitting the
-// full GitHub URL into its clone URL, ref, and path components.
-func buildGitRepo(skill api.AgentSkillRef) (v1alpha2.GitRepo, error) {
+func buildGitRepo(skill platformtypes.AgentSkillRef) (v1alpha2.GitRepo, error) {
 	if skill.Name == "" {
 		return v1alpha2.GitRepo{}, fmt.Errorf("skill name is required for git-based skill (repo %q)", skill.RepoURL)
 	}
@@ -246,7 +221,6 @@ func buildGitRepo(skill api.AgentSkillRef) (v1alpha2.GitRepo, error) {
 		return v1alpha2.GitRepo{}, fmt.Errorf("parse skill repo URL %q: %w", skill.RepoURL, err)
 	}
 
-	// Resolve the effective path (explicit takes precedence over parsed).
 	effectivePath := skill.Path
 	if effectivePath == "" {
 		effectivePath = path
@@ -256,8 +230,6 @@ func buildGitRepo(skill api.AgentSkillRef) (v1alpha2.GitRepo, error) {
 		URL:  cloneURL,
 		Name: skill.Name,
 	}
-
-	// Prefer explicitly set values from the AgentSkillRef over parsed ones.
 	if skill.Ref != "" {
 		gr.Ref = skill.Ref
 	} else if ref != "" {
@@ -266,19 +238,15 @@ func buildGitRepo(skill api.AgentSkillRef) (v1alpha2.GitRepo, error) {
 	if effectivePath != "" {
 		gr.Path = effectivePath
 	}
-
 	return gr, nil
 }
 
-// translateRemoteMCPServer translates a remote MCP server into a Kagent RemoteMCPServer CRD
-func (t *translator) translateRemoteMCPServer(server *api.MCPServer) (*v1alpha2.RemoteMCPServer, error) {
+func (t *translator) translateRemoteMCPServer(server *platformtypes.MCPServer) (*v1alpha2.RemoteMCPServer, error) {
 	if server.Remote == nil {
 		return nil, fmt.Errorf("remote MCP server config missing for %s", server.Name)
 	}
 
 	url := buildRemoteMCPURL(server.Remote.Host, server.Remote.Port, server.Remote.Path)
-	// Use namespace from MCPServer if set (propagated from agent's deployment config);
-	// otherwise leave empty and let the runtime layer resolve from kubeconfig context.
 	namespace := server.Namespace
 
 	return &v1alpha2.RemoteMCPServer{
@@ -300,18 +268,14 @@ func (t *translator) translateRemoteMCPServer(server *api.MCPServer) (*v1alpha2.
 	}, nil
 }
 
-// translateLocalMCPServer translates a local MCP server into a KMCP MCPServer CRD
-func (t *translator) translateLocalMCPServer(server *api.MCPServer) (*kmcpv1alpha1.MCPServer, error) {
+func (t *translator) translateLocalMCPServer(server *platformtypes.MCPServer) (*kmcpv1alpha1.MCPServer, error) {
 	if server.Local == nil {
 		return nil, fmt.Errorf("local MCP server config missing for %s", server.Name)
 	}
-	if server.Local.TransportType == api.TransportTypeHTTP && server.Local.HTTP == nil {
+	if server.Local.TransportType == platformtypes.TransportTypeHTTP && server.Local.HTTP == nil {
 		return nil, fmt.Errorf("HTTP transport config missing for %s", server.Name)
 	}
 
-	// Use namespace from MCPServer if set (propagated from agent's deployment config);
-	// fall back to KAGENT_NAMESPACE env; otherwise leave empty and let the runtime
-	// layer resolve from kubeconfig context.
 	namespace := server.Namespace
 	if namespace == "" {
 		namespace = server.Local.Deployment.Env["KAGENT_NAMESPACE"]
@@ -322,15 +286,10 @@ func (t *translator) translateLocalMCPServer(server *api.MCPServer) (*kmcpv1alph
 		Args:  server.Local.Deployment.Args,
 		Env:   server.Local.Deployment.Env,
 	}
-	fmt.Printf("[DEBUG] kagent translateLocalMCPServer: name=%s, image=%s, cmd=%q, args=%v\n",
-		server.Name, deployment.Image, deployment.Cmd, deployment.Args)
 
-	spec := kmcpv1alpha1.MCPServerSpec{
-		Deployment: deployment,
-	}
-
+	spec := kmcpv1alpha1.MCPServerSpec{Deployment: deployment}
 	switch server.Local.TransportType {
-	case api.TransportTypeHTTP:
+	case platformtypes.TransportTypeHTTP:
 		spec.TransportType = kmcpv1alpha1.TransportType("http")
 		spec.HTTPTransport = &kmcpv1alpha1.HTTPTransport{
 			TargetPort: server.Local.HTTP.Port,
@@ -339,7 +298,7 @@ func (t *translator) translateLocalMCPServer(server *api.MCPServer) (*kmcpv1alph
 		if server.Local.HTTP.Port > 0 {
 			spec.Deployment.Port = uint16(server.Local.HTTP.Port)
 		}
-	case api.TransportTypeStdio:
+	case platformtypes.TransportTypeStdio:
 		spec.TransportType = kmcpv1alpha1.TransportType("stdio")
 		spec.StdioTransport = &kmcpv1alpha1.StdioTransport{}
 	default:
@@ -361,15 +320,9 @@ func (t *translator) translateLocalMCPServer(server *api.MCPServer) (*kmcpv1alph
 	}, nil
 }
 
-// translateAgentConfigMap creates a ConfigMap containing the mcp-servers.json for an agent
-// This file is mounted into the agent's pod at /config/mcp-servers.json
-// The BYO agent then reads this file and connects to the MCP servers
-func (t *translator) translateAgentConfigMap(agent *api.Agent) (*corev1.ConfigMap, error) {
-	// Use namespace from KAGENT_NAMESPACE env if set; otherwise leave empty
-	// and let the runtime layer resolve from kubeconfig context.
+func (t *translator) translateAgentConfigMap(agent *platformtypes.Agent) (*corev1.ConfigMap, error) {
 	namespace := agent.Deployment.Env["KAGENT_NAMESPACE"]
 
-	// Convert ResolvedMCPServers to JSON format expected by the Python agent
 	serversJSON, err := json.MarshalIndent(agent.ResolvedMCPServers, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal MCP servers config: %w", err)
@@ -400,7 +353,6 @@ func (t *translator) translateAgentConfigMap(agent *api.Agent) (*corev1.ConfigMa
 	}, nil
 }
 
-// AgentConfigMapName returns the ConfigMap name for an agent
 func AgentConfigMapName(name, version, deploymentID string) string {
 	base := fmt.Sprintf("%s-mcp-config", name)
 	if version != "" {
@@ -484,7 +436,6 @@ func deploymentIDSuffix(deploymentID string) string {
 	if id == "" {
 		return ""
 	}
-	// UUID IDs are long; use first segment to keep generated resource names within DNS limits.
 	if len(id) == 36 && strings.Count(id, "-") == 4 {
 		if idx := strings.IndexByte(id, '-'); idx > 0 {
 			id = id[:idx]
@@ -512,7 +463,6 @@ func truncateK8sNamePart(value string, maxLen int) string {
 	return strings.Trim(value[:maxLen], "-")
 }
 
-// sanitizeK8sName sanitizes a string to a valid Kubernetes name
 func sanitizeK8sName(value string) string {
 	value = strings.ToLower(value)
 	var b strings.Builder

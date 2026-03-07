@@ -1,18 +1,14 @@
-package registry
+package shared
 
 import (
 	"context"
 	"fmt"
-	"maps"
 	"net/url"
 	"slices"
 	"strconv"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
-	registryutils "github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry/utils"
-	"github.com/agentregistry-dev/agentregistry/internal/utils"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	api "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -27,76 +23,20 @@ type MCPServerRunRequest struct {
 	HeaderValues   map[string]string
 }
 
-type AgentRunRequest struct {
-	RegistryAgent *models.AgentJSON
-	DeploymentID  string
-	EnvValues     map[string]string
-	// Registry-type MCP servers resolved from agent manifest at deploy time to inject into the agent
-	ResolvedMCPServers []*MCPServerRunRequest
-	// ResolvedSkills contains skill references resolved from the agent manifest.
-	ResolvedSkills []api.AgentSkillRef
-}
-
-// Translator is the interface for translating MCPServer objects to AgentGateway objects.
 type Translator interface {
 	TranslateMCPServer(
 		ctx context.Context,
 		req *MCPServerRunRequest,
 	) (*api.MCPServer, error)
-
-	TranslateAgent(
-		ctx context.Context,
-		req *AgentRunRequest,
-	) (*api.Agent, error)
 }
 
-type registryTranslator struct{}
+type translator struct{}
 
 func NewTranslator() Translator {
-	return &registryTranslator{}
+	return &translator{}
 }
 
-func (t *registryTranslator) TranslateAgent(
-	ctx context.Context,
-	req *AgentRunRequest,
-) (*api.Agent, error) {
-	manifest := &req.RegistryAgent.AgentManifest
-
-	// Build environment variables map starting with passed values
-	env := make(map[string]string)
-	maps.Copy(env, req.EnvValues)
-
-	// TODO: remove kagent variables (currently required)
-	// note that the change to remove this would have to be done in kagent-adk
-	env["KAGENT_URL"] = "http://localhost"
-	env["KAGENT_NAME"] = manifest.Name
-	if _, ok := env["KAGENT_NAMESPACE"]; !ok {
-		env["KAGENT_NAMESPACE"] = "default"
-	}
-
-	// Set agent configuration
-	env["AGENT_NAME"] = manifest.Name
-	env["MODEL_PROVIDER"] = manifest.ModelProvider
-	env["MODEL_NAME"] = manifest.ModelName
-
-	port, err := utils.FindAvailablePort()
-	if err != nil {
-		return nil, fmt.Errorf("failed to find available port: %w", err)
-	}
-	return &api.Agent{
-		Name:         req.RegistryAgent.Name,
-		Version:      req.RegistryAgent.Version,
-		DeploymentID: req.DeploymentID,
-		Deployment: api.AgentDeployment{
-			Image: req.RegistryAgent.Image,
-			Port:  port,
-			Env:   env,
-		},
-		Skills: req.ResolvedSkills,
-	}, nil
-}
-
-func (t *registryTranslator) TranslateMCPServer(
+func (t *translator) TranslateMCPServer(
 	ctx context.Context,
 	req *MCPServerRunRequest,
 ) (*api.MCPServer, error) {
@@ -132,8 +72,7 @@ func translateRemoteMCPServer(
 ) (*api.MCPServer, error) {
 	remoteInfo := registryServer.Remotes[0]
 
-	// Process headers
-	headersMap, err := registryutils.ProcessHeaders(remoteInfo.Headers, headerValues)
+	headersMap, err := ProcessHeaders(remoteInfo.Headers, headerValues)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +85,7 @@ func translateRemoteMCPServer(
 		})
 	}
 
-	u, err := parseUrl(remoteInfo.URL)
+	u, err := parseURL(remoteInfo.URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse remote server url: %v", err)
 	}
@@ -171,12 +110,9 @@ func translateLocalMCPServer(
 	envValues map[string]string,
 	argValues map[string]string,
 ) (*api.MCPServer, error) {
-	// deploy the server either as stdio or http
 	packageInfo := registryServer.Packages[0]
 
 	var args []string
-
-	// Track which arguments have been processed from the spec
 	processedArgs := make(map[string]bool)
 	addProcessedArgs := func(modelArgs []model.Argument) {
 		for _, arg := range modelArgs {
@@ -184,21 +120,17 @@ func translateLocalMCPServer(
 		}
 	}
 
-	// Process runtime arguments first
-	args = registryutils.ProcessArguments(args, packageInfo.RuntimeArguments, argValues)
+	args = ProcessArguments(args, packageInfo.RuntimeArguments, argValues)
 	addProcessedArgs(packageInfo.RuntimeArguments)
 
-	// Determine image and command based on registry type
-	config, args, err := registryutils.GetRegistryConfig(packageInfo, args)
+	config, args, err := GetRegistryConfig(packageInfo, args)
 	if err != nil {
 		return nil, err
 	}
 
-	// Process package arguments after the package identifier
-	args = registryutils.ProcessArguments(args, packageInfo.PackageArguments, argValues)
+	args = ProcessArguments(args, packageInfo.PackageArguments, argValues)
 	addProcessedArgs(packageInfo.PackageArguments)
 
-	// Add any extra args that weren't in the spec
 	var extraArgNames []string
 	for argName := range argValues {
 		if !processedArgs[argName] {
@@ -208,21 +140,15 @@ func translateLocalMCPServer(
 	slices.Sort(extraArgNames)
 	for _, argName := range extraArgNames {
 		args = append(args, argName)
-		// Only add the value if it's not empty
-		// This allows users to pass flags like --verbose= (empty value means flag only)
 		if argValue := argValues[argName]; argValue != "" {
 			args = append(args, argValue)
 		}
 	}
 
-	// Process environment variables using shared utility
-	// The function returns a map with all processed env vars, including defaults
-	processedEnvVars, err := registryutils.ProcessEnvironmentVariables(packageInfo.EnvironmentVariables, envValues)
+	processedEnvVars, err := ProcessEnvironmentVariables(packageInfo.EnvironmentVariables, envValues)
 	if err != nil {
 		return nil, err
 	}
-
-	// Merge processed env vars into envValues (existing values take precedence)
 	for key, value := range processedEnvVars {
 		if _, exists := envValues[key]; !exists {
 			envValues[key] = value
@@ -238,7 +164,7 @@ func translateLocalMCPServer(
 		transportType = api.TransportTypeStdio
 	default:
 		transportType = api.TransportTypeHTTP
-		u, err := parseUrl(packageInfo.Transport.URL)
+		u, err := parseURL(packageInfo.Transport.URL)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse transport url: %v", err)
 		}
@@ -265,14 +191,14 @@ func translateLocalMCPServer(
 	}, nil
 }
 
-type parsedUrl struct {
+type parsedURL struct {
 	host string
 	port uint32
 	path string
 }
 
-func parseUrl(rawUrl string) (*parsedUrl, error) {
-	u, err := url.Parse(rawUrl)
+func parseURL(rawURL string) (*parsedURL, error) {
+	u, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse server remote url: %v", err)
 	}
@@ -292,18 +218,14 @@ func parseUrl(rawUrl string) (*parsedUrl, error) {
 		port = uint32(portI)
 	}
 
-	return &parsedUrl{
+	return &parsedURL{
 		host: u.Hostname(),
 		port: port,
 		path: u.Path,
 	}, nil
 }
 
-// GenerateInternalName converts a server name to a DNS-1123 compliant name
-// that can be used as a Docker Compose service name or Kubernetes resource name.
-// Export this function so that the runtime can use this to construct the name of MCP to connect to
 func GenerateInternalName(server string) string {
-	// convert the server name to a dns-1123 compliant name
 	name := strings.ToLower(strings.ReplaceAll(server, " ", "-"))
 	name = strings.ReplaceAll(name, ".", "-")
 	name = strings.ReplaceAll(name, "_", "-")
@@ -332,8 +254,6 @@ func GenerateInternalName(server string) string {
 	return name
 }
 
-// GenerateInternalNameForDeployment returns an internal runtime-safe name scoped
-// to a deployment ID when provided.
 func GenerateInternalNameForDeployment(name, deploymentID string) string {
 	base := GenerateInternalName(name)
 	deploymentID = strings.TrimSpace(deploymentID)
@@ -341,4 +261,178 @@ func GenerateInternalNameForDeployment(name, deploymentID string) string {
 		return base
 	}
 	return fmt.Sprintf("%s-%s", base, GenerateInternalName(deploymentID))
+}
+
+type RegistryConfig struct {
+	Image   string
+	Command string
+	IsOCI   bool
+}
+
+func ProcessArguments(
+	args []string,
+	modelArgs []model.Argument,
+	argOverrides map[string]string,
+) []string {
+	getArgValue := func(arg model.Argument) string {
+		if argOverrides != nil {
+			if v, exists := argOverrides[arg.Name]; exists {
+				return v
+			}
+		}
+		if arg.Value != "" {
+			return arg.Value
+		}
+		return arg.Default
+	}
+
+	for _, arg := range modelArgs {
+		if arg.Type == model.ArgumentTypePositional {
+			value := getArgValue(arg)
+			if value != "" {
+				args = append(args, value)
+			}
+		}
+	}
+	for _, arg := range modelArgs {
+		if arg.Type == model.ArgumentTypeNamed {
+			args = append(args, arg.Name)
+			value := getArgValue(arg)
+			if value != "" {
+				args = append(args, value)
+			}
+		}
+	}
+	return args
+}
+
+func ProcessEnvironmentVariables(
+	envVars []model.KeyValueInput,
+	overrides map[string]string,
+) (map[string]string, error) {
+	result := make(map[string]string)
+	var missingRequired []string
+
+	for _, env := range envVars {
+		var value string
+		if override, exists := overrides[env.Name]; exists {
+			value = override
+		} else if env.Value != "" {
+			value = env.Value
+		} else if env.Default != "" {
+			value = env.Default
+		}
+		if env.IsRequired && value == "" {
+			missingRequired = append(missingRequired, env.Name)
+		}
+		if value != "" {
+			result[env.Name] = value
+		}
+	}
+
+	if len(missingRequired) > 0 {
+		return nil, fmt.Errorf("missing required environment variables: %s", strings.Join(missingRequired, ", "))
+	}
+
+	for key, value := range overrides {
+		found := false
+		for _, env := range envVars {
+			if env.Name == key {
+				found = true
+				break
+			}
+		}
+		if !found {
+			result[key] = value
+		}
+	}
+
+	return result, nil
+}
+
+func ProcessHeaders(
+	headers []model.KeyValueInput,
+	headerOverrides map[string]string,
+) (map[string]string, error) {
+	result := make(map[string]string)
+	var missingRequired []string
+
+	for _, h := range headers {
+		var value string
+		if headerOverrides != nil {
+			if override, exists := headerOverrides[h.Name]; exists {
+				value = override
+			}
+		}
+		if value == "" {
+			value = h.Value
+		}
+		if value == "" {
+			value = h.Default
+		}
+		if h.IsRequired && value == "" {
+			missingRequired = append(missingRequired, h.Name)
+		}
+		if value != "" {
+			result[h.Name] = value
+		}
+	}
+
+	if len(missingRequired) > 0 {
+		return nil, fmt.Errorf("missing required headers: %s", strings.Join(missingRequired, ", "))
+	}
+
+	return result, nil
+}
+
+func GetRegistryConfig(
+	packageInfo model.Package,
+	args []string,
+) (RegistryConfig, []string, error) {
+	var config RegistryConfig
+	normalizedType := strings.ToLower(string(packageInfo.RegistryType))
+
+	switch normalizedType {
+	case strings.ToLower(string(model.RegistryTypeNPM)):
+		config.Image = "node:24-alpine3.21"
+		config.Command = packageInfo.RunTimeHint
+		if config.Command == "" {
+			config.Command = "npx"
+		}
+		if !slices.Contains(args, "-y") {
+			args = append(args, "-y")
+		}
+		if packageInfo.Version != "" {
+			args = append(args, packageInfo.Identifier+"@"+packageInfo.Version)
+		} else {
+			args = append(args, packageInfo.Identifier)
+		}
+	case strings.ToLower(string(model.RegistryTypePyPI)):
+		config.Image = "ghcr.io/astral-sh/uv:debian"
+		config.Command = packageInfo.RunTimeHint
+		if config.Command == "" {
+			config.Command = "uvx"
+		}
+		if packageInfo.Version != "" {
+			args = append(args, packageInfo.Identifier+"=="+packageInfo.Version)
+		} else {
+			args = append(args, packageInfo.Identifier)
+		}
+	case strings.ToLower(string(model.RegistryTypeOCI)):
+		config.Image = packageInfo.Identifier
+		config.Command = packageInfo.RunTimeHint
+		config.IsOCI = true
+	default:
+		return RegistryConfig{}, nil, fmt.Errorf("unsupported package registry type: %s", string(packageInfo.RegistryType))
+	}
+
+	return config, args, nil
+}
+
+func EnvMapToStringSlice(envMap map[string]string) []string {
+	result := make([]string, 0, len(envMap))
+	for key, value := range envMap {
+		result = append(result, fmt.Sprintf("%s=%s", key, value))
+	}
+	return result
 }

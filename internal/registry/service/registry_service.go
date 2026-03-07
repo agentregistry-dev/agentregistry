@@ -13,8 +13,8 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
+	api "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
-	api "github.com/agentregistry-dev/agentregistry/internal/runtime/translation/api"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
@@ -68,11 +68,6 @@ type registryServiceImpl struct {
 // DeploymentPlatformStaleCleaner is an optional adapter hook for stale deployment replacement.
 type DeploymentPlatformStaleCleaner interface {
 	CleanupStale(ctx context.Context, deployment *models.Deployment) error
-}
-
-type resolvedManifestMCPServer struct {
-	Server       *apiv0.ServerJSON
-	PreferRemote bool
 }
 
 // NewRegistryService creates a new registry service with the provided database and configuration
@@ -1032,7 +1027,7 @@ func (s *registryServiceImpl) CreateDeployment(ctx context.Context, req *models.
 		deploymentReq.Env = map[string]string{}
 	}
 
-	created, agentManifest, err := s.createManagedDeploymentRecord(ctx, &deploymentReq)
+	created, err := s.createManagedDeploymentRecord(ctx, &deploymentReq)
 	if err != nil {
 		return nil, err
 	}
@@ -1054,10 +1049,6 @@ func (s *registryServiceImpl) CreateDeployment(ctx context.Context, req *models.
 		return nil, err
 	}
 
-	if resourceType == resourceTypeAgent && agentManifest != nil {
-		s.createResolvedMCPDeploymentsForAgent(ctx, agentManifest, updated.ProviderID, updated.Status)
-	}
-
 	return updated, nil
 }
 
@@ -1076,7 +1067,7 @@ func (s *registryServiceImpl) UndeployDeployment(ctx context.Context, deployment
 	return s.removeDeploymentRecord(ctx, deployment)
 }
 
-func (s *registryServiceImpl) createManagedDeploymentRecord(ctx context.Context, req *models.Deployment) (*models.Deployment, *models.AgentManifest, error) {
+func (s *registryServiceImpl) createManagedDeploymentRecord(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
 	now := time.Now()
 	deployment := &models.Deployment{
 		ID:               req.ID,
@@ -1094,47 +1085,44 @@ func (s *registryServiceImpl) createManagedDeploymentRecord(ctx context.Context,
 		UpdatedAt:        now,
 	}
 	if deployment.ServerName == "" || deployment.Version == "" {
-		return nil, nil, fmt.Errorf("%w: serverName and version are required", database.ErrInvalidInput)
+		return nil, fmt.Errorf("%w: serverName and version are required", database.ErrInvalidInput)
 	}
 	if deployment.Env == nil {
 		deployment.Env = map[string]string{}
 	}
 
-	var agentManifest *models.AgentManifest
 	switch deployment.ResourceType {
 	case resourceTypeMCP:
 		serverResp, err := s.db.GetServerByNameAndVersion(ctx, nil, deployment.ServerName, deployment.Version)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
-				return nil, nil, fmt.Errorf("server %s not found in registry: %w", deployment.ServerName, database.ErrNotFound)
+				return nil, fmt.Errorf("server %s not found in registry: %w", deployment.ServerName, database.ErrNotFound)
 			}
-			return nil, nil, fmt.Errorf("failed to verify server: %w", err)
+			return nil, fmt.Errorf("failed to verify server: %w", err)
 		}
 		deployment.Version = serverResp.Server.Version
 	case resourceTypeAgent:
 		agentResp, err := s.db.GetAgentByNameAndVersion(ctx, nil, deployment.ServerName, deployment.Version)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
-				return nil, nil, fmt.Errorf("agent %s not found in registry: %w", deployment.ServerName, database.ErrNotFound)
+				return nil, fmt.Errorf("agent %s not found in registry: %w", deployment.ServerName, database.ErrNotFound)
 			}
-			return nil, nil, fmt.Errorf("failed to verify agent: %w", err)
+			return nil, fmt.Errorf("failed to verify agent: %w", err)
 		}
 		deployment.Version = agentResp.Agent.Version
-		manifestCopy := agentResp.Agent.AgentManifest
-		agentManifest = &manifestCopy
 	default:
-		return nil, nil, fmt.Errorf("%w: invalid resource type %q", database.ErrInvalidInput, deployment.ResourceType)
+		return nil, fmt.Errorf("%w: invalid resource type %q", database.ErrInvalidInput, deployment.ResourceType)
 	}
 
 	if err := s.db.CreateDeployment(ctx, nil, deployment); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	created, err := s.db.GetDeploymentByID(ctx, nil, deployment.ID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return created, agentManifest, nil
+	return created, nil
 }
 
 func (s *registryServiceImpl) applyDeploymentActionResult(ctx context.Context, deploymentID string, result *models.DeploymentActionResult) error {
@@ -1200,44 +1188,6 @@ func (s *registryServiceImpl) applyFailedDeploymentAction(
 	return s.db.UpdateDeploymentState(ctx, nil, deploymentID, patch)
 }
 
-func (s *registryServiceImpl) createResolvedMCPDeploymentsForAgent(
-	ctx context.Context,
-	manifest *models.AgentManifest,
-	providerID string,
-	status string,
-) {
-	if manifest == nil {
-		return
-	}
-	resolvedServers, err := s.resolveAgentManifestMCPServers(ctx, manifest)
-	if err != nil {
-		log.Printf("Warning: Failed to resolve MCP servers for agent %s: %v", manifest.Name, err)
-		return
-	}
-	if status == "" {
-		status = "deployed"
-	}
-
-	for _, serverReq := range resolvedServers {
-		mcpDeployment := &models.Deployment{
-			ServerName:   serverReq.Server.Name,
-			Version:      serverReq.Server.Version,
-			Status:       status,
-			Env:          map[string]string{},
-			PreferRemote: serverReq.PreferRemote,
-			ResourceType: resourceTypeMCP,
-			ProviderID:   providerID,
-			Origin:       "managed",
-			DeployedAt:   time.Now(),
-			UpdatedAt:    time.Now(),
-		}
-		// Create a managed deployment record for each resolved MCP server.
-		if err := s.db.CreateDeployment(ctx, nil, mcpDeployment); err != nil {
-			log.Printf("Warning: Failed to create deployment for MCP server %s: %v", serverReq.Server.Name, err)
-		}
-	}
-}
-
 // GetDeploymentLogs dispatches logs retrieval to the platform adapter.
 func (s *registryServiceImpl) GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error) {
 	if deployment == nil {
@@ -1260,39 +1210,6 @@ func (s *registryServiceImpl) CancelDeployment(ctx context.Context, deployment *
 		return err
 	}
 	return adapter.Cancel(ctx, deployment)
-}
-
-// resolveAgentManifestMCPServers extracts and resolves registry-type MCP servers from an agent manifest
-// This follows the same logic as the CLI-side resolveRegistryServer
-// TODO: Should we also be resolving the other types (i.e. command)? I didn't see my command server configured in the agent-gateway yaml, unsure if expected or a bug.
-// cat /tmp/arctl-runtime/agent-gateway.yaml only had an mcp route for the registry-resolved (since we added it to the run requests).
-func (s *registryServiceImpl) resolveAgentManifestMCPServers(ctx context.Context, manifest *models.AgentManifest) ([]*resolvedManifestMCPServer, error) {
-	var resolvedServers []*resolvedManifestMCPServer
-
-	for _, mcpServer := range manifest.McpServers {
-		// Only process registry-type servers (non-registry servers are baked into the image)
-		if mcpServer.Type != "registry" {
-			continue
-		}
-
-		version := mcpServer.RegistryServerVersion
-		if version == "" {
-			version = "latest"
-		}
-
-		// Use the registry service's own database instead of making HTTP calls
-		serverResp, err := s.GetServerByNameAndVersion(ctx, mcpServer.RegistryServerName, version)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get server %q version %s from registry database: %w", mcpServer.RegistryServerName, version, err)
-		}
-
-		resolvedServers = append(resolvedServers, &resolvedManifestMCPServer{
-			Server:       &serverResp.Server,
-			PreferRemote: mcpServer.RegistryServerPreferRemote,
-		})
-	}
-
-	return resolvedServers, nil
 }
 
 // resolveAgentManifestSkills resolves registry-type skill references from the
