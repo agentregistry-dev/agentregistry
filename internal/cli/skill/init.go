@@ -11,10 +11,14 @@ import (
 )
 
 var InitCmd = &cobra.Command{
-	Use:   "init [skill-name]",
+	Use:   "init [skill-name] [output-directory]",
 	Short: "Initialize a new agentic skill project",
-	Long:  `Initialize a new agentic skill project.`,
-	RunE:  runInit,
+	Long: `Initialize a new agentic skill project.
+
+If output-directory is provided, the project is created inside that directory
+(e.g. "arctl skill init myskill ./skills/" creates ./skills/myskill/).
+Otherwise, the project is created in the current directory.`,
+	RunE: runInit,
 }
 
 var (
@@ -43,10 +47,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid project name: %w", err)
 	}
 
-	// Check if directory exists
-	projectPath, err := filepath.Abs(projectName)
+	// Determine output path: if a second arg is given, create inside that directory
+	projectPath, err := resolveProjectPath(projectName, args[1:]...)
 	if err != nil {
-		return fmt.Errorf("failed to get absolute path for project: %w", err)
+		return err
 	}
 
 	// Generate project files
@@ -69,4 +73,24 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  arctl skill publish --docker-url localhost:5001/myorg %s\n", projectPath)
 
 	return nil
+}
+
+// resolveProjectPath returns the absolute project directory path. If
+// extraArgs contains an output directory, the project is created inside
+// that directory; otherwise it is created relative to the current
+// working directory.
+func resolveProjectPath(projectName string, extraArgs ...string) (string, error) {
+	if len(extraArgs) > 0 && extraArgs[0] != "" {
+		base, err := filepath.Abs(extraArgs[0])
+		if err != nil {
+			return "", fmt.Errorf("failed to get absolute path for output directory: %w", err)
+		}
+		return filepath.Join(base, projectName), nil
+	}
+
+	abs, err := filepath.Abs(projectName)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path for project: %w", err)
+	}
+	return abs, nil
 }
