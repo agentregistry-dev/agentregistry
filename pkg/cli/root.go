@@ -74,11 +74,6 @@ var rootCmd = &cobra.Command{
 
 		c, err := preRunSetup(cmd.Context(), cmd, baseURL, token, autoStartDaemon)
 		if err != nil {
-			// For commands that should not auto-start the daemon (e.g. status),
-			// let them run with a nil client so they can report the status gracefully.
-			if cmd != nil && preRunDaemonBehavior.noAutoStartCommands[cmd.Name()] {
-				return nil
-			}
 			return err
 		}
 
@@ -183,11 +178,10 @@ var preRunDaemonBehavior = struct {
 		"agent": {"init": true},
 		"mcp":   {"init": true},
 		"skill": {"init": true},
+		"arctl": {"status": true},
 	},
 	// Commands that need the API client but should not auto-start the daemon.
-	noAutoStartCommands: map[string]bool{
-		"status": true,
-	},
+	noAutoStartCommands: map[string]bool{},
 }
 
 // preRunBehavior returns whether to skip pre-run setup (e.g. agent/mcp/skill init) and

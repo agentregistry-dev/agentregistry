@@ -78,7 +78,9 @@ func TestPreRunBehavior(t *testing.T) {
 	listCmd := &cobra.Command{Use: "list"}
 	agentCmd.AddCommand(listCmd)
 
+	arctlCmd := &cobra.Command{Use: "arctl"}
 	statusCmd := &cobra.Command{Use: "status"}
+	arctlCmd.AddCommand(statusCmd)
 
 	skillCmd := &cobra.Command{Use: "skill"}
 	skillInitCmd := &cobra.Command{Use: "init"}
@@ -100,8 +102,8 @@ func TestPreRunBehavior(t *testing.T) {
 		{"mcp init", mcpInitCmd, "http://localhost:12121", true, false},
 		{"skill init", skillInitCmd, "http://localhost:12121", true, false},
 		{"mcp init python (subcommand of init)", initPythonCmd, "http://localhost:12121", true, false},
-		// Status command: no skip (needs client), but no auto-start
-		{"status localhost:12121", statusCmd, "http://localhost:12121", false, false},
+		// Status command: skip setup entirely (creates its own client internally)
+		{"status localhost:12121", statusCmd, "http://localhost:12121", true, false},
 		// No skip for other commands; auto-start depends on URL
 		{"agent list localhost:12121", listCmd, "http://localhost:12121", false, true},
 		{"agent list other port", listCmd, "http://localhost:8080", false, false},
