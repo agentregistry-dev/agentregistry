@@ -97,6 +97,7 @@ func init() {
 	rootCmd.AddCommand(prompt.PromptCmd)
 	rootCmd.AddCommand(configure.ConfigureCmd)
 	rootCmd.AddCommand(cli.VersionCmd)
+	rootCmd.AddCommand(cli.StatusCmd)
 	rootCmd.AddCommand(cli.ImportCmd)
 	rootCmd.AddCommand(cli.ExportCmd)
 	rootCmd.AddCommand(cli.EmbeddingsCmd)
@@ -170,12 +171,17 @@ func parseRegistryURL(raw string) *url.URL {
 // preRunDaemonBehavior defines which commands skip setup and when to auto-start the daemon.
 // Key: parent name; value: set of subcommand names that skip daemon/client setup.
 var preRunDaemonBehavior = struct {
-	skipCommands map[string]map[string]bool
+	skipCommands       map[string]map[string]bool
+	noAutoStartCommands map[string]bool
 }{
 	skipCommands: map[string]map[string]bool{
 		"agent": {"init": true},
 		"mcp":   {"init": true},
 		"skill": {"init": true},
+	},
+	// Commands that need the API client but should not auto-start the daemon.
+	noAutoStartCommands: map[string]bool{
+		"status": true,
 	},
 }
 
@@ -193,6 +199,11 @@ func preRunBehavior(cmd *cobra.Command, baseURL string) (skipSetup bool, autoSta
 				return true, false
 			}
 		}
+	}
+
+	// Some commands need the client but should not auto-start the daemon
+	if cmd != nil && preRunDaemonBehavior.noAutoStartCommands[cmd.Name()] {
+		return false, false
 	}
 
 	// Auto-start daemon only for localhost on default registry port
