@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -192,6 +193,11 @@ func runFromManifest(ctx context.Context, manifest *models.AgentManifest, versio
 		return fmt.Errorf("agent manifest is required")
 	}
 
+	hostPort, err := freePort()
+	if err != nil {
+		return fmt.Errorf("failed to find available port: %w", err)
+	}
+
 	var composeData []byte
 	workDir := ""
 	cleanupWorkDir := false
@@ -204,7 +210,13 @@ func runFromManifest(ctx context.Context, manifest *models.AgentManifest, versio
 		if verbose {
 			fmt.Println("[registry-resolve] Using pre-resolved overrides from runFromDirectory")
 		}
-		composeData = overrides.composeData
+		// Replace the default host port mapping with the randomly selected port
+		composeData = bytes.Replace(
+			overrides.composeData,
+			[]byte("\"8080:8080\""),
+			[]byte(fmt.Sprintf("\"%d:8080\"", hostPort)),
+			1,
+		)
 		workDir = overrides.workDir
 	} else {
 		// Resolve registry-type MCP servers (if any) and build registry-resolved command servers.
@@ -325,7 +337,7 @@ func runFromManifest(ctx context.Context, manifest *models.AgentManifest, versio
 			return err
 		}
 
-		data, err := renderComposeFromManifest(manifest, version)
+		data, err := renderComposeFromManifest(manifest, version, hostPort)
 		if err != nil {
 			return err
 		}
@@ -362,7 +374,7 @@ func runFromManifest(ctx context.Context, manifest *models.AgentManifest, versio
 		}
 	}
 
-	err := runAgent(ctx, composeData, manifest, workDir, buildFlag)
+	err = runAgent(ctx, composeData, manifest, workDir, buildFlag, hostPort)
 
 	// Clean up temp directory for registry/skill-resolved runs
 	if !useOverrides && cleanupWorkDir && workDir != "" {
@@ -379,7 +391,17 @@ type runContext struct {
 	workDir     string
 }
 
-func renderComposeFromManifest(manifest *models.AgentManifest, version string) ([]byte, error) {
+// freePort asks the OS for an available TCP port.
+func freePort() (int, error) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port, nil
+}
+
+func renderComposeFromManifest(manifest *models.AgentManifest, version string, hostPort int) ([]byte, error) {
 	gen := python.NewPythonGenerator()
 	templateBytes, err := gen.ReadTemplateFile("docker-compose.yaml.tmpl")
 	if err != nil {
@@ -395,6 +417,7 @@ func renderComposeFromManifest(manifest *models.AgentManifest, version string) (
 		Name              string
 		Version           string
 		Image             string
+		Port              int
 		ModelProvider     string
 		ModelName         string
 		TelemetryEndpoint string
@@ -405,6 +428,7 @@ func renderComposeFromManifest(manifest *models.AgentManifest, version string) (
 		Name:              manifest.Name,
 		Version:           sanitizedVersion,
 		Image:             image,
+		Port:              hostPort,
 		ModelProvider:     manifest.ModelProvider,
 		ModelName:         manifest.ModelName,
 		TelemetryEndpoint: manifest.TelemetryEndpoint,
@@ -418,7 +442,7 @@ func renderComposeFromManifest(manifest *models.AgentManifest, version string) (
 	return []byte(rendered), nil
 }
 
-func runAgent(ctx context.Context, composeData []byte, manifest *models.AgentManifest, workDir string, shouldBuild bool) error {
+func runAgent(ctx context.Context, composeData []byte, manifest *models.AgentManifest, workDir string, shouldBuild bool, hostPort int) error {
 	if err := validateAPIKey(manifest.ModelProvider); err != nil {
 		return err
 	}
@@ -447,14 +471,15 @@ func runAgent(ctx context.Context, composeData []byte, manifest *models.AgentMan
 	time.Sleep(2 * time.Second)
 	fmt.Println("Waiting for agent to be ready...")
 
-	if err := waitForAgent(ctx, "http://localhost:8080", 60*time.Second); err != nil {
+	agentURL := fmt.Sprintf("http://localhost:%d", hostPort)
+	if err := waitForAgent(ctx, agentURL, 60*time.Second); err != nil {
 		printComposeLogs(composeCmd, commonArgs, composeData, workDir)
 		return err
 	}
 
-	fmt.Printf("✓ Agent '%s' is running at http://localhost:8080\n", manifest.Name)
+	fmt.Printf("✓ Agent '%s' is running at %s\n", manifest.Name, agentURL)
 
-	if err := launchChat(ctx, manifest.Name); err != nil {
+	if err := launchChat(ctx, manifest.Name, agentURL); err != nil {
 		return err
 	}
 
@@ -522,9 +547,9 @@ func printComposeLogs(composeCmd []string, commonArgs []string, composeData []by
 	fmt.Fprintf(os.Stderr, "Container logs:\n%s\n", string(output))
 }
 
-func launchChat(ctx context.Context, agentName string) error {
+func launchChat(ctx context.Context, agentName string, agentURL string) error {
 	sessionID := protocol.GenerateContextID()
-	client, err := a2aclient.NewA2AClient("http://localhost:8080", a2aclient.WithTimeout(60*time.Second))
+	client, err := a2aclient.NewA2AClient(agentURL, a2aclient.WithTimeout(60*time.Second))
 	if err != nil {
 		return fmt.Errorf("failed to create chat client: %w", err)
 	}

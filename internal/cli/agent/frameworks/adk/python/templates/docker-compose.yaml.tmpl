@@ -21,7 +21,7 @@ services:
       dockerfile: Dockerfile
     command: ["{{.Name}}", "--local"]
     ports:
-      - "8080:8080"
+      - "{{.Port}}:8080"
     environment:
       # TODO: remove kagent variables (currently required)
       - KAGENT_URL=placeholder

@@ -146,6 +146,7 @@ func RegenerateDockerCompose(projectDir string, manifest *models.AgentManifest, 
 		Name              string
 		Version           string
 		Image             string
+		Port              int
 		ModelProvider     string
 		ModelName         string
 		TelemetryEndpoint string
@@ -156,6 +157,7 @@ func RegenerateDockerCompose(projectDir string, manifest *models.AgentManifest, 
 		Name:              manifest.Name,
 		Version:           sanitizedVersion,
 		Image:             image,
+		Port:              8080,
 		ModelProvider:     manifest.ModelProvider,
 		ModelName:         manifest.ModelName,
 		TelemetryEndpoint: manifest.TelemetryEndpoint,
