@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // TestSkillPublishGitHub tests publishing a skill with --github flag and
@@ -233,7 +234,7 @@ func TestSkillDelete(t *testing.T) {
 		RequireSuccess(t, result)
 	})
 
-	// Step 4: Verify it's gone
+	// Step 4: Verify it's gone (API returns 404)
 	t.Run("gone_after_delete", func(t *testing.T) {
 		resp := RegistryGet(t, regURL+"/skills/"+skillName+"/versions/"+version)
 		defer resp.Body.Close()
@@ -241,4 +242,36 @@ func TestSkillDelete(t *testing.T) {
 			t.Errorf("expected 404 after delete, got %d", resp.StatusCode)
 		}
 	})
+
+	// Step 5: Deleting the same skill again should fail
+	t.Run("delete_again_fails", func(t *testing.T) {
+		result := RunArctl(t, tmpDir,
+			"skill", "delete", skillName,
+			"--version", version,
+			"--registry-url", regURL,
+		)
+		RequireFailure(t, result)
+	})
+}
+
+// TestSkillDeleteNotFound verifies that deleting a skill that was never
+// published returns 404 via the HTTP API.
+func TestSkillDeleteNotFound(t *testing.T) {
+	regURL := RegistryURL(t)
+
+	url := regURL + "/skills/nonexistent-skill-xyz/versions/0.0.0"
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	if err != nil {
+		t.Fatalf("failed to create DELETE request: %v", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404 for non-existent skill, got %d", resp.StatusCode)
+	}
 }
