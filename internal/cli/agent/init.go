@@ -127,6 +127,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		Language:          language,
 		CLIVersion:        adkBaseImageVersion,
 		TelemetryEndpoint: initTelemetryEndpoint,
+		Port:              8080,
 		InitGit:           true,
 	}
 
