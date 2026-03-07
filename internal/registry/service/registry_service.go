@@ -418,6 +418,13 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 	return s.db.CreateSkill(ctx, tx, &skillJSON, officialMeta)
 }
 
+// DeleteSkill permanently removes a skill version from the registry
+func (s *registryServiceImpl) DeleteSkill(ctx context.Context, skillName, version string) error {
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+		return s.db.DeleteSkill(txCtx, tx, skillName, version)
+	})
+}
+
 // UpdateServer updates an existing server with new details
 func (s *registryServiceImpl) UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
 	// Wrap the entire operation in a transaction

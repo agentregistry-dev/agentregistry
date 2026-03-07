@@ -1520,6 +1520,46 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
+        delete:
+            tags:
+                - skills
+            summary: Delete skill version
+            description: Permanently delete a specific skill version from the registry.
+            operationId: delete-skill-version-v0
+            parameters:
+                - name: skillName
+                  in: path
+                  description: URL-encoded skill name
+                  required: true
+                  schema:
+                    type: string
+                    description: URL-encoded skill name
+                    examples:
+                        - com.example%2Fmy-skill
+                  example: com.example%2Fmy-skill
+                - name: version
+                  in: path
+                  description: URL-encoded skill version
+                  required: true
+                  schema:
+                    type: string
+                    description: URL-encoded skill version
+                    examples:
+                        - 1.0.0
+                  example: 1.0.0
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/EmptyResponse'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
     /v0/version:
         get:
             tags:
