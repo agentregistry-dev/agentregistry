@@ -53,7 +53,7 @@ func TestResolveProjectPath(t *testing.T) {
 			if !filepath.IsAbs(got) {
 				t.Errorf("expected absolute path, got %q", got)
 			}
-			if tt.extraArgs != nil && len(tt.extraArgs) > 0 && filepath.IsAbs(tt.extraArgs[0]) {
+			if len(tt.extraArgs) > 0 && filepath.IsAbs(tt.extraArgs[0]) {
 				// For absolute output dirs, check exact match
 				if got != tt.wantSuffix {
 					t.Errorf("got %q, want %q", got, tt.wantSuffix)
