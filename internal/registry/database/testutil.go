@@ -106,7 +106,7 @@ func ensureTemplateDB(ctx context.Context, adminConn *pgx.Conn) error {
 	// Connect to template and run migrations (always) to keep it up-to-date
 	// Create a permissive authz for tests
 	testAuthz := createTestAuthz()
-	templateDB, err := NewPostgreSQL(ctx, templateURI, testAuthz)
+	templateDB, err := NewPostgreSQL(ctx, templateURI, testAuthz, 0)
 	if err != nil {
 		return fmt.Errorf("failed to connect to template database: %w", err)
 	}
@@ -132,6 +132,13 @@ func ensureVectorExtension(ctx context.Context, uri string) error {
 // The template database has migrations pre-applied, so each test is fast.
 // Requires PostgreSQL to be running on localhost:5432 (e.g., via docker-compose).
 func NewTestDB(t *testing.T) database.Database {
+	return NewTestDBWithEmbeddings(t, 0)
+}
+
+// NewTestDBWithEmbeddings is like NewTestDB but also creates the semantic_embedding
+// vector columns with the given dimension. Use this for tests that exercise
+// embedding/semantic-search functionality. Pass 0 to skip (same as NewTestDB).
+func NewTestDBWithEmbeddings(t *testing.T, embeddingDimensions int) database.Database {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -180,7 +187,7 @@ func NewTestDB(t *testing.T) database.Database {
 
 	// Create a permissive authz for tests
 	testAuthz := createTestAuthz()
-	db, err := NewPostgreSQL(ctx, testURI, testAuthz)
+	db, err := NewPostgreSQL(ctx, testURI, testAuthz, embeddingDimensions)
 	require.NoError(t, err, "Failed to connect to test database")
 
 	// Register cleanup to close connection
