@@ -7,10 +7,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDeployCmd_NoWaitFlag(t *testing.T) {
-	f := DeployCmd.Flags().Lookup("no-wait")
-	require.NotNil(t, f, "--no-wait flag should be registered")
-	assert.Equal(t, "false", f.DefValue)
+func TestDeployCmd_WaitFlag(t *testing.T) {
+	f := DeployCmd.Flags().Lookup("wait")
+	require.NotNil(t, f, "--wait flag should be registered")
+	assert.Equal(t, "true", f.DefValue)
 	assert.Equal(t, "bool", f.Value.Type())
 }
 
@@ -24,7 +24,7 @@ func TestDeployCmd_Flags(t *testing.T) {
 		{"provider-id", "provider-id", "string"},
 		{"namespace", "namespace", "string"},
 		{"prefer-remote", "prefer-remote", "bool"},
-		{"no-wait", "no-wait", "bool"},
+		{"wait", "wait", "bool"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
