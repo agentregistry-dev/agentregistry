@@ -28,6 +28,7 @@ type AgentConfig struct {
 	Language          string
 	CLIVersion        string
 	TelemetryEndpoint string
+	Port              int
 
 	McpServers []models.McpServerType
 	EnvVars    []string
