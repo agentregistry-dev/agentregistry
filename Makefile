@@ -23,7 +23,21 @@ LDFLAGS := \
 # Local architecture detection to build for the current platform
 LOCALARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
 
-.PHONY: help install-ui build-ui clean-ui build-cli build install dev-ui run down test test-integration test-coverage test-coverage-report clean lint all release-cli docker-compose-up docker-compose-down docker-compose-logs
+## Helm / Chart settings
+# Override HELM if your helm binary lives elsewhere (e.g. HELM=/usr/local/bin/helm).
+HELM ?= helm
+HELM_CHART_DIR ?= ./charts/agentregistry
+HELM_PACKAGE_DIR ?= build/charts
+HELM_REGISTRY ?= ghcr.io
+HELM_REPO ?= agentregistry-dev/agentregistry
+# HELM_PUSH_MODE: oci (default, recommended) | repo (legacy chart repo / ChartMuseum)
+HELM_PUSH_MODE ?= oci
+HELM_PLUGIN_UNITTEST_URL ?= https://github.com/helm-unittest/helm-unittest
+# Pin the helm-unittest plugin version for reproducibility and allow install flags
+HELM_PLUGIN_UNITTEST_VERSION ?= v1.0.3
+HELM_PLUGIN_INSTALL_FLAGS ?= --verify=false
+
+.PHONY: help install-ui build-ui clean-ui build-cli build install dev-ui run down test test-integration test-coverage test-coverage-report clean lint all release-cli docker-compose-up docker-compose-down docker-compose-logs charts-deps charts-lint charts-package charts-push charts-test charts-all
 
 # Default target
 help:
@@ -46,6 +60,14 @@ help:
 	@echo "  lint                 - Run the linter (GOLANGCI_LINT_ARGS=--fix to auto-fix)"
 	@echo "  verify               - Verify generated code is up to date"
 	@echo "  release              - Build and release the CLI"
+	@echo ""
+	@echo "Helm / Chart targets (chart dir: $(HELM_CHART_DIR)):"
+	@echo "  charts-deps          - Build Helm chart dependencies"
+	@echo "  charts-lint          - Lint the Helm chart (helm lint --strict)"
+	@echo "  charts-package       - Package chart → $(HELM_PACKAGE_DIR)/"
+	@echo "  charts-push          - Package + push chart to OCI registry (requires creds)"
+	@echo "  charts-test          - Run helm-unittest tests (installs plugin if absent)"
+	@echo "  charts-all           - charts-push then charts-test"
 
 # Install UI dependencies
 install-ui:
@@ -276,3 +298,89 @@ mod-tidy: ## Run go mod tidy
 .PHONY: mod-download
 mod-download: ## Run go mod download
 	go mod download
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Helm / Chart targets
+# All targets operate on HELM_CHART_DIR (default: ../charts/agentregistry).
+# Override with: make charts-test HELM_CHART_DIR=/path/to/chart
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Sanity-check that helm is present. Called as a dependency by all chart targets.
+.PHONY: _helm-check
+_helm-check:
+	@if ! command -v $(HELM) >/dev/null 2>&1; then \
+	  echo "ERROR: 'helm' not found in PATH."; \
+	  echo "  Install Helm from https://helm.sh or set HELM=/path/to/helm"; \
+	  exit 1; \
+	fi
+
+# Build chart dependencies (resolves Chart.yaml dependencies → charts/ subdir).
+.PHONY: charts-deps
+charts-deps: _helm-check
+	@echo "Building Helm chart dependencies for $(HELM_CHART_DIR)..."
+	$(HELM) dependency build $(HELM_CHART_DIR)
+
+# Lint chart with --strict so warnings are treated as errors.
+.PHONY: charts-lint
+charts-lint: charts-deps
+	@echo "Linting Helm chart $(HELM_CHART_DIR)..."
+	$(HELM) lint $(HELM_CHART_DIR) --strict
+
+# Package the chart into $(HELM_PACKAGE_DIR)/.
+.PHONY: charts-package
+charts-package: charts-lint
+	@mkdir -p $(HELM_PACKAGE_DIR)
+	@echo "Packaging chart $(HELM_CHART_DIR) → $(HELM_PACKAGE_DIR)/"
+	$(HELM) package $(HELM_CHART_DIR) -d $(HELM_PACKAGE_DIR)
+	@echo "Packaged chart(s):"
+	@ls -1 $(HELM_PACKAGE_DIR)/*.tgz
+
+# Push packaged chart(s) to an OCI registry.
+# Credentials are read from the environment at runtime (never stored in the Makefile):
+#   HELM_REGISTRY_USERNAME   – registry username (default: your shell $USER)
+#   HELM_REGISTRY_PASSWORD   – registry password / token (required)
+# Override registry/repo: make charts-push HELM_REGISTRY=ghcr.io HELM_REPO=org/repo
+.PHONY: charts-push
+charts-push: charts-package
+	@echo "Pushing chart(s) to $(HELM_REGISTRY)/$(HELM_REPO)/charts (mode: $(HELM_PUSH_MODE))"
+ifeq ($(HELM_PUSH_MODE),oci)
+	@if [ -z "$$HELM_REGISTRY_PASSWORD" ]; then \
+	  echo "ERROR: HELM_REGISTRY_PASSWORD is not set. Export it before running this target."; \
+	  exit 1; \
+	fi
+	@printf "%s" "$$HELM_REGISTRY_PASSWORD" | $(HELM) registry login $(HELM_REGISTRY) \
+	  --username "$${HELM_REGISTRY_USERNAME:-$$USER}" \
+	  --password-stdin
+	@for pkg in $(HELM_PACKAGE_DIR)/*.tgz; do \
+	  [ -f "$$pkg" ] || continue; \
+	  echo "  Pushing $$pkg → oci://$(HELM_REGISTRY)/$(HELM_REPO)/charts"; \
+	  $(HELM) push "$$pkg" "oci://$(HELM_REGISTRY)/$(HELM_REPO)/charts"; \
+	done
+	@$(HELM) registry logout $(HELM_REGISTRY) || true
+else
+	@echo "Non-OCI push (mode=$(HELM_PUSH_MODE)) — implement repo-specific push logic or use chart-releaser."
+	@exit 1
+endif
+
+# Run helm-unittest against charts/agentregistry/tests/*.
+# This target:
+#   1. checks that 'helm' is present (fails with a clear message if not)
+#   2. checks for the helm-unittest plugin and installs it if missing
+#   3. runs the full test suite
+.PHONY: charts-test
+charts-test: _helm-check charts-deps
+	@echo "Checking for helm-unittest plugin..."
+	@if ! $(HELM) plugin list | awk '{print $$1}' | grep -q '^unittest$$'; then \
+	  echo "helm-unittest plugin not found — installing from $(HELM_PLUGIN_UNITTEST_URL)"; \
+	  $(HELM) plugin install $(HELM_PLUGIN_UNITTEST_URL) --version $(HELM_PLUGIN_UNITTEST_VERSION) $(HELM_PLUGIN_INSTALL_FLAGS) \
+	    || { echo "ERROR: helm-unittest install failed. Check network / plugin URL."; exit 1; }; \
+	else \
+	  echo "helm-unittest plugin already installed"; \
+	fi
+	@echo "Running helm-unittest on $(HELM_CHART_DIR)..."
+	$(HELM) unittest $(HELM_CHART_DIR) --file "tests/*_test.yaml"
+
+# Convenience: package → push → test.
+.PHONY: charts-all
+charts-all: charts-push charts-test
+	@echo "charts-all complete: packaged, pushed, and tested."

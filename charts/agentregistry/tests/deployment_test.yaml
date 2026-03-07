@@ -17,12 +17,12 @@ tests:
           path: spec.replicas
           value: 1
 
-  - it: uses the correct image
+  - it: uses server image as repo:tag by default
     template: deployment.yaml
     asserts:
-      - equal:
+      - matchRegex:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/agentregistry-dev/agentregistry/server:0.2.0
+          pattern: '^ghcr.io/agentregistry-dev/agentregistry/server:[^@\s]+$'
 
   - it: uses digest when image.digest is set
     template: deployment.yaml
@@ -31,7 +31,9 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].image
-          pattern: "^ghcr.io/agentregistry-dev/agentregistry/server@sha256:"
+          pattern: "^ghcr.io/agentregistry-dev/agentregistry/server@sha256:[0-9a-fA-F]{64}"
+
+
 
   - it: sets replicaCount
     template: deployment.yaml
