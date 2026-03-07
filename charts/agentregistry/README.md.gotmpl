@@ -96,14 +96,14 @@ config:
   jwtPrivateKey: "$(openssl rand -hex 32)"
 ```
 
-Or reference an existing Secret (key: `JWT_PRIVATE_KEY`):
+Or reference an existing Secret (key: `AGENT_REGISTRY_JWT_PRIVATE_KEY`):
 
 ```yaml
 config:
   existingSecret: "my-agentregistry-secret"
 ```
 
-To use a single Secret for all credentials (`POSTGRES_PASSWORD` and `JWT_PRIVATE_KEY`):
+To use a single Secret for all credentials (`POSTGRES_PASSWORD` and `AGENT_REGISTRY_JWT_PRIVATE_KEY`):
 
 ```yaml
 global:

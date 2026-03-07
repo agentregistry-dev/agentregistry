@@ -9,6 +9,7 @@ tests:
     set:
       config.jwtPrivateKey: deadbeef1234567890abcdef
       database.password: changeme
+      database.host: mydb.example.com
     asserts:
       - hasDocuments:
           count: 0
@@ -17,6 +18,7 @@ tests:
     set:
       config.existingSecret: my-existing-secret
       database.password: changeme
+      database.host: mydb.example.com
     asserts:
       - hasDocuments:
           count: 0
@@ -24,6 +26,7 @@ tests:
   - it: renders nothing when global.existingSecret is set
     set:
       global.existingSecret: global-secret
+      database.host: mydb.example.com
     asserts:
       - hasDocuments:
           count: 0
@@ -56,6 +59,7 @@ tests:
     set:
       config.jwtPrivateKey: deadbeef1234567890abcdef
       database.existingSecret: pg-secret
+      database.host: mydb.example.com
     asserts:
       - hasDocuments:
           count: 0
@@ -67,3 +71,12 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+  # ── Database host validation ─────────────────────────────────────────────────
+
+  - it: fails when database.host and database.url are both unset
+    set:
+      config.jwtPrivateKey: deadbeef1234567890abcdef
+      database.password: changeme
+    asserts:
+      - failedTemplate:
+          errorPattern: "CHART CONFIGURATION ERROR"

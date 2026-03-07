@@ -80,11 +80,11 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: JWT_PRIVATE_KEY
+            name: AGENT_REGISTRY_JWT_PRIVATE_KEY
             valueFrom:
               secretKeyRef:
                 name: RELEASE-NAME-agentregistry
-                key: JWT_PRIVATE_KEY
+                key: AGENT_REGISTRY_JWT_PRIVATE_KEY
 
   - it: sets AGENT_REGISTRY_DATABASE_URL with external host
     template: deployment.yaml
@@ -176,7 +176,7 @@ tests:
       - isNotNull:
           path: spec.template.spec.containers[0].startupProbe
 
-  - it: uses config.existingSecret for JWT_PRIVATE_KEY when set
+  - it: uses config.existingSecret for AGENT_REGISTRY_JWT_PRIVATE_KEY when set
     template: deployment.yaml
     set:
       config.existingSecret: my-existing-secret
@@ -184,11 +184,11 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: JWT_PRIVATE_KEY
+            name: AGENT_REGISTRY_JWT_PRIVATE_KEY
             valueFrom:
               secretKeyRef:
                 name: my-existing-secret
-                key: JWT_PRIVATE_KEY
+                key: AGENT_REGISTRY_JWT_PRIVATE_KEY
 
   - it: uses database.existingSecret for POSTGRES_PASSWORD when set
     template: deployment.yaml
@@ -204,7 +204,7 @@ tests:
                 name: db-secret
                 key: POSTGRES_PASSWORD
 
-  - it: uses global.existingSecret for both JWT_PRIVATE_KEY and POSTGRES_PASSWORD
+  - it: uses global.existingSecret for both AGENT_REGISTRY_JWT_PRIVATE_KEY and POSTGRES_PASSWORD
     template: deployment.yaml
     set:
       global.existingSecret: global-secret
@@ -212,11 +212,11 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: JWT_PRIVATE_KEY
+            name: AGENT_REGISTRY_JWT_PRIVATE_KEY
             valueFrom:
               secretKeyRef:
                 name: global-secret
-                key: JWT_PRIVATE_KEY
+                key: AGENT_REGISTRY_JWT_PRIVATE_KEY
       - contains:
           path: spec.template.spec.containers[0].env
           content:

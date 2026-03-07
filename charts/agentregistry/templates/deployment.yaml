@@ -117,11 +117,11 @@ spec:
                 secretKeyRef:
                   name: {{ include "agentregistry.passwordSecretName" . }}
                   key: POSTGRES_PASSWORD
-            - name: JWT_PRIVATE_KEY
+            - name: AGENT_REGISTRY_JWT_PRIVATE_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ include "agentregistry.secretName" . }}
-                  key: JWT_PRIVATE_KEY
+                  key: AGENT_REGISTRY_JWT_PRIVATE_KEY
             - name: AGENT_REGISTRY_DATABASE_URL
               value: {{ include "agentregistry.databaseUrl" . | quote }}
             {{- if .Values.extraEnvVars }}

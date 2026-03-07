@@ -140,7 +140,7 @@ Create the name of the service account to use.
    ====================================================================== */}}
 
 {{/*
-Return the secret name containing JWT_PRIVATE_KEY.
+Return the secret name containing AGENT_REGISTRY_JWT_PRIVATE_KEY.
 Priority: global.existingSecret → config.existingSecret → chart-managed secret.
 */}}
 {{- define "agentregistry.secretName" -}}
@@ -384,12 +384,15 @@ Called from templates/validate.yaml so it fires during helm template/install.
 {{- $errors := list }}
 {{- $hasExternalJwt := or .Values.global.existingSecret .Values.config.existingSecret }}
 {{- if and (not $hasExternalJwt) (eq .Values.config.jwtPrivateKey "") }}
-{{- $errors = append $errors "config.jwtPrivateKey must be set (or provide config.existingSecret / global.existingSecret containing JWT_PRIVATE_KEY)." }}
+{{- $errors = append $errors "config.jwtPrivateKey must be set (or provide config.existingSecret / global.existingSecret containing AGENT_REGISTRY_JWT_PRIVATE_KEY)." }}
 {{- else if and (not $hasExternalJwt) (not (regexMatch "^[0-9a-fA-F]+$" .Values.config.jwtPrivateKey)) }}
 {{- $errors = append $errors "config.jwtPrivateKey must be a valid hex string (e.g. generated with: openssl rand -hex 32)." }}
 {{- end }}
 {{- if and (not (or .Values.global.existingSecret .Values.database.existingSecret)) (not .Values.database.url) (eq .Values.database.password "") }}
 {{- $errors = append $errors "database.password must be set (or provide database.url, database.existingSecret, or global.existingSecret containing POSTGRES_PASSWORD)." }}
+{{- end }}
+{{- if and (not .Values.database.url) (not .Values.database.host) }}
+{{- $errors = append $errors "database.host (or database.url) must be set. An external PostgreSQL instance with pgvector is required." }}
 {{- end }}
 {{- range $errors }}
 {{ . }}
@@ -401,11 +404,4 @@ Compile soft validation warnings into a single message.
 Called from NOTES.txt (only shown during helm install/upgrade).
 */}}
 {{- define "agentregistry.validateValues" -}}
-{{- $messages := list }}
-{{- if and (not .Values.database.url) (not .Values.database.host) }}
-{{- $messages = append $messages "WARNING: no database.url or database.host is set. The application will fail to start without a database connection." }}
-{{- end }}
-{{- range $messages }}
-{{ . }}
-{{- end }}
 {{- end }}
