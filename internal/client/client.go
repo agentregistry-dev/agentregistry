@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	v0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
@@ -31,71 +32,19 @@ const (
 	defaultDeployProviderID = "local"
 )
 
-// VersionBody represents API version information.
-type VersionBody struct {
-	Version   string `json:"version"`
-	GitCommit string `json:"git_commit"`
-	BuildTime string `json:"build_time"`
-}
+type VersionBody = apitypes.VersionBody
 
-type deploymentRequest struct {
-	ServerName     string            `json:"serverName"`
-	Version        string            `json:"version"`
-	Env            map[string]string `json:"env,omitempty"`
-	ProviderConfig map[string]any    `json:"providerConfig,omitempty"`
-	PreferRemote   bool              `json:"preferRemote,omitempty"`
-	ResourceType   string            `json:"resourceType,omitempty"`
-	ProviderID     string            `json:"providerId"`
-}
+type deploymentRequest = apitypes.DeploymentRequest
 
-// IndexRequest is the request body for embeddings indexing.
-type IndexRequest struct {
-	BatchSize      int  `json:"batchSize,omitempty"`
-	Force          bool `json:"force,omitempty"`
-	DryRun         bool `json:"dryRun,omitempty"`
-	IncludeServers bool `json:"includeServers,omitempty"`
-	IncludeAgents  bool `json:"includeAgents,omitempty"`
-	Stream         bool `json:"stream,omitempty"`
-}
+type IndexRequest = apitypes.IndexRequest
 
-// IndexJobResponse is the response body returned when creating an index job.
-type IndexJobResponse struct {
-	JobID  string `json:"jobId"`
-	Status string `json:"status"`
-}
+type IndexJobResponse = apitypes.IndexJobResponse
 
-// JobProgress contains job progress counters for index jobs.
-type JobProgress struct {
-	Total     int `json:"total"`
-	Processed int `json:"processed"`
-	Updated   int `json:"updated"`
-	Skipped   int `json:"skipped"`
-	Failures  int `json:"failures"`
-}
+type JobProgress = apitypes.JobProgress
 
-// JobResult contains the final result for an index job.
-type JobResult struct {
-	ServersProcessed int    `json:"serversProcessed,omitempty"`
-	ServersUpdated   int    `json:"serversUpdated,omitempty"`
-	ServersSkipped   int    `json:"serversSkipped,omitempty"`
-	ServerFailures   int    `json:"serverFailures,omitempty"`
-	AgentsProcessed  int    `json:"agentsProcessed,omitempty"`
-	AgentsUpdated    int    `json:"agentsUpdated,omitempty"`
-	AgentsSkipped    int    `json:"agentsSkipped,omitempty"`
-	AgentFailures    int    `json:"agentFailures,omitempty"`
-	Error            string `json:"error,omitempty"`
-}
+type JobResult = apitypes.JobResult
 
-// JobStatusResponse is the status payload for an index job.
-type JobStatusResponse struct {
-	JobID     string      `json:"jobId"`
-	Type      string      `json:"type"`
-	Status    string      `json:"status"`
-	Progress  JobProgress `json:"progress"`
-	Result    *JobResult  `json:"result,omitempty"`
-	CreatedAt string      `json:"createdAt"`
-	UpdatedAt string      `json:"updatedAt"`
-}
+type JobStatusResponse = apitypes.JobStatusResponse
 
 // NewClientFromEnv constructs a client using environment variables
 func NewClientFromEnv() (*Client, error) {

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
@@ -15,16 +16,7 @@ import (
 
 const LocalProviderID = "local"
 
-// DeploymentRequest represents the input for deploying a server
-type DeploymentRequest struct {
-	ServerName     string            `json:"serverName" doc:"Server name to deploy" example:"io.github.user/weather"`
-	Version        string            `json:"version" doc:"Version to deploy (use 'latest' for latest version)" default:"latest" example:"1.0.0"`
-	Env            map[string]string `json:"env,omitempty" doc:"Deployment environment variables."`
-	ProviderConfig map[string]any    `json:"providerConfig,omitempty" doc:"Optional provider-specific deployment settings (not env vars)."`
-	PreferRemote   bool              `json:"preferRemote,omitempty" doc:"Prefer remote deployment over local" default:"false"`
-	ResourceType   string            `json:"resourceType,omitempty" doc:"Type of resource to deploy (mcp, agent)" default:"mcp" example:"mcp" enum:"mcp,agent"`
-	ProviderID     string            `json:"providerId" doc:"Concrete provider instance ID." required:"true"`
-}
+type DeploymentRequest = apitypes.DeploymentRequest
 
 // DeploymentResponse represents a deployment
 type DeploymentResponse struct {
