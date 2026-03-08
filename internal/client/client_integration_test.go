@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	v0handlers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
+	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	servicetesting "github.com/agentregistry-dev/agentregistry/internal/registry/service/testing"
@@ -515,7 +515,7 @@ func newClientWithInProcessServer(t *testing.T, fake *servicetesting.FakeRegistr
 		t.Fatalf("failed to initialize test metrics: %v", err)
 	}
 
-	versionInfo := &v0handlers.VersionBody{
+	versionInfo := &apitypes.VersionBody{
 		Version:   "test-version",
 		GitCommit: "test-commit",
 		BuildTime: "2026-01-02T03:04:05Z",

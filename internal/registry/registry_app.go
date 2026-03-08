@@ -17,6 +17,7 @@ import (
 
 	mcpregistry "github.com/agentregistry-dev/agentregistry/internal/mcp/registryserver"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api"
+	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
@@ -182,7 +183,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	slog.Info("starting agentregistry", "version", version.Version, "commit", version.GitCommit)
 
 	// Prepare version information
-	versionInfo := &v0.VersionBody{
+	versionInfo := &apitypes.VersionBody{
 		Version:   version.Version,
 		GitCommit: version.GitCommit,
 		BuildTime: version.BuildDate,

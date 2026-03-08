@@ -46,6 +46,10 @@ type JobResult = apitypes.JobResult
 
 type JobStatusResponse = apitypes.JobStatusResponse
 
+type DeploymentResponse = models.Deployment
+
+type DeploymentsListResponse = apitypes.DeploymentsListResponse
+
 // NewClientFromEnv constructs a client using environment variables
 func NewClientFromEnv() (*Client, error) {
 	base := os.Getenv("ARCTL_API_BASE_URL")
@@ -591,27 +595,6 @@ func asHTTPStatus(err error) int {
 		return http.StatusNotFound
 	}
 	return 0
-}
-
-// DeploymentResponse represents a deployment returned by the API
-type DeploymentResponse struct {
-	ID             string            `json:"id"`
-	ProviderID     string            `json:"providerId,omitempty"`
-	ServerName     string            `json:"serverName"`
-	Version        string            `json:"version"`
-	Origin         string            `json:"origin"`
-	DeployedAt     string            `json:"deployedAt"`
-	UpdatedAt      string            `json:"updatedAt"`
-	Status         string            `json:"status"`
-	Env            map[string]string `json:"env"`
-	ProviderConfig map[string]any    `json:"providerConfig,omitempty"`
-	PreferRemote   bool              `json:"preferRemote"`
-	ResourceType   string            `json:"resourceType"`
-}
-
-// DeploymentsListResponse represents the list of deployments
-type DeploymentsListResponse struct {
-	Deployments []DeploymentResponse `json:"deployments"`
 }
 
 // GetDeployedServers retrieves all deployed servers

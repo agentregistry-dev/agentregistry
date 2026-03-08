@@ -23,16 +23,11 @@ type DeploymentResponse struct {
 	Body models.Deployment
 }
 
-type DeploymentLogsResponse struct {
-	DeploymentID string   `json:"deploymentId"`
-	Logs         []string `json:"logs"`
-}
+type DeploymentLogsResponse = apitypes.DeploymentLogsResponse
 
 // DeploymentsListResponse represents a list of deployments
 type DeploymentsListResponse struct {
-	Body struct {
-		Deployments []models.Deployment `json:"deployments" doc:"List of deployed servers"`
-	}
+	Body apitypes.DeploymentsListResponse
 }
 
 // DeploymentByIDInput represents path parameters for ID-based deployment operations.

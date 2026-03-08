@@ -1,6 +1,9 @@
 package apitypes
 
-import "github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
+import (
+	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
+	"github.com/agentregistry-dev/agentregistry/pkg/models"
+)
 
 // VersionBody represents API version information.
 type VersionBody struct {
@@ -51,4 +54,15 @@ type JobStatusResponse struct {
 	Result    *JobResult  `json:"result,omitempty" doc:"Final result (when completed or failed)"`
 	CreatedAt string      `json:"createdAt" doc:"Job creation timestamp"`
 	UpdatedAt string      `json:"updatedAt" doc:"Last update timestamp"`
+}
+
+// DeploymentsListResponse is the deployment list response body.
+type DeploymentsListResponse struct {
+	Deployments []models.Deployment `json:"deployments" doc:"List of deployed servers"`
+}
+
+// DeploymentLogsResponse is the deployment logs response body.
+type DeploymentLogsResponse struct {
+	DeploymentID string   `json:"deploymentId"`
+	Logs         []string `json:"logs"`
 }

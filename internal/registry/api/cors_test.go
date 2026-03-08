@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api"
-	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
+	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
@@ -39,7 +39,7 @@ func TestCORSHeaders(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = shutdownTelemetry(nil) }()
 
-	versionInfo := &v0.VersionBody{
+	versionInfo := &apitypes.VersionBody{
 		Version:   "test",
 		GitCommit: "test",
 		BuildTime: "test",
@@ -153,7 +153,7 @@ func TestCORSHeaderValues(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = shutdownTelemetry(nil) }()
 
-	versionInfo := &v0.VersionBody{
+	versionInfo := &apitypes.VersionBody{
 		Version:   "test",
 		GitCommit: "test",
 		BuildTime: "test",
