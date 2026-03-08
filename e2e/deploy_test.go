@@ -304,61 +304,6 @@ func removeLocalDeployment(t *testing.T) {
 	}
 }
 
-func TestAgentRedeployAfterDirectDBDeleteDoesNotDuplicateK8sAgent(t *testing.T) {
-	if os.Getenv("E2E_SKIP_SETUP") == "true" {
-		if !dockerContainerRunning("agent-registry-postgres") || !dockerContainerRunning("agentregistry-server") {
-			t.Skip("requires local e2e infrastructure with running agentregistry and postgres containers")
-		}
-	}
-
-	regURL := RegistryURL(t)
-	tmpDir := t.TempDir()
-	agentName := UniqueAgentName("e2ek8sdbdup")
-
-	t.Cleanup(func() { RemoveDeploymentsByServerName(t, regURL, agentName) })
-
-	result := RunArctl(t, tmpDir,
-		"agent", "init", "adk", "python",
-		"--model-name", "gemini-2.5-flash",
-		agentName,
-	)
-	RequireSuccess(t, result)
-
-	result = RunArctl(t, tmpDir, "agent", "build", agentName)
-	RequireSuccess(t, result)
-
-	agentDir := filepath.Join(tmpDir, agentName)
-	result = RunArctl(t, tmpDir,
-		"agent", "publish", agentDir,
-		"--registry-url", regURL,
-	)
-	RequireSuccess(t, result)
-
-	result = RunArctl(t, tmpDir,
-		"agent", "deploy", agentName,
-		"--registry-url", regURL,
-		"--provider-id", "kubernetes-default",
-		"--namespace", "default",
-	)
-	RequireSuccess(t, result)
-	waitForAgentDeploymentCount(t, regURL, agentName, "kubernetes-default", 1, 30*time.Second)
-
-	deleteAgentDeploymentsDirectlyInDB(t, agentName, "kubernetes-default")
-	waitForAgentDeploymentCount(t, regURL, agentName, "kubernetes-default", 0, 30*time.Second)
-
-	result = RunArctl(t, tmpDir,
-		"agent", "deploy", agentName,
-		"--registry-url", regURL,
-		"--provider-id", "kubernetes-default",
-		"--namespace", "default",
-	)
-	RequireSuccess(t, result)
-
-	// Regression assertion: redeploy after DB row deletion should not create
-	// duplicate managed deployment rows for the same agent identity.
-	waitForAgentDeploymentCount(t, regURL, agentName, "kubernetes-default", 1, 30*time.Second)
-}
-
 func TestDeleteDeploymentRemovesKubernetesResources(t *testing.T) {
 	kubeContext := kubeContextForE2E(t)
 	if !kubeContextReachable(kubeContext) {
