@@ -274,7 +274,7 @@ func (t *translator) translateRemoteMCPServer(server *api.MCPServer) (*v1alpha2.
 		return nil, fmt.Errorf("remote MCP server config missing for %s", server.Name)
 	}
 
-	url := buildRemoteMCPURL(server.Remote.Host, server.Remote.Port, server.Remote.Path)
+	url := buildRemoteMCPURL(server.Remote.Scheme, server.Remote.Host, server.Remote.Port, server.Remote.Path)
 	// Use namespace from MCPServer if set (propagated from agent's deployment config);
 	// otherwise leave empty and let the runtime layer resolve from kubeconfig context.
 	namespace := server.Namespace
@@ -407,7 +407,11 @@ func AgentConfigMapName(name, version, deploymentID string) string {
 	return sanitizeK8sName(nameWithDeploymentID(base, deploymentID))
 }
 
-func buildRemoteMCPURL(host string, port uint32, path string) string {
+func buildRemoteMCPURL(scheme, host string, port uint32, path string) string {
+	scheme = strings.TrimSpace(scheme)
+	if scheme == "" {
+		scheme = "http"
+	}
 	host = strings.TrimSpace(host)
 	if path == "" {
 		path = "/"
@@ -415,10 +419,15 @@ func buildRemoteMCPURL(host string, port uint32, path string) string {
 	if path[0] != '/' {
 		path = "/" + path
 	}
-	if port == 0 {
-		return fmt.Sprintf("http://%s%s", host, path)
+
+	defaultPort := uint32(80)
+	if scheme == "https" {
+		defaultPort = 443
 	}
-	return fmt.Sprintf("http://%s:%d%s", host, port, path)
+	if port == 0 || port == defaultPort {
+		return fmt.Sprintf("%s://%s%s", scheme, host, path)
+	}
+	return fmt.Sprintf("%s://%s:%d%s", scheme, host, port, path)
 }
 
 func AgentResourceName(name, version, deploymentID string) string {

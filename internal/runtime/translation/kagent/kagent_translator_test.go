@@ -60,36 +60,91 @@ func TestTranslateRuntimeConfig_RemoteMCP(t *testing.T) {
 	translator := NewTranslator()
 	ctx := context.Background()
 
-	desired := &api.DesiredState{
-		MCPServers: []*api.MCPServer{
-			{
-				Name:          "remote-server",
-				MCPServerType: api.MCPServerTypeRemote,
-				Remote: &api.RemoteMCPServer{
-					Host: "example.com",
-					Port: 8080,
-					Path: "/mcp",
-				},
+	tests := []struct {
+		name        string
+		remote      *api.RemoteMCPServer
+		expectedURL string
+	}{
+		{
+			name: "http with explicit port",
+			remote: &api.RemoteMCPServer{
+				Scheme: "http",
+				Host:   "example.com",
+				Port:   8080,
+				Path:   "/mcp",
 			},
+			expectedURL: "http://example.com:8080/mcp",
+		},
+		{
+			name: "https with default port omitted",
+			remote: &api.RemoteMCPServer{
+				Scheme: "https",
+				Host:   "example.com",
+				Port:   443,
+				Path:   "/mcp",
+			},
+			expectedURL: "https://example.com/mcp",
+		},
+		{
+			name: "http with default port omitted",
+			remote: &api.RemoteMCPServer{
+				Scheme: "http",
+				Host:   "example.com",
+				Port:   80,
+				Path:   "/mcp",
+			},
+			expectedURL: "http://example.com/mcp",
+		},
+		{
+			name: "https with non-default port",
+			remote: &api.RemoteMCPServer{
+				Scheme: "https",
+				Host:   "my-workspace.cloud.databricks.com",
+				Port:   8443,
+				Path:   "/mcp",
+			},
+			expectedURL: "https://my-workspace.cloud.databricks.com:8443/mcp",
+		},
+		{
+			name: "empty scheme defaults to http",
+			remote: &api.RemoteMCPServer{
+				Host: "example.com",
+				Port: 8080,
+				Path: "/mcp",
+			},
+			expectedURL: "http://example.com:8080/mcp",
 		},
 	}
 
-	config, err := translator.TranslateRuntimeConfig(ctx, desired)
-	if err != nil {
-		t.Fatalf("TranslateRuntimeConfig failed: %v", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			desired := &api.DesiredState{
+				MCPServers: []*api.MCPServer{
+					{
+						Name:          "remote-server",
+						MCPServerType: api.MCPServerTypeRemote,
+						Remote:        tt.remote,
+					},
+				},
+			}
 
-	if len(config.Kubernetes.RemoteMCPServers) != 1 {
-		t.Fatalf("Expected 1 RemoteMCPServer, got %d", len(config.Kubernetes.RemoteMCPServers))
-	}
+			config, err := translator.TranslateRuntimeConfig(ctx, desired)
+			if err != nil {
+				t.Fatalf("TranslateRuntimeConfig failed: %v", err)
+			}
 
-	remote := config.Kubernetes.RemoteMCPServers[0]
-	if remote.Name != "remote-server" {
-		t.Errorf("Expected name remote-server, got %s", remote.Name)
-	}
-	expectedURL := "http://example.com:8080/mcp"
-	if remote.Spec.URL != expectedURL {
-		t.Errorf("Expected URL %s, got %s", expectedURL, remote.Spec.URL)
+			if len(config.Kubernetes.RemoteMCPServers) != 1 {
+				t.Fatalf("Expected 1 RemoteMCPServer, got %d", len(config.Kubernetes.RemoteMCPServers))
+			}
+
+			remote := config.Kubernetes.RemoteMCPServers[0]
+			if remote.Name != "remote-server" {
+				t.Errorf("Expected name remote-server, got %s", remote.Name)
+			}
+			if remote.Spec.URL != tt.expectedURL {
+				t.Errorf("Expected URL %s, got %s", tt.expectedURL, remote.Spec.URL)
+			}
+		})
 	}
 }
 
@@ -308,9 +363,10 @@ func TestTranslateRuntimeConfig_NamespaceConsistency(t *testing.T) {
 						MCPServerType: api.MCPServerTypeRemote,
 						Namespace:     tt.mcpNamespace,
 						Remote: &api.RemoteMCPServer{
-							Host: "remote-mcp.example.com",
-							Port: 8080,
-							Path: "/mcp",
+							Scheme: "http",
+							Host:   "remote-mcp.example.com",
+							Port:   8080,
+							Path:   "/mcp",
 						},
 					},
 					{
@@ -409,9 +465,10 @@ func TestTranslateRuntimeConfig_DeploymentIDMetadataAndNaming(t *testing.T) {
 				MCPServerType: api.MCPServerTypeRemote,
 				Namespace:     "demo-ns",
 				Remote: &api.RemoteMCPServer{
-					Host: "example.com",
-					Port: 80,
-					Path: "/mcp",
+					Scheme: "http",
+					Host:   "example.com",
+					Port:   80,
+					Path:   "/mcp",
 				},
 			},
 		},
