@@ -70,42 +70,6 @@ Usage: include "agentregistry.annotations" (dict "annotations" .Values.someAnnot
 {{- end }}
 
 {{/* ======================================================================
-   PostgreSQL helpers
-   ====================================================================== */}}
-
-{{/*
-PostgreSQL fully qualified name.
-*/}}
-{{- define "agentregistry.postgresql.fullname" -}}
-{{- printf "%s-postgresql" (include "agentregistry.fullname" .) | trunc 63 | trimSuffix "-" }}
-{{- end }}
-
-{{/*
-PostgreSQL labels — stable set for all PG resources.
-*/}}
-{{- define "agentregistry.postgresql.labels" -}}
-helm.sh/chart: {{ include "agentregistry.chart" . }}
-{{ include "agentregistry.postgresql.selectorLabels" . }}
-{{- if .Chart.AppVersion }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
-{{- end }}
-app.kubernetes.io/managed-by: {{ .Release.Service }}
-app.kubernetes.io/part-of: {{ include "agentregistry.name" . }}
-{{- if .Values.commonLabels }}
-{{ toYaml .Values.commonLabels }}
-{{- end }}
-{{- end }}
-
-{{/*
-PostgreSQL selector labels.
-*/}}
-{{- define "agentregistry.postgresql.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "agentregistry.name" . }}-postgresql
-app.kubernetes.io/instance: {{ .Release.Name }}
-app.kubernetes.io/component: database
-{{- end }}
-
-{{/* ======================================================================
    Image helpers
    ====================================================================== */}}
 
@@ -125,23 +89,6 @@ Digest takes precedence over tag.
 {{- printf "%s/%s@%s" $registry .Values.image.repository .Values.image.digest }}
 {{- else }}
 {{- printf "%s/%s:%s" $registry .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) }}
-{{- end }}
-{{- end }}
-
-{{/*
-Return the proper PostgreSQL image name.
-*/}}
-{{- define "agentregistry.postgresql.image" -}}
-{{- $registry := .Values.database.bundled.image.registry -}}
-{{- if .Values.global }}
-  {{- if .Values.global.imageRegistry }}
-    {{- $registry = .Values.global.imageRegistry -}}
-  {{- end }}
-{{- end }}
-{{- if .Values.database.bundled.image.digest }}
-{{- printf "%s/%s@%s" $registry .Values.database.bundled.image.repository .Values.database.bundled.image.digest }}
-{{- else }}
-{{- printf "%s/%s:%s" $registry .Values.database.bundled.image.repository .Values.database.bundled.image.tag }}
 {{- end }}
 {{- end }}
 
@@ -193,80 +140,19 @@ Create the name of the service account to use.
    ====================================================================== */}}
 
 {{/*
-Return the secret name containing credentials (JWT key, etc.).
+Return the secret name containing AGENT_REGISTRY_JWT_PRIVATE_KEY.
+Priority: global.existingSecret → config.existingSecret → chart-managed secret.
 */}}
 {{- define "agentregistry.secretName" -}}
-{{- if .Values.existingSecret }}
-{{- .Values.existingSecret }}
-{{- else }}
-{{- include "agentregistry.fullname" . }}
-{{- end }}
+{{- .Values.global.existingSecret | default .Values.config.existingSecret | default (include "agentregistry.fullname" .) }}
 {{- end }}
 
 {{/*
 Return the secret name that holds POSTGRES_PASSWORD.
-Priority:
-  1. Top-level existingSecret (user manages all credentials in one secret)
-  2. database.external.existingSecret (when database.bundled.enabled is false)
-  3. Chart-managed secret (agentregistry.fullname)
+Priority: global.existingSecret → database.existingSecret → chart-managed secret.
 */}}
 {{- define "agentregistry.passwordSecretName" -}}
-{{- if .Values.existingSecret }}
-{{- .Values.existingSecret }}
-{{- else if and (not .Values.database.bundled.enabled) .Values.database.external.existingSecret }}
-{{- .Values.database.external.existingSecret }}
-{{- else }}
-{{- include "agentregistry.fullname" . }}
-{{- end }}
-{{- end }}
-
-{{/*
-Return the secret name containing kubeconfig.
-*/}}
-{{- define "agentregistry.kubeconfigSecretName" -}}
-{{- if .Values.kubeconfig.existingSecret }}
-{{- .Values.kubeconfig.existingSecret }}
-{{- else }}
-{{- printf "%s-kubeconfig" (include "agentregistry.fullname" .) }}
-{{- end }}
-{{- end }}
-
-{{/*
-Generate a random hex string of the specified length (number of hex characters).
-Uses concatenated UUIDs (which are hex) with dashes stripped, then truncated.
-Each UUID yields 32 hex chars, so 3 UUIDs give 96 hex chars (enough for 64).
-
-Usage: include "agentregistry.randHex" <int>
-*/}}
-{{- define "agentregistry.randHex" -}}
-{{- $hex := printf "%s%s%s" (uuidv4 | replace "-" "") (uuidv4 | replace "-" "") (uuidv4 | replace "-" "") -}}
-{{- $hex | trunc (. | int) -}}
-{{- end }}
-
-{{/*
-Generate a secret value. If autoGenerate is true and the secret already exists
-in the cluster, reuse the existing value to guarantee stability across upgrades.
-Otherwise fall back to the user-supplied value or generate a random one.
-
-Set format to "hex" to generate a hex-encoded random string instead of
-alphanumeric (required for keys that must be valid hex, e.g. JWT private keys).
-
-Usage: include "agentregistry.secretValue" (dict "current" <existing-value> "provided" <user-value> "autoGenerate" <bool> "length" <int> "format" <string>)
-*/}}
-{{- define "agentregistry.secretValue" -}}
-{{- if .current }}
-{{- .current }}
-{{- else if and .provided (ne .provided "") }}
-{{- .provided }}
-{{- else if .autoGenerate }}
-{{- if eq (default "" .format) "hex" }}
-{{- include "agentregistry.randHex" (.length | default 64) }}
-{{- else }}
-{{- randAlphaNum (.length | default 32) }}
-{{- end }}
-{{- else }}
-{{- .provided }}
-{{- end }}
+{{- .Values.global.existingSecret | default .Values.database.existingSecret | default (include "agentregistry.fullname" .) }}
 {{- end }}
 
 {{/* ======================================================================
@@ -275,32 +161,20 @@ Usage: include "agentregistry.secretValue" (dict "current" <existing-value> "pro
 
 {{/*
 Return the PostgreSQL database URL.
-When postgresql.enabled is true, builds the URL from bundled PG values.
-When postgresql.enabled is false, uses externalDatabase settings.
-In both cases, the password is injected at runtime via the $(POSTGRES_PASSWORD)
-env-var expansion.
+If database.url is set, use it directly.
+Otherwise build from individual fields, injecting POSTGRES_PASSWORD at runtime.
 */}}
 {{- define "agentregistry.databaseUrl" -}}
-{{- if .Values.database.bundled.enabled }}
-{{- printf "postgres://%s:$(%s)@%s:%s/%s?sslmode=%s"
-      .Values.database.bundled.auth.username
-      "POSTGRES_PASSWORD"
-      (include "agentregistry.postgresql.fullname" .)
-      (toString .Values.database.bundled.service.port)
-      .Values.database.bundled.auth.database
-      .Values.database.bundled.sslMode }}
+{{- if .Values.database.url }}
+{{- .Values.database.url }}
 {{- else }}
-  {{- if .Values.database.external.url }}
-{{- .Values.database.external.url }}
-  {{- else }}
 {{- printf "postgres://%s:$(%s)@%s:%s/%s?sslmode=%s"
-      .Values.database.external.username
+      .Values.database.username
       "POSTGRES_PASSWORD"
-      .Values.database.external.host
-      (toString .Values.database.external.port)
-      .Values.database.external.database
-      .Values.database.external.sslMode }}
-  {{- end }}
+      .Values.database.host
+      (toString .Values.database.port)
+      .Values.database.database
+      .Values.database.sslMode }}
 {{- end }}
 {{- end }}
 
@@ -499,34 +373,6 @@ If .Values.affinity is set it wins entirely. Otherwise build from presets.
 {{- end }}
 
 {{/* ======================================================================
-   StorageClass helper
-   ====================================================================== */}}
-
-{{/*
-Return the proper StorageClass name.
-Uses global.storageClass as override, then per-component, then empty (default).
-Usage: include "agentregistry.storageClass" (dict "storageClass" .Values.database.bundled.persistence.storageClass "global" .Values.global)
-*/}}
-{{- define "agentregistry.storageClass" -}}
-{{- $sc := "" }}
-{{- if .global }}
-  {{- if .global.storageClass }}
-    {{- $sc = .global.storageClass }}
-  {{- end }}
-{{- end }}
-{{- if .storageClass }}
-  {{- $sc = .storageClass }}
-{{- end }}
-{{- if $sc }}
-{{- if eq $sc "-" }}
-storageClassName: ""
-{{- else }}
-storageClassName: {{ $sc | quote }}
-{{- end }}
-{{- end }}
-{{- end }}
-
-{{/* ======================================================================
    Validation
    ====================================================================== */}}
 
@@ -536,8 +382,17 @@ Called from templates/validate.yaml so it fires during helm template/install.
 */}}
 {{- define "agentregistry.validateValues.errors" -}}
 {{- $errors := list }}
-{{- if and .Values.networkPolicy.enabled (not .Values.networkPolicy.allowExternalEgress) (not .Values.database.bundled.enabled) (not .Values.networkPolicy.extraEgress) }}
-{{- $errors = append $errors "networkPolicy.allowExternalEgress is false and database.bundled.enabled is false (external database), but no networkPolicy.extraEgress rules are defined. The NetworkPolicy will block egress to the external database and the application will fail to connect. Either set networkPolicy.allowExternalEgress=true, or add an egress rule to networkPolicy.extraEgress allowing traffic to your database host on port 5432." }}
+{{- $hasExternalJwt := or .Values.global.existingSecret .Values.config.existingSecret }}
+{{- if and (not $hasExternalJwt) (eq .Values.config.jwtPrivateKey "") }}
+{{- $errors = append $errors "config.jwtPrivateKey must be set (or provide config.existingSecret / global.existingSecret containing AGENT_REGISTRY_JWT_PRIVATE_KEY)." }}
+{{- else if and (not $hasExternalJwt) (not (regexMatch "^[0-9a-fA-F]+$" .Values.config.jwtPrivateKey)) }}
+{{- $errors = append $errors "config.jwtPrivateKey must be a valid hex string (e.g. generated with: openssl rand -hex 32)." }}
+{{- end }}
+{{- if and (not (or .Values.global.existingSecret .Values.database.existingSecret)) (not .Values.database.url) (eq .Values.database.password "") }}
+{{- $errors = append $errors "database.password must be set (or provide database.url, database.existingSecret, or global.existingSecret containing POSTGRES_PASSWORD)." }}
+{{- end }}
+{{- if and (not .Values.database.url) (not .Values.database.host) }}
+{{- $errors = append $errors "database.host (or database.url) must be set. An external PostgreSQL instance with pgvector is required." }}
 {{- end }}
 {{- range $errors }}
 {{ . }}
@@ -549,23 +404,4 @@ Compile soft validation warnings into a single message.
 Called from NOTES.txt (only shown during helm install/upgrade).
 */}}
 {{- define "agentregistry.validateValues" -}}
-{{- $messages := list }}
-{{- if and (not .Values.database.bundled.enabled) (not .Values.database.external.url) (not .Values.database.external.host) }}
-{{- $messages = append $messages "WARNING: database.bundled.enabled is false but no database.external.url or database.external.host is set. The application will fail to start without a database connection." }}
-{{- end }}
-{{- if and .Values.rbac.create .Values.rbac.clusterAdminBinding }}
-{{- $messages = append $messages "WARNING: rbac.clusterAdminBinding is true. This grants cluster-admin privileges to the ServiceAccount. This is intended for development/demo environments only." }}
-{{- end }}
-{{- if and (not .Values.existingSecret) (not .Values.secrets.autoGenerate) (or (eq .Values.secrets.postgresPassword "") (eq .Values.secrets.jwtPrivateKey "")) }}
-{{- $messages = append $messages "WARNING: Secrets are not auto-generated and no values or existingSecret were provided. Set secrets.autoGenerate=true or provide explicit secret values." }}
-{{- end }}
-{{- if and .Values.hostVolumes.dockerSocket }}
-{{- $messages = append $messages "WARNING: hostVolumes.dockerSocket is enabled. This exposes the Docker socket inside the pod and is a significant security risk." }}
-{{- end }}
-{{- if and .Values.hostVolumes.hostTmp }}
-{{- $messages = append $messages "WARNING: hostVolumes.hostTmp is enabled. Mounting host /tmp is insecure and should only be used for development." }}
-{{- end }}
-{{- range $messages }}
-{{ . }}
-{{- end }}
 {{- end }}

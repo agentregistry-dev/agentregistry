@@ -61,12 +61,6 @@ tests:
           path: data.AGENT_REGISTRY_DISABLE_BUILTIN_SEED
           value: "true"
 
-  - it: sets KUBECONFIG path
-    asserts:
-      - equal:
-          path: data.KUBECONFIG
-          value: "/home/agentregistry/.kube/config"
-
   - it: does not include AGENT_REGISTRY_SEED_FROM when seedFrom is empty
     asserts:
       - notExists:
@@ -87,15 +81,6 @@ tests:
       - equal:
           path: data.AGENT_REGISTRY_SERVER_ADDRESS
           value: ":9090"
-
-  - it: includes extra config entries
-    set:
-      config.extraConfig:
-        MY_EXTRA_KEY: my-value
-    asserts:
-      - equal:
-          path: data.MY_EXTRA_KEY
-          value: my-value
 
   - it: applies fullnameOverride
     set:

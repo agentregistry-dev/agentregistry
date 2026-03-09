@@ -3,7 +3,7 @@ templates:
   - rbac.yaml
 
 tests:
-  # ── Default: clusterScoped=true, clusterAdminBinding=false ──────────────────
+  # ── Default: no watchedNamespaces ────────────────────────────────────────────
 
   - it: renders ClusterRole and ClusterRoleBinding by default
     asserts:
@@ -65,87 +65,118 @@ tests:
             app.kubernetes.io/name: agentregistry
             app.kubernetes.io/instance: RELEASE-NAME
 
-  - it: ClusterRole includes expected RBAC rules
+  - it: ClusterRole includes all namespace-scoped resource rules
+    documentIndex: 0
+    asserts:
+      - isNotNull:
+          path: rules
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - kagent.dev
+            resources:
+              - mcpservers
+            verbs:
+              - get
+              - list
+              - watch
+              - create
+              - update
+              - patch
+              - delete
+
+  - it: ClusterRole includes namespaces read rule
     documentIndex: 0
     asserts:
       - contains:
           path: rules
           content:
-            apiGroups: ["kagent.dev"]
-            resources: ["mcpservers"]
-            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+            apiGroups:
+              - ""
+            resources:
+              - namespaces
+            verbs:
+              - get
+              - list
+              - watch
 
-  # ── Namespace-scoped: clusterScoped=false ───────────────────────────────────
+  # ── watchedNamespaces set ────────────────────────────────────────────────────
 
-  - it: renders Role and RoleBinding when clusterScoped is false
+  - it: renders ClusterRole, ClusterRoleBinding, and per-namespace Role/RoleBinding when watchedNamespaces is set
     set:
-      rbac.clusterScoped: false
+      rbac.watchedNamespaces:
+        - ns-a
     asserts:
+      # ClusterRole + ClusterRoleBinding + Role(ns-a) + RoleBinding(ns-a) + Role(NAMESPACE) + RoleBinding(NAMESPACE)
       - hasDocuments:
-          count: 2
+          count: 6
 
-  - it: first document is a Role when clusterScoped is false
+  - it: first document is still a ClusterRole when watchedNamespaces is set
     set:
-      rbac.clusterScoped: false
+      rbac.watchedNamespaces:
+        - ns-a
     documentIndex: 0
+    asserts:
+      - isKind:
+          of: ClusterRole
+
+  - it: ClusterRole only has namespaces rule when watchedNamespaces is set
+    set:
+      rbac.watchedNamespaces:
+        - ns-a
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: rules
+          value:
+            - apiGroups:
+                - ""
+              resources:
+                - namespaces
+              verbs:
+                - get
+                - list
+                - watch
+
+  - it: Role is created in the watched namespace
+    set:
+      rbac.watchedNamespaces:
+        - ns-a
+    documentIndex: 2
     asserts:
       - isKind:
           of: Role
+      - equal:
+          path: metadata.namespace
+          value: ns-a
 
-  - it: second document is a RoleBinding when clusterScoped is false
+  - it: Role is also created in the installation namespace
     set:
-      rbac.clusterScoped: false
-    documentIndex: 1
+      rbac.watchedNamespaces:
+        - ns-a
+    documentIndex: 4
     asserts:
       - isKind:
-          of: RoleBinding
-
-  - it: Role has no namespace suffix in name when namespace-scoped
-    set:
-      rbac.clusterScoped: false
-    documentIndex: 0
-    asserts:
+          of: Role
       - equal:
-          path: metadata.name
-          value: RELEASE-NAME-agentregistry
+          path: metadata.namespace
+          value: NAMESPACE
 
-  - it: RoleBinding references the Role correctly
+  - it: installation namespace is not duplicated when already in watchedNamespaces
     set:
-      rbac.clusterScoped: false
-    documentIndex: 1
+      rbac.watchedNamespaces:
+        - NAMESPACE
     asserts:
-      - equal:
-          path: roleRef.kind
-          value: Role
-      - equal:
-          path: roleRef.name
-          value: RELEASE-NAME-agentregistry
-
-  # ── clusterAdminBinding=true ────────────────────────────────────────────────
-
-  - it: renders only a ClusterRoleBinding when clusterAdminBinding is true
-    set:
-      rbac.clusterAdminBinding: true
-    asserts:
+      # ClusterRole + ClusterRoleBinding + Role(NAMESPACE) + RoleBinding(NAMESPACE)
       - hasDocuments:
-          count: 1
+          count: 4
 
-  - it: ClusterRoleBinding references cluster-admin when clusterAdminBinding is true
+  # ── rbac.enabled=false ───────────────────────────────────────────────────────
+
+  - it: renders nothing when rbac.enabled is false
     set:
-      rbac.clusterAdminBinding: true
-    documentIndex: 0
-    asserts:
-      - isKind:
-          of: ClusterRoleBinding
-      - equal:
-          path: roleRef.name
-          value: cluster-admin
-
-  # ── rbac.create=false ───────────────────────────────────────────────────────
-
-  - it: renders nothing when rbac.create is false
-    set:
-      rbac.create: false
+      rbac.enabled: false
     asserts:
       - hasDocuments:
           count: 0

@@ -9,25 +9,31 @@
 ## TL;DR
 
 ```console
-helm install my-agentregistry oci://ghcr.io/agentregistry-dev/helm/agentregistry
+helm install my-agentregistry oci://ghcr.io/agentregistry-dev/helm/agentregistry \
+  --set config.jwtPrivateKey=$(openssl rand -hex 32) \
+  --set database.host=my-postgres.example.com \
+  --set database.password=changeme
 ```
 
 ## Introduction
 
 This chart bootstraps an [Agent Registry](https://github.com/agentregistry-dev/agentregistry) deployment on a [Kubernetes](https://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
 
-It includes a bundled [pgvector/pgvector](https://hub.docker.com/r/pgvector/pgvector) sidecar (PostgreSQL + pgvector extension) and exposes both an HTTP REST API and an Agent Gateway gRPC endpoint.
+It exposes both an HTTP REST API and an Agent Gateway gRPC endpoint. An external PostgreSQL database with the [pgvector](https://github.com/pgvector/pgvector) extension is required.
 
 ## Prerequisites
 
 - Kubernetes 1.19+
 - Helm 3.8+
-- PV provisioner support in the underlying infrastructure (for bundled PostgreSQL persistence)
+- PostgreSQL 14+ with pgvector extension
 
 ## Installing the Chart
 
 ```console
-helm install my-agentregistry oci://ghcr.io/agentregistry-dev/helm/agentregistry
+helm install my-agentregistry oci://ghcr.io/agentregistry-dev/helm/agentregistry \
+  --set config.jwtPrivateKey=$(openssl rand -hex 32) \
+  --set database.host=my-postgres.example.com \
+  --set database.password=changeme
 ```
 
 The command deploys Agent Registry on the Kubernetes cluster using the default configuration. The [Parameters](#parameters) section lists the values that can be configured during installation.
@@ -40,61 +46,86 @@ The command deploys Agent Registry on the Kubernetes cluster using the default c
 helm uninstall my-agentregistry
 ```
 
-> **Note**: If `database.bundled.persistence.keepOnUninstall` is `false` (the default), the PersistentVolumeClaim **will be deleted** and all database data will be lost. Set it to `true` to retain data across `helm uninstall`.
-
 ## Architecture
 
 The chart deploys the following Kubernetes resources:
 
 | Resource | Description |
 |---|---|
-| Deployment | Agent Registry application + bundled PostgreSQL containers |
+| Deployment | Agent Registry application |
 | Service | Exposes HTTP (`:12121`) and gRPC (`:21212`) ports |
 | ConfigMap | Application configuration injected as environment variables |
-| Secret | PostgreSQL password and JWT signing key |
-| Secret | Kubeconfig for in-cluster agent management |
+| Secret | PostgreSQL password and JWT signing key (omitted when both `existingSecret` values are set) |
 | ServiceAccount | Dedicated service account for the workload |
-| ClusterRole / ClusterRoleBinding | RBAC rules for managing MCP servers, deployments, and services |
-| NetworkPolicy | Optional egress/ingress policy (disabled by default) |
+| ClusterRole / ClusterRoleBinding | RBAC rules for managing cluster-scoped resources and namespace discovery |
+| Role / RoleBinding | Per-namespace RBAC rules when `rbac.watchedNamespaces` is set |
 
 ## Database
 
-By default the chart deploys a bundled PostgreSQL instance using the `pgvector/pgvector` image (PostgreSQL + pgvector extension). To use an external database instead, disable the bundled instance and provide connection details:
+Agent Registry requires an external PostgreSQL database with the pgvector extension. Provide connection details via individual fields:
 
 ```yaml
 database:
-  bundled:
-    enabled: false
-  external:
-    host: "my-postgres.example.com"
-    database: "agent-registry"
-    username: "agentregistry"
-    password: "changeme"
+  host: "my-postgres.example.com"
+  database: "agent-registry"
+  username: "agentregistry"
+  password: "changeme"
+  sslMode: "require"
 ```
 
 Or supply a full connection URL:
 
 ```yaml
 database:
-  bundled:
-    enabled: false
-  external:
-    url: "postgresql://agentregistry:changeme@my-postgres.example.com:5432/agent-registry?sslmode=require"
+  url: "postgresql://agentregistry:changeme@my-postgres.example.com:5432/agent-registry?sslmode=require"
+```
+
+To use an existing Secret for the database password (key: `POSTGRES_PASSWORD`):
+
+```yaml
+database:
+  existingSecret: "pg-secret"
 ```
 
 ## Secrets
 
-By default (`secrets.autoGenerate: true`) the chart generates a random PostgreSQL password and JWT key on first install using Helm's `lookup` function. Alternatively, supply an existing Secret:
+Agent Registry requires a hex-encoded JWT signing key. Provide it directly:
 
 ```yaml
-existingSecret: "my-agentregistry-secret"
+config:
+  jwtPrivateKey: "$(openssl rand -hex 32)"
 ```
 
-The Secret must contain the keys `POSTGRES_PASSWORD` and `AGENT_REGISTRY_JWT_PRIVATE_KEY`.
+Or reference an existing Secret (key: `AGENT_REGISTRY_JWT_PRIVATE_KEY`):
+
+```yaml
+config:
+  existingSecret: "my-agentregistry-secret"
+```
+
+To use a single Secret for all credentials (`POSTGRES_PASSWORD` and `AGENT_REGISTRY_JWT_PRIVATE_KEY`):
+
+```yaml
+global:
+  existingSecret: "my-agentregistry-secret"
+```
+
+`global.existingSecret` takes precedence over both `config.existingSecret` and `database.existingSecret`. When set, no chart-managed Secret is created.
+
+When `config.existingSecret` and `database.existingSecret` are set independently, only the keys not covered by an external secret are written into the chart-managed Secret.
 
 ## RBAC
 
-Agent Registry manages MCP servers, agents, deployments, and related resources across namespaces. The chart therefore creates a `ClusterRole`/`ClusterRoleBinding` by default (`rbac.clusterScoped: true`). For single-namespace or multi-tenant deployments, set `rbac.clusterScoped: false` to use a namespace-scoped `Role`/`RoleBinding`.
+By default, Agent Registry is granted cluster-wide access via a `ClusterRole`/`ClusterRoleBinding`. To restrict it to specific namespaces, set `rbac.watchedNamespaces`:
+
+```yaml
+rbac:
+  watchedNamespaces:
+    - production
+    - staging
+```
+
+This creates a `Role`/`RoleBinding` in each listed namespace (plus the installation namespace) instead of granting cluster-wide resource permissions. Read access to the `namespaces` API is always granted via `ClusterRole` regardless of this setting.
 
 ## Parameters
 
@@ -105,20 +136,13 @@ Agent Registry manages MCP servers, agents, deployments, and related resources a
 ### Minimal production values
 
 ```yaml
-image:
-  tag: "0.2.0"
-
-secrets:
-  autoGenerate: false
-
-existingSecret: "agentregistry-secrets"
-
 database:
-  bundled:
-    persistence:
-      storageClass: "standard"
-      size: 20Gi
-      keepOnUninstall: true
+  host: "pg.example.com"
+  existingSecret: "pg-secret"
+  sslMode: "require"
+
+config:
+  existingSecret: "agentregistry-secrets"
 
 resources:
   requests:
@@ -129,25 +153,24 @@ resources:
     memory: 512Mi
 ```
 
-### External database
+### Single secret for all credentials
 
 ```yaml
+global:
+  existingSecret: "agentregistry-all-secrets"
+
 database:
-  bundled:
-    enabled: false
-  external:
-    host: "pg.example.com"
-    database: "agent-registry"
-    username: "agentregistry"
-    existingSecret: "pg-secret"
-    sslMode: "require"
+  host: "pg.example.com"
+  sslMode: "require"
 ```
 
 ### Namespace-scoped RBAC
 
 ```yaml
 rbac:
-  clusterScoped: false
+  watchedNamespaces:
+    - first-app-ns
+    - second-app-ns
 ```
 
 {{ template "chart.maintainersSection" . }}
