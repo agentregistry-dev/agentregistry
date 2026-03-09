@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"maps"
 	"strings"
 	"time"
@@ -71,6 +71,7 @@ type registryServiceImpl struct {
 	cfg                *config.Config
 	embeddingsProvider embeddings.Provider
 	deploymentAdapters map[string]DeploymentPlatformDeployer
+	logger             *slog.Logger
 }
 
 // DeploymentPlatformDeployer is the deployment adapter contract used by service orchestration.
@@ -91,6 +92,7 @@ func NewRegistryService(
 		db:                 db,
 		cfg:                cfg,
 		embeddingsProvider: embeddingProvider,
+		logger:             slog.Default().With("component", "registry"),
 	}
 }
 
@@ -268,10 +270,10 @@ func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx 
 			}
 			embedding, err := embeddings.GenerateSemanticEmbedding(bgCtx, s.embeddingsProvider, payload, s.cfg.Embeddings.Dimensions)
 			if err != nil {
-				log.Printf("Warning: failed to generate embedding for %s@%s: %v", serverJSON.Name, serverJSON.Version, err)
+				s.logger.Warn("failed to generate embedding for server", "name", serverJSON.Name, "version", serverJSON.Version, "error", err)
 			} else if embedding != nil {
 				if err := s.UpsertServerEmbedding(bgCtx, serverJSON.Name, serverJSON.Version, embedding); err != nil {
-					log.Printf("Warning: failed to store embedding for %s@%s: %v", serverJSON.Name, serverJSON.Version, err)
+					s.logger.Warn("failed to store embedding for server", "name", serverJSON.Name, "version", serverJSON.Version, "error", err)
 				}
 			}
 		}()
@@ -667,10 +669,10 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 			}
 			embedding, err := embeddings.GenerateSemanticEmbedding(bgCtx, s.embeddingsProvider, payload, s.cfg.Embeddings.Dimensions)
 			if err != nil {
-				log.Printf("Warning: failed to generate embedding for agent %s@%s: %v", agentJSON.Name, agentJSON.Version, err)
+				s.logger.Warn("failed to generate embedding for agent", "name", agentJSON.Name, "version", agentJSON.Version, "error", err)
 			} else if embedding != nil {
 				if err := s.UpsertAgentEmbedding(bgCtx, agentJSON.Name, agentJSON.Version, embedding); err != nil {
-					log.Printf("Warning: failed to store embedding for agent %s@%s: %v", agentJSON.Name, agentJSON.Version, err)
+					s.logger.Warn("failed to store embedding for agent", "name", agentJSON.Name, "version", agentJSON.Version, "error", err)
 				}
 			}
 		}()
@@ -766,7 +768,7 @@ func matchesKubernetesDeploymentFilter(filter *models.DeploymentFilter, dep *mod
 func (s *registryServiceImpl) appendExternalKubernetesDeployments(ctx context.Context, deployments []*models.Deployment, filter *models.DeploymentFilter) []*models.Deployment {
 	k8sResources, err := s.listKubernetesDeployments(ctx, "")
 	if err != nil {
-		log.Printf("Warning: Failed to list kubernetes deployments: %v", err)
+		s.logger.Warn("failed to list kubernetes deployments", "error", err)
 		return deployments
 	}
 
@@ -774,7 +776,7 @@ func (s *registryServiceImpl) appendExternalKubernetesDeployments(ctx context.Co
 		// Skip internal resources, they are covered in the DB
 		var kubeData models.KubernetesProviderMetadata
 		if err := k8sDep.ProviderMetadata.UnmarshalInto(&kubeData); err != nil {
-			log.Printf("Warning: Failed to unmarshal kubernetes provider metadata: %v", err)
+			s.logger.Warn("failed to unmarshal kubernetes provider metadata", "error", err)
 			continue
 		}
 		if !kubeData.IsExternal {
@@ -912,7 +914,7 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 	resolvedServers, err := s.resolveAgentManifestMCPServers(ctx, &agentResp.Agent.AgentManifest)
 	if err != nil {
 		// Log warning but don't fail - agent deployment should still succeed
-		log.Printf("Warning: Failed to resolve MCP servers for agent %s: %v", agentName, err)
+		s.logger.Warn("failed to resolve MCP servers for agent", "agent", agentName, "error", err)
 	} else {
 		// Create deployment records for each resolved MCP server
 		for _, serverReq := range resolvedServers {
@@ -930,7 +932,7 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 			}
 			// Create a managed deployment record for each resolved MCP server.
 			if err := s.db.CreateDeployment(ctx, nil, mcpDeployment); err != nil {
-				log.Printf("Warning: Failed to create deployment for MCP server %s: %v", serverReq.RegistryServer.Name, err)
+				s.logger.Warn("failed to create deployment for MCP server", "server", serverReq.RegistryServer.Name, "error", err)
 			}
 		}
 	}
@@ -1060,7 +1062,7 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 		return fmt.Errorf("failed to get deployments: %w", err)
 	}
 
-	log.Printf("Reconciling %d deployment(s)", len(deployments))
+	s.logger.Info("reconciling deployments", "count", len(deployments))
 
 	type providerPlatformRequests struct {
 		servers []*registry.MCPServerRunRequest
@@ -1079,12 +1081,12 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 	for _, dep := range deployments {
 		provider, err := s.resolveProviderByID(ctx, dep.ProviderID)
 		if err != nil {
-			log.Printf("Warning: Deployment %s has unknown provider %q; skipping: %v", dep.ID, dep.ProviderID, err)
+			s.logger.Warn("deployment has unknown provider, skipping", "deployment_id", dep.ID, "provider", dep.ProviderID, "error", err)
 			continue
 		}
 		providerPlatform := strings.ToLower(strings.TrimSpace(provider.Platform))
 		if providerPlatform == "" {
-			log.Printf("Warning: Deployment %s has empty provider platform type; skipping", dep.ID)
+			s.logger.Warn("deployment has empty provider platform type, skipping", "deployment_id", dep.ID)
 			continue
 		}
 		targetRequests := getProviderPlatformRequests(providerPlatform)
@@ -1094,7 +1096,7 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 		case resourceTypeMCP:
 			depServer, err := s.GetServerByNameAndVersion(ctx, dep.ServerName, dep.Version)
 			if err != nil {
-				log.Printf("Warning: Failed to get server %s v%s: %v", dep.ServerName, dep.Version, err)
+				s.logger.Warn("failed to get server for deployment", "server", dep.ServerName, "version", dep.Version, "error", err)
 				continue
 			}
 
@@ -1125,7 +1127,7 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 		case resourceTypeAgent:
 			depAgent, err := s.GetAgentByNameAndVersion(ctx, dep.ServerName, dep.Version)
 			if err != nil {
-				log.Printf("Warning: Failed to get agent %s v%s: %v", dep.ServerName, dep.Version, err)
+				s.logger.Warn("failed to get agent for deployment", "agent", dep.ServerName, "version", dep.Version, "error", err)
 				continue
 			}
 
@@ -1139,7 +1141,7 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 			})
 
 		default:
-			log.Printf("Warning: Unknown resource type %q for deployment %s v%s", dep.ResourceType, dep.ServerName, dep.Version)
+			s.logger.Warn("unknown resource type for deployment", "resource_type", dep.ResourceType, "server", dep.ServerName, "version", dep.Version)
 		}
 	}
 
@@ -1177,7 +1179,17 @@ func (s *registryServiceImpl) ReconcileAll(ctx context.Context) error {
 
 			agentReq.ResolvedMCPServers = resolvedServers
 			if s.cfg.Verbose && len(resolvedServers) > 0 {
-				log.Printf("Resolved %d MCP server(s) of type 'registry' for %s agent %s", len(resolvedServers), providerPlatform, agentReq.RegistryAgent.Name)
+				s.logger.Info("resolved MCP servers for agent", "count", len(resolvedServers), "provider_platform", providerPlatform, "agent", agentReq.RegistryAgent.Name)
+			}
+
+			// Resolve registry-type skills from agent manifest
+			resolvedSkills, err := s.resolveAgentManifestSkills(ctx, &agentReq.RegistryAgent.AgentManifest)
+			if err != nil {
+				return fmt.Errorf("failed to resolve skills for agent %s: %w", agentReq.RegistryAgent.Name, err)
+			}
+			agentReq.ResolvedSkills = resolvedSkills
+			if s.cfg.Verbose && len(resolvedSkills) > 0 {
+				s.logger.Info("resolved skills for agent", "count", len(resolvedSkills), "provider_platform", providerPlatform, "agent", agentReq.RegistryAgent.Name)
 			}
 		}
 
@@ -1229,10 +1241,78 @@ func (s *registryServiceImpl) resolveAgentManifestMCPServers(ctx context.Context
 			EnvValues:      make(map[string]string),
 			ArgValues:      make(map[string]string),
 			HeaderValues:   make(map[string]string),
+			Name:           mcpServer.Name,
 		})
 	}
 
 	return resolvedServers, nil
+}
+
+// resolveAgentManifestSkills resolves registry-type skill references from the
+// agent manifest into concrete skill refs (Docker images or GitHub repos) that
+// can be passed to the runtime translator and ultimately to the Agent CRD.
+func (s *registryServiceImpl) resolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]api.AgentSkillRef, error) {
+	if manifest == nil || len(manifest.Skills) == 0 {
+		return nil, nil
+	}
+
+	var resolved []api.AgentSkillRef
+	for _, skill := range manifest.Skills {
+		ref, err := s.resolveSkillRef(ctx, skill)
+		if err != nil {
+			return nil, fmt.Errorf("resolve skill %q: %w", skill.Name, err)
+		}
+		resolved = append(resolved, ref)
+	}
+	return resolved, nil
+}
+
+func (s *registryServiceImpl) resolveSkillRef(ctx context.Context, skill models.SkillRef) (api.AgentSkillRef, error) {
+	image := strings.TrimSpace(skill.Image)
+	registrySkillName := strings.TrimSpace(skill.RegistrySkillName)
+	hasImage := image != ""
+	hasRegistry := registrySkillName != ""
+
+	if !hasImage && !hasRegistry {
+		return api.AgentSkillRef{}, fmt.Errorf("one of image or registrySkillName is required")
+	}
+	if hasImage && hasRegistry {
+		return api.AgentSkillRef{}, fmt.Errorf("only one of image or registrySkillName may be set")
+	}
+
+	if hasImage {
+		return api.AgentSkillRef{Name: skill.Name, Image: image}, nil
+	}
+
+	version := strings.TrimSpace(skill.RegistrySkillVersion)
+	if version == "" {
+		version = "latest"
+	}
+
+	skillResp, err := s.GetSkillByNameAndVersion(ctx, registrySkillName, version)
+	if err != nil {
+		return api.AgentSkillRef{}, fmt.Errorf("fetch skill %q version %q: %w", registrySkillName, version, err)
+	}
+
+	// Prefer Docker/OCI image if available.
+	for _, pkg := range skillResp.Skill.Packages {
+		typ := strings.ToLower(strings.TrimSpace(pkg.RegistryType))
+		if (typ == "docker" || typ == "oci") && strings.TrimSpace(pkg.Identifier) != "" {
+			return api.AgentSkillRef{Name: skill.Name, Image: strings.TrimSpace(pkg.Identifier)}, nil
+		}
+	}
+
+	// Fall back to GitHub repository.
+	if skillResp.Skill.Repository != nil &&
+		strings.EqualFold(skillResp.Skill.Repository.Source, "github") &&
+		strings.TrimSpace(skillResp.Skill.Repository.URL) != "" {
+		return api.AgentSkillRef{
+			Name:    skill.Name,
+			RepoURL: strings.TrimSpace(skillResp.Skill.Repository.URL),
+		}, nil
+	}
+
+	return api.AgentSkillRef{}, fmt.Errorf("skill %q (version %s): no docker/oci package or github repository found", registrySkillName, version)
 }
 
 func (s *registryServiceImpl) ensureSemanticEmbedding(ctx context.Context, opts *database.SemanticSearchOptions) error {
@@ -1316,7 +1396,7 @@ func (s *registryServiceImpl) listKubernetesDeployments(ctx context.Context, nam
 	// List agents from Kubernetes
 	agents, err := runtime.ListAgents(ctx, namespace)
 	if err != nil {
-		log.Printf("Warning: Failed to list agents from Kubernetes: %v", err)
+		s.logger.Warn("failed to list agents from Kubernetes", "error", err)
 	} else {
 		for _, agent := range agents {
 			addResource("agent", agent.Name, agent.Namespace, agent.Labels, agent.CreationTimestamp.Time, agent.Status.Conditions)
@@ -1326,7 +1406,7 @@ func (s *registryServiceImpl) listKubernetesDeployments(ctx context.Context, nam
 	// List MCP servers from Kubernetes
 	mcpServers, err := runtime.ListMCPServers(ctx, namespace)
 	if err != nil {
-		log.Printf("Warning: Failed to list MCP servers from Kubernetes: %v", err)
+		s.logger.Warn("failed to list MCP servers from Kubernetes", "error", err)
 	} else {
 		for _, mcp := range mcpServers {
 			addResource("mcpserver", mcp.Name, mcp.Namespace, mcp.Labels, mcp.CreationTimestamp.Time, mcp.Status.Conditions)
@@ -1336,7 +1416,7 @@ func (s *registryServiceImpl) listKubernetesDeployments(ctx context.Context, nam
 	// List remote MCP servers from Kubernetes
 	remoteMCPs, err := runtime.ListRemoteMCPServers(ctx, namespace)
 	if err != nil {
-		log.Printf("Warning: Failed to list remote MCP servers from Kubernetes: %v", err)
+		s.logger.Warn("failed to list remote MCP servers from Kubernetes", "error", err)
 	} else {
 		for _, remoteMCP := range remoteMCPs {
 			addResource("remotemcpserver", remoteMCP.Name, remoteMCP.Namespace, remoteMCP.Labels, remoteMCP.CreationTimestamp.Time, remoteMCP.Status.Conditions)

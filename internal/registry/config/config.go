@@ -3,7 +3,7 @@ package config
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"log"
+	"log/slog"
 	"os"
 
 	env "github.com/caarlos0/env/v11"
@@ -66,14 +66,15 @@ type EmbeddingsConfig struct {
 func NewConfig() *Config {
 	err := godotenv.Load()
 	if err != nil {
-		log.Printf("No .env file found or error loading .env file: %v", err)
+		slog.Info("no .env file found or error loading .env file", "error", err)
 	}
 	var cfg Config
 	err = env.ParseWithOptions(&cfg, env.Options{
 		Prefix: "AGENT_REGISTRY_",
 	})
 	if err != nil {
-		log.Fatalf("failed to parse config: %v", err)
+		slog.Error("failed to parse config", "error", err)
+		os.Exit(1)
 	}
 
 	// Append a random suffix to RuntimeDir when the user has not set an
@@ -82,7 +83,8 @@ func NewConfig() *Config {
 	if os.Getenv("AGENT_REGISTRY_RUNTIME_DIR") == "" {
 		suffix, err := randomHex(8)
 		if err != nil {
-			log.Fatalf("failed to generate random runtime dir suffix: %v", err)
+			slog.Error("failed to generate random runtime dir suffix", "error", err)
+			os.Exit(1)
 		}
 		cfg.RuntimeDir = cfg.RuntimeDir + "-" + suffix
 	}

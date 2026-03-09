@@ -30,9 +30,7 @@ import { AgentDetail } from "@/components/agent-detail"
 import { PromptDetail } from "@/components/prompt-detail"
 import { ImportDialog } from "@/components/import-dialog"
 import { AddServerDialog } from "@/components/add-server-dialog"
-import { ImportSkillsDialog } from "@/components/import-skills-dialog"
 import { AddSkillDialog } from "@/components/add-skill-dialog"
-import { ImportAgentsDialog } from "@/components/import-agents-dialog"
 import { AddAgentDialog } from "@/components/add-agent-dialog"
 import { AddPromptDialog } from "@/components/add-prompt-dialog"
 import { listServersV0, listSkillsV0, listAgentsV0, listPromptsV0, ServerResponse, SkillResponse, AgentResponse, PromptResponse } from "@/lib/admin-api"
@@ -76,9 +74,7 @@ export default function AdminPage() {
   const [filterVerifiedPublisher, setFilterVerifiedPublisher] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [addServerDialogOpen, setAddServerDialogOpen] = useState(false)
-  const [importSkillsDialogOpen, setImportSkillsDialogOpen] = useState(false)
   const [addSkillDialogOpen, setAddSkillDialogOpen] = useState(false)
-  const [importAgentsDialogOpen, setImportAgentsDialogOpen] = useState(false)
   const [addAgentDialogOpen, setAddAgentDialogOpen] = useState(false)
   const [addPromptDialogOpen, setAddPromptDialogOpen] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -553,14 +549,6 @@ export default function AdminPage() {
                     </span>
                     Import Servers
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setImportSkillsDialogOpen(true)}>
-                    <Zap className="mr-2 h-4 w-4" />
-                    Import Skills
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setImportAgentsDialogOpen(true)}>
-                    <Bot className="mr-2 h-4 w-4" />
-                    Import Agents
-                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
 
@@ -699,17 +687,17 @@ export default function AdminPage() {
                     </p>
                     <p className="text-sm mb-4">
                       {skills.length === 0
-                        ? "Import skills from external sources to get started"
+                        ? "Publish skills to get started"
                         : "Try adjusting your search or filter criteria"}
                     </p>
                     {skills.length === 0 && (
                       <Button
                         variant="outline"
                         className="gap-2"
-                        onClick={() => setImportSkillsDialogOpen(true)}
+                        onClick={() => setAddSkillDialogOpen(true)}
                       >
-                        <Download className="h-4 w-4" />
-                        Import Skills
+                        <Plus className="h-4 w-4" />
+                        Add Skill
                       </Button>
                     )}
                   </div>
@@ -751,17 +739,17 @@ export default function AdminPage() {
                     </p>
                     <p className="text-sm mb-4">
                       {agents.length === 0
-                        ? "Import agents from external sources to get started"
+                        ? "Create agents to get started"
                         : "Try adjusting your search or filter criteria"}
                     </p>
                     {agents.length === 0 && (
                       <Button
                         variant="outline"
                         className="gap-2"
-                        onClick={() => setImportAgentsDialogOpen(true)}
+                        onClick={() => setAddAgentDialogOpen(true)}
                       >
-                        <Download className="h-4 w-4" />
-                        Import Agents
+                        <Plus className="h-4 w-4" />
+                        Add Agent
                       </Button>
                     )}
                   </div>
@@ -847,11 +835,6 @@ export default function AdminPage() {
       />
 
       {/* Skill Dialogs */}
-      <ImportSkillsDialog
-        open={importSkillsDialogOpen}
-        onOpenChange={setImportSkillsDialogOpen}
-        onImportComplete={() => {}}
-      />
       <AddSkillDialog
         open={addSkillDialogOpen}
         onOpenChange={setAddSkillDialogOpen}
@@ -859,11 +842,6 @@ export default function AdminPage() {
       />
 
       {/* Agent Dialogs */}
-      <ImportAgentsDialog
-        open={importAgentsDialogOpen}
-        onOpenChange={setImportAgentsDialogOpen}
-        onImportComplete={() => {}}
-      />
       <AddAgentDialog
         open={addAgentDialogOpen}
         onOpenChange={setAddAgentDialogOpen}

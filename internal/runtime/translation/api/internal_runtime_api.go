@@ -21,6 +21,24 @@ type Agent struct {
 	// ResolvedMCPServers contains the MCP server connection info for this agent
 	// Used to generate ConfigMap for Kubernetes deployments
 	ResolvedMCPServers []ResolvedMCPServerConfig `json:"resolvedMCPServers,omitempty"`
+	// Skills contains skill references resolved from the agent manifest.
+	// Used to populate the Agent CRD's skills field for Kubernetes deployments.
+	Skills []AgentSkillRef `json:"skills,omitempty"`
+}
+
+// AgentSkillRef represents a resolved skill reference, either a Docker/OCI
+// image or a Git repository.
+type AgentSkillRef struct {
+	// Name is the skill directory name (optional, defaults to repo name for git refs).
+	Name string `json:"name,omitempty"`
+	// Image is a Docker/OCI image reference (mutually exclusive with RepoURL).
+	Image string `json:"image,omitempty"`
+	// RepoURL is a Git repository URL (mutually exclusive with Image).
+	RepoURL string `json:"repoURL,omitempty"`
+	// Ref is a Git reference (branch, tag, or commit SHA). Only used with RepoURL.
+	Ref string `json:"ref,omitempty"`
+	// Path is a subdirectory within the Git repository. Only used with RepoURL.
+	Path string `json:"path,omitempty"`
 }
 
 // This gets saved into the mcp-servers.json file for each agent

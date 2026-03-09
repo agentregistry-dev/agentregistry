@@ -9,13 +9,15 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	arclient "github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 )
 
 type resolvedSkillRef struct {
-	name  string
-	image string
+	name    string
+	image   string // Docker/OCI image ref (mutually exclusive with repoURL)
+	repoURL string // GitHub repository URL (mutually exclusive with image)
 }
 
 func resolveSkillsForRuntime(manifest *models.AgentManifest) ([]resolvedSkillRef, error) {
@@ -25,14 +27,11 @@ func resolveSkillsForRuntime(manifest *models.AgentManifest) ([]resolvedSkillRef
 
 	resolved := make([]resolvedSkillRef, 0, len(manifest.Skills))
 	for _, skill := range manifest.Skills {
-		imageRef, err := resolveSkillImageRef(skill)
+		ref, err := resolveSkillSource(skill)
 		if err != nil {
 			return nil, fmt.Errorf("resolve skill %q: %w", skill.Name, err)
 		}
-		resolved = append(resolved, resolvedSkillRef{
-			name:  skill.Name,
-			image: imageRef,
-		})
+		resolved = append(resolved, ref)
 	}
 	slices.SortFunc(resolved, func(a, b resolvedSkillRef) int {
 		return strings.Compare(a.name, b.name)
@@ -41,20 +40,24 @@ func resolveSkillsForRuntime(manifest *models.AgentManifest) ([]resolvedSkillRef
 	return resolved, nil
 }
 
-func resolveSkillImageRef(skill models.SkillRef) (string, error) {
+// resolveSkillSource resolves a SkillRef to either a Docker image or a GitHub
+// repository URL. When the skill is fetched from the registry, Docker/OCI
+// packages are preferred; if none are available, the skill's GitHub repository
+// is used as a fallback.
+func resolveSkillSource(skill models.SkillRef) (resolvedSkillRef, error) {
 	image := strings.TrimSpace(skill.Image)
 	registrySkillName := strings.TrimSpace(skill.RegistrySkillName)
 	hasImage := image != ""
 	hasRegistry := registrySkillName != ""
 
 	if !hasImage && !hasRegistry {
-		return "", fmt.Errorf("one of image or registrySkillName is required")
+		return resolvedSkillRef{}, fmt.Errorf("one of image or registrySkillName is required")
 	}
 	if hasImage && hasRegistry {
-		return "", fmt.Errorf("only one of image or registrySkillName may be set")
+		return resolvedSkillRef{}, fmt.Errorf("only one of image or registrySkillName may be set")
 	}
 	if hasImage {
-		return image, nil
+		return resolvedSkillRef{name: skill.Name, image: image}, nil
 	}
 
 	version := strings.TrimSpace(skill.RegistrySkillVersion)
@@ -64,17 +67,37 @@ func resolveSkillImageRef(skill models.SkillRef) (string, error) {
 
 	skillResp, err := fetchSkillFromRegistry(skill.RegistryURL, registrySkillName, version)
 	if err != nil {
-		return "", err
+		return resolvedSkillRef{}, err
 	}
 	if skillResp == nil {
-		return "", fmt.Errorf("skill not found: %s (version %s)", registrySkillName, version)
+		return resolvedSkillRef{}, fmt.Errorf("skill not found: %s (version %s)", registrySkillName, version)
 	}
 
+	// Prefer Docker/OCI image if available.
 	imageRef, err := extractSkillImageRef(skillResp)
-	if err != nil {
-		return "", fmt.Errorf("skill %s (version %s): %w", registrySkillName, version, err)
+	if err == nil {
+		return resolvedSkillRef{name: skill.Name, image: imageRef}, nil
 	}
-	return imageRef, nil
+
+	// Fall back to GitHub repository.
+	repoURL, err := extractSkillRepoURL(skillResp)
+	if err != nil {
+		return resolvedSkillRef{}, fmt.Errorf("skill %s (version %s): no docker/oci package or github repository found", registrySkillName, version)
+	}
+	return resolvedSkillRef{name: skill.Name, repoURL: repoURL}, nil
+}
+
+// extractSkillRepoURL extracts a GitHub repository URL from a skill response.
+func extractSkillRepoURL(skillResp *models.SkillResponse) (string, error) {
+	if skillResp == nil {
+		return "", fmt.Errorf("skill response is required")
+	}
+	if skillResp.Skill.Repository != nil &&
+		strings.EqualFold(skillResp.Skill.Repository.Source, "github") &&
+		strings.TrimSpace(skillResp.Skill.Repository.URL) != "" {
+		return strings.TrimSpace(skillResp.Skill.Repository.URL), nil
+	}
+	return "", fmt.Errorf("no github repository found")
 }
 
 func fetchSkillFromRegistry(registryURL, skillName, version string) (*models.SkillResponse, error) {
@@ -166,8 +189,17 @@ func materializeSkillsForRuntime(skills []resolvedSkillRef, skillsDir string, ve
 		usedDirs[dirName]++
 
 		targetDir := filepath.Join(skillsDir, dirName)
-		if err := extractSkillImage(skill.image, targetDir, verbose); err != nil {
-			return fmt.Errorf("materialize skill %q from %q: %w", skill.name, skill.image, err)
+		switch {
+		case skill.image != "":
+			if err := extractSkillImage(skill.image, targetDir, verbose); err != nil {
+				return fmt.Errorf("materialize skill %q from image %q: %w", skill.name, skill.image, err)
+			}
+		case skill.repoURL != "":
+			if err := gitutil.CloneAndCopy(skill.repoURL, targetDir, verbose); err != nil {
+				return fmt.Errorf("materialize skill %q from repo %q: %w", skill.name, skill.repoURL, err)
+			}
+		default:
+			return fmt.Errorf("skill %q has no image or repository URL", skill.name)
 		}
 	}
 	return nil

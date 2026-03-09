@@ -145,6 +145,10 @@ func runFromDirectory(ctx context.Context, projectDir string) error {
 		}
 	}
 
+	if err := project.EnsureOtelCollectorConfig(projectDir, manifest, verbose); err != nil {
+		return err
+	}
+
 	if err := project.RegenerateDockerCompose(projectDir, manifest, "", verbose); err != nil {
 		return fmt.Errorf("failed to refresh docker-compose.yaml: %w", err)
 	}
@@ -315,6 +319,10 @@ func runFromManifest(ctx context.Context, manifest *models.AgentManifest, versio
 			verbose,
 		); err != nil {
 			return fmt.Errorf("failed to materialize skills: %w", err)
+		}
+
+		if err := project.EnsureOtelCollectorConfig(workDir, manifest, verbose); err != nil {
+			return err
 		}
 
 		data, err := renderComposeFromManifest(manifest, version)

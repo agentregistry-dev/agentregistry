@@ -8,6 +8,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/project"
+	agentutils "github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/spf13/cobra"
@@ -42,11 +43,11 @@ var (
 )
 
 func init() {
-	AddSkillCmd.Flags().StringVar(&skillProjectDir, "project-dir", ".", "Project directory (default: current directory)")
+	AddSkillCmd.Flags().StringVar(&skillProjectDir, "project-dir", ".", "Project directory")
 	AddSkillCmd.Flags().StringVar(&skillImage, "image", "", "Docker image containing the skill")
-	AddSkillCmd.Flags().StringVar(&skillRegistryURL, "registry-url", "", "Registry URL for pulling the skill")
+	AddSkillCmd.Flags().StringVar(&skillRegistryURL, "registry-url", "", "Registry URL (defaults to the currently configured registry)")
 	AddSkillCmd.Flags().StringVar(&skillRegistrySkillName, "registry-skill-name", "", "Skill name in the registry")
-	AddSkillCmd.Flags().StringVar(&skillRegistrySkillVersion, "registry-skill-version", "", "Version of the skill to pull from the registry")
+	AddSkillCmd.Flags().StringVar(&skillRegistrySkillVersion, "registry-skill-version", "", "Skill version to pull from the registry (defaults to latest)")
 }
 
 func runAddSkill(cmd *cobra.Command, args []string) error {
@@ -107,11 +108,15 @@ func buildSkillRef(name string) (models.SkillRef, error) {
 			Image: skillImage,
 		}, nil
 	}
+	url := skillRegistryURL
+	if url == "" {
+		url = agentutils.GetDefaultRegistryURL()
+	}
 	return models.SkillRef{
 		Name:                 name,
 		RegistrySkillName:    skillRegistrySkillName,
 		RegistrySkillVersion: skillRegistrySkillVersion,
-		RegistryURL:          skillRegistryURL,
+		RegistryURL:          url,
 	}, nil
 }
 

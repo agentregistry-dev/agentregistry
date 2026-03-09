@@ -114,17 +114,28 @@ func displayPaginatedSkills(skills []*models.SkillResponse, pageSize int, showAl
 	}
 }
 
+func skillSource(s *models.SkillResponse) (string, string) {
+	if len(s.Skill.Packages) > 0 {
+		return s.Skill.Packages[0].RegistryType, s.Skill.Packages[0].Identifier
+	}
+	if s.Skill.Repository != nil {
+		return s.Skill.Repository.Source, s.Skill.Repository.URL
+	}
+	return "<none>", "<none>"
+}
+
 func printSkillsTable(skills []*models.SkillResponse) {
 	t := printer.NewTablePrinter(os.Stdout)
-	t.SetHeaders("Name", "Title", "Version", "Category", "Website")
+	t.SetHeaders("Name", "Title", "Version", "Type", "Source")
 
 	for _, s := range skills {
+		typ, src := skillSource(s)
 		t.AddRow(
 			printer.TruncateString(s.Skill.Name, 40),
 			printer.TruncateString(s.Skill.Title, 40),
 			s.Skill.Version,
-			printer.EmptyValueOrDefault(s.Skill.Category, "<none>"),
-			s.Skill.WebsiteURL,
+			typ,
+			printer.TruncateString(src, 50),
 		)
 	}
 

@@ -182,3 +182,29 @@ func TestCreateResolvedMCPServerConfigs_UsesDeploymentScopedNames(t *testing.T) 
 		t.Fatalf("expected non-scoped name for second config, got %q", configs[1].Name)
 	}
 }
+
+func TestCreateResolvedMCPServerConfigs_UsesUserProvidedName(t *testing.T) {
+	req := parseServerReqUnit(t, `{
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+        "name": "user/my-mcp-server",
+        "description": "Demo",
+        "version": "1.0.0",
+        "packages": [{
+          "registryType": "npm",
+          "identifier": "@example/mcp",
+          "version": "1.0.0",
+          "transport": {"type": "stdio"}
+        }]
+      }`)
+	// User provides a short name in agent.yaml
+	req.Name = "my-mcp-server"
+
+	configs := createResolvedMCPServerConfigs([]*registry.MCPServerRunRequest{req})
+	if len(configs) != 1 {
+		t.Fatalf("expected 1 resolved config, got %d", len(configs))
+	}
+	// Should use user-provided name, not the registry name
+	if configs[0].Name != "my-mcp-server" {
+		t.Fatalf("expected user-provided name 'my-mcp-server', got %q", configs[0].Name)
+	}
+}
