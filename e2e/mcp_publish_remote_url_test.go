@@ -15,20 +15,23 @@ func TestMCPPublishRemoteURL(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	tests := []struct {
-		name             string
-		remoteURL        string
-		transport        string
+		name              string
+		namespace         string
+		remoteURL         string
+		transport         string
 		expectedRemoteURL string
 		expectedTransport string
 	}{
 		{
 			name:              "https url with default transport",
+			namespace:         "com.databricks",
 			remoteURL:         "https://my-workspace.cloud.databricks.com/mcp",
 			expectedRemoteURL: "https://my-workspace.cloud.databricks.com/mcp",
 			expectedTransport: "streamable-http",
 		},
 		{
 			name:              "http url with explicit sse transport",
+			namespace:         "com.example",
 			remoteURL:         "http://example.com:8080/sse",
 			transport:         "sse",
 			expectedRemoteURL: "http://example.com:8080/sse",
@@ -36,6 +39,7 @@ func TestMCPPublishRemoteURL(t *testing.T) {
 		},
 		{
 			name:              "https url with explicit streamable-http",
+			namespace:         "com.example",
 			remoteURL:         "https://remote.example.com/api/mcp",
 			transport:         "streamable-http",
 			expectedRemoteURL: "https://remote.example.com/api/mcp",
@@ -46,7 +50,7 @@ func TestMCPPublishRemoteURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mcpName := UniqueNameWithPrefix("e2e-remote")
-			serverName := "e2e-test/" + mcpName
+			serverName := tt.namespace + "/" + mcpName
 			version := "0.0.1-e2e"
 
 			args := []string{
@@ -131,7 +135,7 @@ func TestMCPPublishRemoteURLDryRun(t *testing.T) {
 	tmpDir := t.TempDir()
 	regURL := RegistryURL(t)
 
-	serverName := "e2e-test/" + UniqueNameWithPrefix("e2e-dryrun")
+	serverName := "com.example/" + UniqueNameWithPrefix("e2e-dryrun")
 	result := RunArctl(t, tmpDir,
 		"mcp", "publish", serverName,
 		"--remote-url", "https://secure.example.com/mcp",
