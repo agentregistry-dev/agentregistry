@@ -4,7 +4,9 @@ package e2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/url"
 	"testing"
 )
 
@@ -17,32 +19,28 @@ func TestMCPPublishRemoteURL(t *testing.T) {
 	tests := []struct {
 		name              string
 		namespace         string
-		remoteURL         string
+		remoteURLFmt      string
 		transport         string
-		expectedRemoteURL string
 		expectedTransport string
 	}{
 		{
 			name:              "https url with default transport",
 			namespace:         "com.databricks",
-			remoteURL:         "https://my-workspace.cloud.databricks.com/mcp",
-			expectedRemoteURL: "https://my-workspace.cloud.databricks.com/mcp",
+			remoteURLFmt:      "https://my-workspace.cloud.databricks.com/%s",
 			expectedTransport: "streamable-http",
 		},
 		{
 			name:              "http url with explicit sse transport",
 			namespace:         "com.example",
-			remoteURL:         "http://example.com:8080/sse",
+			remoteURLFmt:      "http://example.com:8080/%s",
 			transport:         "sse",
-			expectedRemoteURL: "http://example.com:8080/sse",
 			expectedTransport: "sse",
 		},
 		{
 			name:              "https url with explicit streamable-http",
 			namespace:         "com.example",
-			remoteURL:         "https://remote.example.com/api/mcp",
+			remoteURLFmt:      "https://remote.example.com/api/%s",
 			transport:         "streamable-http",
-			expectedRemoteURL: "https://remote.example.com/api/mcp",
 			expectedTransport: "streamable-http",
 		},
 	}
@@ -51,11 +49,12 @@ func TestMCPPublishRemoteURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mcpName := UniqueNameWithPrefix("e2e-remote")
 			serverName := tt.namespace + "/" + mcpName
+			remoteURL := fmt.Sprintf(tt.remoteURLFmt, mcpName)
 			version := "0.0.1-e2e"
 
 			args := []string{
 				"mcp", "publish", serverName,
-				"--remote-url", tt.remoteURL,
+				"--remote-url", remoteURL,
 				"--version", version,
 				"--description", "E2E remote-url test",
 				"--registry-url", regURL,
@@ -77,12 +76,12 @@ func TestMCPPublishRemoteURL(t *testing.T) {
 					"--registry-url", regURL,
 				)
 				RequireSuccess(t, result)
-				RequireOutputContains(t, result, tt.expectedRemoteURL)
+				RequireOutputContains(t, result, remoteURL)
 				RequireOutputContains(t, result, tt.expectedTransport)
 			})
 
 			t.Run("verify_via_api", func(t *testing.T) {
-				resp := RegistryGet(t, regURL+"/servers/"+serverName+"/versions/"+version)
+				resp := RegistryGet(t, regURL+"/servers/"+url.PathEscape(serverName)+"/versions/"+version)
 				defer resp.Body.Close()
 
 				if resp.StatusCode != http.StatusOK {
@@ -118,8 +117,8 @@ func TestMCPPublishRemoteURL(t *testing.T) {
 				}
 
 				remote := server.Remotes[0]
-				if remote.URL != tt.expectedRemoteURL {
-					t.Errorf("Remote URL = %q, want %q", remote.URL, tt.expectedRemoteURL)
+				if remote.URL != remoteURL {
+					t.Errorf("Remote URL = %q, want %q", remote.URL, remoteURL)
 				}
 				if remote.Type != tt.expectedTransport {
 					t.Errorf("Remote transport = %q, want %q", remote.Type, tt.expectedTransport)
