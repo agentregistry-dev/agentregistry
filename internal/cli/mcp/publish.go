@@ -48,8 +48,8 @@ func init() {
 	PublishCmd.Flags().BoolVar(&overwriteFlag, "overwrite", false, "Overwrite if the version is already published")
 	PublishCmd.Flags().StringVar(&publishVersion, "version", "", "Server version")
 	PublishCmd.Flags().StringVar(&githubRepository, "github", "", "GitHub repository URL")
-	PublishCmd.Flags().StringVar(&publishTransport, "transport", "", "Transport type: stdio or streamable-http")
-	PublishCmd.Flags().StringVar(&publishTransportURL, "transport-url", "", "Transport URL for streamable-http transport (used with --type)")
+	PublishCmd.Flags().StringVar(&publishTransport, "transport", "", "Transport type: stdio or streamable-http (package mode); streamable-http or sse (--remote-url mode)")
+	PublishCmd.Flags().StringVar(&publishTransportURL, "transport-url", "", "Transport URL for streamable-http transport")
 
 	PublishCmd.Flags().StringVar(&registryType, "type", "", "Package registry type: npm, pypi, or oci")
 	PublishCmd.Flags().StringVar(&packageID, "package-id", "", "Package identifier (e.g., docker.io/org/image:tag, @mcp/server)")
@@ -80,7 +80,7 @@ Otherwise, --version and --description are required.
 
 Examples:
   # Publish a remote MCP server hosted on Databricks (no package to install)
-  arctl mcp publish myorg/databricks-unity-catalog \
+  arctl mcp publish com.databricks/unity-catalog \
     --remote-url https://my-workspace.cloud.databricks.com/mcp \
     --version 1.0.0 \
     --description "Databricks Unity Catalog MCP server"
@@ -175,6 +175,14 @@ func runMCPServerPublish(cmd *cobra.Command, args []string) error {
 
 	// Remote-only mode: server is already deployed, no package to install
 	if publishRemoteURL != "" {
+		// Reject conflicting package flags when using --remote-url
+		if registryType != "" {
+			return fmt.Errorf("--type cannot be used with --remote-url; use one or the other")
+		}
+		if packageID != "" {
+			return fmt.Errorf("--package-id cannot be used with --remote-url; use one or the other")
+		}
+
 		remoteTransportType := publishTransport
 		if remoteTransportType == "" {
 			remoteTransportType = string(model.TransportTypeStreamableHTTP)
