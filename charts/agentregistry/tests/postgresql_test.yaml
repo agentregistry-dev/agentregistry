@@ -50,7 +50,7 @@ tests:
           of: Deployment
       - equal:
           path: spec.template.spec.containers[0].image
-          value: docker.io/pgvector/pgvector:pg16
+          value: docker.io/pgvector/pgvector:0.8.2-pg16
 
   - it: Deployment uses custom image tag
     set:
@@ -170,4 +170,4 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: my-registry.example.com/pgvector/pgvector:pg16
+          value: my-registry.example.com/pgvector/pgvector:0.8.2-pg16

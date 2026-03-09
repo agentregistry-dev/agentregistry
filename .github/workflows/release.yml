@@ -67,8 +67,11 @@ jobs:
     needs:
     - docker
     runs-on: ubuntu-latest
+    env:
+      HELM_PLUGIN_UNITTEST_VERSION: v1.0.3
     permissions:
       contents: write
+      packages: write
     steps:
     - uses: actions/checkout@v4
       with:
@@ -79,10 +82,59 @@ jobs:
       with:
         go-version-file: "go.mod"
 
+    - name: Resolve chart version
+      id: version
+      run: |
+        set -euo pipefail
+        CHART_VER=$(grep -E '^version:' charts/agentregistry/Chart.yaml | awk '{print $2}' | tr -d '"')
+        echo "chart_version=${CHART_VER}" >> "$GITHUB_OUTPUT"
+
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          TARGET_VER="${{ github.event.inputs.version }}"
+        else
+          TARGET_VER="${GITHUB_REF#refs/tags/}"
+          TARGET_VER="${TARGET_VER#v}"
+        fi
+        echo "target_version=${TARGET_VER}" >> "$GITHUB_OUTPUT"
+        echo "Chart.yaml version : ${CHART_VER}"
+        echo "Target publish version: ${TARGET_VER}"
+
+    - name: Verify Chart.yaml version matches release version
+      run: |
+        set -euo pipefail
+        CHART_VER="${{ steps.version.outputs.chart_version }}"
+        TARGET_VER="${{ steps.version.outputs.target_version }}"
+        if [ "$CHART_VER" != "$TARGET_VER" ]; then
+          echo "::error::Chart.yaml version (${CHART_VER}) does not match release version (${TARGET_VER})."
+          echo "Update charts/agentregistry/Chart.yaml to version: ${TARGET_VER} before releasing."
+          exit 1
+        fi
+        echo "Version check passed: ${CHART_VER}"
+
+    - name: Cache Helm plugins
+      uses: actions/cache@v4
+      with:
+        path: ~/.local/share/helm/plugins
+        # Cache the helm-unittest plugin by plugin version so it's stable across chart changes
+        key: ${{ runner.os }}-helm-plugins-unittest-${{ env.HELM_PLUGIN_UNITTEST_VERSION }}
+        restore-keys: |
+          ${{ runner.os }}-helm-plugins-unittest-
+
+    - name: Ensure helm-unittest plugin (Makefile)
+      run: |
+        set -euo pipefail
+        make helm-unittest-install
+
+    - name: Lint chart (Makefile)
+      run: make charts-lint HELM_CHART_DIR=charts/agentregistry
+
+    - name: Run chart tests (Makefile)
+      run: make charts-test HELM_CHART_DIR=charts/agentregistry
+
     - name: Build Release Artifacts
       env:
         DOCKER_REGISTRY: "ghcr.io" # prod for releases
-      run: |  
+      run: |
         # if workflow_dispatch is used, use the version input
         if [ -n "${{ github.event.inputs.version }}" ]; then
           export VERSION=${{ github.event.inputs.version }}
@@ -91,6 +143,62 @@ jobs:
         fi
         make release-cli
 
+    - name: Package chart
+      run: |
+        set -euo pipefail
+        mkdir -p build/charts
+        helm package charts/agentregistry -d build/charts
+        echo "--- packaged files ---"
+        ls -lh build/charts/
+
+    - name: Generate checksum
+      run: |
+        set -euo pipefail
+        cd build/charts
+        sha256sum ./*.tgz > checksums.txt
+        cat checksums.txt
+
+    - name: Resolve registry credentials
+      id: creds
+      run: |
+        # Use explicit secret if provided; fall back to built-in GITHUB_TOKEN.
+        if [ -n "${{ secrets.HELM_REGISTRY_PASSWORD }}" ]; then
+          echo "password_source=secret" >> "$GITHUB_OUTPUT"
+        else
+          echo "password_source=github_token" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Log in to GHCR (OCI registry)
+      run: |
+        set -euo pipefail
+        REGISTRY="${{ secrets.HELM_REGISTRY || 'ghcr.io' }}"
+        USERNAME="${{ secrets.HELM_REGISTRY_USERNAME || github.actor }}"
+
+        if [ "${{ steps.creds.outputs.password_source }}" = "secret" ]; then
+          PASSWORD="${{ secrets.HELM_REGISTRY_PASSWORD }}"
+        else
+          PASSWORD="${{ secrets.GITHUB_TOKEN }}"
+        fi
+
+        printf "%s" "${PASSWORD}" | helm registry login "${REGISTRY}" \
+          --username "${USERNAME}" \
+          --password-stdin
+        echo "Logged in to ${REGISTRY} as ${USERNAME}"
+
+    - name: Push chart to GHCR
+      run: |
+        set -euo pipefail
+        REGISTRY="${{ secrets.HELM_REGISTRY || 'ghcr.io' }}"
+        REPO="${{ secrets.HELM_REPO || 'agentregistry-dev/agentregistry' }}"
+        CHART_VER="${{ steps.version.outputs.chart_version }}"
+
+        for pkg in build/charts/*.tgz; do
+          [ -f "$pkg" ] || continue
+          echo "Pushing ${pkg} → oci://${REGISTRY}/${REPO}/charts/agentregistry:${CHART_VER}"
+          helm push "${pkg}" "oci://${REGISTRY}/${REPO}/charts"
+        done
+
+
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/')
@@ -98,5 +206,5 @@ jobs:
         generate_release_notes: true
         files: |
           bin/arctl-*
-
-
+          build/charts/*.tgz
+          build/charts/checksums.txt

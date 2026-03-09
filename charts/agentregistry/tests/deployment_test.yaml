@@ -31,9 +31,10 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].image
+          # allow either lowercase or uppercase hex and permit extra trailing text
           pattern: "^ghcr.io/agentregistry-dev/agentregistry/server@sha256:[0-9a-fA-F]{64}"
 
-
+  
 
   - it: sets replicaCount
     template: deployment.yaml

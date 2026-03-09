@@ -380,27 +380,26 @@ database:
     # -- Deploy a PostgreSQL instance as part of this chart
     enabled: true
 
-    # The image uses pgvector/pgvector which bundles PostgreSQL + pgvector extension.
-    # Tags follow the pattern: pg<pg_major>
+    # The image uses pgvector/pgvector which bundles PostgreSQL + the pgvector extension.
+    # Use immutable variant tags (recommended) which include both the pgvector release
+    # and the PostgreSQL major, for example: "0.8.2-pg16". Avoid floating tags like
+    # `pg16` or `latest` because they are mutable and can change over time.
     #
-    # To change the PostgreSQL major version, set the tag accordingly:
-    #   PostgreSQL 13: "pg13"
-    #   PostgreSQL 14: "pg14"
-    #   PostgreSQL 15: "pg15"
-    #   PostgreSQL 16: "pg16" (default)
-    #   PostgreSQL 17: "pg17"
-    #   PostgreSQL 18: "pg18"
+    # To select a different PostgreSQL major, choose an immutable variant tag with
+    # the desired pg<major> suffix. Example variants (replace version as needed):
+    #   PostgreSQL 13: "0.8.2-pg13"
+    #   PostgreSQL 14: "0.8.2-pg14"
+    #   PostgreSQL 15: "0.8.2-pg15"
+    #   PostgreSQL 16: "0.8.2-pg16" (recommended default)
     #
-    # Optional Debian variants: "pg17-bookworm", "pg17-trixie"
-    # Browse all tags: https://hub.docker.com/r/pgvector/pgvector/tags
+    # Check available tags: https://hub.docker.com/r/pgvector/pgvector/tags
     image:
       # -- PostgreSQL image registry
       registry: docker.io
       # -- PostgreSQL image repository (pgvector/pgvector)
       repository: pgvector/pgvector
-      # -- PostgreSQL image tag — immutable tags are recommended for reproducible builds;
-      #    using floating tags (e.g. `pg16`, `pg17`, `latest`) may lead to non-reproducible deployments
-      tag: "pg16"
+      # -- PostgreSQL image tag — MUST use immutable variant tags (e.g. "0.8.2-pg16")
+      tag: "0.8.2-pg16"
       # -- PostgreSQL image digest (overrides tag if set)
       digest: ""
       # -- PostgreSQL image pull policy

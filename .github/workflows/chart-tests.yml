@@ -15,12 +15,17 @@ on:
       - '.github/workflows/chart-tests.yml'
       - '.github/workflows/chart-release.yml'
       - 'Makefile'
+  merge_group:
+    branches: [ main ]
+    types: [ checks_requested ]
   workflow_dispatch:
 
 jobs:
   chart-tests:
     name: Helm chart lint & unit tests
     runs-on: ubuntu-latest
+    env:
+      HELM_PLUGIN_UNITTEST_VERSION: v1.0.3
 
     steps:
       - name: Checkout
@@ -28,51 +33,31 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: '3.17.0'
-
       # Cache the helm-unittest plugin dir so repeated runs skip re-downloading.
       - name: Cache Helm plugins
         uses: actions/cache@v4
         id: helm-plugins-cache
         with:
           path: ~/.local/share/helm/plugins
-          key: ${{ runner.os }}-helm-plugins-unittest-${{ hashFiles('charts/agentregistry/Chart.yaml') }}
+          key: ${{ runner.os }}-helm-plugins-unittest-${{ env.HELM_PLUGIN_UNITTEST_VERSION }}
           restore-keys: |
             ${{ runner.os }}-helm-plugins-unittest-
 
-      - name: Install helm-unittest plugin (if missing)
-        # The cache may already have the plugin; the check avoids a redundant install.
+      - name: Ensure helm-unittest plugin (Makefile)
+        # Reuse Makefile logic to centralize install behavior and flags
         run: |
           set -euo pipefail
-          if helm plugin list | awk '{print $1}' | grep -q '^unittest$'; then
-            echo "helm-unittest already installed (from cache or prior install)"
-          else
-            echo "Installing helm-unittest plugin..."
-            helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.0.3
-          fi
+          make helm-unittest-install
 
       - name: Show Helm and plugin versions
         run: |
           helm version --short
           helm plugin list
 
-      - name: Build chart dependencies
+      - name: Lint chart (Makefile)
         run: |
           set -euo pipefail
-          helm dependency build charts/agentregistry
-
-      - name: Lint chart (default values)
-        run: |
-          set -euo pipefail
-          helm lint charts/agentregistry
-
-      - name: Lint chart (strict mode)
-        run: |
-          set -euo pipefail
-          helm lint charts/agentregistry --strict
+          make charts-lint HELM_CHART_DIR=charts/agentregistry
 
       - name: Render templates (smoke test)
         run: |
@@ -84,11 +69,10 @@ jobs:
           echo "--- rendered manifest line count ---"
           wc -l /tmp/chart-render/rendered.yaml
 
-      - name: Run helm-unittest
+      - name: Run chart tests (Makefile)
         run: |
           set -euo pipefail
-          helm unittest charts/agentregistry \
-            --file "tests/*_test.yaml"
+          make charts-test HELM_CHART_DIR=charts/agentregistry
 
       - name: Upload rendered manifests (on failure)
         if: failure()
