@@ -63,6 +63,9 @@ jobs:
           mkdir -p /tmp/chart-render
           helm template test-release charts/agentregistry \
             --values charts/agentregistry/values.yaml \
+            --set config.jwtPrivateKey=deadbeef1234567890abcdef12345678 \
+            --set database.password=ci-password \
+            --set database.host=postgres.example.com \
             > /tmp/chart-render/rendered.yaml
           echo "--- rendered manifest line count ---"
           wc -l /tmp/chart-render/rendered.yaml
