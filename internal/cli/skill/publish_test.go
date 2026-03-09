@@ -34,24 +34,24 @@ Some content here.
 			wantDesc: "A test skill",
 		},
 		{
-			name: "name only",
+			name: "name only (missing description)",
 			content: `---
 name: simple-skill
 ---
 Body text.
 `,
-			wantName: "simple-skill",
-			wantDesc: "",
+			wantErr:     true,
+			errContains: "missing required field: description",
 		},
 		{
-			name: "empty name falls through",
+			name: "description only (missing name)",
 			content: `---
 description: no name provided
 ---
 Body.
 `,
-			wantName: "",
-			wantDesc: "no name provided",
+			wantErr:     true,
+			errContains: "missing required field: name",
 		},
 		{
 			name:        "empty file",
@@ -160,17 +160,6 @@ description: A skill
 			wantRepoURL: "https://github.com/org/repo",
 		},
 		{
-			name: "falls back to directory name when name is empty",
-			skillMd: `---
-description: No name
----
-`,
-			github:      "https://github.com/org/repo",
-			version:     "2.0.0",
-			wantVer:     "2.0.0",
-			wantRepoURL: "https://github.com/org/repo",
-		},
-		{
 			name: "full tree URL with branch and path",
 			skillMd: `---
 name: nested-skill
@@ -213,11 +202,8 @@ description: Branch
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			if tt.wantName != "" && skill.Name != tt.wantName {
+			if skill.Name != tt.wantName {
 				t.Errorf("Name = %q, want %q", skill.Name, tt.wantName)
-			}
-			if tt.wantName == "" && skill.Name == "" {
-				t.Error("expected Name to fall back to directory name, got empty")
 			}
 			if skill.Version != tt.wantVer {
 				t.Errorf("Version = %q, want %q", skill.Version, tt.wantVer)
@@ -250,7 +236,7 @@ func TestBuildSkillFromGitHub_MissingVersion(t *testing.T) {
 	versionFlag = ""
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: test\n---\n")
+	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: test\ndescription: test skill\n---\n")
 
 	_, err := buildSkillFromGitHub(dir)
 	if err == nil {
@@ -294,7 +280,7 @@ func TestBuildSkillFromGitHub_InvalidURL(t *testing.T) {
 	versionFlag = "1.0.0"
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: test\n---\n")
+	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: test\ndescription: test skill\n---\n")
 
 	tests := []struct {
 		name        string
@@ -569,7 +555,7 @@ func TestRunPublish_GitHubMissingVersion(t *testing.T) {
 	dryRunFlag = false
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: test\n---\n")
+	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: test\ndescription: test skill\n---\n")
 
 	err := runPublish(nil, []string{dir})
 	if err == nil {
@@ -1164,18 +1150,18 @@ func TestIsValidSkillDir(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "valid SKILL.md with name only",
+			name: "SKILL.md with name only (missing description)",
 			setup: func(dir string) {
 				writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: simple\n---\nBody.\n")
 			},
-			want: true,
+			want: false,
 		},
 		{
-			name: "valid SKILL.md with description only (no name)",
+			name: "SKILL.md with description only (missing name)",
 			setup: func(dir string) {
 				writeFile(t, filepath.Join(dir, "SKILL.md"), "---\ndescription: no name\n---\nBody.\n")
 			},
-			want: true,
+			want: false,
 		},
 		{
 			name:  "no SKILL.md file",

@@ -68,7 +68,8 @@ func TestAgentAddMCPAndBuild(t *testing.T) {
 	t.Run("build_with_mcp", func(t *testing.T) {
 		agentDir := filepath.Join(tmpDir, agentName)
 
-		result := RunArctl(t, tmpDir, "agent", "build", agentDir)
+		result := RunArctl(t, tmpDir, "agent", "build", agentDir,
+			"--image", agentName+":latest")
 		RequireSuccess(t, result)
 	})
 }

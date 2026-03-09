@@ -268,22 +268,23 @@ func parseSkillFrontmatter(skillPath string) (*skillFrontmatter, error) {
 		return nil, fmt.Errorf("failed to parse SKILL.md frontmatter: %w", err)
 	}
 
+	if fm.Name == "" {
+		return nil, fmt.Errorf("SKILL.md frontmatter missing required field: name")
+	}
+	if fm.Description == "" {
+		return nil, fmt.Errorf("SKILL.md frontmatter missing required field: description")
+	}
+
 	return &fm, nil
 }
 
-// resolveSkillMeta parses SKILL.md frontmatter and resolves the skill name.
+// resolveSkillMeta parses SKILL.md frontmatter and returns the skill name and description.
 func resolveSkillMeta(skillPath string) (name, description string, err error) {
 	fm, err := parseSkillFrontmatter(skillPath)
 	if err != nil {
 		return "", "", err
 	}
-
-	name = fm.Name
-	if name == "" {
-		name = filepath.Base(skillPath)
-	}
-
-	return name, fm.Description, nil
+	return fm.Name, fm.Description, nil
 }
 
 // resolveGitHubVersion returns the version for a GitHub-based publish.

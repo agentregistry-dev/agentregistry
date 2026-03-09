@@ -52,7 +52,7 @@ func TestBuildSkillImage_MissingImageFlag(t *testing.T) {
 	buildImage = ""
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: test-skill\n---\n")
+	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: test-skill\ndescription: test skill\n---\n")
 
 	err := buildSkillImage(dir, nil)
 	if err == nil {
