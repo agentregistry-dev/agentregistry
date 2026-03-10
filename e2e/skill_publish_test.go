@@ -1,7 +1,8 @@
 //go:build e2e
 
-// Tests for the "skill publish" command. These tests verify publishing skills
-// to the registry via both --github and --docker-url flags.
+// Tests for the "skill build" and "skill publish" commands. These tests verify
+// building skills as Docker images and publishing skills to the registry via
+// both --github and --docker-image flags.
 
 package e2e
 
@@ -13,6 +14,61 @@ import (
 	"path/filepath"
 	"testing"
 )
+
+// --- skill build tests ---
+
+// TestSkillBuild tests that "arctl skill build" builds a Docker image from a
+// skill folder containing SKILL.md.
+func TestSkillBuild(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillName := UniqueNameWithPrefix("e2e-build-skill")
+	imageName := "localhost/e2e-test/" + skillName + ":latest"
+
+	// Create skill folder with SKILL.md
+	skillDir := filepath.Join(tmpDir, skillName)
+	createSkillDir(t, skillDir, skillName, "E2E build test skill")
+
+	CleanupDockerImage(t, imageName)
+
+	t.Run("build_succeeds", func(t *testing.T) {
+		result := RunArctl(t, tmpDir,
+			"skill", "build", skillDir,
+			"--image", imageName,
+		)
+		RequireSuccess(t, result)
+	})
+
+	t.Run("image_exists", func(t *testing.T) {
+		if !DockerImageExists(t, imageName) {
+			t.Fatalf("expected Docker image %s to exist after build", imageName)
+		}
+	})
+}
+
+// NOTE: Basic build error cases (missing --image, invalid dir, no SKILL.md)
+// are covered by unit tests in internal/cli/skill/build_test.go.
+
+// TestSkillBuildWithPlatform tests that "arctl skill build" accepts the
+// --platform flag and produces a valid image.
+func TestSkillBuildWithPlatform(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillName := UniqueNameWithPrefix("e2e-plat-skill")
+	imageName := "localhost/e2e-test/" + skillName + ":latest"
+
+	skillDir := filepath.Join(tmpDir, skillName)
+	createSkillDir(t, skillDir, skillName, "E2E platform test skill")
+
+	CleanupDockerImage(t, imageName)
+
+	result := RunArctl(t, tmpDir,
+		"skill", "build", skillDir,
+		"--image", imageName,
+		"--platform", "linux/amd64",
+	)
+	RequireSuccess(t, result)
+}
+
+// --- skill publish tests ---
 
 // TestSkillPublishGitHub tests publishing a skill with --github flag and
 // verifying it appears in the registry with the correct repository metadata.
@@ -26,13 +82,7 @@ func TestSkillPublishGitHub(t *testing.T) {
 
 	// Create a skill folder with SKILL.md
 	skillDir := filepath.Join(tmpDir, skillName)
-	if err := os.MkdirAll(skillDir, 0755); err != nil {
-		t.Fatalf("failed to create skill dir: %v", err)
-	}
-	skillMd := "---\nname: " + skillName + "\ndescription: E2E test skill from GitHub\n---\n# Test Skill\n"
-	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMd), 0644); err != nil {
-		t.Fatalf("failed to write SKILL.md: %v", err)
-	}
+	createSkillDir(t, skillDir, skillName, "E2E test skill from GitHub")
 
 	// Step 1: Publish with --github
 	t.Run("publish", func(t *testing.T) {
@@ -57,48 +107,22 @@ func TestSkillPublishGitHub(t *testing.T) {
 
 	// Step 3: Verify repository metadata via API
 	t.Run("verify_repository_metadata", func(t *testing.T) {
-		url := regURL + "/skills/" + skillName + "/versions/" + version
-		resp := RegistryGet(t, url)
-		defer resp.Body.Close()
+		skillResp := fetchSkillFromAPI(t, regURL, skillName, version)
 
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("expected 200 from skill endpoint, got %d", resp.StatusCode)
+		if skillResp.Name != skillName {
+			t.Errorf("name = %q, want %q", skillResp.Name, skillName)
 		}
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatalf("failed to read response body: %v", err)
-		}
-
-		var skillResp struct {
-			Skill struct {
-				Name       string `json:"name"`
-				Version    string `json:"version"`
-				Repository *struct {
-					URL    string `json:"url"`
-					Source string `json:"source"`
-				} `json:"repository"`
-				Packages []interface{} `json:"packages"`
-			} `json:"skill"`
-		}
-		if err := json.Unmarshal(body, &skillResp); err != nil {
-			t.Fatalf("failed to parse skill response: %v", err)
-		}
-
-		if skillResp.Skill.Name != skillName {
-			t.Errorf("name = %q, want %q", skillResp.Skill.Name, skillName)
-		}
-		if skillResp.Skill.Repository == nil {
+		if skillResp.Repository == nil {
 			t.Fatal("expected repository to be set, got nil")
 		}
-		if skillResp.Skill.Repository.URL != githubRepo {
-			t.Errorf("repository.url = %q, want %q", skillResp.Skill.Repository.URL, githubRepo)
+		if skillResp.Repository.URL != githubRepo {
+			t.Errorf("repository.url = %q, want %q", skillResp.Repository.URL, githubRepo)
 		}
-		if skillResp.Skill.Repository.Source != "github" {
-			t.Errorf("repository.source = %q, want %q", skillResp.Skill.Repository.Source, "github")
+		if skillResp.Repository.Source != "github" {
+			t.Errorf("repository.source = %q, want %q", skillResp.Repository.Source, "github")
 		}
-		if len(skillResp.Skill.Packages) != 0 {
-			t.Errorf("expected no packages for GitHub-published skill, got %d", len(skillResp.Skill.Packages))
+		if len(skillResp.Packages) != 0 {
+			t.Errorf("expected no packages for GitHub-published skill, got %d", len(skillResp.Packages))
 		}
 	})
 
@@ -112,19 +136,185 @@ func TestSkillPublishGitHub(t *testing.T) {
 	})
 }
 
+// TestSkillPublishDockerImageDirect tests publishing a skill with --docker-image
+// flag in direct mode (no local SKILL.md) and verifying the package metadata.
+func TestSkillPublishDockerImageDirect(t *testing.T) {
+	regURL := RegistryURL(t)
+
+	tmpDir := t.TempDir()
+	skillName := UniqueNameWithPrefix("e2e-docker-skill")
+	version := "0.0.1-e2e"
+	dockerImage := "docker.io/test/" + skillName + ":v0.0.1"
+
+	// Publish with --docker-image (direct mode, no local folder)
+	t.Run("publish", func(t *testing.T) {
+		result := RunArctl(t, tmpDir,
+			"skill", "publish", skillName,
+			"--docker-image", dockerImage,
+			"--version", version,
+			"--description", "E2E Docker skill",
+			"--registry-url", regURL,
+		)
+		RequireSuccess(t, result)
+	})
+
+	// Verify the skill exists and has Docker package metadata
+	t.Run("verify_package_metadata", func(t *testing.T) {
+		skillResp := fetchSkillFromAPI(t, regURL, skillName, version)
+
+		if skillResp.Name != skillName {
+			t.Errorf("name = %q, want %q", skillResp.Name, skillName)
+		}
+		if skillResp.Repository != nil {
+			t.Errorf("expected repository to be nil for Docker publish, got %+v", skillResp.Repository)
+		}
+		if len(skillResp.Packages) != 1 {
+			t.Fatalf("expected 1 package, got %d", len(skillResp.Packages))
+		}
+		pkg := skillResp.Packages[0]
+		if pkg.RegistryType != "docker" {
+			t.Errorf("package registryType = %q, want %q", pkg.RegistryType, "docker")
+		}
+		if pkg.Identifier != dockerImage {
+			t.Errorf("package identifier = %q, want %q", pkg.Identifier, dockerImage)
+		}
+	})
+
+	t.Cleanup(func() {
+		RunArctl(t, tmpDir,
+			"skill", "delete", skillName,
+			"--version", version,
+			"--registry-url", regURL,
+		)
+	})
+}
+
+// TestSkillPublishDockerImageFromFolder tests publishing a skill with
+// --docker-image from a local folder containing SKILL.md.
+func TestSkillPublishDockerImageFromFolder(t *testing.T) {
+	regURL := RegistryURL(t)
+
+	tmpDir := t.TempDir()
+	skillName := UniqueNameWithPrefix("e2e-folder-docker")
+	version := "0.0.1-e2e"
+	dockerImage := "docker.io/test/" + skillName + ":v0.0.1"
+
+	// Create a skill folder with SKILL.md
+	skillDir := filepath.Join(tmpDir, skillName)
+	createSkillDir(t, skillDir, skillName, "E2E folder Docker skill")
+
+	// Publish with --docker-image from folder
+	t.Run("publish", func(t *testing.T) {
+		result := RunArctl(t, tmpDir,
+			"skill", "publish", skillDir,
+			"--docker-image", dockerImage,
+			"--version", version,
+			"--registry-url", regURL,
+		)
+		RequireSuccess(t, result)
+	})
+
+	// Verify the skill has correct metadata from SKILL.md and Docker package
+	t.Run("verify_metadata", func(t *testing.T) {
+		skillResp := fetchSkillFromAPI(t, regURL, skillName, version)
+
+		if skillResp.Name != skillName {
+			t.Errorf("name = %q, want %q", skillResp.Name, skillName)
+		}
+		if skillResp.Repository != nil {
+			t.Errorf("expected repository to be nil for Docker publish, got %+v", skillResp.Repository)
+		}
+		if len(skillResp.Packages) != 1 {
+			t.Fatalf("expected 1 package, got %d", len(skillResp.Packages))
+		}
+		pkg := skillResp.Packages[0]
+		if pkg.RegistryType != "docker" {
+			t.Errorf("package registryType = %q, want %q", pkg.RegistryType, "docker")
+		}
+		if pkg.Identifier != dockerImage {
+			t.Errorf("package identifier = %q, want %q", pkg.Identifier, dockerImage)
+		}
+	})
+
+	t.Cleanup(func() {
+		RunArctl(t, tmpDir,
+			"skill", "delete", skillName,
+			"--version", version,
+			"--registry-url", regURL,
+		)
+	})
+}
+
+// TestSkillBuildAndPublish tests the full workflow: build a skill image,
+// then publish it referencing the built image.
+func TestSkillBuildAndPublish(t *testing.T) {
+	regURL := RegistryURL(t)
+
+	tmpDir := t.TempDir()
+	skillName := UniqueNameWithPrefix("e2e-full-flow")
+	version := "0.0.1-e2e"
+	imageName := "localhost/e2e-test/" + skillName + ":v0.0.1"
+
+	// Create skill folder
+	skillDir := filepath.Join(tmpDir, skillName)
+	createSkillDir(t, skillDir, skillName, "E2E build+publish skill")
+
+	CleanupDockerImage(t, imageName)
+
+	// Step 1: Build
+	t.Run("build", func(t *testing.T) {
+		result := RunArctl(t, tmpDir,
+			"skill", "build", skillDir,
+			"--image", imageName,
+		)
+		RequireSuccess(t, result)
+	})
+
+	// Step 2: Publish referencing the built image
+	t.Run("publish", func(t *testing.T) {
+		result := RunArctl(t, tmpDir,
+			"skill", "publish", skillDir,
+			"--docker-image", imageName,
+			"--version", version,
+			"--registry-url", regURL,
+		)
+		RequireSuccess(t, result)
+	})
+
+	// Step 3: Verify
+	t.Run("verify", func(t *testing.T) {
+		skillResp := fetchSkillFromAPI(t, regURL, skillName, version)
+
+		if skillResp.Name != skillName {
+			t.Errorf("name = %q, want %q", skillResp.Name, skillName)
+		}
+		if len(skillResp.Packages) != 1 {
+			t.Fatalf("expected 1 package, got %d", len(skillResp.Packages))
+		}
+		if skillResp.Packages[0].Identifier != imageName {
+			t.Errorf("package identifier = %q, want %q", skillResp.Packages[0].Identifier, imageName)
+		}
+	})
+
+	t.Cleanup(func() {
+		RunArctl(t, tmpDir,
+			"skill", "delete", skillName,
+			"--version", version,
+			"--registry-url", regURL,
+		)
+	})
+}
+
+// --- validation tests ---
+
 // TestSkillPublishValidation verifies that "skill publish" rejects requests
-// when neither --docker-url nor --github is provided.
+// when neither --github nor --docker-image is provided.
 func TestSkillPublishValidation(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a minimal skill folder
 	skillDir := filepath.Join(tmpDir, "test-skill")
-	if err := os.MkdirAll(skillDir, 0755); err != nil {
-		t.Fatalf("failed to create skill dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: test\n---\n"), 0644); err != nil {
-		t.Fatalf("failed to write SKILL.md: %v", err)
-	}
+	createSkillDir(t, skillDir, "test", "test")
 
 	t.Run("missing_both_flags", func(t *testing.T) {
 		result := RunArctl(t, tmpDir, "skill", "publish", skillDir)
@@ -135,12 +325,48 @@ func TestSkillPublishValidation(t *testing.T) {
 	t.Run("mutually_exclusive_flags", func(t *testing.T) {
 		result := RunArctl(t, tmpDir,
 			"skill", "publish", skillDir,
-			"--docker-url", "docker.io/test",
+			"--docker-image", "docker.io/test/test:latest",
 			"--github", "https://github.com/test/repo",
 		)
 		RequireFailure(t, result)
 	})
+
+	t.Run("missing_version_with_docker_image", func(t *testing.T) {
+		result := RunArctl(t, tmpDir,
+			"skill", "publish", skillDir,
+			"--docker-image", "docker.io/test/test:latest",
+			"--registry-url", "http://localhost:12121/v0",
+		)
+		RequireFailure(t, result)
+		RequireOutputContains(t, result, "--version is required")
+	})
+
+	t.Run("missing_version_with_github", func(t *testing.T) {
+		result := RunArctl(t, tmpDir,
+			"skill", "publish", skillDir,
+			"--github", "https://github.com/test/repo",
+			"--registry-url", "http://localhost:12121/v0",
+		)
+		RequireFailure(t, result)
+		RequireOutputContains(t, result, "--version is required")
+	})
+
+	t.Run("directory_without_skill_md", func(t *testing.T) {
+		emptyDir := filepath.Join(tmpDir, "no-skill")
+		os.MkdirAll(emptyDir, 0755)
+
+		result := RunArctl(t, tmpDir,
+			"skill", "publish", emptyDir,
+			"--github", "https://github.com/test/repo",
+			"--version", "1.0.0",
+			"--registry-url", "http://localhost:12121/v0",
+		)
+		RequireFailure(t, result)
+		RequireOutputContains(t, result, "no valid skills found at path")
+	})
 }
+
+// --- dry-run tests ---
 
 // TestSkillPublishDryRunGitHub verifies that --dry-run with --github shows
 // the intended action without actually publishing.
@@ -148,12 +374,7 @@ func TestSkillPublishDryRunGitHub(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	skillDir := filepath.Join(tmpDir, "dry-run-skill")
-	if err := os.MkdirAll(skillDir, 0755); err != nil {
-		t.Fatalf("failed to create skill dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: dry-run-test\ndescription: test\n---\n"), 0644); err != nil {
-		t.Fatalf("failed to write SKILL.md: %v", err)
-	}
+	createSkillDir(t, skillDir, "dry-run-test", "test")
 
 	result := RunArctl(t, tmpDir,
 		"skill", "publish", skillDir,
@@ -166,19 +387,108 @@ func TestSkillPublishDryRunGitHub(t *testing.T) {
 	RequireOutputContains(t, result, "dry-run-test")
 }
 
+// TestSkillPublishDryRunDockerImage verifies that --dry-run with --docker-image
+// shows the intended action without actually publishing.
+func TestSkillPublishDryRunDockerImage(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	skillDir := filepath.Join(tmpDir, "dry-run-docker")
+	createSkillDir(t, skillDir, "dry-run-docker-test", "test")
+
+	result := RunArctl(t, tmpDir,
+		"skill", "publish", skillDir,
+		"--docker-image", "docker.io/test/dry-run:v1.0.0",
+		"--version", "1.0.0",
+		"--dry-run",
+	)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "DRY RUN")
+	RequireOutputContains(t, result, "dry-run-docker-test")
+}
+
 // TestSkillPublishDirectDryRun verifies that direct registration mode
 // works with --dry-run (no local SKILL.md needed).
 func TestSkillPublishDirectDryRun(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	result := RunArctl(t, tmpDir,
-		"skill", "publish", "direct-test-skill",
-		"--github", "https://github.com/agentregistry-dev/skills/tree/main/artifacts-builder",
-		"--version", "1.0.0",
-		"--description", "A remotely hosted skill",
-		"--dry-run",
-	)
-	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "DRY RUN")
-	RequireOutputContains(t, result, "direct-test-skill")
+	t.Run("github_direct", func(t *testing.T) {
+		result := RunArctl(t, tmpDir,
+			"skill", "publish", "direct-test-skill",
+			"--github", "https://github.com/agentregistry-dev/skills/tree/main/artifacts-builder",
+			"--version", "1.0.0",
+			"--description", "A remotely hosted skill",
+			"--dry-run",
+		)
+		RequireSuccess(t, result)
+		RequireOutputContains(t, result, "DRY RUN")
+		RequireOutputContains(t, result, "direct-test-skill")
+	})
+
+	t.Run("docker_direct", func(t *testing.T) {
+		result := RunArctl(t, tmpDir,
+			"skill", "publish", "direct-docker-skill",
+			"--docker-image", "docker.io/test/direct:v1.0.0",
+			"--version", "1.0.0",
+			"--description", "A Docker skill",
+			"--dry-run",
+		)
+		RequireSuccess(t, result)
+		RequireOutputContains(t, result, "DRY RUN")
+		RequireOutputContains(t, result, "direct-docker-skill")
+	})
+}
+
+// --- helpers ---
+
+// createSkillDir creates a skill directory with a valid SKILL.md file.
+func createSkillDir(t *testing.T, dir, name, description string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("failed to create skill dir: %v", err)
+	}
+	skillMd := "---\nname: " + name + "\ndescription: " + description + "\n---\n# " + name + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(skillMd), 0644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+}
+
+// skillAPIResponse represents the shape of the skill API response for verification.
+type skillAPIResponse struct {
+	Name       string `json:"name"`
+	Version    string `json:"version"`
+	Repository *struct {
+		URL    string `json:"url"`
+		Source string `json:"source"`
+	} `json:"repository"`
+	Packages []struct {
+		RegistryType string `json:"registryType"`
+		Identifier   string `json:"identifier"`
+		Version      string `json:"version"`
+	} `json:"packages"`
+}
+
+// fetchSkillFromAPI retrieves a skill from the registry API and returns the parsed response.
+func fetchSkillFromAPI(t *testing.T, regURL, skillName, version string) skillAPIResponse {
+	t.Helper()
+	url := regURL + "/skills/" + skillName + "/versions/" + version
+	resp := RegistryGet(t, url)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from skill endpoint %s, got %d", url, resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to read response body: %v", err)
+	}
+
+	var wrapper struct {
+		Skill skillAPIResponse `json:"skill"`
+	}
+	if err := json.Unmarshal(body, &wrapper); err != nil {
+		t.Fatalf("failed to parse skill response: %v\nbody: %s", err, string(body))
+	}
+
+	return wrapper.Skill
 }

@@ -34,24 +34,24 @@ Some content here.
 			wantDesc: "A test skill",
 		},
 		{
-			name: "name only",
+			name: "name only (missing description)",
 			content: `---
 name: simple-skill
 ---
 Body text.
 `,
-			wantName: "simple-skill",
-			wantDesc: "",
+			wantErr:     true,
+			errContains: "missing required field: description",
 		},
 		{
-			name: "empty name falls through",
+			name: "description only (missing name)",
 			content: `---
 description: no name provided
 ---
 Body.
 `,
-			wantName: "",
-			wantDesc: "no name provided",
+			wantErr:     true,
+			errContains: "missing required field: name",
 		},
 		{
 			name:        "empty file",
@@ -160,17 +160,6 @@ description: A skill
 			wantRepoURL: "https://github.com/org/repo",
 		},
 		{
-			name: "falls back to directory name when name is empty",
-			skillMd: `---
-description: No name
----
-`,
-			github:      "https://github.com/org/repo",
-			version:     "2.0.0",
-			wantVer:     "2.0.0",
-			wantRepoURL: "https://github.com/org/repo",
-		},
-		{
 			name: "full tree URL with branch and path",
 			skillMd: `---
 name: nested-skill
@@ -213,11 +202,8 @@ description: Branch
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			if tt.wantName != "" && skill.Name != tt.wantName {
+			if skill.Name != tt.wantName {
 				t.Errorf("Name = %q, want %q", skill.Name, tt.wantName)
-			}
-			if tt.wantName == "" && skill.Name == "" {
-				t.Error("expected Name to fall back to directory name, got empty")
 			}
 			if skill.Version != tt.wantVer {
 				t.Errorf("Version = %q, want %q", skill.Version, tt.wantVer)
@@ -250,7 +236,7 @@ func TestBuildSkillFromGitHub_MissingVersion(t *testing.T) {
 	versionFlag = ""
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: test\n---\n")
+	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: test\ndescription: test skill\n---\n")
 
 	_, err := buildSkillFromGitHub(dir)
 	if err == nil {
@@ -294,7 +280,7 @@ func TestBuildSkillFromGitHub_InvalidURL(t *testing.T) {
 	versionFlag = "1.0.0"
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: test\n---\n")
+	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: test\ndescription: test skill\n---\n")
 
 	tests := []struct {
 		name        string
@@ -333,116 +319,21 @@ func TestBuildSkillFromGitHub_InvalidURL(t *testing.T) {
 	}
 }
 
-func TestDetectSkills(t *testing.T) {
-	tests := []struct {
-		name      string
-		setup     func(dir string) // creates files/dirs under dir
-		wantCount int
-		wantErr   bool
-	}{
-		{
-			name: "single skill in root",
-			setup: func(dir string) {
-				writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: s\n---\n")
-			},
-			wantCount: 1,
-		},
-		{
-			name: "multiple skills in subdirs",
-			setup: func(dir string) {
-				for _, name := range []string{"skill-a", "skill-b", "skill-c"} {
-					sub := filepath.Join(dir, name)
-					os.MkdirAll(sub, 0755)
-					writeFile(t, filepath.Join(sub, "SKILL.md"), "---\nname: "+name+"\n---\n")
-				}
-			},
-			wantCount: 3,
-		},
-		{
-			name: "ignores subdirs without SKILL.md",
-			setup: func(dir string) {
-				sub := filepath.Join(dir, "has-skill")
-				os.MkdirAll(sub, 0755)
-				writeFile(t, filepath.Join(sub, "SKILL.md"), "---\nname: s\n---\n")
-
-				noSkill := filepath.Join(dir, "no-skill")
-				os.MkdirAll(noSkill, 0755)
-				writeFile(t, filepath.Join(noSkill, "README.md"), "not a skill")
-			},
-			wantCount: 1,
-		},
-		{
-			name: "no skills found",
-			setup: func(dir string) {
-				writeFile(t, filepath.Join(dir, "README.md"), "no skills here")
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir := t.TempDir()
-			tt.setup(dir)
-
-			skills, err := detectSkills(dir)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("detectSkills() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if tt.wantErr {
-				return
-			}
-			if len(skills) != tt.wantCount {
-				t.Errorf("got %d skills, want %d", len(skills), tt.wantCount)
-			}
-		})
-	}
-}
-
-func TestBuildSkillDockerImage_NoDockerURL(t *testing.T) {
-	origURL := dockerUrl
-	origTag := tagFlag
-	t.Cleanup(func() {
-		dockerUrl = origURL
-		tagFlag = origTag
-	})
-
-	dockerUrl = ""
-	tagFlag = "1.0.0"
-
-	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: test\n---\n")
-
-	_, err := buildSkillDockerImage(dir)
-	if err == nil {
-		t.Fatal("expected error when docker url is empty, got nil")
-	}
-	if !contains(err.Error(), "docker url is required") {
-		t.Errorf("error = %q, want it to contain 'docker url is required'", err.Error())
-	}
-}
-
 // savePublishFlags saves all publish-related package-level vars and returns a cleanup function.
 func savePublishFlags(t *testing.T) {
 	t.Helper()
-	origDockerUrl := dockerUrl
-	origTagFlag := tagFlag
 	origVersionFlag := versionFlag
-	origPlatformFlag := platformFlag
-	origPushFlag := pushFlag
 	origDryRunFlag := dryRunFlag
 	origGithubRepo := githubRepository
+	origDockerImage := dockerImageFlag
 	origClient := apiClient
 	origGithubRawBaseURL := githubRawBaseURL
 
 	t.Cleanup(func() {
-		dockerUrl = origDockerUrl
-		tagFlag = origTagFlag
 		versionFlag = origVersionFlag
-		platformFlag = origPlatformFlag
-		pushFlag = origPushFlag
 		dryRunFlag = origDryRunFlag
 		githubRepository = origGithubRepo
+		dockerImageFlag = origDockerImage
 		apiClient = origClient
 		githubRawBaseURL = origGithubRawBaseURL
 	})
@@ -499,34 +390,49 @@ func TestRunPublish_NonExistentPathUsesDirectMode(t *testing.T) {
 	}
 }
 
-func TestRunPublish_DirWithoutSkillMdUsesDirectMode(t *testing.T) {
-	savePublishFlags(t)
-	mockGitHubSkillMdCheck(t)
-
-	var publishedName string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var skill models.SkillJSON
-		json.NewDecoder(r.Body).Decode(&skill)
-		publishedName = skill.Name
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(models.SkillResponse{Skill: skill})
-	}))
-	t.Cleanup(srv.Close)
-
-	apiClient = client.NewClient(srv.URL, "")
-	githubRepository = "https://github.com/org/repo"
-	versionFlag = "1.0.0"
-
-	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "README.md"), "no skill here")
-
-	err := runPublish(nil, []string{dir})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestRunPublish_DirWithoutSkillMdReturnsError(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(dir string)
+	}{
+		{
+			name:  "empty directory",
+			setup: func(dir string) {},
+		},
+		{
+			name: "directory with other files but no SKILL.md",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "README.md"), "no skill here")
+			},
+		},
+		{
+			name: "directory with subdirectories but none containing SKILL.md",
+			setup: func(dir string) {
+				sub := filepath.Join(dir, "sub")
+				os.MkdirAll(sub, 0755)
+				writeFile(t, filepath.Join(sub, "README.md"), "not a skill")
+			},
+		},
 	}
-	// Directory path treated as skill name via direct mode
-	if publishedName == "" {
-		t.Error("expected skill to be published in direct mode")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			savePublishFlags(t)
+			apiClient = client.NewClient("http://localhost:0", "")
+			githubRepository = "https://github.com/org/repo"
+			versionFlag = "1.0.0"
+
+			dir := t.TempDir()
+			tt.setup(dir)
+
+			err := runPublish(nil, []string{dir})
+			if err == nil {
+				t.Fatal("expected error for directory without SKILL.md, got nil")
+			}
+			if !contains(err.Error(), "no valid skills found at path") {
+				t.Errorf("error = %q, want it to contain 'no valid skills found at path'", err.Error())
+			}
+		})
 	}
 }
 
@@ -616,30 +522,15 @@ func TestRunPublish_GitHubAPIError(t *testing.T) {
 	}
 }
 
-func TestRunPublish_GitHubMultipleSkills(t *testing.T) {
+func TestRunPublish_ParentDirWithSubSkillsReturnsError(t *testing.T) {
 	savePublishFlags(t)
-	mockGitHubSkillMdCheck(t)
-
-	var publishedNames []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/v0/skills" {
-			var skill models.SkillJSON
-			json.NewDecoder(r.Body).Decode(&skill)
-			publishedNames = append(publishedNames, skill.Name)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(models.SkillResponse{Skill: skill})
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	t.Cleanup(srv.Close)
-
-	apiClient = client.NewClient(srv.URL, "")
+	apiClient = client.NewClient("http://localhost:0", "")
 	githubRepository = "https://github.com/org/repo"
 	versionFlag = "1.0.0"
 	dryRunFlag = false
 
-	// Create a parent dir with multiple skill subdirs
+	// Parent dir has subdirectories with SKILL.md, but no SKILL.md itself.
+	// isValidSkillDir only checks the given directory, not subdirectories.
 	dir := t.TempDir()
 	for _, name := range []string{"skill-a", "skill-b"} {
 		sub := filepath.Join(dir, name)
@@ -648,11 +539,11 @@ func TestRunPublish_GitHubMultipleSkills(t *testing.T) {
 	}
 
 	err := runPublish(nil, []string{dir})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatal("expected error for parent dir without SKILL.md, got nil")
 	}
-	if len(publishedNames) != 2 {
-		t.Fatalf("expected 2 skills published, got %d: %v", len(publishedNames), publishedNames)
+	if !contains(err.Error(), "no valid skills found at path") {
+		t.Errorf("error = %q, want it to contain 'no valid skills found at path'", err.Error())
 	}
 }
 
@@ -664,7 +555,7 @@ func TestRunPublish_GitHubMissingVersion(t *testing.T) {
 	dryRunFlag = false
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: test\n---\n")
+	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: test\ndescription: test skill\n---\n")
 
 	err := runPublish(nil, []string{dir})
 	if err == nil {
@@ -739,7 +630,7 @@ func TestBuildSkillDirect(t *testing.T) {
 			versionFlag = tt.version
 			publishDesc = tt.desc
 
-			skill, err := buildSkillDirect(tt.skillName)
+			skill, err := buildSkillDirectGitHub(tt.skillName)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -774,7 +665,7 @@ func TestBuildSkillDirect_MissingGithub(t *testing.T) {
 	githubRepository = ""
 	versionFlag = "1.0.0"
 
-	_, err := buildSkillDirect("my-skill")
+	_, err := buildSkillDirectGitHub("my-skill")
 	if err == nil {
 		t.Fatal("expected error when --github is missing, got nil")
 	}
@@ -788,7 +679,7 @@ func TestBuildSkillDirect_MissingVersion(t *testing.T) {
 	githubRepository = "https://github.com/org/repo"
 	versionFlag = ""
 
-	_, err := buildSkillDirect("my-skill")
+	_, err := buildSkillDirectGitHub("my-skill")
 	if err == nil {
 		t.Fatal("expected error when --version is missing, got nil")
 	}
@@ -802,7 +693,7 @@ func TestBuildSkillDirect_InvalidURL(t *testing.T) {
 	githubRepository = "https://gitlab.com/org/repo"
 	versionFlag = "1.0.0"
 
-	_, err := buildSkillDirect("my-skill")
+	_, err := buildSkillDirectGitHub("my-skill")
 	if err == nil {
 		t.Fatal("expected error for invalid GitHub URL, got nil")
 	}
@@ -816,7 +707,7 @@ func TestRunPublish_DirectGitHub(t *testing.T) {
 	mockGitHubSkillMdCheck(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/v0/skills" {
+		if r.Method == http.MethodPost && r.URL.Path == "/v0/skills" { //nolint:nestif
 			var skill models.SkillJSON
 			json.NewDecoder(r.Body).Decode(&skill)
 			if skill.Name != "remote-skill" {
@@ -864,19 +755,19 @@ func TestRunPublish_DirectDryRun(t *testing.T) {
 	}
 }
 
-func TestRunPublish_DirectMissingGithub(t *testing.T) {
+func TestRunPublish_DirectMissingBothFlags(t *testing.T) {
 	savePublishFlags(t)
 	apiClient = client.NewClient("http://localhost:0", "")
 	githubRepository = ""
-	dockerUrl = ""
+	dockerImageFlag = ""
 	versionFlag = "1.0.0"
 
 	err := runPublish(nil, []string{"my-skill"})
 	if err == nil {
 		t.Fatal("expected error when neither flag is set, got nil")
 	}
-	if !contains(err.Error(), "--github is required") {
-		t.Errorf("error = %q, want it to contain '--github is required'", err.Error())
+	if !contains(err.Error(), "--github or --docker-image is required") {
+		t.Errorf("error = %q, want it to contain '--github or --docker-image is required'", err.Error())
 	}
 }
 
@@ -895,18 +786,206 @@ func TestRunPublish_DirectMissingVersion(t *testing.T) {
 	}
 }
 
-func TestRunPublish_DockerUrlWithoutFolder(t *testing.T) {
+// --- Direct Docker mode tests ---
+
+func TestBuildSkillDirectDocker(t *testing.T) {
+	savePublishFlags(t)
+
+	tests := []struct {
+		name        string
+		skillName   string
+		dockerImage string
+		version     string
+		desc        string
+		wantName    string
+		wantVer     string
+		wantImage   string
+	}{
+		{
+			name:        "basic docker publish",
+			skillName:   "my-docker-skill",
+			dockerImage: "docker.io/myorg/my-skill:v1.0.0",
+			version:     "1.0.0",
+			desc:        "A Docker skill",
+			wantName:    "my-docker-skill",
+			wantVer:     "1.0.0",
+			wantImage:   "docker.io/myorg/my-skill:v1.0.0",
+		},
+		{
+			name:        "name is lowercased",
+			skillName:   "My-Skill",
+			dockerImage: "ghcr.io/org/skill:latest",
+			version:     "2.0.0",
+			wantName:    "my-skill",
+			wantVer:     "2.0.0",
+			wantImage:   "ghcr.io/org/skill:latest",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dockerImageFlag = tt.dockerImage
+			versionFlag = tt.version
+			publishDesc = tt.desc
+
+			skill, err := buildSkillDirectDocker(tt.skillName)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if skill.Name != tt.wantName {
+				t.Errorf("Name = %q, want %q", skill.Name, tt.wantName)
+			}
+			if skill.Version != tt.wantVer {
+				t.Errorf("Version = %q, want %q", skill.Version, tt.wantVer)
+			}
+			if skill.Repository != nil {
+				t.Error("Repository should be nil for Docker publish")
+			}
+			if len(skill.Packages) != 1 {
+				t.Fatalf("Packages count = %d, want 1", len(skill.Packages))
+			}
+			pkg := skill.Packages[0]
+			if pkg.Identifier != tt.wantImage {
+				t.Errorf("Packages[0].Identifier = %q, want %q", pkg.Identifier, tt.wantImage)
+			}
+			if pkg.RegistryType != "docker" {
+				t.Errorf("Packages[0].RegistryType = %q, want %q", pkg.RegistryType, "docker")
+			}
+			if pkg.Transport.Type != "docker" {
+				t.Errorf("Packages[0].Transport.Type = %q, want %q", pkg.Transport.Type, "docker")
+			}
+		})
+	}
+}
+
+func TestBuildSkillDirectDocker_MissingVersion(t *testing.T) {
+	savePublishFlags(t)
+	dockerImageFlag = "docker.io/myorg/my-skill:v1.0.0"
+	versionFlag = ""
+
+	_, err := buildSkillDirectDocker("my-skill")
+	if err == nil {
+		t.Fatal("expected error when --version is missing, got nil")
+	}
+	if !contains(err.Error(), "--version is required") {
+		t.Errorf("error = %q, want it to contain '--version is required'", err.Error())
+	}
+}
+
+func TestBuildSkillDirectDocker_MissingImage(t *testing.T) {
+	savePublishFlags(t)
+	dockerImageFlag = ""
+	versionFlag = "1.0.0"
+
+	_, err := buildSkillDirectDocker("my-skill")
+	if err == nil {
+		t.Fatal("expected error when --docker-image is missing, got nil")
+	}
+	if !contains(err.Error(), "--docker-image is required") {
+		t.Errorf("error = %q, want it to contain '--docker-image is required'", err.Error())
+	}
+}
+
+func TestRunPublish_DirectDockerSuccess(t *testing.T) {
+	savePublishFlags(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/v0/skills" { //nolint:nestif
+			var skill models.SkillJSON
+			if err := json.NewDecoder(r.Body).Decode(&skill); err != nil {
+				t.Errorf("failed to decode request body: %v", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if skill.Name != "docker-skill" {
+				t.Errorf("skill name = %q, want %q", skill.Name, "docker-skill")
+			}
+			if skill.Version != "1.0.0" {
+				t.Errorf("skill version = %q, want %q", skill.Version, "1.0.0")
+			}
+			if len(skill.Packages) != 1 {
+				t.Errorf("packages count = %d, want 1", len(skill.Packages))
+			} else if skill.Packages[0].Identifier != "docker.io/myorg/docker-skill:v1.0.0" {
+				t.Errorf("package identifier = %q, want %q", skill.Packages[0].Identifier, "docker.io/myorg/docker-skill:v1.0.0")
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(models.SkillResponse{Skill: skill})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	apiClient = client.NewClient(srv.URL, "")
+	dockerImageFlag = "docker.io/myorg/docker-skill:v1.0.0"
+	githubRepository = ""
+	versionFlag = "1.0.0"
+	dryRunFlag = false
+
+	err := runPublish(nil, []string{"docker-skill"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunPublish_DirectDockerDryRun(t *testing.T) {
 	savePublishFlags(t)
 	apiClient = client.NewClient("http://localhost:0", "")
-	dockerUrl = "docker.io/myorg"
+	dockerImageFlag = "docker.io/myorg/my-skill:v1.0.0"
 	githubRepository = ""
+	versionFlag = "1.0.0"
+	publishDesc = "test"
+	dryRunFlag = true
 
-	err := runPublish(nil, []string{"not-a-folder"})
-	if err == nil {
-		t.Fatal("expected error when --docker-url is used without a skill folder, got nil")
+	err := runPublish(nil, []string{"dry-run-docker"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !contains(err.Error(), "--docker-url requires a local skill folder") {
-		t.Errorf("error = %q, want it to contain '--docker-url requires a local skill folder'", err.Error())
+}
+
+func TestRunPublish_DockerImageWithFolder(t *testing.T) {
+	savePublishFlags(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/v0/skills" { //nolint:nestif
+			var skill models.SkillJSON
+			if err := json.NewDecoder(r.Body).Decode(&skill); err != nil {
+				t.Errorf("failed to decode request body: %v", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if skill.Name != "folder-docker-skill" {
+				t.Errorf("skill name = %q, want %q", skill.Name, "folder-docker-skill")
+			}
+			if len(skill.Packages) != 1 {
+				t.Errorf("packages count = %d, want 1", len(skill.Packages))
+			} else if skill.Packages[0].Identifier != "docker.io/myorg/my-skill:v1.0.0" {
+				t.Errorf("package identifier = %q, want %q", skill.Packages[0].Identifier, "docker.io/myorg/my-skill:v1.0.0")
+			}
+			if skill.Repository != nil {
+				t.Error("repository should be nil for Docker publish")
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(models.SkillResponse{Skill: skill})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	apiClient = client.NewClient(srv.URL, "")
+	dockerImageFlag = "docker.io/myorg/my-skill:v1.0.0"
+	githubRepository = ""
+	versionFlag = "1.0.0"
+	dryRunFlag = false
+
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: folder-docker-skill\ndescription: from folder with docker\n---\n")
+
+	err := runPublish(nil, []string{dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -934,38 +1013,6 @@ func TestRunPublish_FolderModeStillWorks(t *testing.T) {
 	err := runPublish(nil, []string{dir})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestResolveDockerVersion(t *testing.T) {
-	tests := []struct {
-		name    string
-		version string
-		tag     string
-		want    string
-	}{
-		{"version flag takes priority", "2.0.0", "latest", "2.0.0"},
-		{"falls back to tag", "", "v1.0", "v1.0"},
-		{"defaults to latest", "", "", "latest"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			origV := versionFlag
-			origT := tagFlag
-			t.Cleanup(func() {
-				versionFlag = origV
-				tagFlag = origT
-			})
-
-			versionFlag = tt.version
-			tagFlag = tt.tag
-
-			got := resolveDockerVersion()
-			if got != tt.want {
-				t.Errorf("resolveDockerVersion() = %q, want %q", got, tt.want)
-			}
-		})
 	}
 }
 
@@ -1084,6 +1131,104 @@ func TestCheckGitHubSkillMdExists_VerifiesCorrectPath(t *testing.T) {
 				t.Errorf("requested path = %q, want %q", requestedPath, tt.wantPath)
 			}
 		})
+	}
+}
+
+// --- isValidSkillDir tests ---
+
+func TestIsValidSkillDir(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(dir string)
+		want    bool
+	}{
+		{
+			name: "valid SKILL.md with name and description",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: my-skill\ndescription: A test skill\n---\n# My Skill\n")
+			},
+			want: true,
+		},
+		{
+			name: "SKILL.md with name only (missing description)",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: simple\n---\nBody.\n")
+			},
+			want: false,
+		},
+		{
+			name: "SKILL.md with description only (missing name)",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "SKILL.md"), "---\ndescription: no name\n---\nBody.\n")
+			},
+			want: false,
+		},
+		{
+			name:  "no SKILL.md file",
+			setup: func(dir string) {},
+			want:  false,
+		},
+		{
+			name: "other files but no SKILL.md",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "README.md"), "# README")
+			},
+			want: false,
+		},
+		{
+			name: "empty SKILL.md",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "SKILL.md"), "")
+			},
+			want: false,
+		},
+		{
+			name: "SKILL.md without frontmatter delimiters",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "SKILL.md"), "just some text\nno yaml here\n")
+			},
+			want: false,
+		},
+		{
+			name: "SKILL.md with only opening delimiter",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: orphan\n")
+			},
+			want: false,
+		},
+		{
+			name: "SKILL.md with invalid YAML in frontmatter",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: [invalid\n---\n")
+			},
+			want: false,
+		},
+		{
+			name: "SKILL.md with empty frontmatter block",
+			setup: func(dir string) {
+				writeFile(t, filepath.Join(dir, "SKILL.md"), "---\n---\nBody content.\n")
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			tt.setup(dir)
+
+			got := isValidSkillDir(dir)
+			if got != tt.want {
+				t.Errorf("isValidSkillDir() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsValidSkillDir_NonExistentDir(t *testing.T) {
+	got := isValidSkillDir("/nonexistent/path/that/does/not/exist")
+	if got {
+		t.Error("isValidSkillDir() = true for non-existent directory, want false")
 	}
 }
 

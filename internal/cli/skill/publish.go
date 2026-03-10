@@ -3,12 +3,10 @@ package skill
 import (
 	"bufio"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -22,13 +20,10 @@ import (
 
 var (
 	// Flags for skill publish command
-	dockerUrl        string
-	tagFlag          string
 	versionFlag      string
-	platformFlag     string
-	pushFlag         bool
 	dryRunFlag       bool
 	githubRepository string
+	dockerImageFlag  string
 	publishDesc      string
 )
 
@@ -41,41 +36,41 @@ var PublishCmd = &cobra.Command{
 	Short: "Publish a skill to the registry",
 	Long: `Publish a skill to the agent registry.
 
-This command supports two modes:
+This command supports three modes:
 
 1. From a local skill folder (with SKILL.md):
-   arctl skill publish ./my-skill --docker-url docker.io/myorg
    arctl skill publish ./my-skill --github https://github.com/org/repo --version 1.0.0
+   arctl skill publish ./my-skill --docker-image docker.io/myorg/my-skill:v1.0.0 --version 1.0.0
 
-2. Direct registration (without a local SKILL.md, GitHub only):
+2. Direct registration with GitHub:
    arctl skill publish my-skill \
      --github https://github.com/org/repo/tree/main/skills/my-skill \
      --version 1.0.0 \
      --description "My remote skill"
 
-In both modes, SKILL.md must exist at the specified GitHub path.
+3. Direct registration with a pre-built Docker image:
+   arctl skill publish my-skill \
+     --docker-image docker.io/myorg/my-skill:v1.0.0 \
+     --version 1.0.0 \
+     --description "My Docker skill"
+
+For GitHub modes, SKILL.md must exist at the specified GitHub path.
 In folder mode, the local skill folder must also contain a SKILL.md file with proper YAML frontmatter.
-If the path contains multiple subdirectories with SKILL.md files, all will be published.`,
+
+To build a skill as a Docker image, use "arctl skill build" instead.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runPublish,
 }
 
 func init() {
-	// Common flags
-	PublishCmd.Flags().StringVar(&versionFlag, "version", "", "Version to publish (required for --github, optional override for --docker-url)")
+	PublishCmd.Flags().StringVar(&versionFlag, "version", "", "Version to publish (required)")
 	PublishCmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Show what would be done without actually doing it")
-
 	PublishCmd.Flags().StringVar(&publishDesc, "description", "", "Skill description (optional, used with direct registration)")
-	PublishCmd.Flags().StringVar(&githubRepository, "github", "", "GitHub repository URL (alternative to --docker-url). Supports tree URLs: https://github.com/owner/repo/tree/branch/path")
+	PublishCmd.Flags().StringVar(&githubRepository, "github", "", "GitHub repository URL. Supports tree URLs: https://github.com/owner/repo/tree/branch/path")
+	PublishCmd.Flags().StringVar(&dockerImageFlag, "docker-image", "", "Pre-built Docker image reference (e.g., docker.io/myorg/my-skill:v1.0.0)")
 
-	// Docker-only flags
-	PublishCmd.Flags().StringVar(&dockerUrl, "docker-url", "", "Docker registry URL. For example: docker.io/myorg. The final image name will be <docker-url>/<skill-name>:<tag>")
-	PublishCmd.Flags().StringVar(&tagFlag, "tag", "latest", "Docker image tag (only used with --docker-url)")
-	PublishCmd.Flags().BoolVar(&pushFlag, "push", false, "Push image to Docker registry (only used with --docker-url)")
-	PublishCmd.Flags().StringVar(&platformFlag, "platform", "", "Target platform for Docker build (only used with --docker-url, e.g. linux/amd64,linux/arm64)")
-
-	PublishCmd.MarkFlagsMutuallyExclusive("docker-url", "github")
-	PublishCmd.MarkFlagsOneRequired("docker-url", "github")
+	PublishCmd.MarkFlagsMutuallyExclusive("github", "docker-image")
+	PublishCmd.MarkFlagsOneRequired("github", "docker-image")
 }
 
 func runPublish(cmd *cobra.Command, args []string) error {
@@ -92,80 +87,56 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to resolve path %q: %w", input, err)
 	}
-	isFolder := false
 	if info, err := os.Stat(absPath); err == nil && info.IsDir() {
-		if _, detectErr := detectSkills(absPath); detectErr == nil {
-			isFolder = true
+		isValid := isValidSkillDir(absPath)
+		if !isValid {
+			return fmt.Errorf("no valid skills found at path: %s", absPath)
 		}
-	}
-
-	if isFolder {
 		return runPublishFromFolder(absPath)
-	}
-
-	// Direct mode only supports GitHub. If --docker-url was specified but
-	// the input isn't a folder with SKILL.md, give a targeted error.
-	if dockerUrl != "" {
-		return fmt.Errorf("--docker-url requires a local skill folder containing SKILL.md, but %q is not a valid skill folder", input)
 	}
 
 	return runPublishDirect(input)
 }
 
-// runPublishFromFolder publishes skills found in the given directory.
-func runPublishFromFolder(absPath string) error {
-	printer.PrintInfo(fmt.Sprintf("Publishing skill from: %s", absPath))
+// runPublishFromFolder publishes the pre-detected skills from the given directory.
+func runPublishFromFolder(skillFolderPath string) error {
+	printer.PrintInfo(fmt.Sprintf("Publishing skill from: %s", skillFolderPath))
 
-	skills, err := detectSkills(absPath)
+	var skillJson *models.SkillJSON
+	var err error
+	switch {
+	case githubRepository != "":
+		skillJson, err = buildSkillFromGitHub(skillFolderPath)
+	case dockerImageFlag != "":
+		skillJson, err = buildSkillFromDocker(skillFolderPath)
+	default:
+		return fmt.Errorf("--github or --docker-image is required")
+	}
 	if err != nil {
-		return fmt.Errorf("failed to detect skills: %w", err)
+		return fmt.Errorf("failed to build skill '%s': %w", skillFolderPath, err)
 	}
 
-	if len(skills) == 0 {
-		return fmt.Errorf("no valid skills found at path: %s", absPath)
-	}
-
-	printer.PrintInfo(fmt.Sprintf("Found %d skill(s) to publish", len(skills)))
-
-	var errs []error
-
-	for _, skill := range skills {
-		printer.PrintInfo(fmt.Sprintf("Processing skill: %s", skill))
-
-		var skillJson *models.SkillJSON
-		switch {
-		case githubRepository != "":
-			skillJson, err = buildSkillFromGitHub(skill)
-		case dockerUrl != "":
-			skillJson, err = buildSkillDockerImage(skill)
-		default:
-			return fmt.Errorf("no build method specified")
-		}
-		if err != nil {
-			errs = append(errs, fmt.Errorf("failed to build skill '%s': %w", skill, err))
-			continue
-		}
-
-		if err := publishSkillJSON(skillJson); err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("one or more errors occurred during publishing: %w", errors.Join(errs...))
-	}
-
-	if !dryRunFlag {
-		printer.PrintSuccess("Skill publishing complete!")
+	if err := publishSkillJSON(skillJson); err != nil {
+		return err
 	}
 
 	return nil
 }
 
-// runPublishDirect publishes a skill by name using --github and --version flags
+// runPublishDirect publishes a skill by name using --github or --docker-image flags
 // without requiring a local SKILL.md.
 func runPublishDirect(skillName string) error {
-	skillJson, err := buildSkillDirect(skillName)
+	var skillJson *models.SkillJSON
+	var err error
+
+	switch {
+	case githubRepository != "":
+		skillJson, err = buildSkillDirectGitHub(skillName)
+	case dockerImageFlag != "":
+		skillJson, err = buildSkillDirectDocker(skillName)
+	default:
+		return fmt.Errorf("--github or --docker-image is required")
+	}
 	if err != nil {
 		return err
 	}
@@ -196,8 +167,8 @@ func publishSkillJSON(skillJson *models.SkillJSON) error {
 	return nil
 }
 
-// buildSkillDirect builds SkillJSON from command line flags without a local SKILL.md.
-func buildSkillDirect(skillName string) (*models.SkillJSON, error) {
+// buildSkillDirectGitHub builds SkillJSON from --github flags without a local SKILL.md.
+func buildSkillDirectGitHub(skillName string) (*models.SkillJSON, error) {
 	skillName = strings.ToLower(skillName)
 
 	if githubRepository == "" {
@@ -220,6 +191,34 @@ func buildSkillDirect(skillName string) (*models.SkillJSON, error) {
 			Source: "github",
 		},
 	}, nil
+}
+
+// buildSkillDirectDocker builds SkillJSON from --docker-image flags without a local SKILL.md.
+func buildSkillDirectDocker(skillName string) (*models.SkillJSON, error) {
+	skillName = strings.ToLower(skillName)
+
+	if dockerImageFlag == "" {
+		return nil, fmt.Errorf("--docker-image is required")
+	}
+	if versionFlag == "" {
+		return nil, fmt.Errorf("--version is required when publishing with --docker-image")
+	}
+
+	skill := &models.SkillJSON{
+		Name:        skillName,
+		Description: publishDesc,
+		Version:     versionFlag,
+	}
+
+	pkg := models.SkillPackageInfo{
+		RegistryType: "docker",
+		Identifier:   dockerImageFlag,
+		Version:      versionFlag,
+	}
+	pkg.Transport.Type = "docker"
+	skill.Packages = append(skill.Packages, pkg)
+
+	return skill, nil
 }
 
 type skillFrontmatter struct {
@@ -270,34 +269,23 @@ func parseSkillFrontmatter(skillPath string) (*skillFrontmatter, error) {
 		return nil, fmt.Errorf("failed to parse SKILL.md frontmatter: %w", err)
 	}
 
+	if fm.Name == "" {
+		return nil, fmt.Errorf("SKILL.md frontmatter missing required field: name")
+	}
+	if fm.Description == "" {
+		return nil, fmt.Errorf("SKILL.md frontmatter missing required field: description")
+	}
+
 	return &fm, nil
 }
 
-// resolveSkillMeta parses SKILL.md frontmatter and resolves the skill name.
+// resolveSkillMeta parses SKILL.md frontmatter and returns the skill name and description.
 func resolveSkillMeta(skillPath string) (name, description string, err error) {
 	fm, err := parseSkillFrontmatter(skillPath)
 	if err != nil {
 		return "", "", err
 	}
-
-	name = fm.Name
-	if name == "" {
-		name = filepath.Base(skillPath)
-	}
-
-	return name, fm.Description, nil
-}
-
-// resolveDockerVersion returns the version for a Docker-based publish.
-// Prefers --version if set, otherwise uses --tag (default "latest").
-func resolveDockerVersion() string {
-	if versionFlag != "" {
-		return versionFlag
-	}
-	if tagFlag != "" {
-		return tagFlag
-	}
-	return "latest"
+	return fm.Name, fm.Description, nil
 }
 
 // resolveGitHubVersion returns the version for a GitHub-based publish.
@@ -352,81 +340,6 @@ func checkGitHubSkillMdExists(rawURL string) error {
 	return nil
 }
 
-func buildSkillDockerImage(skillPath string) (*models.SkillJSON, error) {
-	name, description, err := resolveSkillMeta(skillPath)
-	if err != nil {
-		return nil, err
-	}
-
-	ver := resolveDockerVersion()
-
-	// Determine image reference and build
-	if dockerUrl == "" {
-		return nil, fmt.Errorf("docker url is required")
-	}
-
-	// BuildRegistryImageName sanitizes the name for docker (lowercase, kebab-case)
-	imageRef := common.BuildRegistryImageName(strings.TrimSuffix(dockerUrl, "/"), name, ver)
-	// Build only if not dry-run
-	if dryRunFlag {
-		printer.PrintInfo("[DRY RUN] Would build Docker image: " + imageRef)
-	} else {
-		// Use classic docker build with Dockerfile provided via stdin (-f -)
-		args := []string{"build", "-t", imageRef}
-
-		// Add platform flag if specified
-		if platformFlag != "" {
-			args = append(args, "--platform", platformFlag)
-		}
-
-		args = append(args, "-f", "-", skillPath)
-
-		printer.PrintInfo("Building Docker image (Dockerfile via stdin): docker " + strings.Join(args, " "))
-		cmd := exec.Command("docker", args...)
-		cmd.Dir = skillPath
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		// Minimal inline Dockerfile; avoids requiring a Dockerfile in the skill folder
-		cmd.Stdin = strings.NewReader("FROM scratch\nCOPY . .\n")
-		if err := cmd.Run(); err != nil {
-			return nil, fmt.Errorf("docker build failed: %w", err)
-		}
-	}
-
-	// Push tags if requested
-	if pushFlag {
-		if dryRunFlag {
-			printer.PrintInfo("[DRY RUN] Would push Docker image: " + imageRef)
-		} else {
-			printer.PrintInfo("Pushing Docker image: docker push " + imageRef)
-			pushCmd := exec.Command("docker", "push", imageRef)
-			pushCmd.Stdout = os.Stdout
-			pushCmd.Stderr = os.Stderr
-			if err := pushCmd.Run(); err != nil {
-				return nil, fmt.Errorf("docker push failed for %s: %w", imageRef, err)
-			}
-		}
-	}
-
-	// 3) Construct SkillJSON payload
-	skill := &models.SkillJSON{
-		Name:        name,
-		Description: description,
-		Version:     ver,
-	}
-
-	// package info for docker image
-	pkg := models.SkillPackageInfo{
-		RegistryType: "docker",
-		Identifier:   imageRef,
-		Version:      ver,
-	}
-	pkg.Transport.Type = "docker"
-	skill.Packages = append(skill.Packages, pkg)
-
-	return skill, nil
-}
-
 // buildSkillFromGitHub reads SKILL.md frontmatter and registers the skill with a GitHub repository.
 func buildSkillFromGitHub(skillPath string) (*models.SkillJSON, error) {
 	name, description, err := resolveSkillMeta(skillPath)
@@ -457,39 +370,45 @@ func buildSkillFromGitHub(skillPath string) (*models.SkillJSON, error) {
 	return skill, nil
 }
 
-// detectSkills scans the given path for skill folders
-// If multiMode is true, it looks for subdirectories containing SKILL.md
-// Otherwise, it expects the path itself to be a skill folder
-func detectSkills(path string) ([]string, error) {
-	var skills []string
-
-	// Check if path contains SKILL.md directly (single skill mode)
-	skillMdPath := filepath.Join(path, "SKILL.md")
-	if _, err := os.Stat(skillMdPath); err == nil {
-		// Single skill found
-		return []string{path}, nil
-	}
-
-	// Multi mode: scan subdirectories for SKILL.md
-	entries, err := os.ReadDir(path)
+// buildSkillFromDocker reads SKILL.md frontmatter and registers the skill with a Docker image reference.
+func buildSkillFromDocker(skillPath string) (*models.SkillJSON, error) {
+	name, description, err := resolveSkillMeta(skillPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read directory: %w", err)
+		return nil, err
 	}
 
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-
-		subPath := filepath.Join(path, entry.Name())
-		skillMdPath := filepath.Join(subPath, "SKILL.md")
-
-		if _, err := os.Stat(skillMdPath); err == nil {
-			skills = append(skills, subPath)
-		}
+	if versionFlag == "" {
+		return nil, fmt.Errorf("--version is required when publishing with --docker-image")
 	}
-	if len(skills) == 0 {
-		return nil, errors.New("SKILL.md not found in this folder or in any immediate subfolder")
+
+	skill := &models.SkillJSON{
+		Name:        name,
+		Description: description,
+		Version:     versionFlag,
 	}
-	return skills, nil
+
+	pkg := models.SkillPackageInfo{
+		RegistryType: "docker",
+		Identifier:   dockerImageFlag,
+		Version:      versionFlag,
+	}
+	pkg.Transport.Type = "docker"
+	skill.Packages = append(skill.Packages, pkg)
+
+	return skill, nil
+}
+
+// isValidSkillDir checks whether a directory contains a SKILL.md with valid YAML frontmatter.
+func isValidSkillDir(dir string) bool {
+	if !hasSkillMd(dir) {
+		return false
+	}
+	_, err := parseSkillFrontmatter(dir)
+	return err == nil
+}
+
+// hasSkillMd checks whether a directory contains a SKILL.md file.
+func hasSkillMd(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, "SKILL.md"))
+	return err == nil
 }
