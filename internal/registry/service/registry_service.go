@@ -16,6 +16,7 @@ import (
 	api "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/jackc/pgx/v5"
@@ -1073,7 +1074,7 @@ func (s *registryServiceImpl) createManagedDeploymentRecord(ctx context.Context,
 		ID:               req.ID,
 		ServerName:       strings.TrimSpace(req.ServerName),
 		Version:          strings.TrimSpace(req.Version),
-		Status:           "pending",
+		Status:           "deploying",
 		Env:              req.Env,
 		ProviderConfig:   req.ProviderConfig,
 		ProviderMetadata: req.ProviderMetadata,
@@ -1151,7 +1152,7 @@ func (s *registryServiceImpl) applyDeploymentActionResult(ctx context.Context, d
 		}
 	}
 
-	return s.db.UpdateDeploymentState(ctx, nil, deploymentID, patch)
+	return s.db.UpdateDeploymentState(auth.WithSystemContext(ctx), nil, deploymentID, patch)
 }
 
 func (s *registryServiceImpl) applyFailedDeploymentAction(
@@ -1185,7 +1186,7 @@ func (s *registryServiceImpl) applyFailedDeploymentAction(
 			patch.ProviderMetadata = &meta
 		}
 	}
-	return s.db.UpdateDeploymentState(ctx, nil, deploymentID, patch)
+	return s.db.UpdateDeploymentState(auth.WithSystemContext(ctx), nil, deploymentID, patch)
 }
 
 // GetDeploymentLogs dispatches logs retrieval to the platform adapter.

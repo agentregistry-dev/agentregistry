@@ -11,6 +11,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/jackc/pgx/v5"
@@ -984,12 +985,110 @@ func TestCreateDeployment_MissingProviderIDReturnsInvalidInput(t *testing.T) {
 	require.ErrorIs(t, err, database.ErrInvalidInput)
 }
 
+func TestCreateManagedDeploymentRecord_UsesDeployingStatus(t *testing.T) {
+	ctx := context.Background()
+	var createdRecord *models.Deployment
+
+	mockDB := &deployCreateMockDB{
+		getServerByNameAndVersionFn: func(_ context.Context, _ pgx.Tx, serverName, version string) (*apiv0.ServerResponse, error) {
+			return &apiv0.ServerResponse{
+				Server: apiv0.ServerJSON{
+					Name:    serverName,
+					Version: version,
+				},
+			}, nil
+		},
+		createDeploymentFn: func(_ context.Context, _ pgx.Tx, deployment *models.Deployment) error {
+			clonedEnv := map[string]string{}
+			for k, v := range deployment.Env {
+				clonedEnv[k] = v
+			}
+			createdRecord = &models.Deployment{
+				ID:           deployment.ID,
+				ServerName:   deployment.ServerName,
+				Version:      deployment.Version,
+				Status:       deployment.Status,
+				ResourceType: deployment.ResourceType,
+				ProviderID:   deployment.ProviderID,
+				Origin:       deployment.Origin,
+				Env:          clonedEnv,
+			}
+			return nil
+		},
+		getDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, _ string) (*models.Deployment, error) {
+			return createdRecord, nil
+		},
+	}
+
+	svc := &registryServiceImpl{db: mockDB}
+
+	created, err := svc.createManagedDeploymentRecord(ctx, &models.Deployment{
+		ID:           "dep-create-1",
+		ServerName:   "com.example/weather",
+		Version:      "1.0.0",
+		ResourceType: "mcp",
+		ProviderID:   "kubernetes-default",
+		Origin:       "managed",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, createdRecord)
+	assert.Equal(t, "deploying", createdRecord.Status)
+	require.NotNil(t, created)
+	assert.Equal(t, "deploying", created.Status)
+}
+
+func TestApplyDeploymentActionResult_UsesSystemContext(t *testing.T) {
+	ctx := context.Background()
+	mockDB := &deployCreateMockDB{
+		updateDeploymentStateFn: func(ctx context.Context, _ pgx.Tx, id string, patch *models.DeploymentStatePatch) error {
+			session, ok := auth.AuthSessionFrom(ctx)
+			require.True(t, ok)
+			require.True(t, auth.IsSystemSession(session))
+			require.Equal(t, "dep-1", id)
+			require.NotNil(t, patch)
+			require.NotNil(t, patch.Status)
+			require.Equal(t, "deployed", *patch.Status)
+			require.NotNil(t, patch.Error)
+			require.Equal(t, "", *patch.Error)
+			return nil
+		},
+	}
+
+	svc := &registryServiceImpl{db: mockDB}
+	err := svc.applyDeploymentActionResult(ctx, "dep-1", &models.DeploymentActionResult{Status: "deployed"})
+	require.NoError(t, err)
+}
+
+func TestApplyFailedDeploymentAction_UsesSystemContext(t *testing.T) {
+	ctx := context.Background()
+	mockDB := &deployCreateMockDB{
+		updateDeploymentStateFn: func(ctx context.Context, _ pgx.Tx, id string, patch *models.DeploymentStatePatch) error {
+			session, ok := auth.AuthSessionFrom(ctx)
+			require.True(t, ok)
+			require.True(t, auth.IsSystemSession(session))
+			require.Equal(t, "dep-2", id)
+			require.NotNil(t, patch)
+			require.NotNil(t, patch.Status)
+			require.Equal(t, "failed", *patch.Status)
+			require.NotNil(t, patch.Error)
+			require.Equal(t, "boom", *patch.Error)
+			return nil
+		},
+	}
+
+	svc := &registryServiceImpl{db: mockDB}
+	err := svc.applyFailedDeploymentAction(ctx, "dep-2", fmt.Errorf("boom"), nil)
+	require.NoError(t, err)
+}
+
 type deployCreateMockDB struct {
 	database.Database
 	getProviderByIDFn           func(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error)
 	getServerByNameAndVersionFn func(ctx context.Context, tx pgx.Tx, serverName, version string) (*apiv0.ServerResponse, error)
 	getAgentByNameAndVersionFn  func(ctx context.Context, tx pgx.Tx, agentName, version string) (*models.AgentResponse, error)
 	createDeploymentFn          func(ctx context.Context, tx pgx.Tx, deployment *models.Deployment) error
+	getDeploymentByIDFn         func(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error)
+	updateDeploymentStateFn     func(ctx context.Context, tx pgx.Tx, id string, patch *models.DeploymentStatePatch) error
 	getDeploymentsFn            func(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
 	removeDeploymentByIDFn      func(ctx context.Context, tx pgx.Tx, id string) error
 }
@@ -1018,6 +1117,14 @@ func (m *deployCreateMockDB) GetAgentByNameAndVersion(ctx context.Context, tx pg
 
 func (m *deployCreateMockDB) CreateDeployment(ctx context.Context, tx pgx.Tx, deployment *models.Deployment) error {
 	return m.createDeploymentFn(ctx, tx, deployment)
+}
+
+func (m *deployCreateMockDB) GetDeploymentByID(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error) {
+	return m.getDeploymentByIDFn(ctx, tx, id)
+}
+
+func (m *deployCreateMockDB) UpdateDeploymentState(ctx context.Context, tx pgx.Tx, id string, patch *models.DeploymentStatePatch) error {
+	return m.updateDeploymentStateFn(ctx, tx, id, patch)
 }
 
 func (m *deployCreateMockDB) GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
@@ -1072,12 +1179,12 @@ func TestResolveDeploymentAdapter_UnsupportedPlatformReturnsTypedError(t *testin
 }
 
 type testDeploymentAdapter struct {
-	deployFn            func(ctx context.Context, req *models.Deployment) (*models.DeploymentActionResult, error)
-	undeployFn          func(ctx context.Context, deployment *models.Deployment) error
-	getLogsFn           func(ctx context.Context, deployment *models.Deployment) ([]string, error)
-	cancelFn            func(ctx context.Context, deployment *models.Deployment) error
-	discoverFn          func(ctx context.Context, providerID string) ([]*models.Deployment, error)
-	cleanupStaleFn      func(ctx context.Context, deployment *models.Deployment) error
+	deployFn       func(ctx context.Context, req *models.Deployment) (*models.DeploymentActionResult, error)
+	undeployFn     func(ctx context.Context, deployment *models.Deployment) error
+	getLogsFn      func(ctx context.Context, deployment *models.Deployment) ([]string, error)
+	cancelFn       func(ctx context.Context, deployment *models.Deployment) error
+	discoverFn     func(ctx context.Context, providerID string) ([]*models.Deployment, error)
+	cleanupStaleFn func(ctx context.Context, deployment *models.Deployment) error
 }
 
 func (a *testDeploymentAdapter) Platform() string { return "test" }
