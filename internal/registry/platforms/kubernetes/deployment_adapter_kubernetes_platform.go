@@ -79,34 +79,12 @@ func kubernetesRESTConfig(provider *models.Provider) (*rest.Config, error) {
 		return nil, err
 	}
 
-	if providerCfg != nil {
-		if kubeconfig := strings.TrimSpace(providerCfg.Kubeconfig); kubeconfig != "" {
-			clientCfg, err := clientcmd.NewClientConfigFromBytes([]byte(kubeconfig))
-			if err != nil {
-				return nil, fmt.Errorf("load kubernetes provider kubeconfig for %s: %w", provider.ID, err)
-			}
-			rawConfig, err := clientCfg.RawConfig()
-			if err != nil {
-				return nil, fmt.Errorf("read kubernetes provider kubeconfig for %s: %w", provider.ID, err)
-			}
-			overrides := &clientcmd.ConfigOverrides{}
-			if contextName := strings.TrimSpace(providerCfg.Context); contextName != "" {
-				overrides.CurrentContext = contextName
-			}
-			return clientcmd.NewDefaultClientConfig(rawConfig, overrides).ClientConfig()
-		}
+	if kubeconfig := strings.TrimSpace(providerCfg.Kubeconfig); kubeconfig != "" {
+		return kubernetesRESTConfigFromInlineKubeconfig(provider, providerCfg, kubeconfig)
+	}
 
-		if kubeconfigPath := strings.TrimSpace(providerCfg.KubeconfigPath); kubeconfigPath != "" || strings.TrimSpace(providerCfg.Context) != "" {
-			loadingRules := &clientcmd.ClientConfigLoadingRules{}
-			if kubeconfigPath != "" {
-				loadingRules.ExplicitPath = kubeconfigPath
-			}
-			overrides := &clientcmd.ConfigOverrides{}
-			if contextName := strings.TrimSpace(providerCfg.Context); contextName != "" {
-				overrides.CurrentContext = contextName
-			}
-			return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides).ClientConfig()
-		}
+	if kubeconfigPath := strings.TrimSpace(providerCfg.KubeconfigPath); kubeconfigPath != "" || strings.TrimSpace(providerCfg.Context) != "" {
+		return kubernetesRESTConfigFromPath(providerCfg, kubeconfigPath)
 	}
 
 	restConfig, err := kubernetesGetAmbientRESTConfig()
@@ -114,6 +92,41 @@ func kubernetesRESTConfig(provider *models.Provider) (*rest.Config, error) {
 		return nil, fmt.Errorf("failed to get kubernetes config: %w", err)
 	}
 	return restConfig, nil
+}
+
+func kubernetesRESTConfigFromInlineKubeconfig(
+	provider *models.Provider,
+	providerCfg *models.KubernetesProviderConfig,
+	kubeconfig string,
+) (*rest.Config, error) {
+	clientCfg, err := clientcmd.NewClientConfigFromBytes([]byte(kubeconfig))
+	if err != nil {
+		return nil, fmt.Errorf("load kubernetes provider kubeconfig for %s: %w", provider.ID, err)
+	}
+	rawConfig, err := clientCfg.RawConfig()
+	if err != nil {
+		return nil, fmt.Errorf("read kubernetes provider kubeconfig for %s: %w", provider.ID, err)
+	}
+	return clientcmd.NewDefaultClientConfig(rawConfig, kubernetesConfigOverrides(providerCfg)).ClientConfig()
+}
+
+func kubernetesRESTConfigFromPath(providerCfg *models.KubernetesProviderConfig, kubeconfigPath string) (*rest.Config, error) {
+	loadingRules := &clientcmd.ClientConfigLoadingRules{}
+	if kubeconfigPath != "" {
+		loadingRules.ExplicitPath = kubeconfigPath
+	}
+	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, kubernetesConfigOverrides(providerCfg)).ClientConfig()
+}
+
+func kubernetesConfigOverrides(providerCfg *models.KubernetesProviderConfig) *clientcmd.ConfigOverrides {
+	overrides := &clientcmd.ConfigOverrides{}
+	if providerCfg == nil {
+		return overrides
+	}
+	if contextName := strings.TrimSpace(providerCfg.Context); contextName != "" {
+		overrides.CurrentContext = contextName
+	}
+	return overrides
 }
 
 func kubernetesGetClient(provider *models.Provider) (client.Client, error) {

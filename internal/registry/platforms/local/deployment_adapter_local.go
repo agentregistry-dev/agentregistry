@@ -74,23 +74,10 @@ func (a *localDeploymentAdapter) Undeploy(ctx context.Context, deployment *model
 
 	translated, _, agentTarget, err := a.translateLocalDeployment(ctx, deployment)
 	if err != nil {
-		if !errors.Is(err, database.ErrNotFound) {
-			return err
-		}
-		if err := a.removeLocalDeploymentArtifactsByID(ctx, deployment.ID); err != nil {
-			return err
-		}
-		if strings.EqualFold(strings.TrimSpace(deployment.ResourceType), "agent") {
-			agentTarget = &common.MCPConfigTarget{
-				BaseDir:   a.platformDir,
-				AgentName: deployment.ServerName,
-				Version:   deployment.Version,
-			}
-		}
-	} else {
-		if err := a.mergeAndApplyLocalPlatform(ctx, translated, true); err != nil {
-			return err
-		}
+		return a.handleLocalUndeployTranslationError(ctx, deployment, err)
+	}
+	if err := a.mergeAndApplyLocalPlatform(ctx, translated, true); err != nil {
+		return err
 	}
 
 	if agentTarget != nil {
@@ -99,6 +86,37 @@ func (a *localDeploymentAdapter) Undeploy(ctx context.Context, deployment *model
 		}
 	}
 	return nil
+}
+
+func (a *localDeploymentAdapter) handleLocalUndeployTranslationError(
+	ctx context.Context,
+	deployment *models.Deployment,
+	translateErr error,
+) error {
+	if !errors.Is(translateErr, database.ErrNotFound) {
+		return translateErr
+	}
+	if err := a.removeLocalDeploymentArtifactsByID(ctx, deployment.ID); err != nil {
+		return err
+	}
+	agentTarget := localFallbackMCPConfigTarget(a.platformDir, deployment)
+	if agentTarget != nil {
+		if err := refreshLocalAgentMCPConfig(agentTarget, nil, false); err != nil {
+			return fmt.Errorf("cleanup agent MCP config: %w", err)
+		}
+	}
+	return nil
+}
+
+func localFallbackMCPConfigTarget(platformDir string, deployment *models.Deployment) *common.MCPConfigTarget {
+	if deployment == nil || !strings.EqualFold(strings.TrimSpace(deployment.ResourceType), "agent") {
+		return nil
+	}
+	return &common.MCPConfigTarget{
+		BaseDir:   platformDir,
+		AgentName: deployment.ServerName,
+		Version:   deployment.Version,
+	}
 }
 
 func (a *localDeploymentAdapter) CleanupStale(_ context.Context, _ *models.Deployment) error {
@@ -231,33 +249,7 @@ func (a *localDeploymentAdapter) removeLocalDeploymentArtifactsByID(ctx context.
 		}
 	}
 
-	if len(gatewayCfg.Binds) > 0 && len(gatewayCfg.Binds[0].Listeners) > 0 {
-		listener := &gatewayCfg.Binds[0].Listeners[0]
-		filteredRoutes := make([]platformtypes.LocalRoute, 0, len(listener.Routes))
-		for _, route := range listener.Routes {
-			if route.RouteName == localMCPRouteName {
-				if len(route.Backends) > 0 && route.Backends[0].MCP != nil {
-					filteredTargets := make([]platformtypes.MCPTarget, 0, len(route.Backends[0].MCP.Targets))
-					for _, target := range route.Backends[0].MCP.Targets {
-						if strings.Contains(target.Name, deploymentID) {
-							continue
-						}
-						filteredTargets = append(filteredTargets, target)
-					}
-					route.Backends[0].MCP.Targets = filteredTargets
-				}
-				if len(route.Backends) > 0 && route.Backends[0].MCP != nil && len(route.Backends[0].MCP.Targets) > 0 {
-					filteredRoutes = append(filteredRoutes, route)
-				}
-				continue
-			}
-			if strings.Contains(route.RouteName, deploymentID) {
-				continue
-			}
-			filteredRoutes = append(filteredRoutes, route)
-		}
-		listener.Routes = filteredRoutes
-	}
+	filterGatewayRoutesByDeploymentID(gatewayCfg, deploymentID)
 
 	if err := WriteLocalPlatformFiles(a.platformDir, &platformtypes.LocalPlatformConfig{
 		DockerCompose: composeCfg,
@@ -266,4 +258,50 @@ func (a *localDeploymentAdapter) removeLocalDeploymentArtifactsByID(ctx context.
 		return err
 	}
 	return runLocalComposeUp(ctx, a.platformDir, false)
+}
+
+func filterGatewayRoutesByDeploymentID(gatewayCfg *platformtypes.AgentGatewayConfig, deploymentID string) {
+	listener := localAgentGatewayListener(gatewayCfg)
+	if listener == nil {
+		return
+	}
+
+	filteredRoutes := make([]platformtypes.LocalRoute, 0, len(listener.Routes))
+	for _, route := range listener.Routes {
+		filteredRoute, keep := filterGatewayRouteByDeploymentID(route, deploymentID)
+		if keep {
+			filteredRoutes = append(filteredRoutes, filteredRoute)
+		}
+	}
+	listener.Routes = filteredRoutes
+}
+
+func localAgentGatewayListener(gatewayCfg *platformtypes.AgentGatewayConfig) *platformtypes.LocalListener {
+	if gatewayCfg == nil || len(gatewayCfg.Binds) == 0 || len(gatewayCfg.Binds[0].Listeners) == 0 {
+		return nil
+	}
+	return &gatewayCfg.Binds[0].Listeners[0]
+}
+
+func filterGatewayRouteByDeploymentID(route platformtypes.LocalRoute, deploymentID string) (platformtypes.LocalRoute, bool) {
+	if route.RouteName == localMCPRouteName {
+		return filterMCPGatewayRouteTargets(route, deploymentID)
+	}
+	return route, !strings.Contains(route.RouteName, deploymentID)
+}
+
+func filterMCPGatewayRouteTargets(route platformtypes.LocalRoute, deploymentID string) (platformtypes.LocalRoute, bool) {
+	if len(route.Backends) == 0 || route.Backends[0].MCP == nil {
+		return route, false
+	}
+
+	filteredTargets := make([]platformtypes.MCPTarget, 0, len(route.Backends[0].MCP.Targets))
+	for _, target := range route.Backends[0].MCP.Targets {
+		if strings.Contains(target.Name, deploymentID) {
+			continue
+		}
+		filteredTargets = append(filteredTargets, target)
+	}
+	route.Backends[0].MCP.Targets = filteredTargets
+	return route, len(filteredTargets) > 0
 }
