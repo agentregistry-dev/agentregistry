@@ -9,6 +9,12 @@ import (
 
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	v1alpha2 "github.com/kagent-dev/kagent/go/api/v1alpha2"
+	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestKubernetesTranslatePlatformConfig_AgentOnly(t *testing.T) {
@@ -413,6 +419,62 @@ func TestDeploymentNamespace_UsesProviderNamespaceWhenDeploymentOmitsIt(t *testi
 	if got != "provider-namespace" {
 		t.Fatalf("deploymentNamespace() = %q, want %q", got, "provider-namespace")
 	}
+}
+
+func TestKubernetesDeleteAgentResourcesByDeploymentID_RemovesResolvedMCPResources(t *testing.T) {
+	const (
+		namespace    = "demo-ns"
+		deploymentID = "dep-agent-123"
+	)
+
+	fakeClient := fake.NewClientBuilder().WithScheme(kubernetesScheme).WithObjects(
+		&v1alpha2.Agent{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "demo-agent",
+				Namespace: namespace,
+				Labels:    map[string]string{kubernetesDeploymentIDLabelKey: deploymentID},
+			},
+		},
+		&corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "demo-config",
+				Namespace: namespace,
+				Labels:    map[string]string{kubernetesDeploymentIDLabelKey: deploymentID},
+			},
+		},
+		&v1alpha2.RemoteMCPServer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "demo-remote-mcp",
+				Namespace: namespace,
+				Labels:    map[string]string{kubernetesDeploymentIDLabelKey: deploymentID},
+			},
+		},
+		&kmcpv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "demo-local-mcp",
+				Namespace: namespace,
+				Labels:    map[string]string{kubernetesDeploymentIDLabelKey: deploymentID},
+			},
+		},
+	).Build()
+
+	err := kubernetesDeleteAgentResourcesByDeploymentID(context.Background(), fakeClient, deploymentID, namespace)
+	if err != nil {
+		t.Fatalf("kubernetesDeleteAgentResourcesByDeploymentID() error = %v", err)
+	}
+
+	assertResourceDeleted := func(obj client.Object, name string) {
+		t.Helper()
+		key := client.ObjectKey{Name: name, Namespace: namespace}
+		if err := fakeClient.Get(context.Background(), key, obj); err == nil {
+			t.Fatalf("expected %T %q to be deleted", obj, name)
+		}
+	}
+
+	assertResourceDeleted(&v1alpha2.Agent{}, "demo-agent")
+	assertResourceDeleted(&corev1.ConfigMap{}, "demo-config")
+	assertResourceDeleted(&v1alpha2.RemoteMCPServer{}, "demo-remote-mcp")
+	assertResourceDeleted(&kmcpv1alpha1.MCPServer{}, "demo-local-mcp")
 }
 
 func testKubernetesProviderKubeconfig(contextHosts map[string]string, currentContext string) string {

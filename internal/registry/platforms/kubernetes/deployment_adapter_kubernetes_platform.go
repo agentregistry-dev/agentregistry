@@ -739,6 +739,26 @@ func kubernetesDeleteAgentResourcesByDeploymentID(ctx context.Context, c client.
 			return fmt.Errorf("failed to delete configmap %s: %w", configMapList.Items[i].Name, err)
 		}
 	}
+
+	remoteMCPList := &v1alpha2.RemoteMCPServerList{}
+	if err := c.List(ctx, remoteMCPList, opts...); err != nil {
+		return fmt.Errorf("failed to list remote mcp servers by deployment id %s: %w", deploymentID, err)
+	}
+	for i := range remoteMCPList.Items {
+		if err := kubernetesDeleteResource(ctx, c, &remoteMCPList.Items[i]); err != nil {
+			return fmt.Errorf("failed to delete remote mcp server %s: %w", remoteMCPList.Items[i].Name, err)
+		}
+	}
+
+	mcpList := &kmcpv1alpha1.MCPServerList{}
+	if err := c.List(ctx, mcpList, opts...); err != nil {
+		return fmt.Errorf("failed to list mcp servers by deployment id %s: %w", deploymentID, err)
+	}
+	for i := range mcpList.Items {
+		if err := kubernetesDeleteResource(ctx, c, &mcpList.Items[i]); err != nil {
+			return fmt.Errorf("failed to delete mcp server %s: %w", mcpList.Items[i].Name, err)
+		}
+	}
 	return nil
 }
 
