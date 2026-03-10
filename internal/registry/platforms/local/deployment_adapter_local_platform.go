@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
@@ -510,7 +509,7 @@ func extractServiceNames(config *platformtypes.LocalPlatformConfig) []string {
 		}
 		names = append(names, name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }
 
@@ -520,7 +519,7 @@ func extractTargetNames(config *platformtypes.AgentGatewayConfig) []string {
 	for _, target := range targets {
 		names = append(names, target.Name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }
 
@@ -530,7 +529,7 @@ func extractNonMCPRouteNames(config *platformtypes.AgentGatewayConfig) []string 
 	for _, route := range routes {
 		names = append(names, route.RouteName)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }
 
@@ -606,11 +605,11 @@ func mergeAgentGatewayConfig(
 		otherRoutes = append(otherRoutes, extractNonMCPRoutes(incoming)...)
 	}
 
-	sort.Slice(existingTargets, func(i, j int) bool {
-		return existingTargets[i].Name < existingTargets[j].Name
+	slices.SortFunc(existingTargets, func(a, b platformtypes.MCPTarget) int {
+		return cmp.Compare(a.Name, b.Name)
 	})
-	sort.Slice(otherRoutes, func(i, j int) bool {
-		return otherRoutes[i].RouteName < otherRoutes[j].RouteName
+	slices.SortFunc(otherRoutes, func(a, b platformtypes.LocalRoute) int {
+		return cmp.Compare(a.RouteName, b.RouteName)
 	})
 
 	routes := make([]platformtypes.LocalRoute, 0, len(otherRoutes)+1)

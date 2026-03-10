@@ -364,7 +364,7 @@ func TestCreateDeployment_NotFoundIncludesResourceName(t *testing.T) {
 	reg.GetProviderByIDFn = func(ctx context.Context, providerID string) (*models.Provider, error) {
 		return &models.Provider{ID: providerID, Platform: "local"}, nil
 	}
-	reg.CreateDeploymentFn = func(ctx context.Context, req *models.Deployment, platform string) (*models.Deployment, error) {
+	reg.CreateDeploymentFn = func(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
 		return nil, fmt.Errorf("server my-cool-server not found in registry: %w", database.ErrNotFound)
 	}
 

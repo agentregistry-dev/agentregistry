@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
@@ -178,9 +179,7 @@ func (a *localDeploymentAdapter) mergeAndApplyLocalPlatform(
 		delete(composeCfg.Services, name)
 	}
 	if !remove {
-		for name, serviceCfg := range config.DockerCompose.Services {
-			composeCfg.Services[name] = serviceCfg
-		}
+		maps.Copy(composeCfg.Services, config.DockerCompose.Services)
 	}
 
 	mergeAgentGatewayConfig(gatewayCfg, config.AgentGateway, targetNames, routeNames, remove, a.agentGatewayPort)

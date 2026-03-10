@@ -4,6 +4,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync"
 	"testing"
 	"time"
@@ -1000,9 +1001,7 @@ func TestCreateManagedDeploymentRecord_UsesDeployingStatus(t *testing.T) {
 		},
 		createDeploymentFn: func(_ context.Context, _ pgx.Tx, deployment *models.Deployment) error {
 			clonedEnv := map[string]string{}
-			for k, v := range deployment.Env {
-				clonedEnv[k] = v
-			}
+			maps.Copy(clonedEnv, deployment.Env)
 			createdRecord = &models.Deployment{
 				ID:           deployment.ID,
 				ServerName:   deployment.ServerName,
@@ -1049,7 +1048,7 @@ func TestApplyDeploymentActionResult_UsesSystemContext(t *testing.T) {
 			require.NotNil(t, patch.Status)
 			require.Equal(t, "deployed", *patch.Status)
 			require.NotNil(t, patch.Error)
-			require.Equal(t, "", *patch.Error)
+			require.Empty(t, *patch.Error)
 			return nil
 		},
 	}

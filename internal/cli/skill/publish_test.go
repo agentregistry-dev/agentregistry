@@ -707,7 +707,7 @@ func TestRunPublish_DirectGitHub(t *testing.T) {
 	mockGitHubSkillMdCheck(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/v0/skills" { //nolint:nestif
+		if r.Method == http.MethodPost && r.URL.Path == "/v0/skills" {
 			var skill models.SkillJSON
 			json.NewDecoder(r.Body).Decode(&skill)
 			if skill.Name != "remote-skill" {
@@ -1138,9 +1138,9 @@ func TestCheckGitHubSkillMdExists_VerifiesCorrectPath(t *testing.T) {
 
 func TestIsValidSkillDir(t *testing.T) {
 	tests := []struct {
-		name    string
-		setup   func(dir string)
-		want    bool
+		name  string
+		setup func(dir string)
+		want  bool
 	}{
 		{
 			name: "valid SKILL.md with name and description",

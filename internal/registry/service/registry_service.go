@@ -908,31 +908,18 @@ func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, res
 		return fmt.Errorf("looking up existing deployment: %w", err)
 	}
 
-	cleanupPlatform := ""
 	if existing == nil {
 		return nil
 	}
-	if providerID := strings.TrimSpace(existing.ProviderID); providerID != "" {
-		provider, err := s.resolveProviderByID(ctx, providerID)
-		if err != nil && !errors.Is(err, database.ErrNotFound) {
-			return fmt.Errorf("resolving provider for existing deployment: %w", err)
-		}
-		if err == nil && provider != nil {
-			cleanupPlatform = strings.ToLower(strings.TrimSpace(provider.Platform))
-		}
+
+	cleanupPlatform, err := s.resolveExistingDeploymentCleanupPlatform(ctx, existing)
+	if err != nil {
+		return err
 	}
-	if cleanupPlatform != "" {
-		if adapter, err := s.resolveDeploymentAdapter(cleanupPlatform); err == nil {
-			if cleaner, ok := adapter.(DeploymentPlatformStaleCleaner); ok {
-				if err := cleaner.CleanupStale(ctx, existing); err != nil {
-					log.Printf("Warning: failed stale cleanup for deployment %s on platform %s: %v", existing.ID, cleanupPlatform, err)
-				}
-			}
-		} else {
-			log.Printf("Warning: failed to resolve deployment adapter for stale cleanup on platform %s: %v", cleanupPlatform, err)
-		}
-	} else {
+	if cleanupPlatform == "" {
 		log.Printf("Warning: skipping stale cleanup for deployment %s: provider platform unavailable", existing.ID)
+	} else if err := s.cleanupStaleDeploymentOnPlatform(ctx, cleanupPlatform, existing); err != nil {
+		log.Printf("Warning: failed stale cleanup for deployment %s on platform %s: %v", existing.ID, cleanupPlatform, err)
 	}
 
 	if err := s.db.RemoveDeploymentByID(ctx, nil, existing.ID); err != nil && !errors.Is(err, database.ErrNotFound) {
@@ -940,6 +927,38 @@ func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, res
 	}
 
 	return nil
+}
+
+func (s *registryServiceImpl) resolveExistingDeploymentCleanupPlatform(ctx context.Context, existing *models.Deployment) (string, error) {
+	providerID := strings.TrimSpace(existing.ProviderID)
+	if providerID == "" {
+		return "", nil
+	}
+
+	provider, err := s.resolveProviderByID(ctx, providerID)
+	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			return "", nil
+		}
+		return "", fmt.Errorf("resolving provider for existing deployment: %w", err)
+	}
+	if provider == nil {
+		return "", nil
+	}
+	return strings.ToLower(strings.TrimSpace(provider.Platform)), nil
+}
+
+func (s *registryServiceImpl) cleanupStaleDeploymentOnPlatform(ctx context.Context, cleanupPlatform string, existing *models.Deployment) error {
+	adapter, err := s.resolveDeploymentAdapter(cleanupPlatform)
+	if err != nil {
+		return fmt.Errorf("resolve deployment adapter: %w", err)
+	}
+
+	cleaner, ok := adapter.(DeploymentPlatformStaleCleaner)
+	if !ok {
+		return nil
+	}
+	return cleaner.CleanupStale(ctx, existing)
 }
 
 // DeployServer deploys a server with environment variables.

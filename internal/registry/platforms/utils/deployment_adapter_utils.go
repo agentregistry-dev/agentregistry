@@ -17,8 +17,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
-
-	api "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 )
 
 const DefaultLocalAgentPort uint16 = 8080
@@ -93,10 +91,10 @@ func ResolveAgent(
 		envValues["KAGENT_NAMESPACE"] = namespace
 	}
 	envValues["KAGENT_URL"] = "http://localhost"
-	envValues["KAGENT_NAME"] = agentResp.Agent.AgentManifest.Name
-	envValues["AGENT_NAME"] = agentResp.Agent.AgentManifest.Name
-	envValues["MODEL_PROVIDER"] = agentResp.Agent.AgentManifest.ModelProvider
-	envValues["MODEL_NAME"] = agentResp.Agent.AgentManifest.ModelName
+	envValues["KAGENT_NAME"] = agentResp.Agent.Name
+	envValues["AGENT_NAME"] = agentResp.Agent.Name
+	envValues["MODEL_PROVIDER"] = agentResp.Agent.ModelProvider
+	envValues["MODEL_NAME"] = agentResp.Agent.ModelName
 
 	resolvedServers, resolvedConfigs, _, err := resolveAgentManifestPlatformMCPServers(ctx, registryService, deployment.ID, &agentResp.Agent.AgentManifest, namespace)
 	if err != nil {
@@ -213,7 +211,7 @@ func resolvedMCPConfigFromRegistryServer(
 
 var ErrDeploymentNotSupported = errors.New("deployment operation is not supported for this provider platform type")
 
-func TranslateMCPServer(ctx context.Context, req *MCPServerRunRequest) (*api.MCPServer, error) {
+func TranslateMCPServer(ctx context.Context, req *MCPServerRunRequest) (*platformtypes.MCPServer, error) {
 	if req == nil || req.RegistryServer == nil {
 		return nil, fmt.Errorf("registry server is required")
 	}
@@ -246,7 +244,7 @@ func translateRemoteMCPServer(
 	registryServer *apiv0.ServerJSON,
 	deploymentID string,
 	headerValues map[string]string,
-) (*api.MCPServer, error) {
+) (*platformtypes.MCPServer, error) {
 	remoteInfo := registryServer.Remotes[0]
 
 	headersMap, err := processHeaders(remoteInfo.Headers, headerValues)
@@ -254,9 +252,9 @@ func translateRemoteMCPServer(
 		return nil, err
 	}
 
-	headers := make([]api.HeaderValue, 0, len(headersMap))
+	headers := make([]platformtypes.HeaderValue, 0, len(headersMap))
 	for k, v := range headersMap {
-		headers = append(headers, api.HeaderValue{
+		headers = append(headers, platformtypes.HeaderValue{
 			Name:  k,
 			Value: v,
 		})
@@ -267,11 +265,11 @@ func translateRemoteMCPServer(
 		return nil, fmt.Errorf("failed to parse remote server url: %v", err)
 	}
 
-	return &api.MCPServer{
+	return &platformtypes.MCPServer{
 		Name:          generateInternalName(registryServer.Name),
 		DeploymentID:  deploymentID,
-		MCPServerType: api.MCPServerTypeRemote,
-		Remote: &api.RemoteMCPServer{
+		MCPServerType: platformtypes.MCPServerTypeRemote,
+		Remote: &platformtypes.RemoteMCPServer{
 			Host:    u.host,
 			Port:    u.port,
 			Path:    u.path,
@@ -286,7 +284,7 @@ func translateLocalMCPServer(
 	deploymentID string,
 	envValues map[string]string,
 	argValues map[string]string,
-) (*api.MCPServer, error) {
+) (*platformtypes.MCPServer, error) {
 	packageInfo := registryServer.Packages[0]
 
 	var args []string
@@ -333,30 +331,30 @@ func translateLocalMCPServer(
 	}
 
 	var (
-		transportType api.TransportType
-		httpTransport *api.HTTPTransport
+		transportType platformtypes.TransportType
+		httpTransport *platformtypes.HTTPTransport
 	)
 	switch packageInfo.Transport.Type {
 	case "stdio":
-		transportType = api.TransportTypeStdio
+		transportType = platformtypes.TransportTypeStdio
 	default:
-		transportType = api.TransportTypeHTTP
+		transportType = platformtypes.TransportTypeHTTP
 		u, err := parseURL(packageInfo.Transport.URL)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse transport url: %v", err)
 		}
-		httpTransport = &api.HTTPTransport{
+		httpTransport = &platformtypes.HTTPTransport{
 			Port: u.port,
 			Path: u.path,
 		}
 	}
 
-	return &api.MCPServer{
+	return &platformtypes.MCPServer{
 		Name:          generateInternalName(registryServer.Name),
 		DeploymentID:  deploymentID,
-		MCPServerType: api.MCPServerTypeLocal,
-		Local: &api.LocalMCPServer{
-			Deployment: api.MCPServerDeployment{
+		MCPServerType: platformtypes.MCPServerTypeLocal,
+		Local: &platformtypes.LocalMCPServer{
+			Deployment: platformtypes.MCPServerDeployment{
 				Image: config.Image,
 				Cmd:   config.Command,
 				Args:  args,

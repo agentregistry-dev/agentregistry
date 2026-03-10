@@ -334,37 +334,37 @@ func TestBuildRemoteServerJSON_NoGithub(t *testing.T) {
 
 func TestResolveRemoteTransport(t *testing.T) {
 	tests := []struct {
-		name          string
-		transport     string
-		expectedType  string
+		name           string
+		transport      string
+		expectedType   string
 		expectingError bool
 	}{
 		{
-			name:          "defaults to streamable-http when empty",
-			transport:     "",
-			expectedType:  "streamable-http",
+			name:           "defaults to streamable-http when empty",
+			transport:      "",
+			expectedType:   "streamable-http",
 			expectingError: false,
 		},
 		{
-			name:          "accepts streamable-http",
-			transport:     "streamable-http",
-			expectedType:  "streamable-http",
+			name:           "accepts streamable-http",
+			transport:      "streamable-http",
+			expectedType:   "streamable-http",
 			expectingError: false,
 		},
 		{
-			name:          "accepts sse",
-			transport:     "sse",
-			expectedType:  "sse",
+			name:           "accepts sse",
+			transport:      "sse",
+			expectedType:   "sse",
 			expectingError: false,
 		},
 		{
-			name:          "rejects stdio",
-			transport:     "stdio",
+			name:           "rejects stdio",
+			transport:      "stdio",
 			expectingError: true,
 		},
 		{
-			name:          "rejects invalid value",
-			transport:     "http",
+			name:           "rejects invalid value",
+			transport:      "http",
 			expectingError: true,
 		},
 	}

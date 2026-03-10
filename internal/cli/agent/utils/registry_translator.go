@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	platformutils "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/types"
@@ -23,9 +24,7 @@ func TranslateRegistryServer(
 	}
 
 	runEnv := make(map[string]string, len(envOverrides))
-	for key, value := range envOverrides {
-		runEnv[key] = value
-	}
+	maps.Copy(runEnv, envOverrides)
 
 	translated, err := platformutils.TranslateMCPServer(context.Background(), &platformutils.MCPServerRunRequest{
 		RegistryServer: &apiv0.ServerJSON{

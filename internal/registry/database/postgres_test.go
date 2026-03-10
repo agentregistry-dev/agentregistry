@@ -1015,7 +1015,7 @@ func TestPostgreSQL_UpdateDeploymentState_PatchesMetadataAndError(t *testing.T) 
 	updated, err := db.GetDeploymentByID(ctxWithAuth, nil, deployment.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "deployed", updated.Status)
-	assert.Equal(t, "", updated.Error)
+	assert.Empty(t, updated.Error)
 	assert.Equal(t, "us-west-2", updated.ProviderConfig["region"])
 	assert.Equal(t, "op-123", updated.ProviderMetadata["operationId"])
 }
