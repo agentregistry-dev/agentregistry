@@ -19,7 +19,7 @@ var PullCmd = &cobra.Command{
 	Use:   "pull <skill-name> [output-directory]",
 	Short: "Pull a skill from the registry and extract it locally",
 	Long: `Pull a skill from the registry and extract its contents to a local directory.
-Supports skills packaged as Docker images or hosted in GitHub repositories.
+Supports skills packaged as Docker images or hosted in Git repositories.
 
 If output-directory is not specified, it will be extracted to ./skills/<skill-name>`,
 	Args: cobra.RangeArgs(1, 2),
@@ -88,8 +88,8 @@ func runPull(cmd *cobra.Command, args []string) error {
 		if err := pullFromDocker(dockerImage, absOutputDir); err != nil {
 			return err
 		}
-	} else if skillResp.Skill.Repository != nil && (skillResp.Skill.Repository.Source == "git" || skillResp.Skill.Repository.Source == "github") {
-		if err := pullFromGitHub(skillResp.Skill.Repository.URL, absOutputDir); err != nil {
+	} else if skillResp.Skill.Repository != nil && skillResp.Skill.Repository.Source == "git" {
+		if err := pullFromGit(skillResp.Skill.Repository.URL, absOutputDir); err != nil {
 			return err
 		}
 	} else {
@@ -186,8 +186,8 @@ func pullFromDocker(dockerImage, absOutputDir string) error {
 	return nil
 }
 
-// pullFromGitHub clones a GitHub repository and copies the skill files to the output directory.
-func pullFromGitHub(repoURL, absOutputDir string) error {
-	printer.PrintInfo(fmt.Sprintf("Cloning from GitHub: %s", repoURL))
+// pullFromGit clones a git repository and copies the skill files to the output directory.
+func pullFromGit(repoURL, absOutputDir string) error {
+	printer.PrintInfo(fmt.Sprintf("Cloning from git: %s", repoURL))
 	return gitutil.CloneAndCopy(repoURL, absOutputDir, true)
 }

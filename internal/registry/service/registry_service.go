@@ -1302,9 +1302,9 @@ func (s *registryServiceImpl) resolveSkillRef(ctx context.Context, skill models.
 		}
 	}
 
-	// Fall back to GitHub repository.
+	// Fall back to git repository.
 	if skillResp.Skill.Repository != nil &&
-		strings.EqualFold(skillResp.Skill.Repository.Source, "github") &&
+		strings.EqualFold(skillResp.Skill.Repository.Source, string(validators.SourceGit)) &&
 		strings.TrimSpace(skillResp.Skill.Repository.URL) != "" {
 		return api.AgentSkillRef{
 			Name:    skill.Name,
@@ -1312,7 +1312,7 @@ func (s *registryServiceImpl) resolveSkillRef(ctx context.Context, skill models.
 		}, nil
 	}
 
-	return api.AgentSkillRef{}, fmt.Errorf("skill %q (version %s): no docker/oci package or github repository found", registrySkillName, version)
+	return api.AgentSkillRef{}, fmt.Errorf("skill %q (version %s): no docker/oci package or git repository found", registrySkillName, version)
 }
 
 func (s *registryServiceImpl) ensureSemanticEmbedding(ctx context.Context, opts *database.SemanticSearchOptions) error {

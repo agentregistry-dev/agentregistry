@@ -117,8 +117,8 @@ func TestSkillPublishGitHub(t *testing.T) {
 		if skillResp.Repository.URL != githubRepo {
 			t.Errorf("repository.url = %q, want %q", skillResp.Repository.URL, githubRepo)
 		}
-		if skillResp.Skill.Repository.Source != "github" {
-			t.Errorf("repository.source = %q, want %q", skillResp.Skill.Repository.Source, "github")
+		if skillResp.Repository.Source != "git" {
+			t.Errorf("repository.source = %q, want %q", skillResp.Repository.Source, "git")
 		}
 		if len(skillResp.Packages) != 0 {
 			t.Errorf("expected no packages for GitHub-published skill, got %d", len(skillResp.Packages))
@@ -307,7 +307,7 @@ func TestSkillBuildAndPublish(t *testing.T) {
 // --- validation tests ---
 
 // TestSkillPublishValidation verifies that "skill publish" rejects requests
-// when neither --docker-url nor --github is provided.
+// when neither --docker-image nor --git is provided.
 func TestSkillPublishValidation(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -325,7 +325,7 @@ func TestSkillPublishValidation(t *testing.T) {
 		result := RunArctl(t, tmpDir,
 			"skill", "publish", skillDir,
 			"--docker-url", "docker.io/test",
-			"--github", "https://github.com/test/repo",
+			"--git", "https://github.com/test/repo",
 		)
 		RequireFailure(t, result)
 	})
@@ -343,7 +343,7 @@ func TestSkillPublishValidation(t *testing.T) {
 	t.Run("missing_version_with_github", func(t *testing.T) {
 		result := RunArctl(t, tmpDir,
 			"skill", "publish", skillDir,
-			"--github", "https://github.com/test/repo",
+			"--git", "https://github.com/test/repo",
 			"--registry-url", "http://localhost:12121/v0",
 		)
 		RequireFailure(t, result)
@@ -356,7 +356,7 @@ func TestSkillPublishValidation(t *testing.T) {
 
 		result := RunArctl(t, tmpDir,
 			"skill", "publish", emptyDir,
-			"--github", "https://github.com/test/repo",
+			"--git", "https://github.com/test/repo",
 			"--version", "1.0.0",
 			"--registry-url", "http://localhost:12121/v0",
 		)
@@ -412,7 +412,7 @@ func TestSkillPublishDirectDryRun(t *testing.T) {
 
 	result := RunArctl(t, tmpDir,
 		"skill", "publish", "direct-test-skill",
-		"--github", "https://github.com/agentregistry-dev/skills/tree/main/artifacts-builder",
+		"--git", "https://github.com/agentregistry-dev/skills/tree/main/artifacts-builder",
 		"--version", "1.0.0",
 		"--description", "A remotely hosted skill",
 		"--dry-run",
@@ -420,4 +420,56 @@ func TestSkillPublishDirectDryRun(t *testing.T) {
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "DRY RUN")
 	RequireOutputContains(t, result, "direct-test-skill")
+}
+
+// --- helpers ---
+
+func createSkillDir(t *testing.T, dir, name, description string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("failed to create skill dir: %v", err)
+	}
+	skillMd := "---\nname: " + name + "\ndescription: " + description + "\n---\n# " + name + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(skillMd), 0644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+}
+
+type skillAPIResponse struct {
+	Name       string `json:"name"`
+	Version    string `json:"version"`
+	Repository *struct {
+		URL    string `json:"url"`
+		Source string `json:"source"`
+	} `json:"repository"`
+	Packages []struct {
+		RegistryType string `json:"registryType"`
+		Identifier   string `json:"identifier"`
+		Version      string `json:"version"`
+	} `json:"packages"`
+}
+
+func fetchSkillFromAPI(t *testing.T, regURL, skillName, version string) skillAPIResponse {
+	t.Helper()
+	url := regURL + "/skills/" + skillName + "/versions/" + version
+	resp := RegistryGet(t, url)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from skill endpoint %s, got %d", url, resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to read response body: %v", err)
+	}
+
+	var wrapper struct {
+		Skill skillAPIResponse `json:"skill"`
+	}
+	if err := json.Unmarshal(body, &wrapper); err != nil {
+		t.Fatalf("failed to parse skill response: %v\nbody: %s", err, string(body))
+	}
+
+	return wrapper.Skill
 }

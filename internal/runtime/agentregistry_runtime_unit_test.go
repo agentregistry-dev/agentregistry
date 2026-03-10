@@ -25,7 +25,7 @@ func Test_TranslateRegistry(t *testing.T) {
         "description": "Enables AI assistants to interact with Demo Time and helps build presentations and demos.",
         "repository": {
           "url": "https://github.com/estruyf/vscode-demo-time",
-          "source": "github"
+          "source": "git"
         },
         "version": "0.0.55",
         "packages": [
@@ -75,7 +75,7 @@ func Test_TranslateDockerCompose(t *testing.T) {
         "description": "Enables AI assistants to interact with Demo Time and helps build presentations and demos.",
         "repository": {
           "url": "https://github.com/estruyf/vscode-demo-time",
-          "source": "github"
+          "source": "git"
         },
         "version": "0.0.55",
         "packages": [

@@ -7,22 +7,17 @@ import (
 )
 
 var (
-	// Regular expressions for validating repository URLs
-	// These regex patterns ensure the URL is in the format of a valid GitHub or GitLab repository
-	// For example:	// - GitHub: https://github.com/user/repo
-	githubURLRegex = regexp.MustCompile(`^https?://(www\.)?github\.com/[\w.-]+/[\w.-]+/?$`)
-	gitlabURLRegex = regexp.MustCompile(`^https?://(www\.)?gitlab\.com/[\w.-]+/[\w.-]+/?$`)
+	// gitRepoURLRegex validates repository URLs for common git hosting providers
+	// (GitHub, GitLab, Bitbucket, etc.) in the standard owner/repo format.
+	gitRepoURLRegex = regexp.MustCompile(`^https?://(www\.)?(github\.com|gitlab\.com|bitbucket\.org)/[\w.-]+/[\w.-]+/?$`)
 )
 
 // IsValidRepositoryURL checks if the given URL is valid for the specified repository source
-func IsValidRepositoryURL(source RepositorySource, url string) bool {
-	switch source {
-	case SourceGitHub:
-		return githubURLRegex.MatchString(url)
-	case SourceGitLab:
-		return gitlabURLRegex.MatchString(url)
+func IsValidRepositoryURL(source RepositorySource, rawURL string) bool {
+	if source != SourceGit {
+		return false
 	}
-	return false
+	return gitRepoURLRegex.MatchString(rawURL)
 }
 
 // HasNoSpaces checks if a string contains no spaces

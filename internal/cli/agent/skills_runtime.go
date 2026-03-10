@@ -93,7 +93,7 @@ func extractSkillRepoURL(skillResp *models.SkillResponse) (string, error) {
 		return "", fmt.Errorf("skill response is required")
 	}
 	if skillResp.Skill.Repository != nil &&
-		(strings.EqualFold(skillResp.Skill.Repository.Source, "git") || strings.EqualFold(skillResp.Skill.Repository.Source, "github")) &&
+		strings.EqualFold(skillResp.Skill.Repository.Source, "git") &&
 		strings.TrimSpace(skillResp.Skill.Repository.URL) != "" {
 		return strings.TrimSpace(skillResp.Skill.Repository.URL), nil
 	}

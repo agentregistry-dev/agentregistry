@@ -27,7 +27,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 			},
@@ -41,7 +41,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 			},
@@ -55,7 +55,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 			},
@@ -69,7 +69,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "^1.2.3",
 			},
@@ -83,7 +83,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 				Packages: []model.Package{
@@ -105,7 +105,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.2.3",
 				Packages: []model.Package{
@@ -127,7 +127,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "2021.03.15",
 				Packages: []model.Package{
@@ -149,7 +149,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.x",
 			},
@@ -163,7 +163,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.*",
 			},
@@ -177,7 +177,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "snapshot - 2025.09",
 			},
@@ -191,7 +191,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.2.3 - 2.0.0",
 			},
@@ -205,7 +205,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.2 || 1.3",
 			},
@@ -219,7 +219,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: ">= 1.2.3",
 			},
@@ -254,7 +254,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 					ID:     "owner/repo",
 				},
 				Version:    "1.0.0",
@@ -293,28 +293,28 @@ func TestValidate(t *testing.T) {
 			expectedError: validators.ErrInvalidRepositoryURL.Error(),
 		},
 		{
-			name: "server with invalid GitHub URL format",
+			name: "server with invalid git repository URL format - missing repo",
 			serverDetail: apiv0.ServerJSON{
 				Schema:      model.CurrentSchemaURL,
 				Name:        "com.example/test-server",
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner", // Missing repo name
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 			},
 			expectedError: validators.ErrInvalidRepositoryURL.Error(),
 		},
 		{
-			name: "server with invalid GitLab URL format",
+			name: "server with invalid git repository URL format - missing path",
 			serverDetail: apiv0.ServerJSON{
 				Schema:      model.CurrentSchemaURL,
 				Name:        "com.example/test-server",
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://gitlab.com", // Missing owner and repo
-					Source: "gitlab",
+					Source: "git",
 				},
 				Version: "1.0.0",
 			},
@@ -328,7 +328,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:       "https://github.com/owner/repo",
-					Source:    "github",
+					Source:    "git",
 					Subfolder: "servers/my-server",
 				},
 				Version: "1.0.0",
@@ -343,7 +343,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:       "https://github.com/owner/repo",
-					Source:    "github",
+					Source:    "git",
 					Subfolder: "../parent/folder",
 				},
 				Version: "1.0.0",
@@ -358,7 +358,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:       "https://github.com/owner/repo",
-					Source:    "github",
+					Source:    "git",
 					Subfolder: "/absolute/path",
 				},
 				Version: "1.0.0",
@@ -373,7 +373,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:       "https://github.com/owner/repo",
-					Source:    "github",
+					Source:    "git",
 					Subfolder: "servers/my-server/",
 				},
 				Version: "1.0.0",
@@ -388,7 +388,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:       "https://github.com/owner/repo",
-					Source:    "github",
+					Source:    "git",
 					Subfolder: "servers/my server",
 				},
 				Version: "1.0.0",
@@ -403,7 +403,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:       "https://github.com/owner/repo",
-					Source:    "github",
+					Source:    "git",
 					Subfolder: "servers//my-server",
 				},
 				Version: "1.0.0",
@@ -418,7 +418,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version:    "1.0.0",
 				WebsiteURL: "https://example.com/docs",
@@ -433,7 +433,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version:    "1.0.0",
 				WebsiteURL: "example.com/docs",
@@ -448,7 +448,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version:    "1.0.0",
 				WebsiteURL: "ftp://example.com/docs",
@@ -463,7 +463,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version:    "1.0.0",
 				WebsiteURL: "ht tp://example.com/docs",
@@ -478,7 +478,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version:    "1.0.0",
 				WebsiteURL: "https://example.com/docs",
@@ -493,7 +493,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version:    "1.0.0",
 				WebsiteURL: "https://docs.example.com/mcp",
@@ -508,7 +508,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version:    "1.0.0",
 				WebsiteURL: "https://different.com/docs",
@@ -523,7 +523,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 				Packages: []model.Package{
@@ -547,7 +547,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 				Packages: []model.Package{
@@ -572,7 +572,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 				Packages: []model.Package{
@@ -604,7 +604,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 				Remotes: []model.Transport{
@@ -624,7 +624,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 				Remotes: []model.Transport{
@@ -644,7 +644,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 				Remotes: []model.Transport{
@@ -664,7 +664,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 				Remotes: []model.Transport{
@@ -684,7 +684,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 				Remotes: []model.Transport{
@@ -708,7 +708,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version:  "1.0.0",
 				Packages: nil,
@@ -724,7 +724,7 @@ func TestValidate(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version:  "1.0.0",
 				Packages: []model.Package{},
@@ -1648,7 +1648,7 @@ func TestValidate_RegistryTypesAndUrls(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 					ID:     "owner/repo",
 				},
 				Version: "1.0.0",
@@ -1685,7 +1685,7 @@ func createValidServerWithArgument(arg model.Argument) apiv0.ServerJSON {
 		Description: "A test server",
 		Repository: &model.Repository{
 			URL:    "https://github.com/owner/repo",
-			Source: "github",
+			Source: "git",
 			ID:     "owner/repo",
 		},
 		Version: "1.0.0",
@@ -1724,7 +1724,7 @@ func TestValidateTitle(t *testing.T) {
 				Title:       "GitHub",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 			},
@@ -1739,7 +1739,7 @@ func TestValidateTitle(t *testing.T) {
 				Title:       "Weather API",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 			},
@@ -1754,7 +1754,7 @@ func TestValidateTitle(t *testing.T) {
 				Title:       "",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 			},
@@ -1769,7 +1769,7 @@ func TestValidateTitle(t *testing.T) {
 				Title:       "GitHub MCP Server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 			},
@@ -1784,7 +1784,7 @@ func TestValidateTitle(t *testing.T) {
 				Title:       "GitHub MCP",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 			},
@@ -1799,7 +1799,7 @@ func TestValidateTitle(t *testing.T) {
 				Title:       "GitHub mcp server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 			},
@@ -1814,7 +1814,7 @@ func TestValidateTitle(t *testing.T) {
 				Title:       "GitHub-MCP",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 			},
@@ -1829,7 +1829,7 @@ func TestValidateTitle(t *testing.T) {
 				Title:       "MCP Weather API",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 			},
@@ -1844,7 +1844,7 @@ func TestValidateTitle(t *testing.T) {
 				Title:       "   ",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 			},
@@ -1859,7 +1859,7 @@ func TestValidateTitle(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 				Icons: []model.Icon{
@@ -1878,7 +1878,7 @@ func TestValidateTitle(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 				Icons: []model.Icon{
@@ -1900,7 +1900,7 @@ func TestValidateTitle(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 				Icons: []model.Icon{
@@ -1921,7 +1921,7 @@ func TestValidateTitle(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 				Icons: []model.Icon{
@@ -1941,7 +1941,7 @@ func TestValidateTitle(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 				Icons: []model.Icon{
@@ -1965,7 +1965,7 @@ func TestValidateTitle(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 				Icons: []model.Icon{
@@ -1984,7 +1984,7 @@ func TestValidateTitle(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 				Icons: []model.Icon{
@@ -2003,7 +2003,7 @@ func TestValidateTitle(t *testing.T) {
 				Description: "A test server",
 				Repository: &model.Repository{
 					URL:    "https://github.com/owner/repo",
-					Source: "github",
+					Source: "git",
 				},
 				Version: "1.0.0",
 				Icons: []model.Icon{
