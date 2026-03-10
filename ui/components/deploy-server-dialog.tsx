@@ -51,6 +51,7 @@ export function DeployServerDialog({ open, onOpenChange, server, onDeploySuccess
           version: server.server.version,
           env: config,
           preferRemote: false,
+          providerId: "local",
         },
         throwOnError: true,
       })
