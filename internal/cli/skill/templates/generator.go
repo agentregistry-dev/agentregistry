@@ -52,7 +52,7 @@ func (g *Generator) GenerateProject(config ProjectConfig) error {
 			return err
 		}
 
-		destPath := filepath.Join(config.ProjectName, strings.TrimSuffix(path, ".tmpl"))
+		destPath := filepath.Join(config.Directory, strings.TrimSuffix(path, ".tmpl"))
 
 		if d.IsDir() {
 			// When Empty flag is set, skip creating directories (allowed templates are in root)
