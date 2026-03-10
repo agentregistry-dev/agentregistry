@@ -852,7 +852,33 @@ func (s *registryServiceImpl) GetDeployments(ctx context.Context, filter *models
 
 // GetDeploymentByID retrieves a specific deployment by UUID.
 func (s *registryServiceImpl) GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error) {
-	return s.db.GetDeploymentByID(ctx, nil, id)
+	deployment, err := s.db.GetDeploymentByID(ctx, nil, id)
+	if err == nil {
+		return deployment, nil
+	}
+	if !errors.Is(err, database.ErrNotFound) {
+		return nil, err
+	}
+	return s.getDiscoveredDeploymentByID(ctx, id)
+}
+
+func (s *registryServiceImpl) getDiscoveredDeploymentByID(ctx context.Context, id string) (*models.Deployment, error) {
+	discoveredID := strings.TrimSpace(id)
+	if !strings.HasPrefix(discoveredID, "discovered-") {
+		return nil, database.ErrNotFound
+	}
+
+	origin := originDiscovered
+	deployments, err := s.GetDeployments(ctx, &models.DeploymentFilter{Origin: &origin})
+	if err != nil {
+		return nil, err
+	}
+	for _, dep := range deployments {
+		if dep != nil && dep.ID == discoveredID {
+			return dep, nil
+		}
+	}
+	return nil, database.ErrNotFound
 }
 
 func (s *registryServiceImpl) resolveProviderByID(ctx context.Context, providerID string) (*models.Provider, error) {

@@ -1096,6 +1096,7 @@ type deployCreateMockDB struct {
 // the methods needed for testing deployment cleanup logic. All other methods panic.
 type deploymentMockDB struct {
 	database.Database      // embed interface so unimplemented methods panic
+	getDeploymentByIDFn    func(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error)
 	getDeploymentsFn       func(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
 	listProvidersFn        func(ctx context.Context, tx pgx.Tx, platform *string) ([]*models.Provider, error)
 	getProviderByIDFn      func(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error)
@@ -1136,6 +1137,10 @@ func (m *deployCreateMockDB) RemoveDeploymentByID(ctx context.Context, tx pgx.Tx
 
 func (m *deploymentMockDB) ListProviders(ctx context.Context, tx pgx.Tx, platform *string) ([]*models.Provider, error) {
 	return m.listProvidersFn(ctx, tx, platform)
+}
+
+func (m *deploymentMockDB) GetDeploymentByID(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error) {
+	return m.getDeploymentByIDFn(ctx, tx, id)
 }
 
 func (m *deploymentMockDB) GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
@@ -1460,4 +1465,52 @@ func TestGetDeployments_ManagedOriginSkipsDiscovery(t *testing.T) {
 	require.Len(t, got, 1)
 	assert.False(t, discoverCalled)
 	assert.Equal(t, "dep-managed-only", got[0].ID)
+}
+
+func TestGetDeploymentByID_FallsBackToDiscoveredDeployments(t *testing.T) {
+	discoveredID := discoveredDeploymentID("kubernetes-default", "mcp", "io.test/external", "unknown")
+	mockDB := &deploymentMockDB{
+		getDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, _ string) (*models.Deployment, error) {
+			return nil, database.ErrNotFound
+		},
+		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+			require.NotNil(t, filter)
+			require.NotNil(t, filter.Origin)
+			require.Equal(t, originDiscovered, *filter.Origin)
+			return []*models.Deployment{}, nil
+		},
+		listProvidersFn: func(_ context.Context, _ pgx.Tx, _ *string) ([]*models.Provider, error) {
+			return []*models.Provider{
+				{ID: "kubernetes-default", Platform: "kubernetes"},
+			}, nil
+		},
+	}
+	adapter := &testDeploymentAdapter{
+		discoverFn: func(_ context.Context, providerID string) ([]*models.Deployment, error) {
+			return []*models.Deployment{
+				{
+					ServerName:   "io.test/external",
+					Version:      "unknown",
+					ResourceType: "mcp",
+					Status:       "deployed",
+					Origin:       originDiscovered,
+					ProviderID:   providerID,
+				},
+			}, nil
+		},
+	}
+
+	svc := &registryServiceImpl{
+		db: mockDB,
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+			"kubernetes": adapter,
+		},
+	}
+
+	got, err := svc.GetDeploymentByID(context.Background(), discoveredID)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, discoveredID, got.ID)
+	assert.Equal(t, originDiscovered, got.Origin)
+	assert.Equal(t, "kubernetes-default", got.ProviderID)
 }
