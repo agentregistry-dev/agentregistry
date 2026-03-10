@@ -21,6 +21,17 @@ import (
 	api "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 )
 
+const DefaultLocalAgentPort uint16 = 8080
+
+type MCPServerRunRequest struct {
+	RegistryServer *apiv0.ServerJSON
+	DeploymentID   string
+	PreferRemote   bool
+	EnvValues      map[string]string
+	ArgValues      map[string]string
+	HeaderValues   map[string]string
+}
+
 func ValidateDeploymentRequest(deployment *models.Deployment, allowExisting bool) error {
 	if deployment == nil {
 		return fmt.Errorf("deployment request is required: %w", database.ErrInvalidInput)
@@ -50,13 +61,13 @@ func BuildPlatformMCPServer(
 		return nil, fmt.Errorf("load mcp server %s@%s: %w", deployment.ServerName, deployment.Version, err)
 	}
 	envValues, argValues, headerValues := splitDeploymentRuntimeInputs(deployment.Env)
-	server, err := translateMCPServer(ctx, &mcpServerRunRequest{
-		registryServer: &serverResp.Server,
-		deploymentID:   deployment.ID,
-		preferRemote:   deployment.PreferRemote,
-		envValues:      envValues,
-		argValues:      argValues,
-		headerValues:   headerValues,
+	server, err := TranslateMCPServer(ctx, &MCPServerRunRequest{
+		RegistryServer: &serverResp.Server,
+		DeploymentID:   deployment.ID,
+		PreferRemote:   deployment.PreferRemote,
+		EnvValues:      envValues,
+		ArgValues:      argValues,
+		HeaderValues:   headerValues,
 	})
 	if err != nil {
 		return nil, err
@@ -101,7 +112,7 @@ func ResolveAgent(
 			Name:               agentResp.Agent.Name,
 			Version:            agentResp.Agent.Version,
 			DeploymentID:       deployment.ID,
-			Deployment:         platformtypes.AgentDeployment{Image: agentResp.Agent.Image, Env: envValues},
+			Deployment:         platformtypes.AgentDeployment{Image: agentResp.Agent.Image, Env: envValues, Port: DefaultLocalAgentPort},
 			ResolvedMCPServers: resolvedConfigs,
 			Skills:             skills,
 		},
@@ -140,13 +151,13 @@ func resolveAgentManifestPlatformMCPServers(
 			return nil, nil, nil, fmt.Errorf("load resolved MCP server %s@%s: %w", mcpServer.RegistryServerName, version, err)
 		}
 
-		platformServer, err := translateMCPServer(ctx, &mcpServerRunRequest{
-			registryServer: &serverResp.Server,
-			deploymentID:   deploymentID,
-			preferRemote:   mcpServer.RegistryServerPreferRemote,
-			envValues:      map[string]string{},
-			argValues:      map[string]string{},
-			headerValues:   map[string]string{},
+		platformServer, err := TranslateMCPServer(ctx, &MCPServerRunRequest{
+			RegistryServer: &serverResp.Server,
+			DeploymentID:   deploymentID,
+			PreferRemote:   mcpServer.RegistryServerPreferRemote,
+			EnvValues:      map[string]string{},
+			ArgValues:      map[string]string{},
+			HeaderValues:   map[string]string{},
 		})
 		if err != nil {
 			return nil, nil, nil, err
@@ -202,41 +213,32 @@ func resolvedMCPConfigFromRegistryServer(
 
 var ErrDeploymentNotSupported = errors.New("deployment operation is not supported for this provider platform type")
 
-type mcpServerRunRequest struct {
-	registryServer *apiv0.ServerJSON
-	deploymentID   string
-	preferRemote   bool
-	envValues      map[string]string
-	argValues      map[string]string
-	headerValues   map[string]string
-}
-
-func translateMCPServer(
-	ctx context.Context,
-	req *mcpServerRunRequest,
-) (*api.MCPServer, error) {
-	useRemote := len(req.registryServer.Remotes) > 0 && (req.preferRemote || len(req.registryServer.Packages) == 0)
-	usePackage := len(req.registryServer.Packages) > 0 && (!req.preferRemote || len(req.registryServer.Remotes) == 0)
+func TranslateMCPServer(ctx context.Context, req *MCPServerRunRequest) (*api.MCPServer, error) {
+	if req == nil || req.RegistryServer == nil {
+		return nil, fmt.Errorf("registry server is required")
+	}
+	useRemote := len(req.RegistryServer.Remotes) > 0 && (req.PreferRemote || len(req.RegistryServer.Packages) == 0)
+	usePackage := len(req.RegistryServer.Packages) > 0 && (!req.PreferRemote || len(req.RegistryServer.Remotes) == 0)
 
 	switch {
 	case useRemote:
 		return translateRemoteMCPServer(
 			ctx,
-			req.registryServer,
-			req.deploymentID,
-			req.headerValues,
+			req.RegistryServer,
+			req.DeploymentID,
+			req.HeaderValues,
 		)
 	case usePackage:
 		return translateLocalMCPServer(
 			ctx,
-			req.registryServer,
-			req.deploymentID,
-			req.envValues,
-			req.argValues,
+			req.RegistryServer,
+			req.DeploymentID,
+			req.EnvValues,
+			req.ArgValues,
 		)
 	}
 
-	return nil, fmt.Errorf("no valid deployment method found for server: %s", req.registryServer.Name)
+	return nil, fmt.Errorf("no valid deployment method found for server: %s", req.RegistryServer.Name)
 }
 
 func translateRemoteMCPServer(
@@ -298,7 +300,7 @@ func translateLocalMCPServer(
 	args = processArguments(args, packageInfo.RuntimeArguments, argValues)
 	addProcessedArgs(packageInfo.RuntimeArguments)
 
-	config, args, err := getRegistryConfig(packageInfo, args)
+	config, args, err := GetRegistryConfig(packageInfo, args)
 	if err != nil {
 		return nil, err
 	}
@@ -355,8 +357,8 @@ func translateLocalMCPServer(
 		MCPServerType: api.MCPServerTypeLocal,
 		Local: &api.LocalMCPServer{
 			Deployment: api.MCPServerDeployment{
-				Image: config.image,
-				Cmd:   config.command,
+				Image: config.Image,
+				Cmd:   config.Command,
 				Args:  args,
 				Env:   envValues,
 			},
@@ -438,10 +440,10 @@ func GenerateInternalNameForDeployment(name, deploymentID string) string {
 	return fmt.Sprintf("%s-%s", base, generateInternalName(deploymentID))
 }
 
-type registryConfig struct {
-	image   string
-	command string
-	isOCI   bool
+type RegistryConfig struct {
+	Image   string
+	Command string
+	IsOCI   bool
 }
 
 func processArguments(
@@ -560,19 +562,19 @@ func processHeaders(
 	return result, nil
 }
 
-func getRegistryConfig(
+func GetRegistryConfig(
 	packageInfo model.Package,
 	args []string,
-) (registryConfig, []string, error) {
-	var config registryConfig
+) (RegistryConfig, []string, error) {
+	var config RegistryConfig
 	normalizedType := strings.ToLower(string(packageInfo.RegistryType))
 
 	switch normalizedType {
 	case strings.ToLower(string(model.RegistryTypeNPM)):
-		config.image = "node:24-alpine3.21"
-		config.command = packageInfo.RunTimeHint
-		if config.command == "" {
-			config.command = "npx"
+		config.Image = "node:24-alpine3.21"
+		config.Command = packageInfo.RunTimeHint
+		if config.Command == "" {
+			config.Command = "npx"
 		}
 		if !slices.Contains(args, "-y") {
 			args = append(args, "-y")
@@ -583,10 +585,10 @@ func getRegistryConfig(
 			args = append(args, packageInfo.Identifier)
 		}
 	case strings.ToLower(string(model.RegistryTypePyPI)):
-		config.image = "ghcr.io/astral-sh/uv:debian"
-		config.command = packageInfo.RunTimeHint
-		if config.command == "" {
-			config.command = "uvx"
+		config.Image = "ghcr.io/astral-sh/uv:debian"
+		config.Command = packageInfo.RunTimeHint
+		if config.Command == "" {
+			config.Command = "uvx"
 		}
 		if packageInfo.Version != "" {
 			args = append(args, packageInfo.Identifier+"=="+packageInfo.Version)
@@ -594,14 +596,23 @@ func getRegistryConfig(
 			args = append(args, packageInfo.Identifier)
 		}
 	case strings.ToLower(string(model.RegistryTypeOCI)):
-		config.image = packageInfo.Identifier
-		config.command = packageInfo.RunTimeHint
-		config.isOCI = true
+		config.Image = packageInfo.Identifier
+		config.Command = packageInfo.RunTimeHint
+		config.IsOCI = true
 	default:
-		return registryConfig{}, nil, fmt.Errorf("unsupported package registry type: %s", string(packageInfo.RegistryType))
+		return RegistryConfig{}, nil, fmt.Errorf("unsupported package registry type: %s", string(packageInfo.RegistryType))
 	}
 
 	return config, args, nil
+}
+
+func EnvMapToStringSlice(envMap map[string]string) []string {
+	result := make([]string, 0, len(envMap))
+	for key, value := range envMap {
+		result = append(result, fmt.Sprintf("%s=%s", key, value))
+	}
+	slices.Sort(result)
+	return result
 }
 
 func copyStringMap(input map[string]string) map[string]string {

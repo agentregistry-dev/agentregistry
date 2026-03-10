@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	platformshared "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/shared"
+	platformutils "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -27,7 +27,7 @@ func TranslateRegistryServer(
 		runEnv[key] = value
 	}
 
-	translated, err := platformshared.NewTranslator().TranslateMCPServer(context.Background(), &platformshared.MCPServerRunRequest{
+	translated, err := platformutils.TranslateMCPServer(context.Background(), &platformutils.MCPServerRunRequest{
 		RegistryServer: &apiv0.ServerJSON{
 			Name:        serverSpec.Name,
 			Title:       serverSpec.Title,
@@ -66,7 +66,7 @@ func TranslateRegistryServer(
 		}
 		buildPath := ""
 		if len(serverSpec.Packages) > 0 {
-			config, _, err := platformshared.GetRegistryConfig(serverSpec.Packages[0], nil)
+			config, _, err := platformutils.GetRegistryConfig(serverSpec.Packages[0], nil)
 			if err != nil {
 				return nil, err
 			}
@@ -81,7 +81,7 @@ func TranslateRegistryServer(
 			Build:   buildPath,
 			Command: translated.Local.Deployment.Cmd,
 			Args:    translated.Local.Deployment.Args,
-			Env:     platformshared.EnvMapToStringSlice(translated.Local.Deployment.Env),
+			Env:     platformutils.EnvMapToStringSlice(translated.Local.Deployment.Env),
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported translated server type %q", translated.MCPServerType)

@@ -133,7 +133,7 @@ func (a *localDeploymentAdapter) buildLocalDesiredState(
 		}
 		return &platformtypes.DesiredState{MCPServers: []*platformtypes.MCPServer{server}}, nil, nil, nil
 	case "agent":
-		resolved, err := utils.ResolveAgent(ctx, a.registry, deployment)
+		resolved, err := utils.ResolveAgent(ctx, a.registry, deployment, "")
 		if err != nil {
 			return nil, nil, nil, err
 		}

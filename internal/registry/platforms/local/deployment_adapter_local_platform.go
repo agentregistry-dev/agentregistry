@@ -342,7 +342,7 @@ func translateLocalAgentToServiceConfig(platformDir string, agent *platformtypes
 
 	port := agent.Deployment.Port
 	if port == 0 {
-		port = 8080
+		port = platformutils.DefaultLocalAgentPort
 	}
 
 	var agentConfigDir string
@@ -428,7 +428,7 @@ func translateLocalAgentGatewayConfig(agentGatewayPort uint16, servers []*platfo
 			}},
 			Backends: []platformtypes.RouteBackend{{
 				Weight: 100,
-				Host:   fmt.Sprintf("%s:%d", agentServiceName, agent.Deployment.Port),
+				Host:   fmt.Sprintf("%s:%d", agentServiceName, defaultAgentPort(agent)),
 			}},
 			Policies: &platformtypes.FilterOrPolicy{
 				A2A: &platformtypes.A2APolicy{},
@@ -477,6 +477,13 @@ func translateLocalAgentGatewayConfig(agentGatewayPort uint16, servers []*platfo
 			}},
 		}},
 	}, nil
+}
+
+func defaultAgentPort(agent *platformtypes.Agent) uint16 {
+	if agent == nil || agent.Deployment.Port == 0 {
+		return platformutils.DefaultLocalAgentPort
+	}
+	return agent.Deployment.Port
 }
 
 func mustAgentManifest(
