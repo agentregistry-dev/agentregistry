@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/kubernetes"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/local"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	mcpregistry "github.com/agentregistry-dev/agentregistry/internal/mcp/registryserver"
@@ -129,10 +131,10 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	// Initialize extension registries once and use them for both routing and service behavior.
 	providerPlatforms := v0.DefaultProviderPlatformAdapters(registryService)
 	maps.Copy(providerPlatforms, options.ProviderPlatforms)
-	deploymentPlatforms := v0.DefaultDeploymentPlatformAdapters(registryService, v0.DefaultDeploymentAdapterConfig{
-		RuntimeDir:       cfg.RuntimeDir,
-		AgentGatewayPort: cfg.AgentGatewayPort,
-	})
+	deploymentPlatforms := map[string]types.DeploymentPlatformAdapter{
+		"local":      local.NewLocalDeploymentAdapter(registryService, cfg.RuntimeDir, cfg.AgentGatewayPort),
+		"kubernetes": kubernetes.NewKubernetesDeploymentAdapter(registryService),
+	}
 	maps.Copy(deploymentPlatforms, options.DeploymentPlatforms)
 
 	type platformAdapterConfigurer interface {

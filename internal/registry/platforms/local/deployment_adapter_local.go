@@ -1,4 +1,4 @@
-package v0
+package local
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
-	localplatform "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/local"
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -20,6 +20,18 @@ type localDeploymentAdapter struct {
 	agentGatewayPort uint16
 }
 
+func NewLocalDeploymentAdapter(
+	registry service.RegistryService,
+	platformDir string,
+	agentGatewayPort uint16,
+) *localDeploymentAdapter {
+	return &localDeploymentAdapter{
+		registry:         registry,
+		platformDir:      platformDir,
+		agentGatewayPort: agentGatewayPort,
+	}
+}
+
 func (a *localDeploymentAdapter) Platform() string { return "local" }
 
 func (a *localDeploymentAdapter) SupportedResourceTypes() []string {
@@ -27,7 +39,7 @@ func (a *localDeploymentAdapter) SupportedResourceTypes() []string {
 }
 
 func (a *localDeploymentAdapter) Deploy(ctx context.Context, req *models.Deployment) (*models.DeploymentActionResult, error) {
-	if err := validateAdapterDeploymentRequest(req, false); err != nil {
+	if err := utils.ValidateDeploymentRequest(req, false); err != nil {
 		return nil, err
 	}
 
@@ -50,7 +62,7 @@ func (a *localDeploymentAdapter) Deploy(ctx context.Context, req *models.Deploym
 }
 
 func (a *localDeploymentAdapter) Undeploy(ctx context.Context, deployment *models.Deployment) error {
-	if err := validateAdapterDeploymentRequest(deployment, true); err != nil {
+	if err := utils.ValidateDeploymentRequest(deployment, true); err != nil {
 		return err
 	}
 
@@ -76,11 +88,11 @@ func (a *localDeploymentAdapter) CleanupStale(_ context.Context, _ *models.Deplo
 }
 
 func (a *localDeploymentAdapter) GetLogs(_ context.Context, _ *models.Deployment) ([]string, error) {
-	return nil, errDeploymentNotSupported
+	return nil, utils.ErrDeploymentNotSupported
 }
 
 func (a *localDeploymentAdapter) Cancel(_ context.Context, _ *models.Deployment) error {
-	return errDeploymentNotSupported
+	return utils.ErrDeploymentNotSupported
 }
 
 func (a *localDeploymentAdapter) Discover(_ context.Context, _ string) ([]*models.Deployment, error) {
@@ -98,8 +110,7 @@ func (a *localDeploymentAdapter) translateLocalDeployment(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	translator := localplatform.NewAgentGatewayTranslator(a.platformDir, a.agentGatewayPort)
-	cfg, err := translator.TranslatePlatformConfig(ctx, desired)
+	cfg, err := BuildLocalPlatformConfig(ctx, a.platformDir, a.agentGatewayPort, "", desired)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("translate local platform config: %w", err)
 	}
@@ -116,25 +127,25 @@ func (a *localDeploymentAdapter) buildLocalDesiredState(
 	resourceType := strings.ToLower(strings.TrimSpace(deployment.ResourceType))
 	switch resourceType {
 	case "mcp":
-		server, err := buildPlatformMCPServer(ctx, a.registry, deployment, "")
+		server, err := utils.BuildPlatformMCPServer(ctx, a.registry, deployment, "")
 		if err != nil {
 			return nil, nil, nil, err
 		}
 		return &platformtypes.DesiredState{MCPServers: []*platformtypes.MCPServer{server}}, nil, nil, nil
 	case "agent":
-		materialized, err := buildLocalAgentMaterialization(ctx, a.registry, deployment)
+		resolved, err := utils.ResolveAgent(ctx, a.registry, deployment)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		pythonServers := append(common.PythonServersFromManifest(mustAgentManifest(ctx, a.registry, deployment)), materialized.pythonConfigServers...)
+		pythonServers := append(common.PythonServersFromManifest(mustAgentManifest(ctx, a.registry, deployment)), resolved.PythonConfigServers...)
 		target := &common.MCPConfigTarget{
 			BaseDir:   a.platformDir,
-			AgentName: materialized.agent.Name,
-			Version:   materialized.agent.Version,
+			AgentName: resolved.Agent.Name,
+			Version:   resolved.Agent.Version,
 		}
 		return &platformtypes.DesiredState{
-			Agents:     []*platformtypes.Agent{materialized.agent},
-			MCPServers: materialized.resolvedPlatformServers,
+			Agents:     []*platformtypes.Agent{resolved.Agent},
+			MCPServers: resolved.ResolvedPlatformServers,
 		}, pythonServers, target, nil
 	default:
 		return nil, nil, nil, fmt.Errorf("invalid resource type %q: %w", deployment.ResourceType, database.ErrInvalidInput)
@@ -147,14 +158,14 @@ func (a *localDeploymentAdapter) mergeAndApplyLocalPlatform(
 	remove bool,
 ) error {
 	if config == nil {
-		return localplatform.ComposeUp(ctx, a.platformDir, false)
+		return ComposeUpLocalPlatform(ctx, a.platformDir, false)
 	}
 
-	composeCfg, err := localplatform.LoadDockerComposeConfig(a.platformDir)
+	composeCfg, err := LoadLocalDockerComposeConfig(a.platformDir)
 	if err != nil {
 		return err
 	}
-	gatewayCfg, err := localplatform.LoadAgentGatewayConfig(a.platformDir, a.agentGatewayPort)
+	gatewayCfg, err := LoadLocalAgentGatewayConfig(a.platformDir, a.agentGatewayPort)
 	if err != nil {
 		return err
 	}
@@ -174,11 +185,11 @@ func (a *localDeploymentAdapter) mergeAndApplyLocalPlatform(
 
 	mergeAgentGatewayConfig(gatewayCfg, config.AgentGateway, targetNames, routeNames, remove, a.agentGatewayPort)
 
-	if err := localplatform.WriteDockerComposeConfig(a.platformDir, composeCfg); err != nil {
+	if err := WriteLocalPlatformFiles(a.platformDir, &platformtypes.LocalPlatformConfig{
+		DockerCompose: composeCfg,
+		AgentGateway:  gatewayCfg,
+	}, a.agentGatewayPort); err != nil {
 		return err
 	}
-	if err := localplatform.WriteAgentGatewayConfig(a.platformDir, gatewayCfg, a.agentGatewayPort); err != nil {
-		return err
-	}
-	return localplatform.ComposeUp(ctx, a.platformDir, false)
+	return ComposeUpLocalPlatform(ctx, a.platformDir, false)
 }

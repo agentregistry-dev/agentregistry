@@ -13,7 +13,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/build"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
-	localplatform "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/local"
+	deploymentv0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	platformshared "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/shared"
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
@@ -126,8 +126,7 @@ func runMCPServerWithPlatform(server *apiv0.ServerResponse) error {
 	if err != nil {
 		return fmt.Errorf("failed to translate MCP server: %w", err)
 	}
-	composeTranslator := localplatform.NewAgentGatewayTranslatorWithProjectName(platformDir, agentGatewayPort, projectName)
-	cfg, err := composeTranslator.TranslatePlatformConfig(context.Background(), &platformtypes.DesiredState{
+	cfg, err := deploymentv0.BuildLocalPlatformConfig(context.Background(), platformDir, agentGatewayPort, projectName, &platformtypes.DesiredState{
 		MCPServers: []*platformtypes.MCPServer{mcpServer},
 	})
 	if err != nil {
@@ -139,13 +138,10 @@ func runMCPServerWithPlatform(server *apiv0.ServerResponse) error {
 
 	fmt.Printf("Starting MCP server: %s (version %s)...\n", server.Server.Name, server.Server.Version)
 
-	if err := localplatform.WriteDockerComposeConfig(platformDir, cfg.DockerCompose); err != nil {
-		return fmt.Errorf("failed to write docker compose config: %w", err)
+	if err := deploymentv0.WriteLocalPlatformFiles(platformDir, cfg, agentGatewayPort); err != nil {
+		return fmt.Errorf("failed to write local platform files: %w", err)
 	}
-	if err := localplatform.WriteAgentGatewayConfig(platformDir, cfg.AgentGateway, agentGatewayPort); err != nil {
-		return fmt.Errorf("failed to write agent gateway config: %w", err)
-	}
-	if err := localplatform.ComposeUp(context.Background(), platformDir, runVerbose); err != nil {
+	if err := deploymentv0.ComposeUpLocalPlatform(context.Background(), platformDir, runVerbose); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
 

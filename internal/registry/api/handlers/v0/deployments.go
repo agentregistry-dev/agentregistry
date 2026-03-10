@@ -6,15 +6,14 @@ import (
 	"net/http"
 	"strings"
 
-	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
 )
-
-const LocalProviderID = "local"
 
 type DeploymentRequest = apitypes.DeploymentRequest
 
@@ -287,7 +286,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Deployment logs not found")
 			}
-			if errors.Is(err, errDeploymentNotSupported) {
+			if errors.Is(err, utils.ErrDeploymentNotSupported) {
 				return nil, huma.Error501NotImplemented("Deployment logs are not supported for this provider")
 			}
 			return nil, huma.Error500InternalServerError("Failed to fetch deployment logs", err)
@@ -328,7 +327,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Deployment job not found")
 			}
-			if errors.Is(err, errDeploymentNotSupported) {
+			if errors.Is(err, utils.ErrDeploymentNotSupported) {
 				return nil, huma.Error501NotImplemented("Deployment cancel is not supported for this provider")
 			}
 			return nil, huma.Error500InternalServerError("Failed to cancel deployment", err)

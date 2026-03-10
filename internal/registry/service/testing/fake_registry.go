@@ -5,6 +5,7 @@ import (
 	"context"
 	"sync"
 
+	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -49,6 +50,7 @@ type FakeRegistry struct {
 	GetAgentByNameAndVersionFn   func(ctx context.Context, agentName, version string) (*models.AgentResponse, error)
 	GetAllVersionsByAgentNameFn  func(ctx context.Context, agentName string) ([]*models.AgentResponse, error)
 	CreateAgentFn                func(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error)
+	ResolveAgentManifestSkillsFn func(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error)
 	DeleteAgentFn                func(ctx context.Context, agentName, version string) error
 	UpsertAgentEmbeddingFn       func(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error
 	GetAgentEmbeddingMetadataFn  func(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error)
@@ -250,6 +252,13 @@ func (f *FakeRegistry) CreateAgent(ctx context.Context, req *models.AgentJSON) (
 		return f.CreateAgentFn(ctx, req)
 	}
 	return nil, database.ErrNotFound
+}
+
+func (f *FakeRegistry) ResolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error) {
+	if f.ResolveAgentManifestSkillsFn != nil {
+		return f.ResolveAgentManifestSkillsFn(ctx, manifest)
+	}
+	return nil, nil
 }
 
 func (f *FakeRegistry) DeleteAgent(ctx context.Context, agentName, version string) error {

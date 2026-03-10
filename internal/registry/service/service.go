@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 
+	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -46,6 +47,8 @@ type RegistryService interface {
 	GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error)
 	// CreateAgent creates a new agent version
 	CreateAgent(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error)
+	// ResolveAgentManifestSkills resolves manifest skill refs to concrete image or repo refs.
+	ResolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error)
 	// DeleteAgent permanently removes an agent version from the registry
 	DeleteAgent(ctx context.Context, agentName, version string) error
 	// UpsertAgentEmbedding stores semantic embedding metadata for an agent version

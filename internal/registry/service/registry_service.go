@@ -1212,10 +1212,10 @@ func (s *registryServiceImpl) CancelDeployment(ctx context.Context, deployment *
 	return adapter.Cancel(ctx, deployment)
 }
 
-// resolveAgentManifestSkills resolves registry-type skill references from the
+// ResolveAgentManifestSkills resolves registry-type skill references from the
 // agent manifest into concrete skill refs (Docker images or GitHub repos) that
 // can be passed to the runtime translator and ultimately to the Agent CRD.
-func (s *registryServiceImpl) resolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]api.AgentSkillRef, error) {
+func (s *registryServiceImpl) ResolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]api.AgentSkillRef, error) {
 	if manifest == nil || len(manifest.Skills) == 0 {
 		return nil, nil
 	}
