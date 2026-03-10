@@ -47,7 +47,8 @@ type DeploymentStatePatch struct {
 }
 
 type KubernetesProviderMetadata struct {
-	IsExternal bool `json:"isExternal"`
+	IsExternal bool   `json:"isExternal"`
+	Namespace  string `json:"namespace,omitempty"`
 }
 
 type JSONObject map[string]any

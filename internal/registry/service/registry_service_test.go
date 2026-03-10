@@ -1419,6 +1419,62 @@ func TestGetDeployments_DedupesDiscoveredDeploymentsByIdentity(t *testing.T) {
 	assert.NotEmpty(t, got[0].ID)
 }
 
+func TestGetDeployments_KeepsDiscoveredDeploymentsDistinctAcrossNamespaces(t *testing.T) {
+	mockDB := &deploymentMockDB{
+		getDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, _ string) (*models.Deployment, error) {
+			return nil, database.ErrNotFound
+		},
+		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
+			return []*models.Deployment{}, nil
+		},
+		listProvidersFn: func(_ context.Context, _ pgx.Tx, _ *string) ([]*models.Provider, error) {
+			return []*models.Provider{
+				{ID: "kubernetes-default", Platform: "kubernetes"},
+			}, nil
+		},
+	}
+	adapter := &testDeploymentAdapter{
+		discoverFn: func(_ context.Context, providerID string) ([]*models.Deployment, error) {
+			metaA, err := models.UnmarshalFrom(models.KubernetesProviderMetadata{IsExternal: true, Namespace: "team-a"})
+			require.NoError(t, err)
+			metaB, err := models.UnmarshalFrom(models.KubernetesProviderMetadata{IsExternal: true, Namespace: "team-b"})
+			require.NoError(t, err)
+			return []*models.Deployment{
+				{
+					ServerName:       "io.test/external",
+					Version:          "unknown",
+					ResourceType:     "mcp",
+					Status:           "deployed",
+					Origin:           "discovered",
+					ProviderID:       providerID,
+					ProviderMetadata: metaA,
+				},
+				{
+					ServerName:       "io.test/external",
+					Version:          "unknown",
+					ResourceType:     "mcp",
+					Status:           "deployed",
+					Origin:           "discovered",
+					ProviderID:       providerID,
+					ProviderMetadata: metaB,
+				},
+			}, nil
+		},
+	}
+
+	svc := &registryServiceImpl{
+		db: mockDB,
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+			"kubernetes": adapter,
+		},
+	}
+
+	got, err := svc.GetDeployments(context.Background(), nil)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.NotEqual(t, got[0].ID, got[1].ID)
+}
+
 func TestGetDeployments_ManagedOriginSkipsDiscovery(t *testing.T) {
 	discoverCalled := false
 	originManaged := "managed"

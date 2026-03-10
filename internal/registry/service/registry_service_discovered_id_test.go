@@ -24,3 +24,11 @@ func TestDiscoveredDeploymentID_VariesByProviderAndResourceType(t *testing.T) {
 		t.Fatalf("expected resource-type-specific id; got %q for both", base)
 	}
 }
+
+func TestDiscoveredDeploymentID_VariesByNamespace(t *testing.T) {
+	first := discoveredDeploymentIDWithNamespace("kubernetes-default", "mcp", "io.github.acme/weather", "unknown", "team-a")
+	second := discoveredDeploymentIDWithNamespace("kubernetes-default", "mcp", "io.github.acme/weather", "unknown", "team-b")
+	if first == second {
+		t.Fatalf("expected namespace-specific id; got %q for both", first)
+	}
+}

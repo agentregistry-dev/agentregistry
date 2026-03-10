@@ -799,7 +799,7 @@ func kubernetesDiscoverDeployments(ctx context.Context, provider *models.Provide
 	}
 
 	discovered := make([]*models.Deployment, 0)
-	appendResource := func(resType, name string, labels map[string]string, creation time.Time) {
+	appendResource := func(resType, name, resourceNamespace string, labels map[string]string, creation time.Time) {
 		if isManaged(labels) {
 			return
 		}
@@ -808,7 +808,10 @@ func kubernetesDiscoverDeployments(ctx context.Context, provider *models.Provide
 			resourceType = "mcp"
 		}
 		preferRemote := resType == "remotemcpserver"
-		meta, _ := models.UnmarshalFrom(models.KubernetesProviderMetadata{IsExternal: true})
+		meta, _ := models.UnmarshalFrom(models.KubernetesProviderMetadata{
+			IsExternal: true,
+			Namespace:  resourceNamespace,
+		})
 		discovered = append(discovered, &models.Deployment{
 			ServerName:       name,
 			Version:          "unknown",
@@ -829,7 +832,7 @@ func kubernetesDiscoverDeployments(ctx context.Context, provider *models.Provide
 		log.Printf("Warning: failed to list kubernetes agents for discovery: %v", err)
 	} else {
 		for _, agent := range agents {
-			appendResource("agent", agent.Name, agent.Labels, agent.CreationTimestamp.Time)
+			appendResource("agent", agent.Name, agent.Namespace, agent.Labels, agent.CreationTimestamp.Time)
 		}
 	}
 
@@ -838,7 +841,7 @@ func kubernetesDiscoverDeployments(ctx context.Context, provider *models.Provide
 		log.Printf("Warning: failed to list kubernetes MCP servers for discovery: %v", err)
 	} else {
 		for _, mcp := range mcpServers {
-			appendResource("mcpserver", mcp.Name, mcp.Labels, mcp.CreationTimestamp.Time)
+			appendResource("mcpserver", mcp.Name, mcp.Namespace, mcp.Labels, mcp.CreationTimestamp.Time)
 		}
 	}
 
@@ -847,7 +850,7 @@ func kubernetesDiscoverDeployments(ctx context.Context, provider *models.Provide
 		log.Printf("Warning: failed to list kubernetes remote MCP servers for discovery: %v", err)
 	} else {
 		for _, remote := range remoteMCPs {
-			appendResource("remotemcpserver", remote.Name, remote.Labels, remote.CreationTimestamp.Time)
+			appendResource("remotemcpserver", remote.Name, remote.Namespace, remote.Labels, remote.CreationTimestamp.Time)
 		}
 	}
 

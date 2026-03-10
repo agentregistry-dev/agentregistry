@@ -13,6 +13,7 @@ import (
 	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -475,6 +476,53 @@ func TestKubernetesDeleteAgentResourcesByDeploymentID_RemovesResolvedMCPResource
 	assertResourceDeleted(&corev1.ConfigMap{}, "demo-config")
 	assertResourceDeleted(&v1alpha2.RemoteMCPServer{}, "demo-remote-mcp")
 	assertResourceDeleted(&kmcpv1alpha1.MCPServer{}, "demo-local-mcp")
+}
+
+func TestKubernetesDiscoverDeployments_RecordsNamespaceInProviderMetadata(t *testing.T) {
+	fakeClient := fake.NewClientBuilder().WithScheme(kubernetesScheme).WithObjects(
+		&v1alpha2.Agent{ObjectMeta: metav1.ObjectMeta{Name: "shared-agent", Namespace: "team-a"}},
+		&v1alpha2.Agent{ObjectMeta: metav1.ObjectMeta{Name: "shared-agent", Namespace: "team-b"}},
+	).Build()
+
+	originalAmbientRESTConfig := kubernetesGetAmbientRESTConfig
+	originalNewClientForConfig := kubernetesNewClientForConfig
+	t.Cleanup(func() {
+		kubernetesGetAmbientRESTConfig = originalAmbientRESTConfig
+		kubernetesNewClientForConfig = originalNewClientForConfig
+	})
+
+	kubernetesGetAmbientRESTConfig = func() (*rest.Config, error) {
+		return &rest.Config{Host: "https://example.test"}, nil
+	}
+	kubernetesNewClientForConfig = func(*rest.Config) (client.Client, error) {
+		return fakeClient, nil
+	}
+
+	discovered, err := kubernetesDiscoverDeployments(context.Background(), &models.Provider{
+		ID:       "kubernetes-default",
+		Platform: "kubernetes",
+	})
+	if err != nil {
+		t.Fatalf("kubernetesDiscoverDeployments() error = %v", err)
+	}
+	if len(discovered) != 2 {
+		t.Fatalf("expected 2 discovered deployments, got %d", len(discovered))
+	}
+
+	namespaces := map[string]struct{}{}
+	for _, dep := range discovered {
+		meta := models.KubernetesProviderMetadata{}
+		if err := dep.ProviderMetadata.UnmarshalInto(&meta); err != nil {
+			t.Fatalf("unmarshal provider metadata: %v", err)
+		}
+		namespaces[meta.Namespace] = struct{}{}
+	}
+	if _, ok := namespaces["team-a"]; !ok {
+		t.Fatalf("expected discovered deployments to include namespace team-a, got %#v", namespaces)
+	}
+	if _, ok := namespaces["team-b"]; !ok {
+		t.Fatalf("expected discovered deployments to include namespace team-b, got %#v", namespaces)
+	}
 }
 
 func testKubernetesProviderKubeconfig(contextHosts map[string]string, currentContext string) string {

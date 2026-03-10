@@ -733,12 +733,30 @@ func shouldIncludeDiscoveredDeployments(filter *models.DeploymentFilter) bool {
 }
 
 func discoveredDeploymentID(providerID, resourceType, name, version string) string {
+	return discoveredDeploymentIDWithNamespace(providerID, resourceType, name, version, "")
+}
+
+func discoveredDeploymentIDWithNamespace(providerID, resourceType, name, version, namespace string) string {
 	raw := strings.ToLower(strings.TrimSpace(providerID)) + "|" +
 		strings.ToLower(strings.TrimSpace(resourceType)) + "|" +
 		strings.TrimSpace(name) + "|" +
-		strings.TrimSpace(version)
+		strings.TrimSpace(version) + "|" +
+		strings.TrimSpace(namespace)
 	sum := sha256.Sum256([]byte(raw))
 	return "discovered-" + hex.EncodeToString(sum[:8])
+}
+
+func discoveredDeploymentNamespace(dep *models.Deployment) string {
+	if dep == nil {
+		return ""
+	}
+	meta := models.KubernetesProviderMetadata{}
+	if err := dep.ProviderMetadata.UnmarshalInto(&meta); err == nil {
+		if namespace := strings.TrimSpace(meta.Namespace); namespace != "" {
+			return namespace
+		}
+	}
+	return ""
 }
 
 func matchesDiscoveredDeploymentFilter(filter *models.DeploymentFilter, dep *models.Deployment, provider *models.Provider) bool {
@@ -817,7 +835,13 @@ func (s *registryServiceImpl) appendDiscoveredDeployments(ctx context.Context, d
 				dep.Origin = originDiscovered
 			}
 			if strings.TrimSpace(dep.ID) == "" {
-				dep.ID = discoveredDeploymentID(dep.ProviderID, dep.ResourceType, dep.ServerName, dep.Version)
+				dep.ID = discoveredDeploymentIDWithNamespace(
+					dep.ProviderID,
+					dep.ResourceType,
+					dep.ServerName,
+					dep.Version,
+					discoveredDeploymentNamespace(dep),
+				)
 			}
 			if _, seen := seenDeploymentIDs[dep.ID]; seen {
 				continue
