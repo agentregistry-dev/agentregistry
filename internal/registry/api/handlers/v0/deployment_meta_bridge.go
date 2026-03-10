@@ -16,7 +16,7 @@ type deploymentResourceKey struct {
 
 func isActiveDeploymentStatus(status string) bool {
 	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "deployed", "discovered":
+	case "deploying", "deployed", "discovered":
 		return true
 	default:
 		return false

@@ -17,6 +17,7 @@ func TestDeploymentResourceIndexFiltersInactiveStatuses(t *testing.T) {
 	reg := &servicetest.FakeRegistry{
 		GetDeploymentsFn: func(_ context.Context, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
 			return []*models.Deployment{
+				{ID: "dep-deploying", ServerName: "io.test/server", ResourceType: "mcp", Status: "deploying", UpdatedAt: now.Add(30 * time.Second)},
 				{ID: "dep-active", ServerName: "io.test/server", ResourceType: "mcp", Status: "deployed", UpdatedAt: now},
 				{ID: "dep-discovered", ServerName: "io.test/server", ResourceType: "mcp", Status: "discovered", UpdatedAt: now.Add(-30 * time.Second)},
 				{ID: "dep-cancelled", ServerName: "io.test/server", ResourceType: "mcp", Status: "cancelled", UpdatedAt: now.Add(-time.Minute)},
@@ -27,11 +28,13 @@ func TestDeploymentResourceIndexFiltersInactiveStatuses(t *testing.T) {
 	index := deploymentResourceIndex(context.Background(), reg)
 	key := deploymentResourceKey{resourceType: "mcp", resourceName: "io.test/server"}
 
-	require.Len(t, index[key], 2)
-	assert.Equal(t, "dep-active", index[key][0].ID)
-	assert.Equal(t, "deployed", index[key][0].Status)
-	assert.Equal(t, "dep-discovered", index[key][1].ID)
-	assert.Equal(t, "discovered", index[key][1].Status)
+	require.Len(t, index[key], 3)
+	assert.Equal(t, "dep-deploying", index[key][0].ID)
+	assert.Equal(t, "deploying", index[key][0].Status)
+	assert.Equal(t, "dep-active", index[key][1].ID)
+	assert.Equal(t, "deployed", index[key][1].Status)
+	assert.Equal(t, "dep-discovered", index[key][2].ID)
+	assert.Equal(t, "discovered", index[key][2].Status)
 }
 
 func TestAttachServerDeploymentMetaMatchesVersionAndLatest(t *testing.T) {
