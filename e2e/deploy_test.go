@@ -99,17 +99,18 @@ func TestAgentDeploy(t *testing.T) {
 				t.Cleanup(func() { target.cleanup(t, agentName) })
 			}
 
-			t.Run("init_and_build", func(t *testing.T) {
-				result := RunArctl(t, tmpDir,
-					"agent", "init", "adk", "python",
-					"--model-name", "gemini-2.5-flash",
-					agentName,
-				)
-				RequireSuccess(t, result)
+		t.Run("init_and_build", func(t *testing.T) {
+			result := RunArctl(t, tmpDir,
+				"agent", "init", "adk", "python",
+				"--model-name", "gemini-2.5-flash",
+				agentName,
+			)
+			RequireSuccess(t, result)
 
-				result = RunArctl(t, tmpDir, "agent", "build", agentName)
-				RequireSuccess(t, result)
-			})
+			result = RunArctl(t, tmpDir, "agent", "build", agentName,
+				"--image", "localhost:5001/"+agentName+":latest")
+			RequireSuccess(t, result)
+		})
 
 			t.Run("publish", func(t *testing.T) {
 				agentDir := filepath.Join(tmpDir, agentName)
@@ -156,18 +157,19 @@ func TestMCPDeploy(t *testing.T) {
 			}
 			CleanupDockerImage(t, defaultImage)
 
-			t.Run("init_and_build", func(t *testing.T) {
-				result := RunArctl(t, tmpDir,
-					"mcp", "init", "python", mcpName,
-					"--non-interactive",
-					"--no-git",
-				)
-				RequireSuccess(t, result)
+		t.Run("init_and_build", func(t *testing.T) {
+			result := RunArctl(t, tmpDir,
+				"mcp", "init", "python", mcpName,
+				"--non-interactive",
+				"--no-git",
+			)
+			RequireSuccess(t, result)
 
-				mcpDir := filepath.Join(tmpDir, mcpName)
-				result = RunArctl(t, tmpDir, "mcp", "build", mcpDir)
-				RequireSuccess(t, result)
-			})
+			mcpDir := filepath.Join(tmpDir, mcpName)
+			result = RunArctl(t, tmpDir, "mcp", "build", mcpDir,
+				"--image", defaultImage)
+			RequireSuccess(t, result)
+		})
 
 			t.Run("publish", func(t *testing.T) {
 				result := RunArctl(t, tmpDir,

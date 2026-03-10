@@ -77,6 +77,7 @@ const (
 
 // RemoteMCPServer represents the configuration for connecting to a remotely hosted MCPServer
 type RemoteMCPServer struct {
+	Scheme  string
 	Host    string
 	Port    uint32
 	Path    string

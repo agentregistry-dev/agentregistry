@@ -26,6 +26,7 @@ arctl skill delete my-skill --version 1.0.0`,
 func init() {
 	SkillCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 
+	SkillCmd.AddCommand(BuildCmd)
 	SkillCmd.AddCommand(InitCmd)
 	SkillCmd.AddCommand(ListCmd)
 	SkillCmd.AddCommand(PublishCmd)

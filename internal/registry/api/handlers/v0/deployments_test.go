@@ -300,6 +300,43 @@ func TestCreateDeployment_AllowsMultipleDeploymentsForSameArtifact(t *testing.T)
 	assert.NotEqual(t, first.ID, second.ID)
 }
 
+func TestCreateDeployment_NotFoundIncludesResourceName(t *testing.T) {
+	reg := servicetesting.NewFakeRegistry()
+	reg.GetProviderByIDFn = func(ctx context.Context, providerID string) (*models.Provider, error) {
+		return &models.Provider{ID: providerID, Platform: "local"}, nil
+	}
+	reg.CreateDeploymentFn = func(ctx context.Context, req *models.Deployment, platform string) (*models.Deployment, error) {
+		return nil, fmt.Errorf("server my-cool-server not found in registry: %w", database.ErrNotFound)
+	}
+
+	adapter := &fakeDeploymentAdapter{}
+	mux := http.NewServeMux()
+	api := humago.New(mux, huma.DefaultConfig("test", "1.0.0"))
+	v0.RegisterDeploymentsEndpoints(api, "/v0", reg, v0.PlatformExtensions{
+		ProviderPlatforms: v0.DefaultProviderPlatformAdapters(reg),
+		DeploymentPlatforms: map[string]registrytypes.DeploymentPlatformAdapter{
+			"local": adapter,
+		},
+	})
+
+	body := map[string]any{
+		"serverName":   "my-cool-server",
+		"version":      "1.0.0",
+		"resourceType": "mcp",
+		"providerId":   "local",
+	}
+	payload, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/v0/deployments", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Contains(t, w.Body.String(), "my-cool-server")
+}
+
 func TestDeleteDeployment_UsesAdapterWhenRegistered(t *testing.T) {
 	reg := servicetesting.NewFakeRegistry()
 	reg.GetDeploymentByIDFn = func(ctx context.Context, id string) (*models.Deployment, error) {

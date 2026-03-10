@@ -514,8 +514,13 @@ func createResolvedMCPServerConfigs(requests []*registry.MCPServerRunRequest) []
 			continue
 		}
 
+		// Use user-provided name when available, otherwise fall back to registry name
+		effectiveName := serverReq.Name
+		if effectiveName == "" {
+			effectiveName = server.Name
+		}
 		config := api.ResolvedMCPServerConfig{
-			Name: registry.GenerateInternalNameForDeployment(server.Name, serverReq.DeploymentID),
+			Name: registry.GenerateInternalNameForDeployment(effectiveName, serverReq.DeploymentID),
 		}
 
 		useRemote := len(server.Remotes) > 0 && (serverReq.PreferRemote || len(server.Packages) == 0)

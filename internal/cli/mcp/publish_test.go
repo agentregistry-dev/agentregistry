@@ -1,6 +1,9 @@
 package mcp
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestResolveTransport(t *testing.T) {
 	tests := []struct {
@@ -262,6 +265,137 @@ func TestBuildServerJSON(t *testing.T) {
 	}
 	if len(pkg.PackageArguments) != 1 {
 		t.Errorf("expected 1 PackageArgument but got %d", len(pkg.PackageArguments))
+	}
+}
+
+func TestBuildRemoteServerJSON(t *testing.T) {
+	params := ServerJSONParams{
+		Name:          "com.example/my-server",
+		Description:   "A remote server",
+		Title:         "My Remote Server",
+		Version:       "2.0.0",
+		GithubURL:     "https://github.com/example/my-server",
+		TransportType: "streamable-http",
+		TransportURL:  "https://api.example.com/mcp",
+	}
+
+	result := buildRemoteServerJSON(params)
+
+	if result.Name != params.Name {
+		t.Errorf("expected Name %s but got %s", params.Name, result.Name)
+	}
+	if result.Description != params.Description {
+		t.Errorf("expected Description %s but got %s", params.Description, result.Description)
+	}
+	if result.Version != params.Version {
+		t.Errorf("expected Version %s but got %s", params.Version, result.Version)
+	}
+	if result.Repository == nil {
+		t.Fatal("expected Repository to be set")
+	}
+	if result.Repository.URL != params.GithubURL {
+		t.Errorf("expected Repository URL %s but got %s", params.GithubURL, result.Repository.URL)
+	}
+	if len(result.Packages) != 0 {
+		t.Errorf("expected no packages but got %d", len(result.Packages))
+	}
+	if len(result.Remotes) != 1 {
+		t.Fatalf("expected 1 remote but got %d", len(result.Remotes))
+	}
+	if result.Remotes[0].Type != params.TransportType {
+		t.Errorf("expected remote Type %s but got %s", params.TransportType, result.Remotes[0].Type)
+	}
+	if result.Remotes[0].URL != params.TransportURL {
+		t.Errorf("expected remote URL %s but got %s", params.TransportURL, result.Remotes[0].URL)
+	}
+}
+
+func TestBuildRemoteServerJSON_NoGithub(t *testing.T) {
+	params := ServerJSONParams{
+		Name:          "com.example/server",
+		Description:   "No github",
+		Version:       "1.0.0",
+		TransportType: "sse",
+		TransportURL:  "https://api.example.com/sse",
+	}
+
+	result := buildRemoteServerJSON(params)
+
+	if result.Repository != nil {
+		t.Errorf("expected nil Repository but got %v", result.Repository)
+	}
+	if len(result.Remotes) != 1 {
+		t.Fatalf("expected 1 remote but got %d", len(result.Remotes))
+	}
+	if result.Remotes[0].Type != "sse" {
+		t.Errorf("expected remote Type 'sse' but got %s", result.Remotes[0].Type)
+	}
+}
+
+func TestResolveRemoteTransport(t *testing.T) {
+	tests := []struct {
+		name          string
+		transport     string
+		expectedType  string
+		expectingError bool
+	}{
+		{
+			name:          "defaults to streamable-http when empty",
+			transport:     "",
+			expectedType:  "streamable-http",
+			expectingError: false,
+		},
+		{
+			name:          "accepts streamable-http",
+			transport:     "streamable-http",
+			expectedType:  "streamable-http",
+			expectingError: false,
+		},
+		{
+			name:          "accepts sse",
+			transport:     "sse",
+			expectedType:  "sse",
+			expectingError: false,
+		},
+		{
+			name:          "rejects stdio",
+			transport:     "stdio",
+			expectingError: true,
+		},
+		{
+			name:          "rejects invalid value",
+			transport:     "http",
+			expectingError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Replicate the remote transport validation logic from runMCPServerPublish
+			remoteTransportType := tt.transport
+			if remoteTransportType == "" {
+				remoteTransportType = "streamable-http"
+			}
+			err := func() error {
+				if remoteTransportType != "streamable-http" && remoteTransportType != "sse" {
+					return fmt.Errorf("--transport must be 'streamable-http' or 'sse' when using --remote-url (got: %s)", remoteTransportType)
+				}
+				return nil
+			}()
+
+			if tt.expectingError {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if remoteTransportType != tt.expectedType {
+				t.Errorf("expected transport type %s but got %s", tt.expectedType, remoteTransportType)
+			}
+		})
 	}
 }
 

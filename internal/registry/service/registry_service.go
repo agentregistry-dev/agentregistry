@@ -1241,6 +1241,7 @@ func (s *registryServiceImpl) resolveAgentManifestMCPServers(ctx context.Context
 			EnvValues:      make(map[string]string),
 			ArgValues:      make(map[string]string),
 			HeaderValues:   make(map[string]string),
+			Name:           mcpServer.Name,
 		})
 	}
 

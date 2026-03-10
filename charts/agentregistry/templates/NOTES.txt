@@ -10,11 +10,9 @@ Chart:     {{ include "agentregistry.chart" . }}
 Release:   {{ .Release.Name }}
 Namespace: {{ .Release.Namespace }}
 
-{{- if .Values.database.bundled.enabled }}
-PostgreSQL: bundled ({{ include "agentregistry.postgresql.image" . }})
-{{- else if .Values.database.external.host }}
-PostgreSQL: external ({{ .Values.database.external.host }}:{{ .Values.database.external.port }}/{{ .Values.database.external.database }})
-{{- else if .Values.database.external.url }}
+{{- if .Values.database.host }}
+PostgreSQL: {{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.database }}
+{{- else if .Values.database.url }}
 PostgreSQL: external (connection string provided)
 {{- else }}
 PostgreSQL: *** NOT CONFIGURED ***

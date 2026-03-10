@@ -249,9 +249,10 @@ func (t *agentGatewayTranslator) translateAgentGatewayConfig(servers []*api.MCPS
 		switch server.MCPServerType {
 		case api.MCPServerTypeRemote:
 			mcpTarget.SSE = &api.SSETargetSpec{
-				Host: server.Remote.Host,
-				Port: server.Remote.Port,
-				Path: server.Remote.Path,
+				Scheme: server.Remote.Scheme,
+				Host:   server.Remote.Host,
+				Port:   server.Remote.Port,
+				Path:   server.Remote.Path,
 			}
 		case api.MCPServerTypeLocal:
 			switch server.Local.TransportType {

@@ -2,7 +2,7 @@ apiVersion: v2
 name: agentregistry
 description: Production-grade Helm chart for Agent Registry -- deploy, secure, and scale the open-source platform for curating and managing AI agents, MCP servers, and skills on Kubernetes with bundled PostgreSQL/pgvector
 type: application
-version: 0.3.0
+version: 0.3.3
 appVersion: "0.2.0"
 kubeVersion: ">=1.19.0-0"
 keywords:
@@ -26,6 +26,6 @@ annotations:
       url: https://github.com/agentregistry-dev/agentregistry
   artifacthub.io/images: |
     - name: agentregistry
-      image: ghcr.io/agentregistry-dev/agentregistry/server:0.2.0
+      image: ghcr.io/agentregistry-dev/agentregistry/server:0.2.1
     - name: pgvector
-      image: pgvector/pgvector:0.8.2-pg17
+      image: pgvector/pgvector:0.8.2-pg16
