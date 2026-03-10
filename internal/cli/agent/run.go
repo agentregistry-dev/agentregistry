@@ -337,7 +337,7 @@ func runFromManifest(ctx context.Context, manifest *models.AgentManifest, versio
 			return err
 		}
 
-		data, err := renderComposeFromManifest(manifest, version)
+		data, err := renderComposeFromManifest(manifest, version, hostPort)
 		if err != nil {
 			return err
 		}
