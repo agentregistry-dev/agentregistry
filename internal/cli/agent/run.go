@@ -333,7 +333,7 @@ func resolveAndBuildRegistryServers(manifest *models.AgentManifest) (string, []c
 		fmt.Printf("[registry-resolve] Created temporary directory: %s\n", tmpDir)
 	}
 
-	if len(serversToBuild) > 0 {
+	if len(serversToBuild) > 0 { //nolint:nestif
 		if verbose {
 			fmt.Printf("[registry-resolve] %d registry-resolved servers require directory setup and build\n", len(serversToBuild))
 		}
