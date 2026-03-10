@@ -21,6 +21,11 @@ type localDeploymentAdapter struct {
 	agentGatewayPort uint16
 }
 
+var (
+	runLocalComposeUp          = ComposeUpLocalPlatform
+	refreshLocalAgentMCPConfig = common.RefreshMCPConfig
+)
+
 func NewLocalDeploymentAdapter(
 	registry service.RegistryService,
 	platformDir string,
@@ -54,7 +59,7 @@ func (a *localDeploymentAdapter) Deploy(ctx context.Context, req *models.Deploym
 	}
 
 	if agentTarget != nil {
-		if err := common.RefreshMCPConfig(agentTarget, pythonServers, false); err != nil {
+		if err := refreshLocalAgentMCPConfig(agentTarget, pythonServers, false); err != nil {
 			return nil, fmt.Errorf("refresh agent MCP config: %w", err)
 		}
 	}
@@ -68,16 +73,28 @@ func (a *localDeploymentAdapter) Undeploy(ctx context.Context, deployment *model
 	}
 
 	translated, _, agentTarget, err := a.translateLocalDeployment(ctx, deployment)
-	if err != nil && !errors.Is(err, database.ErrNotFound) {
-		return err
-	}
-
-	if err := a.mergeAndApplyLocalPlatform(ctx, translated, true); err != nil {
-		return err
+	if err != nil {
+		if !errors.Is(err, database.ErrNotFound) {
+			return err
+		}
+		if err := a.removeLocalDeploymentArtifactsByID(ctx, deployment.ID); err != nil {
+			return err
+		}
+		if strings.EqualFold(strings.TrimSpace(deployment.ResourceType), "agent") {
+			agentTarget = &common.MCPConfigTarget{
+				BaseDir:   a.platformDir,
+				AgentName: deployment.ServerName,
+				Version:   deployment.Version,
+			}
+		}
+	} else {
+		if err := a.mergeAndApplyLocalPlatform(ctx, translated, true); err != nil {
+			return err
+		}
 	}
 
 	if agentTarget != nil {
-		if err := common.RefreshMCPConfig(agentTarget, nil, false); err != nil {
+		if err := refreshLocalAgentMCPConfig(agentTarget, nil, false); err != nil {
 			return fmt.Errorf("cleanup agent MCP config: %w", err)
 		}
 	}
@@ -159,7 +176,7 @@ func (a *localDeploymentAdapter) mergeAndApplyLocalPlatform(
 	remove bool,
 ) error {
 	if config == nil {
-		return ComposeUpLocalPlatform(ctx, a.platformDir, false)
+		return runLocalComposeUp(ctx, a.platformDir, false)
 	}
 
 	composeCfg, err := LoadLocalDockerComposeConfig(a.platformDir)
@@ -190,5 +207,63 @@ func (a *localDeploymentAdapter) mergeAndApplyLocalPlatform(
 	}, a.agentGatewayPort); err != nil {
 		return err
 	}
-	return ComposeUpLocalPlatform(ctx, a.platformDir, false)
+	return runLocalComposeUp(ctx, a.platformDir, false)
+}
+
+func (a *localDeploymentAdapter) removeLocalDeploymentArtifactsByID(ctx context.Context, deploymentID string) error {
+	deploymentID = strings.TrimSpace(deploymentID)
+	if deploymentID == "" {
+		return fmt.Errorf("deployment id is required: %w", database.ErrInvalidInput)
+	}
+
+	composeCfg, err := LoadLocalDockerComposeConfig(a.platformDir)
+	if err != nil {
+		return err
+	}
+	gatewayCfg, err := LoadLocalAgentGatewayConfig(a.platformDir, a.agentGatewayPort)
+	if err != nil {
+		return err
+	}
+
+	for serviceName := range composeCfg.Services {
+		if strings.Contains(serviceName, deploymentID) {
+			delete(composeCfg.Services, serviceName)
+		}
+	}
+
+	if len(gatewayCfg.Binds) > 0 && len(gatewayCfg.Binds[0].Listeners) > 0 {
+		listener := &gatewayCfg.Binds[0].Listeners[0]
+		filteredRoutes := make([]platformtypes.LocalRoute, 0, len(listener.Routes))
+		for _, route := range listener.Routes {
+			if route.RouteName == localMCPRouteName {
+				if len(route.Backends) > 0 && route.Backends[0].MCP != nil {
+					filteredTargets := make([]platformtypes.MCPTarget, 0, len(route.Backends[0].MCP.Targets))
+					for _, target := range route.Backends[0].MCP.Targets {
+						if strings.Contains(target.Name, deploymentID) {
+							continue
+						}
+						filteredTargets = append(filteredTargets, target)
+					}
+					route.Backends[0].MCP.Targets = filteredTargets
+				}
+				if len(route.Backends) > 0 && route.Backends[0].MCP != nil && len(route.Backends[0].MCP.Targets) > 0 {
+					filteredRoutes = append(filteredRoutes, route)
+				}
+				continue
+			}
+			if strings.Contains(route.RouteName, deploymentID) {
+				continue
+			}
+			filteredRoutes = append(filteredRoutes, route)
+		}
+		listener.Routes = filteredRoutes
+	}
+
+	if err := WriteLocalPlatformFiles(a.platformDir, &platformtypes.LocalPlatformConfig{
+		DockerCompose: composeCfg,
+		AgentGateway:  gatewayCfg,
+	}, a.agentGatewayPort); err != nil {
+		return err
+	}
+	return runLocalComposeUp(ctx, a.platformDir, false)
 }
