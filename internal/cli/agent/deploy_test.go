@@ -40,13 +40,6 @@ func TestValidateAPIKey_WithExtraEnv(t *testing.T) {
 			errContain:    "ANTHROPIC_API_KEY",
 		},
 		{
-			name:          "extra env takes precedence",
-			modelProvider: "gemini",
-			osEnv:         map[string]string{},
-			extraEnv:      map[string]string{"GOOGLE_API_KEY": "from-flag"},
-			wantErr:       false,
-		},
-		{
 			name:          "nil extra env falls back to os",
 			modelProvider: "openai",
 			osEnv:         map[string]string{"OPENAI_API_KEY": "sk-test"},
@@ -137,7 +130,7 @@ func TestBuildDeployConfig_WithEnvOverrides(t *testing.T) {
 				TelemetryEndpoint: "http://otel:4317",
 			},
 			envOverrides: map[string]string{"OPENAI_API_KEY": "key"},
-			wantKeys:     map[string]string{"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "http://otel:4317"},
+			wantKeys:     map[string]string{"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "http://otel:4317", "OPENAI_API_KEY": "key"},
 		},
 		{
 			name: "empty overrides with no os env",

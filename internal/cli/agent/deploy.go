@@ -150,5 +150,5 @@ func init() {
 	DeployCmd.Flags().String("provider-id", "", "Deployment target provider ID (defaults to local when omitted)")
 	DeployCmd.Flags().Bool("prefer-remote", false, "Prefer using a remote source when available")
 	DeployCmd.Flags().String("namespace", "", "Kubernetes namespace for agent deployment (defaults to current kubeconfig context)")
-	DeployCmd.Flags().StringArrayP("env", "e", []string{}, "Environment variables to set (KEY=VALUE)")
+	DeployCmd.Flags().StringArrayP("env", "e", []string{}, "Environment variables to set on the deployed agent (KEY=VALUE)")
 }
