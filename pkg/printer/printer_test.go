@@ -25,6 +25,7 @@ func TestNew(t *testing.T) {
 
 			if p == nil {
 				t.Fatal("New() returned nil")
+				return
 			}
 
 			if p.outputType != tt.outputType {

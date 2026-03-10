@@ -110,6 +110,7 @@ func TestHiddenCommands(t *testing.T) {
 			cmd := findSubcommand(root, tt.name)
 			if cmd == nil {
 				t.Fatalf("command %q not found", tt.name)
+				return
 			}
 			if cmd.Hidden != tt.wantHidden {
 				t.Errorf("command %q Hidden = %v, want %v", tt.name, cmd.Hidden, tt.wantHidden)
@@ -147,6 +148,7 @@ func TestAgentInitFlags(t *testing.T) {
 			f := initCmd.Flags().Lookup(tt.flag)
 			if f == nil {
 				t.Fatalf("flag --%s not found on agent init", tt.flag)
+				return
 			}
 			if f.DefValue != tt.defValue {
 				t.Errorf("flag --%s default = %q, want %q", tt.flag, f.DefValue, tt.defValue)
@@ -183,6 +185,7 @@ func TestSkillPublishFlags(t *testing.T) {
 			f := publishCmd.Flags().Lookup(tt.flag)
 			if f == nil {
 				t.Fatalf("flag --%s not found on skill publish", tt.flag)
+				return
 			}
 			if f.DefValue != tt.defValue {
 				t.Errorf("flag --%s default = %q, want %q", tt.flag, f.DefValue, tt.defValue)
@@ -292,6 +295,7 @@ func TestArgsValidators(t *testing.T) {
 			}
 			if cmd == nil {
 				t.Fatalf("command %q not found", tt.command)
+				return
 			}
 			if cmd.Args == nil {
 				if tt.wantErr {
