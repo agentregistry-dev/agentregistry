@@ -284,109 +284,72 @@ func TestPromptMultipleVersions(t *testing.T) {
 		)
 		RequireSuccess(t, result)
 		RequireOutputContains(t, result, promptName)
+		RequireOutputContains(t, result, v2)
 	})
 
-	// Verify both versions via API
-	t.Run("verify_v1_via_api", func(t *testing.T) {
-		url := regURL + "/prompts/" + promptName + "/versions/" + v1
-		resp := RegistryGet(t, url)
-		defer resp.Body.Close()
+	// Verify both versions and latest via API
+	// version is the version queried, expectedVersion is the version that should be returned (e.g. querying latest should return the latest version)
+	versionContentTestCases := []struct {
+		name            string
+		version         string
+		expectedVersion string
+		expectedContent string
+	}{
+		{
+			name:            "verify_v1_via_api",
+			version:         v1,
+			expectedVersion: v1,
+			expectedContent: v1Content,
+		},
+		{
+			name:            "verify_v2_via_api",
+			version:         v2,
+			expectedVersion: v2,
+			expectedContent: v2Content,
+		},
+		{
+			name:            "verify_latest_via_api",
+			version:         "latest",
+			expectedVersion: v2,
+			expectedContent: v2Content,
+		},
+	}
+	for _, tc := range versionContentTestCases {
+		t.Run(tc.name, func(t *testing.T) {
+			url := regURL + "/prompts/" + promptName + "/versions/" + tc.version
+			resp := RegistryGet(t, url)
+			defer resp.Body.Close()
 
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("expected 200 for version %s, got %d", v1, resp.StatusCode)
-		}
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("expected 200 for version %s, got %d", tc.version, resp.StatusCode)
+			}
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("failed to read response body: %v", err)
+			}
 
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatalf("failed to read response body: %v", err)
-		}
+			var promptResp struct {
+				Prompt struct {
+					Name    string `json:"name"`
+					Version string `json:"version"`
+					Content string `json:"content"`
+				} `json:"prompt"`
+			}
+			if err := json.Unmarshal(body, &promptResp); err != nil {
+				t.Fatalf("failed to parse prompt response: %v", err)
+			}
 
-		var promptResp struct {
-			Prompt struct {
-				Name    string `json:"name"`
-				Version string `json:"version"`
-				Content string `json:"content"`
-			} `json:"prompt"`
-		}
-		if err := json.Unmarshal(body, &promptResp); err != nil {
-			t.Fatalf("failed to parse prompt response: %v", err)
-		}
-
-		if promptResp.Prompt.Name != promptName {
-			t.Errorf("name = %q, want %q", promptResp.Prompt.Name, promptName)
-		}
-		if promptResp.Prompt.Version != v1 {
-			t.Errorf("version = %q, want %q", promptResp.Prompt.Version, v1)
-		}
-		if promptResp.Prompt.Content != v1Content {
-			t.Errorf("content = %q, want %q", promptResp.Prompt.Content, v1Content)
-		}
-	})
-
-	t.Run("verify_v2_via_api", func(t *testing.T) {
-		url := regURL + "/prompts/" + promptName + "/versions/" + v2
-		resp := RegistryGet(t, url)
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("expected 200 for version %s, got %d", v2, resp.StatusCode)
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatalf("failed to read response body: %v", err)
-		}
-
-		var promptResp struct {
-			Prompt struct {
-				Name    string `json:"name"`
-				Version string `json:"version"`
-				Content string `json:"content"`
-			} `json:"prompt"`
-		}
-		if err := json.Unmarshal(body, &promptResp); err != nil {
-			t.Fatalf("failed to parse prompt response: %v", err)
-		}
-
-		if promptResp.Prompt.Name != promptName {
-			t.Errorf("name = %q, want %q", promptResp.Prompt.Name, promptName)
-		}
-		if promptResp.Prompt.Version != v2 {
-			t.Errorf("version = %q, want %q", promptResp.Prompt.Version, v2)
-		}
-		if promptResp.Prompt.Content != v2Content {
-			t.Errorf("content = %q, want %q", promptResp.Prompt.Content, v2Content)
-		}
-	})
-
-	// Verify latest version via API
-	t.Run("verify_latest_via_api", func(t *testing.T) {
-		url := regURL + "/prompts/" + promptName + "/versions/latest"
-		resp := RegistryGet(t, url)
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("expected 200 for latest version, got %d", resp.StatusCode)
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatalf("failed to read response body: %v", err)
-		}
-
-		var promptResp struct {
-			Prompt struct {
-				Version string `json:"version"`
-			} `json:"prompt"`
-		}
-		if err := json.Unmarshal(body, &promptResp); err != nil {
-			t.Fatalf("failed to parse prompt response: %v", err)
-		}
-
-		if promptResp.Prompt.Version != v2 {
-			t.Errorf("latest version = %q, want %q", promptResp.Prompt.Version, v2)
-		}
-	})
+			if promptResp.Prompt.Name != promptName {
+				t.Errorf("name = %q, want %q", promptResp.Prompt.Name, promptName)
+			}
+			if promptResp.Prompt.Version != tc.expectedVersion {
+				t.Errorf("version = %q, want %q", promptResp.Prompt.Version, tc.expectedVersion)
+			}
+			if promptResp.Prompt.Content != tc.expectedContent {
+				t.Errorf("content = %q, want %q", promptResp.Prompt.Content, tc.expectedContent)
+			}
+		})
+	}
 
 	// List all versions via API
 	t.Run("list_versions_via_api", func(t *testing.T) {
@@ -418,8 +381,8 @@ func TestPromptMultipleVersions(t *testing.T) {
 			t.Fatalf("failed to parse versions response: %v", err)
 		}
 
-		if versionsResp.Metadata.Count < 2 {
-			t.Errorf("expected at least 2 versions, got count=%d", versionsResp.Metadata.Count)
+		if versionsResp.Metadata.Count != 2 {
+			t.Errorf("expected 2 versions, got %d", versionsResp.Metadata.Count)
 		}
 
 		// Verify both versions are present
