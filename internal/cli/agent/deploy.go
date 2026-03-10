@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"strings"
 
@@ -92,9 +93,7 @@ func buildDeployConfig(manifest *models.AgentManifest, envOverrides map[string]s
 	config := make(map[string]string)
 
 	// Include all --env overrides in config
-	for k, v := range envOverrides {
-		config[k] = v
-	}
+	maps.Copy(config, envOverrides)
 
 	// Add model provider API key from OS env if not already provided via --env
 	providerAPIKeys := map[string]string{

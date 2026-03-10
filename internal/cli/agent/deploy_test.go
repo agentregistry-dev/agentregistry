@@ -68,12 +68,7 @@ func TestValidateAPIKey_WithExtraEnv(t *testing.T) {
 				}
 			}()
 
-			var err error
-			if tt.extraEnv != nil {
-				err = validateAPIKey(tt.modelProvider, tt.extraEnv)
-			} else {
-				err = validateAPIKey(tt.modelProvider)
-			}
+			err := validateAPIKey(tt.modelProvider, tt.extraEnv)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("validateAPIKey(%q) error = %v, wantErr %v", tt.modelProvider, err, tt.wantErr)

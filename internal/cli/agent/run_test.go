@@ -157,86 +157,122 @@ func TestValidateAPIKey(t *testing.T) {
 	tests := []struct {
 		name          string
 		modelProvider string
-		envSetup      map[string]string
+		osEnv         map[string]string
+		extraEnv      map[string]string
 		wantErr       bool
 		errContain    string
 	}{
 		{
-			name:          "openai with key set",
+			name:          "openai with key set (os)",
 			modelProvider: "openai",
-			envSetup:      map[string]string{"OPENAI_API_KEY": "sk-test-key"},
+			osEnv:         map[string]string{"OPENAI_API_KEY": "sk-test-key"},
+			wantErr:       false,
+		},
+		{
+			name:          "openai with key set (extra)",
+			modelProvider: "openai",
+			extraEnv:      map[string]string{"OPENAI_API_KEY": "sk-test-key"},
 			wantErr:       false,
 		},
 		{
 			name:          "openai without key",
 			modelProvider: "openai",
-			envSetup:      map[string]string{},
 			wantErr:       true,
 			errContain:    "OPENAI_API_KEY",
 		},
 		{
-			name:          "anthropic with key set",
+			name:          "anthropic with key set (os)",
 			modelProvider: "anthropic",
-			envSetup:      map[string]string{"ANTHROPIC_API_KEY": "sk-ant-test"},
+			osEnv:         map[string]string{"ANTHROPIC_API_KEY": "sk-ant-test"},
+			wantErr:       false,
+		},
+		{
+			name:          "anthropic with key set (extra)",
+			modelProvider: "anthropic",
+			extraEnv:      map[string]string{"ANTHROPIC_API_KEY": "sk-ant-test"},
 			wantErr:       false,
 		},
 		{
 			name:          "anthropic without key",
 			modelProvider: "anthropic",
-			envSetup:      map[string]string{},
 			wantErr:       true,
 			errContain:    "ANTHROPIC_API_KEY",
 		},
 		{
-			name:          "gemini with key set",
-			modelProvider: "gemini",
-			envSetup:      map[string]string{"GOOGLE_API_KEY": "test-key"},
+			name:          "azureopenai with key set (os)",
+			modelProvider: "azureopenai",
+			osEnv:         map[string]string{"AZUREOPENAI_API_KEY": "test-key"},
 			wantErr:       false,
 		},
 		{
-			name:          "gemini without key",
-			modelProvider: "gemini",
-			envSetup:      map[string]string{},
-			wantErr:       true,
-			errContain:    "GOOGLE_API_KEY",
-		},
-		{
-			name:          "azureopenai with key set",
+			name:          "azureopenai with key set (extra)",
 			modelProvider: "azureopenai",
-			envSetup:      map[string]string{"AZUREOPENAI_API_KEY": "test-key"},
+			extraEnv:      map[string]string{"AZUREOPENAI_API_KEY": "test-key"},
 			wantErr:       false,
 		},
 		{
 			name:          "azureopenai without key",
 			modelProvider: "azureopenai",
-			envSetup:      map[string]string{},
 			wantErr:       true,
 			errContain:    "AZUREOPENAI_API_KEY",
 		},
 		{
+			name:          "gemini with key set (os)",
+			modelProvider: "gemini",
+			osEnv:         map[string]string{"GOOGLE_API_KEY": "test-key"},
+			wantErr:       false,
+		},
+		{
+			name:          "gemini with key set (extra)",
+			modelProvider: "gemini",
+			extraEnv:      map[string]string{"GOOGLE_API_KEY": "test-key"},
+			wantErr:       false,
+		},
+		{
 			name:          "unknown provider returns no error",
-			modelProvider: "unknown-provider",
-			envSetup:      map[string]string{},
+			modelProvider: "custom-llm",
 			wantErr:       false,
 		},
 		{
 			name:          "empty provider returns no error",
 			modelProvider: "",
-			envSetup:      map[string]string{},
 			wantErr:       false,
 		},
 		{
 			name:          "case insensitive - OpenAI uppercase",
 			modelProvider: "OpenAI",
-			envSetup:      map[string]string{"OPENAI_API_KEY": "sk-test"},
+			wantErr:       true,
+			errContain:    "OPENAI_API_KEY",
+		},
+		{
+			name:          "case insensitive - GEMINI uppercase",
+			modelProvider: "GEMINI",
+			wantErr:       true,
+			errContain:    "GOOGLE_API_KEY",
+		},
+		{
+			name:          "key in extra env only",
+			modelProvider: "gemini",
+			extraEnv:      map[string]string{"GOOGLE_API_KEY": "test-key"},
 			wantErr:       false,
 		},
 		{
-			name:          "case insensitive - GEMINI uppercase without key",
-			modelProvider: "GEMINI",
-			envSetup:      map[string]string{},
+			name:          "key in os env only",
+			modelProvider: "openai",
+			osEnv:         map[string]string{"OPENAI_API_KEY": "sk-test"},
+			wantErr:       false,
+		},
+		{
+			name:          "key missing from both",
+			modelProvider: "anthropic",
 			wantErr:       true,
-			errContain:    "GOOGLE_API_KEY",
+			errContain:    "ANTHROPIC_API_KEY",
+		},
+		{
+			name:          "nil extra env falls back to os",
+			modelProvider: "openai",
+			osEnv:         map[string]string{"OPENAI_API_KEY": "sk-test"},
+			wantErr:       false,
 		},
 	}
 
@@ -248,18 +284,18 @@ func TestValidateAPIKey(t *testing.T) {
 			}
 
 			// Set up env vars for this test
-			for k, v := range tt.envSetup {
+			for k, v := range tt.osEnv {
 				os.Setenv(k, v)
 			}
 
 			// Clean up after test
 			defer func() {
-				for k := range tt.envSetup {
+				for k := range tt.osEnv {
 					os.Unsetenv(k)
 				}
 			}()
 
-			err := validateAPIKey(tt.modelProvider)
+			err := validateAPIKey(tt.modelProvider, tt.extraEnv)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("validateAPIKey(%q) error = %v, wantErr %v",
 					tt.modelProvider, err, tt.wantErr)
