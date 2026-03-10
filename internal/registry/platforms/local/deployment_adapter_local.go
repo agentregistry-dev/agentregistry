@@ -146,7 +146,13 @@ func (a *localDeploymentAdapter) translateLocalDeployment(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	cfg, err := BuildLocalPlatformConfig(ctx, a.platformDir, a.agentGatewayPort, "", desired)
+	cfg, err := BuildLocalPlatformConfig(
+		ctx,
+		a.platformDir,
+		a.agentGatewayPort,
+		"",
+		desired,
+	)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("translate local platform config: %w", err)
 	}

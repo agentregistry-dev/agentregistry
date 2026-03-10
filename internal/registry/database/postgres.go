@@ -2815,13 +2815,6 @@ func (db *PostgreSQL) GetDeploymentByID(ctx context.Context, tx pgx.Tx, id strin
 	return &d, nil
 }
 
-// UpdateDeploymentStatus updates the status of a deployment by ID.
-func (db *PostgreSQL) UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, id, status string) error {
-	return db.UpdateDeploymentState(ctx, tx, id, &models.DeploymentStatePatch{
-		Status: &status,
-	})
-}
-
 // UpdateDeploymentState applies partial state updates to a deployment by ID.
 func (db *PostgreSQL) UpdateDeploymentState(ctx context.Context, tx pgx.Tx, id string, patch *models.DeploymentStatePatch) error {
 	if patch == nil {

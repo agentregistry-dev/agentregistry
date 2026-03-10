@@ -941,7 +941,7 @@ func TestPostgreSQL_CreateDeployment_AllowsDuplicateArtifactIdentity(t *testing.
 	assert.Equal(t, 2, count)
 }
 
-func TestPostgreSQL_UpdateDeploymentStatus_UsesID(t *testing.T) {
+func TestPostgreSQL_UpdateDeploymentState_UsesID(t *testing.T) {
 	db := internaldb.NewTestDB(t)
 	ctx := context.Background()
 	ctxWithAuth := internaldb.WithTestSession(ctx)
@@ -970,7 +970,9 @@ func TestPostgreSQL_UpdateDeploymentStatus_UsesID(t *testing.T) {
 	require.NoError(t, db.CreateDeployment(ctx, nil, first))
 	require.NoError(t, db.CreateDeployment(ctx, nil, second))
 
-	require.NoError(t, db.UpdateDeploymentStatus(ctxWithAuth, nil, first.ID, "failed"))
+	require.NoError(t, db.UpdateDeploymentState(ctxWithAuth, nil, first.ID, &models.DeploymentStatePatch{
+		Status: stringPtr("failed"),
+	}))
 
 	firstUpdated, err := db.GetDeploymentByID(ctxWithAuth, nil, first.ID)
 	require.NoError(t, err)
@@ -980,7 +982,9 @@ func TestPostgreSQL_UpdateDeploymentStatus_UsesID(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "deploying", secondUnchanged.Status)
 
-	err = db.UpdateDeploymentStatus(ctxWithAuth, nil, "missing-deployment-id", "failed")
+	err = db.UpdateDeploymentState(ctxWithAuth, nil, "missing-deployment-id", &models.DeploymentStatePatch{
+		Status: stringPtr("failed"),
+	})
 	require.ErrorIs(t, err, database.ErrNotFound)
 }
 

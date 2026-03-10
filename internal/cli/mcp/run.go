@@ -76,7 +76,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Proceed with running the server
-	if err := runMCPServerWithPlatform(server); err != nil {
+	if err := runMCPServerWithPlatform(cmd.Context(), server); err != nil {
 		return fmt.Errorf("error running MCP server: %w", err)
 	}
 
@@ -84,7 +84,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 }
 
 // runMCPServerWithPlatform starts an MCP server using the local platform.
-func runMCPServerWithPlatform(server *apiv0.ServerResponse) error {
+func runMCPServerWithPlatform(ctx context.Context, server *apiv0.ServerResponse) error {
 	// Parse environment variables, arguments, and headers from flags
 	envValues, err := parseKeyValuePairs(runEnvVars)
 	if err != nil {
@@ -121,13 +121,19 @@ func runMCPServerWithPlatform(server *apiv0.ServerResponse) error {
 		return fmt.Errorf("failed to find available port: %w", err)
 	}
 
-	mcpServer, err := platformutils.TranslateMCPServer(context.Background(), runRequest)
+	mcpServer, err := platformutils.TranslateMCPServer(ctx, runRequest)
 	if err != nil {
 		return fmt.Errorf("failed to translate MCP server: %w", err)
 	}
-	cfg, err := localplatform.BuildLocalPlatformConfig(context.Background(), platformDir, agentGatewayPort, projectName, &platformtypes.DesiredState{
-		MCPServers: []*platformtypes.MCPServer{mcpServer},
-	})
+	cfg, err := localplatform.BuildLocalPlatformConfig(
+		ctx,
+		platformDir,
+		agentGatewayPort,
+		projectName,
+		&platformtypes.DesiredState{
+			MCPServers: []*platformtypes.MCPServer{mcpServer},
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("failed to translate local platform config: %w", err)
 	}
@@ -140,7 +146,7 @@ func runMCPServerWithPlatform(server *apiv0.ServerResponse) error {
 	if err := localplatform.WriteLocalPlatformFiles(platformDir, cfg, agentGatewayPort); err != nil {
 		return fmt.Errorf("failed to write local platform files: %w", err)
 	}
-	if err := localplatform.ComposeUpLocalPlatform(context.Background(), platformDir, runVerbose); err != nil {
+	if err := localplatform.ComposeUpLocalPlatform(ctx, platformDir, runVerbose); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
 
