@@ -32,11 +32,16 @@ func (a *kubernetesDeploymentAdapter) Deploy(ctx context.Context, req *models.De
 		return nil, err
 	}
 
-	cfg, err := a.translateKubernetesDeployment(ctx, req)
+	provider, err := a.registry.GetProviderByID(ctx, req.ProviderID)
 	if err != nil {
 		return nil, err
 	}
-	if err := kubernetesApplyPlatformConfig(ctx, cfg, false); err != nil {
+
+	cfg, err := a.translateKubernetesDeployment(ctx, req, provider)
+	if err != nil {
+		return nil, err
+	}
+	if err := kubernetesApplyPlatformConfig(ctx, provider, cfg, false); err != nil {
 		return nil, fmt.Errorf("apply kubernetes platform config: %w", err)
 	}
 	return &models.DeploymentActionResult{Status: "deployed"}, nil
@@ -46,15 +51,23 @@ func (a *kubernetesDeploymentAdapter) Undeploy(ctx context.Context, deployment *
 	if err := utils.ValidateDeploymentRequest(deployment, true); err != nil {
 		return err
 	}
-	namespace := deploymentNamespace(deployment)
-	return kubernetesDeleteResourcesByDeploymentID(ctx, deployment.ID, strings.ToLower(strings.TrimSpace(deployment.ResourceType)), namespace)
+	provider, err := a.registry.GetProviderByID(ctx, deployment.ProviderID)
+	if err != nil {
+		return err
+	}
+	namespace := deploymentNamespace(deployment, provider)
+	return kubernetesDeleteResourcesByDeploymentID(ctx, provider, deployment.ID, strings.ToLower(strings.TrimSpace(deployment.ResourceType)), namespace)
 }
 
 func (a *kubernetesDeploymentAdapter) CleanupStale(ctx context.Context, deployment *models.Deployment) error {
 	if err := utils.ValidateDeploymentRequest(deployment, true); err != nil {
 		return err
 	}
-	if err := kubernetesDeleteResourcesByDeploymentID(ctx, deployment.ID, strings.ToLower(strings.TrimSpace(deployment.ResourceType)), deploymentNamespace(deployment)); err != nil {
+	provider, err := a.registry.GetProviderByID(ctx, deployment.ProviderID)
+	if err != nil {
+		return err
+	}
+	if err := kubernetesDeleteResourcesByDeploymentID(ctx, provider, deployment.ID, strings.ToLower(strings.TrimSpace(deployment.ResourceType)), deploymentNamespace(deployment, provider)); err != nil {
 		log.Printf("Warning: failed to clean up stale kubernetes deployment %s: %v", deployment.ID, err)
 	}
 	return nil
@@ -69,14 +82,19 @@ func (a *kubernetesDeploymentAdapter) Cancel(_ context.Context, _ *models.Deploy
 }
 
 func (a *kubernetesDeploymentAdapter) Discover(ctx context.Context, providerID string) ([]*models.Deployment, error) {
-	return kubernetesDiscoverDeployments(ctx, providerID)
+	provider, err := a.registry.GetProviderByID(ctx, providerID)
+	if err != nil {
+		return nil, err
+	}
+	return kubernetesDiscoverDeployments(ctx, provider)
 }
 
 func (a *kubernetesDeploymentAdapter) translateKubernetesDeployment(
 	ctx context.Context,
 	deployment *models.Deployment,
+	provider *models.Provider,
 ) (*platformtypes.KubernetesPlatformConfig, error) {
-	desired, err := a.buildKubernetesDesiredState(ctx, deployment)
+	desired, err := a.buildKubernetesDesiredState(ctx, deployment, provider)
 	if err != nil {
 		return nil, err
 	}
@@ -93,8 +111,9 @@ func (a *kubernetesDeploymentAdapter) translateKubernetesDeployment(
 func (a *kubernetesDeploymentAdapter) buildKubernetesDesiredState(
 	ctx context.Context,
 	deployment *models.Deployment,
+	provider *models.Provider,
 ) (*platformtypes.DesiredState, error) {
-	namespace := deploymentNamespace(deployment)
+	namespace := deploymentNamespace(deployment, provider)
 	resourceType := strings.ToLower(strings.TrimSpace(deployment.ResourceType))
 	switch resourceType {
 	case "mcp":
@@ -117,11 +136,14 @@ func (a *kubernetesDeploymentAdapter) buildKubernetesDesiredState(
 	}
 }
 
-func deploymentNamespace(deployment *models.Deployment) string {
+func deploymentNamespace(deployment *models.Deployment, provider *models.Provider) string {
 	if deployment != nil && deployment.Env != nil {
 		if namespace := strings.TrimSpace(deployment.Env["KAGENT_NAMESPACE"]); namespace != "" {
 			return namespace
 		}
+	}
+	if namespace := kubernetesProviderNamespace(provider); namespace != "" {
+		return namespace
 	}
 	return kubernetesDefaultNamespace()
 }

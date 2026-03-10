@@ -8,7 +8,6 @@ import (
 	"maps"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
@@ -39,11 +38,11 @@ const (
 )
 
 var (
-	kubernetesScheme = k8sruntime.NewScheme()
-
-	kubernetesClient     client.Client
-	kubernetesClientErr  error
-	kubernetesClientOnce sync.Once
+	kubernetesScheme               = k8sruntime.NewScheme()
+	kubernetesGetAmbientRESTConfig = config.GetConfig
+	kubernetesNewClientForConfig   = func(restConfig *rest.Config) (client.Client, error) {
+		return client.New(restConfig, client.Options{Scheme: kubernetesScheme})
+	}
 )
 
 func init() {
@@ -62,32 +61,87 @@ func kubernetesDefaultNamespace() string {
 	return ns
 }
 
-func kubernetesGetClient() (client.Client, error) {
-	kubernetesClientOnce.Do(func() {
-		var restConfig *rest.Config
-		restConfig, kubernetesClientErr = config.GetConfig()
-		if kubernetesClientErr != nil {
-			kubernetesClientErr = fmt.Errorf("failed to get kubernetes config: %w", kubernetesClientErr)
-			return
-		}
-
-		kubernetesClient, kubernetesClientErr = client.New(restConfig, client.Options{Scheme: kubernetesScheme})
-		if kubernetesClientErr != nil {
-			kubernetesClientErr = fmt.Errorf("failed to create kubernetes client: %w", kubernetesClientErr)
-		}
-	})
-
-	if kubernetesClientErr != nil {
-		return nil, kubernetesClientErr
+func kubernetesProviderConfig(provider *models.Provider) (*models.KubernetesProviderConfig, error) {
+	if provider == nil || len(provider.Config) == 0 {
+		return &models.KubernetesProviderConfig{}, nil
 	}
-	return kubernetesClient, nil
+
+	cfg := &models.KubernetesProviderConfig{}
+	if err := models.JSONObject(provider.Config).UnmarshalInto(cfg); err != nil {
+		return nil, fmt.Errorf("decode kubernetes provider config for %s: %w", provider.ID, err)
+	}
+	return cfg, nil
 }
 
-func kubernetesApplyPlatformConfig(ctx context.Context, cfg *platformtypes.KubernetesPlatformConfig, verbose bool) error {
+func kubernetesRESTConfig(provider *models.Provider) (*rest.Config, error) {
+	providerCfg, err := kubernetesProviderConfig(provider)
+	if err != nil {
+		return nil, err
+	}
+
+	if providerCfg != nil {
+		if kubeconfig := strings.TrimSpace(providerCfg.Kubeconfig); kubeconfig != "" {
+			clientCfg, err := clientcmd.NewClientConfigFromBytes([]byte(kubeconfig))
+			if err != nil {
+				return nil, fmt.Errorf("load kubernetes provider kubeconfig for %s: %w", provider.ID, err)
+			}
+			rawConfig, err := clientCfg.RawConfig()
+			if err != nil {
+				return nil, fmt.Errorf("read kubernetes provider kubeconfig for %s: %w", provider.ID, err)
+			}
+			overrides := &clientcmd.ConfigOverrides{}
+			if contextName := strings.TrimSpace(providerCfg.Context); contextName != "" {
+				overrides.CurrentContext = contextName
+			}
+			return clientcmd.NewDefaultClientConfig(rawConfig, overrides).ClientConfig()
+		}
+
+		if kubeconfigPath := strings.TrimSpace(providerCfg.KubeconfigPath); kubeconfigPath != "" || strings.TrimSpace(providerCfg.Context) != "" {
+			loadingRules := &clientcmd.ClientConfigLoadingRules{}
+			if kubeconfigPath != "" {
+				loadingRules.ExplicitPath = kubeconfigPath
+			}
+			overrides := &clientcmd.ConfigOverrides{}
+			if contextName := strings.TrimSpace(providerCfg.Context); contextName != "" {
+				overrides.CurrentContext = contextName
+			}
+			return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides).ClientConfig()
+		}
+	}
+
+	restConfig, err := kubernetesGetAmbientRESTConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get kubernetes config: %w", err)
+	}
+	return restConfig, nil
+}
+
+func kubernetesGetClient(provider *models.Provider) (client.Client, error) {
+	restConfig, err := kubernetesRESTConfig(provider)
+	if err != nil {
+		return nil, err
+	}
+
+	c, err := kubernetesNewClientForConfig(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+	return c, nil
+}
+
+func kubernetesProviderNamespace(provider *models.Provider) string {
+	providerCfg, err := kubernetesProviderConfig(provider)
+	if err != nil || providerCfg == nil {
+		return ""
+	}
+	return strings.TrimSpace(providerCfg.Namespace)
+}
+
+func kubernetesApplyPlatformConfig(ctx context.Context, provider *models.Provider, cfg *platformtypes.KubernetesPlatformConfig, verbose bool) error {
 	if cfg == nil || (len(cfg.Agents) == 0 && len(cfg.RemoteMCPServers) == 0 && len(cfg.MCPServers) == 0 && len(cfg.ConfigMaps) == 0) {
 		return nil
 	}
-	c, err := kubernetesGetClient()
+	c, err := kubernetesGetClient(provider)
 	if err != nil {
 		return err
 	}
@@ -119,11 +173,11 @@ func kubernetesApplyPlatformConfig(ctx context.Context, cfg *platformtypes.Kuber
 	return nil
 }
 
-func kubernetesDeleteResourcesByDeploymentID(ctx context.Context, deploymentID, resourceType, namespace string) error {
+func kubernetesDeleteResourcesByDeploymentID(ctx context.Context, provider *models.Provider, deploymentID, resourceType, namespace string) error {
 	if deploymentID == "" {
 		return fmt.Errorf("deployment id is required")
 	}
-	c, err := kubernetesGetClient()
+	c, err := kubernetesGetClient(provider)
 	if err != nil {
 		return err
 	}
@@ -137,8 +191,8 @@ func kubernetesDeleteResourcesByDeploymentID(ctx context.Context, deploymentID, 
 	}
 }
 
-func kubernetesListAgents(ctx context.Context, namespace string) ([]*v1alpha2.Agent, error) {
-	c, err := kubernetesGetClient()
+func kubernetesListAgents(ctx context.Context, provider *models.Provider, namespace string) ([]*v1alpha2.Agent, error) {
+	c, err := kubernetesGetClient(provider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
@@ -157,8 +211,8 @@ func kubernetesListAgents(ctx context.Context, namespace string) ([]*v1alpha2.Ag
 	return agents, nil
 }
 
-func kubernetesListMCPServers(ctx context.Context, namespace string) ([]*kmcpv1alpha1.MCPServer, error) {
-	c, err := kubernetesGetClient()
+func kubernetesListMCPServers(ctx context.Context, provider *models.Provider, namespace string) ([]*kmcpv1alpha1.MCPServer, error) {
+	c, err := kubernetesGetClient(provider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
@@ -177,8 +231,8 @@ func kubernetesListMCPServers(ctx context.Context, namespace string) ([]*kmcpv1a
 	return servers, nil
 }
 
-func kubernetesListRemoteMCPServers(ctx context.Context, namespace string) ([]*v1alpha2.RemoteMCPServer, error) {
-	c, err := kubernetesGetClient()
+func kubernetesListRemoteMCPServers(ctx context.Context, provider *models.Provider, namespace string) ([]*v1alpha2.RemoteMCPServer, error) {
+	c, err := kubernetesGetClient(provider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
@@ -713,11 +767,12 @@ func kubernetesDeleteMCPResourcesByDeploymentID(ctx context.Context, c client.Cl
 	return nil
 }
 
-func kubernetesDiscoverDeployments(ctx context.Context, providerID string) ([]*models.Deployment, error) {
-	provider := strings.TrimSpace(providerID)
-	if provider == "" {
-		provider = defaultKubernetesProviderID
+func kubernetesDiscoverDeployments(ctx context.Context, provider *models.Provider) ([]*models.Deployment, error) {
+	providerID := defaultKubernetesProviderID
+	if provider != nil && strings.TrimSpace(provider.ID) != "" {
+		providerID = strings.TrimSpace(provider.ID)
 	}
+	namespace := kubernetesProviderNamespace(provider)
 
 	isManaged := func(labels map[string]string) bool {
 		return labels != nil && labels[kubernetesManagedLabelKey] == "true"
@@ -741,7 +796,7 @@ func kubernetesDiscoverDeployments(ctx context.Context, providerID string) ([]*m
 			UpdatedAt:        creation,
 			Status:           "deployed",
 			Origin:           "discovered",
-			ProviderID:       provider,
+			ProviderID:       providerID,
 			ResourceType:     resourceType,
 			PreferRemote:     preferRemote,
 			Env:              labels,
@@ -749,7 +804,7 @@ func kubernetesDiscoverDeployments(ctx context.Context, providerID string) ([]*m
 		})
 	}
 
-	agents, err := kubernetesListAgents(ctx, "")
+	agents, err := kubernetesListAgents(ctx, provider, namespace)
 	if err != nil {
 		log.Printf("Warning: failed to list kubernetes agents for discovery: %v", err)
 	} else {
@@ -758,7 +813,7 @@ func kubernetesDiscoverDeployments(ctx context.Context, providerID string) ([]*m
 		}
 	}
 
-	mcpServers, err := kubernetesListMCPServers(ctx, "")
+	mcpServers, err := kubernetesListMCPServers(ctx, provider, namespace)
 	if err != nil {
 		log.Printf("Warning: failed to list kubernetes MCP servers for discovery: %v", err)
 	} else {
@@ -767,7 +822,7 @@ func kubernetesDiscoverDeployments(ctx context.Context, providerID string) ([]*m
 		}
 	}
 
-	remoteMCPs, err := kubernetesListRemoteMCPServers(ctx, "")
+	remoteMCPs, err := kubernetesListRemoteMCPServers(ctx, provider, namespace)
 	if err != nil {
 		log.Printf("Warning: failed to list kubernetes remote MCP servers for discovery: %v", err)
 	} else {

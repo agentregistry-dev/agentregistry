@@ -3,10 +3,12 @@ package kubernetes
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
+	"github.com/agentregistry-dev/agentregistry/pkg/models"
 )
 
 func TestKubernetesTranslatePlatformConfig_AgentOnly(t *testing.T) {
@@ -369,6 +371,81 @@ func TestKubernetesTranslatePlatformConfig_AgentWithSkills(t *testing.T) {
 	if agent.Spec.Skills == nil || len(agent.Spec.Skills.Refs) != 1 || agent.Spec.Skills.Refs[0] != "docker.io/org/my-skill:1.0" {
 		t.Fatalf("unexpected skills %+v", agent.Spec.Skills)
 	}
+}
+
+func TestKubernetesRESTConfig_UsesProviderSpecificKubeconfigContext(t *testing.T) {
+	provider := &models.Provider{
+		ID:       "kube-b",
+		Platform: "kubernetes",
+		Config: map[string]any{
+			"kubeconfig": testKubernetesProviderKubeconfig(map[string]string{
+				"ctx-a": "https://cluster-a.example.test",
+				"ctx-b": "https://cluster-b.example.test",
+			}, "ctx-a"),
+			"context": "ctx-b",
+		},
+	}
+
+	cfg, err := kubernetesRESTConfig(provider)
+	if err != nil {
+		t.Fatalf("kubernetesRESTConfig() error = %v", err)
+	}
+	if cfg.Host != "https://cluster-b.example.test" {
+		t.Fatalf("kubernetesRESTConfig() host = %q, want %q", cfg.Host, "https://cluster-b.example.test")
+	}
+}
+
+func TestDeploymentNamespace_UsesProviderNamespaceWhenDeploymentOmitsIt(t *testing.T) {
+	deployment := &models.Deployment{
+		ProviderID:   "kubernetes-default",
+		ResourceType: "agent",
+		Env:          map[string]string{},
+	}
+	provider := &models.Provider{
+		ID:       "kubernetes-default",
+		Platform: "kubernetes",
+		Config: map[string]any{
+			"namespace": "provider-namespace",
+		},
+	}
+
+	got := deploymentNamespace(deployment, provider)
+	if got != "provider-namespace" {
+		t.Fatalf("deploymentNamespace() = %q, want %q", got, "provider-namespace")
+	}
+}
+
+func testKubernetesProviderKubeconfig(contextHosts map[string]string, currentContext string) string {
+	clusters := make([]string, 0, len(contextHosts))
+	contexts := make([]string, 0, len(contextHosts))
+	users := make([]string, 0, len(contextHosts))
+	for contextName, host := range contextHosts {
+		clusterName := contextName + "-cluster"
+		userName := contextName + "-user"
+		clusters = append(clusters, fmt.Sprintf(`
+  - name: %s
+    cluster:
+      server: %s
+      insecure-skip-tls-verify: true`, clusterName, host))
+		contexts = append(contexts, fmt.Sprintf(`
+  - name: %s
+    context:
+      cluster: %s
+      user: %s
+      namespace: %s-ns`, contextName, clusterName, userName, contextName))
+		users = append(users, fmt.Sprintf(`
+  - name: %s
+    user:
+      token: test-token`, userName))
+	}
+
+	return fmt.Sprintf(`apiVersion: v1
+kind: Config
+clusters:%s
+contexts:%s
+current-context: %s
+users:%s
+`, strings.Join(clusters, ""), strings.Join(contexts, ""), currentContext, strings.Join(users, ""))
 }
 
 func TestKubernetesDeploymentScopedName_UsesShortUUIDSuffixAndMaxLength(t *testing.T) {
