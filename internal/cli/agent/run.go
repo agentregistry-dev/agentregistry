@@ -154,15 +154,8 @@ func runFromDirectory(ctx context.Context, projectDir string) error {
 		return fmt.Errorf("failed to refresh docker-compose.yaml: %w", err)
 	}
 
-	composePath := filepath.Join(projectDir, "docker-compose.yaml")
-	data, err := os.ReadFile(composePath)
-	if err != nil {
-		return fmt.Errorf("failed to read docker-compose.yaml: %w", err)
-	}
-
 	return runFromManifest(ctx, manifest, "", &runContext{
-		composeData: data,
-		workDir:     projectDir,
+		workDir: projectDir,
 	})
 }
 
@@ -198,25 +191,16 @@ func runFromManifest(ctx context.Context, manifest *models.AgentManifest, versio
 		return fmt.Errorf("failed to find available port: %w", err)
 	}
 
-	var composeData []byte
 	workDir := ""
 	cleanupWorkDir := false
 
 	useOverrides := overrides != nil
 	var serversForConfig []common.PythonMCPServer
 
-	if useOverrides { //nolint:nestif
-		// servers already resolved, compose already generated (i.e. from runFromDirectory)
+	if useOverrides {
 		if verbose {
 			fmt.Println("[registry-resolve] Using pre-resolved overrides from runFromDirectory")
 		}
-		// Replace the default host port mapping with the randomly selected port
-		composeData = bytes.Replace(
-			overrides.composeData,
-			[]byte("\"8080:8080\""),
-			[]byte(fmt.Sprintf("\"%d:8080\"", hostPort)),
-			1,
-		)
 		workDir = overrides.workDir
 	} else {
 		// Resolve registry-type MCP servers (if any) and build registry-resolved command servers.
@@ -337,12 +321,6 @@ func runFromManifest(ctx context.Context, manifest *models.AgentManifest, versio
 			return err
 		}
 
-		data, err := renderComposeFromManifest(manifest, version, hostPort)
-		if err != nil {
-			return err
-		}
-		composeData = data
-
 		// Clean and write the resolved MCP server config when this function performed resolution.
 		if err := common.RefreshMCPConfig(
 			&common.MCPConfigTarget{BaseDir: workDir, AgentName: manifest.Name, Version: version},
@@ -374,6 +352,11 @@ func runFromManifest(ctx context.Context, manifest *models.AgentManifest, versio
 		}
 	}
 
+	composeData, err := renderComposeFromManifest(manifest, version, hostPort)
+	if err != nil {
+		return err
+	}
+
 	err = runAgent(ctx, composeData, manifest, workDir, buildFlag, hostPort)
 
 	// Clean up temp directory for registry/skill-resolved runs
@@ -387,8 +370,7 @@ func runFromManifest(ctx context.Context, manifest *models.AgentManifest, versio
 }
 
 type runContext struct {
-	composeData []byte
-	workDir     string
+	workDir string
 }
 
 // freePort asks the OS for an available TCP port.
