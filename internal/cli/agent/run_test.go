@@ -359,6 +359,81 @@ func TestFreePort(t *testing.T) {
 	}
 }
 
+func TestFilterServersToBuild(t *testing.T) {
+	tests := []struct {
+		name    string
+		servers []models.McpServerType
+		want    []string
+	}{
+		{
+			name:    "nil servers",
+			servers: nil,
+			want:    nil,
+		},
+		{
+			name:    "empty servers",
+			servers: []models.McpServerType{},
+			want:    nil,
+		},
+		{
+			name: "only registry build servers",
+			servers: []models.McpServerType{
+				{Type: "command", Name: "srv1", Build: "registry/srv1"},
+				{Type: "command", Name: "srv2", Build: "registry/srv2"},
+			},
+			want: []string{"srv1", "srv2"},
+		},
+		{
+			name: "only OCI servers",
+			servers: []models.McpServerType{
+				{Type: "command", Name: "oci1", Image: "ghcr.io/org/oci1:latest"},
+				{Type: "command", Name: "oci2", Image: "ghcr.io/org/oci2:latest"},
+			},
+			want: nil,
+		},
+		{
+			name: "mixed registry build and OCI servers",
+			servers: []models.McpServerType{
+				{Type: "command", Name: "build-me", Build: "registry/build-me"},
+				{Type: "command", Name: "oci", Image: "ghcr.io/org/oci:latest"},
+				{Type: "command", Name: "also-build", Build: "registry/also-build"},
+			},
+			want: []string{"build-me", "also-build"},
+		},
+		{
+			name: "non-command types are excluded",
+			servers: []models.McpServerType{
+				{Type: "remote", Name: "remote-srv"},
+				{Type: "registry", Name: "reg-srv"},
+				{Type: "command", Name: "cmd-srv", Build: "registry/cmd-srv"},
+			},
+			want: []string{"cmd-srv"},
+		},
+		{
+			name: "command with non-registry build path excluded",
+			servers: []models.McpServerType{
+				{Type: "command", Name: "local", Build: "./local-dir"},
+				{Type: "command", Name: "reg", Build: "registry/reg"},
+			},
+			want: []string{"reg"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := filterServersToBuild(tt.servers)
+			if len(got) != len(tt.want) {
+				t.Fatalf("filterServersToBuild() returned %d servers, want %d", len(got), len(tt.want))
+			}
+			for i, srv := range got {
+				if srv.Name != tt.want[i] {
+					t.Errorf("filterServersToBuild()[%d].Name = %q, want %q", i, srv.Name, tt.want[i])
+				}
+			}
+		})
+	}
+}
+
 // TestAgentInitRendersDockerComposeWithPort verifies that the agent init flow
 // (GenerateProject via PythonGenerator) correctly renders docker-compose.yaml
 // with the Port field from AgentConfig. This ensures the {{.Port}} template
