@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDeploymentResourceIndexFiltersInactiveStatuses(t *testing.T) {
+func TestDeploymentResourceIndexIncludesAllStatuses(t *testing.T) {
 	now := time.Now().UTC()
 	reg := &servicetest.FakeRegistry{
 		GetDeploymentsFn: func(_ context.Context, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
@@ -28,13 +28,15 @@ func TestDeploymentResourceIndexFiltersInactiveStatuses(t *testing.T) {
 	index := deploymentResourceIndex(context.Background(), reg)
 	key := deploymentResourceKey{resourceType: "mcp", resourceName: "io.test/server"}
 
-	require.Len(t, index[key], 3)
+	require.Len(t, index[key], 4)
 	assert.Equal(t, "dep-deploying", index[key][0].ID)
 	assert.Equal(t, "deploying", index[key][0].Status)
 	assert.Equal(t, "dep-active", index[key][1].ID)
 	assert.Equal(t, "deployed", index[key][1].Status)
 	assert.Equal(t, "dep-discovered", index[key][2].ID)
 	assert.Equal(t, "discovered", index[key][2].Status)
+	assert.Equal(t, "dep-cancelled", index[key][3].ID)
+	assert.Equal(t, "cancelled", index[key][3].Status)
 }
 
 func TestAttachServerDeploymentMetaMatchesVersionAndLatest(t *testing.T) {

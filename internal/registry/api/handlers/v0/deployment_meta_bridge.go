@@ -14,15 +14,6 @@ type deploymentResourceKey struct {
 	resourceName string
 }
 
-func isActiveDeploymentStatus(status string) bool {
-	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "deploying", "deployed", "discovered":
-		return true
-	default:
-		return false
-	}
-}
-
 func deploymentResourceIndex(ctx context.Context, registry service.RegistryService) map[deploymentResourceKey][]models.DeploymentSummary {
 	deployments, err := registry.GetDeployments(ctx, nil)
 	if err != nil {
@@ -32,9 +23,6 @@ func deploymentResourceIndex(ctx context.Context, registry service.RegistryServi
 	index := make(map[deploymentResourceKey][]models.DeploymentSummary)
 	for _, deployment := range deployments {
 		if deployment == nil {
-			continue
-		}
-		if !isActiveDeploymentStatus(deployment.Status) {
 			continue
 		}
 
