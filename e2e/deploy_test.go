@@ -96,6 +96,7 @@ func TestAgentDeploy(t *testing.T) {
 			regURL := RegistryURL(t)
 			tmpDir := t.TempDir()
 			agentName := UniqueAgentName("e2edpl" + target.name[:3])
+			agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
 
 			// Register cleanup at the parent level so it runs after all
 			// subtests (including verify) complete, not after deploy alone.
@@ -106,18 +107,22 @@ func TestAgentDeploy(t *testing.T) {
 				t.Cleanup(func() { target.cleanup(t, agentName) })
 			}
 
-		t.Run("init_and_build", func(t *testing.T) {
-			result := RunArctl(t, tmpDir,
-				"agent", "init", "adk", "python",
-				"--model-name", "gemini-2.5-flash",
-				agentName,
-			)
-			RequireSuccess(t, result)
+			t.Run("init_and_build", func(t *testing.T) {
+				result := RunArctl(t, tmpDir,
+					"agent", "init", "adk", "python",
+					"--model-name", "gemini-2.5-flash",
+					"--image", agentImage,
+					agentName,
+				)
+				RequireSuccess(t, result)
 
-			result = RunArctl(t, tmpDir, "agent", "build", agentName,
-				"--image", "localhost:5001/"+agentName+":latest")
-			RequireSuccess(t, result)
-		})
+				result = RunArctl(t, tmpDir, "agent", "build", agentName,
+					"--image", agentImage)
+				RequireSuccess(t, result)
+				if target.name == "kubernetes" {
+					loadDockerImageToKind(t, agentImage)
+				}
+			})
 
 			t.Run("publish", func(t *testing.T) {
 				agentDir := filepath.Join(tmpDir, agentName)
@@ -164,19 +169,22 @@ func TestMCPDeploy(t *testing.T) {
 			}
 			CleanupDockerImage(t, defaultImage)
 
-		t.Run("init_and_build", func(t *testing.T) {
-			result := RunArctl(t, tmpDir,
-				"mcp", "init", "python", mcpName,
-				"--non-interactive",
-				"--no-git",
-			)
-			RequireSuccess(t, result)
+			t.Run("init_and_build", func(t *testing.T) {
+				result := RunArctl(t, tmpDir,
+					"mcp", "init", "python", mcpName,
+					"--non-interactive",
+					"--no-git",
+				)
+				RequireSuccess(t, result)
 
-			mcpDir := filepath.Join(tmpDir, mcpName)
-			result = RunArctl(t, tmpDir, "mcp", "build", mcpDir,
-				"--image", defaultImage)
-			RequireSuccess(t, result)
-		})
+				mcpDir := filepath.Join(tmpDir, mcpName)
+				result = RunArctl(t, tmpDir, "mcp", "build", mcpDir,
+					"--image", defaultImage)
+				RequireSuccess(t, result)
+				if target.name == "kubernetes" {
+					loadDockerImageToKind(t, defaultImage)
+				}
+			})
 
 			t.Run("publish", func(t *testing.T) {
 				result := RunArctl(t, tmpDir,
@@ -315,18 +323,21 @@ func TestDeleteDeploymentRemovesKubernetesResources(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	agentName := UniqueAgentName("e2ek8sdel")
+	agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
 
 	t.Cleanup(func() { RemoveDeploymentsByServerName(t, regURL, agentName) })
 
 	result := RunArctl(t, tmpDir,
 		"agent", "init", "adk", "python",
 		"--model-name", "gemini-2.5-flash",
+		"--image", agentImage,
 		agentName,
 	)
 	RequireSuccess(t, result)
 
 	result = RunArctl(t, tmpDir, "agent", "build", agentName)
 	RequireSuccess(t, result)
+	loadDockerImageToKind(t, agentImage)
 
 	agentDir := filepath.Join(tmpDir, agentName)
 	result = RunArctl(t, tmpDir,
@@ -499,6 +510,36 @@ func kubeContextForE2E(t *testing.T) string {
 		t.Skip("unable to determine active kube context in E2E_SKIP_SETUP mode")
 	}
 	return strings.TrimSpace(ctx)
+}
+
+func loadDockerImageToKind(t *testing.T, imageRef string) {
+	t.Helper()
+
+	kubeContext := kubeContextForE2E(t)
+	clusterName, err := kindClusterNameFromContext(kubeContext)
+	if err != nil {
+		t.Fatalf("resolve kind cluster name from context %q: %v", kubeContext, err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "go", "tool", "kind", "load", "docker-image", imageRef, "--name", clusterName)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("load image %q into kind cluster %q failed: %v\n%s", imageRef, clusterName, err, string(out))
+	}
+}
+
+func kindClusterNameFromContext(kubeContext string) (string, error) {
+	const prefix = "kind-"
+	if !strings.HasPrefix(kubeContext, prefix) {
+		return "", fmt.Errorf("expected kind context, got %q", kubeContext)
+	}
+	clusterName := strings.TrimSpace(strings.TrimPrefix(kubeContext, prefix))
+	if clusterName == "" {
+		return "", fmt.Errorf("empty kind cluster name in context %q", kubeContext)
+	}
+	return clusterName, nil
 }
 
 func currentKubeContext() (string, error) {
