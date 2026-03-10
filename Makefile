@@ -1,4 +1,4 @@
-# Load local.env into make's variable scope if it exists
+# Load .env into make's variable scope if it exists
 ifneq (,$(wildcard .env))
   include .env
   export
@@ -32,7 +32,7 @@ LOCALARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
 ## Helm / Chart settings
 # Override HELM if your helm binary lives elsewhere (e.g. HELM=/usr/local/bin/helm).
 HELM ?= helm
-HELM_CHART_DIR ?= ../charts/agentregistry
+HELM_CHART_DIR ?= ./charts/agentregistry
 HELM_PACKAGE_DIR ?= build/charts
 HELM_REGISTRY ?= ghcr.io
 HELM_REPO ?= agentregistry-dev/agentregistry
@@ -76,6 +76,7 @@ help:
 	@echo "Helm / Chart targets (chart dir: $(HELM_CHART_DIR)):"
 	@echo "  charts-deps          - Build Helm chart dependencies"
 	@echo "  charts-lint          - Lint the Helm chart (helm lint --strict)"
+	@echo "  charts-render-test   - Render chart templates (smoke test with min required values)"
 	@echo "  charts-package       - Package chart → $(HELM_PACKAGE_DIR)/"
 	@echo "  charts-push          - Package + push chart to OCI registry (requires creds)"
 	@echo "  charts-test          - Run helm-unittest tests (installs plugin if absent)"
@@ -284,6 +285,7 @@ KIND_CLUSTER_NAME ?= agentregistry
 KIND_IMAGE_VERSION ?= 1.34.0
 KIND_CLUSTER_CONTEXT ?= kind-$(KIND_CLUSTER_NAME)
 KIND_NAMESPACE ?= agentregistry
+KIND_BIN = $(shell test -x bin/kind && echo bin/kind || echo kind)
 KUBECONFIG_PERM ?= $(shell \
   if [ "$$(uname -s | tr '[:upper:]' '[:lower:]')" = "darwin" ]; then \
     stat -f "%Lp" ~/.kube/config 2>/dev/null || echo "600"; \
@@ -304,14 +306,14 @@ create-kind-cluster: install-tools ## Create a local Kind cluster with MetalLB
 
 .PHONY: use-kind-cluster
 use-kind-cluster: ## Merge kind kubeconfig and set default namespace
-	kind get kubeconfig --name $(KIND_CLUSTER_NAME) > /tmp/kind-config
+	$(KIND_BIN) get kubeconfig --name $(KIND_CLUSTER_NAME) > /tmp/kind-config
 	KUBECONFIG=~/.kube/config:/tmp/kind-config kubectl config view --merge --flatten > ~/.kube/config.tmp && mv ~/.kube/config.tmp ~/.kube/config && chmod $(KUBECONFIG_PERM) ~/.kube/config
 	kubectl --context $(KIND_CLUSTER_CONTEXT) create namespace $(KIND_NAMESPACE) || true
 	kubectl --context $(KIND_CLUSTER_CONTEXT) config set-context --current --namespace $(KIND_NAMESPACE) || true
 
 .PHONY: delete-kind-cluster
 delete-kind-cluster: ## Delete the local Kind cluster
-	$(shell test -x bin/kind && echo bin/kind || echo kind) delete cluster --name $(KIND_CLUSTER_NAME)
+	$(KIND_BIN) delete cluster --name $(KIND_CLUSTER_NAME)
 
 .PHONY: prune-kind-cluster
 prune-kind-cluster: ## Prune dangling container images from the Kind control-plane node
@@ -322,7 +324,7 @@ prune-kind-cluster: ## Prune dangling container images from the Kind control-pla
 .PHONY: kind-debug
 kind-debug: ## Shell into Kind control-plane and run btop for resource monitoring
 	@echo "Connecting to kind cluster control plane..."
-	docker exec -it $(KIND_CLUSTER_NAME)-control-plane bash -c 'apt-get update && apt-get install -y btop htop'
+	docker exec -it $(KIND_CLUSTER_NAME)-control-plane bash -c 'apt-get update -qq && apt-get install -y --no-install-recommends btop htop'
 	docker exec -it $(KIND_CLUSTER_NAME)-control-plane bash -c 'btop --utf-force'
 
 .PHONY: install-postgresql
@@ -421,7 +423,7 @@ mod-download: ## Run go mod download
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Helm / Chart targets
-# All targets operate on HELM_CHART_DIR (default: ../charts/agentregistry).
+# All targets operate on HELM_CHART_DIR (default: ./charts/agentregistry).
 # Override with: make charts-test HELM_CHART_DIR=/path/to/chart
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -445,6 +447,17 @@ charts-deps: _helm-check
 charts-lint: charts-deps
 	@echo "Linting Helm chart $(HELM_CHART_DIR)..."
 	$(HELM) lint $(HELM_CHART_DIR) --strict
+
+# Render chart templates to stdout (smoke test — catches template errors).
+# Uses minimum required values to pass chart validation.
+.PHONY: charts-render-test
+charts-render-test: charts-deps
+	@echo "Rendering chart templates for $(HELM_CHART_DIR)..."
+	$(HELM) template test-release $(HELM_CHART_DIR) \
+	  --values $(HELM_CHART_DIR)/values.yaml \
+	  --set config.jwtPrivateKey=deadbeef1234567890abcdef12345678 \
+	  --set database.password=ci-password \
+	  --set database.host=postgres.example.com
 
 # Package the chart into $(HELM_PACKAGE_DIR)/.
 .PHONY: charts-package

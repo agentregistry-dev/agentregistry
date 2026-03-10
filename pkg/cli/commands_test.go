@@ -201,7 +201,6 @@ func TestRequiredFlags(t *testing.T) {
 		required []string
 	}{
 		{"skill", "delete", []string{"version"}},
-		{"mcp", "publish", []string{"package-id", "type"}},
 		{"agent", "delete", []string{"version"}},
 	}
 

@@ -217,9 +217,10 @@ type MCPTarget struct {
 
 // SSETargetSpec represents SSE target specification
 type SSETargetSpec struct {
-	Host string `json:"host" yaml:"host"`
-	Port uint32 `json:"port" yaml:"port"`
-	Path string `json:"path" yaml:"path"`
+	Scheme string `json:"scheme,omitempty" yaml:"scheme,omitempty"`
+	Host   string `json:"host" yaml:"host"`
+	Port   uint32 `json:"port" yaml:"port"`
+	Path   string `json:"path" yaml:"path"`
 }
 
 // MCPTargetSpec represents MCP target specification with a full URL

@@ -61,8 +61,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/chart-render
-          helm template test-release charts/agentregistry \
-            --values charts/agentregistry/values.yaml \
+          make charts-render-test HELM_CHART_DIR=charts/agentregistry \
             > /tmp/chart-render/rendered.yaml
           echo "--- rendered manifest line count ---"
           wc -l /tmp/chart-render/rendered.yaml

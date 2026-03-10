@@ -168,6 +168,7 @@ func translateRemoteMCPServer(
 		DeploymentID:  deploymentID,
 		MCPServerType: api.MCPServerTypeRemote,
 		Remote: &api.RemoteMCPServer{
+			Scheme:  u.scheme,
 			Host:    u.host,
 			Port:    u.port,
 			Path:    u.path,
@@ -279,9 +280,10 @@ func translateLocalMCPServer(
 }
 
 type parsedUrl struct {
-	host string
-	port uint32
-	path string
+	scheme string
+	host   string
+	port   uint32
+	path   string
 }
 
 func parseUrl(rawUrl string) (*parsedUrl, error) {
@@ -289,10 +291,16 @@ func parseUrl(rawUrl string) (*parsedUrl, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse server remote url: %v", err)
 	}
+
+	scheme := u.Scheme
+	if scheme == "" {
+		scheme = "http"
+	}
+
 	portStr := u.Port()
 	var port uint32
 	if portStr == "" {
-		if u.Scheme == "https" {
+		if scheme == "https" {
 			port = 443
 		} else {
 			port = 80
@@ -306,9 +314,10 @@ func parseUrl(rawUrl string) (*parsedUrl, error) {
 	}
 
 	return &parsedUrl{
-		host: u.Hostname(),
-		port: port,
-		path: u.Path,
+		scheme: scheme,
+		host:   u.Hostname(),
+		port:   port,
+		path:   u.Path,
 	}, nil
 }
 

@@ -38,6 +38,9 @@ var (
 	packageVersion string
 	publishDesc    string
 	publishArgs    []string
+
+	// Flags for remote-only publishing
+	publishRemoteURL string
 )
 
 func init() {
@@ -45,7 +48,7 @@ func init() {
 	PublishCmd.Flags().BoolVar(&overwriteFlag, "overwrite", false, "Overwrite if the version is already published")
 	PublishCmd.Flags().StringVar(&publishVersion, "version", "", "Server version")
 	PublishCmd.Flags().StringVar(&githubRepository, "github", "", "GitHub repository URL")
-	PublishCmd.Flags().StringVar(&publishTransport, "transport", "", "Transport type: stdio or streamable-http")
+	PublishCmd.Flags().StringVar(&publishTransport, "transport", "", "Transport type: stdio or streamable-http (package mode); streamable-http or sse (--remote-url mode)")
 	PublishCmd.Flags().StringVar(&publishTransportURL, "transport-url", "", "Transport URL for streamable-http transport")
 
 	PublishCmd.Flags().StringVar(&registryType, "type", "", "Package registry type: npm, pypi, or oci")
@@ -54,24 +57,34 @@ func init() {
 	PublishCmd.Flags().StringVar(&publishDesc, "description", "", "Server description")
 	PublishCmd.Flags().StringArrayVar(&publishArgs, "arg", nil, "Package argument (repeatable)")
 
-	_ = PublishCmd.MarkFlagRequired("package-id")
-	_ = PublishCmd.MarkFlagRequired("type")
+	PublishCmd.Flags().StringVar(&publishRemoteURL, "remote-url", "", "URL of an already-deployed remote MCP server (e.g. https://my-workspace.databricks.com/mcp). Use instead of --type/--package-id for hosted servers.")
 }
 
 var PublishCmd = &cobra.Command{
 	Use:   "publish [server-name|local-path]",
 	Short: "Publish an MCP server to the registry",
-	Long: `Publish an MCP server package reference to the registry.
+	Long: `Publish an MCP server to the registry.
 
-Required flags:
-  --type        Package registry type (oci, npm, or pypi)
-  --package-id  Package identifier (Docker image, npm package, or PyPI package)
+There are two modes:
+
+1. Package-based (installable artifact):
+   Requires --type and --package-id. Use for servers distributed via npm, PyPI, or OCI.
+
+2. Remote-only (already-deployed endpoint):
+   Use --remote-url for servers already running in the cloud (e.g. Databricks, hosted SaaS).
+   No --type or --package-id needed.
 
 If no argument is provided and mcp.yaml exists in the current directory, metadata is read from it.
 If a local path is provided, metadata (name, version, description) is read from mcp.yaml.
 Otherwise, --version and --description are required.
 
 Examples:
+  # Publish a remote MCP server hosted on Databricks (no package to install)
+  arctl mcp publish com.databricks/unity-catalog \
+    --remote-url https://my-workspace.cloud.databricks.com/mcp \
+    --version 1.0.0 \
+    --description "Databricks Unity Catalog MCP server"
+
   # Publish from current folder (reads metadata from mcp.yaml)
   arctl mcp publish \
     --type oci \
@@ -155,14 +168,50 @@ func runMCPServerPublish(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Validate registry type
-	regType, err := validateRegistryType(registryType)
-	if err != nil {
+	// Check if server already exists
+	if err := checkAndHandleExistingServer(serverName, version); err != nil {
 		return err
 	}
 
-	// Check if server already exists
-	if err := checkAndHandleExistingServer(serverName, version); err != nil {
+	// Remote-only mode: server is already deployed, no package to install
+	if publishRemoteURL != "" {
+		// Reject conflicting package flags when using --remote-url
+		if registryType != "" {
+			return fmt.Errorf("--type cannot be used with --remote-url; use one or the other")
+		}
+		if packageID != "" {
+			return fmt.Errorf("--package-id cannot be used with --remote-url; use one or the other")
+		}
+
+		remoteTransportType := publishTransport
+		if remoteTransportType == "" {
+			remoteTransportType = string(model.TransportTypeStreamableHTTP)
+		}
+		if remoteTransportType != string(model.TransportTypeStreamableHTTP) && remoteTransportType != string(model.TransportTypeSSE) {
+			return fmt.Errorf("--transport must be 'streamable-http' or 'sse' when using --remote-url (got: %s)", remoteTransportType)
+		}
+		serverJSON := buildRemoteServerJSON(ServerJSONParams{
+			Name:          serverName,
+			Description:   description,
+			Title:         serverName,
+			Version:       version,
+			GithubURL:     githubRepository,
+			TransportType: remoteTransportType,
+			TransportURL:  publishRemoteURL,
+		})
+		return publishToRegistry(serverJSON, dryRunFlag)
+	}
+
+	// Package-based mode: validate required package flags
+	if registryType == "" {
+		return fmt.Errorf("--type is required (npm, pypi, or oci), or use --remote-url for an already-deployed server")
+	}
+	if packageID == "" {
+		return fmt.Errorf("--package-id is required, or use --remote-url for an already-deployed server")
+	}
+
+	regType, err := validateRegistryType(registryType)
+	if err != nil {
 		return err
 	}
 
@@ -309,7 +358,7 @@ type ServerJSONParams struct {
 	TransportURL     string
 }
 
-// buildServerJSON constructs a ServerJSON from parameters.
+// buildServerJSON constructs a ServerJSON for a package-based server.
 func buildServerJSON(p ServerJSONParams) *apiv0.ServerJSON {
 	return &apiv0.ServerJSON{
 		Schema:      model.CurrentSchemaURL,
@@ -329,6 +378,22 @@ func buildServerJSON(p ServerJSONParams) *apiv0.ServerJSON {
 				Type: p.TransportType,
 				URL:  p.TransportURL,
 			},
+		}},
+	}
+}
+
+// buildRemoteServerJSON constructs a ServerJSON for a remote-only server (no installable package).
+func buildRemoteServerJSON(p ServerJSONParams) *apiv0.ServerJSON {
+	return &apiv0.ServerJSON{
+		Schema:      model.CurrentSchemaURL,
+		Name:        p.Name,
+		Description: p.Description,
+		Title:       p.Title,
+		Repository:  buildRepository(p.GithubURL),
+		Version:     p.Version,
+		Remotes: []model.Transport{{
+			Type: p.TransportType,
+			URL:  p.TransportURL,
 		}},
 	}
 }

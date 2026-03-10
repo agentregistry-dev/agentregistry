@@ -13,14 +13,14 @@ This directory contains scripts for running AgentRegistry in a local [Kind](http
 ## Quick Start
 
 ```bash
-make local-k8s
+make setup-kind-cluster
 ```
 
 This single command sets up the full local environment.
 
 ## What It Does
 
-`make local-k8s` runs three sub-targets in order:
+`make setup-kind-cluster` runs three sub-targets in order:
 
 1. **`make create-kind-cluster`** — creates a Kind cluster named `agentregistry` with a local container registry on `localhost:5001` and MetalLB for LoadBalancer support
 2. **`make install-postgresql`** — creates the `agentregistry` namespace and deploys standalone PostgreSQL/pgvector using `pgvector/pgvector:0.8.2-pg16`
@@ -67,17 +67,17 @@ SELECT * FROM pg_extension WHERE extname = 'vector';
 ### Data Persistence
 
 - Data is stored in a `PersistentVolumeClaim` and survives pod restarts
-- Data is **lost** when the Kind cluster is deleted (`make local-k8s-down`)
+- Data is **lost** when the Kind cluster is deleted (`make delete-kind-cluster`)
 
 ## Accessing AgentRegistry
 
 Port-forward to access the API/UI:
 
 ```bash
-kubectl --context kind-agentregistry port-forward -n agentregistry svc/agentregistry 8080:8080
+kubectl --context kind-agentregistry port-forward -n agentregistry svc/agentregistry 12121:12121
 ```
 
-Then open `http://localhost:8080` in your browser.
+Then open `http://localhost:12121` in your browser.
 
 Alternatively, use the MetalLB LoadBalancer IP:
 
@@ -88,7 +88,7 @@ kubectl --context kind-agentregistry get svc -n agentregistry agentregistry
 ## Teardown
 
 ```bash
-make local-k8s-down
+make delete-kind-cluster
 ```
 
 This deletes the Kind cluster (and all data).
@@ -109,7 +109,7 @@ The setup script accepts environment variables to override defaults:
 Example with custom values:
 
 ```bash
-JWT_KEY=mysecretkey VERSION=v0.2.0 make local-k8s
+JWT_KEY=mysecretkey VERSION=v0.2.0 make setup-kind-cluster
 ```
 
 ## Troubleshooting
@@ -151,7 +151,7 @@ The setup script is idempotent — it skips cluster creation if the cluster alre
 To start fresh:
 
 ```bash
-make local-k8s-down && make local-k8s
+make delete-kind-cluster && make setup-kind-cluster
 ```
 
 ## Scripts
