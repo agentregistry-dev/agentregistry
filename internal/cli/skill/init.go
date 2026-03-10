@@ -11,21 +11,18 @@ import (
 )
 
 var InitCmd = &cobra.Command{
-	Use:   "init [skill-name] [output-directory]",
+	Use:   "init [skill-name]",
 	Short: "Initialize a new agentic skill project",
-	Long: `Initialize a new agentic skill project.
-
-If output-directory is provided, the project is created inside that directory
-(e.g. "arctl skill init myskill ./skills/" creates ./skills/myskill/).
-Otherwise, the project is created in the current directory.`,
-	RunE: runInit,
+	Long:  `Initialize a new agentic skill project.`,
+	RunE:  runInit,
 }
 
 var (
-	initForce   bool
-	initNoGit   bool
-	initVerbose bool
-	initEmpty   bool
+	initForce     bool
+	initNoGit     bool
+	initVerbose   bool
+	initEmpty     bool
+	initDirectory string
 )
 
 func init() {
@@ -33,6 +30,7 @@ func init() {
 	InitCmd.PersistentFlags().BoolVar(&initNoGit, "no-git", false, "Skip git initialization")
 	InitCmd.PersistentFlags().BoolVar(&initVerbose, "verbose", false, "Enable verbose output during initialization")
 	InitCmd.PersistentFlags().BoolVar(&initEmpty, "empty", false, "Create an empty skill project")
+	InitCmd.PersistentFlags().StringVar(&initDirectory, "output-dir", "", "Output directory for the skill project. If not provided, the project is created in the current directory under the skill name.")
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
@@ -47,8 +45,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid project name: %w", err)
 	}
 
-	// Determine output path: if a second arg is given, create inside that directory
-	projectPath, err := resolveProjectPath(projectName, args[1:]...)
+	// Determine output path: if the output directory flag is provided, create inside that directory; otherwise, create in the current directory under the skill name
+	projectPath, err := resolveProjectPath(projectName, initDirectory)
 	if err != nil {
 		return err
 	}
@@ -76,12 +74,13 @@ func runInit(cmd *cobra.Command, args []string) error {
 }
 
 // resolveProjectPath returns the absolute project directory path. If
-// extraArgs contains an output directory, the project is created inside
+// the output directory flag is provided, the project is created inside
 // that directory; otherwise it is created relative to the current
 // working directory.
-func resolveProjectPath(projectName string, extraArgs ...string) (string, error) {
-	if len(extraArgs) > 0 && extraArgs[0] != "" {
-		base, err := filepath.Abs(extraArgs[0])
+// We pass in the output directory to the method for easy testability.
+func resolveProjectPath(projectName string, outputDir string) (string, error) {
+	if outputDir != "" {
+		base, err := filepath.Abs(outputDir)
 		if err != nil {
 			return "", fmt.Errorf("failed to get absolute path for output directory: %w", err)
 		}
