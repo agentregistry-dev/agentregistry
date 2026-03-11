@@ -97,6 +97,7 @@ func init() {
 	rootCmd.AddCommand(prompt.PromptCmd)
 	rootCmd.AddCommand(configure.ConfigureCmd)
 	rootCmd.AddCommand(cli.VersionCmd)
+	rootCmd.AddCommand(cli.StatusCmd)
 	rootCmd.AddCommand(cli.ImportCmd)
 	rootCmd.AddCommand(cli.ExportCmd)
 	rootCmd.AddCommand(cli.EmbeddingsCmd)
@@ -176,6 +177,7 @@ var preRunDaemonBehavior = struct {
 		"agent": {"init": true},
 		"mcp":   {"init": true},
 		"skill": {"init": true},
+		"arctl": {"status": true},
 	},
 }
 
