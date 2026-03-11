@@ -39,8 +39,8 @@ func (e *Executor) CheckAvailability() error {
 }
 
 // Run executes docker with the provided arguments.
-// Stderr is both displayed to the user and captured so it can be included
-// in the returned error message when the command fails.
+// When Verbose is true, stdout and stderr are streamed to the terminal.
+// When Verbose is false, only the stderr is captured and is included in the returned error message.
 func (e *Executor) Run(args ...string) error {
 	if e.Verbose {
 		printer.PrintInfo(fmt.Sprintf("Running: docker %s", strings.Join(args, " ")))
@@ -49,19 +49,21 @@ func (e *Executor) Run(args ...string) error {
 		}
 	}
 
-	var stderrBuf bytes.Buffer
 	cmd := exec.Command("docker", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
 	if e.WorkDir != "" {
 		cmd.Dir = e.WorkDir
 	}
+
+	var stderrBuf bytes.Buffer
+	if e.Verbose {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
+	} else {
+		cmd.Stderr = &stderrBuf
+	}
+
 	if err := cmd.Run(); err != nil {
-		captured := strings.TrimSpace(stderrBuf.String())
-		if captured != "" {
-			return fmt.Errorf("%w\n%s", err, captured)
-		}
-		return err
+		return fmt.Errorf("%w\n%s", err, strings.TrimSpace(stderrBuf.String()))
 	}
 	return nil
 }
