@@ -5,16 +5,12 @@ import (
 	"net/http"
 	"strings"
 
+	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 )
 
-// VersionBody represents the version information
-type VersionBody struct {
-	Version   string `json:"version" example:"v1.0.0" doc:"Application version"`
-	GitCommit string `json:"git_commit" example:"abc123d" doc:"Git commit SHA"`
-	BuildTime string `json:"build_time" example:"2025-10-14T12:00:00Z" doc:"Build timestamp"`
-}
+type VersionBody = apitypes.VersionBody
 
 // RegisterVersionEndpoint registers the version endpoint with a custom path prefix
 func RegisterVersionEndpoint(api huma.API, pathPrefix string, versionInfo *VersionBody) {

@@ -154,7 +154,7 @@ export const getDeployment = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Cancel deployment
  *
- * Cancel an in-progress deployment when supported by the provider
+ * Cancel a deployment when supported by the provider
  */
 export const cancelDeployment = <ThrowOnError extends boolean = false>(options: Options<CancelDeploymentData, ThrowOnError>) => (options.client ?? client).post<CancelDeploymentResponses, CancelDeploymentErrors, ThrowOnError>({ url: '/v0/deployments/{id}/cancel', ...options });
 

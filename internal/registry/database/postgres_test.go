@@ -941,7 +941,7 @@ func TestPostgreSQL_CreateDeployment_AllowsDuplicateArtifactIdentity(t *testing.
 	assert.Equal(t, 2, count)
 }
 
-func TestPostgreSQL_UpdateDeploymentStatus_UsesID(t *testing.T) {
+func TestPostgreSQL_UpdateDeploymentState_UsesID(t *testing.T) {
 	db := internaldb.NewTestDB(t)
 	ctx := context.Background()
 	ctxWithAuth := internaldb.WithTestSession(ctx)
@@ -970,7 +970,9 @@ func TestPostgreSQL_UpdateDeploymentStatus_UsesID(t *testing.T) {
 	require.NoError(t, db.CreateDeployment(ctx, nil, first))
 	require.NoError(t, db.CreateDeployment(ctx, nil, second))
 
-	require.NoError(t, db.UpdateDeploymentStatus(ctxWithAuth, nil, first.ID, "failed"))
+	require.NoError(t, db.UpdateDeploymentState(ctxWithAuth, nil, first.ID, &models.DeploymentStatePatch{
+		Status: stringPtr("failed"),
+	}))
 
 	firstUpdated, err := db.GetDeploymentByID(ctxWithAuth, nil, first.ID)
 	require.NoError(t, err)
@@ -980,8 +982,46 @@ func TestPostgreSQL_UpdateDeploymentStatus_UsesID(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "deploying", secondUnchanged.Status)
 
-	err = db.UpdateDeploymentStatus(ctxWithAuth, nil, "missing-deployment-id", "failed")
+	err = db.UpdateDeploymentState(ctxWithAuth, nil, "missing-deployment-id", &models.DeploymentStatePatch{
+		Status: stringPtr("failed"),
+	})
 	require.ErrorIs(t, err, database.ErrNotFound)
+}
+
+func TestPostgreSQL_UpdateDeploymentState_PatchesMetadataAndError(t *testing.T) {
+	db := internaldb.NewTestDB(t)
+	ctx := context.Background()
+	ctxWithAuth := internaldb.WithTestSession(ctx)
+
+	deployment := &models.Deployment{
+		ServerName:   "com.example/stateful",
+		Version:      "1.0.0",
+		Status:       "deploying",
+		Env:          map[string]string{},
+		PreferRemote: false,
+		ResourceType: "mcp",
+		ProviderID:   "local",
+		Origin:       "managed",
+	}
+	require.NoError(t, db.CreateDeployment(ctxWithAuth, nil, deployment))
+
+	status := "deployed"
+	errorMsg := ""
+	providerCfg := models.JSONObject{"region": "us-west-2"}
+	providerMeta := models.JSONObject{"operationId": "op-123"}
+	require.NoError(t, db.UpdateDeploymentState(ctxWithAuth, nil, deployment.ID, &models.DeploymentStatePatch{
+		Status:           &status,
+		Error:            &errorMsg,
+		ProviderConfig:   &providerCfg,
+		ProviderMetadata: &providerMeta,
+	}))
+
+	updated, err := db.GetDeploymentByID(ctxWithAuth, nil, deployment.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "deployed", updated.Status)
+	assert.Empty(t, updated.Error)
+	assert.Equal(t, "us-west-2", updated.ProviderConfig["region"])
+	assert.Equal(t, "op-123", updated.ProviderMetadata["operationId"])
 }
 
 // Helper functions for creating pointers to basic types

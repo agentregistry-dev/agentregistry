@@ -75,9 +75,11 @@ func deploymentAppliesToVersion(summary models.DeploymentSummary, itemVersion st
 }
 
 func attachServerDeploymentMeta(
+	ctx context.Context,
+	registry service.RegistryService,
 	servers []models.ServerResponse,
-	deploymentIndex map[deploymentResourceKey][]models.DeploymentSummary,
 ) []models.ServerResponse {
+	deploymentIndex := deploymentResourceIndex(ctx, registry)
 	out := make([]models.ServerResponse, len(servers))
 	copy(out, servers)
 
@@ -110,9 +112,11 @@ func attachServerDeploymentMeta(
 }
 
 func attachAgentDeploymentMeta(
+	ctx context.Context,
+	registry service.RegistryService,
 	agents []models.AgentResponse,
-	deploymentIndex map[deploymentResourceKey][]models.DeploymentSummary,
 ) []models.AgentResponse {
+	deploymentIndex := deploymentResourceIndex(ctx, registry)
 	out := make([]models.AgentResponse, len(agents))
 	copy(out, agents)
 

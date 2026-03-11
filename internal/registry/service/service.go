@@ -3,15 +3,11 @@ package service
 import (
 	"context"
 
+	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
-
-// Reconciler handles server-side reconciliation of deployed resources (MCP servers, agents)
-type Reconciler interface {
-	ReconcileAll(ctx context.Context) error
-}
 
 // RegistryService defines the interface for registry operations
 type RegistryService interface {
@@ -51,6 +47,8 @@ type RegistryService interface {
 	GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error)
 	// CreateAgent creates a new agent version
 	CreateAgent(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error)
+	// ResolveAgentManifestSkills resolves manifest skill refs to concrete image or repo refs.
+	ResolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error)
 	// DeleteAgent permanently removes an agent version from the registry
 	DeleteAgent(ctx context.Context, agentName, version string) error
 	// UpsertAgentEmbedding stores semantic embedding metadata for an agent version
@@ -105,14 +103,12 @@ type RegistryService interface {
 	DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error)
 	// RemoveDeploymentByID removes a deployment by UUID.
 	RemoveDeploymentByID(ctx context.Context, id string) error
-	// CreateDeployment dispatches deployment creation via platform adapter.
-	CreateDeployment(ctx context.Context, req *models.Deployment, platform string) (*models.Deployment, error)
-	// UndeployDeployment dispatches undeploy via platform adapter.
-	UndeployDeployment(ctx context.Context, deployment *models.Deployment, platform string) error
-	// GetDeploymentLogs dispatches deployment log retrieval via platform adapter.
-	GetDeploymentLogs(ctx context.Context, deployment *models.Deployment, platform string) ([]string, error)
-	// CancelDeployment dispatches deployment cancellation via platform adapter.
-	CancelDeployment(ctx context.Context, deployment *models.Deployment, platform string) error
-
-	Reconciler
+	// CreateDeployment dispatches deployment creation via provider-resolved platform adapter.
+	CreateDeployment(ctx context.Context, req *models.Deployment) (*models.Deployment, error)
+	// UndeployDeployment dispatches undeploy via provider-resolved platform adapter.
+	UndeployDeployment(ctx context.Context, deployment *models.Deployment) error
+	// GetDeploymentLogs dispatches deployment log retrieval via provider-resolved platform adapter.
+	GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
+	// CancelDeployment dispatches deployment cancellation via provider-resolved platform adapter.
+	CancelDeployment(ctx context.Context, deployment *models.Deployment) error
 }

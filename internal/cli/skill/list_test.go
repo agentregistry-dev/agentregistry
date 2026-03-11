@@ -30,12 +30,12 @@ func TestSkillSource(t *testing.T) {
 			skill: &models.SkillResponse{
 				Skill: models.SkillJSON{
 					Repository: &models.SkillRepository{
-						Source: "github",
+						Source: "git",
 						URL:    "https://github.com/org/repo",
 					},
 				},
 			},
-			wantType: "github",
+			wantType: "git",
 			wantSrc:  "https://github.com/org/repo",
 		},
 		{
@@ -46,7 +46,7 @@ func TestSkillSource(t *testing.T) {
 						{RegistryType: "npm", Identifier: "@org/skill"},
 					},
 					Repository: &models.SkillRepository{
-						Source: "github",
+						Source: "git",
 						URL:    "https://github.com/org/repo",
 					},
 				},

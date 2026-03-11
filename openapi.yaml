@@ -345,11 +345,11 @@ paths:
             parameters:
                 - name: platform
                   in: query
-                  description: 'Filter by provider platform type (for OSS: local or kubernetes)'
+                  description: Filter by provider platform type (matches registered provider platforms)
                   explode: false
                   schema:
                     type: string
-                    description: 'Filter by provider platform type (for OSS: local or kubernetes)'
+                    description: Filter by provider platform type (matches registered provider platforms)
                     examples:
                         - local
                   example: local
@@ -403,7 +403,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/DeploymentsListResponseBody'
+                                $ref: '#/components/schemas/DeploymentsListResponse'
                 default:
                     description: Error
                     content:
@@ -497,7 +497,7 @@ paths:
             tags:
                 - deployments
             summary: Cancel deployment
-            description: Cancel an in-progress deployment when supported by the provider
+            description: Cancel a deployment when supported by the provider
             operationId: cancel-deployment
             parameters:
                 - name: id
@@ -815,11 +815,11 @@ paths:
             parameters:
                 - name: platform
                   in: query
-                  description: Filter providers by platform type (local, kubernetes)
+                  description: Filter providers by platform type
                   explode: false
                   schema:
                     type: string
-                    description: Filter providers by platform type (local, kubernetes)
+                    description: Filter providers by platform type
             responses:
                 "200":
                     description: OK
@@ -1847,7 +1847,7 @@ components:
                     additionalProperties: {}
                 providerId:
                     type: string
-                    description: Concrete provider instance ID. Defaults to local singleton when omitted.
+                    description: Concrete provider instance ID.
                 resourceType:
                     type: string
                     description: Type of resource to deploy (mcp, agent)
@@ -1871,6 +1871,7 @@ components:
             required:
                 - serverName
                 - version
+                - providerId
         DeploymentSummary:
             type: object
             additionalProperties: false
@@ -1897,7 +1898,7 @@ components:
                 - origin
                 - deployedAt
                 - updatedAt
-        DeploymentsListResponseBody:
+        DeploymentsListResponse:
             type: object
             additionalProperties: false
             properties:

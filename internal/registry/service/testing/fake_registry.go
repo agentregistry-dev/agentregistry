@@ -5,6 +5,7 @@ import (
 	"context"
 	"sync"
 
+	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -49,6 +50,7 @@ type FakeRegistry struct {
 	GetAgentByNameAndVersionFn   func(ctx context.Context, agentName, version string) (*models.AgentResponse, error)
 	GetAllVersionsByAgentNameFn  func(ctx context.Context, agentName string) ([]*models.AgentResponse, error)
 	CreateAgentFn                func(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error)
+	ResolveAgentManifestSkillsFn func(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error)
 	DeleteAgentFn                func(ctx context.Context, agentName, version string) error
 	UpsertAgentEmbeddingFn       func(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error
 	GetAgentEmbeddingMetadataFn  func(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error)
@@ -67,10 +69,10 @@ type FakeRegistry struct {
 	DeployServerFn               func(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error)
 	DeployAgentFn                func(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error)
 	RemoveDeploymentByIDFn       func(ctx context.Context, id string) error
-	CreateDeploymentFn           func(ctx context.Context, req *models.Deployment, platform string) (*models.Deployment, error)
-	UndeployDeploymentFn         func(ctx context.Context, deployment *models.Deployment, platform string) error
-	GetDeploymentLogsFn          func(ctx context.Context, deployment *models.Deployment, platform string) ([]string, error)
-	CancelDeploymentFn           func(ctx context.Context, deployment *models.Deployment, platform string) error
+	CreateDeploymentFn           func(ctx context.Context, req *models.Deployment) (*models.Deployment, error)
+	UndeployDeploymentFn         func(ctx context.Context, deployment *models.Deployment) error
+	GetDeploymentLogsFn          func(ctx context.Context, deployment *models.Deployment) ([]string, error)
+	CancelDeploymentFn           func(ctx context.Context, deployment *models.Deployment) error
 	ReconcileAllFn               func(ctx context.Context) error
 
 	// Prompt fields and hooks
@@ -252,6 +254,13 @@ func (f *FakeRegistry) CreateAgent(ctx context.Context, req *models.AgentJSON) (
 	return nil, database.ErrNotFound
 }
 
+func (f *FakeRegistry) ResolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error) {
+	if f.ResolveAgentManifestSkillsFn != nil {
+		return f.ResolveAgentManifestSkillsFn(ctx, manifest)
+	}
+	return nil, nil
+}
+
 func (f *FakeRegistry) DeleteAgent(ctx context.Context, agentName, version string) error {
 	if f.DeleteAgentFn != nil {
 		return f.DeleteAgentFn(ctx, agentName, version)
@@ -421,9 +430,9 @@ func (f *FakeRegistry) RemoveDeploymentByID(ctx context.Context, id string) erro
 	return database.ErrNotFound
 }
 
-func (f *FakeRegistry) CreateDeployment(ctx context.Context, req *models.Deployment, platform string) (*models.Deployment, error) {
+func (f *FakeRegistry) CreateDeployment(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
 	if f.CreateDeploymentFn != nil {
-		return f.CreateDeploymentFn(ctx, req, platform)
+		return f.CreateDeploymentFn(ctx, req)
 	}
 	return nil, database.ErrNotFound
 }
@@ -451,23 +460,23 @@ func (f *FakeRegistry) GetPromptByName(ctx context.Context, promptName string) (
 	return nil, database.ErrNotFound
 }
 
-func (f *FakeRegistry) UndeployDeployment(ctx context.Context, deployment *models.Deployment, platform string) error {
+func (f *FakeRegistry) UndeployDeployment(ctx context.Context, deployment *models.Deployment) error {
 	if f.UndeployDeploymentFn != nil {
-		return f.UndeployDeploymentFn(ctx, deployment, platform)
+		return f.UndeployDeploymentFn(ctx, deployment)
 	}
 	return database.ErrNotFound
 }
 
-func (f *FakeRegistry) GetDeploymentLogs(ctx context.Context, deployment *models.Deployment, platform string) ([]string, error) {
+func (f *FakeRegistry) GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error) {
 	if f.GetDeploymentLogsFn != nil {
-		return f.GetDeploymentLogsFn(ctx, deployment, platform)
+		return f.GetDeploymentLogsFn(ctx, deployment)
 	}
 	return nil, database.ErrNotFound
 }
 
-func (f *FakeRegistry) CancelDeployment(ctx context.Context, deployment *models.Deployment, platform string) error {
+func (f *FakeRegistry) CancelDeployment(ctx context.Context, deployment *models.Deployment) error {
 	if f.CancelDeploymentFn != nil {
-		return f.CancelDeploymentFn(ctx, deployment, platform)
+		return f.CancelDeploymentFn(ctx, deployment)
 	}
 	return database.ErrNotFound
 }

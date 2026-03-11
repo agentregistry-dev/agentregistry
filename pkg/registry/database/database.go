@@ -244,8 +244,8 @@ type Database interface {
 	GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
 	// GetDeploymentByID retrieves a specific deployment by UUID.
 	GetDeploymentByID(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error)
-	// UpdateDeploymentStatus updates the status of a deployment by ID.
-	UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, id, status string) error
+	// UpdateDeploymentState applies a partial state patch to a deployment by ID.
+	UpdateDeploymentState(ctx context.Context, tx pgx.Tx, id string, patch *models.DeploymentStatePatch) error
 	// RemoveDeploymentByID removes a deployment by ID.
 	RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id string) error
 }

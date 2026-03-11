@@ -45,8 +45,6 @@ config:
   serverAddress: ":8080"
   # -- Agent Gateway gRPC port
   agentGatewayPort: "21212"
-  # -- Enable reconciliation of runtime state on startup
-  reconcileOnStartup: "true"
   # -- Enable input validation on the registry API
   enableRegistryValidation: "false"
   # -- Allow unauthenticated access to the API

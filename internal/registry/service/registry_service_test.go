@@ -4,6 +4,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync"
 	"testing"
 	"time"
@@ -11,7 +12,9 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
@@ -903,7 +906,12 @@ func TestDeployServer_AlreadyExistsDoesNotAttemptIdentityCleanup(t *testing.T) {
 		},
 	}
 
-	svc := &registryServiceImpl{db: mockDB}
+	svc := &registryServiceImpl{
+		db: mockDB,
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+			"local": &testDeploymentAdapter{},
+		},
+	}
 	_, err := svc.DeployServer(ctx, "com.example/weather", "1.0.0", map[string]string{}, false, "local")
 	require.ErrorIs(t, err, database.ErrAlreadyExists)
 	assert.Equal(t, 1, createCalls)
@@ -943,12 +951,133 @@ func TestDeployAgent_AlreadyExistsDoesNotAttemptIdentityCleanup(t *testing.T) {
 		},
 	}
 
-	svc := &registryServiceImpl{db: mockDB}
+	svc := &registryServiceImpl{
+		db: mockDB,
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+			"local": &testDeploymentAdapter{},
+		},
+	}
 	_, err := svc.DeployAgent(ctx, "com.example/planner", "1.0.0", map[string]string{}, false, "local")
 	require.ErrorIs(t, err, database.ErrAlreadyExists)
 	assert.Equal(t, 1, createCalls)
 	assert.Equal(t, 0, getDeploymentsCalls)
 	assert.Equal(t, 0, removeCalls)
+}
+
+func TestDeployServer_MissingProviderIDReturnsInvalidInput(t *testing.T) {
+	svc := &registryServiceImpl{}
+	_, err := svc.DeployServer(context.Background(), "com.example/weather", "1.0.0", map[string]string{}, false, "")
+	require.ErrorIs(t, err, database.ErrInvalidInput)
+}
+
+func TestDeployAgent_MissingProviderIDReturnsInvalidInput(t *testing.T) {
+	svc := &registryServiceImpl{}
+	_, err := svc.DeployAgent(context.Background(), "com.example/planner", "1.0.0", map[string]string{}, false, "")
+	require.ErrorIs(t, err, database.ErrInvalidInput)
+}
+
+func TestCreateDeployment_MissingProviderIDReturnsInvalidInput(t *testing.T) {
+	svc := &registryServiceImpl{}
+	_, err := svc.CreateDeployment(context.Background(), &models.Deployment{
+		ServerName:   "com.example/weather",
+		Version:      "1.0.0",
+		ResourceType: "mcp",
+	})
+	require.ErrorIs(t, err, database.ErrInvalidInput)
+}
+
+func TestCreateManagedDeploymentRecord_UsesDeployingStatus(t *testing.T) {
+	ctx := context.Background()
+	var createdRecord *models.Deployment
+
+	mockDB := &deployCreateMockDB{
+		getServerByNameAndVersionFn: func(_ context.Context, _ pgx.Tx, serverName, version string) (*apiv0.ServerResponse, error) {
+			return &apiv0.ServerResponse{
+				Server: apiv0.ServerJSON{
+					Name:    serverName,
+					Version: version,
+				},
+			}, nil
+		},
+		createDeploymentFn: func(_ context.Context, _ pgx.Tx, deployment *models.Deployment) error {
+			clonedEnv := map[string]string{}
+			maps.Copy(clonedEnv, deployment.Env)
+			createdRecord = &models.Deployment{
+				ID:           deployment.ID,
+				ServerName:   deployment.ServerName,
+				Version:      deployment.Version,
+				Status:       deployment.Status,
+				ResourceType: deployment.ResourceType,
+				ProviderID:   deployment.ProviderID,
+				Origin:       deployment.Origin,
+				Env:          clonedEnv,
+			}
+			return nil
+		},
+		getDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, _ string) (*models.Deployment, error) {
+			return createdRecord, nil
+		},
+	}
+
+	svc := &registryServiceImpl{db: mockDB}
+
+	created, err := svc.createManagedDeploymentRecord(ctx, &models.Deployment{
+		ID:           "dep-create-1",
+		ServerName:   "com.example/weather",
+		Version:      "1.0.0",
+		ResourceType: "mcp",
+		ProviderID:   "kubernetes-default",
+		Origin:       "managed",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, createdRecord)
+	assert.Equal(t, "deploying", createdRecord.Status)
+	require.NotNil(t, created)
+	assert.Equal(t, "deploying", created.Status)
+}
+
+func TestApplyDeploymentActionResult_UsesSystemContext(t *testing.T) {
+	ctx := context.Background()
+	mockDB := &deployCreateMockDB{
+		updateDeploymentStateFn: func(ctx context.Context, _ pgx.Tx, id string, patch *models.DeploymentStatePatch) error {
+			session, ok := auth.AuthSessionFrom(ctx)
+			require.True(t, ok)
+			require.True(t, auth.IsSystemSession(session))
+			require.Equal(t, "dep-1", id)
+			require.NotNil(t, patch)
+			require.NotNil(t, patch.Status)
+			require.Equal(t, "deployed", *patch.Status)
+			require.NotNil(t, patch.Error)
+			require.Empty(t, *patch.Error)
+			return nil
+		},
+	}
+
+	svc := &registryServiceImpl{db: mockDB}
+	err := svc.applyDeploymentActionResult(ctx, "dep-1", &models.DeploymentActionResult{Status: "deployed"})
+	require.NoError(t, err)
+}
+
+func TestApplyFailedDeploymentAction_UsesSystemContext(t *testing.T) {
+	ctx := context.Background()
+	mockDB := &deployCreateMockDB{
+		updateDeploymentStateFn: func(ctx context.Context, _ pgx.Tx, id string, patch *models.DeploymentStatePatch) error {
+			session, ok := auth.AuthSessionFrom(ctx)
+			require.True(t, ok)
+			require.True(t, auth.IsSystemSession(session))
+			require.Equal(t, "dep-2", id)
+			require.NotNil(t, patch)
+			require.NotNil(t, patch.Status)
+			require.Equal(t, "failed", *patch.Status)
+			require.NotNil(t, patch.Error)
+			require.Equal(t, "boom", *patch.Error)
+			return nil
+		},
+	}
+
+	svc := &registryServiceImpl{db: mockDB}
+	err := svc.applyFailedDeploymentAction(ctx, "dep-2", fmt.Errorf("boom"), nil)
+	require.NoError(t, err)
 }
 
 type deployCreateMockDB struct {
@@ -957,8 +1086,21 @@ type deployCreateMockDB struct {
 	getServerByNameAndVersionFn func(ctx context.Context, tx pgx.Tx, serverName, version string) (*apiv0.ServerResponse, error)
 	getAgentByNameAndVersionFn  func(ctx context.Context, tx pgx.Tx, agentName, version string) (*models.AgentResponse, error)
 	createDeploymentFn          func(ctx context.Context, tx pgx.Tx, deployment *models.Deployment) error
+	getDeploymentByIDFn         func(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error)
+	updateDeploymentStateFn     func(ctx context.Context, tx pgx.Tx, id string, patch *models.DeploymentStatePatch) error
 	getDeploymentsFn            func(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
 	removeDeploymentByIDFn      func(ctx context.Context, tx pgx.Tx, id string) error
+}
+
+// deploymentMockDB is a minimal mock for database.Database that only implements
+// the methods needed for testing deployment cleanup logic. All other methods panic.
+type deploymentMockDB struct {
+	database.Database      // embed interface so unimplemented methods panic
+	getDeploymentByIDFn    func(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error)
+	getDeploymentsFn       func(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
+	listProvidersFn        func(ctx context.Context, tx pgx.Tx, platform *string) ([]*models.Provider, error)
+	getProviderByIDFn      func(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error)
+	removeDeploymentByIdFn func(ctx context.Context, tx pgx.Tx, id string) error
 }
 
 func (m *deployCreateMockDB) GetProviderByID(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error) {
@@ -977,12 +1119,40 @@ func (m *deployCreateMockDB) CreateDeployment(ctx context.Context, tx pgx.Tx, de
 	return m.createDeploymentFn(ctx, tx, deployment)
 }
 
+func (m *deployCreateMockDB) GetDeploymentByID(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error) {
+	return m.getDeploymentByIDFn(ctx, tx, id)
+}
+
+func (m *deployCreateMockDB) UpdateDeploymentState(ctx context.Context, tx pgx.Tx, id string, patch *models.DeploymentStatePatch) error {
+	return m.updateDeploymentStateFn(ctx, tx, id, patch)
+}
+
 func (m *deployCreateMockDB) GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	return m.getDeploymentsFn(ctx, tx, filter)
 }
 
 func (m *deployCreateMockDB) RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id string) error {
 	return m.removeDeploymentByIDFn(ctx, tx, id)
+}
+
+func (m *deploymentMockDB) ListProviders(ctx context.Context, tx pgx.Tx, platform *string) ([]*models.Provider, error) {
+	return m.listProvidersFn(ctx, tx, platform)
+}
+
+func (m *deploymentMockDB) GetDeploymentByID(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error) {
+	return m.getDeploymentByIDFn(ctx, tx, id)
+}
+
+func (m *deploymentMockDB) GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+	return m.getDeploymentsFn(ctx, tx, filter)
+}
+
+func (m *deploymentMockDB) GetProviderByID(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error) {
+	return m.getProviderByIDFn(ctx, tx, providerID)
+}
+
+func (m *deploymentMockDB) RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id string) error {
+	return m.removeDeploymentByIdFn(ctx, tx, id)
 }
 
 // Helper functions
@@ -1003,11 +1173,531 @@ func TestIsUnsupportedDeploymentPlatformError(t *testing.T) {
 
 func TestResolveDeploymentAdapter_UnsupportedPlatformReturnsTypedError(t *testing.T) {
 	svc := &registryServiceImpl{
-		deploymentAdapters: map[string]DeploymentPlatformDeployer{},
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{},
 	}
 
 	_, err := svc.resolveDeploymentAdapter("unknown-platform")
 	require.Error(t, err)
 	assert.True(t, IsUnsupportedDeploymentPlatformError(err))
 	assert.ErrorIs(t, err, database.ErrInvalidInput)
+}
+
+type testDeploymentAdapter struct {
+	deployFn       func(ctx context.Context, req *models.Deployment) (*models.DeploymentActionResult, error)
+	undeployFn     func(ctx context.Context, deployment *models.Deployment) error
+	getLogsFn      func(ctx context.Context, deployment *models.Deployment) ([]string, error)
+	cancelFn       func(ctx context.Context, deployment *models.Deployment) error
+	discoverFn     func(ctx context.Context, providerID string) ([]*models.Deployment, error)
+	cleanupStaleFn func(ctx context.Context, deployment *models.Deployment) error
+	supportedTypes []string
+}
+
+func (a *testDeploymentAdapter) Platform() string { return "test" }
+
+func (a *testDeploymentAdapter) SupportedResourceTypes() []string {
+	if len(a.supportedTypes) > 0 {
+		return a.supportedTypes
+	}
+	return []string{"mcp", "agent"}
+}
+
+func (a *testDeploymentAdapter) Deploy(ctx context.Context, req *models.Deployment) (*models.DeploymentActionResult, error) {
+	if a.deployFn == nil {
+		return &models.DeploymentActionResult{Status: "deployed"}, nil
+	}
+	return a.deployFn(ctx, req)
+}
+
+func (a *testDeploymentAdapter) Undeploy(ctx context.Context, deployment *models.Deployment) error {
+	if a.undeployFn == nil {
+		return nil
+	}
+	return a.undeployFn(ctx, deployment)
+}
+
+func (a *testDeploymentAdapter) GetLogs(ctx context.Context, deployment *models.Deployment) ([]string, error) {
+	if a.getLogsFn == nil {
+		return []string{}, nil
+	}
+	return a.getLogsFn(ctx, deployment)
+}
+
+func (a *testDeploymentAdapter) Cancel(ctx context.Context, deployment *models.Deployment) error {
+	if a.cancelFn == nil {
+		return nil
+	}
+	return a.cancelFn(ctx, deployment)
+}
+
+func (a *testDeploymentAdapter) Discover(ctx context.Context, providerID string) ([]*models.Deployment, error) {
+	if a.discoverFn == nil {
+		return []*models.Deployment{}, nil
+	}
+	return a.discoverFn(ctx, providerID)
+}
+
+func (a *testDeploymentAdapter) CleanupStale(ctx context.Context, deployment *models.Deployment) error {
+	if a.cleanupStaleFn == nil {
+		return nil
+	}
+	return a.cleanupStaleFn(ctx, deployment)
+}
+
+func TestCleanupExistingDeployment_UsesAdapterStaleCleanerWhenAvailable(t *testing.T) {
+	ctx := context.Background()
+	cleanupCalled := false
+	removeCalled := false
+
+	mockDB := &deploymentMockDB{
+		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
+			return []*models.Deployment{
+				{
+					ID:           "dep-cleanup-1",
+					ServerName:   "com.example/test",
+					Version:      "1.0.0",
+					ResourceType: "mcp",
+					ProviderID:   "local",
+				},
+			}, nil
+		},
+		getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {
+			return &models.Provider{ID: providerID, Platform: "local"}, nil
+		},
+		removeDeploymentByIdFn: func(_ context.Context, _ pgx.Tx, _ string) error {
+			removeCalled = true
+			return nil
+		},
+	}
+
+	adapter := &testDeploymentAdapter{
+		cleanupStaleFn: func(_ context.Context, deployment *models.Deployment) error {
+			cleanupCalled = deployment != nil && deployment.ID == "dep-cleanup-1"
+			return nil
+		},
+	}
+
+	svc := &registryServiceImpl{
+		db: mockDB,
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+			"local": adapter,
+		},
+	}
+
+	err := svc.cleanupExistingDeployment(ctx, "com.example/test", "1.0.0", "mcp")
+	require.NoError(t, err)
+	assert.True(t, cleanupCalled)
+	assert.True(t, removeCalled, "db record should still be removed after adapter stale cleanup")
+}
+
+func TestUndeployDeployment_UsesAdapterForLocalPlatform(t *testing.T) {
+	undeployCalled := false
+	removeCalled := false
+	mockDB := &deploymentMockDB{
+		getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {
+			return &models.Provider{ID: providerID, Platform: "local"}, nil
+		},
+		removeDeploymentByIdFn: func(_ context.Context, _ pgx.Tx, id string) error {
+			removeCalled = id == "dep-local-1"
+			return nil
+		},
+	}
+	adapter := &testDeploymentAdapter{
+		undeployFn: func(_ context.Context, deployment *models.Deployment) error {
+			undeployCalled = deployment != nil && deployment.ID == "dep-local-1"
+			return nil
+		},
+	}
+
+	svc := &registryServiceImpl{
+		db: mockDB,
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+			"local": adapter,
+		},
+	}
+
+	err := svc.UndeployDeployment(context.Background(), &models.Deployment{ID: "dep-local-1", ProviderID: "local"})
+	require.NoError(t, err)
+	assert.True(t, undeployCalled)
+	assert.True(t, removeCalled)
+}
+
+func TestCreateDeployment_RejectsUnsupportedResourceTypeForProvider(t *testing.T) {
+	mockDB := &deployCreateMockDB{
+		getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {
+			return &models.Provider{ID: providerID, Platform: "local"}, nil
+		},
+	}
+
+	svc := &registryServiceImpl{
+		db: mockDB,
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+			"local": &testDeploymentAdapter{supportedTypes: []string{"mcp"}},
+		},
+	}
+
+	_, err := svc.CreateDeployment(context.Background(), &models.Deployment{
+		ServerName:   "io.test/agent",
+		Version:      "1.0.0",
+		ProviderID:   "local",
+		ResourceType: "agent",
+	})
+	require.Error(t, err)
+	require.ErrorIs(t, err, database.ErrInvalidInput)
+	assert.Contains(t, err.Error(), `provider does not support resource type "agent"`)
+}
+
+func TestCreateDeployment_UsesAdapterResolvedFromProviderPlatform(t *testing.T) {
+	tests := []struct {
+		name         string
+		providerID   string
+		platform     string
+		resourceType string
+	}{
+		{
+			name:         "aws agent deployment",
+			providerID:   "aws-prod",
+			platform:     "aws",
+			resourceType: "agent",
+		},
+		{
+			name:         "gcp mcp deployment",
+			providerID:   "gcp-prod",
+			platform:     "gcp",
+			resourceType: "mcp",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var createdRecord *models.Deployment
+			adapterCalled := false
+
+			mockDB := &deployCreateMockDB{
+				getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {
+					require.Equal(t, tt.providerID, providerID)
+					return &models.Provider{ID: providerID, Platform: tt.platform}, nil
+				},
+				getServerByNameAndVersionFn: func(_ context.Context, _ pgx.Tx, serverName, version string) (*apiv0.ServerResponse, error) {
+					if tt.resourceType != "mcp" {
+						t.Fatalf("unexpected server lookup for resource type %s", tt.resourceType)
+					}
+					return &apiv0.ServerResponse{
+						Server: apiv0.ServerJSON{Name: serverName, Version: version},
+					}, nil
+				},
+				getAgentByNameAndVersionFn: func(_ context.Context, _ pgx.Tx, agentName, version string) (*models.AgentResponse, error) {
+					if tt.resourceType != "agent" {
+						t.Fatalf("unexpected agent lookup for resource type %s", tt.resourceType)
+					}
+					return &models.AgentResponse{
+						Agent: models.AgentJSON{
+							AgentManifest: models.AgentManifest{Name: agentName},
+							Version:       version,
+						},
+					}, nil
+				},
+				createDeploymentFn: func(_ context.Context, _ pgx.Tx, deployment *models.Deployment) error {
+					cloned := *deployment
+					createdRecord = &cloned
+					return nil
+				},
+				updateDeploymentStateFn: func(_ context.Context, _ pgx.Tx, id string, patch *models.DeploymentStatePatch) error {
+					require.NotNil(t, createdRecord)
+					require.Equal(t, createdRecord.ID, id)
+					if patch.Status != nil {
+						createdRecord.Status = *patch.Status
+					}
+					return nil
+				},
+				getDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, id string) (*models.Deployment, error) {
+					require.NotNil(t, createdRecord)
+					require.Equal(t, createdRecord.ID, id)
+					return createdRecord, nil
+				},
+			}
+
+			adapter := &testDeploymentAdapter{
+				supportedTypes: []string{tt.resourceType},
+				deployFn: func(_ context.Context, req *models.Deployment) (*models.DeploymentActionResult, error) {
+					adapterCalled = true
+					require.Equal(t, tt.providerID, req.ProviderID)
+					require.Equal(t, tt.resourceType, req.ResourceType)
+					return &models.DeploymentActionResult{Status: "deployed"}, nil
+				},
+			}
+
+			svc := &registryServiceImpl{
+				db: mockDB,
+				deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+					tt.platform: adapter,
+				},
+			}
+
+			got, err := svc.CreateDeployment(context.Background(), &models.Deployment{
+				ServerName:   "com.example/runtime",
+				Version:      "latest",
+				ResourceType: tt.resourceType,
+				ProviderID:   tt.providerID,
+			})
+			require.NoError(t, err)
+			require.True(t, adapterCalled)
+			require.NotNil(t, got)
+			assert.Equal(t, tt.providerID, got.ProviderID)
+			assert.Equal(t, "deployed", got.Status)
+		})
+	}
+}
+
+func TestGetDeployments_AppendsDiscoveredDeploymentsFromAdapters(t *testing.T) {
+	discoverCalled := false
+	mockDB := &deploymentMockDB{
+		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
+			return []*models.Deployment{
+				{
+					ID:           "dep-managed-1",
+					ServerName:   "io.test/managed",
+					Version:      "1.0.0",
+					ResourceType: "mcp",
+					ProviderID:   "local",
+					Origin:       "managed",
+				},
+			}, nil
+		},
+		listProvidersFn: func(_ context.Context, _ pgx.Tx, _ *string) ([]*models.Provider, error) {
+			return []*models.Provider{
+				{ID: "kubernetes-default", Platform: "kubernetes"},
+			}, nil
+		},
+	}
+
+	adapter := &testDeploymentAdapter{
+		discoverFn: func(_ context.Context, providerID string) ([]*models.Deployment, error) {
+			discoverCalled = true
+			return []*models.Deployment{
+				{
+					ServerName:   "io.test/external",
+					Version:      "unknown",
+					ResourceType: "mcp",
+					Status:       "deployed",
+					Origin:       "discovered",
+					ProviderID:   providerID,
+				},
+			}, nil
+		},
+	}
+
+	svc := &registryServiceImpl{
+		db: mockDB,
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+			"kubernetes": adapter,
+		},
+	}
+
+	got, err := svc.GetDeployments(context.Background(), nil)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.True(t, discoverCalled)
+	assert.Equal(t, "dep-managed-1", got[0].ID)
+	assert.Equal(t, "discovered", got[1].Origin)
+	assert.Equal(t, "kubernetes-default", got[1].ProviderID)
+}
+
+func TestGetDeployments_DedupesDiscoveredDeploymentsByIdentity(t *testing.T) {
+	mockDB := &deploymentMockDB{
+		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
+			return []*models.Deployment{}, nil
+		},
+		listProvidersFn: func(_ context.Context, _ pgx.Tx, _ *string) ([]*models.Provider, error) {
+			return []*models.Provider{
+				{ID: "kubernetes-default", Platform: "kubernetes"},
+			}, nil
+		},
+	}
+	adapter := &testDeploymentAdapter{
+		discoverFn: func(_ context.Context, providerID string) ([]*models.Deployment, error) {
+			return []*models.Deployment{
+				{
+					ServerName:   "io.test/external",
+					Version:      "unknown",
+					ResourceType: "mcp",
+					Status:       "deployed",
+					Origin:       "discovered",
+					ProviderID:   providerID,
+				},
+				{
+					ServerName:   "io.test/external",
+					Version:      "unknown",
+					ResourceType: "mcp",
+					Status:       "deployed",
+					Origin:       "discovered",
+					ProviderID:   providerID,
+				},
+			}, nil
+		},
+	}
+
+	svc := &registryServiceImpl{
+		db: mockDB,
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+			"kubernetes": adapter,
+		},
+	}
+
+	got, err := svc.GetDeployments(context.Background(), nil)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "discovered", got[0].Origin)
+	assert.NotEmpty(t, got[0].ID)
+}
+
+func TestGetDeployments_KeepsDiscoveredDeploymentsDistinctAcrossNamespaces(t *testing.T) {
+	mockDB := &deploymentMockDB{
+		getDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, _ string) (*models.Deployment, error) {
+			return nil, database.ErrNotFound
+		},
+		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
+			return []*models.Deployment{}, nil
+		},
+		listProvidersFn: func(_ context.Context, _ pgx.Tx, _ *string) ([]*models.Provider, error) {
+			return []*models.Provider{
+				{ID: "kubernetes-default", Platform: "kubernetes"},
+			}, nil
+		},
+	}
+	adapter := &testDeploymentAdapter{
+		discoverFn: func(_ context.Context, providerID string) ([]*models.Deployment, error) {
+			metaA, err := models.UnmarshalFrom(models.KubernetesProviderMetadata{IsExternal: true, Namespace: "team-a"})
+			require.NoError(t, err)
+			metaB, err := models.UnmarshalFrom(models.KubernetesProviderMetadata{IsExternal: true, Namespace: "team-b"})
+			require.NoError(t, err)
+			return []*models.Deployment{
+				{
+					ServerName:       "io.test/external",
+					Version:          "unknown",
+					ResourceType:     "mcp",
+					Status:           "deployed",
+					Origin:           "discovered",
+					ProviderID:       providerID,
+					ProviderMetadata: metaA,
+				},
+				{
+					ServerName:       "io.test/external",
+					Version:          "unknown",
+					ResourceType:     "mcp",
+					Status:           "deployed",
+					Origin:           "discovered",
+					ProviderID:       providerID,
+					ProviderMetadata: metaB,
+				},
+			}, nil
+		},
+	}
+
+	svc := &registryServiceImpl{
+		db: mockDB,
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+			"kubernetes": adapter,
+		},
+	}
+
+	got, err := svc.GetDeployments(context.Background(), nil)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.NotEqual(t, got[0].ID, got[1].ID)
+}
+
+func TestGetDeployments_ManagedOriginSkipsDiscovery(t *testing.T) {
+	discoverCalled := false
+	originManaged := "managed"
+	mockDB := &deploymentMockDB{
+		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+			require.NotNil(t, filter)
+			require.NotNil(t, filter.Origin)
+			require.Equal(t, originManaged, *filter.Origin)
+			return []*models.Deployment{
+				{
+					ID:           "dep-managed-only",
+					ServerName:   "io.test/managed",
+					Version:      "1.0.0",
+					ResourceType: "mcp",
+					ProviderID:   "local",
+					Origin:       "managed",
+				},
+			}, nil
+		},
+		listProvidersFn: func(_ context.Context, _ pgx.Tx, _ *string) ([]*models.Provider, error) {
+			return []*models.Provider{
+				{ID: "kubernetes-default", Platform: "kubernetes"},
+			}, nil
+		},
+	}
+
+	adapter := &testDeploymentAdapter{
+		discoverFn: func(_ context.Context, _ string) ([]*models.Deployment, error) {
+			discoverCalled = true
+			return []*models.Deployment{}, nil
+		},
+	}
+
+	svc := &registryServiceImpl{
+		db: mockDB,
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+			"kubernetes": adapter,
+		},
+	}
+
+	filter := &models.DeploymentFilter{Origin: &originManaged}
+	got, err := svc.GetDeployments(context.Background(), filter)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.False(t, discoverCalled)
+	assert.Equal(t, "dep-managed-only", got[0].ID)
+}
+
+func TestGetDeploymentByID_FallsBackToDiscoveredDeployments(t *testing.T) {
+	discoveredID := discoveredDeploymentID("kubernetes-default", "mcp", "io.test/external", "unknown")
+	mockDB := &deploymentMockDB{
+		getDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, _ string) (*models.Deployment, error) {
+			return nil, database.ErrNotFound
+		},
+		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+			require.NotNil(t, filter)
+			require.NotNil(t, filter.Origin)
+			require.Equal(t, originDiscovered, *filter.Origin)
+			return []*models.Deployment{}, nil
+		},
+		listProvidersFn: func(_ context.Context, _ pgx.Tx, _ *string) ([]*models.Provider, error) {
+			return []*models.Provider{
+				{ID: "kubernetes-default", Platform: "kubernetes"},
+			}, nil
+		},
+	}
+	adapter := &testDeploymentAdapter{
+		discoverFn: func(_ context.Context, providerID string) ([]*models.Deployment, error) {
+			return []*models.Deployment{
+				{
+					ServerName:   "io.test/external",
+					Version:      "unknown",
+					ResourceType: "mcp",
+					Status:       "deployed",
+					Origin:       originDiscovered,
+					ProviderID:   providerID,
+				},
+			}, nil
+		},
+	}
+
+	svc := &registryServiceImpl{
+		db: mockDB,
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+			"kubernetes": adapter,
+		},
+	}
+
+	got, err := svc.GetDeploymentByID(context.Background(), discoveredID)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, discoveredID, got.ID)
+	assert.Equal(t, originDiscovered, got.Origin)
+	assert.Equal(t, "kubernetes-default", got.ProviderID)
 }

@@ -26,6 +26,7 @@ func TestNewTablePrinter(t *testing.T) {
 
 			if p == nil {
 				t.Fatal("NewTablePrinter() returned nil")
+				return
 			}
 
 			if p.writer == nil {
@@ -45,6 +46,7 @@ func TestNewTablePrinter_NilWriter(t *testing.T) {
 
 	if p == nil {
 		t.Fatal("NewTablePrinter() with nil writer returned nil")
+		return
 	}
 
 	if p.writer == nil {

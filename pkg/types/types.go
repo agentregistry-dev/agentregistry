@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -20,32 +19,6 @@ var ErrCLINoStoredToken = errors.New("no stored authentication token")
 // ErrNoOIDCDefined is returned when OIDC is not defined.
 // This is expected for CLI commands that do not require authentication (e.g. artifact init) and a user/extension does not define OIDC.
 var ErrNoOIDCDefined = errors.New("OIDC is not defined")
-
-// ServiceFactory is a function type that creates a service implementation.
-// The base service is provided as input, and the factory should return a service
-// that implements RegistryService (and optionally additional interfaces).
-type ServiceFactory func(base service.RegistryService) service.RegistryService
-
-// DeploymentTarget defines deployment behavior for a provider platform type.
-// OSS can provide built-ins while enterprise can register cloud platform handlers.
-type DeploymentTarget interface {
-	Provider() string
-	SupportedResourceTypes() []string
-	Deploy(ctx context.Context, req *models.Deployment) (*models.Deployment, error)
-	Undeploy(ctx context.Context, deployment *models.Deployment) error
-}
-
-// AsyncDeploymentTarget extends DeploymentTarget with async job operations.
-type AsyncDeploymentTarget interface {
-	DeploymentTarget
-	GetLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
-	Cancel(ctx context.Context, deployment *models.Deployment) error
-}
-
-// Discoverer can be implemented by provider platform handlers that support discovery.
-type Discoverer interface {
-	Discover(ctx context.Context, providerID string) ([]*models.Deployment, error)
-}
 
 // ProviderPlatformAdapter defines provider CRUD behavior for a provider platform type.
 type ProviderPlatformAdapter interface {
@@ -62,7 +35,7 @@ type ProviderPlatformAdapter interface {
 type DeploymentPlatformAdapter interface {
 	Platform() string
 	SupportedResourceTypes() []string
-	Deploy(ctx context.Context, req *models.Deployment) (*models.Deployment, error)
+	Deploy(ctx context.Context, req *models.Deployment) (*models.DeploymentActionResult, error)
 	Undeploy(ctx context.Context, deployment *models.Deployment) error
 	GetLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
 	Cancel(ctx context.Context, deployment *models.Deployment) error
@@ -84,14 +57,6 @@ type AppOptions struct {
 	// If nil, uses the default PostgreSQL database.
 	DatabaseFactory DatabaseFactory
 
-	// ServiceFactory is an optional function to create a service that adds new functionality.
-	// The factory receives the base service and should return an extended service.
-	ServiceFactory ServiceFactory
-
-	// DeploymentTargets registers additional deployment targets.
-	// OSS provides built-in local runtimes; enterprise can register cloud providers.
-	DeploymentTargets map[string]DeploymentTarget
-
 	// ProviderPlatforms registers adapters for provider CRUD by provider platform type.
 	ProviderPlatforms map[string]ProviderPlatformAdapter
 
@@ -101,10 +66,6 @@ type AppOptions struct {
 	// ExtraRoutes allows external integrations to register additional HTTP routes
 	// using the same API instance and path prefix as OSS core routes.
 	ExtraRoutes func(api huma.API, pathPrefix string)
-
-	// OnServiceCreated is an optional callback that receives the created service
-	// (potentially extended via ServiceFactory).
-	OnServiceCreated func(service.RegistryService)
 
 	// HTTPServerFactory is an optional function to create a server that adds new API routes.
 	HTTPServerFactory HTTPServerFactory

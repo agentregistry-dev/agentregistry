@@ -53,7 +53,7 @@ func TestEditServerEndpoint(t *testing.T) {
 			Version:     "1.0.0",
 			Repository: &model.Repository{
 				URL:    "https://github.com/testuser/editable-server",
-				Source: "github",
+				Source: "git",
 				ID:     "testuser/editable-server",
 			},
 		},
@@ -64,7 +64,7 @@ func TestEditServerEndpoint(t *testing.T) {
 			Version:     "1.0.0",
 			Repository: &model.Repository{
 				URL:    "https://github.com/otheruser/other-server",
-				Source: "github",
+				Source: "git",
 				ID:     "otheruser/other-server",
 			},
 		},
@@ -84,7 +84,7 @@ func TestEditServerEndpoint(t *testing.T) {
 		Version:     "1.0.0",
 		Repository: &model.Repository{
 			URL:    "https://github.com/testuser/deleted-server",
-			Source: "github",
+			Source: "git",
 			ID:     "testuser/deleted-server",
 		},
 	}
@@ -104,7 +104,7 @@ func TestEditServerEndpoint(t *testing.T) {
 		Version:     "1.0.0+20130313144700",
 		Repository: &model.Repository{
 			URL:    "https://github.com/testuser/build-metadata-server",
-			Source: "github",
+			Source: "git",
 			ID:     "testuser/build-metadata-server",
 		},
 	}
@@ -141,7 +141,7 @@ func TestEditServerEndpoint(t *testing.T) {
 				Version:     "1.0.0",
 				Repository: &model.Repository{
 					URL:    "https://github.com/testuser/editable-server",
-					Source: "github",
+					Source: "git",
 					ID:     "testuser/editable-server",
 				},
 			},
@@ -360,7 +360,7 @@ func TestEditServerEndpoint(t *testing.T) {
 				Version:     "1.0.0+20130313144700",
 				Repository: &model.Repository{
 					URL:    "https://github.com/testuser/build-metadata-server",
-					Source: "github",
+					Source: "git",
 					ID:     "testuser/build-metadata-server",
 				},
 			},

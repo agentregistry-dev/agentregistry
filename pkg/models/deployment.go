@@ -23,8 +23,32 @@ type Deployment struct {
 	UpdatedAt        time.Time         `json:"updatedAt"`
 }
 
+// DeploymentActionResult captures provider-specific execution outcome from adapters.
+// The registry service owns persistence and applies this result to deployment rows.
+type DeploymentActionResult struct {
+	// Status should be a terminal or in-flight deployment status (for example: deployed, deploying, failed).
+	// When empty, the service falls back to a status based on whether Deploy returned an error.
+	Status string `json:"status,omitempty"`
+	// Error contains provider-specific failure details, if any.
+	Error string `json:"error,omitempty"`
+	// ProviderConfig stores provider-specific effective config to persist.
+	ProviderConfig JSONObject `json:"providerConfig,omitempty"`
+	// ProviderMetadata stores provider-specific runtime metadata to persist.
+	ProviderMetadata JSONObject `json:"providerMetadata,omitempty"`
+}
+
+// DeploymentStatePatch describes partial deployment state updates.
+// Nil fields are left unchanged.
+type DeploymentStatePatch struct {
+	Status           *string
+	Error            *string
+	ProviderConfig   *JSONObject
+	ProviderMetadata *JSONObject
+}
+
 type KubernetesProviderMetadata struct {
-	IsExternal bool `json:"isExternal"`
+	IsExternal bool   `json:"isExternal"`
+	Namespace  string `json:"namespace,omitempty"`
 }
 
 type JSONObject map[string]any

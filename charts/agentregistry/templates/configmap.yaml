@@ -12,7 +12,6 @@ metadata:
 data:
   AGENT_REGISTRY_SERVER_ADDRESS: {{ .Values.config.serverAddress | quote }}
   AGENT_REGISTRY_AGENT_GATEWAY_PORT: {{ .Values.config.agentGatewayPort | quote }}
-  AGENT_REGISTRY_RECONCILE_ON_STARTUP: {{ .Values.config.reconcileOnStartup | quote }}
   AGENT_REGISTRY_ENABLE_REGISTRY_VALIDATION: {{ .Values.config.enableRegistryValidation | quote }}
   AGENT_REGISTRY_ENABLE_ANONYMOUS_AUTH: {{ .Values.config.enableAnonymousAuth | quote }}
   AGENT_REGISTRY_DISABLE_BUILTIN_SEED: {{ .Values.config.disableBuiltinSeed | quote }}
