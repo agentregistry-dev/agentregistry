@@ -7,85 +7,111 @@
   [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
   [![Discord](https://img.shields.io/discord/1435836734666707190?label=Join%20Discord&logo=discord&logoColor=white&color=5865F2)](https://discord.gg/HTYNjF2y2t)
 
-  ### Discover, curate, and deploy trusted MCP servers, agents, and skills from one registry.
+  ### The trusted catalog and delivery path for MCP servers, agents, and skills.
 </div>
 
-Agent Registry gives platform teams and developers a single place to manage the AI artifacts their applications depend on.
+Agent Registry gives platform teams and developers one place to manage the agentic infrastructure their applications depend on.
 
-Instead of every team finding, configuring, and exposing MCP servers on their own, Agent Registry helps you publish approved artifacts, discover what is available, and make those artifacts usable across local development and Kubernetes.
+Use the web UI and `arctl` CLI to publish approved MCP servers, agents, and skills, discover what is available, and make those artifacts usable across local development, shared environments, and Kubernetes.
+
+<p align="center">
+  <img alt="Agent Registry platform overview" src="./img/operator-scenario.png"/>
+</p>
+
+---
 
 ## Why Agent Registry?
 
-- **Curate what teams can use**: Build a trusted catalog of MCP servers, agents, and skills instead of relying on ad hoc setup.
-- **Speed up developer adoption**: Help developers discover approved AI building blocks quickly and start using them with minimal friction.
-- **Standardize deployment**: Support local workflows, shared environments, and Kubernetes from the same registry.
-- **Add control without slowing teams down**: Centralize discovery and access while keeping the developer experience simple.
+- **One trusted source for AI building blocks**: Give teams a curated catalog instead of scattered repos, scripts, and one-off MCP setup.
+- **Faster developer onboarding**: Help developers discover approved artifacts quickly and start using them with less manual configuration.
+- **A consistent path from laptop to cluster**: Support the same discovery and delivery workflow across local development and Kubernetes.
+- **Governance without slowing teams down**: Centralize curation and publishing without forcing each team to rebuild the same process.
+
+<p align="center">
+  <img alt="Agent Registry developer workflow" src="./img/dev-scenario.png"/>
+</p>
+
+---
 
 ## Quick Links
 
-- [Install `arctl`](#install-arctl)
-- [Start locally](#start-locally)
-- [Deploy on Kubernetes](#deploy-on-kubernetes)
+- [Install `arctl`](https://github.com/agentregistry-dev/agentregistry/releases)
+- [Local development](#local-development)
+- [Kubernetes](#kubernetes)
+- [See it in action](#see-it-in-action)
 - [Contributing](CONTRIBUTING.md)
 - [Development details](DEVELOPMENT.md)
 - [Discord](https://discord.gg/HTYNjF2y2t)
 
-## What You Can Do With Agent Registry
+---
 
-- **Publish and organize artifacts** in a central registry
-- **Discover approved MCP servers, agents, and skills** from a shared catalog
-- **Deploy artifacts across environments** from local development to Kubernetes
-- **Configure AI clients and gateways** from a consistent source of truth
-- **Create a safer path to production** for agentic infrastructure
+## Core Capabilities
 
-## See It In Action
+### Registry
 
-Learn how to create an Anthropic Skill, publish it to Agent Registry, and use it in Claude Code.
+Curate a shared catalog of MCP servers, agents, and skills your teams can trust and reuse.
 
-[![Video](https://img.youtube.com/vi/l6QicyGg46A/maxresdefault.jpg)](https://www.youtube.com/watch?v=l6QicyGg46A)
+- Publish artifacts from a central registry
+- Discover approved artifacts with the CLI and web UI
+- Give teams a consistent source of truth across environments
 
-## Quick Start
+### Curation and Governance
 
-### Install `arctl`
+Turn a broad set of available AI artifacts into a collection your organization is willing to support.
+
+- Organize what developers can discover and deploy
+- Standardize how artifacts are shared across teams
+- Keep control of what gets published and promoted
+
+### Deployment Workflows
+
+Move from discovery to usage without reinventing the same delivery path for every team.
+
+- Run workflows locally with `arctl`
+- Deploy Agent Registry into Kubernetes with Helm
+- Support local environments and shared platform environments from the same registry
+
+### Client and Gateway Integration
+
+Make approved artifacts easier to consume from the tools developers already use.
+
+- Generate configuration for Claude Desktop, Cursor, and VS Code
+- Pair with Agent Gateway for a consistent access layer to deployed MCP infrastructure
+- Reduce manual setup for AI clients and shared environments
+
+### How It Works Together
+
+1. Platform teams curate and publish approved MCP servers, agents, and skills in Agent Registry.
+2. Developers discover those artifacts through the web UI or `arctl`.
+3. Teams pull and deploy what they need in local environments or Kubernetes.
+4. AI clients and shared gateway infrastructure connect to approved artifacts through a consistent workflow.
+
+---
+
+## Flexible Deployment
+
+### Local Development
+
+Get started with a local registry in minutes. The first time `arctl` runs, it automatically starts the local registry daemon and imports the built-in seed data.
 
 ```bash
-# Install via script (recommended)
+# Install via script
 curl -fsSL https://raw.githubusercontent.com/agentregistry-dev/agentregistry/main/scripts/get-arctl | bash
 
-# Or download a binary from releases
-# https://github.com/agentregistry-dev/agentregistry/releases
-```
-
-### Start locally
-
-```bash
-# Start the registry server and look for available MCP servers
+# Discover available MCP servers
 arctl mcp list
-```
 
-The first time `arctl` runs, it automatically starts the local registry daemon and imports the built-in seed data.
-
-### Open the UI
-
-Visit `http://localhost:12121` in your browser.
-
-### Configure your AI client
-
-```bash
+# Configure supported AI clients
 arctl configure claude-desktop
 arctl configure cursor
 arctl configure vscode
 ```
 
-## Deploy Where Your Teams Work
+Open `http://localhost:12121` to use the web UI.
 
-### Local development
+### Kubernetes
 
-Use `arctl` and the web UI to discover artifacts, run workflows locally, and configure supported AI clients.
-
-### Deploy on Kubernetes
-
-Install Agent Registry on any Kubernetes cluster using the Helm chart. An external PostgreSQL instance with the [pgvector](https://github.com/pgvector/pgvector) extension is required.
+Run Agent Registry in a cluster when you want shared discovery and deployment workflows. An external PostgreSQL instance with the [pgvector](https://github.com/pgvector/pgvector) extension is required.
 
 #### PostgreSQL
 
@@ -98,7 +124,7 @@ kubectl -n agentregistry wait --for=condition=ready pod -l app=postgres-pgvector
 
 This setup is intended for development and testing. For production, use a managed PostgreSQL service or a production-grade operator.
 
-#### Agent Registry
+#### Install Agent Registry
 
 ```bash
 helm install agentregistry oci://ghcr.io/agentregistry-dev/helm/agentregistry \
@@ -118,48 +144,25 @@ kubectl port-forward -n agentregistry svc/agentregistry 12121:12121
 
 For deployment details and configuration options, see [charts/agentregistry/README.md.gotmpl](charts/agentregistry/README.md.gotmpl) and [scripts/kind/README.md](scripts/kind/README.md).
 
-## How Teams Use Agent Registry
+---
 
-### For platform teams
+## See It In Action
 
-Curate, govern, and deploy approved AI artifacts with more control.
+Learn how to create an Anthropic Skill, publish it to Agent Registry, and use it in Claude Code.
 
-![Operator scenario](img/operator-scenario.png)
+[![Video](https://img.youtube.com/vi/l6QicyGg46A/maxresdefault.jpg)](https://www.youtube.com/watch?v=l6QicyGg46A)
 
-### For developers
-
-Discover trusted building blocks and use them in real applications with less setup.
-
-![Developer scenario](img/dev-scenario.png)
-
-## Fits Into Your MCP Stack
-
-Agent Registry works alongside the tools teams already use to build and operate agentic systems.
-
-- MCP servers
-- Agent Gateway
-- Claude Desktop
-- Cursor
-- VS Code
-- Kubernetes
+---
 
 ## Contributing
 
-We welcome contributions. See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and [DEVELOPMENT.md](DEVELOPMENT.md) for architecture and development details.
-
-## Community
+We welcome contributions and feedback from the community.
 
 - [GitHub Issues](https://github.com/agentregistry-dev/agentregistry/issues)
 - [GitHub Discussions](https://github.com/agentregistry-dev/agentregistry/discussions)
+- [Contributing guide](CONTRIBUTING.md)
+- [Development details](DEVELOPMENT.md)
 - [Discord](https://discord.gg/HTYNjF2y2t)
-
-## Related Projects
-
-- [Model Context Protocol](https://modelcontextprotocol.io/)
-- [Agent Gateway](https://github.com/agentgateway/agentgateway)
-- [kagent](https://github.com/kagent-dev/kagent)
-- [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk)
-- [FastMCP](https://github.com/jlowin/fastmcp)
 
 ## License
 
