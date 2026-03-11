@@ -399,12 +399,8 @@ func (t *translator) translateAgentConfigMap(agent *api.Agent) (*corev1.ConfigMa
 }
 
 // AgentConfigMapName returns the ConfigMap name for an agent
-func AgentConfigMapName(name, version, deploymentID string) string {
-	base := fmt.Sprintf("%s-mcp-config", name)
-	if version != "" {
-		base = fmt.Sprintf("%s-%s-mcp-config", name, version)
-	}
-	return sanitizeK8sName(nameWithDeploymentID(base, deploymentID))
+func AgentConfigMapName(name, _, _ string) string {
+	return sanitizeK8sName(fmt.Sprintf("%s-mcp-config", name))
 }
 
 func buildRemoteMCPURL(scheme, host string, port uint32, path string) string {
@@ -430,20 +426,16 @@ func buildRemoteMCPURL(scheme, host string, port uint32, path string) string {
 	return fmt.Sprintf("%s://%s:%d%s", scheme, host, port, path)
 }
 
-func AgentResourceName(name, version, deploymentID string) string {
-	base := name
-	if version != "" {
-		base = fmt.Sprintf("%s-%s", name, version)
-	}
-	return sanitizeK8sName(nameWithDeploymentID(base, deploymentID))
+func AgentResourceName(name, _, _ string) string {
+	return sanitizeK8sName(name)
 }
 
-func RemoteMCPResourceName(name, deploymentID string) string {
-	return sanitizeK8sName(nameWithDeploymentID(name, deploymentID))
+func RemoteMCPResourceName(name, _ string) string {
+	return sanitizeK8sName(name)
 }
 
-func MCPServerResourceName(name, deploymentID string) string {
-	return sanitizeK8sName(nameWithDeploymentID(name, deploymentID))
+func MCPServerResourceName(name, _ string) string {
+	return sanitizeK8sName(name)
 }
 
 func deploymentManagedLabels(deploymentID string) map[string]string {
@@ -463,13 +455,6 @@ func deploymentManagedAnnotations(deploymentID string) map[string]string {
 	return map[string]string{
 		DeploymentIDAnnotationKey: deploymentID,
 	}
-}
-
-func nameWithDeploymentID(base, deploymentID string) string {
-	if deploymentID == "" {
-		return base
-	}
-	return fmt.Sprintf("%s-%s", base, deploymentID)
 }
 
 // sanitizeK8sName sanitizes a string to a valid Kubernetes name
