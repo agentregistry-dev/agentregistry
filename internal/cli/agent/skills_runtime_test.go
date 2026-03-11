@@ -181,7 +181,7 @@ func TestExtractSkillRepoURL(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "non-git source",
+			name: "non-git source with URL still resolves",
 			resp: &models.SkillResponse{
 				Skill: models.SkillJSON{
 					Repository: &models.SkillRepository{
@@ -190,7 +190,7 @@ func TestExtractSkillRepoURL(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantURL: "https://gitlab.com/org/skill",
 		},
 	}
 
