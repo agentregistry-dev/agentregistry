@@ -72,6 +72,7 @@ type FakeRegistry struct {
 	GetDeploymentLogsFn          func(ctx context.Context, deployment *models.Deployment, platform string) ([]string, error)
 	CancelDeploymentFn           func(ctx context.Context, deployment *models.Deployment, platform string) error
 	ReconcileAllFn               func(ctx context.Context) error
+	PingDBFn                     func(ctx context.Context) error
 
 	// Prompt fields and hooks
 	Prompts                      []*models.PromptResponse
@@ -500,6 +501,13 @@ func (f *FakeRegistry) DeletePrompt(ctx context.Context, promptName, version str
 		return f.DeletePromptFn(ctx, promptName, version)
 	}
 	return database.ErrNotFound
+}
+
+func (f *FakeRegistry) PingDB(ctx context.Context) error {
+	if f.PingDBFn != nil {
+		return f.PingDBFn(ctx)
+	}
+	return nil
 }
 
 func (f *FakeRegistry) ReconcileAll(ctx context.Context) error {

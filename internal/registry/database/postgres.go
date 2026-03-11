@@ -3406,6 +3406,11 @@ func (db *PostgreSQL) DeletePrompt(ctx context.Context, tx pgx.Tx, promptName, v
 	return nil
 }
 
+// Ping verifies database connectivity with a lightweight round-trip.
+func (db *PostgreSQL) Ping(ctx context.Context) error {
+	return db.pool.Ping(ctx)
+}
+
 // Close closes the database connection
 func (db *PostgreSQL) Close() error {
 	db.pool.Close()

@@ -15,6 +15,8 @@ type Reconciler interface {
 
 // RegistryService defines the interface for registry operations
 type RegistryService interface {
+	// PingDB verifies database connectivity
+	PingDB(ctx context.Context) error
 	// ListServers retrieve all servers with optional filtering
 	ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
 	// GetServerByName retrieve latest version of a server by server name

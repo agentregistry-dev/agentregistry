@@ -57,7 +57,7 @@ func TestPrometheusHandler(t *testing.T) {
 	api.UseMiddleware(router.MetricTelemetryMiddleware(metrics,
 		router.WithSkipPaths("/health", "/metrics", "/ping", "/docs"),
 	))
-	v0.RegisterHealthEndpoint(api, "/v0", cfg, metrics)
+	v0.RegisterHealthEndpoint(api, "/v0", cfg, metrics, registryService)
 	v0.RegisterServersEndpoints(api, "/v0", registryService)
 
 	// Add /metrics for Prometheus metrics using promhttp

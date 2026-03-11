@@ -40,7 +40,7 @@ func RegisterRoutes(
 ) {
 	pathPrefix := "/v0"
 
-	v0.RegisterHealthEndpoint(api, pathPrefix, cfg, metrics)
+	v0.RegisterHealthEndpoint(api, pathPrefix, cfg, metrics, registry)
 	v0.RegisterPingEndpoint(api, pathPrefix)
 	v0.RegisterVersionEndpoint(api, pathPrefix, versionInfo)
 	v0.RegisterServersEndpoints(api, pathPrefix, registry)

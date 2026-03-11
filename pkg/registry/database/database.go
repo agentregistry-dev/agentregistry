@@ -145,6 +145,8 @@ type Database interface {
 	GetServerReadme(ctx context.Context, tx pgx.Tx, serverName, version string) (*ServerReadme, error)
 	// GetLatestServerReadme retrieves the README blob for the latest server version
 	GetLatestServerReadme(ctx context.Context, tx pgx.Tx, serverName string) (*ServerReadme, error)
+	// Ping verifies database connectivity with a lightweight round-trip
+	Ping(ctx context.Context) error
 	// InTransaction executes a function within a database transaction
 	InTransaction(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error
 	// Close closes the database connection
