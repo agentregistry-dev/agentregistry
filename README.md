@@ -2,97 +2,103 @@
   <picture>
     <img alt="agentregistry" src="./img/agentregistry-logo.svg" height="150"/>
   </picture>
-  
+
   [![Go Version](https://img.shields.io/badge/Go-1.25%2B-blue.svg)](https://golang.org/doc/install)
   [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
   [![Discord](https://img.shields.io/discord/1435836734666707190?label=Join%20Discord&logo=discord&logoColor=white&color=5865F2)](https://discord.gg/HTYNjF2y2t)
-  
-  ### A centralized registry to securely curate, discover, deploy, and manage agentic infrastructure from MCP servers, agents to skills.
+
+  ### Discover, curate, and deploy trusted MCP servers, agents, and skills from one registry.
 </div>
 
+Agent Registry gives platform teams and developers a single place to manage the AI artifacts their applications depend on.
 
-##  What is Agent Registry?
+Instead of every team finding, configuring, and exposing MCP servers on their own, Agent Registry helps you publish approved artifacts, discover what is available, and make those artifacts usable across local development and Kubernetes.
 
-Agent Registry brings governance and control to AI artifacts and infrastructure, empowering developers to quickly build and deploy AI applications with confidence. It provides a secure, centralized registry where teams can publish, discover, and share AI artifacts, including MCP servers, agents, and skills, and deploy them seamlessly to any environment.
+## Why Agent Registry?
 
+- **Curate what teams can use**: Build a trusted catalog of MCP servers, agents, and skills instead of relying on ad hoc setup.
+- **Speed up developer adoption**: Help developers discover approved AI building blocks quickly and start using them with minimal friction.
+- **Standardize deployment**: Support local workflows, shared environments, and Kubernetes from the same registry.
+- **Add control without slowing teams down**: Centralize discovery and access while keeping the developer experience simple.
 
-### Agent Registry provides:
+## Quick Links
 
-- **📦 Centralized Registry**: Package, discover and curate AI artifacts from a central source
-- **🔒 Control and Governance**: Selectively  and control custom collection of artifacts
-- **📊 Data Enrichment**: Automatically validate and score ingested data for insights
-- **🌐 Unify AI Infrastructure**: Deploy and access artifacts anywhere
+- [Install `arctl`](#install-arctl)
+- [Start locally](#start-locally)
+- [Deploy on Kubernetes](#deploy-on-kubernetes)
+- [Contributing](CONTRIBUTING.md)
+- [Development details](DEVELOPMENT.md)
+- [Discord](https://discord.gg/HTYNjF2y2t)
 
+## What You Can Do With Agent Registry
 
-## See it in action
+- **Publish and organize artifacts** in a central registry
+- **Discover approved MCP servers, agents, and skills** from a shared catalog
+- **Deploy artifacts across environments** from local development to Kubernetes
+- **Configure AI clients and gateways** from a consistent source of truth
+- **Create a safer path to production** for agentic infrastructure
 
-Learn how to create an Anthropic Skill, publish it to agentregistry, and use it in Claude Code
+## See It In Action
+
+Learn how to create an Anthropic Skill, publish it to Agent Registry, and use it in Claude Code.
 
 [![Video](https://img.youtube.com/vi/l6QicyGg46A/maxresdefault.jpg)](https://www.youtube.com/watch?v=l6QicyGg46A)
 
-##  Agent Registry Architecture
+## Quick Start
 
-### For Operators:  Enrich, package, curate and deploy with control
-![Architecture](img/operator-scenario.png)
-
-### For Developers: Build, push, pull and run applications with confidence
-
-![Architecture](img/dev-scenario.png)
-
-### Development setup
-
-See [`DEVELOPMENT.md`](DEVELOPMENT.md) for detailed architecture information.
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Docker Desktop with Docker Compose v2+
-- Go 1.25+ (for building from source)
-- PostgreSQL with the [pgvector](https://github.com/pgvector/pgvector) extension
-
-### Installation
+### Install `arctl`
 
 ```bash
 # Install via script (recommended)
 curl -fsSL https://raw.githubusercontent.com/agentregistry-dev/agentregistry/main/scripts/get-arctl | bash
 
-# Or download binary directly from releases
+# Or download a binary from releases
 # https://github.com/agentregistry-dev/agentregistry/releases
 ```
 
-### Start the Registry
+### Start locally
 
 ```bash
 # Start the registry server and look for available MCP servers
 arctl mcp list
-
-# The first time the CLI runs, it will automatically start the registry server daemon and import the built-in seed data.
 ```
 
+The first time `arctl` runs, it automatically starts the local registry daemon and imports the built-in seed data.
 
-### Access the Web UI
+### Open the UI
 
-To access the UI, open `http://localhost:12121` in your browser.
+Visit `http://localhost:12121` in your browser.
 
-## ☸️ Deploy on Kubernetes
+### Configure your AI client
+
+```bash
+arctl configure claude-desktop
+arctl configure cursor
+arctl configure vscode
+```
+
+## Deploy Where Your Teams Work
+
+### Local development
+
+Use `arctl` and the web UI to discover artifacts, run workflows locally, and configure supported AI clients.
+
+### Deploy on Kubernetes
 
 Install Agent Registry on any Kubernetes cluster using the Helm chart. An external PostgreSQL instance with the [pgvector](https://github.com/pgvector/pgvector) extension is required.
 
-### PostgreSQL
+#### PostgreSQL
 
-Deploy a single-instance PostgreSQL/pgvector into your cluster using the provided example manifest:
+Deploy a single-instance PostgreSQL and pgvector into your cluster using the provided example manifest:
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/agentregistry-dev/agentregistry/main/examples/postgres-pgvector.yaml
 kubectl -n agentregistry wait --for=condition=ready pod -l app=postgres-pgvector --timeout=120s
 ```
 
-This deploys `pgvector/pgvector:0.8.2-pg16` into the `agentregistry` namespace with a 5Gi PVC and exposes it at `postgres-pgvector.agentregistry.svc.cluster.local:5432`.
+This setup is intended for development and testing. For production, use a managed PostgreSQL service or a production-grade operator.
 
-> This is intended for development and testing only. For production, use a managed PostgreSQL service or a production-grade operator.
-
-### AgentRegistry
+#### Agent Registry
 
 ```bash
 helm install agentregistry oci://ghcr.io/agentregistry-dev/helm/agentregistry \
@@ -110,85 +116,51 @@ Then port-forward to access the UI:
 kubectl port-forward -n agentregistry svc/agentregistry 12121:12121
 ```
 
-See [`charts/agentregistry/README.md`](charts/agentregistry/README.md.gotmpl) for all configuration options and [`scripts/kind/README.md`](scripts/kind/README.md) for local Kubernetes development with Kind.
+For deployment details and configuration options, see [charts/agentregistry/README.md.gotmpl](charts/agentregistry/README.md.gotmpl) and [scripts/kind/README.md](scripts/kind/README.md).
 
-## 📚 Core Concepts
+## How Teams Use Agent Registry
 
-### MCP Servers
+### For platform teams
 
-MCP (Model Context Protocol) servers provide tools, resources, and prompts to AI agents. They're the building blocks of agent capabilities.
+Curate, govern, and deploy approved AI artifacts with more control.
 
-### Agent Gateway
+![Operator scenario](img/operator-scenario.png)
 
-The [Agent Gateway](https://github.com/agentgateway/agentgateway) is a reverse proxy that provides a single MCP endpoint for all deployed servers:
+### For developers
 
-```mermaid
-sequenceDiagram
-    participant IDE as AI IDE/Client
-    participant GW as Agent Gateway
-    participant FS as filesystem MCP
-    participant GH as github MCP
-    
-    IDE->>GW: Connect (MCP over HTTP)
-    GW-->>IDE: Available tools from all servers
-    
-    IDE->>GW: Call read_file()
-    GW->>FS: Forward to filesystem
-    FS-->>GW: File contents
-    GW-->>IDE: Return result
-    
-    IDE->>GW: Call create_issue()
-    GW->>GH: Forward to github
-    GH-->>GW: Issue created
-    GW-->>IDE: Return result
-```
+Discover trusted building blocks and use them in real applications with less setup.
 
-### IDE Configuration
+![Developer scenario](img/dev-scenario.png)
 
-Configure your AI-powered IDEs to use the Agent Gateway:
+## Fits Into Your MCP Stack
 
-```bash
-# Generate Claude Desktop config
-arctl configure claude-desktop
+Agent Registry works alongside the tools teams already use to build and operate agentic systems.
 
-# Generate Cursor config
-arctl configure cursor
+- MCP servers
+- Agent Gateway
+- Claude Desktop
+- Cursor
+- VS Code
+- Kubernetes
 
-# Generate VS Code config
-arctl configure vscode
-```
+## Contributing
 
+We welcome contributions. See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and [DEVELOPMENT.md](DEVELOPMENT.md) for architecture and development details.
 
-## 🤝 Get Involved
+## Community
 
-### Contributing
+- [GitHub Issues](https://github.com/agentregistry-dev/agentregistry/issues)
+- [GitHub Discussions](https://github.com/agentregistry-dev/agentregistry/discussions)
+- [Discord](https://discord.gg/HTYNjF2y2t)
 
-We welcome contributions! Please see [`CONTRIBUTING.md`](CONTRIBUTING.md) for guidelines.
-
-
-### Show your support
-
-- 🐛 **Report bugs and issues**: [GitHub Issues](https://github.com/agentregistry-dev/agentregistry/issues)
-- 💡 **Suggest new features**: [GitHub Discussions](https://github.com/agentregistry-dev/agentregistry/discussions)
-- 🔧 **Submit pull requests**: [GitHub Repository](https://github.com/agentregistry-dev/agentregistry)
-- ⭐ **Star the repository**: Show your support on [GitHub](https://github.com/agentregistry-dev/agentregistry)
-- 💬 **Join the Conversation**: Join our [Discord Server](https://discord.gg/HTYNjF2y2t)
-
-###  Related Projects
+## Related Projects
 
 - [Model Context Protocol](https://modelcontextprotocol.io/)
+- [Agent Gateway](https://github.com/agentgateway/agentgateway)
 - [kagent](https://github.com/kagent-dev/kagent)
 - [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk)
 - [FastMCP](https://github.com/jlowin/fastmcp)
 
-## 📚 Resources
+## License
 
-- 📖 [Documentation] Coming Soon!
-- 💬 [GitHub Discussions](https://github.com/agentregistry-dev/agentregistry/discussions)
-- 🐛 [Issue Tracker](https://github.com/agentregistry-dev/agentregistry/issues)
-
-## 📄 License
-
-Apache V2 License - see [`LICENSE`](LICENSE) for details.
-
----
+Apache V2 License. See [LICENSE](LICENSE) for details.
