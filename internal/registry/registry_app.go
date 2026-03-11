@@ -125,8 +125,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		}
 	}
 
-	baseRegistryService := service.NewRegistryService(db, cfg, embeddingProvider)
-	registryService := baseRegistryService
+	registryService := service.NewRegistryService(db, cfg, embeddingProvider)
 
 	// Initialize extension registries once and use them for both routing and service behavior.
 	providerPlatforms := v0.DefaultProviderPlatformAdapters(registryService)
