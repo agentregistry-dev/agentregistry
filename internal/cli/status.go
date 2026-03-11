@@ -35,8 +35,8 @@ func runStatus() error {
 
 	health, err := c.CheckHealth()
 	if err != nil {
-		printer.PrintError(fmt.Sprintf("Daemon is not running (%s)", c.BaseURL))
-		printer.PrintError("Database is not healthy")
+		printer.PrintFailure(fmt.Sprintf("Daemon is not running (%s)", c.BaseURL))
+		printer.PrintFailure("Database is not healthy")
 		return nil
 	}
 
@@ -49,7 +49,7 @@ func runStatus() error {
 	if health.Database == "ok" {
 		printer.PrintSuccess("Database is healthy")
 	} else {
-		printer.PrintError(fmt.Sprintf("Database is not healthy: %s", health.Database))
+		printer.PrintFailure(fmt.Sprintf("Database is not healthy: %s", health.Database))
 	}
 
 	return nil
