@@ -18,6 +18,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/tui"
 	agentutils "github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
+	cliUtils "github.com/agentregistry-dev/agentregistry/internal/cli/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/spf13/cobra"
@@ -52,25 +53,12 @@ var providerAPIKeys = map[string]string{
 	"gemini":      "GOOGLE_API_KEY",
 }
 
-// parseEnvFlags parses KEY=VALUE strings into a map. Returns an error on invalid format.
-func parseEnvFlags(envFlags []string) (map[string]string, error) {
-	envMap := make(map[string]string)
-	for _, e := range envFlags {
-		parts := strings.SplitN(e, "=", 2)
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid env format (expected KEY=VALUE): %s", e)
-		}
-		envMap[parts[0]] = parts[1]
-	}
-	return envMap, nil
-}
-
 func runRun(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return cmd.Help()
 	}
 
-	envMap, err := parseEnvFlags(envFlags)
+	envMap, err := cliUtils.ParseEnvFlags(envFlags)
 	if err != nil {
 		return err
 	}

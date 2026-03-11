@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	cliUtils "github.com/agentregistry-dev/agentregistry/internal/cli/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/spf13/cobra"
 )
@@ -47,13 +48,9 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	// Parse --env flags into a map
-	envMap := make(map[string]string)
-	for _, e := range envFlags {
-		parts := strings.SplitN(e, "=", 2)
-		if len(parts) != 2 {
-			return fmt.Errorf("invalid env format (expected KEY=VALUE): %s", e)
-		}
-		envMap[parts[0]] = parts[1]
+	envMap, err := cliUtils.ParseEnvFlags(envFlags)
+	if err != nil {
+		return err
 	}
 
 	agentModel, err := apiClient.GetAgentByNameAndVersion(name, version)
