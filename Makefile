@@ -1,3 +1,9 @@
+# Load .env into make's variable scope if it exists
+ifneq (,$(wildcard .env))
+  include .env
+  export
+endif
+
 # Image configuration
 DOCKER_REGISTRY ?= localhost:5001
 BASE_IMAGE_REGISTRY ?= ghcr.io
@@ -48,33 +54,43 @@ HELM_PLUGIN_INSTALL_FLAGS ?= --verify=false
 .PHONY: help
 help:
 	@echo "Available targets:"
-	@echo "  install-ui           - Install UI dependencies"
-	@echo "  build-ui             - Build the Next.js UI"
-	@echo "  clean-ui             - Clean UI build artifacts"
+	@echo "  install-ui            - Install UI dependencies"
+	@echo "  build-ui              - Build the Next.js UI"
+	@echo "  clean-ui              - Clean UI build artifacts"
 	@echo "  build-cli             - Build the Go CLI"
-	@echo "  build                - Build both UI and Go CLI"
-	@echo "  install              - Install the CLI to GOPATH/bin"
-	@echo "  run                  - Start local dev environment (docker-compose)"
-	@echo "  down                 - Stop local dev environment"
-	@echo "  dev-ui               - Run Next.js in development mode"
-	@echo "  test                 - Run Go unit tests"
-	@echo "  test-integration     - Run Go tests with integration tests"
-	@echo "  test-coverage        - Run Go tests with coverage"
-	@echo "  test-coverage-report - Run Go tests with HTML coverage report"
-	@echo "  clean                - Clean all build artifacts"
-	@echo "  all                  - Clean and build everything"
-	@echo "  lint                 - Run the linter (GOLANGCI_LINT_ARGS=--fix to auto-fix)"
-	@echo "  verify               - Verify generated code is up to date"
-	@echo "  release              - Build and release the CLI"
+	@echo "  build                 - Build both UI and Go CLI"
+	@echo "  install               - Install the CLI to GOPATH/bin"
+	@echo "  run                   - Start local dev environment (docker-compose)"
+	@echo "  down                  - Stop local dev environment"
+	@echo "  dev-ui                - Run Next.js in development mode"
+	@echo "  test                  - Run Go unit tests"
+	@echo "  test-integration      - Run Go tests with integration tests"
+	@echo "  test-coverage         - Run Go tests with coverage"
+	@echo "  test-coverage-report  - Run Go tests with HTML coverage report"
+	@echo "  clean                 - Clean all build artifacts"
+	@echo "  all                   - Clean and build everything"
+	@echo "  lint                  - Run the linter (GOLANGCI_LINT_ARGS=--fix to auto-fix)"
+	@echo "  verify                - Verify generated code is up to date"
+	@echo "  release               - Build and release the CLI"
 	@echo ""
 	@echo "Helm / Chart targets (chart dir: $(HELM_CHART_DIR)):"
-	@echo "  charts-deps          - Build Helm chart dependencies"
-	@echo "  charts-lint          - Lint the Helm chart (helm lint --strict)"
-	@echo "  charts-render-test   - Render chart templates (smoke test with min required values)"
-	@echo "  charts-package       - Package chart → $(HELM_PACKAGE_DIR)/"
-	@echo "  charts-push          - Package + push chart to OCI registry (requires creds)"
-	@echo "  charts-test          - Run helm-unittest tests (installs plugin if absent)"
-	@echo "  charts-all           - charts-push then charts-test"
+	@echo "  charts-deps           - Build Helm chart dependencies"
+	@echo "  charts-lint           - Lint the Helm chart (helm lint --strict)"
+	@echo "  charts-render-test    - Render chart templates (smoke test with min required values)"
+	@echo "  charts-package        - Package chart → $(HELM_PACKAGE_DIR)/"
+	@echo "  charts-push           - Package + push chart to OCI registry (requires creds)"
+	@echo "  charts-test           - Run helm-unittest tests (installs plugin if absent)"
+	@echo "  charts-all            - charts-push then charts-test"
+	@echo ""
+	@echo "Kind / local K8s targets (cluster: $(KIND_CLUSTER_NAME)):"
+	@echo "  create-kind-cluster   - Create Kind cluster with MetalLB"
+	@echo "  use-kind-cluster      - Merge kubeconfig and set default namespace"
+	@echo "  delete-kind-cluster   - Delete the Kind cluster"
+	@echo "  prune-kind-cluster    - Prune dangling images from Kind control-plane"
+	@echo "  kind-debug            - Shell into Kind control-plane with btop"
+	@echo "  install-postgresql    - Deploy PostgreSQL/pgvector into Kind"
+	@echo "  install-agentregistry - Build images and Helm-install AgentRegistry into Kind"
+	@echo "  setup-kind-cluster    - Full local K8s dev setup (kind + postgres + agentregistry)"
 
 # Install UI dependencies
 .PHONY: install-ui
@@ -265,10 +281,95 @@ docker-compose-down:
 docker-compose-rm:
 	VERSION=$(VERSION) DOCKER_REGISTRY=$(DOCKER_REGISTRY) docker compose -p agentregistry -f internal/daemon/docker-compose.yml rm --volumes --force
 
+KIND_CLUSTER_NAME ?= agentregistry
+KIND_IMAGE_VERSION ?= 1.34.0
+KIND_CLUSTER_CONTEXT ?= kind-$(KIND_CLUSTER_NAME)
+KIND_NAMESPACE ?= agentregistry
+KIND_BIN = $(shell test -x bin/kind && echo bin/kind || echo kind)
+KUBECONFIG_PERM ?= $(shell \
+  if [ "$$(uname -s | tr '[:upper:]' '[:lower:]')" = "darwin" ]; then \
+    stat -f "%Lp" ~/.kube/config 2>/dev/null || echo "600"; \
+  else \
+    stat -c "%a" ~/.kube/config 2>/dev/null || echo "600"; \
+  fi)
+
+.PHONY: install-tools
+install-tools: ## Install required tools into ./bin
+	@mkdir -p bin
+	GOBIN=$(PWD)/bin go install sigs.k8s.io/kind@v0.27.0
+	@echo "✓ kind installed to bin/kind"
+
 .PHONY: create-kind-cluster
-create-kind-cluster:
-	bash ./scripts/kind/setup-kind.sh
-	bash ./scripts/kind/setup-metallb.sh
+create-kind-cluster: install-tools ## Create a local Kind cluster with MetalLB
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) KIND_IMAGE_VERSION=$(KIND_IMAGE_VERSION) bash ./scripts/kind/setup-kind.sh
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) bash ./scripts/kind/setup-metallb.sh
+
+.PHONY: use-kind-cluster
+use-kind-cluster: ## Merge kind kubeconfig and set default namespace
+	@TMP_KUBECONFIG=$$(mktemp) && chmod 600 $$TMP_KUBECONFIG && \
+	  $(KIND_BIN) get kubeconfig --name $(KIND_CLUSTER_NAME) > $$TMP_KUBECONFIG && \
+	  KUBECONFIG=~/.kube/config:$$TMP_KUBECONFIG kubectl config view --merge --flatten > ~/.kube/config.tmp && \
+	  mv ~/.kube/config.tmp ~/.kube/config && chmod $(KUBECONFIG_PERM) ~/.kube/config && \
+	  rm -f $$TMP_KUBECONFIG
+	kubectl --context $(KIND_CLUSTER_CONTEXT) create namespace $(KIND_NAMESPACE) || true
+	kubectl --context $(KIND_CLUSTER_CONTEXT) config set-context --current --namespace $(KIND_NAMESPACE) || true
+
+.PHONY: delete-kind-cluster
+delete-kind-cluster: ## Delete the local Kind cluster
+	$(KIND_BIN) delete cluster --name $(KIND_CLUSTER_NAME)
+
+.PHONY: prune-kind-cluster
+prune-kind-cluster: ## Prune dangling container images from the Kind control-plane node
+	@echo "Pruning dangling images from kind control-plane..."
+	docker exec $(KIND_CLUSTER_NAME)-control-plane crictl images --no-trunc | \
+	awk '$$1=="<none>" && $$2=="<none>" {print $$3}' | \
+	while read -r img; do \
+	  if [ -n "$$img" ]; then \
+	    docker exec $(KIND_CLUSTER_NAME)-control-plane crictl rmi "$$img"; \
+	  fi; \
+	done || :
+
+.PHONY: kind-debug
+kind-debug: ## Shell into Kind control-plane and run btop for resource monitoring
+	@echo "Connecting to kind cluster control plane..."
+	docker exec -it $(KIND_CLUSTER_NAME)-control-plane bash -c 'apt-get update -qq && apt-get install -y --no-install-recommends btop htop'
+	docker exec -it $(KIND_CLUSTER_NAME)-control-plane bash -c 'btop --utf-force'
+
+.PHONY: install-postgresql
+install-postgresql: ## Deploy standalone PostgreSQL/pgvector into the Kind cluster
+	kubectl --context $(KIND_CLUSTER_CONTEXT) apply -f examples/postgres-pgvector.yaml
+	kubectl --context $(KIND_CLUSTER_CONTEXT) -n agentregistry wait --for=condition=ready pod -l app=postgres-pgvector --timeout=120s
+
+BUILD ?= true
+
+.PHONY: install-agentregistry
+install-agentregistry: ## Build images and Helm install AgentRegistry into the Kind cluster (BUILD=false to skip image builds)
+ifeq ($(BUILD),true)
+install-agentregistry: docker-server docker-agentgateway
+endif
+	@JWT_KEY=$$(kubectl --context $(KIND_CLUSTER_CONTEXT) -n $(KIND_NAMESPACE) \
+	    get secret agentregistry \
+	    -o jsonpath='{.data.AGENT_REGISTRY_JWT_PRIVATE_KEY}' 2>/dev/null | base64 -d); \
+	  if [ -z "$$JWT_KEY" ]; then JWT_KEY=$$(openssl rand -hex 32); fi; \
+	  helm upgrade --install agentregistry charts/agentregistry \
+	    --kube-context $(KIND_CLUSTER_CONTEXT) \
+	    --namespace $(KIND_NAMESPACE) \
+	    --create-namespace \
+	    --set image.pullPolicy=Always \
+	    --set image.registry=$(DOCKER_REGISTRY) \
+	    --set image.repository=$(DOCKER_REPO)/server \
+	    --set image.tag=$(VERSION) \
+	    --set database.host=postgres-pgvector.$(KIND_NAMESPACE).svc.cluster.local \
+	    --set database.password=agentregistry \
+	    --set database.sslMode=disable \
+	    --set config.jwtPrivateKey="$$JWT_KEY" \
+	    --set config.enableAnonymousAuth="true" \
+	    --wait \
+	    --timeout=5m;
+
+## Set up a full local K8s dev environment (Kind + PostgreSQL/pgvector + AgentRegistry)
+.PHONY: setup-kind-cluster
+setup-kind-cluster: create-kind-cluster install-postgresql install-agentregistry
 
 bin/arctl-linux-amd64:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bin/arctl-linux-amd64 cmd/cli/main.go

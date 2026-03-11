@@ -1,3 +1,76 @@
+# Development Guide
+
+## Local Kubernetes Environment
+
+The fastest way to run the full stack locally is with [Kind](https://kind.sigs.k8s.io/). A single `make` target creates the cluster, deploys PostgreSQL/pgvector, builds the server image, and installs AgentRegistry via Helm.
+
+### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/)
+- [Helm](https://helm.sh/docs/intro/install/)
+
+> `kind` is installed automatically into `./bin/kind` by `make install-tools` — no manual installation needed.
+
+### Full setup
+
+```bash
+make setup-kind-cluster
+```
+
+This runs three steps in order:
+
+| Step | Target | What it does |
+|------|--------|-------------|
+| 1 | `create-kind-cluster` | Installs `kind` to `./bin/`, creates Kind cluster + local registry (`localhost:5001`) + MetalLB |
+| 2 | `install-postgresql` | Deploys `pgvector/pgvector:0.8.2-pg16` into the `agentregistry` namespace |
+| 3 | `install-agentregistry` | Builds server image, pushes to local registry, Helm installs AgentRegistry |
+
+Each target can also be run independently — useful when iterating on code:
+
+```bash
+# Rebuild and redeploy after a code change (cluster and PG stay up)
+make install-agentregistry
+
+# Skip image builds if the images are already up to date
+make install-agentregistry BUILD=false
+```
+
+On subsequent runs, `install-agentregistry` reuses the `jwtPrivateKey` already stored in the cluster secret so tokens remain valid across redeploys.
+
+### Accessing the services
+
+```bash
+# AgentRegistry API/UI
+kubectl --context kind-agentregistry port-forward -n agentregistry svc/agentregistry 12121:12121
+# open http://localhost:12121
+
+# PostgreSQL (for direct inspection)
+kubectl --context kind-agentregistry port-forward -n agentregistry svc/postgres-pgvector 5432:5432
+psql -h localhost -U agentregistry -d agent-registry
+```
+
+### Teardown
+
+```bash
+make delete-kind-cluster
+```
+
+See [`scripts/kind/README.md`](scripts/kind/README.md) for more detail on configuration, troubleshooting, and overriding defaults.
+
+---
+
+## Local Docker Compose Environment
+
+```bash
+make run   # starts registry server + daemon via docker-compose
+make down  # stops everything
+```
+
+The UI is available at `http://localhost:12121`.
+
+---
+
 # Architecture Overview
 
 ### 1. CLI Layer (cmd/)

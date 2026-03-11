@@ -35,8 +35,7 @@ var (
 type RepositorySource string
 
 const (
-	SourceGitHub RepositorySource = "github"
-	SourceGitLab RepositorySource = "gitlab"
+	SourceGit RepositorySource = "git"
 )
 
 const (

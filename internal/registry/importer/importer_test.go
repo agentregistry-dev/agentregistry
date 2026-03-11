@@ -29,7 +29,7 @@ func TestImportService_LocalFile(t *testing.T) {
 			Description: "Test server 1",
 			Repository: &model.Repository{
 				URL:    "https://github.com/test/repo1",
-				Source: "github",
+				Source: "git",
 				ID:     "123",
 			},
 			Version: "1.0.0",
@@ -72,7 +72,7 @@ func TestImportService_HTTPFile(t *testing.T) {
 			Description: "HTTP test server",
 			Repository: &model.Repository{
 				URL:    "https://github.com/test/http-repo",
-				Source: "github",
+				Source: "git",
 				ID:     "456",
 			},
 			Version: "2.0.0",

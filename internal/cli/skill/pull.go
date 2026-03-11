@@ -19,7 +19,7 @@ var PullCmd = &cobra.Command{
 	Use:   "pull <skill-name> [output-directory]",
 	Short: "Pull a skill from the registry and extract it locally",
 	Long: `Pull a skill from the registry and extract its contents to a local directory.
-Supports skills packaged as Docker images or hosted in GitHub repositories.
+Supports skills packaged as Docker images or hosted in Git repositories.
 
 If output-directory is not specified, it will be extracted to ./skills/<skill-name>`,
 	Args: cobra.RangeArgs(1, 2),
@@ -66,7 +66,7 @@ func runPull(cmd *cobra.Command, args []string) error {
 
 	printer.PrintSuccess(fmt.Sprintf("Found skill: %s (version %s)", skillResp.Skill.Name, skillResp.Skill.Version))
 
-	// 2. Determine source: Docker package or GitHub repository
+	// 2. Determine source: Docker package or git repository
 	var dockerImage string
 	for _, pkg := range skillResp.Skill.Packages {
 		if pkg.RegistryType == "docker" {
@@ -88,12 +88,12 @@ func runPull(cmd *cobra.Command, args []string) error {
 		if err := pullFromDocker(dockerImage, absOutputDir); err != nil {
 			return err
 		}
-	} else if skillResp.Skill.Repository != nil && skillResp.Skill.Repository.Source == "github" {
-		if err := pullFromGitHub(skillResp.Skill.Repository.URL, absOutputDir); err != nil {
+	} else if skillResp.Skill.Repository != nil && skillResp.Skill.Repository.Source == "git" {
+		if err := pullFromGit(skillResp.Skill.Repository.URL, absOutputDir); err != nil {
 			return err
 		}
 	} else {
-		return fmt.Errorf("skill has no Docker package or GitHub repository")
+		return fmt.Errorf("skill has no Docker package or Git repository")
 	}
 
 	printer.PrintSuccess(fmt.Sprintf("Successfully pulled skill to: %s", absOutputDir))
@@ -186,8 +186,8 @@ func pullFromDocker(dockerImage, absOutputDir string) error {
 	return nil
 }
 
-// pullFromGitHub clones a GitHub repository and copies the skill files to the output directory.
-func pullFromGitHub(repoURL, absOutputDir string) error {
-	printer.PrintInfo(fmt.Sprintf("Cloning from GitHub: %s", repoURL))
+// pullFromGit clones a git repository and copies the skill files to the output directory.
+func pullFromGit(repoURL, absOutputDir string) error {
+	printer.PrintInfo(fmt.Sprintf("Cloning from git: %s", repoURL))
 	return gitutil.CloneAndCopy(repoURL, absOutputDir, true)
 }

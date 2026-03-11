@@ -130,24 +130,24 @@ func TestValidateRegistryType(t *testing.T) {
 func TestBuildRepository(t *testing.T) {
 	tests := []struct {
 		name      string
-		githubURL string
+		gitURL string
 		expectNil bool
 	}{
 		{
 			name:      "empty URL returns nil",
-			githubURL: "",
+			gitURL: "",
 			expectNil: true,
 		},
 		{
 			name:      "valid URL returns repository",
-			githubURL: "https://github.com/user/repo",
+			gitURL: "https://github.com/user/repo",
 			expectNil: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := buildRepository(tt.githubURL)
+			result := buildRepository(tt.gitURL)
 			if tt.expectNil {
 				if result != nil {
 					t.Errorf("expected nil but got %v", result)
@@ -157,11 +157,11 @@ func TestBuildRepository(t *testing.T) {
 			if result == nil { //nolint:staticcheck
 				t.Error("expected non-nil result")
 			}
-			if result.URL != tt.githubURL { //nolint:staticcheck
-				t.Errorf("expected URL %s but got %s", tt.githubURL, result.URL)
+			if result.URL != tt.gitURL { //nolint:staticcheck
+				t.Errorf("expected URL %s but got %s", tt.gitURL, result.URL)
 			}
-			if result.Source != "github" {
-				t.Errorf("expected source 'github' but got %s", result.Source)
+			if result.Source != "git" {
+				t.Errorf("expected source 'git' but got %s", result.Source)
 			}
 		})
 	}
@@ -222,7 +222,7 @@ func TestBuildServerJSON(t *testing.T) {
 		Description:      "Test server",
 		Title:            "My Server",
 		Version:          "1.0.0",
-		GithubURL:        "https://github.com/myorg/my-server",
+		GitURL:        "https://github.com/myorg/my-server",
 		RegistryType:     "oci",
 		Identifier:       "docker.io/myorg/my-server:1.0.0",
 		PackageVersion:   "1.0.0",
@@ -246,8 +246,8 @@ func TestBuildServerJSON(t *testing.T) {
 	if result.Repository == nil {
 		t.Error("expected Repository to be set")
 	}
-	if result.Repository.URL != params.GithubURL {
-		t.Errorf("expected Repository URL %s but got %s", params.GithubURL, result.Repository.URL)
+	if result.Repository.URL != params.GitURL {
+		t.Errorf("expected Repository URL %s but got %s", params.GitURL, result.Repository.URL)
 	}
 	if len(result.Packages) != 1 {
 		t.Fatalf("expected 1 package but got %d", len(result.Packages))
@@ -274,7 +274,7 @@ func TestBuildRemoteServerJSON(t *testing.T) {
 		Description:   "A remote server",
 		Title:         "My Remote Server",
 		Version:       "2.0.0",
-		GithubURL:     "https://github.com/example/my-server",
+		GitURL:     "https://github.com/example/my-server",
 		TransportType: "streamable-http",
 		TransportURL:  "https://api.example.com/mcp",
 	}
@@ -293,8 +293,8 @@ func TestBuildRemoteServerJSON(t *testing.T) {
 	if result.Repository == nil {
 		t.Fatal("expected Repository to be set")
 	}
-	if result.Repository.URL != params.GithubURL {
-		t.Errorf("expected Repository URL %s but got %s", params.GithubURL, result.Repository.URL)
+	if result.Repository.URL != params.GitURL {
+		t.Errorf("expected Repository URL %s but got %s", params.GitURL, result.Repository.URL)
 	}
 	if len(result.Packages) != 0 {
 		t.Errorf("expected no packages but got %d", len(result.Packages))
