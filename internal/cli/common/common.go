@@ -13,6 +13,8 @@ import (
 
 const DefaultUserName = "user"
 
+const DefaultAgentGatewayPort = "21212"
+
 // BuildLocalImageName constructs a local Docker image name from a project name and version.
 // Returns format: "kebab-case-name:version"
 func BuildLocalImageName(name, version string) string {

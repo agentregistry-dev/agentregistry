@@ -17,6 +17,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 
+const GATEWAY_BASE_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:21212"
+
 function sanitizeName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9-]/g, '-')
 }
@@ -24,7 +26,7 @@ function sanitizeName(value: string): string {
 function getAgentEndpointUrl(serverName: string, deploymentId: string): string {
   const name = sanitizeName(serverName)
   const id = sanitizeName(deploymentId)
-  return `http://localhost:21212/agents/${name}-${id}`
+  return `${GATEWAY_BASE_URL}/agents/${name}-${id}`
 }
 
 export default function DeployedPage() {
@@ -36,7 +38,7 @@ export default function DeployedPage() {
   const [copied, setCopied] = useState(false)
   const [copiedAgentId, setCopiedAgentId] = useState<string | null>(null)
 
-  const gatewayUrl = "http://localhost:21212/mcp"
+  const gatewayUrl = `${GATEWAY_BASE_URL}/mcp`
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(gatewayUrl)
