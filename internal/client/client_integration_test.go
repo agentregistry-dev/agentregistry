@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	v0handlers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
+	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	servicetesting "github.com/agentregistry-dev/agentregistry/internal/registry/service/testing"
@@ -317,12 +317,10 @@ func TestClientIntegration_DeploymentRoutes_HappyPath(t *testing.T) {
 	}
 
 	var createdDeployments []*models.Deployment
-	var createPlatforms []string
 	createdByID := map[string]*models.Deployment{}
 	var removedIDs []string
-	fake.CreateDeploymentFn = func(_ context.Context, req *models.Deployment, platform string) (*models.Deployment, error) {
+	fake.CreateDeploymentFn = func(_ context.Context, req *models.Deployment) (*models.Deployment, error) {
 		createdDeployments = append(createdDeployments, req)
-		createPlatforms = append(createPlatforms, platform)
 		id := req.ID
 		if id == "" {
 			id = "dep-created-" + strconv.Itoa(len(createdDeployments))
@@ -357,7 +355,7 @@ func TestClientIntegration_DeploymentRoutes_HappyPath(t *testing.T) {
 		delete(createdByID, id)
 		return nil
 	}
-	fake.UndeployDeploymentFn = func(_ context.Context, deployment *models.Deployment, _ string) error {
+	fake.UndeployDeploymentFn = func(_ context.Context, deployment *models.Deployment) error {
 		if deployment == nil {
 			return database.ErrNotFound
 		}
@@ -385,7 +383,7 @@ func TestClientIntegration_DeploymentRoutes_HappyPath(t *testing.T) {
 		"1.0.0",
 		map[string]string{"API_KEY": "secret"},
 		true,
-		v0handlers.LocalProviderID,
+		"",
 	)
 	if err != nil {
 		t.Fatalf("DeployServer() failed: %v", err)
@@ -401,7 +399,7 @@ func TestClientIntegration_DeploymentRoutes_HappyPath(t *testing.T) {
 		"1.0.0",
 		map[string]string{"API_KEY": "secret"},
 		true,
-		v0handlers.LocalProviderID,
+		defaultDeployProviderID,
 	)
 	if err != nil {
 		t.Fatalf("second DeployServer() failed: %v", err)
@@ -437,7 +435,7 @@ func TestClientIntegration_DeploymentRoutes_HappyPath(t *testing.T) {
 		"acme/planner",
 		"2.0.0",
 		map[string]string{"MODE": "fast"},
-		v0handlers.LocalProviderID,
+		"",
 	)
 	if err != nil {
 		t.Fatalf("DeployAgent() failed: %v", err)
@@ -454,7 +452,7 @@ func TestClientIntegration_DeploymentRoutes_HappyPath(t *testing.T) {
 		"acme/planner",
 		"2.0.0",
 		map[string]string{"MODE": "fast"},
-		v0handlers.LocalProviderID,
+		defaultDeployProviderID,
 	)
 	if err != nil {
 		t.Fatalf("second DeployAgent() failed: %v", err)
@@ -485,12 +483,11 @@ func TestClientIntegration_DeploymentRoutes_HappyPath(t *testing.T) {
 		createdDeployments[3].ResourceType != "agent" {
 		t.Fatalf("unexpected deployment resource types: %#v", createdDeployments)
 	}
-	if len(createPlatforms) != 4 ||
-		createPlatforms[0] != "local" ||
-		createPlatforms[1] != "local" ||
-		createPlatforms[2] != "local" ||
-		createPlatforms[3] != "local" {
-		t.Fatalf("unexpected deployment platforms: %#v", createPlatforms)
+	if createdDeployments[0].ProviderID != "local" ||
+		createdDeployments[1].ProviderID != "local" ||
+		createdDeployments[2].ProviderID != "local" ||
+		createdDeployments[3].ProviderID != "local" {
+		t.Fatalf("unexpected deployment provider IDs: %#v", createdDeployments)
 	}
 	if len(removedIDs) != 4 ||
 		removedIDs[0] != deployedServer.ID ||
@@ -518,7 +515,7 @@ func newClientWithInProcessServer(t *testing.T, fake *servicetesting.FakeRegistr
 		t.Fatalf("failed to initialize test metrics: %v", err)
 	}
 
-	versionInfo := &v0handlers.VersionBody{
+	versionInfo := &apitypes.VersionBody{
 		Version:   "test-version",
 		GitCommit: "test-commit",
 		BuildTime: "2026-01-02T03:04:05Z",
@@ -533,7 +530,7 @@ func newClientWithInProcessServer(t *testing.T, fake *servicetesting.FakeRegistr
 		ProviderPlatforms: map[string]registrytypes.ProviderPlatformAdapter{
 			"local": &testProviderAdapter{
 				provider: &models.Provider{
-					ID:       v0handlers.LocalProviderID,
+					ID:       defaultDeployProviderID,
 					Name:     "Local provider",
 					Platform: "local",
 				},

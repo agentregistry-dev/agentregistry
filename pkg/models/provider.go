@@ -26,3 +26,12 @@ type UpdateProviderInput struct {
 	Name   *string        `json:"name,omitempty"`
 	Config map[string]any `json:"config,omitempty"`
 }
+
+// KubernetesProviderConfig defines how a kubernetes provider selects its target cluster/context.
+// When unset, the process ambient kubeconfig/current context is used.
+type KubernetesProviderConfig struct {
+	Kubeconfig     string `json:"kubeconfig,omitempty"`
+	KubeconfigPath string `json:"kubeconfigPath,omitempty"`
+	Context        string `json:"context,omitempty"`
+	Namespace      string `json:"namespace,omitempty"`
+}

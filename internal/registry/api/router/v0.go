@@ -4,6 +4,7 @@ package router
 import (
 	"net/http"
 
+	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 
@@ -35,7 +36,7 @@ func RegisterRoutes(
 	cfg *config.Config,
 	registry service.RegistryService,
 	metrics *telemetry.Metrics,
-	versionInfo *v0.VersionBody,
+	versionInfo *apitypes.VersionBody,
 	opts *RouteOptions,
 ) {
 	pathPrefix := "/v0"

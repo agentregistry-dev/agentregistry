@@ -179,9 +179,9 @@ export type DeploymentRequest = {
         [key: string]: unknown;
     };
     /**
-     * Concrete provider instance ID. Defaults to local singleton when omitted.
+     * Concrete provider instance ID.
      */
-    providerId?: string;
+    providerId: string;
     /**
      * Type of resource to deploy (mcp, agent)
      */
@@ -206,7 +206,7 @@ export type DeploymentSummary = {
     version?: string;
 };
 
-export type DeploymentsListResponseBody = {
+export type DeploymentsListResponse = {
     /**
      * List of deployed servers
      */
@@ -1049,7 +1049,7 @@ export type ListDeploymentsData = {
     path?: never;
     query?: {
         /**
-         * Filter by provider platform type (for OSS: local or kubernetes)
+         * Filter by provider platform type (matches registered provider platforms)
          */
         platform?: string;
         /**
@@ -1089,7 +1089,7 @@ export type ListDeploymentsResponses = {
     /**
      * OK
      */
-    200: DeploymentsListResponseBody;
+    200: DeploymentsListResponse;
 };
 
 export type ListDeploymentsResponse = ListDeploymentsResponses[keyof ListDeploymentsResponses];
@@ -1463,7 +1463,7 @@ export type ListProvidersData = {
     path?: never;
     query?: {
         /**
-         * Filter providers by platform type (local, kubernetes)
+         * Filter providers by platform type
          */
         platform?: string;
     };

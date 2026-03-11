@@ -13,9 +13,9 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/build"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
-	"github.com/agentregistry-dev/agentregistry/internal/runtime"
-	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/dockercompose"
-	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry"
+	localplatform "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/local"
+	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
+	platformutils "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/spf13/cobra"
@@ -76,15 +76,15 @@ func runRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Proceed with running the server
-	if err := runMCPServerWithRuntime(server); err != nil {
+	if err := runMCPServerWithPlatform(cmd.Context(), server); err != nil {
 		return fmt.Errorf("error running MCP server: %w", err)
 	}
 
 	return nil
 }
 
-// runMCPServerWithRuntime starts an MCP server using the runtime
-func runMCPServerWithRuntime(server *apiv0.ServerResponse) error {
+// runMCPServerWithPlatform starts an MCP server using the local platform.
+func runMCPServerWithPlatform(ctx context.Context, server *apiv0.ServerResponse) error {
 	// Parse environment variables, arguments, and headers from flags
 	envValues, err := parseKeyValuePairs(runEnvVars)
 	if err != nil {
@@ -101,7 +101,7 @@ func runMCPServerWithRuntime(server *apiv0.ServerResponse) error {
 		return fmt.Errorf("failed to parse headers: %w", err)
 	}
 
-	runRequest := &registry.MCPServerRunRequest{
+	runRequest := &platformutils.MCPServerRunRequest{
 		RegistryServer: &server.Server,
 		PreferRemote:   false,
 		EnvValues:      envValues,
@@ -109,8 +109,8 @@ func runMCPServerWithRuntime(server *apiv0.ServerResponse) error {
 		HeaderValues:   headerValues,
 	}
 
-	// Generate a random runtime directory name and project name
-	projectName, runtimeDir, err := generateRuntimePaths("arctl-run-")
+	// Generate a random platform working directory name and project name.
+	projectName, platformDir, err := generatePlatformPaths("arctl-run-")
 	if err != nil {
 		return err
 	}
@@ -121,20 +121,32 @@ func runMCPServerWithRuntime(server *apiv0.ServerResponse) error {
 		return fmt.Errorf("failed to find available port: %w", err)
 	}
 
-	// Create runtime with translators
-	regTranslator := registry.NewTranslator()
-	composeTranslator := dockercompose.NewAgentGatewayTranslatorWithProjectName(runtimeDir, agentGatewayPort, projectName)
-	agentRuntime := runtime.NewAgentRegistryRuntime(
-		regTranslator,
-		composeTranslator,
-		runtimeDir,
-		runVerbose,
+	mcpServer, err := platformutils.TranslateMCPServer(ctx, runRequest)
+	if err != nil {
+		return fmt.Errorf("failed to translate MCP server: %w", err)
+	}
+	cfg, err := localplatform.BuildLocalPlatformConfig(
+		ctx,
+		platformDir,
+		agentGatewayPort,
+		projectName,
+		&platformtypes.DesiredState{
+			MCPServers: []*platformtypes.MCPServer{mcpServer},
+		},
 	)
+	if err != nil {
+		return fmt.Errorf("failed to translate local platform config: %w", err)
+	}
+	if cfg == nil {
+		return fmt.Errorf("local platform config is required")
+	}
 
 	fmt.Printf("Starting MCP server: %s (version %s)...\n", server.Server.Name, server.Server.Version)
 
-	// Start the server
-	if err := agentRuntime.ReconcileAll(context.Background(), []*registry.MCPServerRunRequest{runRequest}, nil); err != nil {
+	if err := localplatform.WriteLocalPlatformFiles(platformDir, cfg, agentGatewayPort); err != nil {
+		return fmt.Errorf("failed to write local platform files: %w", err)
+	}
+	if err := localplatform.ComposeUpLocalPlatform(ctx, platformDir, runVerbose); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
 
@@ -165,11 +177,11 @@ func runMCPServerWithRuntime(server *apiv0.ServerResponse) error {
 	}
 
 	fmt.Println("\nPress CTRL+C to stop the server and clean up...")
-	return waitForShutdown(runtimeDir, projectName, inspectorCmd)
+	return waitForShutdown(platformDir, projectName, inspectorCmd)
 }
 
 // waitForShutdown waits for CTRL+C and then cleans up
-func waitForShutdown(runtimeDir, projectName string, inspectorCmd *exec.Cmd) error {
+func waitForShutdown(platformDir, projectName string, inspectorCmd *exec.Cmd) error {
 	// Create a channel to receive OS signals
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
@@ -194,7 +206,7 @@ func waitForShutdown(runtimeDir, projectName string, inspectorCmd *exec.Cmd) err
 	// Stop the docker compose services
 	fmt.Println("Stopping Docker containers...")
 	stopCmd := exec.Command("docker", "compose", "-p", projectName, "down")
-	stopCmd.Dir = runtimeDir
+	stopCmd.Dir = platformDir
 	stopCmd.Stdout = os.Stdout
 	stopCmd.Stderr = os.Stderr
 	if err := stopCmd.Run(); err != nil {
@@ -204,13 +216,13 @@ func waitForShutdown(runtimeDir, projectName string, inspectorCmd *exec.Cmd) err
 		fmt.Println("✓ Docker containers stopped")
 	}
 
-	// Remove the temporary runtime directory
-	fmt.Printf("Removing runtime directory: %s\n", runtimeDir)
-	if err := os.RemoveAll(runtimeDir); err != nil {
-		fmt.Printf("Warning: Failed to remove runtime directory: %v\n", err)
+	// Remove the temporary platform working directory.
+	fmt.Printf("Removing platform directory: %s\n", platformDir)
+	if err := os.RemoveAll(platformDir); err != nil {
+		fmt.Printf("Warning: Failed to remove platform directory: %v\n", err)
 		return fmt.Errorf("cleanup incomplete: %w", err)
 	}
-	fmt.Println("✓ Runtime directory removed")
+	fmt.Println("✓ Platform directory removed")
 
 	fmt.Println("\n✓ Cleanup completed successfully")
 	return nil
@@ -250,9 +262,9 @@ func generateRandomName() (string, error) {
 	return hex.EncodeToString(randomBytes), nil
 }
 
-// generateRuntimePaths generates random names and paths for runtime directories
-// Returns projectName, runtimeDir, and any error encountered
-func generateRuntimePaths(prefix string) (projectName string, runtimeDir string, err error) {
+// generatePlatformPaths generates random names and paths for platform working directories.
+// Returns projectName, platformDir, and any error encountered.
+func generatePlatformPaths(prefix string) (projectName string, platformDir string, err error) {
 	// Generate a random name
 	randomName, err := generateRandomName()
 	if err != nil {
@@ -262,15 +274,15 @@ func generateRuntimePaths(prefix string) (projectName string, runtimeDir string,
 	// Create project name with prefix
 	projectName = prefix + randomName
 
-	// Get home directory and construct runtime directory path
+	// Get home directory and construct the working directory path.
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", "", fmt.Errorf("failed to get home directory: %w", err)
 	}
 	baseRuntimeDir := filepath.Join(homeDir, ".arctl", "runtime")
-	runtimeDir = filepath.Join(baseRuntimeDir, prefix+randomName)
+	platformDir = filepath.Join(baseRuntimeDir, prefix+randomName)
 
-	return projectName, runtimeDir, nil
+	return projectName, platformDir, nil
 }
 
 // runLocalMCPServer runs a local MCP server from a project directory

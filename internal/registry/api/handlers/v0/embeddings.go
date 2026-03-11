@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
@@ -12,42 +13,21 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
-// IndexRequest is the request body for starting an indexing job.
-type IndexRequest struct {
-	BatchSize      int  `json:"batchSize,omitempty" doc:"Number of items to process per batch" default:"100" minimum:"1" maximum:"1000"`
-	Force          bool `json:"force,omitempty" doc:"Regenerate embeddings even when checksum matches" default:"false"`
-	DryRun         bool `json:"dryRun,omitempty" doc:"Preview changes without writing to database" default:"false"`
-	IncludeServers bool `json:"includeServers,omitempty" doc:"Include MCP servers" default:"true"`
-	IncludeAgents  bool `json:"includeAgents,omitempty" doc:"Include agents" default:"true"`
-	Stream         bool `json:"stream,omitempty" doc:"Use SSE streaming for progress updates" default:"false"`
-}
+type IndexRequest = apitypes.IndexRequest
 
 // IndexInput is the input for starting an indexing job.
 type IndexInput struct {
 	Body IndexRequest
 }
 
-// IndexJobResponse is the response for job creation.
-type IndexJobResponse struct {
-	JobID  string `json:"jobId" doc:"Unique job identifier"`
-	Status string `json:"status" doc:"Current job status"`
-}
+type IndexJobResponse = apitypes.IndexJobResponse
 
 // JobStatusInput is the input for getting job status.
 type JobStatusInput struct {
 	JobID string `path:"jobId" doc:"Job identifier"`
 }
 
-// JobStatusResponse is the response for job status.
-type JobStatusResponse struct {
-	JobID     string           `json:"jobId" doc:"Unique job identifier"`
-	Type      string           `json:"type" doc:"Job type"`
-	Status    string           `json:"status" doc:"Current job status (pending, running, completed, failed)"`
-	Progress  jobs.JobProgress `json:"progress" doc:"Current progress"`
-	Result    *jobs.JobResult  `json:"result,omitempty" doc:"Final result (when completed or failed)"`
-	CreatedAt string           `json:"createdAt" doc:"Job creation timestamp"`
-	UpdatedAt string           `json:"updatedAt" doc:"Last update timestamp"`
-}
+type JobStatusResponse = apitypes.JobStatusResponse
 
 // RegisterEmbeddingsEndpoints registers the embeddings admin endpoints.
 func RegisterEmbeddingsEndpoints(

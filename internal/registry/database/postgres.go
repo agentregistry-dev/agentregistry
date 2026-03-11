@@ -2588,7 +2588,7 @@ func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deploymen
 	}
 	providerID := strings.TrimSpace(deployment.ProviderID)
 	if providerID == "" {
-		providerID = "local"
+		return fmt.Errorf("%w: provider id is required", database.ErrInvalidInput)
 	}
 	origin := deployment.Origin
 	if origin == "" {
@@ -2815,8 +2815,12 @@ func (db *PostgreSQL) GetDeploymentByID(ctx context.Context, tx pgx.Tx, id strin
 	return &d, nil
 }
 
-// UpdateDeploymentStatus updates the status of a deployment by ID.
-func (db *PostgreSQL) UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, id, status string) error {
+// UpdateDeploymentState applies partial state updates to a deployment by ID.
+func (db *PostgreSQL) UpdateDeploymentState(ctx context.Context, tx pgx.Tx, id string, patch *models.DeploymentStatePatch) error {
+	if patch == nil {
+		return fmt.Errorf("%w: deployment state patch is required", database.ErrInvalidInput)
+	}
+
 	deployment, err := db.GetDeploymentByID(ctx, tx, id)
 	if err != nil {
 		return err
@@ -2833,15 +2837,62 @@ func (db *PostgreSQL) UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, id,
 	}
 
 	executor := db.getExecutor(tx)
+	setStatus := patch.Status != nil
+	statusValue := deployment.Status
+	if patch.Status != nil {
+		statusValue = *patch.Status
+	}
+
+	setError := patch.Error != nil
+	errorValue := deployment.Error
+	if patch.Error != nil {
+		errorValue = *patch.Error
+	}
+
+	setProviderConfig := patch.ProviderConfig != nil
+	providerConfigJSON := []byte("{}")
+	if patch.ProviderConfig != nil {
+		providerConfigJSON, err = json.Marshal(*patch.ProviderConfig)
+		if err != nil {
+			return fmt.Errorf("failed to marshal provider config patch: %w", err)
+		}
+	}
+
+	setProviderMetadata := patch.ProviderMetadata != nil
+	providerMetadataJSON := []byte("{}")
+	if patch.ProviderMetadata != nil {
+		providerMetadataJSON, err = json.Marshal(*patch.ProviderMetadata)
+		if err != nil {
+			return fmt.Errorf("failed to marshal provider metadata patch: %w", err)
+		}
+	}
+
 	query := `
 		UPDATE deployments
-		SET status = $2
+		SET
+			status = CASE WHEN $2 THEN $3 ELSE status END,
+			error = CASE WHEN $4 THEN $5 ELSE error END,
+			provider_config = CASE WHEN $6 THEN $7::jsonb ELSE provider_config END,
+			provider_metadata = CASE WHEN $8 THEN $9::jsonb ELSE provider_metadata END,
+			updated_at = NOW()
 		WHERE id = $1
 	`
 
-	result, err := executor.Exec(ctx, query, id, status)
+	result, err := executor.Exec(
+		ctx,
+		query,
+		id,
+		setStatus,
+		statusValue,
+		setError,
+		errorValue,
+		setProviderConfig,
+		string(providerConfigJSON),
+		setProviderMetadata,
+		string(providerMetadataJSON),
+	)
 	if err != nil {
-		return fmt.Errorf("failed to update deployment status: %w", err)
+		return fmt.Errorf("failed to update deployment state: %w", err)
 	}
 
 	if result.RowsAffected() == 0 {
