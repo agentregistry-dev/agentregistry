@@ -1189,11 +1189,15 @@ type testDeploymentAdapter struct {
 	cancelFn       func(ctx context.Context, deployment *models.Deployment) error
 	discoverFn     func(ctx context.Context, providerID string) ([]*models.Deployment, error)
 	cleanupStaleFn func(ctx context.Context, deployment *models.Deployment) error
+	supportedTypes []string
 }
 
 func (a *testDeploymentAdapter) Platform() string { return "test" }
 
 func (a *testDeploymentAdapter) SupportedResourceTypes() []string {
+	if len(a.supportedTypes) > 0 {
+		return a.supportedTypes
+	}
 	return []string{"mcp", "agent"}
 }
 
@@ -1315,6 +1319,31 @@ func TestUndeployDeployment_UsesAdapterForLocalPlatform(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, undeployCalled)
 	assert.True(t, removeCalled)
+}
+
+func TestCreateDeployment_RejectsUnsupportedResourceTypeForProvider(t *testing.T) {
+	mockDB := &deployCreateMockDB{
+		getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {
+			return &models.Provider{ID: providerID, Platform: "local"}, nil
+		},
+	}
+
+	svc := &registryServiceImpl{
+		db: mockDB,
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+			"local": &testDeploymentAdapter{supportedTypes: []string{"mcp"}},
+		},
+	}
+
+	_, err := svc.CreateDeployment(context.Background(), &models.Deployment{
+		ServerName:   "io.test/agent",
+		Version:      "1.0.0",
+		ProviderID:   "local",
+		ResourceType: "agent",
+	})
+	require.Error(t, err)
+	require.ErrorIs(t, err, database.ErrInvalidInput)
+	assert.Contains(t, err.Error(), `provider does not support resource type "agent"`)
 }
 
 func TestGetDeployments_AppendsDiscoveredDeploymentsFromAdapters(t *testing.T) {

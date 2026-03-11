@@ -928,6 +928,18 @@ func (s *registryServiceImpl) resolveDeploymentAdapterByProviderID(ctx context.C
 	return s.resolveDeploymentAdapter(providerPlatform)
 }
 
+func deploymentAdapterSupportsResourceType(adapter registrytypes.DeploymentPlatformAdapter, resourceType string) bool {
+	if adapter == nil {
+		return false
+	}
+	for _, supported := range adapter.SupportedResourceTypes() {
+		if strings.EqualFold(strings.TrimSpace(supported), strings.TrimSpace(resourceType)) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *registryServiceImpl) findDeploymentByIdentity(ctx context.Context, resourceName, version, artifactType string) (*models.Deployment, error) {
 	filter := &models.DeploymentFilter{
 		ResourceType: &artifactType,
@@ -1084,6 +1096,9 @@ func (s *registryServiceImpl) CreateDeployment(ctx context.Context, req *models.
 	adapter, err := s.resolveDeploymentAdapterByProviderID(ctx, providerID)
 	if err != nil {
 		return nil, err
+	}
+	if !deploymentAdapterSupportsResourceType(adapter, resourceType) {
+		return nil, fmt.Errorf("%w: provider does not support resource type %q", database.ErrInvalidInput, resourceType)
 	}
 
 	deploymentReq := *req
