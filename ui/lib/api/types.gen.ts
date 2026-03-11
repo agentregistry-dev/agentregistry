@@ -2014,6 +2014,40 @@ export type GetSkillVersionsV0Responses = {
 
 export type GetSkillVersionsV0Response = GetSkillVersionsV0Responses[keyof GetSkillVersionsV0Responses];
 
+export type DeleteSkillVersionV0Data = {
+    body?: never;
+    path: {
+        /**
+         * URL-encoded skill name
+         */
+        skillName: string;
+        /**
+         * URL-encoded skill version
+         */
+        version: string;
+    };
+    query?: never;
+    url: '/v0/skills/{skillName}/versions/{version}';
+};
+
+export type DeleteSkillVersionV0Errors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type DeleteSkillVersionV0Error = DeleteSkillVersionV0Errors[keyof DeleteSkillVersionV0Errors];
+
+export type DeleteSkillVersionV0Responses = {
+    /**
+     * OK
+     */
+    200: EmptyResponse;
+};
+
+export type DeleteSkillVersionV0Response = DeleteSkillVersionV0Responses[keyof DeleteSkillVersionV0Responses];
+
 export type GetSkillVersionV0Data = {
     body?: never;
     path: {
