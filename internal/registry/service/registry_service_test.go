@@ -1346,6 +1346,108 @@ func TestCreateDeployment_RejectsUnsupportedResourceTypeForProvider(t *testing.T
 	assert.Contains(t, err.Error(), `provider does not support resource type "agent"`)
 }
 
+func TestCreateDeployment_UsesAdapterResolvedFromProviderPlatform(t *testing.T) {
+	tests := []struct {
+		name         string
+		providerID   string
+		platform     string
+		resourceType string
+	}{
+		{
+			name:         "aws agent deployment",
+			providerID:   "aws-prod",
+			platform:     "aws",
+			resourceType: "agent",
+		},
+		{
+			name:         "gcp mcp deployment",
+			providerID:   "gcp-prod",
+			platform:     "gcp",
+			resourceType: "mcp",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var createdRecord *models.Deployment
+			adapterCalled := false
+
+			mockDB := &deployCreateMockDB{
+				getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {
+					require.Equal(t, tt.providerID, providerID)
+					return &models.Provider{ID: providerID, Platform: tt.platform}, nil
+				},
+				getServerByNameAndVersionFn: func(_ context.Context, _ pgx.Tx, serverName, version string) (*apiv0.ServerResponse, error) {
+					if tt.resourceType != "mcp" {
+						t.Fatalf("unexpected server lookup for resource type %s", tt.resourceType)
+					}
+					return &apiv0.ServerResponse{
+						Server: apiv0.ServerJSON{Name: serverName, Version: version},
+					}, nil
+				},
+				getAgentByNameAndVersionFn: func(_ context.Context, _ pgx.Tx, agentName, version string) (*models.AgentResponse, error) {
+					if tt.resourceType != "agent" {
+						t.Fatalf("unexpected agent lookup for resource type %s", tt.resourceType)
+					}
+					return &models.AgentResponse{
+						Agent: models.AgentJSON{
+							AgentManifest: models.AgentManifest{Name: agentName},
+							Version:       version,
+						},
+					}, nil
+				},
+				createDeploymentFn: func(_ context.Context, _ pgx.Tx, deployment *models.Deployment) error {
+					cloned := *deployment
+					createdRecord = &cloned
+					return nil
+				},
+				updateDeploymentStateFn: func(_ context.Context, _ pgx.Tx, id string, patch *models.DeploymentStatePatch) error {
+					require.NotNil(t, createdRecord)
+					require.Equal(t, createdRecord.ID, id)
+					if patch.Status != nil {
+						createdRecord.Status = *patch.Status
+					}
+					return nil
+				},
+				getDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, id string) (*models.Deployment, error) {
+					require.NotNil(t, createdRecord)
+					require.Equal(t, createdRecord.ID, id)
+					return createdRecord, nil
+				},
+			}
+
+			adapter := &testDeploymentAdapter{
+				supportedTypes: []string{tt.resourceType},
+				deployFn: func(_ context.Context, req *models.Deployment) (*models.DeploymentActionResult, error) {
+					adapterCalled = true
+					require.Equal(t, tt.providerID, req.ProviderID)
+					require.Equal(t, tt.resourceType, req.ResourceType)
+					return &models.DeploymentActionResult{Status: "deployed"}, nil
+				},
+			}
+
+			svc := &registryServiceImpl{
+				db: mockDB,
+				deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+					tt.platform: adapter,
+				},
+			}
+
+			got, err := svc.CreateDeployment(context.Background(), &models.Deployment{
+				ServerName:   "com.example/runtime",
+				Version:      "latest",
+				ResourceType: tt.resourceType,
+				ProviderID:   tt.providerID,
+			})
+			require.NoError(t, err)
+			require.True(t, adapterCalled)
+			require.NotNil(t, got)
+			assert.Equal(t, tt.providerID, got.ProviderID)
+			assert.Equal(t, "deployed", got.Status)
+		})
+	}
+}
+
 func TestGetDeployments_AppendsDiscoveredDeploymentsFromAdapters(t *testing.T) {
 	discoverCalled := false
 	mockDB := &deploymentMockDB{
