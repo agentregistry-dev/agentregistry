@@ -90,6 +90,11 @@ func ResolveAgent(
 	if envValues["KAGENT_NAMESPACE"] == "" {
 		envValues["KAGENT_NAMESPACE"] = namespace
 	}
+	// We always need a namespace when deploying to local/docker (kagent-adk requires it)
+	// so even if namespace isn't explicitly provided, we should set it to default.
+	if envValues["KAGENT_NAMESPACE"] == "" {
+		envValues["KAGENT_NAMESPACE"] = "default"
+	}
 	envValues["KAGENT_URL"] = "http://localhost"
 	envValues["KAGENT_NAME"] = agentResp.Agent.Name
 	envValues["AGENT_NAME"] = agentResp.Agent.Name
