@@ -558,7 +558,7 @@ paths:
             tags:
                 - health
             summary: Health check
-            description: Check the health status of the API
+            description: Check the health status of the API and its dependencies
             operationId: get-health-v0
             responses:
                 "200":
@@ -1992,6 +1992,11 @@ components:
             type: object
             additionalProperties: false
             properties:
+                database:
+                    type: string
+                    description: Database connectivity status
+                    examples:
+                        - ok
                 github_client_id:
                     type: string
                     description: GitHub OAuth App Client ID
@@ -2002,6 +2007,7 @@ components:
                         - ok
             required:
                 - status
+                - database
         Icon:
             type: object
             additionalProperties: false
