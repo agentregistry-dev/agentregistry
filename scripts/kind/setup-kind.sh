@@ -6,7 +6,13 @@ set -o pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KIND="${SCRIPT_DIR}/../../bin/kind"
 if [ ! -x "${KIND}" ]; then
-  KIND="$(command -v kind)"
+  KIND="$(command -v kind || true)"
+fi
+
+if [ -z "${KIND}" ] || [ ! -x "${KIND}" ]; then
+  echo "Error: 'kind' binary not found." >&2
+  echo "Run 'make install-tools' to install it, or ensure 'kind' is on your PATH." >&2
+  exit 1
 fi
 
 KIND_CLUSTER_NAME=${KIND_CLUSTER_NAME:-agentregistry}
@@ -32,10 +38,10 @@ fi
 # https://github.com/kubernetes-sigs/kind/issues/2875
 # https://github.com/containerd/containerd/blob/main/docs/cri/config.md#registry-configuration
 # See: https://github.com/containerd/containerd/blob/main/docs/hosts.md
-if ${KIND} get clusters | grep -qx "${KIND_CLUSTER_NAME}"; then
+if "${KIND}" get clusters | grep -qx "${KIND_CLUSTER_NAME}"; then
   echo "Kind cluster '${KIND_CLUSTER_NAME}' already exists; skipping create."
 else
-  ${KIND} create cluster --name "${KIND_CLUSTER_NAME}" \
+  "${KIND}" create cluster --name "${KIND_CLUSTER_NAME}" \
     --config scripts/kind/kind-config.yaml \
     --image="kindest/node:v${KIND_IMAGE_VERSION}"
 fi
@@ -49,7 +55,7 @@ fi
 # We want a consistent name that works from both ends, so we tell containerd to
 # alias localhost:${reg_port} to the registry container when pulling images
 REGISTRY_DIR="/etc/containerd/certs.d/localhost:${reg_port}"
-for node in $(${KIND} get nodes --name "${KIND_CLUSTER_NAME}"); do
+for node in $("${KIND}" get nodes --name "${KIND_CLUSTER_NAME}"); do
   docker exec "${node}" mkdir -p "${REGISTRY_DIR}"
   cat <<EOF | docker exec -i "${node}" cp /dev/stdin "${REGISTRY_DIR}/hosts.toml"
 [host."http://${reg_name}:5000"]

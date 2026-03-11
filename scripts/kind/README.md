@@ -97,14 +97,14 @@ This deletes the Kind cluster (and all data).
 
 The setup script accepts environment variables to override defaults:
 
-| Variable          | Default                         | Description                        |
-|-------------------|---------------------------------|------------------------------------|
-| `KIND_CLUSTER_NAME` | `agentregistry`               | Kind cluster name                  |
-| `NAMESPACE`       | `agentregistry`                 | Kubernetes namespace               |
-| `DOCKER_REGISTRY` | `localhost:5001`                | Local registry address             |
-| `DOCKER_REPO`     | `agentregistry-dev/agentregistry` | Image repository prefix          |
-| `VERSION`         | `git describe --tags --always`  | Image tag to deploy                |
-| `JWT_KEY`         | Random 32-byte hex              | JWT private key for AgentRegistry  |
+| Variable            | Default                           | Description                        |
+|---------------------|-----------------------------------|------------------------------------|
+| `KIND_CLUSTER_NAME` | `agentregistry`                   | Kind cluster name                  |
+| `KIND_NAMESPACE`    | `agentregistry`                   | Kubernetes namespace               |
+| `DOCKER_REGISTRY`   | `localhost:5001`                  | Local registry address             |
+| `DOCKER_REPO`       | `agentregistry-dev/agentregistry` | Image repository prefix for local image builds |
+| `VERSION`           | `git describe --tags --always`    | Image tag to deploy                |
+| `JWT_KEY`           | Random 32-byte hex                | JWT private key for AgentRegistry  |
 
 Example with custom values:
 
@@ -156,9 +156,9 @@ make delete-kind-cluster && make setup-kind-cluster
 
 ## Scripts
 
-| File                      | Purpose                                          |
-|---------------------------|--------------------------------------------------|
-| `setup-kind.sh`           | Creates Kind cluster with local registry         |
-| `setup-metallb.sh`        | Installs and configures MetalLB                  |
+| File                                    | Purpose                                        |
+|-----------------------------------------|------------------------------------------------|
+| `setup-kind.sh`                         | Creates Kind cluster with local registry       |
+| `setup-metallb.sh`                      | Installs and configures MetalLB                |
 | `../../examples/postgres-pgvector.yaml` | Kubernetes manifests for standalone PostgreSQL |
-| `kind-config.yaml`        | Kind cluster configuration                       |
+| `kind-config.yaml`                      | Kind cluster configuration                     |
