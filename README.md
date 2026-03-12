@@ -78,7 +78,6 @@ Make approved artifacts easier to consume from the tools developers already use.
 - Pair with Agent Gateway for a consistent access layer to deployed MCP infrastructure
 - Reduce manual setup for AI clients and shared environments
 
-![](img/gateway-flow.svg)
 
 ### 🔧 How It Works Together
 
