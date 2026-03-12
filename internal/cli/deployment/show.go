@@ -3,7 +3,7 @@ package deployment
 import (
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
@@ -119,7 +119,7 @@ func formatMap(m map[string]any) string {
 	for k := range m {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
