@@ -1,47 +1,51 @@
-<div align="center">
-  <picture>
-    <img alt="agentregistry" src="./img/agentregistry-logo.svg" height="150"/>
-  </picture>
+<picture>
+  <img alt="agentregistry" src="./img/agentregistry-logo.svg" height="150"/>
+</picture>
 
-  [![Go Version](https://img.shields.io/badge/Go-1.25%2B-blue.svg)](https://golang.org/doc/install)
-  [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-  [![Discord](https://img.shields.io/discord/1435836734666707190?label=Join%20Discord&logo=discord&logoColor=white&color=5865F2)](https://discord.gg/HTYNjF2y2t)
+<br>
 
-  ### The trusted catalog and delivery path for MCP servers, agents, and skills.
-</div>
+[![Go Version][go-img]][go] [![License][license-img]][license] [![Discord][discord-img]][discord]
 
-Agent Registry gives platform teams and developers one place to manage the agentic infrastructure their applications depend on.
+# Agent Registry — the trusted catalog for MCP servers, agents, and skills
 
-Use the web UI and `arctl` CLI to publish approved MCP servers, agents, and skills, discover what is available, and make those artifacts usable across local development, shared environments, and Kubernetes.
+**Curate, discover, deploy, and manage agentic infrastructure — from laptop to cluster.**
+
+Agent Registry gives platform teams and developers one place to manage the agentic infrastructure their applications depend on. Use the web UI and `arctl` CLI to publish approved MCP servers, agents, and skills, discover what is available, and make those artifacts usable across local development, shared environments, and Kubernetes.
 
 <p align="center">
-  <img alt="Agent Registry platform overview" src="./img/operator-scenario.png"/>
+  <img alt="Agent Registry platform overview" src="./img/operator-scenario.png" width="800"/>
 </p>
 
 ---
+
+<table>
+<tr>
+<td width="55%">
 
 ## 🤔 Why Agent Registry?
 
-- 📦 **One trusted source for AI building blocks**: Give teams a curated catalog instead of scattered repos, scripts, and one-off MCP setup.
-- 🚀 **Faster developer onboarding**: Help developers discover approved artifacts quickly and start using them with less manual configuration.
-- 🌐 **A consistent path from laptop to cluster**: Support the same discovery and delivery workflow across local development and Kubernetes.
-- 🔒 **Governance without slowing teams down**: Centralize curation and publishing without forcing each team to rebuild the same process.
+- 📦 **One trusted source for AI building blocks** — a curated catalog instead of scattered repos, scripts, and one-off MCP setup.
+- 🚀 **Faster developer onboarding** — discover approved artifacts quickly with less manual configuration.
+- 🌐 **Consistent path from laptop to cluster** — same discovery and delivery workflow across local dev and Kubernetes.
+- 🔒 **Governance without slowing teams down** — centralize curation and publishing without forcing each team to rebuild the process.
 
-<p align="center">
-  <img alt="Agent Registry developer workflow" src="./img/dev-scenario.png"/>
-</p>
-
----
+</td>
+<td width="45%" align="center">
+  <img alt="Agent Registry developer workflow" src="./img/dev-scenario.png" width="400"/>
+</td>
+</tr>
+</table>
 
 ## 🔗 Quick Links
 
-- [Install `arctl`](https://github.com/agentregistry-dev/agentregistry/releases)
-- [Local development](#local-development)
-- [Kubernetes](#kubernetes)
-- [See it in action](#see-it-in-action)
-- [Contributing](CONTRIBUTING.md)
-- [Development details](DEVELOPMENT.md)
-- [Discord](https://discord.gg/HTYNjF2y2t)
+- 📥 [Install `arctl`](https://github.com/agentregistry-dev/agentregistry/releases)
+- 🚀 Quickstart guides:
+  - [Local development](#-local-development)
+  - [Kubernetes](#%EF%B8%8F-kubernetes)
+- 🎬 [See it in action](#-see-it-in-action)
+- 📖 [Development details](DEVELOPMENT.md)
+- 🤝 [Contributing](CONTRIBUTING.md)
+- 💬 [Discord](https://discord.gg/HTYNjF2y2t)
 
 ---
 
@@ -81,10 +85,10 @@ Make approved artifacts easier to consume from the tools developers already use.
 
 ### 🔧 How It Works Together
 
-1. Platform teams curate and publish approved MCP servers, agents, and skills in Agent Registry.
-2. Developers discover those artifacts through the web UI or `arctl`.
-3. Teams pull and deploy what they need in local environments or Kubernetes.
-4. AI clients and shared gateway infrastructure connect to approved artifacts through a consistent workflow.
+1. **Platform teams** curate and publish approved MCP servers, agents, and skills in Agent Registry.
+2. **Developers** discover those artifacts through the web UI or `arctl`.
+3. **Teams** pull and deploy what they need in local environments or Kubernetes.
+4. **AI clients** and shared gateway infrastructure connect to approved artifacts through a consistent workflow.
 
 ---
 
@@ -142,7 +146,7 @@ Then port-forward to access the UI:
 kubectl port-forward -n agentregistry svc/agentregistry 12121:12121
 ```
 
-For deployment details and configuration options, see [charts/agentregistry/README.md.gotmpl](charts/agentregistry/README.md.gotmpl) and [scripts/kind/README.md](scripts/kind/README.md).
+**Get started:** [Helm chart details](charts/agentregistry/README.md.gotmpl), [Local Kind cluster](scripts/kind/README.md)
 
 ---
 
@@ -156,14 +160,31 @@ Learn how to create an Anthropic Skill, publish it to Agent Registry, and use it
 
 ## 🤝 Contributing
 
-We welcome contributions and feedback from the community.
+We welcome contributions and feedback from the community!
 
-- 🐛 [GitHub Issues](https://github.com/agentregistry-dev/agentregistry/issues)
-- 💡 [GitHub Discussions](https://github.com/agentregistry-dev/agentregistry/discussions)
+<table><tr><td>
+
+- 🐛 [Report issues](https://github.com/agentregistry-dev/agentregistry/issues)
+- 💡 [Start a discussion](https://github.com/agentregistry-dev/agentregistry/discussions)
 - 🔧 [Contributing guide](CONTRIBUTING.md)
 - 📖 [Development details](DEVELOPMENT.md)
-- 💬 [Discord](https://discord.gg/HTYNjF2y2t)
+- 💬 [Join our Discord](https://discord.gg/HTYNjF2y2t)
+
+</td>
+<td align="center">
+  <img alt="agentregistry" src="./img/agentregistry-logo.svg" height="120"/>
+</td></tr></table>
+
+---
 
 ## 📄 License
 
 Apache V2 License. See [LICENSE](LICENSE) for details.
+
+<!-- Badge links -->
+[go-img]: https://img.shields.io/badge/Go-1.25%2B-blue.svg
+[go]: https://golang.org/doc/install
+[license-img]: https://img.shields.io/badge/License-Apache%202.0-green.svg
+[license]: LICENSE
+[discord-img]: https://img.shields.io/discord/1435836734666707190?label=Join%20Discord&logo=discord&logoColor=white&color=5865F2
+[discord]: https://discord.gg/HTYNjF2y2t
