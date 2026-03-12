@@ -105,6 +105,11 @@ func ResolveAgent(
 		return nil, err
 	}
 
+	prompts, err := registryService.ResolveAgentManifestPrompts(ctx, &agentResp.Agent.AgentManifest)
+	if err != nil {
+		return nil, err
+	}
+
 	return &platformtypes.ResolvedAgentConfig{
 		Agent: &platformtypes.Agent{
 			Name:               agentResp.Agent.Name,
@@ -112,10 +117,12 @@ func ResolveAgent(
 			DeploymentID:       deployment.ID,
 			Deployment:         platformtypes.AgentDeployment{Image: agentResp.Agent.Image, Env: envValues, Port: DefaultLocalAgentPort},
 			ResolvedMCPServers: resolvedConfigs,
+			ResolvedPrompts:    prompts,
 			Skills:             skills,
 		},
 		ResolvedPlatformServers: resolvedServers,
 		ResolvedConfigServers:   resolvedConfigs,
+		ResolvedPrompts:         prompts,
 	}, nil
 }
 
@@ -602,6 +609,17 @@ func GetRegistryConfig(
 	}
 
 	return config, args, nil
+}
+
+func PythonPromptsFromResolved(prompts []platformtypes.ResolvedPrompt) []common.PythonPrompt {
+	if len(prompts) == 0 {
+		return nil
+	}
+	result := make([]common.PythonPrompt, len(prompts))
+	for i, p := range prompts {
+		result[i] = common.PythonPrompt{Name: p.Name, Content: p.Content}
+	}
+	return result
 }
 
 func EnvMapToStringSlice(envMap map[string]string) []string {

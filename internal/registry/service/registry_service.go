@@ -1371,6 +1371,42 @@ func (s *registryServiceImpl) resolveSkillRef(ctx context.Context, skill models.
 	return api.AgentSkillRef{}, fmt.Errorf("skill %q (version %s): no docker/oci package or git repository found", registrySkillName, version)
 }
 
+// ResolveAgentManifestPrompts resolves registry-type prompt references from the
+// agent manifest into concrete prompt content that can be written to prompts.json.
+func (s *registryServiceImpl) ResolveAgentManifestPrompts(ctx context.Context, manifest *models.AgentManifest) ([]api.ResolvedPrompt, error) {
+	if manifest == nil || len(manifest.Prompts) == 0 {
+		return nil, nil
+	}
+
+	var resolved []api.ResolvedPrompt
+	for _, ref := range manifest.Prompts {
+		promptName := strings.TrimSpace(ref.RegistryPromptName)
+		if promptName == "" {
+			continue
+		}
+
+		version := strings.TrimSpace(ref.RegistryPromptVersion)
+		if version == "" {
+			version = "latest"
+		}
+
+		promptResp, err := s.GetPromptByNameAndVersion(ctx, promptName, version)
+		if err != nil {
+			return nil, fmt.Errorf("resolve prompt %q version %q: %w", promptName, version, err)
+		}
+
+		displayName := ref.Name
+		if displayName == "" {
+			displayName = promptName
+		}
+		resolved = append(resolved, api.ResolvedPrompt{
+			Name:    displayName,
+			Content: promptResp.Prompt.Content,
+		})
+	}
+	return resolved, nil
+}
+
 func (s *registryServiceImpl) ensureSemanticEmbedding(ctx context.Context, opts *database.SemanticSearchOptions) error {
 	if opts == nil {
 		return nil

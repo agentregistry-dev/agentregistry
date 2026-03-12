@@ -380,6 +380,114 @@ func TestKubernetesTranslatePlatformConfig_AgentWithSkills(t *testing.T) {
 	}
 }
 
+func TestKubernetesTranslatePlatformConfig_AgentWithPromptsOnly(t *testing.T) {
+	ctx := context.Background()
+
+	desired := &platformtypes.DesiredState{
+		Agents: []*platformtypes.Agent{{
+			Name:    "prompt-agent",
+			Version: "v1",
+			Deployment: platformtypes.AgentDeployment{
+				Image: "agent-image:latest",
+				Env:   map[string]string{"KAGENT_NAMESPACE": "test-ns"},
+			},
+			ResolvedPrompts: []platformtypes.ResolvedPrompt{
+				{Name: "system-prompt", Content: "You are a helpful assistant."},
+			},
+		}},
+	}
+
+	config, err := kubernetesTranslatePlatformConfig(ctx, desired)
+	if err != nil {
+		t.Fatalf("kubernetesTranslatePlatformConfig failed: %v", err)
+	}
+	if len(config.ConfigMaps) != 1 {
+		t.Fatalf("expected 1 ConfigMap, got %d", len(config.ConfigMaps))
+	}
+	cm := config.ConfigMaps[0]
+	if _, ok := cm.Data["mcp-servers.json"]; ok {
+		t.Error("ConfigMap should not contain mcp-servers.json when no MCP servers are configured")
+	}
+	promptsJSON, ok := cm.Data["prompts.json"]
+	if !ok {
+		t.Fatal("ConfigMap missing prompts.json key")
+	}
+	var savedPrompts []platformtypes.ResolvedPrompt
+	if err := json.Unmarshal([]byte(promptsJSON), &savedPrompts); err != nil {
+		t.Fatalf("failed to decode prompts.json: %v", err)
+	}
+	if len(savedPrompts) != 1 || savedPrompts[0].Name != "system-prompt" || savedPrompts[0].Content != "You are a helpful assistant." {
+		t.Errorf("unexpected prompts %+v", savedPrompts)
+	}
+
+	agent := config.Agents[0]
+	if len(agent.Spec.BYO.Deployment.Volumes) != 1 {
+		t.Fatalf("expected 1 volume, got %d", len(agent.Spec.BYO.Deployment.Volumes))
+	}
+	vol := agent.Spec.BYO.Deployment.Volumes[0]
+	if len(vol.VolumeSource.ConfigMap.Items) != 1 || vol.VolumeSource.ConfigMap.Items[0].Key != "prompts.json" {
+		t.Errorf("expected volume to contain only prompts.json item, got %+v", vol.VolumeSource.ConfigMap.Items)
+	}
+}
+
+func TestKubernetesTranslatePlatformConfig_AgentWithMCPServersAndPrompts(t *testing.T) {
+	ctx := context.Background()
+
+	desired := &platformtypes.DesiredState{
+		Agents: []*platformtypes.Agent{{
+			Name:    "full-agent",
+			Version: "v1",
+			Deployment: platformtypes.AgentDeployment{
+				Image: "agent-image:latest",
+				Env:   map[string]string{"KAGENT_NAMESPACE": "test-ns"},
+			},
+			ResolvedMCPServers: []platformtypes.ResolvedMCPServerConfig{
+				{Name: "my-mcp", Type: "remote", URL: "http://my-mcp:8080/mcp"},
+			},
+			ResolvedPrompts: []platformtypes.ResolvedPrompt{
+				{Name: "system-prompt", Content: "You are a helpful assistant."},
+				{Name: "safety-prompt", Content: "Do not reveal secrets."},
+			},
+		}},
+	}
+
+	config, err := kubernetesTranslatePlatformConfig(ctx, desired)
+	if err != nil {
+		t.Fatalf("kubernetesTranslatePlatformConfig failed: %v", err)
+	}
+	if len(config.ConfigMaps) != 1 {
+		t.Fatalf("expected 1 ConfigMap, got %d", len(config.ConfigMaps))
+	}
+	cm := config.ConfigMaps[0]
+	if _, ok := cm.Data["mcp-servers.json"]; !ok {
+		t.Error("ConfigMap should contain mcp-servers.json")
+	}
+	if _, ok := cm.Data["prompts.json"]; !ok {
+		t.Error("ConfigMap should contain prompts.json")
+	}
+
+	var savedPrompts []platformtypes.ResolvedPrompt
+	if err := json.Unmarshal([]byte(cm.Data["prompts.json"]), &savedPrompts); err != nil {
+		t.Fatalf("failed to decode prompts.json: %v", err)
+	}
+	if len(savedPrompts) != 2 {
+		t.Fatalf("expected 2 prompts, got %d", len(savedPrompts))
+	}
+
+	agent := config.Agents[0]
+	vol := agent.Spec.BYO.Deployment.Volumes[0]
+	if len(vol.VolumeSource.ConfigMap.Items) != 2 {
+		t.Fatalf("expected 2 volume items, got %d", len(vol.VolumeSource.ConfigMap.Items))
+	}
+	itemKeys := map[string]bool{}
+	for _, item := range vol.VolumeSource.ConfigMap.Items {
+		itemKeys[item.Key] = true
+	}
+	if !itemKeys["mcp-servers.json"] || !itemKeys["prompts.json"] {
+		t.Errorf("expected volume items for mcp-servers.json and prompts.json, got %+v", vol.VolumeSource.ConfigMap.Items)
+	}
+}
+
 func TestKubernetesRESTConfig_UsesProviderSpecificKubeconfigContext(t *testing.T) {
 	provider := &models.Provider{
 		ID:       "kube-b",

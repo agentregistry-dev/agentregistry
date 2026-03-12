@@ -276,7 +276,7 @@ func kubernetesTranslatePlatformConfig(ctx context.Context, desired *platformtyp
 		}
 		agents = append(agents, resource)
 
-		if len(agent.ResolvedMCPServers) > 0 {
+		if len(agent.ResolvedMCPServers) > 0 || len(agent.ResolvedPrompts) > 0 {
 			configMap, err := kubernetesTranslateAgentConfigMap(agent)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create ConfigMap for agent %s: %w", agent.Name, err)
@@ -338,15 +338,22 @@ func kubernetesTranslateAgent(agent *platformtypes.Agent) (*v1alpha2.Agent, erro
 	}
 
 	sharedSpec := v1alpha2.SharedDeploymentSpec{Env: envVars}
-	if len(agent.ResolvedMCPServers) > 0 {
+	if len(agent.ResolvedMCPServers) > 0 || len(agent.ResolvedPrompts) > 0 {
 		configMapName := kubernetesAgentConfigMapName(agent.Name, agent.Version, agent.DeploymentID)
-		volumeName := "mcp-config"
+		volumeName := "agent-config"
+		var items []corev1.KeyToPath
+		if len(agent.ResolvedMCPServers) > 0 {
+			items = append(items, corev1.KeyToPath{Key: "mcp-servers.json", Path: "mcp-servers.json"})
+		}
+		if len(agent.ResolvedPrompts) > 0 {
+			items = append(items, corev1.KeyToPath{Key: "prompts.json", Path: "prompts.json"})
+		}
 		sharedSpec.Volumes = []corev1.Volume{{
 			Name: volumeName,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: configMapName},
-					Items:                []corev1.KeyToPath{{Key: "mcp-servers.json", Path: "mcp-servers.json"}},
+					Items:                items,
 				},
 			},
 		}}
@@ -532,9 +539,21 @@ func kubernetesTranslateLocalMCPServer(server *platformtypes.MCPServer) (*kmcpv1
 
 func kubernetesTranslateAgentConfigMap(agent *platformtypes.Agent) (*corev1.ConfigMap, error) {
 	namespace := agent.Deployment.Env["KAGENT_NAMESPACE"]
-	serversJSON, err := json.MarshalIndent(agent.ResolvedMCPServers, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal MCP servers config: %w", err)
+
+	data := make(map[string]string)
+	if len(agent.ResolvedMCPServers) > 0 {
+		serversJSON, err := json.MarshalIndent(agent.ResolvedMCPServers, "", "  ")
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal MCP servers config: %w", err)
+		}
+		data["mcp-servers.json"] = string(serversJSON)
+	}
+	if len(agent.ResolvedPrompts) > 0 {
+		promptsJSON, err := json.MarshalIndent(agent.ResolvedPrompts, "", "  ")
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal prompts config: %w", err)
+		}
+		data["prompts.json"] = string(promptsJSON)
 	}
 
 	configMapName := kubernetesAgentConfigMapName(agent.Name, agent.Version, agent.DeploymentID)
@@ -553,7 +572,7 @@ func kubernetesTranslateAgentConfigMap(agent *platformtypes.Agent) (*corev1.Conf
 			Labels:      labels,
 			Annotations: kubernetesDeploymentManagedAnnotations(agent.DeploymentID),
 		},
-		Data: map[string]string{"mcp-servers.json": string(serversJSON)},
+		Data: data,
 	}, nil
 }
 

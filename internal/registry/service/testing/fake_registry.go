@@ -50,7 +50,8 @@ type FakeRegistry struct {
 	GetAgentByNameAndVersionFn   func(ctx context.Context, agentName, version string) (*models.AgentResponse, error)
 	GetAllVersionsByAgentNameFn  func(ctx context.Context, agentName string) ([]*models.AgentResponse, error)
 	CreateAgentFn                func(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error)
-	ResolveAgentManifestSkillsFn func(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error)
+	ResolveAgentManifestSkillsFn  func(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error)
+	ResolveAgentManifestPromptsFn func(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.ResolvedPrompt, error)
 	DeleteAgentFn                func(ctx context.Context, agentName, version string) error
 	UpsertAgentEmbeddingFn       func(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error
 	GetAgentEmbeddingMetadataFn  func(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error)
@@ -258,6 +259,13 @@ func (f *FakeRegistry) CreateAgent(ctx context.Context, req *models.AgentJSON) (
 func (f *FakeRegistry) ResolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error) {
 	if f.ResolveAgentManifestSkillsFn != nil {
 		return f.ResolveAgentManifestSkillsFn(ctx, manifest)
+	}
+	return nil, nil
+}
+
+func (f *FakeRegistry) ResolveAgentManifestPrompts(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.ResolvedPrompt, error) {
+	if f.ResolveAgentManifestPromptsFn != nil {
+		return f.ResolveAgentManifestPromptsFn(ctx, manifest)
 	}
 	return nil, nil
 }

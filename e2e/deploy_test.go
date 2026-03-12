@@ -716,3 +716,208 @@ func dumpKagentAgentDebug(t *testing.T, kubeContext, namespace, deploymentID str
 		t.Logf("failed to dump kagent agent YAML for deployment-id=%s: %v\n%s", deploymentID, err, string(out))
 	}
 }
+
+// TestAgentDeployWithPrompts tests that deploying an agent whose manifest
+// references a registry prompt correctly resolves the prompt content and
+// makes it available at the deployment target (ConfigMap for Kubernetes,
+// prompts.json volume for local/Docker).
+func TestAgentDeployWithPrompts(t *testing.T) {
+	for _, target := range agentDeployTargets {
+		t.Run(target.name, func(t *testing.T) {
+			regURL := RegistryURL(t)
+			tmpDir := t.TempDir()
+			agentName := UniqueAgentName("e2eprm" + target.name[:3])
+			agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
+			promptName := UniqueNameWithPrefix("e2e-agent-prompt")
+			promptVersion := "1.0.0"
+			promptContent := "You are a helpful coding assistant for e2e tests."
+
+			t.Cleanup(func() { RemoveDeploymentsByServerName(t, regURL, agentName) })
+			if target.cleanup != nil {
+				t.Cleanup(func() { target.cleanup(t, agentName) })
+			}
+			t.Cleanup(func() {
+				RunArctl(t, tmpDir,
+					"prompt", "delete", promptName,
+					"--version", promptVersion,
+					"--registry-url", regURL,
+				)
+			})
+
+			t.Run("publish_prompt", func(t *testing.T) {
+				promptFile := filepath.Join(tmpDir, "system-prompt.txt")
+				if err := os.WriteFile(promptFile, []byte(promptContent), 0644); err != nil {
+					t.Fatalf("failed to write prompt file: %v", err)
+				}
+				result := RunArctl(t, tmpDir,
+					"prompt", "publish", promptFile,
+					"--name", promptName,
+					"--version", promptVersion,
+					"--description", "E2E prompt for agent deploy test",
+					"--registry-url", regURL,
+				)
+				RequireSuccess(t, result)
+			})
+
+			t.Run("init_and_add_prompt", func(t *testing.T) {
+				result := RunArctl(t, tmpDir,
+					"agent", "init", "adk", "python",
+					"--model-name", "gemini-2.5-flash",
+					"--image", agentImage,
+					agentName,
+				)
+				RequireSuccess(t, result)
+
+				result = RunArctl(t, tmpDir,
+					"agent", "add-prompt", "system-prompt",
+					"--registry-prompt-name", promptName,
+					"--registry-prompt-version", promptVersion,
+					"--registry-url", regURL,
+					"--project-dir", filepath.Join(tmpDir, agentName),
+				)
+				RequireSuccess(t, result)
+
+				agentYaml := filepath.Join(tmpDir, agentName, "agent.yaml")
+				RequireFileContains(t, agentYaml, promptName)
+			})
+
+			t.Run("build", func(t *testing.T) {
+				result := RunArctl(t, tmpDir, "agent", "build", agentName,
+					"--image", agentImage)
+				RequireSuccess(t, result)
+				if target.name == "kubernetes" {
+					loadDockerImageToKind(t, agentImage)
+				}
+			})
+
+			t.Run("publish", func(t *testing.T) {
+				agentDir := filepath.Join(tmpDir, agentName)
+				result := RunArctl(t, tmpDir,
+					"agent", "publish", agentDir,
+					"--registry-url", regURL,
+				)
+				RequireSuccess(t, result)
+			})
+
+			t.Run("deploy", func(t *testing.T) {
+				args := []string{"agent", "deploy", agentName, "--registry-url", regURL}
+				args = append(args, target.deplArgs...)
+				result := RunArctl(t, tmpDir, args...)
+				RequireSuccess(t, result)
+			})
+
+			if target.verify != nil {
+				t.Run("verify_running", func(t *testing.T) {
+					target.verify(t, agentName)
+				})
+			}
+
+			t.Run("verify_prompts", func(t *testing.T) {
+				switch target.name {
+				case "kubernetes":
+					verifyKubernetesPromptsConfig(t, agentName, promptContent)
+				case "local":
+					verifyLocalPromptsConfig(t, agentName, promptContent)
+				}
+			})
+		})
+	}
+}
+
+// verifyKubernetesPromptsConfig checks that the ConfigMap created for the
+// agent deployment contains a prompts.json entry with the expected content.
+func verifyKubernetesPromptsConfig(t *testing.T, agentName, expectedContent string) {
+	t.Helper()
+	kubeContext := kubeContextForE2E(t)
+	regURL := RegistryURL(t)
+
+	deploymentID := waitForSingleAgentDeploymentID(t, regURL, agentName, "kubernetes-default", 45*time.Second)
+	waitForK8sResourceCountByDeploymentID(t, kubeContext, "default", "configmaps", deploymentID, 1, 60*time.Second)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "kubectl", "get", "configmaps",
+		"--namespace", "default",
+		"--context", kubeContext,
+		"-l", "aregistry.ai/deployment-id="+deploymentID,
+		"-o", "json")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("failed to get configmaps: %v", err)
+	}
+
+	var payload struct {
+		Items []struct {
+			Data map[string]string `json:"data"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(out, &payload); err != nil {
+		t.Fatalf("failed to parse configmap response: %v", err)
+	}
+	if len(payload.Items) == 0 {
+		t.Fatal("no configmaps found for deployment")
+	}
+
+	promptsJSON, ok := payload.Items[0].Data["prompts.json"]
+	if !ok {
+		t.Fatalf("configmap does not contain prompts.json key; available keys: %v",
+			configMapDataKeys(payload.Items[0].Data))
+	}
+
+	assertPromptsJSONContains(t, promptsJSON, expectedContent)
+}
+
+// verifyLocalPromptsConfig checks that the prompts.json file was written to
+// the local runtime directory for the deployed agent.
+// The runtime directory is under /tmp/arctl-runtime-* on the host, which is
+// bind-mounted into both the agentregistry server and agent containers.
+func verifyLocalPromptsConfig(t *testing.T, agentName, expectedContent string) {
+	t.Helper()
+
+	pattern := filepath.Join("/tmp", "arctl-runtime-*", agentName, "*", "prompts.json")
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		t.Fatalf("failed to glob for prompts.json: %v", err)
+	}
+	if len(matches) == 0 {
+		t.Fatalf("no prompts.json found matching pattern %s", pattern)
+	}
+
+	data, err := os.ReadFile(matches[0])
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", matches[0], err)
+	}
+
+	assertPromptsJSONContains(t, string(data), expectedContent)
+}
+
+// assertPromptsJSONContains parses a prompts.json string and asserts that at
+// least one entry has the given content.
+func assertPromptsJSONContains(t *testing.T, promptsJSON, expectedContent string) {
+	t.Helper()
+
+	var prompts []struct {
+		Name    string `json:"name"`
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal([]byte(promptsJSON), &prompts); err != nil {
+		t.Fatalf("failed to parse prompts.json: %v\nraw: %s", err, promptsJSON)
+	}
+
+	for _, p := range prompts {
+		if p.Content == expectedContent {
+			return
+		}
+	}
+	t.Fatalf("expected prompt content %q not found in prompts.json: %v", expectedContent, prompts)
+}
+
+// configMapDataKeys returns the keys of a ConfigMap's Data map for diagnostics.
+func configMapDataKeys(data map[string]string) []string {
+	keys := make([]string, 0, len(data))
+	for k := range data {
+		keys = append(keys, k)
+	}
+	return keys
+}

@@ -97,9 +97,11 @@ func TestUndeploy_RemovesLocalArtifactsWhenRegistryArtifactIsMissing(t *testing.
 
 	originalComposeUp := runLocalComposeUp
 	originalRefresh := refreshLocalAgentMCPConfig
+	originalPromptsRefresh := refreshLocalAgentPromptsConfig
 	t.Cleanup(func() {
 		runLocalComposeUp = originalComposeUp
 		refreshLocalAgentMCPConfig = originalRefresh
+		refreshLocalAgentPromptsConfig = originalPromptsRefresh
 	})
 
 	runLocalComposeUp = func(context.Context, string, bool) error {
@@ -121,11 +123,26 @@ func TestUndeploy_RemovesLocalArtifactsWhenRegistryArtifactIsMissing(t *testing.
 		return nil
 	}
 
+	promptsRefreshCalled := false
+	refreshLocalAgentPromptsConfig = func(target *common.MCPConfigTarget, prompts []common.PythonPrompt, verbose bool) error {
+		promptsRefreshCalled = true
+		if target == nil || target.AgentName != deployment.ServerName || target.Version != deployment.Version {
+			t.Fatalf("unexpected prompts refresh target: %#v", target)
+		}
+		if len(prompts) != 0 {
+			t.Fatalf("expected cleanup refresh with no prompts, got %#v", prompts)
+		}
+		return nil
+	}
+
 	if err := adapter.Undeploy(context.Background(), deployment); err != nil {
 		t.Fatalf("Undeploy() error = %v", err)
 	}
 	if !refreshCalled {
 		t.Fatal("expected RefreshMCPConfig cleanup to be called for missing agent undeploy")
+	}
+	if !promptsRefreshCalled {
+		t.Fatal("expected RefreshPromptsConfig cleanup to be called for missing agent undeploy")
 	}
 
 	composeCfg, err := LoadLocalDockerComposeConfig(tempDir)
@@ -153,5 +170,77 @@ func TestUndeploy_RemovesLocalArtifactsWhenRegistryArtifactIsMissing(t *testing.
 	routes := extractNonMCPRoutes(gatewayCfg)
 	if len(routes) != 1 || routes[0].RouteName != "unrelated-route" {
 		t.Fatalf("unexpected remaining non-MCP routes: %#v", routes)
+	}
+}
+
+func TestDeploy_WritesPromptsConfig(t *testing.T) {
+	tempDir := t.TempDir()
+	deployment := &models.Deployment{
+		ServerName:   "prompt-agent",
+		Version:      "1.0.0",
+		ResourceType: "agent",
+		ProviderID:   "local",
+		Env:          map[string]string{},
+	}
+
+	registry := servicetesting.NewFakeRegistry()
+	registry.GetAgentByNameAndVersionFn = func(_ context.Context, name, version string) (*models.AgentResponse, error) {
+		return &models.AgentResponse{
+			Agent: models.AgentJSON{
+				AgentManifest: models.AgentManifest{
+					Name:  name,
+					Image: "agent-image:latest",
+				},
+				Version: version,
+			},
+		}, nil
+	}
+	registry.ResolveAgentManifestPromptsFn = func(_ context.Context, _ *models.AgentManifest) ([]platformtypes.ResolvedPrompt, error) {
+		return []platformtypes.ResolvedPrompt{
+			{Name: "system-prompt", Content: "You are a helpful assistant."},
+		}, nil
+	}
+
+	adapter := NewLocalDeploymentAdapter(registry, tempDir, 8080)
+
+	originalComposeUp := runLocalComposeUp
+	originalRefresh := refreshLocalAgentMCPConfig
+	originalPromptsRefresh := refreshLocalAgentPromptsConfig
+	t.Cleanup(func() {
+		runLocalComposeUp = originalComposeUp
+		refreshLocalAgentMCPConfig = originalRefresh
+		refreshLocalAgentPromptsConfig = originalPromptsRefresh
+	})
+
+	runLocalComposeUp = func(context.Context, string, bool) error { return nil }
+	refreshLocalAgentMCPConfig = func(*common.MCPConfigTarget, []common.PythonMCPServer, bool) error { return nil }
+
+	var capturedPrompts []common.PythonPrompt
+	var capturedTarget *common.MCPConfigTarget
+	refreshLocalAgentPromptsConfig = func(target *common.MCPConfigTarget, prompts []common.PythonPrompt, _ bool) error {
+		capturedTarget = target
+		capturedPrompts = prompts
+		return nil
+	}
+
+	result, err := adapter.Deploy(context.Background(), deployment)
+	if err != nil {
+		t.Fatalf("Deploy() error = %v", err)
+	}
+	if result.Status != "deployed" {
+		t.Fatalf("expected status deployed, got %s", result.Status)
+	}
+
+	if capturedTarget == nil {
+		t.Fatal("expected RefreshPromptsConfig to be called")
+	}
+	if capturedTarget.AgentName != "prompt-agent" {
+		t.Fatalf("expected agent name prompt-agent, got %s", capturedTarget.AgentName)
+	}
+	if len(capturedPrompts) != 1 {
+		t.Fatalf("expected 1 prompt, got %d", len(capturedPrompts))
+	}
+	if capturedPrompts[0].Name != "system-prompt" || capturedPrompts[0].Content != "You are a helpful assistant." {
+		t.Fatalf("unexpected prompt %+v", capturedPrompts[0])
 	}
 }

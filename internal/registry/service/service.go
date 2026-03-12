@@ -49,6 +49,8 @@ type RegistryService interface {
 	CreateAgent(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error)
 	// ResolveAgentManifestSkills resolves manifest skill refs to concrete image or repo refs.
 	ResolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error)
+	// ResolveAgentManifestPrompts resolves manifest prompt refs to concrete prompt content.
+	ResolveAgentManifestPrompts(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.ResolvedPrompt, error)
 	// DeleteAgent permanently removes an agent version from the registry
 	DeleteAgent(ctx context.Context, agentName, version string) error
 	// UpsertAgentEmbedding stores semantic embedding metadata for an agent version

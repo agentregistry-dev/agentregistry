@@ -18,6 +18,7 @@ type ResolvedAgentConfig struct {
 	Agent                   *Agent
 	ResolvedPlatformServers []*MCPServer
 	ResolvedConfigServers   []ResolvedMCPServerConfig
+	ResolvedPrompts         []ResolvedPrompt
 	PythonConfigServers     []common.PythonMCPServer
 }
 
@@ -27,6 +28,7 @@ type Agent struct {
 	DeploymentID       string                    `json:"deploymentId,omitempty"`
 	Deployment         AgentDeployment           `json:"deployment"`
 	ResolvedMCPServers []ResolvedMCPServerConfig `json:"resolvedMCPServers,omitempty"`
+	ResolvedPrompts    []ResolvedPrompt          `json:"resolvedPrompts,omitempty"`
 	Skills             []AgentSkillRef           `json:"skills,omitempty"`
 }
 
@@ -43,6 +45,11 @@ type ResolvedMCPServerConfig struct {
 	Type    string            `json:"type"`
 	URL     string            `json:"url,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
+}
+
+type ResolvedPrompt struct {
+	Name    string `json:"name"`
+	Content string `json:"content"`
 }
 
 type MCPServer struct {
