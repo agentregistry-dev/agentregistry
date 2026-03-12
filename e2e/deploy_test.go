@@ -223,6 +223,124 @@ func TestMCPDeployCreate(t *testing.T) {
 	}
 }
 
+// TestDeployDeleteLifecycle exercises the full CLI lifecycle:
+// create a deployment, extract its ID via "deploy list", delete it via
+// "arctl deploy delete <prefix>" (testing ID-prefix resolution), and verify
+// it no longer appears in "deploy list".
+func TestDeployDeleteLifecycle(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+	agentName := UniqueAgentName("e2edeldpl")
+	agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
+
+	t.Cleanup(func() { RemoveDeploymentsByServerName(t, regURL, agentName) })
+	t.Cleanup(func() { removeLocalDeployment(t) })
+
+	// 1. Init, build, and publish
+	result := RunArctl(t, tmpDir,
+		"agent", "init", "adk", "python",
+		"--model-name", "gemini-2.5-flash",
+		"--image", agentImage,
+		agentName,
+	)
+	RequireSuccess(t, result)
+
+	result = RunArctl(t, tmpDir, "agent", "build", agentName,
+		"--image", agentImage)
+	RequireSuccess(t, result)
+
+	agentDir := filepath.Join(tmpDir, agentName)
+	result = RunArctl(t, tmpDir,
+		"agent", "publish", agentDir,
+		"--registry-url", regURL,
+	)
+	RequireSuccess(t, result)
+
+	// 2. Deploy (local provider)
+	result = RunArctl(t, tmpDir,
+		"deploy", "create", agentName,
+		"--type", "agent",
+		"--registry-url", regURL,
+	)
+	RequireSuccess(t, result)
+
+	// 3. Extract the deployment ID from "deploy list -o json"
+	deploymentID := extractDeploymentID(t, tmpDir, regURL, agentName, "agent")
+	if deploymentID == "" {
+		t.Fatal("Could not find deployment ID after deploy create")
+	}
+	t.Logf("Deployment ID: %s", deploymentID)
+
+	// 4. Delete using truncated ID prefix (tests ID-prefix resolution)
+	prefix := deploymentID[:8]
+	result = RunArctl(t, tmpDir,
+		"deploy", "delete", prefix,
+		"--registry-url", regURL,
+	)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "deleted")
+
+	// 5. Verify deployment is gone from "deploy list"
+	result = RunArctl(t, tmpDir,
+		"deploy", "list",
+		"--type", "agent",
+		"-o", "json",
+		"--registry-url", regURL,
+	)
+	RequireSuccess(t, result)
+
+	if strings.TrimSpace(result.Stdout) != "" {
+		var remaining []struct {
+			ID         string `json:"id"`
+			ServerName string `json:"serverName"`
+		}
+		if err := json.Unmarshal([]byte(result.Stdout), &remaining); err == nil {
+			for _, d := range remaining {
+				if d.ID == deploymentID {
+					t.Fatalf("Deployment %s still present after delete", deploymentID)
+				}
+			}
+		}
+	}
+
+	// 6. Verify deleting the same ID again fails
+	result = RunArctl(t, tmpDir,
+		"deploy", "delete", prefix,
+		"--registry-url", regURL,
+	)
+	RequireFailure(t, result)
+}
+
+// extractDeploymentID runs "deploy list -o json" and returns the ID of the
+// deployment matching the given resource name and type.
+func extractDeploymentID(t *testing.T, workDir, regURL, resourceName, resourceType string) string {
+	t.Helper()
+
+	result := RunArctl(t, workDir,
+		"deploy", "list",
+		"--type", resourceType,
+		"-o", "json",
+		"--registry-url", regURL,
+	)
+	RequireSuccess(t, result)
+
+	var deployments []struct {
+		ID           string `json:"id"`
+		ServerName   string `json:"serverName"`
+		ResourceType string `json:"resourceType"`
+	}
+	if err := json.Unmarshal([]byte(result.Stdout), &deployments); err != nil {
+		t.Fatalf("Failed to parse deploy list JSON: %v\nOutput: %s", err, result.Stdout)
+	}
+
+	for _, d := range deployments {
+		if d.ServerName == resourceName && d.ResourceType == resourceType {
+			return d.ID
+		}
+	}
+	return ""
+}
+
 // waitForComposeService polls until a container with the given service name in
 // the agentregistry_runtime compose project is running, or fails after timeout.
 // Uses docker ps with label filters instead of docker compose ps, because the

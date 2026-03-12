@@ -82,7 +82,7 @@ func filterDeployments(deployments []*client.DeploymentResponse, typeFilter, sta
 		if typeFilter != "" && strings.ToLower(d.ResourceType) != typeFilter {
 			continue
 		}
-		if statusFilter != "" && strings.ToLower(d.Status) != statusFilter {
+		if statusFilter != "" && strings.ToLower(effectiveStatus(d)) != statusFilter {
 			continue
 		}
 		if providerFilter != "" && strings.ToLower(d.ProviderID) != providerFilter {
@@ -104,10 +104,9 @@ func printDeploymentsTable(deployments []*client.DeploymentResponse) {
 		}
 
 		id := truncateID(d.ID)
-		status := d.Status
+		status := effectiveStatus(d)
 		if d.Origin == "discovered" {
 			id = "-"
-			status = "discovered"
 		}
 
 		t.AddRow(
@@ -124,6 +123,15 @@ func printDeploymentsTable(deployments []*client.DeploymentResponse) {
 	if err := t.Render(); err != nil {
 		printer.PrintError(fmt.Sprintf("failed to render table: %v", err))
 	}
+}
+
+// effectiveStatus returns "discovered" when the deployment was discovered,
+// otherwise returns the raw status. This keeps filtering consistent with display.
+func effectiveStatus(d *client.DeploymentResponse) string {
+	if d.Origin == "discovered" {
+		return "discovered"
+	}
+	return d.Status
 }
 
 // truncateID shows the first 8 characters of a deployment ID for display.
