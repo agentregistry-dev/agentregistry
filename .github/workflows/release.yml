@@ -9,6 +9,10 @@ on:
       version:
         description: 'Version number'
 
+env:
+  VERSION: ${{ github.event.inputs.version || github.ref_name }}
+  DOCKER_REGISTRY: ghcr.io
+
 jobs:
   docker:
     strategy:
@@ -37,7 +41,7 @@ jobs:
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v3
       with:
-        registry: ghcr.io
+        registry: ${{ env.DOCKER_REGISTRY }}
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -53,15 +57,7 @@ jobs:
       env:
         DOCKER_BUILD_ARGS: "--push --platform linux/amd64,linux/arm64"
         DOCKER_BUILDER: "docker buildx"
-        DOCKER_REGISTRY: "ghcr.io" # prod for releases, local for dev
-      run: |
-        # if workflow_dispatch is used, use the version input
-        if [ -n "${{ github.event.inputs.version }}" ]; then
-          export VERSION=${{ github.event.inputs.version }}
-        else
-          export VERSION=$(echo "$GITHUB_REF" | cut -c12-)
-        fi
-        make docker-${{ matrix.image }}
+      run: make docker-${{ matrix.image }}
 
   release:
     needs:
@@ -69,6 +65,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       HELM_PLUGIN_UNITTEST_VERSION: v1.0.3
+      HELM_REGISTRY: ${{ secrets.HELM_REGISTRY || 'ghcr.io' }}
+      HELM_REPO: ${{ secrets.HELM_REPO || 'agentregistry-dev/agentregistry' }}
     permissions:
       contents: write
       packages: write
@@ -82,14 +80,6 @@ jobs:
       with:
         go-version-file: "go.mod"
 
-    - name: Resolve version
-      run: |
-        if [ -n "${{ github.event.inputs.version }}" ]; then
-          echo "VERSION=${{ github.event.inputs.version }}" >> "$GITHUB_ENV"
-        else
-          echo "VERSION=$(echo "$GITHUB_REF" | cut -c12-)" >> "$GITHUB_ENV"
-        fi
-
     - name: Cache Helm plugins
       uses: actions/cache@v4
       with:
@@ -98,14 +88,9 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-helm-plugins-unittest-
 
-    - name: Build Release Artifacts
-      env:
-        DOCKER_REGISTRY: "ghcr.io"
-      run: make release-cli
 
     - name: Log in to Helm registry
       env:
-        HELM_REGISTRY: ${{ secrets.HELM_REGISTRY || 'ghcr.io' }}
         HELM_REGISTRY_USERNAME: ${{ secrets.HELM_REGISTRY_USERNAME || github.actor }}
         HELM_REGISTRY_PASSWORD: ${{ secrets.HELM_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
       run: |
@@ -114,18 +99,11 @@ jobs:
           --username "${HELM_REGISTRY_USERNAME}" \
           --password-stdin
 
+    - name: Build Release Artifacts
+      run: make release-cli
+
     - name: Release Helm chart
-      env:
-        HELM_REGISTRY: ${{ secrets.HELM_REGISTRY || 'ghcr.io' }}
-        HELM_REPO: ${{ secrets.HELM_REPO || 'agentregistry-dev/agentregistry' }}
       run: make release-helm
-
-    - name: Log out of Helm registry
-      if: always()
-      env:
-        HELM_REGISTRY: ${{ secrets.HELM_REGISTRY || 'ghcr.io' }}
-      run: helm registry logout "${HELM_REGISTRY}" || true
-
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
@@ -136,3 +114,7 @@ jobs:
           bin/arctl-*
           build/charts/*.tgz
           build/charts/checksums.txt
+
+    - name: Log out of Helm registry
+      if: always()
+      run: helm registry logout "${HELM_REGISTRY}" || true
