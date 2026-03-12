@@ -5,14 +5,16 @@ import (
 
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
+	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestBuildDeploymentCounts_Agent(t *testing.T) {
 	deployments := []*client.DeploymentResponse{
-		{ServerName: "acme/planner", Version: "1.0.0", ResourceType: "agent"},
-		{ServerName: "acme/planner", Version: "1.0.0", ResourceType: "agent"},
-		{ServerName: "acme/planner", Version: "2.0.0", ResourceType: "agent"},
+		{ServerName: "acme/planner", Version: "1.0.0", ResourceType: "agent", Status: models.DeploymentStatusDeployed},
+		{ServerName: "acme/planner", Version: "1.0.0", ResourceType: "agent", Status: models.DeploymentStatusFailed},
+		{ServerName: "acme/planner", Version: "1.0.0", ResourceType: "agent", Status: models.DeploymentStatusDeployed},
+		{ServerName: "acme/planner", Version: "2.0.0", ResourceType: "agent", Status: models.DeploymentStatusDeployed},
 		{ServerName: "acme/weather", Version: "1.0.0", ResourceType: "mcp"},
 		nil,
 	}

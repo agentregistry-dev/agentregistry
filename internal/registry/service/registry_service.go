@@ -1165,7 +1165,7 @@ func (s *registryServiceImpl) createManagedDeploymentRecord(ctx context.Context,
 		ID:               req.ID,
 		ServerName:       strings.TrimSpace(req.ServerName),
 		Version:          strings.TrimSpace(req.Version),
-		Status:           "deploying",
+		Status:           models.DeploymentStatusDeploying,
 		Env:              req.Env,
 		ProviderConfig:   req.ProviderConfig,
 		ProviderMetadata: req.ProviderMetadata,
@@ -1218,7 +1218,7 @@ func (s *registryServiceImpl) createManagedDeploymentRecord(ctx context.Context,
 }
 
 func (s *registryServiceImpl) applyDeploymentActionResult(ctx context.Context, deploymentID string, result *models.DeploymentActionResult) error {
-	status := "deployed"
+	status := models.DeploymentStatusDeployed
 	if result != nil {
 		if trimmedStatus := strings.TrimSpace(result.Status); trimmedStatus != "" {
 			status = trimmedStatus
@@ -1252,7 +1252,7 @@ func (s *registryServiceImpl) applyFailedDeploymentAction(
 	deployErr error,
 	result *models.DeploymentActionResult,
 ) error {
-	status := "failed"
+	status := models.DeploymentStatusFailed
 	if result != nil {
 		if trimmedStatus := strings.TrimSpace(result.Status); trimmedStatus != "" {
 			status = trimmedStatus

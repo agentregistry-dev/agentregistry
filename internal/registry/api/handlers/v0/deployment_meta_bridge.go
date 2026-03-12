@@ -25,6 +25,9 @@ func deploymentResourceIndex(ctx context.Context, registry service.RegistryServi
 		if deployment == nil {
 			continue
 		}
+		if deployment.Status != models.DeploymentStatusDeployed {
+			continue
+		}
 
 		resourceType := strings.ToLower(strings.TrimSpace(deployment.ResourceType))
 		resourceName := strings.TrimSpace(deployment.ServerName)

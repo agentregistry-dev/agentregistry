@@ -64,7 +64,7 @@ func (a *localDeploymentAdapter) Deploy(ctx context.Context, req *models.Deploym
 		}
 	}
 
-	return &models.DeploymentActionResult{Status: "deployed"}, nil
+	return &models.DeploymentActionResult{Status: models.DeploymentStatusDeployed}, nil
 }
 
 func (a *localDeploymentAdapter) Undeploy(ctx context.Context, deployment *models.Deployment) error {

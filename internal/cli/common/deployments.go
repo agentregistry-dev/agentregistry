@@ -4,13 +4,18 @@ import (
 	"fmt"
 
 	"github.com/agentregistry-dev/agentregistry/internal/client"
+	"github.com/agentregistry-dev/agentregistry/pkg/models"
 )
 
 // BuildDeploymentCounts indexes deployment rows by resource name and version.
+// Skip non-deployed statuses and non-matching resource types.
 func BuildDeploymentCounts(deployments []*client.DeploymentResponse, resourceType string) map[string]map[string]int {
 	counts := make(map[string]map[string]int)
 	for _, deployment := range deployments {
 		if deployment == nil || deployment.ResourceType != resourceType {
+			continue
+		}
+		if deployment.Status != models.DeploymentStatusDeployed {
 			continue
 		}
 		if counts[deployment.ServerName] == nil {

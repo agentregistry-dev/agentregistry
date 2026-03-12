@@ -5,6 +5,20 @@ import (
 	"time"
 )
 
+// Deployment status values used across registry workflows and API payloads.
+const (
+	// DeploymentStatusDeploying indicates the deployment is currently being applied.
+	DeploymentStatusDeploying = "deploying"
+	// DeploymentStatusDeployed indicates the deployment is successfully applied.
+	DeploymentStatusDeployed = "deployed"
+	// DeploymentStatusFailed indicates deployment failed and may need cleanup/retry.
+	DeploymentStatusFailed = "failed"
+	// DeploymentStatusCancelled indicates deployment was cancelled before completion.
+	DeploymentStatusCancelled = "cancelled"
+	// DeploymentStatusDiscovered indicates deployment was discovered from runtime state.
+	DeploymentStatusDiscovered = "discovered"
+)
+
 // Deployment represents a deployed resource with unified deployment metadata.
 type Deployment struct {
 	ID               string            `json:"id"`

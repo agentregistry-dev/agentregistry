@@ -1321,6 +1321,54 @@ func TestUndeployDeployment_UsesAdapterForLocalPlatform(t *testing.T) {
 	assert.True(t, removeCalled)
 }
 
+func TestUndeployDeployment_FailedOrCancelledRunsAdapterCleanup(t *testing.T) {
+	tests := []struct {
+		name   string
+		status string
+	}{
+		{name: "failed", status: models.DeploymentStatusFailed},
+		{name: "cancelled", status: models.DeploymentStatusCancelled},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			undeployCalled := false
+			removeCalled := false
+			mockDB := &deploymentMockDB{
+				getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {
+					return &models.Provider{ID: providerID, Platform: "local"}, nil
+				},
+				removeDeploymentByIdFn: func(_ context.Context, _ pgx.Tx, id string) error {
+					removeCalled = id == "dep-failed-1"
+					return nil
+				},
+			}
+			adapter := &testDeploymentAdapter{
+				undeployFn: func(_ context.Context, _ *models.Deployment) error {
+					undeployCalled = true
+					return nil
+				},
+			}
+
+			svc := &registryServiceImpl{
+				db: mockDB,
+				deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+					"local": adapter,
+				},
+			}
+
+			err := svc.UndeployDeployment(context.Background(), &models.Deployment{
+				ID:         "dep-failed-1",
+				ProviderID: "local",
+				Status:     tt.status,
+			})
+			require.NoError(t, err)
+			assert.True(t, undeployCalled)
+			assert.True(t, removeCalled)
+		})
+	}
+}
+
 func TestCreateDeployment_RejectsUnsupportedResourceTypeForProvider(t *testing.T) {
 	mockDB := &deployCreateMockDB{
 		getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {

@@ -830,7 +830,7 @@ func kubernetesDiscoverDeployments(ctx context.Context, provider *models.Provide
 			Version:          "unknown",
 			DeployedAt:       creation,
 			UpdatedAt:        creation,
-			Status:           "deployed",
+			Status:           models.DeploymentStatusDeployed,
 			Origin:           "discovered",
 			ProviderID:       providerID,
 			ResourceType:     resourceType,

@@ -44,7 +44,7 @@ func (a *kubernetesDeploymentAdapter) Deploy(ctx context.Context, req *models.De
 	if err := kubernetesApplyPlatformConfig(ctx, provider, cfg, false); err != nil {
 		return nil, fmt.Errorf("apply kubernetes platform config: %w", err)
 	}
-	return &models.DeploymentActionResult{Status: "deployed"}, nil
+	return &models.DeploymentActionResult{Status: models.DeploymentStatusDeployed}, nil
 }
 
 func (a *kubernetesDeploymentAdapter) Undeploy(ctx context.Context, deployment *models.Deployment) error {
