@@ -125,7 +125,7 @@ dev-ui: ## Run the Next.js UI in development mode
 
 # Start local development environment (docker-compose only, no Kind)
 .PHONY: run-docker
-run-docker: docker-registry docker-compose-up build-cli  ## Start the local development environment
+run-docker: docker-registry docker-compose-up build-cli ## Start local development environment (docker-compose only, no Kind)
 	@echo ""
 	@echo "agentregistry is running (docker backend):"
 	@echo "  UI:  http://localhost:12121"
@@ -136,7 +136,7 @@ run-docker: docker-registry docker-compose-up build-cli  ## Start the local deve
 
 # Start local development environment with Kind cluster
 .PHONY: run-k8s
-run-k8s: docker-registry create-kind-cluster docker-compose-up build-cli
+run-k8s: docker-registry create-kind-cluster docker-compose-up build-cli ## Start local development environment with Kind cluster
 	@echo ""
 	@echo "agentregistry is running (k8s backend):"
 	@echo "  UI:  http://localhost:12121"
@@ -147,11 +147,11 @@ run-k8s: docker-registry create-kind-cluster docker-compose-up build-cli
 
 # Start local development environment (default: k8s)
 .PHONY: run
-run: run-k8s
+run: run-k8s # Start local development environment (default: k8s)
 
 # Stop local development environment
 .PHONY: down
-down: docker-compose-down ## Stop the local development environment
+down: docker-compose-down delete-kind-cluster ## Stop the local development environment
 	@echo "agentregistry stopped"
 
 # Run Go tests (unit tests only)
