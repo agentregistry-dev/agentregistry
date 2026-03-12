@@ -11,6 +11,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	api "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -1700,4 +1701,180 @@ func TestGetDeploymentByID_FallsBackToDiscoveredDeployments(t *testing.T) {
 	assert.Equal(t, discoveredID, got.ID)
 	assert.Equal(t, originDiscovered, got.Origin)
 	assert.Equal(t, "kubernetes-default", got.ProviderID)
+}
+
+// promptMockDB is a minimal mock for database.Database that only implements
+// GetPromptByNameAndVersion for testing ResolveAgentManifestPrompts.
+type promptMockDB struct {
+	database.Database
+	getPromptByNameAndVersionFn func(ctx context.Context, tx pgx.Tx, name, version string) (*models.PromptResponse, error)
+}
+
+func (m *promptMockDB) GetPromptByNameAndVersion(ctx context.Context, tx pgx.Tx, name, version string) (*models.PromptResponse, error) {
+	return m.getPromptByNameAndVersionFn(ctx, tx, name, version)
+}
+
+func TestResolveAgentManifestPrompts(t *testing.T) {
+	tests := []struct {
+		name     string
+		manifest *models.AgentManifest
+		dbFn     func(ctx context.Context, tx pgx.Tx, name, version string) (*models.PromptResponse, error)
+		want     []api.ResolvedPrompt
+		wantErr  string
+	}{
+		{
+			name:     "nil manifest returns nil",
+			manifest: nil,
+			want:     nil,
+		},
+		{
+			name:     "empty prompts returns nil",
+			manifest: &models.AgentManifest{Prompts: []models.PromptRef{}},
+			want:     nil,
+		},
+		{
+			name: "single prompt with explicit version",
+			manifest: &models.AgentManifest{
+				Prompts: []models.PromptRef{
+					{Name: "my-system-prompt", RegistryPromptName: "system-prompt", RegistryPromptVersion: "2.0.0"},
+				},
+			},
+			dbFn: func(_ context.Context, _ pgx.Tx, name, version string) (*models.PromptResponse, error) {
+				if name == "system-prompt" && version == "2.0.0" {
+					return &models.PromptResponse{
+						Prompt: models.PromptJSON{Name: "system-prompt", Version: "2.0.0", Content: "You are a coding assistant."},
+					}, nil
+				}
+				return nil, database.ErrNotFound
+			},
+			want: []api.ResolvedPrompt{
+				{Name: "my-system-prompt", Content: "You are a coding assistant."},
+			},
+		},
+		{
+			name: "version defaults to latest when empty",
+			manifest: &models.AgentManifest{
+				Prompts: []models.PromptRef{
+					{Name: "safety", RegistryPromptName: "safety-prompt"},
+				},
+			},
+			dbFn: func(_ context.Context, _ pgx.Tx, name, version string) (*models.PromptResponse, error) {
+				if name == "safety-prompt" && version == "latest" {
+					return &models.PromptResponse{
+						Prompt: models.PromptJSON{Name: "safety-prompt", Version: "latest", Content: "Be safe."},
+					}, nil
+				}
+				return nil, fmt.Errorf("unexpected lookup: %s@%s", name, version)
+			},
+			want: []api.ResolvedPrompt{
+				{Name: "safety", Content: "Be safe."},
+			},
+		},
+		{
+			name: "display name falls back to registry prompt name",
+			manifest: &models.AgentManifest{
+				Prompts: []models.PromptRef{
+					{RegistryPromptName: "fallback-prompt", RegistryPromptVersion: "1.0.0"},
+				},
+			},
+			dbFn: func(_ context.Context, _ pgx.Tx, name, version string) (*models.PromptResponse, error) {
+				return &models.PromptResponse{
+					Prompt: models.PromptJSON{Name: name, Version: version, Content: "Fallback content."},
+				}, nil
+			},
+			want: []api.ResolvedPrompt{
+				{Name: "fallback-prompt", Content: "Fallback content."},
+			},
+		},
+		{
+			name: "multiple prompts resolved in order",
+			manifest: &models.AgentManifest{
+				Prompts: []models.PromptRef{
+					{Name: "first", RegistryPromptName: "prompt-a", RegistryPromptVersion: "1.0.0"},
+					{Name: "second", RegistryPromptName: "prompt-b", RegistryPromptVersion: "2.0.0"},
+				},
+			},
+			dbFn: func(_ context.Context, _ pgx.Tx, name, version string) (*models.PromptResponse, error) {
+				switch name {
+				case "prompt-a":
+					return &models.PromptResponse{
+						Prompt: models.PromptJSON{Name: name, Version: version, Content: "Content A"},
+					}, nil
+				case "prompt-b":
+					return &models.PromptResponse{
+						Prompt: models.PromptJSON{Name: name, Version: version, Content: "Content B"},
+					}, nil
+				}
+				return nil, database.ErrNotFound
+			},
+			want: []api.ResolvedPrompt{
+				{Name: "first", Content: "Content A"},
+				{Name: "second", Content: "Content B"},
+			},
+		},
+		{
+			name: "empty prompt name returns error",
+			manifest: &models.AgentManifest{
+				Prompts: []models.PromptRef{
+					{Name: "bad-ref", RegistryPromptName: ""},
+				},
+			},
+			wantErr: "prompt name is required",
+		},
+		{
+			name: "whitespace-only prompt name returns error",
+			manifest: &models.AgentManifest{
+				Prompts: []models.PromptRef{
+					{Name: "blank", RegistryPromptName: "   "},
+				},
+			},
+			wantErr: "prompt name is required",
+		},
+		{
+			name: "db lookup failure propagates error",
+			manifest: &models.AgentManifest{
+				Prompts: []models.PromptRef{
+					{Name: "missing", RegistryPromptName: "nonexistent", RegistryPromptVersion: "1.0.0"},
+				},
+			},
+			dbFn: func(_ context.Context, _ pgx.Tx, _, _ string) (*models.PromptResponse, error) {
+				return nil, database.ErrNotFound
+			},
+			wantErr: `resolve prompt "nonexistent" version "1.0.0"`,
+		},
+		{
+			name: "error on second prompt does not return partial results",
+			manifest: &models.AgentManifest{
+				Prompts: []models.PromptRef{
+					{Name: "ok", RegistryPromptName: "good-prompt", RegistryPromptVersion: "1.0.0"},
+					{Name: "bad", RegistryPromptName: "bad-prompt", RegistryPromptVersion: "1.0.0"},
+				},
+			},
+			dbFn: func(_ context.Context, _ pgx.Tx, name, _ string) (*models.PromptResponse, error) {
+				if name == "good-prompt" {
+					return &models.PromptResponse{
+						Prompt: models.PromptJSON{Name: name, Version: "1.0.0", Content: "Good"},
+					}, nil
+				}
+				return nil, fmt.Errorf("db connection lost")
+			},
+			wantErr: `resolve prompt "bad-prompt" version "1.0.0"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockDB := &promptMockDB{getPromptByNameAndVersionFn: tt.dbFn}
+			svc := &registryServiceImpl{db: mockDB}
+
+			got, err := svc.ResolveAgentManifestPrompts(context.Background(), tt.manifest)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }

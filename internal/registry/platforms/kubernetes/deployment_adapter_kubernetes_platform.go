@@ -591,9 +591,9 @@ func kubernetesBuildRemoteMCPURL(host string, port uint32, path string) string {
 }
 
 func kubernetesAgentConfigMapName(name, version, deploymentID string) string {
-	base := fmt.Sprintf("%s-mcp-config", name)
+	base := fmt.Sprintf("%s-agent-config", name)
 	if version != "" {
-		base = fmt.Sprintf("%s-%s-mcp-config", name, version)
+		base = fmt.Sprintf("%s-%s-agent-config", name, version)
 	}
 	return kubernetesDeploymentScopedName(base, deploymentID)
 }

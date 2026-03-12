@@ -1382,7 +1382,7 @@ func (s *registryServiceImpl) ResolveAgentManifestPrompts(ctx context.Context, m
 	for _, ref := range manifest.Prompts {
 		promptName := strings.TrimSpace(ref.RegistryPromptName)
 		if promptName == "" {
-			continue
+			return nil, fmt.Errorf("prompt name is required")
 		}
 
 		version := strings.TrimSpace(ref.RegistryPromptVersion)

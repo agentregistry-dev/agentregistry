@@ -153,7 +153,7 @@ func TestKubernetesTranslatePlatformConfig_AgentWithMCPServers(t *testing.T) {
 		t.Fatalf("expected 1 ConfigMap, got %d", len(config.ConfigMaps))
 	}
 	cm := config.ConfigMaps[0]
-	expectedCMName := "test-agent-v1-mcp-config"
+	expectedCMName := "test-agent-v1-agent-config"
 	if cm.Name != expectedCMName {
 		t.Errorf("expected ConfigMap name %s, got %s", expectedCMName, cm.Name)
 	}
@@ -309,7 +309,7 @@ func TestKubernetesTranslatePlatformConfig_DeploymentIDMetadataAndNaming(t *test
 		t.Fatalf("agent deployment-id annotation = %q, want %q", got, "dep-agent-123")
 	}
 	configMap := config.ConfigMaps[0]
-	if configMap.Name != "demo-agent-1-0-0-mcp-config-dep-agent-123" {
+	if configMap.Name != "demo-agent-1-0-0-agent-config-dep-agent-123" {
 		t.Fatalf("unexpected configmap name: %s", configMap.Name)
 	}
 	remote := config.RemoteMCPServers[0]
