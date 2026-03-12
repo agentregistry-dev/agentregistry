@@ -125,7 +125,7 @@ dev-ui: ## Run the Next.js UI in development mode
 
 # Start local development environment (docker-compose only, no Kind)
 .PHONY: run-docker
-run-docker: docker-registry docker-compose-up build-cli ## Start local development environment (docker-compose only, no Kind)
+run-docker: local-registry docker-compose-up build-cli ## Start local development environment (docker-compose only, no Kind)
 	@echo ""
 	@echo "agentregistry is running (docker backend):"
 	@echo "  UI:  http://localhost:12121"
@@ -136,7 +136,7 @@ run-docker: docker-registry docker-compose-up build-cli ## Start local developme
 
 # Start local development environment with Kind cluster
 .PHONY: run-k8s
-run-k8s: docker-registry create-kind-cluster build-cli ## Start local development environment with Kind cluster
+run-k8s: local-registry create-kind-cluster build-cli ## Start local development environment with Kind cluster
 	@echo ""
 	@echo "agentregistry is running (k8s backend):"
 	@echo "  UI:  http://localhost:12121"
@@ -168,7 +168,7 @@ test: ## Run Go integration tests
 
 # Run e2e tests against docker backend (skips Kind cluster setup and k8s tests)
 .PHONY: e2e-docker
-e2e-docker: docker-registry docker-compose-up build-cli
+e2e-docker: local-registry docker-compose-up build-cli
 	ARCTL_API_BASE_URL=http://localhost:12121/v0 E2E_BACKEND=docker \
 	  go tool gotestsum --format testdox -- -v -tags=e2e -timeout 45m ./e2e/...
 
@@ -244,16 +244,16 @@ docker-server: .env ## Build the server Docker image
 	$(DOCKER_BUILDER) build $(DOCKER_BUILD_ARGS) -f docker/server.Dockerfile -t $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) --build-arg LDFLAGS="$(LDFLAGS)" .
 	@echo "✓ Docker image built successfully"
 
-.PHONY: docker-registry
-docker-registry: ## Ensure the local Docker registry is running on port 5001
-	@echo "Ensuring local Docker registry is running on port 5001..."
-	@if docker ps --format '{{.Ports}}' | grep -q '5001->5000'; then \
-		echo "Registry already running on port 5001. Skipping." ; \
-	elif docker inspect docker-registry >/dev/null 2>&1; then \
-		docker start docker-registry ; \
+.PHONY: local-registry
+local-registry: ## Ensure the local registry (kind-registry) is running on port 5001
+	@echo "Ensuring local registry is running on port 5001..."
+	@if [ "$$(docker inspect -f '{{.State.Running}}' kind-registry 2>/dev/null || true)" = "true" ]; then \
+		echo "kind-registry already running. Skipping." ; \
+	elif docker inspect kind-registry >/dev/null 2>&1; then \
+		docker start kind-registry ; \
 	else \
 		docker run \
-		-d --restart=always -p "127.0.0.1:5001:5000" --name docker-registry "docker.io/library/registry:2" ; \
+		-d --restart=always -p "127.0.0.1:5001:5000" --network bridge --name kind-registry "docker.io/library/registry:2" ; \
 	fi
 
 .PHONY: docker
@@ -289,11 +289,15 @@ KIND_CLUSTER_CONTEXT ?= kind-$(KIND_CLUSTER_NAME)
 KIND_NAMESPACE ?= agentregistry
 
 .PHONY: create-kind-cluster
-create-kind-cluster: ## Create a local Kind cluster with MetalLB (skips if cluster already exists)
+create-kind-cluster: local-registry ## Create a local Kind cluster with MetalLB (skips if cluster already exists)
 	@if go tool kind get clusters 2>/dev/null | grep -qx "$(KIND_CLUSTER_NAME)"; then \
 	  echo "Kind cluster '$(KIND_CLUSTER_NAME)' already exists, skipping"; \
 	else \
-	  KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) KIND_IMAGE_VERSION=$(KIND_IMAGE_VERSION) bash ./scripts/kind/setup-kind.sh; \
+	  KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) \
+		KIND_IMAGE_VERSION=$(KIND_IMAGE_VERSION) \
+		REG_NAME=kind-registry \
+		REG_PORT=5001 \
+		bash ./scripts/kind/setup-kind.sh; \
 	  KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) bash ./scripts/kind/setup-metallb.sh; \
 	fi
 
