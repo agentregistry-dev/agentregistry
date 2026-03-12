@@ -15,6 +15,7 @@ func TestCommandTree(t *testing.T) {
 	expectedTopLevel := []string{
 		"agent",
 		"configure",
+		"deployments",
 		"embeddings",
 		"export",
 		"import",
@@ -42,10 +43,12 @@ func TestCommandTree(t *testing.T) {
 
 	// Verify subcommand counts for parent commands
 	expectedSubcmdCounts := map[string]int{
-		// init, build, run, add-skill, add-prompt, add-mcp, publish, delete, deploy, list, show
-		"agent": 11,
-		// init, build, add-tool, publish, delete, deploy, list, run, show
-		"mcp": 9,
+		// init, build, run, add-skill, add-prompt, add-mcp, publish, delete, list, show
+		"agent": 10,
+		// init, build, add-tool, publish, delete, list, run, show
+		"mcp": 8,
+		// create, list, show, delete
+		"deployments": 4,
 		// init, build, list, publish, delete, pull, show
 		"skill": 7,
 		// list, publish, delete, show
