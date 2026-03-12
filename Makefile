@@ -169,13 +169,13 @@ test: ## Run Go integration tests
 # Run e2e tests against docker backend (skips Kind cluster setup and k8s tests)
 .PHONY: e2e-docker
 e2e-docker: local-registry docker-compose-up build-cli
-	ARCTL_API_BASE_URL=http://localhost:12121/v0 E2E_BACKEND=docker \
+	ARCTL_API_BASE_URL=http://localhost:12121/v0 E2E_BACKEND=docker GOOGLE_API_KEY=$(GOOGLE_API_KEY) \
 	  go tool gotestsum --format testdox -- -v -tags=e2e -timeout 45m ./e2e/...
 
 # Run e2e tests against k8s backend (full Kind cluster setup)
 .PHONY: e2e-k8s
 e2e-k8s: setup-kind-cluster build-cli
-	ARCTL_API_BASE_URL=http://localhost:12121/v0 KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) E2E_BACKEND=k8s \
+	ARCTL_API_BASE_URL=http://localhost:12121/v0 KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) E2E_BACKEND=k8s GOOGLE_API_KEY=$(GOOGLE_API_KEY) \
 	  go tool gotestsum --format testdox -- -v -tags=e2e -timeout 45m ./e2e/...
 
 # Run e2e tests (default: k8s)

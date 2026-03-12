@@ -12,8 +12,14 @@ KUBE_CONTEXT="${KUBE_CONTEXT:-kind-agentregistry}"
 if [ ! -x "${KAGENT}" ]; then
   echo "Downloading kagent CLI to ${KAGENT}..."
   mkdir -p "${BIN_DIR}"
+  # Ignore the get-kagent post-install PATH check — we invoke kagent directly
+  # via ${KAGENT} so it does not need to be on $PATH.
   curl -sL https://raw.githubusercontent.com/kagent-dev/kagent/refs/heads/main/scripts/get-kagent | \
-    KAGENT_INSTALL_DIR="${BIN_DIR}" bash
+    KAGENT_INSTALL_DIR="${BIN_DIR}" bash || true
+  if [ ! -x "${KAGENT}" ]; then
+    echo "ERROR: kagent binary not found at ${KAGENT} after installation"
+    exit 1
+  fi
 fi
 
 # Use placeholder API keys if not set — kagent requires them at install time
