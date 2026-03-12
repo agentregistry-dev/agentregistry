@@ -34,9 +34,11 @@ var (
 )
 
 func init() {
-	BuildCmd.Flags().StringVarP(&buildDockerImageName, "name", "n", "", "Full Docker image name")
-	BuildCmd.Flags().BoolVar(&buildPush, "push", false, "Push Docker image to registry")
+	BuildCmd.Flags().StringVarP(&buildDockerImageName, "image", "n", "", "Full image specification (e.g., docker.io/myorg/my-mcp:v1.0.0)")
+	BuildCmd.Flags().BoolVar(&buildPush, "push", false, "Push the image to the container registry, specififed by --image")
 	BuildCmd.Flags().StringVar(&buildPlatform, "platform", "", "Target platform (e.g., linux/amd64,linux/arm64)")
+
+	BuildCmd.MarkFlagRequired("image")
 }
 
 func runBuild(cmd *cobra.Command, args []string) error {

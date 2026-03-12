@@ -32,7 +32,7 @@ var (
 
 func init() {
 	BuildCmd.Flags().StringVar(&buildImage, "image", "", "Full image specification (e.g., ghcr.io/myorg/my-agent:v1.0.0)")
-	BuildCmd.Flags().BoolVar(&buildPush, "push", false, "Push the image to the registry")
+	BuildCmd.Flags().BoolVar(&buildPush, "push", false, "Push the image to the container registry, specififed by --image")
 	BuildCmd.Flags().StringVar(&buildPlatform, "platform", "", "Target platform for Docker build (e.g., linux/amd64, linux/arm64)")
 }
 

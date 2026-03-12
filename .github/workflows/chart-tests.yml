@@ -1,0 +1,80 @@
+name: Chart Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'charts/**'
+      - '.github/workflows/chart-tests.yml'
+      - 'Makefile'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'charts/**'
+      - '.github/workflows/chart-tests.yml'
+      - 'Makefile'
+  merge_group:
+    branches: [ main ]
+    types: [ checks_requested ]
+  workflow_dispatch:
+
+jobs:
+  chart-tests:
+    name: Helm chart lint & unit tests
+    runs-on: ubuntu-latest
+    env:
+      HELM_PLUGIN_UNITTEST_VERSION: v1.0.3
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Cache the helm-unittest plugin dir so repeated runs skip re-downloading.
+      - name: Cache Helm plugins
+        uses: actions/cache@v4
+        id: helm-plugins-cache
+        with:
+          path: ~/.local/share/helm/plugins
+          key: ${{ runner.os }}-helm-plugins-unittest-${{ env.HELM_PLUGIN_UNITTEST_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-helm-plugins-unittest-
+
+      - name: Ensure helm-unittest plugin (Makefile)
+        # Reuse Makefile logic to centralize install behavior and flags
+        run: |
+          set -euo pipefail
+          make helm-unittest-install
+
+      - name: Show Helm and plugin versions
+        run: |
+          helm version --short
+          helm plugin list
+
+      - name: Lint chart (Makefile)
+        run: |
+          set -euo pipefail
+          make charts-lint HELM_CHART_DIR=charts/agentregistry
+
+      - name: Render templates (smoke test)
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/chart-render
+          make charts-render-test HELM_CHART_DIR=charts/agentregistry \
+            > /tmp/chart-render/rendered.yaml
+          echo "--- rendered manifest line count ---"
+          wc -l /tmp/chart-render/rendered.yaml
+
+      - name: Run chart tests (Makefile)
+        run: |
+          set -euo pipefail
+          make charts-test HELM_CHART_DIR=charts/agentregistry
+
+      - name: Upload rendered manifests (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-manifests
+          path: /tmp/chart-render/rendered.yaml
+          retention-days: 3

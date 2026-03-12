@@ -8,6 +8,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/project"
+	agentutils "github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/spf13/cobra"
@@ -107,11 +108,15 @@ func buildSkillRef(name string) (models.SkillRef, error) {
 			Image: skillImage,
 		}, nil
 	}
+	url := skillRegistryURL
+	if url == "" {
+		url = agentutils.GetDefaultRegistryURL()
+	}
 	return models.SkillRef{
 		Name:                 name,
 		RegistrySkillName:    skillRegistrySkillName,
 		RegistrySkillVersion: skillRegistrySkillVersion,
-		RegistryURL:          skillRegistryURL,
+		RegistryURL:          url,
 	}, nil
 }
 

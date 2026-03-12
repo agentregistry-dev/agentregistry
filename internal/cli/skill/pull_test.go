@@ -198,8 +198,8 @@ func TestRunPull_NoSourceAvailable(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for skill with no source, got nil")
 	}
-	if got := err.Error(); !stringContains(got, "no Docker package or GitHub repository") {
-		t.Errorf("error = %q, want it to contain 'no Docker package or GitHub repository'", got)
+	if got := err.Error(); !stringContains(got, "no Docker package or Git repository") {
+		t.Errorf("error = %q, want it to contain 'no Docker package or Git repository'", got)
 	}
 }
 

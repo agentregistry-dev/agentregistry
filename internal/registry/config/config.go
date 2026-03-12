@@ -42,9 +42,8 @@ type Config struct {
 	AgentGatewayPort uint16 `env:"AGENT_GATEWAY_PORT" envDefault:"8081"`
 
 	// Runtime Configuration
-	ReconcileOnStartup bool   `env:"RECONCILE_ON_STARTUP" envDefault:"true"`
-	RuntimeDir         string `env:"RUNTIME_DIR" envDefault:"/tmp/arctl-runtime"`
-	Verbose            bool   `env:"VERBOSE" envDefault:"false"`
+	RuntimeDir string `env:"RUNTIME_DIR" envDefault:"/tmp/arctl-runtime"`
+	Verbose    bool   `env:"VERBOSE" envDefault:"false"`
 
 	// Embeddings / Semantic Search
 	Embeddings EmbeddingsConfig

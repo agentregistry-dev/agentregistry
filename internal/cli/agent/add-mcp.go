@@ -8,6 +8,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/project"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/tui"
+	agentutils "github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	tea "github.com/charmbracelet/bubbletea"
@@ -85,11 +86,15 @@ func addMcpCmd(name string) error {
 				Name:    name,
 				Headers: headerMap,
 			}
-		} else if registryURL != "" && registryServerName != "" {
+		} else if registryServerName != "" {
+			url := registryURL
+			if url == "" {
+				url = agentutils.GetDefaultRegistryURL()
+			}
 			res = models.McpServerType{
 				Type:                       "registry",
 				Name:                       name,
-				RegistryURL:                registryURL,
+				RegistryURL:                url,
 				RegistryServerName:         registryServerName,
 				RegistryServerVersion:      registryServerVersion,
 				RegistryServerPreferRemote: registryServerPreferRemote,

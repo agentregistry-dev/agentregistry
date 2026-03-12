@@ -14,7 +14,7 @@ import (
 )
 
 type ProviderListInput struct {
-	Platform string `query:"platform" json:"platform,omitempty" doc:"Filter providers by platform type (local, kubernetes)"`
+	Platform string `query:"platform" json:"platform,omitempty" doc:"Filter providers by platform type"`
 }
 
 type ProviderByIDInput struct {

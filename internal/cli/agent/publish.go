@@ -17,7 +17,7 @@ import (
 
 var (
 	publishVersion   string
-	githubRepository string
+	gitRepository string
 	dryRunFlag       bool
 	overwriteFlag    bool
 	publishDesc      string
@@ -34,7 +34,7 @@ This command supports two modes:
    arctl agent publish ./my-agent
 
 2. Direct registration (without agent.yaml):
-   arctl agent publish my-agent --github https://github.com/myorg/my-agent
+   arctl agent publish my-agent --git https://github.com/myorg/my-agent
 
 Agent name format:
   - Must start and end with alphanumeric characters
@@ -49,9 +49,9 @@ Examples:
   # Publish from specified directory
   arctl agent publish ./my-agent
 
-  # Publish directly with name and GitHub repo (no agent.yaml needed)
+  # Publish directly with name and git repo (no agent.yaml needed)
   arctl agent publish my-agent \
-    --github https://github.com/myorg/my-agent \
+    --git https://github.com/myorg/my-agent \
     --version 1.0.0 \
     --description "My agent"
 
@@ -65,7 +65,7 @@ Examples:
 
 func init() {
 	PublishCmd.Flags().StringVar(&publishVersion, "version", "", "Version to publish (overrides manifest)")
-	PublishCmd.Flags().StringVar(&githubRepository, "github", "", "GitHub repository URL")
+	PublishCmd.Flags().StringVar(&gitRepository, "git", "", "Git repository URL (GitHub, GitLab, Bitbucket)")
 	PublishCmd.Flags().StringVar(&publishDesc, "description", "", "Agent description (when not using agent.yaml)")
 	PublishCmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Show what would be done without actually doing it")
 	PublishCmd.Flags().BoolVar(&overwriteFlag, "overwrite", false, "Overwrite if the version is already published")
@@ -126,10 +126,10 @@ func buildAgentJSONFromManifest(mgr *common.Manager) (*models.AgentJSON, error) 
 		Status:        "active",
 	}
 
-	if githubRepository != "" {
+	if gitRepository != "" {
 		agentJSON.Repository = &model.Repository{
-			URL:    githubRepository,
-			Source: "github",
+			URL:    gitRepository,
+			Source: "git",
 		}
 	}
 
@@ -140,8 +140,8 @@ func buildAgentJSONFromManifest(mgr *common.Manager) (*models.AgentJSON, error) 
 func buildAgentJSONDirect(agentName string) (*models.AgentJSON, error) {
 	agentName = strings.ToLower(agentName)
 
-	if githubRepository == "" {
-		return nil, fmt.Errorf("--github is required when publishing without agent.yaml")
+	if gitRepository == "" {
+		return nil, fmt.Errorf("--git is required when publishing without agent.yaml")
 	}
 	if publishVersion == "" {
 		return nil, fmt.Errorf("--version is required when publishing without agent.yaml")
@@ -155,8 +155,8 @@ func buildAgentJSONDirect(agentName string) (*models.AgentJSON, error) {
 		Version: publishVersion,
 		Status:  "active",
 		Repository: &model.Repository{
-			URL:    githubRepository,
-			Source: "github",
+			URL:    gitRepository,
+			Source: "git",
 		},
 	}, nil
 }

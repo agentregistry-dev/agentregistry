@@ -18,7 +18,7 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [version, setVersion] = useState("latest")
-  const [publishSource, setPublishSource] = useState<"github" | "docker">("github")
+  const [publishSource, setPublishSource] = useState<"git" | "docker">("git")
   const [repositoryUrl, setRepositoryUrl] = useState("")
   const [dockerImage, setDockerImage] = useState("")
   const [loading, setLoading] = useState(false)
@@ -42,8 +42,8 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
       }
       const trimmedRepositoryUrl = repositoryUrl.trim()
       const trimmedDockerImage = dockerImage.trim()
-      if (publishSource === "github" && !trimmedRepositoryUrl) {
-        throw new Error("GitHub repository URL is required for GitHub publish")
+      if (publishSource === "git" && !trimmedRepositoryUrl) {
+        throw new Error("Repository URL is required")
       }
       if (publishSource === "docker" && !trimmedDockerImage) {
         throw new Error("Docker image is required for Docker publish")
@@ -54,9 +54,9 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
         name: name.trim(),
         description: description.trim(),
         version: version.trim(),
-        repository: publishSource === "github" ? {
+        repository: publishSource === "git" ? {
           url: trimmedRepositoryUrl,
-          source: "github"
+          source: "git"
         } : undefined,
         packages: publishSource === "docker" ? [
           {
@@ -77,7 +77,7 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
       setName("")
       setDescription("")
       setVersion("latest")
-      setPublishSource("github")
+      setPublishSource("git")
       setRepositoryUrl("")
       setDockerImage("")
 
@@ -95,7 +95,7 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
     setName("")
     setDescription("")
     setVersion("latest")
-    setPublishSource("github")
+    setPublishSource("git")
     setRepositoryUrl("")
     setDockerImage("")
     setError(null)
@@ -152,11 +152,11 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
             <div className="flex gap-2">
               <Button
                 type="button"
-                variant={publishSource === "github" ? "default" : "outline"}
-                onClick={() => setPublishSource("github")}
+                variant={publishSource === "git" ? "default" : "outline"}
+                onClick={() => setPublishSource("git")}
                 disabled={loading}
               >
-                GitHub Repository
+                Git Repository
               </Button>
               <Button
                 type="button"
@@ -189,10 +189,10 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
             </p>
           </div>
 
-          {publishSource === "github" ? (
+          {publishSource === "git" ? (
             <div className="space-y-2">
               <Label htmlFor="repositoryUrl">
-                GitHub Repository URL <span className="text-red-500">*</span>
+                Repository URL <span className="text-red-500">*</span>
               </Label>
               <Input
                 id="repositoryUrl"
@@ -204,7 +204,7 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Link to the skill&apos;s public GitHub source
+                Link to the skill&apos;s Git repository (GitHub, GitLab, Bitbucket, etc.)
               </p>
             </div>
           ) : (

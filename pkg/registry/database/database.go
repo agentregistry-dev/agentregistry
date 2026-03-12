@@ -203,6 +203,8 @@ type Database interface {
 	CheckSkillVersionExists(ctx context.Context, tx pgx.Tx, skillName, version string) (bool, error)
 	// UnmarkSkillAsLatest marks the current latest version of a skill as no longer latest
 	UnmarkSkillAsLatest(ctx context.Context, tx pgx.Tx, skillName string) error
+	// DeleteSkill permanently removes a skill version from the database
+	DeleteSkill(ctx context.Context, tx pgx.Tx, skillName, version string) error
 
 	// Prompts API
 	// CreatePrompt inserts a new prompt version with official metadata
@@ -244,8 +246,8 @@ type Database interface {
 	GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
 	// GetDeploymentByID retrieves a specific deployment by UUID.
 	GetDeploymentByID(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error)
-	// UpdateDeploymentStatus updates the status of a deployment by ID.
-	UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, id, status string) error
+	// UpdateDeploymentState applies a partial state patch to a deployment by ID.
+	UpdateDeploymentState(ctx context.Context, tx pgx.Tx, id string, patch *models.DeploymentStatePatch) error
 	// RemoveDeploymentByID removes a deployment by ID.
 	RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id string) error
 }

@@ -179,9 +179,9 @@ export type DeploymentRequest = {
         [key: string]: unknown;
     };
     /**
-     * Concrete provider instance ID. Defaults to local singleton when omitted.
+     * Concrete provider instance ID.
      */
-    providerId?: string;
+    providerId: string;
     /**
      * Type of resource to deploy (mcp, agent)
      */
@@ -206,7 +206,7 @@ export type DeploymentSummary = {
     version?: string;
 };
 
-export type DeploymentsListResponseBody = {
+export type DeploymentsListResponse = {
     /**
      * List of deployed servers
      */
@@ -1049,7 +1049,7 @@ export type ListDeploymentsData = {
     path?: never;
     query?: {
         /**
-         * Filter by provider platform type (for OSS: local or kubernetes)
+         * Filter by provider platform type (matches registered provider platforms)
          */
         platform?: string;
         /**
@@ -1089,7 +1089,7 @@ export type ListDeploymentsResponses = {
     /**
      * OK
      */
-    200: DeploymentsListResponseBody;
+    200: DeploymentsListResponse;
 };
 
 export type ListDeploymentsResponse = ListDeploymentsResponses[keyof ListDeploymentsResponses];
@@ -1463,7 +1463,7 @@ export type ListProvidersData = {
     path?: never;
     query?: {
         /**
-         * Filter providers by platform type (local, kubernetes)
+         * Filter providers by platform type
          */
         platform?: string;
     };
@@ -2013,6 +2013,40 @@ export type GetSkillVersionsV0Responses = {
 };
 
 export type GetSkillVersionsV0Response = GetSkillVersionsV0Responses[keyof GetSkillVersionsV0Responses];
+
+export type DeleteSkillVersionV0Data = {
+    body?: never;
+    path: {
+        /**
+         * URL-encoded skill name
+         */
+        skillName: string;
+        /**
+         * URL-encoded skill version
+         */
+        version: string;
+    };
+    query?: never;
+    url: '/v0/skills/{skillName}/versions/{version}';
+};
+
+export type DeleteSkillVersionV0Errors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type DeleteSkillVersionV0Error = DeleteSkillVersionV0Errors[keyof DeleteSkillVersionV0Errors];
+
+export type DeleteSkillVersionV0Responses = {
+    /**
+     * OK
+     */
+    200: EmptyResponse;
+};
+
+export type DeleteSkillVersionV0Response = DeleteSkillVersionV0Responses[keyof DeleteSkillVersionV0Responses];
 
 export type GetSkillVersionV0Data = {
     body?: never;

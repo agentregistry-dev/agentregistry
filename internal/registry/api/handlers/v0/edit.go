@@ -113,8 +113,9 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, registry service.Reg
 
 		return &types.Response[models.ServerResponse]{
 			Body: attachServerDeploymentMeta(
+				ctx,
+				registry,
 				[]models.ServerResponse{normalizeServerResponse(updatedServer)},
-				deploymentResourceIndex(ctx, registry),
 			)[0],
 		}, nil
 	})

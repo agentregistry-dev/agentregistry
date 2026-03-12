@@ -2384,6 +2384,58 @@ func (db *PostgreSQL) UnmarkSkillAsLatest(ctx context.Context, tx pgx.Tx, skillN
 	return nil
 }
 
+// DeleteSkill permanently removes a skill version from the database.
+func (db *PostgreSQL) DeleteSkill(ctx context.Context, tx pgx.Tx, skillName, version string) error {
+	if err := db.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
+		Name: skillName,
+		Type: auth.PermissionArtifactTypeSkill,
+	}); err != nil {
+		return err
+	}
+
+	executor := db.getExecutor(tx)
+
+	// Check if the version being deleted is the current latest.
+	var wasLatest bool
+	err := executor.QueryRow(ctx,
+		`SELECT is_latest FROM skills WHERE skill_name = $1 AND version = $2`,
+		skillName, version,
+	).Scan(&wasLatest)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return database.ErrNotFound
+		}
+		return fmt.Errorf("failed to check skill latest status: %w", err)
+	}
+
+	query := `DELETE FROM skills WHERE skill_name = $1 AND version = $2`
+	result, err := executor.Exec(ctx, query, skillName, version)
+	if err != nil {
+		return fmt.Errorf("failed to delete skill: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return database.ErrNotFound
+	}
+
+	if wasLatest {
+		promoteQuery := `
+			UPDATE skills SET is_latest = true
+			WHERE skill_name = $1
+			  AND version = (
+			    SELECT version FROM skills
+			    WHERE skill_name = $1
+			    ORDER BY published_at DESC
+			    LIMIT 1
+			  )
+		`
+		if _, err := executor.Exec(ctx, promoteQuery, skillName); err != nil {
+			return fmt.Errorf("failed to promote next latest skill version: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // CreateProvider creates a provider record.
 func (db *PostgreSQL) CreateProvider(ctx context.Context, tx pgx.Tx, in *models.CreateProviderInput) (*models.Provider, error) {
 	if in == nil {
@@ -2588,7 +2640,7 @@ func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deploymen
 	}
 	providerID := strings.TrimSpace(deployment.ProviderID)
 	if providerID == "" {
-		providerID = "local"
+		return fmt.Errorf("%w: provider id is required", database.ErrInvalidInput)
 	}
 	origin := deployment.Origin
 	if origin == "" {
@@ -2815,8 +2867,12 @@ func (db *PostgreSQL) GetDeploymentByID(ctx context.Context, tx pgx.Tx, id strin
 	return &d, nil
 }
 
-// UpdateDeploymentStatus updates the status of a deployment by ID.
-func (db *PostgreSQL) UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, id, status string) error {
+// UpdateDeploymentState applies partial state updates to a deployment by ID.
+func (db *PostgreSQL) UpdateDeploymentState(ctx context.Context, tx pgx.Tx, id string, patch *models.DeploymentStatePatch) error {
+	if patch == nil {
+		return fmt.Errorf("%w: deployment state patch is required", database.ErrInvalidInput)
+	}
+
 	deployment, err := db.GetDeploymentByID(ctx, tx, id)
 	if err != nil {
 		return err
@@ -2833,15 +2889,62 @@ func (db *PostgreSQL) UpdateDeploymentStatus(ctx context.Context, tx pgx.Tx, id,
 	}
 
 	executor := db.getExecutor(tx)
+	setStatus := patch.Status != nil
+	statusValue := deployment.Status
+	if patch.Status != nil {
+		statusValue = *patch.Status
+	}
+
+	setError := patch.Error != nil
+	errorValue := deployment.Error
+	if patch.Error != nil {
+		errorValue = *patch.Error
+	}
+
+	setProviderConfig := patch.ProviderConfig != nil
+	providerConfigJSON := []byte("{}")
+	if patch.ProviderConfig != nil {
+		providerConfigJSON, err = json.Marshal(*patch.ProviderConfig)
+		if err != nil {
+			return fmt.Errorf("failed to marshal provider config patch: %w", err)
+		}
+	}
+
+	setProviderMetadata := patch.ProviderMetadata != nil
+	providerMetadataJSON := []byte("{}")
+	if patch.ProviderMetadata != nil {
+		providerMetadataJSON, err = json.Marshal(*patch.ProviderMetadata)
+		if err != nil {
+			return fmt.Errorf("failed to marshal provider metadata patch: %w", err)
+		}
+	}
+
 	query := `
 		UPDATE deployments
-		SET status = $2
+		SET
+			status = CASE WHEN $2 THEN $3 ELSE status END,
+			error = CASE WHEN $4 THEN $5 ELSE error END,
+			provider_config = CASE WHEN $6 THEN $7::jsonb ELSE provider_config END,
+			provider_metadata = CASE WHEN $8 THEN $9::jsonb ELSE provider_metadata END,
+			updated_at = NOW()
 		WHERE id = $1
 	`
 
-	result, err := executor.Exec(ctx, query, id, status)
+	result, err := executor.Exec(
+		ctx,
+		query,
+		id,
+		setStatus,
+		statusValue,
+		setError,
+		errorValue,
+		setProviderConfig,
+		string(providerConfigJSON),
+		setProviderMetadata,
+		string(providerMetadataJSON),
+	)
 	if err != nil {
-		return fmt.Errorf("failed to update deployment status: %w", err)
+		return fmt.Errorf("failed to update deployment state: %w", err)
 	}
 
 	if result.RowsAffected() == 0 {

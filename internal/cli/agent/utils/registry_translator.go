@@ -1,11 +1,14 @@
 package utils
 
 import (
+	"context"
 	"fmt"
+	"maps"
 
+	platformutils "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/types"
-	"github.com/agentregistry-dev/agentregistry/internal/runtime/translation/registry/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
 // TranslateRegistryServer converts a registry ServerSpec into a common.McpServerType
@@ -20,63 +23,66 @@ func TranslateRegistryServer(
 		return nil, fmt.Errorf("server %q has no remotes or packages", serverSpec.Name)
 	}
 
-	useRemote := len(serverSpec.Remotes) > 0 && (preferRemote || len(serverSpec.Packages) == 0)
-	if useRemote { //nolint:nestif
-		remote := serverSpec.Remotes[0]
-		if remote.URL == "" {
+	runEnv := make(map[string]string, len(envOverrides))
+	maps.Copy(runEnv, envOverrides)
+
+	translated, err := platformutils.TranslateMCPServer(context.Background(), &platformutils.MCPServerRunRequest{
+		RegistryServer: &apiv0.ServerJSON{
+			Name:        serverSpec.Name,
+			Title:       serverSpec.Title,
+			Description: serverSpec.Description,
+			Version:     serverSpec.Version,
+			Packages:    serverSpec.Packages,
+			Remotes:     serverSpec.Remotes,
+		},
+		PreferRemote: preferRemote,
+		EnvValues:    runEnv,
+		ArgValues:    map[string]string{},
+		HeaderValues: map[string]string{},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	switch translated.MCPServerType {
+	case "remote":
+		if len(serverSpec.Remotes) == 0 || serverSpec.Remotes[0].URL == "" {
 			return nil, fmt.Errorf("server %q remote has no URL", serverSpec.Name)
 		}
-
-		headers, err := utils.ProcessHeaders(remote.Headers, nil)
-		if err != nil {
-			return nil, err
+		headers := make(map[string]string, len(translated.Remote.Headers))
+		for _, header := range translated.Remote.Headers {
+			headers[header.Name] = header.Value
 		}
-
 		return &models.McpServerType{
 			Type:    "remote",
 			Name:    name,
-			URL:     remote.URL,
+			URL:     serverSpec.Remotes[0].URL,
 			Headers: headers,
 		}, nil
-	} else {
-		pkg := serverSpec.Packages[0]
-
-		var args []string
-
-		// Process runtime arguments first
-		args = utils.ProcessArguments(args, pkg.RuntimeArguments, nil)
-
-		// Determine image and command based on registry type
-		config, args, err := utils.GetRegistryConfig(pkg, args)
-		if err != nil {
-			return nil, err
+	case "local":
+		if translated.Local == nil {
+			return nil, fmt.Errorf("server %q local translation missing deployment config", serverSpec.Name)
 		}
-
-		// Process package arguments after the package identifier
-		args = utils.ProcessArguments(args, pkg.PackageArguments, nil)
-
-		// Process environment variables
-		envVarsMap, err := utils.ProcessEnvironmentVariables(pkg.EnvironmentVariables, envOverrides)
-		if err != nil {
-			return nil, err
-		}
-		envVars := utils.EnvMapToStringSlice(envVarsMap)
-
-		// For OCI registry type, we already have a complete image - no build needed.
-		// For other types (npm, pypi), we need to create a build context with Dockerfile.
 		buildPath := ""
-		if !config.IsOCI {
-			buildPath = "registry/" + name // Registry-resolved servers go under registry/ to easily manage on sequential runs
+		if len(serverSpec.Packages) > 0 {
+			config, _, err := platformutils.GetRegistryConfig(serverSpec.Packages[0], nil)
+			if err != nil {
+				return nil, err
+			}
+			if !config.IsOCI {
+				buildPath = "registry/" + name
+			}
 		}
-
 		return &models.McpServerType{
 			Type:    "command",
 			Name:    name,
-			Image:   config.Image,
+			Image:   translated.Local.Deployment.Image,
 			Build:   buildPath,
-			Command: config.Command,
-			Args:    args,
-			Env:     envVars,
+			Command: translated.Local.Deployment.Cmd,
+			Args:    translated.Local.Deployment.Args,
+			Env:     platformutils.EnvMapToStringSlice(translated.Local.Deployment.Env),
 		}, nil
+	default:
+		return nil, fmt.Errorf("unsupported translated server type %q", translated.MCPServerType)
 	}
 }

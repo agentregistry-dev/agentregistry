@@ -112,7 +112,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 	if deployProviderID == "local" {
 		fmt.Printf("\nServer deployment recorded. The registry will reconcile containers automatically.\n")
-		fmt.Printf("Agent Gateway endpoint: http://localhost:21212/mcp\n")
+		fmt.Printf("Agent Gateway endpoint: http://localhost:%s/mcp\n", common.DefaultAgentGatewayPort)
 	}
 
 	return nil

@@ -146,6 +146,7 @@ func RegenerateDockerCompose(projectDir string, manifest *models.AgentManifest, 
 		Name              string
 		Version           string
 		Image             string
+		Port              int
 		ModelProvider     string
 		ModelName         string
 		TelemetryEndpoint string
@@ -156,6 +157,7 @@ func RegenerateDockerCompose(projectDir string, manifest *models.AgentManifest, 
 		Name:              manifest.Name,
 		Version:           sanitizedVersion,
 		Image:             image,
+		Port:              8080,
 		ModelProvider:     manifest.ModelProvider,
 		ModelName:         manifest.ModelName,
 		TelemetryEndpoint: manifest.TelemetryEndpoint,
@@ -175,6 +177,37 @@ func RegenerateDockerCompose(projectDir string, manifest *models.AgentManifest, 
 	if verbose {
 		fmt.Printf("Updated %s\n", target)
 	}
+	return nil
+}
+
+// EnsureOtelCollectorConfig generates the OpenTelemetry collector config file
+// when the manifest has a telemetryEndpoint but the file is missing. This
+// handles the case where a user manually adds telemetryEndpoint to agent.yaml
+// without going through arctl agent init --telemetry.
+func EnsureOtelCollectorConfig(projectDir string, manifest *models.AgentManifest, verbose bool) error {
+	if manifest.TelemetryEndpoint == "" {
+		return nil
+	}
+
+	configPath := filepath.Join(projectDir, "otel-collector-config.yaml")
+	if _, err := os.Stat(configPath); err == nil {
+		return nil
+	}
+
+	gen := python.NewPythonGenerator()
+	content, err := gen.ReadTemplateFile("otel-collector-config.yaml")
+	if err != nil {
+		return fmt.Errorf("failed to read otel collector config template: %w", err)
+	}
+
+	if verbose {
+		fmt.Printf("Generating %s (telemetryEndpoint is set but file was missing)\n", configPath)
+	}
+
+	if err := os.WriteFile(configPath, content, 0o644); err != nil {
+		return fmt.Errorf("failed to write otel-collector-config.yaml: %w", err)
+	}
+
 	return nil
 }
 

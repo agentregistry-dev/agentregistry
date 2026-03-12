@@ -42,7 +42,8 @@ func TestMCPInitPythonAndBuild(t *testing.T) {
 		defaultImage := mcpName + ":0.1.0"
 		CleanupDockerImage(t, defaultImage)
 
-		result := RunArctl(t, tmpDir, "mcp", "build", mcpDir)
+		result := RunArctl(t, tmpDir, "mcp", "build", mcpDir,
+			"--image", defaultImage)
 		RequireSuccess(t, result)
 
 		if !DockerImageExists(t, defaultImage) {

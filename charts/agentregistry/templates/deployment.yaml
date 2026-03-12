@@ -14,10 +14,8 @@ spec:
   {{- if .Values.revisionHistoryLimit }}
   revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   {{- end }}
-  {{- if .Values.updateStrategy }}
   strategy:
-    {{- toYaml .Values.updateStrategy | nindent 4 }}
-  {{- end }}
+    type: RollingUpdate
   selector:
     matchLabels:
       {{- include "agentregistry.selectorLabels" . | nindent 6 }}
@@ -86,62 +84,15 @@ spec:
       topologySpreadConstraints:
         {{- toYaml .Values.topologySpreadConstraints | nindent 8 }}
       {{- end }}
-      {{- if or .Values.database.bundled.enabled .Values.initContainers }}
-      initContainers:
-        {{- if .Values.database.bundled.enabled }}
-        - name: wait-for-postgres
-          image: {{ include "agentregistry.postgresql.image" . }}
-          imagePullPolicy: {{ .Values.database.bundled.image.pullPolicy }}
-          {{- $initSec := include "agentregistry.containerSecurityContext" .Values.containerSecurityContext }}
-          {{- if $initSec }}
-          securityContext:
-            {{- $initSec | nindent 12 }}
-          {{- end }}
-          command:
-            - sh
-            - -c
-            - |
-              timeout=${WAIT_TIMEOUT:-300}
-              elapsed=0
-              until pg_isready -h {{ include "agentregistry.postgresql.fullname" . }} -p {{ .Values.database.bundled.service.port }} -U {{ .Values.database.bundled.auth.username }} -d {{ .Values.database.bundled.auth.database }}; do
-                echo "waiting for postgres... ($elapsed/$timeout s)"
-                sleep 2
-                elapsed=$((elapsed + 2))
-                if [ "$elapsed" -ge "$timeout" ]; then
-                  echo "timed out waiting for postgres"
-                  exit 1
-                fi
-              done
-          env:
-            - name: PGPASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "agentregistry.passwordSecretName" . }}
-                  key: POSTGRES_PASSWORD
-          {{- $initRes := include "agentregistry.resources" (dict "resources" dict "preset" "nano") }}
-          {{- if $initRes }}
-          resources:
-            {{- $initRes | nindent 12 }}
-          {{- end }}
-        {{- end }}
-        {{- if .Values.initContainers }}
-        {{- tpl (toYaml .Values.initContainers) . | nindent 8 }}
-        {{- end }}
-      {{- end }}
       containers:
         - name: agentregistry
           image: {{ include "agentregistry.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- if .Values.diagnosticMode.enabled }}
-          command:
-            {{- toYaml .Values.diagnosticMode.command | nindent 12 }}
-          args:
-            {{- toYaml .Values.diagnosticMode.args | nindent 12 }}
-          {{- else if .Values.command }}
+          {{- if .Values.command }}
           command:
             {{- tpl (toYaml .Values.command) . | nindent 12 }}
           {{- end }}
-          {{- if and (not .Values.diagnosticMode.enabled) .Values.args }}
+          {{- if .Values.args }}
           args:
             {{- tpl (toYaml .Values.args) . | nindent 12 }}
           {{- end }}
@@ -160,14 +111,6 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "agentregistry.fullname" . }}-config
-            {{- if .Values.extraEnvVarsCM }}
-            - configMapRef:
-                name: {{ .Values.extraEnvVarsCM }}
-            {{- end }}
-            {{- if .Values.extraEnvVarsSecret }}
-            - secretRef:
-                name: {{ .Values.extraEnvVarsSecret }}
-            {{- end }}
           env:
             - name: POSTGRES_PASSWORD
               valueFrom:
@@ -184,11 +127,7 @@ spec:
             {{- if .Values.extraEnvVars }}
             {{- tpl (toYaml .Values.extraEnvVars) . | nindent 12 }}
             {{- end }}
-          {{- if not .Values.diagnosticMode.enabled }}
-          {{- if .Values.customLivenessProbe }}
-          livenessProbe:
-            {{- toYaml .Values.customLivenessProbe | nindent 12 }}
-          {{- else if .Values.livenessProbe.enabled }}
+          {{- if .Values.livenessProbe.enabled }}
           livenessProbe:
             tcpSocket:
               port: http
@@ -198,10 +137,7 @@ spec:
             failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
             successThreshold: {{ .Values.livenessProbe.successThreshold }}
           {{- end }}
-          {{- if .Values.customReadinessProbe }}
-          readinessProbe:
-            {{- toYaml .Values.customReadinessProbe | nindent 12 }}
-          {{- else if .Values.readinessProbe.enabled }}
+          {{- if .Values.readinessProbe.enabled }}
           readinessProbe:
             tcpSocket:
               port: http
@@ -211,10 +147,7 @@ spec:
             failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
             successThreshold: {{ .Values.readinessProbe.successThreshold }}
           {{- end }}
-          {{- if .Values.customStartupProbe }}
-          startupProbe:
-            {{- toYaml .Values.customStartupProbe | nindent 12 }}
-          {{- else if .Values.startupProbe.enabled }}
+          {{- if .Values.startupProbe.enabled }}
           startupProbe:
             tcpSocket:
               port: http
@@ -223,7 +156,6 @@ spec:
             timeoutSeconds: {{ .Values.startupProbe.timeoutSeconds }}
             failureThreshold: {{ .Values.startupProbe.failureThreshold }}
             successThreshold: {{ .Values.startupProbe.successThreshold }}
-          {{- end }}
           {{- end }}
           {{- if .Values.lifecycleHooks }}
           lifecycle:
@@ -235,53 +167,16 @@ spec:
             {{- $res | nindent 12 }}
           {{- end }}
           volumeMounts:
-            - name: kubeconfig
-              mountPath: {{ .Values.config.kubeconfigPath }}
-              subPath: config
-              readOnly: true
             {{- if .Values.containerSecurityContext.enabled }}
             {{- if .Values.containerSecurityContext.readOnlyRootFilesystem }}
             - name: tmp
               mountPath: /tmp
             {{- end }}
             {{- end }}
-            {{- if .Values.hostVolumes.dockerSocket }}
-            - name: docker-sock
-              mountPath: /var/run/docker.sock
-            {{- end }}
-            {{- if .Values.hostVolumes.hostTmp }}
-            - name: host-tmp
-              mountPath: /host-tmp
-            {{- end }}
-            {{- if .Values.extraVolumeMounts }}
-            {{- tpl (toYaml .Values.extraVolumeMounts) . | nindent 12 }}
-            {{- end }}
-        {{- if .Values.sidecars }}
-        {{- tpl (toYaml .Values.sidecars) . | nindent 8 }}
-        {{- end }}
       volumes:
-        - name: kubeconfig
-          secret:
-            secretName: {{ include "agentregistry.kubeconfigSecretName" . }}
-            optional: true
         {{- if .Values.containerSecurityContext.enabled }}
         {{- if .Values.containerSecurityContext.readOnlyRootFilesystem }}
         - name: tmp
           emptyDir: {}
         {{- end }}
-        {{- end }}
-        {{- if .Values.hostVolumes.dockerSocket }}
-        - name: docker-sock
-          hostPath:
-            path: /var/run/docker.sock
-            type: Socket
-        {{- end }}
-        {{- if .Values.hostVolumes.hostTmp }}
-        - name: host-tmp
-          hostPath:
-            path: /tmp
-            type: Directory
-        {{- end }}
-        {{- if .Values.extraVolumes }}
-        {{- tpl (toYaml .Values.extraVolumes) . | nindent 8 }}
         {{- end }}

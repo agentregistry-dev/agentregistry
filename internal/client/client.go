@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	internalv0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
+	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	v0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
@@ -26,10 +26,29 @@ type Client struct {
 }
 
 const (
-	defaultBaseURL    = "http://localhost:12121/v0"
-	DefaultBaseURL    = defaultBaseURL
-	pingRetryAttempts = 3
+	defaultBaseURL          = "http://localhost:12121/v0"
+	DefaultBaseURL          = defaultBaseURL
+	pingRetryAttempts       = 3
+	defaultDeployProviderID = "local"
 )
+
+type VersionBody = apitypes.VersionBody
+
+type deploymentRequest = apitypes.DeploymentRequest
+
+type IndexRequest = apitypes.IndexRequest
+
+type IndexJobResponse = apitypes.IndexJobResponse
+
+type JobProgress = apitypes.JobProgress
+
+type JobResult = apitypes.JobResult
+
+type JobStatusResponse = apitypes.JobStatusResponse
+
+type DeploymentResponse = models.Deployment
+
+type DeploymentsListResponse = apitypes.DeploymentsListResponse
 
 // NewClientFromEnv constructs a client using environment variables
 func NewClientFromEnv() (*Client, error) {
@@ -149,12 +168,12 @@ func (c *Client) Ping() error {
 	return c.doJSON(req, nil)
 }
 
-func (c *Client) GetVersion() (*internalv0.VersionBody, error) {
+func (c *Client) GetVersion() (*VersionBody, error) {
 	req, err := c.newRequest(http.MethodGet, "/version")
 	if err != nil {
 		return nil, err
 	}
-	var resp internalv0.VersionBody
+	var resp VersionBody
 	if err := c.doJSON(req, &resp); err != nil {
 		return nil, err
 	}
@@ -578,27 +597,6 @@ func asHTTPStatus(err error) int {
 	return 0
 }
 
-// DeploymentResponse represents a deployment returned by the API
-type DeploymentResponse struct {
-	ID             string            `json:"id"`
-	ProviderID     string            `json:"providerId,omitempty"`
-	ServerName     string            `json:"serverName"`
-	Version        string            `json:"version"`
-	Origin         string            `json:"origin"`
-	DeployedAt     string            `json:"deployedAt"`
-	UpdatedAt      string            `json:"updatedAt"`
-	Status         string            `json:"status"`
-	Env            map[string]string `json:"env"`
-	ProviderConfig map[string]any    `json:"providerConfig,omitempty"`
-	PreferRemote   bool              `json:"preferRemote"`
-	ResourceType   string            `json:"resourceType"`
-}
-
-// DeploymentsListResponse represents the list of deployments
-type DeploymentsListResponse struct {
-	Deployments []DeploymentResponse `json:"deployments"`
-}
-
 // GetDeployedServers retrieves all deployed servers
 func (c *Client) GetDeployedServers() ([]*DeploymentResponse, error) {
 	req, err := c.newRequest(http.MethodGet, "/deployments")
@@ -641,7 +639,10 @@ func (c *Client) GetDeploymentByID(id string) (*DeploymentResponse, error) {
 
 // DeployServer deploys a server with deployment environment variables.
 func (c *Client) DeployServer(name, version string, env map[string]string, preferRemote bool, providerID string) (*DeploymentResponse, error) {
-	payload := internalv0.DeploymentRequest{
+	if strings.TrimSpace(providerID) == "" {
+		providerID = defaultDeployProviderID
+	}
+	payload := deploymentRequest{
 		ServerName:   name,
 		Version:      version,
 		Env:          env,
@@ -660,7 +661,10 @@ func (c *Client) DeployServer(name, version string, env map[string]string, prefe
 
 // DeployAgent deploys an agent with deployment environment variables.
 func (c *Client) DeployAgent(name, version string, env map[string]string, providerID string) (*DeploymentResponse, error) {
-	payload := internalv0.DeploymentRequest{
+	if strings.TrimSpace(providerID) == "" {
+		providerID = defaultDeployProviderID
+	}
+	payload := deploymentRequest{
 		ServerName:   name,
 		Version:      version,
 		Env:          env,
@@ -698,7 +702,7 @@ func (c *Client) SSEClient() *http.Client {
 }
 
 // NewSSERequest creates a request for streaming embedding indexing events.
-func (c *Client) NewSSERequest(ctx context.Context, reqBody internalv0.IndexRequest) (*http.Request, error) {
+func (c *Client) NewSSERequest(ctx context.Context, reqBody IndexRequest) (*http.Request, error) {
 	req, err := c.newRequest(http.MethodPost, "/embeddings/index/stream")
 	if err != nil {
 		return nil, err
@@ -715,8 +719,8 @@ func (c *Client) NewSSERequest(ctx context.Context, reqBody internalv0.IndexRequ
 }
 
 // StartIndex starts a non-streaming indexing job.
-func (c *Client) StartIndex(req internalv0.IndexRequest) (*internalv0.IndexJobResponse, error) {
-	var resp internalv0.IndexJobResponse
+func (c *Client) StartIndex(req IndexRequest) (*IndexJobResponse, error) {
+	var resp IndexJobResponse
 	if err := c.doJsonRequest(http.MethodPost, "/embeddings/index", req, &resp); err != nil {
 		return nil, err
 	}
@@ -724,13 +728,13 @@ func (c *Client) StartIndex(req internalv0.IndexRequest) (*internalv0.IndexJobRe
 }
 
 // GetIndexStatus fetches indexing job status by job ID.
-func (c *Client) GetIndexStatus(jobID string) (*internalv0.JobStatusResponse, error) {
+func (c *Client) GetIndexStatus(jobID string) (*JobStatusResponse, error) {
 	encJobID := url.PathEscape(jobID)
 	req, err := c.newRequest(http.MethodGet, "/embeddings/index/"+encJobID)
 	if err != nil {
 		return nil, err
 	}
-	var resp internalv0.JobStatusResponse
+	var resp JobStatusResponse
 	if err := c.doJSON(req, &resp); err != nil {
 		return nil, err
 	}

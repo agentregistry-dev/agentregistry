@@ -49,6 +49,7 @@ See [`DEVELOPMENT.md`](DEVELOPMENT.md) for detailed architecture information.
 
 - Docker Desktop with Docker Compose v2+
 - Go 1.25+ (for building from source)
+- PostgreSQL with the [pgvector](https://github.com/pgvector/pgvector) extension
 
 ### Installation
 
@@ -73,6 +74,43 @@ arctl mcp list
 ### Access the Web UI
 
 To access the UI, open `http://localhost:12121` in your browser.
+
+## ☸️ Deploy on Kubernetes
+
+Install Agent Registry on any Kubernetes cluster using the Helm chart. An external PostgreSQL instance with the [pgvector](https://github.com/pgvector/pgvector) extension is required.
+
+### PostgreSQL
+
+Deploy a single-instance PostgreSQL/pgvector into your cluster using the provided example manifest:
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/agentregistry-dev/agentregistry/main/examples/postgres-pgvector.yaml
+kubectl -n agentregistry wait --for=condition=ready pod -l app=postgres-pgvector --timeout=120s
+```
+
+This deploys `pgvector/pgvector:0.8.2-pg16` into the `agentregistry` namespace with a 5Gi PVC and exposes it at `postgres-pgvector.agentregistry.svc.cluster.local:5432`.
+
+> This is intended for development and testing only. For production, use a managed PostgreSQL service or a production-grade operator.
+
+### AgentRegistry
+
+```bash
+helm install agentregistry oci://ghcr.io/agentregistry-dev/helm/agentregistry \
+  --namespace agentregistry \
+  --create-namespace \
+  --set database.host=postgres-pgvector.agentregistry.svc.cluster.local \
+  --set database.password=agentregistry \
+  --set database.sslMode=disable \
+  --set config.jwtPrivateKey=$(openssl rand -hex 32)
+```
+
+Then port-forward to access the UI:
+
+```bash
+kubectl port-forward -n agentregistry svc/agentregistry 12121:12121
+```
+
+See [`charts/agentregistry/README.md`](charts/agentregistry/README.md.gotmpl) for all configuration options and [`scripts/kind/README.md`](scripts/kind/README.md) for local Kubernetes development with Kind.
 
 ## 📚 Core Concepts
 
