@@ -2,12 +2,13 @@ package common
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 )
 
-const (
+var (
 	defaultWaitTimeout  = 5 * time.Minute
 	defaultPollInterval = 2 * time.Second
 )
@@ -31,15 +32,27 @@ func WaitForDeploymentReady(c *client.Client, deploymentID string) error {
 		case "deployed":
 			return nil
 		case "failed":
-			return fmt.Errorf("deployment failed")
+			return fmt.Errorf("deployment failed%s", formatDeploymentWaitError(dep.Error))
 		case "cancelled":
-			return fmt.Errorf("deployment was cancelled")
+			return fmt.Errorf("deployment was cancelled%s", formatDeploymentWaitError(dep.Error))
 		}
 
 		if time.Now().After(deadline) {
-			return fmt.Errorf("timed out waiting for deployment to become ready (current status: %s)", dep.Status)
+			return fmt.Errorf(
+				"timed out waiting for deployment to become ready (current status: %s%s)",
+				dep.Status,
+				formatDeploymentWaitError(dep.Error),
+			)
 		}
 
 		time.Sleep(defaultPollInterval)
 	}
+}
+
+func formatDeploymentWaitError(errorText string) string {
+	trimmed := strings.TrimSpace(errorText)
+	if trimmed == "" {
+		return ""
+	}
+	return ": " + trimmed
 }

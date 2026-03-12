@@ -44,7 +44,7 @@ func (a *kubernetesDeploymentAdapter) Deploy(ctx context.Context, req *models.De
 	if err := kubernetesApplyPlatformConfig(ctx, provider, cfg, false); err != nil {
 		return nil, fmt.Errorf("apply kubernetes platform config: %w", err)
 	}
-	return &models.DeploymentActionResult{Status: "deployed"}, nil
+	return &models.DeploymentActionResult{Status: "deploying"}, nil
 }
 
 func (a *kubernetesDeploymentAdapter) Undeploy(ctx context.Context, deployment *models.Deployment) error {
@@ -71,6 +71,20 @@ func (a *kubernetesDeploymentAdapter) CleanupStale(ctx context.Context, deployme
 		log.Printf("Warning: failed to clean up stale kubernetes deployment %s: %v", deployment.ID, err)
 	}
 	return nil
+}
+
+func (a *kubernetesDeploymentAdapter) RefreshDeploymentState(
+	ctx context.Context,
+	deployment *models.Deployment,
+) (*models.DeploymentStatePatch, error) {
+	if err := utils.ValidateDeploymentRequest(deployment, true); err != nil {
+		return nil, err
+	}
+	provider, err := a.registry.GetProviderByID(ctx, deployment.ProviderID)
+	if err != nil {
+		return nil, err
+	}
+	return kubernetesRefreshManagedDeploymentState(ctx, provider, deployment)
 }
 
 func (a *kubernetesDeploymentAdapter) GetLogs(_ context.Context, _ *models.Deployment) ([]string, error) {

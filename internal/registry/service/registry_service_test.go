@@ -1058,6 +1058,25 @@ func TestApplyDeploymentActionResult_UsesSystemContext(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestApplyDeploymentActionResult_PreservesInFlightStatus(t *testing.T) {
+	ctx := context.Background()
+	mockDB := &deployCreateMockDB{
+		updateDeploymentStateFn: func(_ context.Context, _ pgx.Tx, id string, patch *models.DeploymentStatePatch) error {
+			require.Equal(t, "dep-1", id)
+			require.NotNil(t, patch)
+			require.NotNil(t, patch.Status)
+			require.Equal(t, "deploying", *patch.Status)
+			require.NotNil(t, patch.Error)
+			require.Empty(t, *patch.Error)
+			return nil
+		},
+	}
+
+	svc := &registryServiceImpl{db: mockDB}
+	err := svc.applyDeploymentActionResult(ctx, "dep-1", &models.DeploymentActionResult{Status: "deploying"})
+	require.NoError(t, err)
+}
+
 func TestApplyFailedDeploymentAction_UsesSystemContext(t *testing.T) {
 	ctx := context.Background()
 	mockDB := &deployCreateMockDB{
@@ -1095,12 +1114,13 @@ type deployCreateMockDB struct {
 // deploymentMockDB is a minimal mock for database.Database that only implements
 // the methods needed for testing deployment cleanup logic. All other methods panic.
 type deploymentMockDB struct {
-	database.Database      // embed interface so unimplemented methods panic
-	getDeploymentByIDFn    func(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error)
-	getDeploymentsFn       func(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
-	listProvidersFn        func(ctx context.Context, tx pgx.Tx, platform *string) ([]*models.Provider, error)
-	getProviderByIDFn      func(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error)
-	removeDeploymentByIdFn func(ctx context.Context, tx pgx.Tx, id string) error
+	database.Database       // embed interface so unimplemented methods panic
+	getDeploymentByIDFn     func(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error)
+	getDeploymentsFn        func(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
+	listProvidersFn         func(ctx context.Context, tx pgx.Tx, platform *string) ([]*models.Provider, error)
+	getProviderByIDFn       func(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error)
+	updateDeploymentStateFn func(ctx context.Context, tx pgx.Tx, id string, patch *models.DeploymentStatePatch) error
+	removeDeploymentByIdFn  func(ctx context.Context, tx pgx.Tx, id string) error
 }
 
 func (m *deployCreateMockDB) GetProviderByID(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error) {
@@ -1151,6 +1171,10 @@ func (m *deploymentMockDB) GetProviderByID(ctx context.Context, tx pgx.Tx, provi
 	return m.getProviderByIDFn(ctx, tx, providerID)
 }
 
+func (m *deploymentMockDB) UpdateDeploymentState(ctx context.Context, tx pgx.Tx, id string, patch *models.DeploymentStatePatch) error {
+	return m.updateDeploymentStateFn(ctx, tx, id, patch)
+}
+
 func (m *deploymentMockDB) RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id string) error {
 	return m.removeDeploymentByIdFn(ctx, tx, id)
 }
@@ -1189,6 +1213,7 @@ type testDeploymentAdapter struct {
 	cancelFn       func(ctx context.Context, deployment *models.Deployment) error
 	discoverFn     func(ctx context.Context, providerID string) ([]*models.Deployment, error)
 	cleanupStaleFn func(ctx context.Context, deployment *models.Deployment) error
+	refreshStateFn func(ctx context.Context, deployment *models.Deployment) (*models.DeploymentStatePatch, error)
 	supportedTypes []string
 }
 
@@ -1241,6 +1266,13 @@ func (a *testDeploymentAdapter) CleanupStale(ctx context.Context, deployment *mo
 		return nil
 	}
 	return a.cleanupStaleFn(ctx, deployment)
+}
+
+func (a *testDeploymentAdapter) RefreshDeploymentState(ctx context.Context, deployment *models.Deployment) (*models.DeploymentStatePatch, error) {
+	if a.refreshStateFn == nil {
+		return nil, nil
+	}
+	return a.refreshStateFn(ctx, deployment)
 }
 
 func TestCleanupExistingDeployment_UsesAdapterStaleCleanerWhenAvailable(t *testing.T) {
@@ -1652,6 +1684,127 @@ func TestGetDeployments_ManagedOriginSkipsDiscovery(t *testing.T) {
 	require.Len(t, got, 1)
 	assert.False(t, discoverCalled)
 	assert.Equal(t, "dep-managed-only", got[0].ID)
+}
+
+func TestGetDeploymentByID_RefreshesManagedDeployingState(t *testing.T) {
+	current := &models.Deployment{
+		ID:         "dep-k8s-1",
+		ProviderID: "kubernetes-default",
+		Origin:     "managed",
+		Status:     "deploying",
+		Error:      "",
+	}
+	updated := *current
+	updated.Status = "deployed"
+
+	refreshCalled := false
+	mockDB := &deploymentMockDB{
+		getDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, id string) (*models.Deployment, error) {
+			require.Equal(t, "dep-k8s-1", id)
+			if refreshCalled {
+				cloned := updated
+				return &cloned, nil
+			}
+			cloned := *current
+			return &cloned, nil
+		},
+		getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {
+			require.Equal(t, "kubernetes-default", providerID)
+			return &models.Provider{ID: providerID, Platform: "kubernetes"}, nil
+		},
+		updateDeploymentStateFn: func(_ context.Context, _ pgx.Tx, id string, patch *models.DeploymentStatePatch) error {
+			require.Equal(t, "dep-k8s-1", id)
+			require.NotNil(t, patch)
+			require.NotNil(t, patch.Status)
+			require.Equal(t, "deployed", *patch.Status)
+			require.NotNil(t, patch.Error)
+			require.Empty(t, *patch.Error)
+			refreshCalled = true
+			return nil
+		},
+	}
+	adapter := &testDeploymentAdapter{
+		refreshStateFn: func(_ context.Context, deployment *models.Deployment) (*models.DeploymentStatePatch, error) {
+			require.Equal(t, "dep-k8s-1", deployment.ID)
+			status := "deployed"
+			errorText := ""
+			return &models.DeploymentStatePatch{Status: &status, Error: &errorText}, nil
+		},
+	}
+
+	svc := &registryServiceImpl{
+		db: mockDB,
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+			"kubernetes": adapter,
+		},
+	}
+
+	got, err := svc.GetDeploymentByID(context.Background(), "dep-k8s-1")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.True(t, refreshCalled)
+	assert.Equal(t, "deployed", got.Status)
+}
+
+func TestGetDeploymentByID_RefreshesManagedDeployingFailureState(t *testing.T) {
+	current := &models.Deployment{
+		ID:         "dep-k8s-2",
+		ProviderID: "kubernetes-default",
+		Origin:     "managed",
+		Status:     "deploying",
+	}
+	updated := *current
+	updated.Status = "failed"
+	updated.Error = "agent demo-agent: DeploymentNotReady"
+
+	refreshCalled := false
+	mockDB := &deploymentMockDB{
+		getDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, id string) (*models.Deployment, error) {
+			require.Equal(t, "dep-k8s-2", id)
+			if refreshCalled {
+				cloned := updated
+				return &cloned, nil
+			}
+			cloned := *current
+			return &cloned, nil
+		},
+		getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {
+			require.Equal(t, "kubernetes-default", providerID)
+			return &models.Provider{ID: providerID, Platform: "kubernetes"}, nil
+		},
+		updateDeploymentStateFn: func(_ context.Context, _ pgx.Tx, id string, patch *models.DeploymentStatePatch) error {
+			require.Equal(t, "dep-k8s-2", id)
+			require.NotNil(t, patch)
+			require.NotNil(t, patch.Status)
+			require.Equal(t, "failed", *patch.Status)
+			require.NotNil(t, patch.Error)
+			require.Equal(t, "agent demo-agent: DeploymentNotReady", *patch.Error)
+			refreshCalled = true
+			return nil
+		},
+	}
+	adapter := &testDeploymentAdapter{
+		refreshStateFn: func(_ context.Context, deployment *models.Deployment) (*models.DeploymentStatePatch, error) {
+			require.Equal(t, "dep-k8s-2", deployment.ID)
+			status := "failed"
+			errorText := "agent demo-agent: DeploymentNotReady"
+			return &models.DeploymentStatePatch{Status: &status, Error: &errorText}, nil
+		},
+	}
+
+	svc := &registryServiceImpl{
+		db: mockDB,
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+			"kubernetes": adapter,
+		},
+	}
+
+	got, err := svc.GetDeploymentByID(context.Background(), "dep-k8s-2")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.True(t, refreshCalled)
+	assert.Equal(t, "failed", got.Status)
+	assert.Equal(t, "agent demo-agent: DeploymentNotReady", got.Error)
 }
 
 func TestGetDeploymentByID_FallsBackToDiscoveredDeployments(t *testing.T) {
