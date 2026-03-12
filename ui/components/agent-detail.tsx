@@ -4,6 +4,7 @@ import { useState } from "react"
 import { AgentResponse } from "@/lib/admin-api"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Calendar,
   Bot,
@@ -15,17 +16,27 @@ import {
   Clock,
   Github,
   ExternalLink,
+  History,
 } from "lucide-react"
 
 interface AgentDetailProps {
   agent: AgentResponse
+  allVersions?: AgentResponse[]
 }
 
-export function AgentDetail({ agent }: AgentDetailProps) {
+export function AgentDetail({ agent, allVersions: allVersionsProp }: AgentDetailProps) {
   const [activeTab, setActiveTab] = useState("overview")
+  const [selectedVersion, setSelectedVersion] = useState<AgentResponse>(agent)
 
-  const { agent: agentData, _meta } = agent
+  const allVersions = allVersionsProp || [agent]
+
+  const { agent: agentData, _meta } = selectedVersion
   const official = _meta?.['io.modelcontextprotocol.registry/official']
+
+  const handleVersionChange = (version: string) => {
+    const newVersion = allVersions.find(v => v.agent.version === version)
+    if (newVersion) setSelectedVersion(newVersion)
+  }
 
   const formatDate = (dateString: string) => {
     try {
@@ -60,10 +71,34 @@ export function AgentDetail({ agent }: AgentDetailProps) {
           </div>
         </div>
 
+        {/* Version selector */}
+        {allVersions.length > 1 && (
+          <div className="flex items-center gap-3 px-3 py-2 bg-accent/50 border border-primary/10 rounded-md">
+            <History className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm">{allVersions.length} versions</span>
+            <Select value={selectedVersion.agent.version} onValueChange={handleVersionChange}>
+              <SelectTrigger className="w-[160px] h-7 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {allVersions.map((version) => (
+                  <SelectItem key={version.agent.version} value={version.agent.version}>
+                    {version.agent.version}
+                    {version.agent.version === agent.agent.version && " (latest)"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         {/* Quick info */}
         <div className="flex flex-wrap gap-2">
-          <span className="flex items-center gap-1.5 px-2.5 py-1 bg-muted rounded text-sm font-mono">
-            {agentData.version}
+          <span className="flex items-center gap-1.5 px-2.5 py-1 bg-muted rounded text-sm">
+            <span className="font-mono">{agentData.version}</span>
+            {allVersions.length > 1 && (
+              <Badge variant="secondary" className="text-[10px] px-1 py-0 h-3.5">{allVersions.length} total</Badge>
+            )}
           </span>
           <span className="flex items-center gap-1.5 px-2.5 py-1 bg-muted rounded text-sm">
             {agentData.status}
@@ -208,7 +243,7 @@ export function AgentDetail({ agent }: AgentDetailProps) {
                 Raw JSON
               </h3>
               <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs leading-relaxed">
-                {JSON.stringify(agent, null, 2)}
+                {JSON.stringify(selectedVersion, null, 2)}
               </pre>
             </div>
           </TabsContent>

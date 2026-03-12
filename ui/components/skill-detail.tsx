@@ -5,6 +5,7 @@ import { SkillResponse } from "@/lib/admin-api"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Package,
   Calendar,
@@ -15,22 +16,32 @@ import {
   Zap,
   Copy,
   Check,
+  History,
 } from "lucide-react"
 
 interface SkillDetailProps {
   skill: SkillResponse
+  allVersions?: SkillResponse[]
 }
 
-export function SkillDetail({ skill }: SkillDetailProps) {
+export function SkillDetail({ skill, allVersions: allVersionsProp }: SkillDetailProps) {
   const [activeTab, setActiveTab] = useState("overview")
   const [jsonCopied, setJsonCopied] = useState(false)
+  const [selectedVersion, setSelectedVersion] = useState<SkillResponse>(skill)
 
-  const { skill: skillData, _meta } = skill
+  const allVersions = allVersionsProp || [skill]
+
+  const { skill: skillData, _meta } = selectedVersion
   const official = _meta?.['io.modelcontextprotocol.registry/official']
+
+  const handleVersionChange = (version: string) => {
+    const newVersion = allVersions.find(v => v.skill.version === version)
+    if (newVersion) setSelectedVersion(newVersion)
+  }
 
   const handleCopyJson = async () => {
     try {
-      await navigator.clipboard.writeText(JSON.stringify(skill, null, 2))
+      await navigator.clipboard.writeText(JSON.stringify(selectedVersion, null, 2))
       setJsonCopied(true)
       setTimeout(() => setJsonCopied(false), 2000)
     } catch (err) {
@@ -65,10 +76,34 @@ export function SkillDetail({ skill }: SkillDetailProps) {
           </div>
         </div>
 
+        {/* Version selector */}
+        {allVersions.length > 1 && (
+          <div className="flex items-center gap-3 px-3 py-2 bg-accent/50 border border-primary/10 rounded-md">
+            <History className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm">{allVersions.length} versions</span>
+            <Select value={selectedVersion.skill.version} onValueChange={handleVersionChange}>
+              <SelectTrigger className="w-[160px] h-7 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {allVersions.map((version) => (
+                  <SelectItem key={version.skill.version} value={version.skill.version}>
+                    {version.skill.version}
+                    {version.skill.version === skill.skill.version && " (latest)"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         {/* Quick info */}
         <div className="flex flex-wrap gap-2">
-          <span className="flex items-center gap-1.5 px-2.5 py-1 bg-muted rounded text-sm font-mono">
-            {skillData.version}
+          <span className="flex items-center gap-1.5 px-2.5 py-1 bg-muted rounded text-sm">
+            <span className="font-mono">{skillData.version}</span>
+            {allVersions.length > 1 && (
+              <Badge variant="secondary" className="text-[10px] px-1 py-0 h-3.5">{allVersions.length} total</Badge>
+            )}
           </span>
           {official?.publishedAt && (
             <span className="flex items-center gap-1.5 px-2.5 py-1 bg-muted rounded text-sm">
@@ -204,7 +239,7 @@ export function SkillDetail({ skill }: SkillDetailProps) {
                 </Button>
               </div>
               <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs leading-relaxed">
-                {JSON.stringify(skill, null, 2)}
+                {JSON.stringify(selectedVersion, null, 2)}
               </pre>
             </div>
           </TabsContent>

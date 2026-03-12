@@ -52,6 +52,24 @@ interface GroupedServer extends ServerResponse {
   allVersions: ServerResponse[]
 }
 
+// Grouped prompt type
+interface GroupedPrompt extends PromptResponse {
+  versionCount: number
+  allVersions: PromptResponse[]
+}
+
+// Grouped skill type
+interface GroupedSkill extends SkillResponse {
+  versionCount: number
+  allVersions: SkillResponse[]
+}
+
+// Grouped agent type
+interface GroupedAgent extends AgentResponse {
+  versionCount: number
+  allVersions: AgentResponse[]
+}
+
 type TabKey = "servers" | "skills" | "agents" | "prompts"
 
 const TAB_CONFIG: { key: TabKey; label: string; icon: React.ReactNode }[] = [
@@ -65,13 +83,13 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<TabKey>("servers")
   const [servers, setServers] = useState<ServerResponse[]>([])
   const [groupedServers, setGroupedServers] = useState<GroupedServer[]>([])
-  const [skills, setSkills] = useState<SkillResponse[]>([])
-  const [agents, setAgents] = useState<AgentResponse[]>([])
-  const [prompts, setPrompts] = useState<PromptResponse[]>([])
+  const [groupedSkills, setGroupedSkills] = useState<GroupedSkill[]>([])
+  const [groupedAgents, setGroupedAgents] = useState<GroupedAgent[]>([])
+  const [groupedPrompts, setGroupedPrompts] = useState<GroupedPrompt[]>([])
   const [filteredServers, setFilteredServers] = useState<GroupedServer[]>([])
-  const [filteredSkills, setFilteredSkills] = useState<SkillResponse[]>([])
-  const [filteredAgents, setFilteredAgents] = useState<AgentResponse[]>([])
-  const [filteredPrompts, setFilteredPrompts] = useState<PromptResponse[]>([])
+  const [filteredSkills, setFilteredSkills] = useState<GroupedSkill[]>([])
+  const [filteredAgents, setFilteredAgents] = useState<GroupedAgent[]>([])
+  const [filteredPrompts, setFilteredPrompts] = useState<GroupedPrompt[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [sortBy, setSortBy] = useState<"name" | "stars" | "date">("name")
   const [filterVerifiedOrg, setFilterVerifiedOrg] = useState(false)
@@ -84,9 +102,9 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedServer, setSelectedServer] = useState<ServerResponse | null>(null)
-  const [selectedSkill, setSelectedSkill] = useState<SkillResponse | null>(null)
-  const [selectedAgent, setSelectedAgent] = useState<AgentResponse | null>(null)
-  const [selectedPrompt, setSelectedPrompt] = useState<PromptResponse | null>(null)
+  const [selectedSkill, setSelectedSkill] = useState<GroupedSkill | null>(null)
+  const [selectedAgent, setSelectedAgent] = useState<GroupedAgent | null>(null)
+  const [selectedPrompt, setSelectedPrompt] = useState<GroupedPrompt | null>(null)
 
   const getStars = (server: ServerResponse): number => {
     const publisherProvided = server.server._meta?.['io.modelcontextprotocol.registry/publisher-provided'] as Record<string, unknown> | undefined
@@ -134,6 +152,96 @@ export default function AdminPage() {
     })
   }
 
+  const groupSkillsByName = (skills: SkillResponse[]): GroupedSkill[] => {
+    const grouped = new Map<string, SkillResponse[]>()
+
+    skills.forEach((skill) => {
+      const name = skill.skill.name
+      if (!grouped.has(name)) {
+        grouped.set(name, [])
+      }
+      grouped.get(name)!.push(skill)
+    })
+
+    return Array.from(grouped.entries()).map(([, versions]) => {
+      const sortedVersions = [...versions].sort((a, b) => {
+        const dateA = a._meta?.['io.modelcontextprotocol.registry/official']?.publishedAt
+        const dateB = b._meta?.['io.modelcontextprotocol.registry/official']?.publishedAt
+        if (dateA && dateB) {
+          return new Date(dateB).getTime() - new Date(dateA).getTime()
+        }
+        return (b.skill.version || '').localeCompare(a.skill.version || '')
+      })
+
+      const latestVersion = sortedVersions[0]
+      return {
+        ...latestVersion,
+        versionCount: versions.length,
+        allVersions: sortedVersions,
+      }
+    })
+  }
+
+  const groupAgentsByName = (agents: AgentResponse[]): GroupedAgent[] => {
+    const grouped = new Map<string, AgentResponse[]>()
+
+    agents.forEach((agent) => {
+      const name = agent.agent.name
+      if (!grouped.has(name)) {
+        grouped.set(name, [])
+      }
+      grouped.get(name)!.push(agent)
+    })
+
+    return Array.from(grouped.entries()).map(([, versions]) => {
+      const sortedVersions = [...versions].sort((a, b) => {
+        const dateA = a._meta?.['io.modelcontextprotocol.registry/official']?.publishedAt
+        const dateB = b._meta?.['io.modelcontextprotocol.registry/official']?.publishedAt
+        if (dateA && dateB) {
+          return new Date(dateB).getTime() - new Date(dateA).getTime()
+        }
+        return (b.agent.version || '').localeCompare(a.agent.version || '')
+      })
+
+      const latestVersion = sortedVersions[0]
+      return {
+        ...latestVersion,
+        versionCount: versions.length,
+        allVersions: sortedVersions,
+      }
+    })
+  }
+
+  const groupPromptsByName = (prompts: PromptResponse[]): GroupedPrompt[] => {
+    const grouped = new Map<string, PromptResponse[]>()
+
+    prompts.forEach((prompt) => {
+      const name = prompt.prompt.name
+      if (!grouped.has(name)) {
+        grouped.set(name, [])
+      }
+      grouped.get(name)!.push(prompt)
+    })
+
+    return Array.from(grouped.entries()).map(([, versions]) => {
+      const sortedVersions = [...versions].sort((a, b) => {
+        const dateA = a._meta?.['io.modelcontextprotocol.registry/official']?.publishedAt
+        const dateB = b._meta?.['io.modelcontextprotocol.registry/official']?.publishedAt
+        if (dateA && dateB) {
+          return new Date(dateB).getTime() - new Date(dateA).getTime()
+        }
+        return (b.prompt.version || '').localeCompare(a.prompt.version || '')
+      })
+
+      const latestVersion = sortedVersions[0]
+      return {
+        ...latestVersion,
+        versionCount: versions.length,
+        allVersions: sortedVersions,
+      }
+    })
+  }
+
   const fetchData = async () => {
     try {
       setLoading(true)
@@ -161,7 +269,8 @@ export default function AdminPage() {
         allSkills.push(...skillData.skills)
         skillCursor = skillData.metadata.nextCursor
       } while (skillCursor)
-      setSkills(allSkills)
+      const groupedS = groupSkillsByName(allSkills)
+      setGroupedSkills(groupedS)
 
       const allAgents: AgentResponse[] = []
       let agentCursor: string | undefined
@@ -173,19 +282,21 @@ export default function AdminPage() {
         allAgents.push(...agentData.agents)
         agentCursor = agentData.metadata.nextCursor
       } while (agentCursor)
-      setAgents(allAgents)
+      const groupedA = groupAgentsByName(allAgents)
+      setGroupedAgents(groupedA)
 
       const allPrompts: PromptResponse[] = []
       let promptCursor: string | undefined
       do {
         const { data: promptData } = await listPromptsV0({
-          query: { cursor: promptCursor, limit: 100, version: 'latest' },
+          query: { cursor: promptCursor, limit: 100 },
           throwOnError: true,
         })
         allPrompts.push(...promptData.prompts)
         promptCursor = promptData.metadata.nextCursor
       } while (promptCursor)
-      setPrompts(allPrompts)
+      const groupedP = groupPromptsByName(allPrompts)
+      setGroupedPrompts(groupedP)
 
       const grouped = groupServersByName(allServers)
       setGroupedServers(grouped)
@@ -260,34 +371,34 @@ export default function AdminPage() {
   useEffect(() => {
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
-      setFilteredSkills(skills.filter((s) =>
+      setFilteredSkills(groupedSkills.filter((s) =>
         s.skill.name.toLowerCase().includes(query) ||
         s.skill.title?.toLowerCase().includes(query) ||
         s.skill.description.toLowerCase().includes(query)
       ))
-      setFilteredAgents(agents.filter(({agent}) =>
+      setFilteredAgents(groupedAgents.filter(({agent}) =>
         agent.name?.toLowerCase().includes(query) ||
         agent.modelProvider?.toLowerCase().includes(query) ||
         agent.description.toLowerCase().includes(query)
       ))
-      setFilteredPrompts(prompts.filter(({prompt}) =>
+      setFilteredPrompts(groupedPrompts.filter(({prompt}) =>
         prompt.name?.toLowerCase().includes(query) ||
         prompt.description?.toLowerCase().includes(query) ||
         prompt.content?.toLowerCase().includes(query)
       ))
     } else {
-      setFilteredSkills(skills)
-      setFilteredAgents(agents)
-      setFilteredPrompts(prompts)
+      setFilteredSkills(groupedSkills)
+      setFilteredAgents(groupedAgents)
+      setFilteredPrompts(groupedPrompts)
     }
-  }, [searchQuery, skills, agents, prompts])
+  }, [searchQuery, groupedSkills, groupedAgents, groupedPrompts])
 
   const getCount = (tab: TabKey) => {
     switch (tab) {
       case "servers": return groupedServers.length
-      case "skills": return skills.length
-      case "agents": return agents.length
-      case "prompts": return prompts.length
+      case "skills": return groupedSkills.length
+      case "agents": return groupedAgents.length
+      case "prompts": return groupedPrompts.length
     }
   }
 
@@ -488,9 +599,9 @@ export default function AdminPage() {
             filteredSkills.length === 0 ? (
               <EmptyState
                 icon={<Zap className="h-8 w-8 text-muted-foreground" />}
-                title={skills.length === 0 ? "No skills in registry" : "No skills match your filters"}
-                description={skills.length === 0 ? "Publish skills to get started" : "Try adjusting your search"}
-                action={skills.length === 0 ? (
+                title={groupedSkills.length === 0 ? "No skills in registry" : "No skills match your filters"}
+                description={groupedSkills.length === 0 ? "Publish skills to get started" : "Try adjusting your search"}
+                action={groupedSkills.length === 0 ? (
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setAddSkillDialogOpen(true)}>
                     <Plus className="h-3.5 w-3.5" /> Add Skill
                   </Button>
@@ -502,6 +613,7 @@ export default function AdminPage() {
                   <SkillCard
                     key={`${skill.skill.name}-${skill.skill.version}-${index}`}
                     skill={skill}
+                    versionCount={skill.versionCount}
                     onClick={() => setSelectedSkill(skill)}
                   />
                 ))}
@@ -513,9 +625,9 @@ export default function AdminPage() {
             filteredAgents.length === 0 ? (
               <EmptyState
                 icon={<Bot className="h-8 w-8 text-muted-foreground" />}
-                title={agents.length === 0 ? "No agents in registry" : "No agents match your filters"}
-                description={agents.length === 0 ? "Create agents to get started" : "Try adjusting your search"}
-                action={agents.length === 0 ? (
+                title={groupedAgents.length === 0 ? "No agents in registry" : "No agents match your filters"}
+                description={groupedAgents.length === 0 ? "Create agents to get started" : "Try adjusting your search"}
+                action={groupedAgents.length === 0 ? (
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setAddAgentDialogOpen(true)}>
                     <Plus className="h-3.5 w-3.5" /> Add Agent
                   </Button>
@@ -527,6 +639,7 @@ export default function AdminPage() {
                   <AgentCard
                     key={`${agent.agent.name}-${agent.agent.version}-${index}`}
                     agent={agent}
+                    versionCount={agent.versionCount}
                     onClick={() => setSelectedAgent(agent)}
                   />
                 ))}
@@ -538,9 +651,9 @@ export default function AdminPage() {
             filteredPrompts.length === 0 ? (
               <EmptyState
                 icon={<FileText className="h-8 w-8 text-muted-foreground" />}
-                title={prompts.length === 0 ? "No prompts in registry" : "No prompts match your filters"}
-                description={prompts.length === 0 ? "Add prompts to get started" : "Try adjusting your search"}
-                action={prompts.length === 0 ? (
+                title={groupedPrompts.length === 0 ? "No prompts in registry" : "No prompts match your filters"}
+                description={groupedPrompts.length === 0 ? "Add prompts to get started" : "Try adjusting your search"}
+                action={groupedPrompts.length === 0 ? (
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setAddPromptDialogOpen(true)}>
                     <Plus className="h-3.5 w-3.5" /> Add Prompt
                   </Button>
@@ -552,6 +665,7 @@ export default function AdminPage() {
                   <PromptCard
                     key={`${prompt.prompt.name}-${prompt.prompt.version}-${index}`}
                     prompt={prompt}
+                    versionCount={prompt.versionCount}
                     onClick={() => setSelectedPrompt(prompt)}
                   />
                 ))}
@@ -581,9 +695,9 @@ export default function AdminPage() {
               onServerCopied={fetchData}
             />
           )}
-          {selectedSkill && <SkillDetail skill={selectedSkill} />}
-          {selectedAgent && <AgentDetail agent={selectedAgent} />}
-          {selectedPrompt && <PromptDetail prompt={selectedPrompt} />}
+          {selectedSkill && <SkillDetail skill={selectedSkill} allVersions={selectedSkill.allVersions} />}
+          {selectedAgent && <AgentDetail agent={selectedAgent} allVersions={selectedAgent.allVersions} />}
+          {selectedPrompt && <PromptDetail prompt={selectedPrompt} allVersions={selectedPrompt.allVersions} />}
         </SheetContent>
       </Sheet>
     </main>

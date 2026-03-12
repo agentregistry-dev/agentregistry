@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createServerV0, type ServerJson } from "@/lib/admin-api"
 import { Loader2, AlertCircle, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
@@ -158,7 +159,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto px-8">
         <DialogHeader>
           <DialogTitle>Add New MCP Server</DialogTitle>
           <DialogDescription>
@@ -235,16 +236,16 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
             <div className="space-y-2">
               <Label htmlFor="repositoryUrl">Repository URL</Label>
               <div className="flex gap-2">
-                <select
-                  value={repositorySource}
-                  onChange={(e) => setRepositorySource(e.target.value as any)}
-                  className="px-3 py-2 border rounded-md bg-background text-foreground border-input focus:outline-none focus:ring-2 focus:ring-ring"
-                  disabled={loading}
-                >
-                  <option value="github">GitHub</option>
-                  <option value="gitlab">GitLab</option>
-                  <option value="bitbucket">Bitbucket</option>
-                </select>
+                <Select value={repositorySource} onValueChange={(v) => setRepositorySource(v as "github" | "gitlab" | "bitbucket")} disabled={loading}>
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="github">GitHub</SelectItem>
+                    <SelectItem value="gitlab">GitLab</SelectItem>
+                    <SelectItem value="bitbucket">Bitbucket</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Input
                   id="repositoryUrl"
                   placeholder="https://github.com/user/repo"
@@ -310,10 +311,10 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
-                <div className="flex gap-2 items-center pl-2">
-                  <Label className="text-xs text-muted-foreground">Transport *:</Label>
+                <div className="flex gap-3 items-center pl-2">
+                  <Label className="text-sm text-muted-foreground">Transport *:</Label>
                   {["stdio", "sse", "streamable-http"].map((transport) => (
-                    <label key={transport} className="flex items-center gap-1 cursor-pointer">
+                    <label key={transport} className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="radio"
                         name={`transport-${index}`}
@@ -322,7 +323,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
                         disabled={loading}
                         className="border-gray-300"
                       />
-                      <span className="text-xs">{transport}</span>
+                      <span className="text-sm">{transport}</span>
                     </label>
                   ))}
                 </div>

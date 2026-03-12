@@ -3,7 +3,9 @@
 import { useState } from "react"
 import { PromptResponse } from "@/lib/admin-api"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Calendar,
   FileText,
@@ -11,22 +13,32 @@ import {
   Clock,
   Copy,
   Check,
+  History,
 } from "lucide-react"
 
 interface PromptDetailProps {
   prompt: PromptResponse
+  allVersions?: PromptResponse[]
 }
 
-export function PromptDetail({ prompt }: PromptDetailProps) {
+export function PromptDetail({ prompt, allVersions: allVersionsProp }: PromptDetailProps) {
   const [activeTab, setActiveTab] = useState("overview")
   const [jsonCopied, setJsonCopied] = useState(false)
+  const [selectedVersion, setSelectedVersion] = useState<PromptResponse>(prompt)
 
-  const { prompt: promptData, _meta } = prompt
+  const allVersions = allVersionsProp || [prompt]
+
+  const { prompt: promptData, _meta } = selectedVersion
   const official = _meta?.['io.modelcontextprotocol.registry/official']
+
+  const handleVersionChange = (version: string) => {
+    const newVersion = allVersions.find(v => v.prompt.version === version)
+    if (newVersion) setSelectedVersion(newVersion)
+  }
 
   const handleCopyJson = async () => {
     try {
-      await navigator.clipboard.writeText(JSON.stringify(prompt, null, 2))
+      await navigator.clipboard.writeText(JSON.stringify(selectedVersion, null, 2))
       setJsonCopied(true)
       setTimeout(() => setJsonCopied(false), 2000)
     } catch (err) {
@@ -63,10 +75,34 @@ export function PromptDetail({ prompt }: PromptDetailProps) {
           </div>
         </div>
 
+        {/* Version selector */}
+        {allVersions.length > 1 && (
+          <div className="flex items-center gap-3 px-3 py-2 bg-accent/50 border border-primary/10 rounded-md">
+            <History className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm">{allVersions.length} versions</span>
+            <Select value={selectedVersion.prompt.version} onValueChange={handleVersionChange}>
+              <SelectTrigger className="w-[160px] h-7 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {allVersions.map((version) => (
+                  <SelectItem key={version.prompt.version} value={version.prompt.version}>
+                    {version.prompt.version}
+                    {version.prompt.version === prompt.prompt.version && " (latest)"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         {/* Quick info */}
         <div className="flex flex-wrap gap-2">
-          <span className="flex items-center gap-1.5 px-2.5 py-1 bg-muted rounded text-sm font-mono">
-            {promptData.version}
+          <span className="flex items-center gap-1.5 px-2.5 py-1 bg-muted rounded text-sm">
+            <span className="font-mono">{promptData.version}</span>
+            {allVersions.length > 1 && (
+              <Badge variant="secondary" className="text-[10px] px-1 py-0 h-3.5">{allVersions.length} total</Badge>
+            )}
           </span>
           {official?.publishedAt && (
             <span className="flex items-center gap-1.5 px-2.5 py-1 bg-muted rounded text-sm">
@@ -116,7 +152,7 @@ export function PromptDetail({ prompt }: PromptDetailProps) {
                 </Button>
               </div>
               <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs leading-relaxed">
-                {JSON.stringify(prompt, null, 2)}
+                {JSON.stringify(selectedVersion, null, 2)}
               </pre>
             </div>
           </TabsContent>

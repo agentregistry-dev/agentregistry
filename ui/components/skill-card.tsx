@@ -16,9 +16,10 @@ interface SkillCardProps {
   showDelete?: boolean
   showExternalLinks?: boolean
   onClick?: () => void
+  versionCount?: number
 }
 
-export function SkillCard({ skill, onDelete, showDelete = false, showExternalLinks = true, onClick }: SkillCardProps) {
+export function SkillCard({ skill, onDelete, showDelete = false, showExternalLinks = true, onClick, versionCount }: SkillCardProps) {
   const { skill: skillData, _meta } = skill
   const official = _meta?.['io.modelcontextprotocol.registry/official']
 
@@ -55,6 +56,9 @@ export function SkillCard({ skill, onDelete, showDelete = false, showExternalLin
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
             <span className="font-mono">{skillData.version}</span>
+            {versionCount && versionCount > 1 && (
+              <span className="text-primary text-xs">+{versionCount - 1}</span>
+            )}
 
             {official?.publishedAt && (
               <span>{formatDate(official.publishedAt)}</span>

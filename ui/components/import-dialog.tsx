@@ -173,9 +173,9 @@ export function ImportDialog({ open, onOpenChange, onImportComplete }: ImportDia
             </div>
           )}
 
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-50 border border-blue-200 dark:bg-blue-950 dark:border-blue-800">
-            <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <div className="text-sm text-blue-900 dark:text-blue-100">
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-muted">
+            <AlertCircle className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div className="text-sm text-muted-foreground">
               <p className="font-medium">Common Registry URLs:</p>
               <ul className="mt-1 space-y-1 text-xs">
                 <li>• Official MCP Registry: <code>https://registry.modelcontextprotocol.io/v0.1/servers</code></li>
