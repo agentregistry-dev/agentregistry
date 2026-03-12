@@ -27,6 +27,8 @@ if "${HELM}" plugin install "${HELM_PLUGIN_UNITTEST_URL}" \
   exit 0
 fi
 
+# Retry without flags: some Helm versions fail with extra plugin install flags
+# due to https://github.com/helm/helm/issues/31490
 echo "Install with HELM_PLUGIN_INSTALL_FLAGS failed; retrying without flags..."
 if "${HELM}" plugin install "${HELM_PLUGIN_UNITTEST_URL}" \
     --version "${HELM_PLUGIN_UNITTEST_VERSION}"; then
