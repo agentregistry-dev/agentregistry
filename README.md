@@ -78,6 +78,8 @@ Make approved artifacts easier to consume from the tools developers already use.
 - Pair with Agent Gateway for a consistent access layer to deployed MCP infrastructure
 - Reduce manual setup for AI clients and shared environments
 
+![](img/gateway-flow.svg)
+
 ### 🔧 How It Works Together
 
 1. **Platform teams** curate and publish approved MCP servers, agents, and skills in Agent Registry.
