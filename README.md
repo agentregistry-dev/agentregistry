@@ -6,6 +6,8 @@
   [![Go Version][go-img]][go] [![License][license-img]][license] [![Discord][discord-img]][discord]
 
   ### The trusted catalog and delivery path for MCP servers, agents, and skills.
+
+  ---
 </div>
 
 Agent Registry gives platform teams and developers one place to manage the agentic infrastructure their applications depend on.
