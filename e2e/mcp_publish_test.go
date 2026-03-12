@@ -42,6 +42,13 @@ func TestMCPPublishAndVerify(t *testing.T) {
 		RequireSuccess(t, result)
 	})
 
+	// Delete any stale server entry from a previous interrupted run, and ensure
+	// cleanup happens after all subtests regardless of outcome.
+	RunArctl(t, tmpDir, "mcp", "delete", serverName, "--version", version, "--registry-url", regURL)
+	t.Cleanup(func() {
+		RunArctl(t, tmpDir, "mcp", "delete", serverName, "--version", version, "--registry-url", regURL)
+	})
+
 	// Step 2: Publish the MCP server to the registry
 	t.Run("publish", func(t *testing.T) {
 		result := RunArctl(t, tmpDir,
