@@ -28,7 +28,7 @@ Use the web UI and `arctl` CLI to publish approved MCP servers, agents, and skil
 - 🔒 **Governance without slowing teams down** — centralize curation and publishing without forcing each team to rebuild the process.
 
 <p align="center">
-  <img alt="Agent Registry developer workflow" src="./img/dev-scenario.png"/>
+  <img alt="Agent Registry developer workflow" src="./img/whyagr.png"/>
 </p>
 
 ## 🔗 Quick Links
