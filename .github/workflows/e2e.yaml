@@ -37,22 +37,12 @@ jobs:
           name: ${{ env.BUILDX_BUILDER_NAME }}
           use: true
           driver-opts: network=host
-
-      - name: Run E2E tests (k8s)
-        if: matrix.backend == 'k8s'
+      - name: Run E2E tests
         env:
           DOCKER_BUILDER: "docker buildx"
           DOCKER_BUILD_ARGS: "--push --platform linux/amd64"
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-        run: make e2e-k8s
-
-      - name: Run E2E tests (docker)
-        if: matrix.backend == 'docker'
-        env:
-          DOCKER_BUILDER: "docker buildx"
-          DOCKER_BUILD_ARGS: "--push --platform linux/amd64"
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-        run: make e2e-docker
+        run: make e2e-${{ matrix.backend }}
 
       - name: Dump cluster state on failure
         if: failure() && matrix.backend == 'k8s'
