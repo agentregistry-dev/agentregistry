@@ -420,18 +420,9 @@ charts-generate: ## Generate Chart.yaml from Chart-template.yaml (uses CHART_VER
 	  < $(HELM_CHART_DIR)/Chart-template.yaml \
 	  > $(HELM_CHART_DIR)/Chart.yaml
 
-# Package the chart, generating Chart.yaml from the template first.
-.PHONY: charts-package
-charts-package: charts-generate ## Generate Chart.yaml and package the Helm chart into $(HELM_PACKAGE_DIR)
-	@mkdir -p $(HELM_PACKAGE_DIR)
-	@echo "Packaging chart $(HELM_CHART_DIR) → $(HELM_PACKAGE_DIR)/"
-	$(HELM) package $(HELM_CHART_DIR) -d $(HELM_PACKAGE_DIR)
-	@echo "Packaged chart(s):"
-	@ls -1 $(HELM_PACKAGE_DIR)/*.tgz
-
 # Build chart dependencies (resolves Chart.yaml dependencies → charts/ subdir).
 .PHONY: charts-deps
-charts-deps: _helm-check ## Build Helm chart dependencies
+charts-deps: charts-generate _helm-check ## Build Helm chart dependencies
 	@echo "Building Helm chart dependencies for $(HELM_CHART_DIR)..."
 	$(HELM) dependency build $(HELM_CHART_DIR)
 
@@ -454,24 +445,19 @@ charts-render-test: charts-deps ## Render chart templates as a smoke test
 
 # Package the chart into $(HELM_PACKAGE_DIR)/.
 .PHONY: charts-package
-charts-package: charts-lint ## Package the Helm chart into $(HELM_PACKAGE_DIR)
+charts-package: charts-generate charts-lint ## Package the Helm chart into $(HELM_PACKAGE_DIR)
 	@mkdir -p $(HELM_PACKAGE_DIR)
 	@echo "Packaging chart $(HELM_CHART_DIR) → $(HELM_PACKAGE_DIR)/"
 	$(HELM) package $(HELM_CHART_DIR) -d $(HELM_PACKAGE_DIR)
 	@echo "Packaged chart(s):"
 	@ls -1 $(HELM_PACKAGE_DIR)/*.tgz
 
-# Internal: push pre-packaged chart. Does NOT login or package first.
-# Caller is responsible for authenticating with the registry before invoking this target.
-# Override registry/repo: make _helm-push HELM_REGISTRY=ghcr.io HELM_REPO=org/repo
-.PHONY: _helm-push
-_helm-push: _helm-check
+# Package the chart and push to an OCI registry. Caller must be logged in.
+# Override registry/repo: make charts-push HELM_REGISTRY=ghcr.io HELM_REPO=org/repo
+.PHONY: charts-push
+charts-push: charts-package _helm-check ## Package and push chart to the configured OCI registry
 	@echo "Pushing $(HELM_PACKAGE_DIR)/agentregistry-$(CHART_VERSION).tgz → oci://$(HELM_REGISTRY)/$(HELM_REPO)/charts"
 	$(HELM) push "$(HELM_PACKAGE_DIR)/agentregistry-$(CHART_VERSION).tgz" "oci://$(HELM_REGISTRY)/$(HELM_REPO)/charts"
-
-# Push packaged chart to an OCI registry (packages first). Caller must be logged in.
-.PHONY: charts-push
-charts-push: charts-package _helm-push ## Package and push chart to the configured registry
 
 # Generate SHA-256 checksums for all packaged chart files.
 .PHONY: charts-checksum
@@ -480,16 +466,11 @@ charts-checksum: ## Generate SHA-256 checksum for the packaged chart in $(HELM_P
 	@echo "--- checksum ---"
 	@cat $(HELM_PACKAGE_DIR)/checksums.txt
 
-# Full Helm release pipeline: generate Chart.yaml → lint → test → package → checksum → push.
+# Full Helm release pipeline: test → push (→ lint → package → generate + deps) → checksum.
 # Required env vars for the push step: HELM_REGISTRY_PASSWORD (and optionally HELM_REGISTRY_USERNAME).
-# Override version: make release-helm CHART_VERSION=1.2.3
-.PHONY: release-helm
-release-helm: ## Full Helm release: generate Chart.yaml, lint, test, package, checksum, and push
-	$(MAKE) charts-lint
-	$(MAKE) charts-test
-	$(MAKE) charts-package
-	$(MAKE) charts-checksum
-	$(MAKE) _helm-push
+# Override version: make charts-release CHART_VERSION=1.2.3
+.PHONY: charts-release
+charts-release: charts-test charts-push charts-checksum ## Full Helm release: lint, test, package, checksum, and push
 
 # Run helm-unittest against charts/agentregistry/tests/*.
 # This target:
@@ -520,7 +501,3 @@ helm-unittest-install: _helm-check ## Install the helm-unittest plugin if needed
 	  echo "helm-unittest plugin already installed"; \
 	fi
 
-# Convenience: package → push → test.
-.PHONY: charts-all
-charts-all: charts-push charts-test ## Package, push, and test the Helm chart
-	@echo "charts-all complete: packaged, pushed, and tested."

@@ -103,7 +103,7 @@ jobs:
       run: make release-cli
 
     - name: Release Helm chart
-      run: make release-helm
+      run: make charts-release
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
