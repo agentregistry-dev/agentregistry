@@ -23,6 +23,8 @@ rules:
   - apiGroups:
       - kagent.dev
     resources:
+      - agents
+      - remotemcpservers
       - mcpservers
     verbs:
       - get
@@ -102,6 +104,8 @@ rules:
   - apiGroups:
       - kagent.dev
     resources:
+      - agents
+      - remotemcpservers
       - mcpservers
     verbs:
       - get
