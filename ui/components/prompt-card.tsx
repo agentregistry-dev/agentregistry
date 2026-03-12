@@ -34,7 +34,7 @@ export function PromptCard({ prompt, onClick }: PromptCardProps) {
         onClick={() => onClick?.()}
       >
         <div className="w-10 h-10 rounded bg-primary/8 flex items-center justify-center flex-shrink-0 mt-0.5">
-          <FileText className="h-4.5 w-4.5 text-primary" />
+          <FileText className="h-4 w-4 text-primary" />
         </div>
 
         <div className="flex-1 min-w-0">

@@ -38,7 +38,7 @@ export function AgentCard({ agent, onClick }: AgentCardProps) {
         onClick={() => onClick?.()}
       >
         <div className="w-10 h-10 rounded bg-primary/8 flex items-center justify-center flex-shrink-0 mt-0.5">
-          <Bot className="h-4.5 w-4.5 text-primary" />
+          <Bot className="h-4 w-4 text-primary" />
         </div>
 
         <div className="flex-1 min-w-0">

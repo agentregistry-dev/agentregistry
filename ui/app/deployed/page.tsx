@@ -353,7 +353,7 @@ function DeploymentRow({ item, onRemove, removing, copiedAgentId, onCopyAgentUrl
     <TooltipProvider>
       <div className="group flex items-start gap-3.5 py-4 px-2 -mx-2 rounded-md transition-colors hover:bg-muted/50">
         <div className="w-10 h-10 rounded bg-primary/8 flex items-center justify-center flex-shrink-0 mt-0.5">
-          {isAgent ? <BotIcon className="h-4.5 w-4.5 text-primary" /> : <Server className="h-4.5 w-4.5 text-primary" />}
+          {isAgent ? <BotIcon className="h-4 w-4 text-primary" /> : <Server className="h-4 w-4 text-primary" />}
         </div>
 
         <div className="flex-1 min-w-0">
