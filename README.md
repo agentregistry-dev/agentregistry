@@ -20,12 +20,12 @@ Use the web UI and `arctl` CLI to publish approved MCP servers, agents, and skil
 
 ---
 
-## Why Agent Registry?
+## 🤔 Why Agent Registry?
 
-- **One trusted source for AI building blocks**: Give teams a curated catalog instead of scattered repos, scripts, and one-off MCP setup.
-- **Faster developer onboarding**: Help developers discover approved artifacts quickly and start using them with less manual configuration.
-- **A consistent path from laptop to cluster**: Support the same discovery and delivery workflow across local development and Kubernetes.
-- **Governance without slowing teams down**: Centralize curation and publishing without forcing each team to rebuild the same process.
+- 📦 **One trusted source for AI building blocks**: Give teams a curated catalog instead of scattered repos, scripts, and one-off MCP setup.
+- 🚀 **Faster developer onboarding**: Help developers discover approved artifacts quickly and start using them with less manual configuration.
+- 🌐 **A consistent path from laptop to cluster**: Support the same discovery and delivery workflow across local development and Kubernetes.
+- 🔒 **Governance without slowing teams down**: Centralize curation and publishing without forcing each team to rebuild the same process.
 
 <p align="center">
   <img alt="Agent Registry developer workflow" src="./img/dev-scenario.png"/>
@@ -33,7 +33,7 @@ Use the web UI and `arctl` CLI to publish approved MCP servers, agents, and skil
 
 ---
 
-## Quick Links
+## 🔗 Quick Links
 
 - [Install `arctl`](https://github.com/agentregistry-dev/agentregistry/releases)
 - [Local development](#local-development)
@@ -45,9 +45,9 @@ Use the web UI and `arctl` CLI to publish approved MCP servers, agents, and skil
 
 ---
 
-## Core Capabilities
+## 📚 Core Capabilities
 
-### Registry
+### 📦 Registry
 
 Curate a shared catalog of MCP servers, agents, and skills your teams can trust and reuse.
 
@@ -55,7 +55,7 @@ Curate a shared catalog of MCP servers, agents, and skills your teams can trust 
 - Discover approved artifacts with the CLI and web UI
 - Give teams a consistent source of truth across environments
 
-### Curation and Governance
+### 🔒 Curation and Governance
 
 Turn a broad set of available AI artifacts into a collection your organization is willing to support.
 
@@ -63,7 +63,7 @@ Turn a broad set of available AI artifacts into a collection your organization i
 - Standardize how artifacts are shared across teams
 - Keep control of what gets published and promoted
 
-### Deployment Workflows
+### 🚀 Deployment Workflows
 
 Move from discovery to usage without reinventing the same delivery path for every team.
 
@@ -71,7 +71,7 @@ Move from discovery to usage without reinventing the same delivery path for ever
 - Deploy Agent Registry into Kubernetes with Helm
 - Support local environments and shared platform environments from the same registry
 
-### Client and Gateway Integration
+### 🌐 Client and Gateway Integration
 
 Make approved artifacts easier to consume from the tools developers already use.
 
@@ -79,7 +79,7 @@ Make approved artifacts easier to consume from the tools developers already use.
 - Pair with Agent Gateway for a consistent access layer to deployed MCP infrastructure
 - Reduce manual setup for AI clients and shared environments
 
-### How It Works Together
+### 🔧 How It Works Together
 
 1. Platform teams curate and publish approved MCP servers, agents, and skills in Agent Registry.
 2. Developers discover those artifacts through the web UI or `arctl`.
@@ -88,9 +88,9 @@ Make approved artifacts easier to consume from the tools developers already use.
 
 ---
 
-## Flexible Deployment
+## 🏗️ Flexible Deployment
 
-### Local Development
+### 💻 Local Development
 
 Get started with a local registry in minutes. The first time `arctl` runs, it automatically starts the local registry daemon and imports the built-in seed data.
 
@@ -109,7 +109,7 @@ arctl configure vscode
 
 Open `http://localhost:12121` to use the web UI.
 
-### Kubernetes
+### ☸️ Kubernetes
 
 Run Agent Registry in a cluster when you want shared discovery and deployment workflows. An external PostgreSQL instance with the [pgvector](https://github.com/pgvector/pgvector) extension is required.
 
@@ -146,7 +146,7 @@ For deployment details and configuration options, see [charts/agentregistry/READ
 
 ---
 
-## See It In Action
+## 🎬 See It In Action
 
 Learn how to create an Anthropic Skill, publish it to Agent Registry, and use it in Claude Code.
 
@@ -154,16 +154,16 @@ Learn how to create an Anthropic Skill, publish it to Agent Registry, and use it
 
 ---
 
-## Contributing
+## 🤝 Contributing
 
 We welcome contributions and feedback from the community.
 
-- [GitHub Issues](https://github.com/agentregistry-dev/agentregistry/issues)
-- [GitHub Discussions](https://github.com/agentregistry-dev/agentregistry/discussions)
-- [Contributing guide](CONTRIBUTING.md)
-- [Development details](DEVELOPMENT.md)
-- [Discord](https://discord.gg/HTYNjF2y2t)
+- 🐛 [GitHub Issues](https://github.com/agentregistry-dev/agentregistry/issues)
+- 💡 [GitHub Discussions](https://github.com/agentregistry-dev/agentregistry/discussions)
+- 🔧 [Contributing guide](CONTRIBUTING.md)
+- 📖 [Development details](DEVELOPMENT.md)
+- 💬 [Discord](https://discord.gg/HTYNjF2y2t)
 
-## License
+## 📄 License
 
 Apache V2 License. See [LICENSE](LICENSE) for details.
