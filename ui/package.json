@@ -45,6 +45,7 @@
     "@types/react-dom": "^18",
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.0.1",
+    "baseline-browser-mapping": "^2.10.7",
     "eslint": "^9.39.1",
     "eslint-config-next": "^16.0.7",
     "eslint-plugin-storybook": "9.1.19",

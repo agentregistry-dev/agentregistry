@@ -30,6 +30,8 @@ export function Navigation() {
             <Image
               src={mounted && theme === "dark" ? "/logo-dark.svg" : "/logo-light.svg"}
               alt="Agent Registry"
+              width={180}
+              height={60}
               className="h-12 w-auto"
             />
           </Link>

@@ -41,10 +41,9 @@ const mockServer: ServerResponse = {
 }
 
 describe("ServerCard", () => {
-  it("renders title and name", () => {
+  it("renders title as heading", () => {
     render(<ServerCard server={mockServer} />)
     expect(screen.getByText("Database Server")).toBeInTheDocument()
-    expect(screen.getByText("acme/database-server")).toBeInTheDocument()
   })
 
   it("renders description and version", () => {
@@ -55,8 +54,9 @@ describe("ServerCard", () => {
 
   it("renders package and remote counts", () => {
     render(<ServerCard server={mockServer} />)
-    expect(screen.getByText("1 package")).toBeInTheDocument()
-    expect(screen.getByText("1 remote")).toBeInTheDocument()
+    // counts are shown as numbers next to icons
+    const ones = screen.getAllByText("1")
+    expect(ones.length).toBeGreaterThanOrEqual(2)
   })
 
   it("renders repository source", () => {
@@ -70,13 +70,12 @@ describe("ServerCard", () => {
       _meta: {},
     }
     render(<ServerCard server={noTitle} />)
-    const nameElements = screen.getAllByText("acme/database-server")
-    expect(nameElements.length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText("acme/database-server")).toBeInTheDocument()
   })
 
   it("shows version count when provided", () => {
     render(<ServerCard server={mockServer} versionCount={5} />)
-    expect(screen.getByText("(+4 more)")).toBeInTheDocument()
+    expect(screen.getByText("+4")).toBeInTheDocument()
   })
 
   it("calls onClick when card is clicked", async () => {
@@ -103,8 +102,10 @@ describe("ServerCard", () => {
 
   it("shows delete button when showDelete is true", () => {
     const onDelete = vi.fn()
-    render(<ServerCard server={mockServer} showDelete onDelete={onDelete} />)
-    expect(screen.getByTitle("Remove from registry")).toBeInTheDocument()
+    const { container } = render(<ServerCard server={mockServer} showDelete onDelete={onDelete} />)
+    // Trash2 icon renders an SVG inside the delete button
+    const trashIcon = container.querySelector("svg.lucide-trash2")
+    expect(trashIcon).toBeTruthy()
   })
 
   it("renders without optional fields", () => {

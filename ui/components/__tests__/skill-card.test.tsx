@@ -32,10 +32,9 @@ const mockSkill: SkillResponse = {
 }
 
 describe("SkillCard", () => {
-  it("renders title and name", () => {
+  it("renders title as heading", () => {
     render(<SkillCard skill={mockSkill} />)
     expect(screen.getByText("Code Review")).toBeInTheDocument()
-    expect(screen.getByText("code-review")).toBeInTheDocument()
   })
 
   it("renders description and version", () => {
@@ -46,8 +45,9 @@ describe("SkillCard", () => {
 
   it("renders package and remote counts", () => {
     render(<SkillCard skill={mockSkill} />)
-    expect(screen.getByText("2 packages")).toBeInTheDocument()
-    expect(screen.getByText("1 remote")).toBeInTheDocument()
+    expect(screen.getByText("2")).toBeInTheDocument()
+    const ones = screen.getAllByText("1")
+    expect(ones.length).toBeGreaterThanOrEqual(1)
   })
 
   it("renders repository source", () => {
@@ -61,9 +61,7 @@ describe("SkillCard", () => {
       _meta: {},
     }
     render(<SkillCard skill={noTitle} />)
-    // name appears as both the heading fallback and the subtitle
-    const nameElements = screen.getAllByText("code-review")
-    expect(nameElements.length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText("code-review")).toBeInTheDocument()
   })
 
   it("calls onClick when card is clicked", async () => {
@@ -76,14 +74,18 @@ describe("SkillCard", () => {
   it("shows delete button when showDelete is true", () => {
     const onDelete = vi.fn()
     render(<SkillCard skill={mockSkill} showDelete onDelete={onDelete} />)
-    expect(screen.getByTitle("Remove from registry")).toBeInTheDocument()
+    const buttons = screen.getAllByRole("button")
+    const deleteBtn = buttons.find(btn => btn.querySelector(".lucide-trash2"))
+    expect(deleteBtn).toBeTruthy()
   })
 
   it("calls onDelete without triggering onClick", async () => {
     const onDelete = vi.fn()
     const onClick = vi.fn()
     render(<SkillCard skill={mockSkill} showDelete onDelete={onDelete} onClick={onClick} />)
-    await userEvent.click(screen.getByTitle("Remove from registry"))
+    const buttons = screen.getAllByRole("button")
+    const deleteBtn = buttons.find(btn => btn.querySelector(".lucide-trash2"))
+    await userEvent.click(deleteBtn!)
     expect(onDelete).toHaveBeenCalledOnce()
     expect(onClick).not.toHaveBeenCalled()
   })

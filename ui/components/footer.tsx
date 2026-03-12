@@ -19,6 +19,8 @@ export function Footer() {
             src={mounted && theme === "dark" ? "/logo-dark.svg" : "/logo-light.svg"}
             alt="Agent Registry"
             className="h-5 w-auto"
+            width={180}
+            height={60}
           />
           <span>created at</span>
           <a
