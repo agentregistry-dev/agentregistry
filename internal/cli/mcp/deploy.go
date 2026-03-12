@@ -17,6 +17,7 @@ var (
 	deployYes          bool
 	deployProviderID   string
 	deployNamespace    string
+	deployWait         bool
 )
 
 var DeployCmd = &cobra.Command{
@@ -38,6 +39,7 @@ func init() {
 	DeployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "Automatically accept all prompts (use default/latest version)")
 	DeployCmd.Flags().StringVar(&deployProviderID, "provider-id", "", "Deployment target provider ID (defaults to local when omitted)")
 	DeployCmd.Flags().StringVar(&deployNamespace, "namespace", "", "Kubernetes namespace for deployment (if provider targets Kubernetes)")
+	DeployCmd.Flags().BoolVar(&deployWait, "wait", true, "Wait for the deployment to become ready before returning")
 }
 
 func runDeploy(cmd *cobra.Command, args []string) error {
@@ -93,6 +95,13 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to deploy server: %w", err)
 	}
 
+	if deployProviderID != "local" && deployWait {
+		fmt.Printf("Waiting for server '%s' to become ready...\n", deployment.ServerName)
+		if err := common.WaitForDeploymentReady(apiClient, deployment.ID); err != nil {
+			return err
+		}
+	}
+
 	fmt.Printf("\n✓ Deployed %s (%s) with providerId=%s\n", deployment.ServerName, common.FormatVersionForDisplay(deployment.Version), deployProviderID)
 	if deployNamespace != "" {
 		ns := deployNamespace
@@ -103,7 +112,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 	if deployProviderID == "local" {
 		fmt.Printf("\nServer deployment recorded. The registry will reconcile containers automatically.\n")
-		fmt.Printf("Agent Gateway endpoint: http://localhost:21212/mcp\n")
+		fmt.Printf("Agent Gateway endpoint: http://localhost:%s/mcp\n", common.DefaultAgentGatewayPort)
 	}
 
 	return nil

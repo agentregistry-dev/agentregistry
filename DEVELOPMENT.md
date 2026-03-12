@@ -9,6 +9,7 @@ The fastest way to run the full stack locally is with [Kind](https://kind.sigs.k
 - [Docker](https://docs.docker.com/get-docker/)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
 - [Helm](https://helm.sh/docs/intro/install/)
+- [envsubst](https://www.gnu.org/software/gettext/manual/html_node/envsubst-Invocation.html) (used to generate `Chart.yaml`)
 
 > `kind` is installed automatically into `./bin/kind` by `make install-tools` — no manual installation needed.
 
@@ -36,6 +37,8 @@ make install-agentregistry
 make install-agentregistry BUILD=false
 ```
 
+`install-agentregistry` automatically runs `charts-generate` first (see [Helm Chart Generation](#helm-chart-generation) below), so `Chart.yaml` is always up to date before deploying.
+
 On subsequent runs, `install-agentregistry` reuses the `jwtPrivateKey` already stored in the cluster secret so tokens remain valid across redeploys.
 
 ### Accessing the services
@@ -57,6 +60,41 @@ make delete-kind-cluster
 ```
 
 See [`scripts/kind/README.md`](scripts/kind/README.md) for more detail on configuration, troubleshooting, and overriding defaults.
+
+---
+
+## Helm Chart Generation
+
+`charts/agentregistry/Chart.yaml` is **generated** from `charts/agentregistry/Chart-template.yaml` using `envsubst` and is not committed to the repository. Any `helm` command run directly against the chart directory will fail unless `Chart.yaml` exists.
+
+### Generating Chart.yaml locally
+
+```bash
+# Generate with version derived from the latest git tag (e.g. 0.3.0)
+make charts-generate
+
+# Generate with an explicit version
+make charts-generate CHART_VERSION=0.4.0
+```
+
+`CHART_VERSION` defaults to the output of `git describe --tags --abbrev=0` with the leading `v` stripped. If there are no tags, set it explicitly.
+
+Any Makefile target that needs `Chart.yaml` (e.g. `charts-lint`, `charts-test`, `charts-package`, `install-agentregistry`) declares `charts-generate` as a prerequisite and will generate it automatically. You only need to run `make charts-generate` directly if you're invoking `helm` commands by hand.
+
+### Adding Chart.yaml to your editor's ignore hints
+
+Because `charts/agentregistry/Chart.yaml` is gitignored, some editors may flag it as untracked. This is expected — treat `Chart-template.yaml` as the source of truth and do not commit the generated `Chart.yaml`.
+
+### Helm release pipeline
+
+The full release pipeline is encapsulated in a single target:
+
+```bash
+# Requires HELM_REGISTRY_PASSWORD to be set; optionally HELM_REGISTRY_USERNAME
+make charts-release CHART_VERSION=0.4.0
+```
+
+This runs in order: `charts-test` → `charts-push` (lint → package → push) → `charts-checksum`.
 
 ---
 

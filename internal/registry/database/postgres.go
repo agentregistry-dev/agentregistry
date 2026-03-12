@@ -2384,6 +2384,58 @@ func (db *PostgreSQL) UnmarkSkillAsLatest(ctx context.Context, tx pgx.Tx, skillN
 	return nil
 }
 
+// DeleteSkill permanently removes a skill version from the database.
+func (db *PostgreSQL) DeleteSkill(ctx context.Context, tx pgx.Tx, skillName, version string) error {
+	if err := db.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
+		Name: skillName,
+		Type: auth.PermissionArtifactTypeSkill,
+	}); err != nil {
+		return err
+	}
+
+	executor := db.getExecutor(tx)
+
+	// Check if the version being deleted is the current latest.
+	var wasLatest bool
+	err := executor.QueryRow(ctx,
+		`SELECT is_latest FROM skills WHERE skill_name = $1 AND version = $2`,
+		skillName, version,
+	).Scan(&wasLatest)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return database.ErrNotFound
+		}
+		return fmt.Errorf("failed to check skill latest status: %w", err)
+	}
+
+	query := `DELETE FROM skills WHERE skill_name = $1 AND version = $2`
+	result, err := executor.Exec(ctx, query, skillName, version)
+	if err != nil {
+		return fmt.Errorf("failed to delete skill: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return database.ErrNotFound
+	}
+
+	if wasLatest {
+		promoteQuery := `
+			UPDATE skills SET is_latest = true
+			WHERE skill_name = $1
+			  AND version = (
+			    SELECT version FROM skills
+			    WHERE skill_name = $1
+			    ORDER BY published_at DESC
+			    LIMIT 1
+			  )
+		`
+		if _, err := executor.Exec(ctx, promoteQuery, skillName); err != nil {
+			return fmt.Errorf("failed to promote next latest skill version: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // CreateProvider creates a provider record.
 func (db *PostgreSQL) CreateProvider(ctx context.Context, tx pgx.Tx, in *models.CreateProviderInput) (*models.Provider, error) {
 	if in == nil {

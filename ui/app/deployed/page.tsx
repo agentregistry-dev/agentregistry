@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { listDeployments, removeDeployment, Deployment } from "@/lib/admin-api"
-import { Trash2, AlertCircle, Calendar, Package, Copy, Check } from "lucide-react"
+import { Trash2, AlertCircle, Calendar, Package, Copy, Check, Link2 } from "lucide-react"
 import { toast } from "sonner"
 import {
   Dialog,
@@ -17,6 +17,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 
+const GATEWAY_BASE_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:21212"
+
+function sanitizeName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9-]/g, '-')
+}
+
+function getAgentEndpointUrl(serverName: string, deploymentId: string): string {
+  const name = sanitizeName(serverName)
+  const id = sanitizeName(deploymentId)
+  return `${GATEWAY_BASE_URL}/agents/${name}-${id}`
+}
+
 export default function DeployedPage() {
   const [deployments, setDeployments] = useState<Deployment[]>([])
   const [loading, setLoading] = useState(true)
@@ -24,14 +36,22 @@ export default function DeployedPage() {
   const [removing, setRemoving] = useState(false)
   const [serverToRemove, setServerToRemove] = useState<{ id: string, name: string, version: string, resourceType: string } | null>(null)
   const [copied, setCopied] = useState(false)
+  const [copiedAgentId, setCopiedAgentId] = useState<string | null>(null)
 
-  const gatewayUrl = "http://localhost:21212/mcp"
+  const gatewayUrl = `${GATEWAY_BASE_URL}/mcp`
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(gatewayUrl)
     setCopied(true)
     toast.success("Gateway URL copied to clipboard!")
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const copyAgentUrl = (deploymentId: string, url: string) => {
+    navigator.clipboard.writeText(url)
+    setCopiedAgentId(deploymentId)
+    toast.success("Agent endpoint URL copied to clipboard!")
+    setTimeout(() => setCopiedAgentId(null), 2000)
   }
 
   const fetchDeployments = async () => {
@@ -282,6 +302,28 @@ export default function DeployedPage() {
                               </span>
                             </div>
                           </div>
+
+                          {(!item.providerId || item.providerId === 'local') && (
+                            <div className="mt-3 flex items-center gap-2 text-sm">
+                              <Link2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <code className="text-xs font-mono bg-muted px-2 py-1 rounded truncate">
+                                {getAgentEndpointUrl(item.serverName, item.id)}
+                              </code>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 shrink-0"
+                                onClick={() => copyAgentUrl(item.id, getAgentEndpointUrl(item.serverName, item.id))}
+                                title="Copy agent endpoint URL"
+                              >
+                                {copiedAgentId === item.id ? (
+                                  <Check className="h-3 w-3 text-green-600" />
+                                ) : (
+                                  <Copy className="h-3 w-3" />
+                                )}
+                              </Button>
+                            </div>
+                          )}
 
                           {Object.keys(item.env || {}).length > 0 && (
                             <div className="mt-3 pt-3 border-t">

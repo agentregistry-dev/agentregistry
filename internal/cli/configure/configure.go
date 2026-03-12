@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/spf13/cobra"
 )
 
@@ -80,8 +81,8 @@ var ConfigureCmd = &cobra.Command{
 }
 
 func init() {
-	ConfigureCmd.Flags().StringVar(&configureURL, "url", "", "Custom MCP server URL (default: http://localhost:21212/mcp")
-	ConfigureCmd.Flags().StringVar(&configurePort, "port", "21212", "Port for the MCP server")
+	ConfigureCmd.Flags().StringVar(&configureURL, "url", "", fmt.Sprintf("Custom MCP server URL (default: http://localhost:%s/mcp)", common.DefaultAgentGatewayPort))
+	ConfigureCmd.Flags().StringVar(&configurePort, "port", common.DefaultAgentGatewayPort, "Port for the MCP server")
 }
 
 func writeConfigFile(configPath string, config any) error {

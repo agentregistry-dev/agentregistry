@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // --- skill build tests ---
@@ -472,4 +473,161 @@ func fetchSkillFromAPI(t *testing.T, regURL, skillName, version string) skillAPI
 	}
 
 	return wrapper.Skill
+}
+
+// TestSkillDelete tests publishing a skill and then deleting it via the
+// DELETE /v0/skills/{name}/versions/{version} endpoint.
+func TestSkillDelete(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+
+	skillName := UniqueNameWithPrefix("e2e-del-skill")
+	version := "0.0.1-e2e"
+	gitRepo := "https://github.com/agentregistry-dev/skills/tree/main/artifacts-builder"
+
+	skillDir := filepath.Join(tmpDir, skillName)
+	createSkillDir(t, skillDir, skillName, "E2E delete test")
+
+	// Step 1: Publish the skill
+	t.Run("publish", func(t *testing.T) {
+		result := RunArctl(t, tmpDir,
+			"skill", "publish", skillDir,
+			"--git", gitRepo,
+			"--version", version,
+			"--registry-url", regURL,
+		)
+		RequireSuccess(t, result)
+	})
+
+	// Step 2: Verify it exists
+	t.Run("exists_before_delete", func(t *testing.T) {
+		resp := RegistryGet(t, regURL+"/skills/"+skillName+"/versions/"+version)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200 before delete, got %d", resp.StatusCode)
+		}
+	})
+
+	// Step 3: Delete via CLI
+	t.Run("delete", func(t *testing.T) {
+		result := RunArctl(t, tmpDir,
+			"skill", "delete", skillName,
+			"--version", version,
+			"--registry-url", regURL,
+		)
+		RequireSuccess(t, result)
+	})
+
+	// Step 4: Verify it's gone (API returns 404)
+	t.Run("gone_after_delete", func(t *testing.T) {
+		resp := RegistryGet(t, regURL+"/skills/"+skillName+"/versions/"+version)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("expected 404 after delete, got %d", resp.StatusCode)
+		}
+	})
+
+	// Step 5: Deleting the same skill again should fail
+	t.Run("delete_again_fails", func(t *testing.T) {
+		result := RunArctl(t, tmpDir,
+			"skill", "delete", skillName,
+			"--version", version,
+			"--registry-url", regURL,
+		)
+		RequireFailure(t, result)
+	})
+}
+
+// TestSkillDeletePromotesLatest verifies that deleting the current latest
+// version of a skill promotes the previous version to latest.
+func TestSkillDeletePromotesLatest(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+
+	skillName := UniqueNameWithPrefix("e2e-promote-skill")
+	v1 := "0.0.1"
+	v2 := "0.0.2"
+	gitRepo := "https://github.com/agentregistry-dev/skills/tree/main/artifacts-builder"
+
+	skillDir := filepath.Join(tmpDir, skillName)
+	createSkillDir(t, skillDir, skillName, "E2E promote test")
+
+	// Cleanup: delete remaining versions after the test
+	t.Cleanup(func() {
+		RunArctl(t, tmpDir,
+			"skill", "delete", skillName,
+			"--version", v1,
+			"--registry-url", regURL,
+		)
+	})
+
+	// Step 1: Publish v1
+	t.Run("publish_v1", func(t *testing.T) {
+		result := RunArctl(t, tmpDir,
+			"skill", "publish", skillDir,
+			"--git", gitRepo,
+			"--version", v1,
+			"--registry-url", regURL,
+		)
+		RequireSuccess(t, result)
+	})
+
+	// Step 2: Publish v2 (becomes latest)
+	t.Run("publish_v2", func(t *testing.T) {
+		result := RunArctl(t, tmpDir,
+			"skill", "publish", skillDir,
+			"--git", gitRepo,
+			"--version", v2,
+			"--registry-url", regURL,
+		)
+		RequireSuccess(t, result)
+	})
+
+	// Step 3: Verify "latest" resolves to v2
+	t.Run("latest_is_v2", func(t *testing.T) {
+		skill := fetchSkillFromAPI(t, regURL, skillName, "latest")
+		if skill.Version != v2 {
+			t.Fatalf("expected latest to be %s, got %s", v2, skill.Version)
+		}
+	})
+
+	// Step 4: Delete v2 (the current latest)
+	t.Run("delete_v2", func(t *testing.T) {
+		result := RunArctl(t, tmpDir,
+			"skill", "delete", skillName,
+			"--version", v2,
+			"--registry-url", regURL,
+		)
+		RequireSuccess(t, result)
+	})
+
+	// Step 5: Verify "latest" now resolves to v1
+	t.Run("latest_promoted_to_v1", func(t *testing.T) {
+		skill := fetchSkillFromAPI(t, regURL, skillName, "latest")
+		if skill.Version != v1 {
+			t.Fatalf("expected latest to be promoted to %s after deleting %s, got %s", v1, v2, skill.Version)
+		}
+	})
+}
+
+// TestSkillDeleteNotFound verifies that deleting a skill that was never
+// published returns 404 via the HTTP API.
+func TestSkillDeleteNotFound(t *testing.T) {
+	regURL := RegistryURL(t)
+
+	url := regURL + "/skills/nonexistent-skill-xyz/versions/0.0.0"
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	if err != nil {
+		t.Fatalf("failed to create DELETE request: %v", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404 for non-existent skill, got %d", resp.StatusCode)
+	}
 }

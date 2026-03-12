@@ -21,14 +21,15 @@ type AgentConfig struct {
 	Directory   string
 	Verbose     bool
 
-	Instruction       string
-	ModelProvider     string
-	ModelName         string
-	Framework         string
-	Language          string
-	CLIVersion        string
-	TelemetryEndpoint string
-	Port              int
+	Instruction           string
+	ModelProvider         string
+	ModelName             string
+	Framework             string
+	Language              string
+	KagentADKImageVersion string
+	KagentADKPyVersion    string
+	TelemetryEndpoint     string
+	Port                  int
 
 	McpServers []models.McpServerType
 	EnvVars    []string

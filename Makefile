@@ -1,3 +1,6 @@
+# https://www.gnu.org/software/make/manual/html_node/Special-Variables.html#Special-Variables
+.DEFAULT_GOAL := help
+
 # Load .env into make's variable scope if it exists
 ifneq (,$(wildcard .env))
   include .env
@@ -32,12 +35,12 @@ LOCALARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
 ## Helm / Chart settings
 # Override HELM if your helm binary lives elsewhere (e.g. HELM=/usr/local/bin/helm).
 HELM ?= helm
+# CHART_VERSION strips the leading 'v' from VERSION for use in Chart.yaml (Helm requires semver without the prefix).
+CHART_VERSION ?= $(shell echo $(VERSION) | sed 's/^v//')
 HELM_CHART_DIR ?= ./charts/agentregistry
 HELM_PACKAGE_DIR ?= build/charts
 HELM_REGISTRY ?= ghcr.io
 HELM_REPO ?= agentregistry-dev/agentregistry
-# HELM_PUSH_MODE: oci (default, recommended) | repo (legacy chart repo / ChartMuseum)
-HELM_PUSH_MODE ?= oci
 HELM_PLUGIN_UNITTEST_URL ?= https://github.com/helm-unittest/helm-unittest
 # Pin the helm-unittest plugin version for reproducibility and allow install flags
 HELM_PLUGIN_UNITTEST_VERSION ?= v1.0.3
@@ -47,65 +50,23 @@ HELM_PLUGIN_UNITTEST_VERSION ?= v1.0.3
 # It is not entirely clear as to what is causing the issue exactly because the error message
 # is not completely clear is it the plugin that does not support the flag or is it helm or both?
 HELM_PLUGIN_INSTALL_FLAGS ?= --verify=false
-
-
-
-# Default target
+# Help
+# `make help` self-documents targets annotated with `##`.
 .PHONY: help
-help:
-	@echo "Available targets:"
-	@echo "  install-ui            - Install UI dependencies"
-	@echo "  build-ui              - Build the Next.js UI"
-	@echo "  clean-ui              - Clean UI build artifacts"
-	@echo "  build-cli             - Build the Go CLI"
-	@echo "  build                 - Build both UI and Go CLI"
-	@echo "  install               - Install the CLI to GOPATH/bin"
-	@echo "  run                   - Start local dev environment with Kind (alias: run-k8s)"
-	@echo "  run-docker            - Start local dev environment (docker only, no Kind)"
-	@echo "  run-k8s               - Start local dev environment with Kind cluster"
-	@echo "  down                  - Stop local dev environment"
-	@echo "  dev-ui                - Run Next.js in development mode"
-	@echo "  test                  - Run Go unit tests"
-	@echo "  test-integration      - Run Go tests with integration tests"
-	@echo "  test-coverage         - Run Go tests with coverage"
-	@echo "  test-coverage-report  - Run Go tests with HTML coverage report"
-	@echo "  e2e                   - Run e2e tests against k8s backend (alias: e2e-k8s)"
-	@echo "  e2e-docker            - Run e2e tests against docker backend (no Kind)"
-	@echo "  e2e-k8s               - Run e2e tests against k8s backend (full Kind setup)"
-	@echo "  clean                 - Clean all build artifacts"
-	@echo "  all                   - Clean and build everything"
-	@echo "  lint                  - Run the linter (GOLANGCI_LINT_ARGS=--fix to auto-fix)"
-	@echo "  verify                - Verify generated code is up to date"
-	@echo "  release               - Build and release the CLI"
-	@echo ""
-	@echo "Helm / Chart targets (chart dir: $(HELM_CHART_DIR)):"
-	@echo "  charts-deps           - Build Helm chart dependencies"
-	@echo "  charts-lint           - Lint the Helm chart (helm lint --strict)"
-	@echo "  charts-render-test    - Render chart templates (smoke test with min required values)"
-	@echo "  charts-package        - Package chart → $(HELM_PACKAGE_DIR)/"
-	@echo "  charts-push           - Package + push chart to OCI registry (requires creds)"
-	@echo "  charts-test           - Run helm-unittest tests (installs plugin if absent)"
-	@echo "  charts-all            - charts-push then charts-test"
-	@echo ""
-	@echo "Kind / local K8s targets (cluster: $(KIND_CLUSTER_NAME)):"
-	@echo "  create-kind-cluster   - Create Kind cluster with MetalLB"
-	@echo "  delete-kind-cluster   - Delete the Kind cluster"
-	@echo "  prune-kind-cluster    - Prune dangling images from Kind control-plane"
-	@echo "  kind-debug            - Shell into Kind control-plane with btop"
-	@echo "  install-postgresql    - Deploy PostgreSQL/pgvector into Kind"
-	@echo "  install-agentregistry - Build images and Helm-install AgentRegistry into Kind"
-	@echo "  install-kagent        - Install kagent on the Kind cluster"
-	@echo "  setup-kind-cluster    - Full local K8s dev setup (kind + postgres + agentregistry + kagent)"
+help: NAME_COLUMN_WIDTH=35
+help: LINE_COLUMN_WIDTH=5
+help: ## Output the self-documenting make targets
+	@grep -hnE '^[%a-zA-Z0-9_./-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk '{line=$$0; lineno=line; sub(/:.*/, "", lineno); sub(/^[^:]*:/, "", line); target=line; sub(/:.*/, "", target); desc=line; sub(/^.*##[[:space:]]*/, "", desc); printf "\033[36mL%-$(LINE_COLUMN_WIDTH)s%-$(NAME_COLUMN_WIDTH)s\033[0m %s\n", lineno, target, desc}'
 
 # Install UI dependencies
 .PHONY: install-ui
-install-ui:
+install-ui: ## Install UI dependencies
 	@echo "Installing UI dependencies..."
 	cd ui && npm install
 
 # Build the Next.js UI (outputs to internal/registry/api/ui/dist)
 .PHONY: build-ui
-build-ui: install-ui
+build-ui: install-ui ## Build the Next.js UI for embedding
 	@echo "Building Next.js UI for embedding..."
 	cd ui && npm run build:export
 	@echo "Copying built files to internal/registry/api/ui/dist..."
@@ -116,7 +77,7 @@ build-ui: install-ui
 
 # Clean UI build artifacts
 .PHONY: clean-ui
-clean-ui:
+clean-ui: ## Clean UI build artifacts
 	@echo "Cleaning UI build artifacts..."
 	git clean -xdf ./internal/registry/api/ui/dist/
 	git clean -xdf ./ui/out/
@@ -125,7 +86,7 @@ clean-ui:
 
 # Build the Go CLI
 .PHONY: build-cli
-build-cli: mod-download
+build-cli: mod-download ## Build the Go CLI
 	@echo "Building Go CLI..."
 	@echo "Downloading Go dependencies..."
 	@echo "Building binary..."
@@ -135,7 +96,7 @@ build-cli: mod-download
 
 # Build the Go server (with embedded UI)
 .PHONY: build-server
-build-server: mod-download
+build-server: mod-download ## Build the Go server binary
 	@echo "Building Go CLI..."
 	@echo "Downloading Go dependencies..."
 	@echo "Building binary..."
@@ -145,26 +106,26 @@ build-server: mod-download
 
 # Build everything (UI + Go)
 .PHONY: build
-build: build-ui build-cli
+build: build-ui build-cli ## Build the UI and Go CLI
 	@echo "Build complete!"
 	@echo "Run './bin/arctl --help' to get started"
 
 # Install the CLI to GOPATH/bin
 .PHONY: install
-install: build
+install: build ## Install the CLI to GOPATH/bin
 	@echo "Installing arctl to GOPATH/bin..."
 	go install
 	@echo "Installation complete! Run 'arctl --help' to get started"
 
 # Run Next.js in development mode
 .PHONY: dev-ui
-dev-ui:
+dev-ui: ## Run the Next.js UI in development mode
 	@echo "Starting Next.js development server..."
 	cd ui && npm run dev
 
 # Start local development environment (docker-compose only, no Kind)
 .PHONY: run-docker
-run-docker: docker-registry docker-compose-up build-cli
+run-docker: docker-registry docker-compose-up build-cli  ## Start the local development environment
 	@echo ""
 	@echo "agentregistry is running (docker backend):"
 	@echo "  UI:  http://localhost:12121"
@@ -190,18 +151,18 @@ run: run-k8s
 
 # Stop local development environment
 .PHONY: down
-down: docker-compose-down
+down: docker-compose-down ## Stop the local development environment
 	@echo "agentregistry stopped"
 
 # Run Go tests (unit tests only)
 .PHONY: test-unit
-test-unit:
+test-unit: ## Run Go unit tests
 	@echo "Running Go unit tests..."
 	go tool gotestsum --format testdox -- -tags=unit -timeout 5m ./...
 
 # Run Go tests with integration tests
 .PHONY: test
-test:
+test: ## Run Go integration tests
 	@echo "Running Go tests with integration..."
 	go tool gotestsum --format testdox -- -tags=integration -timeout 10m ./...
 
@@ -225,19 +186,19 @@ gen-openapi:
 	@echo "Generating OpenAPI spec..."
 	go run ./cmd/tools/gen-openapi -output openapi.yaml
 
-gen-client: gen-openapi install-ui
+gen-client: gen-openapi install-ui ## Generate the TypeScript client
 	@echo "Generating TypeScript client..."
 	cd ui && npm run generate
 
 # Run Go tests with coverage
 .PHONY: test-coverage
-test-coverage:
+test-coverage: ## Run Go tests with coverage
 	@echo "Running Go tests with coverage..."
 	go test -ldflags "$(LDFLAGS)" -cover ./...
 
 # Run Go tests with coverage report
 .PHONY: test-coverage-report
-test-coverage-report:
+test-coverage-report: ## Run Go tests with an HTML coverage report
 	@echo "Running Go tests with coverage report..."
 	go test -ldflags "$(LDFLAGS)" -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
@@ -245,7 +206,7 @@ test-coverage-report:
 
 # Clean all build artifacts
 .PHONY: clean
-clean: clean-ui
+clean: clean-ui ## Clean all build artifacts
 	@echo "Cleaning Go build artifacts..."
 	rm -rf bin/
 	go clean
@@ -253,12 +214,12 @@ clean: clean-ui
 
 # Clean and build everything
 .PHONY: all
-all: clean build
+all: clean build ## Clean and build everything
 	@echo "Clean build complete!"
 
 # Quick development build (skips cleaning)
 .PHONY: dev-build
-dev-build: build-ui
+dev-build: build-ui ## Build quickly for local development
 	@echo "Building Go CLI (development mode)..."
 	go build -o bin/arctl cmd/cli/main.go
 	@echo "Development build complete!"
@@ -266,19 +227,19 @@ dev-build: build-ui
 
 # Build custom agent gateway image with npx/uvx support
 .PHONY: docker-agentgateway
-docker-agentgateway:
+docker-agentgateway: ## Build the custom agent gateway image
 	@echo "Building custom age	nt gateway image..."
 	$(DOCKER_BUILDER) build $(DOCKER_BUILD_ARGS) -f docker/agentgateway.Dockerfile -t $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:$(VERSION) .
 	echo "✓ Agent gateway image built successfully";
 
 .PHONY: docker-server
-docker-server: .env
+docker-server: .env ## Build the server Docker image
 	@echo "Building server Docker image..."
 	$(DOCKER_BUILDER) build $(DOCKER_BUILD_ARGS) -f docker/server.Dockerfile -t $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) --build-arg LDFLAGS="$(LDFLAGS)" .
 	@echo "✓ Docker image built successfully"
 
 .PHONY: docker-registry
-docker-registry:
+docker-registry: ## Ensure the local Docker registry is running
 	@echo "Building running local Docker registry..."
 	if docker inspect docker-registry >/dev/null 2>&1; then \
 		echo "Registry already running. Skipping build." ; \
@@ -288,10 +249,10 @@ docker-registry:
 	fi
 
 .PHONY: docker
-docker: docker-agentgateway docker-server
+docker: docker-agentgateway docker-server ## Build the project Docker images
 
 .PHONY: docker-tag-as-dev
-docker-tag-as-dev:
+docker-tag-as-dev: ## Tag and push Docker images as :dev
 	@echo "Pulling and tagging as dev..."
 	docker pull $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION)
 	docker tag $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:dev
@@ -302,16 +263,16 @@ docker-tag-as-dev:
 	@echo "✓ Docker image pulled successfully"
 
 .PHONY: docker-compose-up
-docker-compose-up: docker docker-tag-as-dev
+docker-compose-up: docker docker-tag-as-dev ## Start services with Docker Compose
 	@echo "Starting services with Docker Compose..."
 	VERSION=$(VERSION) DOCKER_REGISTRY=$(DOCKER_REGISTRY) docker compose -p agentregistry -f internal/daemon/docker-compose.yml up -d --wait --pull always
 
 .PHONY: docker-compose-down
-docker-compose-down:
+docker-compose-down: ## Stop services managed by Docker Compose
 	VERSION=$(VERSION) DOCKER_REGISTRY=$(DOCKER_REGISTRY) docker compose -p agentregistry -f internal/daemon/docker-compose.yml down
 
 .PHONY: docker-compose-rm
-docker-compose-rm:
+docker-compose-rm: ## Remove Docker Compose services and volumes
 	VERSION=$(VERSION) DOCKER_REGISTRY=$(DOCKER_REGISTRY) docker compose -p agentregistry -f internal/daemon/docker-compose.yml rm --volumes --force
 
 KIND_CLUSTER_NAME ?= agentregistry
@@ -358,7 +319,7 @@ install-postgresql: ## Deploy standalone PostgreSQL/pgvector into the Kind clust
 BUILD ?= true
 
 .PHONY: install-agentregistry
-install-agentregistry: ## Build images and Helm install AgentRegistry into the Kind cluster (BUILD=false to skip image builds)
+install-agentregistry: charts-generate ## Build images and Helm install AgentRegistry into the Kind cluster (BUILD=false to skip image builds)
 ifeq ($(BUILD),true)
 install-agentregistry: docker-server docker-agentgateway
 endif
@@ -388,7 +349,7 @@ install-kagent: ## Install kagent on the Kind cluster (downloads CLI if absent)
 
 ## Set up a full local K8s dev environment (Kind + PostgreSQL/pgvector + AgentRegistry + kagent).
 .PHONY: setup-kind-cluster
-setup-kind-cluster: create-kind-cluster install-postgresql install-agentregistry install-kagent
+setup-kind-cluster: create-kind-cluster install-postgresql install-agentregistry  ## Set up the full local Kind development environment
 
 bin/arctl-linux-amd64:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bin/arctl-linux-amd64 cmd/cli/main.go
@@ -420,6 +381,7 @@ bin/arctl-windows-amd64.exe:
 bin/arctl-windows-amd64.exe.sha256: bin/arctl-windows-amd64.exe
 	sha256sum bin/arctl-windows-amd64.exe > bin/arctl-windows-amd64.exe.sha256
 
+release-cli: ## Build release CLI archives and checksums
 release-cli: bin/arctl-linux-amd64.sha256
 release-cli: bin/arctl-linux-arm64.sha256
 release-cli: bin/arctl-darwin-amd64.sha256
@@ -464,22 +426,30 @@ _helm-check:
 	  exit 1; \
 	fi
 
+# Generate Chart.yaml from Chart-template.yaml using envsubst.
+.PHONY: charts-generate
+charts-generate: ## Generate Chart.yaml from Chart-template.yaml (uses CHART_VERSION, default derived from git tags)
+	@echo "Generating $(HELM_CHART_DIR)/Chart.yaml (version=$(CHART_VERSION))..."
+	CHART_VERSION=$(CHART_VERSION) envsubst '$$CHART_VERSION' \
+	  < $(HELM_CHART_DIR)/Chart-template.yaml \
+	  > $(HELM_CHART_DIR)/Chart.yaml
+
 # Build chart dependencies (resolves Chart.yaml dependencies → charts/ subdir).
 .PHONY: charts-deps
-charts-deps: _helm-check
+charts-deps: charts-generate _helm-check ## Build Helm chart dependencies
 	@echo "Building Helm chart dependencies for $(HELM_CHART_DIR)..."
 	$(HELM) dependency build $(HELM_CHART_DIR)
 
 # Lint chart with --strict so warnings are treated as errors.
 .PHONY: charts-lint
-charts-lint: charts-deps
+charts-lint: charts-generate charts-deps ## Lint the Helm chart with --strict
 	@echo "Linting Helm chart $(HELM_CHART_DIR)..."
 	$(HELM) lint $(HELM_CHART_DIR) --strict
 
 # Render chart templates to stdout (smoke test — catches template errors).
 # Uses minimum required values to pass chart validation.
 .PHONY: charts-render-test
-charts-render-test: charts-deps
+charts-render-test: charts-deps ## Render chart templates as a smoke test
 	@echo "Rendering chart templates for $(HELM_CHART_DIR)..."
 	$(HELM) template test-release $(HELM_CHART_DIR) \
 	  --values $(HELM_CHART_DIR)/values.yaml \
@@ -489,39 +459,32 @@ charts-render-test: charts-deps
 
 # Package the chart into $(HELM_PACKAGE_DIR)/.
 .PHONY: charts-package
-charts-package: charts-lint
+charts-package: charts-generate charts-lint ## Package the Helm chart into $(HELM_PACKAGE_DIR)
 	@mkdir -p $(HELM_PACKAGE_DIR)
 	@echo "Packaging chart $(HELM_CHART_DIR) → $(HELM_PACKAGE_DIR)/"
 	$(HELM) package $(HELM_CHART_DIR) -d $(HELM_PACKAGE_DIR)
 	@echo "Packaged chart(s):"
 	@ls -1 $(HELM_PACKAGE_DIR)/*.tgz
 
-# Push packaged chart(s) to an OCI registry.
-# Credentials are read from the environment at runtime (never stored in the Makefile):
-#   HELM_REGISTRY_USERNAME   – registry username (default: your shell $USER)
-#   HELM_REGISTRY_PASSWORD   – registry password / token (required)
+# Package the chart and push to an OCI registry. Caller must be logged in.
 # Override registry/repo: make charts-push HELM_REGISTRY=ghcr.io HELM_REPO=org/repo
 .PHONY: charts-push
-charts-push: charts-package
-	@echo "Pushing chart(s) to $(HELM_REGISTRY)/$(HELM_REPO)/charts (mode: $(HELM_PUSH_MODE))"
-ifeq ($(HELM_PUSH_MODE),oci)
-	@if [ -z "$$HELM_REGISTRY_PASSWORD" ]; then \
-	  echo "ERROR: HELM_REGISTRY_PASSWORD is not set. Export it before running this target."; \
-	  exit 1; \
-	fi
-	@printf "%s" "$$HELM_REGISTRY_PASSWORD" | $(HELM) registry login $(HELM_REGISTRY) \
-	  --username "$${HELM_REGISTRY_USERNAME:-$$USER}" \
-	  --password-stdin
-	@for pkg in $(HELM_PACKAGE_DIR)/*.tgz; do \
-	  [ -f "$$pkg" ] || continue; \
-	  echo "  Pushing $$pkg → oci://$(HELM_REGISTRY)/$(HELM_REPO)/charts"; \
-	  $(HELM) push "$$pkg" "oci://$(HELM_REGISTRY)/$(HELM_REPO)/charts"; \
-	done
-	@$(HELM) registry logout $(HELM_REGISTRY) || true
-else
-	@echo "Non-OCI push (mode=$(HELM_PUSH_MODE)) — implement repo-specific push logic or use chart-releaser."
-	@exit 1
-endif
+charts-push: charts-package _helm-check ## Package and push chart to the configured OCI registry
+	@echo "Pushing $(HELM_PACKAGE_DIR)/agentregistry-$(CHART_VERSION).tgz → oci://$(HELM_REGISTRY)/$(HELM_REPO)/charts"
+	$(HELM) push "$(HELM_PACKAGE_DIR)/agentregistry-$(CHART_VERSION).tgz" "oci://$(HELM_REGISTRY)/$(HELM_REPO)/charts"
+
+# Generate SHA-256 checksums for all packaged chart files.
+.PHONY: charts-checksum
+charts-checksum: ## Generate SHA-256 checksum for the packaged chart in $(HELM_PACKAGE_DIR)
+	sha256sum "$(HELM_PACKAGE_DIR)/agentregistry-$(CHART_VERSION).tgz" > "$(HELM_PACKAGE_DIR)/checksums.txt"
+	@echo "--- checksum ---"
+	@cat $(HELM_PACKAGE_DIR)/checksums.txt
+
+# Full Helm release pipeline: test → push (→ lint → package → generate + deps) → checksum.
+# Required env vars for the push step: HELM_REGISTRY_PASSWORD (and optionally HELM_REGISTRY_USERNAME).
+# Override version: make charts-release CHART_VERSION=1.2.3
+.PHONY: charts-release
+charts-release: charts-test charts-push charts-checksum ## Full Helm release: lint, test, package, checksum, and push
 
 # Run helm-unittest against charts/agentregistry/tests/*.
 # This target:
@@ -529,19 +492,15 @@ endif
 #   2. checks for the helm-unittest plugin and installs it if missing
 #   3. runs the full test suite
 .PHONY: charts-test
-charts-test: _helm-check charts-deps helm-unittest-install
+charts-test: charts-generate _helm-check charts-deps helm-unittest-install ## Run helm-unittest chart tests
 	@echo "Running helm-unittest on $(HELM_CHART_DIR)..."
 	$(HELM) unittest $(HELM_CHART_DIR) --file "tests/*_test.yaml"
 
 .PHONY: helm-unittest-install
-helm-unittest-install: _helm-check
+helm-unittest-install: _helm-check  ## Install the helm-unittest plugin if needed
 	HELM=$(HELM) \
 	HELM_PLUGIN_UNITTEST_URL=$(HELM_PLUGIN_UNITTEST_URL) \
 	HELM_PLUGIN_UNITTEST_VERSION=$(HELM_PLUGIN_UNITTEST_VERSION) \
 	HELM_PLUGIN_INSTALL_FLAGS="$(HELM_PLUGIN_INSTALL_FLAGS)" \
 	bash ./scripts/install-helm-unittest.sh
 
-# Convenience: package → push → test.
-.PHONY: charts-all
-charts-all: charts-push charts-test
-	@echo "charts-all complete: packaged, pushed, and tested."

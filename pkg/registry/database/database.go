@@ -203,6 +203,8 @@ type Database interface {
 	CheckSkillVersionExists(ctx context.Context, tx pgx.Tx, skillName, version string) (bool, error)
 	// UnmarkSkillAsLatest marks the current latest version of a skill as no longer latest
 	UnmarkSkillAsLatest(ctx context.Context, tx pgx.Tx, skillName string) error
+	// DeleteSkill permanently removes a skill version from the database
+	DeleteSkill(ctx context.Context, tx pgx.Tx, skillName, version string) error
 
 	// Prompts API
 	// CreatePrompt inserts a new prompt version with official metadata

@@ -195,3 +195,70 @@ func TestResolveAgentDefaultsLocalPort(t *testing.T) {
 		t.Fatalf("port = %d, want %d", resolved.Agent.Deployment.Port, DefaultLocalAgentPort)
 	}
 }
+
+func TestResolveAgentNamespaceDefaulting(t *testing.T) {
+	newRegistry := func() *servicetesting.FakeRegistry {
+		r := servicetesting.NewFakeRegistry()
+		r.Agents = []*models.AgentResponse{{
+			Agent: models.AgentJSON{
+				AgentManifest: models.AgentManifest{
+					Name:          "planner",
+					ModelProvider: "openai",
+					ModelName:     "gpt-4o",
+				},
+				Version: "1.0.0",
+			},
+		}}
+		return r
+	}
+
+	tests := []struct {
+		name          string
+		namespace     string
+		deploymentEnv map[string]string
+		wantNamespace string
+	}{
+		{
+			name:          "defaults to 'default' when namespace param is empty",
+			namespace:     "",
+			deploymentEnv: map[string]string{},
+			wantNamespace: "default",
+		},
+		{
+			name:          "uses explicit namespace param",
+			namespace:     "production",
+			deploymentEnv: map[string]string{},
+			wantNamespace: "production",
+		},
+		{
+			name:          "deployment env KAGENT_NAMESPACE takes priority over namespace param",
+			namespace:     "staging",
+			deploymentEnv: map[string]string{"KAGENT_NAMESPACE": "from-env"},
+			wantNamespace: "from-env",
+		},
+		{
+			name:          "deployment env KAGENT_NAMESPACE takes priority over default",
+			namespace:     "",
+			deploymentEnv: map[string]string{"KAGENT_NAMESPACE": "from-env"},
+			wantNamespace: "from-env",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolved, err := ResolveAgent(context.Background(), newRegistry(), &models.Deployment{
+				ID:         "dep-123",
+				ServerName: "planner",
+				Version:    "1.0.0",
+				Env:        tt.deploymentEnv,
+			}, tt.namespace)
+			if err != nil {
+				t.Fatalf("ResolveAgent() unexpected error: %v", err)
+			}
+			got := resolved.Agent.Deployment.Env["KAGENT_NAMESPACE"]
+			if got != tt.wantNamespace {
+				t.Errorf("KAGENT_NAMESPACE = %q, want %q", got, tt.wantNamespace)
+			}
+		})
+	}
+}

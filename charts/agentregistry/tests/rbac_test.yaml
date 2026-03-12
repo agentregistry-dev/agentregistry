@@ -76,6 +76,8 @@ tests:
             apiGroups:
               - kagent.dev
             resources:
+              - agents
+              - remotemcpservers
               - mcpservers
             verbs:
               - get
@@ -150,6 +152,23 @@ tests:
       - equal:
           path: metadata.namespace
           value: ns-a
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - kagent.dev
+            resources:
+              - agents
+              - remotemcpservers
+              - mcpservers
+            verbs:
+              - get
+              - list
+              - watch
+              - create
+              - update
+              - patch
+              - delete
 
   - it: Role is also created in the installation namespace
     set:
