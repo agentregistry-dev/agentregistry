@@ -306,6 +306,9 @@ func TestFormatVersionForDisplay(t *testing.T) {
 	}{
 		{name: "adds v prefix when missing", version: "1.0.0", want: "v1.0.0"},
 		{name: "keeps existing v prefix", version: "v1.0.0", want: "v1.0.0"},
+		{name: "keeps latest sentinel", version: "latest", want: "latest"},
+		{name: "keeps supported non semver labels", version: "snapshot", want: "snapshot"},
+		{name: "keeps date based versions", version: "2021.03.15", want: "2021.03.15"},
 	}
 
 	for _, tt := range tests {
