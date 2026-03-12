@@ -13,7 +13,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const adkBaseImageVersion = "0.7.22"
+const (
+	// kagentADKBaseImageVersion is the kagent-adk image version to use
+	kagentADKBaseImageVersion = "0.8.0-beta6"
+
+	// kagentADKPyVersion is the version of the kagent-adk Python package to use
+	kagentADKPyVersion = "0.8.0b6"
+)
 
 var InitCmd = &cobra.Command{
 	Use:   "init [framework] [language] [agent-name]",
@@ -28,6 +34,9 @@ You can select a specific model using --model-provider and --model-name flags.
 You can specify a custom Docker image using the --image flag.
 If no custom instruction file is provided, a default dice-rolling instruction will be used.
 If no model flags are provided, defaults to Gemini (gemini-2.0-flash).
+When using Agentgateway as the model provider, the model is routed through the gateway
+and the GATEWAY_API_BASE_URL environment variable specifies the base URL to access the model
+via the gateway (e.g., http://agentgateway.dev/v1).
 
 Examples:
 arctl agent init adk python dice
@@ -50,7 +59,7 @@ var (
 
 func init() {
 	InitCmd.Flags().StringVar(&initInstructionFile, "instruction-file", "", "Path to file containing custom instructions for the root agent")
-	InitCmd.Flags().StringVar(&initModelProvider, "model-provider", "Gemini", "Model provider (OpenAI, Anthropic, Gemini, AzureOpenAI)")
+	InitCmd.Flags().StringVar(&initModelProvider, "model-provider", "Gemini", "Model provider (OpenAI, Anthropic, Gemini, AzureOpenAI, Agentgateway)")
 	InitCmd.Flags().StringVar(&initModelName, "model-name", "gemini-2.0-flash", "Model name (e.g., gpt-4, claude-3-5-sonnet, gemini-2.0-flash)")
 	InitCmd.Flags().StringVar(&initDescription, "description", "", "Description for the agent")
 	InitCmd.Flags().StringVar(&initTelemetryEndpoint, "telemetry", "", "OTLP endpoint URL for OpenTelemetry traces (e.g., http://localhost:4318/v1/traces)")
@@ -115,20 +124,21 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	agentConfig := &common.AgentConfig{
-		Name:              agentName,
-		Description:       initDescription,
-		Image:             defaultImage(agentName, initImage),
-		Directory:         projectDir,
-		Verbose:           verbose,
-		Instruction:       instruction,
-		ModelProvider:     modelProvider,
-		ModelName:         modelName,
-		Framework:         framework,
-		Language:          language,
-		CLIVersion:        adkBaseImageVersion,
-		TelemetryEndpoint: initTelemetryEndpoint,
-		Port:              8080,
-		InitGit:           true,
+		Name:                  agentName,
+		Description:           initDescription,
+		Image:                 defaultImage(agentName, initImage),
+		Directory:             projectDir,
+		Verbose:               verbose,
+		Instruction:           instruction,
+		ModelProvider:         modelProvider,
+		ModelName:             modelName,
+		Framework:             framework,
+		Language:              language,
+		KagentADKImageVersion: kagentADKBaseImageVersion,
+		KagentADKPyVersion:    kagentADKPyVersion,
+		TelemetryEndpoint:     initTelemetryEndpoint,
+		Port:                  8080,
+		InitGit:               true,
 	}
 
 	if err := generator.Generate(agentConfig); err != nil {
@@ -151,10 +161,11 @@ func validateFrameworkAndLanguage(framework, language string) error {
 }
 
 var supportedModelProviders = map[string]struct{}{
-	"openai":      {},
-	"anthropic":   {},
-	"gemini":      {},
-	"azureopenai": {},
+	"openai":       {},
+	"anthropic":    {},
+	"gemini":       {},
+	"azureopenai":  {},
+	"agentgateway": {},
 }
 
 func normalizeModelProvider(value string) (string, error) {
@@ -163,14 +174,14 @@ func normalizeModelProvider(value string) (string, error) {
 		return "", nil
 	}
 	if _, ok := supportedModelProviders[trimmed]; !ok {
-		return "", fmt.Errorf("unsupported model provider: %s. Supported providers: OpenAI, Anthropic, Gemini, AzureOpenAI", value)
+		return "", fmt.Errorf("unsupported model provider: %s. Supported providers: OpenAI, Anthropic, Gemini, AzureOpenAI, Agentgateway", value)
 	}
 	return trimmed, nil
 }
 
 func defaultModelNameForProvider(provider string) (string, bool) {
 	switch provider {
-	case "openai":
+	case "openai", "agentgateway":
 		return "gpt-4o-mini", true
 	case "anthropic":
 		return "claude-3-5-sonnet", true

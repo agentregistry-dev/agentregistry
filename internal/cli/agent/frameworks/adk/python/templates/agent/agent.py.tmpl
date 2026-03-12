@@ -3,7 +3,9 @@ import os
 
 from google.adk import Agent
 from google.adk.tools.tool_context import ToolContext
-{{if ne .ModelProvider "gemini"}}
+{{if eq .ModelProvider "agentgateway"}}
+from kagent.adk.models._openai import BaseOpenAI
+{{else if ne .ModelProvider "gemini"}}
 from google.adk.models.lite_llm import LiteLlm
 {{end}}
 from .mcp_tools import get_mcp_tools
@@ -43,8 +45,15 @@ async def check_prime(nums: list[int]) -> str:
             primes.add(number)
     return "No prime numbers found." if not primes else f"{', '.join(str(num) for num in primes)} are prime numbers."
 
-
-{{if eq .ModelProvider "gemini"}}
+{{if eq .ModelProvider "agentgateway"}}
+def create_model():
+    """Use a model via Agentgateway."""
+    return BaseOpenAI(
+        model="{{.ModelName}}", # Can be configured at the Gateway
+        base_url=os.environ.get("GATEWAY_API_BASE_URL", "http://localhost/v1"),
+        api_key=os.environ.get("GATEWAY_API_KEY", "placeholder"), # Can be configured at the Gateway
+    )
+{{else if eq .ModelProvider "gemini"}}
 def create_model():
     """Use a Gemini model."""
     return "{{.ModelName}}"
@@ -65,7 +74,6 @@ def create_model():
     """Fallback model specification."""
     return "{{.ModelName}}"
 {{end}}
-
 
 mcp_tools = get_mcp_tools()
 root_agent = Agent(
