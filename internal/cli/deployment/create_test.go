@@ -1,4 +1,4 @@
-package agent
+package deployment
 
 import (
 	"os"
@@ -83,7 +83,7 @@ func TestValidateAPIKey_WithExtraEnv(t *testing.T) {
 	}
 }
 
-func TestBuildDeployConfig_WithEnvOverrides(t *testing.T) {
+func TestBuildAgentDeployConfig_WithEnvOverrides(t *testing.T) {
 	tests := []struct {
 		name         string
 		manifest     *models.AgentManifest
@@ -151,7 +151,7 @@ func TestBuildDeployConfig_WithEnvOverrides(t *testing.T) {
 				}
 			}()
 
-			config := buildDeployConfig(tt.manifest, tt.envOverrides)
+			config := buildAgentDeployConfig(tt.manifest, tt.envOverrides)
 
 			for k, v := range tt.wantKeys {
 				if got, ok := config[k]; !ok {

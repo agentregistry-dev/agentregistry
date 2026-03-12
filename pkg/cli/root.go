@@ -12,6 +12,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent"
 	agentutils "github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/configure"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/deployment"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/prompt"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/skill"
@@ -81,6 +82,7 @@ var rootCmd = &cobra.Command{
 		agent.SetAPIClient(c)
 		skill.SetAPIClient(c)
 		prompt.SetAPIClient(c)
+		deployment.SetAPIClient(c)
 		cli.SetAPIClient(c)
 		return nil
 	},
@@ -99,6 +101,7 @@ func init() {
 	rootCmd.AddCommand(cli.ImportCmd)
 	rootCmd.AddCommand(cli.ExportCmd)
 	rootCmd.AddCommand(cli.EmbeddingsCmd)
+	rootCmd.AddCommand(deployment.DeploymentCmd)
 }
 
 // resolveRegistryTarget returns base URL and token from flags and env.

@@ -90,7 +90,7 @@ var mcpDeployTargets = []deployTarget{
 	},
 }
 
-func TestAgentDeploy(t *testing.T) {
+func TestAgentDeployCreate(t *testing.T) {
 	for _, target := range agentDeployTargets {
 		t.Run(target.name, func(t *testing.T) {
 			if target.name == "kubernetes" && !IsK8sBackend() {
@@ -101,10 +101,6 @@ func TestAgentDeploy(t *testing.T) {
 			agentName := UniqueAgentName("e2edpl" + target.name[:3])
 			agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
 
-			// Register cleanup at the parent level so it runs after all
-			// subtests (including verify) complete, not after deploy alone.
-			// Remove deployment record first (LIFO) so ReconcileAll in
-			// subsequent tests doesn't try to reconcile stale deployments.
 			t.Cleanup(func() { RemoveDeploymentsByServerName(t, regURL, agentName) })
 			if target.cleanup != nil {
 				t.Cleanup(func() { target.cleanup(t, agentName) })
@@ -140,12 +136,20 @@ func TestAgentDeploy(t *testing.T) {
 				RequireSuccess(t, result)
 			})
 
-			t.Run("deploy", func(t *testing.T) {
+			t.Run("deploy_create", func(t *testing.T) {
 				t.Logf("Deploying agent %q (target: %s)...", agentName, target.name)
-				args := []string{"agent", "deploy", agentName, "--registry-url", regURL}
+				args := []string{
+					"deploy", "create", agentName,
+					"--type", "agent",
+					"--registry-url", regURL,
+				}
 				args = append(args, target.deplArgs...)
 				result := RunArctl(t, tmpDir, args...)
 				RequireSuccess(t, result)
+			})
+
+			t.Run("deploy_list", func(t *testing.T) {
+				verifyDeploymentInList(t, tmpDir, regURL, agentName, "agent")
 			})
 
 			if target.verify != nil {
@@ -158,7 +162,7 @@ func TestAgentDeploy(t *testing.T) {
 	}
 }
 
-func TestMCPDeploy(t *testing.T) {
+func TestMCPDeployCreate(t *testing.T) {
 	for _, target := range mcpDeployTargets {
 		t.Run(target.name, func(t *testing.T) {
 			if target.name == "kubernetes" && !IsK8sBackend() {
@@ -173,10 +177,6 @@ func TestMCPDeploy(t *testing.T) {
 
 			// Delete any stale server entry from a previous interrupted run.
 			RunArctl(t, tmpDir, "mcp", "delete", serverName, "--version", version, "--registry-url", regURL)
-			// Register cleanup at the parent level so it runs after all
-			// subtests (including verify) complete, not after deploy alone.
-			// Remove deployment record first (LIFO) so ReconcileAll in
-			// subsequent tests doesn't try to reconcile stale deployments.
 			t.Cleanup(func() { RemoveDeploymentsByServerName(t, regURL, serverName) })
 			t.Cleanup(func() {
 				RunArctl(t, tmpDir, "mcp", "delete", serverName, "--version", version, "--registry-url", regURL)
@@ -219,12 +219,21 @@ func TestMCPDeploy(t *testing.T) {
 				RequireSuccess(t, result)
 			})
 
-			t.Run("deploy", func(t *testing.T) {
+			t.Run("deploy_create", func(t *testing.T) {
 				t.Logf("Deploying MCP server %q (target: %s)...", serverName, target.name)
-				args := []string{"mcp", "deploy", serverName, "--version", version, "--registry-url", regURL}
+				args := []string{
+					"deploy", "create", serverName,
+					"--type", "mcp",
+					"--version", version,
+					"--registry-url", regURL,
+				}
 				args = append(args, target.deplArgs...)
 				result := RunArctl(t, tmpDir, args...)
 				RequireSuccess(t, result)
+			})
+
+			t.Run("deploy_list", func(t *testing.T) {
+				verifyDeploymentInList(t, tmpDir, regURL, serverName, "mcp")
 			})
 
 			if target.verify != nil {
@@ -377,7 +386,8 @@ func TestDeleteDeploymentRemovesKubernetesResources(t *testing.T) {
 
 	t.Log("Deploying agent to Kubernetes...")
 	result = RunArctl(t, tmpDir,
-		"agent", "deploy", agentName,
+		"deploy", "create", agentName,
+		"--type", "agent",
 		"--registry-url", regURL,
 		"--provider-id", "kubernetes-default",
 		"--namespace", "default",
@@ -514,6 +524,39 @@ func deleteAgentDeploymentsDirectlyInDB(t *testing.T, agentName, providerID stri
 
 func escapeSQLLiteral(value string) string {
 	return strings.ReplaceAll(value, "'", "''")
+}
+
+// verifyDeploymentInList runs "arctl deploy list" with JSON output and asserts
+// that a deployment with the given resource name and type appears in the results.
+func verifyDeploymentInList(t *testing.T, workDir, regURL, resourceName, resourceType string) {
+	t.Helper()
+
+	result := RunArctl(t, workDir,
+		"deploy", "list",
+		"--type", resourceType,
+		"-o", "json",
+		"--registry-url", regURL,
+	)
+	RequireSuccess(t, result)
+
+	var deployments []struct {
+		ServerName   string `json:"serverName"`
+		ResourceType string `json:"resourceType"`
+		Status       string `json:"status"`
+	}
+	if err := json.Unmarshal([]byte(result.Stdout), &deployments); err != nil {
+		t.Fatalf("Failed to parse deploy list JSON output: %v\nOutput: %s", err, result.Stdout)
+	}
+
+	for _, d := range deployments {
+		if d.ServerName == resourceName && d.ResourceType == resourceType {
+			t.Logf("Found deployment: name=%s type=%s status=%s", d.ServerName, d.ResourceType, d.Status)
+			return
+		}
+	}
+
+	t.Fatalf("Expected deployment name=%q type=%q not found in deploy list output (%d deployments)",
+		resourceName, resourceType, len(deployments))
 }
 
 func dockerContainerRunning(name string) bool {
@@ -843,8 +886,12 @@ func TestAgentDeployWithPrompts(t *testing.T) {
 				RequireSuccess(t, result)
 			})
 
-			t.Run("deploy", func(t *testing.T) {
-				args := []string{"agent", "deploy", agentName, "--registry-url", regURL}
+			t.Run("deploy_create", func(t *testing.T) {
+				args := []string{
+					"deploy", "create", agentName,
+					"--type", "agent",
+					"--registry-url", regURL,
+				}
 				args = append(args, target.deplArgs...)
 				result := RunArctl(t, tmpDir, args...)
 				RequireSuccess(t, result)
