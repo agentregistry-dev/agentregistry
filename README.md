@@ -1,20 +1,16 @@
 <div align="center">
-
   <picture>
     <img alt="agentregistry" src="./img/agentregistry-logo.svg" height="150"/>
   </picture>
 
-  <br><br>
-
   [![Go Version][go-img]][go] [![License][license-img]][license] [![Discord][discord-img]][discord]
 
-  <br>
-
   ### The trusted catalog and delivery path for MCP servers, agents, and skills.
-
-  Agent Registry gives platform teams and developers one place to manage the agentic infrastructure their applications depend on. Use the web UI and `arctl` CLI to publish approved MCP servers, agents, and skills, discover what is available, and make those artifacts usable across local development, shared environments, and Kubernetes.
-
 </div>
+
+Agent Registry gives platform teams and developers one place to manage the agentic infrastructure their applications depend on.
+
+Use the web UI and `arctl` CLI to publish approved MCP servers, agents, and skills, discover what is available, and make those artifacts usable across local development, shared environments, and Kubernetes.
 
 <p align="center">
   <img alt="Agent Registry platform overview" src="./img/operator-scenario.png" width="800"/>
