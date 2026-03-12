@@ -1,8 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
-import Link from "next/link"
-import { Card } from "@/components/ui/card"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -28,6 +26,7 @@ import { ServerDetail } from "@/components/server-detail"
 import { SkillDetail } from "@/components/skill-detail"
 import { AgentDetail } from "@/components/agent-detail"
 import { PromptDetail } from "@/components/prompt-detail"
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { ImportDialog } from "@/components/import-dialog"
 import { AddServerDialog } from "@/components/add-server-dialog"
 import { AddSkillDialog } from "@/components/add-skill-dialog"
@@ -42,11 +41,8 @@ import {
   Plus,
   Zap,
   Bot,
-  Eye,
   ArrowUpDown,
-  X,
   ChevronDown,
-  Filter,
   FileText,
 } from "lucide-react"
 
@@ -56,8 +52,17 @@ interface GroupedServer extends ServerResponse {
   allVersions: ServerResponse[]
 }
 
+type TabKey = "servers" | "skills" | "agents" | "prompts"
+
+const TAB_CONFIG: { key: TabKey; label: string; icon: React.ReactNode }[] = [
+  { key: "servers", label: "Servers", icon: <MCPIcon /> },
+  { key: "skills", label: "Skills", icon: <Zap className="h-3.5 w-3.5" /> },
+  { key: "agents", label: "Agents", icon: <Bot className="h-3.5 w-3.5" /> },
+  { key: "prompts", label: "Prompts", icon: <FileText className="h-3.5 w-3.5" /> },
+]
+
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState("servers")
+  const [activeTab, setActiveTab] = useState<TabKey>("servers")
   const [servers, setServers] = useState<ServerResponse[]>([])
   const [groupedServers, setGroupedServers] = useState<GroupedServer[]>([])
   const [skills, setSkills] = useState<SkillResponse[]>([])
@@ -67,7 +72,6 @@ export default function AdminPage() {
   const [filteredSkills, setFilteredSkills] = useState<SkillResponse[]>([])
   const [filteredAgents, setFilteredAgents] = useState<AgentResponse[]>([])
   const [filteredPrompts, setFilteredPrompts] = useState<PromptResponse[]>([])
-  const [stats, setStats] = useState<{ total_servers: number; total_server_names: number } | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [sortBy, setSortBy] = useState<"name" | "stars" | "date">("name")
   const [filterVerifiedOrg, setFilterVerifiedOrg] = useState(false)
@@ -83,19 +87,13 @@ export default function AdminPage() {
   const [selectedSkill, setSelectedSkill] = useState<SkillResponse | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<AgentResponse | null>(null)
   const [selectedPrompt, setSelectedPrompt] = useState<PromptResponse | null>(null)
-  
-  // Track scroll position for restoring after navigation
-  const scrollPositionRef = useRef<number>(0)
-  const shouldRestoreScrollRef = useRef<boolean>(false)
 
-  // Helper function to extract GitHub stars from server metadata
   const getStars = (server: ServerResponse): number => {
     const publisherProvided = server.server._meta?.['io.modelcontextprotocol.registry/publisher-provided'] as Record<string, unknown> | undefined
     const metadata = publisherProvided?.['aregistry.ai/metadata'] as Record<string, unknown> | undefined
     return (metadata?.stars as number) ?? 0
   }
 
-  // Helper function to get published date
   const getPublishedDate = (server: ServerResponse): Date | null => {
     const publishedAt = server._meta?.['io.modelcontextprotocol.registry/official']?.publishedAt
     if (!publishedAt) return null
@@ -106,11 +104,9 @@ export default function AdminPage() {
     }
   }
 
-  // Group servers by name, keeping the latest version as the representative
   const groupServersByName = (servers: ServerResponse[]): GroupedServer[] => {
     const grouped = new Map<string, ServerResponse[]>()
-    
-    // Group all versions by server name
+
     servers.forEach((server) => {
       const name = server.server.name
       if (!grouped.has(name)) {
@@ -118,20 +114,17 @@ export default function AdminPage() {
       }
       grouped.get(name)!.push(server)
     })
-    
-    // Convert to GroupedServer array, using the latest version as representative
-    return Array.from(grouped.entries()).map(([name, versions]) => {
-      // Sort versions by date (newest first) or version string
+
+    return Array.from(grouped.entries()).map(([, versions]) => {
       const sortedVersions = [...versions].sort((a, b) => {
         const dateA = getPublishedDate(a)
         const dateB = getPublishedDate(b)
         if (dateA && dateB) {
           return dateB.getTime() - dateA.getTime()
         }
-        // Fallback to version string comparison
         return b.server.version.localeCompare(a.server.version)
       })
-      
+
       const latestVersion = sortedVersions[0]
       return {
         ...latestVersion,
@@ -141,16 +134,13 @@ export default function AdminPage() {
     })
   }
 
-  // Fetch data from API
   const fetchData = async () => {
     try {
       setLoading(true)
       setError(null)
-      
-      // Fetch all servers (with pagination if needed)
+
       const allServers: ServerResponse[] = []
       let serverCursor: string | undefined
-
       do {
         const { data: serverData } = await listServersV0({
           query: { cursor: serverCursor, limit: 100 },
@@ -159,13 +149,10 @@ export default function AdminPage() {
         allServers.push(...serverData.servers)
         serverCursor = serverData.metadata.nextCursor
       } while (serverCursor)
-
       setServers(allServers)
 
-      // Fetch all skills (with pagination if needed)
       const allSkills: SkillResponse[] = []
       let skillCursor: string | undefined
-
       do {
         const { data: skillData } = await listSkillsV0({
           query: { cursor: skillCursor, limit: 100 },
@@ -174,13 +161,10 @@ export default function AdminPage() {
         allSkills.push(...skillData.skills)
         skillCursor = skillData.metadata.nextCursor
       } while (skillCursor)
-
       setSkills(allSkills)
 
-      // Fetch all agents (with pagination if needed)
       const allAgents: AgentResponse[] = []
       let agentCursor: string | undefined
-
       do {
         const { data: agentData } = await listAgentsV0({
           query: { cursor: agentCursor, limit: 100 },
@@ -189,13 +173,10 @@ export default function AdminPage() {
         allAgents.push(...agentData.agents)
         agentCursor = agentData.metadata.nextCursor
       } while (agentCursor)
-      
       setAgents(allAgents)
 
-      // Fetch all prompts (with pagination if needed)
       const allPrompts: PromptResponse[] = []
       let promptCursor: string | undefined
-
       do {
         const { data: promptData } = await listPromptsV0({
           query: { cursor: promptCursor, limit: 100, version: 'latest' },
@@ -204,18 +185,10 @@ export default function AdminPage() {
         allPrompts.push(...promptData.prompts)
         promptCursor = promptData.metadata.nextCursor
       } while (promptCursor)
-
       setPrompts(allPrompts)
 
-      // Group servers by name
       const grouped = groupServersByName(allServers)
       setGroupedServers(grouped)
-      
-      // Set stats
-      setStats({
-        total_servers: allServers.length,
-        total_server_names: grouped.length,
-      })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch data")
     } finally {
@@ -223,41 +196,20 @@ export default function AdminPage() {
     }
   }
 
-  useEffect(() => {
-    fetchData()
-  }, [])
+  useEffect(() => { fetchData() }, [])
 
-  // Restore scroll position when returning from server detail
-  useEffect(() => {
-    if (!selectedServer && shouldRestoreScrollRef.current) {
-      // Use setTimeout to ensure DOM has updated
-      setTimeout(() => {
-        window.scrollTo({
-          top: scrollPositionRef.current,
-          behavior: 'instant' as ScrollBehavior
-        })
-        shouldRestoreScrollRef.current = false
-      }, 0)
-    }
-  }, [selectedServer])
-
-  // Handle server card click - save scroll position before navigating
-  const handleServerClick = (server: GroupedServer) => {
-    scrollPositionRef.current = window.scrollY
-    shouldRestoreScrollRef.current = true
-    setSelectedServer(server)
-  }
-
-  // Handle closing server detail - flag for scroll restoration
-  const handleCloseServerDetail = () => {
+  const isSheetOpen = !!(selectedServer || selectedSkill || selectedAgent || selectedPrompt)
+  const closeSheet = () => {
     setSelectedServer(null)
+    setSelectedSkill(null)
+    setSelectedAgent(null)
+    setSelectedPrompt(null)
   }
 
-  // Filter and sort servers based on search query and sort option
+  // Filter and sort servers
   useEffect(() => {
     let filtered = [...groupedServers]
 
-    // Filter by search query
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
       filtered = filtered.filter(
@@ -268,7 +220,6 @@ export default function AdminPage() {
       )
     }
 
-    // Filter by verified organization
     if (filterVerifiedOrg) {
       filtered = filtered.filter((s) => {
         const publisherProvided = s.server._meta?.['io.modelcontextprotocol.registry/publisher-provided'] as Record<string, unknown> | undefined
@@ -278,7 +229,6 @@ export default function AdminPage() {
       })
     }
 
-    // Filter by verified publisher
     if (filterVerifiedPublisher) {
       filtered = filtered.filter((s) => {
         const publisherProvided = s.server._meta?.['io.modelcontextprotocol.registry/publisher-provided'] as Record<string, unknown> | undefined
@@ -288,11 +238,9 @@ export default function AdminPage() {
       })
     }
 
-    // Sort servers
     filtered.sort((a, b) => {
       switch (sortBy) {
-        case "stars":
-          return getStars(b) - getStars(a)
+        case "stars": return getStars(b) - getStars(a)
         case "date": {
           const dateA = getPublishedDate(a)
           const dateB = getPublishedDate(b)
@@ -301,46 +249,32 @@ export default function AdminPage() {
           if (!dateB) return -1
           return dateB.getTime() - dateA.getTime()
         }
-        case "name":
-        default:
-          return a.server.name.localeCompare(b.server.name)
+        default: return a.server.name.localeCompare(b.server.name)
       }
     })
 
     setFilteredServers(filtered)
   }, [searchQuery, groupedServers, sortBy, filterVerifiedOrg, filterVerifiedPublisher])
 
-  // Filter skills and agents based on search query
+  // Filter skills, agents, prompts
   useEffect(() => {
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
-      
-      // Filter skills
-      const filteredSk = skills.filter(
-        (s) =>
-          s.skill.name.toLowerCase().includes(query) ||
-          s.skill.title?.toLowerCase().includes(query) ||
-          s.skill.description.toLowerCase().includes(query)
-      )
-      setFilteredSkills(filteredSk)
-
-      // Filter agents
-      const filteredA = agents.filter(
-        ({agent}) =>
-          agent.name?.toLowerCase().includes(query) ||
-          agent.modelProvider?.toLowerCase().includes(query) ||
-          agent.description.toLowerCase().includes(query)
-      )
-      setFilteredAgents(filteredA)
-
-      // Filter prompts
-      const filteredP = prompts.filter(
-        ({prompt}) =>
-          prompt.name?.toLowerCase().includes(query) ||
-          prompt.description?.toLowerCase().includes(query) ||
-          prompt.content?.toLowerCase().includes(query)
-      )
-      setFilteredPrompts(filteredP)
+      setFilteredSkills(skills.filter((s) =>
+        s.skill.name.toLowerCase().includes(query) ||
+        s.skill.title?.toLowerCase().includes(query) ||
+        s.skill.description.toLowerCase().includes(query)
+      ))
+      setFilteredAgents(agents.filter(({agent}) =>
+        agent.name?.toLowerCase().includes(query) ||
+        agent.modelProvider?.toLowerCase().includes(query) ||
+        agent.description.toLowerCase().includes(query)
+      ))
+      setFilteredPrompts(prompts.filter(({prompt}) =>
+        prompt.name?.toLowerCase().includes(query) ||
+        prompt.description?.toLowerCase().includes(query) ||
+        prompt.content?.toLowerCase().includes(query)
+      ))
     } else {
       setFilteredSkills(skills)
       setFilteredAgents(agents)
@@ -348,12 +282,21 @@ export default function AdminPage() {
     }
   }, [searchQuery, skills, agents, prompts])
 
+  const getCount = (tab: TabKey) => {
+    switch (tab) {
+      case "servers": return groupedServers.length
+      case "skills": return skills.length
+      case "agents": return agents.length
+      case "prompts": return prompts.length
+    }
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading registry data...</p>
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
+          <p className="text-sm text-muted-foreground">Loading registry...</p>
         </div>
       </div>
     )
@@ -361,500 +304,304 @@ export default function AdminPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-red-500 text-6xl mb-4">⚠️</div>
-          <h2 className="text-xl font-bold mb-2">Error Loading Registry</h2>
-          <p className="text-muted-foreground mb-4">{error}</p>
-          <Button onClick={fetchData}>Retry</Button>
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <p className="text-lg font-semibold">Failed to load registry</p>
+          <p className="text-sm text-muted-foreground max-w-md">{error}</p>
+          <Button onClick={fetchData} size="sm">Retry</Button>
         </div>
       </div>
-    )
-  }
-
-  // Show server detail view if a server is selected
-  if (selectedServer) {
-    return (
-      <ServerDetail
-        server={selectedServer as ServerResponse & { allVersions?: ServerResponse[] }}
-        onClose={handleCloseServerDetail}
-        onServerCopied={fetchData}
-      />
-    )
-  }
-
-  // Show skill detail view if a skill is selected
-  if (selectedSkill) {
-    return (
-      <SkillDetail
-        skill={selectedSkill}
-        onClose={() => setSelectedSkill(null)}
-      />
-    )
-  }
-
-  // Show agent detail view if an agent is selected
-  if (selectedAgent) {
-    return (
-      <AgentDetail
-        agent={selectedAgent}
-        onClose={() => setSelectedAgent(null)}
-      />
-    )
-  }
-
-  // Show prompt detail view if a prompt is selected
-  if (selectedPrompt) {
-    return (
-      <PromptDetail
-        prompt={selectedPrompt}
-        onClose={() => setSelectedPrompt(null)}
-      />
     )
   }
 
   return (
-    <main className="min-h-screen bg-background">
-      {/* Category Cards */}
-      {stats && (
-        <div className="bg-muted/30 border-b">
-          <div className="container mx-auto px-6 py-6">
-            <div className="grid gap-4 md:grid-cols-4">
-              <Card
-                className={`p-4 cursor-pointer transition-all duration-200 border ${activeTab === "servers" ? "border-primary ring-1 ring-primary shadow-md" : "hover:border-primary/20 hover:shadow-md"}`}
-                onClick={() => setActiveTab("servers")}
+    <main className="bg-background">
+      <div className="container mx-auto px-6">
+        {/* Tab bar with counts */}
+        <div className="flex items-center justify-between border-b pt-4">
+          <div className="flex items-center gap-1">
+            {TAB_CONFIG.map(({ key, label, icon }) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                className={`group relative flex items-center gap-2 px-4 py-3 text-[15px] font-medium transition-colors ${
+                  activeTab === key
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
               >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-primary/10 rounded-lg flex items-center justify-center">
-                    <span className="h-5 w-5 text-primary flex items-center justify-center">
-                      <MCPIcon />
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">{stats.total_server_names}</p>
-                    <p className="text-xs text-muted-foreground">Servers</p>
-                  </div>
-                </div>
-              </Card>
+                <span className={`h-4 w-4 flex items-center justify-center transition-colors ${
+                  activeTab === key ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+                }`}>
+                  {icon}
+                </span>
+                {label}
+                <span className={`text-[13px] tabular-nums px-1.5 py-0.5 rounded-full transition-colors ${
+                  activeTab === key
+                    ? "bg-primary/10 text-primary"
+                    : "bg-muted text-muted-foreground"
+                }`}>
+                  {getCount(key)}
+                </span>
+                {activeTab === key && (
+                  <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-primary rounded-full" />
+                )}
+              </button>
+            ))}
+          </div>
 
-              <Card
-                className={`p-4 cursor-pointer transition-all duration-200 border ${activeTab === "skills" ? "border-primary ring-1 ring-primary shadow-md" : "hover:border-primary/20 hover:shadow-md"}`}
-                onClick={() => setActiveTab("skills")}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-primary/20 rounded-lg flex items-center justify-center">
-                    <Zap className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">{skills.length}</p>
-                    <p className="text-xs text-muted-foreground">Skills</p>
-                  </div>
-                </div>
-              </Card>
+          <div className="flex items-center gap-2 pb-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" className="gap-1.5 h-8">
+                  <Plus className="h-3.5 w-3.5" />
+                  Add
+                  <ChevronDown className="h-3 w-3 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setAddServerDialogOpen(true)}>
+                  <span className="mr-2 h-4 w-4 flex items-center justify-center"><MCPIcon /></span>
+                  Server
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setAddSkillDialogOpen(true)}>
+                  <Zap className="mr-2 h-4 w-4" />
+                  Skill
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setAddAgentDialogOpen(true)}>
+                  <Bot className="mr-2 h-4 w-4" />
+                  Agent
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setAddPromptDialogOpen(true)}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  Prompt
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-              <Card
-                className={`p-4 cursor-pointer transition-all duration-200 border ${activeTab === "agents" ? "border-primary ring-1 ring-primary shadow-md" : "hover:border-primary/20 hover:shadow-md"}`}
-                onClick={() => setActiveTab("agents")}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-primary/30 rounded-lg flex items-center justify-center">
-                    <Bot className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">{agents.length}</p>
-                    <p className="text-xs text-muted-foreground">Agents</p>
-                  </div>
-                </div>
-              </Card>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5 h-8">
+                  <Download className="h-3.5 w-3.5" />
+                  Import
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setImportDialogOpen(true)}>
+                  <span className="mr-2 h-4 w-4 flex items-center justify-center"><MCPIcon /></span>
+                  Import Servers
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-              <Card
-                className={`p-4 cursor-pointer transition-all duration-200 border ${activeTab === "prompts" ? "border-primary ring-1 ring-primary shadow-md" : "hover:border-primary/20 hover:shadow-md"}`}
-                onClick={() => setActiveTab("prompts")}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-primary/15 rounded-lg flex items-center justify-center">
-                    <FileText className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">{prompts.length}</p>
-                    <p className="text-xs text-muted-foreground">Prompts</p>
-                  </div>
-                </div>
-              </Card>
-            </div>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={fetchData} title="Refresh">
+              <RefreshCw className="h-3.5 w-3.5" />
+            </Button>
           </div>
         </div>
-      )}
 
-      <div className="container mx-auto px-6 py-8">
-        <div className="w-full">
-          <div className="flex items-center gap-4 mb-8">
-            {/* Search */}
-            <div className="flex-1 max-w-md">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 h-9"
-                />
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex items-center gap-3 ml-auto">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="default" className="gap-2">
-                    <Plus className="h-4 w-4" />
-                    Add
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setAddServerDialogOpen(true)}>
-                    <span className="mr-2 h-4 w-4 flex items-center justify-center">
-                      <MCPIcon />
-                    </span>
-                    Add Server
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setAddSkillDialogOpen(true)}>
-                    <Zap className="mr-2 h-4 w-4" />
-                    Add Skill
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setAddAgentDialogOpen(true)}>
-                    <Bot className="mr-2 h-4 w-4" />
-                    Add Agent
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setAddPromptDialogOpen(true)}>
-                    <FileText className="mr-2 h-4 w-4" />
-                    Add Prompt
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="gap-2">
-                    <Download className="h-4 w-4" />
-                    Import
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setImportDialogOpen(true)}>
-                    <span className="mr-2 h-4 w-4 flex items-center justify-center">
-                      <MCPIcon />
-                    </span>
-                    Import Servers
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={fetchData}
-                title="Refresh"
-              >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-            </div>
+        {/* Search and filters */}
+        <div className="flex items-center gap-3 py-4">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder={`Search ${activeTab}...`}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 h-10 text-[15px]"
+            />
           </div>
 
-          {/* Servers */}
           {activeTab === "servers" && (
             <>
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-2">
-                  <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
-                  <Select value={sortBy} onValueChange={(value: "name" | "stars" | "date") => setSortBy(value)}>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Sort by..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="name">Name (A-Z)</SelectItem>
-                      <SelectItem value="stars">GitHub Stars</SelectItem>
-                      <SelectItem value="date">Date Published</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center gap-4">
-                  <Filter className="h-4 w-4 text-muted-foreground" />
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="filter-verified-org"
-                      checked={filterVerifiedOrg}
-                      onCheckedChange={(checked: boolean) => setFilterVerifiedOrg(checked)}
-                    />
-                    <Label
-                      htmlFor="filter-verified-org"
-                      className="text-sm font-normal cursor-pointer"
-                    >
-                      Verified Organization
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="filter-verified-publisher"
-                      checked={filterVerifiedPublisher}
-                      onCheckedChange={(checked: boolean) => setFilterVerifiedPublisher(checked)}
-                    />
-                    <Label
-                      htmlFor="filter-verified-publisher"
-                      className="text-sm font-normal cursor-pointer"
-                    >
-                      Verified Publisher
-                    </Label>
-                  </div>
-                </div>
+              <div className="flex items-center gap-1.5 ml-auto">
+                <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+                <Select value={sortBy} onValueChange={(value: "name" | "stars" | "date") => setSortBy(value)}>
+                  <SelectTrigger className="w-[140px] h-8 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="name">Name</SelectItem>
+                    <SelectItem value="stars">Stars</SelectItem>
+                    <SelectItem value="date">Published</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div>
-                <h2 className="text-lg font-semibold mb-4">
-                  Servers
-                  <span className="text-muted-foreground ml-2">
-                    ({filteredServers.length})
-                  </span>
-                </h2>
-
-                {filteredServers.length === 0 ? (
-                  <Card className="p-12">
-                    <div className="text-center text-muted-foreground">
-                      <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center">
-                        <MCPIcon />
-                      </div>
-                      <p className="text-lg font-medium mb-2">
-                        {groupedServers.length === 0
-                          ? "No servers in registry"
-                          : "No servers match your filters"}
-                      </p>
-                      <p className="text-sm mb-4">
-                        {groupedServers.length === 0
-                          ? "Import servers from external registries to get started"
-                          : "Try adjusting your search or filter criteria"}
-                      </p>
-                      {groupedServers.length === 0 && (
-                        <Button
-                          variant="outline"
-                          className="gap-2"
-                          onClick={() => setImportDialogOpen(true)}
-                        >
-                          <Download className="h-4 w-4" />
-                          Import Servers
-                        </Button>
-                      )}
-                    </div>
-                  </Card>
-                ) : (
-                  <div className="grid gap-4">
-                    {filteredServers.map((server, index) => (
-                      <ServerCard
-                        key={`${server.server.name}-${server.server.version}-${index}`}
-                        server={server}
-                        versionCount={server.versionCount}
-                        onClick={() => handleServerClick(server)}
-                      />
-                    ))}
-                  </div>
-                )}
+              <div className="flex items-center gap-4 pl-3 border-l">
+                <div className="flex items-center gap-1.5">
+                  <Checkbox
+                    id="filter-verified-org"
+                    checked={filterVerifiedOrg}
+                    onCheckedChange={(checked: boolean) => setFilterVerifiedOrg(checked)}
+                    className="h-3.5 w-3.5"
+                  />
+                  <Label htmlFor="filter-verified-org" className="text-xs cursor-pointer text-muted-foreground">
+                    Verified Org
+                  </Label>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Checkbox
+                    id="filter-verified-publisher"
+                    checked={filterVerifiedPublisher}
+                    onCheckedChange={(checked: boolean) => setFilterVerifiedPublisher(checked)}
+                    className="h-3.5 w-3.5"
+                  />
+                  <Label htmlFor="filter-verified-publisher" className="text-xs cursor-pointer text-muted-foreground">
+                    Verified Publisher
+                  </Label>
+                </div>
               </div>
             </>
           )}
+        </div>
 
-          {/* Skills */}
+        {/* Results */}
+        <div className="pb-12">
+          {activeTab === "servers" && (
+            filteredServers.length === 0 ? (
+              <EmptyState
+                icon={<span className="h-8 w-8 flex items-center justify-center text-muted-foreground"><MCPIcon /></span>}
+                title={groupedServers.length === 0 ? "No servers in registry" : "No servers match your filters"}
+                description={groupedServers.length === 0 ? "Import servers from external registries to get started" : "Try adjusting your search or filter criteria"}
+                action={groupedServers.length === 0 ? (
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setImportDialogOpen(true)}>
+                    <Download className="h-3.5 w-3.5" /> Import Servers
+                  </Button>
+                ) : undefined}
+              />
+            ) : (
+              <div className="divide-y">
+                {filteredServers.map((server, index) => (
+                  <ServerCard
+                    key={`${server.server.name}-${server.server.version}-${index}`}
+                    server={server}
+                    versionCount={server.versionCount}
+                    onClick={() => setSelectedServer(server)}
+                  />
+                ))}
+              </div>
+            )
+          )}
+
           {activeTab === "skills" && (
-            <div>
-              <h2 className="text-lg font-semibold mb-4">
-                Skills
-                <span className="text-muted-foreground ml-2">
-                  ({filteredSkills.length})
-                </span>
-              </h2>
-
-              {filteredSkills.length === 0 ? (
-                <Card className="p-12">
-                  <div className="text-center text-muted-foreground">
-                    <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center text-primary">
-                      <Zap className="w-12 h-12" />
-                    </div>
-                    <p className="text-lg font-medium mb-2">
-                      {skills.length === 0
-                        ? "No skills in registry"
-                        : "No skills match your filters"}
-                    </p>
-                    <p className="text-sm mb-4">
-                      {skills.length === 0
-                        ? "Publish skills to get started"
-                        : "Try adjusting your search or filter criteria"}
-                    </p>
-                    {skills.length === 0 && (
-                      <Button
-                        variant="outline"
-                        className="gap-2"
-                        onClick={() => setAddSkillDialogOpen(true)}
-                      >
-                        <Plus className="h-4 w-4" />
-                        Add Skill
-                      </Button>
-                    )}
-                  </div>
-                </Card>
-              ) : (
-                <div className="grid gap-4">
-                  {filteredSkills.map((skill, index) => (
-                    <SkillCard
-                      key={`${skill.skill.name}-${skill.skill.version}-${index}`}
-                      skill={skill}
-                      onClick={() => setSelectedSkill(skill)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+            filteredSkills.length === 0 ? (
+              <EmptyState
+                icon={<Zap className="h-8 w-8 text-muted-foreground" />}
+                title={skills.length === 0 ? "No skills in registry" : "No skills match your filters"}
+                description={skills.length === 0 ? "Publish skills to get started" : "Try adjusting your search"}
+                action={skills.length === 0 ? (
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setAddSkillDialogOpen(true)}>
+                    <Plus className="h-3.5 w-3.5" /> Add Skill
+                  </Button>
+                ) : undefined}
+              />
+            ) : (
+              <div className="divide-y">
+                {filteredSkills.map((skill, index) => (
+                  <SkillCard
+                    key={`${skill.skill.name}-${skill.skill.version}-${index}`}
+                    skill={skill}
+                    onClick={() => setSelectedSkill(skill)}
+                  />
+                ))}
+              </div>
+            )
           )}
 
-          {/* Agents */}
           {activeTab === "agents" && (
-            <div>
-              <h2 className="text-lg font-semibold mb-4">
-                Agents
-                <span className="text-muted-foreground ml-2">
-                  ({filteredAgents.length})
-                </span>
-              </h2>
-
-              {filteredAgents.length === 0 ? (
-                <Card className="p-12">
-                  <div className="text-center text-muted-foreground">
-                    <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center text-primary">
-                      <Bot className="w-12 h-12" />
-                    </div>
-                    <p className="text-lg font-medium mb-2">
-                      {agents.length === 0
-                        ? "No agents in registry"
-                        : "No agents match your filters"}
-                    </p>
-                    <p className="text-sm mb-4">
-                      {agents.length === 0
-                        ? "Create agents to get started"
-                        : "Try adjusting your search or filter criteria"}
-                    </p>
-                    {agents.length === 0 && (
-                      <Button
-                        variant="outline"
-                        className="gap-2"
-                        onClick={() => setAddAgentDialogOpen(true)}
-                      >
-                        <Plus className="h-4 w-4" />
-                        Add Agent
-                      </Button>
-                    )}
-                  </div>
-                </Card>
-              ) : (
-                <div className="grid gap-4">
-                  {filteredAgents.map((agent, index) => (
-                    <AgentCard
-                      key={`${agent.agent.name}-${agent.agent.version}-${index}`}
-                      agent={agent}
-                      onClick={() => setSelectedAgent(agent)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+            filteredAgents.length === 0 ? (
+              <EmptyState
+                icon={<Bot className="h-8 w-8 text-muted-foreground" />}
+                title={agents.length === 0 ? "No agents in registry" : "No agents match your filters"}
+                description={agents.length === 0 ? "Create agents to get started" : "Try adjusting your search"}
+                action={agents.length === 0 ? (
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setAddAgentDialogOpen(true)}>
+                    <Plus className="h-3.5 w-3.5" /> Add Agent
+                  </Button>
+                ) : undefined}
+              />
+            ) : (
+              <div className="divide-y">
+                {filteredAgents.map((agent, index) => (
+                  <AgentCard
+                    key={`${agent.agent.name}-${agent.agent.version}-${index}`}
+                    agent={agent}
+                    onClick={() => setSelectedAgent(agent)}
+                  />
+                ))}
+              </div>
+            )
           )}
 
-          {/* Prompts */}
           {activeTab === "prompts" && (
-            <div>
-              <h2 className="text-lg font-semibold mb-4">
-                Prompts
-                <span className="text-muted-foreground ml-2">
-                  ({filteredPrompts.length})
-                </span>
-              </h2>
-
-              {filteredPrompts.length === 0 ? (
-                <Card className="p-12">
-                  <div className="text-center text-muted-foreground">
-                    <div className="w-12 h-12 mx-auto mb-4 opacity-50 flex items-center justify-center text-primary">
-                      <FileText className="w-12 h-12" />
-                    </div>
-                    <p className="text-lg font-medium mb-2">
-                      {prompts.length === 0
-                        ? "No prompts in registry"
-                        : "No prompts match your filters"}
-                    </p>
-                    <p className="text-sm mb-4">
-                      {prompts.length === 0
-                        ? "Add prompts to the registry to get started"
-                        : "Try adjusting your search or filter criteria"}
-                    </p>
-                    {prompts.length === 0 && (
-                      <Button
-                        variant="outline"
-                        className="gap-2"
-                        onClick={() => setAddPromptDialogOpen(true)}
-                      >
-                        <Plus className="h-4 w-4" />
-                        Add Prompt
-                      </Button>
-                    )}
-                  </div>
-                </Card>
-              ) : (
-                <div className="grid gap-4">
-                  {filteredPrompts.map((prompt, index) => (
-                    <PromptCard
-                      key={`${prompt.prompt.name}-${prompt.prompt.version}-${index}`}
-                      prompt={prompt}
-                      onClick={() => setSelectedPrompt(prompt)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+            filteredPrompts.length === 0 ? (
+              <EmptyState
+                icon={<FileText className="h-8 w-8 text-muted-foreground" />}
+                title={prompts.length === 0 ? "No prompts in registry" : "No prompts match your filters"}
+                description={prompts.length === 0 ? "Add prompts to get started" : "Try adjusting your search"}
+                action={prompts.length === 0 ? (
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setAddPromptDialogOpen(true)}>
+                    <Plus className="h-3.5 w-3.5" /> Add Prompt
+                  </Button>
+                ) : undefined}
+              />
+            ) : (
+              <div className="divide-y">
+                {filteredPrompts.map((prompt, index) => (
+                  <PromptCard
+                    key={`${prompt.prompt.name}-${prompt.prompt.version}-${index}`}
+                    prompt={prompt}
+                    onClick={() => setSelectedPrompt(prompt)}
+                  />
+                ))}
+              </div>
+            )
           )}
         </div>
       </div>
 
-      {/* Server Dialogs */}
-      <ImportDialog
-        open={importDialogOpen}
-        onOpenChange={setImportDialogOpen}
-        onImportComplete={fetchData}
-      />
-      <AddServerDialog
-        open={addServerDialogOpen}
-        onOpenChange={setAddServerDialogOpen}
-        onServerAdded={fetchData}
-      />
+      <ImportDialog open={importDialogOpen} onOpenChange={setImportDialogOpen} onImportComplete={fetchData} />
+      <AddServerDialog open={addServerDialogOpen} onOpenChange={setAddServerDialogOpen} onServerAdded={fetchData} />
+      <AddSkillDialog open={addSkillDialogOpen} onOpenChange={setAddSkillDialogOpen} onSkillAdded={fetchData} />
+      <AddAgentDialog open={addAgentDialogOpen} onOpenChange={setAddAgentDialogOpen} onAgentAdded={() => {}} />
+      <AddPromptDialog open={addPromptDialogOpen} onOpenChange={setAddPromptDialogOpen} onPromptAdded={fetchData} />
 
-      {/* Skill Dialogs */}
-      <AddSkillDialog
-        open={addSkillDialogOpen}
-        onOpenChange={setAddSkillDialogOpen}
-        onSkillAdded={fetchData}
-      />
-
-      {/* Agent Dialogs */}
-      <AddAgentDialog
-        open={addAgentDialogOpen}
-        onOpenChange={setAddAgentDialogOpen}
-        onAgentAdded={() => {}}
-      />
-
-      {/* Prompt Dialogs */}
-      <AddPromptDialog
-        open={addPromptDialogOpen}
-        onOpenChange={setAddPromptDialogOpen}
-        onPromptAdded={fetchData}
-      />
-
+      <Sheet open={isSheetOpen} onOpenChange={(open) => !open && closeSheet()}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+          <SheetTitle className="sr-only">
+            {selectedServer ? (selectedServer.server.title || selectedServer.server.name) :
+             selectedAgent ? selectedAgent.agent.name :
+             selectedSkill ? (selectedSkill.skill.title || selectedSkill.skill.name) :
+             selectedPrompt ? selectedPrompt.prompt.name : 'Details'}
+          </SheetTitle>
+          {selectedServer && (
+            <ServerDetail
+              server={selectedServer as ServerResponse & { allVersions?: ServerResponse[] }}
+              onServerCopied={fetchData}
+            />
+          )}
+          {selectedSkill && <SkillDetail skill={selectedSkill} />}
+          {selectedAgent && <AgentDetail agent={selectedAgent} />}
+          {selectedPrompt && <PromptDetail prompt={selectedPrompt} />}
+        </SheetContent>
+      </Sheet>
     </main>
+  )
+}
+
+function EmptyState({ icon, title, description, action }: {
+  icon: React.ReactNode
+  title: string
+  description: string
+  action?: React.ReactNode
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 text-center">
+      <div className="mb-4 opacity-40">{icon}</div>
+      <p className="text-base font-medium mb-1">{title}</p>
+      <p className="text-sm text-muted-foreground mb-4 max-w-xs">{description}</p>
+      {action}
+    </div>
   )
 }

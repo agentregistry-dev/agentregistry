@@ -2,11 +2,24 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Card } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { listDeployments, removeDeployment, Deployment } from "@/lib/admin-api"
-import { Trash2, AlertCircle, Calendar, Package, Copy, Check, Link2 } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Trash2, AlertCircle, Calendar, Package, Copy, Check, Link2, Server, Bot as BotIcon, Search, X } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { toast } from "sonner"
 import {
   Dialog,
@@ -37,6 +50,10 @@ export default function DeployedPage() {
   const [serverToRemove, setServerToRemove] = useState<{ id: string, name: string, version: string, resourceType: string } | null>(null)
   const [copied, setCopied] = useState(false)
   const [copiedAgentId, setCopiedAgentId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [filterProvider, setFilterProvider] = useState<string>("all")
+  const [filterOrigin, setFilterOrigin] = useState<string>("all")
+  const [filterStatus, setFilterStatus] = useState<string>("all")
 
   const gatewayUrl = `${GATEWAY_BASE_URL}/mcp`
 
@@ -57,7 +74,6 @@ export default function DeployedPage() {
   const fetchDeployments = async () => {
     try {
       setError(null)
-      // listDeployments now returns both managed and external K8s resources
       const { data: deployData } = await listDeployments({ throwOnError: true })
       setDeployments(deployData.deployments)
     } catch (err) {
@@ -69,7 +85,6 @@ export default function DeployedPage() {
 
   useEffect(() => {
     fetchDeployments()
-    // Refresh every 30 seconds
     const interval = setInterval(fetchDeployments, 30000)
     return () => clearInterval(interval)
   }, [])
@@ -84,7 +99,6 @@ export default function DeployedPage() {
     try {
       setRemoving(true)
       await removeDeployment({ path: { id: serverToRemove.id }, throwOnError: true })
-      // Remove from local state
       setDeployments(prev => prev.filter(d => d.id !== serverToRemove.id))
       setServerToRemove(null)
       fetchDeployments()
@@ -95,353 +109,196 @@ export default function DeployedPage() {
     }
   }
 
-  const runningCount = deployments.length
-  const agents = deployments.filter(d => d.resourceType === 'agent')
-  const mcpServers = deployments.filter(d => d.resourceType === 'mcp')
+  const uniqueProviders = [...new Set(deployments.map(d => d.providerId || "local"))]
+  const uniqueOrigins = [...new Set(deployments.map(d => d.origin))]
+  const uniqueStatuses = [...new Set(deployments.map(d => d.status))]
+
+  const filtered = deployments.filter(d => {
+    if (filterProvider !== "all" && (d.providerId || "local") !== filterProvider) return false
+    if (filterOrigin !== "all" && d.origin !== filterOrigin) return false
+    if (filterStatus !== "all" && d.status !== filterStatus) return false
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      if (!d.serverName.toLowerCase().includes(q) && !d.version.toLowerCase().includes(q)) return false
+    }
+    return true
+  })
+
+  const hasActiveFilters = filterProvider !== "all" || filterOrigin !== "all" || filterStatus !== "all"
+
+  const agents = filtered.filter(d => d.resourceType === 'agent')
+  const mcpServers = filtered.filter(d => d.resourceType === 'mcp')
 
   return (
-    <main className="min-h-screen bg-background">
-      {/* Stats Section */}
-      <div className="bg-muted/30 border-b">
-        <div className="container mx-auto px-6 py-6">
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card className="p-4 hover:shadow-md transition-all duration-200 border hover:border-primary/20">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-500/10 rounded-lg flex items-center justify-center">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={2}
-                    stroke="currentColor"
-                    className="h-5 w-5 text-green-600"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{runningCount}</p>
-                  <p className="text-xs text-muted-foreground">Total Resources</p>
-                </div>
-              </div>
-            </Card>
+    <main className="bg-background">
+      <div className="container mx-auto px-6">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b py-4">
+          <div>
+            <h1 className="text-xl font-semibold">Deployed Resources</h1>
+            <p className="text-[15px] text-muted-foreground">
+              {deployments.length} resource{deployments.length !== 1 ? 's' : ''} running
+            </p>
+          </div>
+        </div>
 
-            <Card className="p-4 hover:shadow-md transition-all duration-200 border hover:border-primary/20">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-500/10 rounded-lg flex items-center justify-center">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={2}
-                    stroke="currentColor"
-                    className="h-5 w-5 text-blue-600"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">
-                    {mcpServers.length}
-                  </p>
-                  <p className="text-xs text-muted-foreground">MCP Servers</p>
-                </div>
-              </div>
-            </Card>
+        {error && (
+          <div className="flex items-center gap-2 text-destructive py-3 text-sm">
+            <AlertCircle className="h-4 w-4" />
+            <p>{error}</p>
+          </div>
+        )}
 
-            <Card className="p-4 hover:shadow-md transition-all duration-200 border hover:border-primary/20">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-500/10 rounded-lg flex items-center justify-center">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={2}
-                      stroke="currentColor"
-                      className="h-5 w-5 text-purple-600"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <code className="text-sm font-mono font-semibold">{gatewayUrl}</code>
-                    <p className="text-xs text-muted-foreground">Gateway Endpoint</p>
-                  </div>
-                </div>
+        {/* Search and filters */}
+        {!loading && deployments.length > 0 && (
+          <div className="flex items-center gap-3 py-4">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search deployments..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 h-10 text-[15px]"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 ml-auto">
+              <Select value={filterProvider} onValueChange={setFilterProvider}>
+                <SelectTrigger className="w-[140px] h-8 text-sm">
+                  <SelectValue placeholder="Provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All providers</SelectItem>
+                  {uniqueProviders.map(p => (
+                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filterOrigin} onValueChange={setFilterOrigin}>
+                <SelectTrigger className="w-[140px] h-8 text-sm">
+                  <SelectValue placeholder="Origin" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All origins</SelectItem>
+                  {uniqueOrigins.map(o => (
+                    <SelectItem key={o} value={o}>{o}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="w-[140px] h-8 text-sm">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  {uniqueStatuses.map(s => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {hasActiveFilters && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={copyToClipboard}
-                  className="shrink-0"
-                  title="Copy gateway URL"
+                  className="h-8 gap-1 text-xs text-muted-foreground"
+                  onClick={() => { setFilterProvider("all"); setFilterOrigin("all"); setFilterStatus("all") }}
                 >
-                  {copied ? (
-                    <Check className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
+                  <X className="h-3 w-3" />
+                  Clear
                 </Button>
-              </div>
-            </Card>
+              )}
+            </div>
           </div>
-        </div>
-      </div>
+        )}
 
-      <div className="container mx-auto px-6 py-12">
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold mb-2">Deployed Resources</h1>
-            <p className="text-muted-foreground">
-              Monitor and manage MCP servers and agents deployed on your system.
-            </p>
-          </div>
-
-          {error && (
-            <Card className="p-4 mb-6 bg-destructive/10 border-destructive/20">
-              <div className="flex items-center gap-2 text-destructive">
-                <AlertCircle className="h-4 w-4" />
-                <p className="text-sm font-medium">{error}</p>
-              </div>
-            </Card>
-          )}
-
+        <div className="py-6">
           {loading ? (
-            <Card className="p-12">
-              <div className="text-center text-muted-foreground">
-                <p className="text-lg font-medium">Loading resources...</p>
+            <div className="flex items-center justify-center py-20">
+              <div className="text-center space-y-3">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
+                <p className="text-sm text-muted-foreground">Loading resources...</p>
               </div>
-            </Card>
+            </div>
           ) : (agents.length === 0 && mcpServers.length === 0) ? (
-            <Card className="p-12">
-              <div className="text-center text-muted-foreground">
-                <div className="w-16 h-16 mx-auto mb-4 opacity-50 flex items-center justify-center">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={1.5}
-                    stroke="currentColor"
-                    className="w-16 h-16"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z"
-                    />
-                  </svg>
-                </div>
-                <p className="text-lg font-medium mb-2">
-                  No resources found
-                </p>
-                <p className="text-sm mb-6">
-                  Deploy MCP servers from the Admin panel to monitor them here.
-                </p>
-                <Link
-                  href="/"
-                  className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background bg-primary text-primary-foreground hover:bg-primary/90 h-10 py-2 px-4"
-                >
-                  Go to Admin Panel
-                </Link>
-              </div>
-            </Card>
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <Server className="h-8 w-8 text-muted-foreground mb-4 opacity-40" />
+              <p className="text-base font-medium mb-1">No resources deployed</p>
+              <p className="text-sm text-muted-foreground mb-4 max-w-xs">
+                Deploy MCP servers or agents from the Catalog to see them here.
+              </p>
+              <Link href="/">
+                <Button size="sm" variant="outline">Go to Catalog</Button>
+              </Link>
+            </div>
           ) : (
-            <div className="space-y-6">
-
+            <div className="space-y-8">
               {/* Agents */}
               {agents.length > 0 && (
-                <div className="space-y-4">
-                  <h2 className="text-xl font-semibold flex items-center gap-2">
-                    Agents
-                    <Badge variant="secondary" className="ml-2">{agents.length}</Badge>
-                  </h2>
-                  {agents.map((item) => (
-                    <Card key={item.id} className="p-6 hover:shadow-md transition-all duration-200">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-3">
-                            <h3 className="text-xl font-semibold">{item.serverName}</h3>
-                            <Badge variant="outline">
-                              {item.providerId || "local"}
-                            </Badge>
-                            {item.origin === 'managed' ? (
-                              <Badge className="bg-primary/10 text-primary hover:bg-primary/20 border-primary/20">
-                                Managed
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 border-purple-500/20">
-                                External
-                              </Badge>
-                            )}
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-4 text-sm">
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <Calendar className="h-4 w-4" />
-                              <span>
-                                Deployed: {new Date(item.deployedAt).toLocaleString()}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <Package className="h-4 w-4" />
-                              <span>
-                                Version: {item.version}
-                                {item.env?.namespace && ` • ${item.env.namespace}`}
-                              </span>
-                            </div>
-                          </div>
-
-                          {(!item.providerId || item.providerId === 'local') && (
-                            <div className="mt-3 flex items-center gap-2 text-sm">
-                              <Link2 className="h-4 w-4 text-muted-foreground shrink-0" />
-                              <code className="text-xs font-mono bg-muted px-2 py-1 rounded truncate">
-                                {getAgentEndpointUrl(item.serverName, item.id)}
-                              </code>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 w-6 p-0 shrink-0"
-                                onClick={() => copyAgentUrl(item.id, getAgentEndpointUrl(item.serverName, item.id))}
-                                title="Copy agent endpoint URL"
-                              >
-                                {copiedAgentId === item.id ? (
-                                  <Check className="h-3 w-3 text-green-600" />
-                                ) : (
-                                  <Copy className="h-3 w-3" />
-                                )}
-                              </Button>
-                            </div>
-                          )}
-
-                          {Object.keys(item.env || {}).length > 0 && (
-                            <div className="mt-3 pt-3 border-t">
-                              <p className="text-xs text-muted-foreground mb-2">Configuration:</p>
-                              <div className="flex flex-wrap gap-2">
-                                {Object.entries(item.env || {}).slice(0, 3).map(([key]) => (
-                                  <span key={key} className="text-xs px-2 py-1 bg-muted rounded">
-                                    {key}
-                                  </span>
-                                ))}
-                                {Object.keys(item.env || {}).length > 3 && (
-                                  <span className="text-xs px-2 py-1 bg-muted rounded text-muted-foreground">
-                                    +{Object.keys(item.env || {}).length - 3} more
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        {item.origin === 'managed' && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            className="ml-4"
-                            onClick={() => handleRemove(item)}
-                            disabled={removing}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Remove
-                          </Button>
-                        )}
-                      </div>
-                    </Card>
-                  ))}
-                </div>
+                <section>
+                  <div className="flex items-center gap-2 mb-3">
+                    <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Agents</h2>
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                      {agents.length}
+                    </Badge>
+                  </div>
+                  <div className="divide-y">
+                    {agents.map((item) => (
+                      <DeploymentRow
+                        key={item.id}
+                        item={item}
+                        onRemove={handleRemove}
+                        removing={removing}
+                        copiedAgentId={copiedAgentId}
+                        onCopyAgentUrl={copyAgentUrl}
+                        getAgentEndpointUrl={getAgentEndpointUrl}
+                      />
+                    ))}
+                  </div>
+                </section>
               )}
 
               {/* MCP Servers */}
               {mcpServers.length > 0 && (
-                <div className="space-y-4">
-                  <h2 className="text-xl font-semibold flex items-center gap-2">
-                    MCP Servers
-                    <Badge variant="secondary" className="ml-2">{mcpServers.length}</Badge>
-                  </h2>
-                  {mcpServers.map((item) => (
-                    <Card key={item.id} className="p-6 hover:shadow-md transition-all duration-200">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-3">
-                            <h3 className="text-xl font-semibold">{item.serverName}</h3>
-                            <Badge variant="outline">
-                              {item.providerId || "local"}
-                            </Badge>
-                            {item.origin === 'managed' ? (
-                              <Badge className="bg-primary/10 text-primary hover:bg-primary/20 border-primary/20">
-                                Managed
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 border-purple-500/20">
-                                External
-                              </Badge>
-                            )}
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-4 text-sm">
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <Calendar className="h-4 w-4" />
-                              <span>
-                                Deployed: {new Date(item.deployedAt).toLocaleString()}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <Package className="h-4 w-4" />
-                              <span>
-                                Version: {item.version}
-                                {item.env?.namespace && ` • ${item.env.namespace}`}
-                              </span>
-                            </div>
-                          </div>
-
-                          {Object.keys(item.env || {}).length > 0 && (
-                            <div className="mt-3 pt-3 border-t">
-                              <p className="text-xs text-muted-foreground mb-2">Configuration:</p>
-                              <div className="flex flex-wrap gap-2">
-                                {Object.entries(item.env || {}).slice(0, 3).map(([key]) => (
-                                  <span key={key} className="text-xs px-2 py-1 bg-muted rounded">
-                                    {key}
-                                  </span>
-                                ))}
-                                {Object.keys(item.env || {}).length > 3 && (
-                                  <span className="text-xs px-2 py-1 bg-muted rounded text-muted-foreground">
-                                    +{Object.keys(item.env || {}).length - 3} more
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        {item.origin === 'managed' && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            className="ml-4"
-                            onClick={() => handleRemove(item)}
-                            disabled={removing}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Remove
-                          </Button>
-                        )}
-                      </div>
-                    </Card>
-                  ))}
-                </div>
+                <section>
+                  <div className="flex items-center gap-2 mb-3">
+                    <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">MCP Servers</h2>
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                      {mcpServers.length}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-3 px-4 py-3 bg-muted/60 border rounded-lg mb-4">
+                    <Link2 className="h-4 w-4 text-primary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-muted-foreground mb-0.5">Gateway URL — connect MCP clients to all managed servers</p>
+                      <code className="text-sm font-mono text-foreground">{gatewayUrl}</code>
+                    </div>
+                    <button
+                      onClick={copyToClipboard}
+                      className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                      title="Copy gateway URL"
+                    >
+                      {copied ? (
+                        <Check className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                  <div className="divide-y">
+                    {mcpServers.map((item) => (
+                      <DeploymentRow
+                        key={item.id}
+                        item={item}
+                        onRemove={handleRemove}
+                        removing={removing}
+                        copiedAgentId={copiedAgentId}
+                        onCopyAgentUrl={copyAgentUrl}
+                        getAgentEndpointUrl={getAgentEndpointUrl}
+                      />
+                    ))}
+                  </div>
+                </section>
               )}
-
             </div>
           )}
         </div>
@@ -454,29 +311,120 @@ export default function DeployedPage() {
             <DialogTitle>Remove Deployment</DialogTitle>
             <DialogDescription>
               Are you sure you want to remove <strong>{serverToRemove?.name}</strong> (version {serverToRemove?.version}) ({serverToRemove?.resourceType})?
-              <br />
-              <br />
+              <br /><br />
               This will stop the server and remove it from your deployments. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setServerToRemove(null)}
-              disabled={removing}
-            >
+            <Button variant="outline" onClick={() => setServerToRemove(null)} disabled={removing}>
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              onClick={confirmRemove}
-              disabled={removing}
-            >
-              {removing ? 'Removing...' : 'Remove Deployment'}
+            <Button variant="destructive" onClick={confirmRemove} disabled={removing}>
+              {removing ? 'Removing...' : 'Remove'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </main>
+  )
+}
+
+function DeploymentRow({ item, onRemove, removing, copiedAgentId, onCopyAgentUrl, getAgentEndpointUrl }: {
+  item: Deployment
+  onRemove: (d: Deployment) => void
+  removing: boolean
+  copiedAgentId: string | null
+  onCopyAgentUrl: (id: string, url: string) => void
+  getAgentEndpointUrl: (name: string, id: string) => string
+}) {
+  const isAgent = item.resourceType === 'agent'
+  const [showError, setShowError] = useState(false)
+  const hasError = item.status === 'error' || item.status === 'failed'
+
+  const statusColor = item.status === 'running'
+    ? 'bg-green-500'
+    : hasError
+    ? 'bg-destructive'
+    : item.status === 'deployed' && item.origin === 'managed'
+    ? 'bg-green-500'
+    : 'bg-muted-foreground'
+
+  return (
+    <TooltipProvider>
+      <div className="group flex items-start gap-3.5 py-4 px-2 -mx-2 rounded-md transition-colors hover:bg-muted/50">
+        <div className="w-10 h-10 rounded bg-primary/8 flex items-center justify-center flex-shrink-0 mt-0.5">
+          {isAgent ? <BotIcon className="h-4.5 w-4.5 text-primary" /> : <Server className="h-4.5 w-4.5 text-primary" />}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className={`inline-block h-2 w-2 rounded-full shrink-0 ${statusColor} ${hasError && item.error ? 'cursor-pointer' : ''}`}
+                  onClick={() => hasError && item.error && setShowError(!showError)}
+                />
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <p>{item.status}{item.error ? ' — click to show error' : ''}</p>
+              </TooltipContent>
+            </Tooltip>
+            <h3 className="text-lg font-semibold">{item.serverName}</h3>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground mt-1">
+            <span className="font-mono">{item.version}</span>
+            <span>{item.providerId || "local"}</span>
+            <span>{item.origin}</span>
+            <span className="flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              {new Date(item.deployedAt).toLocaleDateString()}
+            </span>
+            {item.env?.namespace && (
+              <span className="font-mono">{item.env.namespace}</span>
+            )}
+          </div>
+
+          {isAgent && (!item.providerId || item.providerId === 'local') && (
+            <div className="flex items-center gap-2 mt-2.5 px-3 py-2 bg-muted/60 border rounded-md">
+              <Link2 className="h-3.5 w-3.5 text-primary shrink-0" />
+              <code className="text-sm font-mono text-foreground truncate flex-1">
+                {getAgentEndpointUrl(item.serverName, item.id)}
+              </code>
+              <button
+                className="text-muted-foreground hover:text-foreground transition-colors shrink-0 ml-1"
+                onClick={() => onCopyAgentUrl(item.id, getAgentEndpointUrl(item.serverName, item.id))}
+                title="Copy endpoint URL"
+              >
+                {copiedAgentId === item.id ? (
+                  <Check className="h-4 w-4 text-green-500" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+          )}
+
+          {showError && item.error && (
+            <div className="flex items-start gap-2 mt-2.5 px-3 py-2 bg-destructive/5 border border-destructive/20 rounded-md">
+              <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />
+              <p className="text-sm text-destructive break-all">{item.error}</p>
+            </div>
+          )}
+        </div>
+
+        {item.origin === 'managed' && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+            onClick={() => onRemove(item)}
+            disabled={removing}
+          >
+            <Trash2 className="h-3 w-3" />
+            Remove
+          </Button>
+        )}
+      </div>
+    </TooltipProvider>
   )
 }

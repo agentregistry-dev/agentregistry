@@ -1,7 +1,6 @@
 "use client"
 
 import { ServerResponse } from "@/lib/admin-api"
-import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
   Tooltip,
@@ -9,7 +8,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Package, Calendar, Tag, ExternalLink, GitBranch, Star, Github, Globe, Trash2, ShieldCheck, BadgeCheck, Play } from "lucide-react"
+import { Package, ExternalLink, GitBranch, Star, Github, Globe, Trash2, ShieldCheck, BadgeCheck, Play } from "lucide-react"
 
 interface ServerCardProps {
   server: ServerResponse
@@ -25,20 +24,12 @@ interface ServerCardProps {
 export function ServerCard({ server, onDelete, onDeploy, showDelete = false, showDeploy = false, showExternalLinks = true, onClick, versionCount }: ServerCardProps) {
   const { server: serverData, _meta } = server
   const official = _meta?.['io.modelcontextprotocol.registry/official']
-  
-  // Extract metadata - cast through Record<string, any> since the generated types use { [key: string]: unknown }
+
   const publisherProvided = serverData._meta?.['io.modelcontextprotocol.registry/publisher-provided'] as Record<string, any> | undefined
   const publisherMetadata = publisherProvided?.['aregistry.ai/metadata'] as Record<string, any> | undefined
   const githubStars = publisherMetadata?.stars
   const identityData = publisherMetadata?.identity
 
-  const handleClick = () => {
-    if (onClick) {
-      onClick()
-    }
-  }
-
-  // Format date
   const formatDate = (dateString: string) => {
     try {
       return new Date(dateString).toLocaleDateString('en-US', {
@@ -51,178 +42,133 @@ export function ServerCard({ server, onDelete, onDeploy, showDelete = false, sho
     }
   }
 
-  // Get the first icon if available
   const icon = serverData.icons?.[0]
 
   return (
     <TooltipProvider>
-      <Card
-        className="p-4 hover:shadow-md transition-all duration-200 cursor-pointer border hover:border-primary/20"
-        onClick={handleClick}
+      <div
+        className="group flex items-start gap-3.5 py-4 px-2 -mx-2 rounded-md cursor-pointer transition-colors hover:bg-muted/50"
+        onClick={() => onClick?.()}
       >
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-start gap-3 flex-1">
-          {icon && (
-            <img 
-              src={icon.src} 
-              alt="Server icon" 
-              className="w-10 h-10 rounded flex-shrink-0 mt-1"
-            />
-          )}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-semibold text-lg">{serverData.title || serverData.name}</h3>
+        {icon ? (
+          <img src={icon.src} alt="" className="w-10 h-10 rounded flex-shrink-0 mt-0.5" />
+        ) : (
+          <div className="w-10 h-10 rounded bg-primary/8 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <span className="text-xs font-semibold text-primary uppercase">
+              {serverData.name.slice(0, 2)}
+            </span>
+          </div>
+        )}
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <h3 className="text-lg font-semibold truncate">{serverData.title || serverData.name}</h3>
+            {identityData?.org_is_verified && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <ShieldCheck 
-                    className={`h-4 w-4 flex-shrink-0 ${
-                      identityData?.org_is_verified 
-                        ? 'text-blue-600 dark:text-blue-400' 
-                        : 'text-gray-400 dark:text-gray-600 opacity-40'
-                    }`}
-                  />
+                  <ShieldCheck className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
                 </TooltipTrigger>
-                <TooltipContent>
-                  <p>{identityData?.org_is_verified ? 'Verified Organization' : 'Organization Not Verified'}</p>
-                </TooltipContent>
+                <TooltipContent><p>Verified Organization</p></TooltipContent>
               </Tooltip>
+            )}
+            {identityData?.publisher_identity_verified_by_jwt && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <BadgeCheck 
-                    className={`h-4 w-4 flex-shrink-0 ${
-                      identityData?.publisher_identity_verified_by_jwt 
-                        ? 'text-green-600 dark:text-green-400' 
-                        : 'text-gray-400 dark:text-gray-600 opacity-40'
-                    }`}
-                  />
+                  <BadgeCheck className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
                 </TooltipTrigger>
-                <TooltipContent>
-                  <p>{identityData?.publisher_identity_verified_by_jwt ? 'Verified Publisher' : 'Publisher Not Verified'}</p>
-                </TooltipContent>
+                <TooltipContent><p>Verified Publisher</p></TooltipContent>
               </Tooltip>
-            </div>
-            <p className="text-sm text-muted-foreground">{serverData.name}</p>
+            )}
+          </div>
+
+          <p className="text-[15px] text-muted-foreground line-clamp-1 mb-2">
+            {serverData.description}
+          </p>
+
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+            <span className="font-mono">{serverData.version}</span>
+            {versionCount && versionCount > 1 && (
+              <span className="text-primary text-xs">+{versionCount - 1}</span>
+            )}
+
+            {official?.publishedAt && (
+              <span>{formatDate(official.publishedAt)}</span>
+            )}
+
+            {serverData.packages && serverData.packages.length > 0 && (
+              <span className="flex items-center gap-1">
+                <Package className="h-3 w-3" />
+                {serverData.packages.length}
+              </span>
+            )}
+
+            {serverData.remotes && serverData.remotes.length > 0 && (
+              <span className="flex items-center gap-1">
+                <ExternalLink className="h-3 w-3" />
+                {serverData.remotes.length}
+              </span>
+            )}
+
+            {serverData.repository?.source && (
+              <span className="flex items-center gap-1">
+                <GitBranch className="h-3 w-3" />
+                {serverData.repository.source}
+              </span>
+            )}
+
+            {githubStars !== undefined && githubStars > 0 && (
+              <span className="flex items-center gap-1 text-amber-500">
+                <Star className="h-3 w-3 fill-amber-500" />
+                {githubStars.toLocaleString()}
+              </span>
+            )}
           </div>
         </div>
-        <div className="flex items-center gap-1 ml-2">
+
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
           {showDeploy && onDeploy && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="h-8 gap-1.5"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onDeploy(server)
-                  }}
-                >
-                  <Play className="h-3.5 w-3.5" />
-                  Deploy
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Deploy this server</p>
-              </TooltipContent>
-            </Tooltip>
+            <Button
+              variant="default"
+              size="sm"
+              className="h-7 gap-1 text-xs"
+              onClick={(e) => { e.stopPropagation(); onDeploy(server) }}
+            >
+              <Play className="h-3 w-3" />
+              Deploy
+            </Button>
           )}
           {showExternalLinks && serverData.repository?.url && (
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
-              onClick={(e) => {
-                e.stopPropagation()
-                window.open(serverData.repository?.url || '', '_blank')
-              }}
-              title="View on GitHub"
+              className="h-7 w-7"
+              onClick={(e) => { e.stopPropagation(); window.open(serverData.repository?.url || '', '_blank') }}
             >
-              <Github className="h-4 w-4" />
+              <Github className="h-3.5 w-3.5" />
             </Button>
           )}
           {showExternalLinks && serverData.websiteUrl && (
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
-              onClick={(e) => {
-                e.stopPropagation()
-                window.open(serverData.websiteUrl, '_blank')
-              }}
-              title="Visit website"
+              className="h-7 w-7"
+              onClick={(e) => { e.stopPropagation(); window.open(serverData.websiteUrl, '_blank') }}
             >
-              <Globe className="h-4 w-4" />
+              <Globe className="h-3.5 w-3.5" />
             </Button>
           )}
           {showDelete && onDelete && (
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={(e) => {
-                e.stopPropagation()
-                onDelete(server)
-              }}
-              title="Remove from registry"
+              className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={(e) => { e.stopPropagation(); onDelete(server) }}
             >
-              <Trash2 className="h-4 w-4" />
+              <Trash2 className="h-3.5 w-3.5" />
             </Button>
           )}
         </div>
       </div>
-
-      <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-        {serverData.description}
-      </p>
-
-      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-        <div className="flex items-center gap-1">
-          <Tag className="h-3 w-3" />
-          <span>{serverData.version}</span>
-          {versionCount && versionCount > 1 && (
-            <span className="ml-1 text-primary font-medium">
-              (+{versionCount - 1} more)
-            </span>
-          )}
-        </div>
-
-        {official?.publishedAt && (
-          <div className="flex items-center gap-1">
-            <Calendar className="h-3 w-3" />
-            <span>{formatDate(official.publishedAt)}</span>
-          </div>
-        )}
-
-        {serverData.packages && serverData.packages.length > 0 && (
-          <div className="flex items-center gap-1">
-            <Package className="h-3 w-3" />
-            <span>{serverData.packages.length} package{serverData.packages.length !== 1 ? 's' : ''}</span>
-          </div>
-        )}
-
-        {serverData.remotes && serverData.remotes.length > 0 && (
-          <div className="flex items-center gap-1">
-            <ExternalLink className="h-3 w-3" />
-            <span>{serverData.remotes.length} remote{serverData.remotes.length !== 1 ? 's' : ''}</span>
-          </div>
-        )}
-
-        {serverData.repository && (
-          <div className="flex items-center gap-1">
-            <GitBranch className="h-3 w-3" />
-            <span>{serverData.repository.source}</span>
-          </div>
-        )}
-
-        {githubStars !== undefined && (
-          <div className="flex items-center gap-1 text-yellow-600 dark:text-yellow-400">
-            <Star className="h-3 w-3 fill-yellow-600 dark:fill-yellow-400" />
-            <span className="font-medium">{githubStars.toLocaleString()}</span>
-          </div>
-        )}
-      </div>
-      </Card>
     </TooltipProvider>
   )
 }
-

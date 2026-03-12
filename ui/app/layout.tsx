@@ -1,10 +1,15 @@
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { Plus_Jakarta_Sans } from "next/font/google"
 import { Navigation } from "@/components/navigation"
+import { Footer } from "@/components/footer"
+import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 import "./globals.css"
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  variable: "--font-jakarta",
+})
 
 export const metadata: Metadata = {
   title: "artcl - agent registry admin",
@@ -20,13 +25,19 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${inter.variable} font-sans`}>
-        <Navigation />
-        {children}
-        <Toaster />
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${jakarta.variable} font-sans`}>
+        <ThemeProvider>
+          <div className="min-h-screen flex flex-col">
+            <Navigation />
+            <div className="flex-1">
+              {children}
+            </div>
+            <Footer />
+          </div>
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   )
 }
-

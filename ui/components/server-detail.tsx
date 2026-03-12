@@ -1,8 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { ServerResponse } from "@/lib/admin-api"
-import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -22,10 +21,8 @@ import {
 import { RuntimeArgumentsTable } from "@/components/server-detail/runtime-arguments-table"
 import { EnvironmentVariablesTable } from "@/components/server-detail/environment-variables-table"
 import {
-  X,
   Package,
   Calendar,
-  Tag,
   ExternalLink,
   GitBranch,
   Globe,
@@ -50,22 +47,19 @@ import {
 
 interface ServerDetailProps {
   server: ServerResponse & { allVersions?: ServerResponse[] }
-  onClose: () => void
   onServerCopied?: () => void
 }
 
-export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailProps) {
+export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
   const [activeTab, setActiveTab] = useState("overview")
   const [selectedVersion, setSelectedVersion] = useState<ServerResponse>(server)
   const [jsonCopied, setJsonCopied] = useState(false)
-  
-  // Get all versions, defaulting to just the current server if not available
+
   const allVersions = server.allVersions || [server]
-  
+
   const { server: serverData, _meta } = selectedVersion
   const official = _meta?.['io.modelcontextprotocol.registry/official']
-  
-  // Extract metadata — publisher-provided is typed as { [key: string]: unknown }
+
   const publisherProvided = serverData._meta?.['io.modelcontextprotocol.registry/publisher-provided'] as Record<string, unknown> | undefined
   const publisherMetadata = publisherProvided?.['aregistry.ai/metadata'] as Record<string, any> | undefined
   const githubStars = publisherMetadata?.stars as number | undefined
@@ -77,49 +71,18 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
   const identityData = publisherMetadata?.identity as Record<string, any> | undefined
   const securityScanning = publisherMetadata?.security_scanning as Record<string, any> | undefined
 
-  // Get the first icon if available
   const icon = serverData.icons?.[0]
 
-  // Check if there's any score data available
-  const hasScoreData = !!(
-    overallScore !== undefined ||
-    openSSFScore !== undefined ||
-    githubStars !== undefined ||
-    repoData ||
-    endpointHealth ||
-    scanData ||
-    securityScanning
-  )
-
-  // Handle ESC key to close
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [onClose])
-
-  // Handle version change
   const handleVersionChange = (version: string) => {
     const newVersion = allVersions.find(v => v.server.version === version)
-    if (newVersion) {
-      setSelectedVersion(newVersion)
-    }
+    if (newVersion) setSelectedVersion(newVersion)
   }
 
   const handleCopyJson = async () => {
     try {
       await navigator.clipboard.writeText(JSON.stringify(selectedVersion, null, 2))
       setJsonCopied(true)
-      setTimeout(() => {
-        setJsonCopied(false)
-      }, 2000)
+      setTimeout(() => setJsonCopied(false), 2000)
     } catch (err) {
       console.error('Failed to copy JSON:', err)
     }
@@ -139,395 +102,275 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
     }
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-600'
-      case 'deprecated':
-        return 'bg-yellow-600'
-      case 'deleted':
-        return 'bg-red-600'
-      default:
-        return 'bg-gray-600'
-    }
-  }
-
   return (
     <TooltipProvider>
-      <div className="fixed inset-0 bg-background z-50 overflow-y-auto">
-        <div className="container mx-auto px-6 py-6">
-        {/* Back Button */}
-        <Button
-          variant="ghost"
-          onClick={onClose}
-          className="mb-4 gap-2"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Servers
-        </Button>
-
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-start gap-4 flex-1">
+      <div className="space-y-6">
+          {/* Header */}
+          <div className="flex items-start gap-4">
             {icon && (
-              <img 
-                src={icon.src} 
-                alt="Server icon" 
-                className="w-16 h-16 rounded flex-shrink-0 mt-1"
-              />
+              <img src={icon.src} alt="" className="w-12 h-12 rounded flex-shrink-0" />
             )}
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2 flex-wrap">
-                <h1 className="text-3xl font-bold">{serverData.title || serverData.name}</h1>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <ShieldCheck 
-                      className={`h-6 w-6 flex-shrink-0 ${
-                        identityData?.org_is_verified 
-                          ? 'text-blue-600 dark:text-blue-400' 
-                          : 'text-gray-400 dark:text-gray-600 opacity-40'
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{identityData?.org_is_verified ? 'Verified Organization' : 'Organization Not Verified'}</p>
-                  </TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <BadgeCheck 
-                      className={`h-6 w-6 flex-shrink-0 ${
-                        identityData?.publisher_identity_verified_by_jwt 
-                          ? 'text-green-600 dark:text-green-400' 
-                          : 'text-gray-400 dark:text-gray-600 opacity-40'
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{identityData?.publisher_identity_verified_by_jwt ? 'Verified Publisher' : 'Publisher Not Verified'}</p>
-                  </TooltipContent>
-                </Tooltip>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <h1 className="text-2xl font-bold truncate">{serverData.title || serverData.name}</h1>
+                {identityData?.org_is_verified && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <ShieldCheck className="h-5 w-5 text-blue-500 flex-shrink-0" />
+                    </TooltipTrigger>
+                    <TooltipContent><p>Verified Organization</p></TooltipContent>
+                  </Tooltip>
+                )}
+                {identityData?.publisher_identity_verified_by_jwt && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <BadgeCheck className="h-5 w-5 text-green-500 flex-shrink-0" />
+                    </TooltipTrigger>
+                    <TooltipContent><p>Verified Publisher</p></TooltipContent>
+                  </Tooltip>
+                )}
               </div>
-              <p className="text-muted-foreground">{serverData.name}</p>
+              <p className="text-[15px] text-muted-foreground">{serverData.name}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              <X className="h-5 w-5" />
-            </Button>
-          </div>
-        </div>
 
-        {/* Version Selector and Quick Info */}
-        {allVersions.length > 1 && (
-          <Card className="p-4 mb-6 bg-accent/50 border-primary/20">
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="flex items-center gap-2">
-                <History className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">
-                  {allVersions.length} versions available
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Select version:</span>
-                <Select value={selectedVersion.server.version} onValueChange={handleVersionChange}>
-                  <SelectTrigger className="w-[180px] h-8">
-                    <SelectValue placeholder="Select version" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {allVersions.map((version) => (
-                      <SelectItem key={version.server.version} value={version.server.version}>
-                        {version.server.version}
-                        {version.server.version === server.server.version && (
-                          <span className="ml-2 text-xs text-primary">(Latest)</span>
-                        )}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {/* Quick Info */}
-        <div className="flex flex-wrap gap-3 mb-6 text-sm">
-          <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md">
-            <Tag className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-muted-foreground">Version:</span>
-            <span className="font-medium">{serverData.version}</span>
-            {allVersions.length > 1 && (
-              <Badge variant="secondary" className="ml-2 text-xs">
-                {allVersions.length} total
-              </Badge>
-            )}
-          </div>
-
-          {official?.publishedAt && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md">
-              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-muted-foreground">Published:</span>
-              <span className="font-medium">{formatDate(official.publishedAt)}</span>
+          {/* Version selector */}
+          {allVersions.length > 1 && (
+            <div className="flex items-center gap-3 px-3 py-2 bg-accent/50 border border-primary/10 rounded-md">
+              <History className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm">{allVersions.length} versions</span>
+              <Select value={selectedVersion.server.version} onValueChange={handleVersionChange}>
+                <SelectTrigger className="w-[160px] h-7 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {allVersions.map((version) => (
+                    <SelectItem key={version.server.version} value={version.server.version}>
+                      {version.server.version}
+                      {version.server.version === server.server.version && " (latest)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
 
-          {official?.updatedAt && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md">
-              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-muted-foreground">Updated:</span>
-              <span className="font-medium">{formatDate(official.updatedAt)}</span>
-            </div>
-          )}
-
-          {serverData.websiteUrl && (
-            <a
-              href={serverData.websiteUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md hover:bg-muted/80 transition-colors"
-            >
-              <Globe className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-muted-foreground">Website:</span>
-              <span className="font-medium text-blue-600 flex items-center gap-1">
-                Visit <ExternalLink className="h-3 w-3" />
+          {/* Quick info pills */}
+          <div className="flex flex-wrap gap-2 text-sm">
+            <span className="flex items-center gap-1.5 px-2.5 py-1 bg-muted rounded text-sm">
+              <span className="font-mono">{serverData.version}</span>
+              {allVersions.length > 1 && (
+                <Badge variant="secondary" className="text-[10px] px-1 py-0 h-3.5">{allVersions.length} total</Badge>
+              )}
+            </span>
+            {official?.publishedAt && (
+              <span className="flex items-center gap-1.5 px-2.5 py-1 bg-muted rounded text-sm">
+                <Calendar className="h-3 w-3 text-muted-foreground" />
+                {formatDate(official.publishedAt)}
               </span>
-            </a>
-          )}
-        </div>
-
-        {/* Detailed Information Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="score">Score</TabsTrigger>
-            {serverData.packages && serverData.packages.length > 0 && (
-              <TabsTrigger value="packages">Packages</TabsTrigger>
             )}
-            {serverData.remotes && serverData.remotes.length > 0 && (
-              <TabsTrigger value="remotes">Remotes</TabsTrigger>
+            {serverData.websiteUrl && (
+              <a
+                href={serverData.websiteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-muted rounded text-sm hover:bg-muted/80 transition-colors text-primary"
+              >
+                <Globe className="h-3 w-3" />
+                Website
+                <ExternalLink className="h-2.5 w-2.5" />
+              </a>
             )}
-            <TabsTrigger value="raw">Raw Data</TabsTrigger>
-          </TabsList>
+          </div>
 
-          <TabsContent value="overview" className="space-y-4">
-            {/* Description */}
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold mb-4">Description</h3>
-              <p className="text-base">{serverData.description}</p>
-            </Card>
+          {/* Tabs */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="mb-4">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="score">Score</TabsTrigger>
+              {serverData.packages && serverData.packages.length > 0 && (
+                <TabsTrigger value="packages">Packages</TabsTrigger>
+              )}
+              {serverData.remotes && serverData.remotes.length > 0 && (
+                <TabsTrigger value="remotes">Remotes</TabsTrigger>
+              )}
+              <TabsTrigger value="raw">Raw</TabsTrigger>
+            </TabsList>
 
-            {/* Repository */}
-            {serverData.repository?.url && (
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <GitBranch className="h-5 w-5" />
-                  Repository
-                </h3>
-                <div className="space-y-2">
-                  {serverData.repository.source && (
+            <TabsContent value="overview" className="space-y-6">
+              <section>
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Description</h3>
+                <p className="text-[15px] leading-relaxed">{serverData.description}</p>
+              </section>
+
+              {serverData.repository?.url && (
+                <section>
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Repository</h3>
+                  <div className="space-y-2 text-sm">
+                    {serverData.repository.source && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Source</span>
+                        <Badge variant="outline" className="text-xs">{serverData.repository.source}</Badge>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Source</span>
-                      <Badge variant="outline">{serverData.repository.source}</Badge>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">URL</span>
-                    <a
-                      href={serverData.repository.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-blue-600 hover:underline flex items-center gap-1"
-                    >
-                      {serverData.repository.url} <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </div>
-                </div>
-              </Card>
-            )}
-          </TabsContent>
-
-          <TabsContent value="score" className="space-y-4">
-            {/* Overall Scores */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Overall Score */}
-              {overallScore !== undefined && (
-                <Card className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-blue-200 dark:border-blue-800">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full">
-                      <TrendingUp className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Overall Score</p>
-                      <p className="text-4xl font-bold">{overallScore.toFixed(2)}</p>
+                      <span className="text-muted-foreground">URL</span>
+                      <a
+                        href={serverData.repository.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-primary hover:underline flex items-center gap-1"
+                      >
+                        {serverData.repository.url} <ExternalLink className="h-3 w-3" />
+                      </a>
                     </div>
                   </div>
-                </Card>
+                </section>
               )}
+            </TabsContent>
 
-              {/* OpenSSF Scorecard */}
-              {openSSFScore !== undefined && (
-                <Card className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border-green-200 dark:border-green-800">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full">
-                      <Shield className="h-8 w-8 text-green-600 dark:text-green-400" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">OpenSSF Scorecard</p>
-                      <p className="text-4xl font-bold">{openSSFScore.toFixed(1)}/10</p>
-                    </div>
-                  </div>
-                </Card>
-              )}
-            </div>
-
-            {/* GitHub Repository Stats */}
-            {(githubStars !== undefined || repoData) && (
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <GitBranch className="h-5 w-5" />
-                  Repository Statistics
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  {githubStars !== undefined && (
-                    <div className="flex items-center justify-between p-4 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-950/20 dark:to-orange-950/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+            <TabsContent value="score" className="space-y-6">
+              {/* Score cards */}
+              {(overallScore !== undefined || openSSFScore !== undefined) && (
+                <div className="grid grid-cols-2 gap-4">
+                  {overallScore !== undefined && (
+                    <div className="p-4 rounded-lg border bg-muted/30">
                       <div className="flex items-center gap-3">
-                        <Star className="h-6 w-6 text-yellow-600 dark:text-yellow-400 fill-yellow-600 dark:fill-yellow-400" />
+                        <TrendingUp className="h-5 w-5 text-primary" />
                         <div>
-                          <p className="text-xs text-muted-foreground">Stars</p>
-                          <p className="text-2xl font-bold">{githubStars.toLocaleString()}</p>
+                          <p className="text-xs text-muted-foreground">Overall Score</p>
+                          <p className="text-2xl font-bold">{overallScore.toFixed(2)}</p>
                         </div>
                       </div>
                     </div>
                   )}
-
-                  {repoData?.forks_count !== undefined && (
-                    <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+                  {openSSFScore !== undefined && (
+                    <div className="p-4 rounded-lg border bg-muted/30">
                       <div className="flex items-center gap-3">
-                        <GitFork className="h-6 w-6 text-primary" />
+                        <Shield className="h-5 w-5 text-green-500" />
                         <div>
-                          <p className="text-xs text-muted-foreground">Forks</p>
-                          <p className="text-2xl font-bold">{repoData.forks_count.toLocaleString()}</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {repoData?.watchers_count !== undefined && (
-                    <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <Eye className="h-6 w-6 text-primary" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Watchers</p>
-                          <p className="text-2xl font-bold">{repoData.watchers_count.toLocaleString()}</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {repoData?.primary_language && (
-                    <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <Code className="h-6 w-6 text-primary" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Language</p>
-                          <p className="text-lg font-bold">{repoData.primary_language}</p>
+                          <p className="text-xs text-muted-foreground">OpenSSF Scorecard</p>
+                          <p className="text-2xl font-bold">{openSSFScore.toFixed(1)}/10</p>
                         </div>
                       </div>
                     </div>
                   )}
                 </div>
-                {serverData.repository?.url && (
-                  <div className="mt-4 pt-4 border-t">
+              )}
+
+              {/* Repo stats */}
+              {(githubStars !== undefined || repoData) && (
+                <section>
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Repository Stats</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {githubStars !== undefined && (
+                      <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50">
+                        <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">Stars</p>
+                          <p className="text-lg font-bold">{githubStars.toLocaleString()}</p>
+                        </div>
+                      </div>
+                    )}
+                    {repoData?.forks_count !== undefined && (
+                      <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50">
+                        <GitFork className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">Forks</p>
+                          <p className="text-lg font-bold">{repoData.forks_count.toLocaleString()}</p>
+                        </div>
+                      </div>
+                    )}
+                    {repoData?.watchers_count !== undefined && (
+                      <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50">
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">Watchers</p>
+                          <p className="text-lg font-bold">{repoData.watchers_count.toLocaleString()}</p>
+                        </div>
+                      </div>
+                    )}
+                    {repoData?.primary_language && (
+                      <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50">
+                        <Code className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">Language</p>
+                          <p className="text-sm font-bold">{repoData.primary_language}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {serverData.repository?.url && (
                     <a
                       href={serverData.repository.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-sm text-blue-600 hover:underline"
+                      className="flex items-center gap-1.5 text-xs text-primary hover:underline mt-3"
                     >
-                      <ExternalLink className="h-4 w-4" />
+                      <ExternalLink className="h-3 w-3" />
                       View Repository
                     </a>
-                  </div>
-                )}
-              </Card>
-            )}
-
-            {/* Endpoint Health */}
-            {endpointHealth && (
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <Zap className="h-5 w-5" />
-                  Endpoint Health
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="flex items-center gap-3 p-4 bg-muted rounded-lg">
-                    <div className={`p-2 rounded-full ${endpointHealth.reachable ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
-                      <CheckCircle className={`h-5 w-5 ${endpointHealth.reachable ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} />
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Status</p>
-                      <p className="text-lg font-bold">
-                        {endpointHealth.reachable ? 'Reachable' : 'Unreachable'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {endpointHealth.response_ms !== undefined && (
-                    <div className="flex items-center gap-3 p-4 bg-muted rounded-lg">
-                      <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-full">
-                        <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Response Time</p>
-                        <p className="text-lg font-bold">{endpointHealth.response_ms}ms</p>
-                      </div>
-                    </div>
                   )}
+                </section>
+              )}
 
-                  {endpointHealth.last_checked_at && (
-                    <div className="flex items-center gap-3 p-4 bg-muted rounded-lg">
-                      <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-full">
-                        <Calendar className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                      </div>
+              {/* Endpoint Health */}
+              {endpointHealth && (
+                <section>
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Endpoint Health</h3>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50">
+                      <CheckCircle className={`h-4 w-4 ${endpointHealth.reachable ? 'text-green-500' : 'text-red-500'}`} />
                       <div>
-                        <p className="text-xs text-muted-foreground">Last Checked</p>
-                        <p className="text-sm font-medium">{new Date(endpointHealth.last_checked_at).toLocaleDateString()}</p>
+                        <p className="text-[10px] text-muted-foreground">Status</p>
+                        <p className="text-sm font-semibold">{endpointHealth.reachable ? 'Reachable' : 'Unreachable'}</p>
                       </div>
                     </div>
-                  )}
-                </div>
-              </Card>
-            )}
+                    {endpointHealth.response_ms !== undefined && (
+                      <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">Response</p>
+                          <p className="text-sm font-semibold">{endpointHealth.response_ms}ms</p>
+                        </div>
+                      </div>
+                    )}
+                    {endpointHealth.last_checked_at && (
+                      <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">Last Checked</p>
+                          <p className="text-sm font-semibold">{new Date(endpointHealth.last_checked_at).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
 
-            {/* Security & Scanning */}
-            {(scanData || securityScanning) && (
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <Shield className="h-5 w-5" />
-                  Security & Scanning
-                </h3>
-                
-                {/* Dependency Health */}
-                {scanData?.dependency_health && (
-                  <div className="mb-6">
-                    <h4 className="text-sm font-semibold mb-3 text-muted-foreground">Dependency Health</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      <div className="p-3 bg-muted rounded-lg text-center">
-                        <p className="text-xs text-muted-foreground mb-1">Total Packages</p>
-                        <p className="text-xl font-bold">{scanData.dependency_health.packages_total}</p>
+              {/* Security */}
+              {(scanData || securityScanning) && (
+                <section>
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Security</h3>
+
+                  {scanData?.dependency_health && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                      <div className="p-3 rounded-md bg-muted/50 text-center">
+                        <p className="text-[10px] text-muted-foreground">Total Packages</p>
+                        <p className="text-lg font-bold">{scanData.dependency_health.packages_total}</p>
                       </div>
-                      <div className="p-3 bg-muted rounded-lg text-center">
-                        <p className="text-xs text-muted-foreground mb-1">Copyleft Licenses</p>
-                        <p className="text-xl font-bold">{scanData.dependency_health.copyleft_licenses}</p>
+                      <div className="p-3 rounded-md bg-muted/50 text-center">
+                        <p className="text-[10px] text-muted-foreground">Copyleft</p>
+                        <p className="text-lg font-bold">{scanData.dependency_health.copyleft_licenses}</p>
                       </div>
-                      <div className="p-3 bg-muted rounded-lg text-center">
-                        <p className="text-xs text-muted-foreground mb-1">Unknown Licenses</p>
-                        <p className="text-xl font-bold">{scanData.dependency_health.unknown_licenses}</p>
+                      <div className="p-3 rounded-md bg-muted/50 text-center">
+                        <p className="text-[10px] text-muted-foreground">Unknown Licenses</p>
+                        <p className="text-lg font-bold">{scanData.dependency_health.unknown_licenses}</p>
                       </div>
                       {scanData.dependency_health.ecosystems && (
-                        <div className="p-3 bg-muted rounded-lg text-center">
-                          <p className="text-xs text-muted-foreground mb-1">Ecosystems</p>
-                          <div className="text-sm font-bold space-y-1">
+                        <div className="p-3 rounded-md bg-muted/50 text-center">
+                          <p className="text-[10px] text-muted-foreground">Ecosystems</p>
+                          <div className="text-xs font-semibold space-y-0.5 mt-1">
                             {Object.entries(scanData.dependency_health.ecosystems).map(([key, value]) => (
                               <div key={key}>{key}: {String(value)}</div>
                             ))}
@@ -535,182 +378,138 @@ export function ServerDetail({ server, onClose, onServerCopied }: ServerDetailPr
                         </div>
                       )}
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Security Scanning */}
-                {securityScanning && (
-                  <div className="mb-6">
-                    <h4 className="text-sm font-semibold mb-3 text-muted-foreground">Security Tools</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
-                        <CheckCircle className={`h-4 w-4 ${securityScanning.codeql_enabled ? 'text-green-600' : 'text-gray-400'}`} />
-                        <span className="text-sm">CodeQL</span>
+                  {securityScanning && (
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <CheckCircle className={`h-3.5 w-3.5 ${securityScanning.codeql_enabled ? 'text-green-500' : 'text-muted-foreground/40'}`} />
+                        CodeQL
                       </div>
-                      <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
-                        <CheckCircle className={`h-4 w-4 ${securityScanning.dependabot_enabled ? 'text-green-600' : 'text-gray-400'}`} />
-                        <span className="text-sm">Dependabot</span>
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <CheckCircle className={`h-3.5 w-3.5 ${securityScanning.dependabot_enabled ? 'text-green-500' : 'text-muted-foreground/40'}`} />
+                        Dependabot
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Scan Details */}
-                {scanData?.details && scanData.details.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-semibold mb-3 text-muted-foreground">Scan Details</h4>
-                    <div className="space-y-2">
+                  {scanData?.details && scanData.details.length > 0 && (
+                    <div className="space-y-1">
                       {scanData.details.map((detail: string, idx: number) => (
-                        <div key={idx} className="text-xs p-2 bg-muted rounded font-mono">
-                          {detail}
-                        </div>
+                        <div key={idx} className="text-xs p-2 bg-muted rounded font-mono">{detail}</div>
                       ))}
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Scan Summary */}
-                {scanData?.summary && (
-                  <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
-                    <p className="text-xs font-semibold text-muted-foreground mb-1">Summary</p>
-                    <p className="text-sm font-mono">{scanData.summary}</p>
-                  </div>
-                )}
-              </Card>
-            )}
-
-            {/* Info Box */}
-            {!publisherMetadata && (
-              <div className="text-center p-8 bg-muted rounded-lg">
-                <TrendingUp className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground mb-2">No scoring data available</p>
-                <p className="text-sm text-muted-foreground">
-                  Scoring data will be fetched on next import/refresh from the registry
-                </p>
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="packages" className="space-y-4">
-            {serverData.packages && serverData.packages.length > 0 ? (
-              <div className="space-y-4">
-                {serverData.packages.map((pkg, i) => (
-                  <Card key={i} className="p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <Package className="h-5 w-5 text-primary" />
-                        <h4 className="font-semibold text-lg">{pkg.identifier}</h4>
-                      </div>
-                      <Badge variant="outline">{pkg.registryType}</Badge>
+                  {scanData?.summary && (
+                    <div className="mt-3 p-3 bg-accent/50 rounded-md border border-primary/10">
+                      <p className="text-[10px] font-semibold text-muted-foreground mb-0.5">Summary</p>
+                      <p className="text-xs font-mono">{scanData.summary}</p>
                     </div>
-                    
-                    {/* Basic package info */}
-                    <div className="space-y-2 text-sm mb-4 pb-4 border-b">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Version</span>
-                        <span className="font-mono">{pkg.version}</span>
-                      </div>
-                      {(pkg as any).runtimeHint && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Runtime</span>
-                          <Badge variant="secondary">{(pkg as any).runtimeHint}</Badge>
-                        </div>
-                      )}
-                      {(pkg as any).transport?.type && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Transport</span>
-                          <Badge variant="secondary">{(pkg as any).transport.type}</Badge>
-                        </div>
-                      )}
-                    </div>
+                  )}
+                </section>
+              )}
 
-                    {/* Runtime Arguments */}
-                    <RuntimeArgumentsTable arguments={(pkg as any).runtimeArguments} />
+              {!publisherMetadata && (
+                <div className="text-center py-12">
+                  <TrendingUp className="h-8 w-8 mx-auto mb-3 text-muted-foreground opacity-40" />
+                  <p className="text-sm text-muted-foreground">No scoring data available</p>
+                  <p className="text-xs text-muted-foreground mt-1">Data will be fetched on next import/refresh</p>
+                </div>
+              )}
+            </TabsContent>
 
-                    {/* Environment Variables */}
-                    <EnvironmentVariablesTable variables={(pkg as any).environmentVariables} />
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <Card className="p-8">
-                <p className="text-center text-muted-foreground">No packages defined</p>
-              </Card>
-            )}
-          </TabsContent>
-
-          <TabsContent value="remotes" className="space-y-4">
-            {serverData.remotes && serverData.remotes.length > 0 ? (
-              <div className="space-y-3">
-                {serverData.remotes.map((remote, i) => (
-                  <Card key={i} className="p-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <Server className="h-5 w-5 text-primary" />
-                        <h4 className="font-semibold">Remote {i + 1}</h4>
-                      </div>
-                      <Badge variant="outline">{remote.type}</Badge>
-                    </div>
-                    {remote.url && (
-                      <div className="space-y-2 text-sm">
+            <TabsContent value="packages" className="space-y-4">
+              {serverData.packages && serverData.packages.length > 0 ? (
+                <div className="space-y-4">
+                  {serverData.packages.map((pkg, i) => (
+                    <div key={i} className="p-4 rounded-lg border">
+                      <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
-                          <Link className="h-4 w-4 text-muted-foreground" />
+                          <Package className="h-4 w-4 text-primary" />
+                          <h4 className="text-sm font-semibold">{pkg.identifier}</h4>
+                        </div>
+                        <Badge variant="outline" className="text-xs">{pkg.registryType}</Badge>
+                      </div>
+                      <div className="space-y-1.5 text-sm mb-3 pb-3 border-b">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">Version</span>
+                          <span className="font-mono">{pkg.version}</span>
+                        </div>
+                        {(pkg as any).runtimeHint && (
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">Runtime</span>
+                            <Badge variant="secondary" className="text-[10px] h-4">{(pkg as any).runtimeHint}</Badge>
+                          </div>
+                        )}
+                        {(pkg as any).transport?.type && (
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">Transport</span>
+                            <Badge variant="secondary" className="text-[10px] h-4">{(pkg as any).transport.type}</Badge>
+                          </div>
+                        )}
+                      </div>
+                      <RuntimeArgumentsTable arguments={(pkg as any).runtimeArguments} />
+                      <EnvironmentVariablesTable variables={(pkg as any).environmentVariables} />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-sm text-muted-foreground py-8">No packages defined</p>
+              )}
+            </TabsContent>
+
+            <TabsContent value="remotes" className="space-y-3">
+              {serverData.remotes && serverData.remotes.length > 0 ? (
+                <div className="space-y-3">
+                  {serverData.remotes.map((remote, i) => (
+                    <div key={i} className="p-4 rounded-lg border">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Server className="h-4 w-4 text-primary" />
+                          <h4 className="text-sm font-semibold">Remote {i + 1}</h4>
+                        </div>
+                        <Badge variant="outline" className="text-xs">{remote.type}</Badge>
+                      </div>
+                      {remote.url && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Link className="h-3.5 w-3.5 text-muted-foreground" />
                           <a
                             href={remote.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline break-all"
+                            className="text-primary hover:underline break-all text-xs"
                           >
                             {remote.url}
                           </a>
                         </div>
-                      </div>
-                    )}
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <Card className="p-8">
-                <p className="text-center text-muted-foreground">No remotes defined</p>
-              </Card>
-            )}
-          </TabsContent>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-sm text-muted-foreground py-8">No remotes defined</p>
+              )}
+            </TabsContent>
 
-          <TabsContent value="raw">
-            <Card className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <Code className="h-5 w-5" />
-                  Raw JSON Data
-                </h3>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCopyJson}
-                  className="gap-2"
-                >
-                  {jsonCopied ? (
-                    <>
-                      <Check className="h-4 w-4" />
-                      Copied!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-4 w-4" />
-                      Copy JSON
-                    </>
-                  )}
-                </Button>
+            <TabsContent value="raw">
+              <div className="rounded-lg border p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <Code className="h-4 w-4" />
+                    Raw JSON
+                  </h3>
+                  <Button variant="outline" size="sm" onClick={handleCopyJson} className="gap-1.5 h-7 text-xs">
+                    {jsonCopied ? <><Check className="h-3 w-3" /> Copied</> : <><Copy className="h-3 w-3" /> Copy</>}
+                  </Button>
+                </div>
+                <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs leading-relaxed">
+                  {JSON.stringify(selectedVersion, null, 2)}
+                </pre>
               </div>
-              <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-xs">
-                {JSON.stringify(selectedVersion, null, 2)}
-              </pre>
-            </Card>
-          </TabsContent>
-        </Tabs>
-        </div>
+            </TabsContent>
+          </Tabs>
       </div>
     </TooltipProvider>
   )
 }
-
