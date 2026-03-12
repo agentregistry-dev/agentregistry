@@ -18,10 +18,6 @@ Use the web UI and `arctl` CLI to publish approved MCP servers, agents, and skil
 
 ---
 
-<table>
-<tr>
-<td width="55%">
-
 ## 🤔 Why Agent Registry?
 
 - 📦 **One trusted source for AI building blocks** — a curated catalog instead of scattered repos, scripts, and one-off MCP setup.
@@ -29,12 +25,9 @@ Use the web UI and `arctl` CLI to publish approved MCP servers, agents, and skil
 - 🌐 **Consistent path from laptop to cluster** — same discovery and delivery workflow across local dev and Kubernetes.
 - 🔒 **Governance without slowing teams down** — centralize curation and publishing without forcing each team to rebuild the process.
 
-</td>
-<td width="45%" align="center">
-  <img alt="Agent Registry developer workflow" src="./img/dev-scenario.png" width="400"/>
-</td>
-</tr>
-</table>
+<p align="center">
+  <img alt="Agent Registry developer workflow" src="./img/dev-scenario.png"/>
+</p>
 
 ## 🔗 Quick Links
 
@@ -162,18 +155,11 @@ Learn how to create an Anthropic Skill, publish it to Agent Registry, and use it
 
 We welcome contributions and feedback from the community!
 
-<table><tr><td>
-
 - 🐛 [Report issues](https://github.com/agentregistry-dev/agentregistry/issues)
 - 💡 [Start a discussion](https://github.com/agentregistry-dev/agentregistry/discussions)
 - 🔧 [Contributing guide](CONTRIBUTING.md)
 - 📖 [Development details](DEVELOPMENT.md)
 - 💬 [Join our Discord](https://discord.gg/HTYNjF2y2t)
-
-</td>
-<td align="center">
-  <img alt="agentregistry" src="./img/agentregistry-logo.svg" height="120"/>
-</td></tr></table>
 
 ---
 
