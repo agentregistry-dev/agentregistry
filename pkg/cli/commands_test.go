@@ -21,6 +21,7 @@ func TestCommandTree(t *testing.T) {
 		"mcp",
 		"prompt",
 		"skill",
+		"status",
 		"version",
 	}
 

@@ -85,6 +85,11 @@ func NewRegistryService(
 	}
 }
 
+// PingDB verifies database connectivity delegating to the database layer.
+func (s *registryServiceImpl) PingDB(ctx context.Context) error {
+	return s.db.Ping(ctx)
+}
+
 // SetPlatformAdapters wires platform extension adapters into the service.
 func (s *registryServiceImpl) SetPlatformAdapters(
 	deploymentPlatforms map[string]registrytypes.DeploymentPlatformAdapter,

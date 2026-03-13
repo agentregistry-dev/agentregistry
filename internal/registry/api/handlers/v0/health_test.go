@@ -2,6 +2,7 @@ package v0_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,14 +13,15 @@ import (
 
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
+	servicetesting "github.com/agentregistry-dev/agentregistry/internal/registry/service/testing"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 )
 
 func TestHealthEndpoint(t *testing.T) {
-	// Test cases
 	testCases := []struct {
 		name           string
 		config         *config.Config
+		pingErr        error
 		expectedStatus int
 		expectedBody   v0.HealthBody
 	}{
@@ -31,6 +33,7 @@ func TestHealthEndpoint(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			expectedBody: v0.HealthBody{
 				Status:         "ok",
+				Database:       "ok",
 				GitHubClientID: "test-github-client-id",
 			},
 		},
@@ -41,22 +44,36 @@ func TestHealthEndpoint(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedBody: v0.HealthBody{
-				Status:         "ok",
-				GitHubClientID: "",
+				Status:   "ok",
+				Database: "ok",
+			},
+		},
+		{
+			name: "returns degraded when database is unavailable",
+			config: &config.Config{
+				GithubClientID: "",
+			},
+			pingErr:        errors.New("connection refused"),
+			expectedStatus: http.StatusOK,
+			expectedBody: v0.HealthBody{
+				Status:   "degraded",
+				Database: "unavailable",
 			},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create a new test API
 			mux := http.NewServeMux()
 			api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
 			shutdownTelemetry, metrics, _ := telemetry.InitMetrics("test")
 
-			// Register the health endpoint
-			v0.RegisterHealthEndpoint(api, "/v0", tc.config, metrics)
+			fakeRegistry := servicetesting.NewFakeRegistry()
+			if tc.pingErr != nil {
+				fakeRegistry.PingDBFn = func(_ context.Context) error { return tc.pingErr }
+			}
+			v0.RegisterHealthEndpoint(api, "/v0", tc.config, metrics, fakeRegistry)
 
 			// Create a test request
 			req := httptest.NewRequest(http.MethodGet, "/v0/health", nil)
@@ -74,7 +91,8 @@ func TestHealthEndpoint(t *testing.T) {
 			// Check the response body
 			// Since Huma adds a $schema field, we'll check individual fields
 			body := w.Body.String()
-			assert.Contains(t, body, `"status":"ok"`)
+			assert.Contains(t, body, `"status":"`+tc.expectedBody.Status+`"`)
+			assert.Contains(t, body, `"database":"`+tc.expectedBody.Database+`"`)
 
 			if tc.config.GithubClientID != "" {
 				assert.Contains(t, body, `"github_client_id":"test-github-client-id"`)

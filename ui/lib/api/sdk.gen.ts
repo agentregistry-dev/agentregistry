@@ -168,7 +168,7 @@ export const getDeploymentLogs = <ThrowOnError extends boolean = false>(options:
 /**
  * Health check
  *
- * Check the health status of the API
+ * Check the health status of the API and its dependencies
  */
 export const getHealthV0 = <ThrowOnError extends boolean = false>(options?: Options<GetHealthV0Data, ThrowOnError>) => (options?.client ?? client).get<GetHealthV0Responses, GetHealthV0Errors, ThrowOnError>({ url: '/v0/health', ...options });
 
