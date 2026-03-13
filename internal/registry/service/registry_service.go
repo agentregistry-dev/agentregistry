@@ -1378,7 +1378,7 @@ func (s *registryServiceImpl) ResolveAgentManifestPrompts(ctx context.Context, m
 		return nil, nil
 	}
 
-	var resolved []api.ResolvedPrompt
+	resolved := make([]api.ResolvedPrompt, 0, len(manifest.Prompts))
 	for _, ref := range manifest.Prompts {
 		promptName := strings.TrimSpace(ref.RegistryPromptName)
 		if promptName == "" {
@@ -1386,11 +1386,14 @@ func (s *registryServiceImpl) ResolveAgentManifestPrompts(ctx context.Context, m
 		}
 
 		version := strings.TrimSpace(ref.RegistryPromptVersion)
-		if version == "" {
-			version = "latest"
-		}
 
-		promptResp, err := s.GetPromptByNameAndVersion(ctx, promptName, version)
+		var promptResp *models.PromptResponse
+		var err error
+		if version == "" || version == "latest" {
+			promptResp, err = s.GetPromptByName(ctx, promptName)
+		} else {
+			promptResp, err = s.GetPromptByNameAndVersion(ctx, promptName, version)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("resolve prompt %q version %q: %w", promptName, version, err)
 		}

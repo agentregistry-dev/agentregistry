@@ -1704,10 +1704,18 @@ func TestGetDeploymentByID_FallsBackToDiscoveredDeployments(t *testing.T) {
 }
 
 // promptMockDB is a minimal mock for database.Database that only implements
-// GetPromptByNameAndVersion for testing ResolveAgentManifestPrompts.
+// GetPromptByName and GetPromptByNameAndVersion for testing ResolveAgentManifestPrompts.
 type promptMockDB struct {
 	database.Database
+	getPromptByNameFn           func(ctx context.Context, tx pgx.Tx, name string) (*models.PromptResponse, error)
 	getPromptByNameAndVersionFn func(ctx context.Context, tx pgx.Tx, name, version string) (*models.PromptResponse, error)
+}
+
+func (m *promptMockDB) GetPromptByName(ctx context.Context, tx pgx.Tx, name string) (*models.PromptResponse, error) {
+	if m.getPromptByNameFn != nil {
+		return m.getPromptByNameFn(ctx, tx, name)
+	}
+	return nil, database.ErrNotFound
 }
 
 func (m *promptMockDB) GetPromptByNameAndVersion(ctx context.Context, tx pgx.Tx, name, version string) (*models.PromptResponse, error) {
@@ -1716,11 +1724,12 @@ func (m *promptMockDB) GetPromptByNameAndVersion(ctx context.Context, tx pgx.Tx,
 
 func TestResolveAgentManifestPrompts(t *testing.T) {
 	tests := []struct {
-		name     string
-		manifest *models.AgentManifest
-		dbFn     func(ctx context.Context, tx pgx.Tx, name, version string) (*models.PromptResponse, error)
-		want     []api.ResolvedPrompt
-		wantErr  string
+		name       string
+		manifest   *models.AgentManifest
+		dbFn       func(ctx context.Context, tx pgx.Tx, name, version string) (*models.PromptResponse, error)
+		dbByNameFn func(ctx context.Context, tx pgx.Tx, name string) (*models.PromptResponse, error)
+		want       []api.ResolvedPrompt
+		wantErr    string
 	}{
 		{
 			name:     "nil manifest returns nil",
@@ -1758,13 +1767,13 @@ func TestResolveAgentManifestPrompts(t *testing.T) {
 					{Name: "safety", RegistryPromptName: "safety-prompt"},
 				},
 			},
-			dbFn: func(_ context.Context, _ pgx.Tx, name, version string) (*models.PromptResponse, error) {
-				if name == "safety-prompt" && version == "latest" {
+			dbByNameFn: func(_ context.Context, _ pgx.Tx, name string) (*models.PromptResponse, error) {
+				if name == "safety-prompt" {
 					return &models.PromptResponse{
-						Prompt: models.PromptJSON{Name: "safety-prompt", Version: "latest", Content: "Be safe."},
+						Prompt: models.PromptJSON{Name: "safety-prompt", Version: "1.2.0", Content: "Be safe."},
 					}, nil
 				}
-				return nil, fmt.Errorf("unexpected lookup: %s@%s", name, version)
+				return nil, fmt.Errorf("unexpected lookup: %s", name)
 			},
 			want: []api.ResolvedPrompt{
 				{Name: "safety", Content: "Be safe."},
@@ -1864,7 +1873,10 @@ func TestResolveAgentManifestPrompts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockDB := &promptMockDB{getPromptByNameAndVersionFn: tt.dbFn}
+			mockDB := &promptMockDB{
+				getPromptByNameFn:           tt.dbByNameFn,
+				getPromptByNameAndVersionFn: tt.dbFn,
+			}
 			svc := &registryServiceImpl{db: mockDB}
 
 			got, err := svc.ResolveAgentManifestPrompts(context.Background(), tt.manifest)

@@ -21,11 +21,50 @@ type localDeploymentAdapter struct {
 	agentGatewayPort uint16
 }
 
+// localAgentConfig groups the agent-specific configuration produced during
+// deployment translation: the MCP servers, prompts, and the target location
+// for writing config files.
+type localAgentConfig struct {
+	target        *common.MCPConfigTarget
+	pythonServers []common.PythonMCPServer
+	pythonPrompts []common.PythonPrompt
+}
+
 var (
 	runLocalComposeUp              = ComposeUpLocalPlatform
 	refreshLocalAgentMCPConfig     = common.RefreshMCPConfig
 	refreshLocalAgentPromptsConfig = common.RefreshPromptsConfig
 )
+
+// apply writes the MCP and prompt config files for an agent deployment.
+// When called with nil receiver (non-agent deployments), it is a no-op.
+func (c *localAgentConfig) apply() error {
+	if c == nil {
+		return nil
+	}
+	if err := refreshLocalAgentMCPConfig(c.target, c.pythonServers, false); err != nil {
+		return fmt.Errorf("refresh agent MCP config: %w", err)
+	}
+	if err := refreshLocalAgentPromptsConfig(c.target, c.pythonPrompts, false); err != nil {
+		return fmt.Errorf("refresh agent prompts config: %w", err)
+	}
+	return nil
+}
+
+// cleanup removes the agent config files by writing empty servers/prompts.
+// When called with nil receiver (non-agent deployments), it is a no-op.
+func (c *localAgentConfig) cleanup() error {
+	if c == nil {
+		return nil
+	}
+	if err := refreshLocalAgentMCPConfig(c.target, nil, false); err != nil {
+		return fmt.Errorf("cleanup agent MCP config: %w", err)
+	}
+	if err := refreshLocalAgentPromptsConfig(c.target, nil, false); err != nil {
+		return fmt.Errorf("cleanup agent prompts config: %w", err)
+	}
+	return nil
+}
 
 func NewLocalDeploymentAdapter(
 	registry service.RegistryService,
@@ -50,7 +89,7 @@ func (a *localDeploymentAdapter) Deploy(ctx context.Context, req *models.Deploym
 		return nil, err
 	}
 
-	translated, pythonServers, pythonPrompts, agentTarget, err := a.translateLocalDeployment(ctx, req)
+	translated, agentCfg, err := a.translateLocalDeployment(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -59,13 +98,8 @@ func (a *localDeploymentAdapter) Deploy(ctx context.Context, req *models.Deploym
 		return nil, err
 	}
 
-	if agentTarget != nil {
-		if err := refreshLocalAgentMCPConfig(agentTarget, pythonServers, false); err != nil {
-			return nil, fmt.Errorf("refresh agent MCP config: %w", err)
-		}
-		if err := refreshLocalAgentPromptsConfig(agentTarget, pythonPrompts, false); err != nil {
-			return nil, fmt.Errorf("refresh agent prompts config: %w", err)
-		}
+	if err := agentCfg.apply(); err != nil {
+		return nil, err
 	}
 
 	return &models.DeploymentActionResult{Status: "deployed"}, nil
@@ -76,7 +110,7 @@ func (a *localDeploymentAdapter) Undeploy(ctx context.Context, deployment *model
 		return err
 	}
 
-	translated, _, _, agentTarget, err := a.translateLocalDeployment(ctx, deployment)
+	translated, agentCfg, err := a.translateLocalDeployment(ctx, deployment)
 	if err != nil {
 		return a.handleLocalUndeployTranslationError(ctx, deployment, err)
 	}
@@ -84,15 +118,7 @@ func (a *localDeploymentAdapter) Undeploy(ctx context.Context, deployment *model
 		return err
 	}
 
-	if agentTarget != nil {
-		if err := refreshLocalAgentMCPConfig(agentTarget, nil, false); err != nil {
-			return fmt.Errorf("cleanup agent MCP config: %w", err)
-		}
-		if err := refreshLocalAgentPromptsConfig(agentTarget, nil, false); err != nil {
-			return fmt.Errorf("cleanup agent prompts config: %w", err)
-		}
-	}
-	return nil
+	return agentCfg.cleanup()
 }
 
 func (a *localDeploymentAdapter) handleLocalUndeployTranslationError(
@@ -106,26 +132,19 @@ func (a *localDeploymentAdapter) handleLocalUndeployTranslationError(
 	if err := a.removeLocalDeploymentArtifactsByID(ctx, deployment.ID); err != nil {
 		return err
 	}
-	agentTarget := localFallbackMCPConfigTarget(a.platformDir, deployment)
-	if agentTarget != nil {
-		if err := refreshLocalAgentMCPConfig(agentTarget, nil, false); err != nil {
-			return fmt.Errorf("cleanup agent MCP config: %w", err)
-		}
-		if err := refreshLocalAgentPromptsConfig(agentTarget, nil, false); err != nil {
-			return fmt.Errorf("cleanup agent prompts config: %w", err)
-		}
-	}
-	return nil
+	return localFallbackAgentConfig(a.platformDir, deployment).cleanup()
 }
 
-func localFallbackMCPConfigTarget(platformDir string, deployment *models.Deployment) *common.MCPConfigTarget {
+func localFallbackAgentConfig(platformDir string, deployment *models.Deployment) *localAgentConfig {
 	if deployment == nil || !strings.EqualFold(strings.TrimSpace(deployment.ResourceType), "agent") {
 		return nil
 	}
-	return &common.MCPConfigTarget{
-		BaseDir:   platformDir,
-		AgentName: deployment.ServerName,
-		Version:   deployment.Version,
+	return &localAgentConfig{
+		target: &common.MCPConfigTarget{
+			BaseDir:   platformDir,
+			AgentName: deployment.ServerName,
+			Version:   deployment.Version,
+		},
 	}
 }
 
@@ -148,13 +167,13 @@ func (a *localDeploymentAdapter) Discover(_ context.Context, _ string) ([]*model
 func (a *localDeploymentAdapter) translateLocalDeployment(
 	ctx context.Context,
 	deployment *models.Deployment,
-) (*platformtypes.LocalPlatformConfig, []common.PythonMCPServer, []common.PythonPrompt, *common.MCPConfigTarget, error) {
+) (*platformtypes.LocalPlatformConfig, *localAgentConfig, error) {
 	if deployment == nil {
-		return nil, nil, nil, nil, nil
+		return nil, nil, nil
 	}
-	desired, pythonServers, pythonPrompts, agentTarget, err := a.buildLocalDesiredState(ctx, deployment)
+	desired, agentCfg, err := a.buildLocalDesiredState(ctx, deployment)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, err
 	}
 	cfg, err := BuildLocalPlatformConfig(
 		ctx,
@@ -164,44 +183,46 @@ func (a *localDeploymentAdapter) translateLocalDeployment(
 		desired,
 	)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("translate local platform config: %w", err)
+		return nil, nil, fmt.Errorf("translate local platform config: %w", err)
 	}
 	if cfg == nil {
-		return nil, nil, nil, nil, fmt.Errorf("local platform config is required")
+		return nil, nil, fmt.Errorf("local platform config is required")
 	}
-	return cfg, pythonServers, pythonPrompts, agentTarget, nil
+	return cfg, agentCfg, nil
 }
 
 func (a *localDeploymentAdapter) buildLocalDesiredState(
 	ctx context.Context,
 	deployment *models.Deployment,
-) (*platformtypes.DesiredState, []common.PythonMCPServer, []common.PythonPrompt, *common.MCPConfigTarget, error) {
+) (*platformtypes.DesiredState, *localAgentConfig, error) {
 	resourceType := strings.ToLower(strings.TrimSpace(deployment.ResourceType))
 	switch resourceType {
 	case "mcp":
 		server, err := utils.BuildPlatformMCPServer(ctx, a.registry, deployment, "")
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return nil, nil, err
 		}
-		return &platformtypes.DesiredState{MCPServers: []*platformtypes.MCPServer{server}}, nil, nil, nil, nil
+		return &platformtypes.DesiredState{MCPServers: []*platformtypes.MCPServer{server}}, nil, nil
 	case "agent":
 		resolved, err := utils.ResolveAgent(ctx, a.registry, deployment, "")
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return nil, nil, err
 		}
-		pythonServers := append(common.PythonServersFromManifest(mustAgentManifest(ctx, a.registry, deployment)), resolved.PythonConfigServers...)
-		pythonPrompts := utils.PythonPromptsFromResolved(resolved.ResolvedPrompts)
-		target := &common.MCPConfigTarget{
-			BaseDir:   a.platformDir,
-			AgentName: resolved.Agent.Name,
-			Version:   resolved.Agent.Version,
+		agentCfg := &localAgentConfig{
+			target: &common.MCPConfigTarget{
+				BaseDir:   a.platformDir,
+				AgentName: resolved.Agent.Name,
+				Version:   resolved.Agent.Version,
+			},
+			pythonServers: append(common.PythonServersFromManifest(mustAgentManifest(ctx, a.registry, deployment)), resolved.PythonConfigServers...),
+			pythonPrompts: pythonPromptsFromResolved(resolved.ResolvedPrompts),
 		}
 		return &platformtypes.DesiredState{
 			Agents:     []*platformtypes.Agent{resolved.Agent},
 			MCPServers: resolved.ResolvedPlatformServers,
-		}, pythonServers, pythonPrompts, target, nil
+		}, agentCfg, nil
 	default:
-		return nil, nil, nil, nil, fmt.Errorf("invalid resource type %q: %w", deployment.ResourceType, database.ErrInvalidInput)
+		return nil, nil, fmt.Errorf("invalid resource type %q: %w", deployment.ResourceType, database.ErrInvalidInput)
 	}
 }
 
@@ -321,4 +342,15 @@ func filterMCPGatewayRouteTargets(route platformtypes.LocalRoute, deploymentID s
 	}
 	route.Backends[0].MCP.Targets = filteredTargets
 	return route, len(filteredTargets) > 0
+}
+
+func pythonPromptsFromResolved(prompts []platformtypes.ResolvedPrompt) []common.PythonPrompt {
+	if len(prompts) == 0 {
+		return nil
+	}
+	result := make([]common.PythonPrompt, len(prompts))
+	for i, p := range prompts {
+		result[i] = common.PythonPrompt{Name: p.Name, Content: p.Content}
+	}
+	return result
 }

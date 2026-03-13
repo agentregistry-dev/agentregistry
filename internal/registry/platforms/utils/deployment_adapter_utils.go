@@ -611,17 +611,6 @@ func GetRegistryConfig(
 	return config, args, nil
 }
 
-func PythonPromptsFromResolved(prompts []platformtypes.ResolvedPrompt) []common.PythonPrompt {
-	if len(prompts) == 0 {
-		return nil
-	}
-	result := make([]common.PythonPrompt, len(prompts))
-	for i, p := range prompts {
-		result[i] = common.PythonPrompt{Name: p.Name, Content: p.Content}
-	}
-	return result
-}
-
 func EnvMapToStringSlice(envMap map[string]string) []string {
 	result := make([]string, 0, len(envMap))
 	for key, value := range envMap {
