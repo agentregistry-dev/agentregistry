@@ -41,7 +41,7 @@ var ExportCmd = &cobra.Command{
 		// so that the authn middleware extracts the session and stores in the context. (which the db can use to authorize queries)
 		authz := auth.Authorizer{Authz: nil}
 
-		db, err := database.NewPostgreSQL(ctx, cfg.DatabaseURL, authz)
+		db, err := database.NewPostgreSQL(ctx, cfg.DatabaseURL, authz, 0)
 		if err != nil {
 			return fmt.Errorf("failed to connect to database: %w", err)
 		}
