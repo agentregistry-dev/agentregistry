@@ -150,10 +150,8 @@ type Server interface {
 type DaemonManager interface {
 	// IsRunning checks if the daemon is currently running
 	IsRunning() bool
-	// Start starts the daemon, blocking until it's ready
+	// Start starts the daemon and waits until it's ready to serve requests
 	Start() error
-	// WaitForReady polls the daemon API until it responds or the timeout expires
-	WaitForReady(baseURL string) error
 }
 
 // CLIAuthnProvider provides authentication for CLI commands.
@@ -176,11 +174,7 @@ type HTTPServerFactory func(base Server, db database.Database) Server
 
 // DaemonConfig allows customization of the default daemon manager
 type DaemonConfig struct {
-	ProjectName    string // docker compose project name (default: "agentregistry")
-	ContainerName  string // container name to check for running state (default: "agentregistry-server")
-	ComposeYAML    string // docker-compose.yml content (default: embedded)
-	DockerRegistry string // image registry (default: version.DockerRegistry)
-	Version        string // image version (default: version.Version)
+	BaseURL string
 }
 
 // Response is a generic wrapper for Huma responses
