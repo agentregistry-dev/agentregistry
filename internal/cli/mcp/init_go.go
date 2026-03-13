@@ -30,6 +30,7 @@ You must provide a valid Go module name for the project.`,
 
 func init() {
 	InitCmd.AddCommand(initGoCmd)
+	hideRegistryFlags(initGoCmd)
 	initGoCmd.Flags().StringVar(
 		&goModuleName,
 		"go-module-name",

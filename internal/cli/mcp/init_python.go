@@ -23,6 +23,7 @@ including a pyproject.toml file, a main.py file, and an example tool.`,
 
 func init() {
 	InitCmd.AddCommand(initPythonCmd)
+	hideRegistryFlags(initPythonCmd)
 }
 
 func runInitPython(_ *cobra.Command, args []string) error {
