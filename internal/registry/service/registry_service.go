@@ -71,6 +71,12 @@ type DeploymentPlatformStaleCleaner interface {
 	CleanupStale(ctx context.Context, deployment *models.Deployment) error
 }
 
+// DeploymentPlatformStateRefresher is an optional adapter hook for updating
+// managed deployment state from live platform resources.
+type DeploymentPlatformStateRefresher interface {
+	RefreshDeploymentState(ctx context.Context, deployment *models.Deployment) (*models.DeploymentStatePatch, error)
+}
+
 // NewRegistryService creates a new registry service with the provided database and configuration
 func NewRegistryService(
 	db database.Database,
@@ -885,12 +891,71 @@ func (s *registryServiceImpl) GetDeployments(ctx context.Context, filter *models
 func (s *registryServiceImpl) GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error) {
 	deployment, err := s.db.GetDeploymentByID(ctx, nil, id)
 	if err == nil {
+		refreshed, refreshErr := s.refreshManagedDeploymentState(ctx, deployment)
+		if refreshErr != nil {
+			return nil, refreshErr
+		}
+		if refreshed != nil {
+			return refreshed, nil
+		}
 		return deployment, nil
 	}
 	if !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
 	return s.getDiscoveredDeploymentByID(ctx, id)
+}
+
+func (s *registryServiceImpl) refreshManagedDeploymentState(ctx context.Context, deployment *models.Deployment) (*models.Deployment, error) {
+	if deployment == nil {
+		return nil, nil
+	}
+	if !strings.EqualFold(strings.TrimSpace(deployment.Origin), "managed") {
+		return nil, nil
+	}
+	if !strings.EqualFold(strings.TrimSpace(deployment.Status), "deploying") {
+		return nil, nil
+	}
+
+	adapter, err := s.resolveDeploymentAdapterByProviderID(ctx, deployment.ProviderID)
+	if err != nil {
+		return nil, err
+	}
+	refresher, ok := adapter.(DeploymentPlatformStateRefresher)
+	if !ok {
+		return nil, nil
+	}
+
+	patch, err := refresher.RefreshDeploymentState(ctx, deployment)
+	if err != nil {
+		return nil, err
+	}
+	if !deploymentStatePatchChangesDeployment(deployment, patch) {
+		return nil, nil
+	}
+	if err := s.db.UpdateDeploymentState(auth.WithSystemContext(ctx), nil, deployment.ID, patch); err != nil {
+		return nil, err
+	}
+	return s.db.GetDeploymentByID(ctx, nil, deployment.ID)
+}
+
+func deploymentStatePatchChangesDeployment(deployment *models.Deployment, patch *models.DeploymentStatePatch) bool {
+	if deployment == nil || patch == nil {
+		return false
+	}
+	if patch.Status != nil && strings.TrimSpace(*patch.Status) != strings.TrimSpace(deployment.Status) {
+		return true
+	}
+	if patch.Error != nil && strings.TrimSpace(*patch.Error) != strings.TrimSpace(deployment.Error) {
+		return true
+	}
+	if patch.ProviderConfig != nil {
+		return true
+	}
+	if patch.ProviderMetadata != nil {
+		return true
+	}
+	return false
 }
 
 func (s *registryServiceImpl) getDiscoveredDeploymentByID(ctx context.Context, id string) (*models.Deployment, error) {

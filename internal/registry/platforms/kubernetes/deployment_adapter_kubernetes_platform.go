@@ -17,6 +17,7 @@ import (
 	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -204,6 +205,265 @@ func kubernetesDeleteResourcesByDeploymentID(ctx context.Context, provider *mode
 	}
 }
 
+func kubernetesRefreshManagedDeploymentState(
+	ctx context.Context,
+	provider *models.Provider,
+	deployment *models.Deployment,
+) (*models.DeploymentStatePatch, error) {
+	c, err := kubernetesGetClient(provider)
+	if err != nil {
+		return nil, err
+	}
+	return kubernetesRefreshManagedDeploymentStateWithClient(ctx, c, provider, deployment)
+}
+
+func kubernetesRefreshManagedDeploymentStateWithClient(
+	ctx context.Context,
+	c client.Client,
+	provider *models.Provider,
+	deployment *models.Deployment,
+) (*models.DeploymentStatePatch, error) {
+	if deployment == nil {
+		return nil, fmt.Errorf("deployment is required")
+	}
+	namespace := deploymentNamespace(deployment, provider)
+	status, message, err := kubernetesManagedDeploymentReadiness(ctx, c, deployment, namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	patch := &models.DeploymentStatePatch{}
+	if status != "" {
+		patch.Status = &status
+	}
+	patch.Error = &message
+	return patch, nil
+}
+
+func kubernetesManagedDeploymentReadiness(
+	ctx context.Context,
+	c client.Client,
+	deployment *models.Deployment,
+	namespace string,
+) (string, string, error) {
+	if deployment == nil {
+		return "", "", fmt.Errorf("deployment is required")
+	}
+
+	type resourceState struct {
+		status  string
+		message string
+	}
+	var states []resourceState
+
+	switch strings.ToLower(strings.TrimSpace(deployment.ResourceType)) {
+	case "agent":
+		agents, err := kubernetesListAgentsByDeploymentID(ctx, c, deployment.ID, namespace)
+		if err != nil {
+			return "", "", err
+		}
+		if len(agents) == 0 {
+			return "deploying", "waiting for kubernetes agent resource to be created", nil
+		}
+		for _, agent := range agents {
+			states = append(states, kubernetesEvaluateAgentReadiness(agent))
+		}
+
+		remoteMCPs, err := kubernetesListRemoteMCPServersByDeploymentID(ctx, c, deployment.ID, namespace)
+		if err != nil {
+			return "", "", err
+		}
+		for _, remote := range remoteMCPs {
+			states = append(states, kubernetesEvaluateRemoteMCPServerReadiness(remote))
+		}
+
+		mcpServers, err := kubernetesListMCPServersByDeploymentID(ctx, c, deployment.ID, namespace)
+		if err != nil {
+			return "", "", err
+		}
+		for _, mcp := range mcpServers {
+			states = append(states, kubernetesEvaluateMCPServerReadiness(mcp))
+		}
+	case "mcp":
+		remoteMCPs, err := kubernetesListRemoteMCPServersByDeploymentID(ctx, c, deployment.ID, namespace)
+		if err != nil {
+			return "", "", err
+		}
+		mcpServers, err := kubernetesListMCPServersByDeploymentID(ctx, c, deployment.ID, namespace)
+		if err != nil {
+			return "", "", err
+		}
+		if len(remoteMCPs) == 0 && len(mcpServers) == 0 {
+			return "deploying", "waiting for kubernetes MCP resources to be created", nil
+		}
+		for _, remote := range remoteMCPs {
+			states = append(states, kubernetesEvaluateRemoteMCPServerReadiness(remote))
+		}
+		for _, mcp := range mcpServers {
+			states = append(states, kubernetesEvaluateMCPServerReadiness(mcp))
+		}
+	default:
+		return "", "", fmt.Errorf("unsupported kubernetes resource type %q", deployment.ResourceType)
+	}
+
+	allReady := len(states) > 0
+	progressMessage := ""
+	for _, state := range states {
+		switch state.status {
+		case "failed":
+			return "failed", state.message, nil
+		case "deploying":
+			allReady = false
+			if progressMessage == "" && state.message != "" {
+				progressMessage = state.message
+			}
+		case "deployed":
+		default:
+			allReady = false
+		}
+	}
+	if allReady {
+		return "deployed", "", nil
+	}
+	return "deploying", progressMessage, nil
+}
+
+func kubernetesEvaluateAgentReadiness(agent *v1alpha2.Agent) (result struct {
+	status  string
+	message string
+}) {
+	if agent == nil {
+		result.status = "deploying"
+		result.message = "waiting for kubernetes agent resource"
+		return result
+	}
+	if !kubernetesObservedLatestGeneration(agent.Generation, agent.Status.ObservedGeneration) {
+		result.status = "deploying"
+		result.message = fmt.Sprintf("waiting for agent %s status to observe generation %d", agent.Name, agent.Generation)
+		return result
+	}
+	if cond := meta.FindStatusCondition(agent.Status.Conditions, v1alpha2.AgentConditionTypeAccepted); cond != nil && cond.Status == metav1.ConditionFalse {
+		result.status = "failed"
+		result.message = kubernetesFormatConditionMessage("agent", agent.Name, *cond)
+		return result
+	}
+	if cond := meta.FindStatusCondition(agent.Status.Conditions, v1alpha2.AgentConditionTypeReady); cond != nil {
+		switch cond.Status {
+		case metav1.ConditionTrue:
+			result.status = "deployed"
+			return result
+		case metav1.ConditionFalse:
+			result.status = "deploying"
+			result.message = kubernetesFormatConditionMessage("agent", agent.Name, *cond)
+			return result
+		}
+	}
+	result.status = "deploying"
+	result.message = fmt.Sprintf("waiting for agent %s to report Ready condition", agent.Name)
+	return result
+}
+
+func kubernetesEvaluateMCPServerReadiness(server *kmcpv1alpha1.MCPServer) (result struct {
+	status  string
+	message string
+}) {
+	if server == nil {
+		result.status = "deploying"
+		result.message = "waiting for kubernetes MCP server resource"
+		return result
+	}
+	if !kubernetesObservedLatestGeneration(server.Generation, server.Status.ObservedGeneration) {
+		result.status = "deploying"
+		result.message = fmt.Sprintf("waiting for MCP server %s status to observe generation %d", server.Name, server.Generation)
+		return result
+	}
+
+	for _, conditionType := range []string{
+		string(kmcpv1alpha1.MCPServerConditionAccepted),
+		string(kmcpv1alpha1.MCPServerConditionResolvedRefs),
+		string(kmcpv1alpha1.MCPServerConditionProgrammed),
+	} {
+		if cond := meta.FindStatusCondition(server.Status.Conditions, conditionType); cond != nil && cond.Status == metav1.ConditionFalse {
+			result.status = "failed"
+			result.message = kubernetesFormatConditionMessage("mcp server", server.Name, *cond)
+			return result
+		}
+	}
+
+	if cond := meta.FindStatusCondition(server.Status.Conditions, string(kmcpv1alpha1.MCPServerConditionReady)); cond != nil {
+		switch cond.Status {
+		case metav1.ConditionTrue:
+			result.status = "deployed"
+			return result
+		case metav1.ConditionFalse:
+			result.status = "deploying"
+			result.message = kubernetesFormatConditionMessage("mcp server", server.Name, *cond)
+			return result
+		}
+	}
+
+	result.status = "deploying"
+	result.message = fmt.Sprintf("waiting for MCP server %s to report Ready condition", server.Name)
+	return result
+}
+
+func kubernetesEvaluateRemoteMCPServerReadiness(server *v1alpha2.RemoteMCPServer) (result struct {
+	status  string
+	message string
+}) {
+	if server == nil {
+		result.status = "deploying"
+		result.message = "waiting for kubernetes remote MCP server resource"
+		return result
+	}
+	if !kubernetesObservedLatestGeneration(server.Generation, server.Status.ObservedGeneration) {
+		result.status = "deploying"
+		result.message = fmt.Sprintf("waiting for remote MCP server %s status to observe generation %d", server.Name, server.Generation)
+		return result
+	}
+
+	if cond := meta.FindStatusCondition(server.Status.Conditions, "Accepted"); cond != nil && cond.Status == metav1.ConditionFalse {
+		result.status = "failed"
+		result.message = kubernetesFormatConditionMessage("remote MCP server", server.Name, *cond)
+		return result
+	}
+
+	if cond := meta.FindStatusCondition(server.Status.Conditions, "Ready"); cond != nil {
+		switch cond.Status {
+		case metav1.ConditionTrue:
+			result.status = "deployed"
+			return result
+		case metav1.ConditionFalse:
+			result.status = "deploying"
+			result.message = kubernetesFormatConditionMessage("remote MCP server", server.Name, *cond)
+			return result
+		}
+	}
+	if cond := meta.FindStatusCondition(server.Status.Conditions, "Accepted"); cond != nil && cond.Status == metav1.ConditionTrue {
+		result.status = "deployed"
+		return result
+	}
+
+	result.status = "deploying"
+	result.message = fmt.Sprintf("waiting for remote MCP server %s to report Accepted condition", server.Name)
+	return result
+}
+
+func kubernetesObservedLatestGeneration(generation, observedGeneration int64) bool {
+	return observedGeneration >= generation
+}
+
+func kubernetesFormatConditionMessage(kind, name string, condition metav1.Condition) string {
+	details := strings.TrimSpace(condition.Message)
+	if details == "" {
+		details = strings.TrimSpace(condition.Reason)
+	}
+	if details == "" {
+		details = fmt.Sprintf("%s=%s", condition.Type, condition.Status)
+	}
+	return fmt.Sprintf("%s %s: %s", kind, name, details)
+}
+
 func kubernetesListAgents(ctx context.Context, provider *models.Provider, namespace string) ([]*v1alpha2.Agent, error) {
 	c, err := kubernetesGetClient(provider)
 	if err != nil {
@@ -216,6 +476,18 @@ func kubernetesListAgents(ctx context.Context, provider *models.Provider, namesp
 	}
 	if err := c.List(ctx, agentList, listOpts...); err != nil {
 		return nil, fmt.Errorf("failed to list agents: %w", err)
+	}
+	agents := make([]*v1alpha2.Agent, 0, len(agentList.Items))
+	for i := range agentList.Items {
+		agents = append(agents, &agentList.Items[i])
+	}
+	return agents, nil
+}
+
+func kubernetesListAgentsByDeploymentID(ctx context.Context, c client.Client, deploymentID, namespace string) ([]*v1alpha2.Agent, error) {
+	agentList := &v1alpha2.AgentList{}
+	if err := c.List(ctx, agentList, kubernetesDeploymentSelectorOpts(deploymentID, namespace)...); err != nil {
+		return nil, fmt.Errorf("failed to list agents by deployment id %s: %w", deploymentID, err)
 	}
 	agents := make([]*v1alpha2.Agent, 0, len(agentList.Items))
 	for i := range agentList.Items {
@@ -244,6 +516,18 @@ func kubernetesListMCPServers(ctx context.Context, provider *models.Provider, na
 	return servers, nil
 }
 
+func kubernetesListMCPServersByDeploymentID(ctx context.Context, c client.Client, deploymentID, namespace string) ([]*kmcpv1alpha1.MCPServer, error) {
+	mcpList := &kmcpv1alpha1.MCPServerList{}
+	if err := c.List(ctx, mcpList, kubernetesDeploymentSelectorOpts(deploymentID, namespace)...); err != nil {
+		return nil, fmt.Errorf("failed to list mcp servers by deployment id %s: %w", deploymentID, err)
+	}
+	servers := make([]*kmcpv1alpha1.MCPServer, 0, len(mcpList.Items))
+	for i := range mcpList.Items {
+		servers = append(servers, &mcpList.Items[i])
+	}
+	return servers, nil
+}
+
 func kubernetesListRemoteMCPServers(ctx context.Context, provider *models.Provider, namespace string) ([]*v1alpha2.RemoteMCPServer, error) {
 	c, err := kubernetesGetClient(provider)
 	if err != nil {
@@ -256,6 +540,18 @@ func kubernetesListRemoteMCPServers(ctx context.Context, provider *models.Provid
 	}
 	if err := c.List(ctx, remoteMCPList, listOpts...); err != nil {
 		return nil, fmt.Errorf("failed to list remote MCP servers: %w", err)
+	}
+	servers := make([]*v1alpha2.RemoteMCPServer, 0, len(remoteMCPList.Items))
+	for i := range remoteMCPList.Items {
+		servers = append(servers, &remoteMCPList.Items[i])
+	}
+	return servers, nil
+}
+
+func kubernetesListRemoteMCPServersByDeploymentID(ctx context.Context, c client.Client, deploymentID, namespace string) ([]*v1alpha2.RemoteMCPServer, error) {
+	remoteMCPList := &v1alpha2.RemoteMCPServerList{}
+	if err := c.List(ctx, remoteMCPList, kubernetesDeploymentSelectorOpts(deploymentID, namespace)...); err != nil {
+		return nil, fmt.Errorf("failed to list remote mcp servers by deployment id %s: %w", deploymentID, err)
 	}
 	servers := make([]*v1alpha2.RemoteMCPServer, 0, len(remoteMCPList.Items))
 	for i := range remoteMCPList.Items {

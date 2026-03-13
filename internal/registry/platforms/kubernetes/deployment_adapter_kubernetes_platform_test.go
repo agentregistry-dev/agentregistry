@@ -525,6 +525,170 @@ func TestKubernetesDiscoverDeployments_RecordsNamespaceInProviderMetadata(t *tes
 	}
 }
 
+func TestKubernetesRefreshManagedDeploymentStateWithClient_AgentReady(t *testing.T) {
+	const (
+		namespace    = "demo-ns"
+		deploymentID = "dep-agent-ready"
+	)
+
+	fakeClient := fake.NewClientBuilder().WithScheme(kubernetesScheme).WithObjects(
+		&v1alpha2.Agent{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "demo-agent",
+				Namespace:  namespace,
+				Generation: 3,
+				Labels:     map[string]string{kubernetesDeploymentIDLabelKey: deploymentID},
+			},
+			Status: v1alpha2.AgentStatus{
+				ObservedGeneration: 3,
+				Conditions: []metav1.Condition{
+					{Type: v1alpha2.AgentConditionTypeAccepted, Status: metav1.ConditionTrue},
+					{Type: v1alpha2.AgentConditionTypeReady, Status: metav1.ConditionTrue},
+				},
+			},
+		},
+	).Build()
+
+	statusPatch, err := kubernetesRefreshManagedDeploymentStateWithClient(
+		context.Background(),
+		fakeClient,
+		&models.Provider{ID: "kubernetes-default", Platform: "kubernetes"},
+		&models.Deployment{ID: deploymentID, ResourceType: "agent", Env: map[string]string{"KAGENT_NAMESPACE": namespace}},
+	)
+	if err != nil {
+		t.Fatalf("kubernetesRefreshManagedDeploymentStateWithClient() error = %v", err)
+	}
+	if statusPatch == nil || statusPatch.Status == nil || *statusPatch.Status != "deployed" {
+		t.Fatalf("expected deployed status patch, got %#v", statusPatch)
+	}
+	if statusPatch.Error == nil || *statusPatch.Error != "" {
+		t.Fatalf("expected cleared error, got %#v", statusPatch.Error)
+	}
+}
+
+func TestKubernetesRefreshManagedDeploymentStateWithClient_AgentNotReadyRemainsDeploying(t *testing.T) {
+	const (
+		namespace    = "demo-ns"
+		deploymentID = "dep-agent-progressing"
+	)
+
+	fakeClient := fake.NewClientBuilder().WithScheme(kubernetesScheme).WithObjects(
+		&v1alpha2.Agent{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "demo-agent",
+				Namespace:  namespace,
+				Generation: 2,
+				Labels:     map[string]string{kubernetesDeploymentIDLabelKey: deploymentID},
+			},
+			Status: v1alpha2.AgentStatus{
+				ObservedGeneration: 2,
+				Conditions: []metav1.Condition{
+					{Type: v1alpha2.AgentConditionTypeAccepted, Status: metav1.ConditionTrue},
+					{Type: v1alpha2.AgentConditionTypeReady, Status: metav1.ConditionFalse, Reason: "DeploymentNotReady", Message: "underlying Deployment has unavailable replicas"},
+				},
+			},
+		},
+	).Build()
+
+	statusPatch, err := kubernetesRefreshManagedDeploymentStateWithClient(
+		context.Background(),
+		fakeClient,
+		&models.Provider{ID: "kubernetes-default", Platform: "kubernetes"},
+		&models.Deployment{ID: deploymentID, ResourceType: "agent", Env: map[string]string{"KAGENT_NAMESPACE": namespace}},
+	)
+	if err != nil {
+		t.Fatalf("kubernetesRefreshManagedDeploymentStateWithClient() error = %v", err)
+	}
+	if statusPatch == nil || statusPatch.Status == nil || *statusPatch.Status != "deploying" {
+		t.Fatalf("expected deploying status patch, got %#v", statusPatch)
+	}
+	if statusPatch.Error == nil || !strings.Contains(*statusPatch.Error, "underlying Deployment has unavailable replicas") {
+		t.Fatalf("expected readiness message in error field, got %#v", statusPatch.Error)
+	}
+}
+
+func TestKubernetesRefreshManagedDeploymentStateWithClient_RemoteMCPNotReadyRemainsDeploying(t *testing.T) {
+	const (
+		namespace    = "demo-ns"
+		deploymentID = "dep-remote-mcp-progressing"
+	)
+
+	fakeClient := fake.NewClientBuilder().WithScheme(kubernetesScheme).WithObjects(
+		&v1alpha2.RemoteMCPServer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "demo-remote-mcp",
+				Namespace:  namespace,
+				Generation: 2,
+				Labels:     map[string]string{kubernetesDeploymentIDLabelKey: deploymentID},
+			},
+			Status: v1alpha2.RemoteMCPServerStatus{
+				ObservedGeneration: 2,
+				Conditions: []metav1.Condition{
+					{Type: "Accepted", Status: metav1.ConditionTrue},
+					{Type: "Ready", Status: metav1.ConditionFalse, Reason: "Reconciling", Message: "remote endpoint validation still running"},
+				},
+			},
+		},
+	).Build()
+
+	statusPatch, err := kubernetesRefreshManagedDeploymentStateWithClient(
+		context.Background(),
+		fakeClient,
+		&models.Provider{ID: "kubernetes-default", Platform: "kubernetes"},
+		&models.Deployment{ID: deploymentID, ResourceType: "mcp", Env: map[string]string{"KAGENT_NAMESPACE": namespace}},
+	)
+	if err != nil {
+		t.Fatalf("kubernetesRefreshManagedDeploymentStateWithClient() error = %v", err)
+	}
+	if statusPatch == nil || statusPatch.Status == nil || *statusPatch.Status != "deploying" {
+		t.Fatalf("expected deploying status patch, got %#v", statusPatch)
+	}
+	if statusPatch.Error == nil || !strings.Contains(*statusPatch.Error, "remote endpoint validation still running") {
+		t.Fatalf("expected readiness message in error field, got %#v", statusPatch.Error)
+	}
+}
+
+func TestKubernetesRefreshManagedDeploymentStateWithClient_MCPConditionFailure(t *testing.T) {
+	const (
+		namespace    = "demo-ns"
+		deploymentID = "dep-mcp-failed"
+	)
+
+	fakeClient := fake.NewClientBuilder().WithScheme(kubernetesScheme).WithObjects(
+		&kmcpv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "demo-mcp",
+				Namespace:  namespace,
+				Generation: 1,
+				Labels:     map[string]string{kubernetesDeploymentIDLabelKey: deploymentID},
+			},
+			Status: kmcpv1alpha1.MCPServerStatus{
+				ObservedGeneration: 1,
+				Conditions: []metav1.Condition{
+					{Type: string(kmcpv1alpha1.MCPServerConditionAccepted), Status: metav1.ConditionTrue},
+					{Type: string(kmcpv1alpha1.MCPServerConditionResolvedRefs), Status: metav1.ConditionFalse, Reason: string(kmcpv1alpha1.MCPServerReasonImageNotFound), Message: "image not found"},
+				},
+			},
+		},
+	).Build()
+
+	statusPatch, err := kubernetesRefreshManagedDeploymentStateWithClient(
+		context.Background(),
+		fakeClient,
+		&models.Provider{ID: "kubernetes-default", Platform: "kubernetes"},
+		&models.Deployment{ID: deploymentID, ResourceType: "mcp", Env: map[string]string{"KAGENT_NAMESPACE": namespace}},
+	)
+	if err != nil {
+		t.Fatalf("kubernetesRefreshManagedDeploymentStateWithClient() error = %v", err)
+	}
+	if statusPatch == nil || statusPatch.Status == nil || *statusPatch.Status != "failed" {
+		t.Fatalf("expected failed status patch, got %#v", statusPatch)
+	}
+	if statusPatch.Error == nil || !strings.Contains(*statusPatch.Error, "image not found") {
+		t.Fatalf("expected failure message in error field, got %#v", statusPatch.Error)
+	}
+}
+
 func testKubernetesProviderKubeconfig(contextHosts map[string]string, currentContext string) string {
 	clusters := make([]string, 0, len(contextHosts))
 	contexts := make([]string, 0, len(contextHosts))
