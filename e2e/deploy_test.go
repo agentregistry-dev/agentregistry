@@ -765,6 +765,9 @@ func dumpKagentAgentDebug(t *testing.T, kubeContext, namespace, deploymentID str
 func TestAgentDeployWithPrompts(t *testing.T) {
 	for _, target := range agentDeployTargets {
 		t.Run(target.name, func(t *testing.T) {
+			if target.name == "kubernetes" && !IsK8sBackend() {
+				t.Skip("skipping kubernetes deploy target: E2E_BACKEND=docker")
+			}
 			regURL := RegistryURL(t)
 			tmpDir := t.TempDir()
 			agentName := UniqueAgentName("e2eprm" + target.name[:3])
