@@ -3,11 +3,18 @@ package common
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/manifest"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 )
+
+// envVarPortPattern matches ${VAR} when used as a port (after a colon).
+var envVarPortPattern = regexp.MustCompile(`:\$\{[^}]+\}`)
+
+// envVarPattern matches remaining ${VAR} placeholders in strings.
+var envVarPattern = regexp.MustCompile(`\$\{[^}]+\}`)
 
 const ManifestFileName = "agent.yaml"
 
@@ -84,7 +91,12 @@ func validateRemoteMcpServer(i int, srv models.McpServerType) error {
 	if srv.URL == "" {
 		return fmt.Errorf("mcpServers[%d]: url is required for type 'remote'", i)
 	}
-	parsed, err := url.Parse(srv.URL)
+	// Replace ${VAR} placeholders with dummy values so url.Parse can
+	// validate the structure. The actual env vars are resolved at runtime.
+	// Port placeholders (e.g. :${PORT}) need a numeric replacement.
+	sanitized := envVarPortPattern.ReplaceAllString(srv.URL, ":8080")
+	sanitized = envVarPattern.ReplaceAllString(sanitized, "placeholder")
+	parsed, err := url.Parse(sanitized)
 	if err != nil {
 		return fmt.Errorf("mcpServers[%d]: url is not a valid URL: %v", i, err)
 	}

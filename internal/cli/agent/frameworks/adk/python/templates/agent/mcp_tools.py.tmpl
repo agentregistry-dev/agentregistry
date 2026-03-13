@@ -45,7 +45,7 @@ def _resolve_env_vars(value: str) -> str:
 
 def _get_terminate_on_close() -> bool:
     """Get the terminate_on_close setting from environment variable.
-    
+
     Defaults to True for backward compatibility.
     Set MCP_TERMINATE_ON_CLOSE=false for stateless MCP servers.
     """
@@ -56,12 +56,12 @@ def _load_runtime_mcp_servers() -> List[dict]:
     """Load MCP servers resolved at runtime (registry types) from config file."""
     # The agent-specific directory is mounted to /config, so the file is at /config/mcp-servers.json
     config_paths = [Path(__file__).parent / "mcp-servers.json", Path("/config/mcp-servers.json")]
-    
+
     # Allow override via environment variable for testing/debugging
     env_path = os.environ.get("MCP_SERVERS_CONFIG_PATH")
     if env_path:
         config_paths.insert(0, Path(env_path))
-    
+
     for config_path in config_paths:
         if not config_path.exists():
             continue
@@ -74,17 +74,17 @@ def _load_runtime_mcp_servers() -> List[dict]:
                     return data["servers"]
         except (json.JSONDecodeError, IOError):
             continue
-    
+
     return []
 
 
 def _get_all_mcp_servers() -> List[dict]:
     """Get all MCP servers, merging baked-in and runtime-resolved servers."""
     servers = list(_MCP_SERVERS)  # Only command/remote servers (registry filtered out at template time)
-    
+
     # Load runtime-resolved servers (registry types)
     runtime_servers = _load_runtime_mcp_servers()
-    
+
     # Append runtime servers, avoiding duplicates by name
     existing_names = {s.get("name") for s in servers}
     for runtime_server in runtime_servers:
@@ -92,7 +92,7 @@ def _get_all_mcp_servers() -> List[dict]:
         if server_name and server_name not in existing_names:
             servers.append(runtime_server)
             existing_names.add(server_name)
-    
+
     return servers
 
 def get_mcp_tools(
@@ -101,7 +101,7 @@ def get_mcp_tools(
     global_filter: Optional[Union[ToolPredicate, List[str]]] = None,
 ) -> List[MCPToolset]:
     """Return MCP toolsets for the configured servers.
-    
+
     Environment variables:
         MCP_TERMINATE_ON_CLOSE: Set to "false" for stateless MCP servers.
             Defaults to "true" for backward compatibility.
@@ -118,6 +118,7 @@ def get_mcp_tools(
     for server in servers:
         server_name = server["name"]
         url = f"http://{server_name}:3000/mcp" if server["type"] == "command" else server["url"]
+        url = _resolve_env_vars(url)
 
         headers = {}
         if "headers" in server and server["headers"]:
