@@ -55,6 +55,9 @@ func checkPrerequisites() {
 		if _, err := exec.LookPath("kubectl"); err != nil {
 			log.Fatalf("kubectl not found in PATH -- required for k8s e2e tests")
 		}
+		if out, err := exec.Command("go", "tool", "kind", "version").CombinedOutput(); err != nil {
+			log.Fatalf("go tool kind not available -- required for k8s e2e tests: %v\n%s", err, out)
+		}
 	}
 }
 

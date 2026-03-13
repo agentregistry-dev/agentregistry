@@ -24,9 +24,10 @@ runtimeConfig:
 
 # Add extra certSANs so TLS verification works without --insecure-skip-tls-verify:
 #   "docker"      - for docker-in-docker (DinD) setups
-#   "172.17.0.1"  - Docker bridge gateway; reachable from both the host and
-#                   containers, used as the API server address in the kubeconfig
-#                   on Linux (see setup-kind.sh).
+#   "172.17.0.1"  - Placeholder for the Docker bridge gateway. setup-kind.sh
+#                   detects the actual gateway at runtime and replaces this value
+#                   in a temp copy of this file before passing it to kind, so the
+#                   cert SAN and kubeconfig server URL always stay in sync.
 # Strategic merge patch is used instead of kubeadmConfigPatchesJSON6902 because
 # JSON6902 `add` to /apiServer/certSANs/- silently fails when certSANs is unset.
 kubeadmConfigPatches:

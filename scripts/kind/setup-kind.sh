@@ -32,26 +32,42 @@ REG_PORT=${REG_PORT:-}
 # network-namespace local). Bind the API server on all interfaces so it is
 # reachable from the Docker bridge network, and patch the kubeconfig afterwards
 # to use the bridge gateway IP instead of 0.0.0.0.
+#
+# We copy kind-config.yaml to a temp file before patching so we never mutate
+# the tracked source file.
+TMP_CONFIG=$(mktemp --suffix=.yaml)
+trap 'rm -f "${TMP_CONFIG}"' EXIT
+cp "${SCRIPT_DIR}/kind-config.yaml" "${TMP_CONFIG}"
+
 if [ "$(uname -s)" = "Linux" ]; then
-  echo "Linux: patching Kind config to bind API server on 0.0.0.0..."
-  sed -i 's/apiServerAddress: "127.0.0.1"/apiServerAddress: "0.0.0.0"/' \
-    "${SCRIPT_DIR}/kind-config.yaml"
+  GATEWAY=$(docker network inspect bridge -f '{{range .IPAM.Config}}{{.Gateway}}{{end}}' 2>/dev/null || echo "172.17.0.1")
+  echo "Linux: gateway=${GATEWAY}, binding API server on 0.0.0.0 and adding gateway to certSANs..."
+  # Patch apiServerAddress and replace the placeholder gateway SAN with the
+  # actual detected bridge gateway so the cert and kubeconfig stay in sync.
+  sed -i \
+    -e 's/apiServerAddress: "127.0.0.1"/apiServerAddress: "0.0.0.0"/' \
+    -e "s/\"172.17.0.1\"/\"${GATEWAY}\"/" \
+    "${TMP_CONFIG}"
 fi
 
 "${KIND[@]}" create cluster --name "${KIND_CLUSTER_NAME}" \
-  --config "${SCRIPT_DIR}/kind-config.yaml" \
+  --config "${TMP_CONFIG}" \
   --image="kindest/node:v${KIND_IMAGE_VERSION}"
 
 if [ "$(uname -s)" = "Linux" ]; then
-  # Patch the kubeconfig to use the Docker bridge gateway (172.17.0.1).
+  # Patch the kubeconfig to use the Docker bridge gateway.
   # This IP is reachable from both the host and from Docker containers on the
   # bridge network, and is included in the API server cert SANs via
-  # kubeadmConfigPatches in kind-config.yaml.
-  GATEWAY=$(docker network inspect bridge -f '{{range .IPAM.Config}}{{.Gateway}}{{end}}')
+  # kubeadmConfigPatches in kind-config.yaml (substituted above).
+  # Use kubectl config set-cluster to update only this cluster's entry rather
+  # than doing a global search/replace across the entire kubeconfig file.
   if [ -n "${GATEWAY}" ]; then
-    echo "Linux: patching kubeconfig to use Docker bridge gateway ${GATEWAY}..."
-    sed -i "s|server: https://0.0.0.0:|server: https://${GATEWAY}:|g" \
-      "${HOME}/.kube/config"
+    API_SERVER=$(kubectl config view --context "${KIND_CLUSTER_CONTEXT}" --minify \
+      -o jsonpath='{.clusters[0].cluster.server}')
+    API_PORT="${API_SERVER##*:}"
+    echo "Linux: patching kubeconfig cluster '${KIND_CLUSTER_CONTEXT}' server to ${GATEWAY}:${API_PORT}..."
+    kubectl config set-cluster "${KIND_CLUSTER_CONTEXT}" \
+      --server="https://${GATEWAY}:${API_PORT}"
   fi
 fi
 

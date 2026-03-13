@@ -288,27 +288,33 @@ KIND_IMAGE_VERSION ?= 1.34.0
 KIND_CLUSTER_CONTEXT ?= kind-$(KIND_CLUSTER_NAME)
 KIND_NAMESPACE ?= agentregistry
 
-# Use placeholder API keys if not set — real inference is not needed for local/CI cluster setup.
+# Use placeholder API keys if not set or empty — real inference is not needed for local/CI cluster
+# setup. ?= only applies when undefined; the ifeq guards also cover empty strings
 GOOGLE_API_KEY ?= fake-key-for-setup
+ifeq ($(strip $(GOOGLE_API_KEY)),)
+GOOGLE_API_KEY := fake-key-for-setup
+endif
 OPENAI_API_KEY ?= fake-key-for-setup
+ifeq ($(strip $(OPENAI_API_KEY)),)
+OPENAI_API_KEY := fake-key-for-setup
+endif
 
 .PHONY: create-kind-cluster
-create-kind-cluster: local-registry ## Create a local Kind cluster with MetalLB (skips if cluster already exists)
+create-kind-cluster: local-registry ## Create a local Kind cluster with MetalLB (skips cluster creation if already exists, always runs post-create steps)
 	@if go tool kind get clusters 2>/dev/null | grep -qx "$(KIND_CLUSTER_NAME)"; then \
-	  echo "Kind cluster '$(KIND_CLUSTER_NAME)' already exists, skipping"; \
+	  echo "Kind cluster '$(KIND_CLUSTER_NAME)' already exists, skipping cluster creation"; \
 	else \
 	  KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) \
 		KIND_IMAGE_VERSION=$(KIND_IMAGE_VERSION) \
 		REG_NAME=kind-registry \
 		REG_PORT=5001 \
 		bash ./scripts/kind/setup-kind.sh; \
-	  KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) bash ./scripts/kind/setup-metallb.sh; \
 	fi
-
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) bash ./scripts/kind/setup-metallb.sh
 
 .PHONY: delete-kind-cluster
-delete-kind-cluster: ## Delete the local Kind cluster
-	go tool kind delete cluster --name $(KIND_CLUSTER_NAME)
+delete-kind-cluster: ## Delete the local Kind cluster (no-op if it does not exist)
+	@go tool kind delete cluster --name $(KIND_CLUSTER_NAME) 2>/dev/null || true
 
 .PHONY: prune-kind-cluster
 prune-kind-cluster: ## Prune dangling container images from the Kind control-plane node
