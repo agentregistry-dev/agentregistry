@@ -53,7 +53,7 @@ jobs:
       run: make build-ui
 
     - name: Start environment
-      run: make run
+      run: make run-docker
 
     - name: Run Integration Tests
       run: make test
