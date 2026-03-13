@@ -23,6 +23,12 @@ func TestAgentAddMCPAndBuild(t *testing.T) {
 	serverName := "e2e-test/" + mcpName
 	version := "0.0.1-e2e"
 
+	// Delete any stale entry from a previous interrupted run, then clean up after.
+	RunArctl(t, tmpDir, "mcp", "delete", serverName, "--version", version, "--registry-url", regURL)
+	t.Cleanup(func() {
+		RunArctl(t, tmpDir, "mcp", "delete", serverName, "--version", version, "--registry-url", regURL)
+	})
+
 	// Step 1: Publish a test MCP server to the registry
 	t.Run("publish_mcp", func(t *testing.T) {
 		result := RunArctl(t, tmpDir,

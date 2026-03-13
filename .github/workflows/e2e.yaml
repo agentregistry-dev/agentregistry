@@ -15,7 +15,11 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [k8s, docker]
+    name: e2e (${{ matrix.backend }})
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -33,30 +37,14 @@ jobs:
           name: ${{ env.BUILDX_BUILDER_NAME }}
           use: true
           driver-opts: network=host
-
       - name: Run E2E tests
         env:
           DOCKER_BUILDER: "docker buildx"
           DOCKER_BUILD_ARGS: "--push --platform linux/amd64"
-        run: make e2e
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: make test-e2e-${{ matrix.backend }}
 
       - name: Dump cluster state on failure
-        if: failure()
-        run: |
-          echo "=== Kind clusters ==="
-          go tool kind get clusters 2>/dev/null || true
-          echo ""
-          echo "=== Pods ==="
-          kubectl get pods -A --context kind-arctl-e2e 2>/dev/null || true
-          echo ""
-          echo "=== Pod describe ==="
-          kubectl describe pods --context kind-arctl-e2e 2>/dev/null || true
-          echo ""
-          echo "=== Events ==="
-          kubectl get events -A --sort-by='.lastTimestamp' --context kind-arctl-e2e 2>/dev/null | tail -50 || true
-          echo ""
-          echo "=== Kagent pods ==="
-          kubectl get pods -n kagent --context kind-arctl-e2e 2>/dev/null || true
-          echo ""
-          echo "=== Kagent controller logs ==="
-          kubectl logs deployment/kagent-controller -n kagent --context kind-arctl-e2e --tail=100 2>/dev/null || true
+        if: failure() && matrix.backend == 'k8s'
+        run: make dump-kind-state

@@ -93,6 +93,9 @@ var mcpDeployTargets = []deployTarget{
 func TestAgentDeploy(t *testing.T) {
 	for _, target := range agentDeployTargets {
 		t.Run(target.name, func(t *testing.T) {
+			if target.name == "kubernetes" && !IsK8sBackend() {
+				t.Skip("skipping kubernetes deploy target: E2E_BACKEND=docker")
+			}
 			regURL := RegistryURL(t)
 			tmpDir := t.TempDir()
 			agentName := UniqueAgentName("e2edpl" + target.name[:3])
@@ -108,6 +111,7 @@ func TestAgentDeploy(t *testing.T) {
 			}
 
 			t.Run("init_and_build", func(t *testing.T) {
+				t.Log("Initializing agent scaffold...")
 				result := RunArctl(t, tmpDir,
 					"agent", "init", "adk", "python",
 					"--model-name", "gemini-2.5-flash",
@@ -116,15 +120,18 @@ func TestAgentDeploy(t *testing.T) {
 				)
 				RequireSuccess(t, result)
 
+				t.Log("Building agent Docker image...")
 				result = RunArctl(t, tmpDir, "agent", "build", agentName,
 					"--image", agentImage)
 				RequireSuccess(t, result)
 				if target.name == "kubernetes" {
+					t.Log("Loading image into Kind cluster...")
 					loadDockerImageToKind(t, agentImage)
 				}
 			})
 
 			t.Run("publish", func(t *testing.T) {
+				t.Log("Publishing agent to registry...")
 				agentDir := filepath.Join(tmpDir, agentName)
 				result := RunArctl(t, tmpDir,
 					"agent", "publish", agentDir,
@@ -134,6 +141,7 @@ func TestAgentDeploy(t *testing.T) {
 			})
 
 			t.Run("deploy", func(t *testing.T) {
+				t.Logf("Deploying agent %q (target: %s)...", agentName, target.name)
 				args := []string{"agent", "deploy", agentName, "--registry-url", regURL}
 				args = append(args, target.deplArgs...)
 				result := RunArctl(t, tmpDir, args...)
@@ -142,6 +150,7 @@ func TestAgentDeploy(t *testing.T) {
 
 			if target.verify != nil {
 				t.Run("verify", func(t *testing.T) {
+					t.Logf("Verifying deployment health (target: %s)...", target.name)
 					target.verify(t, agentName)
 				})
 			}
@@ -152,6 +161,9 @@ func TestAgentDeploy(t *testing.T) {
 func TestMCPDeploy(t *testing.T) {
 	for _, target := range mcpDeployTargets {
 		t.Run(target.name, func(t *testing.T) {
+			if target.name == "kubernetes" && !IsK8sBackend() {
+				t.Skip("skipping kubernetes deploy target: E2E_BACKEND=docker")
+			}
 			regURL := RegistryURL(t)
 			tmpDir := t.TempDir()
 			mcpName := UniqueNameWithPrefix("e2e-dpl-" + target.name[:3])
@@ -159,17 +171,23 @@ func TestMCPDeploy(t *testing.T) {
 			version := "0.0.1-e2e"
 			defaultImage := mcpName + ":0.1.0"
 
+			// Delete any stale server entry from a previous interrupted run.
+			RunArctl(t, tmpDir, "mcp", "delete", serverName, "--version", version, "--registry-url", regURL)
 			// Register cleanup at the parent level so it runs after all
 			// subtests (including verify) complete, not after deploy alone.
 			// Remove deployment record first (LIFO) so ReconcileAll in
 			// subsequent tests doesn't try to reconcile stale deployments.
 			t.Cleanup(func() { RemoveDeploymentsByServerName(t, regURL, serverName) })
+			t.Cleanup(func() {
+				RunArctl(t, tmpDir, "mcp", "delete", serverName, "--version", version, "--registry-url", regURL)
+			})
 			if target.cleanup != nil {
 				t.Cleanup(func() { target.cleanup(t, mcpName) })
 			}
 			CleanupDockerImage(t, defaultImage)
 
 			t.Run("init_and_build", func(t *testing.T) {
+				t.Log("Initializing MCP server scaffold...")
 				result := RunArctl(t, tmpDir,
 					"mcp", "init", "python", mcpName,
 					"--non-interactive",
@@ -177,16 +195,19 @@ func TestMCPDeploy(t *testing.T) {
 				)
 				RequireSuccess(t, result)
 
+				t.Log("Building MCP Docker image...")
 				mcpDir := filepath.Join(tmpDir, mcpName)
 				result = RunArctl(t, tmpDir, "mcp", "build", mcpDir,
 					"--image", defaultImage)
 				RequireSuccess(t, result)
 				if target.name == "kubernetes" {
+					t.Log("Loading image into Kind cluster...")
 					loadDockerImageToKind(t, defaultImage)
 				}
 			})
 
 			t.Run("publish", func(t *testing.T) {
+				t.Log("Publishing MCP server to registry...")
 				result := RunArctl(t, tmpDir,
 					"mcp", "publish", serverName,
 					"--type", "oci",
@@ -199,6 +220,7 @@ func TestMCPDeploy(t *testing.T) {
 			})
 
 			t.Run("deploy", func(t *testing.T) {
+				t.Logf("Deploying MCP server %q (target: %s)...", serverName, target.name)
 				args := []string{"mcp", "deploy", serverName, "--version", version, "--registry-url", regURL}
 				args = append(args, target.deplArgs...)
 				result := RunArctl(t, tmpDir, args...)
@@ -207,6 +229,7 @@ func TestMCPDeploy(t *testing.T) {
 
 			if target.verify != nil {
 				t.Run("verify", func(t *testing.T) {
+					t.Logf("Verifying deployment health (target: %s)...", target.name)
 					target.verify(t, mcpName)
 				})
 			}
@@ -315,9 +338,12 @@ func removeLocalDeployment(t *testing.T) {
 }
 
 func TestDeleteDeploymentRemovesKubernetesResources(t *testing.T) {
+	if !IsK8sBackend() {
+		t.Skip("skipping kubernetes deletion test: E2E_BACKEND=docker")
+	}
 	kubeContext := kubeContextForE2E(t)
 	if !kubeContextReachable(kubeContext) {
-		t.Skipf("kube context %q is not reachable", kubeContext)
+		t.Fatalf("kube context %q is not reachable", kubeContext)
 	}
 
 	regURL := RegistryURL(t)
@@ -327,6 +353,7 @@ func TestDeleteDeploymentRemovesKubernetesResources(t *testing.T) {
 
 	t.Cleanup(func() { RemoveDeploymentsByServerName(t, regURL, agentName) })
 
+	t.Log("Initializing and building agent...")
 	result := RunArctl(t, tmpDir,
 		"agent", "init", "adk", "python",
 		"--model-name", "gemini-2.5-flash",
@@ -337,8 +364,10 @@ func TestDeleteDeploymentRemovesKubernetesResources(t *testing.T) {
 
 	result = RunArctl(t, tmpDir, "agent", "build", agentName)
 	RequireSuccess(t, result)
+	t.Log("Loading image into Kind cluster...")
 	loadDockerImageToKind(t, agentImage)
 
+	t.Log("Publishing agent to registry...")
 	agentDir := filepath.Join(tmpDir, agentName)
 	result = RunArctl(t, tmpDir,
 		"agent", "publish", agentDir,
@@ -346,6 +375,7 @@ func TestDeleteDeploymentRemovesKubernetesResources(t *testing.T) {
 	)
 	RequireSuccess(t, result)
 
+	t.Log("Deploying agent to Kubernetes...")
 	result = RunArctl(t, tmpDir,
 		"agent", "deploy", agentName,
 		"--registry-url", regURL,
@@ -354,15 +384,19 @@ func TestDeleteDeploymentRemovesKubernetesResources(t *testing.T) {
 	)
 	RequireSuccess(t, result)
 
+	t.Log("Waiting for deployment record and k8s resource to appear...")
 	deploymentID := waitForSingleAgentDeploymentID(t, regURL, agentName, "kubernetes-default", 30*time.Second)
 	waitForK8sResourceCountByDeploymentID(t, kubeContext, "default", "agents.kagent.dev", deploymentID, 1, 45*time.Second)
 
+	t.Log("Deleting deployment via API...")
 	deleteDeploymentByIDAPI(t, regURL, deploymentID)
 	waitForAgentDeploymentCount(t, regURL, agentName, "kubernetes-default", 0, 30*time.Second)
 
+	t.Log("Verifying k8s resources are cleaned up...")
 	// Regression assertion: deleting deployment from registry must remove k8s runtime resources.
 	waitForK8sResourceCountByDeploymentID(t, kubeContext, "default", "agents.kagent.dev", deploymentID, 0, 45*time.Second)
 	waitForK8sResourceCountByDeploymentID(t, kubeContext, "default", "configmaps", deploymentID, 0, 45*time.Second)
+	t.Log("k8s resources cleaned up successfully")
 }
 
 func waitForAgentDeploymentCount(t *testing.T, regURL, agentName, providerID string, expectedCount int, timeout time.Duration) {
@@ -521,7 +555,7 @@ func loadDockerImageToKind(t *testing.T, imageRef string) {
 		t.Fatalf("resolve kind cluster name from context %q: %v", kubeContext, err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "go", "tool", "kind", "load", "docker-image", imageRef, "--name", clusterName)
@@ -618,11 +652,17 @@ func verifyKubernetesAgentDeploymentHealthy(t *testing.T, agentName string) {
 	}
 
 	regURL := RegistryURL(t)
+	t.Log("Waiting for deployment record in registry...")
 	deploymentID := waitForSingleAgentDeploymentID(t, regURL, agentName, "kubernetes-default", 45*time.Second)
+	t.Logf("Deployment ID: %s", deploymentID)
 
+	t.Log("Waiting for Agent CR to appear in Kubernetes...")
 	waitForK8sResourceCountByDeploymentID(t, kubeContext, "default", "agents.kagent.dev", deploymentID, 1, 60*time.Second)
+	t.Log("Waiting for Agent CR condition Accepted=True...")
 	waitForKagentAgentConditionByDeploymentID(t, kubeContext, "default", deploymentID, "Accepted", "True", 90*time.Second)
+	t.Log("Waiting for Agent CR condition Ready=True...")
 	waitForKagentAgentConditionByDeploymentID(t, kubeContext, "default", deploymentID, "Ready", "True", 120*time.Second)
+	t.Log("Agent deployment is healthy")
 }
 
 func waitForKagentAgentConditionByDeploymentID(t *testing.T, kubeContext, namespace, deploymentID, conditionType, expectedStatus string, timeout time.Duration) {
@@ -641,6 +681,7 @@ func waitForKagentAgentConditionByDeploymentID(t *testing.T, kubeContext, namesp
 		} else {
 			lastState = debugState
 		}
+		t.Logf("  waiting for condition %s=%s: %s", conditionType, expectedStatus, lastState)
 		time.Sleep(3 * time.Second)
 	}
 
@@ -724,6 +765,9 @@ func dumpKagentAgentDebug(t *testing.T, kubeContext, namespace, deploymentID str
 func TestAgentDeployWithPrompts(t *testing.T) {
 	for _, target := range agentDeployTargets {
 		t.Run(target.name, func(t *testing.T) {
+			if target.name == "kubernetes" && !IsK8sBackend() {
+				t.Skip("skipping kubernetes deploy target: E2E_BACKEND=docker")
+			}
 			regURL := RegistryURL(t)
 			tmpDir := t.TempDir()
 			agentName := UniqueAgentName("e2eprm" + target.name[:3])

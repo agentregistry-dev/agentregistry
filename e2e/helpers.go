@@ -19,6 +19,21 @@ import (
 // registryURL is set during TestMain setup and used by all tests that need the registry.
 var registryURL string
 
+// IsK8sBackend returns true when the e2e backend is kubernetes (the default).
+// Returns false when E2E_BACKEND=docker, which skips Kind setup and k8s-only tests.
+func IsK8sBackend() bool {
+	return os.Getenv("E2E_BACKEND") != "docker"
+}
+
+// getEnv returns the value of the environment variable named by key,
+// or defaultVal if the variable is unset or empty.
+func getEnv(key, defaultVal string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return defaultVal
+}
+
 // arctlBinary returns the absolute path to the pre-built arctl binary.
 // Checks ARCTL_BINARY env var first, then falls back to ../bin/arctl.
 // The path is resolved to an absolute path because exec.Command resolves
