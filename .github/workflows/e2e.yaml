@@ -42,6 +42,7 @@ jobs:
           DOCKER_BUILDER: "docker buildx"
           DOCKER_BUILD_ARGS: "--push --platform linux/amd64"
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: make e2e-${{ matrix.backend }}
 
       - name: Dump cluster state on failure

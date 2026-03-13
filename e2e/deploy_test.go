@@ -91,7 +91,6 @@ var mcpDeployTargets = []deployTarget{
 }
 
 func TestAgentDeploy(t *testing.T) {
-	RequireEnv(t, "GOOGLE_API_KEY")
 	for _, target := range agentDeployTargets {
 		t.Run(target.name, func(t *testing.T) {
 			if target.name == "kubernetes" && !IsK8sBackend() {
@@ -342,10 +341,9 @@ func TestDeleteDeploymentRemovesKubernetesResources(t *testing.T) {
 	if !IsK8sBackend() {
 		t.Skip("skipping kubernetes deletion test: E2E_BACKEND=docker")
 	}
-	RequireEnv(t, "GOOGLE_API_KEY")
 	kubeContext := kubeContextForE2E(t)
 	if !kubeContextReachable(kubeContext) {
-		t.Skipf("kube context %q is not reachable", kubeContext)
+		t.Fatalf("kube context %q is not reachable", kubeContext)
 	}
 
 	regURL := RegistryURL(t)
@@ -557,7 +555,7 @@ func loadDockerImageToKind(t *testing.T, imageRef string) {
 		t.Fatalf("resolve kind cluster name from context %q: %v", kubeContext, err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "go", "tool", "kind", "load", "docker-image", imageRef, "--name", clusterName)

@@ -35,6 +35,7 @@ kubeadmConfigPatches:
     apiVersion: kubeadm.k8s.io/v1beta3
     apiServer:
       certSANs:
+        - "127.0.0.1"
         - "docker"
         - "172.17.0.1"
 

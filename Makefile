@@ -169,13 +169,13 @@ test: ## Run Go integration tests
 # Run e2e tests against docker backend (skips Kind cluster setup and k8s tests)
 .PHONY: e2e-docker
 e2e-docker: local-registry docker-compose-up build-cli
-	ARCTL_API_BASE_URL=http://localhost:12121/v0 E2E_BACKEND=docker GOOGLE_API_KEY=$(GOOGLE_API_KEY) \
+	ARCTL_API_BASE_URL=http://localhost:12121/v0 E2E_BACKEND=docker GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
 	  go tool gotestsum --format testdox -- -v -tags=e2e -timeout 45m ./e2e/...
 
 # Run e2e tests against k8s backend (full Kind cluster setup)
 .PHONY: e2e-k8s
 e2e-k8s: setup-kind-cluster build-cli
-	ARCTL_API_BASE_URL=http://localhost:12121/v0 KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) E2E_BACKEND=k8s GOOGLE_API_KEY=$(GOOGLE_API_KEY) \
+	ARCTL_API_BASE_URL=http://localhost:12121/v0 KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) E2E_BACKEND=k8s GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
 	  go tool gotestsum --format testdox -- -v -tags=e2e -timeout 45m ./e2e/...
 
 # Run e2e tests (default: k8s)
@@ -287,6 +287,10 @@ KIND_CLUSTER_NAME ?= agentregistry
 KIND_IMAGE_VERSION ?= 1.34.0
 KIND_CLUSTER_CONTEXT ?= kind-$(KIND_CLUSTER_NAME)
 KIND_NAMESPACE ?= agentregistry
+
+# Use placeholder API keys if not set — real inference is not needed for local/CI cluster setup.
+GOOGLE_API_KEY ?= fake-key-for-setup
+OPENAI_API_KEY ?= fake-key-for-setup
 
 .PHONY: create-kind-cluster
 create-kind-cluster: local-registry ## Create a local Kind cluster with MetalLB (skips if cluster already exists)
