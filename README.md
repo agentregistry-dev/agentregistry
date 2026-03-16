@@ -31,9 +31,9 @@ Use the web UI and `arctl` CLI to publish approved MCP servers, agents, and skil
 
 - 📥 [Install `arctl`](https://github.com/agentregistry-dev/agentregistry/releases)
 - 🚀 Quickstart guides:
-  - [Local development](#local-development)
-  - [Kubernetes](#kubernetes)
-- 🎬 [See it in action](#see-it-in-action)
+  - [Local development](https://aregistry.ai/docs/agents/deploy/local/)
+  - [Kubernetes](https://aregistry.ai/docs/agents/deploy/kubernetes/)
+- 🎬 [See it in action](https://www.youtube.com/watch?v=l6QicyGg46A)
 - 📖 [Development details](DEVELOPMENT.md)
 - 🤝 [Contributing](CONTRIBUTING.md)
 - 💬 [Discord](https://discord.gg/HTYNjF2y2t)
