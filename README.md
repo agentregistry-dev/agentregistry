@@ -101,6 +101,7 @@ arctl mcp list
 arctl configure claude-desktop
 arctl configure cursor
 arctl configure vscode
+arctl configure claude-code
 ```
 
 Open `http://localhost:12121` to use the web UI.
