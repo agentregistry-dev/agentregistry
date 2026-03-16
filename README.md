@@ -95,7 +95,7 @@ This deploys `pgvector/pgvector:0.8.2-pg16` into the `agentregistry` namespace w
 ### AgentRegistry
 
 ```bash
-helm install agentregistry oci://ghcr.io/agentregistry-dev/helm/agentregistry \
+helm install agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
   --namespace agentregistry \
   --create-namespace \
   --set database.host=postgres-pgvector.agentregistry.svc.cluster.local \
