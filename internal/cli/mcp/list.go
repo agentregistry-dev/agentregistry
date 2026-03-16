@@ -210,16 +210,18 @@ func sortServers(servers []*v0.ServerResponse, column string) {
 
 func printServersTable(servers []*v0.ServerResponse, deployedServers []*client.DeploymentResponse) {
 	t := printer.NewTablePrinter(os.Stdout)
-	t.SetHeaders("Name", "Version", "Type", "Deployed", "Updated")
+	t.SetHeaders("Name", "Version", "Type", "Package", "Deployed", "Updated")
 
 	deploymentCounts := cliCommon.BuildDeploymentCounts(deployedServers, "mcp")
 
 	for _, s := range servers {
 		registryType := "<none>"
+		packageID := "<none>"
 		updatedAt := ""
 
 		if len(s.Server.Packages) > 0 {
 			registryType = s.Server.Packages[0].RegistryType
+			packageID = s.Server.Packages[0].Identifier
 		} else if len(s.Server.Remotes) > 0 {
 			registryType = s.Server.Remotes[0].Type
 		}
@@ -236,6 +238,7 @@ func printServersTable(servers []*v0.ServerResponse, deployedServers []*client.D
 			printer.TruncateString(fullName, 50),
 			s.Server.Version,
 			registryType,
+			printer.TruncateString(printer.EmptyValueOrDefault(packageID, "<none>"), 50),
 			deployedStatus,
 			updatedAt,
 		)

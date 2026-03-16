@@ -111,16 +111,33 @@ func displayPaginatedAgents(agents []*models.AgentResponse, deployedAgents []*cl
 
 func printAgentsTable(agents []*models.AgentResponse, deployedAgents []*client.DeploymentResponse) {
 	t := printer.NewTablePrinter(os.Stdout)
-	t.SetHeaders("Name", "Version", "Framework", "Language", "Provider", "Model", "Deployed")
+	t.SetHeaders("Name", "Version", "Image", "Repository", "Framework", "Language", "Provider", "Model", "Deployed")
 
 	deploymentCounts := common.BuildDeploymentCounts(deployedAgents, "agent")
 
 	for _, a := range agents {
 		deployedStatus := common.DeployedStatus(deploymentCounts, a.Agent.Name, a.Agent.Version, true)
 
+		repoURL := ""
+		if a.Agent.Repository != nil {
+			repoURL = a.Agent.Repository.URL
+		}
+
+		image := printer.EmptyValueOrDefault(a.Agent.Image, "")
+		if image == "" {
+			for _, pkg := range a.Agent.Packages {
+				if pkg.RegistryType == "oci" && pkg.Identifier != "" {
+					image = pkg.Identifier
+					break
+				}
+			}
+		}
+
 		t.AddRow(
 			printer.TruncateString(a.Agent.Name, 40),
 			a.Agent.Version,
+			printer.TruncateString(printer.EmptyValueOrDefault(image, "<none>"), 40),
+			printer.TruncateString(printer.EmptyValueOrDefault(repoURL, "<none>"), 45),
 			printer.EmptyValueOrDefault(a.Agent.Framework, "<none>"),
 			printer.EmptyValueOrDefault(a.Agent.Language, "<none>"),
 			printer.EmptyValueOrDefault(a.Agent.ModelProvider, "<none>"),
