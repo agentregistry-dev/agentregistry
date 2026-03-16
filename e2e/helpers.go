@@ -22,7 +22,7 @@ var registryURL string
 // IsK8sBackend returns true when the e2e backend is kubernetes (the default).
 // Returns false when E2E_BACKEND=docker, which skips Kind setup and k8s-only tests.
 func IsK8sBackend() bool {
-	return os.Getenv("E2E_BACKEND") != "docker"
+	return os.Getenv("E2E_BACKEND") == "k8s"
 }
 
 // getEnv returns the value of the environment variable named by key,
