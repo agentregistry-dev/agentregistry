@@ -14,10 +14,6 @@ Agent Registry gives platform teams and developers one place to manage the agent
 
 Use the web UI and `arctl` CLI to publish approved MCP servers, agents, and skills, discover what is available, and make those artifacts usable across local development, shared environments, and Kubernetes.
 
-<p align="center">
-  <img alt="Agent Registry platform overview" src="./img/operator-scenario.png" width="800"/>
-</p>
-
 ---
 
 ## 🤔 Why Agent Registry?
