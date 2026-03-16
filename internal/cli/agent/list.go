@@ -126,7 +126,8 @@ func printAgentsTable(agents []*models.AgentResponse, deployedAgents []*client.D
 		image := printer.EmptyValueOrDefault(a.Agent.Image, "")
 		if image == "" {
 			for _, pkg := range a.Agent.Packages {
-				if pkg.RegistryType == "oci" && pkg.Identifier != "" {
+				rt := strings.ToLower(strings.TrimSpace(pkg.RegistryType))
+				if (rt == "oci" || rt == "docker") && pkg.Identifier != "" {
 					image = pkg.Identifier
 					break
 				}
