@@ -30,7 +30,7 @@ It exposes both an HTTP REST API and an Agent Gateway gRPC endpoint. An external
 ## Installing the Chart
 
 ```console
-helm install my-agentregistry oci://ghcr.io/agentregistry-dev/helm/agentregistry \
+helm install my-agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
   --set config.jwtPrivateKey=$(openssl rand -hex 32) \
   --set database.host=my-postgres.example.com \
   --set database.password=changeme
