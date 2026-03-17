@@ -12,13 +12,13 @@ _This document provides a General Technical Review of the agentregistry project.
 
 ---
 
-## Day 0 — Planning Phase (Sandbox)
+# Day 0 — Planning Phase (Sandbox)
 
 This section covers the design and architecture of Agentregistry as a cloud native project applying for CNCF Sandbox status.
 
 ---
 
-### Scope
+## Scope
 
 **Describe the roadmap process, how scope is determined for mid to long term features, as well as how the roadmap maps back to current contributions and maintainer ladder.**
 
@@ -69,7 +69,7 @@ Agentregistry is broadly relevant to any organization building on AI-powered too
 
 ---
 
-### Usability
+## Usability
 
 **How should the target personas interact with your project?**
 
@@ -111,12 +111,9 @@ In production, agentregistry acts as the **control plane** for agentic AI infras
 
 ---
 
-### Design
+## Design
 
 **Explain the design principles and best practices the project is following.**
-
-agentregistry is designed around the following principles:
-
 1. **Centralization with portability:** A single registry server acts as the source of truth for artifacts, yet is deployable anywhere via container images and Helm.
 2. **Governance first:** All artifacts are subject to operator-controlled curation, approval, and access control before reaching developers.
 3. **Data enrichment by default:** Ingested artifacts are automatically validated and scored to provide operators with trustworthiness insights.
@@ -125,63 +122,9 @@ agentregistry is designed around the following principles:
 6. **Open source and vendor-neutral:** Licensed under Apache 2.0; no vendor lock-in for registry operations or artifact formats.
 
 **Outline or link to the project's architecture requirements.**
-
-See [`DEVELOPMENT.md`](https://github.com/agentregistry-dev/agentregistry/blob/main/DEVELOPMENT.md) for detailed architecture information.
-
-At a high level, the project comprises:
-
-| Component | Description |
-|---|---|
-| **Registry Server** | Core Go service exposing the REST API for artifact management. Stores metadata in PostgreSQL + pgvector for semantic search. |
-| **PostgreSQL + pgvector** | Persistent storage backend. pgvector enables embedding-based discovery and search. |
-| **arctl CLI** | Go-based command-line interface. Communicates with the registry server over HTTP. Manages the server daemon lifecycle on first run. |
-| **Web UI** | TypeScript/React frontend served by the registry server. Accessible at port 12121. |
-| **agentgateway** | Optional integration with [agentgateway](https://github.com/agentgateway/agentgateway) as a reverse proxy providing a unified MCP endpoint for all deployed servers. |
-
-**Architecture overview (Operator scenario):**
-
-```
-[External Registries / Artifact Sources]
-           │  import
-           ▼
-   ┌──────────────────┐      enrich / validate / score
-   │  Registry Server │◄─────────────────────────────
-   │  (Go + REST API) │
-   └────────┬─────────┘
-            │  publish (curated)
-            ▼
-   ┌──────────────────┐
-   │  PostgreSQL +    │  metadata + vector embeddings
-   │  pgvector        │
-   └──────────────────┘
-            │
-            ▼
-   ┌──────────────────┐
-   │  Web UI / arctl  │  operators and developers
-   └──────────────────┘
-```
-
-**Architecture overview (Developer scenario):**
-
-```
-[Developer: Claude Code / Cursor / VS Code]
-           │  arctl configure
-           ▼
-   ┌──────────────────┐
-   │  agentgateway   │  unified MCP endpoint
-   └────────┬─────────┘
-            │  proxy
-            ▼
-   ┌──────────────────┐
-   │  Deployed MCP    │  pulled from registry
-   │  Servers/Skills  │
-   └──────────────────┘
-```
+See [`DEVELOPMENT.md`](https://github.com/agentregistry-dev/agentregistry/blob/main/DEVELOPMENT.md) for detailed architecture information, specifically the `Architecture Overview` section.
 
 **Describe how this project integrates with other projects in a production environment.**
-
-agentregistry integrates with:
-
 - **agentgateway (Linux Foundation):** Acts as the data plane, providing a single MCP endpoint for all deployed servers and enforcing policy and observability.
 - **MCP SDK / Model Context Protocol:** Core protocol for tool and agent interoperability.
 - **Kubernetes / Helm:** Deployment and lifecycle management.
@@ -190,7 +133,6 @@ agentregistry integrates with:
 - **CI/CD tooling:** `arctl` can be embedded in CI/CD pipelines for artifact publishing workflows.
 
 **Describe the project's architecture requirements for PoC, Development, Test, and Production environments.**
-
 | Environment | Configuration |
 |---|---|
 | **PoC / Local** | Docker Compose with bundled PostgreSQL/pgvector. Single node. `arctl mcp list` auto-starts daemon. |
@@ -199,56 +141,29 @@ agentregistry integrates with:
 | **Production** | Kubernetes cluster with Helm chart (`oci://ghcr.io/agentregistry-dev/helm/agentregistry`). Requires an external, HA PostgreSQL instance with pgvector extension. |
 
 **Define any specific service dependencies the project relies on.**
-
 - **PostgreSQL ≥ 16 with pgvector extension:** Required for all environments except local PoC (where it is bundled via Docker Compose). The pgvector extension is required for semantic search capabilities.
 - **Kubernetes (production):** Required for Helm-based deployment.
 - **Docker / container runtime:** Required for running the registry server and related services.
 
 **Describe the project's High Availability (HA) requirements.**
-
-The registry server is stateless (all state in PostgreSQL), so HA is achieved by increasing `replicaCount` in the Helm chart with a `podAntiAffinityPreset: soft` default to spread pods across nodes. PostgreSQL HA is the operator's responsibility (e.g., CloudNativePG or a managed database service).
-
-**Describe the project's resource requirements (CPU, Memory, Network).**
-
-The default Helm resource preset is `small`: requests of 250m CPU / 256Mi memory with limits of 1 CPU / 1Gi memory. The registry server listens on HTTP port 8080 (exposed as service port 12121) and optionally gRPC port 21212 for agent gateway communication.
-
-**Describe how the project implements Identity and Access Management.**
-
-The registry authenticates API requests via JWT tokens signed with Ed25519 (5-minute expiry), with support for GitHub OAuth, GitHub OIDC, generic OIDC, and DNS/HTTP key-based authentication methods configured through environment variables (`OIDC_ISSUER`, `OIDC_CLIENT_ID`, role-to-permission mappings via `OIDC_*_PERMS`). Authorization is enforced per-request by the `AuthzProvider` interface, which checks permissions against resource patterns (namespace-scoped with wildcard support) and actions (read, publish, edit, delete, deploy).
+The registry server is stateless; HA is achieved by running multiple replicas behind a load balancer in Kubernetes. PostgreSQL HA is the responsibility of the operator (e.g., using CloudNativePG or a managed cloud database service). 
 
 **Describe how the project has addressed sovereignty.**
-
-agentregistry is fully self-hosted with no external SaaS dependency for core registry functions, so operators retain complete control over artifact metadata and all registry data within their own infrastructure. Data residency is determined entirely by where the operator deploys the PostgreSQL instance and Kubernetes cluster.
+Because agentregistry is self-hosted (no external SaaS dependency for core registry functions), operators retain full control over artifact metadata and deployed registry data within their own infrastructure.
 
 **Describe any compliance requirements addressed by the project.**
+No regulatory or compliance frameworks are currently supported. 
 
-No specific regulatory compliance frameworks (SOC 2, GDPR, FedRAMP) are formally targeted at this stage. The project's self-hosted, air-gappable design and operator-controlled curation model provide a foundation for organizations with supply chain governance and change management requirements.
+**Describe the project’s release processes, including major, minor and patch releases.**
 
-**Describe the project's storage requirements, including its use of ephemeral and/or persistent storage.**
-
-The registry server requires no persistent local storage — all data is stored in PostgreSQL+pgvector, and the container runs with a read-only root filesystem. No PersistentVolumeClaims are defined in the Helm chart; the external PostgreSQL instance is the sole persistent storage dependency.
-
-**Describe the project's API Design.**
-
-_API topology and conventions:_ The REST API uses a `/v0` path prefix with the Huma framework auto-generating OpenAPI documentation at `/docs`, and exposes resource-oriented endpoints (`/v0/servers`, `/v0/agents`, `/v0/skills`, `/v0/providers`, `/v0/deployments`, `/v0/auth/*`) plus operational endpoints (`/health`, `/ping`, `/version`, `/metrics`).
-
-_Defaults:_ HTTP listen on `:8080`, anonymous auth disabled, registry validation disabled, built-in seed data disabled (`disableBuiltinSeed: "true"`), database SSL mode `require`.
-
-_Additional configurations from default:_ Key non-default configurations for production use include setting `config.jwtPrivateKey` (or referencing `config.existingSecret`), configuring OIDC environment variables for external identity federation, enabling `enableRegistryValidation`, and optionally scoping RBAC via `rbac.watchedNamespaces`.
-
-_New or changed API types:_ agentregistry does not define its own CRDs; it creates and manages instances of the `kagent.dev` API group CRDs (`agents`, `remotemcpservers`, `mcpservers`) plus standard Kubernetes resources (Deployments, Services, Secrets, ConfigMaps). No cloud provider-specific API calls are made.
-
-_Compatibility with API servers:_ The project uses standard Kubernetes client-go for all cluster interactions and is compatible with any Kubernetes API server that supports the `kagent.dev` CRD group (installed separately via the kagent project).
-
-_Versioning and breaking changes:_ The REST API is currently at `/v0`, indicating a pre-stable API surface where breaking changes may occur between minor releases. Semantic versioning is used for project releases (`v*.*.*` tags), with the Helm chart version stripped of the leading `v` for OCI semver compliance.
-
-**Describe the project's release processes, including major, minor and patch releases.**
-
-Releases are triggered by pushing a `v*.*.*` git tag (or manual workflow dispatch), which builds multi-platform Docker images (linux/amd64, linux/arm64) pushed to `ghcr.io`, packages and pushes the Helm chart to an OCI registry, cross-compiles CLI binaries for 5 platform targets, and creates a GitHub Release with auto-generated release notes, binaries, chart archives, and SHA-256 checksums.
+agentregistry follows semantic versioning (https://semver.org/):
+- Major Releases (x.0.0): Breaking API changes, major new features
+- Minor Releases (0.x.0): New features, non-breaking changes.
+- Patch Releases (0.0.x): Bug fixes, security patches
 
 ---
 
-### Installation
+## Installation
 
 **Describe how the project is installed and initialized, e.g. a minimal install with a few lines of code or does it require more complex integration and configuration?**
 - _Local install with Docker_: Follow the steps at https://github.com/agentregistry-dev/agentregistry/blob/main/README.md#-local-development 
@@ -261,8 +176,7 @@ agentregistry does not currently ship a dedicated installation verification comm
 
 ---
 
-### Security
-
+## Security
 
 **Please provide a link to the project’s cloud native security self assessment.**
 [Security self-assessment](./security-self-assessment.md)
@@ -324,24 +238,3 @@ The following gaps have been identified and are on the projects roadmap:
 | Provenance attestation | No SLSA provenance attestation for build artifacts | Integrate SLSA provenance generation |
 | Automated vulnerability scanning | No govulncheck, Trivy, or Dependabot in CI | Add govulncheck for Go and npm audit for frontend dependencies |
 | Dependency update automation | No Dependabot or Renovate configuration | Add automated dependency update tooling |
-
-
----
-
-## Open Items for Maintainer Review
-
-The following items require input from the agentregistry maintainers before this GTR is considered complete:
-
-1. **SECURITY.md:** Add a vulnerability reporting policy and response SLA to the repository.
-2. **GOVERNANCE.md:** Document the project's governance model, maintainer roles, and decision-making process.
-3. **Public Roadmap:** Publish a roadmap documenting the path from v0.1.x to a stable v1.0 and eventual CNCF Incubation readiness.
-4. **IAM documentation:** Detail the JWT-based authentication model, planned RBAC roles, and future OIDC/OAuth2 integration plans.
-5. **SCA / dependency scanning:** Document the automated tooling used to scan Go and TypeScript dependencies for vulnerabilities.
-6. **Attribution / license notices:** Describe how license compliance is enforced for dependencies in built artifacts (container images, binaries).
-7. **HA topology:** Document the recommended HA configuration for production PostgreSQL and the registry server.
-8. **Resource benchmarks:** Provide baseline CPU/memory/network resource requirements for production sizing.
-9. **Audit logging:** Document the audit trail capabilities for artifact lifecycle events.
-10. **Failure mode runbooks:** Expand the known failure modes table with recovery procedures and links to operational documentation.
-
----
-
