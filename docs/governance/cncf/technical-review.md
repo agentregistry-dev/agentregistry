@@ -206,25 +206,45 @@ agentregistry integrates with:
 
 **Describe the project's High Availability (HA) requirements.**
 
-The registry server is stateless; HA is achieved by running multiple replicas behind a load balancer in Kubernetes. PostgreSQL HA is the responsibility of the operator (e.g., using CloudNativePG or a managed cloud database service). [TODO: document specific HA topology and failover behavior]
+The registry server is stateless (all state in PostgreSQL), so HA is achieved by increasing `replicaCount` in the Helm chart with a `podAntiAffinityPreset: soft` default to spread pods across nodes. PostgreSQL HA is the operator's responsibility (e.g., CloudNativePG or a managed database service).
 
 **Describe the project's resource requirements (CPU, Memory, Network).**
 
-[TODO: Provide baseline resource benchmarks for the registry server, agentgateway, and PostgreSQL components under representative workloads.]
+The default Helm resource preset is `small`: requests of 250m CPU / 256Mi memory with limits of 1 CPU / 1Gi memory. The registry server listens on HTTP port 8080 (exposed as service port 12121) and optionally gRPC port 21212 for agent gateway communication.
 
 **Describe how the project implements Identity and Access Management.**
 
-[TODO: Document the current authentication and authorization model. Based on the repository, JWT-based authentication is used (see `config.jwtPrivateKey` in the Helm chart). Describe: (1) how tokens are issued and validated, (2) role definitions and RBAC model, (3) planned support for external identity providers (OIDC, OAuth2).]
-
-The CLI currently requires a `config.jwtPrivateKey` to be set at deployment time. Access to the registry API is gated by JWT tokens.
+The registry authenticates API requests via JWT tokens signed with Ed25519 (5-minute expiry), with support for GitHub OAuth, GitHub OIDC, generic OIDC, and DNS/HTTP key-based authentication methods configured through environment variables (`OIDC_ISSUER`, `OIDC_CLIENT_ID`, role-to-permission mappings via `OIDC_*_PERMS`). Authorization is enforced per-request by the `AuthzProvider` interface, which checks permissions against resource patterns (namespace-scoped with wildcard support) and actions (read, publish, edit, delete, deploy).
 
 **Describe how the project has addressed sovereignty.**
 
-[TODO: Document data residency capabilities. Because agentregistry is self-hosted (no external SaaS dependency for core registry functions), operators retain full control over artifact metadata and deployed registry data within their own infrastructure.]
+agentregistry is fully self-hosted with no external SaaS dependency for core registry functions, so operators retain complete control over artifact metadata and all registry data within their own infrastructure. Data residency is determined entirely by where the operator deploys the PostgreSQL instance and Kubernetes cluster.
 
 **Describe any compliance requirements addressed by the project.**
 
-[TODO: Identify any regulatory or compliance frameworks (e.g., SOC 2, GDPR, FedRAMP) that the project is designed to support or that early adopters have raised.]
+No specific regulatory compliance frameworks (SOC 2, GDPR, FedRAMP) are formally targeted at this stage. The project's self-hosted, air-gappable design and operator-controlled curation model provide a foundation for organizations with supply chain governance and change management requirements.
+
+**Describe the project's storage requirements, including its use of ephemeral and/or persistent storage.**
+
+The registry server requires no persistent local storage — all data is stored in PostgreSQL+pgvector, and the container runs with a read-only root filesystem. No PersistentVolumeClaims are defined in the Helm chart; the external PostgreSQL instance is the sole persistent storage dependency.
+
+**Describe the project's API Design.**
+
+_API topology and conventions:_ The REST API uses a `/v0` path prefix with the Huma framework auto-generating OpenAPI documentation at `/docs`, and exposes resource-oriented endpoints (`/v0/servers`, `/v0/agents`, `/v0/skills`, `/v0/providers`, `/v0/deployments`, `/v0/auth/*`) plus operational endpoints (`/health`, `/ping`, `/version`, `/metrics`).
+
+_Defaults:_ HTTP listen on `:8080`, anonymous auth disabled, registry validation disabled, built-in seed data disabled (`disableBuiltinSeed: "true"`), database SSL mode `require`.
+
+_Additional configurations from default:_ Key non-default configurations for production use include setting `config.jwtPrivateKey` (or referencing `config.existingSecret`), configuring OIDC environment variables for external identity federation, enabling `enableRegistryValidation`, and optionally scoping RBAC via `rbac.watchedNamespaces`.
+
+_New or changed API types:_ agentregistry does not define its own CRDs; it creates and manages instances of the `kagent.dev` API group CRDs (`agents`, `remotemcpservers`, `mcpservers`) plus standard Kubernetes resources (Deployments, Services, Secrets, ConfigMaps). No cloud provider-specific API calls are made.
+
+_Compatibility with API servers:_ The project uses standard Kubernetes client-go for all cluster interactions and is compatible with any Kubernetes API server that supports the `kagent.dev` CRD group (installed separately via the kagent project).
+
+_Versioning and breaking changes:_ The REST API is currently at `/v0`, indicating a pre-stable API surface where breaking changes may occur between minor releases. Semantic versioning is used for project releases (`v*.*.*` tags), with the Helm chart version stripped of the leading `v` for OCI semver compliance.
+
+**Describe the project's release processes, including major, minor and patch releases.**
+
+Releases are triggered by pushing a `v*.*.*` git tag (or manual workflow dispatch), which builds multi-platform Docker images (linux/amd64, linux/arm64) pushed to `ghcr.io`, packages and pushes the Helm chart to an OCI registry, cross-compiles CLI binaries for 5 platform targets, and creates a GitHub Release with auto-generated release notes, binaries, chart archives, and SHA-256 checksums.
 
 ---
 
