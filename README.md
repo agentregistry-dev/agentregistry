@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="img/logo.png" alt="agentregistry" width="500"/>
+  <img src="img/agentregistry-logo.png" alt="agentregistry" width="500"/>
 </p>
 
 <h1 align="center" style="font-size: 3em;">Build. Deploy. Discover.</h1>
@@ -32,26 +32,6 @@ agentregistry is an open-source platform that gives you one place to find, manag
 Right now, the MCP servers and AI tools your team needs are spread across npm, PyPI, Docker Hub, GitHub repos, and random URLs. Nobody knows which ones are trustworthy, which versions work, or how to get them running. Every developer is doing their own manual Docker setup and IDE configuration.
 
 agentregistry puts all of that into a single registry with a CLI and a web UI. You import or publish artifacts once, and then anyone on your team can discover them, deploy them with one command, and have their IDE automatically configured to use them.
-
-Build, test, publish, and deploy AI artifacts with minimal dependencies.
-
-<table>
-<tr>
-<td width="400">
-  <img src="img/lifecycle-logo-only.gif" alt="agentregistry lifecycle" width="400"/>
-  <br/>
-  <em>Create, Add artifacts, Test, Publish, Deploy, Consume</em>
-</td>
-<td>
-
-- **Local development** — Create and test agents, skills, and MCP servers locally.
-- **Easy publishing** — Publish your artifacts to a registry with a single command.
-- **Pull and run anywhere** — Pull artifacts from the registry and run them in any environment instantly — local Docker, Kubernetes, or any cloud.
-- **Discover and consume** — Find new artifacts to add to your registry or optimize existing ones. Consume directly from Claude Code, Cursor, VS Code, Claude Desktop, OpenCode, or any MCP-compatible client.
-
-</td>
-</tr>
-</table>
 
 ---
 
@@ -106,7 +86,11 @@ Build, test, publish, and deploy AI artifacts with minimal dependencies.
 A browser-based admin interface at `localhost:12121`. Add MCP servers, skills, and agents through a visual interface. Browse the artifact catalog, review enrichment scores and metadata, manage deployments, and configure the registry — all without touching the CLI.
 
 <p align="center">
-  <img src="img/arwui.gif" alt="agentregistry Web UI — browse servers, skills, agents, and prompts" width="800"/>
+  <a href="img/arwui.gif">
+    <img src="img/arwui.gif" alt="agentregistry Web UI — browse servers, skills, agents, and prompts" width="800"/>
+  </a>
+  <br/>
+  <sub><a href="img/arwui.gif">Click to expand ↗</a></sub>
 </p>
 
 ---
@@ -123,9 +107,13 @@ A centralized catalog for three types of AI artifacts, backed by PostgreSQL with
 <p><strong>MCP servers</strong> — The tools that AI agents and IDE assistants call at runtime. agentregistry supports every packaging model: npm packages run via <code>npx</code> on <code>node:24-alpine</code>, PyPI packages run via <code>uvx</code> on Astral's <code>uv</code> runtime, OCI/Docker images pulled from any container registry, and remote HTTP/SSE endpoints accessed directly with optional auth headers. Each server entry stores rich metadata including version history, tool listings, environment variable requirements, package references, and automated quality scores.</p>
 </td>
 <td width="48%" align="center" valign="top">
-  <img src="img/createmcp.gif" alt="Creating an MCP server in agentregistry" width="480"/>
+  <a href="img/createmcp.gif">
+    <img src="img/createmcp.gif" alt="Creating an MCP server in agentregistry" width="480"/>
+  </a>
   <br/>
   <em>Create and register MCP servers from npm, PyPI, Docker, or remote endpoints</em>
+  <br/>
+  <sub><a href="img/createmcp.gif">Click to expand ↗</a></sub>
 </td>
 </tr>
 </table>
@@ -136,9 +124,13 @@ A centralized catalog for three types of AI artifacts, backed by PostgreSQL with
 <p><strong>Skills</strong> — Structured knowledge packages that extend what an agent knows beyond its base training. A skill is a SKILL.md instruction file bundled with optional code examples, documentation, PDFs, and reference URLs. Skills are published as container images to Docker Hub or any OCI-compatible registry and can be pulled locally by any compatible AI assistant. The <code>arctl skill init</code> command scaffolds the directory structure; <code>arctl skill publish</code> builds and pushes the image.</p>
 </td>
 <td width="48%" align="center" valign="top">
-  <img src="img/createskill.gif" alt="Creating a skill in agentregistry" width="480"/>
+  <a href="img/createskill.gif">
+    <img src="img/createskill.gif" alt="Creating a skill in agentregistry" width="480"/>
+  </a>
   <br/>
   <em>Scaffold, build, and publish skills as portable container images</em>
+  <br/>
+  <sub><a href="img/createskill.gif">Click to expand ↗</a></sub>
 </td>
 </tr>
 </table>
@@ -149,9 +141,13 @@ A centralized catalog for three types of AI artifacts, backed by PostgreSQL with
 <p><strong>Agents</strong> — Definitions that bundle an agent's identity with its dependencies: which MCP servers it needs, which skills it uses, and how it should be configured. agentregistry uses the ADK (Agent Development Kit) scaffolding pattern. Blueprints package an agent and all its dependencies into a single versioned artifact for one-step deployment.</p>
 </td>
 <td width="48%" align="center" valign="top">
-  <img src="img/createagents.gif" alt="Creating an agent in agentregistry" width="480"/>
+  <a href="img/createagents.gif">
+    <img src="img/createagents.gif" alt="Creating an agent in agentregistry" width="480"/>
+  </a>
   <br/>
   <em>Define agents with bundled MCP servers, skills, and configuration</em>
+  <br/>
+  <sub><a href="img/createagents.gif">Click to expand ↗</a></sub>
 </td>
 </tr>
 </table>
@@ -166,9 +162,13 @@ A centralized catalog for three types of AI artifacts, backed by PostgreSQL with
 <p>Scaffold agents using ADK, version them, and push to the registry. Blueprints bundle an agent definition with its MCP server dependencies and skills into a single deployable unit. The registry stores the metadata and pointers — actual container images live in Docker Hub, GHCR, or any OCI registry you use. This means you own your artifacts; agentregistry indexes and governs them.</p>
 </td>
 <td width="48%" align="center" valign="top">
-  <img src="img/addtools.gif" alt="Adding tools to an agent in agentregistry" width="480"/>
+  <a href="img/addtools.gif">
+    <img src="img/addtools.gif" alt="Adding tools to an agent in agentregistry" width="480"/>
+  </a>
   <br/>
   <em>Add MCP servers and skills to agents, then push to the registry</em>
+  <br/>
+  <sub><a href="img/addtools.gif">Click to expand ↗</a></sub>
 </td>
 </tr>
 </table>
