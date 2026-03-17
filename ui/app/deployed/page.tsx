@@ -269,7 +269,7 @@ export default function DeployedPage() {
                   <div className="flex items-center gap-3 px-4 py-3 bg-muted/60 border rounded-lg mb-4">
                     <Link2 className="h-4 w-4 text-primary shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-muted-foreground mb-0.5">Gateway URL — connect MCP clients to all managed servers</p>
+                      <p className="text-xs text-muted-foreground mb-0.5">Gateway URL — connect MCP clients to all managed servers (local provider only)</p>
                       <code className="text-sm font-mono text-foreground">{gatewayUrl}</code>
                     </div>
                     <button
