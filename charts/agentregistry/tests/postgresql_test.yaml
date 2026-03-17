@@ -1,0 +1,245 @@
+suite: Bundled PostgreSQL
+templates:
+  - postgresql.yaml
+  - secrets.yaml
+
+tests:
+  # ── Bundled enabled (default) ─────────────────────────────────────────────
+
+  - it: renders PVC, Deployment, and Service when bundled is enabled
+    template: postgresql.yaml
+    asserts:
+      - hasDocuments:
+          count: 3
+
+  - it: PVC has correct name
+    template: postgresql.yaml
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-agentregistry-postgresql
+
+  - it: Deployment has correct name and Recreate strategy
+    template: postgresql.yaml
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-agentregistry-postgresql
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+
+  - it: Deployment uses pgvector image
+    template: postgresql.yaml
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: '^docker.io/pgvector/pgvector:0\.8\.2-pg16$'
+
+  - it: Deployment references chart-managed secret for POSTGRES_PASSWORD
+    template: postgresql.yaml
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-agentregistry
+                key: POSTGRES_PASSWORD
+
+  - it: Deployment uses global.existingSecret for POSTGRES_PASSWORD when set
+    template: postgresql.yaml
+    set:
+      global.existingSecret: global-secret
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: global-secret
+                key: POSTGRES_PASSWORD
+
+  - it: Deployment has liveness and readiness probes
+    template: postgresql.yaml
+    documentIndex: 1
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.containers[0].livenessProbe
+      - isNotNull:
+          path: spec.template.spec.containers[0].readinessProbe
+
+  - it: Deployment mounts PVC as data volume
+    template: postgresql.yaml
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            persistentVolumeClaim:
+              claimName: RELEASE-NAME-agentregistry-postgresql
+
+  - it: Service has correct name and port
+    template: postgresql.yaml
+    documentIndex: 2
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-agentregistry-postgresql
+      - equal:
+          path: spec.ports[0].port
+          value: 5432
+
+  # ── Bundled disabled ──────────────────────────────────────────────────────
+
+  - it: renders nothing when bundled is disabled
+    template: postgresql.yaml
+    set:
+      database.bundled.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ── Persistence disabled ──────────────────────────────────────────────────
+
+  - it: renders only Deployment and Service when persistence is disabled (no PVC)
+    template: postgresql.yaml
+    set:
+      database.bundled.persistence.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: Deployment uses emptyDir when persistence is disabled
+    template: postgresql.yaml
+    set:
+      database.bundled.persistence.enabled: false
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            emptyDir: {}
+
+  # ── Existing PVC claim ────────────────────────────────────────────────────
+
+  - it: does not create PVC when existingClaim is set
+    template: postgresql.yaml
+    set:
+      database.bundled.persistence.existingClaim: my-existing-pvc
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: uses existingClaim name in Deployment volume
+    template: postgresql.yaml
+    set:
+      database.bundled.persistence.existingClaim: my-existing-pvc
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            persistentVolumeClaim:
+              claimName: my-existing-pvc
+
+  # ── Security contexts ─────────────────────────────────────────────────────
+
+  - it: applies pod security context by default
+    template: postgresql.yaml
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 999
+
+  - it: applies container security context by default
+    template: postgresql.yaml
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+
+  - it: omits pod security context when disabled
+    template: postgresql.yaml
+    set:
+      database.bundled.podSecurityContext.enabled: false
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Deployment
+      - isNull:
+          path: spec.template.spec.securityContext
+
+  - it: omits container security context when disabled
+    template: postgresql.yaml
+    set:
+      database.bundled.containerSecurityContext.enabled: false
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Deployment
+      - isNull:
+          path: spec.template.spec.containers[0].securityContext
+
+  - it: respects custom fsGroup override
+    template: postgresql.yaml
+    set:
+      database.bundled.podSecurityContext.fsGroup: 1000
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1000
+
+  # ── Custom auth values ────────────────────────────────────────────────────
+
+  - it: uses custom bundled auth values
+    template: postgresql.yaml
+    set:
+      database.bundled.auth.database: mydb
+      database.bundled.auth.username: myuser
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_DB
+            value: mydb
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_USER
+            value: myuser

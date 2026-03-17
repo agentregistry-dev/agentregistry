@@ -1,0 +1,145 @@
+{{- if .Values.database.bundled.enabled }}
+{{- $pg := .Values.database.bundled }}
+{{- $fullname := include "agentregistry.postgresql.fullname" . }}
+---
+{{- if and $pg.persistence.enabled (not $pg.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "agentregistry.postgresql.labels" . | nindent 4 }}
+  {{- $annotations := include "agentregistry.annotations" (dict "annotations" dict "context" $) }}
+  {{- if $annotations }}
+  annotations:
+    {{- $annotations | nindent 4 }}
+  {{- end }}
+spec:
+  accessModes:
+    {{- toYaml $pg.persistence.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ $pg.persistence.size }}
+  {{- $sc := include "agentregistry.storageClass" . | trim }}
+  {{- if $sc }}
+  storageClassName: {{ $sc | quote }}
+  {{- end }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "agentregistry.postgresql.labels" . | nindent 4 }}
+  {{- $annotations := include "agentregistry.annotations" (dict "annotations" dict "context" $) }}
+  {{- if $annotations }}
+  annotations:
+    {{- $annotations | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "agentregistry.postgresql.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "agentregistry.postgresql.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- $podSec := include "agentregistry.podSecurityContext" $pg.podSecurityContext }}
+      {{- if $podSec }}
+      securityContext:
+        {{- $podSec | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: postgresql
+          image: {{ include "agentregistry.postgresql.image" . }}
+          imagePullPolicy: {{ $pg.image.pullPolicy }}
+          {{- $containerSec := include "agentregistry.containerSecurityContext" $pg.containerSecurityContext }}
+          {{- if $containerSec }}
+          securityContext:
+            {{- $containerSec | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_DB
+              value: {{ $pg.auth.database | quote }}
+            - name: POSTGRES_USER
+              value: {{ $pg.auth.username | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "agentregistry.passwordSecretName" . }}
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ $pg.auth.username | quote }}
+                - -d
+                - {{ $pg.auth.database | quote }}
+            initialDelaySeconds: {{ $pg.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ $pg.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ $pg.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ $pg.probes.liveness.failureThreshold }}
+            successThreshold: {{ $pg.probes.liveness.successThreshold }}
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ $pg.auth.username | quote }}
+                - -d
+                - {{ $pg.auth.database | quote }}
+            initialDelaySeconds: {{ $pg.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ $pg.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ $pg.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ $pg.probes.readiness.failureThreshold }}
+            successThreshold: {{ $pg.probes.readiness.successThreshold }}
+          {{- $res := include "agentregistry.resources" (dict "resources" $pg.resources "preset" $pg.resourcesPreset) }}
+          {{- if $res }}
+          resources:
+            {{- $res | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          {{- if $pg.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ $pg.persistence.existingClaim | default $fullname }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "agentregistry.postgresql.labels" . | nindent 4 }}
+  {{- $annotations := include "agentregistry.annotations" (dict "annotations" dict "context" $) }}
+  {{- if $annotations }}
+  annotations:
+    {{- $annotations | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ $pg.service.type }}
+  ports:
+    - name: postgresql
+      port: {{ $pg.service.port }}
+      targetPort: postgresql
+      protocol: TCP
+  selector:
+    {{- include "agentregistry.postgresql.selectorLabels" . | nindent 4 }}
+{{- end }}

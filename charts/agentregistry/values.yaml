@@ -263,19 +263,107 @@ rbac:
 # @section Database
 
 database:
-  # -- Full PostgreSQL connection string (overrides all other database fields when set)
-  url: ""
-  # -- External database host
-  host: ""
-  # -- External database port
-  port: 5432
-  # -- External database name
-  database: "agent-registry"
-  # -- External database user
-  username: "agentregistry"
-  # -- External database password (ignored when existingSecret is set)
-  password: ""
-  # -- Name of an existing Secret containing the database password (key: POSTGRES_PASSWORD)
-  existingSecret: ""
-  # -- External database SSL mode (require, verify-ca, verify-full, disable). Defaults to require for encrypted connections.
-  sslMode: "require"
+  # -- Bundled PostgreSQL (dev/test). Enabled by default; set bundled.enabled=false to bring your own.
+  bundled:
+    # -- Deploy a PostgreSQL instance alongside Agent Registry
+    enabled: true
+    image:
+      # -- Bundled PostgreSQL image registry
+      registry: docker.io
+      # -- Bundled PostgreSQL image repository
+      repository: pgvector/pgvector
+      # -- Bundled PostgreSQL image tag
+      tag: "0.8.2-pg16"
+      # -- Bundled PostgreSQL image pull policy
+      pullPolicy: IfNotPresent
+    auth:
+      # -- Database name to create
+      database: "agent-registry"
+      # -- Database user to create
+      username: "agentregistry"
+      # -- Database password (override in production)
+      password: "agentregistry"
+    # -- SSL mode for the bundled PostgreSQL connection
+    sslMode: "disable"
+    service:
+      # -- Service type for bundled PostgreSQL
+      type: ClusterIP
+      # -- Service port for bundled PostgreSQL
+      port: 5432
+    persistence:
+      # -- Enable persistent storage for bundled PostgreSQL
+      enabled: true
+      # -- PVC size
+      size: 5Gi
+      # -- PVC access modes
+      accessModes: [ReadWriteOnce]
+      # -- StorageClass name (empty = cluster default)
+      storageClass: ""
+      # -- Use an existing PVC instead of creating one
+      existingClaim: ""
+    podSecurityContext:
+      # -- Enable pod-level security context for bundled PostgreSQL
+      enabled: true
+      # -- Group ID for the bundled PostgreSQL pod filesystem (matches the postgres user in the pgvector image)
+      fsGroup: 999
+      # -- Policy for changing fsGroup ownership
+      fsGroupChangePolicy: Always
+
+    containerSecurityContext:
+      # -- Enable container-level security context for bundled PostgreSQL
+      enabled: true
+      # -- User ID to run the bundled PostgreSQL container as (postgres user in the pgvector image)
+      runAsUser: 999
+      # -- Group ID to run the bundled PostgreSQL container as
+      runAsGroup: 999
+      # -- Prevent running as root
+      runAsNonRoot: true
+      # -- Allow privilege escalation
+      allowPrivilegeEscalation: false
+
+    # -- Resource requests/limits for the bundled PostgreSQL container (overrides resourcesPreset when set)
+    resources: {}
+    # -- Resource preset for the bundled PostgreSQL container (none, nano, micro, small, medium, large, xlarge, 2xlarge)
+    resourcesPreset: "small"
+    probes:
+      liveness:
+        # -- Initial delay before bundled PostgreSQL liveness check
+        initialDelaySeconds: 20
+        # -- Period between bundled PostgreSQL liveness checks
+        periodSeconds: 10
+        # -- Timeout for bundled PostgreSQL liveness check
+        timeoutSeconds: 5
+        # -- Failure threshold for bundled PostgreSQL liveness check
+        failureThreshold: 6
+        # -- Success threshold for bundled PostgreSQL liveness check
+        successThreshold: 1
+      readiness:
+        # -- Initial delay before bundled PostgreSQL readiness check
+        initialDelaySeconds: 5
+        # -- Period between bundled PostgreSQL readiness checks
+        periodSeconds: 5
+        # -- Timeout for bundled PostgreSQL readiness check
+        timeoutSeconds: 3
+        # -- Failure threshold for bundled PostgreSQL readiness check
+        failureThreshold: 3
+        # -- Success threshold for bundled PostgreSQL readiness check
+        successThreshold: 1
+
+  # -- External PostgreSQL settings (used when bundled.enabled=false)
+  external:
+    # -- Full PostgreSQL connection string (overrides all other external fields when set)
+    url: ""
+    # -- External database host
+    host: ""
+    # -- External database port
+    port: 5432
+    # -- External database name
+    database: "agent-registry"
+    # -- External database user
+    username: "agentregistry"
+    # -- External database password (ignored when existingSecret is set)
+    password: ""
+    # -- Name of an existing Secret containing the database password (key: POSTGRES_PASSWORD)
+    existingSecret: ""
+    # -- External database SSL mode (require, verify-ca, verify-full, disable)
+    sslMode: "require"

@@ -84,6 +84,19 @@ spec:
       topologySpreadConstraints:
         {{- toYaml .Values.topologySpreadConstraints | nindent 8 }}
       {{- end }}
+      {{- if .Values.database.bundled.enabled }}
+      initContainers:
+        - name: wait-for-postgres
+          image: {{ include "agentregistry.postgresql.image" . }}
+          imagePullPolicy: {{ .Values.database.bundled.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h {{ include "agentregistry.postgresql.fullname" . }} -p {{ .Values.database.bundled.service.port }} -U {{ .Values.database.bundled.auth.username | quote }}; do
+                echo "waiting for postgres..."; sleep 2
+              done
+      {{- end }}
       containers:
         - name: agentregistry
           image: {{ include "agentregistry.image" . }}
