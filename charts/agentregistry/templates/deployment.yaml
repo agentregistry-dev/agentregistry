@@ -174,10 +174,9 @@ spec:
           lifecycle:
             {{- toYaml .Values.lifecycleHooks | nindent 12 }}
           {{- end }}
-          {{- $res := include "agentregistry.resources" (dict "resources" .Values.resources "preset" .Values.resourcesPreset) }}
-          {{- if $res }}
+          {{- if .Values.resources }}
           resources:
-            {{- $res | nindent 12 }}
+            {{- toYaml .Values.resources | nindent 12 }}
           {{- end }}
           volumeMounts:
             {{- if .Values.containerSecurityContext.enabled }}

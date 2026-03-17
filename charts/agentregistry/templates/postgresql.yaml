@@ -2,7 +2,6 @@
 {{- $pg := .Values.database.bundled }}
 {{- $fullname := include "agentregistry.postgresql.fullname" . }}
 ---
-{{- if and $pg.persistence.enabled (not $pg.persistence.existingClaim) }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -16,16 +15,11 @@ metadata:
   {{- end }}
 spec:
   accessModes:
-    {{- toYaml $pg.persistence.accessModes | nindent 4 }}
+    - ReadWriteOnce
   resources:
     requests:
-      storage: {{ $pg.persistence.size }}
-  {{- $sc := include "agentregistry.storageClass" . | trim }}
-  {{- if $sc }}
-  storageClassName: {{ $sc | quote }}
-  {{- end }}
+      storage: {{ $pg.storage }}
 ---
-{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -49,20 +43,17 @@ spec:
       labels:
         {{- include "agentregistry.postgresql.selectorLabels" . | nindent 8 }}
     spec:
-      {{- $podSec := include "agentregistry.podSecurityContext" $pg.podSecurityContext }}
-      {{- if $podSec }}
       securityContext:
-        {{- $podSec | nindent 8 }}
-      {{- end }}
+        fsGroup: 999
+        runAsUser: 999
+        runAsGroup: 999
+        runAsNonRoot: true
       containers:
         - name: postgresql
           image: {{ include "agentregistry.postgresql.image" . }}
           imagePullPolicy: {{ $pg.image.pullPolicy }}
-          {{- $containerSec := include "agentregistry.containerSecurityContext" $pg.containerSecurityContext }}
-          {{- if $containerSec }}
           securityContext:
-            {{- $containerSec | nindent 12 }}
-          {{- end }}
+            allowPrivilegeEscalation: false
           ports:
             - name: postgresql
               containerPort: 5432
@@ -87,11 +78,11 @@ spec:
                 - {{ $pg.auth.username | quote }}
                 - -d
                 - {{ $pg.auth.database | quote }}
-            initialDelaySeconds: {{ $pg.probes.liveness.initialDelaySeconds }}
-            periodSeconds: {{ $pg.probes.liveness.periodSeconds }}
-            timeoutSeconds: {{ $pg.probes.liveness.timeoutSeconds }}
-            failureThreshold: {{ $pg.probes.liveness.failureThreshold }}
-            successThreshold: {{ $pg.probes.liveness.successThreshold }}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+            successThreshold: 1
           readinessProbe:
             exec:
               command:
@@ -100,27 +91,22 @@ spec:
                 - {{ $pg.auth.username | quote }}
                 - -d
                 - {{ $pg.auth.database | quote }}
-            initialDelaySeconds: {{ $pg.probes.readiness.initialDelaySeconds }}
-            periodSeconds: {{ $pg.probes.readiness.periodSeconds }}
-            timeoutSeconds: {{ $pg.probes.readiness.timeoutSeconds }}
-            failureThreshold: {{ $pg.probes.readiness.failureThreshold }}
-            successThreshold: {{ $pg.probes.readiness.successThreshold }}
-          {{- $res := include "agentregistry.resources" (dict "resources" $pg.resources "preset" $pg.resourcesPreset) }}
-          {{- if $res }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
+          {{- if $pg.resources }}
           resources:
-            {{- $res | nindent 12 }}
+            {{- toYaml $pg.resources | nindent 12 }}
           {{- end }}
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
       volumes:
         - name: data
-          {{- if $pg.persistence.enabled }}
           persistentVolumeClaim:
-            claimName: {{ $pg.persistence.existingClaim | default $fullname }}
-          {{- else }}
-          emptyDir: {}
-          {{- end }}
+            claimName: {{ $fullname }}
 ---
 apiVersion: v1
 kind: Service

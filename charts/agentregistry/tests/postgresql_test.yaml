@@ -12,7 +12,7 @@ tests:
       - hasDocuments:
           count: 3
 
-  - it: PVC has correct name
+  - it: PVC has correct name and storage size
     template: postgresql.yaml
     documentIndex: 0
     asserts:
@@ -21,6 +21,12 @@ tests:
       - equal:
           path: metadata.name
           value: RELEASE-NAME-agentregistry-postgresql
+      - equal:
+          path: spec.resources.requests.storage
+          value: 5Gi
+      - equal:
+          path: spec.accessModes[0]
+          value: ReadWriteOnce
 
   - it: Deployment has correct name and Recreate strategy
     template: postgresql.yaml
@@ -42,6 +48,32 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[0].image
           pattern: '^docker.io/pgvector/pgvector:0\.8\.2-pg16$'
+
+  - it: Deployment has hardcoded pod security context
+    template: postgresql.yaml
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 999
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 999
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+
+  - it: Deployment has hardcoded container security context
+    template: postgresql.yaml
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
 
   - it: Deployment references chart-managed secret for POSTGRES_PASSWORD
     template: postgresql.yaml
@@ -77,8 +109,14 @@ tests:
     asserts:
       - isNotNull:
           path: spec.template.spec.containers[0].livenessProbe
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 20
       - isNotNull:
           path: spec.template.spec.containers[0].readinessProbe
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
+          value: 5
 
   - it: Deployment mounts PVC as data volume
     template: postgresql.yaml
@@ -90,6 +128,17 @@ tests:
             name: data
             persistentVolumeClaim:
               claimName: RELEASE-NAME-agentregistry-postgresql
+
+  - it: Deployment renders resources when set
+    template: postgresql.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 250m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: "1"
 
   - it: Service has correct name and port
     template: postgresql.yaml
@@ -114,114 +163,6 @@ tests:
       - hasDocuments:
           count: 0
 
-  # ── Persistence disabled ──────────────────────────────────────────────────
-
-  - it: renders only Deployment and Service when persistence is disabled (no PVC)
-    template: postgresql.yaml
-    set:
-      database.bundled.persistence.enabled: false
-    asserts:
-      - hasDocuments:
-          count: 2
-
-  - it: Deployment uses emptyDir when persistence is disabled
-    template: postgresql.yaml
-    set:
-      database.bundled.persistence.enabled: false
-    documentIndex: 0
-    asserts:
-      - isKind:
-          of: Deployment
-      - contains:
-          path: spec.template.spec.volumes
-          content:
-            name: data
-            emptyDir: {}
-
-  # ── Existing PVC claim ────────────────────────────────────────────────────
-
-  - it: does not create PVC when existingClaim is set
-    template: postgresql.yaml
-    set:
-      database.bundled.persistence.existingClaim: my-existing-pvc
-    asserts:
-      - hasDocuments:
-          count: 2
-
-  - it: uses existingClaim name in Deployment volume
-    template: postgresql.yaml
-    set:
-      database.bundled.persistence.existingClaim: my-existing-pvc
-    documentIndex: 0
-    asserts:
-      - isKind:
-          of: Deployment
-      - contains:
-          path: spec.template.spec.volumes
-          content:
-            name: data
-            persistentVolumeClaim:
-              claimName: my-existing-pvc
-
-  # ── Security contexts ─────────────────────────────────────────────────────
-
-  - it: applies pod security context by default
-    template: postgresql.yaml
-    documentIndex: 1
-    asserts:
-      - isKind:
-          of: Deployment
-      - equal:
-          path: spec.template.spec.securityContext.fsGroup
-          value: 999
-
-  - it: applies container security context by default
-    template: postgresql.yaml
-    documentIndex: 1
-    asserts:
-      - isKind:
-          of: Deployment
-      - equal:
-          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
-          value: true
-      - equal:
-          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
-          value: false
-
-  - it: omits pod security context when disabled
-    template: postgresql.yaml
-    set:
-      database.bundled.podSecurityContext.enabled: false
-    documentIndex: 1
-    asserts:
-      - isKind:
-          of: Deployment
-      - isNull:
-          path: spec.template.spec.securityContext
-
-  - it: omits container security context when disabled
-    template: postgresql.yaml
-    set:
-      database.bundled.containerSecurityContext.enabled: false
-    documentIndex: 1
-    asserts:
-      - isKind:
-          of: Deployment
-      - isNull:
-          path: spec.template.spec.containers[0].securityContext
-
-  - it: respects custom fsGroup override
-    template: postgresql.yaml
-    set:
-      database.bundled.podSecurityContext.fsGroup: 1000
-    documentIndex: 1
-    asserts:
-      - isKind:
-          of: Deployment
-      - equal:
-          path: spec.template.spec.securityContext.fsGroup
-          value: 1000
-
   # ── Custom auth values ────────────────────────────────────────────────────
 
   - it: uses custom bundled auth values
@@ -243,3 +184,17 @@ tests:
           content:
             name: POSTGRES_USER
             value: myuser
+
+  # ── Custom storage size ───────────────────────────────────────────────────
+
+  - it: uses custom storage size
+    template: postgresql.yaml
+    set:
+      database.bundled.storage: 10Gi
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: spec.resources.requests.storage
+          value: 10Gi

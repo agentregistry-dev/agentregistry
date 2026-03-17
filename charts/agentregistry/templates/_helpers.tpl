@@ -188,75 +188,6 @@ Otherwise: if database.external.url is set, use it directly; else build from ind
 {{- end }}
 
 {{/* ======================================================================
-   Resource management
-   ====================================================================== */}}
-
-{{/*
-Return resource requests/limits.
-If .resources is non-empty, use it directly.
-Otherwise, map .resourcesPreset to a set of defaults.
-
-Usage: include "agentregistry.resources" (dict "resources" .Values.resources "preset" .Values.resourcesPreset)
-*/}}
-{{- define "agentregistry.resources" -}}
-{{- if .resources }}
-{{- toYaml .resources }}
-{{- else }}
-{{- $preset := .preset | default "none" }}
-{{- if eq $preset "nano" }}
-requests:
-  cpu: 100m
-  memory: 128Mi
-limits:
-  cpu: 200m
-  memory: 256Mi
-{{- else if eq $preset "micro" }}
-requests:
-  cpu: 250m
-  memory: 256Mi
-limits:
-  cpu: 500m
-  memory: 512Mi
-{{- else if eq $preset "small" }}
-requests:
-  cpu: 250m
-  memory: 256Mi
-limits:
-  cpu: "1"
-  memory: 1Gi
-{{- else if eq $preset "medium" }}
-requests:
-  cpu: 500m
-  memory: 512Mi
-limits:
-  cpu: "2"
-  memory: 2Gi
-{{- else if eq $preset "large" }}
-requests:
-  cpu: "1"
-  memory: 1Gi
-limits:
-  cpu: "4"
-  memory: 4Gi
-{{- else if eq $preset "xlarge" }}
-requests:
-  cpu: "2"
-  memory: 2Gi
-limits:
-  cpu: "8"
-  memory: 8Gi
-{{- else if eq $preset "2xlarge" }}
-requests:
-  cpu: "4"
-  memory: 4Gi
-limits:
-  cpu: "16"
-  memory: 16Gi
-{{- end }}
-{{- end }}
-{{- end }}
-
-{{/* ======================================================================
    Security context helpers
    ====================================================================== */}}
 
@@ -429,20 +360,6 @@ Respects global.imageRegistry override.
   {{- end }}
 {{- end }}
 {{- printf "%s/%s:%s" $registry .Values.database.bundled.image.repository .Values.database.bundled.image.tag }}
-{{- end }}
-
-{{/*
-Resolve the storageClassName for the bundled PostgreSQL PVC.
-Prefers global.storageClass over database.bundled.persistence.storageClass.
-*/}}
-{{- define "agentregistry.storageClass" -}}
-{{- $sc := .Values.database.bundled.persistence.storageClass -}}
-{{- if .Values.global }}
-  {{- if .Values.global.storageClass }}
-    {{- $sc = .Values.global.storageClass -}}
-  {{- end }}
-{{- end }}
-{{- $sc }}
 {{- end }}
 
 {{/* ======================================================================

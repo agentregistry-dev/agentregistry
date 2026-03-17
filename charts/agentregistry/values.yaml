@@ -124,9 +124,13 @@ containerSecurityContext:
 # @section Resource management
 
 # -- Resource requests and limits for the Agent Registry container
-resources: {}
-# -- Resource preset to use when resources is empty (none, nano, micro, small, medium, large, xlarge, 2xlarge)
-resourcesPreset: "small"
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
 
 # @section Liveness probe
 
@@ -290,64 +294,16 @@ database:
       type: ClusterIP
       # -- Service port for bundled PostgreSQL
       port: 5432
-    persistence:
-      # -- Enable persistent storage for bundled PostgreSQL
-      enabled: true
-      # -- PVC size
-      size: 5Gi
-      # -- PVC access modes
-      accessModes: [ReadWriteOnce]
-      # -- StorageClass name (empty = cluster default)
-      storageClass: ""
-      # -- Use an existing PVC instead of creating one
-      existingClaim: ""
-    podSecurityContext:
-      # -- Enable pod-level security context for bundled PostgreSQL
-      enabled: true
-      # -- Group ID for the bundled PostgreSQL pod filesystem (matches the postgres user in the pgvector image)
-      fsGroup: 999
-      # -- Policy for changing fsGroup ownership
-      fsGroupChangePolicy: Always
-
-    containerSecurityContext:
-      # -- Enable container-level security context for bundled PostgreSQL
-      enabled: true
-      # -- User ID to run the bundled PostgreSQL container as (postgres user in the pgvector image)
-      runAsUser: 999
-      # -- Group ID to run the bundled PostgreSQL container as
-      runAsGroup: 999
-      # -- Prevent running as root
-      runAsNonRoot: true
-      # -- Allow privilege escalation
-      allowPrivilegeEscalation: false
-
-    # -- Resource requests/limits for the bundled PostgreSQL container (overrides resourcesPreset when set)
-    resources: {}
-    # -- Resource preset for the bundled PostgreSQL container (none, nano, micro, small, medium, large, xlarge, 2xlarge)
-    resourcesPreset: "small"
-    probes:
-      liveness:
-        # -- Initial delay before bundled PostgreSQL liveness check
-        initialDelaySeconds: 20
-        # -- Period between bundled PostgreSQL liveness checks
-        periodSeconds: 10
-        # -- Timeout for bundled PostgreSQL liveness check
-        timeoutSeconds: 5
-        # -- Failure threshold for bundled PostgreSQL liveness check
-        failureThreshold: 6
-        # -- Success threshold for bundled PostgreSQL liveness check
-        successThreshold: 1
-      readiness:
-        # -- Initial delay before bundled PostgreSQL readiness check
-        initialDelaySeconds: 5
-        # -- Period between bundled PostgreSQL readiness checks
-        periodSeconds: 5
-        # -- Timeout for bundled PostgreSQL readiness check
-        timeoutSeconds: 3
-        # -- Failure threshold for bundled PostgreSQL readiness check
-        failureThreshold: 3
-        # -- Success threshold for bundled PostgreSQL readiness check
-        successThreshold: 1
+    # -- PersistentVolumeClaim size for the bundled PostgreSQL data directory
+    storage: 5Gi
+    # -- Resource requests/limits for the bundled PostgreSQL container
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
 
   # -- External PostgreSQL settings (used when bundled.enabled=false)
   external:
