@@ -96,7 +96,7 @@ func init() {
 	rootCmd.AddCommand(cli.ExportCmd)
 	rootCmd.AddCommand(cli.EmbeddingsCmd)
 	rootCmd.AddCommand(deployment.DeploymentCmd)
-	rootCmd.AddCommand(clidaemon.NewDaemonCmd(dockercompose.NewManager(dockercompose.DefaultConfig())))
+	rootCmd.AddCommand(clidaemon.New(dockercompose.NewManager(dockercompose.DefaultConfig())))
 }
 
 // resolveRegistryTarget returns base URL and token from flags and env.

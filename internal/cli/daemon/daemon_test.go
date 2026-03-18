@@ -53,7 +53,7 @@ func TestStartCmd(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd := NewDaemonCmd(tt.dm)
+			cmd := New(tt.dm)
 			cmd.SetOut(&bytes.Buffer{})
 			cmd.SetErr(&bytes.Buffer{})
 			cmd.SetArgs([]string{"start"})
@@ -110,7 +110,7 @@ func TestStopCmd(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd := NewDaemonCmd(tt.dm)
+			cmd := New(tt.dm)
 			cmd.SetOut(&bytes.Buffer{})
 			cmd.SetErr(&bytes.Buffer{})
 			args := []string{"stop"}
@@ -151,7 +151,7 @@ func TestStatusCmd(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd := NewDaemonCmd(tt.dm)
+			cmd := New(tt.dm)
 			cmd.SetOut(&bytes.Buffer{})
 			cmd.SetErr(&bytes.Buffer{})
 			cmd.SetArgs([]string{"status"})

@@ -6,8 +6,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// NewDaemonCmd creates the daemon command tree with the given manager.
-func NewDaemonCmd(dm types.DaemonManager) *cobra.Command {
+// New creates the daemon command tree with the given manager.
+func New(dm types.DaemonManager) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "daemon",
 		Short: "Manage the local registry daemon",
