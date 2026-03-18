@@ -42,6 +42,10 @@ agentregistry puts all of that into a single registry with a CLI and a web UI. Y
 - **Consistent path from laptop to cluster** — same discovery and delivery workflow across local dev and Kubernetes
 - **Governance without slowing teams down** — centralize curation and publishing without forcing each team to rebuild the process
 
+<p align="center">
+  <img src="img/hero-final.png" alt="agentregistry overview" width="800"/>
+</p>
+
 <table>
 <tr>
 <td width="50%" valign="top">
