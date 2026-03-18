@@ -133,6 +133,9 @@ func ComposeUpLocalPlatform(ctx context.Context, platformDir string, verbose boo
 }
 
 func ComposeDownLocalPlatform(ctx context.Context, platformDir string, verbose bool) error {
+	if _, err := os.Stat(platformDir); os.IsNotExist(err) {
+		return nil
+	}
 	cmd := exec.CommandContext(ctx, "docker", "compose", "down", "--remove-orphans")
 	cmd.Dir = platformDir
 	var stderrBuf bytes.Buffer
