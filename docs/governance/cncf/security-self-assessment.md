@@ -39,9 +39,9 @@ This document provides a self-assessment of the agentregistry project following 
 |   |  |
 | - | - |
 | March 17, 2026 | Initial Draft _(Sam Heilbron)_ |
-|  |  |
 
 ### Security Links
+
 
 |   |  |
 | - | - |
@@ -52,7 +52,6 @@ This document provides a self-assessment of the agentregistry project following 
 | Security Insights | See [Project Compliance > Future State](#future-state) |
 | Security File | See [Project Compliance > Future State](#future-state) |
 | Cosign pub-key | See [Project Compliance > Future State](#future-state) |
-|   |  |
 
 ## Overview
 
@@ -127,7 +126,7 @@ This document provides the CNCF TAG-Security with an initial understanding of ag
 
 - **Artifact Scoring and Validation**: Ingested artifacts are automatically scored and validated using the OSSF Scorecard library, enriching metadata with trustworthiness and dependency health signals.
 
-- **Container Image Security**: Production images are built using multi-stage Docker builds with Alpine Linux base images for minimal attack surface. Go binaries are stripped of debug symbols (`-s -w` flags). Images are published to `ghcr.io` with multi-platform support (linux/amd64, linux/arm64).
+- **Container Image Security**: Production images are built using multi-stage Docker builds, with Alpine Linux used for builder stages and `ubuntu:22.04` as the final runtime base image to reduce the attack surface. Go binaries are stripped of debug symbols (`-s -w` flags). Images are published to `ghcr.io` with multi-platform support (linux/amd64, linux/arm64).
 
 - **Namespace Denylist**: A namespace blocking mechanism prevents abuse by denying operations on restricted namespaces.
 

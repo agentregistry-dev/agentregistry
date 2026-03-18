@@ -24,7 +24,7 @@ This section covers the design and architecture of Agentregistry as a cloud nati
 
 The roadmap can be found here: https://github.com/orgs/agentregistry-dev/projects/3
 
-Work is tracked in Github issues, and then feature requests are prioritized into the `Ready` column when they are ready for an engineer to start working on them.
+Work is tracked in GitHub issues, and then feature requests are prioritized into the `Ready` column when they are ready for an engineer to start working on them.
 
 https://github.com/agentregistry-dev/community/blob/main/CONTRIBUTING.md outlines how individuals can contribute to the project.
 
@@ -51,8 +51,8 @@ _Additional Supported Use Cases:_
 **Explain which use cases have been identified as unsupported by the project.**
 
 The following use cases are not supported, and are currently considered out of scope:
-- **General-purpose OCI artifact or container image registry:** Agentgegistry is purpose-built for agentic AI artifacts (MCP servers, agents, skills). It is not a replacement for OCI-compatible container registries such as Harbor or Docker Hub. Container image distribution is out of scope.
-- **AI model registry or model storage:** Agentgegistry does not store, version, or serve machine learning model weights or model files. It manages the metadata, configuration, and composition of agentic tools and skills, not the underlying models they invoke.
+- **General-purpose OCI artifact or container image registry:** Agentregistry is purpose-built for agentic AI artifacts (MCP servers, agents, skills). It is not a replacement for OCI-compatible container registries such as Harbor or Docker Hub. Container image distribution is out of scope.
+- **AI model registry or model storage:** Agentregistry does not store, version, or serve machine learning model weights or model files. It manages the metadata, configuration, and composition of agentic tools and skills, not the underlying models they invoke.
 - **Runtime execution environment:** Agentregistry does not execute agents or MCP servers directly. Execution is handled by the target environment (e.g., the Agentgateway and the underlying runtime). The registry manages lifecycle metadata, not runtime orchestration.
 - **Agent versioning (currently in progress):** Versioning for agents and skills is not yet implemented. Until released, use cases requiring immutable, versioned artifact references are not fully supported.
 
@@ -102,10 +102,10 @@ _This is described as part of the above answer_
 **Describe how this project integrates with other projects in a production environment.**
 
 In production, agentregistry acts as the **control plane** for agentic AI infrastructure — it manages the catalog, governance, and configuration of AI artifacts — while complementary projects handle execution, traffic routing, and deployment. The key integrations are:
-- **agentgateway (Linux Foundation):** The most significant integration. Agentgateway is a reverse proxy purpose-built for AI traffic that provides a single, unified MCP endpoint for all deployed servers. In a production deployment, agentregistry and aentgateway work as a pair, where agentregistry holds the catalog of approved artifacts, while agentgateway receives mCP traffic from AI IDE clients (ie Claude Desktop, Cursor, VS Code) and droutes tools calls to the appropriate backend MCP server.
-- **Kubernetes / Helm:** In production, agentregistry is deployed to a Kubernetes cluster using the published OCI Helm chart (`oci://ghcr.io/agentregistry-dev/charts/agentregistry`). It integrates with standard Kubernetes primitives: Deployments, Services, ConfigMaps, and Secrets (for the JWT private key and database credentials). The Kubernetes Gateway API (`gateway.networking.k8s.io`) is used for agentgateway routing configuration.
+- **agentgateway (Linux Foundation):** The most significant integration. Agentgateway is a reverse proxy purpose-built for AI traffic that provides a single, unified MCP endpoint for all deployed servers. In a production deployment, agentregistry and agentgateway work as a pair, where agentregistry holds the catalog of approved artifacts, while agentgateway receives mCP traffic from AI IDE clients (ie Claude Desktop, Cursor, VS Code) and droutes tools calls to the appropriate backend MCP server.
+- **Kubernetes / Helm:** In production, agentregistry is deployed to a Kubernetes cluster using the published OCI Helm chart (`oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry`). It integrates with standard Kubernetes primitives: Deployments, Services, ConfigMaps, and Secrets (for the JWT private key and database credentials). The Kubernetes Gateway API (`gateway.networking.k8s.io`) is used for agentgateway routing configuration.
 - **PostgreSQL with pgvector:** agentregistry requires PostgreSQL with the pgvector extension as its persistent storage backend. In production, this may be an externally managed PostgreSQL instance. The pgvector extension enables semantic/embedding-based search across the artifact catalog.
-- **Container registries:**: agentregistry integrates with whatever container registry an organization already uses, with no lock-in to a specific image storage backend.
+- **Container registries:** agentregistry integrates with whatever container registry an organization already uses, with no lock-in to a specific image storage backend.
 - **AI-powered IDEs (Claude Desktop, Cursor, VS Code):** agentregistry integrates with AI IDEs not as a runtime dependency, but as a configuration provider. The `arctl configure` command writes MCP configuration files to the developer's local filesystem in the format expected by each IDE. Once configured, the IDE connects directly to the agentgateway; agentregistry is not in the request path at runtime.
 - **Model Context Protocol (MCP):** agentregistry is built around MCP as the core protocol for tool and agent interoperability. MCP servers are the primary artifact type managed by the registry. Compatibility with the MCP specification is foundational to the project's design, and the registry is expected to track and align with MCP specification evolution over time.
 
@@ -138,7 +138,7 @@ See [`DEVELOPMENT.md`](https://github.com/agentregistry-dev/agentregistry/blob/m
 | **PoC / Local** | Docker Compose with bundled PostgreSQL/pgvector. Single node. `arctl mcp list` auto-starts daemon. |
 | **Development** | Docker Compose or Kind (local Kubernetes). See `scripts/kind/README.md`. |
 | **Test** | Kubernetes (Kind) with Helm chart and an external PostgreSQL/pgvector instance. |
-| **Production** | Kubernetes cluster with Helm chart (`oci://ghcr.io/agentregistry-dev/helm/agentregistry`). Requires an external, HA PostgreSQL instance with pgvector extension. |
+| **Production** | Kubernetes cluster with Helm chart (`oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry`). Requires an external, HA PostgreSQL instance with pgvector extension. |
 
 **Define any specific service dependencies the project relies on.**
 - **PostgreSQL ≥ 16 with pgvector extension:** Required for all environments except local PoC (where it is bundled via Docker Compose). The pgvector extension is required for semantic search capabilities.
