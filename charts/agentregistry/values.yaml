@@ -277,7 +277,7 @@ database:
       # -- Bundled PostgreSQL image repository
       repository: pgvector/pgvector
       # -- Bundled PostgreSQL image tag
-      tag: "0.8.2-pg16"
+      tag: "pg16"
       # -- Bundled PostgreSQL image pull policy
       pullPolicy: IfNotPresent
     auth:

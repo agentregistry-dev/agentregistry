@@ -47,7 +47,7 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].image
-          pattern: '^docker.io/pgvector/pgvector:0\.8\.2-pg16$'
+          pattern: '^docker.io/pgvector/pgvector:pg16$'
 
   - it: Deployment has hardcoded pod security context
     template: postgresql.yaml
