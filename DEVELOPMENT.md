@@ -2,7 +2,7 @@
 
 ## Local Kubernetes Environment
 
-The fastest way to run the full stack locally is with [Kind](https://kind.sigs.k8s.io/). A single `make` target creates the cluster, deploys PostgreSQL/pgvector, builds the server image, and installs AgentRegistry via Helm.
+The fastest way to run the full stack locally is with [Kind](https://kind.sigs.k8s.io/). A single `make` target creates the cluster, builds the server image, and installs AgentRegistry via Helm — PostgreSQL/pgvector is bundled and deployed automatically by the Helm chart.
 
 ### Prerequisites
 
@@ -19,13 +19,12 @@ The fastest way to run the full stack locally is with [Kind](https://kind.sigs.k
 make setup-kind-cluster
 ```
 
-This runs three steps in order:
+This runs two steps in order:
 
 | Step | Target | What it does |
 |------|--------|-------------|
 | 1 | `create-kind-cluster` | Installs `kind` to `./bin/`, creates Kind cluster + local registry (`localhost:5001`) + MetalLB |
-| 2 | `install-postgresql` | Deploys `pgvector/pgvector:0.8.2-pg16` into the `agentregistry` namespace |
-| 3 | `install-agentregistry` | Builds server image, pushes to local registry, Helm installs AgentRegistry |
+| 2 | `install-agentregistry` | Builds server image, pushes to local registry, Helm installs AgentRegistry (PostgreSQL/pgvector bundled) |
 
 Each target can also be run independently — useful when iterating on code:
 
@@ -48,8 +47,8 @@ On subsequent runs, `install-agentregistry` reuses the `jwtPrivateKey` already s
 kubectl --context kind-agentregistry port-forward -n agentregistry svc/agentregistry 12121:12121
 # open http://localhost:12121
 
-# PostgreSQL (for direct inspection)
-kubectl --context kind-agentregistry port-forward -n agentregistry svc/postgres-pgvector 5432:5432
+# Bundled PostgreSQL (for direct inspection)
+kubectl --context kind-agentregistry port-forward -n agentregistry svc/agentregistry-postgresql 5432:5432
 psql -h localhost -U agentregistry -d agent-registry
 ```
 

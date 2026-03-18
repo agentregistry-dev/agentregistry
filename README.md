@@ -108,18 +108,7 @@ Open `http://localhost:12121` to use the web UI.
 
 ### ☸️ Kubernetes
 
-Run Agent Registry in a cluster when you want shared discovery and deployment workflows. An external PostgreSQL instance with the [pgvector](https://github.com/pgvector/pgvector) extension is required.
-
-#### PostgreSQL
-
-Deploy a single-instance PostgreSQL and pgvector into your cluster using the provided example manifest:
-
-```bash
-kubectl apply -f https://raw.githubusercontent.com/agentregistry-dev/agentregistry/main/examples/postgres-pgvector.yaml
-kubectl -n agentregistry wait --for=condition=ready pod -l app=postgres-pgvector --timeout=120s
-```
-
-This setup is intended for development and testing. For production, use a managed PostgreSQL service or a production-grade operator.
+Run Agent Registry in a cluster when you want shared discovery and deployment workflows. PostgreSQL with the [pgvector](https://github.com/pgvector/pgvector) extension is **bundled by default** — no separate database setup required for development and testing.
 
 #### Install Agent Registry
 
@@ -127,9 +116,18 @@ This setup is intended for development and testing. For production, use a manage
 helm install agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
   --namespace agentregistry \
   --create-namespace \
-  --set database.host=postgres-pgvector.agentregistry.svc.cluster.local \
-  --set database.password=agentregistry \
-  --set database.sslMode=disable \
+  --set config.jwtPrivateKey=$(openssl rand -hex 32)
+```
+
+For production, disable the bundled database and point to a managed PostgreSQL service:
+
+```bash
+helm install agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
+  --namespace agentregistry \
+  --create-namespace \
+  --set database.bundled.enabled=false \
+  --set database.external.host=<your-pg-host> \
+  --set database.external.password=<your-pg-password> \
   --set config.jwtPrivateKey=$(openssl rand -hex 32)
 ```
 
