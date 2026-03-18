@@ -559,7 +559,8 @@ func validateRemoteURLMatchesNamespace(remoteURL, namespace string) error {
 	// Extract publisher domain from reverse-DNS namespace
 	publisherDomain := extractPublisherDomainFromNamespace(namespace)
 	if publisherDomain == "" {
-		return fmt.Errorf("invalid namespace format: cannot extract domain from %s", namespace)
+		hint := reverseDNSFromHostname(hostname)
+		return fmt.Errorf("invalid namespace format: namespace must use reverse-DNS notation (e.g., %q for %s)", hint, hostname)
 	}
 
 	// Check if the remote URL hostname matches the publisher domain or is a subdomain
@@ -585,6 +586,13 @@ func extractPublisherDomainFromNamespace(namespace string) string {
 	// Reverse the parts to convert from reverse-DNS to normal domain
 	slices.Reverse(parts)
 
+	return strings.Join(parts, ".")
+}
+
+// reverseDNSFromHostname converts a hostname like "example.com" to reverse-DNS "com.example".
+func reverseDNSFromHostname(hostname string) string {
+	parts := strings.Split(hostname, ".")
+	slices.Reverse(parts)
 	return strings.Join(parts, ".")
 }
 
