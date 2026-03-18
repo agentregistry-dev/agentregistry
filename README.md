@@ -158,7 +158,7 @@ agentregistry pairs with [agentgateway](https://github.com/agentgateway/agentgat
 Instead of exposing every MCP server individually, agentgateway acts as an AI-native reverse proxy that sits in front of your entire agentic infrastructure:
 
 - **Single endpoint** — AI clients (Claude Desktop, Cursor, VS Code) connect to one URL. The gateway routes each tool call to the correct backend MCP server.
-- **Authentication & authorization** — Enforce identity and access policies before requests reach your MCP servers. Control who can call which tools.
+- **Authentication & authorization** — Enforce identity and access policies before requests reach your MCP servers. Control who can call which tools. Supports JWT validation and on-behalf-of auth flows.
 - **Centralized observability** — Log and monitor all agent-to-tool traffic in one place instead of instrumenting each server separately. Supports OTEL endpoints for traces, metrics, and logs.
 - **Dynamic discovery** — Deploy a new MCP server through agentregistry and every connected client picks it up automatically — no reconfiguration needed.
 - **Transport flexibility** — Proxy across stdio, SSE, and streamable HTTP transports seamlessly.
