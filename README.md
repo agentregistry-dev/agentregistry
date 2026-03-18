@@ -74,6 +74,28 @@ agentregistry puts all of that into a single registry with a CLI and a web UI. Y
 </tr>
 </table>
 
+<a id="quick-start"></a>
+## Quick Start
+
+**Prerequisites:** Docker Desktop with Docker Compose v2+
+
+```bash
+# 1. Install the CLI
+curl -fsSL https://raw.githubusercontent.com/agentregistry-dev/agentregistry/main/scripts/get-arctl | bash
+
+# 2. List available MCP servers (starts the registry daemon automatically)
+arctl mcp list
+
+# 3. Open the web UI
+open http://localhost:12121
+
+# 4. Deploy a server and configure your IDE
+arctl deploy <server-name>
+arctl configure cursor
+```
+
+That's it. Your IDE now has access to the deployed server through the Agent Gateway.
+
 ---
 
 ## Core Capabilities
@@ -128,30 +150,6 @@ Make approved artifacts easier to consume from the tools developers already use.
 2. Developers discover those artifacts through the web UI or `arctl`
 3. Teams pull and deploy what they need in local environments or Kubernetes
 4. AI clients and shared gateway infrastructure connect to approved artifacts through a consistent workflow
-
-<a id="quick-start"></a>
-## Quick Start
-
-**Prerequisites:** Docker Desktop with Docker Compose v2+
-
-```bash
-# 1. Install the CLI
-curl -fsSL https://raw.githubusercontent.com/agentregistry-dev/agentregistry/main/scripts/get-arctl | bash
-
-# 2. List available MCP servers (starts the registry daemon automatically)
-arctl mcp list
-
-# 3. Open the web UI
-open http://localhost:12121
-
-# 4. Deploy a server and configure your IDE
-arctl deploy <server-name>
-arctl configure cursor
-```
-
-That's it. Your IDE now has access to the deployed server through the Agent Gateway.
-
----
 
 ## Related Projects
 
