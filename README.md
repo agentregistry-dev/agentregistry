@@ -94,7 +94,7 @@ arctl deploy <server-name>
 arctl configure cursor
 ```
 
-That's it. Your IDE now has access to the deployed server through the Agent Gateway.
+That's it. Your IDE now has access to the deployed server through the agentgateway.
 
 ---
 
@@ -141,7 +141,7 @@ Move from discovery to usage without reinventing the same delivery path for ever
 Make approved artifacts easier to consume from the tools developers already use.
 
 - Generate configuration for Claude Desktop, Cursor, and VS Code
-- Pair with Agent Gateway for a consistent access layer to deployed MCP infrastructure
+- Pair with agentgateway for a consistent access layer to deployed MCP infrastructure
 - Reduce manual setup for AI clients and shared environments
 
 ### How It Works Together
@@ -151,15 +151,15 @@ Make approved artifacts easier to consume from the tools developers already use.
 3. Teams pull and deploy what they need in local environments or Kubernetes
 4. AI clients and shared gateway infrastructure connect to approved artifacts through a consistent workflow
 
-## Secure Access with Agent Gateway
+## Secure Access with agentgateway
 
 <p align="center">
-  <img src="img/arch-diagram.png" alt="Agent Gateway architecture diagram" width="800"/>
+  <img src="img/arch-diagram.png" alt="agentgateway architecture diagram" width="800"/>
 </p>
 
-agentregistry pairs with [Agent Gateway](https://github.com/agentgateway/agentgateway) to give you a single, secure entry point to all your deployed MCP servers and agents.
+agentregistry pairs with [agentgateway](https://github.com/agentgateway/agentgateway) to give you a single, secure entry point to all your deployed MCP servers and agents.
 
-Instead of exposing every MCP server individually, Agent Gateway acts as an AI-native reverse proxy that sits in front of your entire agentic infrastructure:
+Instead of exposing every MCP server individually, agentgateway acts as an AI-native reverse proxy that sits in front of your entire agentic infrastructure:
 
 - **Single endpoint** — AI clients (Claude Desktop, Cursor, VS Code) connect to one URL. The gateway routes each tool call to the correct backend MCP server.
 - **Authentication & authorization** — Enforce identity and access policies before requests reach your MCP servers. Control who can call which tools.
@@ -168,11 +168,11 @@ Instead of exposing every MCP server individually, Agent Gateway acts as an AI-n
 - **Transport flexibility** — Proxy across stdio, SSE, and streamable HTTP transports seamlessly.
 
 ```
-┌─────────────┐     ┌─────────────────┐     ┌──────────────┐
-│  AI Client  │────▶│  Agent Gateway  │────▶│  MCP Server  │
-│  (Cursor,   │     │  (auth, route,  │     │  MCP Server  │
-│   Claude)   │     │   observe)      │     │  MCP Server  │
-└─────────────┘     └─────────────────┘     └──────────────┘
+┌─────────────┐     ┌──────────────────┐     ┌──────────────┐
+│  AI Client  │────▶│  agentgateway    │────▶│  MCP Server  │
+│  (Cursor,   │     │  (auth, route,   │     │  MCP Server  │
+│   Claude)   │     │   observe)       │     │  MCP Server  │
+└─────────────┘     └──────────────────┘     └──────────────┘
 ```
 
 When you run `arctl deploy`, agentregistry automatically configures the gateway routing so your MCP servers are reachable through the secured proxy. Run `arctl configure cursor` to point your IDE at the gateway endpoint.
@@ -183,7 +183,7 @@ When you run `arctl deploy`, agentregistry automatically configures the gateway 
 
 | Project | Role |
 |---|---|
-| [Agent Gateway](https://github.com/agentgateway/agentgateway) | AI-native reverse proxy for MCP traffic |
+| [agentgateway](https://github.com/agentgateway/agentgateway) | AI-native reverse proxy for MCP traffic |
 | [kagent](https://github.com/kagent-dev/kagent) | Kubernetes-native AI agent platform |
 | [kgateway](https://github.com/kgateway-dev/kgateway) | Cloud-native API gateway (Envoy + Gateway API) |
 | [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) | Go SDK for building MCP servers |
