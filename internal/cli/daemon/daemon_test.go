@@ -34,18 +34,13 @@ func TestStartCmd(t *testing.T) {
 		wantStartCalled bool
 	}{
 		{
-			name:            "already running",
-			dm:              &mockDaemonManager{running: true},
-			wantStartCalled: false,
-		},
-		{
-			name:            "not running starts successfully",
-			dm:              &mockDaemonManager{running: false},
+			name:            "starts successfully",
+			dm:              &mockDaemonManager{},
 			wantStartCalled: true,
 		},
 		{
 			name:            "start fails",
-			dm:              &mockDaemonManager{running: false, startErr: errors.New("docker compose not available")},
+			dm:              &mockDaemonManager{startErr: errors.New("docker compose not available")},
 			wantErr:         true,
 			wantStartCalled: true,
 		},
@@ -79,29 +74,25 @@ func TestStopCmd(t *testing.T) {
 		wantPurgeCalled bool
 	}{
 		{
-			name: "not running",
-			dm:   &mockDaemonManager{running: false},
-		},
-		{
 			name:           "stop successfully",
-			dm:             &mockDaemonManager{running: true},
+			dm:             &mockDaemonManager{},
 			wantStopCalled: true,
 		},
 		{
 			name:           "stop fails",
-			dm:             &mockDaemonManager{running: true, stopErr: errors.New("stop failed")},
+			dm:             &mockDaemonManager{stopErr: errors.New("stop failed")},
 			wantErr:        true,
 			wantStopCalled: true,
 		},
 		{
 			name:            "purge successfully",
-			dm:              &mockDaemonManager{running: true},
+			dm:              &mockDaemonManager{},
 			purge:           true,
 			wantPurgeCalled: true,
 		},
 		{
 			name:            "purge fails",
-			dm:              &mockDaemonManager{running: true, purgeErr: errors.New("purge failed")},
+			dm:              &mockDaemonManager{purgeErr: errors.New("purge failed")},
 			purge:           true,
 			wantErr:         true,
 			wantPurgeCalled: true,

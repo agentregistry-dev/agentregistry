@@ -30,10 +30,6 @@ func newStartCmd(dm types.DaemonManager) *cobra.Command {
 		Use:   "start",
 		Short: "Start the local registry daemon",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if dm.IsRunning() {
-				printer.PrintInfo("Daemon is already running.")
-				return nil
-			}
 			return dm.Start()
 		},
 	}
@@ -46,10 +42,6 @@ func newStopCmd(dm types.DaemonManager) *cobra.Command {
 		Use:   "stop",
 		Short: "Stop the local registry daemon",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if !dm.IsRunning() {
-				printer.PrintInfo("Daemon is not running.")
-				return nil
-			}
 			if purge {
 				printer.PrintWarning("This will remove all registry data (published servers, agents, skills, prompts).")
 				if err := dm.Purge(); err != nil {
