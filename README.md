@@ -81,35 +81,49 @@ agentregistry puts all of that into a single registry with a CLI and a web UI. Y
 
 ---
 
-## Web UI
-
-A browser-based admin interface at `localhost:12121`. Add MCP servers, skills, and agents through a visual interface. Browse the artifact catalog, review enrichment scores and metadata, manage deployments, and configure the registry — all without touching the CLI.
-
-<p align="center">
-  <a href="img/arwui.gif">
-    <img src="img/arwui.gif" alt="agentregistry Web UI — browse servers, skills, agents, and prompts" width="800"/>
-  </a>
-  <br/>
-  <sub><a href="img/arwui.gif">Click to expand ↗</a></sub>
-</p>
-
----
-
 ## Core Capabilities
 
-A centralized catalog for AI artifacts, backed by PostgreSQL with pgvector for semantic search.
+### Registry
 
-- **MCP servers** — The tools that AI agents and IDE assistants call at runtime. agentregistry supports every packaging model: npm packages run via `npx` on `node:24-alpine`, PyPI packages run via `uvx` on Astral's `uv` runtime, OCI/Docker images pulled from any container registry, and remote HTTP/SSE endpoints accessed directly with optional auth headers. Each server entry stores rich metadata including version history, tool listings, environment variable requirements, package references, and automated quality scores.
+Curate a shared catalog of MCP servers, agents, skills, and prompts your teams can trust and reuse.
 
-- **Skills** — Structured knowledge packages that extend what an agent knows beyond its base training. A skill is a SKILL.md instruction file bundled with optional code examples, documentation, PDFs, and reference URLs. Skills are published as container images to Docker Hub or any OCI-compatible registry and can be pulled locally by any compatible AI assistant. The `arctl skill init` command scaffolds the directory structure; `arctl skill publish` builds and pushes the image.
+- Publish artifacts to a central registry from npm, PyPI, Docker, OCI, or remote endpoints
+- Discover approved artifacts through the CLI, REST API, or web UI at `localhost:12121`
+- Give teams a consistent source of truth across environments
+- Search by description ("query Postgres", "send Slack messages") instead of exact names — powered by pgvector
 
-- **Agents** — Definitions that bundle an agent's identity with its dependencies: which MCP servers it needs, which skills it uses, and how it should be configured. agentregistry uses the ADK (Agent Development Kit) scaffolding pattern. Blueprints package an agent and all its dependencies into a single versioned artifact for one-step deployment.
+### Curation and Governance
 
-- **Prompts** — Reusable instruction templates that define how an agent should behave in specific contexts. Prompts are versioned and stored in the registry alongside agents, skills, and servers, making them discoverable and shareable across your team.
+Turn a broad set of available AI artifacts into a collection your organization is willing to support.
 
-### Build and push
+- Organize what developers can discover and deploy
+- Review enrichment scores, version history, tool listings, and environment variable requirements
+- Standardize how artifacts are shared across teams
+- Keep control of what gets published and promoted
 
-Scaffold agents using ADK, version them, and push to the registry. Blueprints bundle an agent definition with its MCP server dependencies and skills into a single deployable unit. The registry stores the metadata and pointers — actual container images live in Docker Hub, GHCR, or any OCI registry you use. This means you own your artifacts; agentregistry indexes and governs them.
+### Deployment Workflows
+
+Move from discovery to usage without reinventing the same delivery path for every team.
+
+- Run workflows locally with `arctl`
+- Deploy Agent Registry into Kubernetes with Helm
+- Support local environments and shared platform environments from the same registry
+- Build and push agents using ADK — blueprints bundle an agent with its MCP servers and skills into a single deployable unit
+
+### Client and Gateway Integration
+
+Make approved artifacts easier to consume from the tools developers already use.
+
+- Generate configuration for Claude Desktop, Cursor, and VS Code
+- Pair with Agent Gateway for a consistent access layer to deployed MCP infrastructure
+- Reduce manual setup for AI clients and shared environments
+
+### How It Works Together
+
+1. Platform teams curate and publish approved MCP servers, agents, and skills in Agent Registry
+2. Developers discover those artifacts through the web UI or `arctl`
+3. Teams pull and deploy what they need in local environments or Kubernetes
+4. AI clients and shared gateway infrastructure connect to approved artifacts through a consistent workflow
 
 <a id="quick-start"></a>
 ## Quick Start
