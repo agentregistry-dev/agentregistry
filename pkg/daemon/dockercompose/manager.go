@@ -94,6 +94,28 @@ func (m *Manager) Start() error {
 	return nil
 }
 
+func (m *Manager) Stop() error {
+	return m.down(false)
+}
+
+func (m *Manager) Purge() error {
+	return m.down(true)
+}
+
+func (m *Manager) down(removeVolumes bool) error {
+	args := []string{"compose", "-p", m.config.ProjectName, "-f", "-", "down"}
+	if removeVolumes {
+		args = append(args, "-v")
+	}
+	cmd := exec.Command("docker", args...)
+	cmd.Stdin = strings.NewReader(m.config.ComposeYAML)
+	cmd.Env = append(os.Environ(), fmt.Sprintf("VERSION=%s", m.config.Version), fmt.Sprintf("DOCKER_REGISTRY=%s", m.config.DockerRegistry))
+	if byt, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to stop docker compose: %w, output: %s", err, string(byt))
+	}
+	return nil
+}
+
 func (m *Manager) isContainerRunning() bool {
 	cmd := exec.Command("docker", "compose", "-p", m.config.ProjectName, "-f", "-", "ps")
 	cmd.Stdin = strings.NewReader(m.config.ComposeYAML)

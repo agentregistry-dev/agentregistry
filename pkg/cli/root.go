@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"strings"
 
@@ -12,17 +11,16 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent"
 	agentutils "github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/configure"
+	clidaemon "github.com/agentregistry-dev/agentregistry/internal/cli/daemon"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/deployment"
+	"github.com/agentregistry-dev/agentregistry/pkg/daemon/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/prompt"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
-	"github.com/agentregistry-dev/agentregistry/pkg/daemon/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/spf13/cobra"
 )
-
-const defaultRegistryPort = "12121"
 
 // ClientFactory creates an API client for the given base URL and token.
 // Used for testing when nil; production uses client.NewClientWithConfig.
@@ -31,9 +29,6 @@ type ClientFactory func(ctx context.Context, baseURL, token string) (*client.Cli
 // CLIOptions configures the CLI behavior.
 // Can be extended for more options (e.g. client factory).
 type CLIOptions struct {
-	// DaemonManager handles daemon lifecycle. If nil, uses default.
-	DaemonManager types.DaemonManager
-
 	// AuthnProviderFactory provides CLI-specific authentication.
 	AuthnProviderFactory types.CLIAuthnProviderFactory
 
@@ -67,12 +62,11 @@ var rootCmd = &cobra.Command{
 	Long:  `arctl is a CLI tool for managing agents, MCP servers and skills.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, token := resolveRegistryTarget(os.Getenv)
-		skipSetup, autoStartDaemon := preRunBehavior(cmd, baseURL)
-		if skipSetup {
+		if preRunBehavior(cmd) {
 			return nil
 		}
 
-		c, err := preRunSetup(cmd.Context(), cmd, baseURL, token, autoStartDaemon)
+		c, err := preRunSetup(cmd.Context(), cmd, baseURL, token)
 		if err != nil {
 			return err
 		}
@@ -102,6 +96,7 @@ func init() {
 	rootCmd.AddCommand(cli.ExportCmd)
 	rootCmd.AddCommand(cli.EmbeddingsCmd)
 	rootCmd.AddCommand(deployment.DeploymentCmd)
+	rootCmd.AddCommand(clidaemon.NewDaemonCmd(dockercompose.NewManager(dockercompose.DefaultConfig())))
 }
 
 // resolveRegistryTarget returns base URL and token from flags and env.
@@ -154,83 +149,33 @@ func normalizeBaseURL(raw string) string {
 	return "http://" + trimmed
 }
 
-func parseRegistryURL(raw string) *url.URL {
-	if strings.TrimSpace(raw) == "" {
-		raw = client.DefaultBaseURL
-	}
-	parsed, err := url.Parse(raw)
-	if err == nil && parsed.Hostname() != "" {
-		return parsed
-	}
-	parsed, err = url.Parse("http://" + raw)
-	if err != nil {
-		return nil
-	}
-	return parsed
+// preRunSkipCommands defines which commands skip pre-run setup (no API client needed).
+// Key: parent name; value: set of subcommand names that skip setup.
+var preRunSkipCommands = map[string]map[string]bool{
+	"agent": {"init": true},
+	"mcp":   {"init": true},
+	"skill": {"init": true},
 }
 
-// preRunDaemonBehavior defines which commands skip setup and when to auto-start the daemon.
-// Key: parent name; value: set of subcommand names that skip daemon/client setup.
-var preRunDaemonBehavior = struct {
-	skipCommands map[string]map[string]bool
-}{
-	skipCommands: map[string]map[string]bool{
-		"agent": {"init": true},
-		"mcp":   {"init": true},
-		"skill": {"init": true},
-	},
+// preRunBehavior returns whether to skip pre-run setup (e.g. agent/mcp/skill init).
+func preRunBehavior(cmd *cobra.Command) (skipSetup bool) {
+	if cmd == nil {
+		return false
+	}
+	for c := cmd; c != nil; c = c.Parent() {
+		parent := c.Parent()
+		if parent == nil {
+			break
+		}
+		if subcommands, ok := preRunSkipCommands[parent.Name()]; ok && subcommands[c.Name()] {
+			return true
+		}
+	}
+	return false
 }
 
-// preRunBehavior returns whether to skip pre-run setup (e.g. agent/mcp/skill init) and
-// whether to auto-start the daemon when the registry target is localhost:12121.
-func preRunBehavior(cmd *cobra.Command, baseURL string) (skipSetup bool, autoStartDaemon bool) {
-	// Skip daemon and client setup for specific commands and any of their subcommand
-	if cmd != nil {
-		for c := cmd; c != nil; c = c.Parent() {
-			parent := c.Parent()
-			if parent == nil {
-				break
-			}
-			if subcommands, ok := preRunDaemonBehavior.skipCommands[parent.Name()]; ok && subcommands[c.Name()] {
-				return true, false
-			}
-		}
-	}
-
-	// Auto-start daemon only for localhost on default registry port
-	parsed := parseRegistryURL(baseURL)
-	if parsed == nil {
-		return false, false
-	}
-	host := strings.ToLower(parsed.Hostname())
-	if host != "localhost" && host != "127.0.0.1" && host != "::1" {
-		return false, false
-	}
-	port := parsed.Port()
-	if port == "" {
-		if parsed.Scheme == "https" {
-			port = "443"
-		} else {
-			port = "80"
-		}
-	}
-	autoStartDaemon = (port == defaultRegistryPort)
-	return false, autoStartDaemon
-}
-
-// preRunSetup ensures daemon is running when autoStartDaemon is true, resolves auth, and creates the API client.
-func preRunSetup(ctx context.Context, cmd *cobra.Command, baseURL, token string, autoStartDaemon bool) (*client.Client, error) {
-	dm := cliOptions.DaemonManager
-	if dm == nil {
-		dm = dockercompose.NewManager(dockercompose.DefaultConfig())
-	}
-
-	if autoStartDaemon {
-		if err := ensureDaemonRunning(dm); err != nil {
-			return nil, err
-		}
-	}
-
+// preRunSetup resolves auth and creates the API client.
+func preRunSetup(ctx context.Context, cmd *cobra.Command, baseURL, token string) (*client.Client, error) {
 	// Get authentication token if no token override was provided
 	if token == "" && cliOptions.AuthnProviderFactory != nil {
 		resolvedToken, err := resolveAuthToken(ctx, cmd, cliOptions.AuthnProviderFactory)
@@ -247,25 +192,15 @@ func preRunSetup(ctx context.Context, cmd *cobra.Command, baseURL, token string,
 		}
 	}
 
-	var c *client.Client
-	var err error
-	if cliOptions.ClientFactory != nil {
-		c, err = cliOptions.ClientFactory(ctx, baseURL, token)
-	} else {
-		c, err = client.NewClientWithConfig(baseURL, token)
+	factory := cliOptions.ClientFactory
+	if factory == nil {
+		factory = func(_ context.Context, u, tok string) (*client.Client, error) {
+			return client.NewClientWithConfig(u, tok)
+		}
 	}
+	c, err := factory(ctx, baseURL, token)
 	if err != nil {
-		return nil, fmt.Errorf("API client not initialized: %w", err)
+		return nil, fmt.Errorf("registry unreachable at %s: %w", baseURL, err)
 	}
 	return c, nil
-}
-
-func ensureDaemonRunning(dm types.DaemonManager) error {
-	if dm.IsRunning() {
-		return nil
-	}
-	if err := dm.Start(); err != nil {
-		return fmt.Errorf("failed to start daemon: %w", err)
-	}
-	return nil
 }
