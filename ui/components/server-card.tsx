@@ -141,11 +141,11 @@ export function ServerCard({ server, onDelete, onDeploy, showDelete = false, sho
             ) : (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span tabIndex={0} onClick={(e) => e.stopPropagation()}>
+                  <span tabIndex={0} className="pointer-events-auto" onClick={(e) => e.stopPropagation()}>
                     <Button
                       variant="default"
                       size="sm"
-                      className="h-7 gap-1 text-xs"
+                      className="h-7 gap-1 text-xs pointer-events-none"
                       disabled
                     >
                       <Play className="h-3 w-3" aria-hidden="true" />

@@ -2037,9 +2037,12 @@ components:
                     description: GitHub OAuth App Client ID
                 platform_mode:
                     type: string
-                    description: 'Platform mode: docker or kubernetes'
+                    description: Platform mode
                     examples:
                         - docker
+                    enum:
+                        - docker
+                        - kubernetes
                 status:
                     type: string
                     description: Health status
