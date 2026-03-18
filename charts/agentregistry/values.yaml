@@ -5,7 +5,7 @@ global:
   imageRegistry: ""
   # -- Global Docker registry secret names
   imagePullSecrets: []
-  # -- Name of an existing Secret containing all credentials (POSTGRES_PASSWORD and AGENT_REGISTRY_JWT_PRIVATE_KEY). Overrides config.existingSecret and database.existingSecret when set.
+  # -- Name of an existing Secret containing all credentials (POSTGRES_PASSWORD and AGENT_REGISTRY_JWT_PRIVATE_KEY). Overrides config.existingSecret and database.external.existingSecret when set. When database.bundled.enabled=true, this secret must contain POSTGRES_PASSWORD — the chart will not create its own secret and the bundled PostgreSQL pod will reference it directly.
   existingSecret: ""
 
 # @section Common parameters
@@ -285,7 +285,7 @@ database:
       database: "agent-registry"
       # -- Database user to create
       username: "agentregistry"
-      # -- Database password (override in production)
+      # -- Database password. This default is intentionally weak — always override for any non-local deployment.
       password: "agentregistry"
     # -- SSL mode for the bundled PostgreSQL connection
     sslMode: "disable"
