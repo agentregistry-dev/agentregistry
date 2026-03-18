@@ -86,8 +86,8 @@ curl -fsSL https://raw.githubusercontent.com/agentregistry-dev/agentregistry/mai
 # 2. List available MCP servers (starts the registry daemon automatically)
 arctl mcp list
 
-# 3. Open the web UI
-open http://localhost:12121
+# 3. Open the web UI by navigating to this URL in your browser:
+#    http://localhost:12121
 
 # 4. Deploy a server and configure your IDE
 arctl deploy <server-name>
