@@ -59,9 +59,10 @@ func TestKubernetesTranslatePlatformConfig_RemoteMCP(t *testing.T) {
 			Name:          "remote-server",
 			MCPServerType: platformtypes.MCPServerTypeRemote,
 			Remote: &platformtypes.RemoteMCPServer{
-				Host: "example.com",
-				Port: 8080,
-				Path: "/mcp",
+				Scheme: "https",
+				Host:   "example.com",
+				Port:   8080,
+				Path:   "/mcp",
 			},
 		}},
 	}
@@ -77,7 +78,7 @@ func TestKubernetesTranslatePlatformConfig_RemoteMCP(t *testing.T) {
 	if remote.Name != "remote-server" {
 		t.Errorf("expected name remote-server, got %s", remote.Name)
 	}
-	if remote.Spec.URL != "http://example.com:8080/mcp" {
+	if remote.Spec.URL != "https://example.com:8080/mcp" {
 		t.Errorf("unexpected URL %s", remote.Spec.URL)
 	}
 }
@@ -215,9 +216,10 @@ func TestKubernetesTranslatePlatformConfig_NamespaceConsistency(t *testing.T) {
 						MCPServerType: platformtypes.MCPServerTypeRemote,
 						Namespace:     tt.mcpNamespace,
 						Remote: &platformtypes.RemoteMCPServer{
-							Host: "remote-mcp.example.com",
-							Port: 8080,
-							Path: "/mcp",
+							Scheme: "https",
+							Host:   "remote-mcp.example.com",
+							Port:   8080,
+							Path:   "/mcp",
 						},
 					},
 					{
@@ -287,9 +289,10 @@ func TestKubernetesTranslatePlatformConfig_DeploymentIDMetadataAndNaming(t *test
 			MCPServerType: platformtypes.MCPServerTypeRemote,
 			Namespace:     "demo-ns",
 			Remote: &platformtypes.RemoteMCPServer{
-				Host: "example.com",
-				Port: 80,
-				Path: "/mcp",
+				Scheme: "http",
+				Host:   "example.com",
+				Port:   80,
+				Path:   "/mcp",
 			},
 		}},
 	}

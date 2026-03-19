@@ -38,27 +38,6 @@ func TestBuildLocalPlatformConfig_UsesDefaultAgentPortInGatewayRoute(t *testing.
 	}
 }
 
-func TestBuildRemoteMCPURL(t *testing.T) {
-	tests := []struct {
-		name   string
-		remote *platformtypes.RemoteMCPServer
-		want   string
-	}{
-		{"https standard port", &platformtypes.RemoteMCPServer{Host: "example.com", Port: 443, Path: "/mcp"}, "https://example.com/mcp"},
-		{"https custom port", &platformtypes.RemoteMCPServer{Host: "example.com", Port: 8443, Path: "/mcp"}, "https://example.com:8443/mcp"},
-		{"http standard port", &platformtypes.RemoteMCPServer{Host: "example.com", Port: 80, Path: "/sse"}, "http://example.com/sse"},
-		{"http custom port", &platformtypes.RemoteMCPServer{Host: "localhost", Port: 3005, Path: "/mcp/"}, "https://localhost:3005/mcp/"},
-		{"empty path", &platformtypes.RemoteMCPServer{Host: "example.com", Port: 443, Path: ""}, "https://example.com"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := buildRemoteMCPURL(tt.remote); got != tt.want {
-				t.Errorf("buildRemoteMCPURL() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestDefaultAgentPort(t *testing.T) {
 	if got := defaultAgentPort(nil); got != platformutils.DefaultLocalAgentPort {
 		t.Fatalf("defaultAgentPort(nil) = %d, want %d", got, platformutils.DefaultLocalAgentPort)

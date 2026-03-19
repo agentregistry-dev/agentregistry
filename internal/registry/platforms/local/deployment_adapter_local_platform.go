@@ -283,23 +283,6 @@ func ensureLocalAgentGatewayDefaults(cfg *platformtypes.AgentGatewayConfig, port
 	}
 }
 
-func buildRemoteMCPURL(remote *platformtypes.RemoteMCPServer) string {
-	scheme := "https"
-	host := remote.Host
-	port := remote.Port
-	path := remote.Path
-
-	if port == 80 {
-		scheme = "http"
-	}
-
-	portSuffix := ""
-	if (scheme == "https" && port != 443) || (scheme == "http" && port != 80) {
-		portSuffix = fmt.Sprintf(":%d", port)
-	}
-
-	return fmt.Sprintf("%s://%s%s%s", scheme, host, portSuffix, path)
-}
 
 func canRunInsideLocalAgentGateway(cmd string) bool {
 	return cmd == "npx" || cmd == "uvx"
@@ -416,7 +399,7 @@ func translateLocalAgentGatewayConfig(agentGatewayPort uint16, servers []*platfo
 		switch server.MCPServerType {
 		case platformtypes.MCPServerTypeRemote:
 			mcpTarget.MCP = &platformtypes.MCPTargetSpec{
-				Host: buildRemoteMCPURL(server.Remote),
+				Host: platformutils.BuildRemoteMCPURL(server.Remote),
 			}
 		case platformtypes.MCPServerTypeLocal:
 			switch server.Local.TransportType {

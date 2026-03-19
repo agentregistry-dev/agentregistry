@@ -12,6 +12,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
+	platformutils "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	v1alpha2 "github.com/kagent-dev/kagent/go/api/v1alpha2"
 	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
@@ -471,7 +472,7 @@ func kubernetesTranslateRemoteMCPServer(server *platformtypes.MCPServer) (*v1alp
 		return nil, fmt.Errorf("remote MCP server config missing for %s", server.Name)
 	}
 
-	url := kubernetesBuildRemoteMCPURL(server.Remote.Host, server.Remote.Port, server.Remote.Path)
+	url := platformutils.BuildRemoteMCPURL(server.Remote)
 	return &v1alpha2.RemoteMCPServer{
 		TypeMeta: metav1.TypeMeta{APIVersion: "kagent.dev/v1alpha2", Kind: "RemoteMCPServer"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -576,19 +577,6 @@ func kubernetesTranslateAgentConfigMap(agent *platformtypes.Agent) (*corev1.Conf
 	}, nil
 }
 
-func kubernetesBuildRemoteMCPURL(host string, port uint32, path string) string {
-	host = strings.TrimSpace(host)
-	if path == "" {
-		path = "/"
-	}
-	if path[0] != '/' {
-		path = "/" + path
-	}
-	if port == 0 {
-		return fmt.Sprintf("http://%s%s", host, path)
-	}
-	return fmt.Sprintf("http://%s:%d%s", host, port, path)
-}
 
 func kubernetesAgentConfigMapName(name, version, deploymentID string) string {
 	base := fmt.Sprintf("%s-agent-config", name)
