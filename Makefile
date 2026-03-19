@@ -235,7 +235,7 @@ dev-build: build-ui ## Build quickly for local development
 # Build custom agent gateway image with npx/uvx support
 .PHONY: docker-agentgateway
 docker-agentgateway: ## Build the custom agent gateway image
-	@echo "Building custom age	nt gateway image..."
+	@echo "Building custom agent gateway image..."
 	$(DOCKER_BUILDER) build $(DOCKER_BUILD_ARGS) -f docker/agentgateway.Dockerfile -t $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:$(VERSION) .
 	echo "✓ Agent gateway image built successfully";
 

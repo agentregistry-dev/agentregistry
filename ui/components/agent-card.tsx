@@ -2,23 +2,30 @@
 
 import { AgentResponse } from "@/lib/admin-api"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
+  Tooltip,
+  TooltipContent,
   TooltipProvider,
+  TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Bot, Brain, Cpu, Github } from "lucide-react"
+import { Bot, Brain, Cpu, Github, Play } from "lucide-react"
 
 interface AgentCardProps {
   agent: AgentResponse
   onDelete?: (agent: AgentResponse) => void
+  onDeploy?: (agent: AgentResponse) => void
   showDelete?: boolean
+  showDeploy?: boolean
   showExternalLinks?: boolean
   onClick?: () => void
   versionCount?: number
 }
 
-export function AgentCard({ agent, onClick, versionCount }: AgentCardProps) {
+export function AgentCard({ agent, onDeploy, showDeploy = false, onClick, versionCount }: AgentCardProps) {
   const { agent: agentData, _meta } = agent
   const official = _meta?.['io.modelcontextprotocol.registry/official']
+  const hasImage = !!agentData.image
 
   const formatDate = (dateString: string) => {
     try {
@@ -39,18 +46,22 @@ export function AgentCard({ agent, onClick, versionCount }: AgentCardProps) {
         onClick={() => onClick?.()}
       >
         <div className="w-10 h-10 rounded bg-primary/8 flex items-center justify-center flex-shrink-0 mt-0.5">
-          <Bot className="h-4 w-4 text-primary" />
+          <Bot className="h-4 w-4 text-primary" aria-hidden="true" />
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
             <h3 className="text-lg font-semibold truncate">{agentData.name}</h3>
-            <Badge variant="outline" className="text-[13px] px-2 py-0.5 font-normal">
-              {agentData.framework}
-            </Badge>
-            <Badge variant="secondary" className="text-[13px] px-2 py-0.5 font-normal">
-              {agentData.language}
-            </Badge>
+            {agentData.framework && (
+              <Badge variant="outline" className="text-[13px] px-2 py-0.5 font-normal">
+                {agentData.framework}
+              </Badge>
+            )}
+            {agentData.language && (
+              <Badge variant="secondary" className="text-[13px] px-2 py-0.5 font-normal">
+                {agentData.language}
+              </Badge>
+            )}
           </div>
 
           {agentData.description && (
@@ -71,14 +82,14 @@ export function AgentCard({ agent, onClick, versionCount }: AgentCardProps) {
 
             {agentData.modelProvider && (
               <span className="flex items-center gap-1">
-                <Brain className="h-3 w-3" />
+                <Brain className="h-3 w-3" aria-hidden="true" />
                 {agentData.modelProvider}
               </span>
             )}
 
             {agentData.modelName && (
               <span className="flex items-center gap-1 font-mono">
-                <Cpu className="h-3 w-3" />
+                <Cpu className="h-3 w-3" aria-hidden="true" />
                 {agentData.modelName}
               </span>
             )}
@@ -91,11 +102,44 @@ export function AgentCard({ agent, onClick, versionCount }: AgentCardProps) {
                 className="flex items-center gap-1 hover:text-primary transition-colors"
                 onClick={(e) => e.stopPropagation()}
               >
-                <Github className="h-3 w-3" />
+                <Github className="h-3 w-3" aria-hidden="true" />
                 Repo
               </a>
             )}
           </div>
+        </div>
+
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+          {showDeploy && onDeploy && (
+            hasImage ? (
+              <Button
+                variant="default"
+                size="sm"
+                className="h-7 gap-1 text-xs"
+                onClick={(e) => { e.stopPropagation(); onDeploy(agent) }}
+              >
+                <Play className="h-3 w-3" aria-hidden="true" />
+                Deploy
+              </Button>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={0} onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="h-7 gap-1 text-xs"
+                      disabled
+                    >
+                      <Play className="h-3 w-3" aria-hidden="true" />
+                      Deploy
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent><p>No container image specified</p></TooltipContent>
+              </Tooltip>
+            )
+          )}
         </div>
       </div>
     </TooltipProvider>
