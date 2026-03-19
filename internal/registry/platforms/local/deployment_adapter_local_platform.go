@@ -132,6 +132,25 @@ func ComposeUpLocalPlatform(ctx context.Context, platformDir string, verbose boo
 	return nil
 }
 
+func ComposeDownLocalPlatform(ctx context.Context, platformDir string, verbose bool) error {
+	if _, err := os.Stat(platformDir); os.IsNotExist(err) {
+		return nil
+	}
+	cmd := exec.CommandContext(ctx, "docker", "compose", "down", "--remove-orphans")
+	cmd.Dir = platformDir
+	var stderrBuf bytes.Buffer
+	if verbose {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
+	} else {
+		cmd.Stderr = &stderrBuf
+	}
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to stop docker compose: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
+	}
+	return nil
+}
+
 func LoadLocalDockerComposeConfig(platformDir string) (*platformtypes.DockerComposeConfig, error) {
 	path := filepath.Join(platformDir, localComposeFileName)
 	project := &platformtypes.DockerComposeConfig{
