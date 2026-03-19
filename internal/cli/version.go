@@ -41,6 +41,8 @@ var VersionCmd = &cobra.Command{
 			BuildDate:    version.BuildDate,
 		}
 
+		// version command can run without root pre-run (#375), so the API client
+		// may be nil. bild a best-effort client from env vars for server lookup.
 		c := apiClient
 		if c == nil {
 			c = client.NewClient(os.Getenv("ARCTL_API_BASE_URL"), os.Getenv("ARCTL_API_TOKEN"))
