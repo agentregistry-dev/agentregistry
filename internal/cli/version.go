@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/semver"
@@ -40,7 +41,12 @@ var VersionCmd = &cobra.Command{
 			BuildDate:    version.BuildDate,
 		}
 
-		serverVersion, err := apiClient.GetVersion()
+		c := apiClient
+		if c == nil {
+			c = client.NewClient(os.Getenv("ARCTL_API_BASE_URL"), os.Getenv("ARCTL_API_TOKEN"))
+		}
+
+		serverVersion, err := c.GetVersion()
 		if err == nil {
 			output.ServerVersion = serverVersion.Version
 			output.ServerGitCommit = serverVersion.GitCommit

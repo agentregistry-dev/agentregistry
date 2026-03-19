@@ -13,11 +13,11 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/configure"
 	clidaemon "github.com/agentregistry-dev/agentregistry/internal/cli/daemon"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/deployment"
-	"github.com/agentregistry-dev/agentregistry/pkg/daemon/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/prompt"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
+	"github.com/agentregistry-dev/agentregistry/pkg/daemon/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -152,9 +152,24 @@ func normalizeBaseURL(raw string) string {
 // preRunSkipCommands defines which commands skip pre-run setup (no API client needed).
 // Key: parent name; value: set of subcommand names that skip setup.
 var preRunSkipCommands = map[string]map[string]bool{
-	"agent": {"init": true},
-	"mcp":   {"init": true},
-	"skill": {"init": true},
+	"arctl": {
+		"completion": true,
+		"configure":  true,
+		"version":    true,
+	},
+	"agent": {
+		"build": true,
+		"init":  true,
+	},
+	"mcp": {
+		"add-tool": true,
+		"build":    true,
+		"init":     true,
+	},
+	"skill": {
+		"build": true,
+		"init":  true,
+	},
 }
 
 // preRunBehavior returns whether to skip pre-run setup (e.g. agent/mcp/skill init).

@@ -35,24 +35,40 @@ func TestNormalizeBaseURL(t *testing.T) {
 }
 
 func TestPreRunBehavior(t *testing.T) {
+	root := &cobra.Command{Use: "arctl"}
+
 	agentCmd := &cobra.Command{Use: "agent"}
 	initCmd := &cobra.Command{Use: "init"}
+	buildCmd := &cobra.Command{Use: "build"}
+	listCmd := &cobra.Command{Use: "list"}
 	agentCmd.AddCommand(initCmd)
+	agentCmd.AddCommand(buildCmd)
+	agentCmd.AddCommand(listCmd)
 
 	mcpCmd := &cobra.Command{Use: "mcp"}
 	mcpInitCmd := &cobra.Command{Use: "init"}
+	mcpBuildCmd := &cobra.Command{Use: "build"}
+	mcpAddToolCmd := &cobra.Command{Use: "add-tool"}
 	mcpCmd.AddCommand(mcpInitCmd)
-
-	listCmd := &cobra.Command{Use: "list"}
-	agentCmd.AddCommand(listCmd)
+	mcpCmd.AddCommand(mcpBuildCmd)
+	mcpCmd.AddCommand(mcpAddToolCmd)
 
 	skillCmd := &cobra.Command{Use: "skill"}
 	skillInitCmd := &cobra.Command{Use: "init"}
+	skillBuildCmd := &cobra.Command{Use: "build"}
 	skillCmd.AddCommand(skillInitCmd)
+	skillCmd.AddCommand(skillBuildCmd)
 
 	// Subcommand under "mcp init" (e.g. arctl mcp init python mymcp)
 	initPythonCmd := &cobra.Command{Use: "python"}
 	mcpInitCmd.AddCommand(initPythonCmd)
+
+	configureCmd := &cobra.Command{Use: "configure"}
+	completionCmd := &cobra.Command{Use: "completion"}
+	zshCompletionCmd := &cobra.Command{Use: "zsh"}
+	completionCmd.AddCommand(zshCompletionCmd)
+	versionCmd := &cobra.Command{Use: "version"}
+	root.AddCommand(agentCmd, mcpCmd, skillCmd, configureCmd, completionCmd, versionCmd)
 
 	tests := []struct {
 		name     string
@@ -60,12 +76,20 @@ func TestPreRunBehavior(t *testing.T) {
 		wantSkip bool
 	}{
 		{"agent init", initCmd, true},
+		{"agent build", buildCmd, true},
 		{"mcp init", mcpInitCmd, true},
+		{"mcp build", mcpBuildCmd, true},
+		{"mcp add-tool", mcpAddToolCmd, true},
 		{"skill init", skillInitCmd, true},
+		{"skill build", skillBuildCmd, true},
+		{"configure", configureCmd, true},
+		{"completion", completionCmd, true},
+		{"completion zsh", zshCompletionCmd, true},
+		{"version", versionCmd, true},
 		{"mcp init python (subcommand of init)", initPythonCmd, true},
 		{"agent list", listCmd, false},
 		{"nil cmd", nil, false},
-		{"nil parent (root-level)", agentCmd, false},
+		{"top-level command with parent", agentCmd, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
