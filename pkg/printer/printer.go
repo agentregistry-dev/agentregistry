@@ -46,6 +46,13 @@ func PrintError(message string) {
 	fmt.Fprintf(os.Stderr, "Error: %s\n", message)
 }
 
+// PrintFailure prints a negative-status message with a cross-mark prefix to stdout.
+// Use for reporting expected negative conditions (e.g. "daemon is not running")
+// rather than PrintError which implies an unexpected error.
+func PrintFailure(message string) {
+	_, _ = fmt.Fprintf(os.Stdout, "✗ %s\n", message)
+}
+
 // PrintWarning prints a warning message
 func PrintWarning(message string) {
 	_, _ = fmt.Fprintf(os.Stdout, "Warning: %s\n", message)

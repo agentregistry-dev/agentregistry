@@ -278,6 +278,10 @@ export type GitHubTokenExchangeInputBody = {
 
 export type HealthBody = {
     /**
+     * Database connectivity status
+     */
+    database: string;
+    /**
      * GitHub OAuth App Client ID
      */
     github_client_id?: string;

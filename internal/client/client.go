@@ -168,6 +168,25 @@ func (c *Client) Ping() error {
 	return c.doJSON(req, nil)
 }
 
+// HealthResponse represents the response from the /health endpoint.
+type HealthResponse struct {
+	Status   string `json:"status"`
+	Database string `json:"database"`
+}
+
+// CheckHealth queries the /health endpoint and returns structured health status.
+func (c *Client) CheckHealth() (*HealthResponse, error) {
+	req, err := c.newRequest(http.MethodGet, "/health")
+	if err != nil {
+		return nil, err
+	}
+	var resp HealthResponse
+	if err := c.doJSON(req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 func (c *Client) GetVersion() (*VersionBody, error) {
 	req, err := c.newRequest(http.MethodGet, "/version")
 	if err != nil {

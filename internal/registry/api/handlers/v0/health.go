@@ -2,6 +2,7 @@ package v0
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
@@ -17,26 +19,37 @@ import (
 // HealthBody represents the health check response body
 type HealthBody struct {
 	Status         string `json:"status" example:"ok" doc:"Health status"`
+	Database       string `json:"database" example:"ok" doc:"Database connectivity status"`
 	GitHubClientID string `json:"github_client_id,omitempty" doc:"GitHub OAuth App Client ID"`
 	PlatformMode   string `json:"platform_mode,omitempty" example:"docker" doc:"Platform mode" enum:"docker,kubernetes"`
 }
 
 // RegisterHealthEndpoint registers the health check endpoint with a custom path prefix
-func RegisterHealthEndpoint(api huma.API, pathPrefix string, cfg *config.Config, metrics *telemetry.Metrics) {
+func RegisterHealthEndpoint(api huma.API, pathPrefix string, cfg *config.Config, metrics *telemetry.Metrics, registry service.RegistryService) {
 	huma.Register(api, huma.Operation{
 		OperationID: "get-health" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodGet,
 		Path:        pathPrefix + "/health",
 		Summary:     "Health check",
-		Description: "Check the health status of the API",
+		Description: "Check the health status of the API and its dependencies",
 		Tags:        []string{"health"},
 	}, func(ctx context.Context, _ *struct{}) (*types.Response[HealthBody], error) {
 		// Record the health check metrics
 		recordHealthMetrics(ctx, metrics, pathPrefix+"/health", cfg.Version)
 
+		status := "ok"
+		dbStatus := "ok"
+
+		if err := registry.PingDB(ctx); err != nil {
+			slog.Warn("health check: database ping failed", "error", err)
+			status = "degraded"
+			dbStatus = "unavailable"
+		}
+
 		return &types.Response[HealthBody]{
 			Body: HealthBody{
-				Status:         "ok",
+				Status:         status,
+				Database:       dbStatus,
 				GitHubClientID: cfg.GithubClientID,
 				PlatformMode:   cfg.PlatformMode,
 			},
