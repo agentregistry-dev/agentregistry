@@ -32,6 +32,14 @@ import {
 
 const GATEWAY_BASE_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:21212"
 
+const STATUS_COLORS: Record<string, string> = {
+  deployed:   'bg-green-500',
+  discovered: 'bg-green-500',
+  deploying:  'bg-amber-500',
+  failed:     'bg-destructive',
+  cancelled:  'bg-muted-foreground',
+}
+
 function sanitizeName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9-]/g, '-')
 }
@@ -128,6 +136,7 @@ export default function DeployedPage() {
 
   const agents = filtered.filter(d => d.resourceType === 'agent')
   const mcpServers = filtered.filter(d => d.resourceType === 'mcp')
+  const runningCount = deployments.filter(d => d.status === 'deployed' || d.status === 'discovered').length
 
   return (
     <main className="bg-background">
@@ -137,7 +146,7 @@ export default function DeployedPage() {
           <div>
             <h1 className="text-xl font-semibold">Deployed Resources</h1>
             <p className="text-[15px] text-muted-foreground">
-              {deployments.length} resource{deployments.length !== 1 ? 's' : ''} running
+              {runningCount} resource{runningCount !== 1 ? 's' : ''} running
             </p>
           </div>
         </div>
@@ -339,15 +348,9 @@ function DeploymentRow({ item, onRemove, removing, copiedAgentId, onCopyAgentUrl
 }) {
   const isAgent = item.resourceType === 'agent'
   const [showError, setShowError] = useState(false)
-  const hasError = item.status === 'error' || item.status === 'failed'
+  const hasError = Boolean(item.error)
 
-  const statusColor = item.status === 'running'
-    ? 'bg-green-500'
-    : hasError
-    ? 'bg-destructive'
-    : item.status === 'deployed' && item.origin === 'managed'
-    ? 'bg-green-500'
-    : 'bg-muted-foreground'
+  const statusColor = STATUS_COLORS[item.status] ?? 'bg-muted-foreground'
 
   return (
     <TooltipProvider>
@@ -365,7 +368,7 @@ function DeploymentRow({ item, onRemove, removing, copiedAgentId, onCopyAgentUrl
                 />
               </TooltipTrigger>
               <TooltipContent side="right">
-                <p>{item.status}{item.error ? ' — click to show error' : ''}</p>
+                <p>{item.status}{hasError ? ' — click to show error' : ''}</p>
               </TooltipContent>
             </Tooltip>
             <h3 className="text-lg font-semibold">{item.serverName}</h3>
