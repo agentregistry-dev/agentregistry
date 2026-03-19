@@ -55,6 +55,16 @@ HELM_PLUGIN_UNITTEST_VERSION ?= v1.0.3
 # It is not entirely clear as to what is causing the issue exactly because the error message
 # is not completely clear is it the plugin that does not support the flag or is it helm or both?
 HELM_PLUGIN_INSTALL_FLAGS ?= --verify=false
+
+# Go/tooling settings
+GO ?= go
+TOOLS_DIR ?= tools
+TOOLS_MODFILE ?= $(TOOLS_DIR)/go.mod
+GO_TOOL ?= $(GO) tool -modfile=$(TOOLS_MODFILE)
+KIND ?= $(GO_TOOL) kind
+GOTESTSUM ?= $(GO_TOOL) gotestsum
+GOLANGCI_LINT ?= $(GO_TOOL) golangci-lint
+GOLANGCI_LINT_ARGS ?= --fix
 # Help
 # `make help` self-documents targets annotated with `##`.
 .PHONY: help
@@ -159,7 +169,6 @@ run: run-k8s # Start local development environment (default: k8s)
 down: daemon-stop delete-kind-cluster ## Stop the local development environment
 	@echo "agentregistry stopped"
 
-GOTESTSUM ?= go tool gotestsum
 ARCTL ?= ./bin/arctl
 
 # Manage local daemon lifecycle via CLI helpers.
@@ -311,20 +320,21 @@ endif
 
 .PHONY: create-kind-cluster
 create-kind-cluster: local-registry ## Create a local Kind cluster with MetalLB (skips cluster creation if already exists, always runs post-create steps)
-	@if go tool kind get clusters 2>/dev/null | grep -qx "$(KIND_CLUSTER_NAME)"; then \
+	@if $(KIND) get clusters 2>/dev/null | grep -qx "$(KIND_CLUSTER_NAME)"; then \
 	  echo "Kind cluster '$(KIND_CLUSTER_NAME)' already exists, skipping cluster creation"; \
 	else \
 	  KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) \
 		KIND_IMAGE_VERSION=$(KIND_IMAGE_VERSION) \
 		REG_NAME=kind-registry \
 		REG_PORT=5001 \
+		KIND='$(KIND)' \
 		bash ./scripts/kind/setup-kind.sh; \
 	fi
 	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) bash ./scripts/kind/setup-metallb.sh
 
 .PHONY: delete-kind-cluster
 delete-kind-cluster: ## Delete the local Kind cluster (no-op if it does not exist)
-	@go tool kind delete cluster --name $(KIND_CLUSTER_NAME) 2>/dev/null || true
+	@$(KIND) delete cluster --name $(KIND_CLUSTER_NAME) 2>/dev/null || true
 
 .PHONY: prune-kind-cluster
 prune-kind-cluster: ## Prune dangling container images from the Kind control-plane node
@@ -419,7 +429,7 @@ setup-kind-cluster: create-kind-cluster install-postgresql install-kagent instal
 .PHONY: dump-kind-state
 dump-kind-state: ## Dump Kind cluster state for debugging (pods, events, kagent logs)
 	@echo "=== Kind clusters ==="
-	@go tool kind get clusters 2>/dev/null || true
+	@$(KIND) get clusters 2>/dev/null || true
 	@echo ""
 	@echo "=== Pods ==="
 	@kubectl get pods -A --context $(KIND_CLUSTER_CONTEXT) 2>/dev/null || true
@@ -473,9 +483,6 @@ release-cli: bin/arctl-darwin-amd64.sha256
 release-cli: bin/arctl-darwin-arm64.sha256
 release-cli: bin/arctl-windows-amd64.exe.sha256
 
-GOLANGCI_LINT ?= go tool golangci-lint
-GOLANGCI_LINT_ARGS ?= --fix
-
 .PHONY: lint
 lint: ## Run golangci-lint linter
 	$(GOLANGCI_LINT) run $(GOLANGCI_LINT_ARGS)
@@ -489,12 +496,26 @@ verify: mod-tidy gen-client ## Run all verification checks
 	git diff --exit-code
 
 .PHONY: mod-tidy
-mod-tidy: ## Run go mod tidy
-	go mod tidy
+mod-tidy: mod-tidy-root mod-tidy-tools ## Run go mod tidy for root and tools modules
+
+.PHONY: mod-tidy-root
+mod-tidy-root:
+	$(GO) mod tidy
+
+.PHONY: mod-tidy-tools
+mod-tidy-tools:
+	$(GO) -C $(TOOLS_DIR) mod tidy
 
 .PHONY: mod-download
-mod-download: ## Run go mod download
-	go mod download
+mod-download: mod-download-root mod-download-tools ## Run go mod download for root and tools modules
+
+.PHONY: mod-download-root
+mod-download-root:
+	$(GO) mod download
+
+.PHONY: mod-download-tools
+mod-download-tools:
+	$(GO) -C $(TOOLS_DIR) mod download all
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Helm / Chart targets
