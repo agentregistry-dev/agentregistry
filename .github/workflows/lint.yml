@@ -22,7 +22,6 @@ jobs:
       - uses: golangci/golangci-lint-action@v7
         with:
           version: v2.8.0
-          args: --fix
 
       - name: Verify no lint autofix diff
         run: git diff --exit-code
