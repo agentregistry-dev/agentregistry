@@ -57,20 +57,22 @@ func ValidateProjectName(name string) error {
 	return nil
 }
 
-// agentNameRegex enforces the strictest rule - names that work BOTH as Python identifiers AND as publishable agent names.
-// Must start with a letter, followed by alphanumeric only, minimum 2 characters.
-var agentNameRegex = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9]+$`)
+// agentNameRegex enforces names that work as publishable agent names.
+// Must start with a letter, end with a letter or digit, can contain hyphens in the middle.
+// Dots are intentionally excluded to avoid .well-known URL path routing ambiguity.
+// Minimum 2 characters.
+var agentNameRegex = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9-]*[a-zA-Z0-9]$`)
 
 // ValidateAgentName checks if the agent name is valid.
-// Allowed: letters and digits only, must start with a letter, minimum 2 characters.
-// Not allowed: underscores, dots, hyphens, or Python keywords.
+// Allowed: letters, digits, and hyphens; must start with a letter, end with a letter or digit.
+// Not allowed: underscores, dots, or Python keywords.
 func ValidateAgentName(name string) error {
 	if name == "" {
 		return fmt.Errorf("agent name cannot be empty")
 	}
 
 	if !agentNameRegex.MatchString(name) {
-		return fmt.Errorf("agent name must start with a letter and contain only letters and digits (minimum 2 characters)")
+		return fmt.Errorf("agent name must start with a letter, end with a letter or digit, and contain only letters, digits, and hyphens (minimum 2 characters)")
 	}
 
 	// Reject Python keywords to avoid issues in generated code
@@ -79,6 +81,12 @@ func ValidateAgentName(name string) error {
 	}
 
 	return nil
+}
+
+// PythonSafeName converts an agent name to a valid Python identifier
+// by replacing hyphens with underscores.
+func PythonSafeName(name string) string {
+	return strings.ReplaceAll(name, "-", "_")
 }
 
 // ValidateMCPServerName checks if the MCP server name matches the required format.
