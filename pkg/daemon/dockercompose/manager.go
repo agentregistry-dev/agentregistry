@@ -76,7 +76,7 @@ func (m *Manager) Start() error {
 	}
 
 	fmt.Printf("Starting %s daemon...\n", m.config.ProjectName)
-	cmd := m.composeCmd("up", "-d", "--wait")
+	cmd := m.composeCmd("up", "-d", "--wait", "--pull", "always")
 	if byt, err := cmd.CombinedOutput(); err != nil {
 		fmt.Printf("failed to start docker compose: %v, output: %s", err, string(byt))
 		return fmt.Errorf("failed to start docker compose: %w", err)

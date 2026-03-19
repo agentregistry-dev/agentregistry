@@ -175,14 +175,17 @@ test: ## Run Go integration tests
 
 # Run e2e tests against docker backend (skips Kind cluster setup and k8s tests)
 .PHONY: test-e2e-docker
-test-e2e-docker: local-registry docker-compose-up build-cli
-	ARCTL_API_BASE_URL=http://localhost:12121/v0 E2E_BACKEND=docker GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
-	  $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./e2e/...
+test-e2e-docker: local-registry docker docker-tag-as-dev build-cli
+	@set -e; \
+	  ./bin/arctl daemon start; \
+	  trap './bin/arctl daemon stop --purge || true' EXIT; \
+	  ARCTL_API_BASE_URL=http://localhost:12121/v0 E2E_BACKEND=docker GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
+	    $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./e2e/...
 
 # Run e2e tests against k8s backend (full Kind cluster setup)
 .PHONY: test-e2e-k8s
 test-e2e-k8s: setup-kind-cluster build-cli
-	ARCTL_API_BASE_URL=http://localhost:12121/v0 KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) E2E_BACKEND=k8s GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) E2E_BACKEND=k8s GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
 	  $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./e2e/...
 
 # Run e2e tests (default: k8s)
@@ -369,6 +372,7 @@ endif
 	    --set database.sslMode=disable \
 	    --set config.jwtPrivateKey="$$JWT_KEY" \
 	    --set config.enableAnonymousAuth="true" \
+	    --set service.type=LoadBalancer \
 	    --wait \
 	    --timeout=5m;
 
