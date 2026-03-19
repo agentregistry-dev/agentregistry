@@ -456,8 +456,8 @@ When working with this codebase, AI assistants should:
 | Format Code | `make fmt` |
 | Build UI | `make build-ui` |
 | Dev UI | `make dev-ui` |
-| Docker Up | `make docker-compose-up` |
-| Docker Down | `make docker-compose-down` |
+| Daemon Start | `make daemon-start` |
+| Daemon Stop | `make daemon-stop` |
 
 ---
 
