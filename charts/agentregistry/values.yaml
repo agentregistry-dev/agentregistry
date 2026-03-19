@@ -5,8 +5,6 @@ global:
   imageRegistry: ""
   # -- Global Docker registry secret names
   imagePullSecrets: []
-  # -- Name of an existing Secret containing all credentials (POSTGRES_PASSWORD and AGENT_REGISTRY_JWT_PRIVATE_KEY). Overrides config.existingSecret and database.external.existingSecret when set. When database.bundled.enabled=true, this secret must contain POSTGRES_PASSWORD — the chart will not create its own secret and the bundled PostgreSQL pod will reference it directly.
-  existingSecret: ""
 
 # @section Common parameters
 
@@ -24,8 +22,10 @@ commonAnnotations: {}
 image:
   # -- Agent Registry image registry
   registry: ghcr.io
-  # -- Agent Registry image repository
-  repository: agentregistry-dev/agentregistry/server
+  # -- Agent Registry image repository (org/path, excluding the image name)
+  repository: agentregistry-dev/agentregistry
+  # -- Agent Registry image name
+  name: server
   # -- Agent Registry image tag (immutable tags recommended)
   tag: "0.2.1"
   # -- Agent Registry image digest (overrides tag if set)
@@ -53,7 +53,7 @@ config:
   disableBuiltinSeed: "true"
   # -- Path or URL to external seed data file (leave empty to disable external seeding)
   seedFrom: ""
-  # -- Name of an existing Secret containing AGENT_REGISTRY_JWT_PRIVATE_KEY. Use global.existingSecret if you want a single secret for both AGENT_REGISTRY_JWT_PRIVATE_KEY and POSTGRES_PASSWORD.
+  # -- Name of an existing Secret containing AGENT_REGISTRY_JWT_PRIVATE_KEY. When set, the chart will not create its own JWT secret.
   existingSecret: ""
   # -- Hex-encoded HMAC key for signing JWT tokens (must be valid hex, e.g. "a3f4b2c1..."). Ignored when existingSecret is set.
   jwtPrivateKey: ""
@@ -267,59 +267,36 @@ rbac:
 # @section Database
 
 database:
-  # -- Bundled PostgreSQL (dev/test). Enabled by default; set bundled.enabled=false to bring your own.
-  bundled:
-    # -- Deploy a PostgreSQL instance alongside Agent Registry
-    enabled: true
-    image:
-      # -- Bundled PostgreSQL image registry
-      registry: docker.io
-      # -- Bundled PostgreSQL image repository
-      repository: pgvector/pgvector
-      # -- Bundled PostgreSQL image tag
-      tag: "pg16"
-      # -- Bundled PostgreSQL image pull policy
-      pullPolicy: IfNotPresent
-    auth:
-      # -- Database name to create
-      database: "agent-registry"
-      # -- Database user to create
-      username: "agentregistry"
-      # -- Database password. This default is intentionally weak — always override for any non-local deployment.
-      password: "agentregistry"
-    # -- SSL mode for the bundled PostgreSQL connection
-    sslMode: "disable"
-    service:
-      # -- Service type for bundled PostgreSQL
-      type: ClusterIP
-      # -- Service port for bundled PostgreSQL
-      port: 5432
-    # -- PersistentVolumeClaim size for the bundled PostgreSQL data directory
-    storage: 5Gi
-    # -- Resource requests/limits for the bundled PostgreSQL container
-    resources:
-      requests:
-        cpu: 250m
-        memory: 256Mi
-      limits:
-        cpu: "1"
-        memory: 1Gi
-
-  # -- External PostgreSQL settings (used when bundled.enabled=false)
-  external:
-    # -- Full PostgreSQL connection string (overrides all other external fields when set)
+  postgres:
+    # -- External PostgreSQL connection string. Used if set, regardless of bundled.enabled.
     url: ""
-    # -- External database host
-    host: ""
-    # -- External database port
-    port: 5432
-    # -- External database name
-    database: "agent-registry"
-    # -- External database user
-    username: "agentregistry"
-    # -- External database password (ignored when existingSecret is set)
-    password: ""
-    # -- Name of an existing Secret containing the database password (key: POSTGRES_PASSWORD)
-    existingSecret: ""
-    # -- External database SSL mode (require, verify-ca, verify-full, disable)
-    sslMode: "require"
+    # -- Path to a file containing the database URL. Takes precedence over url.
+    urlFile: ""
+    # -- Enable pgvector extension migration. Set true if your DB has pgvector.
+    vectorEnabled: false
+    # -- Bundled PostgreSQL — dev/eval only.
+    bundled:
+      # -- Deploy a PostgreSQL instance alongside Agent Registry
+      enabled: true
+      image:
+        # -- Bundled PostgreSQL image registry
+        registry: docker.io
+        # -- Bundled PostgreSQL image repository (org/namespace)
+        repository: library
+        # -- Bundled PostgreSQL image name
+        name: postgres
+        # -- Bundled PostgreSQL image tag
+        tag: "16"
+        # -- Bundled PostgreSQL image pull policy
+        pullPolicy: IfNotPresent
+      # -- DB name, user, and password are hardcoded ("agentregistry") for the bundled instance.
+      # -- PersistentVolumeClaim size for the bundled PostgreSQL data directory
+      storage: 5Gi
+      # -- Resource requests/limits for the bundled PostgreSQL container
+      resources:
+        requests:
+          cpu: 250m
+          memory: 256Mi
+        limits:
+          cpu: "1"
+          memory: 1Gi

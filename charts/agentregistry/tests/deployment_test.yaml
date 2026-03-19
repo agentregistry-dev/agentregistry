@@ -3,6 +3,7 @@ templates:
   - deployment.yaml
   - configmap.yaml
   - secrets.yaml
+  - postgresql-secret.yaml
 
 tests:
   - it: renders with default values
@@ -17,7 +18,7 @@ tests:
           path: spec.replicas
           value: 1
 
-  - it: uses server image as repo:tag by default
+  - it: uses server image as registry/repository/name:tag by default
     template: deployment.yaml
     asserts:
       - matchRegex:
@@ -31,7 +32,6 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].image
-          # allow either lowercase or uppercase hex and permit extra trailing text
           pattern: "^ghcr.io/agentregistry-dev/agentregistry/server@sha256:[0-9a-fA-F]{64}"
 
 
@@ -65,7 +65,7 @@ tests:
           content:
             app.kubernetes.io/name: agentregistry
 
-  - it: injects POSTGRES_PASSWORD from secret
+  - it: injects POSTGRES_PASSWORD from postgresql secret when bundled is enabled
     template: deployment.yaml
     asserts:
       - contains:
@@ -74,7 +74,7 @@ tests:
             name: POSTGRES_PASSWORD
             valueFrom:
               secretKeyRef:
-                name: RELEASE-NAME-agentregistry
+                name: RELEASE-NAME-agentregistry-postgresql
                 key: POSTGRES_PASSWORD
 
   - it: injects JWT private key from secret
@@ -96,35 +96,51 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: AGENT_REGISTRY_DATABASE_URL
-            value: "postgres://agentregistry:$(POSTGRES_PASSWORD)@RELEASE-NAME-agentregistry-postgresql:5432/agent-registry?sslmode=disable"
+            value: "postgres://agentregistry:$(POSTGRES_PASSWORD)@RELEASE-NAME-agentregistry-postgresql:5432/agentregistry?sslmode=disable"
 
-  - it: sets AGENT_REGISTRY_DATABASE_URL with external host (bundled disabled)
+  - it: sets AGENT_REGISTRY_DATABASE_URL directly when database.postgres.url is set
     template: deployment.yaml
     set:
-      database.bundled.enabled: false
-      database.external.host: mydb.example.com
-      database.external.port: 5432
-      database.external.database: mydb
-      database.external.username: myuser
-      database.external.sslMode: require
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: AGENT_REGISTRY_DATABASE_URL
-            value: "postgres://myuser:$(POSTGRES_PASSWORD)@mydb.example.com:5432/mydb?sslmode=require"
-
-  - it: sets AGENT_REGISTRY_DATABASE_URL with external url (bundled disabled)
-    template: deployment.yaml
-    set:
-      database.bundled.enabled: false
-      database.external.url: "postgres://user:pass@host:5432/db?sslmode=disable"
+      database.postgres.bundled.enabled: false
+      database.postgres.url: "postgres://user:pass@host:5432/db?sslmode=disable"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: AGENT_REGISTRY_DATABASE_URL
             value: "postgres://user:pass@host:5432/db?sslmode=disable"
+
+  - it: sets POSTGRES_DATABASE_URL_FILE when database.postgres.urlFile is set
+    template: deployment.yaml
+    set:
+      database.postgres.bundled.enabled: false
+      database.postgres.urlFile: "/run/secrets/db-url"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_DATABASE_URL_FILE
+            value: "/run/secrets/db-url"
+
+  - it: does not inject POSTGRES_PASSWORD when url is set (bundled enabled or disabled)
+    template: deployment.yaml
+    set:
+      database.postgres.url: "postgres://user:pass@host:5432/db"
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_PASSWORD
+
+  - it: does not inject POSTGRES_PASSWORD when urlFile is set
+    template: deployment.yaml
+    set:
+      database.postgres.urlFile: "/run/secrets/db-url"
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_PASSWORD
 
   - it: applies pod security context by default
     template: deployment.yaml
@@ -204,42 +220,6 @@ tests:
                 name: my-existing-secret
                 key: AGENT_REGISTRY_JWT_PRIVATE_KEY
 
-  - it: uses database.external.existingSecret for POSTGRES_PASSWORD when set (bundled disabled)
-    template: deployment.yaml
-    set:
-      database.bundled.enabled: false
-      database.external.existingSecret: db-secret
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: POSTGRES_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: db-secret
-                key: POSTGRES_PASSWORD
-
-  - it: uses global.existingSecret for both AGENT_REGISTRY_JWT_PRIVATE_KEY and POSTGRES_PASSWORD
-    template: deployment.yaml
-    set:
-      global.existingSecret: global-secret
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: AGENT_REGISTRY_JWT_PRIVATE_KEY
-            valueFrom:
-              secretKeyRef:
-                name: global-secret
-                key: AGENT_REGISTRY_JWT_PRIVATE_KEY
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: POSTGRES_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: global-secret
-                key: POSTGRES_PASSWORD
 
   - it: adds checksum annotations for config and secret
     template: deployment.yaml
@@ -272,7 +252,19 @@ tests:
   - it: does not include init container when bundled is disabled
     template: deployment.yaml
     set:
-      database.bundled.enabled: false
+      database.postgres.bundled.enabled: false
+      database.postgres.url: "postgres://user:pass@host:5432/db"
     asserts:
       - isNull:
           path: spec.template.spec.initContainers
+
+  - it: still includes init container when bundled is enabled and url is also set
+    template: deployment.yaml
+    set:
+      database.postgres.url: "postgres://user:pass@host:5432/db"
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.initContainers
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-postgres

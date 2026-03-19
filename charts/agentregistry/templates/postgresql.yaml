@@ -1,5 +1,5 @@
-{{- if .Values.database.bundled.enabled }}
-{{- $pg := .Values.database.bundled }}
+{{- if .Values.database.postgres.bundled.enabled }}
+{{- $pg := .Values.database.postgres.bundled }}
 {{- $fullname := include "agentregistry.postgresql.fullname" . }}
 ---
 apiVersion: v1
@@ -60,13 +60,13 @@ spec:
               protocol: TCP
           env:
             - name: POSTGRES_DB
-              value: {{ $pg.auth.database | quote }}
+              value: "agentregistry"
             - name: POSTGRES_USER
-              value: {{ $pg.auth.username | quote }}
+              value: "agentregistry"
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "agentregistry.passwordSecretName" . }}
+                  name: {{ include "agentregistry.fullname" . }}-postgresql
                   key: POSTGRES_PASSWORD
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
@@ -75,9 +75,9 @@ spec:
               command:
                 - pg_isready
                 - -U
-                - {{ $pg.auth.username | quote }}
+                - agentregistry
                 - -d
-                - {{ $pg.auth.database | quote }}
+                - agentregistry
             initialDelaySeconds: 20
             periodSeconds: 10
             timeoutSeconds: 5
@@ -88,9 +88,9 @@ spec:
               command:
                 - pg_isready
                 - -U
-                - {{ $pg.auth.username | quote }}
+                - agentregistry
                 - -d
-                - {{ $pg.auth.database | quote }}
+                - agentregistry
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3
@@ -120,10 +120,10 @@ metadata:
     {{- $annotations | nindent 4 }}
   {{- end }}
 spec:
-  type: {{ $pg.service.type }}
+  type: ClusterIP
   ports:
     - name: postgresql
-      port: {{ $pg.service.port }}
+      port: 5432
       targetPort: postgresql
       protocol: TCP
   selector:

@@ -86,9 +86,9 @@ Digest takes precedence over tag.
   {{- end }}
 {{- end }}
 {{- if .Values.image.digest }}
-{{- printf "%s/%s@%s" $registry .Values.image.repository .Values.image.digest }}
+{{- printf "%s/%s/%s@%s" $registry .Values.image.repository .Values.image.name .Values.image.digest }}
 {{- else }}
-{{- printf "%s/%s:%s" $registry .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) }}
+{{- printf "%s/%s/%s:%s" $registry .Values.image.repository .Values.image.name (.Values.image.tag | default .Chart.AppVersion) }}
 {{- end }}
 {{- end }}
 
@@ -132,58 +132,6 @@ Create the name of the service account to use.
 {{- default (include "agentregistry.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
-{{- end }}
-{{- end }}
-
-{{/* ======================================================================
-   Secret helpers
-   ====================================================================== */}}
-
-{{/*
-Return the secret name containing AGENT_REGISTRY_JWT_PRIVATE_KEY.
-Priority: global.existingSecret → config.existingSecret → chart-managed secret.
-*/}}
-{{- define "agentregistry.secretName" -}}
-{{- .Values.global.existingSecret | default .Values.config.existingSecret | default (include "agentregistry.fullname" .) }}
-{{- end }}
-
-{{/*
-Return the secret name that holds POSTGRES_PASSWORD.
-Priority: global.existingSecret → database.external.existingSecret → chart-managed secret.
-When database.bundled.enabled, external.existingSecret is not meaningful; the chart-managed secret holds the bundled password.
-*/}}
-{{- define "agentregistry.passwordSecretName" -}}
-{{- .Values.global.existingSecret | default .Values.database.external.existingSecret | default (include "agentregistry.fullname" .) }}
-{{- end }}
-
-{{/* ======================================================================
-   Database URL
-   ====================================================================== */}}
-
-{{/*
-Return the PostgreSQL database URL.
-When database.bundled.enabled, points at the in-chart PostgreSQL service.
-Otherwise: if database.external.url is set, use it directly; else build from individual external fields.
-*/}}
-{{- define "agentregistry.databaseUrl" -}}
-{{- if .Values.database.bundled.enabled }}
-{{- printf "postgres://%s:$(%s)@%s:%s/%s?sslmode=%s"
-      .Values.database.bundled.auth.username
-      "POSTGRES_PASSWORD"
-      (include "agentregistry.postgresql.fullname" .)
-      (toString .Values.database.bundled.service.port)
-      .Values.database.bundled.auth.database
-      .Values.database.bundled.sslMode }}
-{{- else if .Values.database.external.url }}
-{{- .Values.database.external.url }}
-{{- else }}
-{{- printf "postgres://%s:$(%s)@%s:%s/%s?sslmode=%s"
-      .Values.database.external.username
-      "POSTGRES_PASSWORD"
-      .Values.database.external.host
-      (toString .Values.database.external.port)
-      .Values.database.external.database
-      .Values.database.external.sslMode }}
 {{- end }}
 {{- end }}
 
@@ -327,16 +275,8 @@ Full name for the bundled PostgreSQL resources.
 Standard labels for bundled PostgreSQL resources.
 */}}
 {{- define "agentregistry.postgresql.labels" -}}
-helm.sh/chart: {{ include "agentregistry.chart" . }}
-{{ include "agentregistry.postgresql.selectorLabels" . }}
-{{- if .Chart.AppVersion }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
-{{- end }}
-app.kubernetes.io/managed-by: {{ .Release.Service }}
-app.kubernetes.io/part-of: {{ include "agentregistry.name" . }}
-{{- if .Values.commonLabels }}
-{{ toYaml .Values.commonLabels }}
-{{- end }}
+{{ include "agentregistry.labels" . }}
+app.kubernetes.io/component: database
 {{- end }}
 
 {{/*
@@ -353,13 +293,14 @@ Return the bundled PostgreSQL image string.
 Respects global.imageRegistry override.
 */}}
 {{- define "agentregistry.postgresql.image" -}}
-{{- $registry := .Values.database.bundled.image.registry -}}
+{{- $pg := .Values.database.postgres.bundled -}}
+{{- $registry := $pg.image.registry -}}
 {{- if .Values.global }}
   {{- if .Values.global.imageRegistry }}
     {{- $registry = .Values.global.imageRegistry -}}
   {{- end }}
 {{- end }}
-{{- printf "%s/%s:%s" $registry .Values.database.bundled.image.repository .Values.database.bundled.image.tag }}
+{{- printf "%s/%s/%s:%s" $registry $pg.image.repository $pg.image.name $pg.image.tag }}
 {{- end }}
 
 {{/* ======================================================================
@@ -369,22 +310,17 @@ Respects global.imageRegistry override.
 {{/*
 Compile hard-error validations. Any non-empty result triggers fail.
 Called from templates/validate.yaml so it fires during helm template/install.
-When database.bundled.enabled, external database host/password validation is skipped.
 */}}
 {{- define "agentregistry.validateValues.errors" -}}
 {{- $errors := list }}
-{{- $hasExternalJwt := or .Values.global.existingSecret .Values.config.existingSecret }}
-{{- if and (not $hasExternalJwt) (eq .Values.config.jwtPrivateKey "") }}
-{{- $errors = append $errors "config.jwtPrivateKey must be set (or provide config.existingSecret / global.existingSecret containing AGENT_REGISTRY_JWT_PRIVATE_KEY)." }}
-{{- else if and (not $hasExternalJwt) (not (regexMatch "^[0-9a-fA-F]+$" .Values.config.jwtPrivateKey)) }}
+{{- if and (not .Values.config.existingSecret) (eq .Values.config.jwtPrivateKey "") }}
+{{- $errors = append $errors "config.jwtPrivateKey must be set (or provide config.existingSecret containing AGENT_REGISTRY_JWT_PRIVATE_KEY)." }}
+{{- else if and (not .Values.config.existingSecret) (not (regexMatch "^[0-9a-fA-F]+$" .Values.config.jwtPrivateKey)) }}
 {{- $errors = append $errors "config.jwtPrivateKey must be a valid hex string (e.g. generated with: openssl rand -hex 32)." }}
 {{- end }}
-{{- if not .Values.database.bundled.enabled }}
-{{- if and (not (or .Values.global.existingSecret .Values.database.external.existingSecret)) (not .Values.database.external.url) (eq .Values.database.external.password "") }}
-{{- $errors = append $errors "database.external.password must be set (or provide database.external.url, database.external.existingSecret, or global.existingSecret containing POSTGRES_PASSWORD)." }}
-{{- end }}
-{{- if and (not .Values.database.external.url) (not .Values.database.external.host) }}
-{{- $errors = append $errors "database.external.host (or database.external.url) must be set when database.bundled.enabled=false. An external PostgreSQL instance with pgvector is required." }}
+{{- if not .Values.database.postgres.bundled.enabled }}
+{{- if and (not .Values.database.postgres.url) (not .Values.database.postgres.urlFile) }}
+{{- $errors = append $errors "database.postgres.url or database.postgres.urlFile must be set when database.postgres.bundled.enabled=false. An external PostgreSQL instance with pgvector is required." }}
 {{- end }}
 {{- end }}
 {{- range $errors }}

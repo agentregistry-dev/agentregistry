@@ -12,12 +12,11 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: renders nothing when jwtPrivateKey and database.external.password are set (bundled disabled)
+  - it: renders nothing when jwtPrivateKey and database.postgres.url are set (bundled disabled)
     set:
       config.jwtPrivateKey: deadbeef1234567890abcdef
-      database.bundled.enabled: false
-      database.external.password: changeme
-      database.external.host: mydb.example.com
+      database.postgres.bundled.enabled: false
+      database.postgres.url: "postgres://user:pass@host:5432/db"
     asserts:
       - hasDocuments:
           count: 0
@@ -25,23 +24,15 @@ tests:
   - it: renders nothing when config.existingSecret is set (bundled disabled)
     set:
       config.existingSecret: my-existing-secret
-      database.bundled.enabled: false
-      database.external.password: changeme
-      database.external.host: mydb.example.com
-    asserts:
-      - hasDocuments:
-          count: 0
-
-  - it: renders nothing when global.existingSecret is set
-    set:
-      global.existingSecret: global-secret
+      database.postgres.bundled.enabled: false
+      database.postgres.url: "postgres://user:pass@host:5432/db"
     asserts:
       - hasDocuments:
           count: 0
 
   - it: fails when jwtPrivateKey is empty and no existingSecret is provided
     set:
-      database.bundled.enabled: true
+      database.postgres.bundled.enabled: true
     asserts:
       - failedTemplate:
           errorPattern: "CHART CONFIGURATION ERROR"
@@ -55,50 +46,37 @@ tests:
 
   # ── Bundled PostgreSQL skips external validation ──────────────────────────
 
-  - it: renders nothing with bundled enabled even when no external host or password
+  - it: renders nothing with bundled enabled even when no url or urlFile
     set:
       config.jwtPrivateKey: deadbeef1234567890abcdef
     asserts:
       - hasDocuments:
           count: 0
 
-  # ── Database password validation (bundled disabled) ───────────────────────
+  # ── Database URL validation (bundled disabled) ────────────────────────────
 
-  - it: fails when database.external.password is empty and no existingSecret (bundled disabled)
+  - it: fails when bundled is disabled and neither url nor urlFile is set
     set:
       config.jwtPrivateKey: deadbeef1234567890abcdef
-      database.bundled.enabled: false
-      database.external.host: mydb.example.com
+      database.postgres.bundled.enabled: false
     asserts:
       - failedTemplate:
           errorPattern: "CHART CONFIGURATION ERROR"
 
-  - it: renders nothing when database.external.existingSecret is set (bundled disabled)
+  - it: renders nothing when database.postgres.url is set (bundled disabled)
     set:
       config.jwtPrivateKey: deadbeef1234567890abcdef
-      database.bundled.enabled: false
-      database.external.existingSecret: pg-secret
-      database.external.host: mydb.example.com
+      database.postgres.bundled.enabled: false
+      database.postgres.url: "postgres://user:pass@host:5432/db"
     asserts:
       - hasDocuments:
           count: 0
 
-  - it: renders nothing when database.external.url is set (bundled disabled)
+  - it: renders nothing when database.postgres.urlFile is set (bundled disabled)
     set:
       config.jwtPrivateKey: deadbeef1234567890abcdef
-      database.bundled.enabled: false
-      database.external.url: "postgres://user:pass@host:5432/db"
+      database.postgres.bundled.enabled: false
+      database.postgres.urlFile: "/run/secrets/db-url"
     asserts:
       - hasDocuments:
           count: 0
-
-  # ── Database host validation (bundled disabled) ───────────────────────────
-
-  - it: fails when database.external.host and database.external.url are both unset (bundled disabled)
-    set:
-      config.jwtPrivateKey: deadbeef1234567890abcdef
-      database.bundled.enabled: false
-      database.external.password: changeme
-    asserts:
-      - failedTemplate:
-          errorPattern: "CHART CONFIGURATION ERROR"

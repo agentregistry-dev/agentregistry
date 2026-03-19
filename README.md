@@ -108,7 +108,7 @@ Open `http://localhost:12121` to use the web UI.
 
 ### ☸️ Kubernetes
 
-Run Agent Registry in a cluster when you want shared discovery and deployment workflows. PostgreSQL with the [pgvector](https://github.com/pgvector/pgvector) extension is **bundled by default** — no separate database setup required for development and testing.
+Run Agent Registry in a cluster when you want shared discovery and deployment workflows. A PostgreSQL instance is **bundled by default** — no separate database setup required for development and testing.
 
 #### Install Agent Registry
 
@@ -119,17 +119,18 @@ helm install agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/
   --set config.jwtPrivateKey=$(openssl rand -hex 32)
 ```
 
-For production, disable the bundled database and point to a managed PostgreSQL service:
+For production, disable the bundled database and provide a connection string to your own PostgreSQL service:
 
 ```bash
 helm install agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
   --namespace agentregistry \
   --create-namespace \
-  --set database.bundled.enabled=false \
-  --set database.external.host=<your-pg-host> \
-  --set database.external.password=<your-pg-password> \
+  --set database.postgres.bundled.enabled=false \
+  --set database.postgres.url=postgres://<user>:<password>@<host>:5432/<dbname> \
   --set config.jwtPrivateKey=$(openssl rand -hex 32)
 ```
+
+> **Semantic search** requires a vector-enabled PostgreSQL instance. Add `--set database.postgres.vectorEnabled=true` when your database has vector support. The bundled database does not include vector support — semantic search will not be available when using it.
 
 Then port-forward to access the UI:
 

@@ -1,7 +1,7 @@
 suite: Bundled PostgreSQL
 templates:
   - postgresql.yaml
-  - secrets.yaml
+  - postgresql-secret.yaml
 
 tests:
   # ── Bundled enabled (default) ─────────────────────────────────────────────
@@ -41,13 +41,25 @@ tests:
           path: spec.strategy.type
           value: Recreate
 
-  - it: Deployment uses pgvector image
+  - it: Deployment uses official postgres image as registry/repository/name:tag by default
     template: postgresql.yaml
     documentIndex: 1
     asserts:
-      - matchRegex:
+      - equal:
           path: spec.template.spec.containers[0].image
-          pattern: '^docker.io/pgvector/pgvector:pg16$'
+          value: 'docker.io/library/postgres:16'
+
+  - it: Deployment image can be overridden to pgvector via component fields
+    template: postgresql.yaml
+    set:
+      database.postgres.bundled.image.repository: pgvector
+      database.postgres.bundled.image.name: pgvector
+      database.postgres.bundled.image.tag: pg16
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/pgvector/pgvector:pg16
 
   - it: Deployment has hardcoded pod security context
     template: postgresql.yaml
@@ -75,7 +87,22 @@ tests:
           path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
           value: false
 
-  - it: Deployment references chart-managed secret for POSTGRES_PASSWORD
+  - it: Deployment uses hardcoded POSTGRES_DB and POSTGRES_USER
+    template: postgresql.yaml
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_DB
+            value: agentregistry
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_USER
+            value: agentregistry
+
+  - it: Deployment reads POSTGRES_PASSWORD from chart-managed postgresql secret
     template: postgresql.yaml
     documentIndex: 1
     asserts:
@@ -85,23 +112,9 @@ tests:
             name: POSTGRES_PASSWORD
             valueFrom:
               secretKeyRef:
-                name: RELEASE-NAME-agentregistry
+                name: RELEASE-NAME-agentregistry-postgresql
                 key: POSTGRES_PASSWORD
 
-  - it: Deployment uses global.existingSecret for POSTGRES_PASSWORD when set
-    template: postgresql.yaml
-    set:
-      global.existingSecret: global-secret
-    documentIndex: 1
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: POSTGRES_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: global-secret
-                key: POSTGRES_PASSWORD
 
   - it: Deployment has liveness and readiness probes
     template: postgresql.yaml
@@ -153,44 +166,47 @@ tests:
           path: spec.ports[0].port
           value: 5432
 
+  - it: Service type is hardcoded to ClusterIP
+    template: postgresql.yaml
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: spec.type
+          value: ClusterIP
+
   # ── Bundled disabled ──────────────────────────────────────────────────────
 
   - it: renders nothing when bundled is disabled
     template: postgresql.yaml
     set:
-      database.bundled.enabled: false
+      database.postgres.bundled.enabled: false
+      database.postgres.url: "postgres://user:pass@host:5432/db"
     asserts:
       - hasDocuments:
           count: 0
 
-  # ── Custom auth values ────────────────────────────────────────────────────
-
-  - it: uses custom bundled auth values
+  - it: still renders when bundled is enabled and url is also set
     template: postgresql.yaml
     set:
-      database.bundled.auth.database: mydb
-      database.bundled.auth.username: myuser
-    documentIndex: 1
+      database.postgres.url: "postgres://user:pass@host:5432/db"
     asserts:
-      - isKind:
-          of: Deployment
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: POSTGRES_DB
-            value: mydb
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: POSTGRES_USER
-            value: myuser
+      - hasDocuments:
+          count: 3
+
+  - it: still renders when bundled is enabled and urlFile is also set
+    template: postgresql.yaml
+    set:
+      database.postgres.urlFile: "/run/secrets/db-url"
+    asserts:
+      - hasDocuments:
+          count: 3
 
   # ── Custom storage size ───────────────────────────────────────────────────
 
   - it: uses custom storage size
     template: postgresql.yaml
     set:
-      database.bundled.storage: 10Gi
+      database.postgres.bundled.storage: 10Gi
     documentIndex: 0
     asserts:
       - isKind:
@@ -198,3 +214,59 @@ tests:
       - equal:
           path: spec.resources.requests.storage
           value: 10Gi
+
+  # ── postgresql-secret.yaml ────────────────────────────────────────────────
+
+  - it: creates postgresql secret when bundled is enabled
+    template: postgresql-secret.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Secret
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-agentregistry-postgresql
+      - isNotNull:
+          path: data["POSTGRES_PASSWORD"]
+
+  - it: postgresql secret has hardcoded agentregistry password (base64)
+    template: postgresql-secret.yaml
+    asserts:
+      - equal:
+          path: data["POSTGRES_PASSWORD"]
+          # base64("agentregistry")
+          value: "YWdlbnRyZWdpc3RyeQ=="
+
+  - it: postgresql secret has database component label
+    template: postgresql-secret.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: database
+
+  - it: creates postgresql secret even when url is set (bundled still enabled)
+    template: postgresql-secret.yaml
+    set:
+      database.postgres.url: "postgres://user:pass@host:5432/db"
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: creates postgresql secret even when urlFile is set (bundled still enabled)
+    template: postgresql-secret.yaml
+    set:
+      database.postgres.urlFile: "/run/secrets/db-url"
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: does not create postgresql secret when bundled is disabled
+    template: postgresql-secret.yaml
+    set:
+      database.postgres.bundled.enabled: false
+      database.postgres.url: "postgres://user:pass@host:5432/db"
+    asserts:
+      - hasDocuments:
+          count: 0
+

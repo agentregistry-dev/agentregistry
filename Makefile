@@ -355,6 +355,10 @@ endif
 	    --set image.tag=$(VERSION) \
 	    --set config.jwtPrivateKey="$$JWT_KEY" \
 	    --set config.enableAnonymousAuth="true" \
+	    --set database.postgres.bundled.image.repository=pgvector \
+	    --set database.postgres.bundled.image.name=pgvector \
+	    --set database.postgres.bundled.image.tag=pg16 \
+	    --set database.postgres.vectorEnabled=true \
 	    --wait \
 	    --timeout=5m;
 
