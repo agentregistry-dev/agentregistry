@@ -351,7 +351,7 @@ endif
 	    --create-namespace \
 	    --set image.pullPolicy=Always \
 	    --set image.registry=$(DOCKER_REGISTRY) \
-	    --set image.repository=$(DOCKER_REPO)/server \
+	    --set image.repository=$(DOCKER_REPO) \
 	    --set image.tag=$(VERSION) \
 	    --set config.jwtPrivateKey="$$JWT_KEY" \
 	    --set config.enableAnonymousAuth="true" \

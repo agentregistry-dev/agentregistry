@@ -148,6 +148,10 @@ spec:
             {{- else }}
             {{ fail "No database connection configured. Set database.postgres.url, database.postgres.urlFile, or enable database.postgres.bundled." }}
             {{- end }}
+            {{- if .Values.database.postgres.vectorEnabled }}
+            - name: AGENT_REGISTRY_EMBEDDINGS_ENABLED
+              value: "true"
+            {{- end }}
             {{- if .Values.extraEnvVars }}
             {{- tpl (toYaml .Values.extraEnvVars) . | nindent 12 }}
             {{- end }}
