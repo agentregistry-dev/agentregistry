@@ -159,29 +159,31 @@ run: run-k8s # Start local development environment (default: k8s)
 down: docker-compose-down delete-kind-cluster ## Stop the local development environment
 	@echo "agentregistry stopped"
 
+GOTESTSUM ?= go tool gotestsum
+
 # Run Go tests (unit tests only)
 .PHONY: test-unit
 test-unit: ## Run Go unit tests
 	@echo "Running Go unit tests..."
-	go tool gotestsum --format testdox -- -tags=unit -timeout 5m ./...
+	$(GOTESTSUM) --format testdox -- -tags=unit -timeout 5m ./...
 
 # Run Go tests with integration tests
 .PHONY: test
 test: ## Run Go integration tests
 	@echo "Running Go tests with integration..."
-	go tool gotestsum --format testdox -- -tags=integration -timeout 10m ./...
+	$(GOTESTSUM) --format testdox -- -tags=integration -timeout 10m ./...
 
 # Run e2e tests against docker backend (skips Kind cluster setup and k8s tests)
 .PHONY: test-e2e-docker
 test-e2e-docker: local-registry docker-compose-up build-cli
 	ARCTL_API_BASE_URL=http://localhost:12121/v0 E2E_BACKEND=docker GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
-	  go tool gotestsum --format testdox -- -v -tags=e2e -timeout 45m ./e2e/...
+	  $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./e2e/...
 
 # Run e2e tests against k8s backend (full Kind cluster setup)
 .PHONY: test-e2e-k8s
 test-e2e-k8s: setup-kind-cluster build-cli
 	ARCTL_API_BASE_URL=http://localhost:12121/v0 KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) E2E_BACKEND=k8s GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
-	  go tool gotestsum --format testdox -- -v -tags=e2e -timeout 45m ./e2e/...
+	  $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./e2e/...
 
 # Run e2e tests (default: k8s)
 .PHONY: test-e2e
