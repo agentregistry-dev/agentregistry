@@ -9,12 +9,6 @@ import (
 )
 
 func main() {
-	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	})
-	logger := slog.New(handler)
-	slog.SetDefault(logger)
-
 	ctx := context.Background()
 	if err := registry.App(ctx); err != nil {
 		slog.Error("failed to start registry", "error", err)

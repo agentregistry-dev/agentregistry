@@ -9,6 +9,7 @@ import (
 	"time"
 
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
+	"github.com/agentregistry-dev/agentregistry/pkg/logging"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
@@ -191,7 +192,7 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 
 	// Add metrics middleware with options
 	api.UseMiddleware(MetricTelemetryMiddleware(metrics,
-		WithSkipPaths("/health", "/metrics", "/ping", "/docs"),
+		WithSkipPaths("/health", "/metrics", "/ping", "/docs", "/logging"),
 	))
 
 	// Set the mux on routeOpts for SSE handlers that need direct mux access
@@ -204,6 +205,8 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 
 	// Add /metrics for Prometheus metrics using promhttp
 	mux.Handle("/metrics", metrics.PrometheusHandler())
+	// Add /logging to control component loggers
+	mux.HandleFunc("/logging", logging.HTTPLevelHandler)
 
 	// Serve UI from root path or handle 404 for non-API routes
 	if uiHandler != nil {
@@ -215,6 +218,7 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 				r.URL.Path == "/health" ||
 				r.URL.Path == "/ping" ||
 				r.URL.Path == "/metrics" ||
+				r.URL.Path == "/logging" ||
 				strings.HasPrefix(r.URL.Path, "/docs") {
 				handle404(w, r)
 				return
