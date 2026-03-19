@@ -161,6 +161,19 @@ down: docker-compose-down delete-kind-cluster ## Stop the local development envi
 
 GOTESTSUM ?= go tool gotestsum
 
+# Manage local daemon lifecycle via CLI helpers.
+.PHONY: daemon-start
+daemon-start: build-cli ## Start local daemon via CLI
+	./bin/arctl daemon start
+
+.PHONY: daemon-stop
+daemon-stop: ## Stop local daemon via CLI
+	./bin/arctl daemon stop
+
+.PHONY: daemon-stop-purge
+daemon-stop-purge: ## Stop local daemon and purge volumes via CLI
+	./bin/arctl daemon stop --purge
+
 # Run Go tests (unit tests only)
 .PHONY: test-unit
 test-unit: ## Run Go unit tests
@@ -175,10 +188,9 @@ test: ## Run Go integration tests
 
 # Run e2e tests against docker backend (skips Kind cluster setup and k8s tests)
 .PHONY: test-e2e-docker
-test-e2e-docker: local-registry docker docker-tag-as-dev build-cli
+test-e2e-docker: local-registry docker docker-tag-as-dev daemon-start
 	@set -e; \
-	  ./bin/arctl daemon start; \
-	  trap './bin/arctl daemon stop --purge || true' EXIT; \
+	  trap '$(MAKE) --no-print-directory daemon-stop-purge >/dev/null 2>&1 || true' EXIT; \
 	  ARCTL_API_BASE_URL=http://localhost:12121/v0 E2E_BACKEND=docker GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
 	    $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./e2e/...
 
