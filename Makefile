@@ -128,14 +128,14 @@ dev-ui: ## Run the Next.js UI in development mode
 	@echo "Starting Next.js development server..."
 	cd ui && npm run dev
 
-# Start local development environment (docker-compose only, no Kind)
+# Start local development environment (docker backend only, no Kind)
 .PHONY: run-docker
-run-docker: local-registry docker-compose-up build-cli ## Start local development environment (docker-compose only, no Kind)
+run-docker: local-registry docker docker-tag-as-dev daemon-start ## Start local development environment (docker backend only, no Kind)
 	@echo ""
 	@echo "agentregistry is running (docker backend):"
 	@echo "  UI:  http://localhost:12121"
 	@echo "  API: http://localhost:12121/v0"
-	@echo "  CLI: ./bin/arctl"
+	@echo "  CLI: $(ARCTL)"
 	@echo ""
 	@echo "To stop: make down"
 
@@ -146,7 +146,7 @@ run-k8s: local-registry create-kind-cluster build-cli ## Start local development
 	@echo "agentregistry is running (k8s backend):"
 	@echo "  UI:  http://localhost:12121"
 	@echo "  API: http://localhost:12121/v0"
-	@echo "  CLI: ./bin/arctl"
+	@echo "  CLI: $(ARCTL)"
 	@echo ""
 	@echo "To stop: make down"
 
@@ -156,23 +156,24 @@ run: run-k8s # Start local development environment (default: k8s)
 
 # Stop local development environment
 .PHONY: down
-down: docker-compose-down delete-kind-cluster ## Stop the local development environment
+down: daemon-stop delete-kind-cluster ## Stop the local development environment
 	@echo "agentregistry stopped"
 
 GOTESTSUM ?= go tool gotestsum
+ARCTL ?= ./bin/arctl
 
 # Manage local daemon lifecycle via CLI helpers.
 .PHONY: daemon-start
 daemon-start: build-cli ## Start local daemon via CLI
-	./bin/arctl daemon start
+	$(ARCTL) daemon start
 
 .PHONY: daemon-stop
 daemon-stop: ## Stop local daemon via CLI
-	./bin/arctl daemon stop
+	$(ARCTL) daemon stop
 
 .PHONY: daemon-stop-purge
 daemon-stop-purge: ## Stop local daemon and purge volumes via CLI
-	./bin/arctl daemon stop --purge
+	$(ARCTL) daemon stop --purge
 
 # Run Go tests (unit tests only)
 .PHONY: test-unit
@@ -291,19 +292,6 @@ docker-tag-as-dev: ## Tag and push Docker images as :dev
 	docker tag $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:$(VERSION) $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:dev
 	docker push $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:dev
 	@echo "✓ Docker image pulled successfully"
-
-.PHONY: docker-compose-up
-docker-compose-up: docker docker-tag-as-dev ## Start services with Docker Compose
-	@echo "Starting services with Docker Compose..."
-	VERSION=$(VERSION) DOCKER_REGISTRY=$(DOCKER_REGISTRY) docker compose -p agentregistry -f internal/daemon/docker-compose.yml up -d --wait --pull always
-
-.PHONY: docker-compose-down
-docker-compose-down: ## Stop services managed by Docker Compose
-	VERSION=$(VERSION) DOCKER_REGISTRY=$(DOCKER_REGISTRY) docker compose -p agentregistry -f internal/daemon/docker-compose.yml down
-
-.PHONY: docker-compose-rm
-docker-compose-rm: ## Remove Docker Compose services and volumes
-	VERSION=$(VERSION) DOCKER_REGISTRY=$(DOCKER_REGISTRY) docker compose -p agentregistry -f internal/daemon/docker-compose.yml rm --volumes --force
 
 KIND_CLUSTER_NAME ?= agentregistry
 KIND_IMAGE_VERSION ?= 1.34.0
