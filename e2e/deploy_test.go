@@ -16,7 +16,11 @@ import (
 	"time"
 )
 
-const localDeployComposeProject = "agentregistry_runtime"
+const (
+	localDeployComposeProject = "agentregistry_runtime"
+	deployTargetLocal         = "local"
+	deployTargetKubernetes    = "kubernetes"
+)
 
 // deployTarget describes a deployment provider used by the table-driven deploy tests.
 type deployTarget struct {
@@ -32,7 +36,7 @@ type deployTarget struct {
 
 var agentDeployTargets = []deployTarget{
 	{
-		name: "local",
+		name: deployTargetLocal,
 		verify: func(t *testing.T, agentName string) {
 			waitForComposeService(t, agentName, 60*time.Second)
 		},
@@ -41,7 +45,7 @@ var agentDeployTargets = []deployTarget{
 		},
 	},
 	{
-		name:     "kubernetes",
+		name:     deployTargetKubernetes,
 		deplArgs: []string{"--provider-id", "kubernetes-default", "--namespace", "default"},
 		verify: func(t *testing.T, agentName string) {
 			verifyKubernetesAgentDeploymentHealthy(t, agentName)
@@ -62,7 +66,7 @@ var agentDeployTargets = []deployTarget{
 
 var mcpDeployTargets = []deployTarget{
 	{
-		name: "local",
+		name: deployTargetLocal,
 		verify: func(t *testing.T, _ string) {
 			waitForComposeService(t, "agent_gateway", 60*time.Second)
 		},
@@ -71,7 +75,7 @@ var mcpDeployTargets = []deployTarget{
 		},
 	},
 	{
-		name:     "kubernetes",
+		name:     deployTargetKubernetes,
 		deplArgs: []string{"--provider-id", "kubernetes-default", "--namespace", "default"},
 		cleanup: func(t *testing.T, mcpName string) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -90,12 +94,23 @@ var mcpDeployTargets = []deployTarget{
 	},
 }
 
+// skipUnsupportedDeployTarget skips deploy targets that do not match the active
+// E2E backend mode.
+func skipUnsupportedDeployTarget(t *testing.T, targetName string) {
+	t.Helper()
+	if targetName == deployTargetLocal && IsK8sBackend() {
+		t.Skip("skipping local deploy target: E2E_BACKEND=k8s")
+	}
+	if targetName == deployTargetKubernetes && !IsK8sBackend() {
+		t.Skip("skipping kubernetes deploy target: E2E_BACKEND=docker")
+	}
+}
+
 func TestAgentDeployCreate(t *testing.T) {
 	for _, target := range agentDeployTargets {
 		t.Run(target.name, func(t *testing.T) {
-			if target.name == "kubernetes" && !IsK8sBackend() {
-				t.Skip("skipping kubernetes deploy target: E2E_BACKEND=docker")
-			}
+			skipUnsupportedDeployTarget(t, target.name)
+
 			regURL := RegistryURL(t)
 			tmpDir := t.TempDir()
 			agentName := UniqueAgentName("e2edpl" + target.name[:3])
@@ -120,7 +135,7 @@ func TestAgentDeployCreate(t *testing.T) {
 				result = RunArctl(t, tmpDir, "agent", "build", agentName,
 					"--image", agentImage)
 				RequireSuccess(t, result)
-				if target.name == "kubernetes" {
+				if target.name == deployTargetKubernetes {
 					t.Log("Loading image into Kind cluster...")
 					loadDockerImageToKind(t, agentImage)
 				}
@@ -165,9 +180,8 @@ func TestAgentDeployCreate(t *testing.T) {
 func TestMCPDeployCreate(t *testing.T) {
 	for _, target := range mcpDeployTargets {
 		t.Run(target.name, func(t *testing.T) {
-			if target.name == "kubernetes" && !IsK8sBackend() {
-				t.Skip("skipping kubernetes deploy target: E2E_BACKEND=docker")
-			}
+			skipUnsupportedDeployTarget(t, target.name)
+
 			regURL := RegistryURL(t)
 			tmpDir := t.TempDir()
 			mcpName := UniqueNameWithPrefix("e2e-dpl-" + target.name[:3])
@@ -200,7 +214,7 @@ func TestMCPDeployCreate(t *testing.T) {
 				result = RunArctl(t, tmpDir, "mcp", "build", mcpDir,
 					"--image", defaultImage)
 				RequireSuccess(t, result)
-				if target.name == "kubernetes" {
+				if target.name == deployTargetKubernetes {
 					t.Log("Loading image into Kind cluster...")
 					loadDockerImageToKind(t, defaultImage)
 				}
@@ -246,11 +260,15 @@ func TestMCPDeployCreate(t *testing.T) {
 	}
 }
 
-// TestDeployDeleteLifecycle exercises the full CLI lifecycle:
+// TestDeployDeleteLifecycleLocal exercises the local-provider CLI lifecycle:
 // create a deployment, extract its ID via "deploy list", delete it via
 // "arctl deploy delete <prefix>" (testing ID-prefix resolution), and verify
 // it no longer appears in "deploy list".
-func TestDeployDeleteLifecycle(t *testing.T) {
+func TestDeployDeleteLifecycleLocal(t *testing.T) {
+	if IsK8sBackend() {
+		t.Skip("skipping local deploy lifecycle test: E2E_BACKEND=k8s")
+	}
+
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	agentName := UniqueAgentName("e2edeldpl")
@@ -926,9 +944,8 @@ func dumpKagentAgentDebug(t *testing.T, kubeContext, namespace, deploymentID str
 func TestAgentDeployWithPrompts(t *testing.T) {
 	for _, target := range agentDeployTargets {
 		t.Run(target.name, func(t *testing.T) {
-			if target.name == "kubernetes" && !IsK8sBackend() {
-				t.Skip("skipping kubernetes deploy target: E2E_BACKEND=docker")
-			}
+			skipUnsupportedDeployTarget(t, target.name)
+
 			regURL := RegistryURL(t)
 			tmpDir := t.TempDir()
 			agentName := UniqueAgentName("e2eprm" + target.name[:3])
@@ -990,7 +1007,7 @@ func TestAgentDeployWithPrompts(t *testing.T) {
 				result := RunArctl(t, tmpDir, "agent", "build", agentName,
 					"--image", agentImage)
 				RequireSuccess(t, result)
-				if target.name == "kubernetes" {
+				if target.name == deployTargetKubernetes {
 					loadDockerImageToKind(t, agentImage)
 				}
 			})
@@ -1023,10 +1040,12 @@ func TestAgentDeployWithPrompts(t *testing.T) {
 
 			t.Run("verify_prompts", func(t *testing.T) {
 				switch target.name {
-				case "kubernetes":
+				case deployTargetKubernetes:
 					verifyKubernetesPromptsConfig(t, agentName, promptContent)
-				case "local":
+				case deployTargetLocal:
 					verifyLocalPromptsConfig(t, agentName, promptContent)
+				default:
+					t.Fatalf("unsupported deploy target: %s", target.name)
 				}
 			})
 		})
