@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -24,7 +25,11 @@ import (
 //go:embed all:ui/dist
 var embeddedUI embed.FS
 
-// createUIHandler creates an HTTP handler for serving the embedded UI files
+// createUIHandler creates an HTTP handler for serving the embedded UI files.
+// It uses a similar approach to NGINX's try_files.
+// It handles Next.js static export routing by trying the exact path, then
+// <path>.html (for page routes like /deployed -> deployed.html), then falling
+// back to index.html for client-side SPA routing.
 func createUIHandler() (http.Handler, error) {
 	// Extract the ui/dist subdirectory from the embedded filesystem
 	uiFS, err := fs.Sub(embeddedUI, "ui/dist")
@@ -32,8 +37,52 @@ func createUIHandler() (http.Handler, error) {
 		return nil, err
 	}
 
-	// Create a file server for the UI
-	return http.FileServer(http.FS(uiFS)), nil
+	fileServer := http.FileServer(http.FS(uiFS))
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/")
+
+		// Try the exact path as a file first (e.g. _next/static/..., index.html)
+		if f, err := uiFS.Open(path); err == nil {
+			info, err := f.Stat()
+			f.Close()
+			// Only serve directly if it's a regular file, not a directory
+			if err == nil && !info.IsDir() {
+				fileServer.ServeHTTP(w, r)
+				return
+			}
+		}
+
+		// Try <path>.html (Next.js static export puts /deployed -> deployed.html)
+		if htmlPath := path + ".html"; path != "" {
+			if f, err := uiFS.Open(htmlPath); err == nil {
+				f.Close()
+				r2 := r.Clone(r.Context())
+				r2.URL.Path = "/" + htmlPath
+				fileServer.ServeHTTP(w, r2)
+				return
+			}
+		}
+
+		// Fall back to index.html for SPA client-side routing.
+		// Use `ServeContent` to avoid http.FileServer's built-in
+		// redirect from /index.html -> / which causes an infinite redirect loop.
+		// Ref: https://pkg.go.dev/net/http#ServeFile
+		indexFile, err := uiFS.Open("index.html")
+		if err != nil {
+			http.Error(w, "index.html not found", http.StatusNotFound)
+			return
+		}
+		defer indexFile.Close()
+
+		stat, err := indexFile.Stat()
+		if err != nil {
+			http.Error(w, "failed to stat index.html", http.StatusInternalServerError)
+			return
+		}
+
+		http.ServeContent(w, r, "index.html", stat.ModTime(), indexFile.(io.ReadSeeker))
+	}), nil
 }
 
 // TrailingSlashMiddleware redirects requests with trailing slashes to their canonical form
