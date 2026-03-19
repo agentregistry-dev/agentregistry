@@ -16,11 +16,11 @@ import (
 )
 
 var (
-	publishVersion   string
-	gitRepository string
-	dryRunFlag       bool
-	overwriteFlag    bool
-	publishDesc      string
+	publishVersion string
+	gitRepository  string
+	dryRunFlag     bool
+	overwriteFlag  bool
+	publishDesc    string
 )
 
 var PublishCmd = &cobra.Command{
