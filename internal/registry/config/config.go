@@ -3,8 +3,10 @@ package config
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	env "github.com/caarlos0/env/v11"
 	"github.com/joho/godotenv"
@@ -16,6 +18,8 @@ type Config struct {
 	ServerAddress            string `env:"SERVER_ADDRESS" envDefault:":8080"`
 	MCPPort                  uint16 `env:"MCP_PORT" envDefault:"0"`
 	DatabaseURL              string `env:"DATABASE_URL" envDefault:"postgres://agentregistry:agentregistry@localhost:5432/agent-registry?sslmode=disable"`
+	DatabaseURLFile          string `env:"DATABASE_URL_FILE" envDefault:""`
+	DatabaseVectorEnabled    bool   `env:"DATABASE_VECTOR_ENABLED" envDefault:"false"`
 	SeedFrom                 string `env:"SEED_FROM" envDefault:""`
 	EnrichServerData         bool   `env:"ENRICH_SERVER_DATA" envDefault:"false"`
 	DisableBuiltinSeed       bool   `env:"DISABLE_BUILTIN_SEED" envDefault:"true"`
@@ -82,6 +86,16 @@ func NewConfig() *Config {
 		os.Exit(1)
 	}
 
+	// If a database URL file is specified, read it and override DatabaseURL.
+	if cfg.DatabaseURLFile != "" {
+		url, err := readDatabaseURLFile(cfg.DatabaseURLFile)
+		if err != nil {
+			slog.Error("failed to read database URL file", "path", cfg.DatabaseURLFile, "error", err)
+			os.Exit(1)
+		}
+		cfg.DatabaseURL = url
+	}
+
 	// Append a random suffix to RuntimeDir when the user has not set an
 	// explicit override via the AGENT_REGISTRY_RUNTIME_DIR env var. This
 	// prevents concurrent runs from sharing the same directory.
@@ -95,6 +109,19 @@ func NewConfig() *Config {
 	}
 
 	return &cfg
+}
+
+// readDatabaseURLFile reads a database connection URL from a file and returns the trimmed contents.
+func readDatabaseURLFile(path string) (string, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("reading database URL file: %w", err)
+	}
+	url := strings.TrimSpace(string(content))
+	if url == "" {
+		return "", fmt.Errorf("database URL file %s is empty", path)
+	}
+	return url, nil
 }
 
 // randomHex returns a hex-encoded string of n random bytes.

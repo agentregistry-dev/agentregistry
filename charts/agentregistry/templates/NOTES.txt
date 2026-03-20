@@ -38,12 +38,12 @@ gRPC endpoint (Agent Gateway):
   To use an external database, set:
     database.postgres.url=<your-connection-string> or database.postgres.urlFile=<path>
 {{- else }}
-# NOTE: BUNDLED DATABASE DEPLOYED BUT NOT IN USE BY CONTROLLER                 #
+# NOTE: BUNDLED DATABASE DEPLOYED BUT NOT IN USE                               #
 ################################################################################
-  The bundled PostgreSQL pod is running, but the controller is connected to an
+  The bundled PostgreSQL pod is running, but Agent Registry is connected to an
   external database (database.postgres.url or database.postgres.urlFile is set).
 
-  To connect the controller to the bundled instance instead, unset url/urlFile:
+  To connect Agent Registry to the bundled instance instead, unset url/urlFile:
     database.postgres.url=""
   To stop deploying the bundled pod entirely, set:
     database.postgres.bundled.enabled=false

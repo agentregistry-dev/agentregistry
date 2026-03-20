@@ -85,7 +85,7 @@ spec:
       topologySpreadConstraints:
         {{- toYaml .Values.topologySpreadConstraints | nindent 8 }}
       {{- end }}
-      {{- if .Values.database.postgres.bundled.enabled }}
+      {{- if and .Values.database.postgres.bundled.enabled (eq .Values.database.postgres.url "") (eq .Values.database.postgres.urlFile "") }}
       initContainers:
         - name: wait-for-postgres
           image: {{ include "agentregistry.postgresql.image" . }}
@@ -132,7 +132,7 @@ spec:
                   name: {{ .Values.config.existingSecret | default (include "agentregistry.fullname" .) }}
                   key: AGENT_REGISTRY_JWT_PRIVATE_KEY
             {{- if .Values.database.postgres.urlFile }}
-            - name: POSTGRES_DATABASE_URL_FILE
+            - name: AGENT_REGISTRY_DATABASE_URL_FILE
               value: {{ .Values.database.postgres.urlFile | quote }}
             {{- else if .Values.database.postgres.url }}
             - name: AGENT_REGISTRY_DATABASE_URL
@@ -150,6 +150,8 @@ spec:
             {{- end }}
             {{- if .Values.database.postgres.vectorEnabled }}
             - name: AGENT_REGISTRY_EMBEDDINGS_ENABLED
+              value: "true"
+            - name: AGENT_REGISTRY_DATABASE_VECTOR_ENABLED
               value: "true"
             {{- end }}
             {{- if .Values.extraEnvVars }}
