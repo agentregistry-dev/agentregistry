@@ -379,7 +379,12 @@ dump-kind-state: ## Dump Kind cluster state for debugging (pods, events, kagent 
 	@kubectl get pods -A --context $(KIND_CLUSTER_CONTEXT) 2>/dev/null || true
 	@echo ""
 	@echo "=== Pod describe ==="
-	@kubectl describe pods --context $(KIND_CLUSTER_CONTEXT) 2>/dev/null || true
+	@kubectl describe pods -A --context $(KIND_CLUSTER_CONTEXT) 2>/dev/null || true
+	@echo ""
+	@echo "=== AgentRegistry logs ==="
+	@kubectl logs deployment/agentregistry -n $(KIND_NAMESPACE) --context $(KIND_CLUSTER_CONTEXT) --tail=100 2>/dev/null || true
+	@echo "=== AgentRegistry previous logs ==="
+	@kubectl logs deployment/agentregistry -n $(KIND_NAMESPACE) --context $(KIND_CLUSTER_CONTEXT) --tail=100 --previous 2>/dev/null || true
 	@echo ""
 	@echo "=== Events ==="
 	@kubectl get events -A --sort-by='.lastTimestamp' --context $(KIND_CLUSTER_CONTEXT) 2>/dev/null | tail -50 || true

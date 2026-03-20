@@ -27,6 +27,7 @@ func DefaultMigratorConfig() database.MigratorConfig {
 func VectorMigratorConfig() database.MigratorConfig {
 	return database.MigratorConfig{
 		MigrationFiles: vectorMigrationFiles,
+		MigrationDir:   "migrations_vector",
 		VersionOffset:  100,
 		EnsureTable:    false,
 	}

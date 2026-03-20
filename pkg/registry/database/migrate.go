@@ -27,9 +27,12 @@ type Migration struct {
 // their own migrations while sharing the same schema_migrations table.
 type MigratorConfig struct {
 	// MigrationFiles is the embedded filesystem containing migration files.
-	// The filesystem should contain a "migrations" directory with .sql files
+	// The filesystem should contain a directory (named by MigrationDir) with .sql files
 	// named using the pattern "NNN_description.sql" (e.g., "001_initial_schema.sql").
 	MigrationFiles embed.FS
+	// MigrationDir is the directory within MigrationFiles to read migrations from.
+	// Defaults to "migrations" when empty.
+	MigrationDir string
 	// VersionOffset is added to all migration versions to avoid conflicts.
 	// Set to 0 for OSS migrations, 500+ for extensions.
 	// This allows multiple migration sources to avoid collisions.
@@ -97,7 +100,8 @@ func (m *Migrator) getAppliedMigrations(ctx context.Context) (map[int]struct{}, 
 
 // loadMigrations loads all migration files from the embedded filesystem
 func (m *Migrator) loadMigrations() ([]Migration, error) {
-	entries, err := m.config.MigrationFiles.ReadDir("migrations")
+	dir := cmp.Or(m.config.MigrationDir, "migrations")
+	entries, err := m.config.MigrationFiles.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read migrations directory: %w", err)
 	}
@@ -126,7 +130,7 @@ func (m *Migrator) loadMigrations() ([]Migration, error) {
 		offsetVersion := version + m.config.VersionOffset
 
 		// Read the migration SQL
-		content, err := m.config.MigrationFiles.ReadFile(path.Join("migrations", name))
+		content, err := m.config.MigrationFiles.ReadFile(path.Join(dir, name))
 		if err != nil {
 			return nil, fmt.Errorf("failed to read migration file %s: %w", name, err)
 		}
