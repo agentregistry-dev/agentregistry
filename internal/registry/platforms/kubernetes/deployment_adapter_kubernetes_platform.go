@@ -577,7 +577,6 @@ func kubernetesTranslateAgentConfigMap(agent *platformtypes.Agent) (*corev1.Conf
 	}, nil
 }
 
-
 func kubernetesAgentConfigMapName(name, version, deploymentID string) string {
 	base := fmt.Sprintf("%s-agent-config", name)
 	if version != "" {

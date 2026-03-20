@@ -283,7 +283,6 @@ func ensureLocalAgentGatewayDefaults(cfg *platformtypes.AgentGatewayConfig, port
 	}
 }
 
-
 func canRunInsideLocalAgentGateway(cmd string) bool {
 	return cmd == "npx" || cmd == "uvx"
 }

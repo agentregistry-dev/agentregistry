@@ -114,9 +114,9 @@ func TestExtractAPIErrorMessage(t *testing.T) {
 
 func TestAsHTTPStatus(t *testing.T) {
 	tests := []struct {
-		name    string
-		errMsg  string
-		want    int
+		name   string
+		errMsg string
+		want   int
 	}{
 		{"parsed API error format", "400 Bad Request: name is required", 400},
 		{"unparsed fallback format", "unexpected status: 404 Not Found, {\"detail\":\"not found\"}", 404},
