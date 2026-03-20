@@ -230,7 +230,7 @@ func runMCPServerPublish(cmd *cobra.Command, args []string) error {
 		Description:      description,
 		Title:            serverName,
 		Version:          version,
-		GitURL:        gitRepository,
+		GitURL:           gitRepository,
 		RegistryType:     regType,
 		Identifier:       packageID,
 		PackageVersion:   pkgVersion,
@@ -345,7 +345,7 @@ type ServerJSONParams struct {
 	Description string
 	Title       string
 	Version     string
-	GitURL   string
+	GitURL      string
 
 	// Package info
 	RegistryType     string

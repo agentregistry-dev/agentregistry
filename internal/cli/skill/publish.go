@@ -20,11 +20,11 @@ import (
 
 var (
 	// Flags for skill publish command
-	versionFlag      string
-	dryRunFlag       bool
+	versionFlag     string
+	dryRunFlag      bool
 	gitRepository   string
 	dockerImageFlag string
-	publishDesc      string
+	publishDesc     string
 )
 
 // githubRawBaseURL is the base URL for raw GitHub content checks.
