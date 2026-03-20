@@ -22,7 +22,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
-	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/stretchr/testify/assert"
@@ -136,8 +135,7 @@ func TestListServersEndpoint(t *testing.T) {
 
 func TestListServersSemanticSearch(t *testing.T) {
 	ctx := context.Background()
-	db := internaldb.NewTestDB(t)
-	ensureVectorExtension(t, db)
+	db := internaldb.NewTestDB(t, internaldb.WithVector())
 
 	cfg := config.NewConfig()
 	cfg.Embeddings.Enabled = true
@@ -434,15 +432,6 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 			}
 		})
 	}
-}
-
-func ensureVectorExtension(t *testing.T, db database.Database) {
-	t.Helper()
-	err := db.InTransaction(context.Background(), func(ctx context.Context, tx pgx.Tx) error {
-		_, execErr := tx.Exec(ctx, "CREATE EXTENSION IF NOT EXISTS vector")
-		return execErr
-	})
-	require.NoError(t, err, "failed to ensure pgvector extension for tests")
 }
 
 type stubEmbeddingProvider struct {

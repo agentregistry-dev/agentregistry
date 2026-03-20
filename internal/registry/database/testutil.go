@@ -128,11 +128,29 @@ func ensureVectorExtension(ctx context.Context, uri string) error {
 	return nil
 }
 
+type testDBOption struct {
+	vectorEnabled bool
+}
+
+// WithVector enables vector migrations (adds semantic_embedding columns) on the test database.
+// Use for tests that exercise pgvector/embeddings functionality.
+func WithVector() testDBOption {
+	return testDBOption{vectorEnabled: true}
+}
+
 // NewTestDB creates an isolated PostgreSQL database for each test by copying a template.
 // The template database has migrations pre-applied, so each test is fast.
 // Requires PostgreSQL to be running on localhost:5432 (e.g., via docker-compose).
-func NewTestDB(t *testing.T) database.Database {
+// Pass WithVector() to also apply vector migrations.
+func NewTestDB(t *testing.T, opts ...testDBOption) database.Database {
 	t.Helper()
+
+	vectorEnabled := false
+	for _, o := range opts {
+		if o.vectorEnabled {
+			vectorEnabled = true
+		}
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -175,15 +193,13 @@ func NewTestDB(t *testing.T) database.Database {
 		_, _ = adminConn.Exec(cleanupCtx, fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
 	})
 
-	// Connect to test database (no migrations needed - copied from template)
 	testURI := fmt.Sprintf("postgres://agentregistry:agentregistry@localhost:5432/%s?sslmode=disable", dbName)
 
 	// Create a permissive authz for tests
 	testAuthz := createTestAuthz()
-	db, err := NewPostgreSQL(ctx, testURI, testAuthz, false)
+	db, err := NewPostgreSQL(ctx, testURI, testAuthz, vectorEnabled)
 	require.NoError(t, err, "Failed to connect to test database")
 
-	// Register cleanup to close connection
 	t.Cleanup(func() {
 		if err := db.Close(); err != nil {
 			t.Logf("Warning: failed to close test database connection: %v", err)
