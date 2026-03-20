@@ -75,20 +75,15 @@ Usage: include "agentregistry.annotations" (dict "annotations" .Values.someAnnot
 
 {{/*
 Return the proper Agent Registry image name.
-Uses global.imageRegistry as override if set.
-Digest takes precedence over tag.
+global.imageRegistry overrides image.registry. Digest takes precedence over tag.
 */}}
 {{- define "agentregistry.image" -}}
-{{- $registry := .Values.image.registry -}}
-{{- if .Values.global }}
-  {{- if .Values.global.imageRegistry }}
-    {{- $registry = .Values.global.imageRegistry -}}
-  {{- end }}
-{{- end }}
+{{- $registry := coalesce (.Values.global).imageRegistry .Values.image.registry }}
+{{- $tag := coalesce .Values.image.tag .Chart.AppVersion }}
 {{- if .Values.image.digest }}
 {{- printf "%s/%s/%s@%s" $registry .Values.image.repository .Values.image.name .Values.image.digest }}
 {{- else }}
-{{- printf "%s/%s/%s:%s" $registry .Values.image.repository .Values.image.name (.Values.image.tag | default .Chart.AppVersion) }}
+{{- printf "%s/%s/%s:%s" $registry .Values.image.repository .Values.image.name $tag }}
 {{- end }}
 {{- end }}
 
@@ -290,17 +285,12 @@ app.kubernetes.io/component: database
 
 {{/*
 Return the bundled PostgreSQL image string.
-Respects global.imageRegistry override.
+global.imageRegistry overrides image.registry.
 */}}
 {{- define "agentregistry.postgresql.image" -}}
-{{- $pg := .Values.database.postgres.bundled -}}
-{{- $registry := $pg.image.registry -}}
-{{- if .Values.global }}
-  {{- if .Values.global.imageRegistry }}
-    {{- $registry = .Values.global.imageRegistry -}}
-  {{- end }}
-{{- end }}
-{{- printf "%s/%s/%s:%s" $registry $pg.image.repository $pg.image.name $pg.image.tag }}
+{{- $pg := .Values.database.postgres.bundled.image }}
+{{- $registry := coalesce (.Values.global).imageRegistry $pg.registry }}
+{{- printf "%s/%s/%s:%s" $registry $pg.repository $pg.name $pg.tag }}
 {{- end }}
 
 {{/* ======================================================================
