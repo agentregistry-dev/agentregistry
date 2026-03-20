@@ -87,15 +87,10 @@ agentregistry puts all of that into a single registry with a CLI and a web UI. Y
 # 1. Install the CLI
 curl -fsSL https://raw.githubusercontent.com/agentregistry-dev/agentregistry/main/scripts/get-arctl | bash
 
-# 2. List available MCP servers (starts the registry daemon automatically)
-arctl mcp list
+# 2. Start the agentregistry daemon by running any arctl command, such as arctl version.
+arctl version
 
-# 3. Open the web UI by navigating to this URL in your browser:
-#    http://localhost:12121
-
-# 4. Deploy a server and configure your IDE
-arctl deploy <server-name>
-arctl configure cursor
+# 3. Open the agentregistry UI in your browser. http://localhost:12121 The UI is automatically exposed on port 12121 on your local machine when you start the agentregistry daemon.
 ```
 
 That's it. Your IDE now has access to the deployed server through the agentgateway.
