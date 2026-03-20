@@ -17,6 +17,10 @@ BUILD_DATE ?= $(shell date -u '+%Y-%m-%d')
 GIT_COMMIT ?= $(shell git rev-parse --short HEAD || echo "unknown")
 VERSION ?= $(shell git describe --tags --always 2>/dev/null | grep v || echo "v0.0.0-$(GIT_COMMIT)")
 KAGENT_VERSION ?= v0.8.0-beta6
+KAGENT_HELM_VERSION ?= $(shell echo $(KAGENT_VERSION) | sed 's/^v//')
+KAGENT_NAMESPACE ?= kagent
+KAGENT_HELM_CHART_CRDS ?= oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds
+KAGENT_HELM_CHART ?= oci://ghcr.io/kagent-dev/kagent/helm/kagent
 
 # Copy .env.example to .env if it doesn't exist
 .env:
@@ -363,12 +367,44 @@ endif
 	    --timeout=5m;
 
 .PHONY: install-kagent
-install-kagent: ## Install kagent on the Kind cluster (downloads CLI if absent)
-	KUBE_CONTEXT=$(KIND_CLUSTER_CONTEXT) KAGENT_VERSION=$(KAGENT_VERSION) bash ./scripts/kind/install-kagent.sh
+install-kagent: install-kagent-crds install-kagent-controller ## Deploy kagent CRDs and controller into the Kind cluster
+
+.PHONY: install-kagent-crds
+install-kagent-crds: ## Deploy kagent CRDs
+	$(HELM) upgrade --install kagent-crds $(KAGENT_HELM_CHART_CRDS) \
+	  --kube-context $(KIND_CLUSTER_CONTEXT) \
+	  --namespace $(KAGENT_NAMESPACE) \
+	  --create-namespace \
+	  --version $(KAGENT_HELM_VERSION) \
+	  --wait \
+	  --timeout=2m
+
+.PHONY: install-kagent-controller
+install-kagent-controller: ## Deploy kagent controller (minimal, no agents/tools/UI)
+	$(HELM) upgrade --install kagent $(KAGENT_HELM_CHART) \
+	  --kube-context $(KIND_CLUSTER_CONTEXT) \
+	  --namespace $(KAGENT_NAMESPACE) \
+	  --version $(KAGENT_HELM_VERSION) \
+	  --set ui.replicas=0 \
+	  --set kagent-tools.enabled=false \
+	  --set tools.grafana-mcp.enabled=false \
+	  --set tools.querydoc.enabled=false \
+	  --set agents.argo-rollouts-agent.enabled=false \
+	  --set agents.cilium-debug-agent.enabled=false \
+	  --set agents.cilium-manager-agent.enabled=false \
+	  --set agents.cilium-policy-agent.enabled=false \
+	  --set agents.helm-agent.enabled=false \
+	  --set agents.istio-agent.enabled=false \
+	  --set agents.k8s-agent.enabled=false \
+	  --set agents.kgateway-agent.enabled=false \
+	  --set agents.observability-agent.enabled=false \
+	  --set agents.promql-agent.enabled=false \
+	  --wait \
+	  --timeout=5m
 
 ## Set up a full local K8s dev environment (Kind + AgentRegistry with bundled PostgreSQL + kagent).
 .PHONY: setup-kind-cluster
-setup-kind-cluster: create-kind-cluster install-agentregistry install-kagent ## Set up the full local Kind development environment
+setup-kind-cluster: create-kind-cluster install-kagent install-agentregistry ## Set up the full local Kind development environment
 
 .PHONY: dump-kind-state
 dump-kind-state: ## Dump Kind cluster state for debugging (pods, events, kagent logs)
@@ -545,4 +581,3 @@ helm-unittest-install: _helm-check  ## Install the helm-unittest plugin if neede
 	HELM_PLUGIN_UNITTEST_VERSION=$(HELM_PLUGIN_UNITTEST_VERSION) \
 	HELM_PLUGIN_INSTALL_FLAGS="$(HELM_PLUGIN_INSTALL_FLAGS)" \
 	bash ./scripts/install-helm-unittest.sh
-

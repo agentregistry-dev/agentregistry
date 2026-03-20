@@ -63,10 +63,10 @@ func captureStdout(t *testing.T, fn func()) string {
 
 func TestPrintAgentsTable_ImageAndRepository(t *testing.T) {
 	tests := []struct {
-		name       string
-		agents     []*models.AgentResponse
-		wantImage  string
-		wantRepo   string
+		name      string
+		agents    []*models.AgentResponse
+		wantImage string
+		wantRepo  string
 	}{
 		{
 			name: "manifest image and repository",

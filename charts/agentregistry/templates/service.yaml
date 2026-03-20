@@ -48,3 +48,10 @@ spec:
       {{- if and (or (eq .Values.service.type "NodePort") (eq .Values.service.type "LoadBalancer")) .Values.service.nodePorts.grpc }}
       nodePort: {{ .Values.service.nodePorts.grpc }}
       {{- end }}
+    - name: mcp
+      port: {{ .Values.service.ports.mcp }}
+      targetPort: {{ .Values.service.targetPorts.mcp }}
+      protocol: TCP
+      {{- if and (or (eq .Values.service.type "NodePort") (eq .Values.service.type "LoadBalancer")) .Values.service.nodePorts.mcp }}
+      nodePort: {{ .Values.service.nodePorts.mcp }}
+      {{- end }}
