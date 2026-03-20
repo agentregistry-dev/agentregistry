@@ -309,8 +309,8 @@ Called from templates/validate.yaml so it fires during helm template/install.
 {{- $errors = append $errors "config.jwtPrivateKey must be a valid hex string (e.g. generated with: openssl rand -hex 32)." }}
 {{- end }}
 {{- if not .Values.database.postgres.bundled.enabled }}
-{{- if and (not .Values.database.postgres.url) (not .Values.database.postgres.urlFile) }}
-{{- $errors = append $errors "database.postgres.url or database.postgres.urlFile must be set when database.postgres.bundled.enabled=false. An external PostgreSQL instance with pgvector is required." }}
+{{- if not .Values.database.postgres.url }}
+{{- $errors = append $errors "database.postgres.url must be set when database.postgres.bundled.enabled=false." }}
 {{- end }}
 {{- end }}
 {{- range $errors }}

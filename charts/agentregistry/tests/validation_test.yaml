@@ -46,7 +46,7 @@ tests:
 
   # ── Bundled PostgreSQL skips external validation ──────────────────────────
 
-  - it: renders nothing with bundled enabled even when no url or urlFile
+  - it: renders nothing with bundled enabled even when no url
     set:
       config.jwtPrivateKey: deadbeef1234567890abcdef
     asserts:
@@ -55,7 +55,7 @@ tests:
 
   # ── Database URL validation (bundled disabled) ────────────────────────────
 
-  - it: fails when bundled is disabled and neither url nor urlFile is set
+  - it: fails when bundled is disabled and url is not set
     set:
       config.jwtPrivateKey: deadbeef1234567890abcdef
       database.postgres.bundled.enabled: false
@@ -72,11 +72,3 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: renders nothing when database.postgres.urlFile is set (bundled disabled)
-    set:
-      config.jwtPrivateKey: deadbeef1234567890abcdef
-      database.postgres.bundled.enabled: false
-      database.postgres.urlFile: "/run/secrets/db-url"
-    asserts:
-      - hasDocuments:
-          count: 0

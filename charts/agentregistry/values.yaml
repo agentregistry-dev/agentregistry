@@ -278,8 +278,6 @@ database:
   postgres:
     # -- External PostgreSQL connection string. Used if set, regardless of bundled.enabled.
     url: ""
-    # -- Path to a file containing the database URL. Takes precedence over url.
-    urlFile: ""
     # -- Enable vector schema migrations and embeddings/semantic search (sets AGENT_REGISTRY_DATABASE_VECTOR_ENABLED and AGENT_REGISTRY_EMBEDDINGS_ENABLED). Requires a pgvector-capable PostgreSQL instance.
     vectorEnabled: false
     # -- Bundled PostgreSQL — dev/eval only.

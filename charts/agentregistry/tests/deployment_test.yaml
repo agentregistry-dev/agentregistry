@@ -110,32 +110,10 @@ tests:
             name: AGENT_REGISTRY_DATABASE_URL
             value: "postgres://user:pass@host:5432/db?sslmode=disable"
 
-  - it: sets AGENT_REGISTRY_DATABASE_URL_FILE when database.postgres.urlFile is set
-    template: deployment.yaml
-    set:
-      database.postgres.bundled.enabled: false
-      database.postgres.urlFile: "/run/secrets/db-url"
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: AGENT_REGISTRY_DATABASE_URL_FILE
-            value: "/run/secrets/db-url"
-
   - it: does not inject POSTGRES_PASSWORD when url is set (bundled enabled or disabled)
     template: deployment.yaml
     set:
       database.postgres.url: "postgres://user:pass@host:5432/db"
-    asserts:
-      - notContains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: POSTGRES_PASSWORD
-
-  - it: does not inject POSTGRES_PASSWORD when urlFile is set
-    template: deployment.yaml
-    set:
-      database.postgres.urlFile: "/run/secrets/db-url"
     asserts:
       - notContains:
           path: spec.template.spec.containers[0].env

@@ -193,14 +193,6 @@ tests:
       - hasDocuments:
           count: 3
 
-  - it: still renders when bundled is enabled and urlFile is also set
-    template: postgresql.yaml
-    set:
-      database.postgres.urlFile: "/run/secrets/db-url"
-    asserts:
-      - hasDocuments:
-          count: 3
-
   # ── Custom storage size ───────────────────────────────────────────────────
 
   - it: uses custom storage size
@@ -249,14 +241,6 @@ tests:
     template: postgresql-secret.yaml
     set:
       database.postgres.url: "postgres://user:pass@host:5432/db"
-    asserts:
-      - hasDocuments:
-          count: 1
-
-  - it: creates postgresql secret even when urlFile is set (bundled still enabled)
-    template: postgresql-secret.yaml
-    set:
-      database.postgres.urlFile: "/run/secrets/db-url"
     asserts:
       - hasDocuments:
           count: 1
