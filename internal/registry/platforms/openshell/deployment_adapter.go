@@ -22,6 +22,26 @@ const (
 	sandboxPhaseError = "SANDBOX_PHASE_ERROR"
 )
 
+// openshellProviderMapping maps agent model-provider slugs to their
+// corresponding OpenShell provider type and credential env vars.
+// Supported OpenShell types: claude, codex, generic, github, gitlab,
+// nvidia, openai, opencode.
+// See https://docs.nvidia.com/openshell/latest/sandboxes/manage-providers.html
+type openshellProviderSpec struct {
+	Type           string   // OpenShell provider type
+	CredentialKeys []string // env var names that carry API credentials
+}
+
+var openshellProviderMapping = map[string]openshellProviderSpec{
+	"anthropic": {Type: "claude", CredentialKeys: []string{"ANTHROPIC_API_KEY", "CLAUDE_API_KEY"}},
+	"openai":    {Type: "openai", CredentialKeys: []string{"OPENAI_API_KEY"}},
+	"nvidia":    {Type: "nvidia", CredentialKeys: []string{"NVIDIA_API_KEY"}},
+	"google":    {Type: "generic", CredentialKeys: []string{"GOOGLE_API_KEY", "GEMINI_API_KEY"}},
+	"gemini":    {Type: "generic", CredentialKeys: []string{"GOOGLE_API_KEY", "GEMINI_API_KEY"}},
+	"mistral":   {Type: "generic", CredentialKeys: []string{"MISTRAL_API_KEY"}},
+	"cohere":    {Type: "generic", CredentialKeys: []string{"COHERE_API_KEY"}},
+}
+
 type openshellDeploymentAdapter struct {
 	registry    service.RegistryService
 	client      Client
@@ -69,22 +89,26 @@ func (a *openshellDeploymentAdapter) SupportedResourceTypes() []string {
 }
 
 func (a *openshellDeploymentAdapter) Deploy(ctx context.Context, req *models.Deployment) (*models.DeploymentActionResult, error) {
+	if err := utils.ValidateDeploymentRequest(req, false); err != nil {
+		return nil, err
+	}
 	slog.Info("openshell: deploy started", "server", req.ServerName, "provider", req.ProviderID)
 	client, err := a.getClient()
 	if err != nil {
 		return nil, err
 	}
 	slog.Info("openshell: client ready")
-	if err := utils.ValidateDeploymentRequest(req, false); err != nil {
-		return nil, err
-	}
 
 	sandboxName := sandboxNameForDeployment(req)
 	image, env, providers, err := a.resolveDeploymentSpec(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	slog.Info("openshell: resolved spec", "sandbox", sandboxName, "image", image)
+	slog.Info("openshell: resolved spec", "sandbox", sandboxName, "image", image, "providers", providers)
+
+	if err := a.ensureProviders(ctx, client, providers, env); err != nil {
+		return nil, err
+	}
 
 	opts := CreateSandboxOpts{
 		Name:      sandboxName,
@@ -176,11 +200,51 @@ func (a *openshellDeploymentAdapter) resolveDeploymentSpec(
 		if rErr != nil {
 			return "", nil, nil, rErr
 		}
-		return resolved.Agent.Deployment.Image, mergeEnv(deployment.Env, resolved.Agent.Deployment.Env), nil, nil
+		mergedEnv := mergeEnv(deployment.Env, resolved.Agent.Deployment.Env)
+		modelProvider := mergedEnv["MODEL_PROVIDER"]
+		if modelProvider != "" {
+			providers = append(providers, strings.ToLower(modelProvider))
+		}
+		return resolved.Agent.Deployment.Image, mergedEnv, providers, nil
 
 	default:
 		return "", nil, nil, fmt.Errorf("invalid resource type %q: %w", deployment.ResourceType, database.ErrInvalidInput)
 	}
+}
+
+// ensureProviders makes sure every named inference provider exists on the
+// gateway, creating it with credentials extracted from env if necessary.
+func (a *openshellDeploymentAdapter) ensureProviders(ctx context.Context, client Client, providers []string, env map[string]string) error {
+	for _, name := range providers {
+		spec := resolveProviderSpec(name)
+		creds := extractProviderCredentials(spec, env)
+		slog.Info("openshell: ensuring provider", "provider", name, "openshell_type", spec.Type, "has_credentials", len(creds) > 0)
+		if err := client.EnsureProvider(ctx, name, spec.Type, creds); err != nil {
+			return fmt.Errorf("ensure openshell provider %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+// resolveProviderSpec returns the OpenShell provider spec for a model provider
+// slug. Unknown providers fall back to the "generic" type.
+func resolveProviderSpec(provider string) openshellProviderSpec {
+	if spec, ok := openshellProviderMapping[provider]; ok {
+		return spec
+	}
+	return openshellProviderSpec{Type: "generic"}
+}
+
+// extractProviderCredentials looks up known API-key env vars for a provider
+// spec and returns them as a credentials map suitable for OpenShell.
+func extractProviderCredentials(spec openshellProviderSpec, env map[string]string) map[string]string {
+	creds := make(map[string]string)
+	for _, key := range spec.CredentialKeys {
+		if v, exists := env[key]; exists && v != "" {
+			creds[key] = v
+		}
+	}
+	return creds
 }
 
 // waitForReady polls GetSandbox until the sandbox reaches the Ready phase or times out.

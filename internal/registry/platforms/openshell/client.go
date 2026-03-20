@@ -16,6 +16,12 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+// ProviderInfo holds the identity and type of an OpenShell inference provider.
+type ProviderInfo struct {
+	Name string
+	Type string
+}
+
 // Client is the interface for interacting with an OpenShell gateway.
 type Client interface {
 	CreateSandbox(ctx context.Context, opts CreateSandboxOpts) (*SandboxInfo, error)
@@ -24,6 +30,8 @@ type Client interface {
 	DeleteSandbox(ctx context.Context, name string) error
 	GetSandboxLogs(ctx context.Context, sandboxID string) ([]string, error)
 	HealthCheck(ctx context.Context) error
+	ListProviders(ctx context.Context) ([]ProviderInfo, error)
+	EnsureProvider(ctx context.Context, name, providerType string, credentials map[string]string) error
 	Close() error
 }
 
@@ -210,6 +218,36 @@ func (c *grpcClient) HealthCheck(ctx context.Context) error {
 	}
 	if resp.GetStatus() != pb.ServiceStatus_SERVICE_STATUS_HEALTHY {
 		return fmt.Errorf("gateway unhealthy: %s", resp.GetStatus().String())
+	}
+	return nil
+}
+
+func (c *grpcClient) ListProviders(ctx context.Context) ([]ProviderInfo, error) {
+	resp, err := c.client.ListProviders(ctx, &pb.ListProvidersRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("list providers: %w", err)
+	}
+	result := make([]ProviderInfo, len(resp.GetProviders()))
+	for i, p := range resp.GetProviders() {
+		result[i] = ProviderInfo{Name: p.GetName(), Type: p.GetType()}
+	}
+	return result, nil
+}
+
+func (c *grpcClient) EnsureProvider(ctx context.Context, name, providerType string, credentials map[string]string) error {
+	_, err := c.client.GetProvider(ctx, &pb.GetProviderRequest{Name: name})
+	if err == nil {
+		return nil
+	}
+	_, err = c.client.CreateProvider(ctx, &pb.CreateProviderRequest{
+		Provider: &pb.Provider{
+			Name:        name,
+			Type:        providerType,
+			Credentials: credentials,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("create openshell provider %s: %w", name, err)
 	}
 	return nil
 }

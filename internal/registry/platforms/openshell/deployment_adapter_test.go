@@ -14,12 +14,14 @@ import (
 
 // mockClient implements Client for testing.
 type mockClient struct {
-	createFn  func(ctx context.Context, opts CreateSandboxOpts) (*SandboxInfo, error)
-	getFn     func(ctx context.Context, name string) (*SandboxInfo, error)
-	listFn    func(ctx context.Context) ([]SandboxInfo, error)
-	deleteFn  func(ctx context.Context, name string) error
-	logsFn    func(ctx context.Context, name string) ([]string, error)
-	healthFn  func(ctx context.Context) error
+	createFn        func(ctx context.Context, opts CreateSandboxOpts) (*SandboxInfo, error)
+	getFn           func(ctx context.Context, name string) (*SandboxInfo, error)
+	listFn          func(ctx context.Context) ([]SandboxInfo, error)
+	deleteFn        func(ctx context.Context, name string) error
+	logsFn          func(ctx context.Context, name string) ([]string, error)
+	healthFn        func(ctx context.Context) error
+	listProvidersFn func(ctx context.Context) ([]ProviderInfo, error)
+	ensureProvFn    func(ctx context.Context, name, provType string, creds map[string]string) error
 }
 
 func (m *mockClient) CreateSandbox(ctx context.Context, opts CreateSandboxOpts) (*SandboxInfo, error) {
@@ -64,16 +66,35 @@ func (m *mockClient) HealthCheck(ctx context.Context) error {
 	return nil
 }
 
+func (m *mockClient) ListProviders(ctx context.Context) ([]ProviderInfo, error) {
+	if m.listProvidersFn != nil {
+		return m.listProvidersFn(ctx)
+	}
+	return nil, nil
+}
+
+func (m *mockClient) EnsureProvider(ctx context.Context, name, provType string, creds map[string]string) error {
+	if m.ensureProvFn != nil {
+		return m.ensureProvFn(ctx, name, provType, creds)
+	}
+	return nil
+}
+
 func (m *mockClient) Close() error { return nil }
 
 func newTestRegistry() *servicetesting.FakeRegistry {
+	return newTestRegistryWithProvider("anthropic")
+}
+
+func newTestRegistryWithProvider(modelProvider string) *servicetesting.FakeRegistry {
 	registry := servicetesting.NewFakeRegistry()
 	registry.GetAgentByNameAndVersionFn = func(_ context.Context, name, version string) (*models.AgentResponse, error) {
 		return &models.AgentResponse{
 			Agent: models.AgentJSON{
 				AgentManifest: models.AgentManifest{
-					Name:  name,
-					Image: "test-agent-image:latest",
+					Name:          name,
+					Image:         "test-agent-image:latest",
+					ModelProvider: modelProvider,
 				},
 				Version: version,
 			},
@@ -411,5 +432,196 @@ func TestDeploy_CreateSandboxError(t *testing.T) {
 	_, err := adapter.Deploy(context.Background(), deployment)
 	if err == nil {
 		t.Fatal("expected error from CreateSandbox failure")
+	}
+}
+
+func TestDeploy_Agent_EnsuresProvider(t *testing.T) {
+	var ensuredName, ensuredType string
+	var ensuredCreds map[string]string
+	var createdProviders []string
+
+	client := &mockClient{
+		ensureProvFn: func(_ context.Context, name, provType string, creds map[string]string) error {
+			ensuredName = name
+			ensuredType = provType
+			ensuredCreds = creds
+			return nil
+		},
+		createFn: func(_ context.Context, opts CreateSandboxOpts) (*SandboxInfo, error) {
+			createdProviders = opts.Providers
+			return &SandboxInfo{ID: "sb-1", Name: opts.Name, Phase: "SANDBOX_PHASE_PROVISIONING"}, nil
+		},
+	}
+
+	adapter := NewOpenShellDeploymentAdapter(newTestRegistry(), client)
+
+	deployment := &models.Deployment{
+		ID:           "dep-prov",
+		ServerName:   "my-agent",
+		Version:      "1.0.0",
+		ResourceType: "agent",
+		ProviderID:   "openshell-default",
+		Env:          map[string]string{"ANTHROPIC_API_KEY": "sk-test-123"},
+	}
+
+	result, err := adapter.Deploy(context.Background(), deployment)
+	if err != nil {
+		t.Fatalf("Deploy() error = %v", err)
+	}
+	if result.Status != models.DeploymentStatusDeployed {
+		t.Errorf("status = %q, want %q", result.Status, models.DeploymentStatusDeployed)
+	}
+	if ensuredName != "anthropic" {
+		t.Errorf("ensured provider name = %q, want %q", ensuredName, "anthropic")
+	}
+	if ensuredType != "claude" {
+		t.Errorf("ensured provider type = %q, want %q (OpenShell type for anthropic)", ensuredType, "claude")
+	}
+	if ensuredCreds["ANTHROPIC_API_KEY"] != "sk-test-123" {
+		t.Errorf("ensured creds = %v, want ANTHROPIC_API_KEY=sk-test-123", ensuredCreds)
+	}
+	if len(createdProviders) != 1 || createdProviders[0] != "anthropic" {
+		t.Errorf("sandbox providers = %v, want [anthropic]", createdProviders)
+	}
+}
+
+func TestDeploy_Agent_NoProviderWhenModelProviderEmpty(t *testing.T) {
+	var ensureCalled bool
+	client := &mockClient{
+		ensureProvFn: func(_ context.Context, _, _ string, _ map[string]string) error {
+			ensureCalled = true
+			return nil
+		},
+	}
+
+	adapter := NewOpenShellDeploymentAdapter(newTestRegistryWithProvider(""), client)
+
+	deployment := &models.Deployment{
+		ID:           "dep-noprov",
+		ServerName:   "my-agent",
+		Version:      "1.0.0",
+		ResourceType: "agent",
+		ProviderID:   "openshell-default",
+	}
+
+	_, err := adapter.Deploy(context.Background(), deployment)
+	if err != nil {
+		t.Fatalf("Deploy() error = %v", err)
+	}
+	if ensureCalled {
+		t.Error("EnsureProvider should not be called when model provider is empty")
+	}
+}
+
+func TestDeploy_Agent_EnsureProviderError(t *testing.T) {
+	client := &mockClient{
+		ensureProvFn: func(_ context.Context, _, _ string, _ map[string]string) error {
+			return fmt.Errorf("gateway unreachable")
+		},
+	}
+
+	adapter := NewOpenShellDeploymentAdapter(newTestRegistry(), client)
+
+	deployment := &models.Deployment{
+		ID:           "dep-enserr",
+		ServerName:   "my-agent",
+		Version:      "1.0.0",
+		ResourceType: "agent",
+		ProviderID:   "openshell-default",
+		Env:          map[string]string{"ANTHROPIC_API_KEY": "sk-test"},
+	}
+
+	_, err := adapter.Deploy(context.Background(), deployment)
+	if err == nil {
+		t.Fatal("expected error from EnsureProvider failure")
+	}
+}
+
+func TestExtractProviderCredentials(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		env      map[string]string
+		wantKeys []string
+	}{
+		{
+			name:     "anthropic with key",
+			provider: "anthropic",
+			env:      map[string]string{"ANTHROPIC_API_KEY": "sk-123", "OTHER": "val"},
+			wantKeys: []string{"ANTHROPIC_API_KEY"},
+		},
+		{
+			name:     "openai with key",
+			provider: "openai",
+			env:      map[string]string{"OPENAI_API_KEY": "sk-456"},
+			wantKeys: []string{"OPENAI_API_KEY"},
+		},
+		{
+			name:     "google with gemini key",
+			provider: "google",
+			env:      map[string]string{"GEMINI_API_KEY": "gem-789"},
+			wantKeys: []string{"GEMINI_API_KEY"},
+		},
+		{
+			name:     "unknown provider falls back to generic",
+			provider: "custom-llm",
+			env:      map[string]string{"CUSTOM_KEY": "val"},
+			wantKeys: nil,
+		},
+		{
+			name:     "known provider but no matching env var",
+			provider: "anthropic",
+			env:      map[string]string{"SOME_OTHER_KEY": "val"},
+			wantKeys: nil,
+		},
+		{
+			name:     "empty env var value ignored",
+			provider: "anthropic",
+			env:      map[string]string{"ANTHROPIC_API_KEY": ""},
+			wantKeys: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spec := resolveProviderSpec(tt.provider)
+			creds := extractProviderCredentials(spec, tt.env)
+			if len(tt.wantKeys) == 0 {
+				if len(creds) != 0 {
+					t.Errorf("expected empty creds, got %v", creds)
+				}
+				return
+			}
+			for _, key := range tt.wantKeys {
+				if _, ok := creds[key]; !ok {
+					t.Errorf("expected key %q in creds %v", key, creds)
+				}
+			}
+		})
+	}
+}
+
+func TestResolveProviderSpec(t *testing.T) {
+	tests := []struct {
+		provider string
+		wantType string
+	}{
+		{"anthropic", "claude"},
+		{"openai", "openai"},
+		{"nvidia", "nvidia"},
+		{"google", "generic"},
+		{"gemini", "generic"},
+		{"mistral", "generic"},
+		{"cohere", "generic"},
+		{"unknown-provider", "generic"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.provider, func(t *testing.T) {
+			spec := resolveProviderSpec(tt.provider)
+			if spec.Type != tt.wantType {
+				t.Errorf("resolveProviderSpec(%q).Type = %q, want %q", tt.provider, spec.Type, tt.wantType)
+			}
+		})
 	}
 }

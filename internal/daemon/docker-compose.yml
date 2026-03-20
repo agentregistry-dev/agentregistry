@@ -64,7 +64,7 @@ services:
       # Mount kubeconfig as read-only source; the entrypoint rewrites it for Docker networking
       - ~/.kube/config:/root/.kube/config.orig:ro
       # Mount OpenShell mTLS certs for gateway authentication
-      - ~/.config/openshell/gateways/ar-dev/mtls:/root/.config/openshell/mtls:ro
+      - ~/.config/openshell/gateways/${OPENSHELL_GATEWAY_NAME:-openshell}/mtls:/root/.config/openshell/mtls:ro
     depends_on:
       postgres:
         condition: service_healthy

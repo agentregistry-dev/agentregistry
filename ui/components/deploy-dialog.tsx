@@ -12,7 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { deployServer as deployServerApi, getHealthV0, type ServerResponse, type AgentResponse } from "@/lib/admin-api"
+import { deployServer as deployServerApi, listProviders, type ServerResponse, type AgentResponse, type Provider } from "@/lib/admin-api"
+import { platformDisplayName, platformDescription } from "@/lib/platform-display"
 import { Play, Plus, X, Loader2, CheckCircle } from "lucide-react"
 
 type DeployResourceType = "mcp" | "agent"
@@ -26,21 +27,6 @@ interface DeployDialogProps {
   onDeploySuccess?: () => void
 }
 
-interface ProviderOption {
-  id: string
-  label: string
-  description: string
-}
-
-const DOCKER_PROVIDERS: ProviderOption[] = [
-  { id: "local", label: "Local (Docker)", description: "Deploy as a Docker container on this machine" },
-  { id: "kubernetes-default", label: "Kubernetes", description: "Deploy to the connected Kubernetes cluster" },
-]
-
-const KUBERNETES_PROVIDERS: ProviderOption[] = [
-  { id: "kubernetes-default", label: "Kubernetes", description: "Deploy to the local Kubernetes cluster" },
-]
-
 export function DeployDialog({ open, onOpenChange, resourceType, server, agent, onDeploySuccess }: DeployDialogProps) {
   const [deploying, setDeploying] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -48,35 +34,31 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
   const [config, setConfig] = useState<Record<string, string>>({})
   const [newKey, setNewKey] = useState("")
   const [newValue, setNewValue] = useState("")
-  const [providerId, setProviderId] = useState("local")
+  const [providerId, setProviderId] = useState("")
   const [namespace, setNamespace] = useState("")
-  const [platformMode, setPlatformMode] = useState<string>("docker")
-  const [loadingPlatform, setLoadingPlatform] = useState(true)
+  const [providers, setProviders] = useState<Provider[]>([])
+  const [loadingProviders, setLoadingProviders] = useState(true)
   const keyInputRef = useRef<HTMLInputElement>(null)
-
-  const availableProviders = platformMode === "kubernetes" ? KUBERNETES_PROVIDERS : DOCKER_PROVIDERS
 
   useEffect(() => {
     if (open) {
-      fetchPlatformMode()
+      fetchProviders()
     }
   }, [open])
 
-  useEffect(() => {
-    if (platformMode === "kubernetes") {
-      setProviderId("kubernetes-default")
-    }
-  }, [platformMode])
-
-  const fetchPlatformMode = async () => {
+  const fetchProviders = async () => {
     try {
-      setLoadingPlatform(true)
-      const { data } = await getHealthV0({ throwOnError: true })
-      setPlatformMode(data.platform_mode || "docker")
+      setLoadingProviders(true)
+      const { data } = await listProviders({ throwOnError: true })
+      const available = data.providers ?? []
+      setProviders(available)
+      if (available.length > 0 && !available.some(p => p.id === providerId)) {
+        setProviderId(available[0].id)
+      }
     } catch {
-      setPlatformMode("docker")
+      setProviders([])
     } finally {
-      setLoadingPlatform(false)
+      setLoadingProviders(false)
     }
   }
 
@@ -92,7 +74,8 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
     ? (server?.server.title || server?.server.name)
     : agent?.agent.name
 
-  const isKubernetesProvider = providerId.startsWith("kubernetes")
+  const selectedProvider = providers.find(p => p.id === providerId)
+  const isKubernetesProvider = selectedProvider?.platform === "kubernetes"
 
   const handleAddConfig = () => {
     if (newKey.trim() && newValue.trim()) {
@@ -152,7 +135,7 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
     setConfig({})
     setNewKey("")
     setNewValue("")
-    setProviderId("local")
+    setProviderId("")
     setNamespace("")
   }
 
@@ -203,11 +186,13 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
             {/* Provider Selection */}
             <fieldset className="space-y-2">
               <Label htmlFor="deploy-provider">Target</Label>
-              {loadingPlatform ? (
+              {loadingProviders ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground" aria-live="polite">
                   <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                  Loading&hellip;
+                  Loading providers&hellip;
                 </div>
+              ) : providers.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No deployment providers configured.</p>
               ) : (
                 <>
                   <Select value={providerId} onValueChange={setProviderId}>
@@ -215,16 +200,18 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
                       <SelectValue placeholder="Select target&hellip;" />
                     </SelectTrigger>
                     <SelectContent>
-                      {availableProviders.map((provider) => (
+                      {providers.map((provider) => (
                         <SelectItem key={provider.id} value={provider.id}>
-                          {provider.label}
+                          {provider.name} ({platformDisplayName(provider.platform)})
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">
-                    {availableProviders.find(p => p.id === providerId)?.description}
-                  </p>
+                  {selectedProvider && (
+                    <p className="text-xs text-muted-foreground">
+                      {platformDescription(selectedProvider.platform)}
+                    </p>
+                  )}
                 </>
               )}
             </fieldset>
@@ -349,7 +336,7 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
               <Button type="button" variant="ghost" onClick={handleClose} disabled={deploying}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={deploying || loadingPlatform}>
+              <Button type="submit" disabled={deploying || loadingProviders || providers.length === 0}>
                 {deploying ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />

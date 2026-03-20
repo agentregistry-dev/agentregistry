@@ -14,6 +14,18 @@ COPY .python-version .python-version
 
 RUN uv sync
 
+# OpenShell sandbox requirements: iproute2 for network namespace setup,
+# iptables for network bypass detection, and a sandbox user/group.
+# The kagent-adk image is Wolfi-based, so packages come from the Wolfi OS repo.
+USER root
+RUN apk add --no-cache \
+    --repository https://packages.wolfi.dev/os \
+    --allow-untrusted \
+    iproute2 iptables && \
+    addgroup -S sandbox && adduser -S -G sandbox -s /bin/sh sandbox
+USER sandbox
+
+ENV PATH="/sbin:/usr/sbin:$PATH"
 ENV OTEL_SERVICE_NAME={{.Name}}
 
 CMD ["{{.Name}}"]
