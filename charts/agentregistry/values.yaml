@@ -45,6 +45,8 @@ config:
   serverAddress: ":8080"
   # -- Agent Gateway gRPC port
   agentGatewayPort: "21212"
+  # -- Agent Registry MCP server port
+  agentRegistryMcpPort: "31313"
   # -- Enable input validation on the registry API
   enableRegistryValidation: "false"
   # -- Allow unauthenticated access to the API
@@ -212,16 +214,22 @@ service:
     http: 12121
     # -- Agent Gateway gRPC port
     grpc: 21212
+    # -- MCP HTTP port
+    mcp: 31313
   targetPorts:
     # -- HTTP container target port
     http: 8080
     # -- gRPC container target port
     grpc: 21212
+    # -- MCP container target port
+    mcp: 31313
   nodePorts:
     # -- NodePort for HTTP (when type is NodePort)
     http: ""
     # -- NodePort for gRPC (when type is NodePort)
     grpc: ""
+    # -- NodePort for MCP (when type is NodePort)
+    mcp: ""
   # -- Specific cluster IP (set to None for headless)
   clusterIP: ""
   # -- LoadBalancer IP

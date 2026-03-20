@@ -45,11 +45,13 @@ services:
       # Temporarily only for local development
       AGENT_REGISTRY_ENABLE_REGISTRY_VALIDATION: "false"
       AGENT_REGISTRY_PLATFORM_MODE: "docker"
+      AGENT_REGISTRY_MCP_PORT: "31313"
       KUBECONFIG: "/root/.kube/config"
       # AGENT_REGISTRY_ENABLE_ANONYMOUS_AUTH: "false"
       # AGENT_REGISTRY_ENABLE_REGISTRY_VALIDATION: "true"
     ports:
       - "12121:8080"
+      - "31313:31313"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

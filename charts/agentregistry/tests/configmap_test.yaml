@@ -37,6 +37,12 @@ tests:
           path: data.AGENT_REGISTRY_AGENT_GATEWAY_PORT
           value: "21212"
 
+  - it: sets AGENT_REGISTRY_MCP_PORT
+    asserts:
+      - equal:
+          path: data.AGENT_REGISTRY_MCP_PORT
+          value: "31313"
+
   - it: sets AGENT_REGISTRY_ENABLE_REGISTRY_VALIDATION
     asserts:
       - equal:

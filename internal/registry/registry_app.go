@@ -13,8 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/kubernetes"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/local"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	mcpregistry "github.com/agentregistry-dev/agentregistry/internal/mcp/registryserver"
@@ -27,10 +25,13 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/importer"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/kubernetes"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/local"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
+	"github.com/agentregistry-dev/agentregistry/pkg/logging"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 
@@ -50,6 +51,8 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	// Create a context with timeout for PostgreSQL connection
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
+	setupLogging(cfg.LogLevel)
 
 	// Build auth providers from options (before database creation)
 	// Only create jwtManager if JWT is configured
@@ -308,4 +311,18 @@ func mcpAuthnMiddleware(authn auth.AuthnProvider) func(http.Handler) http.Handle
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// SetupLogging configures the global slog logger
+func setupLogging(levelStr string) {
+	if levelStr == "" {
+		levelStr = "info"
+	}
+	level, err := logging.ParseLevel(levelStr)
+	if err != nil {
+		slog.Error("failed to parse log level, defaulting to info", "error", err)
+		level = slog.LevelInfo
+	}
+	// set all loggers to the specified level
+	logging.Reset(level)
 }
