@@ -1,0 +1,256 @@
+suite: Bundled PostgreSQL
+templates:
+  - postgresql.yaml
+  - postgresql-secret.yaml
+
+tests:
+  # ── Bundled enabled (default) ─────────────────────────────────────────────
+
+  - it: renders PVC, Deployment, and Service when bundled is enabled
+    template: postgresql.yaml
+    asserts:
+      - hasDocuments:
+          count: 3
+
+  - it: PVC has correct name and storage size
+    template: postgresql.yaml
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-agentregistry-postgresql
+      - equal:
+          path: spec.resources.requests.storage
+          value: 5Gi
+      - equal:
+          path: spec.accessModes[0]
+          value: ReadWriteOnce
+
+  - it: Deployment has correct name and Recreate strategy
+    template: postgresql.yaml
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-agentregistry-postgresql
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+
+  - it: Deployment uses official postgres image as registry/repository/name:tag by default
+    template: postgresql.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: 'docker.io/library/postgres:18'
+
+  - it: Deployment image can be overridden to pgvector via component fields
+    template: postgresql.yaml
+    set:
+      database.postgres.bundled.image.repository: pgvector
+      database.postgres.bundled.image.name: pgvector
+      database.postgres.bundled.image.tag: pg16
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/pgvector/pgvector:pg16
+
+  - it: Deployment has hardcoded pod security context
+    template: postgresql.yaml
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 999
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 999
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+
+  - it: Deployment has hardcoded container security context
+    template: postgresql.yaml
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+
+  - it: Deployment uses hardcoded POSTGRES_DB and POSTGRES_USER
+    template: postgresql.yaml
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_DB
+            value: agentregistry
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_USER
+            value: agentregistry
+
+  - it: Deployment reads POSTGRES_PASSWORD from chart-managed postgresql secret
+    template: postgresql.yaml
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-agentregistry-postgresql
+                key: POSTGRES_PASSWORD
+
+
+  - it: Deployment has liveness and readiness probes
+    template: postgresql.yaml
+    documentIndex: 1
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.containers[0].livenessProbe
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 20
+      - isNotNull:
+          path: spec.template.spec.containers[0].readinessProbe
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
+          value: 5
+
+  - it: Deployment mounts PVC as data volume
+    template: postgresql.yaml
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            persistentVolumeClaim:
+              claimName: RELEASE-NAME-agentregistry-postgresql
+
+  - it: Deployment renders resources when set
+    template: postgresql.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 250m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: "1"
+
+  - it: Service has correct name and port
+    template: postgresql.yaml
+    documentIndex: 2
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-agentregistry-postgresql
+      - equal:
+          path: spec.ports[0].port
+          value: 5432
+
+  - it: Service type is hardcoded to ClusterIP
+    template: postgresql.yaml
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: spec.type
+          value: ClusterIP
+
+  # ── Bundled disabled ──────────────────────────────────────────────────────
+
+  - it: renders nothing when bundled is disabled
+    template: postgresql.yaml
+    set:
+      database.postgres.bundled.enabled: false
+      database.postgres.url: "postgres://user:pass@host:5432/db"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: still renders when bundled is enabled and url is also set
+    template: postgresql.yaml
+    set:
+      database.postgres.url: "postgres://user:pass@host:5432/db"
+    asserts:
+      - hasDocuments:
+          count: 3
+
+  # ── Custom storage size ───────────────────────────────────────────────────
+
+  - it: uses custom storage size
+    template: postgresql.yaml
+    set:
+      database.postgres.bundled.storage: 10Gi
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: spec.resources.requests.storage
+          value: 10Gi
+
+  # ── postgresql-secret.yaml ────────────────────────────────────────────────
+
+  - it: creates postgresql secret when bundled is enabled
+    template: postgresql-secret.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Secret
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-agentregistry-postgresql
+      - isNotNull:
+          path: data["POSTGRES_PASSWORD"]
+
+  - it: postgresql secret has hardcoded agentregistry password (base64)
+    template: postgresql-secret.yaml
+    asserts:
+      - equal:
+          path: data["POSTGRES_PASSWORD"]
+          # base64("agentregistry")
+          value: "YWdlbnRyZWdpc3RyeQ=="
+
+  - it: postgresql secret has database component label
+    template: postgresql-secret.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: database
+
+  - it: creates postgresql secret even when url is set (bundled still enabled)
+    template: postgresql-secret.yaml
+    set:
+      database.postgres.url: "postgres://user:pass@host:5432/db"
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: does not create postgresql secret when bundled is disabled
+    template: postgresql-secret.yaml
+    set:
+      database.postgres.bundled.enabled: false
+      database.postgres.url: "postgres://user:pass@host:5432/db"
+    asserts:
+      - hasDocuments:
+          count: 0
+

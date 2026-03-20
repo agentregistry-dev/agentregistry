@@ -108,18 +108,7 @@ Open `http://localhost:12121` to use the web UI.
 
 ### ☸️ Kubernetes
 
-Run Agent Registry in a cluster when you want shared discovery and deployment workflows. An external PostgreSQL instance with the [pgvector](https://github.com/pgvector/pgvector) extension is required.
-
-#### PostgreSQL
-
-Deploy a single-instance PostgreSQL and pgvector into your cluster using the provided example manifest:
-
-```bash
-kubectl apply -f https://raw.githubusercontent.com/agentregistry-dev/agentregistry/main/examples/postgres-pgvector.yaml
-kubectl -n agentregistry wait --for=condition=ready pod -l app=postgres-pgvector --timeout=120s
-```
-
-This setup is intended for development and testing. For production, use a managed PostgreSQL service or a production-grade operator.
+Run Agent Registry in a cluster when you want shared discovery and deployment workflows. A PostgreSQL instance is **bundled by default** — no separate database setup required for development and testing.
 
 #### Install Agent Registry
 
@@ -127,9 +116,17 @@ This setup is intended for development and testing. For production, use a manage
 helm install agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
   --namespace agentregistry \
   --create-namespace \
-  --set database.host=postgres-pgvector.agentregistry.svc.cluster.local \
-  --set database.password=agentregistry \
-  --set database.sslMode=disable \
+  --set config.jwtPrivateKey=$(openssl rand -hex 32)
+```
+
+For production, disable the bundled database and provide a connection string to your own PostgreSQL service:
+
+```bash
+helm install agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
+  --namespace agentregistry \
+  --create-namespace \
+  --set database.postgres.bundled.enabled=false \
+  --set database.postgres.url=postgres://<user>:<password>@<host>:5432/<dbname> \
   --set config.jwtPrivateKey=$(openssl rand -hex 32)
 ```
 
@@ -140,6 +137,8 @@ kubectl port-forward -n agentregistry svc/agentregistry 12121:12121
 ```
 
 **Get started:** [Helm chart details](charts/agentregistry/README.md.gotmpl), [Local Kind cluster](scripts/kind/README.md)
+
+> **Semantic search** requires a PostgreSQL instance with the pgvector extension. It is disabled by default. To enable it, ensure your database has pgvector support and set `AGENT_REGISTRY_DATABASE_VECTOR_ENABLED=true` (docker-compose / `.env`) or `--set database.postgres.vectorEnabled=true` (Helm).
 
 ---
 

@@ -24,6 +24,7 @@ spec:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         checksum/secret: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+        checksum/postgresql-secret: {{ include (print $.Template.BasePath "/postgresql-secret.yaml") . | sha256sum }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -84,6 +85,19 @@ spec:
       topologySpreadConstraints:
         {{- toYaml .Values.topologySpreadConstraints | nindent 8 }}
       {{- end }}
+      {{- if and .Values.database.postgres.bundled.enabled (eq .Values.database.postgres.url "") }}
+      initContainers:
+        - name: wait-for-postgres
+          image: {{ include "agentregistry.postgresql.image" . }}
+          imagePullPolicy: {{ .Values.database.postgres.bundled.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h {{ include "agentregistry.postgresql.fullname" . }} -p 5432 -U agentregistry; do
+                echo "waiting for postgres..."; sleep 2
+              done
+      {{- end }}
       containers:
         - name: agentregistry
           image: {{ include "agentregistry.image" . }}
@@ -115,18 +129,31 @@ spec:
             - configMapRef:
                 name: {{ include "agentregistry.fullname" . }}-config
           env:
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "agentregistry.passwordSecretName" . }}
-                  key: POSTGRES_PASSWORD
             - name: AGENT_REGISTRY_JWT_PRIVATE_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "agentregistry.secretName" . }}
+                  name: {{ .Values.config.existingSecret | default (include "agentregistry.fullname" .) }}
                   key: AGENT_REGISTRY_JWT_PRIVATE_KEY
+            {{- if .Values.database.postgres.url }}
             - name: AGENT_REGISTRY_DATABASE_URL
-              value: {{ include "agentregistry.databaseUrl" . | quote }}
+              value: {{ .Values.database.postgres.url | quote }}
+            {{- else if .Values.database.postgres.bundled.enabled }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "agentregistry.fullname" . }}-postgresql
+                  key: POSTGRES_PASSWORD
+            - name: AGENT_REGISTRY_DATABASE_URL
+              value: {{ printf "postgres://agentregistry:$(POSTGRES_PASSWORD)@%s:5432/agentregistry?sslmode=disable" (include "agentregistry.postgresql.fullname" .) | quote }}
+            {{- else }}
+            {{ fail "No database connection configured. Set database.postgres.url or enable database.postgres.bundled." }}
+            {{- end }}
+            {{- if .Values.database.postgres.vectorEnabled }}
+            - name: AGENT_REGISTRY_EMBEDDINGS_ENABLED
+              value: "true"
+            - name: AGENT_REGISTRY_DATABASE_VECTOR_ENABLED
+              value: "true"
+            {{- end }}
             {{- if .Values.extraEnvVars }}
             {{- tpl (toYaml .Values.extraEnvVars) . | nindent 12 }}
             {{- end }}
@@ -164,10 +191,9 @@ spec:
           lifecycle:
             {{- toYaml .Values.lifecycleHooks | nindent 12 }}
           {{- end }}
-          {{- $res := include "agentregistry.resources" (dict "resources" .Values.resources "preset" .Values.resourcesPreset) }}
-          {{- if $res }}
+          {{- if .Values.resources }}
           resources:
-            {{- $res | nindent 12 }}
+            {{- toYaml .Values.resources | nindent 12 }}
           {{- end }}
           volumeMounts:
             {{- if .Values.containerSecurityContext.enabled }}

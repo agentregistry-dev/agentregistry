@@ -45,7 +45,7 @@ func (db *PostgreSQL) getExecutor(tx pgx.Tx) Executor {
 }
 
 // NewPostgreSQL creates a new instance of the PostgreSQL database
-func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authorizer) (*PostgreSQL, error) {
+func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authorizer, vectorEnabled bool) (*PostgreSQL, error) {
 	// Parse connection config for pool settings
 	config, err := pgxpool.ParseConfig(connectionURI)
 	if err != nil {
@@ -79,6 +79,13 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 	migrator := database.NewMigrator(conn.Conn(), DefaultMigratorConfig())
 	if err := migrator.Migrate(ctx); err != nil {
 		return nil, fmt.Errorf("failed to run database migrations: %w", err)
+	}
+
+	if vectorEnabled {
+		vectorMigrator := database.NewMigrator(conn.Conn(), VectorMigratorConfig())
+		if err := vectorMigrator.Migrate(ctx); err != nil {
+			return nil, fmt.Errorf("failed to run vector database migrations: %w", err)
+		}
 	}
 
 	return &PostgreSQL{

@@ -5,8 +5,6 @@ global:
   imageRegistry: ""
   # -- Global Docker registry secret names
   imagePullSecrets: []
-  # -- Name of an existing Secret containing all credentials (POSTGRES_PASSWORD and AGENT_REGISTRY_JWT_PRIVATE_KEY). Overrides config.existingSecret and database.existingSecret when set.
-  existingSecret: ""
 
 # @section Common parameters
 
@@ -24,8 +22,10 @@ commonAnnotations: {}
 image:
   # -- Agent Registry image registry
   registry: ghcr.io
-  # -- Agent Registry image repository
-  repository: agentregistry-dev/agentregistry/server
+  # -- Agent Registry image repository (org/path, excluding the image name)
+  repository: agentregistry-dev/agentregistry
+  # -- Agent Registry image name
+  name: server
   # -- Agent Registry image tag (immutable tags recommended)
   tag: "0.2.1"
   # -- Agent Registry image digest (overrides tag if set)
@@ -55,7 +55,7 @@ config:
   disableBuiltinSeed: "true"
   # -- Path or URL to external seed data file (leave empty to disable external seeding)
   seedFrom: ""
-  # -- Name of an existing Secret containing AGENT_REGISTRY_JWT_PRIVATE_KEY. Use global.existingSecret if you want a single secret for both AGENT_REGISTRY_JWT_PRIVATE_KEY and POSTGRES_PASSWORD.
+  # -- Name of an existing Secret containing AGENT_REGISTRY_JWT_PRIVATE_KEY. When set, the chart will not create its own JWT secret.
   existingSecret: ""
   # -- Hex-encoded HMAC key for signing JWT tokens (must be valid hex, e.g. "a3f4b2c1..."). Ignored when existingSecret is set.
   jwtPrivateKey: ""
@@ -126,9 +126,13 @@ containerSecurityContext:
 # @section Resource management
 
 # -- Resource requests and limits for the Agent Registry container
-resources: {}
-# -- Resource preset to use when resources is empty (none, nano, micro, small, medium, large, xlarge, 2xlarge)
-resourcesPreset: "small"
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
 
 # @section Liveness probe
 
@@ -271,19 +275,35 @@ rbac:
 # @section Database
 
 database:
-  # -- Full PostgreSQL connection string (overrides all other database fields when set)
-  url: ""
-  # -- External database host
-  host: ""
-  # -- External database port
-  port: 5432
-  # -- External database name
-  database: "agent-registry"
-  # -- External database user
-  username: "agentregistry"
-  # -- External database password (ignored when existingSecret is set)
-  password: ""
-  # -- Name of an existing Secret containing the database password (key: POSTGRES_PASSWORD)
-  existingSecret: ""
-  # -- External database SSL mode (require, verify-ca, verify-full, disable). Defaults to require for encrypted connections.
-  sslMode: "require"
+  postgres:
+    # -- External PostgreSQL connection string.
+    # -- When set, Agent Registry connects here instead of the bundled instance. The bundled pod (if enabled) still deploys but is unused; the init container is skipped.
+    url: ""
+    # -- Enable features that require a pgvector-capable PostgreSQL instance. e.g. vector schema migrations, embeddings and semantic search. 
+    vectorEnabled: false
+    # -- Bundled PostgreSQL — dev/eval only.
+    bundled:
+      # -- Deploy a PostgreSQL instance alongside Agent Registry
+      enabled: true
+      image:
+        # -- Bundled PostgreSQL image registry
+        registry: docker.io
+        # -- Bundled PostgreSQL image repository (org/namespace)
+        repository: library
+        # -- Bundled PostgreSQL image name
+        name: postgres
+        # -- Bundled PostgreSQL image tag
+        tag: "18"
+        # -- Bundled PostgreSQL image pull policy
+        pullPolicy: IfNotPresent
+      # -- DB name, user, and password are hardcoded ("agentregistry") for the bundled instance.
+      # -- PersistentVolumeClaim size for the bundled PostgreSQL data directory
+      storage: 5Gi
+      # -- Resource requests/limits for the bundled PostgreSQL container
+      resources:
+        requests:
+          cpu: 250m
+          memory: 256Mi
+        limits:
+          cpu: "1"
+          memory: 1Gi
