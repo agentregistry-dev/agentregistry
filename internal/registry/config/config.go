@@ -38,6 +38,12 @@ type Config struct {
 	OIDCDeletePerms  string `env:"OIDC_DELETE_PERMISSIONS" envDefault:""`
 	OIDCDeployPerms  string `env:"OIDC_DEPLOY_PERMISSIONS" envDefault:""`
 
+	// Platform mode: "docker" or "kubernetes". Controls which deployment
+	// provider IDs are available in the UI. Defaults to "kubernetes" so
+	// Helm/K8s deployments work without extra config; docker-compose.yml
+	// explicitly sets this to "docker".
+	PlatformMode string `env:"PLATFORM_MODE" envDefault:"kubernetes"`
+
 	// Agent Gateway Configuration
 	AgentGatewayPort uint16 `env:"AGENT_GATEWAY_PORT" envDefault:"8081"`
 

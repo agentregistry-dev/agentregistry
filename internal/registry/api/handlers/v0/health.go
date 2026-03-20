@@ -18,6 +18,7 @@ import (
 type HealthBody struct {
 	Status         string `json:"status" example:"ok" doc:"Health status"`
 	GitHubClientID string `json:"github_client_id,omitempty" doc:"GitHub OAuth App Client ID"`
+	PlatformMode   string `json:"platform_mode,omitempty" example:"docker" doc:"Platform mode" enum:"docker,kubernetes"`
 }
 
 // RegisterHealthEndpoint registers the health check endpoint with a custom path prefix
@@ -37,6 +38,7 @@ func RegisterHealthEndpoint(api huma.API, pathPrefix string, cfg *config.Config,
 			Body: HealthBody{
 				Status:         "ok",
 				GitHubClientID: cfg.GithubClientID,
+				PlatformMode:   cfg.PlatformMode,
 			},
 		}, nil
 	})

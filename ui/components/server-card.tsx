@@ -29,6 +29,7 @@ export function ServerCard({ server, onDelete, onDeploy, showDelete = false, sho
   const publisherMetadata = publisherProvided?.['aregistry.ai/metadata'] as Record<string, any> | undefined
   const githubStars = publisherMetadata?.stars
   const identityData = publisherMetadata?.identity
+  const hasOciPackage = serverData.packages?.some(pkg => pkg.registryType === "oci") ?? false
 
   const formatDate = (dateString: string) => {
     try {
@@ -127,15 +128,34 @@ export function ServerCard({ server, onDelete, onDeploy, showDelete = false, sho
 
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
           {showDeploy && onDeploy && (
-            <Button
-              variant="default"
-              size="sm"
-              className="h-7 gap-1 text-xs"
-              onClick={(e) => { e.stopPropagation(); onDeploy(server) }}
-            >
-              <Play className="h-3 w-3" />
-              Deploy
-            </Button>
+            hasOciPackage ? (
+              <Button
+                variant="default"
+                size="sm"
+                className="h-7 gap-1 text-xs"
+                onClick={(e) => { e.stopPropagation(); onDeploy(server) }}
+              >
+                <Play className="h-3 w-3" aria-hidden="true" />
+                Deploy
+              </Button>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={0} className="pointer-events-auto" onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="h-7 gap-1 text-xs pointer-events-none"
+                      disabled
+                    >
+                      <Play className="h-3 w-3" aria-hidden="true" />
+                      Deploy
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent><p>No OCI package available</p></TooltipContent>
+              </Tooltip>
+            )
           )}
           {showExternalLinks && serverData.repository?.url && (
             <Button
@@ -143,8 +163,9 @@ export function ServerCard({ server, onDelete, onDeploy, showDelete = false, sho
               size="icon"
               className="h-7 w-7"
               onClick={(e) => { e.stopPropagation(); window.open(serverData.repository?.url || '', '_blank') }}
+              aria-label="View repository"
             >
-              <Github className="h-3.5 w-3.5" />
+              <Github className="h-3.5 w-3.5" aria-hidden="true" />
             </Button>
           )}
           {showExternalLinks && serverData.websiteUrl && (
@@ -153,8 +174,9 @@ export function ServerCard({ server, onDelete, onDeploy, showDelete = false, sho
               size="icon"
               className="h-7 w-7"
               onClick={(e) => { e.stopPropagation(); window.open(serverData.websiteUrl, '_blank') }}
+              aria-label="Visit website"
             >
-              <Globe className="h-3.5 w-3.5" />
+              <Globe className="h-3.5 w-3.5" aria-hidden="true" />
             </Button>
           )}
           {showDelete && onDelete && (
@@ -163,8 +185,9 @@ export function ServerCard({ server, onDelete, onDeploy, showDelete = false, sho
               size="icon"
               className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
               onClick={(e) => { e.stopPropagation(); onDelete(server) }}
+              aria-label="Delete server"
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
             </Button>
           )}
         </div>

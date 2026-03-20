@@ -282,6 +282,10 @@ export type HealthBody = {
      */
     github_client_id?: string;
     /**
+     * Platform mode
+     */
+    platform_mode?: 'docker' | 'kubernetes';
+    /**
      * Health status
      */
     status: string;
