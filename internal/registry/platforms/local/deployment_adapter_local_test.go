@@ -32,9 +32,10 @@ func TestUndeploy_RemovesLocalArtifactsWhenRegistryArtifactIsMissing(t *testing.
 		DeploymentID:  deployment.ID,
 		MCPServerType: platformtypes.MCPServerTypeRemote,
 		Remote: &platformtypes.RemoteMCPServer{
-			Host: "example.com",
-			Port: 443,
-			Path: "/mcp",
+			Scheme: "https",
+			Host:   "example.com",
+			Port:   443,
+			Path:   "/mcp",
 		},
 	}
 

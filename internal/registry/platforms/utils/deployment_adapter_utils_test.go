@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	servicetesting "github.com/agentregistry-dev/agentregistry/internal/registry/service/testing"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -258,6 +259,65 @@ func TestResolveAgentNamespaceDefaulting(t *testing.T) {
 			got := resolved.Agent.Deployment.Env["KAGENT_NAMESPACE"]
 			if got != tt.wantNamespace {
 				t.Errorf("KAGENT_NAMESPACE = %q, want %q", got, tt.wantNamespace)
+			}
+		})
+	}
+}
+
+func TestBuildRemoteMCPURL(t *testing.T) {
+	tests := []struct {
+		name   string
+		remote *platformtypes.RemoteMCPServer
+		want   string
+	}{
+		{"https standard port", &platformtypes.RemoteMCPServer{Scheme: "https", Host: "example.com", Port: 443, Path: "/mcp"}, "https://example.com/mcp"},
+		{"https custom port", &platformtypes.RemoteMCPServer{Scheme: "https", Host: "example.com", Port: 8443, Path: "/mcp"}, "https://example.com:8443/mcp"},
+		{"http standard port", &platformtypes.RemoteMCPServer{Scheme: "http", Host: "example.com", Port: 80, Path: "/sse"}, "http://example.com/sse"},
+		{"http custom port", &platformtypes.RemoteMCPServer{Scheme: "http", Host: "localhost", Port: 3005, Path: "/mcp/"}, "http://localhost:3005/mcp/"},
+		{"empty path", &platformtypes.RemoteMCPServer{Scheme: "https", Host: "example.com", Port: 443, Path: ""}, "https://example.com"},
+		{"empty scheme defaults to http", &platformtypes.RemoteMCPServer{Host: "example.com", Port: 80, Path: "/mcp"}, "http://example.com/mcp"},
+		{"ipv6 with custom port", &platformtypes.RemoteMCPServer{Scheme: "http", Host: "::1", Port: 3005, Path: "/mcp"}, "http://[::1]:3005/mcp"},
+		{"ipv6 standard port", &platformtypes.RemoteMCPServer{Scheme: "https", Host: "::1", Port: 443, Path: "/mcp"}, "https://[::1]/mcp"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := BuildRemoteMCPURL(tt.remote); got != tt.want {
+				t.Errorf("BuildRemoteMCPURL() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		rawURL  string
+		want    parsedURL
+		wantErr bool
+	}{
+		{"https with explicit port", "https://example.com:8443/mcp", parsedURL{scheme: "https", host: "example.com", port: 8443, path: "/mcp"}, false},
+		{"https default port", "https://example.com/mcp", parsedURL{scheme: "https", host: "example.com", port: 443, path: "/mcp"}, false},
+		{"http default port", "http://example.com/sse", parsedURL{scheme: "http", host: "example.com", port: 80, path: "/sse"}, false},
+		{"http with explicit port", "http://localhost:3005/mcp", parsedURL{scheme: "http", host: "localhost", port: 3005, path: "/mcp"}, false},
+		{"no path", "https://example.com", parsedURL{scheme: "https", host: "example.com", port: 443, path: ""}, false},
+		{"ipv6 with port", "http://[::1]:3005/mcp", parsedURL{scheme: "http", host: "::1", port: 3005, path: "/mcp"}, false},
+		{"ipv6 without port", "https://[::1]/mcp", parsedURL{scheme: "https", host: "::1", port: 443, path: "/mcp"}, false},
+		{"invalid port", "http://example.com:notaport/mcp", parsedURL{}, true},
+		{"empty scheme", "://example.com/mcp", parsedURL{}, true},
+		{"unsupported scheme", "ftp://example.com/mcp", parsedURL{}, true},
+		{"no scheme", "example.com/mcp", parsedURL{}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseURL(tt.rawURL)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("parseURL(%q) error = %v, wantErr %v", tt.rawURL, err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if *got != tt.want {
+				t.Errorf("parseURL(%q) = %+v, want %+v", tt.rawURL, *got, tt.want)
 			}
 		})
 	}
