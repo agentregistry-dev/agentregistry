@@ -42,6 +42,8 @@ type CreateSandboxOpts struct {
 	Env       map[string]string
 	Providers []string // OpenShell provider names to attach
 	GPU       bool
+	Policy    *pb.SandboxPolicy
+	Command   []string // optional workload container command (merged via template.pod_template)
 }
 
 // SandboxInfo holds the status of a sandbox.
@@ -153,17 +155,42 @@ func NewGRPCClientFromEndpoint(endpoint string, tlsCfg *tls.Config) (Client, err
 	}, nil
 }
 
+func buildSandboxSpec(opts CreateSandboxOpts) (*pb.SandboxSpec, error) {
+	tmpl := &pb.SandboxTemplate{Image: opts.Image}
+	// Also set template.environment for API completeness; the gateway still applies "sleep infinity"
+	// to the pod unless pod_template patches containers[].env (see podTemplatePatchForCommand).
+	if opts.Env != nil {
+		if v := strings.TrimSpace(opts.Env[openshellSandboxCommandEnv]); v != "" {
+			tmpl.Environment = map[string]string{openshellSandboxCommandEnv: v}
+		}
+	}
+	if len(opts.Command) > 0 {
+		podPatch, err := podTemplatePatchForCommand(opts.Image, opts.Command)
+		if err != nil {
+			return nil, err
+		}
+		tmpl.PodTemplate = podPatch
+	}
+	spec := &pb.SandboxSpec{
+		Environment: opts.Env,
+		Providers:   opts.Providers,
+		Gpu:         opts.GPU,
+		Template:    tmpl,
+	}
+	if opts.Policy != nil {
+		spec.Policy = opts.Policy
+	}
+	return spec, nil
+}
+
 func (c *grpcClient) CreateSandbox(ctx context.Context, opts CreateSandboxOpts) (*SandboxInfo, error) {
+	spec, err := buildSandboxSpec(opts)
+	if err != nil {
+		return nil, err
+	}
 	resp, err := c.client.CreateSandbox(ctx, &pb.CreateSandboxRequest{
 		Name: opts.Name,
-		Spec: &pb.SandboxSpec{
-			Environment: opts.Env,
-			Providers:   opts.Providers,
-			Gpu:         opts.GPU,
-			Template: &pb.SandboxTemplate{
-				Image: opts.Image,
-			},
-		},
+		Spec: spec,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create sandbox: %w", err)

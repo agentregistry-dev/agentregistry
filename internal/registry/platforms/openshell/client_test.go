@@ -146,6 +146,97 @@ func TestCreateSandboxOptsMapping(t *testing.T) {
 	}
 }
 
+func TestBuildSandboxSpec_SetsTemplateEnvironmentForWorkload(t *testing.T) {
+	want := "kagent-adk run --host 0.0.0.0 --port 9999 myagent --local"
+	spec, err := buildSandboxSpec(CreateSandboxOpts{
+		Image:   "docker.io/example:latest",
+		Env:     map[string]string{openshellSandboxCommandEnv: want},
+		Command: []string{"kagent-adk", "run", "--help"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl := spec.GetTemplate()
+	if tmpl == nil {
+		t.Fatal("nil template")
+	}
+	if got := tmpl.GetEnvironment()[openshellSandboxCommandEnv]; got != want {
+		t.Errorf("template.environment[%s] = %q, want %q", openshellSandboxCommandEnv, got, want)
+	}
+}
+
+func TestPodTemplatePatchForCommand(t *testing.T) {
+	st, err := podTemplatePatchForCommand("ghcr.io/example/agent:latest", []string{"kagent-adk", "run", "--help"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st == nil {
+		t.Fatal("expected non-nil struct")
+	}
+	specVal := st.GetFields()["spec"]
+	if specVal == nil {
+		t.Fatal("missing spec")
+	}
+	spec := specVal.GetStructValue()
+	if spec == nil {
+		t.Fatal("spec not a struct")
+	}
+	containersVal := spec.GetFields()["containers"]
+	if containersVal == nil {
+		t.Fatal("missing containers")
+	}
+	list := containersVal.GetListValue()
+	if list == nil || len(list.GetValues()) == 0 {
+		t.Fatal("expected containers list")
+	}
+	c0 := list.GetValues()[0].GetStructValue()
+	if c0.GetFields()["name"].GetStringValue() != "sandbox" {
+		t.Errorf("container name = %q", c0.GetFields()["name"].GetStringValue())
+	}
+	if c0.GetFields()["image"].GetStringValue() != "ghcr.io/example/agent:latest" {
+		t.Errorf("container image = %q", c0.GetFields()["image"].GetStringValue())
+	}
+	argsList := c0.GetFields()["args"].GetListValue()
+	if argsList == nil || len(argsList.GetValues()) != 3 {
+		t.Fatalf("args = %v, want 3 elements", argsList)
+	}
+	if argsList.GetValues()[0].GetStringValue() != "kagent-adk" ||
+		argsList.GetValues()[1].GetStringValue() != "run" ||
+		argsList.GetValues()[2].GetStringValue() != "--help" {
+		t.Errorf("args = %v", argsList.GetValues())
+	}
+	envList := c0.GetFields()["env"].GetListValue()
+	if envList == nil || len(envList.GetValues()) != 1 {
+		t.Fatalf("env list = %v, want 1 entry for OPENSHELL_SANDBOX_COMMAND", envList)
+	}
+	ev := envList.GetValues()[0].GetStructValue().GetFields()
+	if ev["name"].GetStringValue() != openshellSandboxCommandEnv {
+		t.Errorf("env name = %q", ev["name"].GetStringValue())
+	}
+	if want := "kagent-adk run --help"; ev["value"].GetStringValue() != want {
+		t.Errorf("env value = %q, want %q", ev["value"].GetStringValue(), want)
+	}
+	scVal := c0.GetFields()["securityContext"]
+	if scVal == nil {
+		t.Fatal("missing securityContext")
+	}
+	sc := scVal.GetStructValue()
+	if sc.GetFields()["runAsUser"].GetNumberValue() != 0 {
+		t.Errorf("runAsUser = %v, want 0", sc.GetFields()["runAsUser"].GetNumberValue())
+	}
+	addList := sc.GetFields()["capabilities"].GetStructValue().GetFields()["add"].GetListValue()
+	if addList == nil || len(addList.GetValues()) != 4 {
+		t.Fatalf("capabilities.add = %v, want 4 caps", addList)
+	}
+}
+
+func TestPodTemplatePatchForCommand_RequiresImage(t *testing.T) {
+	_, err := podTemplatePatchForCommand("", []string{"sh", "-c", "true"})
+	if err == nil {
+		t.Fatal("expected error for empty image")
+	}
+}
+
 func TestNewGRPCClientFromEndpoint_Insecure(t *testing.T) {
 	client, err := NewGRPCClientFromEndpoint("localhost:0", nil)
 	if err != nil {

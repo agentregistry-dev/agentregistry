@@ -20,6 +20,12 @@ const (
 	// Phase enum string values from the generated proto.
 	sandboxPhaseReady = "SANDBOX_PHASE_READY"
 	sandboxPhaseError = "SANDBOX_PHASE_ERROR"
+	// openshellKagentForwardPort is the in-sandbox port for kagent-adk HTTP; users forward this from the host.
+	openshellKagentForwardPort = 9999
+	// openshellSandboxCommandEnv is the env var the supervisor reads to exec the workload; the
+	// container entrypoint remains /opt/openshell/bin/openshell-sandbox (setting container.command
+	// in a pod patch does not replace that).
+	openshellSandboxCommandEnv = "OPENSHELL_SANDBOX_COMMAND"
 )
 
 // openshellProviderMapping maps agent model-provider slugs to their
@@ -106,6 +112,17 @@ func (a *openshellDeploymentAdapter) Deploy(ctx context.Context, req *models.Dep
 	}
 	slog.Info("openshell: resolved spec", "sandbox", sandboxName, "image", image, "providers", providers)
 
+	resourceType := strings.ToLower(strings.TrimSpace(req.ResourceType))
+
+	if resourceType == "agent" {
+		agentName := strings.TrimSpace(req.ServerName)
+		env = mergeEnv(env, map[string]string{
+			"KAGENT_URL":       "placeholder",
+			"KAGENT_NAME":      agentName,
+			"KAGENT_NAMESPACE": "placeholder",
+		})
+	}
+
 	if err := a.ensureProviders(ctx, client, providers, env); err != nil {
 		return nil, err
 	}
@@ -115,6 +132,16 @@ func (a *openshellDeploymentAdapter) Deploy(ctx context.Context, req *models.Dep
 		Image:     image,
 		Env:       env,
 		Providers: providers,
+	}
+	if resourceType == "agent" {
+		agentName := strings.TrimSpace(req.ServerName)
+		modelProvider := strings.TrimSpace(env["MODEL_PROVIDER"])
+		cmd := kagentADKOpenshellCommand(agentName, openshellKagentForwardPort)
+		opts.Policy = kagentADKSandboxPolicy(modelProvider)
+		opts.Command = cmd
+		opts.Env = mergeEnv(opts.Env, map[string]string{
+			openshellSandboxCommandEnv: joinOpenshellSandboxWorkload(cmd),
+		})
 	}
 
 	slog.Info("openshell: calling CreateSandbox")
@@ -127,7 +154,26 @@ func (a *openshellDeploymentAdapter) Deploy(ctx context.Context, req *models.Dep
 		return nil, err
 	}
 
-	return &models.DeploymentActionResult{Status: models.DeploymentStatusDeployed}, nil
+	result := &models.DeploymentActionResult{Status: models.DeploymentStatusDeployed}
+	if resourceType == "agent" {
+		forwardCLI := fmt.Sprintf("openshell forward start %d %s", openshellKagentForwardPort, sandboxName)
+		slog.Info("openshell: agent sandbox ready — forward this port from your machine to reach the agent",
+			"command", forwardCLI,
+			"sandbox", sandboxName,
+			"port", openshellKagentForwardPort,
+		)
+		meta, mErr := models.UnmarshalFrom(map[string]any{
+			"openshellSandboxName": sandboxName,
+			"openshellForwardPort": openshellKagentForwardPort,
+			"openshellForwardCLI":  forwardCLI,
+		})
+		if mErr != nil {
+			slog.Warn("openshell: could not build provider metadata", "error", mErr)
+		} else {
+			result.ProviderMetadata = meta
+		}
+	}
+	return result, nil
 }
 
 func (a *openshellDeploymentAdapter) Undeploy(_ context.Context, deployment *models.Deployment) error {
@@ -294,4 +340,21 @@ func mergeEnv(base, override map[string]string) map[string]string {
 		result[k] = v
 	}
 	return result
+}
+
+// joinOpenshellSandboxWorkload formats argv for OPENSHELL_SANDBOX_COMMAND (space-separated, like
+// the default "sleep infinity"). Agent names must not contain spaces.
+func joinOpenshellSandboxWorkload(argv []string) string {
+	return strings.Join(argv, " ")
+}
+
+// kagentADKOpenshellCommand is the process OpenShell runs inside the agent image (see kagent-adk CLI).
+func kagentADKOpenshellCommand(agentName string, port int) []string {
+	return []string{
+		"kagent-adk", "run",
+		"--host", "0.0.0.0",
+		"--port", fmt.Sprintf("%d", port),
+		agentName,
+		"--local",
+	}
 }

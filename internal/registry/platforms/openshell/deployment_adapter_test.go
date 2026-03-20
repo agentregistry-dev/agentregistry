@@ -137,11 +137,35 @@ func TestDeploy_Agent_CallsCreateSandbox(t *testing.T) {
 	if result.Status != models.DeploymentStatusDeployed {
 		t.Errorf("status = %q, want %q", result.Status, models.DeploymentStatusDeployed)
 	}
+	if result.ProviderMetadata == nil || result.ProviderMetadata["openshellForwardCLI"] == nil {
+		t.Errorf("expected openshell ProviderMetadata with forward CLI, got %#v", result.ProviderMetadata)
+	}
 	if createdOpts.Image != "test-agent-image:latest" {
 		t.Errorf("image = %q, want %q", createdOpts.Image, "test-agent-image:latest")
 	}
 	if createdOpts.Name == "" {
 		t.Error("sandbox name should not be empty")
+	}
+	if createdOpts.Policy == nil || createdOpts.Policy.GetProcess().GetRunAsUser() != "sandbox" {
+		t.Errorf("expected default sandbox policy with run_as_user sandbox, got policy=%v", createdOpts.Policy)
+	}
+	np := createdOpts.Policy.GetNetworkPolicies()
+	rule, ok := np["anthropic_api"]
+	if !ok || rule == nil || len(rule.GetEndpoints()) == 0 || rule.GetEndpoints()[0].GetHost() != "api.anthropic.com" {
+		t.Errorf("anthropic agent should get api.anthropic.com egress, got network_policies=%v", np)
+	}
+	if len(createdOpts.Command) < 2 || createdOpts.Command[0] != "kagent-adk" || createdOpts.Command[1] != "run" {
+		t.Errorf("command = %v, want kagent-adk run ...", createdOpts.Command)
+	}
+	if createdOpts.Env["KAGENT_URL"] != "placeholder" || createdOpts.Env["KAGENT_NAMESPACE"] != "placeholder" {
+		t.Errorf("KAGENT env = %#v, want placeholder URL/namespace", createdOpts.Env)
+	}
+	if createdOpts.Env["KAGENT_NAME"] != "my-agent" {
+		t.Errorf("KAGENT_NAME = %q, want my-agent", createdOpts.Env["KAGENT_NAME"])
+	}
+	wantWorkload := "kagent-adk run --host 0.0.0.0 --port 9999 my-agent --local"
+	if got := createdOpts.Env["OPENSHELL_SANDBOX_COMMAND"]; got != wantWorkload {
+		t.Errorf("OPENSHELL_SANDBOX_COMMAND = %q, want %q", got, wantWorkload)
 	}
 }
 
@@ -487,7 +511,12 @@ func TestDeploy_Agent_EnsuresProvider(t *testing.T) {
 
 func TestDeploy_Agent_NoProviderWhenModelProviderEmpty(t *testing.T) {
 	var ensureCalled bool
+	var createdOpts CreateSandboxOpts
 	client := &mockClient{
+		createFn: func(_ context.Context, opts CreateSandboxOpts) (*SandboxInfo, error) {
+			createdOpts = opts
+			return &SandboxInfo{ID: "sb-1", Name: opts.Name, Phase: "SANDBOX_PHASE_PROVISIONING"}, nil
+		},
 		ensureProvFn: func(_ context.Context, _, _ string, _ map[string]string) error {
 			ensureCalled = true
 			return nil
@@ -510,6 +539,9 @@ func TestDeploy_Agent_NoProviderWhenModelProviderEmpty(t *testing.T) {
 	}
 	if ensureCalled {
 		t.Error("EnsureProvider should not be called when model provider is empty")
+	}
+	if _, ok := createdOpts.Policy.GetNetworkPolicies()["gemini_api"]; !ok {
+		t.Errorf("empty MODEL_PROVIDER should default to Gemini network policy, got %#v", createdOpts.Policy.GetNetworkPolicies())
 	}
 }
 
