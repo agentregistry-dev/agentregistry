@@ -286,7 +286,7 @@ database:
         # -- Bundled PostgreSQL image name
         name: postgres
         # -- Bundled PostgreSQL image tag
-        tag: "16"
+        tag: "18"
         # -- Bundled PostgreSQL image pull policy
         pullPolicy: IfNotPresent
       # -- DB name, user, and password are hardcoded ("agentregistry") for the bundled instance.
