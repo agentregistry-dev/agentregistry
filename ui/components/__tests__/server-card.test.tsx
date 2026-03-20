@@ -85,19 +85,35 @@ describe("ServerCard", () => {
     expect(onClick).toHaveBeenCalledOnce()
   })
 
-  it("shows deploy button when showDeploy is true", () => {
+  it("shows deploy button when showDeploy is true and server has OCI package", () => {
     const onDeploy = vi.fn()
-    render(<ServerCard server={mockServer} showDeploy onDeploy={onDeploy} />)
-    expect(screen.getByText("Deploy")).toBeInTheDocument()
+    const ociServer: ServerResponse = {
+      server: { ...mockServer.server, packages: [{ registryType: "oci", identifier: "ghcr.io/acme/db", transport: { type: "stdio" } }] },
+      _meta: mockServer._meta,
+    }
+    render(<ServerCard server={ociServer} showDeploy onDeploy={onDeploy} />)
+    const btn = screen.getByText("Deploy").closest("button")!
+    expect(btn).not.toBeDisabled()
   })
 
   it("calls onDeploy without triggering onClick", async () => {
     const onDeploy = vi.fn()
     const onClick = vi.fn()
-    render(<ServerCard server={mockServer} showDeploy onDeploy={onDeploy} onClick={onClick} />)
+    const ociServer: ServerResponse = {
+      server: { ...mockServer.server, packages: [{ registryType: "oci", identifier: "ghcr.io/acme/db", transport: { type: "stdio" } }] },
+      _meta: mockServer._meta,
+    }
+    render(<ServerCard server={ociServer} showDeploy onDeploy={onDeploy} onClick={onClick} />)
     await userEvent.click(screen.getByText("Deploy"))
     expect(onDeploy).toHaveBeenCalledOnce()
     expect(onClick).not.toHaveBeenCalled()
+  })
+
+  it("disables deploy button when server has no OCI package", () => {
+    const onDeploy = vi.fn()
+    render(<ServerCard server={mockServer} showDeploy onDeploy={onDeploy} />)
+    const btn = screen.getByText("Deploy").closest("button")!
+    expect(btn).toBeDisabled()
   })
 
   it("shows delete button when showDelete is true", () => {

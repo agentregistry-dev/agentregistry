@@ -173,6 +173,82 @@ func TestUndeploy_RemovesLocalArtifactsWhenRegistryArtifactIsMissing(t *testing.
 	}
 }
 
+func TestUndeploy_CallsComposeDownWhenNoServicesRemain(t *testing.T) {
+	tempDir := t.TempDir()
+	deployment := &models.Deployment{
+		ID:           "dep-last-001",
+		ServerName:   "io.test/only-agent",
+		Version:      "1.0.0",
+		ResourceType: "agent",
+		ProviderID:   "local",
+	}
+
+	agent := &platformtypes.Agent{
+		Name:         deployment.ServerName,
+		Version:      deployment.Version,
+		DeploymentID: deployment.ID,
+	}
+	agentServiceName := localAgentServiceName(agent)
+
+	err := WriteLocalPlatformFiles(tempDir, &platformtypes.LocalPlatformConfig{
+		DockerCompose: &platformtypes.DockerComposeConfig{
+			Name:       "test",
+			WorkingDir: tempDir,
+			Services: map[string]composetypes.ServiceConfig{
+				agentServiceName: {Name: agentServiceName},
+			},
+		},
+		AgentGateway: &platformtypes.AgentGatewayConfig{
+			Config: struct{}{},
+			Binds:  []platformtypes.LocalBind{},
+		},
+	}, 8080)
+	if err != nil {
+		t.Fatalf("WriteLocalPlatformFiles() error = %v", err)
+	}
+
+	registry := servicetesting.NewFakeRegistry()
+	registry.GetAgentByNameAndVersionFn = func(context.Context, string, string) (*models.AgentResponse, error) {
+		return nil, database.ErrNotFound
+	}
+
+	adapter := NewLocalDeploymentAdapter(registry, tempDir, 8080)
+
+	originalComposeUp := runLocalComposeUp
+	originalComposeDown := runLocalComposeDown
+	originalRefresh := refreshLocalAgentMCPConfig
+	originalPromptsRefresh := refreshLocalAgentPromptsConfig
+	t.Cleanup(func() {
+		runLocalComposeUp = originalComposeUp
+		runLocalComposeDown = originalComposeDown
+		refreshLocalAgentMCPConfig = originalRefresh
+		refreshLocalAgentPromptsConfig = originalPromptsRefresh
+	})
+
+	composeUpCalled := false
+	runLocalComposeUp = func(context.Context, string, bool) error {
+		composeUpCalled = true
+		return nil
+	}
+	composeDownCalled := false
+	runLocalComposeDown = func(context.Context, string, bool) error {
+		composeDownCalled = true
+		return nil
+	}
+	refreshLocalAgentMCPConfig = func(*common.MCPConfigTarget, []common.PythonMCPServer, bool) error { return nil }
+	refreshLocalAgentPromptsConfig = func(*common.MCPConfigTarget, []common.PythonPrompt, bool) error { return nil }
+
+	if err := adapter.Undeploy(context.Background(), deployment); err != nil {
+		t.Fatalf("Undeploy() error = %v", err)
+	}
+	if composeUpCalled {
+		t.Fatal("expected compose up NOT to be called when no services remain")
+	}
+	if !composeDownCalled {
+		t.Fatal("expected compose down to be called when no services remain")
+	}
+}
+
 func TestDeploy_WritesPromptsConfig(t *testing.T) {
 	tempDir := t.TempDir()
 	deployment := &models.Deployment{

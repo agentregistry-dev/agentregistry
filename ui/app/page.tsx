@@ -32,6 +32,7 @@ import { AddServerDialog } from "@/components/add-server-dialog"
 import { AddSkillDialog } from "@/components/add-skill-dialog"
 import { AddAgentDialog } from "@/components/add-agent-dialog"
 import { AddPromptDialog } from "@/components/add-prompt-dialog"
+import { DeployDialog } from "@/components/deploy-dialog"
 import { listServersV0, listSkillsV0, listAgentsV0, listPromptsV0, ServerResponse, SkillResponse, AgentResponse, PromptResponse } from "@/lib/admin-api"
 import MCPIcon from "@/components/icons/mcp"
 import {
@@ -105,6 +106,8 @@ export default function AdminPage() {
   const [selectedSkill, setSelectedSkill] = useState<GroupedSkill | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<GroupedAgent | null>(null)
   const [selectedPrompt, setSelectedPrompt] = useState<GroupedPrompt | null>(null)
+  const [deployServerTarget, setDeployServerTarget] = useState<ServerResponse | null>(null)
+  const [deployAgentTarget, setDeployAgentTarget] = useState<AgentResponse | null>(null)
 
   const getStars = (server: ServerResponse): number => {
     const publisherProvided = server.server._meta?.['io.modelcontextprotocol.registry/publisher-provided'] as Record<string, unknown> | undefined
@@ -589,6 +592,8 @@ export default function AdminPage() {
                     server={server}
                     versionCount={server.versionCount}
                     onClick={() => setSelectedServer(server)}
+                    showDeploy
+                    onDeploy={(s) => setDeployServerTarget(s)}
                   />
                 ))}
               </div>
@@ -641,6 +646,8 @@ export default function AdminPage() {
                     agent={agent}
                     versionCount={agent.versionCount}
                     onClick={() => setSelectedAgent(agent)}
+                    showDeploy
+                    onDeploy={(a) => setDeployAgentTarget(a)}
                   />
                 ))}
               </div>
@@ -680,6 +687,21 @@ export default function AdminPage() {
       <AddSkillDialog open={addSkillDialogOpen} onOpenChange={setAddSkillDialogOpen} onSkillAdded={fetchData} />
       <AddAgentDialog open={addAgentDialogOpen} onOpenChange={setAddAgentDialogOpen} onAgentAdded={() => {}} />
       <AddPromptDialog open={addPromptDialogOpen} onOpenChange={setAddPromptDialogOpen} onPromptAdded={fetchData} />
+
+      <DeployDialog
+        open={!!deployServerTarget}
+        onOpenChange={(open) => { if (!open) setDeployServerTarget(null) }}
+        resourceType="mcp"
+        server={deployServerTarget}
+        onDeploySuccess={fetchData}
+      />
+      <DeployDialog
+        open={!!deployAgentTarget}
+        onOpenChange={(open) => { if (!open) setDeployAgentTarget(null) }}
+        resourceType="agent"
+        agent={deployAgentTarget}
+        onDeploySuccess={fetchData}
+      />
 
       <Sheet open={isSheetOpen} onOpenChange={(open) => !open && closeSheet()}>
         <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">

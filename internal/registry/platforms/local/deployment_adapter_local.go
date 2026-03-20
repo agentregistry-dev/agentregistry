@@ -32,6 +32,7 @@ type localAgentConfig struct {
 
 var (
 	runLocalComposeUp              = ComposeUpLocalPlatform
+	runLocalComposeDown            = ComposeDownLocalPlatform
 	refreshLocalAgentMCPConfig     = common.RefreshMCPConfig
 	refreshLocalAgentPromptsConfig = common.RefreshPromptsConfig
 )
@@ -263,6 +264,9 @@ func (a *localDeploymentAdapter) mergeAndApplyLocalPlatform(
 	}, a.agentGatewayPort); err != nil {
 		return err
 	}
+	if len(composeCfg.Services) == 0 {
+		return runLocalComposeDown(ctx, a.platformDir, false)
+	}
 	return runLocalComposeUp(ctx, a.platformDir, false)
 }
 
@@ -294,6 +298,9 @@ func (a *localDeploymentAdapter) removeLocalDeploymentArtifactsByID(ctx context.
 		AgentGateway:  gatewayCfg,
 	}, a.agentGatewayPort); err != nil {
 		return err
+	}
+	if len(composeCfg.Services) == 0 {
+		return runLocalComposeDown(ctx, a.platformDir, false)
 	}
 	return runLocalComposeUp(ctx, a.platformDir, false)
 }
