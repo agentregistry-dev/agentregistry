@@ -130,8 +130,6 @@ helm install agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/
   --set config.jwtPrivateKey=$(openssl rand -hex 32)
 ```
 
-> **Semantic search** requires a vector-enabled PostgreSQL instance. Add `--set database.postgres.vectorEnabled=true` when your database has vector support. The bundled database does not include vector support — semantic search will not be available when using it.
-
 Then port-forward to access the UI:
 
 ```bash
@@ -139,6 +137,8 @@ kubectl port-forward -n agentregistry svc/agentregistry 12121:12121
 ```
 
 **Get started:** [Helm chart details](charts/agentregistry/README.md.gotmpl), [Local Kind cluster](scripts/kind/README.md)
+
+> **Semantic search** requires a PostgreSQL instance with the pgvector extension. It is disabled by default. To enable it, ensure your database has pgvector support and set `AGENT_REGISTRY_DATABASE_VECTOR_ENABLED=true` (docker-compose / `.env`) or `--set database.postgres.vectorEnabled=true` (Helm).
 
 ---
 

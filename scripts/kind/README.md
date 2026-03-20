@@ -20,24 +20,26 @@ This single command sets up the full local environment.
 
 ## What It Does
 
-`make setup-kind-cluster` runs two sub-targets in order:
+`make setup-kind-cluster` runs the following sub-targets in order:
 
 1. **`make create-kind-cluster`** — creates a Kind cluster named `agentregistry` with a local container registry on `localhost:5001` and MetalLB for LoadBalancer support
-2. **`make install-agentregistry`** — builds server images, pushes them to the local registry, and Helm installs AgentRegistry with a bundled PostgreSQL/pgvector instance
+2. **`make install-agentregistry`** — builds server images, pushes them to the local registry, and Helm installs AgentRegistry with a bundled database instance
 
 You can also run any sub-target individually, e.g. `make install-agentregistry` to redeploy after a code change.
 
 ## Database Details
 
-PostgreSQL/pgvector is bundled in the Helm chart and deployed automatically. The default configuration is:
+PostgreSQL is bundled in the Helm chart and deployed automatically. The default configuration is:
 
 | Setting  | Value                            |
 |----------|----------------------------------|
 | Host     | `agentregistry-postgresql.agentregistry.svc.cluster.local` (in-cluster) |
 | Port     | `5432`                           |
-| Database | `agent-registry`                 |
+| Database | `agentregistry`                  |
 | Username | `agentregistry`                  |
 | Password | `agentregistry`                  |
+
+Local setup uses `pgvector` for development of vector dependent capabilities.
 
 ### Connecting Directly
 
@@ -50,7 +52,7 @@ kubectl --context kind-agentregistry port-forward -n agentregistry svc/agentregi
 Then connect with psql:
 
 ```bash
-psql -h localhost -U agentregistry -d agent-registry
+psql -h localhost -U agentregistry -d agentregistry
 ```
 
 ### pgvector Extension

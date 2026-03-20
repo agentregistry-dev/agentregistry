@@ -128,14 +128,18 @@ func ensureVectorExtension(ctx context.Context, uri string) error {
 	return nil
 }
 
-type testDBOption struct {
+type testDBOption func(*testDBConfig)
+
+type testDBConfig struct {
 	vectorEnabled bool
 }
 
 // WithVector enables vector migrations (adds semantic_embedding columns) on the test database.
 // Use for tests that exercise pgvector/embeddings functionality.
 func WithVector() testDBOption {
-	return testDBOption{vectorEnabled: true}
+	return func(cfg *testDBConfig) {
+		cfg.vectorEnabled = true
+	}
 }
 
 // NewTestDB creates an isolated PostgreSQL database for each test by copying a template.
@@ -145,12 +149,11 @@ func WithVector() testDBOption {
 func NewTestDB(t *testing.T, opts ...testDBOption) database.Database {
 	t.Helper()
 
-	vectorEnabled := false
+	var cfg testDBConfig
 	for _, o := range opts {
-		if o.vectorEnabled {
-			vectorEnabled = true
-		}
+		o(&cfg)
 	}
+	vectorEnabled := cfg.vectorEnabled
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

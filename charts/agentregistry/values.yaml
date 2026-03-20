@@ -276,9 +276,10 @@ rbac:
 
 database:
   postgres:
-    # -- External PostgreSQL connection string. Used if set, regardless of bundled.enabled.
+    # -- External PostgreSQL connection string.
+    # -- When set, Agent Registry connects here instead of the bundled instance. The bundled pod (if enabled) still deploys but is unused; the init container is skipped.
     url: ""
-    # -- Enable vector schema migrations and embeddings/semantic search (sets AGENT_REGISTRY_DATABASE_VECTOR_ENABLED and AGENT_REGISTRY_EMBEDDINGS_ENABLED). Requires a pgvector-capable PostgreSQL instance.
+    # -- Enable features that require a pgvector-capable PostgreSQL instance. e.g. vector schema migrations, embeddings and semantic search. 
     vectorEnabled: false
     # -- Bundled PostgreSQL — dev/eval only.
     bundled:
