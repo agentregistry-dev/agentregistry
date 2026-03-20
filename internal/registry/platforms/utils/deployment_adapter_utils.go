@@ -393,6 +393,9 @@ func parseURL(rawURL string) (*parsedURL, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse server remote url: %v", err)
 	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, fmt.Errorf("unsupported URL scheme %q: only http and https are supported", u.Scheme)
+	}
 	portStr := u.Port()
 	var port uint32
 	if portStr == "" {

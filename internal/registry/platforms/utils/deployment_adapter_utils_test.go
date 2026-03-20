@@ -303,6 +303,9 @@ func TestParseURL(t *testing.T) {
 		{"ipv6 with port", "http://[::1]:3005/mcp", parsedURL{scheme: "http", host: "::1", port: 3005, path: "/mcp"}, false},
 		{"ipv6 without port", "https://[::1]/mcp", parsedURL{scheme: "https", host: "::1", port: 443, path: "/mcp"}, false},
 		{"invalid port", "http://example.com:notaport/mcp", parsedURL{}, true},
+		{"empty scheme", "://example.com/mcp", parsedURL{}, true},
+		{"unsupported scheme", "ftp://example.com/mcp", parsedURL{}, true},
+		{"no scheme", "example.com/mcp", parsedURL{}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
