@@ -34,87 +34,68 @@ func TestNormalizeBaseURL(t *testing.T) {
 	}
 }
 
-func TestParseRegistryURL(t *testing.T) {
-	tests := []struct {
-		name     string
-		raw      string
-		wantHost string
-		wantNil  bool
-	}{
-		{"empty", "", "localhost", false},
-		{"blank", "  ", "localhost", false},
-		{"with path", "http://localhost:12121/v0", "localhost", false},
-		{"host only", "api.example.com", "api.example.com", false},
-		{"with port", "http://host:9999", "host", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := parseRegistryURL(tt.raw)
-			if tt.wantNil {
-				if got != nil {
-					t.Errorf("parseRegistryURL(%q) = %v, want nil", tt.raw, got)
-				}
-				return
-			}
-			if got == nil {
-				t.Errorf("parseRegistryURL(%q) = nil, want host %q", tt.raw, tt.wantHost)
-				return
-			}
-			if got.Hostname() != tt.wantHost {
-				t.Errorf("parseRegistryURL(%q).Hostname() = %q, want %q", tt.raw, got.Hostname(), tt.wantHost)
-			}
-		})
-	}
-}
-
 func TestPreRunBehavior(t *testing.T) {
+	root := &cobra.Command{Use: "arctl"}
+
 	agentCmd := &cobra.Command{Use: "agent"}
 	initCmd := &cobra.Command{Use: "init"}
+	buildCmd := &cobra.Command{Use: "build"}
+	listCmd := &cobra.Command{Use: "list"}
 	agentCmd.AddCommand(initCmd)
+	agentCmd.AddCommand(buildCmd)
+	agentCmd.AddCommand(listCmd)
 
 	mcpCmd := &cobra.Command{Use: "mcp"}
 	mcpInitCmd := &cobra.Command{Use: "init"}
+	mcpBuildCmd := &cobra.Command{Use: "build"}
+	mcpAddToolCmd := &cobra.Command{Use: "add-tool"}
 	mcpCmd.AddCommand(mcpInitCmd)
-
-	listCmd := &cobra.Command{Use: "list"}
-	agentCmd.AddCommand(listCmd)
+	mcpCmd.AddCommand(mcpBuildCmd)
+	mcpCmd.AddCommand(mcpAddToolCmd)
 
 	skillCmd := &cobra.Command{Use: "skill"}
 	skillInitCmd := &cobra.Command{Use: "init"}
+	skillBuildCmd := &cobra.Command{Use: "build"}
 	skillCmd.AddCommand(skillInitCmd)
+	skillCmd.AddCommand(skillBuildCmd)
 
 	// Subcommand under "mcp init" (e.g. arctl mcp init python mymcp)
 	initPythonCmd := &cobra.Command{Use: "python"}
 	mcpInitCmd.AddCommand(initPythonCmd)
 
+	configureCmd := &cobra.Command{Use: "configure"}
+	completionCmd := &cobra.Command{Use: "completion"}
+	zshCompletionCmd := &cobra.Command{Use: "zsh"}
+	completionCmd.AddCommand(zshCompletionCmd)
+	versionCmd := &cobra.Command{Use: "version"}
+	root.AddCommand(agentCmd, mcpCmd, skillCmd, configureCmd, completionCmd, versionCmd)
+
 	tests := []struct {
-		name          string
-		cmd           *cobra.Command
-		baseURL       string
-		wantSkip      bool
-		wantAutoStart bool
+		name     string
+		cmd      *cobra.Command
+		wantSkip bool
 	}{
-		// Skip setup for init commands (baseURL irrelevant)
-		{"agent init", initCmd, "http://localhost:12121", true, false},
-		{"mcp init", mcpInitCmd, "http://localhost:12121", true, false},
-		{"skill init", skillInitCmd, "http://localhost:12121", true, false},
-		{"mcp init python (subcommand of init)", initPythonCmd, "http://localhost:12121", true, false},
-		// No skip for other commands; auto-start depends on URL
-		{"agent list localhost:12121", listCmd, "http://localhost:12121", false, true},
-		{"agent list other port", listCmd, "http://localhost:8080", false, false},
-		{"agent list remote", listCmd, "http://api.example.com:12121", false, false},
-		{"default port 127.0.0.1", listCmd, "http://127.0.0.1:12121", false, true},
-		{"default port with path", listCmd, "http://localhost:12121/v0", false, true},
-		{"empty defaults to localhost:12121", listCmd, "", false, true},
-		{"nil cmd", nil, "http://localhost:12121", false, true},
-		{"nil parent (root-level)", agentCmd, "http://localhost:12121", false, true},
+		{"agent init", initCmd, true},
+		{"agent build", buildCmd, true},
+		{"mcp init", mcpInitCmd, true},
+		{"mcp build", mcpBuildCmd, true},
+		{"mcp add-tool", mcpAddToolCmd, true},
+		{"skill init", skillInitCmd, true},
+		{"skill build", skillBuildCmd, true},
+		{"configure", configureCmd, true},
+		{"completion", completionCmd, true},
+		{"completion zsh", zshCompletionCmd, true},
+		{"version", versionCmd, true},
+		{"mcp init python (subcommand of init)", initPythonCmd, true},
+		{"agent list", listCmd, false},
+		{"nil cmd", nil, false},
+		{"top-level command with parent", agentCmd, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotSkip, gotAutoStart := preRunBehavior(tt.cmd, tt.baseURL)
-			if gotSkip != tt.wantSkip || gotAutoStart != tt.wantAutoStart {
-				t.Errorf("preRunBehavior(%v, %q) = (skip=%v, autoStart=%v), want (skip=%v, autoStart=%v)",
-					tt.cmd != nil && tt.cmd.Name() != "", tt.baseURL, gotSkip, gotAutoStart, tt.wantSkip, tt.wantAutoStart)
+			gotSkip := preRunBehavior(tt.cmd)
+			if gotSkip != tt.wantSkip {
+				t.Errorf("preRunBehavior() = %v, want %v", gotSkip, tt.wantSkip)
 			}
 		})
 	}
@@ -157,23 +138,16 @@ func TestResolveRegistryTarget(t *testing.T) {
 	}
 }
 
-func TestParseRegistryURL_EmptyHost(t *testing.T) {
-	// URL like "http://" or "://" might return empty host - ensure we don't panic
-	u := parseRegistryURL("http://")
-	if u != nil {
-		// Parser may still return a URL with empty host
-		_ = u.Hostname()
-	}
-}
-
 func TestConfigure(t *testing.T) {
 	opts := CLIOptions{
-		DaemonManager: &mockDaemonManager{running: true},
+		ClientFactory: func(_ context.Context, u, tok string) (*client.Client, error) {
+			return client.NewClient(u, tok), nil
+		},
 	}
 	Configure(opts)
 	defer Configure(CLIOptions{}) // reset
-	if cliOptions.DaemonManager == nil {
-		t.Error("Configure: expected DaemonManager to be set")
+	if cliOptions.ClientFactory == nil {
+		t.Error("Configure: expected ClientFactory to be set")
 	}
 }
 
@@ -199,29 +173,22 @@ func TestPreRunSetup(t *testing.T) {
 		return client.NewClient(u, tok), nil
 	}
 
-	// Mock daemon that is already running (so Start is not called)
-	dm := &mockDaemonManager{running: true}
-
 	// Use a dummy command for testing, since some code paths may access cmd.Root() for authn provider
 	mockCmd := &cobra.Command{Use: "test"}
 
 	oldOpts := cliOptions
 	defer func() { Configure(oldOpts) }()
 	Configure(CLIOptions{
-		DaemonManager: dm,
 		ClientFactory: clientFactory,
 	})
 
-	t.Run("no_auto_start_skips_daemon", func(t *testing.T) {
-		c, err := preRunSetup(ctx, nil, baseURL, token, false)
+	t.Run("basic_client_creation", func(t *testing.T) {
+		c, err := preRunSetup(ctx, mockCmd, baseURL, token)
 		if err != nil {
 			t.Fatalf("preRunSetup: %v", err)
 		}
 		if c == nil {
 			t.Fatal("preRunSetup: expected client")
-		}
-		if dm.startCalled {
-			t.Error("expected daemon Start not to be called when autoStartDaemon is false")
 		}
 	})
 
@@ -232,7 +199,6 @@ func TestPreRunSetup(t *testing.T) {
 
 		var authnToken string
 		Configure(CLIOptions{
-			DaemonManager:        dm,
 			AuthnProviderFactory: mockAuthnProviderFactory,
 			ClientFactory: func(_ context.Context, u, tok string) (*client.Client, error) {
 				authnToken = tok
@@ -241,7 +207,7 @@ func TestPreRunSetup(t *testing.T) {
 		})
 		defer func() { Configure(oldOpts) }()
 
-		_, err := preRunSetup(ctx, mockCmd, baseURL, "", true)
+		_, err := preRunSetup(ctx, mockCmd, baseURL, "")
 		if err != nil {
 			t.Fatalf("preRunSetup: %v", err)
 		}
@@ -257,13 +223,12 @@ func TestPreRunSetup(t *testing.T) {
 		}
 
 		Configure(CLIOptions{
-			DaemonManager:        dm,
 			AuthnProviderFactory: mockAuthnProviderFactory,
 			ClientFactory:        clientFactory,
 		})
 		defer func() { Configure(oldOpts) }()
 
-		_, err := preRunSetup(ctx, mockCmd, baseURL, "", false)
+		_, err := preRunSetup(ctx, mockCmd, baseURL, "")
 		if err == nil {
 			t.Fatal("expected error from AuthnProvider")
 		}
@@ -275,13 +240,12 @@ func TestPreRunSetup(t *testing.T) {
 	t.Run("token_resolved_callback_success", func(t *testing.T) {
 		var resolvedToken string
 		Configure(CLIOptions{
-			DaemonManager:   dm,
 			ClientFactory:   clientFactory,
 			OnTokenResolved: func(tok string) error { resolvedToken = tok; return nil },
 		})
 		defer func() { Configure(oldOpts) }()
 
-		_, err := preRunSetup(ctx, mockCmd, baseURL, token, false)
+		_, err := preRunSetup(ctx, mockCmd, baseURL, token)
 		if err != nil {
 			t.Fatalf("preRunSetup: %v", err)
 		}
@@ -293,13 +257,12 @@ func TestPreRunSetup(t *testing.T) {
 	t.Run("token_resolved_callback_error", func(t *testing.T) {
 		callbackErr := errors.New("callback failed")
 		Configure(CLIOptions{
-			DaemonManager:   dm,
 			ClientFactory:   clientFactory,
 			OnTokenResolved: func(tok string) error { return callbackErr },
 		})
 		defer func() { Configure(oldOpts) }()
 
-		_, err := preRunSetup(ctx, mockCmd, baseURL, token, false)
+		_, err := preRunSetup(ctx, mockCmd, baseURL, token)
 		if err == nil {
 			t.Fatal("expected error from OnTokenResolved callback")
 		}
@@ -311,31 +274,38 @@ func TestPreRunSetup(t *testing.T) {
 	t.Run("client_factory_error", func(t *testing.T) {
 		clientErr := errors.New("client failed")
 		Configure(CLIOptions{
-			DaemonManager: dm,
 			ClientFactory: func(_ context.Context, _, _ string) (*client.Client, error) {
 				return nil, clientErr
 			},
 		})
 		defer func() { Configure(oldOpts) }()
 
-		_, err := preRunSetup(ctx, mockCmd, baseURL, token, false)
+		_, err := preRunSetup(ctx, mockCmd, baseURL, token)
 		if err == nil {
 			t.Fatal("expected error from ClientFactory")
 		}
 	})
-}
 
-// mockDaemonManager for unit tests.
-type mockDaemonManager struct {
-	running     bool
-	startCalled bool
-	startErr    error
-}
+	t.Run("client_factory_error_includes_url", func(t *testing.T) {
+		clientErr := errors.New("connection refused")
+		Configure(CLIOptions{
+			ClientFactory: func(_ context.Context, _, _ string) (*client.Client, error) {
+				return nil, clientErr
+			},
+		})
+		defer func() { Configure(oldOpts) }()
 
-func (m *mockDaemonManager) IsRunning() bool { return m.running }
-func (m *mockDaemonManager) Start() error {
-	m.startCalled = true
-	return m.startErr
+		_, err := preRunSetup(ctx, mockCmd, baseURL, token)
+		if err == nil {
+			t.Fatal("expected error from ClientFactory")
+		}
+		if !errors.Is(err, clientErr) {
+			t.Errorf("expected wrapped client error, got %v", err)
+		}
+		if !strings.Contains(err.Error(), baseURL) {
+			t.Errorf("error should include the registry URL, got: %s", err.Error())
+		}
+	})
 }
 
 // mockAuthnProvider for unit tests.
@@ -351,75 +321,4 @@ func (m *mockAuthnProvider) Authenticate(context.Context) (string, error) {
 	return m.token, nil
 }
 
-var _ types.DaemonManager = (*mockDaemonManager)(nil)
 var _ types.CLIAuthnProvider = (*mockAuthnProvider)(nil)
-
-func TestEnsureDaemonRunning(t *testing.T) {
-	startErr := errors.New("start failed")
-	dockerComposeErr := errors.New("docker compose is not available")
-	notReadyErr := errors.New("daemon did not become ready within 30 seconds")
-
-	tests := []struct {
-		name            string
-		dm              *mockDaemonManager
-		wantErr         string
-		wantStartCalled bool
-	}{
-		{
-			name:            "docker compose not available",
-			dm:              &mockDaemonManager{startErr: dockerComposeErr},
-			wantErr:         "docker compose is not available",
-			wantStartCalled: true,
-		},
-		{
-			name:            "daemon already running",
-			dm:              &mockDaemonManager{running: true},
-			wantErr:         "",
-			wantStartCalled: false,
-		},
-		{
-			name:            "daemon not running starts successfully",
-			dm:              &mockDaemonManager{running: false},
-			wantErr:         "",
-			wantStartCalled: true,
-		},
-		{
-			name:            "daemon start fails",
-			dm:              &mockDaemonManager{running: false, startErr: startErr},
-			wantErr:         "failed to start daemon",
-			wantStartCalled: true,
-		},
-		{
-			name:            "daemon started but not ready",
-			dm:              &mockDaemonManager{running: false, startErr: notReadyErr},
-			wantErr:         "daemon did not become ready",
-			wantStartCalled: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := ensureDaemonRunning(tt.dm)
-
-			if tt.wantErr == "" {
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-			} else {
-				if err == nil {
-					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
-				}
-				if !strings.Contains(err.Error(), tt.wantErr) {
-					t.Errorf("error %q does not contain %q", err.Error(), tt.wantErr)
-				}
-			}
-
-			if tt.wantStartCalled && !tt.dm.startCalled {
-				t.Error("expected Start() to be called")
-			}
-			if !tt.wantStartCalled && tt.dm.startCalled {
-				t.Error("expected Start() not to be called")
-			}
-		})
-	}
-}

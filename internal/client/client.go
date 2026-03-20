@@ -28,7 +28,6 @@ type Client struct {
 const (
 	defaultBaseURL          = "http://localhost:12121/v0"
 	DefaultBaseURL          = defaultBaseURL
-	pingRetryAttempts       = 3
 	defaultDeployProviderID = "local"
 )
 
@@ -86,25 +85,10 @@ func ensureV0Suffix(u string) string {
 // NewClientWithConfig constructs a client from explicit inputs (flag/env), applies defaults, and verifies connectivity.
 func NewClientWithConfig(baseURL, token string) (*Client, error) {
 	c := NewClient(baseURL, token)
-	if err := pingWithRetry(c, pingRetryAttempts); err != nil {
+	if err := c.Ping(); err != nil {
 		return nil, err
 	}
 	return c, nil
-}
-
-func pingWithRetry(c *Client, attempts int) error {
-	var lastErr error
-	for i := range attempts {
-		if err := c.Ping(); err != nil {
-			lastErr = err
-			if i < attempts-1 {
-				time.Sleep(time.Duration(i+1) * time.Second)
-			}
-			continue
-		}
-		return nil
-	}
-	return fmt.Errorf("failed to reach API after %d attempts: %w", attempts, lastErr)
 }
 
 // Close is a no-op in API mode

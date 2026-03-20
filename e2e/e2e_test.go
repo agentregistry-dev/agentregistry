@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 // e2eClusterName and e2eKubeContext are derived from KIND_CLUSTER_NAME so that
@@ -29,9 +31,13 @@ func TestMain(m *testing.M) {
 	checkPrerequisites()
 
 	registryURL = os.Getenv("ARCTL_API_BASE_URL")
+	if IsK8sBackend() {
+		registryURL = discoverRegistryURL()
+	}
 	if registryURL == "" {
 		log.Fatal("ARCTL_API_BASE_URL not set — run tests via `make test-e2e-docker` or `make test-e2e-k8s`")
 	}
+	os.Setenv("ARCTL_API_BASE_URL", registryURL)
 
 	log.Printf("Configuration:")
 	log.Printf("  ARCTL_API_BASE_URL: %s", registryURL)
@@ -41,6 +47,38 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Exit(m.Run())
+}
+
+// discoverRegistryURL resolves the registry URL from the LoadBalancer IP
+// assigned to the agentregistry service in the Kind cluster.
+func discoverRegistryURL() string {
+	const timeout = 2 * time.Minute
+	const pollInterval = 3 * time.Second
+
+	var ip string
+	var lastErr error
+
+	err := wait.PollUntilContextTimeout(context.Background(), pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+		cmd := exec.CommandContext(ctx, "kubectl", "--context", e2eKubeContext, "-n", "agentregistry",
+			"get", "svc", "agentregistry", "-o", "jsonpath={.status.loadBalancer.ingress[0].ip}")
+		out, pollErr := cmd.Output()
+		if pollErr != nil {
+			lastErr = pollErr
+			return false, nil
+		}
+
+		ip = strings.TrimSpace(string(out))
+		return ip != "", nil
+	})
+
+	if err != nil && lastErr != nil {
+		log.Fatalf("Failed to discover registry LoadBalancer IP within %s: %v", timeout, lastErr)
+	}
+	if err != nil || ip == "" {
+		log.Fatalf("LoadBalancer IP not assigned to agentregistry service within %s — is MetalLB running?", timeout)
+	}
+
+	return fmt.Sprintf("http://%s:12121/v0", ip)
 }
 
 // checkPrerequisites verifies required tools are available.
@@ -96,8 +134,13 @@ func TestArctlVersion(t *testing.T) {
 }
 
 // TestDaemonContainersRunning verifies that the agentregistry daemon
-// containers (server + postgres) are running.
+// containers (server + postgres) are running. Only applicable to the
+// docker backend where containers are managed by docker compose.
 func TestDaemonContainersRunning(t *testing.T) {
+	if IsK8sBackend() {
+		t.Skip("Skipping: docker-compose containers are not used in k8s backend")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -115,9 +158,10 @@ func TestDaemonContainersRunning(t *testing.T) {
 
 // TestRegistryHealth verifies the registry health endpoint responds with 200.
 func TestRegistryHealth(t *testing.T) {
-	WaitForHealth(t, "http://localhost:12121", 30*time.Second)
+	regURL := RegistryURL(t)
+	WaitForHealth(t, regURL+"/ping", 30*time.Second)
 
-	resp := RegistryGet(t, fmt.Sprintf("http://localhost:12121/v0/version"))
+	resp := RegistryGet(t, regURL+"/version")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("Expected 200 from version endpoint, got %d", resp.StatusCode)
