@@ -45,6 +45,8 @@ config:
   serverAddress: ":8080"
   # -- Agent Gateway gRPC port
   agentGatewayPort: "21212"
+  # -- Agent Registry MCP server port
+  agentRegistryMcpPort: "31313"
   # -- Enable input validation on the registry API
   enableRegistryValidation: "false"
   # -- Allow unauthenticated access to the API
