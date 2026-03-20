@@ -205,8 +205,8 @@ func NewHumaAPI(cfg *config.Config, registry service.RegistryService, mux *http.
 
 	// Add /metrics for Prometheus metrics using promhttp
 	mux.Handle("/metrics", metrics.PrometheusHandler())
-	// Add /logging to control component loggers
-	mux.HandleFunc("/logging", logging.HTTPLevelHandler)
+	// Add /logging to control component loggers (localhost only)
+	mux.HandleFunc("/logging", logging.LocalhostOnly(logging.HTTPLevelHandler))
 
 	// Serve UI from root path or handle 404 for non-API routes
 	if uiHandler != nil {

@@ -40,7 +40,9 @@ const (
 // componentLeveler maps component names to their respective slog.LevelVar instance
 var componentLeveler sync.Map
 
-func init() {
+// SetupDefault creates and sets the default slog logger for the DefaultComponent.
+// This must be called early in application startup (e.g. in main or server init).
+func SetupDefault() {
 	defaultLogger := New(DefaultComponent)
 	slog.SetDefault(defaultLogger)
 }

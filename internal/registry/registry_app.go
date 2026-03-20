@@ -313,8 +313,10 @@ func mcpAuthnMiddleware(authn auth.AuthnProvider) func(http.Handler) http.Handle
 	}
 }
 
-// SetupLogging configures the global slog logger
+// setupLogging configures the global slog logger
 func setupLogging(levelStr string) {
+	logging.SetupDefault()
+
 	if levelStr == "" {
 		levelStr = "info"
 	}

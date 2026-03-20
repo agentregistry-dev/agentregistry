@@ -43,6 +43,7 @@ import (
 func TestLogging(t *testing.T) {
 	tests := []struct {
 		name           string
+		method         string
 		components     []string
 		query          string
 		setLevel       map[string]slog.Level
@@ -51,10 +52,21 @@ func TestLogging(t *testing.T) {
 		wantLevels     map[string]slog.Level
 	}{
 		{
-			name:           "only default logger",
+			name:           "GET returns current levels",
+			method:         http.MethodGet,
 			wantStatusCode: http.StatusOK,
+			wantBody:       "current log levels:",
 			wantLevels: map[string]slog.Level{
-				DefaultComponent: GlobalLevel.Level(),
+				DefaultComponent: globalLevel.Level(),
+			},
+		},
+		{
+			name:           "POST with no params returns 400",
+			method:         http.MethodPost,
+			wantStatusCode: http.StatusBadRequest,
+			wantBody:       "query parameters required",
+			wantLevels: map[string]slog.Level{
+				DefaultComponent: slog.LevelInfo,
 			},
 		},
 		{
@@ -121,7 +133,18 @@ func TestLogging(t *testing.T) {
 			},
 		},
 		{
+			name:           "unknown component returns 400 without partial update",
+			components:     []string{"c1"},
+			query:          "c1=debug&unknown=error",
+			wantStatusCode: http.StatusBadRequest,
+			wantBody:       "unknown component: unknown",
+			wantLevels: map[string]slog.Level{
+				"c1": slog.LevelInfo, // must not have been updated
+			},
+		},
+		{
 			name:           "update default and component levels using SetLevel",
+			method:         http.MethodGet,
 			components:     []string{"c1", "c2", "c3"},
 			setLevel:       map[string]slog.Level{"default": slog.LevelDebug, "c1": slog.LevelError, "c2": slog.LevelWarn, "c3": LevelTrace},
 			wantStatusCode: http.StatusOK,
@@ -144,16 +167,21 @@ func TestLogging(t *testing.T) {
 			loggers := map[string]*slog.Logger{DefaultComponent: slog.Default()}
 			for _, component := range tc.components {
 				logger := New(component)
+				t.Cleanup(func() { DeleteLeveler(component) }) //nolint: errcheck
 				a.NotNil(logger)
 				loggers[component] = logger
 			}
 
 			// Test HTTP handler
+			method := tc.method
+			if method == "" {
+				method = http.MethodPost
+			}
 			path := "/logging"
 			if tc.query != "" {
 				path += "?" + tc.query
 			}
-			req := httptest.NewRequest(http.MethodPost, path, nil)
+			req := httptest.NewRequest(method, path, nil)
 			w := httptest.NewRecorder()
 			HTTPLevelHandler(w, req)
 			resp := w.Result()
@@ -181,9 +209,55 @@ func TestGetComponentLevels(t *testing.T) {
 	a := assert.New(t)
 
 	_ = NewWithOptions("TestGetComponentLevels1", Options{Level: ptr.To(slog.LevelDebug)})
+	t.Cleanup(func() { DeleteLeveler("TestGetComponentLevels1") }) //nolint: errcheck
 	_ = NewWithOptions("TestGetComponentLevels2", Options{Level: ptr.To(slog.LevelError)})
+	t.Cleanup(func() { DeleteLeveler("TestGetComponentLevels2") }) //nolint: errcheck
 
 	got := GetComponentLevels()
 	a.Equal(slog.LevelDebug, got["TestGetComponentLevels1"], "TestGetComponentLevels1")
 	a.Equal(slog.LevelError, got["TestGetComponentLevels2"], "TestGetComponentLevels2")
+}
+
+func TestLocalhostOnly(t *testing.T) {
+	handler := LocalhostOnly(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok")) //nolint: errcheck
+	})
+
+	tests := []struct {
+		name       string
+		remoteAddr string
+		wantStatus int
+	}{
+		{
+			name:       "IPv4 localhost allowed",
+			remoteAddr: "127.0.0.1:12345",
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "IPv6 localhost allowed",
+			remoteAddr: "[::1]:12345",
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "remote address rejected",
+			remoteAddr: "192.168.1.100:12345",
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "public IP rejected",
+			remoteAddr: "8.8.8.8:443",
+			wantStatus: http.StatusForbidden,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/logging", nil)
+			req.RemoteAddr = tc.remoteAddr
+			w := httptest.NewRecorder()
+			handler(w, req)
+			assert.Equal(t, tc.wantStatus, w.Result().StatusCode)
+		})
+	}
 }

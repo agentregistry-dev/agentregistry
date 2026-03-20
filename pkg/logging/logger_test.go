@@ -30,15 +30,22 @@ package logging
 import (
 	"context"
 	"log/slog"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"k8s.io/utils/ptr"
 )
 
+func TestMain(m *testing.M) {
+	SetupDefault()
+	os.Exit(m.Run())
+}
+
 func TestDeleteLeveler(t *testing.T) {
 	r := require.New(t)
 	l := New("delete")
+	t.Cleanup(func() { DeleteLeveler("delete") }) //nolint: errcheck
 	err := SetLevel("delete", slog.LevelInfo)
 	r.NoError(err)
 	r.True(l.Enabled(context.TODO(), slog.LevelInfo))
@@ -57,7 +64,9 @@ func TestDefaultLevelInheritance(t *testing.T) {
 	r := require.New(t)
 
 	l1 := New("l1")
+	t.Cleanup(func() { DeleteLeveler("l1") }) //nolint: errcheck
 	l2 := NewWithOptions("l2", Options{Level: ptr.To(slog.LevelDebug)})
+	t.Cleanup(func() { DeleteLeveler("l2") }) //nolint: errcheck
 
 	r.True(slog.Default().Enabled(context.TODO(), slog.LevelInfo))
 	r.True(l1.Enabled(context.TODO(), slog.LevelInfo))
@@ -69,7 +78,9 @@ func TestDefaultLevelInheritance(t *testing.T) {
 	r.True(l2.Enabled(context.TODO(), slog.LevelError))
 
 	l3 := NewWithOptions("l3", Options{Level: ptr.To(slog.LevelDebug)})
+	t.Cleanup(func() { DeleteLeveler("l3") }) //nolint: errcheck
 	r.True(l3.Enabled(context.TODO(), slog.LevelDebug))
 	l4 := New("l4")
+	t.Cleanup(func() { DeleteLeveler("l4") }) //nolint: errcheck
 	r.True(l4.Enabled(context.TODO(), slog.LevelError))
 }

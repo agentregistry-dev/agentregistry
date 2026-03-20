@@ -30,6 +30,7 @@ package logging
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 )
@@ -53,12 +54,8 @@ const (
 )
 
 var (
-	// GlobalLevel is the slog.LevelVar for the default logger
-	GlobalLevel = &slog.LevelVar{} // default is INFO
-
-	levelNames = map[slog.Leveler]string{
-		LevelTrace: traceLevel,
-	}
+	// globalLevel is the slog.LevelVar for the default logger
+	globalLevel = &slog.LevelVar{} // default is INFO
 )
 
 // GetLevel returns the current log level for the component
@@ -113,19 +110,33 @@ func Reset(level slog.Level) {
 }
 
 // HTTPLevelHandler handles HTTP requests to the log level of the default or
-// component specific loggers
-// It accepts POST and PUT requests with the following query parameters:
-// - level=<level>: updates log level across all component loggers
-// - <component>=<level>&<component=<level2>...: updates log level for specific components
+// component specific loggers.
 //
-// If no query parameters are provided, it returns the current log levels of all components
+// GET returns the current log levels of all components.
+//
+// POST/PUT with query parameters updates log levels:
+//   - level=<level>: updates log level across all component loggers
+//   - <component>=<level>&<component>=<level2>...: updates log level for specific components
+//
+// POST/PUT without query parameters returns 400.
 func HTTPLevelHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost && r.Method != http.MethodPut {
-		http.Error(w, "method must be one of POST|PUT", http.StatusMethodNotAllowed)
+	switch r.Method {
+	case http.MethodGet:
+		writeCurrentLevels(w)
+		return
+	case http.MethodPost, http.MethodPut:
+		// handled below
+	default:
+		http.Error(w, "method must be one of GET|POST|PUT", http.StatusMethodNotAllowed)
 		return
 	}
 
 	componentValues := r.URL.Query()
+	if len(componentValues) == 0 {
+		http.Error(w, "query parameters required", http.StatusBadRequest)
+		return
+	}
+
 	if lvl := componentValues.Get(levelQuery); lvl != "" {
 		level, err := ParseLevel(lvl)
 		if err != nil {
@@ -138,7 +149,7 @@ func HTTPLevelHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	levels := make(map[string]slog.Level)
-	// Parse ?level= or ?c1=level1&c2=level2,...
+	// Parse ?c1=level1&c2=level2,...
 	for component := range componentValues {
 		l := componentValues.Get(component)
 		if l == "" {
@@ -154,24 +165,43 @@ func HTTPLevelHandler(w http.ResponseWriter, r *http.Request) {
 		levels[component] = level
 	}
 
-	// Update component specific log levels
-	for component, level := range levels {
-		err := SetLevel(component, level)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+	// Validate all components exist before applying any changes
+	for component := range levels {
+		if _, ok := componentLeveler.Load(component); !ok {
+			http.Error(w, fmt.Sprintf("unknown component: %s", component), http.StatusBadRequest)
 			return
 		}
-		w.Write(fmt.Appendf(nil, "component %s log level set to: %s\n", component, strings.ToLower(levelName(level)))) //nolint: errcheck
 	}
 
-	// If no levels were set, write the current log levels
-	if len(levels) == 0 {
-		// Print current component log levels
-		w.Write([]byte("current log levels:\n---\n")) //nolint: errcheck
-		componentLeveler.Range(func(key any, value any) bool {
-			w.Write(fmt.Appendf(nil, "%s: %s\n", key, LevelToString(value.(*slog.LevelVar).Level()))) //nolint: errcheck
-			return true
-		})
+	// Apply all changes (guaranteed to succeed)
+	for component, level := range levels {
+		MustSetLevel(component, level)
+		w.Write(fmt.Appendf(nil, "component %s log level set to: %s\n", component, LevelToString(level))) //nolint: errcheck
+	}
+}
+
+// writeCurrentLevels writes the current log levels of all components to the response
+func writeCurrentLevels(w http.ResponseWriter) {
+	w.Write([]byte("current log levels:\n---\n")) //nolint: errcheck
+	componentLeveler.Range(func(key any, value any) bool {
+		w.Write(fmt.Appendf(nil, "%s: %s\n", key, LevelToString(value.(*slog.LevelVar).Level()))) //nolint: errcheck
+		return true
+	})
+}
+
+// LocalhostOnly wraps an http.HandlerFunc to only allow requests from localhost
+func LocalhostOnly(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		host, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			http.Error(w, "forbidden: localhost access only", http.StatusForbidden)
+			return
+		}
+		if host != "127.0.0.1" && host != "::1" {
+			http.Error(w, "forbidden: localhost access only", http.StatusForbidden)
+			return
+		}
+		next(w, r)
 	}
 }
 
@@ -179,19 +209,9 @@ func HTTPLevelHandler(w http.ResponseWriter, r *http.Request) {
 func slogLevelReplacer(groups []string, attr slog.Attr) slog.Attr {
 	if attr.Key == slog.LevelKey {
 		level := attr.Value.Any().(slog.Level)
-		levelname := levelName(level)
-		attr.Value = slog.StringValue(levelname)
+		attr.Value = slog.StringValue(LevelToString(level))
 	}
 	return attr
-}
-
-// levelName returns the string representation of slog.Level
-func levelName(level slog.Level) string {
-	levelname, ok := levelNames[level]
-	if !ok {
-		levelname = strings.ToLower(level.String())
-	}
-	return levelname
 }
 
 // ParseLevel parses the given level string to slog.Level,
