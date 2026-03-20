@@ -75,11 +75,15 @@ type kubernetesProviderAdapter struct {
 	providerAdapterBase
 }
 
-// NOTE: local and kubernetes currently share the same adapter base behavior.
+type openshellProviderAdapter struct {
+	providerAdapterBase
+}
+
+// NOTE: local, kubernetes, and openshell currently share the same adapter base behavior.
 // Provider CRUD remains extension-driven, and these concrete adapter types are
 // kept explicit so platform-specific validation can diverge later if needed.
 
-// DefaultProviderPlatformAdapters returns OSS provider adapters for local and kubernetes.
+// DefaultProviderPlatformAdapters returns OSS provider adapters for local, kubernetes, and openshell.
 func DefaultProviderPlatformAdapters(registry service.RegistryService) map[string]registrytypes.ProviderPlatformAdapter {
 	return map[string]registrytypes.ProviderPlatformAdapter{
 		"local": &localProviderAdapter{
@@ -91,6 +95,12 @@ func DefaultProviderPlatformAdapters(registry service.RegistryService) map[strin
 		"kubernetes": &kubernetesProviderAdapter{
 			providerAdapterBase: providerAdapterBase{
 				providerPlatform: "kubernetes",
+				registry:         registry,
+			},
+		},
+		"openshell": &openshellProviderAdapter{
+			providerAdapterBase: providerAdapterBase{
+				providerPlatform: "openshell",
 				registry:         registry,
 			},
 		},

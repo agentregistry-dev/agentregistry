@@ -15,6 +15,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/kubernetes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/local"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/openshell"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	mcpregistry "github.com/agentregistry-dev/agentregistry/internal/mcp/registryserver"
@@ -133,6 +134,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	deploymentPlatforms := map[string]types.DeploymentPlatformAdapter{
 		"local":      local.NewLocalDeploymentAdapter(registryService, cfg.RuntimeDir, cfg.AgentGatewayPort),
 		"kubernetes": kubernetes.NewKubernetesDeploymentAdapter(registryService),
+		"openshell":  openshell.NewOpenShellDeploymentAdapter(registryService, nil),
 	}
 	maps.Copy(deploymentPlatforms, options.DeploymentPlatforms)
 
