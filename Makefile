@@ -547,3 +547,37 @@ helm-unittest-install: _helm-check  ## Install the helm-unittest plugin if neede
 	HELM_PLUGIN_INSTALL_FLAGS="$(HELM_PLUGIN_INSTALL_FLAGS)" \
 	bash ./scripts/install-helm-unittest.sh
 
+# ──────────────────────────────────────────────────────────────────────────────
+# OpenShell proto vendoring
+# ──────────────────────────────────────────────────────────────────────────────
+OPENSHELL_PROTO_VERSION := $(shell cat internal/registry/platforms/openshell/proto/OPENSHELL_PROTO_VERSION)
+OPENSHELL_PROTO_REPO := NVIDIA/OpenShell
+OPENSHELL_PROTO_DIR := internal/registry/platforms/openshell/proto
+
+.PHONY: sync-openshell-proto
+sync-openshell-proto: ## Fetch OpenShell protos from upstream and regenerate Go code (requires protoc)
+	@echo "Fetching OpenShell protos at $(OPENSHELL_PROTO_VERSION)..."
+	@for f in openshell datamodel sandbox inference; do \
+	  curl -sfL "https://raw.githubusercontent.com/$(OPENSHELL_PROTO_REPO)/$(OPENSHELL_PROTO_VERSION)/proto/$$f.proto" \
+	    -o "$(OPENSHELL_PROTO_DIR)/$$f.proto"; \
+	done
+	@echo "Installing protoc Go plugins..."
+	@go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+	@echo "Generating Go code..."
+	$(eval OPENSHELL_GO_PKG := github.com/agentregistry-dev/agentregistry/internal/registry/platforms/openshell/proto/gen)
+	@protoc --go_out=. --go-grpc_out=. \
+	  --go_opt=module=github.com/agentregistry-dev/agentregistry \
+	  --go-grpc_opt=module=github.com/agentregistry-dev/agentregistry \
+	  --go_opt=Mopenshell.proto=$(OPENSHELL_GO_PKG) \
+	  --go_opt=Mdatamodel.proto=$(OPENSHELL_GO_PKG) \
+	  --go_opt=Msandbox.proto=$(OPENSHELL_GO_PKG) \
+	  --go_opt=Minference.proto=$(OPENSHELL_GO_PKG) \
+	  --go-grpc_opt=Mopenshell.proto=$(OPENSHELL_GO_PKG) \
+	  --go-grpc_opt=Mdatamodel.proto=$(OPENSHELL_GO_PKG) \
+	  --go-grpc_opt=Msandbox.proto=$(OPENSHELL_GO_PKG) \
+	  --go-grpc_opt=Minference.proto=$(OPENSHELL_GO_PKG) \
+	  -I $(OPENSHELL_PROTO_DIR) \
+	  $(OPENSHELL_PROTO_DIR)/*.proto
+	@echo "Done. Proto version: $(OPENSHELL_PROTO_VERSION)"
+

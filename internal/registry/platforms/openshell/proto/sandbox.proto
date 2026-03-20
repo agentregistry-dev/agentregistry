@@ -1,0 +1,126 @@
+// SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+
+package openshell.sandbox.v1;
+
+// Sandbox security policy configuration.
+message SandboxPolicy {
+  // Policy version.
+  uint32 version = 1;
+  // Filesystem access policy.
+  FilesystemPolicy filesystem = 2;
+  // Landlock configuration.
+  LandlockPolicy landlock = 3;
+  // Process execution policy.
+  ProcessPolicy process = 4;
+  // Network access policies keyed by name (e.g. "claude_code", "gitlab").
+  map<string, NetworkPolicyRule> network_policies = 5;
+}
+
+// Filesystem access policy.
+message FilesystemPolicy {
+  // Automatically include the workdir as read-write.
+  bool include_workdir = 1;
+  // Read-only directory allow list.
+  repeated string read_only = 2;
+  // Read-write directory allow list.
+  repeated string read_write = 3;
+}
+
+// Landlock policy configuration.
+message LandlockPolicy {
+  // Compatibility mode (e.g. "best_effort", "hard_requirement").
+  string compatibility = 1;
+}
+
+// Process execution policy.
+message ProcessPolicy {
+  // User name to run the sandboxed process as.
+  string run_as_user = 1;
+  // Group name to run the sandboxed process as.
+  string run_as_group = 2;
+}
+
+// A named network access policy rule.
+message NetworkPolicyRule {
+  // Human-readable name for this policy rule.
+  string name = 1;
+  // Allowed endpoint (host:port) pairs.
+  repeated NetworkEndpoint endpoints = 2;
+  // Allowed binary identities.
+  repeated NetworkBinary binaries = 3;
+}
+
+// A network endpoint (host + port) with optional L7 inspection config.
+message NetworkEndpoint {
+  // Hostname or host glob pattern. Exact match is case-insensitive.
+  // Glob patterns use "." as delimiter: "*.example.com" matches a single
+  // subdomain label, "**.example.com" matches across labels.
+  string host = 1;
+  // Single port (backwards compat). Use `ports` for multiple ports.
+  // Mutually exclusive with `ports` — if both are set, `ports` takes precedence.
+  uint32 port = 2;
+  // Application protocol for L7 inspection: "rest", "sql", or "" (L4-only).
+  string protocol = 3;
+  // TLS handling: "terminate" or "passthrough" (default).
+  string tls = 4;
+  // Enforcement mode: "enforce" or "audit" (default).
+  string enforcement = 5;
+  // Access preset shorthand: "read-only", "read-write", "full".
+  // Mutually exclusive with rules.
+  string access = 6;
+  // Explicit L7 rules (mutually exclusive with access).
+  repeated L7Rule rules = 7;
+  // Allowed resolved IP addresses or CIDR ranges for this endpoint.
+  // When non-empty, the SSRF internal-IP check is replaced by an allowlist check:
+  //   - If host is also set: domain must resolve to an IP in this list.
+  //   - If host is empty: any domain is allowed as long as it resolves to an IP in this list.
+  // Supports exact IPs ("10.0.5.20") and CIDR notation ("10.0.5.0/24").
+  // Loopback (127.0.0.0/8) and link-local (169.254.0.0/16) are always blocked
+  // regardless of this field.
+  repeated string allowed_ips = 8;
+  // Multiple ports. When non-empty, this endpoint covers all listed ports.
+  // If `port` is set and `ports` is empty, `port` is normalized to `ports: [port]`.
+  // If both are set, `ports` takes precedence.
+  repeated uint32 ports = 9;
+}
+
+// An L7 policy rule (allow-only).
+message L7Rule {
+  L7Allow allow = 1;
+}
+
+// Allowed action definition for L7 rules.
+message L7Allow {
+  // HTTP method (REST): GET, POST, etc. or "*" for any.
+  string method = 1;
+  // URL path glob pattern (REST): "/repos/**", "**" for any.
+  string path = 2;
+  // SQL command (SQL): SELECT, INSERT, etc. or "*" for any.
+  string command = 3;
+}
+
+// A binary identity for network policy matching.
+message NetworkBinary {
+  string path = 1;
+  // Deprecated: the harness concept has been removed. This field is ignored.
+  bool harness = 2 [deprecated = true];
+}
+
+// Request to get sandbox policy by sandbox ID.
+message GetSandboxPolicyRequest {
+  // The sandbox ID.
+  string sandbox_id = 1;
+}
+
+// Response containing sandbox policy.
+message GetSandboxPolicyResponse {
+  // The sandbox policy configuration.
+  SandboxPolicy policy = 1;
+  // Current policy version (monotonically increasing per sandbox).
+  uint32 version = 2;
+  // SHA-256 hash of the serialized policy payload.
+  string policy_hash = 3;
+}

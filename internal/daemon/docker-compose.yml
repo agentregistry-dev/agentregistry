@@ -45,6 +45,10 @@ services:
       # Temporarily only for local development
       AGENT_REGISTRY_ENABLE_REGISTRY_VALIDATION: "false"
       KUBECONFIG: "/root/.kube/config"
+      # OpenShell gateway
+      OPENSHELL_GATEWAY_ENDPOINT: "host.docker.internal:8080"
+      OPENSHELL_GATEWAY_MTLS_DIR: "/root/.config/openshell/mtls"
+      OPENSHELL_GATEWAY_TLS_SERVER_NAME: "127.0.0.1"
       # AGENT_REGISTRY_ENABLE_ANONYMOUS_AUTH: "false"
       # AGENT_REGISTRY_ENABLE_REGISTRY_VALIDATION: "true"
     ports:
@@ -58,6 +62,8 @@ services:
       - /tmp:/tmp
       # Mount kubeconfig as read-only source; the entrypoint rewrites it for Docker networking
       - ~/.kube/config:/root/.kube/config.orig:ro
+      # Mount OpenShell mTLS certs for gateway authentication
+      - ~/.config/openshell/gateways/ar-dev/mtls:/root/.config/openshell/mtls:ro
     depends_on:
       postgres:
         condition: service_healthy

@@ -22,6 +22,9 @@ const localDeployComposeProject = "agentregistry_runtime"
 type deployTarget struct {
 	name     string   // subtest name (e.g. "local", "kubernetes")
 	deplArgs []string // extra args appended to the deploy command
+	// setup is called once before deploying to perform any provider-specific
+	// prerequisite work (e.g. creating the provider in the registry).
+	setup func(t *testing.T)
 	// verify is called after deploy succeeds; use it to assert the
 	// deployment is actually running (e.g. check Docker containers).
 	// resourceName is the agent/MCP name being deployed.
@@ -58,6 +61,19 @@ var agentDeployTargets = []deployTarget{
 			}
 		},
 	},
+	{
+		name:     "openshell",
+		deplArgs: []string{"--provider-id", "openshell-default"},
+		setup: func(t *testing.T) {
+			ensureOpenShellProvider(t)
+		},
+		verify: func(t *testing.T, agentName string) {
+			waitForOpenShellSandbox(t, agentName, 120*time.Second)
+		},
+		cleanup: func(t *testing.T, agentName string) {
+			deleteOpenShellSandbox(t, agentName)
+		},
+	},
 }
 
 var mcpDeployTargets = []deployTarget{
@@ -88,6 +104,16 @@ var mcpDeployTargets = []deployTarget{
 			}
 		},
 	},
+	{
+		name:     "openshell",
+		deplArgs: []string{"--provider-id", "openshell-default"},
+		setup: func(t *testing.T) {
+			ensureOpenShellProvider(t)
+		},
+		cleanup: func(t *testing.T, mcpName string) {
+			deleteOpenShellSandbox(t, mcpName)
+		},
+	},
 }
 
 func TestAgentDeployCreate(t *testing.T) {
@@ -95,6 +121,12 @@ func TestAgentDeployCreate(t *testing.T) {
 		t.Run(target.name, func(t *testing.T) {
 			if target.name == "kubernetes" && !IsK8sBackend() {
 				t.Skip("skipping kubernetes deploy target: E2E_BACKEND=docker")
+			}
+			if target.name == "openshell" && !isOpenShellAvailable() {
+				t.Skip("skipping openshell deploy target: openshell CLI not available or gateway not healthy")
+			}
+			if target.setup != nil {
+				target.setup(t)
 			}
 			regURL := RegistryURL(t)
 			tmpDir := t.TempDir()
@@ -123,6 +155,10 @@ func TestAgentDeployCreate(t *testing.T) {
 				if target.name == "kubernetes" {
 					t.Log("Loading image into Kind cluster...")
 					loadDockerImageToKind(t, agentImage)
+				}
+				if target.name == "openshell" {
+					t.Log("Loading image into OpenShell K3s cluster...")
+					loadDockerImageToOpenShell(t, agentImage)
 				}
 			})
 
@@ -168,6 +204,12 @@ func TestMCPDeployCreate(t *testing.T) {
 			if target.name == "kubernetes" && !IsK8sBackend() {
 				t.Skip("skipping kubernetes deploy target: E2E_BACKEND=docker")
 			}
+			if target.name == "openshell" && !isOpenShellAvailable() {
+				t.Skip("skipping openshell deploy target: openshell CLI not available or gateway not healthy")
+			}
+			if target.setup != nil {
+				target.setup(t)
+			}
 			regURL := RegistryURL(t)
 			tmpDir := t.TempDir()
 			mcpName := UniqueNameWithPrefix("e2e-dpl-" + target.name[:3])
@@ -203,6 +245,10 @@ func TestMCPDeployCreate(t *testing.T) {
 				if target.name == "kubernetes" {
 					t.Log("Loading image into Kind cluster...")
 					loadDockerImageToKind(t, defaultImage)
+				}
+				if target.name == "openshell" {
+					t.Log("Loading image into OpenShell K3s cluster...")
+					loadDockerImageToOpenShell(t, defaultImage)
 				}
 			})
 
@@ -707,6 +753,62 @@ func kubeContextForE2E(t *testing.T) string {
 	return strings.TrimSpace(ctx)
 }
 
+// loadDockerImageToOpenShell pushes a local Docker image into OpenShell's K3s
+// containerd so that sandbox pods can use it with imagePullPolicy=IfNotPresent.
+// It discovers the OpenShell gateway container via "openshell gateway info" and
+// pipes "docker save" into "ctr images import" inside the container.
+func loadDockerImageToOpenShell(t *testing.T, imageRef string) {
+	t.Helper()
+
+	// Discover the OpenShell gateway Docker container name.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "docker", "ps",
+		"--filter", "name=openshell-cluster-",
+		"--format", "{{.Names}}")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("failed to find OpenShell gateway container: %v", err)
+	}
+	containerName := strings.TrimSpace(string(out))
+	if containerName == "" {
+		t.Fatal("no OpenShell gateway container found")
+	}
+	// If multiple lines, take the first one.
+	if idx := strings.Index(containerName, "\n"); idx > 0 {
+		containerName = containerName[:idx]
+	}
+
+	t.Logf("Pushing image %q into OpenShell K3s container %q...", imageRef, containerName)
+
+	// Pipe docker save -> ctr images import inside the gateway container.
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel2()
+
+	saveCmd := exec.CommandContext(ctx2, "docker", "save", imageRef)
+	importCmd := exec.CommandContext(ctx2, "docker", "exec", "-i", containerName,
+		"ctr", "-n", "k8s.io", "images", "import", "--all-platforms", "-")
+
+	pipe, err := saveCmd.StdoutPipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+	importCmd.Stdin = pipe
+
+	if err := saveCmd.Start(); err != nil {
+		t.Fatalf("docker save failed to start: %v", err)
+	}
+	importOut, importErr := importCmd.CombinedOutput()
+	if saveErr := saveCmd.Wait(); saveErr != nil {
+		t.Fatalf("docker save failed: %v", saveErr)
+	}
+	if importErr != nil {
+		t.Fatalf("ctr images import failed: %v\n%s", importErr, string(importOut))
+	}
+
+	t.Logf("Successfully loaded %q into OpenShell K3s", imageRef)
+}
+
 func loadDockerImageToKind(t *testing.T, imageRef string) {
 	t.Helper()
 
@@ -929,6 +1031,12 @@ func TestAgentDeployWithPrompts(t *testing.T) {
 			if target.name == "kubernetes" && !IsK8sBackend() {
 				t.Skip("skipping kubernetes deploy target: E2E_BACKEND=docker")
 			}
+			if target.name == "openshell" && !isOpenShellAvailable() {
+				t.Skip("skipping openshell deploy target: openshell CLI not available or gateway not healthy")
+			}
+			if target.setup != nil {
+				target.setup(t)
+			}
 			regURL := RegistryURL(t)
 			tmpDir := t.TempDir()
 			agentName := UniqueAgentName("e2eprm" + target.name[:3])
@@ -992,6 +1100,9 @@ func TestAgentDeployWithPrompts(t *testing.T) {
 				RequireSuccess(t, result)
 				if target.name == "kubernetes" {
 					loadDockerImageToKind(t, agentImage)
+				}
+				if target.name == "openshell" {
+					loadDockerImageToOpenShell(t, agentImage)
 				}
 			})
 
@@ -1129,4 +1240,124 @@ func configMapDataKeys(data map[string]string) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// isOpenShellAvailable checks whether the openshell CLI is on PATH and the
+// gateway is healthy. Returns false when OpenShell is not installed.
+func isOpenShellAvailable() bool {
+	if _, err := exec.LookPath("openshell"); err != nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "openshell", "gateway", "info")
+	return cmd.Run() == nil
+}
+
+// ensureOpenShellProvider verifies that the "openshell-default" provider
+// exists in the registry (seeded by migration 011). If the registry is running
+// an older schema that predates the migration, it creates the provider via the
+// API as a fallback.
+func ensureOpenShellProvider(t *testing.T) {
+	t.Helper()
+	regURL := RegistryURL(t)
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	// The provider should already exist from the DB migration seed.
+	resp, err := client.Get(regURL + "/providers/openshell-default")
+	if err == nil {
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			return
+		}
+	}
+
+	// Fallback: create it if the migration hasn't been applied yet.
+	t.Log("openshell-default provider not found, creating via API...")
+	body := strings.NewReader(`{"id":"openshell-default","name":"OpenShell Default","platform":"openshell","config":{}}`)
+	req, err := http.NewRequest(http.MethodPost, regURL+"/providers", body)
+	if err != nil {
+		t.Fatalf("failed to build provider create request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Fatalf("failed to create openshell-default provider: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		t.Fatalf("unexpected status creating openshell-default provider: %d", resp.StatusCode)
+	}
+	t.Log("created openshell-default provider via API fallback")
+}
+
+// waitForOpenShellSandbox polls `openshell sandbox list` until a sandbox
+// whose name contains the given resource name appears, or the timeout expires.
+// The adapter generates sandbox names from the deployment ID, so we do a
+// substring match on the resource name to account for name mangling.
+func waitForOpenShellSandbox(t *testing.T, resourceName string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	// Sanitise the resource name the same way the adapter does (lowercase, replace dots/slashes with dashes).
+	sanitised := strings.ToLower(resourceName)
+	sanitised = strings.NewReplacer("/", "-", ".", "-").Replace(sanitised)
+	for time.Now().Before(deadline) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		cmd := exec.CommandContext(ctx, "openshell", "sandbox", "list")
+		out, err := cmd.Output()
+		cancel()
+		if err == nil {
+			for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+				if strings.Contains(strings.ToLower(line), sanitised) {
+					t.Logf("OpenShell sandbox matching %q found: %s", resourceName, strings.TrimSpace(line))
+					return
+				}
+			}
+		}
+		time.Sleep(3 * time.Second)
+	}
+
+	// Dump sandbox list for debugging before failing.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "openshell", "sandbox", "list")
+	if out, err := cmd.CombinedOutput(); err == nil {
+		t.Logf("OpenShell sandboxes:\n%s", string(out))
+	}
+	t.Fatalf("Timed out waiting for OpenShell sandbox matching %q (timeout %v)", resourceName, timeout)
+}
+
+// deleteOpenShellSandbox removes any OpenShell sandboxes whose name contains
+// the given resource name. Uses substring matching because the adapter
+// generates sandbox names that include (but are not equal to) the resource name.
+func deleteOpenShellSandbox(t *testing.T, resourceName string) {
+	t.Helper()
+	sanitised := strings.ToLower(resourceName)
+	sanitised = strings.NewReplacer("/", "-", ".", "-").Replace(sanitised)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// List sandboxes and delete any that match.
+	cmd := exec.CommandContext(ctx, "openshell", "sandbox", "list", "--names")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Logf("Warning: failed to list OpenShell sandboxes for cleanup: %v", err)
+		return
+	}
+
+	for _, name := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if strings.Contains(strings.ToLower(name), sanitised) {
+			delCmd := exec.CommandContext(ctx, "openshell", "sandbox", "delete", name)
+			if delOut, delErr := delCmd.CombinedOutput(); delErr != nil {
+				t.Logf("Warning: failed to delete OpenShell sandbox %s: %v\n%s", name, delErr, string(delOut))
+			} else {
+				t.Logf("Deleted OpenShell sandbox %s", name)
+			}
+		}
+	}
 }

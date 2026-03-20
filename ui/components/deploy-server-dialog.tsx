@@ -1,12 +1,20 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { deployServer as deployServerApi, type ServerResponse } from "@/lib/admin-api"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { deployServer as deployServerApi, listProviders, type ServerResponse, type Provider } from "@/lib/admin-api"
+import { platformDisplayName } from "@/lib/platform-display"
 import { Play, Plus, X, Loader2 } from "lucide-react"
 
 interface DeployServerDialogProps {
@@ -23,6 +31,20 @@ export function DeployServerDialog({ open, onOpenChange, server, onDeploySuccess
   const [config, setConfig] = useState<Record<string, string>>({})
   const [newKey, setNewKey] = useState("")
   const [newValue, setNewValue] = useState("")
+  const [providers, setProviders] = useState<Provider[]>([])
+  const [providerId, setProviderId] = useState("local")
+
+  useEffect(() => {
+    if (open) {
+      listProviders({ throwOnError: false })
+        .then(({ data }) => {
+          if (data?.providers?.length) {
+            setProviders(data.providers)
+          }
+        })
+        .catch(() => {})
+    }
+  }, [open])
 
   const handleAddConfig = () => {
     if (newKey.trim() && newValue.trim()) {
@@ -44,14 +66,14 @@ export function DeployServerDialog({ open, onOpenChange, server, onDeploySuccess
     try {
       setDeploying(true)
       setError(null)
-      
+
       await deployServerApi({
         body: {
           serverName: server.server.name,
           version: server.server.version,
           env: config,
           preferRemote: false,
-          providerId: "local",
+          providerId,
         },
         throwOnError: true,
       })
@@ -61,6 +83,7 @@ export function DeployServerDialog({ open, onOpenChange, server, onDeploySuccess
         onOpenChange(false)
         setSuccess(false)
         setConfig({})
+        setProviderId("local")
         onDeploySuccess?.()
       }, 1500)
     } catch (err) {
@@ -76,6 +99,7 @@ export function DeployServerDialog({ open, onOpenChange, server, onDeploySuccess
       setError(null)
       setSuccess(false)
       setConfig({})
+      setProviderId("local")
       setNewKey("")
       setNewValue("")
     }
@@ -116,6 +140,25 @@ export function DeployServerDialog({ open, onOpenChange, server, onDeploySuccess
             </div>
 
             <Separator />
+
+            {/* Deploy Target */}
+            {providers.length > 0 && (
+              <div className="space-y-2">
+                <Label>Deploy Target</Label>
+                <Select value={providerId} onValueChange={setProviderId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {providers.map(p => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {platformDisplayName(p.platform)} — {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Configuration */}
             <div className="space-y-4">
@@ -220,4 +263,3 @@ export function DeployServerDialog({ open, onOpenChange, server, onDeploySuccess
     </Dialog>
   )
 }
-
