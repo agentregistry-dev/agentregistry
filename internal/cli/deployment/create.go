@@ -9,6 +9,7 @@ import (
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	cliUtils "github.com/agentregistry-dev/agentregistry/internal/cli/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/spf13/cobra"
 )
 
@@ -139,6 +140,7 @@ func createAgentDeployment(name, version string, envMap map[string]string, provi
 			return fmt.Errorf("failed to deploy agent: %w", err)
 		}
 		fmt.Printf("Agent '%s' version '%s' deployed to local provider (providerId=%s)\n", deployment.ServerName, deployment.Version, providerID)
+		printOpenShellAgentForwardHint(deployment)
 		return nil
 	}
 
@@ -159,6 +161,7 @@ func createAgentDeployment(name, version string, envMap map[string]string, provi
 		ns = "(default)"
 	}
 	fmt.Printf("Agent '%s' version '%s' deployed to providerId=%s in namespace '%s'\n", deployment.ServerName, deployment.Version, providerID, ns)
+	printOpenShellAgentForwardHint(deployment)
 	return nil
 }
 
@@ -224,4 +227,23 @@ func buildAgentDeployConfig(manifest *models.AgentManifest, envOverrides map[str
 	}
 
 	return config
+}
+
+// printOpenShellAgentForwardHint prints the openshell forward command when the adapter
+// stored it in providerMetadata (slog alone only reaches server logs).
+func printOpenShellAgentForwardHint(d *models.Deployment) {
+	if d == nil || len(d.ProviderMetadata) == 0 {
+		return
+	}
+	raw, ok := d.ProviderMetadata["openshellForwardCLI"]
+	if !ok || raw == nil {
+		return
+	}
+	s := strings.TrimSpace(fmt.Sprint(raw))
+	if s == "" {
+		return
+	}
+	printer.PrintInfo("")
+	printer.PrintSuccess("OpenShell: forward this port from your machine to reach the agent")
+	printer.PrintInfo("  " + s)
 }

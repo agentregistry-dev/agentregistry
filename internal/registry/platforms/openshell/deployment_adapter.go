@@ -157,6 +157,7 @@ func (a *openshellDeploymentAdapter) Deploy(ctx context.Context, req *models.Dep
 	result := &models.DeploymentActionResult{Status: models.DeploymentStatusDeployed}
 	if resourceType == "agent" {
 		forwardCLI := fmt.Sprintf("openshell forward start %d %s", openshellKagentForwardPort, sandboxName)
+		// User-facing hint is persisted on providerMetadata (arctl prints it); slog is for server logs only.
 		slog.Info("openshell: agent sandbox ready — forward this port from your machine to reach the agent",
 			"command", forwardCLI,
 			"sandbox", sandboxName,
