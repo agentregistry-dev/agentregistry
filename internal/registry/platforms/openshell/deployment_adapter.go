@@ -144,17 +144,25 @@ func (a *openshellDeploymentAdapter) Deploy(ctx context.Context, req *models.Dep
 		})
 	}
 
-	slog.Info("openshell: calling CreateSandbox")
-	if _, err := client.CreateSandbox(ctx, opts); err != nil {
+	slog.Info("openshell: calling CreateSandbox", "sandbox_name", sandboxName)
+	created, err := client.CreateSandbox(ctx, opts)
+	if err != nil {
 		return nil, fmt.Errorf("create openshell sandbox: %w", err)
 	}
-	slog.Info("openshell: sandbox created, waiting for ready")
+	slog.Info("openshell: CreateSandbox returned — waiting for ready",
+		"sandbox_id", strings.TrimSpace(created.ID),
+		"sandbox_name", sandboxName,
+		"phase", created.Phase,
+	)
 
 	if err := a.waitForReady(ctx, client, sandboxName); err != nil {
 		return nil, err
 	}
 
 	result := &models.DeploymentActionResult{Status: models.DeploymentStatusDeployed}
+	metaMap := map[string]any{
+		"openshellSandboxName": sandboxName,
+	}
 	if resourceType == "agent" {
 		forwardCLI := fmt.Sprintf("openshell forward start %d %s", openshellKagentForwardPort, sandboxName)
 		// User-facing hint is persisted on providerMetadata (arctl prints it); slog is for server logs only.
@@ -163,21 +171,19 @@ func (a *openshellDeploymentAdapter) Deploy(ctx context.Context, req *models.Dep
 			"sandbox", sandboxName,
 			"port", openshellKagentForwardPort,
 		)
-		meta, mErr := models.UnmarshalFrom(map[string]any{
-			"openshellSandboxName": sandboxName,
-			"openshellForwardPort": openshellKagentForwardPort,
-			"openshellForwardCLI":  forwardCLI,
-		})
-		if mErr != nil {
-			slog.Warn("openshell: could not build provider metadata", "error", mErr)
-		} else {
-			result.ProviderMetadata = meta
-		}
+		metaMap["openshellForwardPort"] = openshellKagentForwardPort
+		metaMap["openshellForwardCLI"] = forwardCLI
+	}
+	meta, mErr := models.UnmarshalFrom(metaMap)
+	if mErr != nil {
+		slog.Warn("openshell: could not build provider metadata", "error", mErr)
+	} else {
+		result.ProviderMetadata = meta
 	}
 	return result, nil
 }
 
-func (a *openshellDeploymentAdapter) Undeploy(_ context.Context, deployment *models.Deployment) error {
+func (a *openshellDeploymentAdapter) Undeploy(ctx context.Context, deployment *models.Deployment) error {
 	client, err := a.getClient()
 	if err != nil {
 		return err
@@ -186,7 +192,7 @@ func (a *openshellDeploymentAdapter) Undeploy(_ context.Context, deployment *mod
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	sandboxName := sandboxNameForDeployment(deployment)
@@ -196,16 +202,8 @@ func (a *openshellDeploymentAdapter) Undeploy(_ context.Context, deployment *mod
 	return nil
 }
 
-func (a *openshellDeploymentAdapter) GetLogs(ctx context.Context, deployment *models.Deployment) ([]string, error) {
-	client, err := a.getClient()
-	if err != nil {
-		return nil, err
-	}
-	if deployment == nil {
-		return nil, fmt.Errorf("deployment is required: %w", database.ErrInvalidInput)
-	}
-	sandboxName := sandboxNameForDeployment(deployment)
-	return client.GetSandboxLogs(ctx, sandboxName)
+func (a *openshellDeploymentAdapter) GetLogs(_ context.Context, _ *models.Deployment) ([]string, error) {
+	return nil, utils.ErrDeploymentNotSupported
 }
 
 func (a *openshellDeploymentAdapter) Cancel(ctx context.Context, deployment *models.Deployment) error {

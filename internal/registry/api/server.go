@@ -25,7 +25,6 @@ import (
 var embeddedUI embed.FS
 
 // createUIHandler creates an HTTP handler for serving the embedded UI files
-// with SPA-aware routing for Next.js static export
 func createUIHandler() (http.Handler, error) {
 	// Extract the ui/dist subdirectory from the embedded filesystem
 	uiFS, err := fs.Sub(embeddedUI, "ui/dist")
@@ -33,55 +32,8 @@ func createUIHandler() (http.Handler, error) {
 		return nil, err
 	}
 
-	httpFS := http.FS(uiFS)
-	fileServer := http.FileServer(httpFS)
-
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-
-		// Try the exact path first (handles static assets like .js, .css, etc.)
-		if f, err := httpFS.Open(path); err == nil {
-			f.Close()
-			// Check if it's a file (not a directory) — serve it directly
-			if stat, err := f.(interface{ Stat() (fs.FileInfo, error) }).Stat(); err == nil && !stat.IsDir() {
-				fileServer.ServeHTTP(w, r)
-				return
-			}
-		}
-
-		// For paths without extensions (route requests), try {path}.html
-		// This handles Next.js static export where /deployed -> deployed.html
-		cleanPath := strings.TrimSuffix(path, "/")
-		if cleanPath != "" && !strings.Contains(cleanPath[strings.LastIndex(cleanPath, "/")+1:], ".") {
-			htmlPath := cleanPath + ".html"
-			if f, err := httpFS.Open(htmlPath); err == nil {
-				f.Close()
-				r.URL.Path = htmlPath
-				fileServer.ServeHTTP(w, r)
-				return
-			}
-		}
-
-		// Try {path}/index.html for directory-style routes
-		indexPath := strings.TrimSuffix(path, "/") + "/index.html"
-		if f, err := httpFS.Open(indexPath); err == nil {
-			f.Close()
-			r.URL.Path = indexPath
-			fileServer.ServeHTTP(w, r)
-			return
-		}
-
-		// Fall back to /index.html for client-side routing
-		if f, err := httpFS.Open("/index.html"); err == nil {
-			f.Close()
-			r.URL.Path = "/index.html"
-			fileServer.ServeHTTP(w, r)
-			return
-		}
-
-		// Nothing found
-		http.NotFound(w, r)
-	}), nil
+	// Create a file server for the UI
+	return http.FileServer(http.FS(uiFS)), nil
 }
 
 // TrailingSlashMiddleware redirects requests with trailing slashes to their canonical form

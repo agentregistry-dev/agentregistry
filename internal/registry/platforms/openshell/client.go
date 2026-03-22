@@ -28,7 +28,6 @@ type Client interface {
 	GetSandbox(ctx context.Context, name string) (*SandboxInfo, error)
 	ListSandboxes(ctx context.Context) ([]SandboxInfo, error)
 	DeleteSandbox(ctx context.Context, name string) error
-	GetSandboxLogs(ctx context.Context, sandboxID string) ([]string, error)
 	HealthCheck(ctx context.Context) error
 	ListProviders(ctx context.Context) ([]ProviderInfo, error)
 	EnsureProvider(ctx context.Context, name, providerType string, credentials map[string]string) error
@@ -44,6 +43,7 @@ type CreateSandboxOpts struct {
 	GPU       bool
 	Policy    *pb.SandboxPolicy
 	Command   []string // optional workload container command (merged via template.pod_template)
+	LogLevel  string
 }
 
 // SandboxInfo holds the status of a sandbox.
@@ -224,18 +224,6 @@ func (c *grpcClient) DeleteSandbox(ctx context.Context, name string) error {
 		return fmt.Errorf("delete sandbox %s: %w", name, err)
 	}
 	return nil
-}
-
-func (c *grpcClient) GetSandboxLogs(ctx context.Context, sandboxID string) ([]string, error) {
-	resp, err := c.client.GetSandboxLogs(ctx, &pb.GetSandboxLogsRequest{SandboxId: sandboxID})
-	if err != nil {
-		return nil, fmt.Errorf("get sandbox logs %s: %w", sandboxID, err)
-	}
-	lines := make([]string, len(resp.GetLogs()))
-	for i, entry := range resp.GetLogs() {
-		lines[i] = entry.GetMessage()
-	}
-	return lines, nil
 }
 
 func (c *grpcClient) HealthCheck(ctx context.Context) error {

@@ -2,10 +2,12 @@ package openshell
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	servicetesting "github.com/agentregistry-dev/agentregistry/internal/registry/service/testing"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -18,7 +20,6 @@ type mockClient struct {
 	getFn           func(ctx context.Context, name string) (*SandboxInfo, error)
 	listFn          func(ctx context.Context) ([]SandboxInfo, error)
 	deleteFn        func(ctx context.Context, name string) error
-	logsFn          func(ctx context.Context, name string) ([]string, error)
 	healthFn        func(ctx context.Context) error
 	listProvidersFn func(ctx context.Context) ([]ProviderInfo, error)
 	ensureProvFn    func(ctx context.Context, name, provType string, creds map[string]string) error
@@ -50,13 +51,6 @@ func (m *mockClient) DeleteSandbox(ctx context.Context, name string) error {
 		return m.deleteFn(ctx, name)
 	}
 	return nil
-}
-
-func (m *mockClient) GetSandboxLogs(ctx context.Context, name string) ([]string, error) {
-	if m.logsFn != nil {
-		return m.logsFn(ctx, name)
-	}
-	return nil, nil
 }
 
 func (m *mockClient) HealthCheck(ctx context.Context) error {
@@ -140,6 +134,9 @@ func TestDeploy_Agent_CallsCreateSandbox(t *testing.T) {
 	if result.ProviderMetadata == nil || result.ProviderMetadata["openshellForwardCLI"] == nil {
 		t.Errorf("expected openshell ProviderMetadata with forward CLI, got %#v", result.ProviderMetadata)
 	}
+	if got, _ := result.ProviderMetadata["openshellSandboxName"].(string); got == "" {
+		t.Errorf("openshellSandboxName should be set, got %#v", result.ProviderMetadata["openshellSandboxName"])
+	}
 	if createdOpts.Image != "test-agent-image:latest" {
 		t.Errorf("image = %q, want %q", createdOpts.Image, "test-agent-image:latest")
 	}
@@ -214,6 +211,12 @@ func TestDeploy_MCP_CallsCreateSandbox(t *testing.T) {
 	if createdOpts.Name == "" {
 		t.Error("sandbox name should not be empty")
 	}
+	if result.ProviderMetadata == nil {
+		t.Fatal("expected ProviderMetadata for MCP deploy")
+	}
+	if got, _ := result.ProviderMetadata["openshellSandboxName"].(string); got == "" {
+		t.Errorf("openshellSandboxName should be set, got %#v", result.ProviderMetadata["openshellSandboxName"])
+	}
 }
 
 func TestUndeploy_CallsDeleteSandbox(t *testing.T) {
@@ -243,29 +246,17 @@ func TestUndeploy_CallsDeleteSandbox(t *testing.T) {
 	}
 }
 
-func TestGetLogs_ReturnsLogLines(t *testing.T) {
-	client := &mockClient{
-		logsFn: func(_ context.Context, _ string) ([]string, error) {
-			return []string{"line1", "line2", "line3"}, nil
-		},
-	}
-
-	adapter := NewOpenShellDeploymentAdapter(newTestRegistry(), client)
-
-	deployment := &models.Deployment{
+func TestGetLogs_NotSupported(t *testing.T) {
+	adapter := NewOpenShellDeploymentAdapter(newTestRegistry(), &mockClient{})
+	_, err := adapter.GetLogs(context.Background(), &models.Deployment{
 		ID:           "dep-logs",
 		ServerName:   "my-agent",
 		Version:      "1.0.0",
 		ResourceType: "agent",
 		ProviderID:   "openshell-default",
-	}
-
-	logs, err := adapter.GetLogs(context.Background(), deployment)
-	if err != nil {
-		t.Fatalf("GetLogs() error = %v", err)
-	}
-	if len(logs) != 3 {
-		t.Errorf("log lines = %d, want 3", len(logs))
+	})
+	if !errors.Is(err, utils.ErrDeploymentNotSupported) {
+		t.Fatalf("GetLogs() error = %v, want %v", err, utils.ErrDeploymentNotSupported)
 	}
 }
 
