@@ -53,6 +53,7 @@ Selector labels — stable subset used in matchLabels.
 {{- define "agentregistry.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "agentregistry.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: server
 {{- end }}
 
 {{/*
@@ -270,8 +271,18 @@ Full name for the bundled PostgreSQL resources.
 Standard labels for bundled PostgreSQL resources.
 */}}
 {{- define "agentregistry.postgresql.labels" -}}
-{{ include "agentregistry.labels" . }}
+helm.sh/chart: {{ include "agentregistry.chart" . }}
+app.kubernetes.io/name: {{ include "agentregistry.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: database
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: {{ include "agentregistry.name" . }}
+{{- if .Values.commonLabels }}
+{{ toYaml .Values.commonLabels }}
+{{- end }}
 {{- end }}
 
 {{/*
