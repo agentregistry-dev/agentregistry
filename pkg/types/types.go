@@ -113,6 +113,10 @@ type DaemonManager interface {
 	IsRunning() bool
 	// Start starts the daemon and waits until it's ready to serve requests
 	Start() error
+	// Stop stops the daemon but preserves data volumes
+	Stop() error
+	// Purge stops the daemon and removes all data volumes
+	Purge() error
 }
 
 // CLIAuthnProvider provides authentication for CLI commands.

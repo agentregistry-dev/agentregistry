@@ -335,7 +335,7 @@ func TestSkillPublishValidation(t *testing.T) {
 		result := RunArctl(t, tmpDir,
 			"skill", "publish", skillDir,
 			"--docker-image", "docker.io/test/test:latest",
-			"--registry-url", "http://localhost:12121/v0",
+			"--registry-url", registryURL,
 		)
 		RequireFailure(t, result)
 		RequireOutputContains(t, result, "--version is required")
@@ -345,7 +345,7 @@ func TestSkillPublishValidation(t *testing.T) {
 		result := RunArctl(t, tmpDir,
 			"skill", "publish", skillDir,
 			"--git", "https://github.com/test/repo",
-			"--registry-url", "http://localhost:12121/v0",
+			"--registry-url", registryURL,
 		)
 		RequireFailure(t, result)
 		RequireOutputContains(t, result, "--version is required")
@@ -359,7 +359,7 @@ func TestSkillPublishValidation(t *testing.T) {
 			"skill", "publish", emptyDir,
 			"--git", "https://github.com/test/repo",
 			"--version", "1.0.0",
-			"--registry-url", "http://localhost:12121/v0",
+			"--registry-url", registryURL,
 		)
 		RequireFailure(t, result)
 		RequireOutputContains(t, result, "no valid skills found at path")

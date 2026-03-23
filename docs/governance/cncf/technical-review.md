@@ -86,7 +86,7 @@ _Developers interact primarily through the CLI for day-to-day workflows._
    ```
    curl -fsSL https://raw.githubusercontent.com/agentregistry-dev/agentregistry/main/scripts/get-arctl | bash
    ```
-2. **Discover** — Run `arctl mcp list` or `arctl list` to browse available artifacts from the registry. On first run, this automatically starts the registry server daemon and imports built-in seed data, requiring no separate setup step.
+2. **Discover** — Run `arctl daemon start` first to start the local registry daemon, then use `arctl mcp list` or `arctl list` to browse available artifacts from the registry.
 3. **Configure IDEs** — Generate ready-to-use configuration files for AI-powered IDEs with a single command:
    - `arctl configure claude-desktop`
    - `arctl configure cursor`
@@ -135,7 +135,7 @@ See [`DEVELOPMENT.md`](https://github.com/agentregistry-dev/agentregistry/blob/m
 **Describe the project's architecture requirements for PoC, Development, Test, and Production environments.**
 | Environment | Configuration |
 |---|---|
-| **PoC / Local** | Docker Compose with bundled PostgreSQL/pgvector. Single node. `arctl mcp list` auto-starts daemon. |
+| **PoC / Local** | Docker Compose with bundled PostgreSQL/pgvector. Single node. Daemon lifecycle is managed explicitly with `arctl daemon start` / `arctl daemon stop`. |
 | **Development** | Docker Compose or Kind (local Kubernetes). See `scripts/kind/README.md`. |
 | **Test** | Kubernetes (Kind) with Helm chart and an external PostgreSQL/pgvector instance. |
 | **Production** | Kubernetes cluster with Helm chart (`oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry`). Requires an external, HA PostgreSQL instance with pgvector extension. |

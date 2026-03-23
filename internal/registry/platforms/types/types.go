@@ -69,6 +69,7 @@ const (
 )
 
 type RemoteMCPServer struct {
+	Scheme  string
 	Host    string
 	Port    uint32
 	Path    string

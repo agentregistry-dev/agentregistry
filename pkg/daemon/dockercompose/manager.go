@@ -76,10 +76,7 @@ func (m *Manager) Start() error {
 	}
 
 	fmt.Printf("Starting %s daemon...\n", m.config.ProjectName)
-	// Pipe the docker-compose.yml via stdin to docker compose
-	cmd := exec.Command("docker", "compose", "-p", m.config.ProjectName, "-f", "-", "up", "-d", "--wait")
-	cmd.Stdin = strings.NewReader(m.getComposeYAML())
-	cmd.Env = append(os.Environ(), fmt.Sprintf("VERSION=%s", m.config.Version), fmt.Sprintf("DOCKER_REGISTRY=%s", m.config.DockerRegistry))
+	cmd := m.composeCmd("up", "-d", "--wait", "--pull", "always")
 	if byt, err := cmd.CombinedOutput(); err != nil {
 		fmt.Printf("failed to start docker compose: %v, output: %s", err, string(byt))
 		return fmt.Errorf("failed to start docker compose: %w", err)
@@ -94,15 +91,46 @@ func (m *Manager) Start() error {
 	return nil
 }
 
+func (m *Manager) Stop() error {
+	return m.down(false)
+}
+
+func (m *Manager) Purge() error {
+	return m.down(true)
+}
+
+func (m *Manager) down(removeVolumes bool) error {
+	args := []string{"down"}
+	if removeVolumes {
+		args = append(args, "-v")
+	}
+	cmd := m.composeCmd(args...)
+	if byt, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to stop docker compose: %w, output: %s", err, string(byt))
+	}
+	return nil
+}
+
 func (m *Manager) isContainerRunning() bool {
-	cmd := exec.Command("docker", "compose", "-p", m.config.ProjectName, "-f", "-", "ps")
-	cmd.Stdin = strings.NewReader(m.config.ComposeYAML)
-	cmd.Env = append(os.Environ(), fmt.Sprintf("VERSION=%s", m.config.Version), fmt.Sprintf("DOCKER_REGISTRY=%s", m.config.DockerRegistry))
+	cmd := m.composeCmd("ps")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return false
 	}
 	return strings.Contains(string(output), m.config.ContainerName)
+}
+
+// composeCmd builds an exec.Cmd for docker compose with the project's
+// config (compose YAML via stdin, image version/registry env vars).
+func (m *Manager) composeCmd(args ...string) *exec.Cmd {
+	fullArgs := append([]string{"compose", "-p", m.config.ProjectName, "-f", "-"}, args...)
+	cmd := exec.Command("docker", fullArgs...)
+	cmd.Stdin = strings.NewReader(m.getComposeYAML())
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("VERSION=%s", m.config.Version),
+		fmt.Sprintf("DOCKER_REGISTRY=%s", m.config.DockerRegistry),
+	)
+	return cmd
 }
 
 // getComposeYAML returns the docker-compose YAML, potentially modified for macOS with local clusters.
