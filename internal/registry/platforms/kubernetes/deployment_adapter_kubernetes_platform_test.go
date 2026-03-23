@@ -59,9 +59,10 @@ func TestKubernetesTranslatePlatformConfig_RemoteMCP(t *testing.T) {
 			Name:          "remote-server",
 			MCPServerType: platformtypes.MCPServerTypeRemote,
 			Remote: &platformtypes.RemoteMCPServer{
-				Host: "example.com",
-				Port: 8080,
-				Path: "/mcp",
+				Scheme: "https",
+				Host:   "example.com",
+				Port:   8080,
+				Path:   "/mcp",
 			},
 		}},
 	}
@@ -77,7 +78,7 @@ func TestKubernetesTranslatePlatformConfig_RemoteMCP(t *testing.T) {
 	if remote.Name != "remote-server" {
 		t.Errorf("expected name remote-server, got %s", remote.Name)
 	}
-	if remote.Spec.URL != "http://example.com:8080/mcp" {
+	if remote.Spec.URL != "https://example.com:8080/mcp" {
 		t.Errorf("unexpected URL %s", remote.Spec.URL)
 	}
 }
@@ -215,9 +216,10 @@ func TestKubernetesTranslatePlatformConfig_NamespaceConsistency(t *testing.T) {
 						MCPServerType: platformtypes.MCPServerTypeRemote,
 						Namespace:     tt.mcpNamespace,
 						Remote: &platformtypes.RemoteMCPServer{
-							Host: "remote-mcp.example.com",
-							Port: 8080,
-							Path: "/mcp",
+							Scheme: "https",
+							Host:   "remote-mcp.example.com",
+							Port:   8080,
+							Path:   "/mcp",
 						},
 					},
 					{
@@ -287,9 +289,10 @@ func TestKubernetesTranslatePlatformConfig_DeploymentIDMetadataAndNaming(t *test
 			MCPServerType: platformtypes.MCPServerTypeRemote,
 			Namespace:     "demo-ns",
 			Remote: &platformtypes.RemoteMCPServer{
-				Host: "example.com",
-				Port: 80,
-				Path: "/mcp",
+				Scheme: "http",
+				Host:   "example.com",
+				Port:   80,
+				Path:   "/mcp",
 			},
 		}},
 	}
@@ -425,8 +428,8 @@ func TestKubernetesTranslatePlatformConfig_AgentWithPromptsOnly(t *testing.T) {
 		t.Fatalf("expected 1 volume, got %d", len(agent.Spec.BYO.Deployment.Volumes))
 	}
 	vol := agent.Spec.BYO.Deployment.Volumes[0]
-	if len(vol.VolumeSource.ConfigMap.Items) != 1 || vol.VolumeSource.ConfigMap.Items[0].Key != "prompts.json" {
-		t.Errorf("expected volume to contain only prompts.json item, got %+v", vol.VolumeSource.ConfigMap.Items)
+	if len(vol.ConfigMap.Items) != 1 || vol.VolumeSource.ConfigMap.Items[0].Key != "prompts.json" {
+		t.Errorf("expected volume to contain only prompts.json item, got %+v", vol.ConfigMap.Items)
 	}
 }
 
@@ -476,15 +479,15 @@ func TestKubernetesTranslatePlatformConfig_AgentWithMCPServersAndPrompts(t *test
 
 	agent := config.Agents[0]
 	vol := agent.Spec.BYO.Deployment.Volumes[0]
-	if len(vol.VolumeSource.ConfigMap.Items) != 2 {
-		t.Fatalf("expected 2 volume items, got %d", len(vol.VolumeSource.ConfigMap.Items))
+	if len(vol.ConfigMap.Items) != 2 {
+		t.Fatalf("expected 2 volume items, got %d", len(vol.ConfigMap.Items))
 	}
 	itemKeys := map[string]bool{}
-	for _, item := range vol.VolumeSource.ConfigMap.Items {
+	for _, item := range vol.ConfigMap.Items {
 		itemKeys[item.Key] = true
 	}
 	if !itemKeys["mcp-servers.json"] || !itemKeys["prompts.json"] {
-		t.Errorf("expected volume items for mcp-servers.json and prompts.json, got %+v", vol.VolumeSource.ConfigMap.Items)
+		t.Errorf("expected volume items for mcp-servers.json and prompts.json, got %+v", vol.ConfigMap.Items)
 	}
 }
 

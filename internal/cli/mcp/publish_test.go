@@ -130,17 +130,17 @@ func TestValidateRegistryType(t *testing.T) {
 func TestBuildRepository(t *testing.T) {
 	tests := []struct {
 		name      string
-		gitURL string
+		gitURL    string
 		expectNil bool
 	}{
 		{
 			name:      "empty URL returns nil",
-			gitURL: "",
+			gitURL:    "",
 			expectNil: true,
 		},
 		{
 			name:      "valid URL returns repository",
-			gitURL: "https://github.com/user/repo",
+			gitURL:    "https://github.com/user/repo",
 			expectNil: false,
 		},
 	}
@@ -222,7 +222,7 @@ func TestBuildServerJSON(t *testing.T) {
 		Description:      "Test server",
 		Title:            "My Server",
 		Version:          "1.0.0",
-		GitURL:        "https://github.com/myorg/my-server",
+		GitURL:           "https://github.com/myorg/my-server",
 		RegistryType:     "oci",
 		Identifier:       "docker.io/myorg/my-server:1.0.0",
 		PackageVersion:   "1.0.0",
@@ -274,7 +274,7 @@ func TestBuildRemoteServerJSON(t *testing.T) {
 		Description:   "A remote server",
 		Title:         "My Remote Server",
 		Version:       "2.0.0",
-		GitURL:     "https://github.com/example/my-server",
+		GitURL:        "https://github.com/example/my-server",
 		TransportType: "streamable-http",
 		TransportURL:  "https://api.example.com/mcp",
 	}

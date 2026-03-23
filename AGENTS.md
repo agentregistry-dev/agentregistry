@@ -158,17 +158,23 @@ var (
 
 ## Logging
 
-Use Go's standard library structured logging:
+Use the `github.com/agentregistry-dev/agentregistry/pkg/logging` package for structured logging. Loggers should be package scoped in most cases, but the global logger can be directly used via the `slog` package if necessary. `logging.New` keeps track of `slog.LevelVar` to allow log levels to be changed at runtime via the `/logging` HTTP endpoint, so calling `logging.New*` within a re-entrant function will leak memory and should be avoided. If `logging.New*` is invoked within a re-entrant function, the tracked leveler should be explicitly deleted by a call to `logging.DeleteLeveler("component-name")` before the function returns.
 
 ```go
-import "log/slog"
+import (
+    "log/slog"
+    "github.com/agentregistry-dev/agentregistry/pkg/logging"
+)
 
-// Use structured logging with context
-slog.Info("agent created",
+var logger = logging.New("my-component")
+
+// package scoped logger
+logger.Info("agent created",
     "agent_id", agent.ID,
     "name", agent.Name,
 )
 
+// global logger
 slog.Error("failed to create agent",
     "error", err,
     "agent_name", name,
@@ -450,8 +456,8 @@ When working with this codebase, AI assistants should:
 | Format Code | `make fmt` |
 | Build UI | `make build-ui` |
 | Dev UI | `make dev-ui` |
-| Docker Up | `make docker-compose-up` |
-| Docker Down | `make docker-compose-down` |
+| Daemon Start | `make daemon-start` |
+| Daemon Stop | `make daemon-stop` |
 
 ---
 

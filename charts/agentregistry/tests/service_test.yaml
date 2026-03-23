@@ -51,6 +51,16 @@ tests:
             targetPort: 21212
             protocol: TCP
 
+  - it: exposes mcp port 31313
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            name: mcp
+            port: 31313
+            targetPort: 31313
+            protocol: TCP
+
   - it: has selector labels
     asserts:
       - isSubset:
@@ -80,6 +90,20 @@ tests:
             targetPort: 8080
             protocol: TCP
             nodePort: 30080
+
+  - it: sets explicit nodePort for mcp when NodePort type
+    set:
+      service.type: NodePort
+      service.nodePorts.mcp: 31313
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            name: mcp
+            port: 31313
+            targetPort: 31313
+            protocol: TCP
+            nodePort: 31313
 
   - it: sets LoadBalancer type
     set:

@@ -17,6 +17,10 @@ BUILD_DATE ?= $(shell date -u '+%Y-%m-%d')
 GIT_COMMIT ?= $(shell git rev-parse --short HEAD || echo "unknown")
 VERSION ?= $(shell git describe --tags --always 2>/dev/null | grep v || echo "v0.0.0-$(GIT_COMMIT)")
 KAGENT_VERSION ?= v0.8.0-beta6
+KAGENT_HELM_VERSION ?= $(shell echo $(KAGENT_VERSION) | sed 's/^v//')
+KAGENT_NAMESPACE ?= kagent
+KAGENT_HELM_CHART_CRDS ?= oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds
+KAGENT_HELM_CHART ?= oci://ghcr.io/kagent-dev/kagent/helm/kagent
 
 # Copy .env.example to .env if it doesn't exist
 .env:
@@ -124,14 +128,14 @@ dev-ui: ## Run the Next.js UI in development mode
 	@echo "Starting Next.js development server..."
 	cd ui && npm run dev
 
-# Start local development environment (docker-compose only, no Kind)
+# Start local development environment (docker backend only, no Kind)
 .PHONY: run-docker
-run-docker: local-registry docker-compose-up build-cli ## Start local development environment (docker-compose only, no Kind)
+run-docker: local-registry docker docker-tag-as-dev daemon-start ## Start local development environment (docker backend only, no Kind)
 	@echo ""
 	@echo "agentregistry is running (docker backend):"
 	@echo "  UI:  http://localhost:12121"
 	@echo "  API: http://localhost:12121/v0"
-	@echo "  CLI: ./bin/arctl"
+	@echo "  CLI: $(ARCTL)"
 	@echo ""
 	@echo "To stop: make down"
 
@@ -142,7 +146,7 @@ run-k8s: local-registry create-kind-cluster build-cli ## Start local development
 	@echo "agentregistry is running (k8s backend):"
 	@echo "  UI:  http://localhost:12121"
 	@echo "  API: http://localhost:12121/v0"
-	@echo "  CLI: ./bin/arctl"
+	@echo "  CLI: $(ARCTL)"
 	@echo ""
 	@echo "To stop: make down"
 
@@ -152,32 +156,50 @@ run: run-k8s # Start local development environment (default: k8s)
 
 # Stop local development environment
 .PHONY: down
-down: docker-compose-down delete-kind-cluster ## Stop the local development environment
+down: daemon-stop delete-kind-cluster ## Stop the local development environment
 	@echo "agentregistry stopped"
+
+GOTESTSUM ?= go tool gotestsum
+ARCTL ?= ./bin/arctl
+
+# Manage local daemon lifecycle via CLI helpers.
+.PHONY: daemon-start
+daemon-start: build-cli ## Start local daemon via CLI
+	$(ARCTL) daemon start
+
+.PHONY: daemon-stop
+daemon-stop: ## Stop local daemon via CLI
+	$(ARCTL) daemon stop
+
+.PHONY: daemon-stop-purge
+daemon-stop-purge: ## Stop local daemon and purge volumes via CLI
+	$(ARCTL) daemon stop --purge
 
 # Run Go tests (unit tests only)
 .PHONY: test-unit
 test-unit: ## Run Go unit tests
 	@echo "Running Go unit tests..."
-	go tool gotestsum --format testdox -- -tags=unit -timeout 5m ./...
+	$(GOTESTSUM) --format testdox -- -tags=unit -timeout 5m ./...
 
 # Run Go tests with integration tests
 .PHONY: test
 test: ## Run Go integration tests
 	@echo "Running Go tests with integration..."
-	go tool gotestsum --format testdox -- -tags=integration -timeout 10m ./...
+	$(GOTESTSUM) --format testdox -- -tags=integration -timeout 10m ./...
 
 # Run e2e tests against docker backend (skips Kind cluster setup and k8s tests)
 .PHONY: test-e2e-docker
-test-e2e-docker: local-registry docker-compose-up build-cli
-	ARCTL_API_BASE_URL=http://localhost:12121/v0 E2E_BACKEND=docker GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
-	  go tool gotestsum --format testdox -- -v -tags=e2e -timeout 45m ./e2e/...
+test-e2e-docker: local-registry docker docker-tag-as-dev daemon-start
+	@set -e; \
+	  trap '$(MAKE) --no-print-directory daemon-stop-purge >/dev/null 2>&1 || true' EXIT; \
+	  ARCTL_API_BASE_URL=http://localhost:12121/v0 E2E_BACKEND=docker GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
+	    $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./e2e/...
 
 # Run e2e tests against k8s backend (full Kind cluster setup)
 .PHONY: test-e2e-k8s
 test-e2e-k8s: setup-kind-cluster build-cli
-	ARCTL_API_BASE_URL=http://localhost:12121/v0 KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) E2E_BACKEND=k8s GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
-	  go tool gotestsum --format testdox -- -v -tags=e2e -timeout 45m ./e2e/...
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) E2E_BACKEND=k8s GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
+	  $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./e2e/...
 
 # Run e2e tests (default: k8s)
 .PHONY: test-e2e
@@ -271,19 +293,6 @@ docker-tag-as-dev: ## Tag and push Docker images as :dev
 	docker push $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:dev
 	@echo "✓ Docker image pulled successfully"
 
-.PHONY: docker-compose-up
-docker-compose-up: docker docker-tag-as-dev ## Start services with Docker Compose
-	@echo "Starting services with Docker Compose..."
-	VERSION=$(VERSION) DOCKER_REGISTRY=$(DOCKER_REGISTRY) docker compose -p agentregistry -f internal/daemon/docker-compose.yml up -d --wait --pull always
-
-.PHONY: docker-compose-down
-docker-compose-down: ## Stop services managed by Docker Compose
-	VERSION=$(VERSION) DOCKER_REGISTRY=$(DOCKER_REGISTRY) docker compose -p agentregistry -f internal/daemon/docker-compose.yml down
-
-.PHONY: docker-compose-rm
-docker-compose-rm: ## Remove Docker Compose services and volumes
-	VERSION=$(VERSION) DOCKER_REGISTRY=$(DOCKER_REGISTRY) docker compose -p agentregistry -f internal/daemon/docker-compose.yml rm --volumes --force
-
 KIND_CLUSTER_NAME ?= agentregistry
 KIND_IMAGE_VERSION ?= 1.34.0
 KIND_CLUSTER_CONTEXT ?= kind-$(KIND_CLUSTER_NAME)
@@ -363,16 +372,49 @@ endif
 	    --set database.sslMode=disable \
 	    --set config.jwtPrivateKey="$$JWT_KEY" \
 	    --set config.enableAnonymousAuth="true" \
+	    --set service.type=LoadBalancer \
 	    --wait \
 	    --timeout=5m;
 
 .PHONY: install-kagent
-install-kagent: ## Install kagent on the Kind cluster (downloads CLI if absent)
-	KUBE_CONTEXT=$(KIND_CLUSTER_CONTEXT) KAGENT_VERSION=$(KAGENT_VERSION) bash ./scripts/kind/install-kagent.sh
+install-kagent: install-kagent-crds install-kagent-controller ## Deploy kagent CRDs and controller into the Kind cluster
+
+.PHONY: install-kagent-crds
+install-kagent-crds: ## Deploy kagent CRDs
+	$(HELM) upgrade --install kagent-crds $(KAGENT_HELM_CHART_CRDS) \
+	  --kube-context $(KIND_CLUSTER_CONTEXT) \
+	  --namespace $(KAGENT_NAMESPACE) \
+	  --create-namespace \
+	  --version $(KAGENT_HELM_VERSION) \
+	  --wait \
+	  --timeout=2m
+
+.PHONY: install-kagent-controller
+install-kagent-controller: ## Deploy kagent controller (minimal, no agents/tools/UI)
+	$(HELM) upgrade --install kagent $(KAGENT_HELM_CHART) \
+	  --kube-context $(KIND_CLUSTER_CONTEXT) \
+	  --namespace $(KAGENT_NAMESPACE) \
+	  --version $(KAGENT_HELM_VERSION) \
+	  --set ui.replicas=0 \
+	  --set kagent-tools.enabled=false \
+	  --set tools.grafana-mcp.enabled=false \
+	  --set tools.querydoc.enabled=false \
+	  --set agents.argo-rollouts-agent.enabled=false \
+	  --set agents.cilium-debug-agent.enabled=false \
+	  --set agents.cilium-manager-agent.enabled=false \
+	  --set agents.cilium-policy-agent.enabled=false \
+	  --set agents.helm-agent.enabled=false \
+	  --set agents.istio-agent.enabled=false \
+	  --set agents.k8s-agent.enabled=false \
+	  --set agents.kgateway-agent.enabled=false \
+	  --set agents.observability-agent.enabled=false \
+	  --set agents.promql-agent.enabled=false \
+	  --wait \
+	  --timeout=5m
 
 ## Set up a full local K8s dev environment (Kind + PostgreSQL/pgvector + AgentRegistry + kagent).
 .PHONY: setup-kind-cluster
-setup-kind-cluster: create-kind-cluster install-postgresql install-agentregistry install-kagent ## Set up the full local Kind development environment
+setup-kind-cluster: create-kind-cluster install-postgresql install-kagent install-agentregistry ## Set up the full local Kind development environment
 
 .PHONY: dump-kind-state
 dump-kind-state: ## Dump Kind cluster state for debugging (pods, events, kagent logs)
@@ -546,4 +588,3 @@ helm-unittest-install: _helm-check  ## Install the helm-unittest plugin if neede
 	HELM_PLUGIN_UNITTEST_VERSION=$(HELM_PLUGIN_UNITTEST_VERSION) \
 	HELM_PLUGIN_INSTALL_FLAGS="$(HELM_PLUGIN_INSTALL_FLAGS)" \
 	bash ./scripts/install-helm-unittest.sh
-

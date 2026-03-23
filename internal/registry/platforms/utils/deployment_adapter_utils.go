@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net"
 	"net/url"
 	"slices"
 	"strconv"
@@ -283,6 +284,7 @@ func translateRemoteMCPServer(
 		DeploymentID:  deploymentID,
 		MCPServerType: platformtypes.MCPServerTypeRemote,
 		Remote: &platformtypes.RemoteMCPServer{
+			Scheme:  u.scheme,
 			Host:    u.host,
 			Port:    u.port,
 			Path:    u.path,
@@ -380,15 +382,19 @@ func translateLocalMCPServer(
 }
 
 type parsedURL struct {
-	host string
-	port uint32
-	path string
+	scheme string
+	host   string
+	port   uint32
+	path   string
 }
 
 func parseURL(rawURL string) (*parsedURL, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse server remote url: %v", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, fmt.Errorf("unsupported URL scheme %q: only http and https are supported", u.Scheme)
 	}
 	portStr := u.Port()
 	var port uint32
@@ -407,10 +413,37 @@ func parseURL(rawURL string) (*parsedURL, error) {
 	}
 
 	return &parsedURL{
-		host: u.Hostname(),
-		port: port,
-		path: u.Path,
+		scheme: u.Scheme,
+		host:   u.Hostname(),
+		port:   port,
+		path:   u.Path,
 	}, nil
+}
+
+// BuildRemoteMCPURL constructs a well-formed URL from a RemoteMCPServer,
+// handling IPv6 bracketing and standard-port omission.
+func BuildRemoteMCPURL(remote *platformtypes.RemoteMCPServer) string {
+	scheme := remote.Scheme
+	if scheme == "" {
+		scheme = "http"
+	}
+
+	var host string
+	includePort := (scheme == "https" && remote.Port != 443) || (scheme == "http" && remote.Port != 80)
+	if includePort {
+		host = net.JoinHostPort(remote.Host, fmt.Sprintf("%d", remote.Port))
+	} else if strings.Contains(remote.Host, ":") {
+		host = "[" + remote.Host + "]"
+	} else {
+		host = remote.Host
+	}
+
+	u := &url.URL{
+		Scheme: scheme,
+		Host:   host,
+		Path:   remote.Path,
+	}
+	return u.String()
 }
 
 func generateInternalName(server string) string {

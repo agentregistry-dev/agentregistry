@@ -397,10 +397,8 @@ func translateLocalAgentGatewayConfig(agentGatewayPort uint16, servers []*platfo
 
 		switch server.MCPServerType {
 		case platformtypes.MCPServerTypeRemote:
-			mcpTarget.SSE = &platformtypes.SSETargetSpec{
-				Host: server.Remote.Host,
-				Port: server.Remote.Port,
-				Path: server.Remote.Path,
+			mcpTarget.MCP = &platformtypes.MCPTargetSpec{
+				Host: platformutils.BuildRemoteMCPURL(server.Remote),
 			}
 		case platformtypes.MCPServerTypeLocal:
 			switch server.Local.TransportType {

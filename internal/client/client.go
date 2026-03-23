@@ -28,7 +28,6 @@ type Client struct {
 const (
 	defaultBaseURL          = "http://localhost:12121/v0"
 	DefaultBaseURL          = defaultBaseURL
-	pingRetryAttempts       = 3
 	defaultDeployProviderID = "local"
 )
 
@@ -86,25 +85,10 @@ func ensureV0Suffix(u string) string {
 // NewClientWithConfig constructs a client from explicit inputs (flag/env), applies defaults, and verifies connectivity.
 func NewClientWithConfig(baseURL, token string) (*Client, error) {
 	c := NewClient(baseURL, token)
-	if err := pingWithRetry(c, pingRetryAttempts); err != nil {
+	if err := c.Ping(); err != nil {
 		return nil, err
 	}
 	return c, nil
-}
-
-func pingWithRetry(c *Client, attempts int) error {
-	var lastErr error
-	for i := range attempts {
-		if err := c.Ping(); err != nil {
-			lastErr = err
-			if i < attempts-1 {
-				time.Sleep(time.Duration(i+1) * time.Second)
-			}
-			continue
-		}
-		return nil
-	}
-	return fmt.Errorf("failed to reach API after %d attempts: %w", attempts, lastErr)
 }
 
 // Close is a no-op in API mode
@@ -132,8 +116,10 @@ func (c *Client) doJSON(req *http.Request, out any) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		// read up to 1KB of body for error message
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		if msg := extractAPIErrorMessage(errBody); msg != "" {
+			return fmt.Errorf("%s: %s", resp.Status, msg)
+		}
 		return fmt.Errorf("unexpected status: %s, %s", resp.Status, string(errBody))
 	}
 	if out == nil {
@@ -141,6 +127,31 @@ func (c *Client) doJSON(req *http.Request, out any) error {
 	}
 	dec := json.NewDecoder(resp.Body)
 	return dec.Decode(out)
+}
+
+// extractAPIErrorMessage parses a Huma-style JSON error body and returns a
+// human-readable string with just the error messages. Returns "" if the body
+// cannot be parsed.
+func extractAPIErrorMessage(body []byte) string {
+	var apiErr struct {
+		Detail string `json:"detail"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if json.Unmarshal(body, &apiErr) != nil || (apiErr.Detail == "" && len(apiErr.Errors) == 0) {
+		return ""
+	}
+	var msgs []string
+	for _, e := range apiErr.Errors {
+		if e.Message != "" {
+			msgs = append(msgs, e.Message)
+		}
+	}
+	if len(msgs) > 0 {
+		return strings.Join(msgs, "; ")
+	}
+	return apiErr.Detail
 }
 
 func (c *Client) doJsonRequest(method, pathWithQuery string, in, out any) error {
@@ -579,8 +590,8 @@ func asHTTPStatus(err error) int {
 		return 0
 	}
 	errStr := err.Error()
-	// Parse error format: "unexpected status: 404 Not Found, ..."
-	// Extract status code from the error message
+
+	// Try "unexpected status: CODE ..." (unparsed JSON fallback)
 	if strings.Contains(errStr, "unexpected status:") {
 		parts := strings.Split(errStr, "unexpected status: ")
 		if len(parts) > 1 {
@@ -590,7 +601,12 @@ func asHTTPStatus(err error) int {
 			}
 		}
 	}
-	// Also check for "404" or "Not Found" in the error message
+
+	// Try "CODE Status Text: message" (parsed API error)
+	if code, parseErr := strconv.Atoi(strings.Split(errStr, " ")[0]); parseErr == nil {
+		return code
+	}
+
 	if strings.Contains(errStr, "404") || strings.Contains(errStr, "Not Found") {
 		return http.StatusNotFound
 	}

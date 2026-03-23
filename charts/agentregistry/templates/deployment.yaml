@@ -108,6 +108,9 @@ spec:
             - name: grpc
               containerPort: {{ .Values.service.targetPorts.grpc }}
               protocol: TCP
+            - name: mcp
+              containerPort: {{ .Values.service.targetPorts.mcp }}
+              protocol: TCP
           envFrom:
             - configMapRef:
                 name: {{ include "agentregistry.fullname" . }}-config
