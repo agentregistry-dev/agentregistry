@@ -14,12 +14,12 @@ import (
 //   - deployed/          directory of internal Next.js route metadata files
 //   - _next/static/...   hashed asset files
 var testUIFS = fstest.MapFS{
-	"index.html":                      {Data: []byte("<html>index</html>")},
-	"deployed.html":                   {Data: []byte("<html>deployed</html>")},
-	"deployed/__next._full.txt":       {Data: []byte("internal")},
-	"deployed/__next._index.txt":      {Data: []byte("internal")},
-	"_next/static/chunk.abc123.js":    {Data: []byte("console.log('chunk')")},
-	"_next/static/style.abc123.css":   {Data: []byte("body{}")},
+	"index.html":                    {Data: []byte("<html>index</html>")},
+	"deployed.html":                 {Data: []byte("<html>deployed</html>")},
+	"deployed/__next._full.txt":     {Data: []byte("internal")},
+	"deployed/__next._index.txt":    {Data: []byte("internal")},
+	"_next/static/chunk.abc123.js":  {Data: []byte("console.log('chunk')")},
+	"_next/static/style.abc123.css": {Data: []byte("body{}")},
 }
 
 func TestNewUIHandler(t *testing.T) {
