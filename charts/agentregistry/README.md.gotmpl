@@ -9,31 +9,39 @@
 ## TL;DR
 
 ```console
-helm install my-agentregistry oci://ghcr.io/agentregistry-dev/helm/agentregistry \
-  --set config.jwtPrivateKey=$(openssl rand -hex 32) \
-  --set database.host=my-postgres.example.com \
-  --set database.password=changeme
+helm install my-agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
+  --set config.jwtPrivateKey=$(openssl rand -hex 32)
 ```
+
+A PostgreSQL instance is bundled and started automatically — no external database is required to get started.
 
 ## Introduction
 
 This chart bootstraps an [Agent Registry](https://github.com/agentregistry-dev/agentregistry) deployment on a [Kubernetes](https://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
 
-It exposes both an HTTP REST API and an Agent Gateway gRPC endpoint. An external PostgreSQL database with the [pgvector](https://github.com/pgvector/pgvector) extension is required.
+It exposes both an HTTP REST API and an Agent Gateway gRPC endpoint. A PostgreSQL instance is bundled by default for development and evaluation. For production, disable the bundled database and supply a connection string to your own PostgreSQL service.
 
 ## Prerequisites
 
 - Kubernetes 1.19+
 - Helm 3.8+
-- PostgreSQL 14+ with pgvector extension
 
 ## Installing the Chart
+
+### Development / evaluation (bundled database)
+
+```console
+helm install my-agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
+  --set config.jwtPrivateKey=$(openssl rand -hex 32)
+```
+
+### Production (external database)
 
 ```console
 helm install my-agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
   --set config.jwtPrivateKey=$(openssl rand -hex 32) \
-  --set database.host=my-postgres.example.com \
-  --set database.password=changeme
+  --set database.postgres.bundled.enabled=false \
+  --set database.postgres.url=postgres://<user>:<password>@<host>:5432/<dbname>
 ```
 
 The command deploys Agent Registry on the Kubernetes cluster using the default configuration. The [Parameters](#parameters) section lists the values that can be configured during installation.
@@ -55,37 +63,61 @@ The chart deploys the following Kubernetes resources:
 | Deployment | Agent Registry application |
 | Service | Exposes HTTP (`:12121`) and gRPC (`:21212`) ports |
 | ConfigMap | Application configuration injected as environment variables |
-| Secret | PostgreSQL password and JWT signing key (omitted when both `existingSecret` values are set) |
+| Secret | JWT signing key (omitted when `config.existingSecret` is set) |
+| Secret (`-postgresql`) | Bundled PostgreSQL password (only when `database.postgres.bundled.enabled=true`) |
+| Deployment (`-postgresql`) | Bundled PostgreSQL instance (only when `database.postgres.bundled.enabled=true`) |
+| Service (`-postgresql`) | Internal service for bundled PostgreSQL (only when `database.postgres.bundled.enabled=true`) |
+| PersistentVolumeClaim (`-postgresql`) | Storage for bundled PostgreSQL data (only when `database.postgres.bundled.enabled=true`) |
 | ServiceAccount | Dedicated service account for the workload |
 | ClusterRole / ClusterRoleBinding | RBAC rules for managing cluster-scoped resources and namespace discovery |
 | Role / RoleBinding | Per-namespace RBAC rules when `rbac.watchedNamespaces` is set |
 
 ## Database
 
-Agent Registry requires an external PostgreSQL database with the pgvector extension. Provide connection details via individual fields:
+### Bundled PostgreSQL (default)
+
+By default, the chart deploys a PostgreSQL instance alongside Agent Registry. It is suitable for development and evaluation only — data may be lost if the pod is restarted or rescheduled.
 
 ```yaml
 database:
-  host: "my-postgres.example.com"
-  database: "agent-registry"
-  username: "agentregistry"
-  password: "changeme"
-  sslMode: "require"
+  postgres:
+    bundled:
+      enabled: true  # default
 ```
 
-Or supply a full connection URL:
+### External PostgreSQL
+
+For production, disable the bundled database and provide a connection string:
 
 ```yaml
 database:
-  url: "postgresql://agentregistry:changeme@my-postgres.example.com:5432/agent-registry?sslmode=require"
+  postgres:
+    bundled:
+      enabled: false
+    url: "postgres://agentregistry:changeme@my-postgres.example.com:5432/agentregistry?sslmode=require"
 ```
 
-To use an existing Secret for the database password (key: `POSTGRES_PASSWORD`):
+To supply the connection string from a file (for example, a mounted Secret):
 
 ```yaml
 database:
-  existingSecret: "pg-secret"
+  postgres:
+    bundled:
+      enabled: false
+    urlFile: "/etc/secrets/db-url"
 ```
+
+### Semantic search
+
+Semantic search requires a vector-enabled PostgreSQL instance. Set `database.postgres.vectorEnabled=true` to enable it:
+
+```yaml
+database:
+  postgres:
+    vectorEnabled: true
+```
+
+This enables the `AGENT_REGISTRY_EMBEDDINGS_ENABLED` environment variable on the Agent Registry pod. The bundled database does not include vector support — semantic search will not be available when using it.
 
 ## Secrets
 
@@ -96,23 +128,12 @@ config:
   jwtPrivateKey: "$(openssl rand -hex 32)"
 ```
 
-Or reference an existing Secret (key: `AGENT_REGISTRY_JWT_PRIVATE_KEY`):
+Or reference an existing Secret (must contain key `AGENT_REGISTRY_JWT_PRIVATE_KEY`):
 
 ```yaml
 config:
   existingSecret: "my-agentregistry-secret"
 ```
-
-To use a single Secret for all credentials (`POSTGRES_PASSWORD` and `AGENT_REGISTRY_JWT_PRIVATE_KEY`):
-
-```yaml
-global:
-  existingSecret: "my-agentregistry-secret"
-```
-
-`global.existingSecret` takes precedence over both `config.existingSecret` and `database.existingSecret`. When set, no chart-managed Secret is created.
-
-When `config.existingSecret` and `database.existingSecret` are set independently, only the keys not covered by an external secret are written into the chart-managed Secret.
 
 ## RBAC
 
@@ -137,9 +158,10 @@ This creates a `Role`/`RoleBinding` in each listed namespace (plus the installat
 
 ```yaml
 database:
-  host: "pg.example.com"
-  existingSecret: "pg-secret"
-  sslMode: "require"
+  postgres:
+    bundled:
+      enabled: false
+    url: "postgres://agentregistry:changeme@pg.example.com:5432/agentregistry?sslmode=require"
 
 config:
   existingSecret: "agentregistry-secrets"
@@ -153,15 +175,17 @@ resources:
     memory: 512Mi
 ```
 
-### Single secret for all credentials
+### Production with connection string from a mounted file
 
 ```yaml
-global:
-  existingSecret: "agentregistry-all-secrets"
-
 database:
-  host: "pg.example.com"
-  sslMode: "require"
+  postgres:
+    bundled:
+      enabled: false
+    urlFile: "/etc/secrets/db-url"
+
+config:
+  existingSecret: "agentregistry-secrets"
 ```
 
 ### Namespace-scoped RBAC

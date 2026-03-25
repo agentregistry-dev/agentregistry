@@ -53,6 +53,7 @@ Selector labels — stable subset used in matchLabels.
 {{- define "agentregistry.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "agentregistry.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: server
 {{- end }}
 
 {{/*
@@ -75,20 +76,15 @@ Usage: include "agentregistry.annotations" (dict "annotations" .Values.someAnnot
 
 {{/*
 Return the proper Agent Registry image name.
-Uses global.imageRegistry as override if set.
-Digest takes precedence over tag.
+global.imageRegistry overrides image.registry. Digest takes precedence over tag.
 */}}
 {{- define "agentregistry.image" -}}
-{{- $registry := .Values.image.registry -}}
-{{- if .Values.global }}
-  {{- if .Values.global.imageRegistry }}
-    {{- $registry = .Values.global.imageRegistry -}}
-  {{- end }}
-{{- end }}
+{{- $registry := coalesce (.Values.global).imageRegistry .Values.image.registry }}
+{{- $tag := coalesce .Values.image.tag .Chart.AppVersion }}
 {{- if .Values.image.digest }}
-{{- printf "%s/%s@%s" $registry .Values.image.repository .Values.image.digest }}
+{{- printf "%s/%s/%s@%s" $registry .Values.image.repository .Values.image.name .Values.image.digest }}
 {{- else }}
-{{- printf "%s/%s:%s" $registry .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) }}
+{{- printf "%s/%s/%s:%s" $registry .Values.image.repository .Values.image.name $tag }}
 {{- end }}
 {{- end }}
 
@@ -132,118 +128,6 @@ Create the name of the service account to use.
 {{- default (include "agentregistry.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
-{{- end }}
-{{- end }}
-
-{{/* ======================================================================
-   Secret helpers
-   ====================================================================== */}}
-
-{{/*
-Return the secret name containing AGENT_REGISTRY_JWT_PRIVATE_KEY.
-Priority: global.existingSecret → config.existingSecret → chart-managed secret.
-*/}}
-{{- define "agentregistry.secretName" -}}
-{{- .Values.global.existingSecret | default .Values.config.existingSecret | default (include "agentregistry.fullname" .) }}
-{{- end }}
-
-{{/*
-Return the secret name that holds POSTGRES_PASSWORD.
-Priority: global.existingSecret → database.existingSecret → chart-managed secret.
-*/}}
-{{- define "agentregistry.passwordSecretName" -}}
-{{- .Values.global.existingSecret | default .Values.database.existingSecret | default (include "agentregistry.fullname" .) }}
-{{- end }}
-
-{{/* ======================================================================
-   Database URL
-   ====================================================================== */}}
-
-{{/*
-Return the PostgreSQL database URL.
-If database.url is set, use it directly.
-Otherwise build from individual fields, injecting POSTGRES_PASSWORD at runtime.
-*/}}
-{{- define "agentregistry.databaseUrl" -}}
-{{- if .Values.database.url }}
-{{- .Values.database.url }}
-{{- else }}
-{{- printf "postgres://%s:$(%s)@%s:%s/%s?sslmode=%s"
-      .Values.database.username
-      "POSTGRES_PASSWORD"
-      .Values.database.host
-      (toString .Values.database.port)
-      .Values.database.database
-      .Values.database.sslMode }}
-{{- end }}
-{{- end }}
-
-{{/* ======================================================================
-   Resource management
-   ====================================================================== */}}
-
-{{/*
-Return resource requests/limits.
-If .resources is non-empty, use it directly.
-Otherwise, map .resourcesPreset to a set of defaults.
-
-Usage: include "agentregistry.resources" (dict "resources" .Values.resources "preset" .Values.resourcesPreset)
-*/}}
-{{- define "agentregistry.resources" -}}
-{{- if .resources }}
-{{- toYaml .resources }}
-{{- else }}
-{{- $preset := .preset | default "none" }}
-{{- if eq $preset "nano" }}
-requests:
-  cpu: 100m
-  memory: 128Mi
-limits:
-  cpu: 200m
-  memory: 256Mi
-{{- else if eq $preset "micro" }}
-requests:
-  cpu: 250m
-  memory: 256Mi
-limits:
-  cpu: 500m
-  memory: 512Mi
-{{- else if eq $preset "small" }}
-requests:
-  cpu: 250m
-  memory: 256Mi
-limits:
-  cpu: "1"
-  memory: 1Gi
-{{- else if eq $preset "medium" }}
-requests:
-  cpu: 500m
-  memory: 512Mi
-limits:
-  cpu: "2"
-  memory: 2Gi
-{{- else if eq $preset "large" }}
-requests:
-  cpu: "1"
-  memory: 1Gi
-limits:
-  cpu: "4"
-  memory: 4Gi
-{{- else if eq $preset "xlarge" }}
-requests:
-  cpu: "2"
-  memory: 2Gi
-limits:
-  cpu: "8"
-  memory: 8Gi
-{{- else if eq $preset "2xlarge" }}
-requests:
-  cpu: "4"
-  memory: 4Gi
-limits:
-  cpu: "16"
-  memory: 16Gi
-{{- end }}
 {{- end }}
 {{- end }}
 
@@ -373,6 +257,54 @@ If .Values.affinity is set it wins entirely. Otherwise build from presets.
 {{- end }}
 
 {{/* ======================================================================
+   Bundled PostgreSQL helpers
+   ====================================================================== */}}
+
+{{/*
+Full name for the bundled PostgreSQL resources.
+*/}}
+{{- define "agentregistry.postgresql.fullname" -}}
+{{- printf "%s-postgresql" (include "agentregistry.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Standard labels for bundled PostgreSQL resources.
+*/}}
+{{- define "agentregistry.postgresql.labels" -}}
+helm.sh/chart: {{ include "agentregistry.chart" . }}
+app.kubernetes.io/name: {{ include "agentregistry.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: database
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: {{ include "agentregistry.name" . }}
+{{- if .Values.commonLabels }}
+{{ toYaml .Values.commonLabels }}
+{{- end }}
+{{- end }}
+
+{{/*
+Selector labels for bundled PostgreSQL resources.
+*/}}
+{{- define "agentregistry.postgresql.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "agentregistry.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: database
+{{- end }}
+
+{{/*
+Return the bundled PostgreSQL image string.
+global.imageRegistry overrides image.registry.
+*/}}
+{{- define "agentregistry.postgresql.image" -}}
+{{- $pg := .Values.database.postgres.bundled.image }}
+{{- $registry := coalesce (.Values.global).imageRegistry $pg.registry }}
+{{- printf "%s/%s/%s:%s" $registry $pg.repository $pg.name $pg.tag }}
+{{- end }}
+
+{{/* ======================================================================
    Validation
    ====================================================================== */}}
 
@@ -382,17 +314,15 @@ Called from templates/validate.yaml so it fires during helm template/install.
 */}}
 {{- define "agentregistry.validateValues.errors" -}}
 {{- $errors := list }}
-{{- $hasExternalJwt := or .Values.global.existingSecret .Values.config.existingSecret }}
-{{- if and (not $hasExternalJwt) (eq .Values.config.jwtPrivateKey "") }}
-{{- $errors = append $errors "config.jwtPrivateKey must be set (or provide config.existingSecret / global.existingSecret containing AGENT_REGISTRY_JWT_PRIVATE_KEY)." }}
-{{- else if and (not $hasExternalJwt) (not (regexMatch "^[0-9a-fA-F]+$" .Values.config.jwtPrivateKey)) }}
+{{- if and (not .Values.config.existingSecret) (eq .Values.config.jwtPrivateKey "") }}
+{{- $errors = append $errors "config.jwtPrivateKey must be set (or provide config.existingSecret containing AGENT_REGISTRY_JWT_PRIVATE_KEY)." }}
+{{- else if and (not .Values.config.existingSecret) (not (regexMatch "^[0-9a-fA-F]+$" .Values.config.jwtPrivateKey)) }}
 {{- $errors = append $errors "config.jwtPrivateKey must be a valid hex string (e.g. generated with: openssl rand -hex 32)." }}
 {{- end }}
-{{- if and (not (or .Values.global.existingSecret .Values.database.existingSecret)) (not .Values.database.url) (eq .Values.database.password "") }}
-{{- $errors = append $errors "database.password must be set (or provide database.url, database.existingSecret, or global.existingSecret containing POSTGRES_PASSWORD)." }}
+{{- if not .Values.database.postgres.bundled.enabled }}
+{{- if not .Values.database.postgres.url }}
+{{- $errors = append $errors "database.postgres.url must be set when database.postgres.bundled.enabled=false." }}
 {{- end }}
-{{- if and (not .Values.database.url) (not .Values.database.host) }}
-{{- $errors = append $errors "database.host (or database.url) must be set. An external PostgreSQL instance with pgvector is required." }}
 {{- end }}
 {{- range $errors }}
 {{ . }}

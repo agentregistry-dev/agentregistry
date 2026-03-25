@@ -10,14 +10,6 @@ Chart:     {{ include "agentregistry.chart" . }}
 Release:   {{ .Release.Name }}
 Namespace: {{ .Release.Namespace }}
 
-{{- if .Values.database.host }}
-PostgreSQL: {{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.database }}
-{{- else if .Values.database.url }}
-PostgreSQL: external (connection string provided)
-{{- else }}
-PostgreSQL: *** NOT CONFIGURED ***
-{{- end }}
-
 To access the Agent Registry UI and API:
 
 1. Port-forward (quickest):
@@ -33,5 +25,30 @@ Useful endpoints (after port-forward):
 
 gRPC endpoint (Agent Gateway):
   - kubectl -n {{ .Release.Namespace }} port-forward svc/{{ $fullName }} {{ $grpcPort }}:{{ $grpcPort }}
+
+{{ if .Values.database.postgres.bundled.enabled -}}
+################################################################################
+{{- if eq .Values.database.postgres.url "" }}
+# WARNING: BUNDLED DATABASE IN USE                                             #
+################################################################################
+  The bundled PostgreSQL instance is enabled. It is intended for development and
+  evaluation only — not suitable for production use. Data may be lost if the
+  pod is restarted or rescheduled.
+
+  To use an external database, set:
+    database.postgres.url=<your-connection-string>
+{{- else }}
+# NOTE: BUNDLED DATABASE DEPLOYED BUT NOT IN USE                               #
+################################################################################
+  The bundled PostgreSQL pod is running, but Agent Registry is connected to an
+  external database (database.postgres.url is set).
+
+  To connect Agent Registry to the bundled instance instead, unset url:
+    database.postgres.url=""
+  To stop deploying the bundled pod entirely, set:
+    database.postgres.bundled.enabled=false
+{{- end }}
+{{- end }}
+################################################################################
 
 {{ include "agentregistry.validateValues" . }}

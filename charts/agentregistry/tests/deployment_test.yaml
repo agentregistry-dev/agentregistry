@@ -3,6 +3,7 @@ templates:
   - deployment.yaml
   - configmap.yaml
   - secrets.yaml
+  - postgresql-secret.yaml
 
 tests:
   - it: renders with default values
@@ -17,7 +18,7 @@ tests:
           path: spec.replicas
           value: 1
 
-  - it: uses server image as repo:tag by default
+  - it: uses server image as registry/repository/name:tag by default
     template: deployment.yaml
     asserts:
       - matchRegex:
@@ -31,10 +32,9 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].image
-          # allow either lowercase or uppercase hex and permit extra trailing text
           pattern: "^ghcr.io/agentregistry-dev/agentregistry/server@sha256:[0-9a-fA-F]{64}"
 
-  
+
 
   - it: sets replicaCount
     template: deployment.yaml
@@ -65,7 +65,7 @@ tests:
           content:
             app.kubernetes.io/name: agentregistry
 
-  - it: injects POSTGRES_PASSWORD from secret
+  - it: injects POSTGRES_PASSWORD from postgresql secret when bundled is enabled
     template: deployment.yaml
     asserts:
       - contains:
@@ -74,7 +74,7 @@ tests:
             name: POSTGRES_PASSWORD
             valueFrom:
               secretKeyRef:
-                name: RELEASE-NAME-agentregistry
+                name: RELEASE-NAME-agentregistry-postgresql
                 key: POSTGRES_PASSWORD
 
   - it: injects JWT private key from secret
@@ -89,31 +89,36 @@ tests:
                 name: RELEASE-NAME-agentregistry
                 key: AGENT_REGISTRY_JWT_PRIVATE_KEY
 
-  - it: sets AGENT_REGISTRY_DATABASE_URL with external host
+  - it: sets AGENT_REGISTRY_DATABASE_URL pointing at bundled postgres by default
     template: deployment.yaml
-    set:
-      database.host: mydb.example.com
-      database.port: 5432
-      database.database: mydb
-      database.username: myuser
-      database.sslMode: require
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: AGENT_REGISTRY_DATABASE_URL
-            value: "postgres://myuser:$(POSTGRES_PASSWORD)@mydb.example.com:5432/mydb?sslmode=require"
+            value: "postgres://agentregistry:$(POSTGRES_PASSWORD)@RELEASE-NAME-agentregistry-postgresql:5432/agentregistry?sslmode=disable"
 
-  - it: sets AGENT_REGISTRY_DATABASE_URL with external url
+  - it: sets AGENT_REGISTRY_DATABASE_URL directly when database.postgres.url is set
     template: deployment.yaml
     set:
-      database.url: "postgres://user:pass@host:5432/db?sslmode=disable"
+      database.postgres.bundled.enabled: false
+      database.postgres.url: "postgres://user:pass@host:5432/db?sslmode=disable"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: AGENT_REGISTRY_DATABASE_URL
             value: "postgres://user:pass@host:5432/db?sslmode=disable"
+
+  - it: does not inject POSTGRES_PASSWORD when url is set (bundled enabled or disabled)
+    template: deployment.yaml
+    set:
+      database.postgres.url: "postgres://user:pass@host:5432/db"
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_PASSWORD
 
   - it: applies pod security context by default
     template: deployment.yaml
@@ -193,41 +198,6 @@ tests:
                 name: my-existing-secret
                 key: AGENT_REGISTRY_JWT_PRIVATE_KEY
 
-  - it: uses database.existingSecret for POSTGRES_PASSWORD when set
-    template: deployment.yaml
-    set:
-      database.existingSecret: db-secret
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: POSTGRES_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: db-secret
-                key: POSTGRES_PASSWORD
-
-  - it: uses global.existingSecret for both AGENT_REGISTRY_JWT_PRIVATE_KEY and POSTGRES_PASSWORD
-    template: deployment.yaml
-    set:
-      global.existingSecret: global-secret
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: AGENT_REGISTRY_JWT_PRIVATE_KEY
-            valueFrom:
-              secretKeyRef:
-                name: global-secret
-                key: AGENT_REGISTRY_JWT_PRIVATE_KEY
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: POSTGRES_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: global-secret
-                key: POSTGRES_PASSWORD
 
   - it: adds checksum annotations for config and secret
     template: deployment.yaml
@@ -245,3 +215,31 @@ tests:
       - equal:
           path: metadata.name
           value: myapp
+
+  # ── Init container (bundled PostgreSQL) ──────────────────────────────────────
+
+  - it: includes wait-for-postgres init container when bundled is enabled
+    template: deployment.yaml
+    asserts:
+      - isNotNull:
+          path: spec.template.spec.initContainers
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-postgres
+
+  - it: does not include init container when bundled is disabled
+    template: deployment.yaml
+    set:
+      database.postgres.bundled.enabled: false
+      database.postgres.url: "postgres://user:pass@host:5432/db"
+    asserts:
+      - isNull:
+          path: spec.template.spec.initContainers
+
+  - it: does not include init container when bundled is enabled but url is also set
+    template: deployment.yaml
+    set:
+      database.postgres.url: "postgres://user:pass@host:5432/db"
+    asserts:
+      - isNull:
+          path: spec.template.spec.initContainers

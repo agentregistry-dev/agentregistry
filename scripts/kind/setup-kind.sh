@@ -35,7 +35,7 @@ REG_PORT=${REG_PORT:-}
 #
 # We copy kind-config.yaml to a temp file before patching so we never mutate
 # the tracked source file.
-TMP_CONFIG=$(mktemp --suffix=.yaml)
+TMP_CONFIG=$(mktemp /tmp/kind-config.XXXXXX.yaml)
 trap 'rm -f "${TMP_CONFIG}"' EXIT
 cp "${SCRIPT_DIR}/kind-config.yaml" "${TMP_CONFIG}"
 

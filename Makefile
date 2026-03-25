@@ -343,11 +343,6 @@ kind-debug: ## Shell into Kind control-plane and run btop for resource monitorin
 	docker exec -it $(KIND_CLUSTER_NAME)-control-plane bash -c 'apt-get update -qq && apt-get install -y --no-install-recommends btop htop'
 	docker exec -it $(KIND_CLUSTER_NAME)-control-plane bash -c 'btop --utf-force'
 
-.PHONY: install-postgresql
-install-postgresql: ## Deploy standalone PostgreSQL/pgvector into the Kind cluster
-	kubectl --context $(KIND_CLUSTER_CONTEXT) apply -f examples/postgres-pgvector.yaml
-	kubectl --context $(KIND_CLUSTER_CONTEXT) -n agentregistry wait --for=condition=ready pod -l app=postgres-pgvector --timeout=120s
-
 BUILD ?= true
 
 .PHONY: install-agentregistry
@@ -365,14 +360,15 @@ endif
 	    --create-namespace \
 	    --set image.pullPolicy=Always \
 	    --set image.registry=$(DOCKER_REGISTRY) \
-	    --set image.repository=$(DOCKER_REPO)/server \
+	    --set image.repository=$(DOCKER_REPO) \
 	    --set image.tag=$(VERSION) \
-	    --set database.host=postgres-pgvector.$(KIND_NAMESPACE).svc.cluster.local \
-	    --set database.password=agentregistry \
-	    --set database.sslMode=disable \
 	    --set config.jwtPrivateKey="$$JWT_KEY" \
 	    --set config.enableAnonymousAuth="true" \
 	    --set service.type=LoadBalancer \
+	    --set database.postgres.bundled.image.repository=pgvector \
+	    --set database.postgres.bundled.image.name=pgvector \
+	    --set database.postgres.bundled.image.tag=pg16 \
+	    --set database.postgres.vectorEnabled=true \
 	    --wait \
 	    --timeout=5m;
 
@@ -412,9 +408,9 @@ install-kagent-controller: ## Deploy kagent controller (minimal, no agents/tools
 	  --wait \
 	  --timeout=5m
 
-## Set up a full local K8s dev environment (Kind + PostgreSQL/pgvector + AgentRegistry + kagent).
+## Set up a full local K8s dev environment (Kind + AgentRegistry with bundled PostgreSQL + kagent).
 .PHONY: setup-kind-cluster
-setup-kind-cluster: create-kind-cluster install-postgresql install-kagent install-agentregistry ## Set up the full local Kind development environment
+setup-kind-cluster: create-kind-cluster install-kagent install-agentregistry ## Set up the full local Kind development environment
 
 .PHONY: dump-kind-state
 dump-kind-state: ## Dump Kind cluster state for debugging (pods, events, kagent logs)
@@ -425,7 +421,12 @@ dump-kind-state: ## Dump Kind cluster state for debugging (pods, events, kagent 
 	@kubectl get pods -A --context $(KIND_CLUSTER_CONTEXT) 2>/dev/null || true
 	@echo ""
 	@echo "=== Pod describe ==="
-	@kubectl describe pods --context $(KIND_CLUSTER_CONTEXT) 2>/dev/null || true
+	@kubectl describe pods -A --context $(KIND_CLUSTER_CONTEXT) 2>/dev/null || true
+	@echo ""
+	@echo "=== AgentRegistry logs ==="
+	@kubectl logs deployment/agentregistry -n $(KIND_NAMESPACE) --context $(KIND_CLUSTER_CONTEXT) --tail=100 2>/dev/null || true
+	@echo "=== AgentRegistry previous logs ==="
+	@kubectl logs deployment/agentregistry -n $(KIND_NAMESPACE) --context $(KIND_CLUSTER_CONTEXT) --tail=100 --previous 2>/dev/null || true
 	@echo ""
 	@echo "=== Events ==="
 	@kubectl get events -A --sort-by='.lastTimestamp' --context $(KIND_CLUSTER_CONTEXT) 2>/dev/null | tail -50 || true
@@ -538,9 +539,7 @@ charts-render-test: charts-deps ## Render chart templates as a smoke test
 	@echo "Rendering chart templates for $(HELM_CHART_DIR)..."
 	$(HELM) template test-release $(HELM_CHART_DIR) \
 	  --values $(HELM_CHART_DIR)/values.yaml \
-	  --set config.jwtPrivateKey=deadbeef1234567890abcdef12345678 \
-	  --set database.password=ci-password \
-	  --set database.host=postgres.example.com
+	  --set config.jwtPrivateKey=deadbeef1234567890abcdef12345678
 
 # Package the chart into $(HELM_PACKAGE_DIR)/.
 .PHONY: charts-package

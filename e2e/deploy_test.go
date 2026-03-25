@@ -650,7 +650,7 @@ func deleteAgentDeploymentsDirectlyInDB(t *testing.T, agentName, providerID stri
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "docker", "exec", "agent-registry-postgres",
-		"psql", "-U", "agentregistry", "-d", "agent-registry", "-v", "ON_ERROR_STOP=1", "-c", sql)
+		"psql", "-U", "agentregistry", "-d", "agentregistry", "-v", "ON_ERROR_STOP=1", "-c", sql)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("failed to delete deployments directly in db: %v\n%s", err, string(out))

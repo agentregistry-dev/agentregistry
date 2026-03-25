@@ -20,38 +20,39 @@ This single command sets up the full local environment.
 
 ## What It Does
 
-`make setup-kind-cluster` runs three sub-targets in order:
+`make setup-kind-cluster` runs the following sub-targets in order:
 
 1. **`make create-kind-cluster`** — creates a Kind cluster named `agentregistry` with a local container registry on `localhost:5001` and MetalLB for LoadBalancer support
-2. **`make install-postgresql`** — creates the `agentregistry` namespace and deploys standalone PostgreSQL/pgvector using `pgvector/pgvector:0.8.2-pg16`
-3. **`make install-agentregistry`** — builds server images, pushes them to the local registry, and Helm installs AgentRegistry connected to the local PostgreSQL
+2. **`make install-agentregistry`** — builds server images, pushes them to the local registry, and Helm installs AgentRegistry with a bundled database instance
 
 You can also run any sub-target individually, e.g. `make install-agentregistry` to redeploy after a code change.
 
 ## Database Details
 
-The local PostgreSQL instance is configured as follows:
+PostgreSQL is bundled in the Helm chart and deployed automatically. The default configuration is:
 
 | Setting  | Value                            |
 |----------|----------------------------------|
-| Host     | `postgres-pgvector.agentregistry.svc.cluster.local` (in-cluster) |
+| Host     | `agentregistry-postgresql.agentregistry.svc.cluster.local` (in-cluster) |
 | Port     | `5432`                           |
-| Database | `agent-registry`                 |
+| Database | `agentregistry`                  |
 | Username | `agentregistry`                  |
 | Password | `agentregistry`                  |
+
+Local setup uses `pgvector` for development of vector dependent capabilities.
 
 ### Connecting Directly
 
 Port-forward to access PostgreSQL from your local machine:
 
 ```bash
-kubectl --context kind-agentregistry port-forward -n agentregistry svc/postgres-pgvector 5432:5432
+kubectl --context kind-agentregistry port-forward -n agentregistry svc/agentregistry-postgresql 5432:5432
 ```
 
 Then connect with psql:
 
 ```bash
-psql -h localhost -U agentregistry -d agent-registry
+psql -h localhost -U agentregistry -d agentregistry
 ```
 
 ### pgvector Extension
@@ -119,7 +120,7 @@ JWT_KEY=mysecretkey VERSION=v0.2.0 make setup-kind-cluster
 Check pod logs:
 
 ```bash
-kubectl --context kind-agentregistry logs -n agentregistry -l app=postgres-pgvector
+kubectl --context kind-agentregistry logs -n agentregistry -l app.kubernetes.io/component=database
 ```
 
 ### Images not found
@@ -156,9 +157,8 @@ make delete-kind-cluster && make setup-kind-cluster
 
 ## Scripts
 
-| File                                    | Purpose                                        |
-|-----------------------------------------|------------------------------------------------|
-| `setup-kind.sh`                         | Creates Kind cluster with local registry       |
-| `setup-metallb.sh`                      | Installs and configures MetalLB                |
-| `../../examples/postgres-pgvector.yaml` | Kubernetes manifests for standalone PostgreSQL |
-| `kind-config.yaml`                      | Kind cluster configuration                     |
+| File               | Purpose                                  |
+|--------------------|------------------------------------------|
+| `setup-kind.sh`    | Creates Kind cluster with local registry |
+| `setup-metallb.sh` | Installs and configures MetalLB          |
+| `kind-config.yaml` | Kind cluster configuration               |

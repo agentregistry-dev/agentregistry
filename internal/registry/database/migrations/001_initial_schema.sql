@@ -11,9 +11,6 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Trigram support for text search
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
--- pgvector for semantic embeddings
-CREATE EXTENSION IF NOT EXISTS vector;
-
 -- =============================================================================
 -- SERVERS TABLE
 -- =============================================================================
@@ -22,29 +19,21 @@ CREATE TABLE servers (
     -- Primary identifiers
     server_name VARCHAR(255) NOT NULL,
     version VARCHAR(255) NOT NULL,
-    
+
     -- Status and timestamps
     status VARCHAR(50) NOT NULL DEFAULT 'active',
     published_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     is_latest BOOLEAN NOT NULL DEFAULT true,
-    
+
     -- Complete ServerJSON payload as JSONB
     value JSONB NOT NULL,
-    
+
     -- Publishing state
     published BOOLEAN NOT NULL DEFAULT false,
     published_date TIMESTAMP WITH TIME ZONE,
     unpublished_date TIMESTAMP WITH TIME ZONE,
-    
-    -- Semantic embedding columns for vector search
-    semantic_embedding vector(1536),
-    semantic_embedding_provider TEXT,
-    semantic_embedding_model TEXT,
-    semantic_embedding_dimensions INTEGER,
-    semantic_embedding_checksum TEXT,
-    semantic_embedding_generated_at TIMESTAMPTZ,
-    
+
     -- Primary key
     CONSTRAINT servers_pkey PRIMARY KEY (server_name, version)
 );
@@ -64,9 +53,6 @@ CREATE UNIQUE INDEX idx_unique_latest_per_server ON servers (server_name) WHERE 
 -- GIN indexes for JSONB queries
 CREATE INDEX idx_servers_json_remotes ON servers USING GIN((value->'remotes'));
 CREATE INDEX idx_servers_json_packages ON servers USING GIN((value->'packages'));
-
--- HNSW index for semantic embedding similarity search
-CREATE INDEX idx_servers_semantic_embedding_hnsw ON servers USING hnsw (semantic_embedding vector_cosine_ops);
 
 -- Check constraints for servers
 ALTER TABLE servers ADD CONSTRAINT check_status_valid
@@ -166,29 +152,21 @@ CREATE TABLE agents (
     -- Primary identifiers
     agent_name VARCHAR(255) NOT NULL,
     version VARCHAR(255) NOT NULL,
-    
+
     -- Status and timestamps
     status VARCHAR(50) NOT NULL DEFAULT 'active',
     published_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     is_latest BOOLEAN NOT NULL DEFAULT true,
-    
+
     -- Complete AgentJSON payload as JSONB
     value JSONB NOT NULL,
-    
+
     -- Publishing state
     published BOOLEAN NOT NULL DEFAULT false,
     published_date TIMESTAMP WITH TIME ZONE,
     unpublished_date TIMESTAMP WITH TIME ZONE,
-    
-    -- Semantic embedding columns for vector search
-    semantic_embedding vector(1536),
-    semantic_embedding_provider TEXT,
-    semantic_embedding_model TEXT,
-    semantic_embedding_dimensions INTEGER,
-    semantic_embedding_checksum TEXT,
-    semantic_embedding_generated_at TIMESTAMPTZ,
-    
+
     -- Primary key
     CONSTRAINT agents_pkey PRIMARY KEY (agent_name, version)
 );
@@ -204,9 +182,6 @@ CREATE INDEX idx_agents_published ON agents (published);
 
 -- Ensure only one version per agent is marked as latest
 CREATE UNIQUE INDEX idx_unique_latest_per_agent ON agents (agent_name) WHERE is_latest = true;
-
--- HNSW index for semantic embedding similarity search
-CREATE INDEX idx_agents_semantic_embedding_hnsw ON agents USING hnsw (semantic_embedding vector_cosine_ops);
 
 -- Trigger function to auto-update updated_at
 CREATE OR REPLACE FUNCTION update_agents_updated_at()

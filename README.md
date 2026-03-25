@@ -189,6 +189,8 @@ When you run `arctl deploy`, agentregistry automatically configures the gateway 
 | [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) | Go SDK for building MCP servers |
 | [Model Context Protocol](https://modelcontextprotocol.io/) | The open standard for AI-to-tool communication |
 
+> **Semantic search** requires a PostgreSQL instance with the pgvector extension. It is disabled by default. To enable it, ensure your database has pgvector support and set `AGENT_REGISTRY_DATABASE_VECTOR_ENABLED=true` (docker-compose / `.env`) or `--set database.postgres.vectorEnabled=true` (Helm).
+
 ---
 
 ## Community
