@@ -291,10 +291,11 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, registry servic
 			}
 			return nil, huma.Error500InternalServerError("Failed to fetch deployment logs", err)
 		}
-		return &DeploymentLogsResponse{
+		return &DeploymentLogsResponse{Body: apitypes.DeploymentLogsBody{
 			DeploymentID: deployment.ID,
+			Status:       deployment.Status,
 			Logs:         logs,
-		}, nil
+		}}, nil
 	})
 
 	// Cancel in-progress deployment (async providers)
