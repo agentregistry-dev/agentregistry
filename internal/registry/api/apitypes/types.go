@@ -64,7 +64,7 @@ type DeploymentsListResponse struct {
 // DeploymentLogsBody is the JSON body returned for deployment logs requests.
 type DeploymentLogsBody struct {
 	DeploymentID string   `json:"deploymentId"`
-	Status       string   `json:"status,omitempty"`
+	Status       string   `json:"status"`
 	Logs         []string `json:"logs"`
 }
 

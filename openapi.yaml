@@ -1879,6 +1879,7 @@ components:
                     type: string
             required:
                 - deploymentId
+                - status
                 - logs
         DeploymentRequest:
             type: object

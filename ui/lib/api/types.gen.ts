@@ -164,7 +164,7 @@ export type Deployment = {
 export type DeploymentLogsBody = {
     deploymentId: string;
     logs: Array<string>;
-    status?: string;
+    status: string;
 };
 
 export type DeploymentRequest = {
