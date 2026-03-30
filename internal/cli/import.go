@@ -15,6 +15,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/importer"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
+	regdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/spf13/cobra"
 )
 
@@ -65,7 +66,7 @@ var ImportCmd = &cobra.Command{
 			}
 		}()
 
-		registryService := service.NewRegistryService(db, cfg, nil)
+		registryService := service.NewRegistryService(regdb.NewServiceDatabase(db), cfg, nil)
 
 		// Build HTTP client and headers for importer
 		httpClient := &http.Client{Timeout: importTimeout}

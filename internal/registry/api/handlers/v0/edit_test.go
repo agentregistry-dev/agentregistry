@@ -39,7 +39,7 @@ func TestEditServerEndpoint(t *testing.T) {
 	}
 
 	// Create registry service and test data
-	registryService := service.NewRegistryService(database.NewTestDB(t), cfg, nil)
+	registryService := service.NewRegistryService(database.NewTestServiceDB(t), cfg, nil)
 
 	// Create authorizer
 	jwtManager := auth.NewJWTManager(cfg)
@@ -448,7 +448,7 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 	}
 
 	// Create registry service
-	registryService := service.NewRegistryService(database.NewTestDB(t), cfg, nil)
+	registryService := service.NewRegistryService(database.NewTestServiceDB(t), cfg, nil)
 
 	// Setup test servers with different characteristics
 	testServers := []struct {

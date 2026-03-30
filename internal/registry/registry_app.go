@@ -128,7 +128,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		}
 	}
 
-	registryService := service.NewRegistryService(db, cfg, embeddingProvider)
+	registryService := service.NewRegistryService(database.NewServiceDatabase(db), cfg, embeddingProvider)
 	var providerService service.ProviderService = registryService
 	var platformRuntimeService service.PlatformRuntimeService = registryService
 	var serverService service.ServerService = registryService

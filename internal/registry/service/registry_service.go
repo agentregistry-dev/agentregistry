@@ -19,7 +19,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
-	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 )
@@ -60,12 +59,13 @@ func IsUnsupportedDeploymentPlatformError(err error) bool {
 // registryServiceImpl implements the RegistryService interface using our Database.
 type registryServiceImpl struct {
 	db                 database.Database
-	serverRepo         database.ServerRepository
-	agentRepo          database.AgentRepository
-	skillRepo          database.SkillRepository
-	promptRepo         database.PromptRepository
-	providerRepo       database.ProviderRepository
-	deploymentRepo     database.DeploymentRepository
+	storeDB            database.ServiceDatabase
+	serverRepo         database.ServerStore
+	agentRepo          database.AgentStore
+	skillRepo          database.SkillStore
+	promptRepo         database.PromptStore
+	providerRepo       database.ProviderStore
+	deploymentRepo     database.DeploymentStore
 	cfg                *config.Config
 	embeddingsProvider embeddings.Provider
 	deploymentAdapters map[string]registrytypes.DeploymentPlatformAdapter
@@ -79,18 +79,18 @@ type DeploymentPlatformStaleCleaner interface {
 
 // NewRegistryService creates a new registry service with the provided database and configuration
 func NewRegistryService(
-	db database.Database,
+	storeDB database.ServiceDatabase,
 	cfg *config.Config,
 	embeddingProvider embeddings.Provider,
 ) RegistryService {
 	return &registryServiceImpl{
-		db:                 db,
-		serverRepo:         db,
-		agentRepo:          db,
-		skillRepo:          db,
-		promptRepo:         db,
-		providerRepo:       db,
-		deploymentRepo:     db,
+		storeDB:            storeDB,
+		serverRepo:         storeDB,
+		agentRepo:          storeDB,
+		skillRepo:          storeDB,
+		promptRepo:         storeDB,
+		providerRepo:       storeDB,
+		deploymentRepo:     storeDB,
 		cfg:                cfg,
 		embeddingsProvider: embeddingProvider,
 		logger:             slog.Default().With("component", "registry"),
@@ -102,48 +102,6 @@ func (s *registryServiceImpl) SetPlatformAdapters(
 	deploymentPlatforms map[string]registrytypes.DeploymentPlatformAdapter,
 ) {
 	s.deploymentAdapters = deploymentPlatforms
-}
-
-func (s *registryServiceImpl) serverStoreDB() database.ServerRepository {
-	if s.serverRepo != nil {
-		return s.serverRepo
-	}
-	return s.db
-}
-
-func (s *registryServiceImpl) providerStoreDB() database.ProviderRepository {
-	if s.providerRepo != nil {
-		return s.providerRepo
-	}
-	return s.db
-}
-
-func (s *registryServiceImpl) agentStoreDB() database.AgentRepository {
-	if s.agentRepo != nil {
-		return s.agentRepo
-	}
-	return s.db
-}
-
-func (s *registryServiceImpl) skillStoreDB() database.SkillRepository {
-	if s.skillRepo != nil {
-		return s.skillRepo
-	}
-	return s.db
-}
-
-func (s *registryServiceImpl) promptStoreDB() database.PromptRepository {
-	if s.promptRepo != nil {
-		return s.promptRepo
-	}
-	return s.db
-}
-
-func (s *registryServiceImpl) deploymentStoreDB() database.DeploymentRepository {
-	if s.deploymentRepo != nil {
-		return s.deploymentRepo
-	}
-	return s.db
 }
 
 func (s *registryServiceImpl) resolveDeploymentAdapter(platform string) (registrytypes.DeploymentPlatformAdapter, error) {
@@ -177,7 +135,7 @@ func (s *registryServiceImpl) ListServers(ctx context.Context, filter *database.
 	}
 
 	// Use the database's ListServers method with pagination and filtering
-	serverRecords, nextCursor, err := s.serverStoreDB().ListServers(ctx, nil, filter, cursor, limit)
+	serverRecords, nextCursor, err := s.readStores().servers.ListServers(ctx, filter, cursor, limit)
 	if err != nil {
 		return nil, "", err
 	}
@@ -187,7 +145,7 @@ func (s *registryServiceImpl) ListServers(ctx context.Context, filter *database.
 
 // GetServerByName retrieves the latest version of a server by its server name
 func (s *registryServiceImpl) GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
-	serverRecord, err := s.serverStoreDB().GetServerByName(ctx, nil, serverName)
+	serverRecord, err := s.readStores().servers.GetServerByName(ctx, serverName)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +155,7 @@ func (s *registryServiceImpl) GetServerByName(ctx context.Context, serverName st
 
 // GetServerByNameAndVersion retrieves a specific version of a server by server name and version
 func (s *registryServiceImpl) GetServerByNameAndVersion(ctx context.Context, serverName string, version string) (*apiv0.ServerResponse, error) {
-	serverRecord, err := s.serverStoreDB().GetServerByNameAndVersion(ctx, nil, serverName, version)
+	serverRecord, err := s.readStores().servers.GetServerByNameAndVersion(ctx, serverName, version)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +165,7 @@ func (s *registryServiceImpl) GetServerByNameAndVersion(ctx context.Context, ser
 
 // GetAllVersionsByServerName retrieves all versions of a server by server name
 func (s *registryServiceImpl) GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
-	serverRecords, err := s.serverStoreDB().GetAllVersionsByServerName(ctx, nil, serverName)
+	serverRecords, err := s.readStores().servers.GetAllVersionsByServerName(ctx, serverName)
 	if err != nil {
 		return nil, err
 	}
@@ -218,13 +176,13 @@ func (s *registryServiceImpl) GetAllVersionsByServerName(ctx context.Context, se
 // CreateServer creates a new server version
 func (s *registryServiceImpl) CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
 	// Wrap the entire operation in a transaction
-	return database.InTransactionT(ctx, s.db, func(ctx context.Context, tx pgx.Tx) (*apiv0.ServerResponse, error) {
-		return s.createServerInTransaction(ctx, tx, req)
+	return inTransactionT(ctx, s, func(ctx context.Context, stores storeBundle) (*apiv0.ServerResponse, error) {
+		return s.createServerInTransaction(ctx, stores.servers, req)
 	})
 }
 
 // createServerInTransaction contains the actual CreateServer logic within a transaction
-func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx pgx.Tx, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
+func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, servers database.ServerStore, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
 	// Validate the request
 	if err := validators.ValidatePublishRequest(ctx, *req, s.cfg); err != nil {
 		return nil, err
@@ -234,17 +192,17 @@ func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx 
 	serverJSON := *req
 
 	// Serialize concurrent creates for the same server to avoid idx_unique_latest_per_server violations
-	if err := s.serverStoreDB().AcquireServerCreateLock(ctx, tx, serverJSON.Name); err != nil {
+	if err := servers.AcquireServerCreateLock(ctx, serverJSON.Name); err != nil {
 		return nil, err
 	}
 
 	// Check for duplicate remote URLs
-	if err := s.validateNoDuplicateRemoteURLs(ctx, tx, serverJSON); err != nil {
+	if err := s.validateNoDuplicateRemoteURLs(ctx, servers, serverJSON); err != nil {
 		return nil, err
 	}
 
 	// Check we haven't exceeded the maximum versions allowed for a server
-	versionCount, err := s.serverStoreDB().CountServerVersions(ctx, tx, serverJSON.Name)
+	versionCount, err := servers.CountServerVersions(ctx, serverJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -253,7 +211,7 @@ func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx 
 	}
 
 	// Check this isn't a duplicate version
-	versionExists, err := s.serverStoreDB().CheckVersionExists(ctx, tx, serverJSON.Name, serverJSON.Version)
+	versionExists, err := servers.CheckVersionExists(ctx, serverJSON.Name, serverJSON.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +220,7 @@ func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx 
 	}
 
 	// Get current latest version to determine if new version should be latest
-	currentLatest, err := s.serverStoreDB().GetCurrentLatestVersion(ctx, tx, serverJSON.Name)
+	currentLatest, err := servers.GetCurrentLatestVersion(ctx, serverJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -284,7 +242,7 @@ func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx 
 
 	// Unmark old latest version if needed
 	if isNewLatest && currentLatest != nil {
-		if err := s.serverStoreDB().UnmarkAsLatest(ctx, tx, serverJSON.Name); err != nil {
+		if err := servers.UnmarkAsLatest(ctx, serverJSON.Name); err != nil {
 			return nil, err
 		}
 	}
@@ -298,7 +256,7 @@ func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx 
 	}
 
 	// Insert new server version
-	result, err := s.serverStoreDB().CreateServer(ctx, tx, &serverJSON, officialMeta)
+	result, err := servers.CreateServer(ctx, &serverJSON, officialMeta)
 	if err != nil {
 		return nil, err
 	}
@@ -326,13 +284,13 @@ func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, tx 
 }
 
 // validateNoDuplicateRemoteURLs checks that no other server is using the same remote URLs
-func (s *registryServiceImpl) validateNoDuplicateRemoteURLs(ctx context.Context, tx pgx.Tx, serverDetail apiv0.ServerJSON) error {
+func (s *registryServiceImpl) validateNoDuplicateRemoteURLs(ctx context.Context, servers database.ServerStore, serverDetail apiv0.ServerJSON) error {
 	// Check each remote URL in the new server for conflicts
 	for _, remote := range serverDetail.Remotes {
 		// Use filter to find servers with this remote URL
 		filter := &database.ServerFilter{RemoteURL: &remote.URL}
 
-		conflictingServers, _, err := s.serverStoreDB().ListServers(ctx, tx, filter, "", 1000)
+		conflictingServers, _, err := servers.ListServers(ctx, filter, "", 1000)
 		if err != nil {
 			return fmt.Errorf("failed to check remote URL conflict: %w", err)
 		}
@@ -357,7 +315,7 @@ func (s *registryServiceImpl) ListSkills(ctx context.Context, filter *database.S
 	if limit <= 0 {
 		limit = 30
 	}
-	skills, next, err := s.skillStoreDB().ListSkills(ctx, nil, filter, cursor, limit)
+	skills, next, err := s.readStores().skills.ListSkills(ctx, filter, cursor, limit)
 	if err != nil {
 		return nil, "", err
 	}
@@ -366,27 +324,27 @@ func (s *registryServiceImpl) ListSkills(ctx context.Context, filter *database.S
 
 // GetSkillByName retrieves the latest version of a skill by its name
 func (s *registryServiceImpl) GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error) {
-	return s.skillStoreDB().GetSkillByName(ctx, nil, skillName)
+	return s.readStores().skills.GetSkillByName(ctx, skillName)
 }
 
 // GetSkillByNameAndVersion retrieves a specific version of a skill by name and version
 func (s *registryServiceImpl) GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
-	return s.skillStoreDB().GetSkillByNameAndVersion(ctx, nil, skillName, version)
+	return s.readStores().skills.GetSkillByNameAndVersion(ctx, skillName, version)
 }
 
 // GetAllVersionsBySkillName retrieves all versions for a skill
 func (s *registryServiceImpl) GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
-	return s.skillStoreDB().GetAllVersionsBySkillName(ctx, nil, skillName)
+	return s.readStores().skills.GetAllVersionsBySkillName(ctx, skillName)
 }
 
 // CreateSkill creates a new skill version
 func (s *registryServiceImpl) CreateSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error) {
-	return database.InTransactionT(ctx, s.db, func(ctx context.Context, tx pgx.Tx) (*models.SkillResponse, error) {
-		return s.createSkillInTransaction(ctx, tx, req)
+	return inTransactionT(ctx, s, func(ctx context.Context, stores storeBundle) (*models.SkillResponse, error) {
+		return s.createSkillInTransaction(ctx, stores.skills, req)
 	})
 }
 
-func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx pgx.Tx, req *models.SkillJSON) (*models.SkillResponse, error) {
+func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, skills database.SkillStore, req *models.SkillJSON) (*models.SkillResponse, error) {
 	// Basic validation: ensure required fields present
 	if req == nil || req.Name == "" || req.Version == "" {
 		return nil, fmt.Errorf("invalid skill payload: name and version are required")
@@ -398,7 +356,7 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 	// Check duplicate remote URLs among skills
 	for _, remote := range skillJSON.Remotes {
 		filter := &database.SkillFilter{RemoteURL: &remote.URL}
-		existing, _, err := s.skillStoreDB().ListSkills(ctx, tx, filter, "", 1000)
+		existing, _, err := skills.ListSkills(ctx, filter, "", 1000)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check remote URL conflict: %w", err)
 		}
@@ -410,7 +368,7 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 	}
 
 	// Enforce maximum versions per skill similar to servers
-	versionCount, err := s.skillStoreDB().CountSkillVersions(ctx, tx, skillJSON.Name)
+	versionCount, err := skills.CountSkillVersions(ctx, skillJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -419,7 +377,7 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 	}
 
 	// Prevent duplicate version
-	exists, err := s.skillStoreDB().CheckSkillVersionExists(ctx, tx, skillJSON.Name, skillJSON.Version)
+	exists, err := skills.CheckSkillVersionExists(ctx, skillJSON.Name, skillJSON.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -428,7 +386,7 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 	}
 
 	// Determine latest
-	currentLatest, err := s.skillStoreDB().GetCurrentLatestSkillVersion(ctx, tx, skillJSON.Name)
+	currentLatest, err := skills.GetCurrentLatestSkillVersion(ctx, skillJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -446,7 +404,7 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 	}
 
 	if isNewLatest && currentLatest != nil {
-		if err := s.skillStoreDB().UnmarkSkillAsLatest(ctx, tx, skillJSON.Name); err != nil {
+		if err := skills.UnmarkSkillAsLatest(ctx, skillJSON.Name); err != nil {
 			return nil, err
 		}
 	}
@@ -458,28 +416,28 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 		IsLatest:    isNewLatest,
 	}
 
-	return s.skillStoreDB().CreateSkill(ctx, tx, &skillJSON, officialMeta)
+	return skills.CreateSkill(ctx, &skillJSON, officialMeta)
 }
 
 // DeleteSkill permanently removes a skill version from the registry
 func (s *registryServiceImpl) DeleteSkill(ctx context.Context, skillName, version string) error {
-	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
-		return s.skillStoreDB().DeleteSkill(txCtx, tx, skillName, version)
+	return s.inTransaction(ctx, func(txCtx context.Context, stores storeBundle) error {
+		return stores.skills.DeleteSkill(txCtx, skillName, version)
 	})
 }
 
 // UpdateServer updates an existing server with new details
 func (s *registryServiceImpl) UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
 	// Wrap the entire operation in a transaction
-	return database.InTransactionT(ctx, s.db, func(ctx context.Context, tx pgx.Tx) (*apiv0.ServerResponse, error) {
-		return s.updateServerInTransaction(ctx, tx, serverName, version, req, newStatus)
+	return inTransactionT(ctx, s, func(ctx context.Context, stores storeBundle) (*apiv0.ServerResponse, error) {
+		return s.updateServerInTransaction(ctx, stores.servers, serverName, version, req, newStatus)
 	})
 }
 
 // updateServerInTransaction contains the actual UpdateServer logic within a transaction
-func (s *registryServiceImpl) updateServerInTransaction(ctx context.Context, tx pgx.Tx, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
+func (s *registryServiceImpl) updateServerInTransaction(ctx context.Context, servers database.ServerStore, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
 	// Get current server to check if it's deleted or being deleted
-	currentServer, err := s.serverStoreDB().GetServerByNameAndVersion(ctx, tx, serverName, version)
+	currentServer, err := servers.GetServerByNameAndVersion(ctx, serverName, version)
 	if err != nil {
 		return nil, err
 	}
@@ -500,19 +458,19 @@ func (s *registryServiceImpl) updateServerInTransaction(ctx context.Context, tx 
 	updatedServer := *req
 
 	// Check for duplicate remote URLs using the updated server
-	if err := s.validateNoDuplicateRemoteURLs(ctx, tx, updatedServer); err != nil {
+	if err := s.validateNoDuplicateRemoteURLs(ctx, servers, updatedServer); err != nil {
 		return nil, err
 	}
 
 	// Update server in database
-	updatedServerResponse, err := s.serverStoreDB().UpdateServer(ctx, tx, serverName, version, &updatedServer)
+	updatedServerResponse, err := servers.UpdateServer(ctx, serverName, version, &updatedServer)
 	if err != nil {
 		return nil, err
 	}
 
 	// Handle status change if provided
 	if newStatus != nil {
-		updatedWithStatus, err := s.serverStoreDB().SetServerStatus(ctx, tx, serverName, version, *newStatus)
+		updatedWithStatus, err := servers.SetServerStatus(ctx, serverName, version, *newStatus)
 		if err != nil {
 			return nil, err
 		}
@@ -530,8 +488,8 @@ func (s *registryServiceImpl) StoreServerReadme(ctx context.Context, serverName,
 		contentType = "text/markdown"
 	}
 
-	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
-		if _, err := s.serverStoreDB().GetServerByNameAndVersion(txCtx, tx, serverName, version); err != nil {
+	return s.inTransaction(ctx, func(txCtx context.Context, stores storeBundle) error {
+		if _, err := stores.servers.GetServerByNameAndVersion(txCtx, serverName, version); err != nil {
 			return err
 		}
 
@@ -544,7 +502,7 @@ func (s *registryServiceImpl) StoreServerReadme(ctx context.Context, serverName,
 			FetchedAt:   time.Now(),
 		}
 
-		if err := s.serverStoreDB().UpsertServerReadme(txCtx, tx, readme); err != nil {
+		if err := stores.servers.UpsertServerReadme(txCtx, readme); err != nil {
 			return err
 		}
 
@@ -553,17 +511,17 @@ func (s *registryServiceImpl) StoreServerReadme(ctx context.Context, serverName,
 }
 
 func (s *registryServiceImpl) GetServerReadmeLatest(ctx context.Context, serverName string) (*database.ServerReadme, error) {
-	return s.serverStoreDB().GetLatestServerReadme(ctx, nil, serverName)
+	return s.readStores().servers.GetLatestServerReadme(ctx, serverName)
 }
 
 func (s *registryServiceImpl) GetServerReadmeByVersion(ctx context.Context, serverName, version string) (*database.ServerReadme, error) {
-	return s.serverStoreDB().GetServerReadme(ctx, nil, serverName, version)
+	return s.readStores().servers.GetServerReadme(ctx, serverName, version)
 }
 
 // DeleteServer permanently removes a server version from the registry
 func (s *registryServiceImpl) DeleteServer(ctx context.Context, serverName, version string) error {
-	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
-		return s.serverStoreDB().DeleteServer(txCtx, tx, serverName, version)
+	return s.inTransaction(ctx, func(txCtx context.Context, stores storeBundle) error {
+		return stores.servers.DeleteServer(txCtx, serverName, version)
 	})
 }
 
@@ -603,7 +561,7 @@ func (s *registryServiceImpl) ListAgents(ctx context.Context, filter *database.A
 			return nil, "", err
 		}
 	}
-	agents, next, err := s.agentStoreDB().ListAgents(ctx, nil, filter, cursor, limit)
+	agents, next, err := s.readStores().agents.ListAgents(ctx, filter, cursor, limit)
 	if err != nil {
 		return nil, "", err
 	}
@@ -612,27 +570,27 @@ func (s *registryServiceImpl) ListAgents(ctx context.Context, filter *database.A
 
 // GetAgentByName retrieves the latest version of an agent by its name
 func (s *registryServiceImpl) GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error) {
-	return s.agentStoreDB().GetAgentByName(ctx, nil, agentName)
+	return s.readStores().agents.GetAgentByName(ctx, agentName)
 }
 
 // GetAgentByNameAndVersion retrieves a specific version of an agent by name and version
 func (s *registryServiceImpl) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
-	return s.agentStoreDB().GetAgentByNameAndVersion(ctx, nil, agentName, version)
+	return s.readStores().agents.GetAgentByNameAndVersion(ctx, agentName, version)
 }
 
 // GetAllVersionsByAgentName retrieves all versions for an agent
 func (s *registryServiceImpl) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
-	return s.agentStoreDB().GetAllVersionsByAgentName(ctx, nil, agentName)
+	return s.readStores().agents.GetAllVersionsByAgentName(ctx, agentName)
 }
 
 // CreateAgent creates a new agent version
 func (s *registryServiceImpl) CreateAgent(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error) {
-	return database.InTransactionT(ctx, s.db, func(ctx context.Context, tx pgx.Tx) (*models.AgentResponse, error) {
-		return s.createAgentInTransaction(ctx, tx, req)
+	return inTransactionT(ctx, s, func(ctx context.Context, stores storeBundle) (*models.AgentResponse, error) {
+		return s.createAgentInTransaction(ctx, stores.agents, req)
 	})
 }
 
-func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx pgx.Tx, req *models.AgentJSON) (*models.AgentResponse, error) {
+func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, agents database.AgentStore, req *models.AgentJSON) (*models.AgentResponse, error) {
 	// Basic validation: ensure required fields present
 	if req == nil || req.Name == "" || req.Version == "" {
 		return nil, fmt.Errorf("invalid agent payload: name and version are required")
@@ -644,7 +602,7 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 	// Check duplicate remote URLs among agents
 	for _, remote := range agentJSON.Remotes {
 		filter := &database.AgentFilter{RemoteURL: &remote.URL}
-		existing, _, err := s.agentStoreDB().ListAgents(ctx, tx, filter, "", 1000)
+		existing, _, err := agents.ListAgents(ctx, filter, "", 1000)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check remote URL conflict: %w", err)
 		}
@@ -656,7 +614,7 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 	}
 
 	// Enforce maximum versions per agent similar to servers
-	versionCount, err := s.agentStoreDB().CountAgentVersions(ctx, tx, agentJSON.Name)
+	versionCount, err := agents.CountAgentVersions(ctx, agentJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -665,7 +623,7 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 	}
 
 	// Prevent duplicate version
-	exists, err := s.agentStoreDB().CheckAgentVersionExists(ctx, tx, agentJSON.Name, agentJSON.Version)
+	exists, err := agents.CheckAgentVersionExists(ctx, agentJSON.Name, agentJSON.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -674,7 +632,7 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 	}
 
 	// Determine latest
-	currentLatest, err := s.agentStoreDB().GetCurrentLatestAgentVersion(ctx, tx, agentJSON.Name)
+	currentLatest, err := agents.GetCurrentLatestAgentVersion(ctx, agentJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -692,7 +650,7 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 	}
 
 	if isNewLatest && currentLatest != nil {
-		if err := s.agentStoreDB().UnmarkAgentAsLatest(ctx, tx, agentJSON.Name); err != nil {
+		if err := agents.UnmarkAgentAsLatest(ctx, agentJSON.Name); err != nil {
 			return nil, err
 		}
 	}
@@ -704,7 +662,7 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 		IsLatest:    isNewLatest,
 	}
 
-	result, err := s.agentStoreDB().CreateAgent(ctx, tx, &agentJSON, officialMeta)
+	result, err := agents.CreateAgent(ctx, &agentJSON, officialMeta)
 	if err != nil {
 		return nil, err
 	}
@@ -733,54 +691,54 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, tx p
 
 // DeleteAgent permanently removes an agent version from the registry
 func (s *registryServiceImpl) DeleteAgent(ctx context.Context, agentName, version string) error {
-	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
-		return s.agentStoreDB().DeleteAgent(txCtx, tx, agentName, version)
+	return s.inTransaction(ctx, func(txCtx context.Context, stores storeBundle) error {
+		return stores.agents.DeleteAgent(txCtx, agentName, version)
 	})
 }
 
 func (s *registryServiceImpl) UpsertServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error {
-	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
-		return s.serverStoreDB().SetServerEmbedding(txCtx, tx, serverName, version, embedding)
+	return s.inTransaction(ctx, func(txCtx context.Context, stores storeBundle) error {
+		return stores.servers.SetServerEmbedding(txCtx, serverName, version, embedding)
 	})
 }
 
 func (s *registryServiceImpl) GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
-	return s.serverStoreDB().GetServerEmbeddingMetadata(ctx, nil, serverName, version)
+	return s.readStores().servers.GetServerEmbeddingMetadata(ctx, serverName, version)
 }
 
 func (s *registryServiceImpl) UpsertAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error {
-	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
-		return s.agentStoreDB().SetAgentEmbedding(txCtx, tx, agentName, version, embedding)
+	return s.inTransaction(ctx, func(txCtx context.Context, stores storeBundle) error {
+		return stores.agents.SetAgentEmbedding(txCtx, agentName, version, embedding)
 	})
 }
 
 func (s *registryServiceImpl) GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
-	return s.agentStoreDB().GetAgentEmbeddingMetadata(ctx, nil, agentName, version)
+	return s.readStores().agents.GetAgentEmbeddingMetadata(ctx, agentName, version)
 }
 
 // ListProviders lists providers, optionally filtered by platform.
 func (s *registryServiceImpl) ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error) {
-	return s.providerStoreDB().ListProviders(ctx, nil, platform)
+	return s.readStores().providers.ListProviders(ctx, platform)
 }
 
 // GetProviderByID gets a provider by ID.
 func (s *registryServiceImpl) GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error) {
-	return s.providerStoreDB().GetProviderByID(ctx, nil, providerID)
+	return s.readStores().providers.GetProviderByID(ctx, providerID)
 }
 
 // CreateProvider creates a provider.
 func (s *registryServiceImpl) CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error) {
-	return s.providerStoreDB().CreateProvider(ctx, nil, in)
+	return s.readStores().providers.CreateProvider(ctx, in)
 }
 
 // UpdateProvider updates mutable provider fields.
 func (s *registryServiceImpl) UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error) {
-	return s.providerStoreDB().UpdateProvider(ctx, nil, providerID, in)
+	return s.readStores().providers.UpdateProvider(ctx, providerID, in)
 }
 
 // DeleteProvider removes a provider by ID.
 func (s *registryServiceImpl) DeleteProvider(ctx context.Context, providerID string) error {
-	return s.providerStoreDB().DeleteProvider(ctx, nil, providerID)
+	return s.readStores().providers.DeleteProvider(ctx, providerID)
 }
 
 func shouldIncludeDiscoveredDeployments(filter *models.DeploymentFilter) bool {
@@ -860,7 +818,7 @@ func (s *registryServiceImpl) appendDiscoveredDeployments(ctx context.Context, d
 		}
 	}
 
-	providers, err := s.providerStoreDB().ListProviders(ctx, nil, platformFilter)
+	providers, err := s.readStores().providers.ListProviders(ctx, platformFilter)
 	if err != nil {
 		log.Printf("Warning: Failed to list providers for discovery: %v", err)
 		return deployments
@@ -920,7 +878,7 @@ func (s *registryServiceImpl) appendDiscoveredDeployments(ctx context.Context, d
 // GetDeployments retrieves all deployed servers with optional filtering
 func (s *registryServiceImpl) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	// Get managed deployments from DB
-	dbDeployments, err := s.deploymentStoreDB().GetDeployments(ctx, nil, filter)
+	dbDeployments, err := s.readStores().deployments.GetDeployments(ctx, filter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get deployments from DB: %w", err)
 	}
@@ -937,7 +895,7 @@ func (s *registryServiceImpl) GetDeployments(ctx context.Context, filter *models
 
 // GetDeploymentByID retrieves a specific deployment by UUID.
 func (s *registryServiceImpl) GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error) {
-	deployment, err := s.deploymentStoreDB().GetDeploymentByID(ctx, nil, id)
+	deployment, err := s.readStores().deployments.GetDeploymentByID(ctx, id)
 	if err == nil {
 		return deployment, nil
 	}
@@ -970,7 +928,7 @@ func (s *registryServiceImpl) resolveProviderByID(ctx context.Context, providerI
 	if strings.TrimSpace(providerID) == "" {
 		return nil, fmt.Errorf("%w: provider id is required", database.ErrInvalidInput)
 	}
-	return s.providerStoreDB().GetProviderByID(ctx, nil, providerID)
+	return s.readStores().providers.GetProviderByID(ctx, providerID)
 }
 
 func (s *registryServiceImpl) resolveDeploymentAdapterByProviderID(ctx context.Context, providerID string) (registrytypes.DeploymentPlatformAdapter, error) {
@@ -1006,7 +964,7 @@ func (s *registryServiceImpl) findDeploymentByIdentity(ctx context.Context, reso
 		ResourceType: &artifactType,
 		ResourceName: &resourceName,
 	}
-	deployments, err := s.deploymentStoreDB().GetDeployments(ctx, nil, filter)
+	deployments, err := s.readStores().deployments.GetDeployments(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -1045,7 +1003,7 @@ func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, res
 		log.Printf("Warning: failed stale cleanup for deployment %s on platform %s: %v", existing.ID, cleanupPlatform, err)
 	}
 
-	if err := s.deploymentStoreDB().RemoveDeploymentByID(ctx, nil, existing.ID); err != nil && !errors.Is(err, database.ErrNotFound) {
+	if err := s.readStores().deployments.RemoveDeploymentByID(ctx, existing.ID); err != nil && !errors.Is(err, database.ErrNotFound) {
 		return fmt.Errorf("removing stale deployment record: %w", err)
 	}
 
@@ -1121,7 +1079,7 @@ func (s *registryServiceImpl) removeDeploymentRecord(ctx context.Context, deploy
 		return database.ErrInvalidInput
 	}
 
-	if err := s.deploymentStoreDB().RemoveDeploymentByID(ctx, nil, deployment.ID); err != nil {
+	if err := s.readStores().deployments.RemoveDeploymentByID(ctx, deployment.ID); err != nil {
 		return err
 	}
 
@@ -1130,7 +1088,7 @@ func (s *registryServiceImpl) removeDeploymentRecord(ctx context.Context, deploy
 
 // RemoveDeploymentByID removes a deployment by UUID.
 func (s *registryServiceImpl) RemoveDeploymentByID(ctx context.Context, id string) error {
-	deployment, err := s.deploymentStoreDB().GetDeploymentByID(ctx, nil, id)
+	deployment, err := s.readStores().deployments.GetDeploymentByID(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -1190,7 +1148,7 @@ func (s *registryServiceImpl) CreateDeployment(ctx context.Context, req *models.
 		return nil, err
 	}
 
-	updated, err := s.deploymentStoreDB().GetDeploymentByID(ctx, nil, created.ID)
+	updated, err := s.readStores().deployments.GetDeploymentByID(ctx, created.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -1236,10 +1194,11 @@ func (s *registryServiceImpl) createManagedDeploymentRecord(ctx context.Context,
 	if deployment.Env == nil {
 		deployment.Env = map[string]string{}
 	}
+	stores := s.readStores()
 
 	switch deployment.ResourceType {
 	case resourceTypeMCP:
-		serverResp, err := s.serverStoreDB().GetServerByNameAndVersion(ctx, nil, deployment.ServerName, deployment.Version)
+		serverResp, err := stores.servers.GetServerByNameAndVersion(ctx, deployment.ServerName, deployment.Version)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, fmt.Errorf("server %s not found in registry: %w", deployment.ServerName, database.ErrNotFound)
@@ -1248,7 +1207,7 @@ func (s *registryServiceImpl) createManagedDeploymentRecord(ctx context.Context,
 		}
 		deployment.Version = serverResp.Server.Version
 	case resourceTypeAgent:
-		agentResp, err := s.agentStoreDB().GetAgentByNameAndVersion(ctx, nil, deployment.ServerName, deployment.Version)
+		agentResp, err := stores.agents.GetAgentByNameAndVersion(ctx, deployment.ServerName, deployment.Version)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, fmt.Errorf("agent %s not found in registry: %w", deployment.ServerName, database.ErrNotFound)
@@ -1260,11 +1219,11 @@ func (s *registryServiceImpl) createManagedDeploymentRecord(ctx context.Context,
 		return nil, fmt.Errorf("%w: invalid resource type %q", database.ErrInvalidInput, deployment.ResourceType)
 	}
 
-	if err := s.deploymentStoreDB().CreateDeployment(ctx, nil, deployment); err != nil {
+	if err := stores.deployments.CreateDeployment(ctx, deployment); err != nil {
 		return nil, err
 	}
 
-	created, err := s.deploymentStoreDB().GetDeploymentByID(ctx, nil, deployment.ID)
+	created, err := stores.deployments.GetDeploymentByID(ctx, deployment.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -1297,7 +1256,7 @@ func (s *registryServiceImpl) applyDeploymentActionResult(ctx context.Context, d
 		}
 	}
 
-	return s.deploymentStoreDB().UpdateDeploymentState(auth.WithSystemContext(ctx), nil, deploymentID, patch)
+	return s.readStores().deployments.UpdateDeploymentState(auth.WithSystemContext(ctx), deploymentID, patch)
 }
 
 func (s *registryServiceImpl) applyFailedDeploymentAction(
@@ -1331,7 +1290,7 @@ func (s *registryServiceImpl) applyFailedDeploymentAction(
 			patch.ProviderMetadata = &meta
 		}
 	}
-	return s.deploymentStoreDB().UpdateDeploymentState(auth.WithSystemContext(ctx), nil, deploymentID, patch)
+	return s.readStores().deployments.UpdateDeploymentState(auth.WithSystemContext(ctx), deploymentID, patch)
 }
 
 // GetDeploymentLogs dispatches logs retrieval to the platform adapter.
@@ -1498,7 +1457,7 @@ func (s *registryServiceImpl) ListPrompts(ctx context.Context, filter *database.
 	if limit <= 0 {
 		limit = 30
 	}
-	prompts, next, err := s.promptStoreDB().ListPrompts(ctx, nil, filter, cursor, limit)
+	prompts, next, err := s.readStores().prompts.ListPrompts(ctx, filter, cursor, limit)
 	if err != nil {
 		return nil, "", err
 	}
@@ -1507,27 +1466,27 @@ func (s *registryServiceImpl) ListPrompts(ctx context.Context, filter *database.
 
 // GetPromptByName retrieves the latest version of a prompt by its name
 func (s *registryServiceImpl) GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error) {
-	return s.promptStoreDB().GetPromptByName(ctx, nil, promptName)
+	return s.readStores().prompts.GetPromptByName(ctx, promptName)
 }
 
 // GetPromptByNameAndVersion retrieves a specific version of a prompt by name and version
 func (s *registryServiceImpl) GetPromptByNameAndVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
-	return s.promptStoreDB().GetPromptByNameAndVersion(ctx, nil, promptName, version)
+	return s.readStores().prompts.GetPromptByNameAndVersion(ctx, promptName, version)
 }
 
 // GetAllVersionsByPromptName retrieves all versions for a prompt
 func (s *registryServiceImpl) GetAllVersionsByPromptName(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
-	return s.promptStoreDB().GetAllVersionsByPromptName(ctx, nil, promptName)
+	return s.readStores().prompts.GetAllVersionsByPromptName(ctx, promptName)
 }
 
 // CreatePrompt creates a new prompt version
 func (s *registryServiceImpl) CreatePrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error) {
-	return database.InTransactionT(ctx, s.db, func(ctx context.Context, tx pgx.Tx) (*models.PromptResponse, error) {
-		return s.createPromptInTransaction(ctx, tx, req)
+	return inTransactionT(ctx, s, func(ctx context.Context, stores storeBundle) (*models.PromptResponse, error) {
+		return s.createPromptInTransaction(ctx, stores.prompts, req)
 	})
 }
 
-func (s *registryServiceImpl) createPromptInTransaction(ctx context.Context, tx pgx.Tx, req *models.PromptJSON) (*models.PromptResponse, error) {
+func (s *registryServiceImpl) createPromptInTransaction(ctx context.Context, prompts database.PromptStore, req *models.PromptJSON) (*models.PromptResponse, error) {
 	if req == nil || req.Name == "" || req.Version == "" {
 		return nil, fmt.Errorf("invalid prompt payload: name and version are required")
 	}
@@ -1535,7 +1494,7 @@ func (s *registryServiceImpl) createPromptInTransaction(ctx context.Context, tx 
 	publishTime := time.Now()
 	promptJSON := *req
 
-	versionCount, err := s.promptStoreDB().CountPromptVersions(ctx, tx, promptJSON.Name)
+	versionCount, err := prompts.CountPromptVersions(ctx, promptJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -1543,7 +1502,7 @@ func (s *registryServiceImpl) createPromptInTransaction(ctx context.Context, tx 
 		return nil, database.ErrMaxVersionsReached
 	}
 
-	exists, err := s.promptStoreDB().CheckPromptVersionExists(ctx, tx, promptJSON.Name, promptJSON.Version)
+	exists, err := prompts.CheckPromptVersionExists(ctx, promptJSON.Name, promptJSON.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -1551,7 +1510,7 @@ func (s *registryServiceImpl) createPromptInTransaction(ctx context.Context, tx 
 		return nil, database.ErrInvalidVersion
 	}
 
-	currentLatest, err := s.promptStoreDB().GetCurrentLatestPromptVersion(ctx, tx, promptJSON.Name)
+	currentLatest, err := prompts.GetCurrentLatestPromptVersion(ctx, promptJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -1568,7 +1527,7 @@ func (s *registryServiceImpl) createPromptInTransaction(ctx context.Context, tx 
 	}
 
 	if isNewLatest && currentLatest != nil {
-		if err := s.promptStoreDB().UnmarkPromptAsLatest(ctx, tx, promptJSON.Name); err != nil {
+		if err := prompts.UnmarkPromptAsLatest(ctx, promptJSON.Name); err != nil {
 			return nil, err
 		}
 	}
@@ -1580,12 +1539,12 @@ func (s *registryServiceImpl) createPromptInTransaction(ctx context.Context, tx 
 		IsLatest:    isNewLatest,
 	}
 
-	return s.promptStoreDB().CreatePrompt(ctx, tx, &promptJSON, officialMeta)
+	return prompts.CreatePrompt(ctx, &promptJSON, officialMeta)
 }
 
 // DeletePrompt permanently removes a prompt version from the registry
 func (s *registryServiceImpl) DeletePrompt(ctx context.Context, promptName, version string) error {
-	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
-		return s.promptStoreDB().DeletePrompt(txCtx, tx, promptName, version)
+	return s.inTransaction(ctx, func(txCtx context.Context, stores storeBundle) error {
+		return stores.prompts.DeletePrompt(txCtx, promptName, version)
 	})
 }

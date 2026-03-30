@@ -32,7 +32,7 @@ func TestCORSHeaders(t *testing.T) {
 	cfg.JWTPrivateKey = hex.EncodeToString(testSeed)
 
 	// Create test services
-	db := database.NewTestDB(t)
+	db := database.NewTestServiceDB(t)
 	registryService := service.NewRegistryService(db, cfg, nil)
 
 	shutdownTelemetry, metrics, err := telemetry.InitMetrics("test")
@@ -146,7 +146,7 @@ func TestCORSHeaderValues(t *testing.T) {
 	cfg.JWTPrivateKey = hex.EncodeToString(testSeed)
 
 	// Create test services
-	db := database.NewTestDB(t)
+	db := database.NewTestServiceDB(t)
 	registryService := service.NewRegistryService(db, cfg, nil)
 
 	shutdownTelemetry, metrics, err := telemetry.InitMetrics("test")
