@@ -62,6 +62,8 @@ type registryServiceImpl struct {
 	db                 database.Database
 	serverRepo         database.ServerRepository
 	agentRepo          database.AgentRepository
+	skillRepo          database.SkillRepository
+	promptRepo         database.PromptRepository
 	providerRepo       database.ProviderRepository
 	deploymentRepo     database.DeploymentRepository
 	cfg                *config.Config
@@ -85,6 +87,8 @@ func NewRegistryService(
 		db:                 db,
 		serverRepo:         db,
 		agentRepo:          db,
+		skillRepo:          db,
+		promptRepo:         db,
 		providerRepo:       db,
 		deploymentRepo:     db,
 		cfg:                cfg,
@@ -117,6 +121,20 @@ func (s *registryServiceImpl) providerStoreDB() database.ProviderRepository {
 func (s *registryServiceImpl) agentStoreDB() database.AgentRepository {
 	if s.agentRepo != nil {
 		return s.agentRepo
+	}
+	return s.db
+}
+
+func (s *registryServiceImpl) skillStoreDB() database.SkillRepository {
+	if s.skillRepo != nil {
+		return s.skillRepo
+	}
+	return s.db
+}
+
+func (s *registryServiceImpl) promptStoreDB() database.PromptRepository {
+	if s.promptRepo != nil {
+		return s.promptRepo
 	}
 	return s.db
 }
@@ -339,7 +357,7 @@ func (s *registryServiceImpl) ListSkills(ctx context.Context, filter *database.S
 	if limit <= 0 {
 		limit = 30
 	}
-	skills, next, err := s.db.ListSkills(ctx, nil, filter, cursor, limit)
+	skills, next, err := s.skillStoreDB().ListSkills(ctx, nil, filter, cursor, limit)
 	if err != nil {
 		return nil, "", err
 	}
@@ -348,17 +366,17 @@ func (s *registryServiceImpl) ListSkills(ctx context.Context, filter *database.S
 
 // GetSkillByName retrieves the latest version of a skill by its name
 func (s *registryServiceImpl) GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error) {
-	return s.db.GetSkillByName(ctx, nil, skillName)
+	return s.skillStoreDB().GetSkillByName(ctx, nil, skillName)
 }
 
 // GetSkillByNameAndVersion retrieves a specific version of a skill by name and version
 func (s *registryServiceImpl) GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
-	return s.db.GetSkillByNameAndVersion(ctx, nil, skillName, version)
+	return s.skillStoreDB().GetSkillByNameAndVersion(ctx, nil, skillName, version)
 }
 
 // GetAllVersionsBySkillName retrieves all versions for a skill
 func (s *registryServiceImpl) GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
-	return s.db.GetAllVersionsBySkillName(ctx, nil, skillName)
+	return s.skillStoreDB().GetAllVersionsBySkillName(ctx, nil, skillName)
 }
 
 // CreateSkill creates a new skill version
@@ -380,7 +398,7 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 	// Check duplicate remote URLs among skills
 	for _, remote := range skillJSON.Remotes {
 		filter := &database.SkillFilter{RemoteURL: &remote.URL}
-		existing, _, err := s.db.ListSkills(ctx, tx, filter, "", 1000)
+		existing, _, err := s.skillStoreDB().ListSkills(ctx, tx, filter, "", 1000)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check remote URL conflict: %w", err)
 		}
@@ -392,7 +410,7 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 	}
 
 	// Enforce maximum versions per skill similar to servers
-	versionCount, err := s.db.CountSkillVersions(ctx, tx, skillJSON.Name)
+	versionCount, err := s.skillStoreDB().CountSkillVersions(ctx, tx, skillJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -401,7 +419,7 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 	}
 
 	// Prevent duplicate version
-	exists, err := s.db.CheckSkillVersionExists(ctx, tx, skillJSON.Name, skillJSON.Version)
+	exists, err := s.skillStoreDB().CheckSkillVersionExists(ctx, tx, skillJSON.Name, skillJSON.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -410,7 +428,7 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 	}
 
 	// Determine latest
-	currentLatest, err := s.db.GetCurrentLatestSkillVersion(ctx, tx, skillJSON.Name)
+	currentLatest, err := s.skillStoreDB().GetCurrentLatestSkillVersion(ctx, tx, skillJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -428,7 +446,7 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 	}
 
 	if isNewLatest && currentLatest != nil {
-		if err := s.db.UnmarkSkillAsLatest(ctx, tx, skillJSON.Name); err != nil {
+		if err := s.skillStoreDB().UnmarkSkillAsLatest(ctx, tx, skillJSON.Name); err != nil {
 			return nil, err
 		}
 	}
@@ -440,13 +458,13 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, tx p
 		IsLatest:    isNewLatest,
 	}
 
-	return s.db.CreateSkill(ctx, tx, &skillJSON, officialMeta)
+	return s.skillStoreDB().CreateSkill(ctx, tx, &skillJSON, officialMeta)
 }
 
 // DeleteSkill permanently removes a skill version from the registry
 func (s *registryServiceImpl) DeleteSkill(ctx context.Context, skillName, version string) error {
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
-		return s.db.DeleteSkill(txCtx, tx, skillName, version)
+		return s.skillStoreDB().DeleteSkill(txCtx, tx, skillName, version)
 	})
 }
 
@@ -1480,7 +1498,7 @@ func (s *registryServiceImpl) ListPrompts(ctx context.Context, filter *database.
 	if limit <= 0 {
 		limit = 30
 	}
-	prompts, next, err := s.db.ListPrompts(ctx, nil, filter, cursor, limit)
+	prompts, next, err := s.promptStoreDB().ListPrompts(ctx, nil, filter, cursor, limit)
 	if err != nil {
 		return nil, "", err
 	}
@@ -1489,17 +1507,17 @@ func (s *registryServiceImpl) ListPrompts(ctx context.Context, filter *database.
 
 // GetPromptByName retrieves the latest version of a prompt by its name
 func (s *registryServiceImpl) GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error) {
-	return s.db.GetPromptByName(ctx, nil, promptName)
+	return s.promptStoreDB().GetPromptByName(ctx, nil, promptName)
 }
 
 // GetPromptByNameAndVersion retrieves a specific version of a prompt by name and version
 func (s *registryServiceImpl) GetPromptByNameAndVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
-	return s.db.GetPromptByNameAndVersion(ctx, nil, promptName, version)
+	return s.promptStoreDB().GetPromptByNameAndVersion(ctx, nil, promptName, version)
 }
 
 // GetAllVersionsByPromptName retrieves all versions for a prompt
 func (s *registryServiceImpl) GetAllVersionsByPromptName(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
-	return s.db.GetAllVersionsByPromptName(ctx, nil, promptName)
+	return s.promptStoreDB().GetAllVersionsByPromptName(ctx, nil, promptName)
 }
 
 // CreatePrompt creates a new prompt version
@@ -1517,7 +1535,7 @@ func (s *registryServiceImpl) createPromptInTransaction(ctx context.Context, tx 
 	publishTime := time.Now()
 	promptJSON := *req
 
-	versionCount, err := s.db.CountPromptVersions(ctx, tx, promptJSON.Name)
+	versionCount, err := s.promptStoreDB().CountPromptVersions(ctx, tx, promptJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -1525,7 +1543,7 @@ func (s *registryServiceImpl) createPromptInTransaction(ctx context.Context, tx 
 		return nil, database.ErrMaxVersionsReached
 	}
 
-	exists, err := s.db.CheckPromptVersionExists(ctx, tx, promptJSON.Name, promptJSON.Version)
+	exists, err := s.promptStoreDB().CheckPromptVersionExists(ctx, tx, promptJSON.Name, promptJSON.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -1533,7 +1551,7 @@ func (s *registryServiceImpl) createPromptInTransaction(ctx context.Context, tx 
 		return nil, database.ErrInvalidVersion
 	}
 
-	currentLatest, err := s.db.GetCurrentLatestPromptVersion(ctx, tx, promptJSON.Name)
+	currentLatest, err := s.promptStoreDB().GetCurrentLatestPromptVersion(ctx, tx, promptJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -1550,7 +1568,7 @@ func (s *registryServiceImpl) createPromptInTransaction(ctx context.Context, tx 
 	}
 
 	if isNewLatest && currentLatest != nil {
-		if err := s.db.UnmarkPromptAsLatest(ctx, tx, promptJSON.Name); err != nil {
+		if err := s.promptStoreDB().UnmarkPromptAsLatest(ctx, tx, promptJSON.Name); err != nil {
 			return nil, err
 		}
 	}
@@ -1562,12 +1580,12 @@ func (s *registryServiceImpl) createPromptInTransaction(ctx context.Context, tx 
 		IsLatest:    isNewLatest,
 	}
 
-	return s.db.CreatePrompt(ctx, tx, &promptJSON, officialMeta)
+	return s.promptStoreDB().CreatePrompt(ctx, tx, &promptJSON, officialMeta)
 }
 
 // DeletePrompt permanently removes a prompt version from the registry
 func (s *registryServiceImpl) DeletePrompt(ctx context.Context, promptName, version string) error {
 	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
-		return s.db.DeletePrompt(txCtx, tx, promptName, version)
+		return s.promptStoreDB().DeletePrompt(txCtx, tx, promptName, version)
 	})
 }

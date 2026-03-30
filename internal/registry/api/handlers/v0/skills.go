@@ -42,7 +42,7 @@ type SkillVersionsInput struct {
 }
 
 // RegisterSkillsEndpoints registers all skill-related endpoints with a custom path prefix.
-func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService) {
+func RegisterSkillsEndpoints(api huma.API, pathPrefix string, skillSvc service.SkillService) {
 	tags := []string{"skills"}
 	if strings.Contains(pathPrefix, "admin") {
 		tags = append(tags, "admin")
@@ -81,7 +81,7 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 			}
 		}
 
-		skills, nextCursor, err := registry.ListSkills(ctx, filter, input.Cursor, input.Limit)
+		skills, nextCursor, err := skillSvc.ListSkills(ctx, filter, input.Cursor, input.Limit)
 		if err != nil {
 			if errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error401Unauthorized("Authentication required")
@@ -124,7 +124,7 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
 		}
-		if err := registry.DeleteSkill(ctx, skillName, version); err != nil {
+		if err := skillSvc.DeleteSkill(ctx, skillName, version); err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Skill not found")
 			}
@@ -161,9 +161,9 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 
 		var skillResp *skillmodels.SkillResponse
 		if version == "latest" {
-			skillResp, err = registry.GetSkillByName(ctx, skillName)
+			skillResp, err = skillSvc.GetSkillByName(ctx, skillName)
 		} else {
-			skillResp, err = registry.GetSkillByNameAndVersion(ctx, skillName, version)
+			skillResp, err = skillSvc.GetSkillByNameAndVersion(ctx, skillName, version)
 		}
 		if err != nil {
 			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
@@ -195,7 +195,7 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, registry service.R
 		}
 
 		// Get all versions of the skill
-		skills, err := registry.GetAllVersionsBySkillName(ctx, skillName)
+		skills, err := skillSvc.GetAllVersionsBySkillName(ctx, skillName)
 		if err != nil {
 			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Skill not found")
@@ -228,9 +228,9 @@ type CreateSkillInput struct {
 }
 
 // createSkillHandler is the shared handler logic for creating skills
-func createSkillHandler(ctx context.Context, input *CreateSkillInput, registry service.RegistryService) (*types.Response[skillmodels.SkillResponse], error) {
+func createSkillHandler(ctx context.Context, input *CreateSkillInput, skillSvc service.SkillService) (*types.Response[skillmodels.SkillResponse], error) {
 	// Create/update the skill (published defaults to false in the service layer)
-	createdSkill, err := registry.CreateSkill(ctx, &input.Body)
+	createdSkill, err := skillSvc.CreateSkill(ctx, &input.Body)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
 			return nil, huma.Error404NotFound("Not found")
@@ -248,7 +248,7 @@ func createSkillHandler(ctx context.Context, input *CreateSkillInput, registry s
 }
 
 // RegisterSkillsCreateEndpoint registers POST /skills (create or update; immediately visible).
-func RegisterSkillsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
+func RegisterSkillsCreateEndpoint(api huma.API, pathPrefix string, skillSvc service.SkillService) {
 	huma.Register(api, huma.Operation{
 		OperationID: "create-skill" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodPost,
@@ -257,6 +257,6 @@ func RegisterSkillsCreateEndpoint(api huma.API, pathPrefix string, registry serv
 		Description: "Create a new Agentic skill in the registry or update an existing one. Resources are immediately visible after creation.",
 		Tags:        []string{"skills"},
 	}, func(ctx context.Context, input *CreateSkillInput) (*types.Response[skillmodels.SkillResponse], error) {
-		return createSkillHandler(ctx, input, registry)
+		return createSkillHandler(ctx, input, skillSvc)
 	})
 }

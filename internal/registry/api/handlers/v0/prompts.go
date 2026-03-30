@@ -42,7 +42,7 @@ type PromptVersionsInput struct {
 }
 
 // RegisterPromptsEndpoints registers all prompt-related endpoints with a custom path prefix.
-func RegisterPromptsEndpoints(api huma.API, pathPrefix string, registry service.RegistryService) {
+func RegisterPromptsEndpoints(api huma.API, pathPrefix string, promptSvc service.PromptService) {
 	tags := []string{"prompts"}
 	if strings.Contains(pathPrefix, "admin") {
 		tags = append(tags, "admin")
@@ -79,7 +79,7 @@ func RegisterPromptsEndpoints(api huma.API, pathPrefix string, registry service.
 			}
 		}
 
-		prompts, nextCursor, err := registry.ListPrompts(ctx, filter, input.Cursor, input.Limit)
+		prompts, nextCursor, err := promptSvc.ListPrompts(ctx, filter, input.Cursor, input.Limit)
 		if err != nil {
 			if errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error401Unauthorized("Authentication required")
@@ -125,9 +125,9 @@ func RegisterPromptsEndpoints(api huma.API, pathPrefix string, registry service.
 
 		var promptResp *promptmodels.PromptResponse
 		if version == "latest" {
-			promptResp, err = registry.GetPromptByName(ctx, promptName)
+			promptResp, err = promptSvc.GetPromptByName(ctx, promptName)
 		} else {
-			promptResp, err = registry.GetPromptByNameAndVersion(ctx, promptName, version)
+			promptResp, err = promptSvc.GetPromptByNameAndVersion(ctx, promptName, version)
 		}
 		if err != nil {
 			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
@@ -162,7 +162,7 @@ func RegisterPromptsEndpoints(api huma.API, pathPrefix string, registry service.
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
 		}
 
-		if err := registry.DeletePrompt(ctx, promptName, version); err != nil {
+		if err := promptSvc.DeletePrompt(ctx, promptName, version); err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Prompt not found")
 			}
@@ -194,7 +194,7 @@ func RegisterPromptsEndpoints(api huma.API, pathPrefix string, registry service.
 			return nil, huma.Error400BadRequest("Invalid prompt name encoding", err)
 		}
 
-		prompts, err := registry.GetAllVersionsByPromptName(ctx, promptName)
+		prompts, err := promptSvc.GetAllVersionsByPromptName(ctx, promptName)
 		if err != nil {
 			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Prompt not found")
@@ -227,8 +227,8 @@ type CreatePromptInput struct {
 }
 
 // createPromptHandler is the shared handler logic for creating prompts
-func createPromptHandler(ctx context.Context, input *CreatePromptInput, registry service.RegistryService) (*types.Response[promptmodels.PromptResponse], error) {
-	createdPrompt, err := registry.CreatePrompt(ctx, &input.Body)
+func createPromptHandler(ctx context.Context, input *CreatePromptInput, promptSvc service.PromptService) (*types.Response[promptmodels.PromptResponse], error) {
+	createdPrompt, err := promptSvc.CreatePrompt(ctx, &input.Body)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
 			return nil, huma.Error404NotFound("Not found")
@@ -246,7 +246,7 @@ func createPromptHandler(ctx context.Context, input *CreatePromptInput, registry
 }
 
 // RegisterPromptsCreateEndpoint registers POST /prompts (create or update; immediately visible).
-func RegisterPromptsCreateEndpoint(api huma.API, pathPrefix string, registry service.RegistryService) {
+func RegisterPromptsCreateEndpoint(api huma.API, pathPrefix string, promptSvc service.PromptService) {
 	huma.Register(api, huma.Operation{
 		OperationID: "create-prompt" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodPost,
@@ -255,6 +255,6 @@ func RegisterPromptsCreateEndpoint(api huma.API, pathPrefix string, registry ser
 		Description: "Create a new prompt in the registry or update an existing one. Resources are immediately visible after creation.",
 		Tags:        []string{"prompts"},
 	}, func(ctx context.Context, input *CreatePromptInput) (*types.Response[promptmodels.PromptResponse], error) {
-		return createPromptHandler(ctx, input, registry)
+		return createPromptHandler(ctx, input, promptSvc)
 	})
 }

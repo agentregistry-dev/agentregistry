@@ -192,31 +192,8 @@ type AgentRepository interface {
 	GetAgentEmbeddingMetadata(ctx context.Context, tx pgx.Tx, agentName, version string) (*SemanticEmbeddingMetadata, error)
 }
 
-// DeploymentRepository defines deployment persistence operations.
-type DeploymentRepository interface {
-	// CreateDeployment creates a new deployment record
-	CreateDeployment(ctx context.Context, tx pgx.Tx, deployment *models.Deployment) error
-	// GetDeployments retrieves all deployed servers
-	GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
-	// GetDeploymentByID retrieves a specific deployment by UUID.
-	GetDeploymentByID(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error)
-	// UpdateDeploymentState applies a partial state patch to a deployment by ID.
-	UpdateDeploymentState(ctx context.Context, tx pgx.Tx, id string, patch *models.DeploymentStatePatch) error
-	// RemoveDeploymentByID removes a deployment by ID.
-	RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id string) error
-}
-
-// Database defines the interface for database operations
-type Database interface {
-	ServerRepository
-	// InTransaction executes a function within a database transaction
-	InTransaction(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error
-	// Close closes the database connection
-	Close() error
-
-	AgentRepository
-
-	// Skills API
+// SkillRepository defines skill persistence operations.
+type SkillRepository interface {
 	// CreateSkill inserts a new skill version with official metadata
 	CreateSkill(ctx context.Context, tx pgx.Tx, skillJSON *models.SkillJSON, officialMeta *models.SkillRegistryExtensions) (*models.SkillResponse, error)
 	// UpdateSkill updates an existing skill record
@@ -241,8 +218,10 @@ type Database interface {
 	UnmarkSkillAsLatest(ctx context.Context, tx pgx.Tx, skillName string) error
 	// DeleteSkill permanently removes a skill version from the database
 	DeleteSkill(ctx context.Context, tx pgx.Tx, skillName, version string) error
+}
 
-	// Prompts API
+// PromptRepository defines prompt persistence operations.
+type PromptRepository interface {
 	// CreatePrompt inserts a new prompt version with official metadata
 	CreatePrompt(ctx context.Context, tx pgx.Tx, promptJSON *models.PromptJSON, officialMeta *models.PromptRegistryExtensions) (*models.PromptResponse, error)
 	// ListPrompts retrieve prompt entries with optional filtering
@@ -263,6 +242,33 @@ type Database interface {
 	UnmarkPromptAsLatest(ctx context.Context, tx pgx.Tx, promptName string) error
 	// DeletePrompt permanently removes a prompt version from the database
 	DeletePrompt(ctx context.Context, tx pgx.Tx, promptName, version string) error
+}
+
+// DeploymentRepository defines deployment persistence operations.
+type DeploymentRepository interface {
+	// CreateDeployment creates a new deployment record
+	CreateDeployment(ctx context.Context, tx pgx.Tx, deployment *models.Deployment) error
+	// GetDeployments retrieves all deployed servers
+	GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
+	// GetDeploymentByID retrieves a specific deployment by UUID.
+	GetDeploymentByID(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error)
+	// UpdateDeploymentState applies a partial state patch to a deployment by ID.
+	UpdateDeploymentState(ctx context.Context, tx pgx.Tx, id string, patch *models.DeploymentStatePatch) error
+	// RemoveDeploymentByID removes a deployment by ID.
+	RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id string) error
+}
+
+// Database defines the interface for database operations
+type Database interface {
+	ServerRepository
+	// InTransaction executes a function within a database transaction
+	InTransaction(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error
+	// Close closes the database connection
+	Close() error
+
+	AgentRepository
+	SkillRepository
+	PromptRepository
 
 	ProviderRepository
 	DeploymentRepository

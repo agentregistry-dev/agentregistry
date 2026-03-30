@@ -61,6 +61,38 @@ type AgentService interface {
 	GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error)
 }
 
+// SkillService defines skill catalog and mutation operations.
+type SkillService interface {
+	// ListSkills retrieve all skills with optional filtering
+	ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error)
+	// GetSkillByName retrieve latest version of a skill by name
+	GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error)
+	// GetSkillByNameAndVersion retrieve specific version of a skill by name and version
+	GetSkillByNameAndVersion(ctx context.Context, skillName string, version string) (*models.SkillResponse, error)
+	// GetAllVersionsBySkillName retrieve all versions of a skill by name
+	GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error)
+	// CreateSkill creates a new skill version
+	CreateSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error)
+	// DeleteSkill permanently removes a skill version from the registry
+	DeleteSkill(ctx context.Context, skillName, version string) error
+}
+
+// PromptService defines prompt catalog and mutation operations.
+type PromptService interface {
+	// ListPrompts retrieve all prompts with optional filtering
+	ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error)
+	// GetPromptByName retrieve latest version of a prompt by name
+	GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error)
+	// GetPromptByNameAndVersion retrieve specific version of a prompt by name and version
+	GetPromptByNameAndVersion(ctx context.Context, promptName string, version string) (*models.PromptResponse, error)
+	// GetAllVersionsByPromptName retrieve all versions of a prompt by name
+	GetAllVersionsByPromptName(ctx context.Context, promptName string) ([]*models.PromptResponse, error)
+	// CreatePrompt creates a new prompt version
+	CreatePrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error)
+	// DeletePrompt permanently removes a prompt version from the registry
+	DeletePrompt(ctx context.Context, promptName, version string) error
+}
+
 // ProviderService defines provider lifecycle operations.
 type ProviderService interface {
 	// ListProviders retrieves deployment target providers, optionally filtered by provider platform type.
@@ -101,33 +133,8 @@ type DeploymentService interface {
 type RegistryService interface {
 	ServerService
 	AgentService
-	// Skills APIs
-	// ListSkills retrieve all skills with optional filtering
-	ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error)
-	// GetSkillByName retrieve latest version of a skill by name
-	GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error)
-	// GetSkillByNameAndVersion retrieve specific version of a skill by name and version
-	GetSkillByNameAndVersion(ctx context.Context, skillName string, version string) (*models.SkillResponse, error)
-	// GetAllVersionsBySkillName retrieve all versions of a skill by name
-	GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error)
-	// CreateSkill creates a new skill version
-	CreateSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error)
-	// DeleteSkill permanently removes a skill version from the registry
-	DeleteSkill(ctx context.Context, skillName, version string) error
-
-	// Prompts APIs
-	// ListPrompts retrieve all prompts with optional filtering
-	ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error)
-	// GetPromptByName retrieve latest version of a prompt by name
-	GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error)
-	// GetPromptByNameAndVersion retrieve specific version of a prompt by name and version
-	GetPromptByNameAndVersion(ctx context.Context, promptName string, version string) (*models.PromptResponse, error)
-	// GetAllVersionsByPromptName retrieve all versions of a prompt by name
-	GetAllVersionsByPromptName(ctx context.Context, promptName string) ([]*models.PromptResponse, error)
-	// CreatePrompt creates a new prompt version
-	CreatePrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error)
-	// DeletePrompt permanently removes a prompt version from the registry
-	DeletePrompt(ctx context.Context, promptName, version string) error
+	SkillService
+	PromptService
 
 	ProviderService
 	DeploymentService
