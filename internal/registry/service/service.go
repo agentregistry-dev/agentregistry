@@ -93,6 +93,23 @@ type PromptService interface {
 	DeletePrompt(ctx context.Context, promptName, version string) error
 }
 
+// MCPRegistryService defines the read-heavy and deployment operations needed by the MCP bridge.
+type MCPRegistryService interface {
+	ServerService
+	AgentService
+	SkillService
+	DeploymentService
+}
+
+// PlatformRuntimeService defines the registry operations needed to materialize platform deployments.
+type PlatformRuntimeService interface {
+	ProviderService
+	GetServerByNameAndVersion(ctx context.Context, serverName string, version string) (*apiv0.ServerResponse, error)
+	GetAgentByNameAndVersion(ctx context.Context, agentName string, version string) (*models.AgentResponse, error)
+	ResolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error)
+	ResolveAgentManifestPrompts(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.ResolvedPrompt, error)
+}
+
 // ProviderService defines provider lifecycle operations.
 type ProviderService interface {
 	// ListProviders retrieves deployment target providers, optionally filtered by provider platform type.

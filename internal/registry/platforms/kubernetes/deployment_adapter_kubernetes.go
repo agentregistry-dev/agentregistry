@@ -14,10 +14,10 @@ import (
 )
 
 type kubernetesDeploymentAdapter struct {
-	registry service.RegistryService
+	registry service.PlatformRuntimeService
 }
 
-func NewKubernetesDeploymentAdapter(registry service.RegistryService) *kubernetesDeploymentAdapter {
+func NewKubernetesDeploymentAdapter(registry service.PlatformRuntimeService) *kubernetesDeploymentAdapter {
 	return &kubernetesDeploymentAdapter{registry: registry}
 }
 

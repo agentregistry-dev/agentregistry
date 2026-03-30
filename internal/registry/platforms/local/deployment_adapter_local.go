@@ -16,7 +16,7 @@ import (
 )
 
 type localDeploymentAdapter struct {
-	registry         service.RegistryService
+	registry         service.PlatformRuntimeService
 	platformDir      string
 	agentGatewayPort uint16
 }
@@ -68,7 +68,7 @@ func (c *localAgentConfig) cleanup() error {
 }
 
 func NewLocalDeploymentAdapter(
-	registry service.RegistryService,
+	registry service.PlatformRuntimeService,
 	platformDir string,
 	agentGatewayPort uint16,
 ) *localDeploymentAdapter {

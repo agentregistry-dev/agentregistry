@@ -504,7 +504,7 @@ func defaultAgentPort(agent *platformtypes.Agent) uint16 {
 
 func mustAgentManifest(
 	ctx context.Context,
-	registryService service.RegistryService,
+	registryService service.PlatformRuntimeService,
 	deployment *models.Deployment,
 ) *models.AgentManifest {
 	agentResp, err := registryService.GetAgentByNameAndVersion(ctx, deployment.ServerName, deployment.Version)
