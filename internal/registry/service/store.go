@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
@@ -27,14 +28,14 @@ func bundleFromStore(store database.Store) storeBundle {
 }
 
 func (s *registryServiceImpl) serviceDatabase() database.ServiceDatabase {
-	if s.storeDB != nil {
-		return s.storeDB
-	}
-	return database.NewServiceDatabase(s.db)
+	return s.storeDB
 }
 
 func (s *registryServiceImpl) readStores() storeBundle {
-	stores := bundleFromStore(s.serviceDatabase())
+	var stores storeBundle
+	if storeDB := s.serviceDatabase(); storeDB != nil {
+		stores = bundleFromStore(storeDB)
+	}
 	if s.serverRepo != nil {
 		stores.servers = s.serverRepo
 	}
@@ -57,7 +58,12 @@ func (s *registryServiceImpl) readStores() storeBundle {
 }
 
 func (s *registryServiceImpl) inTransaction(ctx context.Context, fn func(context.Context, storeBundle) error) error {
-	return s.serviceDatabase().InTransaction(ctx, func(txCtx context.Context, store database.Store) error {
+	storeDB := s.serviceDatabase()
+	if storeDB == nil {
+		return errors.New("service database is not configured")
+	}
+
+	return storeDB.InTransaction(ctx, func(txCtx context.Context, store database.Store) error {
 		return fn(txCtx, bundleFromStore(store))
 	})
 }

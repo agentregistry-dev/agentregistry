@@ -58,7 +58,6 @@ func IsUnsupportedDeploymentPlatformError(err error) bool {
 
 // registryServiceImpl implements the RegistryService interface using our Database.
 type registryServiceImpl struct {
-	db                 database.Database
 	storeDB            database.ServiceDatabase
 	serverRepo         database.ServerStore
 	agentRepo          database.AgentStore

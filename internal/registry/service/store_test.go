@@ -41,7 +41,7 @@ func (m *storeTestDB) DeleteServer(ctx context.Context, tx pgx.Tx, serverName, v
 	return m.deleteServerFn(ctx, tx, serverName, version)
 }
 
-func TestReadStoresFallsBackToDatabaseRepositories(t *testing.T) {
+func TestReadStoresUsesServiceDatabase(t *testing.T) {
 	called := false
 	mockDB := &storeTestDB{
 		testingT: t,
@@ -55,7 +55,7 @@ func TestReadStoresFallsBackToDatabaseRepositories(t *testing.T) {
 		},
 	}
 
-	svc := &registryServiceImpl{db: mockDB}
+	svc := &registryServiceImpl{storeDB: database.NewServiceDatabase(mockDB)}
 
 	_, nextCursor, err := svc.readStores().servers.ListServers(context.Background(), nil, "", 25)
 	require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestReadStoresUsesRepositoryOverrides(t *testing.T) {
 	}
 
 	svc := &registryServiceImpl{
-		db:         mockDB,
+		storeDB:    database.NewServiceDatabase(mockDB),
 		serverRepo: database.NewServiceDatabase(override),
 	}
 
@@ -108,7 +108,7 @@ func TestInTransactionUsesTransactionalStores(t *testing.T) {
 		},
 	}
 
-	svc := &registryServiceImpl{db: mockDB}
+	svc := &registryServiceImpl{storeDB: database.NewServiceDatabase(mockDB)}
 
 	err := svc.inTransaction(context.Background(), func(ctx context.Context, stores storeBundle) error {
 		return stores.servers.DeleteServer(ctx, "io.test/server", "1.0.0")
