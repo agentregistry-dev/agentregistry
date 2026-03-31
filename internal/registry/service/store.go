@@ -68,7 +68,11 @@ func (s *registryServiceImpl) inTransaction(ctx context.Context, fn func(context
 	})
 }
 
-func inTransactionT[T any](ctx context.Context, s *registryServiceImpl, fn func(context.Context, storeBundle) (T, error)) (T, error) {
+type transactionRunner interface {
+	inTransaction(ctx context.Context, fn func(context.Context, storeBundle) error) error
+}
+
+func inTransactionT[T any](ctx context.Context, s transactionRunner, fn func(context.Context, storeBundle) (T, error)) (T, error) {
 	var result T
 	var fnErr error
 

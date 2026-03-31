@@ -22,6 +22,64 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type splitDomainViewMockDB struct {
+	database.Database
+	listServersFn     func(ctx context.Context, tx database.Transaction, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
+	getProviderByIDFn func(ctx context.Context, tx database.Transaction, providerID string) (*models.Provider, error)
+}
+
+func (m *splitDomainViewMockDB) ListServers(ctx context.Context, tx database.Transaction, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
+	return m.listServersFn(ctx, tx, filter, cursor, limit)
+}
+
+func (m *splitDomainViewMockDB) GetProviderByID(ctx context.Context, tx database.Transaction, providerID string) (*models.Provider, error) {
+	return m.getProviderByIDFn(ctx, tx, providerID)
+}
+
+func TestDomainServiceViewsShareRegistryState(t *testing.T) {
+	ctx := context.Background()
+	serverCalls := 0
+	providerCalls := 0
+	adapter := &testDeploymentAdapter{}
+
+	mockDB := &splitDomainViewMockDB{
+		listServersFn: func(_ context.Context, _ database.Transaction, _ *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
+			serverCalls++
+			require.Empty(t, cursor)
+			require.Equal(t, 1, limit)
+			return []*apiv0.ServerResponse{{
+				Server: apiv0.ServerJSON{Name: "com.example/weather", Version: "1.0.0"},
+			}}, "", nil
+		},
+		getProviderByIDFn: func(_ context.Context, _ database.Transaction, providerID string) (*models.Provider, error) {
+			providerCalls++
+			return &models.Provider{ID: providerID, Platform: "local"}, nil
+		},
+	}
+
+	svc := &registryServiceImpl{
+		storeDB: database.NewServiceDatabase(mockDB),
+		deploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+			"local": adapter,
+		},
+	}
+
+	servers, _, err := svc.serverService().ListServers(ctx, nil, "", 1)
+	require.NoError(t, err)
+	require.Len(t, servers, 1)
+	assert.Equal(t, "com.example/weather", servers[0].Server.Name)
+
+	provider, err := svc.providerService().GetProviderByID(ctx, "provider-1")
+	require.NoError(t, err)
+	assert.Equal(t, "local", provider.Platform)
+
+	resolved, err := svc.deploymentService().resolveDeploymentAdapterByProviderID(ctx, "provider-1")
+	require.NoError(t, err)
+	assert.Same(t, adapter, resolved)
+	assert.Equal(t, 1, serverCalls)
+	assert.Equal(t, 2, providerCalls)
+}
+
 func TestValidateNoDuplicateRemoteURLs(t *testing.T) {
 	ctx := context.Background()
 

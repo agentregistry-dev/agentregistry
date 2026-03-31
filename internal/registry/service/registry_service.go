@@ -121,7 +121,7 @@ func (s *registryServiceImpl) shouldGenerateEmbeddingsOnPublish() bool {
 }
 
 // ListServers returns registry entries with cursor-based pagination and optional filtering
-func (s *registryServiceImpl) ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
+func (s *serverServiceImpl) ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
 	// If limit is not set or negative, use a default limit
 	if limit <= 0 {
 		limit = 30
@@ -143,7 +143,7 @@ func (s *registryServiceImpl) ListServers(ctx context.Context, filter *database.
 }
 
 // GetServerByName retrieves the latest version of a server by its server name
-func (s *registryServiceImpl) GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+func (s *serverServiceImpl) GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
 	serverRecord, err := s.readStores().servers.GetServerByName(ctx, serverName)
 	if err != nil {
 		return nil, err
@@ -153,7 +153,7 @@ func (s *registryServiceImpl) GetServerByName(ctx context.Context, serverName st
 }
 
 // GetServerByNameAndVersion retrieves a specific version of a server by server name and version
-func (s *registryServiceImpl) GetServerByNameAndVersion(ctx context.Context, serverName string, version string) (*apiv0.ServerResponse, error) {
+func (s *serverServiceImpl) GetServerByNameAndVersion(ctx context.Context, serverName string, version string) (*apiv0.ServerResponse, error) {
 	serverRecord, err := s.readStores().servers.GetServerByNameAndVersion(ctx, serverName, version)
 	if err != nil {
 		return nil, err
@@ -163,7 +163,7 @@ func (s *registryServiceImpl) GetServerByNameAndVersion(ctx context.Context, ser
 }
 
 // GetAllVersionsByServerName retrieves all versions of a server by server name
-func (s *registryServiceImpl) GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
+func (s *serverServiceImpl) GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
 	serverRecords, err := s.readStores().servers.GetAllVersionsByServerName(ctx, serverName)
 	if err != nil {
 		return nil, err
@@ -173,7 +173,7 @@ func (s *registryServiceImpl) GetAllVersionsByServerName(ctx context.Context, se
 }
 
 // CreateServer creates a new server version
-func (s *registryServiceImpl) CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
+func (s *serverServiceImpl) CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
 	// Wrap the entire operation in a transaction
 	return inTransactionT(ctx, s, func(ctx context.Context, stores storeBundle) (*apiv0.ServerResponse, error) {
 		return s.createServerInTransaction(ctx, stores.servers, req)
@@ -181,7 +181,7 @@ func (s *registryServiceImpl) CreateServer(ctx context.Context, req *apiv0.Serve
 }
 
 // createServerInTransaction contains the actual CreateServer logic within a transaction
-func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, servers database.ServerStore, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
+func (s *serverServiceImpl) createServerInTransaction(ctx context.Context, servers database.ServerStore, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
 	// Validate the request
 	if err := validators.ValidatePublishRequest(ctx, *req, s.cfg); err != nil {
 		return nil, err
@@ -283,7 +283,7 @@ func (s *registryServiceImpl) createServerInTransaction(ctx context.Context, ser
 }
 
 // validateNoDuplicateRemoteURLs checks that no other server is using the same remote URLs
-func (s *registryServiceImpl) validateNoDuplicateRemoteURLs(ctx context.Context, servers database.ServerStore, serverDetail apiv0.ServerJSON) error {
+func (s *serverServiceImpl) validateNoDuplicateRemoteURLs(ctx context.Context, servers database.ServerStore, serverDetail apiv0.ServerJSON) error {
 	// Check each remote URL in the new server for conflicts
 	for _, remote := range serverDetail.Remotes {
 		// Use filter to find servers with this remote URL
@@ -310,7 +310,7 @@ func (s *registryServiceImpl) validateNoDuplicateRemoteURLs(ctx context.Context,
 // ==============================
 
 // ListSkills returns registry entries for skills with pagination and filtering
-func (s *registryServiceImpl) ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
+func (s *skillServiceImpl) ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
 	if limit <= 0 {
 		limit = 30
 	}
@@ -322,28 +322,28 @@ func (s *registryServiceImpl) ListSkills(ctx context.Context, filter *database.S
 }
 
 // GetSkillByName retrieves the latest version of a skill by its name
-func (s *registryServiceImpl) GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error) {
+func (s *skillServiceImpl) GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error) {
 	return s.readStores().skills.GetSkillByName(ctx, skillName)
 }
 
 // GetSkillByNameAndVersion retrieves a specific version of a skill by name and version
-func (s *registryServiceImpl) GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
+func (s *skillServiceImpl) GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
 	return s.readStores().skills.GetSkillByNameAndVersion(ctx, skillName, version)
 }
 
 // GetAllVersionsBySkillName retrieves all versions for a skill
-func (s *registryServiceImpl) GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
+func (s *skillServiceImpl) GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
 	return s.readStores().skills.GetAllVersionsBySkillName(ctx, skillName)
 }
 
 // CreateSkill creates a new skill version
-func (s *registryServiceImpl) CreateSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error) {
+func (s *skillServiceImpl) CreateSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error) {
 	return inTransactionT(ctx, s, func(ctx context.Context, stores storeBundle) (*models.SkillResponse, error) {
 		return s.createSkillInTransaction(ctx, stores.skills, req)
 	})
 }
 
-func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, skills database.SkillStore, req *models.SkillJSON) (*models.SkillResponse, error) {
+func (s *skillServiceImpl) createSkillInTransaction(ctx context.Context, skills database.SkillStore, req *models.SkillJSON) (*models.SkillResponse, error) {
 	// Basic validation: ensure required fields present
 	if req == nil || req.Name == "" || req.Version == "" {
 		return nil, fmt.Errorf("invalid skill payload: name and version are required")
@@ -419,14 +419,14 @@ func (s *registryServiceImpl) createSkillInTransaction(ctx context.Context, skil
 }
 
 // DeleteSkill permanently removes a skill version from the registry
-func (s *registryServiceImpl) DeleteSkill(ctx context.Context, skillName, version string) error {
+func (s *skillServiceImpl) DeleteSkill(ctx context.Context, skillName, version string) error {
 	return s.inTransaction(ctx, func(txCtx context.Context, stores storeBundle) error {
 		return stores.skills.DeleteSkill(txCtx, skillName, version)
 	})
 }
 
 // UpdateServer updates an existing server with new details
-func (s *registryServiceImpl) UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
+func (s *serverServiceImpl) UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
 	// Wrap the entire operation in a transaction
 	return inTransactionT(ctx, s, func(ctx context.Context, stores storeBundle) (*apiv0.ServerResponse, error) {
 		return s.updateServerInTransaction(ctx, stores.servers, serverName, version, req, newStatus)
@@ -434,7 +434,7 @@ func (s *registryServiceImpl) UpdateServer(ctx context.Context, serverName, vers
 }
 
 // updateServerInTransaction contains the actual UpdateServer logic within a transaction
-func (s *registryServiceImpl) updateServerInTransaction(ctx context.Context, servers database.ServerStore, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
+func (s *serverServiceImpl) updateServerInTransaction(ctx context.Context, servers database.ServerStore, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
 	// Get current server to check if it's deleted or being deleted
 	currentServer, err := servers.GetServerByNameAndVersion(ctx, serverName, version)
 	if err != nil {
@@ -479,7 +479,7 @@ func (s *registryServiceImpl) updateServerInTransaction(ctx context.Context, ser
 	return updatedServerResponse, nil
 }
 
-func (s *registryServiceImpl) StoreServerReadme(ctx context.Context, serverName, version string, content []byte, contentType string) error {
+func (s *serverServiceImpl) StoreServerReadme(ctx context.Context, serverName, version string, content []byte, contentType string) error {
 	if len(content) == 0 {
 		return nil
 	}
@@ -509,23 +509,23 @@ func (s *registryServiceImpl) StoreServerReadme(ctx context.Context, serverName,
 	})
 }
 
-func (s *registryServiceImpl) GetServerReadmeLatest(ctx context.Context, serverName string) (*database.ServerReadme, error) {
+func (s *serverServiceImpl) GetServerReadmeLatest(ctx context.Context, serverName string) (*database.ServerReadme, error) {
 	return s.readStores().servers.GetLatestServerReadme(ctx, serverName)
 }
 
-func (s *registryServiceImpl) GetServerReadmeByVersion(ctx context.Context, serverName, version string) (*database.ServerReadme, error) {
+func (s *serverServiceImpl) GetServerReadmeByVersion(ctx context.Context, serverName, version string) (*database.ServerReadme, error) {
 	return s.readStores().servers.GetServerReadme(ctx, serverName, version)
 }
 
 // DeleteServer permanently removes a server version from the registry
-func (s *registryServiceImpl) DeleteServer(ctx context.Context, serverName, version string) error {
+func (s *serverServiceImpl) DeleteServer(ctx context.Context, serverName, version string) error {
 	return s.inTransaction(ctx, func(txCtx context.Context, stores storeBundle) error {
 		return stores.servers.DeleteServer(txCtx, serverName, version)
 	})
 }
 
 // validateUpdateRequest validates an update request with optional registry validation skipping
-func (s *registryServiceImpl) validateUpdateRequest(ctx context.Context, req apiv0.ServerJSON, skipRegistryValidation bool) error {
+func (s *serverServiceImpl) validateUpdateRequest(ctx context.Context, req apiv0.ServerJSON, skipRegistryValidation bool) error {
 	// Always validate the server JSON structure
 	if err := validators.ValidateServerJSON(&req); err != nil {
 		return err
@@ -551,7 +551,7 @@ func (s *registryServiceImpl) validateUpdateRequest(ctx context.Context, req api
 // ==============================
 
 // ListAgents returns registry entries for agents with pagination and filtering
-func (s *registryServiceImpl) ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
+func (s *agentServiceImpl) ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
 	if limit <= 0 {
 		limit = 30
 	}
@@ -568,28 +568,28 @@ func (s *registryServiceImpl) ListAgents(ctx context.Context, filter *database.A
 }
 
 // GetAgentByName retrieves the latest version of an agent by its name
-func (s *registryServiceImpl) GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error) {
+func (s *agentServiceImpl) GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error) {
 	return s.readStores().agents.GetAgentByName(ctx, agentName)
 }
 
 // GetAgentByNameAndVersion retrieves a specific version of an agent by name and version
-func (s *registryServiceImpl) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
+func (s *agentServiceImpl) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
 	return s.readStores().agents.GetAgentByNameAndVersion(ctx, agentName, version)
 }
 
 // GetAllVersionsByAgentName retrieves all versions for an agent
-func (s *registryServiceImpl) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
+func (s *agentServiceImpl) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
 	return s.readStores().agents.GetAllVersionsByAgentName(ctx, agentName)
 }
 
 // CreateAgent creates a new agent version
-func (s *registryServiceImpl) CreateAgent(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error) {
+func (s *agentServiceImpl) CreateAgent(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error) {
 	return inTransactionT(ctx, s, func(ctx context.Context, stores storeBundle) (*models.AgentResponse, error) {
 		return s.createAgentInTransaction(ctx, stores.agents, req)
 	})
 }
 
-func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, agents database.AgentStore, req *models.AgentJSON) (*models.AgentResponse, error) {
+func (s *agentServiceImpl) createAgentInTransaction(ctx context.Context, agents database.AgentStore, req *models.AgentJSON) (*models.AgentResponse, error) {
 	// Basic validation: ensure required fields present
 	if req == nil || req.Name == "" || req.Version == "" {
 		return nil, fmt.Errorf("invalid agent payload: name and version are required")
@@ -689,54 +689,54 @@ func (s *registryServiceImpl) createAgentInTransaction(ctx context.Context, agen
 }
 
 // DeleteAgent permanently removes an agent version from the registry
-func (s *registryServiceImpl) DeleteAgent(ctx context.Context, agentName, version string) error {
+func (s *agentServiceImpl) DeleteAgent(ctx context.Context, agentName, version string) error {
 	return s.inTransaction(ctx, func(txCtx context.Context, stores storeBundle) error {
 		return stores.agents.DeleteAgent(txCtx, agentName, version)
 	})
 }
 
-func (s *registryServiceImpl) UpsertServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error {
+func (s *serverServiceImpl) UpsertServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error {
 	return s.inTransaction(ctx, func(txCtx context.Context, stores storeBundle) error {
 		return stores.servers.SetServerEmbedding(txCtx, serverName, version, embedding)
 	})
 }
 
-func (s *registryServiceImpl) GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
+func (s *serverServiceImpl) GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
 	return s.readStores().servers.GetServerEmbeddingMetadata(ctx, serverName, version)
 }
 
-func (s *registryServiceImpl) UpsertAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error {
+func (s *agentServiceImpl) UpsertAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error {
 	return s.inTransaction(ctx, func(txCtx context.Context, stores storeBundle) error {
 		return stores.agents.SetAgentEmbedding(txCtx, agentName, version, embedding)
 	})
 }
 
-func (s *registryServiceImpl) GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
+func (s *agentServiceImpl) GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
 	return s.readStores().agents.GetAgentEmbeddingMetadata(ctx, agentName, version)
 }
 
 // ListProviders lists providers, optionally filtered by platform.
-func (s *registryServiceImpl) ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error) {
+func (s *providerServiceImpl) ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error) {
 	return s.readStores().providers.ListProviders(ctx, platform)
 }
 
 // GetProviderByID gets a provider by ID.
-func (s *registryServiceImpl) GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error) {
+func (s *providerServiceImpl) GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error) {
 	return s.readStores().providers.GetProviderByID(ctx, providerID)
 }
 
 // CreateProvider creates a provider.
-func (s *registryServiceImpl) CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error) {
+func (s *providerServiceImpl) CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error) {
 	return s.readStores().providers.CreateProvider(ctx, in)
 }
 
 // UpdateProvider updates mutable provider fields.
-func (s *registryServiceImpl) UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error) {
+func (s *providerServiceImpl) UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error) {
 	return s.readStores().providers.UpdateProvider(ctx, providerID, in)
 }
 
 // DeleteProvider removes a provider by ID.
-func (s *registryServiceImpl) DeleteProvider(ctx context.Context, providerID string) error {
+func (s *providerServiceImpl) DeleteProvider(ctx context.Context, providerID string) error {
 	return s.readStores().providers.DeleteProvider(ctx, providerID)
 }
 
@@ -802,7 +802,7 @@ func matchesDiscoveredDeploymentFilter(filter *models.DeploymentFilter, dep *mod
 	return true
 }
 
-func (s *registryServiceImpl) appendDiscoveredDeployments(ctx context.Context, deployments []*models.Deployment, filter *models.DeploymentFilter) []*models.Deployment {
+func (s *deploymentServiceImpl) appendDiscoveredDeployments(ctx context.Context, deployments []*models.Deployment, filter *models.DeploymentFilter) []*models.Deployment {
 	var platformFilter *string
 	if filter != nil {
 		platformFilter = filter.Platform
@@ -875,7 +875,7 @@ func (s *registryServiceImpl) appendDiscoveredDeployments(ctx context.Context, d
 }
 
 // GetDeployments retrieves all deployed servers with optional filtering
-func (s *registryServiceImpl) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+func (s *deploymentServiceImpl) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	// Get managed deployments from DB
 	dbDeployments, err := s.readStores().deployments.GetDeployments(ctx, filter)
 	if err != nil {
@@ -893,7 +893,7 @@ func (s *registryServiceImpl) GetDeployments(ctx context.Context, filter *models
 }
 
 // GetDeploymentByID retrieves a specific deployment by UUID.
-func (s *registryServiceImpl) GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error) {
+func (s *deploymentServiceImpl) GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error) {
 	deployment, err := s.readStores().deployments.GetDeploymentByID(ctx, id)
 	if err == nil {
 		return deployment, nil
@@ -904,7 +904,7 @@ func (s *registryServiceImpl) GetDeploymentByID(ctx context.Context, id string) 
 	return s.getDiscoveredDeploymentByID(ctx, id)
 }
 
-func (s *registryServiceImpl) getDiscoveredDeploymentByID(ctx context.Context, id string) (*models.Deployment, error) {
+func (s *deploymentServiceImpl) getDiscoveredDeploymentByID(ctx context.Context, id string) (*models.Deployment, error) {
 	discoveredID := strings.TrimSpace(id)
 	if !strings.HasPrefix(discoveredID, "discovered-") {
 		return nil, database.ErrNotFound
@@ -923,14 +923,14 @@ func (s *registryServiceImpl) getDiscoveredDeploymentByID(ctx context.Context, i
 	return nil, database.ErrNotFound
 }
 
-func (s *registryServiceImpl) resolveProviderByID(ctx context.Context, providerID string) (*models.Provider, error) {
+func (s *deploymentServiceImpl) resolveProviderByID(ctx context.Context, providerID string) (*models.Provider, error) {
 	if strings.TrimSpace(providerID) == "" {
 		return nil, fmt.Errorf("%w: provider id is required", database.ErrInvalidInput)
 	}
 	return s.readStores().providers.GetProviderByID(ctx, providerID)
 }
 
-func (s *registryServiceImpl) resolveDeploymentAdapterByProviderID(ctx context.Context, providerID string) (registrytypes.DeploymentPlatformAdapter, error) {
+func (s *deploymentServiceImpl) resolveDeploymentAdapterByProviderID(ctx context.Context, providerID string) (registrytypes.DeploymentPlatformAdapter, error) {
 	resolvedProviderID := strings.TrimSpace(providerID)
 	if resolvedProviderID == "" {
 		return nil, fmt.Errorf("%w: provider id is required", database.ErrInvalidInput)
@@ -958,7 +958,7 @@ func deploymentAdapterSupportsResourceType(adapter registrytypes.DeploymentPlatf
 	return false
 }
 
-func (s *registryServiceImpl) findDeploymentByIdentity(ctx context.Context, resourceName, version, artifactType string) (*models.Deployment, error) {
+func (s *deploymentServiceImpl) findDeploymentByIdentity(ctx context.Context, resourceName, version, artifactType string) (*models.Deployment, error) {
 	filter := &models.DeploymentFilter{
 		ResourceType: &artifactType,
 		ResourceName: &resourceName,
@@ -979,7 +979,7 @@ func (s *registryServiceImpl) findDeploymentByIdentity(ctx context.Context, reso
 
 // cleanupExistingDeployment removes a stale deployment record and its associated runtime resources.
 // Errors from runtime cleanup are logged but not fatal, since the resources may already be gone.
-func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, resourceName, version, resourceType string) error {
+func (s *deploymentServiceImpl) cleanupExistingDeployment(ctx context.Context, resourceName, version, resourceType string) error {
 	existing, err := s.findDeploymentByIdentity(ctx, resourceName, version, resourceType)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
@@ -1009,7 +1009,7 @@ func (s *registryServiceImpl) cleanupExistingDeployment(ctx context.Context, res
 	return nil
 }
 
-func (s *registryServiceImpl) resolveExistingDeploymentCleanupPlatform(ctx context.Context, existing *models.Deployment) (string, error) {
+func (s *deploymentServiceImpl) resolveExistingDeploymentCleanupPlatform(ctx context.Context, existing *models.Deployment) (string, error) {
 	providerID := strings.TrimSpace(existing.ProviderID)
 	if providerID == "" {
 		return "", nil
@@ -1028,7 +1028,7 @@ func (s *registryServiceImpl) resolveExistingDeploymentCleanupPlatform(ctx conte
 	return strings.ToLower(strings.TrimSpace(provider.Platform)), nil
 }
 
-func (s *registryServiceImpl) cleanupStaleDeploymentOnPlatform(ctx context.Context, cleanupPlatform string, existing *models.Deployment) error {
+func (s *deploymentServiceImpl) cleanupStaleDeploymentOnPlatform(ctx context.Context, cleanupPlatform string, existing *models.Deployment) error {
 	adapter, err := s.resolveDeploymentAdapter(cleanupPlatform)
 	if err != nil {
 		return fmt.Errorf("resolve deployment adapter: %w", err)
@@ -1042,7 +1042,7 @@ func (s *registryServiceImpl) cleanupStaleDeploymentOnPlatform(ctx context.Conte
 }
 
 // DeployServer deploys a server with environment variables.
-func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, version string, env map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
+func (s *deploymentServiceImpl) DeployServer(ctx context.Context, serverName, version string, env map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
 	return s.CreateDeployment(ctx, &models.Deployment{
 		ServerName:   serverName,
 		Version:      version,
@@ -1055,7 +1055,7 @@ func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, vers
 }
 
 // DeployAgent deploys an agent with environment variables.
-func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, version string, env map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
+func (s *deploymentServiceImpl) DeployAgent(ctx context.Context, agentName, version string, env map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
 	return s.CreateDeployment(ctx, &models.Deployment{
 		ServerName:   agentName,
 		Version:      version,
@@ -1067,7 +1067,7 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 	})
 }
 
-func (s *registryServiceImpl) removeDeploymentRecord(ctx context.Context, deployment *models.Deployment) error {
+func (s *deploymentServiceImpl) removeDeploymentRecord(ctx context.Context, deployment *models.Deployment) error {
 	if deployment == nil {
 		return database.ErrNotFound
 	}
@@ -1086,7 +1086,7 @@ func (s *registryServiceImpl) removeDeploymentRecord(ctx context.Context, deploy
 }
 
 // RemoveDeploymentByID removes a deployment by UUID.
-func (s *registryServiceImpl) RemoveDeploymentByID(ctx context.Context, id string) error {
+func (s *deploymentServiceImpl) RemoveDeploymentByID(ctx context.Context, id string) error {
 	deployment, err := s.readStores().deployments.GetDeploymentByID(ctx, id)
 	if err != nil {
 		return err
@@ -1095,7 +1095,7 @@ func (s *registryServiceImpl) RemoveDeploymentByID(ctx context.Context, id strin
 }
 
 // CreateDeployment dispatches deployment creation to the platform adapter.
-func (s *registryServiceImpl) CreateDeployment(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
+func (s *deploymentServiceImpl) CreateDeployment(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
 	if req == nil {
 		return nil, fmt.Errorf("%w: deployment request is required", database.ErrInvalidInput)
 	}
@@ -1156,7 +1156,7 @@ func (s *registryServiceImpl) CreateDeployment(ctx context.Context, req *models.
 }
 
 // UndeployDeployment dispatches undeploy to the platform adapter.
-func (s *registryServiceImpl) UndeployDeployment(ctx context.Context, deployment *models.Deployment) error {
+func (s *deploymentServiceImpl) UndeployDeployment(ctx context.Context, deployment *models.Deployment) error {
 	if deployment == nil {
 		return database.ErrNotFound
 	}
@@ -1170,7 +1170,7 @@ func (s *registryServiceImpl) UndeployDeployment(ctx context.Context, deployment
 	return s.removeDeploymentRecord(ctx, deployment)
 }
 
-func (s *registryServiceImpl) createManagedDeploymentRecord(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
+func (s *deploymentServiceImpl) createManagedDeploymentRecord(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
 	now := time.Now()
 	deployment := &models.Deployment{
 		ID:               req.ID,
@@ -1229,7 +1229,7 @@ func (s *registryServiceImpl) createManagedDeploymentRecord(ctx context.Context,
 	return created, nil
 }
 
-func (s *registryServiceImpl) applyDeploymentActionResult(ctx context.Context, deploymentID string, result *models.DeploymentActionResult) error {
+func (s *deploymentServiceImpl) applyDeploymentActionResult(ctx context.Context, deploymentID string, result *models.DeploymentActionResult) error {
 	status := models.DeploymentStatusDeployed
 	if result != nil {
 		if trimmedStatus := strings.TrimSpace(result.Status); trimmedStatus != "" {
@@ -1258,7 +1258,7 @@ func (s *registryServiceImpl) applyDeploymentActionResult(ctx context.Context, d
 	return s.readStores().deployments.UpdateDeploymentState(auth.WithSystemContext(ctx), deploymentID, patch)
 }
 
-func (s *registryServiceImpl) applyFailedDeploymentAction(
+func (s *deploymentServiceImpl) applyFailedDeploymentAction(
 	ctx context.Context,
 	deploymentID string,
 	deployErr error,
@@ -1293,7 +1293,7 @@ func (s *registryServiceImpl) applyFailedDeploymentAction(
 }
 
 // GetDeploymentLogs dispatches logs retrieval to the platform adapter.
-func (s *registryServiceImpl) GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error) {
+func (s *deploymentServiceImpl) GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error) {
 	if deployment == nil {
 		return nil, database.ErrNotFound
 	}
@@ -1305,7 +1305,7 @@ func (s *registryServiceImpl) GetDeploymentLogs(ctx context.Context, deployment 
 }
 
 // CancelDeployment dispatches cancellation to the platform adapter.
-func (s *registryServiceImpl) CancelDeployment(ctx context.Context, deployment *models.Deployment) error {
+func (s *deploymentServiceImpl) CancelDeployment(ctx context.Context, deployment *models.Deployment) error {
 	if deployment == nil {
 		return database.ErrNotFound
 	}
@@ -1319,7 +1319,7 @@ func (s *registryServiceImpl) CancelDeployment(ctx context.Context, deployment *
 // ResolveAgentManifestSkills resolves registry-type skill references from the
 // agent manifest into concrete skill refs (Docker images or GitHub repos) that
 // can be passed to the runtime translator and ultimately to the Agent CRD.
-func (s *registryServiceImpl) ResolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]api.AgentSkillRef, error) {
+func (s *agentServiceImpl) ResolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]api.AgentSkillRef, error) {
 	if manifest == nil || len(manifest.Skills) == 0 {
 		return nil, nil
 	}
@@ -1335,7 +1335,7 @@ func (s *registryServiceImpl) ResolveAgentManifestSkills(ctx context.Context, ma
 	return resolved, nil
 }
 
-func (s *registryServiceImpl) resolveSkillRef(ctx context.Context, skill models.SkillRef) (api.AgentSkillRef, error) {
+func (s *agentServiceImpl) resolveSkillRef(ctx context.Context, skill models.SkillRef) (api.AgentSkillRef, error) {
 	image := strings.TrimSpace(skill.Image)
 	registrySkillName := strings.TrimSpace(skill.RegistrySkillName)
 	hasImage := image != ""
@@ -1385,7 +1385,7 @@ func (s *registryServiceImpl) resolveSkillRef(ctx context.Context, skill models.
 
 // ResolveAgentManifestPrompts resolves registry-type prompt references from the
 // agent manifest into concrete prompt content that can be written to prompts.json.
-func (s *registryServiceImpl) ResolveAgentManifestPrompts(ctx context.Context, manifest *models.AgentManifest) ([]api.ResolvedPrompt, error) {
+func (s *agentServiceImpl) ResolveAgentManifestPrompts(ctx context.Context, manifest *models.AgentManifest) ([]api.ResolvedPrompt, error) {
 	if manifest == nil || len(manifest.Prompts) == 0 {
 		return nil, nil
 	}
@@ -1452,7 +1452,7 @@ func (s *registryServiceImpl) ensureSemanticEmbedding(ctx context.Context, opts 
 }
 
 // ListPrompts returns registry entries for prompts with pagination and filtering
-func (s *registryServiceImpl) ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
+func (s *promptServiceImpl) ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
 	if limit <= 0 {
 		limit = 30
 	}
@@ -1464,28 +1464,28 @@ func (s *registryServiceImpl) ListPrompts(ctx context.Context, filter *database.
 }
 
 // GetPromptByName retrieves the latest version of a prompt by its name
-func (s *registryServiceImpl) GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error) {
+func (s *promptServiceImpl) GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error) {
 	return s.readStores().prompts.GetPromptByName(ctx, promptName)
 }
 
 // GetPromptByNameAndVersion retrieves a specific version of a prompt by name and version
-func (s *registryServiceImpl) GetPromptByNameAndVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
+func (s *promptServiceImpl) GetPromptByNameAndVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
 	return s.readStores().prompts.GetPromptByNameAndVersion(ctx, promptName, version)
 }
 
 // GetAllVersionsByPromptName retrieves all versions for a prompt
-func (s *registryServiceImpl) GetAllVersionsByPromptName(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
+func (s *promptServiceImpl) GetAllVersionsByPromptName(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
 	return s.readStores().prompts.GetAllVersionsByPromptName(ctx, promptName)
 }
 
 // CreatePrompt creates a new prompt version
-func (s *registryServiceImpl) CreatePrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error) {
+func (s *promptServiceImpl) CreatePrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error) {
 	return inTransactionT(ctx, s, func(ctx context.Context, stores storeBundle) (*models.PromptResponse, error) {
 		return s.createPromptInTransaction(ctx, stores.prompts, req)
 	})
 }
 
-func (s *registryServiceImpl) createPromptInTransaction(ctx context.Context, prompts database.PromptStore, req *models.PromptJSON) (*models.PromptResponse, error) {
+func (s *promptServiceImpl) createPromptInTransaction(ctx context.Context, prompts database.PromptStore, req *models.PromptJSON) (*models.PromptResponse, error) {
 	if req == nil || req.Name == "" || req.Version == "" {
 		return nil, fmt.Errorf("invalid prompt payload: name and version are required")
 	}
@@ -1542,7 +1542,7 @@ func (s *registryServiceImpl) createPromptInTransaction(ctx context.Context, pro
 }
 
 // DeletePrompt permanently removes a prompt version from the registry
-func (s *registryServiceImpl) DeletePrompt(ctx context.Context, promptName, version string) error {
+func (s *promptServiceImpl) DeletePrompt(ctx context.Context, promptName, version string) error {
 	return s.inTransaction(ctx, func(txCtx context.Context, stores storeBundle) error {
 		return stores.prompts.DeletePrompt(txCtx, promptName, version)
 	})
