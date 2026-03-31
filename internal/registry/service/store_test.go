@@ -5,22 +5,21 @@ import (
 	"testing"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
-	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/stretchr/testify/require"
 )
 
-type storeTestTx struct{ pgx.Tx }
+type storeTestTx struct{ database.Transaction }
 
 type storeTestDB struct {
 	database.Database
 	testingT       *testing.T
 	inTransaction  bool
-	listServersFn  func(ctx context.Context, tx pgx.Tx, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
-	deleteServerFn func(ctx context.Context, tx pgx.Tx, serverName, version string) error
+	listServersFn  func(ctx context.Context, tx database.Transaction, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
+	deleteServerFn func(ctx context.Context, tx database.Transaction, serverName, version string) error
 }
 
-func (m *storeTestDB) InTransaction(ctx context.Context, fn func(context.Context, pgx.Tx) error) error {
+func (m *storeTestDB) InTransaction(ctx context.Context, fn func(context.Context, database.Transaction) error) error {
 	m.inTransaction = true
 	defer func() {
 		m.inTransaction = false
@@ -29,13 +28,13 @@ func (m *storeTestDB) InTransaction(ctx context.Context, fn func(context.Context
 	return fn(ctx, storeTestTx{})
 }
 
-func (m *storeTestDB) ListServers(ctx context.Context, tx pgx.Tx, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
+func (m *storeTestDB) ListServers(ctx context.Context, tx database.Transaction, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
 	require.NotNil(m.testingT, m.testingT, "testingT must be set")
 	require.NotNil(m.testingT, m.listServersFn, "listServersFn must be set")
 	return m.listServersFn(ctx, tx, filter, cursor, limit)
 }
 
-func (m *storeTestDB) DeleteServer(ctx context.Context, tx pgx.Tx, serverName, version string) error {
+func (m *storeTestDB) DeleteServer(ctx context.Context, tx database.Transaction, serverName, version string) error {
 	require.NotNil(m.testingT, m.testingT, "testingT must be set")
 	require.NotNil(m.testingT, m.deleteServerFn, "deleteServerFn must be set")
 	return m.deleteServerFn(ctx, tx, serverName, version)
@@ -45,7 +44,7 @@ func TestReadStoresUsesServiceDatabase(t *testing.T) {
 	called := false
 	mockDB := &storeTestDB{
 		testingT: t,
-		listServersFn: func(ctx context.Context, tx pgx.Tx, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
+		listServersFn: func(ctx context.Context, tx database.Transaction, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
 			require.Nil(t, tx)
 			require.Nil(t, filter)
 			require.Equal(t, "", cursor)
@@ -69,14 +68,14 @@ func TestReadStoresUsesRepositoryOverrides(t *testing.T) {
 
 	mockDB := &storeTestDB{
 		testingT: t,
-		listServersFn: func(ctx context.Context, tx pgx.Tx, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
+		listServersFn: func(ctx context.Context, tx database.Transaction, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
 			databaseCalled = true
 			return nil, "database", nil
 		},
 	}
 	override := &storeTestDB{
 		testingT: t,
-		listServersFn: func(ctx context.Context, tx pgx.Tx, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
+		listServersFn: func(ctx context.Context, tx database.Transaction, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
 			overrideCalled = true
 			return nil, "override", nil
 		},
@@ -98,7 +97,7 @@ func TestInTransactionUsesTransactionalStores(t *testing.T) {
 	var mockDB *storeTestDB
 	mockDB = &storeTestDB{
 		testingT: t,
-		deleteServerFn: func(ctx context.Context, tx pgx.Tx, serverName, version string) error {
+		deleteServerFn: func(ctx context.Context, tx database.Transaction, serverName, version string) error {
 			require.True(t, mockDB.inTransaction)
 			_, ok := tx.(storeTestTx)
 			require.True(t, ok)

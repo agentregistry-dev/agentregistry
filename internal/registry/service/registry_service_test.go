@@ -16,7 +16,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
-	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/stretchr/testify/assert"
@@ -882,10 +881,10 @@ func TestDeployServer_AlreadyExistsDoesNotAttemptIdentityCleanup(t *testing.T) {
 	removeCalls := 0
 
 	mockDB := &deployCreateMockDB{
-		getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {
+		getProviderByIDFn: func(_ context.Context, _ database.Transaction, providerID string) (*models.Provider, error) {
 			return &models.Provider{ID: providerID, Platform: "local"}, nil
 		},
-		getServerByNameAndVersionFn: func(_ context.Context, _ pgx.Tx, serverName, version string) (*apiv0.ServerResponse, error) {
+		getServerByNameAndVersionFn: func(_ context.Context, _ database.Transaction, serverName, version string) (*apiv0.ServerResponse, error) {
 			return &apiv0.ServerResponse{
 				Server: apiv0.ServerJSON{
 					Name:    serverName,
@@ -893,15 +892,15 @@ func TestDeployServer_AlreadyExistsDoesNotAttemptIdentityCleanup(t *testing.T) {
 				},
 			}, nil
 		},
-		createDeploymentFn: func(_ context.Context, _ pgx.Tx, _ *models.Deployment) error {
+		createDeploymentFn: func(_ context.Context, _ database.Transaction, _ *models.Deployment) error {
 			createCalls++
 			return database.ErrAlreadyExists
 		},
-		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
+		getDeploymentsFn: func(_ context.Context, _ database.Transaction, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
 			getDeploymentsCalls++
 			return []*models.Deployment{}, nil
 		},
-		removeDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, _ string) error {
+		removeDeploymentByIDFn: func(_ context.Context, _ database.Transaction, _ string) error {
 			removeCalls++
 			return nil
 		},
@@ -927,10 +926,10 @@ func TestDeployAgent_AlreadyExistsDoesNotAttemptIdentityCleanup(t *testing.T) {
 	removeCalls := 0
 
 	mockDB := &deployCreateMockDB{
-		getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {
+		getProviderByIDFn: func(_ context.Context, _ database.Transaction, providerID string) (*models.Provider, error) {
 			return &models.Provider{ID: providerID, Platform: "local"}, nil
 		},
-		getAgentByNameAndVersionFn: func(_ context.Context, _ pgx.Tx, agentName, version string) (*models.AgentResponse, error) {
+		getAgentByNameAndVersionFn: func(_ context.Context, _ database.Transaction, agentName, version string) (*models.AgentResponse, error) {
 			return &models.AgentResponse{
 				Agent: models.AgentJSON{
 					AgentManifest: models.AgentManifest{Name: agentName},
@@ -938,15 +937,15 @@ func TestDeployAgent_AlreadyExistsDoesNotAttemptIdentityCleanup(t *testing.T) {
 				},
 			}, nil
 		},
-		createDeploymentFn: func(_ context.Context, _ pgx.Tx, _ *models.Deployment) error {
+		createDeploymentFn: func(_ context.Context, _ database.Transaction, _ *models.Deployment) error {
 			createCalls++
 			return database.ErrAlreadyExists
 		},
-		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
+		getDeploymentsFn: func(_ context.Context, _ database.Transaction, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
 			getDeploymentsCalls++
 			return []*models.Deployment{}, nil
 		},
-		removeDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, _ string) error {
+		removeDeploymentByIDFn: func(_ context.Context, _ database.Transaction, _ string) error {
 			removeCalls++
 			return nil
 		},
@@ -992,7 +991,7 @@ func TestCreateManagedDeploymentRecord_UsesDeployingStatus(t *testing.T) {
 	var createdRecord *models.Deployment
 
 	mockDB := &deployCreateMockDB{
-		getServerByNameAndVersionFn: func(_ context.Context, _ pgx.Tx, serverName, version string) (*apiv0.ServerResponse, error) {
+		getServerByNameAndVersionFn: func(_ context.Context, _ database.Transaction, serverName, version string) (*apiv0.ServerResponse, error) {
 			return &apiv0.ServerResponse{
 				Server: apiv0.ServerJSON{
 					Name:    serverName,
@@ -1000,7 +999,7 @@ func TestCreateManagedDeploymentRecord_UsesDeployingStatus(t *testing.T) {
 				},
 			}, nil
 		},
-		createDeploymentFn: func(_ context.Context, _ pgx.Tx, deployment *models.Deployment) error {
+		createDeploymentFn: func(_ context.Context, _ database.Transaction, deployment *models.Deployment) error {
 			clonedEnv := map[string]string{}
 			maps.Copy(clonedEnv, deployment.Env)
 			createdRecord = &models.Deployment{
@@ -1015,7 +1014,7 @@ func TestCreateManagedDeploymentRecord_UsesDeployingStatus(t *testing.T) {
 			}
 			return nil
 		},
-		getDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, _ string) (*models.Deployment, error) {
+		getDeploymentByIDFn: func(_ context.Context, _ database.Transaction, _ string) (*models.Deployment, error) {
 			return createdRecord, nil
 		},
 	}
@@ -1040,7 +1039,7 @@ func TestCreateManagedDeploymentRecord_UsesDeployingStatus(t *testing.T) {
 func TestApplyDeploymentActionResult_UsesSystemContext(t *testing.T) {
 	ctx := context.Background()
 	mockDB := &deployCreateMockDB{
-		updateDeploymentStateFn: func(ctx context.Context, _ pgx.Tx, id string, patch *models.DeploymentStatePatch) error {
+		updateDeploymentStateFn: func(ctx context.Context, _ database.Transaction, id string, patch *models.DeploymentStatePatch) error {
 			session, ok := auth.AuthSessionFrom(ctx)
 			require.True(t, ok)
 			require.True(t, auth.IsSystemSession(session))
@@ -1062,7 +1061,7 @@ func TestApplyDeploymentActionResult_UsesSystemContext(t *testing.T) {
 func TestApplyFailedDeploymentAction_UsesSystemContext(t *testing.T) {
 	ctx := context.Background()
 	mockDB := &deployCreateMockDB{
-		updateDeploymentStateFn: func(ctx context.Context, _ pgx.Tx, id string, patch *models.DeploymentStatePatch) error {
+		updateDeploymentStateFn: func(ctx context.Context, _ database.Transaction, id string, patch *models.DeploymentStatePatch) error {
 			session, ok := auth.AuthSessionFrom(ctx)
 			require.True(t, ok)
 			require.True(t, auth.IsSystemSession(session))
@@ -1083,76 +1082,76 @@ func TestApplyFailedDeploymentAction_UsesSystemContext(t *testing.T) {
 
 type deployCreateMockDB struct {
 	database.Database
-	getProviderByIDFn           func(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error)
-	getServerByNameAndVersionFn func(ctx context.Context, tx pgx.Tx, serverName, version string) (*apiv0.ServerResponse, error)
-	getAgentByNameAndVersionFn  func(ctx context.Context, tx pgx.Tx, agentName, version string) (*models.AgentResponse, error)
-	createDeploymentFn          func(ctx context.Context, tx pgx.Tx, deployment *models.Deployment) error
-	getDeploymentByIDFn         func(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error)
-	updateDeploymentStateFn     func(ctx context.Context, tx pgx.Tx, id string, patch *models.DeploymentStatePatch) error
-	getDeploymentsFn            func(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
-	removeDeploymentByIDFn      func(ctx context.Context, tx pgx.Tx, id string) error
+	getProviderByIDFn           func(ctx context.Context, tx database.Transaction, providerID string) (*models.Provider, error)
+	getServerByNameAndVersionFn func(ctx context.Context, tx database.Transaction, serverName, version string) (*apiv0.ServerResponse, error)
+	getAgentByNameAndVersionFn  func(ctx context.Context, tx database.Transaction, agentName, version string) (*models.AgentResponse, error)
+	createDeploymentFn          func(ctx context.Context, tx database.Transaction, deployment *models.Deployment) error
+	getDeploymentByIDFn         func(ctx context.Context, tx database.Transaction, id string) (*models.Deployment, error)
+	updateDeploymentStateFn     func(ctx context.Context, tx database.Transaction, id string, patch *models.DeploymentStatePatch) error
+	getDeploymentsFn            func(ctx context.Context, tx database.Transaction, filter *models.DeploymentFilter) ([]*models.Deployment, error)
+	removeDeploymentByIDFn      func(ctx context.Context, tx database.Transaction, id string) error
 }
 
 // deploymentMockDB is a minimal mock for database.Database that only implements
 // the methods needed for testing deployment cleanup logic. All other methods panic.
 type deploymentMockDB struct {
 	database.Database      // embed interface so unimplemented methods panic
-	getDeploymentByIDFn    func(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error)
-	getDeploymentsFn       func(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error)
-	listProvidersFn        func(ctx context.Context, tx pgx.Tx, platform *string) ([]*models.Provider, error)
-	getProviderByIDFn      func(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error)
-	removeDeploymentByIdFn func(ctx context.Context, tx pgx.Tx, id string) error
+	getDeploymentByIDFn    func(ctx context.Context, tx database.Transaction, id string) (*models.Deployment, error)
+	getDeploymentsFn       func(ctx context.Context, tx database.Transaction, filter *models.DeploymentFilter) ([]*models.Deployment, error)
+	listProvidersFn        func(ctx context.Context, tx database.Transaction, platform *string) ([]*models.Provider, error)
+	getProviderByIDFn      func(ctx context.Context, tx database.Transaction, providerID string) (*models.Provider, error)
+	removeDeploymentByIdFn func(ctx context.Context, tx database.Transaction, id string) error
 }
 
-func (m *deployCreateMockDB) GetProviderByID(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error) {
+func (m *deployCreateMockDB) GetProviderByID(ctx context.Context, tx database.Transaction, providerID string) (*models.Provider, error) {
 	return m.getProviderByIDFn(ctx, tx, providerID)
 }
 
-func (m *deployCreateMockDB) GetServerByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName, version string) (*apiv0.ServerResponse, error) {
+func (m *deployCreateMockDB) GetServerByNameAndVersion(ctx context.Context, tx database.Transaction, serverName, version string) (*apiv0.ServerResponse, error) {
 	return m.getServerByNameAndVersionFn(ctx, tx, serverName, version)
 }
 
-func (m *deployCreateMockDB) GetAgentByNameAndVersion(ctx context.Context, tx pgx.Tx, agentName, version string) (*models.AgentResponse, error) {
+func (m *deployCreateMockDB) GetAgentByNameAndVersion(ctx context.Context, tx database.Transaction, agentName, version string) (*models.AgentResponse, error) {
 	return m.getAgentByNameAndVersionFn(ctx, tx, agentName, version)
 }
 
-func (m *deployCreateMockDB) CreateDeployment(ctx context.Context, tx pgx.Tx, deployment *models.Deployment) error {
+func (m *deployCreateMockDB) CreateDeployment(ctx context.Context, tx database.Transaction, deployment *models.Deployment) error {
 	return m.createDeploymentFn(ctx, tx, deployment)
 }
 
-func (m *deployCreateMockDB) GetDeploymentByID(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error) {
+func (m *deployCreateMockDB) GetDeploymentByID(ctx context.Context, tx database.Transaction, id string) (*models.Deployment, error) {
 	return m.getDeploymentByIDFn(ctx, tx, id)
 }
 
-func (m *deployCreateMockDB) UpdateDeploymentState(ctx context.Context, tx pgx.Tx, id string, patch *models.DeploymentStatePatch) error {
+func (m *deployCreateMockDB) UpdateDeploymentState(ctx context.Context, tx database.Transaction, id string, patch *models.DeploymentStatePatch) error {
 	return m.updateDeploymentStateFn(ctx, tx, id, patch)
 }
 
-func (m *deployCreateMockDB) GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+func (m *deployCreateMockDB) GetDeployments(ctx context.Context, tx database.Transaction, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	return m.getDeploymentsFn(ctx, tx, filter)
 }
 
-func (m *deployCreateMockDB) RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id string) error {
+func (m *deployCreateMockDB) RemoveDeploymentByID(ctx context.Context, tx database.Transaction, id string) error {
 	return m.removeDeploymentByIDFn(ctx, tx, id)
 }
 
-func (m *deploymentMockDB) ListProviders(ctx context.Context, tx pgx.Tx, platform *string) ([]*models.Provider, error) {
+func (m *deploymentMockDB) ListProviders(ctx context.Context, tx database.Transaction, platform *string) ([]*models.Provider, error) {
 	return m.listProvidersFn(ctx, tx, platform)
 }
 
-func (m *deploymentMockDB) GetDeploymentByID(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error) {
+func (m *deploymentMockDB) GetDeploymentByID(ctx context.Context, tx database.Transaction, id string) (*models.Deployment, error) {
 	return m.getDeploymentByIDFn(ctx, tx, id)
 }
 
-func (m *deploymentMockDB) GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+func (m *deploymentMockDB) GetDeployments(ctx context.Context, tx database.Transaction, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	return m.getDeploymentsFn(ctx, tx, filter)
 }
 
-func (m *deploymentMockDB) GetProviderByID(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error) {
+func (m *deploymentMockDB) GetProviderByID(ctx context.Context, tx database.Transaction, providerID string) (*models.Provider, error) {
 	return m.getProviderByIDFn(ctx, tx, providerID)
 }
 
-func (m *deploymentMockDB) RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id string) error {
+func (m *deploymentMockDB) RemoveDeploymentByID(ctx context.Context, tx database.Transaction, id string) error {
 	return m.removeDeploymentByIdFn(ctx, tx, id)
 }
 
@@ -1250,7 +1249,7 @@ func TestCleanupExistingDeployment_UsesAdapterStaleCleanerWhenAvailable(t *testi
 	removeCalled := false
 
 	mockDB := &deploymentMockDB{
-		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
+		getDeploymentsFn: func(_ context.Context, _ database.Transaction, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
 			return []*models.Deployment{
 				{
 					ID:           "dep-cleanup-1",
@@ -1261,10 +1260,10 @@ func TestCleanupExistingDeployment_UsesAdapterStaleCleanerWhenAvailable(t *testi
 				},
 			}, nil
 		},
-		getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {
+		getProviderByIDFn: func(_ context.Context, _ database.Transaction, providerID string) (*models.Provider, error) {
 			return &models.Provider{ID: providerID, Platform: "local"}, nil
 		},
-		removeDeploymentByIdFn: func(_ context.Context, _ pgx.Tx, _ string) error {
+		removeDeploymentByIdFn: func(_ context.Context, _ database.Transaction, _ string) error {
 			removeCalled = true
 			return nil
 		},
@@ -1294,10 +1293,10 @@ func TestUndeployDeployment_UsesAdapterForLocalPlatform(t *testing.T) {
 	undeployCalled := false
 	removeCalled := false
 	mockDB := &deploymentMockDB{
-		getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {
+		getProviderByIDFn: func(_ context.Context, _ database.Transaction, providerID string) (*models.Provider, error) {
 			return &models.Provider{ID: providerID, Platform: "local"}, nil
 		},
-		removeDeploymentByIdFn: func(_ context.Context, _ pgx.Tx, id string) error {
+		removeDeploymentByIdFn: func(_ context.Context, _ database.Transaction, id string) error {
 			removeCalled = id == "dep-local-1"
 			return nil
 		},
@@ -1336,10 +1335,10 @@ func TestUndeployDeployment_FailedOrCancelledRunsAdapterCleanup(t *testing.T) {
 			undeployCalled := false
 			removeCalled := false
 			mockDB := &deploymentMockDB{
-				getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {
+				getProviderByIDFn: func(_ context.Context, _ database.Transaction, providerID string) (*models.Provider, error) {
 					return &models.Provider{ID: providerID, Platform: "local"}, nil
 				},
-				removeDeploymentByIdFn: func(_ context.Context, _ pgx.Tx, id string) error {
+				removeDeploymentByIdFn: func(_ context.Context, _ database.Transaction, id string) error {
 					removeCalled = id == "dep-failed-1"
 					return nil
 				},
@@ -1372,7 +1371,7 @@ func TestUndeployDeployment_FailedOrCancelledRunsAdapterCleanup(t *testing.T) {
 
 func TestCreateDeployment_RejectsUnsupportedResourceTypeForProvider(t *testing.T) {
 	mockDB := &deployCreateMockDB{
-		getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {
+		getProviderByIDFn: func(_ context.Context, _ database.Transaction, providerID string) (*models.Provider, error) {
 			return &models.Provider{ID: providerID, Platform: "local"}, nil
 		},
 	}
@@ -1422,11 +1421,11 @@ func TestCreateDeployment_UsesAdapterResolvedFromProviderPlatform(t *testing.T) 
 			adapterCalled := false
 
 			mockDB := &deployCreateMockDB{
-				getProviderByIDFn: func(_ context.Context, _ pgx.Tx, providerID string) (*models.Provider, error) {
+				getProviderByIDFn: func(_ context.Context, _ database.Transaction, providerID string) (*models.Provider, error) {
 					require.Equal(t, tt.providerID, providerID)
 					return &models.Provider{ID: providerID, Platform: tt.platform}, nil
 				},
-				getServerByNameAndVersionFn: func(_ context.Context, _ pgx.Tx, serverName, version string) (*apiv0.ServerResponse, error) {
+				getServerByNameAndVersionFn: func(_ context.Context, _ database.Transaction, serverName, version string) (*apiv0.ServerResponse, error) {
 					if tt.resourceType != "mcp" {
 						t.Fatalf("unexpected server lookup for resource type %s", tt.resourceType)
 					}
@@ -1434,7 +1433,7 @@ func TestCreateDeployment_UsesAdapterResolvedFromProviderPlatform(t *testing.T) 
 						Server: apiv0.ServerJSON{Name: serverName, Version: version},
 					}, nil
 				},
-				getAgentByNameAndVersionFn: func(_ context.Context, _ pgx.Tx, agentName, version string) (*models.AgentResponse, error) {
+				getAgentByNameAndVersionFn: func(_ context.Context, _ database.Transaction, agentName, version string) (*models.AgentResponse, error) {
 					if tt.resourceType != "agent" {
 						t.Fatalf("unexpected agent lookup for resource type %s", tt.resourceType)
 					}
@@ -1445,12 +1444,12 @@ func TestCreateDeployment_UsesAdapterResolvedFromProviderPlatform(t *testing.T) 
 						},
 					}, nil
 				},
-				createDeploymentFn: func(_ context.Context, _ pgx.Tx, deployment *models.Deployment) error {
+				createDeploymentFn: func(_ context.Context, _ database.Transaction, deployment *models.Deployment) error {
 					cloned := *deployment
 					createdRecord = &cloned
 					return nil
 				},
-				updateDeploymentStateFn: func(_ context.Context, _ pgx.Tx, id string, patch *models.DeploymentStatePatch) error {
+				updateDeploymentStateFn: func(_ context.Context, _ database.Transaction, id string, patch *models.DeploymentStatePatch) error {
 					require.NotNil(t, createdRecord)
 					require.Equal(t, createdRecord.ID, id)
 					if patch.Status != nil {
@@ -1458,7 +1457,7 @@ func TestCreateDeployment_UsesAdapterResolvedFromProviderPlatform(t *testing.T) 
 					}
 					return nil
 				},
-				getDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, id string) (*models.Deployment, error) {
+				getDeploymentByIDFn: func(_ context.Context, _ database.Transaction, id string) (*models.Deployment, error) {
 					require.NotNil(t, createdRecord)
 					require.Equal(t, createdRecord.ID, id)
 					return createdRecord, nil
@@ -1500,7 +1499,7 @@ func TestCreateDeployment_UsesAdapterResolvedFromProviderPlatform(t *testing.T) 
 func TestGetDeployments_AppendsDiscoveredDeploymentsFromAdapters(t *testing.T) {
 	discoverCalled := false
 	mockDB := &deploymentMockDB{
-		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
+		getDeploymentsFn: func(_ context.Context, _ database.Transaction, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
 			return []*models.Deployment{
 				{
 					ID:           "dep-managed-1",
@@ -1512,7 +1511,7 @@ func TestGetDeployments_AppendsDiscoveredDeploymentsFromAdapters(t *testing.T) {
 				},
 			}, nil
 		},
-		listProvidersFn: func(_ context.Context, _ pgx.Tx, _ *string) ([]*models.Provider, error) {
+		listProvidersFn: func(_ context.Context, _ database.Transaction, _ *string) ([]*models.Provider, error) {
 			return []*models.Provider{
 				{ID: "kubernetes-default", Platform: "kubernetes"},
 			}, nil
@@ -1553,10 +1552,10 @@ func TestGetDeployments_AppendsDiscoveredDeploymentsFromAdapters(t *testing.T) {
 
 func TestGetDeployments_DedupesDiscoveredDeploymentsByIdentity(t *testing.T) {
 	mockDB := &deploymentMockDB{
-		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
+		getDeploymentsFn: func(_ context.Context, _ database.Transaction, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
 			return []*models.Deployment{}, nil
 		},
-		listProvidersFn: func(_ context.Context, _ pgx.Tx, _ *string) ([]*models.Provider, error) {
+		listProvidersFn: func(_ context.Context, _ database.Transaction, _ *string) ([]*models.Provider, error) {
 			return []*models.Provider{
 				{ID: "kubernetes-default", Platform: "kubernetes"},
 			}, nil
@@ -1601,13 +1600,13 @@ func TestGetDeployments_DedupesDiscoveredDeploymentsByIdentity(t *testing.T) {
 
 func TestGetDeployments_KeepsDiscoveredDeploymentsDistinctAcrossNamespaces(t *testing.T) {
 	mockDB := &deploymentMockDB{
-		getDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, _ string) (*models.Deployment, error) {
+		getDeploymentByIDFn: func(_ context.Context, _ database.Transaction, _ string) (*models.Deployment, error) {
 			return nil, database.ErrNotFound
 		},
-		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
+		getDeploymentsFn: func(_ context.Context, _ database.Transaction, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
 			return []*models.Deployment{}, nil
 		},
-		listProvidersFn: func(_ context.Context, _ pgx.Tx, _ *string) ([]*models.Provider, error) {
+		listProvidersFn: func(_ context.Context, _ database.Transaction, _ *string) ([]*models.Provider, error) {
 			return []*models.Provider{
 				{ID: "kubernetes-default", Platform: "kubernetes"},
 			}, nil
@@ -1659,7 +1658,7 @@ func TestGetDeployments_ManagedOriginSkipsDiscovery(t *testing.T) {
 	discoverCalled := false
 	originManaged := "managed"
 	mockDB := &deploymentMockDB{
-		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+		getDeploymentsFn: func(_ context.Context, _ database.Transaction, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 			require.NotNil(t, filter)
 			require.NotNil(t, filter.Origin)
 			require.Equal(t, originManaged, *filter.Origin)
@@ -1674,7 +1673,7 @@ func TestGetDeployments_ManagedOriginSkipsDiscovery(t *testing.T) {
 				},
 			}, nil
 		},
-		listProvidersFn: func(_ context.Context, _ pgx.Tx, _ *string) ([]*models.Provider, error) {
+		listProvidersFn: func(_ context.Context, _ database.Transaction, _ *string) ([]*models.Provider, error) {
 			return []*models.Provider{
 				{ID: "kubernetes-default", Platform: "kubernetes"},
 			}, nil
@@ -1706,16 +1705,16 @@ func TestGetDeployments_ManagedOriginSkipsDiscovery(t *testing.T) {
 func TestGetDeploymentByID_FallsBackToDiscoveredDeployments(t *testing.T) {
 	discoveredID := discoveredDeploymentID("kubernetes-default", "mcp", "io.test/external", "unknown")
 	mockDB := &deploymentMockDB{
-		getDeploymentByIDFn: func(_ context.Context, _ pgx.Tx, _ string) (*models.Deployment, error) {
+		getDeploymentByIDFn: func(_ context.Context, _ database.Transaction, _ string) (*models.Deployment, error) {
 			return nil, database.ErrNotFound
 		},
-		getDeploymentsFn: func(_ context.Context, _ pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+		getDeploymentsFn: func(_ context.Context, _ database.Transaction, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 			require.NotNil(t, filter)
 			require.NotNil(t, filter.Origin)
 			require.Equal(t, originDiscovered, *filter.Origin)
 			return []*models.Deployment{}, nil
 		},
-		listProvidersFn: func(_ context.Context, _ pgx.Tx, _ *string) ([]*models.Provider, error) {
+		listProvidersFn: func(_ context.Context, _ database.Transaction, _ *string) ([]*models.Provider, error) {
 			return []*models.Provider{
 				{ID: "kubernetes-default", Platform: "kubernetes"},
 			}, nil
@@ -1755,18 +1754,18 @@ func TestGetDeploymentByID_FallsBackToDiscoveredDeployments(t *testing.T) {
 // GetPromptByName and GetPromptByNameAndVersion for testing ResolveAgentManifestPrompts.
 type promptMockDB struct {
 	database.Database
-	getPromptByNameFn           func(ctx context.Context, tx pgx.Tx, name string) (*models.PromptResponse, error)
-	getPromptByNameAndVersionFn func(ctx context.Context, tx pgx.Tx, name, version string) (*models.PromptResponse, error)
+	getPromptByNameFn           func(ctx context.Context, tx database.Transaction, name string) (*models.PromptResponse, error)
+	getPromptByNameAndVersionFn func(ctx context.Context, tx database.Transaction, name, version string) (*models.PromptResponse, error)
 }
 
-func (m *promptMockDB) GetPromptByName(ctx context.Context, tx pgx.Tx, name string) (*models.PromptResponse, error) {
+func (m *promptMockDB) GetPromptByName(ctx context.Context, tx database.Transaction, name string) (*models.PromptResponse, error) {
 	if m.getPromptByNameFn != nil {
 		return m.getPromptByNameFn(ctx, tx, name)
 	}
 	return nil, database.ErrNotFound
 }
 
-func (m *promptMockDB) GetPromptByNameAndVersion(ctx context.Context, tx pgx.Tx, name, version string) (*models.PromptResponse, error) {
+func (m *promptMockDB) GetPromptByNameAndVersion(ctx context.Context, tx database.Transaction, name, version string) (*models.PromptResponse, error) {
 	return m.getPromptByNameAndVersionFn(ctx, tx, name, version)
 }
 
@@ -1774,8 +1773,8 @@ func TestResolveAgentManifestPrompts(t *testing.T) {
 	tests := []struct {
 		name       string
 		manifest   *models.AgentManifest
-		dbFn       func(ctx context.Context, tx pgx.Tx, name, version string) (*models.PromptResponse, error)
-		dbByNameFn func(ctx context.Context, tx pgx.Tx, name string) (*models.PromptResponse, error)
+		dbFn       func(ctx context.Context, tx database.Transaction, name, version string) (*models.PromptResponse, error)
+		dbByNameFn func(ctx context.Context, tx database.Transaction, name string) (*models.PromptResponse, error)
 		want       []api.ResolvedPrompt
 		wantErr    string
 	}{
@@ -1796,7 +1795,7 @@ func TestResolveAgentManifestPrompts(t *testing.T) {
 					{Name: "my-system-prompt", RegistryPromptName: "system-prompt", RegistryPromptVersion: "2.0.0"},
 				},
 			},
-			dbFn: func(_ context.Context, _ pgx.Tx, name, version string) (*models.PromptResponse, error) {
+			dbFn: func(_ context.Context, _ database.Transaction, name, version string) (*models.PromptResponse, error) {
 				if name == "system-prompt" && version == "2.0.0" {
 					return &models.PromptResponse{
 						Prompt: models.PromptJSON{Name: "system-prompt", Version: "2.0.0", Content: "You are a coding assistant."},
@@ -1815,7 +1814,7 @@ func TestResolveAgentManifestPrompts(t *testing.T) {
 					{Name: "safety", RegistryPromptName: "safety-prompt"},
 				},
 			},
-			dbByNameFn: func(_ context.Context, _ pgx.Tx, name string) (*models.PromptResponse, error) {
+			dbByNameFn: func(_ context.Context, _ database.Transaction, name string) (*models.PromptResponse, error) {
 				if name == "safety-prompt" {
 					return &models.PromptResponse{
 						Prompt: models.PromptJSON{Name: "safety-prompt", Version: "1.2.0", Content: "Be safe."},
@@ -1834,7 +1833,7 @@ func TestResolveAgentManifestPrompts(t *testing.T) {
 					{RegistryPromptName: "fallback-prompt", RegistryPromptVersion: "1.0.0"},
 				},
 			},
-			dbFn: func(_ context.Context, _ pgx.Tx, name, version string) (*models.PromptResponse, error) {
+			dbFn: func(_ context.Context, _ database.Transaction, name, version string) (*models.PromptResponse, error) {
 				return &models.PromptResponse{
 					Prompt: models.PromptJSON{Name: name, Version: version, Content: "Fallback content."},
 				}, nil
@@ -1851,7 +1850,7 @@ func TestResolveAgentManifestPrompts(t *testing.T) {
 					{Name: "second", RegistryPromptName: "prompt-b", RegistryPromptVersion: "2.0.0"},
 				},
 			},
-			dbFn: func(_ context.Context, _ pgx.Tx, name, version string) (*models.PromptResponse, error) {
+			dbFn: func(_ context.Context, _ database.Transaction, name, version string) (*models.PromptResponse, error) {
 				switch name {
 				case "prompt-a":
 					return &models.PromptResponse{
@@ -1894,7 +1893,7 @@ func TestResolveAgentManifestPrompts(t *testing.T) {
 					{Name: "missing", RegistryPromptName: "nonexistent", RegistryPromptVersion: "1.0.0"},
 				},
 			},
-			dbFn: func(_ context.Context, _ pgx.Tx, _, _ string) (*models.PromptResponse, error) {
+			dbFn: func(_ context.Context, _ database.Transaction, _, _ string) (*models.PromptResponse, error) {
 				return nil, database.ErrNotFound
 			},
 			wantErr: `resolve prompt "nonexistent" version "1.0.0"`,
@@ -1907,7 +1906,7 @@ func TestResolveAgentManifestPrompts(t *testing.T) {
 					{Name: "bad", RegistryPromptName: "bad-prompt", RegistryPromptVersion: "1.0.0"},
 				},
 			},
-			dbFn: func(_ context.Context, _ pgx.Tx, name, _ string) (*models.PromptResponse, error) {
+			dbFn: func(_ context.Context, _ database.Transaction, name, _ string) (*models.PromptResponse, error) {
 				if name == "good-prompt" {
 					return &models.PromptResponse{
 						Prompt: models.PromptJSON{Name: name, Version: "1.0.0", Content: "Good"},

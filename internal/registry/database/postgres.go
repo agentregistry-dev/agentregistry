@@ -29,7 +29,7 @@ type PostgreSQL struct {
 	authz auth.Authorizer
 }
 
-// Executor is an interface for executing queries (satisfied by both pgx.Tx and pgxpool.Pool)
+// Executor is an interface for executing queries (satisfied by both database.Transaction and pgxpool.Pool)
 type Executor interface {
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
@@ -37,7 +37,7 @@ type Executor interface {
 }
 
 // getExecutor returns the appropriate executor (transaction or pool)
-func (db *PostgreSQL) getExecutor(tx pgx.Tx) Executor {
+func (db *PostgreSQL) getExecutor(tx database.Transaction) Executor {
 	if tx != nil {
 		return tx
 	}
@@ -96,7 +96,7 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 
 func (db *PostgreSQL) ListServers(
 	ctx context.Context,
-	tx pgx.Tx,
+	tx database.Transaction,
 	filter *database.ServerFilter,
 	cursor string,
 	limit int,
@@ -274,7 +274,7 @@ func (db *PostgreSQL) ListServers(
 }
 
 // GetServerByName retrieves the latest version of a server by server name
-func (db *PostgreSQL) GetServerByName(ctx context.Context, tx pgx.Tx, serverName string) (*apiv0.ServerResponse, error) {
+func (db *PostgreSQL) GetServerByName(ctx context.Context, tx database.Transaction, serverName string) (*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -330,7 +330,7 @@ func (db *PostgreSQL) GetServerByName(ctx context.Context, tx pgx.Tx, serverName
 }
 
 // GetServerByNameAndVersion retrieves a specific version of a server by server name and version
-func (db *PostgreSQL) GetServerByNameAndVersion(ctx context.Context, tx pgx.Tx, serverName string, version string) (*apiv0.ServerResponse, error) {
+func (db *PostgreSQL) GetServerByNameAndVersion(ctx context.Context, tx database.Transaction, serverName string, version string) (*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -386,7 +386,7 @@ func (db *PostgreSQL) GetServerByNameAndVersion(ctx context.Context, tx pgx.Tx, 
 }
 
 // GetAllVersionsByServerName retrieves all versions of a server by server name
-func (db *PostgreSQL) GetAllVersionsByServerName(ctx context.Context, tx pgx.Tx, serverName string) ([]*apiv0.ServerResponse, error) {
+func (db *PostgreSQL) GetAllVersionsByServerName(ctx context.Context, tx database.Transaction, serverName string) ([]*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -457,7 +457,7 @@ func (db *PostgreSQL) GetAllVersionsByServerName(ctx context.Context, tx pgx.Tx,
 }
 
 // CreateServer inserts a new server version with official metadata
-func (db *PostgreSQL) CreateServer(ctx context.Context, tx pgx.Tx, serverJSON *apiv0.ServerJSON, officialMeta *apiv0.RegistryExtensions) (*apiv0.ServerResponse, error) {
+func (db *PostgreSQL) CreateServer(ctx context.Context, tx database.Transaction, serverJSON *apiv0.ServerJSON, officialMeta *apiv0.RegistryExtensions) (*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -515,7 +515,7 @@ func (db *PostgreSQL) CreateServer(ctx context.Context, tx pgx.Tx, serverJSON *a
 }
 
 // UpdateServer updates an existing server record with new server details
-func (db *PostgreSQL) UpdateServer(ctx context.Context, tx pgx.Tx, serverName, version string, serverJSON *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
+func (db *PostgreSQL) UpdateServer(ctx context.Context, tx database.Transaction, serverName, version string, serverJSON *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -580,7 +580,7 @@ func (db *PostgreSQL) UpdateServer(ctx context.Context, tx pgx.Tx, serverName, v
 }
 
 // SetServerStatus updates the status of a specific server version
-func (db *PostgreSQL) SetServerStatus(ctx context.Context, tx pgx.Tx, serverName, version string, status string) (*apiv0.ServerResponse, error) {
+func (db *PostgreSQL) SetServerStatus(ctx context.Context, tx database.Transaction, serverName, version string, status string) (*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -636,7 +636,7 @@ func (db *PostgreSQL) SetServerStatus(ctx context.Context, tx pgx.Tx, serverName
 }
 
 // InTransaction executes a function within a database transaction
-func (db *PostgreSQL) InTransaction(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error {
+func (db *PostgreSQL) InTransaction(ctx context.Context, fn func(ctx context.Context, tx database.Transaction) error) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -666,7 +666,7 @@ func (db *PostgreSQL) InTransaction(ctx context.Context, fn func(ctx context.Con
 }
 
 // GetCurrentLatestVersion retrieves the current latest version of a server by server name
-func (db *PostgreSQL) GetCurrentLatestVersion(ctx context.Context, tx pgx.Tx, serverName string) (*apiv0.ServerResponse, error) {
+func (db *PostgreSQL) GetCurrentLatestVersion(ctx context.Context, tx database.Transaction, serverName string) (*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -723,7 +723,7 @@ func (db *PostgreSQL) GetCurrentLatestVersion(ctx context.Context, tx pgx.Tx, se
 }
 
 // CountServerVersions counts the number of versions for a server
-func (db *PostgreSQL) CountServerVersions(ctx context.Context, tx pgx.Tx, serverName string) (int, error) {
+func (db *PostgreSQL) CountServerVersions(ctx context.Context, tx database.Transaction, serverName string) (int, error) {
 	if ctx.Err() != nil {
 		return 0, ctx.Err()
 	}
@@ -749,7 +749,7 @@ func (db *PostgreSQL) CountServerVersions(ctx context.Context, tx pgx.Tx, server
 }
 
 // CheckVersionExists checks if a specific version exists for a server
-func (db *PostgreSQL) CheckVersionExists(ctx context.Context, tx pgx.Tx, serverName, version string) (bool, error) {
+func (db *PostgreSQL) CheckVersionExists(ctx context.Context, tx database.Transaction, serverName, version string) (bool, error) {
 	if ctx.Err() != nil {
 		return false, ctx.Err()
 	}
@@ -775,7 +775,7 @@ func (db *PostgreSQL) CheckVersionExists(ctx context.Context, tx pgx.Tx, serverN
 }
 
 // UnmarkAsLatest marks the current latest version of a server as no longer latest
-func (db *PostgreSQL) UnmarkAsLatest(ctx context.Context, tx pgx.Tx, serverName string) error {
+func (db *PostgreSQL) UnmarkAsLatest(ctx context.Context, tx database.Transaction, serverName string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -804,7 +804,7 @@ func (db *PostgreSQL) UnmarkAsLatest(ctx context.Context, tx pgx.Tx, serverName 
 // AcquireServerCreateLock acquires a transaction-scoped advisory lock so that concurrent
 // CreateServer calls for the same server name serialize and avoid unique constraint violations
 // on idx_unique_latest_per_server.
-func (db *PostgreSQL) AcquireServerCreateLock(ctx context.Context, tx pgx.Tx, serverName string) error {
+func (db *PostgreSQL) AcquireServerCreateLock(ctx context.Context, tx database.Transaction, serverName string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -819,7 +819,7 @@ func (db *PostgreSQL) AcquireServerCreateLock(ctx context.Context, tx pgx.Tx, se
 // DeleteServer permanently removes a server version from the database.
 // If the deleted version was the current latest, the most recently published
 // remaining version is promoted to latest.
-func (db *PostgreSQL) DeleteServer(ctx context.Context, tx pgx.Tx, serverName, version string) error {
+func (db *PostgreSQL) DeleteServer(ctx context.Context, tx database.Transaction, serverName, version string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -875,7 +875,7 @@ func (db *PostgreSQL) DeleteServer(ctx context.Context, tx pgx.Tx, serverName, v
 }
 
 // SetServerEmbedding stores semantic embedding metadata for a server version.
-func (db *PostgreSQL) SetServerEmbedding(ctx context.Context, tx pgx.Tx, serverName, version string, embedding *database.SemanticEmbedding) error {
+func (db *PostgreSQL) SetServerEmbedding(ctx context.Context, tx database.Transaction, serverName, version string, embedding *database.SemanticEmbedding) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -947,7 +947,7 @@ func (db *PostgreSQL) SetServerEmbedding(ctx context.Context, tx pgx.Tx, serverN
 // GetServerEmbeddingMetadata retrieves embedding metadata for a server version without loading
 // the underlying vector payload. This is useful for maintenance tasks that only need to know
 // whether an embedding exists or if its checksum is stale.
-func (db *PostgreSQL) GetServerEmbeddingMetadata(ctx context.Context, tx pgx.Tx, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
+func (db *PostgreSQL) GetServerEmbeddingMetadata(ctx context.Context, tx database.Transaction, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -1019,7 +1019,7 @@ func (db *PostgreSQL) GetServerEmbeddingMetadata(ctx context.Context, tx pgx.Tx,
 	return meta, nil
 }
 
-func (db *PostgreSQL) UpsertServerReadme(ctx context.Context, tx pgx.Tx, readme *database.ServerReadme) error {
+func (db *PostgreSQL) UpsertServerReadme(ctx context.Context, tx database.Transaction, readme *database.ServerReadme) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -1078,7 +1078,7 @@ func (db *PostgreSQL) UpsertServerReadme(ctx context.Context, tx pgx.Tx, readme 
 	return nil
 }
 
-func (db *PostgreSQL) GetServerReadme(ctx context.Context, tx pgx.Tx, serverName, version string) (*database.ServerReadme, error) {
+func (db *PostgreSQL) GetServerReadme(ctx context.Context, tx database.Transaction, serverName, version string) (*database.ServerReadme, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -1103,7 +1103,7 @@ func (db *PostgreSQL) GetServerReadme(ctx context.Context, tx pgx.Tx, serverName
 	return scanServerReadme(row)
 }
 
-func (db *PostgreSQL) GetLatestServerReadme(ctx context.Context, tx pgx.Tx, serverName string) (*database.ServerReadme, error) {
+func (db *PostgreSQL) GetLatestServerReadme(ctx context.Context, tx database.Transaction, serverName string) (*database.ServerReadme, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -1153,7 +1153,7 @@ func scanServerReadme(row pgx.Row) (*database.ServerReadme, error) {
 // ==============================
 
 // ListAgents returns paginated agents with filtering
-func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
+func (db *PostgreSQL) ListAgents(ctx context.Context, tx database.Transaction, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -1325,7 +1325,7 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *databas
 	return results, nextCursor, nil
 }
 
-func (db *PostgreSQL) GetAgentByName(ctx context.Context, tx pgx.Tx, agentName string) (*models.AgentResponse, error) {
+func (db *PostgreSQL) GetAgentByName(ctx context.Context, tx database.Transaction, agentName string) (*models.AgentResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -1372,7 +1372,7 @@ func (db *PostgreSQL) GetAgentByName(ctx context.Context, tx pgx.Tx, agentName s
 	}, nil
 }
 
-func (db *PostgreSQL) GetAgentByNameAndVersion(ctx context.Context, tx pgx.Tx, agentName, version string) (*models.AgentResponse, error) {
+func (db *PostgreSQL) GetAgentByNameAndVersion(ctx context.Context, tx database.Transaction, agentName, version string) (*models.AgentResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -1418,7 +1418,7 @@ func (db *PostgreSQL) GetAgentByNameAndVersion(ctx context.Context, tx pgx.Tx, a
 	}, nil
 }
 
-func (db *PostgreSQL) GetAllVersionsByAgentName(ctx context.Context, tx pgx.Tx, agentName string) ([]*models.AgentResponse, error) {
+func (db *PostgreSQL) GetAllVersionsByAgentName(ctx context.Context, tx database.Transaction, agentName string) ([]*models.AgentResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -1475,7 +1475,7 @@ func (db *PostgreSQL) GetAllVersionsByAgentName(ctx context.Context, tx pgx.Tx, 
 	return results, nil
 }
 
-func (db *PostgreSQL) CreateAgent(ctx context.Context, tx pgx.Tx, agentJSON *models.AgentJSON, officialMeta *models.AgentRegistryExtensions) (*models.AgentResponse, error) {
+func (db *PostgreSQL) CreateAgent(ctx context.Context, tx database.Transaction, agentJSON *models.AgentJSON, officialMeta *models.AgentRegistryExtensions) (*models.AgentResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -1520,7 +1520,7 @@ func (db *PostgreSQL) CreateAgent(ctx context.Context, tx pgx.Tx, agentJSON *mod
 	}, nil
 }
 
-func (db *PostgreSQL) UpdateAgent(ctx context.Context, tx pgx.Tx, agentName, version string, agentJSON *models.AgentJSON) (*models.AgentResponse, error) {
+func (db *PostgreSQL) UpdateAgent(ctx context.Context, tx database.Transaction, agentName, version string, agentJSON *models.AgentJSON) (*models.AgentResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -1570,7 +1570,7 @@ func (db *PostgreSQL) UpdateAgent(ctx context.Context, tx pgx.Tx, agentName, ver
 	}, nil
 }
 
-func (db *PostgreSQL) SetAgentStatus(ctx context.Context, tx pgx.Tx, agentName, version string, status string) (*models.AgentResponse, error) {
+func (db *PostgreSQL) SetAgentStatus(ctx context.Context, tx database.Transaction, agentName, version string, status string) (*models.AgentResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -1615,7 +1615,7 @@ func (db *PostgreSQL) SetAgentStatus(ctx context.Context, tx pgx.Tx, agentName, 
 	}, nil
 }
 
-func (db *PostgreSQL) GetCurrentLatestAgentVersion(ctx context.Context, tx pgx.Tx, agentName string) (*models.AgentResponse, error) {
+func (db *PostgreSQL) GetCurrentLatestAgentVersion(ctx context.Context, tx database.Transaction, agentName string) (*models.AgentResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -1661,7 +1661,7 @@ func (db *PostgreSQL) GetCurrentLatestAgentVersion(ctx context.Context, tx pgx.T
 	}, nil
 }
 
-func (db *PostgreSQL) CountAgentVersions(ctx context.Context, tx pgx.Tx, agentName string) (int, error) {
+func (db *PostgreSQL) CountAgentVersions(ctx context.Context, tx database.Transaction, agentName string) (int, error) {
 	if ctx.Err() != nil {
 		return 0, ctx.Err()
 	}
@@ -1682,7 +1682,7 @@ func (db *PostgreSQL) CountAgentVersions(ctx context.Context, tx pgx.Tx, agentNa
 	return count, nil
 }
 
-func (db *PostgreSQL) CheckAgentVersionExists(ctx context.Context, tx pgx.Tx, agentName, version string) (bool, error) {
+func (db *PostgreSQL) CheckAgentVersionExists(ctx context.Context, tx database.Transaction, agentName, version string) (bool, error) {
 	if ctx.Err() != nil {
 		return false, ctx.Err()
 	}
@@ -1703,7 +1703,7 @@ func (db *PostgreSQL) CheckAgentVersionExists(ctx context.Context, tx pgx.Tx, ag
 	return exists, nil
 }
 
-func (db *PostgreSQL) UnmarkAgentAsLatest(ctx context.Context, tx pgx.Tx, agentName string) error {
+func (db *PostgreSQL) UnmarkAgentAsLatest(ctx context.Context, tx database.Transaction, agentName string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -1726,7 +1726,7 @@ func (db *PostgreSQL) UnmarkAgentAsLatest(ctx context.Context, tx pgx.Tx, agentN
 }
 
 // SetAgentEmbedding stores semantic embedding metadata for an agent version.
-func (db *PostgreSQL) SetAgentEmbedding(ctx context.Context, tx pgx.Tx, agentName, version string, embedding *database.SemanticEmbedding) error {
+func (db *PostgreSQL) SetAgentEmbedding(ctx context.Context, tx database.Transaction, agentName, version string, embedding *database.SemanticEmbedding) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -1795,7 +1795,7 @@ func (db *PostgreSQL) SetAgentEmbedding(ctx context.Context, tx pgx.Tx, agentNam
 }
 
 // GetAgentEmbeddingMetadata retrieves embedding metadata for an agent version without loading the vector.
-func (db *PostgreSQL) GetAgentEmbeddingMetadata(ctx context.Context, tx pgx.Tx, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
+func (db *PostgreSQL) GetAgentEmbeddingMetadata(ctx context.Context, tx database.Transaction, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -1872,7 +1872,7 @@ func (db *PostgreSQL) GetAgentEmbeddingMetadata(ctx context.Context, tx pgx.Tx, 
 // ==============================
 
 // ListSkills returns paginated skills with filtering
-func (db *PostgreSQL) ListSkills(ctx context.Context, tx pgx.Tx, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
+func (db *PostgreSQL) ListSkills(ctx context.Context, tx database.Transaction, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -1993,7 +1993,7 @@ func (db *PostgreSQL) ListSkills(ctx context.Context, tx pgx.Tx, filter *databas
 	return results, nextCursor, nil
 }
 
-func (db *PostgreSQL) GetSkillByName(ctx context.Context, tx pgx.Tx, skillName string) (*models.SkillResponse, error) {
+func (db *PostgreSQL) GetSkillByName(ctx context.Context, tx database.Transaction, skillName string) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -2039,7 +2039,7 @@ func (db *PostgreSQL) GetSkillByName(ctx context.Context, tx pgx.Tx, skillName s
 	}, nil
 }
 
-func (db *PostgreSQL) GetSkillByNameAndVersion(ctx context.Context, tx pgx.Tx, skillName, version string) (*models.SkillResponse, error) {
+func (db *PostgreSQL) GetSkillByNameAndVersion(ctx context.Context, tx database.Transaction, skillName, version string) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -2084,7 +2084,7 @@ func (db *PostgreSQL) GetSkillByNameAndVersion(ctx context.Context, tx pgx.Tx, s
 	}, nil
 }
 
-func (db *PostgreSQL) GetAllVersionsBySkillName(ctx context.Context, tx pgx.Tx, skillName string) ([]*models.SkillResponse, error) {
+func (db *PostgreSQL) GetAllVersionsBySkillName(ctx context.Context, tx database.Transaction, skillName string) ([]*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -2141,7 +2141,7 @@ func (db *PostgreSQL) GetAllVersionsBySkillName(ctx context.Context, tx pgx.Tx, 
 	return results, nil
 }
 
-func (db *PostgreSQL) CreateSkill(ctx context.Context, tx pgx.Tx, skillJSON *models.SkillJSON, officialMeta *models.SkillRegistryExtensions) (*models.SkillResponse, error) {
+func (db *PostgreSQL) CreateSkill(ctx context.Context, tx database.Transaction, skillJSON *models.SkillJSON, officialMeta *models.SkillRegistryExtensions) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -2186,7 +2186,7 @@ func (db *PostgreSQL) CreateSkill(ctx context.Context, tx pgx.Tx, skillJSON *mod
 	}, nil
 }
 
-func (db *PostgreSQL) UpdateSkill(ctx context.Context, tx pgx.Tx, skillName, version string, skillJSON *models.SkillJSON) (*models.SkillResponse, error) {
+func (db *PostgreSQL) UpdateSkill(ctx context.Context, tx database.Transaction, skillName, version string, skillJSON *models.SkillJSON) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -2236,7 +2236,7 @@ func (db *PostgreSQL) UpdateSkill(ctx context.Context, tx pgx.Tx, skillName, ver
 	}, nil
 }
 
-func (db *PostgreSQL) SetSkillStatus(ctx context.Context, tx pgx.Tx, skillName, version string, status string) (*models.SkillResponse, error) {
+func (db *PostgreSQL) SetSkillStatus(ctx context.Context, tx database.Transaction, skillName, version string, status string) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -2281,7 +2281,7 @@ func (db *PostgreSQL) SetSkillStatus(ctx context.Context, tx pgx.Tx, skillName, 
 	}, nil
 }
 
-func (db *PostgreSQL) GetCurrentLatestSkillVersion(ctx context.Context, tx pgx.Tx, skillName string) (*models.SkillResponse, error) {
+func (db *PostgreSQL) GetCurrentLatestSkillVersion(ctx context.Context, tx database.Transaction, skillName string) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -2327,7 +2327,7 @@ func (db *PostgreSQL) GetCurrentLatestSkillVersion(ctx context.Context, tx pgx.T
 	}, nil
 }
 
-func (db *PostgreSQL) CountSkillVersions(ctx context.Context, tx pgx.Tx, skillName string) (int, error) {
+func (db *PostgreSQL) CountSkillVersions(ctx context.Context, tx database.Transaction, skillName string) (int, error) {
 	if ctx.Err() != nil {
 		return 0, ctx.Err()
 	}
@@ -2348,7 +2348,7 @@ func (db *PostgreSQL) CountSkillVersions(ctx context.Context, tx pgx.Tx, skillNa
 	return count, nil
 }
 
-func (db *PostgreSQL) CheckSkillVersionExists(ctx context.Context, tx pgx.Tx, skillName, version string) (bool, error) {
+func (db *PostgreSQL) CheckSkillVersionExists(ctx context.Context, tx database.Transaction, skillName, version string) (bool, error) {
 	if ctx.Err() != nil {
 		return false, ctx.Err()
 	}
@@ -2369,7 +2369,7 @@ func (db *PostgreSQL) CheckSkillVersionExists(ctx context.Context, tx pgx.Tx, sk
 	return exists, nil
 }
 
-func (db *PostgreSQL) UnmarkSkillAsLatest(ctx context.Context, tx pgx.Tx, skillName string) error {
+func (db *PostgreSQL) UnmarkSkillAsLatest(ctx context.Context, tx database.Transaction, skillName string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -2392,7 +2392,7 @@ func (db *PostgreSQL) UnmarkSkillAsLatest(ctx context.Context, tx pgx.Tx, skillN
 }
 
 // DeleteSkill permanently removes a skill version from the database.
-func (db *PostgreSQL) DeleteSkill(ctx context.Context, tx pgx.Tx, skillName, version string) error {
+func (db *PostgreSQL) DeleteSkill(ctx context.Context, tx database.Transaction, skillName, version string) error {
 	if err := db.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
 		Name: skillName,
 		Type: auth.PermissionArtifactTypeSkill,
@@ -2444,7 +2444,7 @@ func (db *PostgreSQL) DeleteSkill(ctx context.Context, tx pgx.Tx, skillName, ver
 }
 
 // CreateProvider creates a provider record.
-func (db *PostgreSQL) CreateProvider(ctx context.Context, tx pgx.Tx, in *models.CreateProviderInput) (*models.Provider, error) {
+func (db *PostgreSQL) CreateProvider(ctx context.Context, tx database.Transaction, in *models.CreateProviderInput) (*models.Provider, error) {
 	if in == nil {
 		return nil, database.ErrInvalidInput
 	}
@@ -2490,7 +2490,7 @@ func (db *PostgreSQL) CreateProvider(ctx context.Context, tx pgx.Tx, in *models.
 }
 
 // ListProviders lists providers, optionally filtered by platform.
-func (db *PostgreSQL) ListProviders(ctx context.Context, tx pgx.Tx, platform *string) ([]*models.Provider, error) {
+func (db *PostgreSQL) ListProviders(ctx context.Context, tx database.Transaction, platform *string) ([]*models.Provider, error) {
 	executor := db.getExecutor(tx)
 	query := `SELECT id, name, platform, COALESCE(config, '{}'::jsonb), created_at, updated_at FROM providers`
 	args := []any{}
@@ -2528,7 +2528,7 @@ func (db *PostgreSQL) ListProviders(ctx context.Context, tx pgx.Tx, platform *st
 }
 
 // GetProviderByID gets a provider by ID.
-func (db *PostgreSQL) GetProviderByID(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error) {
+func (db *PostgreSQL) GetProviderByID(ctx context.Context, tx database.Transaction, providerID string) (*models.Provider, error) {
 	executor := db.getExecutor(tx)
 	query := `SELECT id, name, platform, COALESCE(config, '{}'::jsonb), created_at, updated_at FROM providers WHERE id = $1`
 	var p models.Provider
@@ -2551,7 +2551,7 @@ func (db *PostgreSQL) GetProviderByID(ctx context.Context, tx pgx.Tx, providerID
 }
 
 // UpdateProvider updates mutable provider fields.
-func (db *PostgreSQL) UpdateProvider(ctx context.Context, tx pgx.Tx, providerID string, in *models.UpdateProviderInput) (*models.Provider, error) {
+func (db *PostgreSQL) UpdateProvider(ctx context.Context, tx database.Transaction, providerID string, in *models.UpdateProviderInput) (*models.Provider, error) {
 	if in == nil {
 		return db.GetProviderByID(ctx, tx, providerID)
 	}
@@ -2598,7 +2598,7 @@ func (db *PostgreSQL) UpdateProvider(ctx context.Context, tx pgx.Tx, providerID 
 }
 
 // DeleteProvider removes a provider by ID.
-func (db *PostgreSQL) DeleteProvider(ctx context.Context, tx pgx.Tx, providerID string) error {
+func (db *PostgreSQL) DeleteProvider(ctx context.Context, tx database.Transaction, providerID string) error {
 	executor := db.getExecutor(tx)
 	result, err := executor.Exec(ctx, `DELETE FROM providers WHERE id = $1`, providerID)
 	if err != nil {
@@ -2611,7 +2611,7 @@ func (db *PostgreSQL) DeleteProvider(ctx context.Context, tx pgx.Tx, providerID 
 }
 
 // CreateDeployment creates a new deployment record
-func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deployment *models.Deployment) error {
+func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx database.Transaction, deployment *models.Deployment) error {
 	// Authz check (determine resource type)
 	artifactType := auth.PermissionArtifactTypeServer
 	if deployment.ResourceType == "agent" {
@@ -2693,7 +2693,7 @@ func (db *PostgreSQL) CreateDeployment(ctx context.Context, tx pgx.Tx, deploymen
 }
 
 // GetDeployments retrieves all deployed servers
-func (db *PostgreSQL) GetDeployments(ctx context.Context, tx pgx.Tx, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+func (db *PostgreSQL) GetDeployments(ctx context.Context, tx database.Transaction, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	executor := db.getExecutor(tx)
 
 	where, args, needsProviderJoin := buildDeploymentFilters(filter)
@@ -2813,7 +2813,7 @@ func buildDeploymentFilters(filter *models.DeploymentFilter) ([]string, []any, b
 }
 
 // GetDeploymentByID retrieves a specific deployment by UUID.
-func (db *PostgreSQL) GetDeploymentByID(ctx context.Context, tx pgx.Tx, id string) (*models.Deployment, error) {
+func (db *PostgreSQL) GetDeploymentByID(ctx context.Context, tx database.Transaction, id string) (*models.Deployment, error) {
 	executor := db.getExecutor(tx)
 	query := `SELECT
 			id, server_name, version, deployed_at, updated_at, status, config, prefer_remote, resource_type,
@@ -2875,7 +2875,7 @@ func (db *PostgreSQL) GetDeploymentByID(ctx context.Context, tx pgx.Tx, id strin
 }
 
 // UpdateDeploymentState applies partial state updates to a deployment by ID.
-func (db *PostgreSQL) UpdateDeploymentState(ctx context.Context, tx pgx.Tx, id string, patch *models.DeploymentStatePatch) error {
+func (db *PostgreSQL) UpdateDeploymentState(ctx context.Context, tx database.Transaction, id string, patch *models.DeploymentStatePatch) error {
 	if patch == nil {
 		return fmt.Errorf("%w: deployment state patch is required", database.ErrInvalidInput)
 	}
@@ -2962,7 +2962,7 @@ func (db *PostgreSQL) UpdateDeploymentState(ctx context.Context, tx pgx.Tx, id s
 }
 
 // RemoveDeploymentByID removes a deployment by UUID.
-func (db *PostgreSQL) RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id string) error {
+func (db *PostgreSQL) RemoveDeploymentByID(ctx context.Context, tx database.Transaction, id string) error {
 	deployment, err := db.GetDeploymentByID(ctx, tx, id)
 	if err != nil {
 		return err
@@ -2994,7 +2994,7 @@ func (db *PostgreSQL) RemoveDeploymentByID(ctx context.Context, tx pgx.Tx, id st
 // DeleteAgent permanently removes an agent version from the database.
 // If the deleted version was the current latest, the most recently published
 // remaining version is promoted to latest.
-func (db *PostgreSQL) DeleteAgent(ctx context.Context, tx pgx.Tx, agentName, version string) error {
+func (db *PostgreSQL) DeleteAgent(ctx context.Context, tx database.Transaction, agentName, version string) error {
 	if err := db.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
 		Name: agentName,
 		Type: auth.PermissionArtifactTypeAgent,
@@ -3045,7 +3045,7 @@ func (db *PostgreSQL) DeleteAgent(ctx context.Context, tx pgx.Tx, agentName, ver
 	return nil
 }
 
-func (db *PostgreSQL) ListPrompts(ctx context.Context, tx pgx.Tx, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
+func (db *PostgreSQL) ListPrompts(ctx context.Context, tx database.Transaction, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -3161,7 +3161,7 @@ func (db *PostgreSQL) ListPrompts(ctx context.Context, tx pgx.Tx, filter *databa
 	return results, nextCursor, nil
 }
 
-func (db *PostgreSQL) GetPromptByName(ctx context.Context, tx pgx.Tx, promptName string) (*models.PromptResponse, error) {
+func (db *PostgreSQL) GetPromptByName(ctx context.Context, tx database.Transaction, promptName string) (*models.PromptResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -3207,7 +3207,7 @@ func (db *PostgreSQL) GetPromptByName(ctx context.Context, tx pgx.Tx, promptName
 	}, nil
 }
 
-func (db *PostgreSQL) GetPromptByNameAndVersion(ctx context.Context, tx pgx.Tx, promptName, version string) (*models.PromptResponse, error) {
+func (db *PostgreSQL) GetPromptByNameAndVersion(ctx context.Context, tx database.Transaction, promptName, version string) (*models.PromptResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -3252,7 +3252,7 @@ func (db *PostgreSQL) GetPromptByNameAndVersion(ctx context.Context, tx pgx.Tx, 
 	}, nil
 }
 
-func (db *PostgreSQL) GetAllVersionsByPromptName(ctx context.Context, tx pgx.Tx, promptName string) ([]*models.PromptResponse, error) {
+func (db *PostgreSQL) GetAllVersionsByPromptName(ctx context.Context, tx database.Transaction, promptName string) ([]*models.PromptResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -3309,7 +3309,7 @@ func (db *PostgreSQL) GetAllVersionsByPromptName(ctx context.Context, tx pgx.Tx,
 	return results, nil
 }
 
-func (db *PostgreSQL) CreatePrompt(ctx context.Context, tx pgx.Tx, promptJSON *models.PromptJSON, officialMeta *models.PromptRegistryExtensions) (*models.PromptResponse, error) {
+func (db *PostgreSQL) CreatePrompt(ctx context.Context, tx database.Transaction, promptJSON *models.PromptJSON, officialMeta *models.PromptRegistryExtensions) (*models.PromptResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -3354,7 +3354,7 @@ func (db *PostgreSQL) CreatePrompt(ctx context.Context, tx pgx.Tx, promptJSON *m
 	}, nil
 }
 
-func (db *PostgreSQL) GetCurrentLatestPromptVersion(ctx context.Context, tx pgx.Tx, promptName string) (*models.PromptResponse, error) {
+func (db *PostgreSQL) GetCurrentLatestPromptVersion(ctx context.Context, tx database.Transaction, promptName string) (*models.PromptResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -3400,7 +3400,7 @@ func (db *PostgreSQL) GetCurrentLatestPromptVersion(ctx context.Context, tx pgx.
 	}, nil
 }
 
-func (db *PostgreSQL) CountPromptVersions(ctx context.Context, tx pgx.Tx, promptName string) (int, error) {
+func (db *PostgreSQL) CountPromptVersions(ctx context.Context, tx database.Transaction, promptName string) (int, error) {
 	if ctx.Err() != nil {
 		return 0, ctx.Err()
 	}
@@ -3421,7 +3421,7 @@ func (db *PostgreSQL) CountPromptVersions(ctx context.Context, tx pgx.Tx, prompt
 	return count, nil
 }
 
-func (db *PostgreSQL) CheckPromptVersionExists(ctx context.Context, tx pgx.Tx, promptName, version string) (bool, error) {
+func (db *PostgreSQL) CheckPromptVersionExists(ctx context.Context, tx database.Transaction, promptName, version string) (bool, error) {
 	if ctx.Err() != nil {
 		return false, ctx.Err()
 	}
@@ -3442,7 +3442,7 @@ func (db *PostgreSQL) CheckPromptVersionExists(ctx context.Context, tx pgx.Tx, p
 	return exists, nil
 }
 
-func (db *PostgreSQL) UnmarkPromptAsLatest(ctx context.Context, tx pgx.Tx, promptName string) error {
+func (db *PostgreSQL) UnmarkPromptAsLatest(ctx context.Context, tx database.Transaction, promptName string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -3462,7 +3462,7 @@ func (db *PostgreSQL) UnmarkPromptAsLatest(ctx context.Context, tx pgx.Tx, promp
 	return nil
 }
 
-func (db *PostgreSQL) DeletePrompt(ctx context.Context, tx pgx.Tx, promptName, version string) error {
+func (db *PostgreSQL) DeletePrompt(ctx context.Context, tx database.Transaction, promptName, version string) error {
 	if err := db.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
 		Name: promptName,
 		Type: auth.PermissionArtifactTypePrompt,

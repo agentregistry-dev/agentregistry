@@ -9,7 +9,6 @@ import (
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
-	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 	"github.com/stretchr/testify/assert"
@@ -555,7 +554,7 @@ func TestPostgreSQL_TransactionHandling(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("successful transaction", func(t *testing.T) {
-		err := db.InTransaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		err := db.InTransaction(ctx, func(ctx context.Context, tx database.Transaction) error {
 			serverJSON := &apiv0.ServerJSON{
 				Name:        "com.example/transaction-success",
 				Description: "Transaction test server",
@@ -581,7 +580,7 @@ func TestPostgreSQL_TransactionHandling(t *testing.T) {
 	})
 
 	t.Run("failed transaction rollback", func(t *testing.T) {
-		err := db.InTransaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		err := db.InTransaction(ctx, func(ctx context.Context, tx database.Transaction) error {
 			serverJSON := &apiv0.ServerJSON{
 				Name:        "com.example/transaction-rollback",
 				Description: "Transaction rollback test server",

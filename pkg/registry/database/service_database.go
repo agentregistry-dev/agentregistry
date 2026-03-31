@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
-	"github.com/jackc/pgx/v5"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
@@ -120,7 +119,7 @@ func NewServiceDatabase(db Database) ServiceDatabase {
 }
 
 func (s serviceDatabaseAdapter) InTransaction(ctx context.Context, fn func(context.Context, Store) error) error {
-	return s.db.InTransaction(ctx, func(txCtx context.Context, tx pgx.Tx) error {
+	return s.db.InTransaction(ctx, func(txCtx context.Context, tx Transaction) error {
 		return fn(txCtx, storeAdapter{db: s.db, tx: tx})
 	})
 }
@@ -131,7 +130,7 @@ func (s serviceDatabaseAdapter) Close() error {
 
 type storeAdapter struct {
 	db Database
-	tx pgx.Tx
+	tx Transaction
 }
 
 func (s storeAdapter) DeleteServer(ctx context.Context, serverName, version string) error {
