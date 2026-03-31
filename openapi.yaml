@@ -538,15 +538,12 @@ paths:
                         - 6b7ce4ab-ec3d-4789-95f4-8be5fac2e6be
                   example: 6b7ce4ab-ec3d-4789-95f4-8be5fac2e6be
             responses:
-                "204":
-                    description: No Content
-                    headers:
-                        DeploymentID:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
                             schema:
-                                type: string
-                        Logs:
-                            schema:
-                                type: string
+                                $ref: '#/components/schemas/DeploymentLogsBody'
                 default:
                     description: Error
                     content:
@@ -1868,6 +1865,22 @@ components:
                 - preferRemote
                 - deployedAt
                 - updatedAt
+        DeploymentLogsBody:
+            type: object
+            additionalProperties: false
+            properties:
+                deploymentId:
+                    type: string
+                logs:
+                    type: array
+                    items:
+                        type: string
+                status:
+                    type: string
+            required:
+                - deploymentId
+                - status
+                - logs
         DeploymentRequest:
             type: object
             additionalProperties: false

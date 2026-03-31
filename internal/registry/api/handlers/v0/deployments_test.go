@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
+	platformutils "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	servicetesting "github.com/agentregistry-dev/agentregistry/internal/registry/service/testing"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
@@ -498,8 +499,14 @@ func TestGetDeploymentLogs_UsesAdapterWhenRegistered(t *testing.T) {
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
 	assert.True(t, adapter.getLogsCalled)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "dep-2", resp["deploymentId"])
+	assert.Equal(t, "deployed", resp["status"])
+	assert.Equal(t, []any{"line-1", "line-2"}, resp["logs"])
 }
 
 func TestGetDeploymentLogs_NotFoundFromAdapterReturnsNotFound(t *testing.T) {
@@ -533,6 +540,40 @@ func TestGetDeploymentLogs_NotFoundFromAdapterReturnsNotFound(t *testing.T) {
 	mux.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.True(t, adapter.getLogsCalled)
+}
+
+func TestGetDeploymentLogs_NotSupportedFromAdapterReturnsNotImplemented(t *testing.T) {
+	reg := servicetesting.NewFakeRegistry()
+	reg.GetDeploymentByIDFn = func(ctx context.Context, id string) (*models.Deployment, error) {
+		return &models.Deployment{
+			ID:         id,
+			ProviderID: "local",
+			Status:     "deployed",
+		}, nil
+	}
+	reg.GetProviderByIDFn = func(ctx context.Context, providerID string) (*models.Provider, error) {
+		return &models.Provider{ID: providerID, Platform: "local"}, nil
+	}
+
+	adapter := &fakeDeploymentAdapter{getLogsErr: platformutils.ErrDeploymentNotSupported}
+	reg.GetDeploymentLogsFn = func(ctx context.Context, deployment *models.Deployment) ([]string, error) {
+		return adapter.GetLogs(ctx, deployment)
+	}
+	mux := http.NewServeMux()
+	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
+	v0.RegisterDeploymentsEndpoints(api, "/v0", reg, v0.PlatformExtensions{
+		ProviderPlatforms: v0.DefaultProviderPlatformAdapters(reg),
+		DeploymentPlatforms: map[string]registrytypes.DeploymentPlatformAdapter{
+			"local": adapter,
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v0/deployments/dep-2/logs", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotImplemented, w.Code)
 	assert.True(t, adapter.getLogsCalled)
 }
 
@@ -601,5 +642,39 @@ func TestCancelDeployment_InvalidInputFromAdapterReturnsBadRequest(t *testing.T)
 	mux.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.True(t, adapter.cancelCalled)
+}
+
+func TestCancelDeployment_NotSupportedFromAdapterReturnsNotImplemented(t *testing.T) {
+	reg := servicetesting.NewFakeRegistry()
+	reg.GetDeploymentByIDFn = func(ctx context.Context, id string) (*models.Deployment, error) {
+		return &models.Deployment{
+			ID:         id,
+			ProviderID: "local",
+			Status:     "queued",
+		}, nil
+	}
+	reg.GetProviderByIDFn = func(ctx context.Context, providerID string) (*models.Provider, error) {
+		return &models.Provider{ID: providerID, Platform: "local"}, nil
+	}
+
+	adapter := &fakeDeploymentAdapter{cancelErr: platformutils.ErrDeploymentNotSupported}
+	reg.CancelDeploymentFn = func(ctx context.Context, deployment *models.Deployment) error {
+		return adapter.Cancel(ctx, deployment)
+	}
+	mux := http.NewServeMux()
+	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
+	v0.RegisterDeploymentsEndpoints(api, "/v0", reg, v0.PlatformExtensions{
+		ProviderPlatforms: v0.DefaultProviderPlatformAdapters(reg),
+		DeploymentPlatforms: map[string]registrytypes.DeploymentPlatformAdapter{
+			"local": adapter,
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v0/deployments/dep-3/cancel", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotImplemented, w.Code)
 	assert.True(t, adapter.cancelCalled)
 }

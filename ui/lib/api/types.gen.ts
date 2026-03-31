@@ -161,6 +161,12 @@ export type Deployment = {
     version: string;
 };
 
+export type DeploymentLogsBody = {
+    deploymentId: string;
+    logs: Array<string>;
+    status: string;
+};
+
 export type DeploymentRequest = {
     /**
      * Deployment environment variables.
@@ -1236,9 +1242,9 @@ export type GetDeploymentLogsError = GetDeploymentLogsErrors[keyof GetDeployment
 
 export type GetDeploymentLogsResponses = {
     /**
-     * No Content
+     * OK
      */
-    204: void;
+    200: DeploymentLogsBody;
 };
 
 export type GetDeploymentLogsResponse = GetDeploymentLogsResponses[keyof GetDeploymentLogsResponses];

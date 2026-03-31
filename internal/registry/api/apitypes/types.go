@@ -61,8 +61,14 @@ type DeploymentsListResponse struct {
 	Deployments []models.Deployment `json:"deployments" doc:"List of deployed servers"`
 }
 
-// DeploymentLogsResponse is the deployment logs response body.
-type DeploymentLogsResponse struct {
+// DeploymentLogsBody is the JSON body returned for deployment logs requests.
+type DeploymentLogsBody struct {
 	DeploymentID string   `json:"deploymentId"`
+	Status       string   `json:"status"`
 	Logs         []string `json:"logs"`
+}
+
+// DeploymentLogsResponse is the deployment logs response wrapper.
+type DeploymentLogsResponse struct {
+	Body DeploymentLogsBody
 }
