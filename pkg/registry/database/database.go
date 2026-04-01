@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
@@ -107,11 +105,29 @@ type SemanticSearchOptions struct {
 	HybridSubstring *string
 }
 
+// CommandTag reports metadata about an executed statement.
+type CommandTag interface {
+	RowsAffected() int64
+}
+
+// Rows defines the row-iteration surface repository methods need.
+type Rows interface {
+	Close()
+	Err() error
+	Next() bool
+	Scan(dest ...any) error
+}
+
+// Row defines the single-row scan surface repository methods need.
+type Row interface {
+	Scan(dest ...any) error
+}
+
 // Transaction defines the query surface repository methods need from a database transaction.
 type Transaction interface {
-	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, arguments ...any) (CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) Row
 }
 
 // ServerRepository defines server persistence operations.

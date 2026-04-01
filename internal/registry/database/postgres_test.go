@@ -553,6 +553,51 @@ func TestPostgreSQL_TransactionHandling(t *testing.T) {
 	db := internaldb.NewTestDB(t)
 	ctx := context.Background()
 
+	t.Run("transaction interface uses neutral query primitives", func(t *testing.T) {
+		err := db.InTransaction(ctx, func(ctx context.Context, tx database.Transaction) error {
+			_, err := tx.Exec(ctx, `CREATE TEMP TABLE phase1_tx_contract (id INT)`)
+			if err != nil {
+				return err
+			}
+
+			result, err := tx.Exec(ctx, `INSERT INTO phase1_tx_contract (id) VALUES (1), (2)`)
+			if err != nil {
+				return err
+			}
+			require.Equal(t, int64(2), result.RowsAffected())
+
+			row := tx.QueryRow(ctx, `SELECT COUNT(*) FROM phase1_tx_contract`)
+			var count int
+			if err := row.Scan(&count); err != nil {
+				return err
+			}
+			require.Equal(t, 2, count)
+
+			rows, err := tx.Query(ctx, `SELECT id FROM phase1_tx_contract ORDER BY id`)
+			if err != nil {
+				return err
+			}
+			defer rows.Close()
+
+			var ids []int
+			for rows.Next() {
+				var id int
+				if err := rows.Scan(&id); err != nil {
+					return err
+				}
+				ids = append(ids, id)
+			}
+			if err := rows.Err(); err != nil {
+				return err
+			}
+
+			require.Equal(t, []int{1, 2}, ids)
+			return nil
+		})
+
+		require.NoError(t, err)
+	})
+
 	t.Run("successful transaction", func(t *testing.T) {
 		err := db.InTransaction(ctx, func(ctx context.Context, tx database.Transaction) error {
 			serverJSON := &apiv0.ServerJSON{

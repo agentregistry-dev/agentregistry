@@ -29,11 +29,95 @@ type PostgreSQL struct {
 	authz auth.Authorizer
 }
 
-// Executor is an interface for executing queries (satisfied by both database.Transaction and pgxpool.Pool)
+type commandTagAdapter struct {
+	tag pgconn.CommandTag
+}
+
+func (c commandTagAdapter) RowsAffected() int64 {
+	return c.tag.RowsAffected()
+}
+
+type rowsAdapter struct {
+	rows pgx.Rows
+}
+
+func (r rowsAdapter) Close() {
+	r.rows.Close()
+}
+
+func (r rowsAdapter) Err() error {
+	return r.rows.Err()
+}
+
+func (r rowsAdapter) Next() bool {
+	return r.rows.Next()
+}
+
+func (r rowsAdapter) Scan(dest ...any) error {
+	return r.rows.Scan(dest...)
+}
+
+type rowAdapter struct {
+	row pgx.Row
+}
+
+func (r rowAdapter) Scan(dest ...any) error {
+	return r.row.Scan(dest...)
+}
+
+type transactionAdapter struct {
+	tx pgx.Tx
+}
+
+func (t transactionAdapter) Exec(ctx context.Context, sql string, arguments ...any) (database.CommandTag, error) {
+	result, err := t.tx.Exec(ctx, sql, arguments...)
+	if err != nil {
+		return nil, err
+	}
+	return commandTagAdapter{tag: result}, nil
+}
+
+func (t transactionAdapter) Query(ctx context.Context, sql string, args ...any) (database.Rows, error) {
+	rows, err := t.tx.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, err
+	}
+	return rowsAdapter{rows: rows}, nil
+}
+
+func (t transactionAdapter) QueryRow(ctx context.Context, sql string, args ...any) database.Row {
+	return rowAdapter{row: t.tx.QueryRow(ctx, sql, args...)}
+}
+
+type poolExecutor struct {
+	pool *pgxpool.Pool
+}
+
+func (p poolExecutor) Exec(ctx context.Context, sql string, arguments ...any) (database.CommandTag, error) {
+	result, err := p.pool.Exec(ctx, sql, arguments...)
+	if err != nil {
+		return nil, err
+	}
+	return commandTagAdapter{tag: result}, nil
+}
+
+func (p poolExecutor) Query(ctx context.Context, sql string, args ...any) (database.Rows, error) {
+	rows, err := p.pool.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, err
+	}
+	return rowsAdapter{rows: rows}, nil
+}
+
+func (p poolExecutor) QueryRow(ctx context.Context, sql string, args ...any) database.Row {
+	return rowAdapter{row: p.pool.QueryRow(ctx, sql, args...)}
+}
+
+// Executor is an internal query surface used by repository methods.
 type Executor interface {
-	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, arguments ...any) (database.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (database.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) database.Row
 }
 
 // getExecutor returns the appropriate executor (transaction or pool)
@@ -41,7 +125,7 @@ func (db *PostgreSQL) getExecutor(tx database.Transaction) Executor {
 	if tx != nil {
 		return tx
 	}
-	return db.pool
+	return poolExecutor{pool: db.pool}
 }
 
 // NewPostgreSQL creates a new instance of the PostgreSQL database
@@ -654,7 +738,7 @@ func (db *PostgreSQL) InTransaction(ctx context.Context, fn func(ctx context.Con
 		}
 	}()
 
-	if err := fn(ctx, tx); err != nil {
+	if err := fn(ctx, transactionAdapter{tx: tx}); err != nil {
 		return err
 	}
 
@@ -1129,7 +1213,7 @@ func (db *PostgreSQL) GetLatestServerReadme(ctx context.Context, tx database.Tra
 	return scanServerReadme(row)
 }
 
-func scanServerReadme(row pgx.Row) (*database.ServerReadme, error) {
+func scanServerReadme(row database.Row) (*database.ServerReadme, error) {
 	var readme database.ServerReadme
 	if err := row.Scan(
 		&readme.ServerName,
