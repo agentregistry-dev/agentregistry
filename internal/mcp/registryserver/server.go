@@ -8,7 +8,6 @@ import (
 	"time"
 
 	restv0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -23,7 +22,7 @@ const (
 
 // NewServer constructs an MCP server that exposes discovery and deployment tools backed by focused registry contracts.
 // All endpoints are restricted to published content to keep the surface area safe for unauthenticated agents.
-func NewServer(registry service.MCPRegistryService) *mcp.Server {
+func NewServer(registry Registry) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "agentregistry-mcp",
 		Version: version.Version,
@@ -44,7 +43,7 @@ func NewServer(registry service.MCPRegistryService) *mcp.Server {
 
 type listAgentsArgs = restv0.ListAgentsInput
 
-func addAgentTools(server *mcp.Server, registry service.MCPRegistryService) {
+func addAgentTools(server *mcp.Server, registry Registry) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_agents",
 		Description: "List published agents with optional search and pagination. Set semantic_search=true for natural-language queries.",
@@ -127,7 +126,7 @@ func addAgentTools(server *mcp.Server, registry service.MCPRegistryService) {
 
 type listServersArgs = restv0.ListServersInput
 
-func addServerTools(server *mcp.Server, registry service.MCPRegistryService) {
+func addServerTools(server *mcp.Server, registry Registry) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_servers",
 		Description: "List published MCP servers with optional search and pagination. Set semantic_search=true for natural-language queries (e.g. 'database management tools').",
@@ -261,7 +260,7 @@ func addServerTools(server *mcp.Server, registry service.MCPRegistryService) {
 
 type listSkillsArgs = restv0.ListSkillsInput
 
-func addSkillTools(server *mcp.Server, registry service.MCPRegistryService) {
+func addSkillTools(server *mcp.Server, registry Registry) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_skills",
 		Description: "List published skills with optional search and pagination",
@@ -374,7 +373,7 @@ type deploymentsResponse struct {
 	Count       int                 `json:"count"`
 }
 
-func addDeploymentTools(server *mcp.Server, registry service.MCPRegistryService) {
+func addDeploymentTools(server *mcp.Server, registry Registry) {
 	// List deployments
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_deployments",
@@ -486,7 +485,7 @@ type ServerReadmePayload struct {
 	FetchedAt   time.Time `json:"fetched_at"`
 }
 
-func fetchSingleServer(ctx context.Context, registry service.MCPRegistryService, name, version string) (*apiv0.ServerResponse, error) {
+func fetchSingleServer(ctx context.Context, registry Registry, name, version string) (*apiv0.ServerResponse, error) {
 	if version == "latest" {
 		servers, err := registry.GetAllVersionsByServerName(ctx, name)
 		if err != nil {

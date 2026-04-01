@@ -10,13 +10,12 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
 type localDeploymentAdapter struct {
-	registry         service.PlatformRuntimeService
+	registry         platformtypes.PlatformRuntimeService
 	platformDir      string
 	agentGatewayPort uint16
 }
@@ -68,7 +67,7 @@ func (c *localAgentConfig) cleanup() error {
 }
 
 func NewLocalDeploymentAdapter(
-	registry service.PlatformRuntimeService,
+	registry platformtypes.PlatformRuntimeService,
 	platformDir string,
 	agentGatewayPort uint16,
 ) *localDeploymentAdapter {

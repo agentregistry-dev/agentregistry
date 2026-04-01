@@ -17,7 +17,6 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 )
 
@@ -132,7 +131,7 @@ func handle404(w http.ResponseWriter, r *http.Request) {
 
 // NewHumaAPI creates a new Huma API with all routes registered
 // Note: authz is handled at the DB/service layer, not at the API layer.
-func NewHumaAPI(cfg *config.Config, registry service.APIRouteService, mux *http.ServeMux, metrics *telemetry.Metrics, versionInfo *apitypes.VersionBody, uiHandler http.Handler, authnProvider auth.AuthnProvider, routeOpts *RouteOptions) huma.API {
+func NewHumaAPI(cfg *config.Config, registry APIRouteService, mux *http.ServeMux, metrics *telemetry.Metrics, versionInfo *apitypes.VersionBody, uiHandler http.Handler, authnProvider auth.AuthnProvider, routeOpts *RouteOptions) huma.API {
 	// Create Huma API configuration
 	humaConfig := huma.DefaultConfig("Official MCP Registry", "1.0.0")
 	humaConfig.Info.Description = "A community driven registry service for Model Context Protocol (MCP) servers.\n\n[GitHub repository](https://github.com/modelcontextprotocol/registry) | [Documentation](https://github.com/modelcontextprotocol/registry/tree/main/docs)"

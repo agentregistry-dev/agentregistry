@@ -17,7 +17,6 @@ import (
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 )
@@ -149,7 +148,7 @@ func (s *Server) Mux() *http.ServeMux {
 
 // NewServer creates a new HTTP server
 // Note: AuthZ is handled at the DB/service layer, not at the API layer.
-func NewServer(cfg *config.Config, registryService service.APIRouteService, metrics *telemetry.Metrics, versionInfo *apitypes.VersionBody, customUIHandler http.Handler, authnProvider auth.AuthnProvider, routeOpts *router.RouteOptions) *Server {
+func NewServer(cfg *config.Config, registryService router.APIRouteService, metrics *telemetry.Metrics, versionInfo *apitypes.VersionBody, customUIHandler http.Handler, authnProvider auth.AuthnProvider, routeOpts *router.RouteOptions) *Server {
 	// Create HTTP mux and Huma API
 	mux := http.NewServeMux()
 

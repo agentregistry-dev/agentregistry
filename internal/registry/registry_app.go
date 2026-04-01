@@ -27,6 +27,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/kubernetes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/local"
+	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
@@ -130,10 +131,10 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 
 	registryService := service.NewRegistryService(database.NewServiceDatabase(db), cfg, embeddingProvider)
 	var providerService service.ProviderService = registryService
-	var platformRuntimeService service.PlatformRuntimeService = registryService
+	var platformRuntimeService platformtypes.PlatformRuntimeService = registryService
 	var serverService service.ServerService = registryService
-	var apiRouteService service.APIRouteService = registryService
-	var mcpRegistryService service.MCPRegistryService = registryService
+	var apiRouteService router.APIRouteService = registryService
+	var mcpRegistryService mcpregistry.Registry = registryService
 
 	// Initialize extension registries once and use them for both routing and service behavior.
 	providerPlatforms := v0.DefaultProviderPlatformAdapters(providerService)

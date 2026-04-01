@@ -8,16 +8,15 @@ import (
 
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
 type kubernetesDeploymentAdapter struct {
-	registry service.PlatformRuntimeService
+	registry platformtypes.PlatformRuntimeService
 }
 
-func NewKubernetesDeploymentAdapter(registry service.PlatformRuntimeService) *kubernetesDeploymentAdapter {
+func NewKubernetesDeploymentAdapter(registry platformtypes.PlatformRuntimeService) *kubernetesDeploymentAdapter {
 	return &kubernetesDeploymentAdapter{registry: registry}
 }
 
