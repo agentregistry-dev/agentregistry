@@ -129,12 +129,14 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		}
 	}
 
-	registryService := service.NewRegistryService(database.NewServiceDatabase(db), cfg, embeddingProvider)
-	var providerService service.ProviderService = registryService
-	var platformRuntimeService platformtypes.PlatformRuntimeService = registryService
-	var serverService service.ServerService = registryService
-	var apiRouteService router.APIRouteService = registryService
-	var mcpRegistryService mcpregistry.Registry = registryService
+	serviceDB := database.NewServiceDatabase(db)
+	bootstrapServices := service.NewSet(service.SetDependencies{
+		StoreDB:            serviceDB,
+		Config:             cfg,
+		EmbeddingsProvider: embeddingProvider,
+	})
+	var providerService service.ProviderService = bootstrapServices
+	var platformRuntimeService platformtypes.PlatformRuntimeService = bootstrapServices
 
 	// Initialize extension registries once and use them for both routing and service behavior.
 	providerPlatforms := v0.DefaultProviderPlatformAdapters(providerService)
@@ -145,16 +147,17 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	}
 	maps.Copy(deploymentPlatforms, options.DeploymentPlatforms)
 
-	type platformAdapterConfigurer interface {
-		SetPlatformAdapters(
-			map[string]types.DeploymentPlatformAdapter,
-		)
-	}
-	// TODO(phase-1): inject deployment adapters during service construction and remove this
-	// post-construction type assertion once the legacy service aggregate is gone.
-	if cfgSvc, ok := registryService.(platformAdapterConfigurer); ok {
-		cfgSvc.SetPlatformAdapters(deploymentPlatforms)
-	}
+	registryService := service.NewSet(service.SetDependencies{
+		StoreDB:            serviceDB,
+		Config:             cfg,
+		EmbeddingsProvider: embeddingProvider,
+		DeploymentAdapters: deploymentPlatforms,
+	})
+	providerService = registryService
+	platformRuntimeService = registryService
+	var serverService service.ServerService = registryService
+	var apiRouteService router.APIRouteService = registryService
+	var mcpRegistryService mcpregistry.Registry = registryService
 
 	// Import builtin seed data unless it is disabled
 	if !cfg.DisableBuiltinSeed {

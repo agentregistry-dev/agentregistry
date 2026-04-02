@@ -177,9 +177,7 @@ func TestValidateNoDuplicateRemoteURLs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			impl := service.(*registryServiceImpl)
-
-			err := impl.validateNoDuplicateRemoteURLs(ctx, nil, tt.serverDetail)
+			err := service.Server().ValidateNoDuplicateRemoteURLs(ctx, testDB, tt.serverDetail)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -718,11 +716,11 @@ func TestUpdateServer_SkipValidationForDeletedServers(t *testing.T) {
 	}
 
 	// Create initial server (validation disabled for creation in this test)
-	originalConfig := service.(*registryServiceImpl).cfg.EnableRegistryValidation
-	service.(*registryServiceImpl).cfg.EnableRegistryValidation = false
+	originalConfig := service.Config().EnableRegistryValidation
+	service.Config().EnableRegistryValidation = false
 	_, err := service.CreateServer(ctx, invalidServer)
 	require.NoError(t, err, "failed to create server with validation disabled")
-	service.(*registryServiceImpl).cfg.EnableRegistryValidation = originalConfig
+	service.Config().EnableRegistryValidation = originalConfig
 
 	// First, set server to deleted status
 	ctxWithAuth := internaldb.WithTestSession(ctx)
@@ -775,10 +773,10 @@ func TestUpdateServer_SkipValidationForDeletedServers(t *testing.T) {
 	}
 
 	// Create active server (with validation disabled)
-	service.(*registryServiceImpl).cfg.EnableRegistryValidation = false
+	service.Config().EnableRegistryValidation = false
 	_, err = service.CreateServer(ctx, activeServer)
 	require.NoError(t, err)
-	service.(*registryServiceImpl).cfg.EnableRegistryValidation = originalConfig
+	service.Config().EnableRegistryValidation = originalConfig
 
 	// Update server and set to deleted in same operation - should skip validation
 	newDeletedStatus := string(model.StatusDeleted)
