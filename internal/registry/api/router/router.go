@@ -9,6 +9,12 @@ import (
 	"time"
 
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
+	v0agents "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/agents"
+	v0deployments "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deployments"
+	v0prompts "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/prompts"
+	v0providers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/providers"
+	v0servers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/servers"
+	v0skills "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/skills"
 	"github.com/agentregistry-dev/agentregistry/pkg/logging"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/danielgtaylor/huma/v2"
@@ -17,7 +23,6 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 )
 
@@ -134,12 +139,12 @@ func handle404(w http.ResponseWriter, r *http.Request) {
 // Note: authz is handled at the DB/service layer, not at the API layer.
 func NewHumaAPI(
 	cfg *config.Config,
-	serverSvc service.ServerRouteService,
-	agentSvc service.AgentRouteService,
-	skillSvc service.SkillService,
-	promptSvc service.PromptService,
-	providerSvc service.ProviderService,
-	deploymentSvc service.DeploymentService,
+	serverSvc v0servers.ServerService,
+	agentSvc v0agents.AgentService,
+	skillSvc v0skills.SkillService,
+	promptSvc v0prompts.PromptService,
+	providerSvc v0providers.ProviderService,
+	deploymentSvc v0deployments.DeploymentService,
 	mux *http.ServeMux,
 	metrics *telemetry.Metrics,
 	versionInfo *apitypes.VersionBody,

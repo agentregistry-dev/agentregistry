@@ -1,4 +1,4 @@
-package v0_test
+package providers_test
 
 import (
 	"bytes"
@@ -8,7 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
+	v0extensions "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/extensions"
+	v0providers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/providers"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
@@ -120,7 +121,7 @@ func TestListProviders_EmptyReturnsEmpty(t *testing.T) {
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 	fake := &fakeProviderService{}
 	kubernetesAdapter := &fakeProviderAdapter{platform: "kubernetes", providers: map[string]*models.Provider{}}
-	v0.RegisterProvidersEndpoints(api, "/v0", fake, v0.PlatformExtensions{
+	v0providers.RegisterProvidersEndpoints(api, "/v0", fake, v0extensions.PlatformExtensions{
 		ProviderPlatforms: map[string]registrytypes.ProviderPlatformAdapter{
 			"kubernetes": kubernetesAdapter,
 		},
@@ -155,7 +156,7 @@ func TestCreateAndGetProvider(t *testing.T) {
 		return &models.Provider{ID: "kubernetes-1", Name: "prod-account", Platform: "kubernetes"}, nil
 	}
 	kubernetesAdapter := &fakeProviderAdapter{platform: "kubernetes", providers: map[string]*models.Provider{}}
-	v0.RegisterProvidersEndpoints(api, "/v0", fake, v0.PlatformExtensions{
+	v0providers.RegisterProvidersEndpoints(api, "/v0", fake, v0extensions.PlatformExtensions{
 		ProviderPlatforms: map[string]registrytypes.ProviderPlatformAdapter{
 			"kubernetes": kubernetesAdapter,
 		},
@@ -206,7 +207,7 @@ func TestListProviders_WithData(t *testing.T) {
 			"kubernetes-default": {ID: "kubernetes-default", Name: "Kubernetes Default", Platform: "kubernetes"},
 		},
 	}
-	v0.RegisterProvidersEndpoints(api, "/v0", fake, v0.PlatformExtensions{
+	v0providers.RegisterProvidersEndpoints(api, "/v0", fake, v0extensions.PlatformExtensions{
 		ProviderPlatforms: map[string]registrytypes.ProviderPlatformAdapter{
 			"local":      localAdapter,
 			"kubernetes": k8sAdapter,
@@ -231,7 +232,7 @@ func TestDeleteProvider_NotFound(t *testing.T) {
 	fake.deleteFn = func(_ context.Context, providerID string) error {
 		return database.ErrNotFound
 	}
-	v0.RegisterProvidersEndpoints(api, "/v0", fake, v0.PlatformExtensions{})
+	v0providers.RegisterProvidersEndpoints(api, "/v0", fake, v0extensions.PlatformExtensions{})
 	req := httptest.NewRequest(http.MethodDelete, "/v0/providers/missing", nil)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)

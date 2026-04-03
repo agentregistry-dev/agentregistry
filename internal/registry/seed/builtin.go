@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
@@ -19,7 +18,13 @@ var builtinSeedData []byte
 //go:embed seed-readme.json
 var builtinReadmeData []byte
 
-func ImportBuiltinSeedData(ctx context.Context, registry service.ServerService) error {
+// ServerRegistry defines the server operations consumed by builtin seed import.
+type ServerRegistry interface {
+	CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
+	StoreServerReadme(ctx context.Context, serverName, version string, content []byte, contentType string) error
+}
+
+func ImportBuiltinSeedData(ctx context.Context, registry ServerRegistry) error {
 	servers, err := loadSeedData(builtinSeedData)
 	if err != nil {
 		return err
@@ -61,7 +66,7 @@ func loadReadmeSeedData(data []byte) (ReadmeFile, error) {
 
 func importServer(
 	ctx context.Context,
-	registry service.ServerService,
+	registry ServerRegistry,
 	srv *apiv0.ServerJSON,
 	readmes ReadmeFile,
 ) {

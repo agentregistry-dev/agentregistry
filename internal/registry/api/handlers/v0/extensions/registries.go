@@ -1,4 +1,4 @@
-package v0
+package extensions
 
 import registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 

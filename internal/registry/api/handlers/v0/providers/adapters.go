@@ -1,10 +1,9 @@
-package v0
+package providers
 
 import (
 	"context"
 	"errors"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
@@ -12,7 +11,7 @@ import (
 
 type providerAdapterBase struct {
 	providerPlatform string
-	registry         service.ProviderService
+	registry         ProviderService
 }
 
 func (a *providerAdapterBase) Platform() string {
@@ -80,7 +79,7 @@ type kubernetesProviderAdapter struct {
 // kept explicit so platform-specific validation can diverge later if needed.
 
 // DefaultProviderPlatformAdapters returns OSS provider adapters for local and kubernetes.
-func DefaultProviderPlatformAdapters(registry service.ProviderService) map[string]registrytypes.ProviderPlatformAdapter {
+func DefaultProviderPlatformAdapters(registry ProviderService) map[string]registrytypes.ProviderPlatformAdapter {
 	return map[string]registrytypes.ProviderPlatformAdapter{
 		"local": &localProviderAdapter{
 			providerAdapterBase: providerAdapterBase{

@@ -1,4 +1,4 @@
-package v0
+package providers
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	handlerext "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/extensions"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
@@ -43,7 +43,16 @@ type ProviderResponse struct {
 	Body models.Provider
 }
 
-func adapterPlatformKeys(extensions PlatformExtensions) []string {
+// ProviderService defines the provider operations consumed by provider HTTP handlers.
+type ProviderService interface {
+	ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error)
+	GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error)
+	CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error)
+	UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error)
+	DeleteProvider(ctx context.Context, providerID string) error
+}
+
+func adapterPlatformKeys(extensions handlerext.PlatformExtensions) []string {
 	if len(extensions.ProviderPlatforms) == 0 {
 		return nil
 	}
@@ -63,7 +72,7 @@ func unsupportedProviderPlatformError(platform string) error {
 	return huma.Error400BadRequest("Provider platform is not supported: " + p)
 }
 
-func getProviderByHint(ctx context.Context, extensions PlatformExtensions, providerID, platformHint string) (*models.Provider, error) {
+func getProviderByHint(ctx context.Context, extensions handlerext.PlatformExtensions, providerID, platformHint string) (*models.Provider, error) {
 	if strings.TrimSpace(platformHint) == "" {
 		return nil, nil
 	}
@@ -85,7 +94,7 @@ func getProviderByHint(ctx context.Context, extensions PlatformExtensions, provi
 	return nil, huma.Error404NotFound("Provider not found")
 }
 
-func listProvidersForAllPlatforms(ctx context.Context, extensions PlatformExtensions) ([]*models.Provider, error) {
+func listProvidersForAllPlatforms(ctx context.Context, extensions handlerext.PlatformExtensions) ([]*models.Provider, error) {
 	out := make([]*models.Provider, 0)
 	for _, platform := range adapterPlatformKeys(extensions) {
 		adapter, ok := extensions.ResolveProviderAdapter(platform)
@@ -101,7 +110,7 @@ func listProvidersForAllPlatforms(ctx context.Context, extensions PlatformExtens
 	return out, nil
 }
 
-func listProvidersForPlatform(ctx context.Context, extensions PlatformExtensions, platform string) ([]*models.Provider, error) {
+func listProvidersForPlatform(ctx context.Context, extensions handlerext.PlatformExtensions, platform string) ([]*models.Provider, error) {
 	adapter, ok := extensions.ResolveProviderAdapter(platform)
 	if !ok {
 		return nil, unsupportedProviderPlatformError(platform)
@@ -113,7 +122,7 @@ func listProvidersForPlatform(ctx context.Context, extensions PlatformExtensions
 	return providers, nil
 }
 
-func getProviderByID(ctx context.Context, providerSvc service.ProviderService, extensions PlatformExtensions, providerID, platformHint string) (*models.Provider, error) {
+func ResolveProviderByID(ctx context.Context, providerSvc ProviderService, extensions handlerext.PlatformExtensions, providerID, platformHint string) (*models.Provider, error) {
 	hintedProvider, err := getProviderByHint(ctx, extensions, providerID, platformHint)
 	if hintedProvider != nil || err != nil {
 		return hintedProvider, err
@@ -146,7 +155,7 @@ func getProviderByID(ctx context.Context, providerSvc service.ProviderService, e
 }
 
 // RegisterProvidersEndpoints registers provider CRUD endpoints.
-func RegisterProvidersEndpoints(api huma.API, basePath string, providerSvc service.ProviderService, extensions PlatformExtensions) {
+func RegisterProvidersEndpoints(api huma.API, basePath string, providerSvc ProviderService, extensions handlerext.PlatformExtensions) {
 	huma.Register(api, huma.Operation{
 		OperationID: "list-providers",
 		Method:      http.MethodGet,
@@ -227,7 +236,7 @@ func RegisterProvidersEndpoints(api huma.API, basePath string, providerSvc servi
 		Description: "Get a provider by ID.",
 		Tags:        []string{"providers"},
 	}, func(ctx context.Context, input *ProviderByIDInput) (*ProviderResponse, error) {
-		provider, err := getProviderByID(ctx, providerSvc, extensions, input.ProviderID, input.Platform)
+			provider, err := ResolveProviderByID(ctx, providerSvc, extensions, input.ProviderID, input.Platform)
 		if err != nil {
 			return nil, err
 		}
@@ -242,7 +251,7 @@ func RegisterProvidersEndpoints(api huma.API, basePath string, providerSvc servi
 		Description: "Update mutable fields of a provider by ID.",
 		Tags:        []string{"providers"},
 	}, func(ctx context.Context, input *UpdateProviderRequest) (*ProviderResponse, error) {
-		provider, err := getProviderByID(ctx, providerSvc, extensions, input.ProviderID, input.Platform)
+			provider, err := ResolveProviderByID(ctx, providerSvc, extensions, input.ProviderID, input.Platform)
 		if err != nil {
 			return nil, err
 		}
@@ -270,7 +279,7 @@ func RegisterProvidersEndpoints(api huma.API, basePath string, providerSvc servi
 		Description: "Delete a provider by ID.",
 		Tags:        []string{"providers"},
 	}, func(ctx context.Context, input *ProviderByIDInput) (*struct{}, error) {
-		provider, err := getProviderByID(ctx, providerSvc, extensions, input.ProviderID, input.Platform)
+			provider, err := ResolveProviderByID(ctx, providerSvc, extensions, input.ProviderID, input.Platform)
 		if err != nil {
 			return nil, err
 		}

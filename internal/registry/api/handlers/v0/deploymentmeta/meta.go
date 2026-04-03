@@ -1,20 +1,23 @@
-package v0
+package deploymentmeta
 
 import (
 	"context"
 	"slices"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 )
+
+type Lister interface {
+	GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
+}
 
 type deploymentResourceKey struct {
 	resourceType string
 	resourceName string
 }
 
-func deploymentResourceIndex(ctx context.Context, deploymentSvc service.DeploymentService) map[deploymentResourceKey][]models.DeploymentSummary {
+func deploymentResourceIndex(ctx context.Context, deploymentSvc Lister) map[deploymentResourceKey][]models.DeploymentSummary {
 	deployments, err := deploymentSvc.GetDeployments(ctx, nil)
 	if err != nil {
 		return map[deploymentResourceKey][]models.DeploymentSummary{}
@@ -77,9 +80,9 @@ func deploymentAppliesToVersion(summary models.DeploymentSummary, itemVersion st
 	return strings.EqualFold(deploymentVersion, "latest") && itemIsLatest
 }
 
-func attachServerDeploymentMeta(
+func AttachServerDeploymentMeta(
 	ctx context.Context,
-	deploymentSvc service.DeploymentService,
+	deploymentSvc Lister,
 	servers []models.ServerResponse,
 ) []models.ServerResponse {
 	deploymentIndex := deploymentResourceIndex(ctx, deploymentSvc)
@@ -114,9 +117,9 @@ func attachServerDeploymentMeta(
 	return out
 }
 
-func attachAgentDeploymentMeta(
+func AttachAgentDeploymentMeta(
 	ctx context.Context,
-	deploymentSvc service.DeploymentService,
+	deploymentSvc Lister,
 	agents []models.AgentResponse,
 ) []models.AgentResponse {
 	deploymentIndex := deploymentResourceIndex(ctx, deploymentSvc)

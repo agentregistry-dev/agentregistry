@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"time"
 
-	restv0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
+	restagents "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/agents"
+	restdeployments "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deployments"
+	restservers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/servers"
+	restskills "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/skills"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -41,7 +44,7 @@ func NewServer(serverRegistry ServerRegistry, agentRegistry AgentRegistry, skill
 	return server
 }
 
-type listAgentsArgs = restv0.ListAgentsInput
+type listAgentsArgs = restagents.ListAgentsInput
 
 func addAgentTools(server *mcp.Server, registry AgentRegistry) {
 	mcp.AddTool(server, &mcp.Tool{
@@ -124,7 +127,7 @@ func addAgentTools(server *mcp.Server, registry AgentRegistry) {
 	})
 }
 
-type listServersArgs = restv0.ListServersInput
+type listServersArgs = restservers.ListServersInput
 
 func addServerTools(server *mcp.Server, registry ServerRegistry) {
 	mcp.AddTool(server, &mcp.Tool{
@@ -258,7 +261,7 @@ func addServerTools(server *mcp.Server, registry ServerRegistry) {
 	})
 }
 
-type listSkillsArgs = restv0.ListSkillsInput
+type listSkillsArgs = restskills.ListSkillsInput
 
 func addSkillTools(server *mcp.Server, registry SkillRegistry) {
 	mcp.AddTool(server, &mcp.Tool{
@@ -353,7 +356,7 @@ func addMetaTools(server *mcp.Server) {
 }
 
 type listDeploymentsArgs struct {
-	restv0.DeploymentsListInput
+	restdeployments.DeploymentsListInput
 }
 
 type getDeploymentArgs struct {

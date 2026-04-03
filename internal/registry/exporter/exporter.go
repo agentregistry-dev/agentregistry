@@ -10,22 +10,27 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
 const defaultPageSize = 100
 
+// ServerRegistry defines the server operations consumed by the exporter.
+type ServerRegistry interface {
+	ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
+	GetServerReadmeByVersion(ctx context.Context, serverName, version string) (*database.ServerReadme, error)
+}
+
 // Service handles exporting registry data into seed files.
 type Service struct {
-	registryService service.ServerService
+	registryService ServerRegistry
 	pageSize        int
 	readmeOutput    string
 }
 
 // NewService creates a new exporter service.
-func NewService(registryService service.ServerService) *Service {
+func NewService(registryService ServerRegistry) *Service {
 	return &Service{
 		registryService: registryService,
 		pageSize:        defaultPageSize,

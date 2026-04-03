@@ -1,4 +1,4 @@
-package v0
+package deployments
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
+	handlerext "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/extensions"
+	v0providers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/providers"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
@@ -42,6 +44,19 @@ type DeploymentsListInput struct {
 	Status       string `query:"status" json:"status,omitempty" doc:"Filter by deployment status"`
 	Origin       string `query:"origin" json:"origin,omitempty" doc:"Filter by deployment origin (managed, discovered)" enum:"managed,discovered"`
 	ResourceName string `query:"resourceName" json:"resourceName,omitempty" doc:"Case-insensitive substring filter on resource name"`
+}
+
+// DeploymentService defines the deployment operations consumed by deployment-aware HTTP handlers.
+type DeploymentService interface {
+	GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
+	GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error)
+	DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error)
+	DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error)
+	RemoveDeploymentByID(ctx context.Context, id string) error
+	CreateDeployment(ctx context.Context, req *models.Deployment) (*models.Deployment, error)
+	UndeployDeployment(ctx context.Context, deployment *models.Deployment) error
+	GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
+	CancelDeployment(ctx context.Context, deployment *models.Deployment) error
 }
 
 func normalizePlatform(platform string) string {
@@ -87,7 +102,7 @@ func removeDeploymentHTTPError(err error) error {
 }
 
 // RegisterDeploymentsEndpoints registers all deployment-related endpoints
-func RegisterDeploymentsEndpoints(api huma.API, basePath string, providerSvc service.ProviderService, deploymentSvc service.DeploymentService, extensions PlatformExtensions) {
+func RegisterDeploymentsEndpoints(api huma.API, basePath string, providerSvc v0providers.ProviderService, deploymentSvc DeploymentService, extensions handlerext.PlatformExtensions) {
 	// List all deployments
 	huma.Register(api, huma.Operation{
 		OperationID: "list-deployments",
@@ -195,7 +210,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, providerSvc ser
 		if providerID == "" {
 			return nil, huma.Error400BadRequest("providerId is required")
 		}
-		_, err := getProviderByID(ctx, providerSvc, extensions, providerID, "")
+		_, err := v0providers.ResolveProviderByID(ctx, providerSvc, extensions, providerID, "")
 		if err != nil {
 			return nil, err
 		}

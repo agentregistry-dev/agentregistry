@@ -1,4 +1,4 @@
-package v0_test
+package servers_test
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
+	v0servers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/servers"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
@@ -73,7 +73,7 @@ func TestListServersEndpoint(t *testing.T) {
 	// Create API
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", serverService, deploymentService)
+	v0servers.RegisterServersEndpoints(api, "/v0", serverService, deploymentService)
 
 	tests := []struct {
 		name           string
@@ -206,7 +206,7 @@ func TestListServersSemanticSearch(t *testing.T) {
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", serverService, deploymentService)
+	v0servers.RegisterServersEndpoints(api, "/v0", serverService, deploymentService)
 
 	t.Run("semantic search ranks by similarity", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/v0/servers?search=server&semantic_search=true", nil)
@@ -263,7 +263,7 @@ func TestGetLatestServerVersionEndpoint(t *testing.T) {
 	// Create API
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", serverService, deploymentService)
+	v0servers.RegisterServersEndpoints(api, "/v0", serverService, deploymentService)
 
 	tests := []struct {
 		name           string
@@ -353,7 +353,7 @@ func TestGetServerVersionEndpoint(t *testing.T) {
 	// Create API
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", serverService, deploymentService)
+	v0servers.RegisterServersEndpoints(api, "/v0", serverService, deploymentService)
 
 	tests := []struct {
 		name           string
@@ -524,7 +524,7 @@ func TestGetServerReadmeEndpoints(t *testing.T) {
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", serverService, deploymentService)
+	v0servers.RegisterServersEndpoints(api, "/v0", serverService, deploymentService)
 
 	t.Run("latest readme", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/v0/servers/"+url.PathEscape(serverName)+"/readme", nil)
@@ -534,7 +534,7 @@ func TestGetServerReadmeEndpoints(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
-		var resp v0.ServerReadmeResponse
+		var resp v0servers.ServerReadmeResponse
 		require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
 		assert.Equal(t, "# Title\nBody", resp.Content)
 		assert.Equal(t, "text/markdown", resp.ContentType)
@@ -549,7 +549,7 @@ func TestGetServerReadmeEndpoints(t *testing.T) {
 		mux.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusOK, w.Code)
-		var resp v0.ServerReadmeResponse
+		var resp v0servers.ServerReadmeResponse
 		require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
 		assert.Equal(t, "# Title\nBody", resp.Content)
 	})
@@ -603,7 +603,7 @@ func TestGetAllVersionsEndpoint(t *testing.T) {
 	// Create API
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", serverService, deploymentService)
+	v0servers.RegisterServersEndpoints(api, "/v0", serverService, deploymentService)
 
 	tests := []struct {
 		name           string
@@ -710,7 +710,7 @@ func TestServersEndpointEdgeCases(t *testing.T) {
 	// Create API
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterServersEndpoints(api, "/v0", serverService, deploymentService)
+	v0servers.RegisterServersEndpoints(api, "/v0", serverService, deploymentService)
 
 	t.Run("URL encoding edge cases", func(t *testing.T) {
 		tests := []struct {

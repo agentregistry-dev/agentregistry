@@ -1,4 +1,4 @@
-package v0
+package servers
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentmeta"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -26,7 +26,7 @@ type EditServerInput struct {
 }
 
 // RegisterEditEndpoints registers the edit endpoint with a custom path prefix
-func RegisterEditEndpoints(api huma.API, pathPrefix string, serverSvc service.ServerRouteService, deploymentSvc service.DeploymentService) {
+func RegisterEditEndpoints(api huma.API, pathPrefix string, serverSvc ServerService, deploymentSvc deploymentmeta.Lister) {
 	// Edit server endpoint
 	huma.Register(api, huma.Operation{
 		OperationID: "edit-server" + strings.ReplaceAll(pathPrefix, "/", "-"),
@@ -112,7 +112,7 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, serverSvc service.Se
 		}
 
 		return &types.Response[models.ServerResponse]{
-			Body: attachServerDeploymentMeta(
+			Body: deploymentmeta.AttachServerDeploymentMeta(
 				ctx,
 				deploymentSvc,
 				[]models.ServerResponse{normalizeServerResponse(updatedServer)},

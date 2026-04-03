@@ -1,4 +1,4 @@
-package v0
+package servers
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentmeta"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -97,8 +97,22 @@ type ServerReadmeResponse struct {
 	FetchedAt   time.Time `json:"fetchedAt"`
 }
 
+// ServerService defines the server operations consumed by server HTTP handlers.
+type ServerService interface {
+	ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
+	GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error)
+	GetServerByNameAndVersion(ctx context.Context, serverName string, version string) (*apiv0.ServerResponse, error)
+	GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error)
+	CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
+	UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error)
+	StoreServerReadme(ctx context.Context, serverName, version string, content []byte, contentType string) error
+	GetServerReadmeLatest(ctx context.Context, serverName string) (*database.ServerReadme, error)
+	GetServerReadmeByVersion(ctx context.Context, serverName, version string) (*database.ServerReadme, error)
+	DeleteServer(ctx context.Context, serverName, version string) error
+}
+
 // RegisterServersEndpoints registers all server-related endpoints with a custom path prefix.
-func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc service.ServerRouteService, deploymentSvc service.DeploymentService) {
+func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc ServerService, deploymentSvc deploymentmeta.Lister) {
 	huma.Register(api, huma.Operation{
 		OperationID: "delete-server-version" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodDelete,
@@ -145,14 +159,9 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc service
 		Description: "Get a paginated list of MCP servers from the registry",
 		Tags:        tags,
 	}, func(ctx context.Context, input *ListServersInput) (*types.Response[models.ServerListResponse], error) {
-		// Note: Authz filtering for list operations is handled at the database layer.
-
-		// Build filter from input parameters
 		filter := &database.ServerFilter{}
 
-		// Parse updated_since parameter
 		if input.UpdatedSince != "" {
-			// Parse RFC3339 format
 			if updatedTime, err := time.Parse(time.RFC3339, input.UpdatedSince); err == nil {
 				filter.UpdatedSince = &updatedTime
 			} else {
@@ -160,8 +169,6 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc service
 			}
 		}
 
-		// Handle search parameter — when semantic search is active, use pure
-		// vector similarity instead of AND-ing with a substring name filter.
 		if input.Semantic {
 			if strings.TrimSpace(input.Search) == "" {
 				return nil, huma.Error400BadRequest("semantic_search requires the search parameter to be set", nil)
@@ -174,19 +181,15 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc service
 			filter.SubstringName = &input.Search
 		}
 
-		// Handle version parameter
 		if input.Version != "" {
 			if input.Version == "latest" {
-				// Special case: filter for latest versions
 				isLatest := true
 				filter.IsLatest = &isLatest
 			} else {
-				// Future: exact version matching
 				filter.Version = &input.Version
 			}
 		}
 
-		// Get paginated results with filtering
 		servers, nextCursor, err := serverSvc.ListServers(ctx, filter, input.Cursor, input.Limit)
 		if err != nil {
 			if errors.Is(err, database.ErrInvalidInput) {
@@ -201,12 +204,11 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc service
 			return nil, huma.Error500InternalServerError("Failed to get registry list", err)
 		}
 
-		// Convert []*ServerResponse to []ServerResponse while normalizing metadata.
 		serverValues := make([]models.ServerResponse, len(servers))
 		for i, server := range servers {
 			serverValues[i] = normalizeServerResponse(server)
 		}
-		serverValues = attachServerDeploymentMeta(ctx, deploymentSvc, serverValues)
+		serverValues = deploymentmeta.AttachServerDeploymentMeta(ctx, deploymentSvc, serverValues)
 
 		return &types.Response[models.ServerListResponse]{
 			Body: models.ServerListResponse{
@@ -219,8 +221,6 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc service
 		}, nil
 	})
 
-	// Get specific server version endpoint
-	// Can return a single version or all versions based on query parameters
 	huma.Register(api, huma.Operation{
 		OperationID: "get-server-version" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodGet,
@@ -229,19 +229,16 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc service
 		Description: "Get detailed information about a specific version of an MCP server. Set 'all=true' query parameter to get all versions.",
 		Tags:        tags,
 	}, func(ctx context.Context, input *ServerVersionDetailInput) (*types.Response[models.ServerListResponse], error) {
-		// URL-decode the server name
 		serverName, err := url.PathUnescape(input.ServerName)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
 		}
 
-		// URL-decode the version
 		version, err := url.PathUnescape(input.Version)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
 		}
 
-		// If all=true, return all versions
 		if input.All {
 			servers, err := serverSvc.GetAllVersionsByServerName(ctx, serverName)
 			if err != nil {
@@ -257,12 +254,11 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc service
 				}
 			}
 
-			// Convert []*ServerResponse to []ServerResponse
 			serverValues := make([]models.ServerResponse, len(servers))
 			for i, server := range servers {
 				serverValues[i] = normalizeServerResponse(server)
 			}
-			serverValues = attachServerDeploymentMeta(ctx, deploymentSvc, serverValues)
+			serverValues = deploymentmeta.AttachServerDeploymentMeta(ctx, deploymentSvc, serverValues)
 
 			return &types.Response[models.ServerListResponse]{
 				Body: models.ServerListResponse{
@@ -274,12 +270,9 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc service
 			}, nil
 		}
 
-		// Default behavior: return a single version (wrapped in a list for consistency)
 		var serverResponse *apiv0.ServerResponse
 
-		// Handle "latest" as a special version string
 		if version == "latest" { //nolint:nestif
-			// Get all versions and find the latest one
 			servers, err := serverSvc.GetAllVersionsByServerName(ctx, serverName)
 			if err != nil {
 				if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
@@ -296,7 +289,6 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc service
 			if len(servers) == 0 {
 				return nil, huma.Error404NotFound("Server not found")
 			}
-			// Find the latest version (should be marked with IsLatest=true)
 			var latestServer *apiv0.ServerResponse
 			for _, s := range servers {
 				if s.Meta.Official != nil && s.Meta.Official.IsLatest {
@@ -304,7 +296,6 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc service
 					break
 				}
 			}
-			// If no server is marked as latest, use the first one (shouldn't happen, but be defensive)
 			if latestServer == nil {
 				latestServer = servers[0]
 			}
@@ -325,10 +316,9 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc service
 			}
 		}
 
-		// Return single server wrapped in a list response
 		return &types.Response[models.ServerListResponse]{
 			Body: models.ServerListResponse{
-				Servers: attachServerDeploymentMeta(
+				Servers: deploymentmeta.AttachServerDeploymentMeta(
 					ctx,
 					deploymentSvc,
 					[]models.ServerResponse{normalizeServerResponse(serverResponse)},
@@ -340,7 +330,6 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc service
 		}, nil
 	})
 
-	// Get server versions endpoint
 	huma.Register(api, huma.Operation{
 		OperationID: "get-server-versions" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodGet,
@@ -349,13 +338,11 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc service
 		Description: "Get all available versions for a specific MCP server",
 		Tags:        tags,
 	}, func(ctx context.Context, input *ServerVersionsInput) (*types.Response[models.ServerListResponse], error) {
-		// URL-decode the server name
 		serverName, err := url.PathUnescape(input.ServerName)
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid server name encoding", err)
 		}
 
-		// Get all versions for this server
 		servers, err := serverSvc.GetAllVersionsByServerName(ctx, serverName)
 		if err != nil {
 			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
@@ -370,12 +357,11 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc service
 			return nil, huma.Error500InternalServerError("Failed to get server versions", err)
 		}
 
-		// Convert []*ServerResponse to []ServerResponse
 		serverValues := make([]models.ServerResponse, len(servers))
 		for i, server := range servers {
 			serverValues[i] = normalizeServerResponse(server)
 		}
-		serverValues = attachServerDeploymentMeta(ctx, deploymentSvc, serverValues)
+		serverValues = deploymentmeta.AttachServerDeploymentMeta(ctx, deploymentSvc, serverValues)
 
 		return &types.Response[models.ServerListResponse]{
 			Body: models.ServerListResponse{
@@ -387,7 +373,6 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc service
 		}, nil
 	})
 
-	// Get latest server README endpoint
 	huma.Register(api, huma.Operation{
 		OperationID: "get-server-readme" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodGet,
@@ -420,7 +405,6 @@ func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc service
 		}, nil
 	})
 
-	// Get specific version README endpoint
 	huma.Register(api, huma.Operation{
 		OperationID: "get-server-version-readme" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodGet,
@@ -484,8 +468,7 @@ type CreateServerInput struct {
 }
 
 // createServerHandler is the shared handler logic for creating servers
-func createServerHandler(ctx context.Context, input *CreateServerInput, serverSvc service.ServerRouteService, deploymentSvc service.DeploymentService) (*types.Response[models.ServerResponse], error) {
-	// Create/update the server (published defaults to false in the service layer)
+func createServerHandler(ctx context.Context, input *CreateServerInput, serverSvc ServerService, deploymentSvc deploymentmeta.Lister) (*types.Response[models.ServerResponse], error) {
 	createdServer, err := serverSvc.CreateServer(ctx, &input.Body)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
@@ -501,7 +484,7 @@ func createServerHandler(ctx context.Context, input *CreateServerInput, serverSv
 	}
 
 	return &types.Response[models.ServerResponse]{
-		Body: attachServerDeploymentMeta(
+		Body: deploymentmeta.AttachServerDeploymentMeta(
 			ctx,
 			deploymentSvc,
 			[]models.ServerResponse{normalizeServerResponse(createdServer)},
@@ -510,7 +493,7 @@ func createServerHandler(ctx context.Context, input *CreateServerInput, serverSv
 }
 
 // RegisterServersCreateEndpoint registers POST /servers (create or update; immediately visible).
-func RegisterServersCreateEndpoint(api huma.API, pathPrefix string, serverSvc service.ServerRouteService, deploymentSvc service.DeploymentService) {
+func RegisterServersCreateEndpoint(api huma.API, pathPrefix string, serverSvc ServerService, deploymentSvc deploymentmeta.Lister) {
 	huma.Register(api, huma.Operation{
 		OperationID: "create-server" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodPost,

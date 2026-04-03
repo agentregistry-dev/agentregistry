@@ -1,4 +1,4 @@
-package v0_test
+package servers_test
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
+	v0servers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/servers"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
@@ -385,7 +385,7 @@ func TestEditServerEndpoint(t *testing.T) {
 			api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
 			// Register edit endpoints
-			v0.RegisterEditEndpoints(api, "/v0", serverService, deploymentService)
+			v0servers.RegisterEditEndpoints(api, "/v0", serverService, deploymentService)
 
 			// Create request body
 			requestBody, err := json.Marshal(tc.requestBody)
@@ -492,7 +492,7 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 	// Create API
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	v0.RegisterEditEndpoints(api, "/v0", serverService, deploymentService)
+	v0servers.RegisterEditEndpoints(api, "/v0", serverService, deploymentService)
 
 	t.Run("status transitions", func(t *testing.T) {
 		tests := []struct {

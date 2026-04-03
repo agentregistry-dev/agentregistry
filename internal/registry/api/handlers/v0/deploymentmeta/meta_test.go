@@ -1,4 +1,4 @@
-package v0
+package deploymentmeta
 
 import (
 	"context"
@@ -59,7 +59,7 @@ func TestAttachServerDeploymentMetaMatchesVersionAndLatest(t *testing.T) {
 		},
 	}
 
-	enriched := attachServerDeploymentMeta(context.Background(), reg, servers)
+	enriched := AttachServerDeploymentMeta(context.Background(), reg, servers)
 	require.NotNil(t, enriched[0].Meta.Deployments)
 	require.NotNil(t, enriched[1].Meta.Deployments)
 	assert.Equal(t, 1, enriched[0].Meta.Deployments.Count)
