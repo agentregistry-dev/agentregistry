@@ -1,4 +1,4 @@
-package v0
+package version
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 
 type VersionBody = apitypes.VersionBody
 
-// RegisterVersionEndpoint registers the version endpoint with a custom path prefix
+// RegisterVersionEndpoint registers the version endpoint with a custom path prefix.
 func RegisterVersionEndpoint(api huma.API, pathPrefix string, versionInfo *VersionBody) {
 	huma.Register(api, huma.Operation{
 		OperationID: "get-version" + strings.ReplaceAll(pathPrefix, "/", "-"),

@@ -1,4 +1,4 @@
-package v0
+package embeddings
 
 import (
 	"context"
@@ -60,7 +60,6 @@ func registerIndexEndpoint(
 
 		req := input.Body
 
-		// Default to including both if neither specified
 		if !req.IncludeServers && !req.IncludeAgents {
 			req.IncludeServers = true
 			req.IncludeAgents = true
@@ -70,12 +69,10 @@ func registerIndexEndpoint(
 			req.BatchSize = 100
 		}
 
-		// SSE streaming is handled by a different endpoint
 		if req.Stream {
 			return nil, huma.Error400BadRequest("SSE streaming should use GET /embeddings/index/stream with query parameters")
 		}
 
-		// Create a new job
 		job, err := jobManager.CreateJob(jobs.IndexJobType)
 		if err != nil {
 			if err == jobs.ErrJobAlreadyRunning {
@@ -90,7 +87,6 @@ func registerIndexEndpoint(
 
 		initialStatus := string(job.Status)
 
-		// Run indexing in background
 		go runIndexJob(indexer, jobManager, job.ID, req)
 
 		return &types.Response[IndexJobResponse]{

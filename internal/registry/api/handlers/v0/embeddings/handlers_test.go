@@ -1,4 +1,4 @@
-package v0_test
+package embeddings_test
 
 import (
 	"context"
@@ -15,12 +15,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
+	v0embeddings "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 )
 
-// mockIndexer implements service.Indexer for testing.
 type mockIndexer struct {
 	mu       sync.Mutex
 	runFunc  func(ctx context.Context, opts service.IndexOptions, onProgress service.IndexProgressCallback) (*service.IndexResult, error)
@@ -52,7 +51,7 @@ func TestStartIndex_Success(t *testing.T) {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	v0.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
 
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
@@ -63,7 +62,7 @@ func TestStartIndex_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var resp v0.IndexJobResponse
+	var resp v0embeddings.IndexJobResponse
 	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	require.NoError(t, err)
 
@@ -84,9 +83,8 @@ func TestStartIndex_WithOptions(t *testing.T) {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	v0.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
 
-	// Test that custom batchSize, force, and dryRun options are passed through
 	body := strings.NewReader(`{"batchSize": 50, "force": true, "dryRun": true, "includeServers": true, "includeAgents": true}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
 	req.Header.Set("Content-Type", "application/json")
@@ -96,7 +94,6 @@ func TestStartIndex_WithOptions(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// Wait for the goroutine to capture the options
 	select {
 	case capturedOpts := <-captured:
 		assert.Equal(t, 50, capturedOpts.BatchSize)
@@ -114,7 +111,7 @@ func TestStartIndex_IndexerNil(t *testing.T) {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	v0.RegisterEmbeddingsEndpoints(api, "/v0", nil, jobManager)
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", nil, jobManager)
 
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
@@ -134,7 +131,7 @@ func TestStartIndex_StreamTrue(t *testing.T) {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	v0.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
 
 	body := strings.NewReader(`{"stream": true}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
@@ -148,7 +145,6 @@ func TestStartIndex_StreamTrue(t *testing.T) {
 }
 
 func TestStartIndex_JobAlreadyRunning(t *testing.T) {
-	// Create a slow indexer that blocks
 	started := make(chan struct{})
 	blockCh := make(chan struct{})
 	mockIdx := &mockIndexer{
@@ -163,9 +159,8 @@ func TestStartIndex_JobAlreadyRunning(t *testing.T) {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	v0.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
 
-	// Start first job
 	body1 := strings.NewReader(`{}`)
 	req1 := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body1)
 	req1.Header.Set("Content-Type", "application/json")
@@ -174,10 +169,8 @@ func TestStartIndex_JobAlreadyRunning(t *testing.T) {
 	mux.ServeHTTP(w1, req1)
 	assert.Equal(t, http.StatusOK, w1.Code)
 
-	// Wait for the job to start running
 	<-started
 
-	// Try to start second job
 	body2 := strings.NewReader(`{}`)
 	req2 := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body2)
 	req2.Header.Set("Content-Type", "application/json")
@@ -188,7 +181,6 @@ func TestStartIndex_JobAlreadyRunning(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, w2.Code)
 	assert.Contains(t, w2.Body.String(), "already running")
 
-	// Unblock the first job
 	close(blockCh)
 }
 
@@ -205,9 +197,8 @@ func TestStartIndex_DefaultsApplied(t *testing.T) {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	v0.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
 
-	// Send empty body - neither servers nor agents set
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
 	req.Header.Set("Content-Type", "application/json")
@@ -217,13 +208,11 @@ func TestStartIndex_DefaultsApplied(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// Wait for the goroutine to process
 	time.Sleep(50 * time.Millisecond)
 
-	// Both should default to true
 	assert.True(t, capturedOpts.IncludeServers)
 	assert.True(t, capturedOpts.IncludeAgents)
-	assert.Equal(t, 100, capturedOpts.BatchSize) // Default batch size
+	assert.Equal(t, 100, capturedOpts.BatchSize)
 }
 
 func TestGetJobStatus_Success(t *testing.T) {
@@ -237,9 +226,8 @@ func TestGetJobStatus_Success(t *testing.T) {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	v0.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
 
-	// Start a job first
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
 	req.Header.Set("Content-Type", "application/json")
@@ -248,11 +236,10 @@ func TestGetJobStatus_Success(t *testing.T) {
 	mux.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var createResp v0.IndexJobResponse
+	var createResp v0embeddings.IndexJobResponse
 	err := json.Unmarshal(w.Body.Bytes(), &createResp)
 	require.NoError(t, err)
 
-	// Get job status
 	req2 := httptest.NewRequest(http.MethodGet, "/v0/embeddings/index/"+createResp.JobID, nil)
 	w2 := httptest.NewRecorder()
 
@@ -260,7 +247,7 @@ func TestGetJobStatus_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w2.Code)
 
-	var statusResp v0.JobStatusResponse
+	var statusResp v0embeddings.JobStatusResponse
 	err = json.Unmarshal(w2.Body.Bytes(), &statusResp)
 	require.NoError(t, err)
 
@@ -275,7 +262,7 @@ func TestGetJobStatus_NotFound(t *testing.T) {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	v0.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
 
 	req := httptest.NewRequest(http.MethodGet, "/v0/embeddings/index/non-existent-job-id", nil)
 	w := httptest.NewRecorder()
@@ -300,9 +287,8 @@ func TestGetJobStatus_Completed(t *testing.T) {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	v0.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
 
-	// Start a job
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
 	req.Header.Set("Content-Type", "application/json")
@@ -311,14 +297,12 @@ func TestGetJobStatus_Completed(t *testing.T) {
 	mux.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var createResp v0.IndexJobResponse
+	var createResp v0embeddings.IndexJobResponse
 	err := json.Unmarshal(w.Body.Bytes(), &createResp)
 	require.NoError(t, err)
 
-	// Wait for job to complete
 	time.Sleep(100 * time.Millisecond)
 
-	// Get job status
 	req2 := httptest.NewRequest(http.MethodGet, "/v0/embeddings/index/"+createResp.JobID, nil)
 	w2 := httptest.NewRecorder()
 
@@ -326,7 +310,7 @@ func TestGetJobStatus_Completed(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w2.Code)
 
-	var statusResp v0.JobStatusResponse
+	var statusResp v0embeddings.JobStatusResponse
 	err = json.Unmarshal(w2.Body.Bytes(), &statusResp)
 	require.NoError(t, err)
 
@@ -349,9 +333,8 @@ func TestGetJobStatus_Failed(t *testing.T) {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	v0.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
 
-	// Start a job
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
 	req.Header.Set("Content-Type", "application/json")
@@ -360,14 +343,12 @@ func TestGetJobStatus_Failed(t *testing.T) {
 	mux.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var createResp v0.IndexJobResponse
+	var createResp v0embeddings.IndexJobResponse
 	err := json.Unmarshal(w.Body.Bytes(), &createResp)
 	require.NoError(t, err)
 
-	// Wait for job to fail
 	time.Sleep(100 * time.Millisecond)
 
-	// Get job status
 	req2 := httptest.NewRequest(http.MethodGet, "/v0/embeddings/index/"+createResp.JobID, nil)
 	w2 := httptest.NewRecorder()
 
@@ -375,7 +356,7 @@ func TestGetJobStatus_Failed(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w2.Code)
 
-	var statusResp v0.JobStatusResponse
+	var statusResp v0embeddings.JobStatusResponse
 	err = json.Unmarshal(w2.Body.Bytes(), &statusResp)
 	require.NoError(t, err)
 

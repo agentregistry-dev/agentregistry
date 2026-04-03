@@ -7,15 +7,18 @@ import (
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	v0agents "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/agents"
 	v0deployments "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deployments"
+	v0embeddings "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/embeddings"
 	v0extensions "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/extensions"
+	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
+	v0ping "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/ping"
 	v0prompts "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/prompts"
 	v0providers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/providers"
 	v0servers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/servers"
 	v0skills "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/skills"
+	v0version "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/version"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 
-	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	v0auth "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
@@ -53,9 +56,9 @@ func RegisterRoutes(
 ) {
 	pathPrefix := "/v0"
 
-	v0.RegisterHealthEndpoint(api, pathPrefix, cfg, metrics)
-	v0.RegisterPingEndpoint(api, pathPrefix)
-	v0.RegisterVersionEndpoint(api, pathPrefix, versionInfo)
+	v0health.RegisterHealthEndpoint(api, pathPrefix, cfg, metrics)
+	v0ping.RegisterPingEndpoint(api, pathPrefix)
+	v0version.RegisterVersionEndpoint(api, pathPrefix, versionInfo)
 	v0servers.RegisterServersEndpoints(api, pathPrefix, serverSvc, deploymentSvc)
 	v0servers.RegisterServersCreateEndpoint(api, pathPrefix, serverSvc, deploymentSvc)
 	v0servers.RegisterEditEndpoints(api, pathPrefix, serverSvc, deploymentSvc)
@@ -75,9 +78,9 @@ func RegisterRoutes(
 	v0prompts.RegisterPromptsCreateEndpoint(api, pathPrefix, promptSvc)
 
 	if opts != nil && opts.Indexer != nil && opts.JobManager != nil {
-		v0.RegisterEmbeddingsEndpoints(api, pathPrefix, opts.Indexer, opts.JobManager)
+		v0embeddings.RegisterEmbeddingsEndpoints(api, pathPrefix, opts.Indexer, opts.JobManager)
 		if opts.Mux != nil {
-			v0.RegisterEmbeddingsSSEHandler(opts.Mux, pathPrefix, opts.Indexer, opts.JobManager)
+			v0embeddings.RegisterEmbeddingsSSEHandler(opts.Mux, pathPrefix, opts.Indexer, opts.JobManager)
 		}
 	}
 	if opts != nil && opts.ExtraRoutes != nil {

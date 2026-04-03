@@ -1,4 +1,4 @@
-package v0
+package embeddings
 
 import (
 	"context"
@@ -22,15 +22,12 @@ type SSEEvent struct {
 }
 
 // RegisterEmbeddingsSSEHandler registers the SSE streaming endpoint for indexing.
-// This is registered separately as it uses raw HTTP handlers instead of huma.
 func RegisterEmbeddingsSSEHandler(
 	mux *http.ServeMux,
 	pathPrefix string,
 	indexer service.Indexer,
 	jobManager *jobs.Manager,
 ) {
-	// Use POST to accept JSON body with options, and method-specific pattern
-	// to avoid conflict with Huma's {jobId} route
 	path := "POST " + pathPrefix + "/embeddings/index/stream"
 	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		handleSSEIndex(w, r, indexer, jobManager)
@@ -48,21 +45,18 @@ func handleSSEIndex(
 		return
 	}
 
-	// Check for SSE support
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
 		return
 	}
 
-	// Parse JSON body
 	var req IndexRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Apply defaults
 	if req.BatchSize <= 0 {
 		req.BatchSize = 100
 	}
@@ -71,7 +65,6 @@ func handleSSEIndex(
 		req.IncludeAgents = true
 	}
 
-	// Create a job for tracking
 	job, err := jobManager.CreateJob(jobs.IndexJobType)
 	if err != nil {
 		if err == jobs.ErrJobAlreadyRunning {
@@ -82,13 +75,11 @@ func handleSSEIndex(
 		return
 	}
 
-	// Set SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	// Helper to send SSE events
 	sendEvent := func(event SSEEvent) {
 		data, err := json.Marshal(event)
 		if err != nil {
@@ -98,14 +89,9 @@ func handleSSEIndex(
 		flusher.Flush()
 	}
 
-	// Send started event
-	sendEvent(SSEEvent{
-		Type:  "started",
-		JobID: string(job.ID),
-	})
+	sendEvent(SSEEvent{Type: "started", JobID: string(job.ID)})
 
 	ctx := r.Context()
-	// Use system context for database operations
 	dbCtx := auth.WithSystemContext(context.Background())
 
 	if err := jobManager.StartJob(job.ID); err != nil {
@@ -125,7 +111,6 @@ func handleSSEIndex(
 		IncludeAgents:  req.IncludeAgents,
 	}
 
-	// Create a context that cancels when client disconnects
 	runCtx, cancel := context.WithCancel(dbCtx)
 	defer cancel()
 
@@ -142,7 +127,6 @@ func handleSSEIndex(
 			Stats:    stats,
 		})
 
-		// Also update job progress
 		progress := jobs.JobProgress{
 			Processed: stats.Processed,
 			Updated:   stats.Updated,

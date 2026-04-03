@@ -1,4 +1,4 @@
-package v0_test
+package embeddings_test
 
 import (
 	"bufio"
@@ -13,12 +13,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
+	v0embeddings "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 )
 
-// sseEvent represents a parsed SSE event.
 type sseEvent struct {
 	Type     string          `json:"type"`
 	JobID    string          `json:"jobId,omitempty"`
@@ -28,7 +27,6 @@ type sseEvent struct {
 	Error    string          `json:"error,omitempty"`
 }
 
-// parseSSEEvents parses SSE events from a response body.
 func parseSSEEvents(t *testing.T, body string) []sseEvent {
 	t.Helper()
 	var events []sseEvent
@@ -57,7 +55,7 @@ func TestSSEIndex_Success(t *testing.T) {
 
 	jobManager := jobs.NewManager()
 	mux := http.NewServeMux()
-	v0.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
 
 	body := strings.NewReader(`{"includeServers": true}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index/stream", body)
@@ -78,7 +76,7 @@ func TestSSEIndex_Success(t *testing.T) {
 func TestSSEIndex_IndexerNil(t *testing.T) {
 	jobManager := jobs.NewManager()
 	mux := http.NewServeMux()
-	v0.RegisterEmbeddingsSSEHandler(mux, "/v0", nil, jobManager)
+	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", nil, jobManager)
 
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index/stream", body)
@@ -96,7 +94,7 @@ func TestSSEIndex_InvalidJSON(t *testing.T) {
 
 	jobManager := jobs.NewManager()
 	mux := http.NewServeMux()
-	v0.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
 
 	body := strings.NewReader(`{invalid json`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index/stream", body)
@@ -110,7 +108,6 @@ func TestSSEIndex_InvalidJSON(t *testing.T) {
 }
 
 func TestSSEIndex_JobAlreadyRunning(t *testing.T) {
-	// Create a blocking indexer
 	started := make(chan struct{})
 	blockCh := make(chan struct{})
 	mockIdx := &mockIndexer{
@@ -123,9 +120,8 @@ func TestSSEIndex_JobAlreadyRunning(t *testing.T) {
 
 	jobManager := jobs.NewManager()
 	mux := http.NewServeMux()
-	v0.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
 
-	// Start first request in a goroutine
 	go func() {
 		body := strings.NewReader(`{}`)
 		req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index/stream", body)
@@ -134,10 +130,8 @@ func TestSSEIndex_JobAlreadyRunning(t *testing.T) {
 		mux.ServeHTTP(w, req)
 	}()
 
-	// Wait for first job to start
 	<-started
 
-	// Try second request
 	body2 := strings.NewReader(`{}`)
 	req2 := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index/stream", body2)
 	req2.Header.Set("Content-Type", "application/json")
@@ -148,7 +142,6 @@ func TestSSEIndex_JobAlreadyRunning(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, w2.Code)
 	assert.Contains(t, w2.Body.String(), "already running")
 
-	// Cleanup
 	close(blockCh)
 }
 
@@ -161,7 +154,7 @@ func TestSSEIndex_IndexerError(t *testing.T) {
 
 	jobManager := jobs.NewManager()
 	mux := http.NewServeMux()
-	v0.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
 
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index/stream", body)
@@ -170,14 +163,12 @@ func TestSSEIndex_IndexerError(t *testing.T) {
 
 	mux.ServeHTTP(w, req)
 
-	// SSE endpoint returns 200 and sends error as event
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	events := parseSSEEvents(t, w.Body.String())
 	require.GreaterOrEqual(t, len(events), 2)
 	assert.Equal(t, "started", events[0].Type)
 
-	// Find error event
 	var foundError bool
 	for _, e := range events {
 		if e.Type == "error" {
@@ -197,7 +188,7 @@ func TestSSEIndex_Headers(t *testing.T) {
 
 	jobManager := jobs.NewManager()
 	mux := http.NewServeMux()
-	v0.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
 
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index/stream", body)
@@ -228,7 +219,7 @@ func TestSSEIndex_ProgressEvents(t *testing.T) {
 
 	jobManager := jobs.NewManager()
 	mux := http.NewServeMux()
-	v0.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
 
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index/stream", body)
@@ -241,7 +232,6 @@ func TestSSEIndex_ProgressEvents(t *testing.T) {
 
 	events := parseSSEEvents(t, w.Body.String())
 
-	// Count event types
 	var startedCount, progressCount, completedCount int
 	for _, e := range events {
 		switch e.Type {
@@ -270,9 +260,8 @@ func TestSSEIndex_DefaultsApplied(t *testing.T) {
 
 	jobManager := jobs.NewManager()
 	mux := http.NewServeMux()
-	v0.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
 
-	// Empty body - should apply defaults
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index/stream", body)
 	req.Header.Set("Content-Type", "application/json")

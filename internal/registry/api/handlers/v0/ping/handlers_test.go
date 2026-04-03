@@ -1,35 +1,28 @@
-package v0_test
+package ping_test
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"github.com/stretchr/testify/assert"
+
+	v0ping "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/ping"
 )
 
 func TestPingEndpoint(t *testing.T) {
-	// Create a new test API
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	// Register the ping endpoint
-	v0.RegisterPingEndpoint(api, "/v0")
+	v0ping.RegisterPingEndpoint(api, "/v0")
 
-	// Create a test request
 	req := httptest.NewRequest(http.MethodGet, "/v0/ping", nil)
 	w := httptest.NewRecorder()
 
-	// Serve the request
 	mux.ServeHTTP(w, req)
 
-	// Check the status code
 	assert.Equal(t, http.StatusOK, w.Code)
-
-	// Check the response body contains pong
-	body := w.Body.String()
-	assert.Contains(t, body, `"pong":true`)
+	assert.Contains(t, w.Body.String(), `"pong":true`)
 }

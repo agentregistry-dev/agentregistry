@@ -1,4 +1,4 @@
-package v0_test
+package version_test
 
 import (
 	"net/http"
@@ -9,19 +9,18 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"github.com/stretchr/testify/assert"
 
-	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
+	v0version "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/version"
 )
 
 func TestVersionEndpoint(t *testing.T) {
-	// Test cases
 	testCases := []struct {
 		name         string
-		versionInfo  *v0.VersionBody
+		versionInfo  *v0version.VersionBody
 		expectedBody map[string]string
 	}{
 		{
 			name: "returns version information",
-			versionInfo: &v0.VersionBody{
+			versionInfo: &v0version.VersionBody{
 				Version:   "v1.2.3",
 				GitCommit: "abc123def456",
 				BuildTime: "2025-10-14T12:00:00Z",
@@ -34,7 +33,7 @@ func TestVersionEndpoint(t *testing.T) {
 		},
 		{
 			name: "returns dev version information",
-			versionInfo: &v0.VersionBody{
+			versionInfo: &v0version.VersionBody{
 				Version:   "dev",
 				GitCommit: "unknown",
 				BuildTime: "unknown",
@@ -49,24 +48,18 @@ func TestVersionEndpoint(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create a new test API
 			mux := http.NewServeMux()
 			api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-			// Register the version endpoint
-			v0.RegisterVersionEndpoint(api, "/v0", tc.versionInfo)
+			v0version.RegisterVersionEndpoint(api, "/v0", tc.versionInfo)
 
-			// Create a test request
 			req := httptest.NewRequest(http.MethodGet, "/v0/version", nil)
 			w := httptest.NewRecorder()
 
-			// Serve the request
 			mux.ServeHTTP(w, req)
 
-			// Check the status code
 			assert.Equal(t, http.StatusOK, w.Code)
 
-			// Check the response body
 			body := w.Body.String()
 			assert.Contains(t, body, `"version":"`+tc.expectedBody["version"]+`"`)
 			assert.Contains(t, body, `"git_commit":"`+tc.expectedBody["git_commit"]+`"`)

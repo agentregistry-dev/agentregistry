@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
+	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
 	v0servers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/servers"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
@@ -61,7 +61,7 @@ func TestPrometheusHandler(t *testing.T) {
 	api.UseMiddleware(router.MetricTelemetryMiddleware(metrics,
 		router.WithSkipPaths("/health", "/metrics", "/ping", "/docs"),
 	))
-	v0.RegisterHealthEndpoint(api, "/v0", cfg, metrics)
+	v0health.RegisterHealthEndpoint(api, "/v0", cfg, metrics)
 	v0servers.RegisterServersEndpoints(api, "/v0", serverService, deploymentService)
 
 	// Add /metrics for Prometheus metrics using promhttp
