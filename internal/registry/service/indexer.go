@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
+	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
-	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
 // IndexOptions configures an indexing operation.
@@ -44,31 +44,17 @@ type Indexer interface {
 	Run(ctx context.Context, opts IndexOptions, onProgress IndexProgressCallback) (*IndexResult, error)
 }
 
-// IndexerServerService defines the server operations needed by the embeddings indexer.
-type IndexerServerService interface {
-	ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
-	GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error)
-	UpsertServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error
-}
-
-// IndexerAgentService defines the agent operations needed by the embeddings indexer.
-type IndexerAgentService interface {
-	ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error)
-	GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error)
-	UpsertAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error
-}
-
 // indexerImpl is the concrete implementation of Indexer.
 type indexerImpl struct {
-	servers    IndexerServerService
-	agents     IndexerAgentService
+	servers    serversvc.Registry
+	agents     agentsvc.Registry
 	provider   embeddings.Provider
 	dimensions int
 	logger     *slog.Logger
 }
 
 // NewIndexer creates a new embeddings indexer.
-func NewIndexer(servers IndexerServerService, agents IndexerAgentService, provider embeddings.Provider, dimensions int) Indexer {
+func NewIndexer(servers serversvc.Registry, agents agentsvc.Registry, provider embeddings.Provider, dimensions int) Indexer {
 	return &indexerImpl{
 		servers:    servers,
 		agents:     agents,

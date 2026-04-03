@@ -21,6 +21,22 @@ import (
 
 const maxVersionsPerServer = 10000
 
+// Registry defines the server operations exposed to other packages.
+type Registry interface {
+	ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
+	GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error)
+	GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error)
+	GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error)
+	CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
+	UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error)
+	StoreServerReadme(ctx context.Context, serverName, version string, content []byte, contentType string) error
+	GetServerReadmeLatest(ctx context.Context, serverName string) (*database.ServerReadme, error)
+	GetServerReadmeByVersion(ctx context.Context, serverName, version string) (*database.ServerReadme, error)
+	DeleteServer(ctx context.Context, serverName, version string) error
+	UpsertServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error
+	GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error)
+}
+
 type Dependencies struct {
 	StoreDB            database.ServiceDatabase
 	Servers            database.ServerStore

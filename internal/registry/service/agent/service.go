@@ -22,6 +22,20 @@ import (
 
 const maxVersionsPerAgent = 10000
 
+// Registry defines the agent operations exposed to other packages.
+type Registry interface {
+	ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error)
+	GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error)
+	GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error)
+	GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error)
+	CreateAgent(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error)
+	DeleteAgent(ctx context.Context, agentName, version string) error
+	UpsertAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error
+	GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error)
+	ResolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error)
+	ResolveAgentManifestPrompts(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.ResolvedPrompt, error)
+}
+
 type Dependencies struct {
 	StoreDB            database.ServiceDatabase
 	Agents             database.AgentStore

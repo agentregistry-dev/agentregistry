@@ -12,7 +12,9 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
+	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
+	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -50,7 +52,7 @@ func ValidateDeploymentRequest(deployment *models.Deployment, allowExisting bool
 
 func BuildPlatformMCPServer(
 	ctx context.Context,
-	serverService platformtypes.ServerRuntimeService,
+	serverService serversvc.Registry,
 	deployment *models.Deployment,
 	namespace string,
 ) (*platformtypes.MCPServer, error) {
@@ -78,8 +80,8 @@ func BuildPlatformMCPServer(
 
 func ResolveAgent(
 	ctx context.Context,
-	serverService platformtypes.ServerRuntimeService,
-	agentService platformtypes.AgentRuntimeService,
+	serverService serversvc.Registry,
+	agentService agentsvc.Registry,
 	deployment *models.Deployment,
 	namespace string,
 ) (*platformtypes.ResolvedAgentConfig, error) {
@@ -135,7 +137,7 @@ func ResolveAgent(
 
 func resolveAgentManifestPlatformMCPServers(
 	ctx context.Context,
-	serverService platformtypes.ServerRuntimeService,
+	serverService serversvc.Registry,
 	deploymentID string,
 	manifest *models.AgentManifest,
 	namespace string,

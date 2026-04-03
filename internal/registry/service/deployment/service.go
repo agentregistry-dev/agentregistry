@@ -23,6 +23,19 @@ const (
 	originDiscovered  = "discovered"
 )
 
+// Registry defines the deployment operations exposed to other packages.
+type Registry interface {
+	GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
+	GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error)
+	DeployServer(ctx context.Context, serverName, version string, env map[string]string, preferRemote bool, providerID string) (*models.Deployment, error)
+	DeployAgent(ctx context.Context, agentName, version string, env map[string]string, preferRemote bool, providerID string) (*models.Deployment, error)
+	RemoveDeploymentByID(ctx context.Context, id string) error
+	CreateDeployment(ctx context.Context, req *models.Deployment) (*models.Deployment, error)
+	UndeployDeployment(ctx context.Context, deployment *models.Deployment) error
+	GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
+	CancelDeployment(ctx context.Context, deployment *models.Deployment) error
+}
+
 type Dependencies struct {
 	StoreDB            database.ServiceDatabase
 	Providers          database.ProviderStore

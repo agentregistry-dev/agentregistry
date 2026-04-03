@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
+	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -40,6 +41,59 @@ func (f *fakeIndexerRegistry) ListServers(ctx context.Context, filter *database.
 	return f.Servers, "", nil
 }
 
+func (f *fakeIndexerRegistry) GetServerByName(context.Context, string) (*apiv0.ServerResponse, error) {
+	if len(f.Servers) == 0 {
+		return nil, database.ErrNotFound
+	}
+	return f.Servers[0], nil
+}
+
+func (f *fakeIndexerRegistry) GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
+	for _, server := range f.Servers {
+		if server.Server.Name == serverName && (version == "" || server.Server.Version == version) {
+			return server, nil
+		}
+	}
+	return nil, database.ErrNotFound
+}
+
+func (f *fakeIndexerRegistry) GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
+	versions := make([]*apiv0.ServerResponse, 0, len(f.Servers))
+	for _, server := range f.Servers {
+		if server.Server.Name == serverName {
+			versions = append(versions, server)
+		}
+	}
+	if len(versions) == 0 {
+		return nil, database.ErrNotFound
+	}
+	return versions, nil
+}
+
+func (f *fakeIndexerRegistry) CreateServer(context.Context, *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
+	return nil, database.ErrInvalidInput
+}
+
+func (f *fakeIndexerRegistry) UpdateServer(context.Context, string, string, *apiv0.ServerJSON, *string) (*apiv0.ServerResponse, error) {
+	return nil, database.ErrInvalidInput
+}
+
+func (f *fakeIndexerRegistry) StoreServerReadme(context.Context, string, string, []byte, string) error {
+	return nil
+}
+
+func (f *fakeIndexerRegistry) GetServerReadmeLatest(context.Context, string) (*database.ServerReadme, error) {
+	return nil, database.ErrNotFound
+}
+
+func (f *fakeIndexerRegistry) GetServerReadmeByVersion(context.Context, string, string) (*database.ServerReadme, error) {
+	return nil, database.ErrNotFound
+}
+
+func (f *fakeIndexerRegistry) DeleteServer(context.Context, string, string) error {
+	return nil
+}
+
 func (f *fakeIndexerRegistry) GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
 	key := serverName + "@" + version
 	if meta, ok := f.ServerEmbeddingMeta[key]; ok {
@@ -60,6 +114,43 @@ func (f *fakeIndexerRegistry) ListAgents(ctx context.Context, filter *database.A
 	return f.Agents, "", nil
 }
 
+func (f *fakeIndexerRegistry) GetAgentByName(context.Context, string) (*models.AgentResponse, error) {
+	if len(f.Agents) == 0 {
+		return nil, database.ErrNotFound
+	}
+	return f.Agents[0], nil
+}
+
+func (f *fakeIndexerRegistry) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
+	for _, agent := range f.Agents {
+		if agent.Agent.Name == agentName && (version == "" || agent.Agent.Version == version) {
+			return agent, nil
+		}
+	}
+	return nil, database.ErrNotFound
+}
+
+func (f *fakeIndexerRegistry) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
+	versions := make([]*models.AgentResponse, 0, len(f.Agents))
+	for _, agent := range f.Agents {
+		if agent.Agent.Name == agentName {
+			versions = append(versions, agent)
+		}
+	}
+	if len(versions) == 0 {
+		return nil, database.ErrNotFound
+	}
+	return versions, nil
+}
+
+func (f *fakeIndexerRegistry) CreateAgent(context.Context, *models.AgentJSON) (*models.AgentResponse, error) {
+	return nil, database.ErrInvalidInput
+}
+
+func (f *fakeIndexerRegistry) DeleteAgent(context.Context, string, string) error {
+	return nil
+}
+
 func (f *fakeIndexerRegistry) GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
 	key := agentName + "@" + version
 	if meta, ok := f.AgentEmbeddingMeta[key]; ok {
@@ -71,6 +162,14 @@ func (f *fakeIndexerRegistry) GetAgentEmbeddingMetadata(ctx context.Context, age
 func (f *fakeIndexerRegistry) UpsertAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error {
 	f.UpsertAgentEmbeddingCalls++
 	return nil
+}
+
+func (f *fakeIndexerRegistry) ResolveAgentManifestSkills(context.Context, *models.AgentManifest) ([]platformtypes.AgentSkillRef, error) {
+	return nil, nil
+}
+
+func (f *fakeIndexerRegistry) ResolveAgentManifestPrompts(context.Context, *models.AgentManifest) ([]platformtypes.ResolvedPrompt, error) {
+	return nil, nil
 }
 
 // mockProvider implements embeddings.Provider for testing.

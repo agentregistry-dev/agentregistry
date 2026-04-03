@@ -15,14 +15,14 @@ import (
 	"github.com/rs/cors"
 
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
-	v0agents "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/agents"
-	v0deployments "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deployments"
-	v0prompts "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/prompts"
-	v0providers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/providers"
-	v0servers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/servers"
-	v0skills "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/skills"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
+	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
+	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
+	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
+	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
+	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
+	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 )
@@ -156,12 +156,12 @@ func (s *Server) Mux() *http.ServeMux {
 // Note: AuthZ is handled at the DB/service layer, not at the API layer.
 func NewServer(
 	cfg *config.Config,
-	serverSvc v0servers.ServerService,
-	agentSvc v0agents.AgentService,
-	skillSvc v0skills.SkillService,
-	promptSvc v0prompts.PromptService,
-	providerSvc v0providers.ProviderService,
-	deploymentSvc v0deployments.DeploymentService,
+	serverSvc serversvc.Registry,
+	agentSvc agentsvc.Registry,
+	skillSvc skillsvc.Registry,
+	promptSvc promptsvc.Registry,
+	providerSvc providersvc.Registry,
+	deploymentSvc deploymentsvc.Registry,
 	metrics *telemetry.Metrics,
 	versionInfo *apitypes.VersionBody,
 	customUIHandler http.Handler,

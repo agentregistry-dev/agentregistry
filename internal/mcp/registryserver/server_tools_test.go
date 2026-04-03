@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -66,11 +67,49 @@ func (f *fakeMCPRegistry) GetAgentByNameAndVersion(ctx context.Context, agentNam
 	return f.GetAgentByName(ctx, agentName)
 }
 
+func (f *fakeMCPRegistry) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
+	if len(f.agents) > 0 {
+		return f.agents, nil
+	}
+	return nil, database.ErrNotFound
+}
+
+func (f *fakeMCPRegistry) CreateAgent(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeMCPRegistry) DeleteAgent(ctx context.Context, agentName, version string) error {
+	return errors.New("not implemented")
+}
+
+func (f *fakeMCPRegistry) UpsertAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error {
+	return errors.New("not implemented")
+}
+
+func (f *fakeMCPRegistry) GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
+	return nil, database.ErrNotFound
+}
+
+func (f *fakeMCPRegistry) ResolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error) {
+	return nil, nil
+}
+
+func (f *fakeMCPRegistry) ResolveAgentManifestPrompts(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.ResolvedPrompt, error) {
+	return nil, nil
+}
+
 func (f *fakeMCPRegistry) ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
 	if f.listServersFn != nil {
 		return f.listServersFn(ctx, filter, cursor, limit)
 	}
 	return f.servers, "", nil
+}
+
+func (f *fakeMCPRegistry) GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+	if len(f.servers) > 0 {
+		return f.servers[0], nil
+	}
+	return nil, database.ErrNotFound
 }
 
 func (f *fakeMCPRegistry) GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
@@ -90,6 +129,18 @@ func (f *fakeMCPRegistry) GetAllVersionsByServerName(ctx context.Context, server
 	return f.servers, nil
 }
 
+func (f *fakeMCPRegistry) CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeMCPRegistry) UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeMCPRegistry) StoreServerReadme(ctx context.Context, serverName, version string, content []byte, contentType string) error {
+	return errors.New("not implemented")
+}
+
 func (f *fakeMCPRegistry) GetServerReadmeLatest(ctx context.Context, serverName string) (*database.ServerReadme, error) {
 	if f.getServerReadmeLatestFn != nil {
 		return f.getServerReadmeLatestFn(ctx, serverName)
@@ -105,6 +156,18 @@ func (f *fakeMCPRegistry) GetServerReadmeByVersion(ctx context.Context, serverNa
 		return f.getServerReadmeByVerFn(ctx, serverName, version)
 	}
 	return f.GetServerReadmeLatest(ctx, serverName)
+}
+
+func (f *fakeMCPRegistry) DeleteServer(ctx context.Context, serverName, version string) error {
+	return errors.New("not implemented")
+}
+
+func (f *fakeMCPRegistry) UpsertServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error {
+	return errors.New("not implemented")
+}
+
+func (f *fakeMCPRegistry) GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
+	return nil, database.ErrNotFound
 }
 
 func (f *fakeMCPRegistry) ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
@@ -129,6 +192,21 @@ func (f *fakeMCPRegistry) GetSkillByNameAndVersion(ctx context.Context, skillNam
 		return f.getSkillByNameVersionFn(ctx, skillName, version)
 	}
 	return f.GetSkillByName(ctx, skillName)
+}
+
+func (f *fakeMCPRegistry) GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
+	if len(f.skills) > 0 {
+		return f.skills, nil
+	}
+	return nil, database.ErrNotFound
+}
+
+func (f *fakeMCPRegistry) CreateSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeMCPRegistry) DeleteSkill(ctx context.Context, skillName, version string) error {
+	return errors.New("not implemented")
 }
 
 func (f *fakeMCPRegistry) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
@@ -159,10 +237,26 @@ func (f *fakeMCPRegistry) DeployAgent(ctx context.Context, agentName, version st
 	return nil, errors.New("not implemented")
 }
 
+func (f *fakeMCPRegistry) RemoveDeploymentByID(ctx context.Context, id string) error {
+	return errors.New("not implemented")
+}
+
+func (f *fakeMCPRegistry) CreateDeployment(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (f *fakeMCPRegistry) UndeployDeployment(ctx context.Context, deployment *models.Deployment) error {
 	if f.undeployFn != nil {
 		return f.undeployFn(ctx, deployment)
 	}
+	return errors.New("not implemented")
+}
+
+func (f *fakeMCPRegistry) GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeMCPRegistry) CancelDeployment(ctx context.Context, deployment *models.Deployment) error {
 	return errors.New("not implemented")
 }
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentmeta"
+	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -87,22 +88,8 @@ type ServerReadmeResponse struct {
 	FetchedAt   time.Time `json:"fetchedAt"`
 }
 
-// ServerService defines the server operations consumed by server HTTP handlers.
-type ServerService interface {
-	ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
-	GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error)
-	GetServerByNameAndVersion(ctx context.Context, serverName string, version string) (*apiv0.ServerResponse, error)
-	GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error)
-	CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
-	UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error)
-	StoreServerReadme(ctx context.Context, serverName, version string, content []byte, contentType string) error
-	GetServerReadmeLatest(ctx context.Context, serverName string) (*database.ServerReadme, error)
-	GetServerReadmeByVersion(ctx context.Context, serverName, version string) (*database.ServerReadme, error)
-	DeleteServer(ctx context.Context, serverName, version string) error
-}
-
 // RegisterServersEndpoints registers all server-related endpoints with a custom path prefix.
-func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc ServerService, deploymentSvc deploymentmeta.Lister) {
+func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc serversvc.Registry, deploymentSvc deploymentmeta.Lister) {
 	huma.Register(api, huma.Operation{
 		OperationID: "delete-server-version" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodDelete,
@@ -458,7 +445,7 @@ type CreateServerInput struct {
 }
 
 // createServerHandler is the shared handler logic for creating servers
-func createServerHandler(ctx context.Context, input *CreateServerInput, serverSvc ServerService, deploymentSvc deploymentmeta.Lister) (*types.Response[models.ServerResponse], error) {
+func createServerHandler(ctx context.Context, input *CreateServerInput, serverSvc serversvc.Registry, deploymentSvc deploymentmeta.Lister) (*types.Response[models.ServerResponse], error) {
 	createdServer, err := serverSvc.CreateServer(ctx, &input.Body)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
@@ -483,7 +470,7 @@ func createServerHandler(ctx context.Context, input *CreateServerInput, serverSv
 }
 
 // RegisterServersCreateEndpoint registers POST /servers (create or update; immediately visible).
-func RegisterServersCreateEndpoint(api huma.API, pathPrefix string, serverSvc ServerService, deploymentSvc deploymentmeta.Lister) {
+func RegisterServersCreateEndpoint(api huma.API, pathPrefix string, serverSvc serversvc.Registry, deploymentSvc deploymentmeta.Lister) {
 	huma.Register(api, huma.Operation{
 		OperationID: "create-server" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodPost,

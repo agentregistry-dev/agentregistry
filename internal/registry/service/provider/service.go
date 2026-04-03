@@ -7,6 +7,15 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
+// Registry defines the provider operations exposed to other packages.
+type Registry interface {
+	ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error)
+	GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error)
+	CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error)
+	UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error)
+	DeleteProvider(ctx context.Context, providerID string) error
+}
+
 type Dependencies struct {
 	StoreDB   database.ServiceDatabase
 	Providers database.ProviderStore

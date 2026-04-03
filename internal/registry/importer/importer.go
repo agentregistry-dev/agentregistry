@@ -25,22 +25,15 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
+	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
-// ServerRegistry defines the server operations consumed by the importer.
-type ServerRegistry interface {
-	CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
-	UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error)
-	UpsertServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error
-	StoreServerReadme(ctx context.Context, serverName, version string, content []byte, contentType string) error
-}
-
 // Service handles importing seed data into the registry
 type Service struct {
-	registry            ServerRegistry
+	registry            serversvc.Registry
 	httpClient          *http.Client
 	requestHeaders      map[string]string
 	updateIfExists      bool
@@ -56,7 +49,7 @@ type Service struct {
 }
 
 // NewService creates a new importer service with sane defaults
-func NewService(registry ServerRegistry) *Service {
+func NewService(registry serversvc.Registry) *Service {
 	// Allow user to override HTTP timeout via environment variable (seconds)
 	timeout := 30 * time.Second
 	if s := strings.TrimSpace(os.Getenv("AR_HTTP_TIMEOUT_SECONDS")); s != "" {

@@ -15,6 +15,12 @@ import (
 	v0providers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/providers"
 	v0servers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/servers"
 	v0skills "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/skills"
+	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
+	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
+	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
+	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
+	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
+	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
 	v0version "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/version"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
@@ -44,12 +50,12 @@ type RouteOptions struct {
 func RegisterRoutes(
 	api huma.API,
 	cfg *config.Config,
-	serverSvc v0servers.ServerService,
-	agentSvc v0agents.AgentService,
-	skillSvc v0skills.SkillService,
-	promptSvc v0prompts.PromptService,
-	providerSvc v0providers.ProviderService,
-	deploymentSvc v0deployments.DeploymentService,
+	serverSvc serversvc.Registry,
+	agentSvc agentsvc.Registry,
+	skillSvc skillsvc.Registry,
+	promptSvc promptsvc.Registry,
+	providerSvc providersvc.Registry,
+	deploymentSvc deploymentsvc.Registry,
 	metrics *telemetry.Metrics,
 	versionInfo *apitypes.VersionBody,
 	opts *RouteOptions,

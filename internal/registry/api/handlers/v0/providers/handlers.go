@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	handlerext "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/extensions"
+	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
@@ -41,15 +42,6 @@ type ProvidersListResponse struct {
 
 type ProviderResponse struct {
 	Body models.Provider
-}
-
-// ProviderService defines the provider operations consumed by provider HTTP handlers.
-type ProviderService interface {
-	ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error)
-	GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error)
-	CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error)
-	UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error)
-	DeleteProvider(ctx context.Context, providerID string) error
 }
 
 func adapterPlatformKeys(extensions handlerext.PlatformExtensions) []string {
@@ -122,7 +114,7 @@ func listProvidersForPlatform(ctx context.Context, extensions handlerext.Platfor
 	return providers, nil
 }
 
-func ResolveProviderByID(ctx context.Context, providerSvc ProviderService, extensions handlerext.PlatformExtensions, providerID, platformHint string) (*models.Provider, error) {
+func ResolveProviderByID(ctx context.Context, providerSvc providersvc.Registry, extensions handlerext.PlatformExtensions, providerID, platformHint string) (*models.Provider, error) {
 	hintedProvider, err := getProviderByHint(ctx, extensions, providerID, platformHint)
 	if hintedProvider != nil || err != nil {
 		return hintedProvider, err
@@ -155,7 +147,7 @@ func ResolveProviderByID(ctx context.Context, providerSvc ProviderService, exten
 }
 
 // RegisterProvidersEndpoints registers provider CRUD endpoints.
-func RegisterProvidersEndpoints(api huma.API, basePath string, providerSvc ProviderService, extensions handlerext.PlatformExtensions) {
+func RegisterProvidersEndpoints(api huma.API, basePath string, providerSvc providersvc.Registry, extensions handlerext.PlatformExtensions) {
 	huma.Register(api, huma.Operation{
 		OperationID: "list-providers",
 		Method:      http.MethodGet,

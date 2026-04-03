@@ -20,6 +20,17 @@ type fakePlatformRuntimeRegistry struct {
 	getProviderByIDFn func(ctx context.Context, providerID string) (*models.Provider, error)
 }
 
+func (f *fakePlatformRuntimeRegistry) ListServers(context.Context, *database.ServerFilter, string, int) ([]*apiv0.ServerResponse, string, error) {
+	return nil, "", nil
+}
+
+func (f *fakePlatformRuntimeRegistry) GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+	if f.getServerByVerFn != nil {
+		return f.getServerByVerFn(ctx, serverName, "")
+	}
+	return nil, database.ErrNotFound
+}
+
 func (f *fakePlatformRuntimeRegistry) GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error) {
 	if f.getProviderByIDFn != nil {
 		return f.getProviderByIDFn(ctx, providerID)
@@ -34,6 +45,65 @@ func (f *fakePlatformRuntimeRegistry) GetServerByNameAndVersion(ctx context.Cont
 	return nil, database.ErrNotFound
 }
 
+func (f *fakePlatformRuntimeRegistry) GetAllVersionsByServerName(context.Context, string) ([]*apiv0.ServerResponse, error) {
+	return nil, nil
+}
+
+func (f *fakePlatformRuntimeRegistry) CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
+	if req == nil {
+		return nil, database.ErrInvalidInput
+	}
+	return &apiv0.ServerResponse{Server: *req}, nil
+}
+
+func (f *fakePlatformRuntimeRegistry) UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
+	_ = serverName
+	_ = version
+	_ = newStatus
+	return f.CreateServer(ctx, req)
+}
+
+func (f *fakePlatformRuntimeRegistry) StoreServerReadme(context.Context, string, string, []byte, string) error {
+	return nil
+}
+
+func (f *fakePlatformRuntimeRegistry) GetServerReadmeLatest(context.Context, string) (*database.ServerReadme, error) {
+	return nil, database.ErrNotFound
+}
+
+func (f *fakePlatformRuntimeRegistry) GetServerReadmeByVersion(context.Context, string, string) (*database.ServerReadme, error) {
+	return nil, database.ErrNotFound
+}
+
+func (f *fakePlatformRuntimeRegistry) DeleteServer(context.Context, string, string) error {
+	return nil
+}
+
+func (f *fakePlatformRuntimeRegistry) UpsertServerEmbedding(context.Context, string, string, *database.SemanticEmbedding) error {
+	return nil
+}
+
+func (f *fakePlatformRuntimeRegistry) GetServerEmbeddingMetadata(context.Context, string, string) (*database.SemanticEmbeddingMetadata, error) {
+	return nil, database.ErrNotFound
+}
+
+func (f *fakePlatformRuntimeRegistry) ListAgents(context.Context, *database.AgentFilter, string, int) ([]*models.AgentResponse, string, error) {
+	if f.agentResp != nil {
+		return []*models.AgentResponse{f.agentResp}, "", nil
+	}
+	return nil, "", nil
+}
+
+func (f *fakePlatformRuntimeRegistry) GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error) {
+	if f.getAgentFn != nil {
+		return f.getAgentFn(ctx, agentName, "")
+	}
+	if f.agentResp != nil {
+		return f.agentResp, nil
+	}
+	return nil, database.ErrNotFound
+}
+
 func (f *fakePlatformRuntimeRegistry) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
 	if f.getAgentFn != nil {
 		return f.getAgentFn(ctx, agentName, version)
@@ -41,6 +111,32 @@ func (f *fakePlatformRuntimeRegistry) GetAgentByNameAndVersion(ctx context.Conte
 	if f.agentResp != nil {
 		return f.agentResp, nil
 	}
+	return nil, database.ErrNotFound
+}
+
+func (f *fakePlatformRuntimeRegistry) GetAllVersionsByAgentName(context.Context, string) ([]*models.AgentResponse, error) {
+	if f.agentResp != nil {
+		return []*models.AgentResponse{f.agentResp}, nil
+	}
+	return nil, nil
+}
+
+func (f *fakePlatformRuntimeRegistry) CreateAgent(context.Context, *models.AgentJSON) (*models.AgentResponse, error) {
+	if f.agentResp != nil {
+		return f.agentResp, nil
+	}
+	return nil, database.ErrInvalidInput
+}
+
+func (f *fakePlatformRuntimeRegistry) DeleteAgent(context.Context, string, string) error {
+	return nil
+}
+
+func (f *fakePlatformRuntimeRegistry) UpsertAgentEmbedding(context.Context, string, string, *database.SemanticEmbedding) error {
+	return nil
+}
+
+func (f *fakePlatformRuntimeRegistry) GetAgentEmbeddingMetadata(context.Context, string, string) (*database.SemanticEmbeddingMetadata, error) {
 	return nil, database.ErrNotFound
 }
 
