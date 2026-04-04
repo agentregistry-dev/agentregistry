@@ -11,7 +11,6 @@ import (
 	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
-	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
 	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
@@ -127,11 +126,6 @@ func (s *registryServiceImpl) skillService() *skillsvc.Service {
 func (s *registryServiceImpl) promptService() *promptsvc.Service {
 	stores := s.readStores()
 	return promptsvc.New(promptsvc.Dependencies{StoreDB: s.storeDB, Prompts: stores.prompts})
-}
-
-func (s *registryServiceImpl) providerService() *providersvc.Service {
-	stores := s.readStores()
-	return providersvc.New(providersvc.Dependencies{StoreDB: s.storeDB, Providers: stores.providers})
 }
 
 type deploymentServiceImpl struct {
@@ -291,23 +285,23 @@ func (s *registryServiceImpl) DeletePrompt(ctx context.Context, promptName, vers
 }
 
 func (s *registryServiceImpl) ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error) {
-	return s.providerService().ListProviders(ctx, platform)
+	return s.readStores().providers.ListProviders(ctx, platform)
 }
 
 func (s *registryServiceImpl) GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error) {
-	return s.providerService().GetProviderByID(ctx, providerID)
+	return s.readStores().providers.GetProviderByID(ctx, providerID)
 }
 
 func (s *registryServiceImpl) CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error) {
-	return s.providerService().CreateProvider(ctx, in)
+	return s.readStores().providers.CreateProvider(ctx, in)
 }
 
 func (s *registryServiceImpl) UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error) {
-	return s.providerService().UpdateProvider(ctx, providerID, in)
+	return s.readStores().providers.UpdateProvider(ctx, providerID, in)
 }
 
 func (s *registryServiceImpl) DeleteProvider(ctx context.Context, providerID string) error {
-	return s.providerService().DeleteProvider(ctx, providerID)
+	return s.readStores().providers.DeleteProvider(ctx, providerID)
 }
 
 func (s *registryServiceImpl) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {

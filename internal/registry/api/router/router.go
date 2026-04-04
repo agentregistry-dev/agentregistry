@@ -63,14 +63,6 @@ type promptRegistry interface {
 	CreatePrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error)
 }
 
-type providerRegistry interface {
-	ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error)
-	GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error)
-	CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error)
-	UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error)
-	DeleteProvider(ctx context.Context, providerID string) error
-}
-
 type deploymentRegistry interface {
 	GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
 	GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error)
@@ -197,7 +189,7 @@ func NewHumaAPI(
 	agentSvc agentRegistry,
 	skillSvc skillRegistry,
 	promptSvc promptRegistry,
-	providerSvc providerRegistry,
+	providerSvc database.ProviderStore,
 	deploymentSvc deploymentRegistry,
 	mux *http.ServeMux,
 	metrics *telemetry.Metrics,

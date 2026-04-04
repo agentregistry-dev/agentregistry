@@ -17,10 +17,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
-type providerLookup interface {
-	GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error)
-}
-
 type deploymentRegistry interface {
 	GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
 	GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error)
@@ -92,7 +88,7 @@ func removeDeploymentHTTPError(err error) error {
 }
 
 // RegisterDeploymentsEndpoints registers all deployment-related endpoints
-func RegisterDeploymentsEndpoints(api huma.API, basePath string, providerSvc providerLookup, deploymentSvc deploymentRegistry, extensions handlerext.PlatformExtensions) {
+func RegisterDeploymentsEndpoints(api huma.API, basePath string, providerSvc database.ProviderStore, deploymentSvc deploymentRegistry, extensions handlerext.PlatformExtensions) {
 	// List all deployments
 	huma.Register(api, huma.Operation{
 		OperationID: "list-deployments",

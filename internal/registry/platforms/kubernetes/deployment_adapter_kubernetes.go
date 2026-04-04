@@ -13,10 +13,6 @@ import (
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
-type providerRegistry interface {
-	GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error)
-}
-
 type serverRegistry interface {
 	GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error)
 }
@@ -28,12 +24,12 @@ type agentRegistry interface {
 }
 
 type kubernetesDeploymentAdapter struct {
-	providerService providerRegistry
+	providerService database.ProviderStore
 	serverService   serverRegistry
 	agentService    agentRegistry
 }
 
-func NewKubernetesDeploymentAdapter(providerService providerRegistry, serverService serverRegistry, agentService agentRegistry) *kubernetesDeploymentAdapter {
+func NewKubernetesDeploymentAdapter(providerService database.ProviderStore, serverService serverRegistry, agentService agentRegistry) *kubernetesDeploymentAdapter {
 	return &kubernetesDeploymentAdapter{providerService: providerService, serverService: serverService, agentService: agentService}
 }
 

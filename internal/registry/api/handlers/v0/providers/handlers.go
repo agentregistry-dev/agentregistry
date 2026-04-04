@@ -13,18 +13,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
-type providerRegistry interface {
-	ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error)
-	GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error)
-	CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error)
-	UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error)
-	DeleteProvider(ctx context.Context, providerID string) error
-}
-
-type providerLookup interface {
-	GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error)
-}
-
 type ProviderListInput struct {
 	Platform string `query:"platform" json:"platform,omitempty" doc:"Filter providers by platform type"`
 }
@@ -125,7 +113,7 @@ func listProvidersForPlatform(ctx context.Context, extensions handlerext.Platfor
 	return providers, nil
 }
 
-func ResolveProviderByID(ctx context.Context, providerSvc providerLookup, extensions handlerext.PlatformExtensions, providerID, platformHint string) (*models.Provider, error) {
+func ResolveProviderByID(ctx context.Context, providerSvc database.ProviderStore, extensions handlerext.PlatformExtensions, providerID, platformHint string) (*models.Provider, error) {
 	hintedProvider, err := getProviderByHint(ctx, extensions, providerID, platformHint)
 	if hintedProvider != nil || err != nil {
 		return hintedProvider, err
@@ -158,7 +146,7 @@ func ResolveProviderByID(ctx context.Context, providerSvc providerLookup, extens
 }
 
 // RegisterProvidersEndpoints registers provider CRUD endpoints.
-func RegisterProvidersEndpoints(api huma.API, basePath string, providerSvc providerRegistry, extensions handlerext.PlatformExtensions) {
+func RegisterProvidersEndpoints(api huma.API, basePath string, providerSvc database.ProviderStore, extensions handlerext.PlatformExtensions) {
 	huma.Register(api, huma.Operation{
 		OperationID: "list-providers",
 		Method:      http.MethodGet,

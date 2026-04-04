@@ -75,7 +75,7 @@ func TestDomainServiceViewsShareRegistryState(t *testing.T) {
 	require.Len(t, servers, 1)
 	assert.Equal(t, "com.example/weather", servers[0].Server.Name)
 
-	provider, err := svc.providerService().GetProviderByID(ctx, "provider-1")
+	provider, err := svc.GetProviderByID(ctx, "provider-1")
 	require.NoError(t, err)
 	assert.Equal(t, "local", provider.Platform)
 

@@ -20,10 +20,10 @@ import (
 	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
-	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
 	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 )
 
@@ -160,7 +160,7 @@ func NewServer(
 	agentSvc *agentsvc.Service,
 	skillSvc *skillsvc.Service,
 	promptSvc *promptsvc.Service,
-	providerSvc *providersvc.Service,
+	providerSvc database.ProviderStore,
 	deploymentSvc *deploymentsvc.Service,
 	metrics *telemetry.Metrics,
 	versionInfo *apitypes.VersionBody,
