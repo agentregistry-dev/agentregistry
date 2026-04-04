@@ -33,7 +33,7 @@ import (
 
 // Service handles importing seed data into the registry
 type Service struct {
-	registry            serversvc.Registry
+	registry            *serversvc.Service
 	httpClient          *http.Client
 	requestHeaders      map[string]string
 	updateIfExists      bool
@@ -49,7 +49,7 @@ type Service struct {
 }
 
 // NewService creates a new importer service with sane defaults
-func NewService(registry serversvc.Registry) *Service {
+func NewService(registry *serversvc.Service) *Service {
 	// Allow user to override HTTP timeout via environment variable (seconds)
 	timeout := 30 * time.Second
 	if s := strings.TrimSpace(os.Getenv("AR_HTTP_TIMEOUT_SECONDS")); s != "" {

@@ -15,16 +15,6 @@ import (
 
 const maxVersionsPerSkill = 10000
 
-// Registry defines the skill operations exposed to other packages.
-type Registry interface {
-	ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error)
-	GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error)
-	GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error)
-	GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error)
-	CreateSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error)
-	DeleteSkill(ctx context.Context, skillName, version string) error
-}
-
 type Dependencies struct {
 	StoreDB database.Store
 	Skills  database.SkillStore

@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentmeta"
-	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -27,7 +26,7 @@ type EditServerInput struct {
 }
 
 // RegisterEditEndpoints registers the edit endpoint with a custom path prefix
-func RegisterEditEndpoints(api huma.API, pathPrefix string, serverSvc serversvc.Registry, deploymentSvc deploymentmeta.Lister) {
+func RegisterEditEndpoints(api huma.API, pathPrefix string, serverSvc serverRegistry, deploymentSvc deploymentmeta.Lister) {
 	// Edit server endpoint
 	huma.Register(api, huma.Operation{
 		OperationID: "edit-server" + strings.ReplaceAll(pathPrefix, "/", "-"),

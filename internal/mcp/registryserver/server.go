@@ -8,10 +8,6 @@ import (
 	"time"
 
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
-	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
-	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
-	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
-	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -24,9 +20,37 @@ const (
 	maxPageLimit     = 100
 )
 
+type agentRegistry interface {
+	ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error)
+	GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error)
+	GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error)
+}
+
+type serverRegistry interface {
+	ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
+	GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error)
+	GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error)
+	GetServerReadmeLatest(ctx context.Context, serverName string) (*database.ServerReadme, error)
+	GetServerReadmeByVersion(ctx context.Context, serverName, version string) (*database.ServerReadme, error)
+}
+
+type skillRegistry interface {
+	ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error)
+	GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error)
+	GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error)
+}
+
+type deploymentRegistry interface {
+	GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
+	GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error)
+	DeployServer(ctx context.Context, serverName, version string, env map[string]string, preferRemote bool, providerID string) (*models.Deployment, error)
+	DeployAgent(ctx context.Context, agentName, version string, env map[string]string, preferRemote bool, providerID string) (*models.Deployment, error)
+	UndeployDeployment(ctx context.Context, deployment *models.Deployment) error
+}
+
 // NewServer constructs an MCP server that exposes discovery and deployment tools backed by focused registry contracts.
 // All endpoints are restricted to published content to keep the surface area safe for unauthenticated agents.
-func NewServer(serverRegistry serversvc.Registry, agentRegistry agentsvc.Registry, skillRegistry skillsvc.Registry, deploymentRegistry deploymentsvc.Registry) *mcp.Server {
+func NewServer(serverRegistry serverRegistry, agentRegistry agentRegistry, skillRegistry skillRegistry, deploymentRegistry deploymentRegistry) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "agentregistry-mcp",
 		Version: version.Version,
@@ -47,7 +71,7 @@ func NewServer(serverRegistry serversvc.Registry, agentRegistry agentsvc.Registr
 
 type listAgentsArgs = apitypes.ListAgentsInput
 
-func addAgentTools(server *mcp.Server, registry agentsvc.Registry) {
+func addAgentTools(server *mcp.Server, registry agentRegistry) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_agents",
 		Description: "List published agents with optional search and pagination. Set semantic_search=true for natural-language queries.",
@@ -130,7 +154,7 @@ func addAgentTools(server *mcp.Server, registry agentsvc.Registry) {
 
 type listServersArgs = apitypes.ListServersInput
 
-func addServerTools(server *mcp.Server, registry serversvc.Registry) {
+func addServerTools(server *mcp.Server, registry serverRegistry) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_servers",
 		Description: "List published MCP servers with optional search and pagination. Set semantic_search=true for natural-language queries (e.g. 'database management tools').",
@@ -264,7 +288,7 @@ func addServerTools(server *mcp.Server, registry serversvc.Registry) {
 
 type listSkillsArgs = apitypes.ListSkillsInput
 
-func addSkillTools(server *mcp.Server, registry skillsvc.Registry) {
+func addSkillTools(server *mcp.Server, registry skillRegistry) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_skills",
 		Description: "List published skills with optional search and pagination",
@@ -375,7 +399,7 @@ type deploymentsResponse struct {
 	Count       int                 `json:"count"`
 }
 
-func addDeploymentTools(server *mcp.Server, registry deploymentsvc.Registry) {
+func addDeploymentTools(server *mcp.Server, registry deploymentRegistry) {
 	// List deployments
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_deployments",
@@ -487,7 +511,7 @@ type ServerReadmePayload struct {
 	FetchedAt   time.Time `json:"fetched_at"`
 }
 
-func fetchSingleServer(ctx context.Context, registry serversvc.Registry, name, version string) (*apiv0.ServerResponse, error) {
+func fetchSingleServer(ctx context.Context, registry serverRegistry, name, version string) (*apiv0.ServerResponse, error) {
 	if version == "latest" {
 		servers, err := registry.GetAllVersionsByServerName(ctx, name)
 		if err != nil {

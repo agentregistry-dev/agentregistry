@@ -2,6 +2,7 @@
 package router
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,22 +10,75 @@ import (
 	"time"
 
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
-	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
-	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
-	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
-	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
-	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
-	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
 	"github.com/agentregistry-dev/agentregistry/pkg/logging"
+	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
+	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 )
+
+type serverRegistry interface {
+	DeleteServer(ctx context.Context, serverName, version string) error
+	ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
+	GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error)
+	GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error)
+	GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error)
+	CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
+	UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error)
+	GetServerReadmeLatest(ctx context.Context, serverName string) (*database.ServerReadme, error)
+	GetServerReadmeByVersion(ctx context.Context, serverName, version string) (*database.ServerReadme, error)
+}
+
+type agentRegistry interface {
+	ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error)
+	GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error)
+	GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error)
+	DeleteAgent(ctx context.Context, agentName, version string) error
+	GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error)
+	CreateAgent(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error)
+}
+
+type skillRegistry interface {
+	ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error)
+	GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error)
+	GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error)
+	DeleteSkill(ctx context.Context, skillName, version string) error
+	GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error)
+	CreateSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error)
+}
+
+type promptRegistry interface {
+	ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error)
+	GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error)
+	GetPromptByNameAndVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error)
+	DeletePrompt(ctx context.Context, promptName, version string) error
+	GetAllVersionsByPromptName(ctx context.Context, promptName string) ([]*models.PromptResponse, error)
+	CreatePrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error)
+}
+
+type providerRegistry interface {
+	ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error)
+	GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error)
+	CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error)
+	UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error)
+	DeleteProvider(ctx context.Context, providerID string) error
+}
+
+type deploymentRegistry interface {
+	GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
+	GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error)
+	CreateDeployment(ctx context.Context, req *models.Deployment) (*models.Deployment, error)
+	UndeployDeployment(ctx context.Context, deployment *models.Deployment) error
+	GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
+	CancelDeployment(ctx context.Context, deployment *models.Deployment) error
+}
 
 // Middleware configuration options
 type middlewareConfig struct {
@@ -139,12 +193,12 @@ func handle404(w http.ResponseWriter, r *http.Request) {
 // Note: authz is handled at the DB/service layer, not at the API layer.
 func NewHumaAPI(
 	cfg *config.Config,
-	serverSvc serversvc.Registry,
-	agentSvc agentsvc.Registry,
-	skillSvc skillsvc.Registry,
-	promptSvc promptsvc.Registry,
-	providerSvc providersvc.Registry,
-	deploymentSvc deploymentsvc.Registry,
+	serverSvc serverRegistry,
+	agentSvc agentRegistry,
+	skillSvc skillRegistry,
+	promptSvc promptRegistry,
+	providerSvc providerRegistry,
+	deploymentSvc deploymentRegistry,
 	mux *http.ServeMux,
 	metrics *telemetry.Metrics,
 	versionInfo *apitypes.VersionBody,

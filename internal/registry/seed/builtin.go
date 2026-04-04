@@ -19,7 +19,7 @@ var builtinSeedData []byte
 //go:embed seed-readme.json
 var builtinReadmeData []byte
 
-func ImportBuiltinSeedData(ctx context.Context, registry serversvc.Registry) error {
+func ImportBuiltinSeedData(ctx context.Context, registry *serversvc.Service) error {
 	servers, err := loadSeedData(builtinSeedData)
 	if err != nil {
 		return err
@@ -61,7 +61,7 @@ func loadReadmeSeedData(data []byte) (ReadmeFile, error) {
 
 func importServer(
 	ctx context.Context,
-	registry serversvc.Registry,
+	registry *serversvc.Service,
 	srv *apiv0.ServerJSON,
 	readmes ReadmeFile,
 ) {

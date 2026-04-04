@@ -15,16 +15,6 @@ import (
 
 const maxVersionsPerPrompt = 10000
 
-// Registry defines the prompt operations exposed to other packages.
-type Registry interface {
-	ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error)
-	GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error)
-	GetPromptByNameAndVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error)
-	GetAllVersionsByPromptName(ctx context.Context, promptName string) ([]*models.PromptResponse, error)
-	CreatePrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error)
-	DeletePrompt(ctx context.Context, promptName, version string) error
-}
-
 type Dependencies struct {
 	StoreDB database.Store
 	Prompts database.PromptStore

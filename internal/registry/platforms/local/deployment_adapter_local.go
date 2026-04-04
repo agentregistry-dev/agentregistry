@@ -10,15 +10,24 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
-	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
-	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
+type serverRegistry interface {
+	GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error)
+}
+
+type agentRegistry interface {
+	GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error)
+	ResolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error)
+	ResolveAgentManifestPrompts(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.ResolvedPrompt, error)
+}
+
 type localDeploymentAdapter struct {
-	serverService    serversvc.Registry
-	agentService     agentsvc.Registry
+	serverService    serverRegistry
+	agentService     agentRegistry
 	platformDir      string
 	agentGatewayPort uint16
 }
@@ -70,8 +79,8 @@ func (c *localAgentConfig) cleanup() error {
 }
 
 func NewLocalDeploymentAdapter(
-	serverService serversvc.Registry,
-	agentService agentsvc.Registry,
+	serverService serverRegistry,
+	agentService agentRegistry,
 	platformDir string,
 	agentGatewayPort uint16,
 ) *localDeploymentAdapter {

@@ -8,20 +8,32 @@ import (
 
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
-	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
-	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
-	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
-type kubernetesDeploymentAdapter struct {
-	providerService providersvc.Registry
-	serverService   serversvc.Registry
-	agentService    agentsvc.Registry
+type providerRegistry interface {
+	GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error)
 }
 
-func NewKubernetesDeploymentAdapter(providerService providersvc.Registry, serverService serversvc.Registry, agentService agentsvc.Registry) *kubernetesDeploymentAdapter {
+type serverRegistry interface {
+	GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error)
+}
+
+type agentRegistry interface {
+	GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error)
+	ResolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error)
+	ResolveAgentManifestPrompts(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.ResolvedPrompt, error)
+}
+
+type kubernetesDeploymentAdapter struct {
+	providerService providerRegistry
+	serverService   serverRegistry
+	agentService    agentRegistry
+}
+
+func NewKubernetesDeploymentAdapter(providerService providerRegistry, serverService serverRegistry, agentService agentRegistry) *kubernetesDeploymentAdapter {
 	return &kubernetesDeploymentAdapter{providerService: providerService, serverService: serverService, agentService: agentService}
 }
 

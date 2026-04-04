@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
-	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
 	skillmodels "github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -18,6 +17,15 @@ import (
 )
 
 const errRecordNotFound = "record not found"
+
+type skillRegistry interface {
+	ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*skillmodels.SkillResponse, string, error)
+	GetSkillByName(ctx context.Context, skillName string) (*skillmodels.SkillResponse, error)
+	GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*skillmodels.SkillResponse, error)
+	DeleteSkill(ctx context.Context, skillName, version string) error
+	GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*skillmodels.SkillResponse, error)
+	CreateSkill(ctx context.Context, req *skillmodels.SkillJSON) (*skillmodels.SkillResponse, error)
+}
 
 // SkillDetailInput represents the input for getting skill details
 type SkillDetailInput struct {
@@ -36,7 +44,7 @@ type SkillVersionsInput struct {
 }
 
 // RegisterSkillsEndpoints registers all skill-related endpoints with a custom path prefix.
-func RegisterSkillsEndpoints(api huma.API, pathPrefix string, skillSvc skillsvc.Registry) {
+func RegisterSkillsEndpoints(api huma.API, pathPrefix string, skillSvc skillRegistry) {
 	tags := []string{"skills"}
 	if strings.Contains(pathPrefix, "admin") {
 		tags = append(tags, "admin")
@@ -222,7 +230,7 @@ type CreateSkillInput struct {
 }
 
 // createSkillHandler is the shared handler logic for creating skills
-func createSkillHandler(ctx context.Context, input *CreateSkillInput, skillSvc skillsvc.Registry) (*types.Response[skillmodels.SkillResponse], error) {
+func createSkillHandler(ctx context.Context, input *CreateSkillInput, skillSvc skillRegistry) (*types.Response[skillmodels.SkillResponse], error) {
 	// Create/update the skill (published defaults to false in the service layer)
 	createdSkill, err := skillSvc.CreateSkill(ctx, &input.Body)
 	if err != nil {
@@ -242,7 +250,7 @@ func createSkillHandler(ctx context.Context, input *CreateSkillInput, skillSvc s
 }
 
 // RegisterSkillsCreateEndpoint registers POST /skills (create or update; immediately visible).
-func RegisterSkillsCreateEndpoint(api huma.API, pathPrefix string, skillSvc skillsvc.Registry) {
+func RegisterSkillsCreateEndpoint(api huma.API, pathPrefix string, skillSvc skillRegistry) {
 	huma.Register(api, huma.Operation{
 		OperationID: "create-skill" + strings.ReplaceAll(pathPrefix, "/", "-"),
 		Method:      http.MethodPost,

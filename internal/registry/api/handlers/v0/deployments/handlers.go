@@ -11,12 +11,24 @@ import (
 	v0providers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/providers"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
-	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
 )
+
+type providerLookup interface {
+	GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error)
+}
+
+type deploymentRegistry interface {
+	GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
+	GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error)
+	CreateDeployment(ctx context.Context, req *models.Deployment) (*models.Deployment, error)
+	UndeployDeployment(ctx context.Context, deployment *models.Deployment) error
+	GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
+	CancelDeployment(ctx context.Context, deployment *models.Deployment) error
+}
 
 type DeploymentRequest = apitypes.DeploymentRequest
 
@@ -80,7 +92,7 @@ func removeDeploymentHTTPError(err error) error {
 }
 
 // RegisterDeploymentsEndpoints registers all deployment-related endpoints
-func RegisterDeploymentsEndpoints(api huma.API, basePath string, providerSvc providersvc.Registry, deploymentSvc deploymentsvc.Registry, extensions handlerext.PlatformExtensions) {
+func RegisterDeploymentsEndpoints(api huma.API, basePath string, providerSvc providerLookup, deploymentSvc deploymentRegistry, extensions handlerext.PlatformExtensions) {
 	// List all deployments
 	huma.Register(api, huma.Operation{
 		OperationID: "list-deployments",
