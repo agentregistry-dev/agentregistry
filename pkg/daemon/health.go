@@ -14,11 +14,11 @@ type HealthChecker struct {
 // IsResponding checks if the server is responding
 func (h *HealthChecker) IsResponding() bool {
 	httpClient := &http.Client{Timeout: 2 * time.Second}
-	versionURL := strings.TrimRight(h.BaseURL, "/") + "/version"
+	pingURL := strings.TrimRight(h.BaseURL, "/") + "/ping"
 
 	const maxRetries = 3
 	for i := range maxRetries {
-		resp, err := httpClient.Get(versionURL)
+		resp, err := httpClient.Get(pingURL)
 		if err == nil {
 			defer resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
@@ -42,7 +42,7 @@ func (h *HealthChecker) WaitForReady(timeout time.Duration) error {
 		resp, err := httpClient.Get(pingURL)
 		if err == nil {
 			resp.Body.Close()
-			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			if resp.StatusCode == http.StatusOK {
 				return nil
 			}
 		}
