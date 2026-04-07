@@ -12,10 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
-	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
-	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
-	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
-	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
@@ -301,13 +297,13 @@ func (h *fakeMCPDeploymentHarness) DeleteProvider(context.Context, string) error
 	return errors.New("not implemented")
 }
 
-func (h *fakeMCPDeploymentHarness) CreateDeployment(ctx context.Context, deployment *models.Deployment) error {
+func (h *fakeMCPDeploymentHarness) CreateManagedDeploymentRecord(ctx context.Context, deployment *models.Deployment) (*models.Deployment, error) {
 	created := deployment
 	if h.registry.createDeploymentRecordFn != nil {
 		var err error
 		created, err = h.registry.createDeploymentRecordFn(ctx, deployment)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if created == nil {
@@ -323,7 +319,7 @@ func (h *fakeMCPDeploymentHarness) CreateDeployment(ctx context.Context, deploym
 		stored.Env = map[string]string{}
 	}
 	h.deployments[stored.ID] = &stored
-	return nil
+	return &stored, nil
 }
 
 func (h *fakeMCPDeploymentHarness) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
@@ -376,6 +372,105 @@ func (h *fakeMCPDeploymentHarness) RemoveDeploymentByID(_ context.Context, id st
 	return nil
 }
 
+func (h *fakeMCPDeploymentHarness) CreateDeployment(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
+	created, err := h.CreateManagedDeploymentRecord(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	result, deployErr := h.Deploy(ctx, created)
+	if deployErr != nil {
+		if stateErr := h.ApplyFailedDeploymentAction(ctx, created.ID, deployErr, result); stateErr != nil {
+			return nil, stateErr
+		}
+		return nil, deployErr
+	}
+	if err := h.ApplyDeploymentActionResult(ctx, created.ID, result); err != nil {
+		return nil, err
+	}
+	return h.GetDeploymentByID(ctx, created.ID)
+	}
+
+func (h *fakeMCPDeploymentHarness) DeployServer(ctx context.Context, serverName, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
+	return h.CreateDeployment(ctx, &models.Deployment{
+		ServerName:   serverName,
+		Version:      version,
+		Env:          config,
+		PreferRemote: preferRemote,
+		ProviderID:   providerID,
+		ResourceType: "mcp",
+		Origin:       "managed",
+	})
+}
+
+func (h *fakeMCPDeploymentHarness) DeployAgent(ctx context.Context, agentName, version string, config map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
+	return h.CreateDeployment(ctx, &models.Deployment{
+		ServerName:   agentName,
+		Version:      version,
+		Env:          config,
+		PreferRemote: preferRemote,
+		ProviderID:   providerID,
+		ResourceType: "agent",
+		Origin:       "managed",
+	})
+}
+
+func (h *fakeMCPDeploymentHarness) ResolveDeploymentAdapter(platform string) (registrytypes.DeploymentPlatformAdapter, error) {
+	if platform != "" && platform != "local" {
+		return nil, fmt.Errorf("unsupported platform %q", platform)
+	}
+	return h, nil
+}
+
+func (h *fakeMCPDeploymentHarness) ResolveDeploymentAdapterByProviderID(context.Context, string) (registrytypes.DeploymentPlatformAdapter, error) {
+	return h, nil
+}
+
+func (h *fakeMCPDeploymentHarness) CleanupExistingDeployment(context.Context, string, string, string) error {
+	return nil
+}
+
+func (h *fakeMCPDeploymentHarness) ApplyDeploymentActionResult(ctx context.Context, deploymentID string, result *models.DeploymentActionResult) error {
+	status := models.DeploymentStatusDeployed
+	patch := &models.DeploymentStatePatch{}
+	if result != nil {
+		if result.Status != "" {
+			status = result.Status
+		}
+		if result.ProviderConfig != nil {
+			patch.ProviderConfig = &result.ProviderConfig
+		}
+		if result.ProviderMetadata != nil {
+			patch.ProviderMetadata = &result.ProviderMetadata
+		}
+		if result.Error != "" {
+			patch.Error = &result.Error
+		}
+	}
+	patch.Status = &status
+	return h.UpdateDeploymentState(ctx, deploymentID, patch)
+}
+
+func (h *fakeMCPDeploymentHarness) ApplyFailedDeploymentAction(ctx context.Context, deploymentID string, deployErr error, result *models.DeploymentActionResult) error {
+	status := models.DeploymentStatusFailed
+	message := ""
+	if deployErr != nil {
+		message = deployErr.Error()
+	}
+	patch := &models.DeploymentStatePatch{Status: &status, Error: &message}
+	if result != nil {
+		if result.ProviderConfig != nil {
+			patch.ProviderConfig = &result.ProviderConfig
+		}
+		if result.ProviderMetadata != nil {
+			patch.ProviderMetadata = &result.ProviderMetadata
+		}
+		if result.Error != "" {
+			patch.Error = &result.Error
+		}
+	}
+	return h.UpdateDeploymentState(ctx, deploymentID, patch)
+}
+
 func (h *fakeMCPDeploymentHarness) Platform() string { return "local" }
 
 func (h *fakeMCPDeploymentHarness) SupportedResourceTypes() []string {
@@ -417,12 +512,24 @@ func (h *fakeMCPDeploymentHarness) Undeploy(ctx context.Context, deployment *mod
 	return nil
 }
 
+func (h *fakeMCPDeploymentHarness) UndeployDeployment(ctx context.Context, deployment *models.Deployment) error {
+	return h.Undeploy(ctx, deployment)
+}
+
 func (h *fakeMCPDeploymentHarness) GetLogs(context.Context, *models.Deployment) ([]string, error) {
 	return nil, errors.New("not implemented")
 }
 
+func (h *fakeMCPDeploymentHarness) GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error) {
+	return h.GetLogs(ctx, deployment)
+}
+
 func (h *fakeMCPDeploymentHarness) Cancel(context.Context, *models.Deployment) error {
 	return errors.New("not implemented")
+}
+
+func (h *fakeMCPDeploymentHarness) CancelDeployment(ctx context.Context, deployment *models.Deployment) error {
+	return h.Cancel(ctx, deployment)
 }
 
 func (h *fakeMCPDeploymentHarness) Discover(context.Context, string) ([]*models.Deployment, error) {
@@ -686,16 +793,10 @@ func (s *fakeMCPSkillStore) DeleteSkill(context.Context, string, string) error {
 func newTestMCPServer(reg *fakeMCPRegistry) *mcp.Server {
 	deploymentHarness := newFakeMCPDeploymentHarness(reg)
 	return NewServer(
-		serversvc.New(serversvc.Dependencies{Servers: &fakeMCPServerStore{registry: reg}}),
-		agentsvc.New(agentsvc.Dependencies{Agents: &fakeMCPAgentStore{registry: reg}}),
-		skillsvc.New(skillsvc.Dependencies{Skills: &fakeMCPSkillStore{registry: reg}}),
-		deploymentsvc.New(deploymentsvc.Dependencies{
-			Providers:          deploymentHarness,
-			Servers:            &fakeMCPServerStore{registry: reg},
-			Agents:             &fakeMCPAgentStore{registry: reg},
-			Deployments:        deploymentHarness,
-			DeploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{"local": deploymentHarness},
-		}),
+		reg,
+		reg,
+		reg,
+		deploymentHarness,
 	)
 }
 

@@ -123,7 +123,10 @@ type Row interface {
 	Scan(dest ...any) error
 }
 
-type ServerStore interface {
+// Store is the single public persistence contract used by services.
+// Implementations hide transaction handling internally and pass a transaction-bound
+// Store into InTransaction callbacks.
+type Store interface {
 	DeleteServer(ctx context.Context, serverName, version string) error
 	CreateServer(ctx context.Context, serverJSON *apiv0.ServerJSON, officialMeta *apiv0.RegistryExtensions) (*apiv0.ServerResponse, error)
 	UpdateServer(ctx context.Context, serverName, version string, serverJSON *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
@@ -142,17 +145,13 @@ type ServerStore interface {
 	UpsertServerReadme(ctx context.Context, readme *ServerReadme) error
 	GetServerReadme(ctx context.Context, serverName, version string) (*ServerReadme, error)
 	GetLatestServerReadme(ctx context.Context, serverName string) (*ServerReadme, error)
-}
 
-type ProviderStore interface {
 	CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error)
 	ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error)
 	GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error)
 	UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error)
 	DeleteProvider(ctx context.Context, providerID string) error
-}
 
-type AgentStore interface {
 	CreateAgent(ctx context.Context, agentJSON *models.AgentJSON, officialMeta *models.AgentRegistryExtensions) (*models.AgentResponse, error)
 	UpdateAgent(ctx context.Context, agentName, version string, agentJSON *models.AgentJSON) (*models.AgentResponse, error)
 	SetAgentStatus(ctx context.Context, agentName, version, status string) (*models.AgentResponse, error)
@@ -167,9 +166,7 @@ type AgentStore interface {
 	DeleteAgent(ctx context.Context, agentName, version string) error
 	SetAgentEmbedding(ctx context.Context, agentName, version string, embedding *SemanticEmbedding) error
 	GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*SemanticEmbeddingMetadata, error)
-}
 
-type SkillStore interface {
 	CreateSkill(ctx context.Context, skillJSON *models.SkillJSON, officialMeta *models.SkillRegistryExtensions) (*models.SkillResponse, error)
 	UpdateSkill(ctx context.Context, skillName, version string, skillJSON *models.SkillJSON) (*models.SkillResponse, error)
 	SetSkillStatus(ctx context.Context, skillName, version, status string) (*models.SkillResponse, error)
@@ -182,9 +179,7 @@ type SkillStore interface {
 	CheckSkillVersionExists(ctx context.Context, skillName, version string) (bool, error)
 	UnmarkSkillAsLatest(ctx context.Context, skillName string) error
 	DeleteSkill(ctx context.Context, skillName, version string) error
-}
 
-type PromptStore interface {
 	CreatePrompt(ctx context.Context, promptJSON *models.PromptJSON, officialMeta *models.PromptRegistryExtensions) (*models.PromptResponse, error)
 	ListPrompts(ctx context.Context, filter *PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error)
 	GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error)
@@ -195,26 +190,13 @@ type PromptStore interface {
 	CheckPromptVersionExists(ctx context.Context, promptName, version string) (bool, error)
 	UnmarkPromptAsLatest(ctx context.Context, promptName string) error
 	DeletePrompt(ctx context.Context, promptName, version string) error
-}
 
-type DeploymentStore interface {
 	CreateDeployment(ctx context.Context, deployment *models.Deployment) error
 	GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
 	GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error)
 	UpdateDeploymentState(ctx context.Context, id string, patch *models.DeploymentStatePatch) error
 	RemoveDeploymentByID(ctx context.Context, id string) error
-}
 
-// Store is the single public persistence contract used by services.
-// Implementations hide transaction handling internally and pass a transaction-bound
-// Store into InTransaction callbacks.
-type Store interface {
-	ServerStore
-	AgentStore
-	SkillStore
-	PromptStore
-	ProviderStore
-	DeploymentStore
 	InTransaction(ctx context.Context, fn func(context.Context, Store) error) error
 	Close() error
 }

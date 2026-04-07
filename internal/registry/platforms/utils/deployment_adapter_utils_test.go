@@ -289,7 +289,7 @@ func (s *fakePlatformAgentStore) GetAgentEmbeddingMetadata(context.Context, stri
 }
 
 func newPlatformRuntimeServices(registry *fakePlatformRuntimeRegistry) (serversvc.Registry, agentsvc.Registry) {
-	return serversvc.New(serversvc.Dependencies{Servers: &fakePlatformServerStore{registry: registry}}), agentsvc.New(agentsvc.Dependencies{Agents: &fakePlatformAgentStore{registry: registry}})
+	return registry, registry
 }
 
 func TestSplitDeploymentRuntimeInputs(t *testing.T) {

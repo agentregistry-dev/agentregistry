@@ -23,7 +23,6 @@ const maxVersionsPerServer = 10000
 
 type Dependencies struct {
 	StoreDB            database.Store
-	Servers            database.ServerStore
 	Config             *config.Config
 	EmbeddingsProvider embeddings.Provider
 	Logger             *slog.Logger
@@ -42,12 +41,10 @@ type Registry interface {
 	DeleteServer(ctx context.Context, serverName, version string) error
 	UpsertServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error
 	GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error)
-	ValidateNoDuplicateRemoteURLs(ctx context.Context, servers database.ServerStore, serverDetail apiv0.ServerJSON) error
 }
 
 type Service struct {
 	storeDB            database.Store
-	servers            database.ServerStore
 	cfg                *config.Config
 	embeddingsProvider embeddings.Provider
 	logger             *slog.Logger
@@ -56,10 +53,6 @@ type Service struct {
 var _ Registry = (*Service)(nil)
 
 func New(deps Dependencies) Registry {
-	servers := deps.Servers
-	if servers == nil {
-		servers = deps.StoreDB
-	}
 	logger := deps.Logger
 	if logger == nil {
 		logger = slog.Default().With("component", "registry.server")
@@ -67,7 +60,6 @@ func New(deps Dependencies) Registry {
 
 	return &Service{
 		storeDB:            deps.StoreDB,
-		servers:            servers,
 		cfg:                deps.Config,
 		embeddingsProvider: deps.EmbeddingsProvider,
 		logger:             logger,
@@ -85,19 +77,19 @@ func (s *Service) ListServers(ctx context.Context, filter *database.ServerFilter
 		}
 	}
 
-	return s.servers.ListServers(ctx, filter, cursor, limit)
+	return s.storeDB.ListServers(ctx, filter, cursor, limit)
 }
 
 func (s *Service) GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
-	return s.servers.GetServerByName(ctx, serverName)
+	return s.storeDB.GetServerByName(ctx, serverName)
 }
 
 func (s *Service) GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
-	return s.servers.GetServerByNameAndVersion(ctx, serverName, version)
+	return s.storeDB.GetServerByNameAndVersion(ctx, serverName, version)
 }
 
 func (s *Service) GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
-	return s.servers.GetAllVersionsByServerName(ctx, serverName)
+	return s.storeDB.GetAllVersionsByServerName(ctx, serverName)
 }
 
 func (s *Service) CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
@@ -139,11 +131,11 @@ func (s *Service) StoreServerReadme(ctx context.Context, serverName, version str
 }
 
 func (s *Service) GetServerReadmeLatest(ctx context.Context, serverName string) (*database.ServerReadme, error) {
-	return s.servers.GetLatestServerReadme(ctx, serverName)
+	return s.storeDB.GetLatestServerReadme(ctx, serverName)
 }
 
 func (s *Service) GetServerReadmeByVersion(ctx context.Context, serverName, version string) (*database.ServerReadme, error) {
-	return s.servers.GetServerReadme(ctx, serverName, version)
+	return s.storeDB.GetServerReadme(ctx, serverName, version)
 }
 
 func (s *Service) DeleteServer(ctx context.Context, serverName, version string) error {
@@ -159,18 +151,14 @@ func (s *Service) UpsertServerEmbedding(ctx context.Context, serverName, version
 }
 
 func (s *Service) GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
-	return s.servers.GetServerEmbeddingMetadata(ctx, serverName, version)
+	return s.storeDB.GetServerEmbeddingMetadata(ctx, serverName, version)
 }
 
-func (s *Service) ValidateNoDuplicateRemoteURLs(ctx context.Context, servers database.ServerStore, serverDetail apiv0.ServerJSON) error {
-	return s.validateNoDuplicateRemoteURLs(ctx, servers, serverDetail)
-}
-
-func (s *Service) validateNoDuplicateRemoteURLs(ctx context.Context, servers database.ServerStore, serverDetail apiv0.ServerJSON) error {
+func (s *Service) validateNoDuplicateRemoteURLs(ctx context.Context, store database.Store, serverDetail apiv0.ServerJSON) error {
 	for _, remote := range serverDetail.Remotes {
 		filter := &database.ServerFilter{RemoteURL: &remote.URL}
 
-		conflictingServers, _, err := servers.ListServers(ctx, filter, "", 1000)
+		conflictingServers, _, err := store.ListServers(ctx, filter, "", 1000)
 		if err != nil {
 			return fmt.Errorf("failed to check remote URL conflict: %w", err)
 		}
@@ -185,7 +173,7 @@ func (s *Service) validateNoDuplicateRemoteURLs(ctx context.Context, servers dat
 	return nil
 }
 
-func (s *Service) createServerInTransaction(ctx context.Context, servers database.ServerStore, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
+func (s *Service) createServerInTransaction(ctx context.Context, store database.Store, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
 	if err := validators.ValidatePublishRequest(ctx, *req, s.cfg); err != nil {
 		return nil, err
 	}
@@ -193,15 +181,15 @@ func (s *Service) createServerInTransaction(ctx context.Context, servers databas
 	publishTime := time.Now()
 	serverJSON := *req
 
-	if err := servers.AcquireServerCreateLock(ctx, serverJSON.Name); err != nil {
+	if err := store.AcquireServerCreateLock(ctx, serverJSON.Name); err != nil {
 		return nil, err
 	}
 
-	if err := s.validateNoDuplicateRemoteURLs(ctx, servers, serverJSON); err != nil {
+	if err := s.validateNoDuplicateRemoteURLs(ctx, store, serverJSON); err != nil {
 		return nil, err
 	}
 
-	versionCount, err := servers.CountServerVersions(ctx, serverJSON.Name)
+	versionCount, err := store.CountServerVersions(ctx, serverJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -209,7 +197,7 @@ func (s *Service) createServerInTransaction(ctx context.Context, servers databas
 		return nil, database.ErrMaxVersionsReached
 	}
 
-	versionExists, err := servers.CheckVersionExists(ctx, serverJSON.Name, serverJSON.Version)
+	versionExists, err := store.CheckVersionExists(ctx, serverJSON.Name, serverJSON.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +205,7 @@ func (s *Service) createServerInTransaction(ctx context.Context, servers databas
 		return nil, database.ErrInvalidVersion
 	}
 
-	currentLatest, err := servers.GetCurrentLatestVersion(ctx, serverJSON.Name)
+	currentLatest, err := store.GetCurrentLatestVersion(ctx, serverJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -237,7 +225,7 @@ func (s *Service) createServerInTransaction(ctx context.Context, servers databas
 	}
 
 	if isNewLatest && currentLatest != nil {
-		if err := servers.UnmarkAsLatest(ctx, serverJSON.Name); err != nil {
+		if err := store.UnmarkAsLatest(ctx, serverJSON.Name); err != nil {
 			return nil, err
 		}
 	}
@@ -249,7 +237,7 @@ func (s *Service) createServerInTransaction(ctx context.Context, servers databas
 		IsLatest:    isNewLatest,
 	}
 
-	result, err := servers.CreateServer(ctx, &serverJSON, officialMeta)
+	result, err := store.CreateServer(ctx, &serverJSON, officialMeta)
 	if err != nil {
 		return nil, err
 	}
@@ -275,8 +263,8 @@ func (s *Service) createServerInTransaction(ctx context.Context, servers databas
 	return result, nil
 }
 
-func (s *Service) updateServerInTransaction(ctx context.Context, servers database.ServerStore, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
-	currentServer, err := servers.GetServerByNameAndVersion(ctx, serverName, version)
+func (s *Service) updateServerInTransaction(ctx context.Context, store database.Store, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
+	currentServer, err := store.GetServerByNameAndVersion(ctx, serverName, version)
 	if err != nil {
 		return nil, err
 	}
@@ -290,17 +278,17 @@ func (s *Service) updateServerInTransaction(ctx context.Context, servers databas
 	}
 
 	updatedServer := *req
-	if err := s.validateNoDuplicateRemoteURLs(ctx, servers, updatedServer); err != nil {
+	if err := s.validateNoDuplicateRemoteURLs(ctx, store, updatedServer); err != nil {
 		return nil, err
 	}
 
-	updatedServerResponse, err := servers.UpdateServer(ctx, serverName, version, &updatedServer)
+	updatedServerResponse, err := store.UpdateServer(ctx, serverName, version, &updatedServer)
 	if err != nil {
 		return nil, err
 	}
 
 	if newStatus != nil {
-		return servers.SetServerStatus(ctx, serverName, version, *newStatus)
+		return store.SetServerStatus(ctx, serverName, version, *newStatus)
 	}
 
 	return updatedServerResponse, nil

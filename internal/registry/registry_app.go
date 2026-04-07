@@ -158,7 +158,6 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	promptService := promptsvc.New(promptsvc.Dependencies{StoreDB: db})
 	deploymentService := deploymentsvc.New(deploymentsvc.Dependencies{
 		StoreDB:            db,
-		Providers:          providerService,
 		DeploymentAdapters: deploymentPlatforms,
 	})
 	agentRouteService := agentService

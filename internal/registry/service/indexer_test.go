@@ -8,8 +8,6 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
-	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
-	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -458,10 +456,9 @@ func (s *fakeIndexerStore) Close() error {
 }
 
 func newTestIndexer(registry *fakeIndexerRegistry, provider embeddings.Provider, dimensions int) Indexer {
-	store := newFakeIndexerStore(registry)
 	return NewIndexer(
-		serversvc.New(serversvc.Dependencies{StoreDB: store, Servers: store}),
-		agentsvc.New(agentsvc.Dependencies{StoreDB: store, Agents: store}),
+		registry,
+		registry,
 		provider,
 		dimensions,
 	)

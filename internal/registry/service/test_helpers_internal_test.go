@@ -21,12 +21,12 @@ import (
 )
 
 type storeBundle struct {
-	servers     database.ServerStore
-	agents      database.AgentStore
-	skills      database.SkillStore
-	prompts     database.PromptStore
-	providers   database.ProviderStore
-	deployments database.DeploymentStore
+	servers     database.Store
+	agents      database.Store
+	skills      database.Store
+	prompts     database.Store
+	providers   database.Store
+	deployments database.Store
 }
 
 func bundleFromStore(store database.Store) storeBundle {
@@ -42,12 +42,12 @@ func bundleFromStore(store database.Store) storeBundle {
 
 type registryServiceImpl struct {
 	storeDB            database.Store
-	serverRepo         database.ServerStore
-	agentRepo          database.AgentStore
-	skillRepo          database.SkillStore
-	promptRepo         database.PromptStore
-	providerRepo       database.ProviderStore
-	deploymentRepo     database.DeploymentStore
+	serverRepo         database.Store
+	agentRepo          database.Store
+	skillRepo          database.Store
+	promptRepo         database.Store
+	providerRepo       database.Store
+	deploymentRepo     database.Store
 	cfg                *config.Config
 	embeddingsProvider embeddings.Provider
 	deploymentAdapters map[string]registrytypes.DeploymentPlatformAdapter
@@ -98,8 +98,7 @@ func (s *registryServiceImpl) inTransaction(ctx context.Context, fn func(context
 func (s *registryServiceImpl) serverService() serversvc.Registry {
 	stores := s.readStores()
 	return serversvc.New(serversvc.Dependencies{
-		StoreDB:            s.storeDB,
-		Servers:            stores.servers,
+		StoreDB:            stores.servers,
 		Config:             s.cfg,
 		EmbeddingsProvider: s.embeddingsProvider,
 		Logger:             s.logger,
@@ -109,10 +108,7 @@ func (s *registryServiceImpl) serverService() serversvc.Registry {
 func (s *registryServiceImpl) agentService() agentsvc.Registry {
 	stores := s.readStores()
 	return agentsvc.New(agentsvc.Dependencies{
-		StoreDB:            s.storeDB,
-		Agents:             stores.agents,
-		Skills:             stores.skills,
-		Prompts:            stores.prompts,
+		StoreDB:            stores.agents,
 		Config:             s.cfg,
 		EmbeddingsProvider: s.embeddingsProvider,
 		Logger:             s.logger,
@@ -121,17 +117,17 @@ func (s *registryServiceImpl) agentService() agentsvc.Registry {
 
 func (s *registryServiceImpl) skillService() skillsvc.Registry {
 	stores := s.readStores()
-	return skillsvc.New(skillsvc.Dependencies{StoreDB: s.storeDB, Skills: stores.skills})
+	return skillsvc.New(skillsvc.Dependencies{StoreDB: stores.skills})
 }
 
 func (s *registryServiceImpl) promptService() promptsvc.Registry {
 	stores := s.readStores()
-	return promptsvc.New(promptsvc.Dependencies{StoreDB: s.storeDB, Prompts: stores.prompts})
+	return promptsvc.New(promptsvc.Dependencies{StoreDB: stores.prompts})
 }
 
 func (s *registryServiceImpl) providerService() providersvc.Registry {
 	stores := s.readStores()
-	return providersvc.New(providersvc.Dependencies{StoreDB: s.storeDB, Providers: stores.providers})
+	return providersvc.New(providersvc.Dependencies{StoreDB: stores.providers})
 }
 
 type deploymentServiceImpl struct {
@@ -145,11 +141,7 @@ func (s *deploymentServiceImpl) resolveDeploymentAdapterByProviderID(ctx context
 func (s *registryServiceImpl) deploymentService() *deploymentServiceImpl {
 	stores := s.readStores()
 	return &deploymentServiceImpl{Registry: deploymentsvc.New(deploymentsvc.Dependencies{
-		StoreDB:            s.storeDB,
-		Providers:          s.providerService(),
-		Servers:            stores.servers,
-		Agents:             stores.agents,
-		Deployments:        stores.deployments,
+		StoreDB:            stores.deployments,
 		DeploymentAdapters: s.deploymentAdapters,
 	})}
 }
@@ -344,13 +336,6 @@ func (s *registryServiceImpl) GetDeploymentLogs(ctx context.Context, deployment 
 
 func (s *registryServiceImpl) CancelDeployment(ctx context.Context, deployment *models.Deployment) error {
 	return s.deploymentService().CancelDeployment(ctx, deployment)
-}
-
-func (s *registryServiceImpl) validateNoDuplicateRemoteURLs(ctx context.Context, servers database.ServerStore, serverDetail apiv0.ServerJSON) error {
-	if servers == nil {
-		servers = s.readStores().servers
-	}
-	return s.serverService().ValidateNoDuplicateRemoteURLs(ctx, servers, serverDetail)
 }
 
 func (s *registryServiceImpl) resolveDeploymentAdapter(platform string) (registrytypes.DeploymentPlatformAdapter, error) {

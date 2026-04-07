@@ -183,7 +183,7 @@ func TestValidateNoDuplicateRemoteURLs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := serverService.ValidateNoDuplicateRemoteURLs(ctx, testDB, tt.serverDetail)
+			_, err := serverService.CreateServer(ctx, &tt.serverDetail)
 
 			if tt.expectError {
 				require.Error(t, err)

@@ -24,9 +24,6 @@ const maxVersionsPerAgent = 10000
 
 type Dependencies struct {
 	StoreDB            database.Store
-	Agents             database.AgentStore
-	Skills             database.SkillStore
-	Prompts            database.PromptStore
 	Config             *config.Config
 	EmbeddingsProvider embeddings.Provider
 	Logger             *slog.Logger
@@ -47,9 +44,6 @@ type Registry interface {
 
 type Service struct {
 	storeDB            database.Store
-	agents             database.AgentStore
-	skills             database.SkillStore
-	prompts            database.PromptStore
 	cfg                *config.Config
 	embeddingsProvider embeddings.Provider
 	logger             *slog.Logger
@@ -58,18 +52,6 @@ type Service struct {
 var _ Registry = (*Service)(nil)
 
 func New(deps Dependencies) Registry {
-	agents := deps.Agents
-	if agents == nil {
-		agents = deps.StoreDB
-	}
-	skills := deps.Skills
-	if skills == nil {
-		skills = deps.StoreDB
-	}
-	prompts := deps.Prompts
-	if prompts == nil {
-		prompts = deps.StoreDB
-	}
 	logger := deps.Logger
 	if logger == nil {
 		logger = slog.Default().With("component", "registry.agent")
@@ -77,9 +59,6 @@ func New(deps Dependencies) Registry {
 
 	return &Service{
 		storeDB:            deps.StoreDB,
-		agents:             agents,
-		skills:             skills,
-		prompts:            prompts,
 		cfg:                deps.Config,
 		embeddingsProvider: deps.EmbeddingsProvider,
 		logger:             logger,
@@ -95,19 +74,19 @@ func (s *Service) ListAgents(ctx context.Context, filter *database.AgentFilter, 
 			return nil, "", err
 		}
 	}
-	return s.agents.ListAgents(ctx, filter, cursor, limit)
+	return s.storeDB.ListAgents(ctx, filter, cursor, limit)
 }
 
 func (s *Service) GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error) {
-	return s.agents.GetAgentByName(ctx, agentName)
+	return s.storeDB.GetAgentByName(ctx, agentName)
 }
 
 func (s *Service) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
-	return s.agents.GetAgentByNameAndVersion(ctx, agentName, version)
+	return s.storeDB.GetAgentByNameAndVersion(ctx, agentName, version)
 }
 
 func (s *Service) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
-	return s.agents.GetAllVersionsByAgentName(ctx, agentName)
+	return s.storeDB.GetAllVersionsByAgentName(ctx, agentName)
 }
 
 func (s *Service) CreateAgent(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error) {
@@ -129,7 +108,7 @@ func (s *Service) UpsertAgentEmbedding(ctx context.Context, agentName, version s
 }
 
 func (s *Service) GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
-	return s.agents.GetAgentEmbeddingMetadata(ctx, agentName, version)
+	return s.storeDB.GetAgentEmbeddingMetadata(ctx, agentName, version)
 }
 
 func (s *Service) ResolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error) {
@@ -165,9 +144,9 @@ func (s *Service) ResolveAgentManifestPrompts(ctx context.Context, manifest *mod
 		var promptResp *models.PromptResponse
 		var err error
 		if version == "" || version == "latest" {
-			promptResp, err = s.prompts.GetPromptByName(ctx, promptName)
+			promptResp, err = s.storeDB.GetPromptByName(ctx, promptName)
 		} else {
-			promptResp, err = s.prompts.GetPromptByNameAndVersion(ctx, promptName, version)
+			promptResp, err = s.storeDB.GetPromptByNameAndVersion(ctx, promptName, version)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("resolve prompt %q version %q: %w", promptName, version, err)
@@ -186,7 +165,7 @@ func (s *Service) ResolveAgentManifestPrompts(ctx context.Context, manifest *mod
 	return resolved, nil
 }
 
-func (s *Service) createAgentInTransaction(ctx context.Context, agents database.AgentStore, req *models.AgentJSON) (*models.AgentResponse, error) {
+func (s *Service) createAgentInTransaction(ctx context.Context, store database.Store, req *models.AgentJSON) (*models.AgentResponse, error) {
 	if req == nil || req.Name == "" || req.Version == "" {
 		return nil, fmt.Errorf("invalid agent payload: name and version are required")
 	}
@@ -196,7 +175,7 @@ func (s *Service) createAgentInTransaction(ctx context.Context, agents database.
 
 	for _, remote := range agentJSON.Remotes {
 		filter := &database.AgentFilter{RemoteURL: &remote.URL}
-		existing, _, err := agents.ListAgents(ctx, filter, "", 1000)
+		existing, _, err := store.ListAgents(ctx, filter, "", 1000)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check remote URL conflict: %w", err)
 		}
@@ -207,7 +186,7 @@ func (s *Service) createAgentInTransaction(ctx context.Context, agents database.
 		}
 	}
 
-	versionCount, err := agents.CountAgentVersions(ctx, agentJSON.Name)
+	versionCount, err := store.CountAgentVersions(ctx, agentJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -215,7 +194,7 @@ func (s *Service) createAgentInTransaction(ctx context.Context, agents database.
 		return nil, database.ErrMaxVersionsReached
 	}
 
-	exists, err := agents.CheckAgentVersionExists(ctx, agentJSON.Name, agentJSON.Version)
+	exists, err := store.CheckAgentVersionExists(ctx, agentJSON.Name, agentJSON.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +202,7 @@ func (s *Service) createAgentInTransaction(ctx context.Context, agents database.
 		return nil, database.ErrInvalidVersion
 	}
 
-	currentLatest, err := agents.GetCurrentLatestAgentVersion(ctx, agentJSON.Name)
+	currentLatest, err := store.GetCurrentLatestAgentVersion(ctx, agentJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -240,7 +219,7 @@ func (s *Service) createAgentInTransaction(ctx context.Context, agents database.
 	}
 
 	if isNewLatest && currentLatest != nil {
-		if err := agents.UnmarkAgentAsLatest(ctx, agentJSON.Name); err != nil {
+		if err := store.UnmarkAgentAsLatest(ctx, agentJSON.Name); err != nil {
 			return nil, err
 		}
 	}
@@ -252,7 +231,7 @@ func (s *Service) createAgentInTransaction(ctx context.Context, agents database.
 		IsLatest:    isNewLatest,
 	}
 
-	result, err := agents.CreateAgent(ctx, &agentJSON, officialMeta)
+	result, err := store.CreateAgent(ctx, &agentJSON, officialMeta)
 	if err != nil {
 		return nil, err
 	}
@@ -300,7 +279,7 @@ func (s *Service) resolveSkillRef(ctx context.Context, skill models.SkillRef) (p
 		version = "latest"
 	}
 
-	skillResp, err := s.skills.GetSkillByNameAndVersion(ctx, registrySkillName, version)
+	skillResp, err := s.storeDB.GetSkillByNameAndVersion(ctx, registrySkillName, version)
 	if err != nil {
 		return platformtypes.AgentSkillRef{}, fmt.Errorf("fetch skill %q version %q: %w", registrySkillName, version, err)
 	}

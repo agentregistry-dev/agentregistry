@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service/internal/deployutil"
-	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -34,10 +33,6 @@ func IsUnsupportedDeploymentPlatformError(err error) bool {
 
 type Dependencies struct {
 	StoreDB            database.Store
-	Providers          providersvc.Registry
-	Servers            database.ServerStore
-	Agents             database.AgentStore
-	Deployments        database.DeploymentStore
 	DeploymentAdapters map[string]registrytypes.DeploymentPlatformAdapter
 }
 
@@ -60,48 +55,26 @@ type Registry interface {
 }
 
 type Service struct {
-	providers   providersvc.Registry
-	servers     database.ServerStore
-	agents      database.AgentStore
-	deployments database.DeploymentStore
-	adapters    map[string]registrytypes.DeploymentPlatformAdapter
+	storeDB  database.Store
+	adapters map[string]registrytypes.DeploymentPlatformAdapter
 }
 
 var _ Registry = (*Service)(nil)
 
 func New(deps Dependencies) Registry {
-	providers := deps.Providers
-	if providers == nil {
-		providers = providersvc.New(providersvc.Dependencies{StoreDB: deps.StoreDB})
-	}
-	servers := deps.Servers
-	if servers == nil {
-		servers = deps.StoreDB
-	}
-	agents := deps.Agents
-	if agents == nil {
-		agents = deps.StoreDB
-	}
-	deployments := deps.Deployments
-	if deployments == nil {
-		deployments = deps.StoreDB
-	}
 	adapters := deps.DeploymentAdapters
 	if adapters == nil {
 		adapters = map[string]registrytypes.DeploymentPlatformAdapter{}
 	}
 
 	return &Service{
-		providers:   providers,
-		servers:     servers,
-		agents:      agents,
-		deployments: deployments,
-		adapters:    adapters,
+		storeDB:  deps.StoreDB,
+		adapters: adapters,
 	}
 }
 
 func (s *Service) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
-	dbDeployments, err := s.deployments.GetDeployments(ctx, filter)
+	dbDeployments, err := s.storeDB.GetDeployments(ctx, filter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get deployments from DB: %w", err)
 	}
@@ -114,7 +87,7 @@ func (s *Service) GetDeployments(ctx context.Context, filter *models.DeploymentF
 }
 
 func (s *Service) GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error) {
-	deployment, err := s.deployments.GetDeploymentByID(ctx, id)
+	deployment, err := s.storeDB.GetDeploymentByID(ctx, id)
 	if err == nil {
 		return deployment, nil
 	}
@@ -149,7 +122,7 @@ func (s *Service) DeployAgent(ctx context.Context, agentName, version string, en
 }
 
 func (s *Service) RemoveDeploymentByID(ctx context.Context, id string) error {
-	deployment, err := s.deployments.GetDeploymentByID(ctx, id)
+	deployment, err := s.storeDB.GetDeploymentByID(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -208,7 +181,7 @@ func (s *Service) CreateDeployment(ctx context.Context, req *models.Deployment) 
 		return nil, err
 	}
 
-	return s.deployments.GetDeploymentByID(ctx, created.ID)
+	return s.storeDB.GetDeploymentByID(ctx, created.ID)
 }
 
 func (s *Service) UndeployDeployment(ctx context.Context, deployment *models.Deployment) error {
@@ -297,7 +270,7 @@ func (s *Service) CleanupExistingDeployment(ctx context.Context, resourceName, v
 		log.Printf("Warning: failed stale cleanup for deployment %s on platform %s: %v", existing.ID, cleanupPlatform, err)
 	}
 
-	if err := s.deployments.RemoveDeploymentByID(ctx, existing.ID); err != nil && !errors.Is(err, database.ErrNotFound) {
+	if err := s.storeDB.RemoveDeploymentByID(ctx, existing.ID); err != nil && !errors.Is(err, database.ErrNotFound) {
 		return fmt.Errorf("removing stale deployment record: %w", err)
 	}
 
@@ -330,7 +303,7 @@ func (s *Service) CreateManagedDeploymentRecord(ctx context.Context, req *models
 
 	switch deployment.ResourceType {
 	case resourceTypeMCP:
-		serverResp, err := s.servers.GetServerByNameAndVersion(ctx, deployment.ServerName, deployment.Version)
+		serverResp, err := s.storeDB.GetServerByNameAndVersion(ctx, deployment.ServerName, deployment.Version)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, fmt.Errorf("server %s not found in registry: %w", deployment.ServerName, database.ErrNotFound)
@@ -339,7 +312,7 @@ func (s *Service) CreateManagedDeploymentRecord(ctx context.Context, req *models
 		}
 		deployment.Version = serverResp.Server.Version
 	case resourceTypeAgent:
-		agentResp, err := s.agents.GetAgentByNameAndVersion(ctx, deployment.ServerName, deployment.Version)
+		agentResp, err := s.storeDB.GetAgentByNameAndVersion(ctx, deployment.ServerName, deployment.Version)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, fmt.Errorf("agent %s not found in registry: %w", deployment.ServerName, database.ErrNotFound)
@@ -351,11 +324,11 @@ func (s *Service) CreateManagedDeploymentRecord(ctx context.Context, req *models
 		return nil, fmt.Errorf("%w: invalid resource type %q", database.ErrInvalidInput, deployment.ResourceType)
 	}
 
-	if err := s.deployments.CreateDeployment(ctx, deployment); err != nil {
+	if err := s.storeDB.CreateDeployment(ctx, deployment); err != nil {
 		return nil, err
 	}
 
-	return s.deployments.GetDeploymentByID(ctx, deployment.ID)
+	return s.storeDB.GetDeploymentByID(ctx, deployment.ID)
 }
 
 func (s *Service) ApplyDeploymentActionResult(ctx context.Context, deploymentID string, result *models.DeploymentActionResult) error {
@@ -381,7 +354,7 @@ func (s *Service) ApplyDeploymentActionResult(ctx context.Context, deploymentID 
 		}
 	}
 
-	return s.deployments.UpdateDeploymentState(auth.WithSystemContext(ctx), deploymentID, patch)
+	return s.storeDB.UpdateDeploymentState(auth.WithSystemContext(ctx), deploymentID, patch)
 }
 
 func (s *Service) ApplyFailedDeploymentAction(ctx context.Context, deploymentID string, deployErr error, result *models.DeploymentActionResult) error {
@@ -408,7 +381,7 @@ func (s *Service) ApplyFailedDeploymentAction(ctx context.Context, deploymentID 
 		}
 	}
 
-	return s.deployments.UpdateDeploymentState(auth.WithSystemContext(ctx), deploymentID, patch)
+	return s.storeDB.UpdateDeploymentState(auth.WithSystemContext(ctx), deploymentID, patch)
 }
 
 func shouldIncludeDiscoveredDeployments(filter *models.DeploymentFilter) bool {
@@ -486,7 +459,7 @@ func (s *Service) appendDiscoveredDeployments(ctx context.Context, deployments [
 		}
 	}
 
-	providers, err := s.providers.ListProviders(ctx, platformFilter)
+	providers, err := s.storeDB.ListProviders(ctx, platformFilter)
 	if err != nil {
 		log.Printf("Warning: Failed to list providers for discovery: %v", err)
 		return deployments
@@ -568,7 +541,7 @@ func (s *Service) resolveProviderByID(ctx context.Context, providerID string) (*
 	if strings.TrimSpace(providerID) == "" {
 		return nil, fmt.Errorf("%w: provider id is required", database.ErrInvalidInput)
 	}
-	return s.providers.GetProviderByID(ctx, providerID)
+	return s.storeDB.GetProviderByID(ctx, providerID)
 }
 
 func deploymentAdapterSupportsResourceType(adapter registrytypes.DeploymentPlatformAdapter, resourceType string) bool {
@@ -585,7 +558,7 @@ func deploymentAdapterSupportsResourceType(adapter registrytypes.DeploymentPlatf
 
 func (s *Service) findDeploymentByIdentity(ctx context.Context, resourceName, version, artifactType string) (*models.Deployment, error) {
 	filter := &models.DeploymentFilter{ResourceType: &artifactType, ResourceName: &resourceName}
-	deployments, err := s.deployments.GetDeployments(ctx, filter)
+	deployments, err := s.storeDB.GetDeployments(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -640,5 +613,5 @@ func (s *Service) removeDeploymentRecord(ctx context.Context, deployment *models
 		return database.ErrInvalidInput
 	}
 
-	return s.deployments.RemoveDeploymentByID(ctx, deployment.ID)
+	return s.storeDB.RemoveDeploymentByID(ctx, deployment.ID)
 }

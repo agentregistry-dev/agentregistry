@@ -17,7 +17,6 @@ const maxVersionsPerSkill = 10000
 
 type Dependencies struct {
 	StoreDB database.Store
-	Skills  database.SkillStore
 }
 
 type Registry interface {
@@ -27,25 +26,17 @@ type Registry interface {
 	GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error)
 	CreateSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error)
 	DeleteSkill(ctx context.Context, skillName, version string) error
-	CreateSkillInTransaction(ctx context.Context, skills database.SkillStore, req *models.SkillJSON) (*models.SkillResponse, error)
 }
 
 type Service struct {
 	storeDB database.Store
-	skills  database.SkillStore
 }
 
 var _ Registry = (*Service)(nil)
 
 func New(deps Dependencies) Registry {
-	skills := deps.Skills
-	if skills == nil {
-		skills = deps.StoreDB
-	}
-
 	return &Service{
 		storeDB: deps.StoreDB,
-		skills:  skills,
 	}
 }
 
@@ -53,19 +44,19 @@ func (s *Service) ListSkills(ctx context.Context, filter *database.SkillFilter, 
 	if limit <= 0 {
 		limit = 30
 	}
-	return s.skills.ListSkills(ctx, filter, cursor, limit)
+	return s.storeDB.ListSkills(ctx, filter, cursor, limit)
 }
 
 func (s *Service) GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error) {
-	return s.skills.GetSkillByName(ctx, skillName)
+	return s.storeDB.GetSkillByName(ctx, skillName)
 }
 
 func (s *Service) GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
-	return s.skills.GetSkillByNameAndVersion(ctx, skillName, version)
+	return s.storeDB.GetSkillByNameAndVersion(ctx, skillName, version)
 }
 
 func (s *Service) GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
-	return s.skills.GetAllVersionsBySkillName(ctx, skillName)
+	return s.storeDB.GetAllVersionsBySkillName(ctx, skillName)
 }
 
 func (s *Service) CreateSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error) {
@@ -80,11 +71,7 @@ func (s *Service) DeleteSkill(ctx context.Context, skillName, version string) er
 	})
 }
 
-func (s *Service) CreateSkillInTransaction(ctx context.Context, skills database.SkillStore, req *models.SkillJSON) (*models.SkillResponse, error) {
-	return s.createSkillInTransaction(ctx, skills, req)
-}
-
-func (s *Service) createSkillInTransaction(ctx context.Context, skills database.SkillStore, req *models.SkillJSON) (*models.SkillResponse, error) {
+func (s *Service) createSkillInTransaction(ctx context.Context, store database.Store, req *models.SkillJSON) (*models.SkillResponse, error) {
 	if req == nil || req.Name == "" || req.Version == "" {
 		return nil, fmt.Errorf("invalid skill payload: name and version are required")
 	}
@@ -94,7 +81,7 @@ func (s *Service) createSkillInTransaction(ctx context.Context, skills database.
 
 	for _, remote := range skillJSON.Remotes {
 		filter := &database.SkillFilter{RemoteURL: &remote.URL}
-		existing, _, err := skills.ListSkills(ctx, filter, "", 1000)
+		existing, _, err := store.ListSkills(ctx, filter, "", 1000)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check remote URL conflict: %w", err)
 		}
@@ -105,7 +92,7 @@ func (s *Service) createSkillInTransaction(ctx context.Context, skills database.
 		}
 	}
 
-	versionCount, err := skills.CountSkillVersions(ctx, skillJSON.Name)
+	versionCount, err := store.CountSkillVersions(ctx, skillJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -113,7 +100,7 @@ func (s *Service) createSkillInTransaction(ctx context.Context, skills database.
 		return nil, database.ErrMaxVersionsReached
 	}
 
-	exists, err := skills.CheckSkillVersionExists(ctx, skillJSON.Name, skillJSON.Version)
+	exists, err := store.CheckSkillVersionExists(ctx, skillJSON.Name, skillJSON.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +108,7 @@ func (s *Service) createSkillInTransaction(ctx context.Context, skills database.
 		return nil, database.ErrInvalidVersion
 	}
 
-	currentLatest, err := skills.GetCurrentLatestSkillVersion(ctx, skillJSON.Name)
+	currentLatest, err := store.GetCurrentLatestSkillVersion(ctx, skillJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -138,7 +125,7 @@ func (s *Service) createSkillInTransaction(ctx context.Context, skills database.
 	}
 
 	if isNewLatest && currentLatest != nil {
-		if err := skills.UnmarkSkillAsLatest(ctx, skillJSON.Name); err != nil {
+		if err := store.UnmarkSkillAsLatest(ctx, skillJSON.Name); err != nil {
 			return nil, err
 		}
 	}
@@ -150,5 +137,5 @@ func (s *Service) createSkillInTransaction(ctx context.Context, skills database.
 		IsLatest:    isNewLatest,
 	}
 
-	return skills.CreateSkill(ctx, &skillJSON, officialMeta)
+	return store.CreateSkill(ctx, &skillJSON, officialMeta)
 }

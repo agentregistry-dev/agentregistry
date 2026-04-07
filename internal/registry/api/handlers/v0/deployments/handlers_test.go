@@ -303,12 +303,105 @@ func (f *fakeProviderDeploymentService) GetAgentEmbeddingMetadata(context.Contex
 	return nil, database.ErrNotFound
 }
 
+func (f *fakeProviderDeploymentService) CreateSkill(context.Context, *models.SkillJSON, *models.SkillRegistryExtensions) (*models.SkillResponse, error) {
+	return nil, database.ErrInvalidInput
+}
+
+func (f *fakeProviderDeploymentService) UpdateSkill(context.Context, string, string, *models.SkillJSON) (*models.SkillResponse, error) {
+	return nil, database.ErrInvalidInput
+}
+
+func (f *fakeProviderDeploymentService) SetSkillStatus(context.Context, string, string, string) (*models.SkillResponse, error) {
+	return nil, database.ErrInvalidInput
+}
+
+func (f *fakeProviderDeploymentService) ListSkills(context.Context, *database.SkillFilter, string, int) ([]*models.SkillResponse, string, error) {
+	return nil, "", nil
+}
+
+func (f *fakeProviderDeploymentService) GetSkillByName(context.Context, string) (*models.SkillResponse, error) {
+	return nil, database.ErrNotFound
+}
+
+func (f *fakeProviderDeploymentService) GetSkillByNameAndVersion(context.Context, string, string) (*models.SkillResponse, error) {
+	return nil, database.ErrNotFound
+}
+
+func (f *fakeProviderDeploymentService) GetAllVersionsBySkillName(context.Context, string) ([]*models.SkillResponse, error) {
+	return nil, database.ErrNotFound
+}
+
+func (f *fakeProviderDeploymentService) GetCurrentLatestSkillVersion(context.Context, string) (*models.SkillResponse, error) {
+	return nil, database.ErrNotFound
+}
+
+func (f *fakeProviderDeploymentService) CountSkillVersions(context.Context, string) (int, error) {
+	return 0, nil
+}
+
+func (f *fakeProviderDeploymentService) CheckSkillVersionExists(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+
+func (f *fakeProviderDeploymentService) UnmarkSkillAsLatest(context.Context, string) error {
+	return nil
+}
+
+func (f *fakeProviderDeploymentService) DeleteSkill(context.Context, string, string) error {
+	return nil
+}
+
+func (f *fakeProviderDeploymentService) CreatePrompt(context.Context, *models.PromptJSON, *models.PromptRegistryExtensions) (*models.PromptResponse, error) {
+	return nil, database.ErrInvalidInput
+}
+
+func (f *fakeProviderDeploymentService) ListPrompts(context.Context, *database.PromptFilter, string, int) ([]*models.PromptResponse, string, error) {
+	return nil, "", nil
+}
+
+func (f *fakeProviderDeploymentService) GetPromptByName(context.Context, string) (*models.PromptResponse, error) {
+	return nil, database.ErrNotFound
+}
+
+func (f *fakeProviderDeploymentService) GetPromptByNameAndVersion(context.Context, string, string) (*models.PromptResponse, error) {
+	return nil, database.ErrNotFound
+}
+
+func (f *fakeProviderDeploymentService) GetAllVersionsByPromptName(context.Context, string) ([]*models.PromptResponse, error) {
+	return nil, database.ErrNotFound
+}
+
+func (f *fakeProviderDeploymentService) GetCurrentLatestPromptVersion(context.Context, string) (*models.PromptResponse, error) {
+	return nil, database.ErrNotFound
+}
+
+func (f *fakeProviderDeploymentService) CountPromptVersions(context.Context, string) (int, error) {
+	return 0, nil
+}
+
+func (f *fakeProviderDeploymentService) CheckPromptVersionExists(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+
+func (f *fakeProviderDeploymentService) UnmarkPromptAsLatest(context.Context, string) error {
+	return nil
+}
+
+func (f *fakeProviderDeploymentService) DeletePrompt(context.Context, string, string) error {
+	return nil
+}
+
+func (f *fakeProviderDeploymentService) InTransaction(ctx context.Context, fn func(context.Context, database.Store) error) error {
+	return fn(ctx, f)
+}
+
+func (f *fakeProviderDeploymentService) Close() error {
+	return nil
+}
+
 func newTestDeploymentService(store *fakeProviderDeploymentService, adapters map[string]registrytypes.DeploymentPlatformAdapter) deploymentsvc.Registry {
 	return deploymentsvc.New(deploymentsvc.Dependencies{
-		Providers:          store,
-		Servers:            store,
-		Agents:             store,
-		Deployments:        store,
+		StoreDB:            store,
 		DeploymentAdapters: adapters,
 	})
 }

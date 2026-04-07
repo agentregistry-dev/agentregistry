@@ -134,7 +134,42 @@ func (f *fakeLocalPlatformRuntimeRegistry) ResolveAgentManifestPrompts(ctx conte
 	if f.resolvePromptsFn != nil {
 		return f.resolvePromptsFn(ctx, manifest)
 	}
-	return nil, nil
+	if manifest == nil || len(manifest.Prompts) == 0 {
+		return nil, nil
+	}
+
+	resolved := make([]platformtypes.ResolvedPrompt, 0, len(manifest.Prompts))
+	for _, ref := range manifest.Prompts {
+		promptName := ref.RegistryPromptName
+		if promptName == "" {
+			return nil, database.ErrInvalidInput
+		}
+
+		version := ref.RegistryPromptVersion
+		var promptResp *models.PromptResponse
+		var err error
+		if version == "" || version == "latest" {
+			promptResp, err = f.getPromptByNameFn(ctx, promptName)
+		} else if f.getPromptByVerFn != nil {
+			promptResp, err = f.getPromptByVerFn(ctx, promptName, version)
+		} else {
+			promptResp, err = f.getPromptByNameFn(ctx, promptName)
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		displayName := ref.Name
+		if displayName == "" {
+			displayName = promptName
+		}
+		resolved = append(resolved, platformtypes.ResolvedPrompt{
+			Name:    displayName,
+			Content: promptResp.Prompt.Content,
+		})
+	}
+
+	return resolved, nil
 }
 
 type fakeLocalServerStore struct{ registry *fakeLocalPlatformRuntimeRegistry }
@@ -328,7 +363,7 @@ func (s *fakeLocalPromptStore) DeletePrompt(context.Context, string, string) err
 }
 
 func newLocalRuntimeServices(registry *fakeLocalPlatformRuntimeRegistry) (serversvc.Registry, agentsvc.Registry) {
-	return serversvc.New(serversvc.Dependencies{Servers: &fakeLocalServerStore{registry: registry}}), agentsvc.New(agentsvc.Dependencies{Agents: &fakeLocalAgentStore{registry: registry}, Prompts: &fakeLocalPromptStore{registry: registry}})
+	return registry, registry
 }
 
 func TestUndeploy_RemovesLocalArtifactsWhenRegistryArtifactIsMissing(t *testing.T) {
