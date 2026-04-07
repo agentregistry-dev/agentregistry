@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
-	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -34,67 +33,14 @@ func newFakeIndexerRegistry() *fakeIndexerRegistry {
 	}
 }
 
-func (f *fakeIndexerRegistry) BrowseServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
+func (f *fakeIndexerRegistry) BrowseServers(_ context.Context, _ *database.ServerFilter, cursor string, _ int) ([]*apiv0.ServerResponse, string, error) {
 	if cursor != "" {
 		return nil, "", nil
 	}
 	return f.Servers, "", nil
 }
 
-func (f *fakeIndexerRegistry) LookupServer(context.Context, string) (*apiv0.ServerResponse, error) {
-	if len(f.Servers) == 0 {
-		return nil, database.ErrNotFound
-	}
-	return f.Servers[0], nil
-}
-
-func (f *fakeIndexerRegistry) LookupServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
-	for _, server := range f.Servers {
-		if server.Server.Name == serverName && (version == "" || server.Server.Version == version) {
-			return server, nil
-		}
-	}
-	return nil, database.ErrNotFound
-}
-
-func (f *fakeIndexerRegistry) ServerHistory(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
-	versions := make([]*apiv0.ServerResponse, 0, len(f.Servers))
-	for _, server := range f.Servers {
-		if server.Server.Name == serverName {
-			versions = append(versions, server)
-		}
-	}
-	if len(versions) == 0 {
-		return nil, database.ErrNotFound
-	}
-	return versions, nil
-}
-
-func (f *fakeIndexerRegistry) PublishServer(context.Context, *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
-	return nil, database.ErrInvalidInput
-}
-
-func (f *fakeIndexerRegistry) ReviseServer(context.Context, string, string, *apiv0.ServerJSON, *string) (*apiv0.ServerResponse, error) {
-	return nil, database.ErrInvalidInput
-}
-
-func (f *fakeIndexerRegistry) SaveServerReadme(context.Context, string, string, []byte, string) error {
-	return nil
-}
-
-func (f *fakeIndexerRegistry) LatestServerReadme(context.Context, string) (*database.ServerReadme, error) {
-	return nil, database.ErrNotFound
-}
-
-func (f *fakeIndexerRegistry) ServerReadme(context.Context, string, string) (*database.ServerReadme, error) {
-	return nil, database.ErrNotFound
-}
-
-func (f *fakeIndexerRegistry) RemoveServer(context.Context, string, string) error {
-	return nil
-}
-
-func (f *fakeIndexerRegistry) ServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
+func (f *fakeIndexerRegistry) ServerEmbeddingMetadata(_ context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
 	key := serverName + "@" + version
 	if meta, ok := f.ServerEmbeddingMeta[key]; ok {
 		return meta, nil
@@ -102,56 +48,19 @@ func (f *fakeIndexerRegistry) ServerEmbeddingMetadata(ctx context.Context, serve
 	return nil, database.ErrNotFound
 }
 
-func (f *fakeIndexerRegistry) SaveServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error {
+func (f *fakeIndexerRegistry) SaveServerEmbedding(_ context.Context, _, _ string, _ *database.SemanticEmbedding) error {
 	f.UpsertServerEmbeddingCalls++
 	return nil
 }
 
-func (f *fakeIndexerRegistry) BrowseAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
+func (f *fakeIndexerRegistry) BrowseAgents(_ context.Context, _ *database.AgentFilter, cursor string, _ int) ([]*models.AgentResponse, string, error) {
 	if cursor != "" {
 		return nil, "", nil
 	}
 	return f.Agents, "", nil
 }
 
-func (f *fakeIndexerRegistry) LookupAgent(context.Context, string) (*models.AgentResponse, error) {
-	if len(f.Agents) == 0 {
-		return nil, database.ErrNotFound
-	}
-	return f.Agents[0], nil
-}
-
-func (f *fakeIndexerRegistry) LookupAgentVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
-	for _, agent := range f.Agents {
-		if agent.Agent.Name == agentName && (version == "" || agent.Agent.Version == version) {
-			return agent, nil
-		}
-	}
-	return nil, database.ErrNotFound
-}
-
-func (f *fakeIndexerRegistry) AgentHistory(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
-	versions := make([]*models.AgentResponse, 0, len(f.Agents))
-	for _, agent := range f.Agents {
-		if agent.Agent.Name == agentName {
-			versions = append(versions, agent)
-		}
-	}
-	if len(versions) == 0 {
-		return nil, database.ErrNotFound
-	}
-	return versions, nil
-}
-
-func (f *fakeIndexerRegistry) PublishAgent(context.Context, *models.AgentJSON) (*models.AgentResponse, error) {
-	return nil, database.ErrInvalidInput
-}
-
-func (f *fakeIndexerRegistry) RemoveAgent(context.Context, string, string) error {
-	return nil
-}
-
-func (f *fakeIndexerRegistry) AgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
+func (f *fakeIndexerRegistry) AgentEmbeddingMetadata(_ context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
 	key := agentName + "@" + version
 	if meta, ok := f.AgentEmbeddingMeta[key]; ok {
 		return meta, nil
@@ -159,321 +68,13 @@ func (f *fakeIndexerRegistry) AgentEmbeddingMetadata(ctx context.Context, agentN
 	return nil, database.ErrNotFound
 }
 
-func (f *fakeIndexerRegistry) SaveAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error {
+func (f *fakeIndexerRegistry) SaveAgentEmbedding(_ context.Context, _, _ string, _ *database.SemanticEmbedding) error {
 	f.UpsertAgentEmbeddingCalls++
 	return nil
 }
 
-func (f *fakeIndexerRegistry) ResolveAgentManifestSkills(context.Context, *models.AgentManifest) ([]platformtypes.AgentSkillRef, error) {
-	return nil, nil
-}
-
-func (f *fakeIndexerRegistry) ResolveAgentManifestPrompts(context.Context, *models.AgentManifest) ([]platformtypes.ResolvedPrompt, error) {
-	return nil, nil
-}
-
-type fakeIndexerServerStore struct{ registry *fakeIndexerRegistry }
-
-func (s *fakeIndexerServerStore) DeleteServer(context.Context, string, string) error {
-	return nil
-}
-
-func (s *fakeIndexerServerStore) CreateServer(context.Context, *apiv0.ServerJSON, *apiv0.RegistryExtensions) (*apiv0.ServerResponse, error) {
-	return nil, database.ErrInvalidInput
-}
-
-func (s *fakeIndexerServerStore) UpdateServer(context.Context, string, string, *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
-	return nil, database.ErrInvalidInput
-}
-
-func (s *fakeIndexerServerStore) SetServerStatus(context.Context, string, string, string) (*apiv0.ServerResponse, error) {
-	return nil, database.ErrInvalidInput
-}
-
-func (s *fakeIndexerServerStore) ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
-	return s.registry.BrowseServers(ctx, filter, cursor, limit)
-}
-
-func (s *fakeIndexerServerStore) GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
-	return s.registry.LookupServer(ctx, serverName)
-}
-
-func (s *fakeIndexerServerStore) GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
-	return s.registry.LookupServerVersion(ctx, serverName, version)
-}
-
-func (s *fakeIndexerServerStore) GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
-	return s.registry.ServerHistory(ctx, serverName)
-}
-
-func (s *fakeIndexerServerStore) GetCurrentLatestVersion(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
-	return s.registry.LookupServer(ctx, serverName)
-}
-
-func (s *fakeIndexerServerStore) CountServerVersions(context.Context, string) (int, error) {
-	return 1, nil
-}
-
-func (s *fakeIndexerServerStore) CheckVersionExists(context.Context, string, string) (bool, error) {
-	return true, nil
-}
-
-func (s *fakeIndexerServerStore) UnmarkAsLatest(context.Context, string) error {
-	return nil
-}
-
-func (s *fakeIndexerServerStore) AcquireServerCreateLock(context.Context, string) error {
-	return nil
-}
-
-func (s *fakeIndexerServerStore) SetServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error {
-	return s.registry.SaveServerEmbedding(ctx, serverName, version, embedding)
-}
-
-func (s *fakeIndexerServerStore) GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
-	return s.registry.ServerEmbeddingMetadata(ctx, serverName, version)
-}
-
-func (s *fakeIndexerServerStore) UpsertServerReadme(context.Context, *database.ServerReadme) error {
-	return nil
-}
-
-func (s *fakeIndexerServerStore) GetServerReadme(context.Context, string, string) (*database.ServerReadme, error) {
-	return nil, database.ErrNotFound
-}
-
-func (s *fakeIndexerServerStore) GetLatestServerReadme(context.Context, string) (*database.ServerReadme, error) {
-	return nil, database.ErrNotFound
-}
-
-type fakeIndexerAgentStore struct{ registry *fakeIndexerRegistry }
-
-func (s *fakeIndexerAgentStore) CreateAgent(context.Context, *models.AgentJSON, *models.AgentRegistryExtensions) (*models.AgentResponse, error) {
-	return nil, database.ErrInvalidInput
-}
-
-func (s *fakeIndexerAgentStore) UpdateAgent(context.Context, string, string, *models.AgentJSON) (*models.AgentResponse, error) {
-	return nil, database.ErrInvalidInput
-}
-
-func (s *fakeIndexerAgentStore) SetAgentStatus(context.Context, string, string, string) (*models.AgentResponse, error) {
-	return nil, database.ErrInvalidInput
-}
-
-func (s *fakeIndexerAgentStore) ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
-	return s.registry.BrowseAgents(ctx, filter, cursor, limit)
-}
-
-func (s *fakeIndexerAgentStore) GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error) {
-	return s.registry.LookupAgent(ctx, agentName)
-}
-
-func (s *fakeIndexerAgentStore) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
-	return s.registry.LookupAgentVersion(ctx, agentName, version)
-}
-
-func (s *fakeIndexerAgentStore) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
-	return s.registry.AgentHistory(ctx, agentName)
-}
-
-func (s *fakeIndexerAgentStore) GetCurrentLatestAgentVersion(ctx context.Context, agentName string) (*models.AgentResponse, error) {
-	return s.registry.LookupAgent(ctx, agentName)
-}
-
-func (s *fakeIndexerAgentStore) CountAgentVersions(context.Context, string) (int, error) {
-	return 1, nil
-}
-
-func (s *fakeIndexerAgentStore) CheckAgentVersionExists(context.Context, string, string) (bool, error) {
-	return true, nil
-}
-
-func (s *fakeIndexerAgentStore) UnmarkAgentAsLatest(context.Context, string) error {
-	return nil
-}
-
-func (s *fakeIndexerAgentStore) DeleteAgent(context.Context, string, string) error {
-	return nil
-}
-
-func (s *fakeIndexerAgentStore) SetAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error {
-	return s.registry.SaveAgentEmbedding(ctx, agentName, version, embedding)
-}
-
-func (s *fakeIndexerAgentStore) GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
-	return s.registry.AgentEmbeddingMetadata(ctx, agentName, version)
-}
-
-type fakeIndexerNoopStore struct{}
-
-func (fakeIndexerNoopStore) CreateSkill(context.Context, *models.SkillJSON, *models.SkillRegistryExtensions) (*models.SkillResponse, error) {
-	return nil, database.ErrInvalidInput
-}
-
-func (fakeIndexerNoopStore) UpdateSkill(context.Context, string, string, *models.SkillJSON) (*models.SkillResponse, error) {
-	return nil, database.ErrInvalidInput
-}
-
-func (fakeIndexerNoopStore) SetSkillStatus(context.Context, string, string, string) (*models.SkillResponse, error) {
-	return nil, database.ErrInvalidInput
-}
-
-func (fakeIndexerNoopStore) ListSkills(context.Context, *database.SkillFilter, string, int) ([]*models.SkillResponse, string, error) {
-	return nil, "", nil
-}
-
-func (fakeIndexerNoopStore) GetSkillByName(context.Context, string) (*models.SkillResponse, error) {
-	return nil, database.ErrNotFound
-}
-
-func (fakeIndexerNoopStore) GetSkillByNameAndVersion(context.Context, string, string) (*models.SkillResponse, error) {
-	return nil, database.ErrNotFound
-}
-
-func (fakeIndexerNoopStore) GetAllVersionsBySkillName(context.Context, string) ([]*models.SkillResponse, error) {
-	return nil, database.ErrNotFound
-}
-
-func (fakeIndexerNoopStore) GetCurrentLatestSkillVersion(context.Context, string) (*models.SkillResponse, error) {
-	return nil, database.ErrNotFound
-}
-
-func (fakeIndexerNoopStore) CountSkillVersions(context.Context, string) (int, error) {
-	return 0, nil
-}
-
-func (fakeIndexerNoopStore) CheckSkillVersionExists(context.Context, string, string) (bool, error) {
-	return false, nil
-}
-
-func (fakeIndexerNoopStore) UnmarkSkillAsLatest(context.Context, string) error {
-	return nil
-}
-
-func (fakeIndexerNoopStore) DeleteSkill(context.Context, string, string) error {
-	return nil
-}
-
-func (fakeIndexerNoopStore) CreatePrompt(context.Context, *models.PromptJSON, *models.PromptRegistryExtensions) (*models.PromptResponse, error) {
-	return nil, database.ErrInvalidInput
-}
-
-func (fakeIndexerNoopStore) ListPrompts(context.Context, *database.PromptFilter, string, int) ([]*models.PromptResponse, string, error) {
-	return nil, "", nil
-}
-
-func (fakeIndexerNoopStore) GetPromptByName(context.Context, string) (*models.PromptResponse, error) {
-	return nil, database.ErrNotFound
-}
-
-func (fakeIndexerNoopStore) GetPromptByNameAndVersion(context.Context, string, string) (*models.PromptResponse, error) {
-	return nil, database.ErrNotFound
-}
-
-func (fakeIndexerNoopStore) GetAllVersionsByPromptName(context.Context, string) ([]*models.PromptResponse, error) {
-	return nil, database.ErrNotFound
-}
-
-func (fakeIndexerNoopStore) GetCurrentLatestPromptVersion(context.Context, string) (*models.PromptResponse, error) {
-	return nil, database.ErrNotFound
-}
-
-func (fakeIndexerNoopStore) CountPromptVersions(context.Context, string) (int, error) {
-	return 0, nil
-}
-
-func (fakeIndexerNoopStore) CheckPromptVersionExists(context.Context, string, string) (bool, error) {
-	return false, nil
-}
-
-func (fakeIndexerNoopStore) UnmarkPromptAsLatest(context.Context, string) error {
-	return nil
-}
-
-func (fakeIndexerNoopStore) DeletePrompt(context.Context, string, string) error {
-	return nil
-}
-
-func (fakeIndexerNoopStore) CreateProvider(context.Context, *models.CreateProviderInput) (*models.Provider, error) {
-	return nil, database.ErrInvalidInput
-}
-
-func (fakeIndexerNoopStore) ListProviders(context.Context, *string) ([]*models.Provider, error) {
-	return nil, nil
-}
-
-func (fakeIndexerNoopStore) GetProviderByID(context.Context, string) (*models.Provider, error) {
-	return nil, database.ErrNotFound
-}
-
-func (fakeIndexerNoopStore) UpdateProvider(context.Context, string, *models.UpdateProviderInput) (*models.Provider, error) {
-	return nil, database.ErrInvalidInput
-}
-
-func (fakeIndexerNoopStore) DeleteProvider(context.Context, string) error {
-	return nil
-}
-
-func (fakeIndexerNoopStore) CreateDeployment(context.Context, *models.Deployment) error {
-	return database.ErrInvalidInput
-}
-
-func (fakeIndexerNoopStore) GetDeployments(context.Context, *models.DeploymentFilter) ([]*models.Deployment, error) {
-	return nil, nil
-}
-
-func (fakeIndexerNoopStore) GetDeploymentByID(context.Context, string) (*models.Deployment, error) {
-	return nil, database.ErrNotFound
-}
-
-func (fakeIndexerNoopStore) UpdateDeploymentState(context.Context, string, *models.DeploymentStatePatch) error {
-	return nil
-}
-
-func (fakeIndexerNoopStore) RemoveDeploymentByID(context.Context, string) error {
-	return nil
-}
-
-type fakeIndexerStore struct {
-	*fakeIndexerServerStore
-	*fakeIndexerAgentStore
-	fakeIndexerNoopStore
-}
-
-func newFakeIndexerStore(registry *fakeIndexerRegistry) *fakeIndexerStore {
-	return &fakeIndexerStore{
-		fakeIndexerServerStore: &fakeIndexerServerStore{registry: registry},
-		fakeIndexerAgentStore:  &fakeIndexerAgentStore{registry: registry},
-	}
-}
-
-func (s *fakeIndexerStore) Servers() database.ServerStore { return s.fakeIndexerServerStore }
-
-func (s *fakeIndexerStore) Providers() database.ProviderStore { return nil }
-
-func (s *fakeIndexerStore) Agents() database.AgentStore { return s.fakeIndexerAgentStore }
-
-func (s *fakeIndexerStore) Skills() database.SkillStore { return nil }
-
-func (s *fakeIndexerStore) Prompts() database.PromptStore { return nil }
-
-func (s *fakeIndexerStore) Deployments() database.DeploymentStore { return nil }
-
-func (s *fakeIndexerStore) InTransaction(ctx context.Context, fn func(context.Context, database.Scope) error) error {
-	return fn(ctx, s)
-}
-
-func (s *fakeIndexerStore) Close() error {
-	return nil
-}
-
 func newTestIndexer(registry *fakeIndexerRegistry, provider embeddings.Provider, dimensions int) Indexer {
-	return NewIndexer(
-		registry,
-		registry,
-		provider,
-		dimensions,
-	)
+	return NewIndexer(registry, registry, provider, dimensions)
 }
 
 // mockProvider implements embeddings.Provider for testing.

@@ -222,10 +222,6 @@ func (s *registryServiceImpl) SaveServerEmbedding(ctx context.Context, serverNam
 	return s.serverService().SaveServerEmbedding(ctx, serverName, version, embedding)
 }
 
-func (s *registryServiceImpl) ServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
-	return s.serverService().ServerEmbeddingMetadata(ctx, serverName, version)
-}
-
 func (s *registryServiceImpl) BrowseAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
 	return s.agentService().BrowseAgents(ctx, filter, cursor, limit)
 }
@@ -256,14 +252,6 @@ func (s *registryServiceImpl) ResolveAgentManifestPrompts(ctx context.Context, m
 
 func (s *registryServiceImpl) RemoveAgent(ctx context.Context, agentName, version string) error {
 	return s.agentService().RemoveAgent(ctx, agentName, version)
-}
-
-func (s *registryServiceImpl) SaveAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error {
-	return s.agentService().SaveAgentEmbedding(ctx, agentName, version, embedding)
-}
-
-func (s *registryServiceImpl) AgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
-	return s.agentService().AgentEmbeddingMetadata(ctx, agentName, version)
 }
 
 func (s *registryServiceImpl) BrowseSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {

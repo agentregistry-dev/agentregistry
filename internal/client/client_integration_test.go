@@ -1383,16 +1383,18 @@ func newClientWithInProcessServer(t *testing.T, fake *fakeClientRegistry) (*Clie
 
 	router.NewHumaAPI(
 		cfg,
-		serversvc.New(serversvc.Dependencies{StoreDB: store, Config: cfg}),
-		agentsvc.New(agentsvc.Dependencies{StoreDB: store, Config: cfg}),
-		skillsvc.New(skillsvc.Dependencies{StoreDB: store}),
-		promptsvc.New(promptsvc.Dependencies{StoreDB: store}),
-		providerRegistry,
-		deploymentsvc.New(deploymentsvc.Dependencies{
-			StoreDB:            store,
-			Providers:          providerRegistry,
-			DeploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{"local": deploymentAdapter},
-		}),
+		router.RegistryServices{
+			Server:  serversvc.New(serversvc.Dependencies{StoreDB: store, Config: cfg}),
+			Agent:   agentsvc.New(agentsvc.Dependencies{StoreDB: store, Config: cfg}),
+			Skill:   skillsvc.New(skillsvc.Dependencies{StoreDB: store}),
+			Prompt:  promptsvc.New(promptsvc.Dependencies{StoreDB: store}),
+			Provider: providerRegistry,
+			Deployment: deploymentsvc.New(deploymentsvc.Dependencies{
+				StoreDB:            store,
+				Providers:          providerRegistry,
+				DeploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{"local": deploymentAdapter},
+			}),
+		},
 		mux,
 		metrics,
 		versionInfo,

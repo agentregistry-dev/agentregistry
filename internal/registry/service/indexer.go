@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
-	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
-	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
+	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
 // IndexOptions configures an indexing operation.
@@ -39,6 +39,20 @@ type IndexResult struct {
 // resource is "servers" or "agents".
 type IndexProgressCallback func(resource string, stats IndexStats)
 
+// ServerEmbeddingSource is the narrow interface the Indexer needs to index server embeddings.
+type ServerEmbeddingSource interface {
+	BrowseServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
+	ServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error)
+	SaveServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error
+}
+
+// AgentEmbeddingSource is the narrow interface the Indexer needs to index agent embeddings.
+type AgentEmbeddingSource interface {
+	BrowseAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error)
+	AgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error)
+	SaveAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error
+}
+
 // Indexer defines the interface for embedding indexing operations.
 type Indexer interface {
 	Run(ctx context.Context, opts IndexOptions, onProgress IndexProgressCallback) (*IndexResult, error)
@@ -46,15 +60,15 @@ type Indexer interface {
 
 // indexerImpl is the concrete implementation of Indexer.
 type indexerImpl struct {
-	servers    serversvc.Registry
-	agents     agentsvc.Registry
+	servers    ServerEmbeddingSource
+	agents     AgentEmbeddingSource
 	provider   embeddings.Provider
 	dimensions int
 	logger     *slog.Logger
 }
 
 // NewIndexer creates a new embeddings indexer.
-func NewIndexer(servers serversvc.Registry, agents agentsvc.Registry, provider embeddings.Provider, dimensions int) Indexer {
+func NewIndexer(servers ServerEmbeddingSource, agents AgentEmbeddingSource, provider embeddings.Provider, dimensions int) Indexer {
 	return &indexerImpl{
 		servers:    servers,
 		agents:     agents,

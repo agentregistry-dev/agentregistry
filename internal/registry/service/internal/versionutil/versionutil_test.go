@@ -1,10 +1,10 @@
-package service_test
+package versionutil_test
 
 import (
 	"testing"
 	"time"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/service/internal/versionutil"
 )
 
 func TestIsSemanticVersion(t *testing.T) {
@@ -45,7 +45,7 @@ func TestIsSemanticVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := service.IsSemanticVersion(tt.version); got != tt.want {
+			if got := versionutil.IsSemanticVersion(tt.version); got != tt.want {
 				t.Errorf("IsSemanticVersion(%q) = %v, want %v", tt.version, got, tt.want)
 			}
 		})
@@ -108,7 +108,7 @@ func TestCompareSemanticVersions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			now := time.Now()
-			if got := service.CompareVersions(tt.version1, tt.version2, now, now); got != tt.want {
+			if got := versionutil.CompareVersions(tt.version1, tt.version2, now, now); got != tt.want {
 				t.Errorf("CompareVersions(%q, %q, %v, %v) = %v, want %v", tt.version1, tt.version2, now, now, got, tt.want)
 			}
 		})
@@ -155,7 +155,7 @@ func TestCompareVersions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := service.CompareVersions(tt.version1, tt.version2, tt.timestamp1, tt.timestamp2); got != tt.want {
+			if got := versionutil.CompareVersions(tt.version1, tt.version2, tt.timestamp1, tt.timestamp2); got != tt.want {
 				t.Errorf("CompareVersions(%q, %q, %v, %v) = %v, want %v",
 					tt.version1, tt.version2, tt.timestamp1, tt.timestamp2, got, tt.want)
 			}

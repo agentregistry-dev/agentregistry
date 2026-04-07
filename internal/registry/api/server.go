@@ -17,12 +17,6 @@ import (
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
-	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
-	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
-	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
-	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
-	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
-	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 )
@@ -156,12 +150,7 @@ func (s *Server) Mux() *http.ServeMux {
 // Note: AuthZ is handled at the DB/service layer, not at the API layer.
 func NewServer(
 	cfg *config.Config,
-	serverSvc serversvc.Registry,
-	agentSvc agentsvc.Registry,
-	skillSvc skillsvc.Registry,
-	promptSvc promptsvc.Registry,
-	providerSvc providersvc.Registry,
-	deploymentSvc deploymentsvc.Registry,
+	svcs router.RegistryServices,
 	metrics *telemetry.Metrics,
 	versionInfo *apitypes.VersionBody,
 	customUIHandler http.Handler,
@@ -186,7 +175,7 @@ func NewServer(
 		}
 	}
 
-	api := router.NewHumaAPI(cfg, serverSvc, agentSvc, skillSvc, promptSvc, providerSvc, deploymentSvc, mux, metrics, versionInfo, uiHandler, authnProvider, routeOpts)
+	api := router.NewHumaAPI(cfg, svcs, mux, metrics, versionInfo, uiHandler, authnProvider, routeOpts)
 
 	// Configure CORS with permissive settings for public API
 	corsHandler := cors.New(cors.Options{

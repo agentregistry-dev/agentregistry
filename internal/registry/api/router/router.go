@@ -9,12 +9,6 @@ import (
 	"time"
 
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
-	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
-	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
-	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
-	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
-	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
-	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
 	"github.com/agentregistry-dev/agentregistry/pkg/logging"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/danielgtaylor/huma/v2"
@@ -139,12 +133,7 @@ func handle404(w http.ResponseWriter, r *http.Request) {
 // Note: authz is handled at the DB/service layer, not at the API layer.
 func NewHumaAPI(
 	cfg *config.Config,
-	serverSvc serversvc.Registry,
-	agentSvc agentsvc.Registry,
-	skillSvc skillsvc.Registry,
-	promptSvc promptsvc.Registry,
-	providerSvc providersvc.Registry,
-	deploymentSvc deploymentsvc.Registry,
+	svcs RegistryServices,
 	mux *http.ServeMux,
 	metrics *telemetry.Metrics,
 	versionInfo *apitypes.VersionBody,
@@ -220,7 +209,7 @@ func NewHumaAPI(
 	}
 
 	// Register all API routes under /v0
-	RegisterRoutes(api, cfg, serverSvc, agentSvc, skillSvc, promptSvc, providerSvc, deploymentSvc, metrics, versionInfo, routeOpts)
+	RegisterRoutes(api, cfg, svcs, metrics, versionInfo, routeOpts)
 
 	// Add /metrics for Prometheus metrics using promhttp
 	mux.Handle("/metrics", metrics.PrometheusHandler())

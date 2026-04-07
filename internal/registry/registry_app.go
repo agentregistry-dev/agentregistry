@@ -170,12 +170,6 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 		Agents:             agentService,
 		DeploymentAdapters: deploymentPlatforms,
 	})
-	agentRouteService := agentService
-	mcpServerRegistry := serverService
-	mcpAgentRegistry := agentService
-	mcpSkillRegistry := skillService
-	mcpDeploymentRegistry := deploymentService
-
 	// Import builtin seed data unless it is disabled
 	if !cfg.DisableBuiltinSeed {
 		slog.Info("importing builtin seed data in the background")
@@ -248,7 +242,14 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	}
 
 	// Initialize HTTP server
-	baseServer := api.NewServer(cfg, serverService, agentRouteService, skillService, promptService, providerService, deploymentService, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts)
+	baseServer := api.NewServer(cfg, router.RegistryServices{
+		Server:     serverService,
+		Agent:      agentService,
+		Skill:      skillService,
+		Prompt:     promptService,
+		Provider:   providerService,
+		Deployment: deploymentService,
+	}, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts)
 
 	var server types.Server
 	if options.HTTPServerFactory != nil {
@@ -263,7 +264,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 
 	var mcpHTTPServer *http.Server
 	if cfg.MCPPort > 0 {
-		mcpServer := mcpregistry.NewServer(mcpServerRegistry, mcpAgentRegistry, mcpSkillRegistry, mcpDeploymentRegistry)
+		mcpServer := mcpregistry.NewServer(serverService, agentService, skillService, deploymentService)
 
 		var handler http.Handler = mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
 			return mcpServer

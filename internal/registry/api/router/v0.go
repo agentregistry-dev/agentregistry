@@ -31,6 +31,16 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 )
 
+// RegistryServices bundles all per-domain service registries for route registration.
+type RegistryServices struct {
+	Server     serversvc.Registry
+	Agent      agentsvc.Registry
+	Skill      skillsvc.Registry
+	Prompt     promptsvc.Registry
+	Provider   providersvc.Registry
+	Deployment deploymentsvc.Registry
+}
+
 // RouteOptions contains optional services for route registration.
 type RouteOptions struct {
 	Indexer    service.Indexer
@@ -49,12 +59,7 @@ type RouteOptions struct {
 func RegisterRoutes(
 	api huma.API,
 	cfg *config.Config,
-	serverSvc serversvc.Registry,
-	agentSvc agentsvc.Registry,
-	skillSvc skillsvc.Registry,
-	promptSvc promptsvc.Registry,
-	providerSvc providersvc.Registry,
-	deploymentSvc deploymentsvc.Registry,
+	svcs RegistryServices,
 	metrics *telemetry.Metrics,
 	versionInfo *apitypes.VersionBody,
 	opts *RouteOptions,
@@ -64,18 +69,18 @@ func RegisterRoutes(
 	v0health.RegisterHealthEndpoint(api, pathPrefix, cfg, metrics)
 	v0ping.RegisterPingEndpoint(api, pathPrefix)
 	v0version.RegisterVersionEndpoint(api, pathPrefix, versionInfo)
-	v0servers.RegisterServersEndpoints(api, pathPrefix, serverSvc, deploymentSvc)
-	v0servers.RegisterServersCreateEndpoint(api, pathPrefix, serverSvc, deploymentSvc)
-	v0servers.RegisterEditEndpoints(api, pathPrefix, serverSvc, deploymentSvc)
+	v0servers.RegisterServersEndpoints(api, pathPrefix, svcs.Server, svcs.Deployment)
+	v0servers.RegisterServersCreateEndpoint(api, pathPrefix, svcs.Server, svcs.Deployment)
+	v0servers.RegisterEditEndpoints(api, pathPrefix, svcs.Server, svcs.Deployment)
 	v0auth.RegisterAuthEndpoints(api, pathPrefix, cfg)
-	v0providers.RegisterProvidersEndpoints(api, pathPrefix, providerSvc)
-	v0deployments.RegisterDeploymentsEndpoints(api, pathPrefix, deploymentSvc)
-	v0agents.RegisterAgentsEndpoints(api, pathPrefix, agentSvc, deploymentSvc)
-	v0agents.RegisterAgentsCreateEndpoint(api, pathPrefix, agentSvc, deploymentSvc)
-	v0skills.RegisterSkillsEndpoints(api, pathPrefix, skillSvc)
-	v0skills.RegisterSkillsCreateEndpoint(api, pathPrefix, skillSvc)
-	v0prompts.RegisterPromptsEndpoints(api, pathPrefix, promptSvc)
-	v0prompts.RegisterPromptsCreateEndpoint(api, pathPrefix, promptSvc)
+	v0providers.RegisterProvidersEndpoints(api, pathPrefix, svcs.Provider)
+	v0deployments.RegisterDeploymentsEndpoints(api, pathPrefix, svcs.Deployment)
+	v0agents.RegisterAgentsEndpoints(api, pathPrefix, svcs.Agent, svcs.Deployment)
+	v0agents.RegisterAgentsCreateEndpoint(api, pathPrefix, svcs.Agent, svcs.Deployment)
+	v0skills.RegisterSkillsEndpoints(api, pathPrefix, svcs.Skill)
+	v0skills.RegisterSkillsCreateEndpoint(api, pathPrefix, svcs.Skill)
+	v0prompts.RegisterPromptsEndpoints(api, pathPrefix, svcs.Prompt)
+	v0prompts.RegisterPromptsCreateEndpoint(api, pathPrefix, svcs.Prompt)
 
 	if opts != nil && opts.Indexer != nil && opts.JobManager != nil {
 		v0embeddings.RegisterEmbeddingsEndpoints(api, pathPrefix, opts.Indexer, opts.JobManager)

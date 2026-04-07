@@ -5,27 +5,33 @@ import (
 	"testing"
 	"time"
 
-	servicetest "github.com/agentregistry-dev/agentregistry/internal/registry/service/testing"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+type fakeLister struct {
+	deployments []*models.Deployment
+	err         error
+}
+
+func (f *fakeLister) BrowseDeployments(_ context.Context, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
+	return f.deployments, f.err
+}
+
 func TestDeploymentResourceIndexIncludesOnlyDeployedStatuses(t *testing.T) {
 	now := time.Now().UTC()
-	reg := &servicetest.FakeRegistry{
-		GetDeploymentsFn: func(_ context.Context, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
-			return []*models.Deployment{
-				{ID: "dep-deploying", ServerName: "io.test/server", ResourceType: "mcp", Status: models.DeploymentStatusDeploying, UpdatedAt: now.Add(30 * time.Second)},
-				{ID: "dep-deployed", ServerName: "io.test/server", ResourceType: "mcp", Status: models.DeploymentStatusDeployed, UpdatedAt: now.Add(-15 * time.Second)},
-				{ID: "dep-discovered", ServerName: "io.test/server", ResourceType: "mcp", Status: models.DeploymentStatusDiscovered, UpdatedAt: now.Add(-30 * time.Second)},
-				{ID: "dep-cancelled", ServerName: "io.test/server", ResourceType: "mcp", Status: models.DeploymentStatusCancelled, UpdatedAt: now.Add(-time.Minute)},
-			}, nil
+	lister := &fakeLister{
+		deployments: []*models.Deployment{
+			{ID: "dep-deploying", ServerName: "io.test/server", ResourceType: "mcp", Status: models.DeploymentStatusDeploying, UpdatedAt: now.Add(30 * time.Second)},
+			{ID: "dep-deployed", ServerName: "io.test/server", ResourceType: "mcp", Status: models.DeploymentStatusDeployed, UpdatedAt: now.Add(-15 * time.Second)},
+			{ID: "dep-discovered", ServerName: "io.test/server", ResourceType: "mcp", Status: models.DeploymentStatusDiscovered, UpdatedAt: now.Add(-30 * time.Second)},
+			{ID: "dep-cancelled", ServerName: "io.test/server", ResourceType: "mcp", Status: models.DeploymentStatusCancelled, UpdatedAt: now.Add(-time.Minute)},
 		},
 	}
 
-	index := deploymentResourceIndex(context.Background(), reg)
+	index := deploymentResourceIndex(context.Background(), lister)
 	key := deploymentResourceKey{resourceType: "mcp", resourceName: "io.test/server"}
 
 	require.Len(t, index[key], 1)
@@ -35,12 +41,10 @@ func TestDeploymentResourceIndexIncludesOnlyDeployedStatuses(t *testing.T) {
 
 func TestAttachServerDeploymentMetaMatchesVersionAndLatest(t *testing.T) {
 	now := time.Now().UTC()
-	reg := &servicetest.FakeRegistry{
-		GetDeploymentsFn: func(_ context.Context, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
-			return []*models.Deployment{
-				{ID: "dep-v1", ServerName: "io.test/server", ResourceType: "mcp", Version: "1.0.0", Status: models.DeploymentStatusDeployed, UpdatedAt: now},
-				{ID: "dep-latest", ServerName: "io.test/server", ResourceType: "mcp", Version: "latest", Status: models.DeploymentStatusDeployed, UpdatedAt: now.Add(-time.Minute)},
-			}, nil
+	lister := &fakeLister{
+		deployments: []*models.Deployment{
+			{ID: "dep-v1", ServerName: "io.test/server", ResourceType: "mcp", Version: "1.0.0", Status: models.DeploymentStatusDeployed, UpdatedAt: now},
+			{ID: "dep-latest", ServerName: "io.test/server", ResourceType: "mcp", Version: "latest", Status: models.DeploymentStatusDeployed, UpdatedAt: now.Add(-time.Minute)},
 		},
 	}
 
@@ -59,7 +63,7 @@ func TestAttachServerDeploymentMetaMatchesVersionAndLatest(t *testing.T) {
 		},
 	}
 
-	enriched := AttachServerDeploymentMeta(context.Background(), reg, servers)
+	enriched := AttachServerDeploymentMeta(context.Background(), lister, servers)
 	require.NotNil(t, enriched[0].Meta.Deployments)
 	require.NotNil(t, enriched[1].Meta.Deployments)
 	assert.Equal(t, 1, enriched[0].Meta.Deployments.Count)
