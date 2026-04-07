@@ -38,7 +38,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
-func App(_ context.Context, opts ...types.AppOptions) error {
+func App(ctx context.Context, opts ...types.AppOptions) error {
 	var options types.AppOptions
 	if len(opts) > 0 {
 		options = opts[0]
@@ -49,7 +49,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	}
 
 	// Create a context with timeout for PostgreSQL connection
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	dbCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	setupLogging(cfg.LogLevel)
@@ -91,7 +91,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 			return fmt.Errorf("failed to create database via factory: %w", err)
 		}
 	} else {
-		baseDB, err := internaldb.NewPostgreSQL(ctx, cfg.DatabaseURL, authz, cfg.DatabaseVectorEnabled)
+		baseDB, err := internaldb.NewPostgreSQL(dbCtx, cfg.DatabaseURL, authz, cfg.DatabaseVectorEnabled)
 		if err != nil {
 			return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
 		}
