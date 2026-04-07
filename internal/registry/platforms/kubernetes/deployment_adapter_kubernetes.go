@@ -9,20 +9,19 @@ import (
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
-	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
 	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
 type kubernetesDeploymentAdapter struct {
-	providerService providersvc.Registry
-	serverService   serversvc.Registry
-	agentService    agentsvc.Registry
+	providerStore database.ProviderStore
+	serverService serversvc.Registry
+	agentService  agentsvc.Registry
 }
 
-func NewKubernetesDeploymentAdapter(providerService providersvc.Registry, serverService serversvc.Registry, agentService agentsvc.Registry) *kubernetesDeploymentAdapter {
-	return &kubernetesDeploymentAdapter{providerService: providerService, serverService: serverService, agentService: agentService}
+func NewKubernetesDeploymentAdapter(providerStore database.ProviderStore, serverService serversvc.Registry, agentService agentsvc.Registry) *kubernetesDeploymentAdapter {
+	return &kubernetesDeploymentAdapter{providerStore: providerStore, serverService: serverService, agentService: agentService}
 }
 
 func (a *kubernetesDeploymentAdapter) Platform() string { return "kubernetes" }
@@ -36,7 +35,7 @@ func (a *kubernetesDeploymentAdapter) Deploy(ctx context.Context, req *models.De
 		return nil, err
 	}
 
-	provider, err := a.providerService.GetProviderByID(ctx, req.ProviderID)
+	provider, err := a.providerStore.GetProviderByID(ctx, req.ProviderID)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +54,7 @@ func (a *kubernetesDeploymentAdapter) Undeploy(ctx context.Context, deployment *
 	if err := utils.ValidateDeploymentRequest(deployment, true); err != nil {
 		return err
 	}
-	provider, err := a.providerService.GetProviderByID(ctx, deployment.ProviderID)
+	provider, err := a.providerStore.GetProviderByID(ctx, deployment.ProviderID)
 	if err != nil {
 		return err
 	}
@@ -67,7 +66,7 @@ func (a *kubernetesDeploymentAdapter) CleanupStale(ctx context.Context, deployme
 	if err := utils.ValidateDeploymentRequest(deployment, true); err != nil {
 		return err
 	}
-	provider, err := a.providerService.GetProviderByID(ctx, deployment.ProviderID)
+	provider, err := a.providerStore.GetProviderByID(ctx, deployment.ProviderID)
 	if err != nil {
 		return err
 	}
@@ -86,7 +85,7 @@ func (a *kubernetesDeploymentAdapter) Cancel(_ context.Context, _ *models.Deploy
 }
 
 func (a *kubernetesDeploymentAdapter) Discover(ctx context.Context, providerID string) ([]*models.Deployment, error) {
-	provider, err := a.providerService.GetProviderByID(ctx, providerID)
+	provider, err := a.providerStore.GetProviderByID(ctx, providerID)
 	if err != nil {
 		return nil, err
 	}

@@ -17,8 +17,14 @@ import (
 	dbUtils "github.com/agentregistry-dev/agentregistry/pkg/registry/database/utils"
 )
 
+type agentStore struct {
+	repositoryBase
+}
+
+var _ database.AgentStore = (*agentStore)(nil)
+
 // ListAgents returns paginated agents with filtering
-func (db *PostgreSQL) ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
+func (s *agentStore) ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -130,7 +136,7 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, filter *database.AgentFilt
 	`, selectClause, whereClause, orderClause, argIndex)
 	args = append(args, limit)
 
-	rows, err := db.getExecutor().Query(ctx, query, args...)
+	rows, err := s.executor.Query(ctx, query, args...)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to query agents: %w", err)
 	}
@@ -190,13 +196,13 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, filter *database.AgentFilt
 	return results, nextCursor, nil
 }
 
-func (db *PostgreSQL) GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error) {
+func (s *agentStore) GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
 	// Authz check
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: agentName,
 		Type: auth.PermissionArtifactTypeAgent,
 	}); err != nil {
@@ -214,7 +220,7 @@ func (db *PostgreSQL) GetAgentByName(ctx context.Context, agentName string) (*mo
 	var publishedAt, updatedAt time.Time
 	var isLatest bool
 	var valueJSON []byte
-	if err := db.getExecutor().QueryRow(ctx, query, agentName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+	if err := s.executor.QueryRow(ctx, query, agentName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, database.ErrNotFound
 		}
@@ -237,13 +243,13 @@ func (db *PostgreSQL) GetAgentByName(ctx context.Context, agentName string) (*mo
 	}, nil
 }
 
-func (db *PostgreSQL) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
+func (s *agentStore) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
 	// Authz check
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: agentName,
 		Type: auth.PermissionArtifactTypeAgent,
 	}); err != nil {
@@ -260,7 +266,7 @@ func (db *PostgreSQL) GetAgentByNameAndVersion(ctx context.Context, agentName, v
 	var publishedAt, updatedAt time.Time
 	var isLatest bool
 	var valueJSON []byte
-	if err := db.getExecutor().QueryRow(ctx, query, agentName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+	if err := s.executor.QueryRow(ctx, query, agentName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, database.ErrNotFound
 		}
@@ -283,12 +289,12 @@ func (db *PostgreSQL) GetAgentByNameAndVersion(ctx context.Context, agentName, v
 	}, nil
 }
 
-func (db *PostgreSQL) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
+func (s *agentStore) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: agentName,
 		Type: auth.PermissionArtifactTypeAgent,
 	}); err != nil {
@@ -301,7 +307,7 @@ func (db *PostgreSQL) GetAllVersionsByAgentName(ctx context.Context, agentName s
 		WHERE agent_name = $1
 		ORDER BY published_at DESC
 	`
-	rows, err := db.getExecutor().Query(ctx, query, agentName)
+	rows, err := s.executor.Query(ctx, query, agentName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query agent versions: %w", err)
 	}
@@ -340,7 +346,7 @@ func (db *PostgreSQL) GetAllVersionsByAgentName(ctx context.Context, agentName s
 	return results, nil
 }
 
-func (db *PostgreSQL) CreateAgent(ctx context.Context, agentJSON *models.AgentJSON, officialMeta *models.AgentRegistryExtensions) (*models.AgentResponse, error) {
+func (s *agentStore) CreateAgent(ctx context.Context, agentJSON *models.AgentJSON, officialMeta *models.AgentRegistryExtensions) (*models.AgentResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -352,7 +358,7 @@ func (db *PostgreSQL) CreateAgent(ctx context.Context, agentJSON *models.AgentJS
 		return nil, fmt.Errorf("agent name and version are required")
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
 		Name: agentJSON.Name,
 		Type: auth.PermissionArtifactTypeAgent,
 	}); err != nil {
@@ -366,7 +372,7 @@ func (db *PostgreSQL) CreateAgent(ctx context.Context, agentJSON *models.AgentJS
 		INSERT INTO agents (agent_name, version, status, published_at, updated_at, is_latest, value)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`
-	if _, err := db.getExecutor().Exec(ctx, insert,
+	if _, err := s.executor.Exec(ctx, insert,
 		agentJSON.Name,
 		agentJSON.Version,
 		officialMeta.Status,
@@ -385,12 +391,12 @@ func (db *PostgreSQL) CreateAgent(ctx context.Context, agentJSON *models.AgentJS
 	}, nil
 }
 
-func (db *PostgreSQL) UpdateAgent(ctx context.Context, agentName, version string, agentJSON *models.AgentJSON) (*models.AgentResponse, error) {
+func (s *agentStore) UpdateAgent(ctx context.Context, agentName, version string, agentJSON *models.AgentJSON) (*models.AgentResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
 		Name: agentName,
 		Type: auth.PermissionArtifactTypeAgent,
 	}); err != nil {
@@ -416,7 +422,7 @@ func (db *PostgreSQL) UpdateAgent(ctx context.Context, agentName, version string
 	var name, vers, status string
 	var publishedAt, updatedAt time.Time
 	var isLatest bool
-	if err := db.getExecutor().QueryRow(ctx, query, valueJSON, agentName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest); err != nil {
+	if err := s.executor.QueryRow(ctx, query, valueJSON, agentName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, database.ErrNotFound
 		}
@@ -435,12 +441,12 @@ func (db *PostgreSQL) UpdateAgent(ctx context.Context, agentName, version string
 	}, nil
 }
 
-func (db *PostgreSQL) SetAgentStatus(ctx context.Context, agentName, version string, status string) (*models.AgentResponse, error) {
+func (s *agentStore) SetAgentStatus(ctx context.Context, agentName, version string, status string) (*models.AgentResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
 		Name: agentName,
 		Type: auth.PermissionArtifactTypeAgent,
 	}); err != nil {
@@ -457,7 +463,7 @@ func (db *PostgreSQL) SetAgentStatus(ctx context.Context, agentName, version str
 	var publishedAt, updatedAt time.Time
 	var isLatest bool
 	var valueJSON []byte
-	if err := db.getExecutor().QueryRow(ctx, query, status, agentName, version).Scan(&name, &vers, &currentStatus, &valueJSON, &publishedAt, &updatedAt, &isLatest); err != nil {
+	if err := s.executor.QueryRow(ctx, query, status, agentName, version).Scan(&name, &vers, &currentStatus, &valueJSON, &publishedAt, &updatedAt, &isLatest); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, database.ErrNotFound
 		}
@@ -480,19 +486,19 @@ func (db *PostgreSQL) SetAgentStatus(ctx context.Context, agentName, version str
 	}, nil
 }
 
-func (db *PostgreSQL) GetCurrentLatestAgentVersion(ctx context.Context, agentName string) (*models.AgentResponse, error) {
+func (s *agentStore) GetCurrentLatestAgentVersion(ctx context.Context, agentName string) (*models.AgentResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: agentName,
 		Type: auth.PermissionArtifactTypeAgent,
 	}); err != nil {
 		return nil, err
 	}
 
-	executor := db.getExecutor()
+	executor := s.executor
 	query := `
 		SELECT agent_name, version, status, value, published_at, updated_at, is_latest
 		FROM agents
@@ -526,19 +532,19 @@ func (db *PostgreSQL) GetCurrentLatestAgentVersion(ctx context.Context, agentNam
 	}, nil
 }
 
-func (db *PostgreSQL) CountAgentVersions(ctx context.Context, agentName string) (int, error) {
+func (s *agentStore) CountAgentVersions(ctx context.Context, agentName string) (int, error) {
 	if ctx.Err() != nil {
 		return 0, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: agentName,
 		Type: auth.PermissionArtifactTypeAgent,
 	}); err != nil {
 		return 0, err
 	}
 
-	executor := db.getExecutor()
+	executor := s.executor
 	query := `SELECT COUNT(*) FROM agents WHERE agent_name = $1`
 	var count int
 	if err := executor.QueryRow(ctx, query, agentName).Scan(&count); err != nil {
@@ -547,19 +553,19 @@ func (db *PostgreSQL) CountAgentVersions(ctx context.Context, agentName string) 
 	return count, nil
 }
 
-func (db *PostgreSQL) CheckAgentVersionExists(ctx context.Context, agentName, version string) (bool, error) {
+func (s *agentStore) CheckAgentVersionExists(ctx context.Context, agentName, version string) (bool, error) {
 	if ctx.Err() != nil {
 		return false, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: agentName,
 		Type: auth.PermissionArtifactTypeAgent,
 	}); err != nil {
 		return false, err
 	}
 
-	executor := db.getExecutor()
+	executor := s.executor
 	query := `SELECT EXISTS(SELECT 1 FROM agents WHERE agent_name = $1 AND version = $2)`
 	var exists bool
 	if err := executor.QueryRow(ctx, query, agentName, version).Scan(&exists); err != nil {
@@ -568,21 +574,21 @@ func (db *PostgreSQL) CheckAgentVersionExists(ctx context.Context, agentName, ve
 	return exists, nil
 }
 
-func (db *PostgreSQL) UnmarkAgentAsLatest(ctx context.Context, agentName string) error {
+func (s *agentStore) UnmarkAgentAsLatest(ctx context.Context, agentName string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
 
 	// note: we do a push check because this is called during an artifact's creation operation, which automatically marks the new version as latest.
 	// maybe we should add a parameter to the function to indicate if it's from a creation operation or not? this would be important if we allow manual marking of latest.
-	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
 		Name: agentName,
 		Type: auth.PermissionArtifactTypeAgent,
 	}); err != nil {
 		return err
 	}
 
-	executor := db.getExecutor()
+	executor := s.executor
 	query := `UPDATE agents SET is_latest = false WHERE agent_name = $1 AND is_latest = true`
 	if _, err := executor.Exec(ctx, query, agentName); err != nil {
 		return fmt.Errorf("failed to unmark latest agent version: %w", err)
@@ -591,19 +597,19 @@ func (db *PostgreSQL) UnmarkAgentAsLatest(ctx context.Context, agentName string)
 }
 
 // SetAgentEmbedding stores semantic embedding metadata for an agent version.
-func (db *PostgreSQL) SetAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error {
+func (s *agentStore) SetAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
 		Name: agentName,
 		Type: auth.PermissionArtifactTypeAgent,
 	}); err != nil {
 		return err
 	}
 
-	executor := db.getExecutor()
+	executor := s.executor
 
 	var (
 		query string
@@ -660,19 +666,19 @@ func (db *PostgreSQL) SetAgentEmbedding(ctx context.Context, agentName, version 
 }
 
 // GetAgentEmbeddingMetadata retrieves embedding metadata for an agent version without loading the vector.
-func (db *PostgreSQL) GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
+func (s *agentStore) GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: agentName,
 		Type: auth.PermissionArtifactTypeAgent,
 	}); err != nil {
 		return nil, err
 	}
 
-	executor := db.getExecutor()
+	executor := s.executor
 	query := `
 		SELECT
 			semantic_embedding IS NOT NULL AS has_embedding,
@@ -735,15 +741,15 @@ func (db *PostgreSQL) GetAgentEmbeddingMetadata(ctx context.Context, agentName, 
 // DeleteAgent permanently removes an agent version from the database.
 // If the deleted version was the current latest, the most recently published
 // remaining version is promoted to latest.
-func (db *PostgreSQL) DeleteAgent(ctx context.Context, agentName, version string) error {
-	if err := db.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
+func (s *agentStore) DeleteAgent(ctx context.Context, agentName, version string) error {
+	if err := s.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
 		Name: agentName,
 		Type: auth.PermissionArtifactTypeAgent,
 	}); err != nil {
 		return err
 	}
 
-	executor := db.getExecutor()
+	executor := s.executor
 
 	// Check if the version being deleted is the current latest.
 	var wasLatest bool

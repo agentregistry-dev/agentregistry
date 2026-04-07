@@ -11,7 +11,6 @@ import (
 	v0providers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/providers"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
-	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -80,7 +79,7 @@ func removeDeploymentHTTPError(err error) error {
 }
 
 // RegisterDeploymentsEndpoints registers all deployment-related endpoints
-func RegisterDeploymentsEndpoints(api huma.API, basePath string, providerSvc providersvc.Registry, deploymentSvc deploymentsvc.Registry, extensions handlerext.PlatformExtensions) {
+func RegisterDeploymentsEndpoints(api huma.API, basePath string, providerSvc database.ProviderStore, deploymentSvc deploymentsvc.Registry, extensions handlerext.PlatformExtensions) {
 	// List all deployments
 	huma.Register(api, huma.Operation{
 		OperationID: "list-deployments",

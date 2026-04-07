@@ -19,12 +19,12 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
-	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
 	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
 	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
 //go:embed all:ui/dist
@@ -160,7 +160,7 @@ func NewServer(
 	agentSvc agentsvc.Registry,
 	skillSvc skillsvc.Registry,
 	promptSvc promptsvc.Registry,
-	providerSvc providersvc.Registry,
+	providerSvc database.ProviderStore,
 	deploymentSvc deploymentsvc.Registry,
 	metrics *telemetry.Metrics,
 	versionInfo *apitypes.VersionBody,

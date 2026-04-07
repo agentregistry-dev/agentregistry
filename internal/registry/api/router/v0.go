@@ -18,10 +18,10 @@ import (
 	v0version "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/version"
 	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
-	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
 	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
 	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 
@@ -54,7 +54,7 @@ func RegisterRoutes(
 	agentSvc agentsvc.Registry,
 	skillSvc skillsvc.Registry,
 	promptSvc promptsvc.Registry,
-	providerSvc providersvc.Registry,
+	providerSvc database.ProviderStore,
 	deploymentSvc deploymentsvc.Registry,
 	metrics *telemetry.Metrics,
 	versionInfo *apitypes.VersionBody,

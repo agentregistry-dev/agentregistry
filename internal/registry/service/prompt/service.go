@@ -17,6 +17,8 @@ const maxVersionsPerPrompt = 10000
 
 type Dependencies struct {
 	StoreDB database.Store
+	Prompts database.PromptStore
+	Tx      database.Transactor
 }
 
 type Registry interface {
@@ -29,14 +31,23 @@ type Registry interface {
 }
 
 type Service struct {
-	storeDB database.Store
+	prompts database.PromptStore
+	tx      database.Transactor
 }
 
 var _ Registry = (*Service)(nil)
 
 func New(deps Dependencies) Registry {
+	if deps.Prompts == nil && deps.StoreDB != nil {
+		deps.Prompts = deps.StoreDB.Prompts()
+	}
+	if deps.Tx == nil {
+		deps.Tx = deps.StoreDB
+	}
+
 	return &Service{
-		storeDB: deps.StoreDB,
+		prompts: deps.Prompts,
+		tx:      deps.Tx,
 	}
 }
 
@@ -44,34 +55,34 @@ func (s *Service) ListPrompts(ctx context.Context, filter *database.PromptFilter
 	if limit <= 0 {
 		limit = 30
 	}
-	return s.storeDB.ListPrompts(ctx, filter, cursor, limit)
+	return s.prompts.ListPrompts(ctx, filter, cursor, limit)
 }
 
 func (s *Service) GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error) {
-	return s.storeDB.GetPromptByName(ctx, promptName)
+	return s.prompts.GetPromptByName(ctx, promptName)
 }
 
 func (s *Service) GetPromptByNameAndVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
-	return s.storeDB.GetPromptByNameAndVersion(ctx, promptName, version)
+	return s.prompts.GetPromptByNameAndVersion(ctx, promptName, version)
 }
 
 func (s *Service) GetAllVersionsByPromptName(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
-	return s.storeDB.GetAllVersionsByPromptName(ctx, promptName)
+	return s.prompts.GetAllVersionsByPromptName(ctx, promptName)
 }
 
 func (s *Service) CreatePrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error) {
-	return txutil.RunT(ctx, s.storeDB, func(txCtx context.Context, store database.Store) (*models.PromptResponse, error) {
-		return s.createPromptInTransaction(txCtx, store, req)
+	return txutil.RunT(ctx, s.tx, func(txCtx context.Context, scope database.Scope) (*models.PromptResponse, error) {
+		return s.createPromptInTransaction(txCtx, scope.Prompts(), req)
 	})
 }
 
 func (s *Service) DeletePrompt(ctx context.Context, promptName, version string) error {
-	return txutil.Run(ctx, s.storeDB, func(txCtx context.Context, store database.Store) error {
-		return store.DeletePrompt(txCtx, promptName, version)
+	return txutil.Run(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
+		return scope.Prompts().DeletePrompt(txCtx, promptName, version)
 	})
 }
 
-func (s *Service) createPromptInTransaction(ctx context.Context, store database.Store, req *models.PromptJSON) (*models.PromptResponse, error) {
+func (s *Service) createPromptInTransaction(ctx context.Context, prompts database.PromptStore, req *models.PromptJSON) (*models.PromptResponse, error) {
 	if req == nil || req.Name == "" || req.Version == "" {
 		return nil, fmt.Errorf("invalid prompt payload: name and version are required")
 	}
@@ -79,7 +90,7 @@ func (s *Service) createPromptInTransaction(ctx context.Context, store database.
 	publishTime := time.Now()
 	promptJSON := *req
 
-	versionCount, err := store.CountPromptVersions(ctx, promptJSON.Name)
+	versionCount, err := prompts.CountPromptVersions(ctx, promptJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -87,7 +98,7 @@ func (s *Service) createPromptInTransaction(ctx context.Context, store database.
 		return nil, database.ErrMaxVersionsReached
 	}
 
-	exists, err := store.CheckPromptVersionExists(ctx, promptJSON.Name, promptJSON.Version)
+	exists, err := prompts.CheckPromptVersionExists(ctx, promptJSON.Name, promptJSON.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +106,7 @@ func (s *Service) createPromptInTransaction(ctx context.Context, store database.
 		return nil, database.ErrInvalidVersion
 	}
 
-	currentLatest, err := store.GetCurrentLatestPromptVersion(ctx, promptJSON.Name)
+	currentLatest, err := prompts.GetCurrentLatestPromptVersion(ctx, promptJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -112,7 +123,7 @@ func (s *Service) createPromptInTransaction(ctx context.Context, store database.
 	}
 
 	if isNewLatest && currentLatest != nil {
-		if err := store.UnmarkPromptAsLatest(ctx, promptJSON.Name); err != nil {
+		if err := prompts.UnmarkPromptAsLatest(ctx, promptJSON.Name); err != nil {
 			return nil, err
 		}
 	}
@@ -124,5 +135,5 @@ func (s *Service) createPromptInTransaction(ctx context.Context, store database.
 		IsLatest:    isNewLatest,
 	}
 
-	return store.CreatePrompt(ctx, &promptJSON, officialMeta)
+	return prompts.CreatePrompt(ctx, &promptJSON, officialMeta)
 }

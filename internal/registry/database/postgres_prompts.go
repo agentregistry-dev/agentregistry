@@ -15,7 +15,13 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
-func (db *PostgreSQL) ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
+type promptStore struct {
+	repositoryBase
+}
+
+var _ database.PromptStore = (*promptStore)(nil)
+
+func (s *promptStore) ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -84,7 +90,7 @@ func (db *PostgreSQL) ListPrompts(ctx context.Context, filter *database.PromptFi
     `, whereClause, argIndex)
 	args = append(args, limit)
 
-	rows, err := db.getExecutor().Query(ctx, query, args...)
+	rows, err := s.executor.Query(ctx, query, args...)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to query prompts: %w", err)
 	}
@@ -131,12 +137,12 @@ func (db *PostgreSQL) ListPrompts(ctx context.Context, filter *database.PromptFi
 	return results, nextCursor, nil
 }
 
-func (db *PostgreSQL) GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error) {
+func (s *promptStore) GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: promptName,
 		Type: auth.PermissionArtifactTypePrompt,
 	}); err != nil {
@@ -154,7 +160,7 @@ func (db *PostgreSQL) GetPromptByName(ctx context.Context, promptName string) (*
 	var publishedAt, updatedAt time.Time
 	var isLatest bool
 	var valueJSON []byte
-	if err := db.getExecutor().QueryRow(ctx, query, promptName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+	if err := s.executor.QueryRow(ctx, query, promptName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, database.ErrNotFound
 		}
@@ -177,12 +183,12 @@ func (db *PostgreSQL) GetPromptByName(ctx context.Context, promptName string) (*
 	}, nil
 }
 
-func (db *PostgreSQL) GetPromptByNameAndVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
+func (s *promptStore) GetPromptByNameAndVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: promptName,
 		Type: auth.PermissionArtifactTypePrompt,
 	}); err != nil {
@@ -199,7 +205,7 @@ func (db *PostgreSQL) GetPromptByNameAndVersion(ctx context.Context, promptName,
 	var publishedAt, updatedAt time.Time
 	var isLatest bool
 	var valueJSON []byte
-	if err := db.getExecutor().QueryRow(ctx, query, promptName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+	if err := s.executor.QueryRow(ctx, query, promptName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, database.ErrNotFound
 		}
@@ -222,12 +228,12 @@ func (db *PostgreSQL) GetPromptByNameAndVersion(ctx context.Context, promptName,
 	}, nil
 }
 
-func (db *PostgreSQL) GetAllVersionsByPromptName(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
+func (s *promptStore) GetAllVersionsByPromptName(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: promptName,
 		Type: auth.PermissionArtifactTypePrompt,
 	}); err != nil {
@@ -240,7 +246,7 @@ func (db *PostgreSQL) GetAllVersionsByPromptName(ctx context.Context, promptName
         WHERE prompt_name = $1
         ORDER BY published_at DESC
     `
-	rows, err := db.getExecutor().Query(ctx, query, promptName)
+	rows, err := s.executor.Query(ctx, query, promptName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query prompt versions: %w", err)
 	}
@@ -279,7 +285,7 @@ func (db *PostgreSQL) GetAllVersionsByPromptName(ctx context.Context, promptName
 	return results, nil
 }
 
-func (db *PostgreSQL) CreatePrompt(ctx context.Context, promptJSON *models.PromptJSON, officialMeta *models.PromptRegistryExtensions) (*models.PromptResponse, error) {
+func (s *promptStore) CreatePrompt(ctx context.Context, promptJSON *models.PromptJSON, officialMeta *models.PromptRegistryExtensions) (*models.PromptResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -291,7 +297,7 @@ func (db *PostgreSQL) CreatePrompt(ctx context.Context, promptJSON *models.Promp
 		return nil, fmt.Errorf("prompt name and version are required")
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
 		Name: promptJSON.Name,
 		Type: auth.PermissionArtifactTypePrompt,
 	}); err != nil {
@@ -305,7 +311,7 @@ func (db *PostgreSQL) CreatePrompt(ctx context.Context, promptJSON *models.Promp
         INSERT INTO prompts (prompt_name, version, status, published_at, updated_at, is_latest, value)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
     `
-	if _, err := db.getExecutor().Exec(ctx, insert,
+	if _, err := s.executor.Exec(ctx, insert,
 		promptJSON.Name,
 		promptJSON.Version,
 		officialMeta.Status,
@@ -324,19 +330,19 @@ func (db *PostgreSQL) CreatePrompt(ctx context.Context, promptJSON *models.Promp
 	}, nil
 }
 
-func (db *PostgreSQL) GetCurrentLatestPromptVersion(ctx context.Context, promptName string) (*models.PromptResponse, error) {
+func (s *promptStore) GetCurrentLatestPromptVersion(ctx context.Context, promptName string) (*models.PromptResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: promptName,
 		Type: auth.PermissionArtifactTypePrompt,
 	}); err != nil {
 		return nil, err
 	}
 
-	executor := db.getExecutor()
+	executor := s.executor
 	query := `
         SELECT prompt_name, version, status, value, published_at, updated_at, is_latest
         FROM prompts
@@ -370,19 +376,19 @@ func (db *PostgreSQL) GetCurrentLatestPromptVersion(ctx context.Context, promptN
 	}, nil
 }
 
-func (db *PostgreSQL) CountPromptVersions(ctx context.Context, promptName string) (int, error) {
+func (s *promptStore) CountPromptVersions(ctx context.Context, promptName string) (int, error) {
 	if ctx.Err() != nil {
 		return 0, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: promptName,
 		Type: auth.PermissionArtifactTypePrompt,
 	}); err != nil {
 		return 0, err
 	}
 
-	executor := db.getExecutor()
+	executor := s.executor
 	query := `SELECT COUNT(*) FROM prompts WHERE prompt_name = $1`
 	var count int
 	if err := executor.QueryRow(ctx, query, promptName).Scan(&count); err != nil {
@@ -391,19 +397,19 @@ func (db *PostgreSQL) CountPromptVersions(ctx context.Context, promptName string
 	return count, nil
 }
 
-func (db *PostgreSQL) CheckPromptVersionExists(ctx context.Context, promptName, version string) (bool, error) {
+func (s *promptStore) CheckPromptVersionExists(ctx context.Context, promptName, version string) (bool, error) {
 	if ctx.Err() != nil {
 		return false, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: promptName,
 		Type: auth.PermissionArtifactTypePrompt,
 	}); err != nil {
 		return false, err
 	}
 
-	executor := db.getExecutor()
+	executor := s.executor
 	query := `SELECT EXISTS(SELECT 1 FROM prompts WHERE prompt_name = $1 AND version = $2)`
 	var exists bool
 	if err := executor.QueryRow(ctx, query, promptName, version).Scan(&exists); err != nil {
@@ -412,19 +418,19 @@ func (db *PostgreSQL) CheckPromptVersionExists(ctx context.Context, promptName, 
 	return exists, nil
 }
 
-func (db *PostgreSQL) UnmarkPromptAsLatest(ctx context.Context, promptName string) error {
+func (s *promptStore) UnmarkPromptAsLatest(ctx context.Context, promptName string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
 		Name: promptName,
 		Type: auth.PermissionArtifactTypePrompt,
 	}); err != nil {
 		return err
 	}
 
-	executor := db.getExecutor()
+	executor := s.executor
 	query := `UPDATE prompts SET is_latest = false WHERE prompt_name = $1 AND is_latest = true`
 	if _, err := executor.Exec(ctx, query, promptName); err != nil {
 		return fmt.Errorf("failed to unmark latest prompt version: %w", err)
@@ -432,15 +438,15 @@ func (db *PostgreSQL) UnmarkPromptAsLatest(ctx context.Context, promptName strin
 	return nil
 }
 
-func (db *PostgreSQL) DeletePrompt(ctx context.Context, promptName, version string) error {
-	if err := db.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
+func (s *promptStore) DeletePrompt(ctx context.Context, promptName, version string) error {
+	if err := s.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
 		Name: promptName,
 		Type: auth.PermissionArtifactTypePrompt,
 	}); err != nil {
 		return err
 	}
 
-	executor := db.getExecutor()
+	executor := s.executor
 
 	// Check if the version being deleted is the current latest.
 	var wasLatest bool

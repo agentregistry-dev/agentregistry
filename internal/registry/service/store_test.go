@@ -10,12 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type storeTestStore struct {
-	database.Store
-	db      *storeTestDB
-	txToken *int
-}
-
 type storeTestDB struct {
 	database.Store
 	testingT         *testing.T
@@ -30,20 +24,73 @@ type storeTestDB struct {
 	deleteAgentFn    func(ctx context.Context, txToken *int, agentName, version string) error
 }
 
-var _ database.Store = (*storeTestDB)(nil)
-
-func (m *storeTestDB) asStore(txToken *int) storeTestStore {
-	return storeTestStore{db: m, txToken: txToken}
+type storeTestScope struct {
+	db      *storeTestDB
+	txToken *int
 }
 
-func (m *storeTestDB) InTransaction(ctx context.Context, fn func(context.Context, database.Store) error) error {
+type storeTestServerStore struct {
+	database.ServerStore
+	db      *storeTestDB
+	txToken *int
+}
+
+type storeTestAgentStore struct {
+	database.AgentStore
+	db      *storeTestDB
+	txToken *int
+}
+
+type storeTestSkillStore struct {
+	database.SkillStore
+	db      *storeTestDB
+	txToken *int
+}
+
+type storeTestPromptStore struct {
+	database.PromptStore
+	db      *storeTestDB
+	txToken *int
+}
+
+type storeTestProviderStore struct {
+	database.ProviderStore
+	db      *storeTestDB
+	txToken *int
+}
+
+type storeTestDeploymentStore struct {
+	database.DeploymentStore
+	db      *storeTestDB
+	txToken *int
+}
+
+var _ database.Store = (*storeTestDB)(nil)
+
+func (m *storeTestDB) scope(txToken *int) storeTestScope {
+	return storeTestScope{db: m, txToken: txToken}
+}
+
+func (m *storeTestDB) Servers() database.ServerStore { return m.scope(nil).Servers() }
+
+func (m *storeTestDB) Providers() database.ProviderStore { return m.scope(nil).Providers() }
+
+func (m *storeTestDB) Agents() database.AgentStore { return m.scope(nil).Agents() }
+
+func (m *storeTestDB) Skills() database.SkillStore { return m.scope(nil).Skills() }
+
+func (m *storeTestDB) Prompts() database.PromptStore { return m.scope(nil).Prompts() }
+
+func (m *storeTestDB) Deployments() database.DeploymentStore { return m.scope(nil).Deployments() }
+
+func (m *storeTestDB) InTransaction(ctx context.Context, fn func(context.Context, database.Scope) error) error {
 	m.inTransaction = true
 	defer func() {
 		m.inTransaction = false
 	}()
 
 	token := 1
-	return fn(ctx, m.asStore(&token))
+	return fn(ctx, m.scope(&token))
 }
 
 func (m *storeTestDB) Close() error {
@@ -51,80 +98,104 @@ func (m *storeTestDB) Close() error {
 }
 
 func (m *storeTestDB) ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
-	return m.asStore(nil).ListServers(ctx, filter, cursor, limit)
+	return m.Servers().ListServers(ctx, filter, cursor, limit)
 }
 
 func (m *storeTestDB) ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
-	return m.asStore(nil).ListAgents(ctx, filter, cursor, limit)
+	return m.Agents().ListAgents(ctx, filter, cursor, limit)
 }
 
 func (m *storeTestDB) ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
-	return m.asStore(nil).ListSkills(ctx, filter, cursor, limit)
+	return m.Skills().ListSkills(ctx, filter, cursor, limit)
 }
 
 func (m *storeTestDB) ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
-	return m.asStore(nil).ListPrompts(ctx, filter, cursor, limit)
+	return m.Prompts().ListPrompts(ctx, filter, cursor, limit)
 }
 
 func (m *storeTestDB) ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error) {
-	return m.asStore(nil).ListProviders(ctx, platform)
+	return m.Providers().ListProviders(ctx, platform)
 }
 
 func (m *storeTestDB) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
-	return m.asStore(nil).GetDeployments(ctx, filter)
+	return m.Deployments().GetDeployments(ctx, filter)
 }
 
 func (m *storeTestDB) DeleteServer(ctx context.Context, serverName, version string) error {
-	return m.asStore(nil).DeleteServer(ctx, serverName, version)
+	return m.Servers().DeleteServer(ctx, serverName, version)
 }
 
 func (m *storeTestDB) DeleteAgent(ctx context.Context, agentName, version string) error {
-	return m.asStore(nil).DeleteAgent(ctx, agentName, version)
+	return m.Agents().DeleteAgent(ctx, agentName, version)
 }
 
-func (s storeTestStore) ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
+func (s storeTestScope) Servers() database.ServerStore {
+	return storeTestServerStore{db: s.db, txToken: s.txToken}
+}
+
+func (s storeTestScope) Providers() database.ProviderStore {
+	return storeTestProviderStore{db: s.db, txToken: s.txToken}
+}
+
+func (s storeTestScope) Agents() database.AgentStore {
+	return storeTestAgentStore{db: s.db, txToken: s.txToken}
+}
+
+func (s storeTestScope) Skills() database.SkillStore {
+	return storeTestSkillStore{db: s.db, txToken: s.txToken}
+}
+
+func (s storeTestScope) Prompts() database.PromptStore {
+	return storeTestPromptStore{db: s.db, txToken: s.txToken}
+}
+
+func (s storeTestScope) Deployments() database.DeploymentStore {
+	return storeTestDeploymentStore{db: s.db, txToken: s.txToken}
+}
+
+func (s storeTestServerStore) ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
 	require.NotNil(s.db.testingT, s.db.testingT, "testingT must be set")
 	require.NotNil(s.db.testingT, s.db.listServersFn, "listServersFn must be set")
 	return s.db.listServersFn(ctx, s.txToken, filter, cursor, limit)
 }
 
-func (s storeTestStore) ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
+func (s storeTestAgentStore) ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
 	require.NotNil(s.db.testingT, s.db.testingT, "testingT must be set")
 	require.NotNil(s.db.testingT, s.db.listAgentsFn, "listAgentsFn must be set")
 	return s.db.listAgentsFn(ctx, s.txToken, filter, cursor, limit)
 }
 
-func (s storeTestStore) ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
+func (s storeTestSkillStore) ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
 	require.NotNil(s.db.testingT, s.db.testingT, "testingT must be set")
 	require.NotNil(s.db.testingT, s.db.listSkillsFn, "listSkillsFn must be set")
 	return s.db.listSkillsFn(ctx, s.txToken, filter, cursor, limit)
 }
 
-func (s storeTestStore) ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
+func (s storeTestPromptStore) ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
 	require.NotNil(s.db.testingT, s.db.testingT, "testingT must be set")
 	require.NotNil(s.db.testingT, s.db.listPromptsFn, "listPromptsFn must be set")
 	return s.db.listPromptsFn(ctx, s.txToken, filter, cursor, limit)
 }
 
-func (s storeTestStore) ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error) {
+func (s storeTestProviderStore) ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error) {
 	require.NotNil(s.db.testingT, s.db.testingT, "testingT must be set")
 	require.NotNil(s.db.testingT, s.db.listProvidersFn, "listProvidersFn must be set")
 	return s.db.listProvidersFn(ctx, s.txToken, platform)
 }
 
-func (s storeTestStore) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+func (s storeTestDeploymentStore) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	require.NotNil(s.db.testingT, s.db.testingT, "testingT must be set")
 	require.NotNil(s.db.testingT, s.db.getDeploymentsFn, "getDeploymentsFn must be set")
 	return s.db.getDeploymentsFn(ctx, s.txToken, filter)
 }
 
-func (s storeTestStore) DeleteServer(ctx context.Context, serverName, version string) error {
+func (s storeTestServerStore) DeleteServer(ctx context.Context, serverName, version string) error {
 	require.NotNil(s.db.testingT, s.db.testingT, "testingT must be set")
 	require.NotNil(s.db.testingT, s.db.deleteServerFn, "deleteServerFn must be set")
 	return s.db.deleteServerFn(ctx, s.txToken, serverName, version)
 }
 
-func (s storeTestStore) DeleteAgent(ctx context.Context, agentName, version string) error {
+func (s storeTestAgentStore) DeleteAgent(ctx context.Context, agentName, version string) error {
 	require.NotNil(s.db.testingT, s.db.testingT, "testingT must be set")
 	require.NotNil(s.db.testingT, s.db.deleteAgentFn, "deleteAgentFn must be set")
 	return s.db.deleteAgentFn(ctx, s.txToken, agentName, version)
@@ -156,7 +227,7 @@ func TestReadStoresUsesRepositoryOverrides(t *testing.T) {
 	tests := []struct {
 		name      string
 		configure func(base, override *storeTestDB, baseCalled, overrideCalled *bool)
-		setRepo   func(svc *registryServiceImpl, repo database.Store)
+		setRepo   func(svc *registryServiceImpl, repo *storeTestDB)
 		invoke    func(t *testing.T, stores storeBundle)
 	}{
 		{
@@ -171,8 +242,8 @@ func TestReadStoresUsesRepositoryOverrides(t *testing.T) {
 					return nil, "override", nil
 				}
 			},
-			setRepo: func(svc *registryServiceImpl, repo database.Store) {
-				svc.serverRepo = repo
+			setRepo: func(svc *registryServiceImpl, repo *storeTestDB) {
+				svc.serverRepo = repo.Servers()
 			},
 			invoke: func(t *testing.T, stores storeBundle) {
 				_, nextCursor, err := stores.servers.ListServers(context.Background(), nil, "", 10)
@@ -192,8 +263,8 @@ func TestReadStoresUsesRepositoryOverrides(t *testing.T) {
 					return nil, "override", nil
 				}
 			},
-			setRepo: func(svc *registryServiceImpl, repo database.Store) {
-				svc.agentRepo = repo
+			setRepo: func(svc *registryServiceImpl, repo *storeTestDB) {
+				svc.agentRepo = repo.Agents()
 			},
 			invoke: func(t *testing.T, stores storeBundle) {
 				_, nextCursor, err := stores.agents.ListAgents(context.Background(), nil, "", 10)
@@ -213,8 +284,8 @@ func TestReadStoresUsesRepositoryOverrides(t *testing.T) {
 					return nil, "override", nil
 				}
 			},
-			setRepo: func(svc *registryServiceImpl, repo database.Store) {
-				svc.skillRepo = repo
+			setRepo: func(svc *registryServiceImpl, repo *storeTestDB) {
+				svc.skillRepo = repo.Skills()
 			},
 			invoke: func(t *testing.T, stores storeBundle) {
 				_, nextCursor, err := stores.skills.ListSkills(context.Background(), nil, "", 10)
@@ -234,8 +305,8 @@ func TestReadStoresUsesRepositoryOverrides(t *testing.T) {
 					return nil, "override", nil
 				}
 			},
-			setRepo: func(svc *registryServiceImpl, repo database.Store) {
-				svc.promptRepo = repo
+			setRepo: func(svc *registryServiceImpl, repo *storeTestDB) {
+				svc.promptRepo = repo.Prompts()
 			},
 			invoke: func(t *testing.T, stores storeBundle) {
 				_, nextCursor, err := stores.prompts.ListPrompts(context.Background(), nil, "", 10)
@@ -255,8 +326,8 @@ func TestReadStoresUsesRepositoryOverrides(t *testing.T) {
 					return []*models.Provider{{ID: "override"}}, nil
 				}
 			},
-			setRepo: func(svc *registryServiceImpl, repo database.Store) {
-				svc.providerRepo = repo
+			setRepo: func(svc *registryServiceImpl, repo *storeTestDB) {
+				svc.providerRepo = repo.Providers()
 			},
 			invoke: func(t *testing.T, stores storeBundle) {
 				providers, err := stores.providers.ListProviders(context.Background(), nil)
@@ -277,8 +348,8 @@ func TestReadStoresUsesRepositoryOverrides(t *testing.T) {
 					return []*models.Deployment{{ID: "override"}}, nil
 				}
 			},
-			setRepo: func(svc *registryServiceImpl, repo database.Store) {
-				svc.deploymentRepo = repo
+			setRepo: func(svc *registryServiceImpl, repo *storeTestDB) {
+				svc.deploymentRepo = repo.Deployments()
 			},
 			invoke: func(t *testing.T, stores storeBundle) {
 				deployments, err := stores.deployments.GetDeployments(context.Background(), nil)

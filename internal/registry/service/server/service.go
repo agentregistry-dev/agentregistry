@@ -23,6 +23,8 @@ const maxVersionsPerServer = 10000
 
 type Dependencies struct {
 	StoreDB            database.Store
+	Servers            database.ServerStore
+	Tx                 database.Transactor
 	Config             *config.Config
 	EmbeddingsProvider embeddings.Provider
 	Logger             *slog.Logger
@@ -44,7 +46,8 @@ type Registry interface {
 }
 
 type Service struct {
-	storeDB            database.Store
+	servers            database.ServerStore
+	tx                 database.Transactor
 	cfg                *config.Config
 	embeddingsProvider embeddings.Provider
 	logger             *slog.Logger
@@ -53,13 +56,21 @@ type Service struct {
 var _ Registry = (*Service)(nil)
 
 func New(deps Dependencies) Registry {
+	if deps.Servers == nil && deps.StoreDB != nil {
+		deps.Servers = deps.StoreDB.Servers()
+	}
+	if deps.Tx == nil {
+		deps.Tx = deps.StoreDB
+	}
+
 	logger := deps.Logger
 	if logger == nil {
 		logger = slog.Default().With("component", "registry.server")
 	}
 
 	return &Service{
-		storeDB:            deps.StoreDB,
+		servers:            deps.Servers,
+		tx:                 deps.Tx,
 		cfg:                deps.Config,
 		embeddingsProvider: deps.EmbeddingsProvider,
 		logger:             logger,
@@ -77,30 +88,30 @@ func (s *Service) ListServers(ctx context.Context, filter *database.ServerFilter
 		}
 	}
 
-	return s.storeDB.ListServers(ctx, filter, cursor, limit)
+	return s.servers.ListServers(ctx, filter, cursor, limit)
 }
 
 func (s *Service) GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
-	return s.storeDB.GetServerByName(ctx, serverName)
+	return s.servers.GetServerByName(ctx, serverName)
 }
 
 func (s *Service) GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
-	return s.storeDB.GetServerByNameAndVersion(ctx, serverName, version)
+	return s.servers.GetServerByNameAndVersion(ctx, serverName, version)
 }
 
 func (s *Service) GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
-	return s.storeDB.GetAllVersionsByServerName(ctx, serverName)
+	return s.servers.GetAllVersionsByServerName(ctx, serverName)
 }
 
 func (s *Service) CreateServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
-	return txutil.RunT(ctx, s.storeDB, func(txCtx context.Context, store database.Store) (*apiv0.ServerResponse, error) {
-		return s.createServerInTransaction(txCtx, store, req)
+	return txutil.RunT(ctx, s.tx, func(txCtx context.Context, scope database.Scope) (*apiv0.ServerResponse, error) {
+		return s.createServerInTransaction(txCtx, scope.Servers(), req)
 	})
 }
 
 func (s *Service) UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
-	return txutil.RunT(ctx, s.storeDB, func(txCtx context.Context, store database.Store) (*apiv0.ServerResponse, error) {
-		return s.updateServerInTransaction(txCtx, store, serverName, version, req, newStatus)
+	return txutil.RunT(ctx, s.tx, func(txCtx context.Context, scope database.Scope) (*apiv0.ServerResponse, error) {
+		return s.updateServerInTransaction(txCtx, scope.Servers(), serverName, version, req, newStatus)
 	})
 }
 
@@ -112,8 +123,9 @@ func (s *Service) StoreServerReadme(ctx context.Context, serverName, version str
 		contentType = "text/markdown"
 	}
 
-	return txutil.Run(ctx, s.storeDB, func(txCtx context.Context, store database.Store) error {
-		if _, err := store.GetServerByNameAndVersion(txCtx, serverName, version); err != nil {
+	return txutil.Run(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
+		servers := scope.Servers()
+		if _, err := servers.GetServerByNameAndVersion(txCtx, serverName, version); err != nil {
 			return err
 		}
 
@@ -126,39 +138,39 @@ func (s *Service) StoreServerReadme(ctx context.Context, serverName, version str
 			FetchedAt:   time.Now(),
 		}
 
-		return store.UpsertServerReadme(txCtx, readme)
+		return servers.UpsertServerReadme(txCtx, readme)
 	})
 }
 
 func (s *Service) GetServerReadmeLatest(ctx context.Context, serverName string) (*database.ServerReadme, error) {
-	return s.storeDB.GetLatestServerReadme(ctx, serverName)
+	return s.servers.GetLatestServerReadme(ctx, serverName)
 }
 
 func (s *Service) GetServerReadmeByVersion(ctx context.Context, serverName, version string) (*database.ServerReadme, error) {
-	return s.storeDB.GetServerReadme(ctx, serverName, version)
+	return s.servers.GetServerReadme(ctx, serverName, version)
 }
 
 func (s *Service) DeleteServer(ctx context.Context, serverName, version string) error {
-	return txutil.Run(ctx, s.storeDB, func(txCtx context.Context, store database.Store) error {
-		return store.DeleteServer(txCtx, serverName, version)
+	return txutil.Run(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
+		return scope.Servers().DeleteServer(txCtx, serverName, version)
 	})
 }
 
 func (s *Service) UpsertServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error {
-	return txutil.Run(ctx, s.storeDB, func(txCtx context.Context, store database.Store) error {
-		return store.SetServerEmbedding(txCtx, serverName, version, embedding)
+	return txutil.Run(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
+		return scope.Servers().SetServerEmbedding(txCtx, serverName, version, embedding)
 	})
 }
 
 func (s *Service) GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
-	return s.storeDB.GetServerEmbeddingMetadata(ctx, serverName, version)
+	return s.servers.GetServerEmbeddingMetadata(ctx, serverName, version)
 }
 
-func (s *Service) validateNoDuplicateRemoteURLs(ctx context.Context, store database.Store, serverDetail apiv0.ServerJSON) error {
+func (s *Service) validateNoDuplicateRemoteURLs(ctx context.Context, servers database.ServerStore, serverDetail apiv0.ServerJSON) error {
 	for _, remote := range serverDetail.Remotes {
 		filter := &database.ServerFilter{RemoteURL: &remote.URL}
 
-		conflictingServers, _, err := store.ListServers(ctx, filter, "", 1000)
+		conflictingServers, _, err := servers.ListServers(ctx, filter, "", 1000)
 		if err != nil {
 			return fmt.Errorf("failed to check remote URL conflict: %w", err)
 		}
@@ -173,7 +185,7 @@ func (s *Service) validateNoDuplicateRemoteURLs(ctx context.Context, store datab
 	return nil
 }
 
-func (s *Service) createServerInTransaction(ctx context.Context, store database.Store, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
+func (s *Service) createServerInTransaction(ctx context.Context, servers database.ServerStore, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
 	if err := validators.ValidatePublishRequest(ctx, *req, s.cfg); err != nil {
 		return nil, err
 	}
@@ -181,15 +193,15 @@ func (s *Service) createServerInTransaction(ctx context.Context, store database.
 	publishTime := time.Now()
 	serverJSON := *req
 
-	if err := store.AcquireServerCreateLock(ctx, serverJSON.Name); err != nil {
+	if err := servers.AcquireServerCreateLock(ctx, serverJSON.Name); err != nil {
 		return nil, err
 	}
 
-	if err := s.validateNoDuplicateRemoteURLs(ctx, store, serverJSON); err != nil {
+	if err := s.validateNoDuplicateRemoteURLs(ctx, servers, serverJSON); err != nil {
 		return nil, err
 	}
 
-	versionCount, err := store.CountServerVersions(ctx, serverJSON.Name)
+	versionCount, err := servers.CountServerVersions(ctx, serverJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -197,7 +209,7 @@ func (s *Service) createServerInTransaction(ctx context.Context, store database.
 		return nil, database.ErrMaxVersionsReached
 	}
 
-	versionExists, err := store.CheckVersionExists(ctx, serverJSON.Name, serverJSON.Version)
+	versionExists, err := servers.CheckVersionExists(ctx, serverJSON.Name, serverJSON.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +217,7 @@ func (s *Service) createServerInTransaction(ctx context.Context, store database.
 		return nil, database.ErrInvalidVersion
 	}
 
-	currentLatest, err := store.GetCurrentLatestVersion(ctx, serverJSON.Name)
+	currentLatest, err := servers.GetCurrentLatestVersion(ctx, serverJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -225,7 +237,7 @@ func (s *Service) createServerInTransaction(ctx context.Context, store database.
 	}
 
 	if isNewLatest && currentLatest != nil {
-		if err := store.UnmarkAsLatest(ctx, serverJSON.Name); err != nil {
+		if err := servers.UnmarkAsLatest(ctx, serverJSON.Name); err != nil {
 			return nil, err
 		}
 	}
@@ -237,7 +249,7 @@ func (s *Service) createServerInTransaction(ctx context.Context, store database.
 		IsLatest:    isNewLatest,
 	}
 
-	result, err := store.CreateServer(ctx, &serverJSON, officialMeta)
+	result, err := servers.CreateServer(ctx, &serverJSON, officialMeta)
 	if err != nil {
 		return nil, err
 	}
@@ -263,8 +275,8 @@ func (s *Service) createServerInTransaction(ctx context.Context, store database.
 	return result, nil
 }
 
-func (s *Service) updateServerInTransaction(ctx context.Context, store database.Store, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
-	currentServer, err := store.GetServerByNameAndVersion(ctx, serverName, version)
+func (s *Service) updateServerInTransaction(ctx context.Context, servers database.ServerStore, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
+	currentServer, err := servers.GetServerByNameAndVersion(ctx, serverName, version)
 	if err != nil {
 		return nil, err
 	}
@@ -278,17 +290,17 @@ func (s *Service) updateServerInTransaction(ctx context.Context, store database.
 	}
 
 	updatedServer := *req
-	if err := s.validateNoDuplicateRemoteURLs(ctx, store, updatedServer); err != nil {
+	if err := s.validateNoDuplicateRemoteURLs(ctx, servers, updatedServer); err != nil {
 		return nil, err
 	}
 
-	updatedServerResponse, err := store.UpdateServer(ctx, serverName, version, &updatedServer)
+	updatedServerResponse, err := servers.UpdateServer(ctx, serverName, version, &updatedServer)
 	if err != nil {
 		return nil, err
 	}
 
 	if newStatus != nil {
-		return store.SetServerStatus(ctx, serverName, version, *newStatus)
+		return servers.SetServerStatus(ctx, serverName, version, *newStatus)
 	}
 
 	return updatedServerResponse, nil

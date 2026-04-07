@@ -837,7 +837,19 @@ func newFakeClientStore(registry *fakeClientRegistry) *fakeClientStore {
 	}
 }
 
-func (s *fakeClientStore) InTransaction(ctx context.Context, fn func(context.Context, database.Store) error) error {
+func (s *fakeClientStore) Servers() database.ServerStore { return s.fakeClientServerStore }
+
+func (s *fakeClientStore) Providers() database.ProviderStore { return s.fakeClientProviderStore }
+
+func (s *fakeClientStore) Agents() database.AgentStore { return s.fakeClientAgentStore }
+
+func (s *fakeClientStore) Skills() database.SkillStore { return s.fakeClientSkillStore }
+
+func (s *fakeClientStore) Prompts() database.PromptStore { return s.fakeClientPromptStore }
+
+func (s *fakeClientStore) Deployments() database.DeploymentStore { return s.fakeClientDeploymentStore }
+
+func (s *fakeClientStore) InTransaction(ctx context.Context, fn func(context.Context, database.Scope) error) error {
 	return fn(ctx, s)
 }
 

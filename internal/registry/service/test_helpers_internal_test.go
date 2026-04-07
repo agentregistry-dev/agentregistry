@@ -10,7 +10,6 @@ import (
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
-	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
 	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
 	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
@@ -21,33 +20,33 @@ import (
 )
 
 type storeBundle struct {
-	servers     database.Store
-	agents      database.Store
-	skills      database.Store
-	prompts     database.Store
-	providers   database.Store
-	deployments database.Store
+	servers     database.ServerStore
+	agents      database.AgentStore
+	skills      database.SkillStore
+	prompts     database.PromptStore
+	providers   database.ProviderStore
+	deployments database.DeploymentStore
 }
 
-func bundleFromStore(store database.Store) storeBundle {
+func bundleFromScope(scope database.Scope) storeBundle {
 	return storeBundle{
-		servers:     store,
-		agents:      store,
-		skills:      store,
-		prompts:     store,
-		providers:   store,
-		deployments: store,
+		servers:     scope.Servers(),
+		agents:      scope.Agents(),
+		skills:      scope.Skills(),
+		prompts:     scope.Prompts(),
+		providers:   scope.Providers(),
+		deployments: scope.Deployments(),
 	}
 }
 
 type registryServiceImpl struct {
 	storeDB            database.Store
-	serverRepo         database.Store
-	agentRepo          database.Store
-	skillRepo          database.Store
-	promptRepo         database.Store
-	providerRepo       database.Store
-	deploymentRepo     database.Store
+	serverRepo         database.ServerStore
+	agentRepo          database.AgentStore
+	skillRepo          database.SkillStore
+	promptRepo         database.PromptStore
+	providerRepo       database.ProviderStore
+	deploymentRepo     database.DeploymentStore
 	cfg                *config.Config
 	embeddingsProvider embeddings.Provider
 	deploymentAdapters map[string]registrytypes.DeploymentPlatformAdapter
@@ -61,7 +60,7 @@ func (s *registryServiceImpl) serviceDatabase() database.Store {
 func (s *registryServiceImpl) readStores() storeBundle {
 	var stores storeBundle
 	if storeDB := s.serviceDatabase(); storeDB != nil {
-		stores = bundleFromStore(storeDB)
+		stores = bundleFromScope(storeDB)
 	}
 	if s.serverRepo != nil {
 		stores.servers = s.serverRepo
@@ -90,15 +89,16 @@ func (s *registryServiceImpl) inTransaction(ctx context.Context, fn func(context
 		return errors.New("store is not configured")
 	}
 
-	return storeDB.InTransaction(ctx, func(txCtx context.Context, store database.Store) error {
-		return fn(txCtx, bundleFromStore(store))
+	return storeDB.InTransaction(ctx, func(txCtx context.Context, scope database.Scope) error {
+		return fn(txCtx, bundleFromScope(scope))
 	})
 }
 
 func (s *registryServiceImpl) serverService() serversvc.Registry {
 	stores := s.readStores()
 	return serversvc.New(serversvc.Dependencies{
-		StoreDB:            stores.servers,
+		Servers:            stores.servers,
+		Tx:                 s.storeDB,
 		Config:             s.cfg,
 		EmbeddingsProvider: s.embeddingsProvider,
 		Logger:             s.logger,
@@ -108,7 +108,10 @@ func (s *registryServiceImpl) serverService() serversvc.Registry {
 func (s *registryServiceImpl) agentService() agentsvc.Registry {
 	stores := s.readStores()
 	return agentsvc.New(agentsvc.Dependencies{
-		StoreDB:            stores.agents,
+		Agents:             stores.agents,
+		Skills:             stores.skills,
+		Prompts:            stores.prompts,
+		Tx:                 s.storeDB,
 		Config:             s.cfg,
 		EmbeddingsProvider: s.embeddingsProvider,
 		Logger:             s.logger,
@@ -117,17 +120,12 @@ func (s *registryServiceImpl) agentService() agentsvc.Registry {
 
 func (s *registryServiceImpl) skillService() skillsvc.Registry {
 	stores := s.readStores()
-	return skillsvc.New(skillsvc.Dependencies{StoreDB: stores.skills})
+	return skillsvc.New(skillsvc.Dependencies{Skills: stores.skills, Tx: s.storeDB})
 }
 
 func (s *registryServiceImpl) promptService() promptsvc.Registry {
 	stores := s.readStores()
-	return promptsvc.New(promptsvc.Dependencies{StoreDB: stores.prompts})
-}
-
-func (s *registryServiceImpl) providerService() providersvc.Registry {
-	stores := s.readStores()
-	return providersvc.New(providersvc.Dependencies{StoreDB: stores.providers})
+	return promptsvc.New(promptsvc.Dependencies{Prompts: stores.prompts, Tx: s.storeDB})
 }
 
 type deploymentServiceImpl struct {
@@ -141,7 +139,10 @@ func (s *deploymentServiceImpl) resolveDeploymentAdapterByProviderID(ctx context
 func (s *registryServiceImpl) deploymentService() *deploymentServiceImpl {
 	stores := s.readStores()
 	return &deploymentServiceImpl{Registry: deploymentsvc.New(deploymentsvc.Dependencies{
-		StoreDB:            stores.deployments,
+		Deployments:        stores.deployments,
+		Providers:          stores.providers,
+		Servers:            stores.servers,
+		Agents:             stores.agents,
 		DeploymentAdapters: s.deploymentAdapters,
 	})}
 }

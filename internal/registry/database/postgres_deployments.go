@@ -15,21 +15,27 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
+type deploymentStore struct {
+	repositoryBase
+}
+
+var _ database.DeploymentStore = (*deploymentStore)(nil)
+
 // CreateDeployment creates a new deployment record
-func (db *PostgreSQL) CreateDeployment(ctx context.Context, deployment *models.Deployment) error {
+func (s *deploymentStore) CreateDeployment(ctx context.Context, deployment *models.Deployment) error {
 	// Authz check (determine resource type)
 	artifactType := auth.PermissionArtifactTypeServer
 	if deployment.ResourceType == "agent" {
 		artifactType = auth.PermissionArtifactTypeAgent
 	}
-	if err := db.authz.Check(ctx, auth.PermissionActionDeploy, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionDeploy, auth.Resource{
 		Name: deployment.ServerName,
 		Type: artifactType,
 	}); err != nil {
 		return err
 	}
 
-	executor := db.getExecutor()
+	executor := s.executor
 
 	envJSON, err := json.Marshal(deployment.Env)
 	if err != nil {
@@ -61,7 +67,7 @@ func (db *PostgreSQL) CreateDeployment(ctx context.Context, deployment *models.D
 	deployment.ProviderID = providerID
 
 	if deployment.ID == "" {
-		_ = db.getExecutor().QueryRow(ctx, "SELECT uuid_generate_v4()::text").Scan(&deployment.ID)
+		_ = s.executor.QueryRow(ctx, "SELECT uuid_generate_v4()::text").Scan(&deployment.ID)
 	}
 
 	query := `
@@ -98,8 +104,8 @@ func (db *PostgreSQL) CreateDeployment(ctx context.Context, deployment *models.D
 }
 
 // GetDeployments retrieves all deployed servers
-func (db *PostgreSQL) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
-	executor := db.getExecutor()
+func (s *deploymentStore) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+	executor := s.executor
 
 	where, args, needsProviderJoin := buildDeploymentFilters(filter)
 
@@ -218,8 +224,8 @@ func buildDeploymentFilters(filter *models.DeploymentFilter) ([]string, []any, b
 }
 
 // GetDeploymentByID retrieves a specific deployment by UUID.
-func (db *PostgreSQL) GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error) {
-	executor := db.getExecutor()
+func (s *deploymentStore) GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error) {
+	executor := s.executor
 	query := `SELECT
 			id, server_name, version, deployed_at, updated_at, status, config, prefer_remote, resource_type,
 			origin, COALESCE(provider_id, ''), COALESCE(provider_config, '{}'::jsonb), COALESCE(provider_metadata, '{}'::jsonb), COALESCE(error, '')
@@ -270,7 +276,7 @@ func (db *PostgreSQL) GetDeploymentByID(ctx context.Context, id string) (*models
 	if d.ResourceType == "agent" {
 		artifactType = auth.PermissionArtifactTypeAgent
 	}
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: d.ServerName,
 		Type: artifactType,
 	}); err != nil {
@@ -280,12 +286,12 @@ func (db *PostgreSQL) GetDeploymentByID(ctx context.Context, id string) (*models
 }
 
 // UpdateDeploymentState applies partial state updates to a deployment by ID.
-func (db *PostgreSQL) UpdateDeploymentState(ctx context.Context, id string, patch *models.DeploymentStatePatch) error {
+func (s *deploymentStore) UpdateDeploymentState(ctx context.Context, id string, patch *models.DeploymentStatePatch) error {
 	if patch == nil {
 		return fmt.Errorf("%w: deployment state patch is required", database.ErrInvalidInput)
 	}
 
-	deployment, err := db.GetDeploymentByID(ctx, id)
+	deployment, err := s.GetDeploymentByID(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -293,14 +299,14 @@ func (db *PostgreSQL) UpdateDeploymentState(ctx context.Context, id string, patc
 	if deployment.ResourceType == "agent" {
 		artifactType = auth.PermissionArtifactTypeAgent
 	}
-	if err := db.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
 		Name: deployment.ServerName,
 		Type: artifactType,
 	}); err != nil {
 		return err
 	}
 
-	executor := db.getExecutor()
+	executor := s.executor
 	setStatus := patch.Status != nil
 	statusValue := deployment.Status
 	if patch.Status != nil {
@@ -367,8 +373,8 @@ func (db *PostgreSQL) UpdateDeploymentState(ctx context.Context, id string, patc
 }
 
 // RemoveDeploymentByID removes a deployment by UUID.
-func (db *PostgreSQL) RemoveDeploymentByID(ctx context.Context, id string) error {
-	deployment, err := db.GetDeploymentByID(ctx, id)
+func (s *deploymentStore) RemoveDeploymentByID(ctx context.Context, id string) error {
+	deployment, err := s.GetDeploymentByID(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -376,14 +382,14 @@ func (db *PostgreSQL) RemoveDeploymentByID(ctx context.Context, id string) error
 	if deployment.ResourceType == "agent" {
 		artifactType = auth.PermissionArtifactTypeAgent
 	}
-	if err := db.authz.Check(ctx, auth.PermissionActionDeploy, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionDeploy, auth.Resource{
 		Name: deployment.ServerName,
 		Type: artifactType,
 	}); err != nil {
 		return err
 	}
 
-	executor := db.getExecutor()
+	executor := s.executor
 	query := `DELETE FROM deployments WHERE id = $1`
 
 	result, err := executor.Exec(ctx, query, id)

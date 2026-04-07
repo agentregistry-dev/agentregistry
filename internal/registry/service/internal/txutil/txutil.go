@@ -9,20 +9,20 @@ import (
 
 var ErrStoreNotConfigured = errors.New("store is not configured")
 
-func Run(ctx context.Context, store database.Store, fn func(context.Context, database.Store) error) error {
-	if store == nil {
+func Run(ctx context.Context, tx database.Transactor, fn func(context.Context, database.Scope) error) error {
+	if tx == nil {
 		return ErrStoreNotConfigured
 	}
 
-	return store.InTransaction(ctx, fn)
+	return tx.InTransaction(ctx, fn)
 }
 
-func RunT[T any](ctx context.Context, store database.Store, fn func(context.Context, database.Store) (T, error)) (T, error) {
+func RunT[T any](ctx context.Context, tx database.Transactor, fn func(context.Context, database.Scope) (T, error)) (T, error) {
 	var result T
 	var fnErr error
 
-	err := Run(ctx, store, func(txCtx context.Context, txStore database.Store) error {
-		result, fnErr = fn(txCtx, txStore)
+	err := Run(ctx, tx, func(txCtx context.Context, scope database.Scope) error {
+		result, fnErr = fn(txCtx, scope)
 		return fnErr
 	})
 	if err != nil {

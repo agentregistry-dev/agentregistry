@@ -447,7 +447,19 @@ func newFakeIndexerStore(registry *fakeIndexerRegistry) *fakeIndexerStore {
 	}
 }
 
-func (s *fakeIndexerStore) InTransaction(ctx context.Context, fn func(context.Context, database.Store) error) error {
+func (s *fakeIndexerStore) Servers() database.ServerStore { return s.fakeIndexerServerStore }
+
+func (s *fakeIndexerStore) Providers() database.ProviderStore { return nil }
+
+func (s *fakeIndexerStore) Agents() database.AgentStore { return s.fakeIndexerAgentStore }
+
+func (s *fakeIndexerStore) Skills() database.SkillStore { return nil }
+
+func (s *fakeIndexerStore) Prompts() database.PromptStore { return nil }
+
+func (s *fakeIndexerStore) Deployments() database.DeploymentStore { return nil }
+
+func (s *fakeIndexerStore) InTransaction(ctx context.Context, fn func(context.Context, database.Scope) error) error {
 	return fn(ctx, s)
 }
 

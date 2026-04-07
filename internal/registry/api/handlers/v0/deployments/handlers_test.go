@@ -47,7 +47,7 @@ type fakeProviderDeploymentService struct {
 	UpdateDeploymentStateFn     func(ctx context.Context, id string, patch *models.DeploymentStatePatch) error
 	GetDeploymentsFn            func(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
 	deployments                 map[string]*models.Deployment
-	nextDeploymentID           int
+	nextDeploymentID            int
 }
 
 func newFakeProviderDeploymentService() *fakeProviderDeploymentService {
@@ -387,11 +387,23 @@ func (f *fakeProviderDeploymentService) UnmarkPromptAsLatest(context.Context, st
 	return nil
 }
 
+func (f *fakeProviderDeploymentService) Servers() database.ServerStore { return f }
+
+func (f *fakeProviderDeploymentService) Providers() database.ProviderStore { return f }
+
+func (f *fakeProviderDeploymentService) Agents() database.AgentStore { return f }
+
+func (f *fakeProviderDeploymentService) Skills() database.SkillStore { return f }
+
+func (f *fakeProviderDeploymentService) Prompts() database.PromptStore { return f }
+
+func (f *fakeProviderDeploymentService) Deployments() database.DeploymentStore { return f }
+
 func (f *fakeProviderDeploymentService) DeletePrompt(context.Context, string, string) error {
 	return nil
 }
 
-func (f *fakeProviderDeploymentService) InTransaction(ctx context.Context, fn func(context.Context, database.Store) error) error {
+func (f *fakeProviderDeploymentService) InTransaction(ctx context.Context, fn func(context.Context, database.Scope) error) error {
 	return fn(ctx, f)
 }
 

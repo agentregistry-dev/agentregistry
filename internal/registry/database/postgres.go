@@ -15,12 +15,28 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
-// PostgreSQL is an implementation of the Database interface using PostgreSQL
+// PostgreSQL is the root PostgreSQL-backed store. It owns the pool, authz, and
+// transaction orchestration, while domain-specific repository structs own CRUD.
 type PostgreSQL struct {
 	pool  *pgxpool.Pool
 	authz auth.Authorizer
-	tx    pgx.Tx
 }
+
+type repositoryBase struct {
+	executor Executor
+	authz    auth.Authorizer
+}
+
+type postgresScope struct {
+	servers     *serverStore
+	providers   *providerStore
+	agents      *agentStore
+	skills      *skillStore
+	prompts     *promptStore
+	deployments *deploymentStore
+}
+
+var _ database.Scope = (*postgresScope)(nil)
 
 type commandTagAdapter struct {
 	tag pgconn.CommandTag
@@ -113,12 +129,40 @@ type Executor interface {
 	QueryRow(ctx context.Context, sql string, args ...any) database.Row
 }
 
-// getExecutor returns the appropriate executor (transaction or pool)
-func (db *PostgreSQL) getExecutor() Executor {
-	if db.tx != nil {
-		return transactionAdapter{tx: db.tx}
+func newPostgresScope(executor Executor, authz auth.Authorizer, tx pgx.Tx) *postgresScope {
+	base := repositoryBase{executor: executor, authz: authz}
+	return &postgresScope{
+		servers:     &serverStore{repositoryBase: base, tx: tx},
+		providers:   &providerStore{executor: executor},
+		agents:      &agentStore{repositoryBase: base},
+		skills:      &skillStore{repositoryBase: base},
+		prompts:     &promptStore{repositoryBase: base},
+		deployments: &deploymentStore{repositoryBase: base},
 	}
-	return poolExecutor{pool: db.pool}
+}
+
+func (s *postgresScope) Servers() database.ServerStore {
+	return s.servers
+}
+
+func (s *postgresScope) Providers() database.ProviderStore {
+	return s.providers
+}
+
+func (s *postgresScope) Agents() database.AgentStore {
+	return s.agents
+}
+
+func (s *postgresScope) Skills() database.SkillStore {
+	return s.skills
+}
+
+func (s *postgresScope) Prompts() database.PromptStore {
+	return s.prompts
+}
+
+func (s *postgresScope) Deployments() database.DeploymentStore {
+	return s.deployments
 }
 
 // NewPostgreSQL creates a new instance of the PostgreSQL database
@@ -168,13 +212,38 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 	return &PostgreSQL{pool: pool, authz: authz}, nil
 }
 
+func (db *PostgreSQL) scope() *postgresScope {
+	return newPostgresScope(poolExecutor{pool: db.pool}, db.authz, nil)
+}
+
+func (db *PostgreSQL) Servers() database.ServerStore {
+	return db.scope().Servers()
+}
+
+func (db *PostgreSQL) Providers() database.ProviderStore {
+	return db.scope().Providers()
+}
+
+func (db *PostgreSQL) Agents() database.AgentStore {
+	return db.scope().Agents()
+}
+
+func (db *PostgreSQL) Skills() database.SkillStore {
+	return db.scope().Skills()
+}
+
+func (db *PostgreSQL) Prompts() database.PromptStore {
+	return db.scope().Prompts()
+}
+
+func (db *PostgreSQL) Deployments() database.DeploymentStore {
+	return db.scope().Deployments()
+}
+
 // InTransaction executes a function within a database transaction
-func (db *PostgreSQL) InTransaction(ctx context.Context, fn func(ctx context.Context, store database.Store) error) error {
+func (db *PostgreSQL) InTransaction(ctx context.Context, fn func(ctx context.Context, scope database.Scope) error) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
-	}
-	if db.tx != nil {
-		return fn(ctx, db)
 	}
 
 	tx, err := db.pool.Begin(ctx)
@@ -190,8 +259,8 @@ func (db *PostgreSQL) InTransaction(ctx context.Context, fn func(ctx context.Con
 		}
 	}()
 
-	txStore := &PostgreSQL{pool: db.pool, authz: db.authz, tx: tx}
-	if err := fn(ctx, txStore); err != nil {
+	txScope := newPostgresScope(transactionAdapter{tx: tx}, db.authz, tx)
+	if err := fn(ctx, txScope); err != nil {
 		return err
 	}
 

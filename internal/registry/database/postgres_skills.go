@@ -15,8 +15,14 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
+type skillStore struct {
+	repositoryBase
+}
+
+var _ database.SkillStore = (*skillStore)(nil)
+
 // ListSkills returns paginated skills with filtering
-func (db *PostgreSQL) ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
+func (s *skillStore) ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -90,7 +96,7 @@ func (db *PostgreSQL) ListSkills(ctx context.Context, filter *database.SkillFilt
     `, whereClause, argIndex)
 	args = append(args, limit)
 
-	rows, err := db.getExecutor().Query(ctx, query, args...)
+	rows, err := s.executor.Query(ctx, query, args...)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to query skills: %w", err)
 	}
@@ -137,12 +143,12 @@ func (db *PostgreSQL) ListSkills(ctx context.Context, filter *database.SkillFilt
 	return results, nextCursor, nil
 }
 
-func (db *PostgreSQL) GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error) {
+func (s *skillStore) GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: skillName,
 		Type: auth.PermissionArtifactTypeSkill,
 	}); err != nil {
@@ -160,7 +166,7 @@ func (db *PostgreSQL) GetSkillByName(ctx context.Context, skillName string) (*mo
 	var publishedAt, updatedAt time.Time
 	var isLatest bool
 	var valueJSON []byte
-	if err := db.getExecutor().QueryRow(ctx, query, skillName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+	if err := s.executor.QueryRow(ctx, query, skillName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, database.ErrNotFound
 		}
@@ -183,12 +189,12 @@ func (db *PostgreSQL) GetSkillByName(ctx context.Context, skillName string) (*mo
 	}, nil
 }
 
-func (db *PostgreSQL) GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
+func (s *skillStore) GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: skillName,
 		Type: auth.PermissionArtifactTypeSkill,
 	}); err != nil {
@@ -205,7 +211,7 @@ func (db *PostgreSQL) GetSkillByNameAndVersion(ctx context.Context, skillName, v
 	var publishedAt, updatedAt time.Time
 	var isLatest bool
 	var valueJSON []byte
-	if err := db.getExecutor().QueryRow(ctx, query, skillName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+	if err := s.executor.QueryRow(ctx, query, skillName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, database.ErrNotFound
 		}
@@ -228,12 +234,12 @@ func (db *PostgreSQL) GetSkillByNameAndVersion(ctx context.Context, skillName, v
 	}, nil
 }
 
-func (db *PostgreSQL) GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
+func (s *skillStore) GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: skillName,
 		Type: auth.PermissionArtifactTypeSkill,
 	}); err != nil {
@@ -246,7 +252,7 @@ func (db *PostgreSQL) GetAllVersionsBySkillName(ctx context.Context, skillName s
         WHERE skill_name = $1
         ORDER BY published_at DESC
     `
-	rows, err := db.getExecutor().Query(ctx, query, skillName)
+	rows, err := s.executor.Query(ctx, query, skillName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query skill versions: %w", err)
 	}
@@ -285,12 +291,12 @@ func (db *PostgreSQL) GetAllVersionsBySkillName(ctx context.Context, skillName s
 	return results, nil
 }
 
-func (db *PostgreSQL) CreateSkill(ctx context.Context, skillJSON *models.SkillJSON, officialMeta *models.SkillRegistryExtensions) (*models.SkillResponse, error) {
+func (s *skillStore) CreateSkill(ctx context.Context, skillJSON *models.SkillJSON, officialMeta *models.SkillRegistryExtensions) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
 		Name: skillJSON.Name,
 		Type: auth.PermissionArtifactTypeSkill,
 	}); err != nil {
@@ -311,7 +317,7 @@ func (db *PostgreSQL) CreateSkill(ctx context.Context, skillJSON *models.SkillJS
         INSERT INTO skills (skill_name, version, status, published_at, updated_at, is_latest, value)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
     `
-	if _, err := db.getExecutor().Exec(ctx, insert,
+	if _, err := s.executor.Exec(ctx, insert,
 		skillJSON.Name,
 		skillJSON.Version,
 		officialMeta.Status,
@@ -330,12 +336,12 @@ func (db *PostgreSQL) CreateSkill(ctx context.Context, skillJSON *models.SkillJS
 	}, nil
 }
 
-func (db *PostgreSQL) UpdateSkill(ctx context.Context, skillName, version string, skillJSON *models.SkillJSON) (*models.SkillResponse, error) {
+func (s *skillStore) UpdateSkill(ctx context.Context, skillName, version string, skillJSON *models.SkillJSON) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
 		Name: skillName,
 		Type: auth.PermissionArtifactTypeSkill,
 	}); err != nil {
@@ -361,7 +367,7 @@ func (db *PostgreSQL) UpdateSkill(ctx context.Context, skillName, version string
 	var name, vers, status string
 	var publishedAt, updatedAt time.Time
 	var isLatest bool
-	if err := db.getExecutor().QueryRow(ctx, query, valueJSON, skillName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest); err != nil {
+	if err := s.executor.QueryRow(ctx, query, valueJSON, skillName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, database.ErrNotFound
 		}
@@ -380,12 +386,12 @@ func (db *PostgreSQL) UpdateSkill(ctx context.Context, skillName, version string
 	}, nil
 }
 
-func (db *PostgreSQL) SetSkillStatus(ctx context.Context, skillName, version string, status string) (*models.SkillResponse, error) {
+func (s *skillStore) SetSkillStatus(ctx context.Context, skillName, version string, status string) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
 		Name: skillName,
 		Type: auth.PermissionArtifactTypeSkill,
 	}); err != nil {
@@ -402,7 +408,7 @@ func (db *PostgreSQL) SetSkillStatus(ctx context.Context, skillName, version str
 	var publishedAt, updatedAt time.Time
 	var isLatest bool
 	var valueJSON []byte
-	if err := db.getExecutor().QueryRow(ctx, query, status, skillName, version).Scan(&name, &vers, &currentStatus, &valueJSON, &publishedAt, &updatedAt, &isLatest); err != nil {
+	if err := s.executor.QueryRow(ctx, query, status, skillName, version).Scan(&name, &vers, &currentStatus, &valueJSON, &publishedAt, &updatedAt, &isLatest); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, database.ErrNotFound
 		}
@@ -425,19 +431,19 @@ func (db *PostgreSQL) SetSkillStatus(ctx context.Context, skillName, version str
 	}, nil
 }
 
-func (db *PostgreSQL) GetCurrentLatestSkillVersion(ctx context.Context, skillName string) (*models.SkillResponse, error) {
+func (s *skillStore) GetCurrentLatestSkillVersion(ctx context.Context, skillName string) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: skillName,
 		Type: auth.PermissionArtifactTypeSkill,
 	}); err != nil {
 		return nil, err
 	}
 
-	executor := db.getExecutor()
+	executor := s.executor
 	query := `
         SELECT skill_name, version, status, value, published_at, updated_at, is_latest
         FROM skills
@@ -471,19 +477,19 @@ func (db *PostgreSQL) GetCurrentLatestSkillVersion(ctx context.Context, skillNam
 	}, nil
 }
 
-func (db *PostgreSQL) CountSkillVersions(ctx context.Context, skillName string) (int, error) {
+func (s *skillStore) CountSkillVersions(ctx context.Context, skillName string) (int, error) {
 	if ctx.Err() != nil {
 		return 0, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: skillName,
 		Type: auth.PermissionArtifactTypeSkill,
 	}); err != nil {
 		return 0, err
 	}
 
-	executor := db.getExecutor()
+	executor := s.executor
 	query := `SELECT COUNT(*) FROM skills WHERE skill_name = $1`
 	var count int
 	if err := executor.QueryRow(ctx, query, skillName).Scan(&count); err != nil {
@@ -492,19 +498,19 @@ func (db *PostgreSQL) CountSkillVersions(ctx context.Context, skillName string) 
 	return count, nil
 }
 
-func (db *PostgreSQL) CheckSkillVersionExists(ctx context.Context, skillName, version string) (bool, error) {
+func (s *skillStore) CheckSkillVersionExists(ctx context.Context, skillName, version string) (bool, error) {
 	if ctx.Err() != nil {
 		return false, ctx.Err()
 	}
 
-	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: skillName,
 		Type: auth.PermissionArtifactTypeSkill,
 	}); err != nil {
 		return false, err
 	}
 
-	executor := db.getExecutor()
+	executor := s.executor
 	query := `SELECT EXISTS(SELECT 1 FROM skills WHERE skill_name = $1 AND version = $2)`
 	var exists bool
 	if err := executor.QueryRow(ctx, query, skillName, version).Scan(&exists); err != nil {
@@ -513,21 +519,21 @@ func (db *PostgreSQL) CheckSkillVersionExists(ctx context.Context, skillName, ve
 	return exists, nil
 }
 
-func (db *PostgreSQL) UnmarkSkillAsLatest(ctx context.Context, skillName string) error {
+func (s *skillStore) UnmarkSkillAsLatest(ctx context.Context, skillName string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
 
 	// note: we do a push check because this is called during an artifact's creation operation, which automatically marks the new version as latest.
 	// maybe we should add a parameter to the function to indicate if it's from a creation operation or not? this would be important if we allow manual marking of latest.
-	if err := db.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
+	if err := s.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
 		Name: skillName,
 		Type: auth.PermissionArtifactTypeSkill,
 	}); err != nil {
 		return err
 	}
 
-	executor := db.getExecutor()
+	executor := s.executor
 	query := `UPDATE skills SET is_latest = false WHERE skill_name = $1 AND is_latest = true`
 	if _, err := executor.Exec(ctx, query, skillName); err != nil {
 		return fmt.Errorf("failed to unmark latest skill version: %w", err)
@@ -536,15 +542,15 @@ func (db *PostgreSQL) UnmarkSkillAsLatest(ctx context.Context, skillName string)
 }
 
 // DeleteSkill permanently removes a skill version from the database.
-func (db *PostgreSQL) DeleteSkill(ctx context.Context, skillName, version string) error {
-	if err := db.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
+func (s *skillStore) DeleteSkill(ctx context.Context, skillName, version string) error {
+	if err := s.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
 		Name: skillName,
 		Type: auth.PermissionArtifactTypeSkill,
 	}); err != nil {
 		return err
 	}
 
-	executor := db.getExecutor()
+	executor := s.executor
 
 	// Check if the version being deleted is the current latest.
 	var wasLatest bool

@@ -31,7 +31,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
-	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
 	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
 	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
@@ -135,29 +134,36 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	}
 
 	serverService := serversvc.New(serversvc.Dependencies{
-		StoreDB:            db,
+		Servers:            db.Servers(),
+		Tx:                 db,
 		Config:             cfg,
 		EmbeddingsProvider: embeddingProvider,
 	})
 	agentService := agentsvc.New(agentsvc.Dependencies{
-		StoreDB:            db,
+		Agents:             db.Agents(),
+		Skills:             db.Skills(),
+		Prompts:            db.Prompts(),
+		Tx:                 db,
 		Config:             cfg,
 		EmbeddingsProvider: embeddingProvider,
 	})
-	providerService := providersvc.New(providersvc.Dependencies{StoreDB: db})
+	providerStore := db.Providers()
 
 	// Initialize extension registries once and use them for both routing and service behavior.
-	providerPlatforms := v0providers.DefaultProviderPlatformAdapters(providerService)
+	providerPlatforms := v0providers.DefaultProviderPlatformAdapters(providerStore)
 	maps.Copy(providerPlatforms, options.ProviderPlatforms)
 	deploymentPlatforms := map[string]types.DeploymentPlatformAdapter{
 		"local":      local.NewLocalDeploymentAdapter(serverService, agentService, cfg.RuntimeDir, cfg.AgentGatewayPort),
-		"kubernetes": kubernetes.NewKubernetesDeploymentAdapter(providerService, serverService, agentService),
+		"kubernetes": kubernetes.NewKubernetesDeploymentAdapter(providerStore, serverService, agentService),
 	}
 	maps.Copy(deploymentPlatforms, options.DeploymentPlatforms)
-	skillService := skillsvc.New(skillsvc.Dependencies{StoreDB: db})
-	promptService := promptsvc.New(promptsvc.Dependencies{StoreDB: db})
+	skillService := skillsvc.New(skillsvc.Dependencies{Skills: db.Skills(), Tx: db})
+	promptService := promptsvc.New(promptsvc.Dependencies{Prompts: db.Prompts(), Tx: db})
 	deploymentService := deploymentsvc.New(deploymentsvc.Dependencies{
-		StoreDB:            db,
+		Deployments:        db.Deployments(),
+		Providers:          providerStore,
+		Servers:            db.Servers(),
+		Agents:             db.Agents(),
 		DeploymentAdapters: deploymentPlatforms,
 	})
 	agentRouteService := agentService
@@ -238,7 +244,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	}
 
 	// Initialize HTTP server
-	baseServer := api.NewServer(cfg, serverService, agentRouteService, skillService, promptService, providerService, deploymentService, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts)
+	baseServer := api.NewServer(cfg, serverService, agentRouteService, skillService, promptService, providerStore, deploymentService, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts)
 
 	var server types.Server
 	if options.HTTPServerFactory != nil {
