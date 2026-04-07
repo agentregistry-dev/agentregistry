@@ -18,7 +18,6 @@ import (
 	mcpregistry "github.com/agentregistry-dev/agentregistry/internal/mcp/registryserver"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api"
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
-	v0providers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/providers"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
@@ -151,7 +150,7 @@ func App(_ context.Context, opts ...types.AppOptions) error {
 	providerStore := db.Providers()
 
 	// Initialize extension registries once and use them for both routing and service behavior.
-	providerPlatforms := v0providers.DefaultProviderPlatformAdapters(providerStore)
+	providerPlatforms := providersvc.DefaultPlatformAdapters(providerStore)
 	maps.Copy(providerPlatforms, options.ProviderPlatforms)
 	providerService := providersvc.New(providersvc.Dependencies{
 		Providers:         providerStore,

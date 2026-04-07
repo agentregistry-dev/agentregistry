@@ -1,4 +1,4 @@
-package providers
+package provider
 
 import (
 	"context"
@@ -9,9 +9,17 @@ import (
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
+type platformStore interface {
+	ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error)
+	CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error)
+	GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error)
+	UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error)
+	DeleteProvider(ctx context.Context, providerID string) error
+}
+
 type providerAdapterBase struct {
 	providerPlatform string
-	registry         database.ProviderStore
+	registry         platformStore
 }
 
 func (a *providerAdapterBase) Platform() string {
@@ -74,12 +82,10 @@ type kubernetesProviderAdapter struct {
 	providerAdapterBase
 }
 
-// NOTE: local and kubernetes currently share the same adapter base behavior.
-// Provider CRUD remains extension-driven, and these concrete adapter types are
-// kept explicit so platform-specific validation can diverge later if needed.
-
-// DefaultProviderPlatformAdapters returns OSS provider adapters for local and kubernetes.
-func DefaultProviderPlatformAdapters(registry database.ProviderStore) map[string]registrytypes.ProviderPlatformAdapter {
+// DefaultPlatformAdapters returns the OSS provider adapters for local and
+// kubernetes. Keeping this in the provider service domain avoids routing
+// packages owning provider CRUD extension behavior.
+func DefaultPlatformAdapters(registry platformStore) map[string]registrytypes.ProviderPlatformAdapter {
 	return map[string]registrytypes.ProviderPlatformAdapter{
 		"local": &localProviderAdapter{
 			providerAdapterBase: providerAdapterBase{
