@@ -261,52 +261,52 @@ func (s *registryServiceImpl) AgentEmbeddingMetadata(ctx context.Context, agentN
 	return s.agentService().AgentEmbeddingMetadata(ctx, agentName, version)
 }
 
-func (s *registryServiceImpl) ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
-	return s.skillService().ListSkills(ctx, filter, cursor, limit)
+func (s *registryServiceImpl) BrowseSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
+	return s.skillService().BrowseSkills(ctx, filter, cursor, limit)
 }
 
-func (s *registryServiceImpl) GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error) {
-	return s.skillService().GetSkillByName(ctx, skillName)
+func (s *registryServiceImpl) LookupSkill(ctx context.Context, skillName string) (*models.SkillResponse, error) {
+	return s.skillService().LookupSkill(ctx, skillName)
 }
 
-func (s *registryServiceImpl) GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
-	return s.skillService().GetSkillByNameAndVersion(ctx, skillName, version)
+func (s *registryServiceImpl) LookupSkillVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
+	return s.skillService().LookupSkillVersion(ctx, skillName, version)
 }
 
-func (s *registryServiceImpl) GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
-	return s.skillService().GetAllVersionsBySkillName(ctx, skillName)
+func (s *registryServiceImpl) SkillHistory(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
+	return s.skillService().SkillHistory(ctx, skillName)
 }
 
-func (s *registryServiceImpl) CreateSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error) {
-	return s.skillService().CreateSkill(ctx, req)
+func (s *registryServiceImpl) PublishSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error) {
+	return s.skillService().PublishSkill(ctx, req)
 }
 
-func (s *registryServiceImpl) DeleteSkill(ctx context.Context, skillName, version string) error {
-	return s.skillService().DeleteSkill(ctx, skillName, version)
+func (s *registryServiceImpl) RemoveSkill(ctx context.Context, skillName, version string) error {
+	return s.skillService().RemoveSkill(ctx, skillName, version)
 }
 
-func (s *registryServiceImpl) ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
-	return s.promptService().ListPrompts(ctx, filter, cursor, limit)
+func (s *registryServiceImpl) BrowsePrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
+	return s.promptService().BrowsePrompts(ctx, filter, cursor, limit)
 }
 
-func (s *registryServiceImpl) GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error) {
-	return s.promptService().GetPromptByName(ctx, promptName)
+func (s *registryServiceImpl) LookupPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error) {
+	return s.promptService().LookupPrompt(ctx, promptName)
 }
 
-func (s *registryServiceImpl) GetPromptByNameAndVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
-	return s.promptService().GetPromptByNameAndVersion(ctx, promptName, version)
+func (s *registryServiceImpl) LookupPromptVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
+	return s.promptService().LookupPromptVersion(ctx, promptName, version)
 }
 
-func (s *registryServiceImpl) GetAllVersionsByPromptName(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
-	return s.promptService().GetAllVersionsByPromptName(ctx, promptName)
+func (s *registryServiceImpl) PromptHistory(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
+	return s.promptService().PromptHistory(ctx, promptName)
 }
 
-func (s *registryServiceImpl) CreatePrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error) {
-	return s.promptService().CreatePrompt(ctx, req)
+func (s *registryServiceImpl) PublishPrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error) {
+	return s.promptService().PublishPrompt(ctx, req)
 }
 
-func (s *registryServiceImpl) DeletePrompt(ctx context.Context, promptName, version string) error {
-	return s.promptService().DeletePrompt(ctx, promptName, version)
+func (s *registryServiceImpl) RemovePrompt(ctx context.Context, promptName, version string) error {
+	return s.promptService().RemovePrompt(ctx, promptName, version)
 }
 
 func (s *registryServiceImpl) ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error) {

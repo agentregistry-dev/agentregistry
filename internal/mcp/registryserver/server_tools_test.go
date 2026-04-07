@@ -173,14 +173,14 @@ func (f *fakeMCPRegistry) ServerEmbeddingMetadata(ctx context.Context, serverNam
 	return nil, database.ErrNotFound
 }
 
-func (f *fakeMCPRegistry) ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
+func (f *fakeMCPRegistry) BrowseSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
 	if f.listSkillsFn != nil {
 		return f.listSkillsFn(ctx, filter, cursor, limit)
 	}
 	return f.skills, "", nil
 }
 
-func (f *fakeMCPRegistry) GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error) {
+func (f *fakeMCPRegistry) LookupSkill(ctx context.Context, skillName string) (*models.SkillResponse, error) {
 	if f.getSkillByNameFn != nil {
 		return f.getSkillByNameFn(ctx, skillName)
 	}
@@ -190,25 +190,25 @@ func (f *fakeMCPRegistry) GetSkillByName(ctx context.Context, skillName string) 
 	return nil, database.ErrNotFound
 }
 
-func (f *fakeMCPRegistry) GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
+func (f *fakeMCPRegistry) LookupSkillVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
 	if f.getSkillByNameVersionFn != nil {
 		return f.getSkillByNameVersionFn(ctx, skillName, version)
 	}
-	return f.GetSkillByName(ctx, skillName)
+	return f.LookupSkill(ctx, skillName)
 }
 
-func (f *fakeMCPRegistry) GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
+func (f *fakeMCPRegistry) SkillHistory(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
 	if len(f.skills) > 0 {
 		return f.skills, nil
 	}
 	return nil, database.ErrNotFound
 }
 
-func (f *fakeMCPRegistry) CreateSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error) {
+func (f *fakeMCPRegistry) PublishSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (f *fakeMCPRegistry) DeleteSkill(ctx context.Context, skillName, version string) error {
+func (f *fakeMCPRegistry) RemoveSkill(ctx context.Context, skillName, version string) error {
 	return errors.New("not implemented")
 }
 
@@ -740,38 +740,19 @@ func (s *fakeMCPSkillStore) ListSkills(ctx context.Context, filter *database.Ski
 }
 
 func (s *fakeMCPSkillStore) GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error) {
-	if s.registry.getSkillByNameFn != nil {
-		return s.registry.getSkillByNameFn(ctx, skillName)
-	}
-	if len(s.registry.skills) > 0 {
-		return s.registry.skills[0], nil
-	}
-	return &models.SkillResponse{Skill: models.SkillJSON{Name: skillName, Version: "latest"}}, nil
+	return s.registry.LookupSkill(ctx, skillName)
 }
 
 func (s *fakeMCPSkillStore) GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
-	if s.registry.getSkillByNameVersionFn != nil {
-		return s.registry.getSkillByNameVersionFn(ctx, skillName, version)
-	}
-	if len(s.registry.skills) > 0 {
-		return s.registry.skills[0], nil
-	}
-	return &models.SkillResponse{Skill: models.SkillJSON{Name: skillName, Version: version}}, nil
+	return s.registry.LookupSkillVersion(ctx, skillName, version)
 }
 
 func (s *fakeMCPSkillStore) GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
-	if len(s.registry.skills) > 0 {
-		return s.registry.skills, nil
-	}
-	skill, err := s.GetSkillByName(ctx, skillName)
-	if err != nil {
-		return nil, err
-	}
-	return []*models.SkillResponse{skill}, nil
+	return s.registry.SkillHistory(ctx, skillName)
 }
 
 func (s *fakeMCPSkillStore) GetCurrentLatestSkillVersion(ctx context.Context, skillName string) (*models.SkillResponse, error) {
-	return s.GetSkillByName(ctx, skillName)
+	return s.registry.LookupSkill(ctx, skillName)
 }
 
 func (s *fakeMCPSkillStore) CountSkillVersions(context.Context, string) (int, error) {

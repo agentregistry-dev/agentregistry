@@ -81,7 +81,7 @@ func RegisterPromptsEndpoints(api huma.API, pathPrefix string, promptSvc prompts
 			}
 		}
 
-		prompts, nextCursor, err := promptSvc.ListPrompts(ctx, filter, input.Cursor, input.Limit)
+		prompts, nextCursor, err := promptSvc.BrowsePrompts(ctx, filter, input.Cursor, input.Limit)
 		if err != nil {
 			if errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error401Unauthorized("Authentication required")
@@ -127,9 +127,9 @@ func RegisterPromptsEndpoints(api huma.API, pathPrefix string, promptSvc prompts
 
 		var promptResp *promptmodels.PromptResponse
 		if version == "latest" {
-			promptResp, err = promptSvc.GetPromptByName(ctx, promptName)
+			promptResp, err = promptSvc.LookupPrompt(ctx, promptName)
 		} else {
-			promptResp, err = promptSvc.GetPromptByNameAndVersion(ctx, promptName, version)
+			promptResp, err = promptSvc.LookupPromptVersion(ctx, promptName, version)
 		}
 		if err != nil {
 			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
@@ -164,7 +164,7 @@ func RegisterPromptsEndpoints(api huma.API, pathPrefix string, promptSvc prompts
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
 		}
 
-		if err := promptSvc.DeletePrompt(ctx, promptName, version); err != nil {
+		if err := promptSvc.RemovePrompt(ctx, promptName, version); err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Prompt not found")
 			}
@@ -196,7 +196,7 @@ func RegisterPromptsEndpoints(api huma.API, pathPrefix string, promptSvc prompts
 			return nil, huma.Error400BadRequest("Invalid prompt name encoding", err)
 		}
 
-		prompts, err := promptSvc.GetAllVersionsByPromptName(ctx, promptName)
+		prompts, err := promptSvc.PromptHistory(ctx, promptName)
 		if err != nil {
 			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Prompt not found")
@@ -230,7 +230,7 @@ type CreatePromptInput struct {
 
 // createPromptHandler is the shared handler logic for creating prompts
 func createPromptHandler(ctx context.Context, input *CreatePromptInput, promptSvc promptsvc.Registry) (*types.Response[promptmodels.PromptResponse], error) {
-	createdPrompt, err := promptSvc.CreatePrompt(ctx, &input.Body)
+	createdPrompt, err := promptSvc.PublishPrompt(ctx, &input.Body)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
 			return nil, huma.Error404NotFound("Not found")

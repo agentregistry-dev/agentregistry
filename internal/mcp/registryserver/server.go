@@ -291,7 +291,7 @@ func addSkillTools(server *mcp.Server, registry skillsvc.Registry) {
 		}
 
 		limit := clampLimit(args.Limit)
-		skills, nextCursor, err := registry.ListSkills(ctx, filter, args.Cursor, limit)
+		skills, nextCursor, err := registry.BrowseSkills(ctx, filter, args.Cursor, limit)
 		if err != nil {
 			return nil, models.SkillListResponse{}, err
 		}
@@ -325,9 +325,9 @@ func addSkillTools(server *mcp.Server, registry skillsvc.Registry) {
 		var skill *models.SkillResponse
 		var err error
 		if version == "latest" {
-			skill, err = registry.GetSkillByName(ctx, args.Name)
+			skill, err = registry.LookupSkill(ctx, args.Name)
 		} else {
-			skill, err = registry.GetSkillByNameAndVersion(ctx, args.Name, version)
+			skill, err = registry.LookupSkillVersion(ctx, args.Name, version)
 		}
 		if err != nil {
 			return nil, models.SkillResponse{}, err

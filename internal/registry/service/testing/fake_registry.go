@@ -302,7 +302,7 @@ func (f *FakeRegistry) GetAgentEmbeddingMetadata(ctx context.Context, agentName,
 
 // Skill methods
 
-func (f *FakeRegistry) ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
+func (f *FakeRegistry) BrowseSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
 	if f.ListSkillsFn != nil {
 		return f.ListSkillsFn(ctx, filter, cursor, limit)
 	}
@@ -311,7 +311,7 @@ func (f *FakeRegistry) ListSkills(ctx context.Context, filter *database.SkillFil
 	return f.Skills, "", nil
 }
 
-func (f *FakeRegistry) GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error) {
+func (f *FakeRegistry) LookupSkill(ctx context.Context, skillName string) (*models.SkillResponse, error) {
 	if f.GetSkillByNameFn != nil {
 		return f.GetSkillByNameFn(ctx, skillName)
 	}
@@ -323,14 +323,14 @@ func (f *FakeRegistry) GetSkillByName(ctx context.Context, skillName string) (*m
 	return nil, database.ErrNotFound
 }
 
-func (f *FakeRegistry) GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
+func (f *FakeRegistry) LookupSkillVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
 	if f.GetSkillByNameAndVersionFn != nil {
 		return f.GetSkillByNameAndVersionFn(ctx, skillName, version)
 	}
-	return f.GetSkillByName(ctx, skillName)
+	return f.LookupSkill(ctx, skillName)
 }
 
-func (f *FakeRegistry) GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
+func (f *FakeRegistry) SkillHistory(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
 	if f.GetAllVersionsBySkillNameFn != nil {
 		return f.GetAllVersionsBySkillNameFn(ctx, skillName)
 	}
@@ -339,14 +339,14 @@ func (f *FakeRegistry) GetAllVersionsBySkillName(ctx context.Context, skillName 
 	return f.Skills, nil
 }
 
-func (f *FakeRegistry) CreateSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error) {
+func (f *FakeRegistry) PublishSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error) {
 	if f.CreateSkillFn != nil {
 		return f.CreateSkillFn(ctx, req)
 	}
 	return nil, database.ErrNotFound
 }
 
-func (f *FakeRegistry) DeleteSkill(ctx context.Context, skillName, version string) error {
+func (f *FakeRegistry) RemoveSkill(ctx context.Context, skillName, version string) error {
 	if f.DeleteSkillFn != nil {
 		return f.DeleteSkillFn(ctx, skillName, version)
 	}
@@ -455,7 +455,7 @@ func (f *FakeRegistry) CreateDeployment(ctx context.Context, req *models.Deploym
 
 // Prompt methods
 
-func (f *FakeRegistry) ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
+func (f *FakeRegistry) BrowsePrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
 	if f.ListPromptsFn != nil {
 		return f.ListPromptsFn(ctx, filter, cursor, limit)
 	}
@@ -464,7 +464,7 @@ func (f *FakeRegistry) ListPrompts(ctx context.Context, filter *database.PromptF
 	return f.Prompts, "", nil
 }
 
-func (f *FakeRegistry) GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error) {
+func (f *FakeRegistry) LookupPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error) {
 	if f.GetPromptByNameFn != nil {
 		return f.GetPromptByNameFn(ctx, promptName)
 	}
@@ -497,14 +497,14 @@ func (f *FakeRegistry) CancelDeployment(ctx context.Context, deployment *models.
 	return database.ErrNotFound
 }
 
-func (f *FakeRegistry) GetPromptByNameAndVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
+func (f *FakeRegistry) LookupPromptVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
 	if f.GetPromptByNameAndVersionFn != nil {
 		return f.GetPromptByNameAndVersionFn(ctx, promptName, version)
 	}
-	return f.GetPromptByName(ctx, promptName)
+	return f.LookupPrompt(ctx, promptName)
 }
 
-func (f *FakeRegistry) GetAllVersionsByPromptName(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
+func (f *FakeRegistry) PromptHistory(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
 	if f.GetAllVersionsByPromptNameFn != nil {
 		return f.GetAllVersionsByPromptNameFn(ctx, promptName)
 	}
@@ -513,14 +513,14 @@ func (f *FakeRegistry) GetAllVersionsByPromptName(ctx context.Context, promptNam
 	return f.Prompts, nil
 }
 
-func (f *FakeRegistry) CreatePrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error) {
+func (f *FakeRegistry) PublishPrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error) {
 	if f.CreatePromptFn != nil {
 		return f.CreatePromptFn(ctx, req)
 	}
 	return nil, database.ErrNotFound
 }
 
-func (f *FakeRegistry) DeletePrompt(ctx context.Context, promptName, version string) error {
+func (f *FakeRegistry) RemovePrompt(ctx context.Context, promptName, version string) error {
 	if f.DeletePromptFn != nil {
 		return f.DeletePromptFn(ctx, promptName, version)
 	}

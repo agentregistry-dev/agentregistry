@@ -39,7 +39,7 @@ func TestPrometheusHandler(t *testing.T) {
 	storeDB := database.NewTestServiceDB(t)
 	serverService := serversvc.New(serversvc.Dependencies{StoreDB: storeDB, Config: testConfig})
 	deploymentService := deploymentsvc.New(deploymentsvc.Dependencies{StoreDB: storeDB})
-	server, err := serverService.CreateServer(context.Background(), &apiv0.ServerJSON{
+	server, err := serverService.PublishServer(context.Background(), &apiv0.ServerJSON{
 		Schema:      model.CurrentSchemaURL,
 		Name:        "io.github.example/test-server",
 		Description: "Test server detail",
