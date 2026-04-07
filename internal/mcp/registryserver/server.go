@@ -84,7 +84,7 @@ func addAgentTools(server *mcp.Server, registry agentsvc.Registry) {
 		}
 
 		limit := clampLimit(args.Limit)
-		agents, nextCursor, err := registry.BrowseAgents(ctx, filter, args.Cursor, limit)
+		agents, nextCursor, err := registry.ListAgents(ctx, filter, args.Cursor, limit)
 		if err != nil {
 			return nil, models.AgentListResponse{}, err
 		}
@@ -117,9 +117,9 @@ func addAgentTools(server *mcp.Server, registry agentsvc.Registry) {
 		var agent *models.AgentResponse
 		var err error
 		if version == "latest" {
-			agent, err = registry.LookupAgent(ctx, args.Name)
+			agent, err = registry.GetAgent(ctx, args.Name)
 		} else {
-			agent, err = registry.LookupAgentVersion(ctx, args.Name, version)
+			agent, err = registry.GetAgentVersion(ctx, args.Name, version)
 		}
 		if err != nil {
 			return nil, models.AgentResponse{}, err
@@ -167,7 +167,7 @@ func addServerTools(server *mcp.Server, registry serversvc.Registry) {
 		}
 
 		limit := clampLimit(args.Limit)
-		servers, nextCursor, err := registry.BrowseServers(ctx, filter, args.Cursor, limit)
+		servers, nextCursor, err := registry.ListServers(ctx, filter, args.Cursor, limit)
 		if err != nil {
 			return nil, apiv0.ServerListResponse{}, err
 		}
@@ -199,7 +199,7 @@ func addServerTools(server *mcp.Server, registry serversvc.Registry) {
 		}
 
 		if args.All {
-			servers, err := registry.ServerHistory(ctx, args.Name)
+			servers, err := registry.GetServerVersions(ctx, args.Name)
 			if err != nil {
 				return nil, apiv0.ServerListResponse{}, err
 			}
@@ -242,9 +242,9 @@ func addServerTools(server *mcp.Server, registry serversvc.Registry) {
 		var readme *database.ServerReadme
 		var err error
 		if version == "latest" {
-			readme, err = registry.LatestServerReadme(ctx, args.Name)
+			readme, err = registry.GetLatestServerReadme(ctx, args.Name)
 		} else {
-			readme, err = registry.ServerReadme(ctx, args.Name, version)
+			readme, err = registry.GetServerReadme(ctx, args.Name, version)
 		}
 		if err != nil {
 			return nil, ServerReadmePayload{}, err
@@ -291,7 +291,7 @@ func addSkillTools(server *mcp.Server, registry skillsvc.Registry) {
 		}
 
 		limit := clampLimit(args.Limit)
-		skills, nextCursor, err := registry.BrowseSkills(ctx, filter, args.Cursor, limit)
+		skills, nextCursor, err := registry.ListSkills(ctx, filter, args.Cursor, limit)
 		if err != nil {
 			return nil, models.SkillListResponse{}, err
 		}
@@ -325,9 +325,9 @@ func addSkillTools(server *mcp.Server, registry skillsvc.Registry) {
 		var skill *models.SkillResponse
 		var err error
 		if version == "latest" {
-			skill, err = registry.LookupSkill(ctx, args.Name)
+			skill, err = registry.GetSkill(ctx, args.Name)
 		} else {
-			skill, err = registry.LookupSkillVersion(ctx, args.Name, version)
+			skill, err = registry.GetSkillVersion(ctx, args.Name, version)
 		}
 		if err != nil {
 			return nil, models.SkillResponse{}, err
@@ -381,7 +381,7 @@ func addDeploymentTools(server *mcp.Server, registry deploymentsvc.Registry) {
 		Name:        "list_deployments",
 		Description: "List deployments (servers or agents)",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listDeploymentsArgs) (*mcp.CallToolResult, deploymentsResponse, error) {
-		deployments, err := registry.BrowseDeployments(ctx, nil)
+		deployments, err := registry.ListDeployments(ctx, nil)
 		if err != nil {
 			return nil, deploymentsResponse{}, err
 		}
@@ -410,7 +410,7 @@ func addDeploymentTools(server *mcp.Server, registry deploymentsvc.Registry) {
 		if args.ID == "" {
 			return nil, models.Deployment{}, errors.New("id is required")
 		}
-		deployment, err := registry.LookupDeployment(ctx, args.ID)
+		deployment, err := registry.GetDeployment(ctx, args.ID)
 		if err != nil {
 			return nil, models.Deployment{}, err
 		}
@@ -465,7 +465,7 @@ func addDeploymentTools(server *mcp.Server, registry deploymentsvc.Registry) {
 		if args.ID == "" {
 			return nil, nil, errors.New("id is required")
 		}
-		deployment, err := registry.LookupDeployment(ctx, args.ID)
+		deployment, err := registry.GetDeployment(ctx, args.ID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -489,7 +489,7 @@ type ServerReadmePayload struct {
 
 func fetchSingleServer(ctx context.Context, registry serversvc.Registry, name, version string) (*apiv0.ServerResponse, error) {
 	if version == "latest" {
-		servers, err := registry.ServerHistory(ctx, name)
+		servers, err := registry.GetServerVersions(ctx, name)
 		if err != nil {
 			return nil, err
 		}
@@ -504,7 +504,7 @@ func fetchSingleServer(ctx context.Context, registry serversvc.Registry, name, v
 		return servers[0], nil
 	}
 
-	return registry.LookupServerVersion(ctx, name, version)
+	return registry.GetServerVersion(ctx, name, version)
 }
 
 func clampLimit(limit int) int {

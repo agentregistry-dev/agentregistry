@@ -9,7 +9,7 @@ import (
 )
 
 type Lister interface {
-	BrowseDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
+	ListDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
 }
 
 type deploymentResourceKey struct {
@@ -18,7 +18,7 @@ type deploymentResourceKey struct {
 }
 
 func deploymentResourceIndex(ctx context.Context, deploymentSvc Lister) map[deploymentResourceKey][]models.DeploymentSummary {
-	deployments, err := deploymentSvc.BrowseDeployments(ctx, nil)
+	deployments, err := deploymentSvc.ListDeployments(ctx, nil)
 	if err != nil {
 		return map[deploymentResourceKey][]models.DeploymentSummary{}
 	}

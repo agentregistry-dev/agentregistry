@@ -16,7 +16,7 @@ type fakeLister struct {
 	err         error
 }
 
-func (f *fakeLister) BrowseDeployments(_ context.Context, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
+func (f *fakeLister) ListDeployments(_ context.Context, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
 	return f.deployments, f.err
 }
 

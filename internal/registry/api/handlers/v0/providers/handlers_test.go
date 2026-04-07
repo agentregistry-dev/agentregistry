@@ -26,14 +26,14 @@ type fakeProviderService struct {
 	deleteFn        func(ctx context.Context, providerID, platformHint string) error
 }
 
-func (f *fakeProviderService) BrowseProviders(ctx context.Context, platform string) ([]*models.Provider, error) {
+func (f *fakeProviderService) ListProviders(ctx context.Context, platform string) ([]*models.Provider, error) {
 	if f.listProvidersFn != nil {
 		return f.listProvidersFn(ctx, platform)
 	}
 	return []*models.Provider{}, nil
 }
 
-func (f *fakeProviderService) LookupProvider(ctx context.Context, providerID string) (*models.Provider, error) {
+func (f *fakeProviderService) GetProvider(ctx context.Context, providerID string) (*models.Provider, error) {
 	if f.getProviderFn != nil {
 		return f.getProviderFn(ctx, providerID)
 	}
@@ -44,7 +44,7 @@ func (f *fakeProviderService) ResolveProvider(ctx context.Context, providerID, p
 	if f.resolveFn != nil {
 		return f.resolveFn(ctx, providerID, platformHint)
 	}
-	return f.LookupProvider(ctx, providerID)
+	return f.GetProvider(ctx, providerID)
 }
 
 func (f *fakeProviderService) RegisterProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error) {
@@ -54,14 +54,14 @@ func (f *fakeProviderService) RegisterProvider(ctx context.Context, in *models.C
 	return nil, database.ErrNotFound
 }
 
-func (f *fakeProviderService) ReviseProvider(ctx context.Context, providerID, platformHint string, in *models.UpdateProviderInput) (*models.Provider, error) {
+func (f *fakeProviderService) UpdateProvider(ctx context.Context, providerID, platformHint string, in *models.UpdateProviderInput) (*models.Provider, error) {
 	if f.updateFn != nil {
 		return f.updateFn(ctx, providerID, platformHint, in)
 	}
 	return nil, database.ErrNotFound
 }
 
-func (f *fakeProviderService) RemoveProvider(ctx context.Context, providerID, platformHint string) error {
+func (f *fakeProviderService) DeleteProvider(ctx context.Context, providerID, platformHint string) error {
 	if f.deleteFn != nil {
 		return f.deleteFn(ctx, providerID, platformHint)
 	}

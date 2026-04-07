@@ -56,7 +56,7 @@ func BuildPlatformMCPServer(
 	deployment *models.Deployment,
 	namespace string,
 ) (*platformtypes.MCPServer, error) {
-	serverResp, err := serverService.LookupServerVersion(ctx, deployment.ServerName, deployment.Version)
+	serverResp, err := serverService.GetServerVersion(ctx, deployment.ServerName, deployment.Version)
 	if err != nil {
 		return nil, fmt.Errorf("load mcp server %s@%s: %w", deployment.ServerName, deployment.Version, err)
 	}
@@ -85,7 +85,7 @@ func ResolveAgent(
 	deployment *models.Deployment,
 	namespace string,
 ) (*platformtypes.ResolvedAgentConfig, error) {
-	agentResp, err := agentService.LookupAgentVersion(ctx, deployment.ServerName, deployment.Version)
+	agentResp, err := agentService.GetAgentVersion(ctx, deployment.ServerName, deployment.Version)
 	if err != nil {
 		return nil, fmt.Errorf("load agent %s@%s: %w", deployment.ServerName, deployment.Version, err)
 	}
@@ -160,7 +160,7 @@ func resolveAgentManifestPlatformMCPServers(
 			version = "latest"
 		}
 
-		serverResp, err := serverService.LookupServerVersion(ctx, mcpServer.RegistryServerName, version)
+		serverResp, err := serverService.GetServerVersion(ctx, mcpServer.RegistryServerName, version)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("load resolved MCP server %s@%s: %w", mcpServer.RegistryServerName, version, err)
 		}

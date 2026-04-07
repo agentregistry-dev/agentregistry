@@ -53,7 +53,7 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, serverSvc serversvc.
 		}
 
 		// Get current server to check permissions against existing name
-		currentServer, err := serverSvc.LookupServerVersion(ctx, serverName, version)
+		currentServer, err := serverSvc.GetServerVersion(ctx, serverName, version)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Server not found")
@@ -98,7 +98,7 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, serverSvc serversvc.
 		if input.Status != "" {
 			statusPtr = &input.Status
 		}
-		updatedServer, err := serverSvc.ReviseServer(ctx, serverName, version, &input.Body, statusPtr)
+		updatedServer, err := serverSvc.UpdateServer(ctx, serverName, version, &input.Body, statusPtr)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Server not found")

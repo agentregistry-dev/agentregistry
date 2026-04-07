@@ -31,18 +31,18 @@ type Dependencies struct {
 }
 
 type Registry interface {
-	BrowseServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
-	LookupServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error)
-	LookupServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error)
-	ServerHistory(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error)
+	ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
+	GetServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error)
+	GetServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error)
+	GetServerVersions(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error)
 	PublishServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
-	ReviseServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error)
-	SaveServerReadme(ctx context.Context, serverName, version string, content []byte, contentType string) error
-	LatestServerReadme(ctx context.Context, serverName string) (*database.ServerReadme, error)
-	ServerReadme(ctx context.Context, serverName, version string) (*database.ServerReadme, error)
-	RemoveServer(ctx context.Context, serverName, version string) error
-	SaveServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error
-	ServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error)
+	UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error)
+	SetServerReadme(ctx context.Context, serverName, version string, content []byte, contentType string) error
+	GetLatestServerReadme(ctx context.Context, serverName string) (*database.ServerReadme, error)
+	GetServerReadme(ctx context.Context, serverName, version string) (*database.ServerReadme, error)
+	DeleteServer(ctx context.Context, serverName, version string) error
+	SetServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error
+	GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error)
 }
 
 type registry struct {
@@ -77,7 +77,7 @@ func New(deps Dependencies) Registry {
 	}
 }
 
-func (s *registry) BrowseServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
+func (s *registry) ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
 	if limit <= 0 {
 		limit = 30
 	}
@@ -91,15 +91,15 @@ func (s *registry) BrowseServers(ctx context.Context, filter *database.ServerFil
 	return s.servers.ListServers(ctx, filter, cursor, limit)
 }
 
-func (s *registry) LookupServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+func (s *registry) GetServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
 	return s.servers.GetServerByName(ctx, serverName)
 }
 
-func (s *registry) LookupServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
+func (s *registry) GetServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
 	return s.servers.GetServerByNameAndVersion(ctx, serverName, version)
 }
 
-func (s *registry) ServerHistory(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
+func (s *registry) GetServerVersions(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
 	return s.servers.GetAllVersionsByServerName(ctx, serverName)
 }
 
@@ -109,13 +109,13 @@ func (s *registry) PublishServer(ctx context.Context, req *apiv0.ServerJSON) (*a
 	})
 }
 
-func (s *registry) ReviseServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
+func (s *registry) UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
 	return txutil.RunT(ctx, s.tx, func(txCtx context.Context, scope database.Scope) (*apiv0.ServerResponse, error) {
 		return s.updateServerInTransaction(txCtx, scope.Servers(), serverName, version, req, newStatus)
 	})
 }
 
-func (s *registry) SaveServerReadme(ctx context.Context, serverName, version string, content []byte, contentType string) error {
+func (s *registry) SetServerReadme(ctx context.Context, serverName, version string, content []byte, contentType string) error {
 	if len(content) == 0 {
 		return nil
 	}
@@ -142,27 +142,27 @@ func (s *registry) SaveServerReadme(ctx context.Context, serverName, version str
 	})
 }
 
-func (s *registry) LatestServerReadme(ctx context.Context, serverName string) (*database.ServerReadme, error) {
+func (s *registry) GetLatestServerReadme(ctx context.Context, serverName string) (*database.ServerReadme, error) {
 	return s.servers.GetLatestServerReadme(ctx, serverName)
 }
 
-func (s *registry) ServerReadme(ctx context.Context, serverName, version string) (*database.ServerReadme, error) {
+func (s *registry) GetServerReadme(ctx context.Context, serverName, version string) (*database.ServerReadme, error) {
 	return s.servers.GetServerReadme(ctx, serverName, version)
 }
 
-func (s *registry) RemoveServer(ctx context.Context, serverName, version string) error {
+func (s *registry) DeleteServer(ctx context.Context, serverName, version string) error {
 	return txutil.Run(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
 		return scope.Servers().DeleteServer(txCtx, serverName, version)
 	})
 }
 
-func (s *registry) SaveServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error {
+func (s *registry) SetServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error {
 	return txutil.Run(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
 		return scope.Servers().SetServerEmbedding(txCtx, serverName, version, embedding)
 	})
 }
 
-func (s *registry) ServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
+func (s *registry) GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
 	return s.servers.GetServerEmbeddingMetadata(ctx, serverName, version)
 }
 
@@ -265,7 +265,7 @@ func (s *registry) createServerInTransaction(ctx context.Context, servers databa
 			if err != nil {
 				s.logger.Warn("failed to generate embedding for server", "name", serverJSON.Name, "version", serverJSON.Version, "error", err)
 			} else if embedding != nil {
-				if err := s.SaveServerEmbedding(bgCtx, serverJSON.Name, serverJSON.Version, embedding); err != nil {
+				if err := s.SetServerEmbedding(bgCtx, serverJSON.Name, serverJSON.Version, embedding); err != nil {
 					s.logger.Warn("failed to store embedding for server", "name", serverJSON.Name, "version", serverJSON.Version, "error", err)
 				}
 			}

@@ -41,16 +41,16 @@ type IndexProgressCallback func(resource string, stats IndexStats)
 
 // ServerEmbeddingSource is the narrow interface the Indexer needs to index server embeddings.
 type ServerEmbeddingSource interface {
-	BrowseServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
-	ServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error)
-	SaveServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error
+	ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
+	GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error)
+	SetServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error
 }
 
 // AgentEmbeddingSource is the narrow interface the Indexer needs to index agent embeddings.
 type AgentEmbeddingSource interface {
-	BrowseAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error)
-	AgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error)
-	SaveAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error
+	ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error)
+	GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error)
+	SetAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error
 }
 
 // Indexer defines the interface for embedding indexing operations.
@@ -128,7 +128,7 @@ func (s *indexerImpl) indexServers(ctx context.Context, opts IndexOptions, onPro
 		default:
 		}
 
-		servers, nextCursor, err := s.servers.BrowseServers(ctx, nil, cursor, opts.BatchSize)
+		servers, nextCursor, err := s.servers.ListServers(ctx, nil, cursor, opts.BatchSize)
 		if err != nil {
 			return stats, err
 		}
@@ -155,7 +155,7 @@ func (s *indexerImpl) indexServers(ctx context.Context, opts IndexOptions, onPro
 			}
 
 			payloadChecksum := embeddings.PayloadChecksum(payload)
-			meta, err := s.servers.ServerEmbeddingMetadata(ctx, name, version)
+			meta, err := s.servers.GetServerEmbeddingMetadata(ctx, name, version)
 			if err != nil && !errors.Is(err, database.ErrNotFound) {
 				s.logger.Error("failed to read server embedding metadata", "name", name, "version", version, "error", err)
 				stats.Failures++
@@ -185,7 +185,7 @@ func (s *indexerImpl) indexServers(ctx context.Context, opts IndexOptions, onPro
 				continue
 			}
 
-			if err := s.servers.SaveServerEmbedding(ctx, name, version, record); err != nil {
+			if err := s.servers.SetServerEmbedding(ctx, name, version, record); err != nil {
 				s.logger.Error("failed to persist server embedding", "name", name, "version", version, "error", err)
 				stats.Failures++
 				continue
@@ -226,7 +226,7 @@ func (s *indexerImpl) indexAgents(ctx context.Context, opts IndexOptions, onProg
 		default:
 		}
 
-		agents, nextCursor, err := s.agents.BrowseAgents(ctx, nil, cursor, opts.BatchSize)
+		agents, nextCursor, err := s.agents.ListAgents(ctx, nil, cursor, opts.BatchSize)
 		if err != nil {
 			return stats, err
 		}
@@ -253,7 +253,7 @@ func (s *indexerImpl) indexAgents(ctx context.Context, opts IndexOptions, onProg
 			}
 
 			payloadChecksum := embeddings.PayloadChecksum(payload)
-			meta, err := s.agents.AgentEmbeddingMetadata(ctx, name, version)
+			meta, err := s.agents.GetAgentEmbeddingMetadata(ctx, name, version)
 			if err != nil && !errors.Is(err, database.ErrNotFound) {
 				s.logger.Error("failed to read agent embedding metadata", "name", name, "version", version, "error", err)
 				stats.Failures++
@@ -283,7 +283,7 @@ func (s *indexerImpl) indexAgents(ctx context.Context, opts IndexOptions, onProg
 				continue
 			}
 
-			if err := s.agents.SaveAgentEmbedding(ctx, name, version, record); err != nil {
+			if err := s.agents.SetAgentEmbedding(ctx, name, version, record); err != nil {
 				s.logger.Error("failed to persist agent embedding", "name", name, "version", version, "error", err)
 				stats.Failures++
 				continue

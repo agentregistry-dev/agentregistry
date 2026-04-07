@@ -507,7 +507,7 @@ func mustAgentManifest(
 	agentService agentsvc.Registry,
 	deployment *models.Deployment,
 ) *models.AgentManifest {
-	agentResp, err := agentService.LookupAgentVersion(ctx, deployment.ServerName, deployment.Version)
+	agentResp, err := agentService.GetAgentVersion(ctx, deployment.ServerName, deployment.Version)
 	if err != nil {
 		return nil
 	}

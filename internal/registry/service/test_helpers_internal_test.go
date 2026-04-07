@@ -178,64 +178,64 @@ func (s *registryServiceImpl) deploymentService() *deploymentServiceImpl {
 	return &deploymentServiceImpl{deploymentInternals: internals}
 }
 
-func (s *registryServiceImpl) BrowseServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
-	return s.serverService().BrowseServers(ctx, filter, cursor, limit)
+func (s *registryServiceImpl) ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
+	return s.serverService().ListServers(ctx, filter, cursor, limit)
 }
 
-func (s *registryServiceImpl) LookupServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
-	return s.serverService().LookupServer(ctx, serverName)
+func (s *registryServiceImpl) GetServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+	return s.serverService().GetServer(ctx, serverName)
 }
 
-func (s *registryServiceImpl) LookupServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
-	return s.serverService().LookupServerVersion(ctx, serverName, version)
+func (s *registryServiceImpl) GetServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
+	return s.serverService().GetServerVersion(ctx, serverName, version)
 }
 
-func (s *registryServiceImpl) ServerHistory(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
-	return s.serverService().ServerHistory(ctx, serverName)
+func (s *registryServiceImpl) GetServerVersions(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
+	return s.serverService().GetServerVersions(ctx, serverName)
 }
 
 func (s *registryServiceImpl) PublishServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
 	return s.serverService().PublishServer(ctx, req)
 }
 
-func (s *registryServiceImpl) ReviseServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
-	return s.serverService().ReviseServer(ctx, serverName, version, req, newStatus)
+func (s *registryServiceImpl) UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
+	return s.serverService().UpdateServer(ctx, serverName, version, req, newStatus)
 }
 
-func (s *registryServiceImpl) SaveServerReadme(ctx context.Context, serverName, version string, content []byte, contentType string) error {
-	return s.serverService().SaveServerReadme(ctx, serverName, version, content, contentType)
+func (s *registryServiceImpl) SetServerReadme(ctx context.Context, serverName, version string, content []byte, contentType string) error {
+	return s.serverService().SetServerReadme(ctx, serverName, version, content, contentType)
 }
 
-func (s *registryServiceImpl) LatestServerReadme(ctx context.Context, serverName string) (*database.ServerReadme, error) {
-	return s.serverService().LatestServerReadme(ctx, serverName)
+func (s *registryServiceImpl) GetLatestServerReadme(ctx context.Context, serverName string) (*database.ServerReadme, error) {
+	return s.serverService().GetLatestServerReadme(ctx, serverName)
 }
 
-func (s *registryServiceImpl) ServerReadme(ctx context.Context, serverName, version string) (*database.ServerReadme, error) {
-	return s.serverService().ServerReadme(ctx, serverName, version)
+func (s *registryServiceImpl) GetServerReadme(ctx context.Context, serverName, version string) (*database.ServerReadme, error) {
+	return s.serverService().GetServerReadme(ctx, serverName, version)
 }
 
-func (s *registryServiceImpl) RemoveServer(ctx context.Context, serverName, version string) error {
-	return s.serverService().RemoveServer(ctx, serverName, version)
+func (s *registryServiceImpl) DeleteServer(ctx context.Context, serverName, version string) error {
+	return s.serverService().DeleteServer(ctx, serverName, version)
 }
 
-func (s *registryServiceImpl) SaveServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error {
-	return s.serverService().SaveServerEmbedding(ctx, serverName, version, embedding)
+func (s *registryServiceImpl) SetServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error {
+	return s.serverService().SetServerEmbedding(ctx, serverName, version, embedding)
 }
 
-func (s *registryServiceImpl) BrowseAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
-	return s.agentService().BrowseAgents(ctx, filter, cursor, limit)
+func (s *registryServiceImpl) ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
+	return s.agentService().ListAgents(ctx, filter, cursor, limit)
 }
 
-func (s *registryServiceImpl) LookupAgent(ctx context.Context, agentName string) (*models.AgentResponse, error) {
-	return s.agentService().LookupAgent(ctx, agentName)
+func (s *registryServiceImpl) GetAgent(ctx context.Context, agentName string) (*models.AgentResponse, error) {
+	return s.agentService().GetAgent(ctx, agentName)
 }
 
-func (s *registryServiceImpl) LookupAgentVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
-	return s.agentService().LookupAgentVersion(ctx, agentName, version)
+func (s *registryServiceImpl) GetAgentVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
+	return s.agentService().GetAgentVersion(ctx, agentName, version)
 }
 
-func (s *registryServiceImpl) AgentHistory(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
-	return s.agentService().AgentHistory(ctx, agentName)
+func (s *registryServiceImpl) GetAgentVersions(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
+	return s.agentService().GetAgentVersions(ctx, agentName)
 }
 
 func (s *registryServiceImpl) PublishAgent(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error) {
@@ -250,64 +250,64 @@ func (s *registryServiceImpl) ResolveAgentManifestPrompts(ctx context.Context, m
 	return s.agentService().ResolveAgentManifestPrompts(ctx, manifest)
 }
 
-func (s *registryServiceImpl) RemoveAgent(ctx context.Context, agentName, version string) error {
-	return s.agentService().RemoveAgent(ctx, agentName, version)
+func (s *registryServiceImpl) DeleteAgent(ctx context.Context, agentName, version string) error {
+	return s.agentService().DeleteAgent(ctx, agentName, version)
 }
 
-func (s *registryServiceImpl) BrowseSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
-	return s.skillService().BrowseSkills(ctx, filter, cursor, limit)
+func (s *registryServiceImpl) ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
+	return s.skillService().ListSkills(ctx, filter, cursor, limit)
 }
 
-func (s *registryServiceImpl) LookupSkill(ctx context.Context, skillName string) (*models.SkillResponse, error) {
-	return s.skillService().LookupSkill(ctx, skillName)
+func (s *registryServiceImpl) GetSkill(ctx context.Context, skillName string) (*models.SkillResponse, error) {
+	return s.skillService().GetSkill(ctx, skillName)
 }
 
-func (s *registryServiceImpl) LookupSkillVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
-	return s.skillService().LookupSkillVersion(ctx, skillName, version)
+func (s *registryServiceImpl) GetSkillVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
+	return s.skillService().GetSkillVersion(ctx, skillName, version)
 }
 
-func (s *registryServiceImpl) SkillHistory(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
-	return s.skillService().SkillHistory(ctx, skillName)
+func (s *registryServiceImpl) GetSkillVersions(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
+	return s.skillService().GetSkillVersions(ctx, skillName)
 }
 
 func (s *registryServiceImpl) PublishSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error) {
 	return s.skillService().PublishSkill(ctx, req)
 }
 
-func (s *registryServiceImpl) RemoveSkill(ctx context.Context, skillName, version string) error {
-	return s.skillService().RemoveSkill(ctx, skillName, version)
+func (s *registryServiceImpl) DeleteSkill(ctx context.Context, skillName, version string) error {
+	return s.skillService().DeleteSkill(ctx, skillName, version)
 }
 
-func (s *registryServiceImpl) BrowsePrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
-	return s.promptService().BrowsePrompts(ctx, filter, cursor, limit)
+func (s *registryServiceImpl) ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
+	return s.promptService().ListPrompts(ctx, filter, cursor, limit)
 }
 
-func (s *registryServiceImpl) LookupPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error) {
-	return s.promptService().LookupPrompt(ctx, promptName)
+func (s *registryServiceImpl) GetPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error) {
+	return s.promptService().GetPrompt(ctx, promptName)
 }
 
-func (s *registryServiceImpl) LookupPromptVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
-	return s.promptService().LookupPromptVersion(ctx, promptName, version)
+func (s *registryServiceImpl) GetPromptVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
+	return s.promptService().GetPromptVersion(ctx, promptName, version)
 }
 
-func (s *registryServiceImpl) PromptHistory(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
-	return s.promptService().PromptHistory(ctx, promptName)
+func (s *registryServiceImpl) GetPromptVersions(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
+	return s.promptService().GetPromptVersions(ctx, promptName)
 }
 
 func (s *registryServiceImpl) PublishPrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error) {
 	return s.promptService().PublishPrompt(ctx, req)
 }
 
-func (s *registryServiceImpl) RemovePrompt(ctx context.Context, promptName, version string) error {
-	return s.promptService().RemovePrompt(ctx, promptName, version)
+func (s *registryServiceImpl) DeletePrompt(ctx context.Context, promptName, version string) error {
+	return s.promptService().DeletePrompt(ctx, promptName, version)
 }
 
-func (s *registryServiceImpl) BrowseProviders(ctx context.Context, platform string) ([]*models.Provider, error) {
-	return s.providerService().BrowseProviders(ctx, platform)
+func (s *registryServiceImpl) ListProviders(ctx context.Context, platform string) ([]*models.Provider, error) {
+	return s.providerService().ListProviders(ctx, platform)
 }
 
-func (s *registryServiceImpl) LookupProvider(ctx context.Context, providerID string) (*models.Provider, error) {
-	return s.providerService().LookupProvider(ctx, providerID)
+func (s *registryServiceImpl) GetProvider(ctx context.Context, providerID string) (*models.Provider, error) {
+	return s.providerService().GetProvider(ctx, providerID)
 }
 
 func (s *registryServiceImpl) RegisterProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error) {
@@ -318,40 +318,21 @@ func (s *registryServiceImpl) ResolveProvider(ctx context.Context, providerID, p
 	return s.providerService().ResolveProvider(ctx, providerID, platformHint)
 }
 
-func (s *registryServiceImpl) ReviseProvider(ctx context.Context, providerID, platformHint string, in *models.UpdateProviderInput) (*models.Provider, error) {
-	return s.providerService().ReviseProvider(ctx, providerID, platformHint, in)
+func (s *registryServiceImpl) UpdateProvider(ctx context.Context, providerID, platformHint string, in *models.UpdateProviderInput) (*models.Provider, error) {
+	return s.providerService().UpdateProvider(ctx, providerID, platformHint, in)
 }
 
-func (s *registryServiceImpl) RemoveProvider(ctx context.Context, providerID, platformHint string) error {
-	return s.providerService().RemoveProvider(ctx, providerID, platformHint)
+func (s *registryServiceImpl) DeleteProvider(ctx context.Context, providerID, platformHint string) error {
+	return s.providerService().DeleteProvider(ctx, providerID, platformHint)
 }
 
-func (s *registryServiceImpl) ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error) {
-	return s.readStores().providers.ListProviders(ctx, platform)
+
+func (s *registryServiceImpl) ListDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+	return s.deploymentService().ListDeployments(ctx, filter)
 }
 
-func (s *registryServiceImpl) GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error) {
-	return s.readStores().providers.GetProviderByID(ctx, providerID)
-}
-
-func (s *registryServiceImpl) CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error) {
-	return s.readStores().providers.CreateProvider(ctx, in)
-}
-
-func (s *registryServiceImpl) UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error) {
-	return s.readStores().providers.UpdateProvider(ctx, providerID, in)
-}
-
-func (s *registryServiceImpl) DeleteProvider(ctx context.Context, providerID string) error {
-	return s.readStores().providers.DeleteProvider(ctx, providerID)
-}
-
-func (s *registryServiceImpl) BrowseDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
-	return s.deploymentService().BrowseDeployments(ctx, filter)
-}
-
-func (s *registryServiceImpl) LookupDeployment(ctx context.Context, id string) (*models.Deployment, error) {
-	return s.deploymentService().LookupDeployment(ctx, id)
+func (s *registryServiceImpl) GetDeployment(ctx context.Context, id string) (*models.Deployment, error) {
+	return s.deploymentService().GetDeployment(ctx, id)
 }
 
 func (s *registryServiceImpl) DeployServer(ctx context.Context, serverName, version string, env map[string]string, preferRemote bool, providerID string) (*models.Deployment, error) {
@@ -362,8 +343,8 @@ func (s *registryServiceImpl) DeployAgent(ctx context.Context, agentName, versio
 	return s.deploymentService().DeployAgent(ctx, agentName, version, env, preferRemote, providerID)
 }
 
-func (s *registryServiceImpl) ForgetDeployment(ctx context.Context, id string) error {
-	return s.deploymentService().ForgetDeployment(ctx, id)
+func (s *registryServiceImpl) DeleteDeployment(ctx context.Context, id string) error {
+	return s.deploymentService().DeleteDeployment(ctx, id)
 }
 
 func (s *registryServiceImpl) LaunchDeployment(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
@@ -374,8 +355,8 @@ func (s *registryServiceImpl) UndeployDeployment(ctx context.Context, deployment
 	return s.deploymentService().UndeployDeployment(ctx, deployment)
 }
 
-func (s *registryServiceImpl) DeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error) {
-	return s.deploymentService().DeploymentLogs(ctx, deployment)
+func (s *registryServiceImpl) GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error) {
+	return s.deploymentService().GetDeploymentLogs(ctx, deployment)
 }
 
 func (s *registryServiceImpl) CancelDeployment(ctx context.Context, deployment *models.Deployment) error {

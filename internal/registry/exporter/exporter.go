@@ -90,7 +90,7 @@ func (s *Service) collectServers(ctx context.Context) ([]*apiv0.ServerJSON, erro
 	}
 
 	for {
-		records, nextCursor, err := s.registryService.BrowseServers(ctx, nil, cursor, pageSize)
+		records, nextCursor, err := s.registryService.ListServers(ctx, nil, cursor, pageSize)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list servers: %w", err)
 		}
@@ -161,7 +161,7 @@ func (s *Service) collectReadmes(ctx context.Context, servers []*apiv0.ServerJSO
 	result := make(seed.ReadmeFile)
 
 	for _, server := range servers {
-		readme, err := s.registryService.ServerReadme(ctx, server.Name, server.Version)
+		readme, err := s.registryService.GetServerReadme(ctx, server.Name, server.Version)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				continue

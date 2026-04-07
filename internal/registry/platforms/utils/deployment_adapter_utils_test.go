@@ -22,32 +22,32 @@ type fakePlatformRuntimeRegistry struct {
 	getProviderByIDFn func(ctx context.Context, providerID string) (*models.Provider, error)
 }
 
-func (f *fakePlatformRuntimeRegistry) BrowseServers(context.Context, *database.ServerFilter, string, int) ([]*apiv0.ServerResponse, string, error) {
+func (f *fakePlatformRuntimeRegistry) ListServers(context.Context, *database.ServerFilter, string, int) ([]*apiv0.ServerResponse, string, error) {
 	return nil, "", nil
 }
 
-func (f *fakePlatformRuntimeRegistry) LookupServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+func (f *fakePlatformRuntimeRegistry) GetServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
 	if f.getServerByVerFn != nil {
 		return f.getServerByVerFn(ctx, serverName, "")
 	}
 	return nil, database.ErrNotFound
 }
 
-func (f *fakePlatformRuntimeRegistry) LookupProvider(ctx context.Context, providerID string) (*models.Provider, error) {
+func (f *fakePlatformRuntimeRegistry) GetProvider(ctx context.Context, providerID string) (*models.Provider, error) {
 	if f.getProviderByIDFn != nil {
 		return f.getProviderByIDFn(ctx, providerID)
 	}
 	return nil, database.ErrNotFound
 }
 
-func (f *fakePlatformRuntimeRegistry) LookupServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
+func (f *fakePlatformRuntimeRegistry) GetServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
 	if f.getServerByVerFn != nil {
 		return f.getServerByVerFn(ctx, serverName, version)
 	}
 	return nil, database.ErrNotFound
 }
 
-func (f *fakePlatformRuntimeRegistry) ServerHistory(context.Context, string) ([]*apiv0.ServerResponse, error) {
+func (f *fakePlatformRuntimeRegistry) GetServerVersions(context.Context, string) ([]*apiv0.ServerResponse, error) {
 	return nil, nil
 }
 
@@ -58,45 +58,45 @@ func (f *fakePlatformRuntimeRegistry) PublishServer(ctx context.Context, req *ap
 	return &apiv0.ServerResponse{Server: *req}, nil
 }
 
-func (f *fakePlatformRuntimeRegistry) ReviseServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
+func (f *fakePlatformRuntimeRegistry) UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
 	_ = serverName
 	_ = version
 	_ = newStatus
 	return f.PublishServer(ctx, req)
 }
 
-func (f *fakePlatformRuntimeRegistry) SaveServerReadme(context.Context, string, string, []byte, string) error {
+func (f *fakePlatformRuntimeRegistry) SetServerReadme(context.Context, string, string, []byte, string) error {
 	return nil
 }
 
-func (f *fakePlatformRuntimeRegistry) LatestServerReadme(context.Context, string) (*database.ServerReadme, error) {
+func (f *fakePlatformRuntimeRegistry) GetLatestServerReadme(context.Context, string) (*database.ServerReadme, error) {
 	return nil, database.ErrNotFound
 }
 
-func (f *fakePlatformRuntimeRegistry) ServerReadme(context.Context, string, string) (*database.ServerReadme, error) {
+func (f *fakePlatformRuntimeRegistry) GetServerReadme(context.Context, string, string) (*database.ServerReadme, error) {
 	return nil, database.ErrNotFound
 }
 
-func (f *fakePlatformRuntimeRegistry) RemoveServer(context.Context, string, string) error {
+func (f *fakePlatformRuntimeRegistry) DeleteServer(context.Context, string, string) error {
 	return nil
 }
 
-func (f *fakePlatformRuntimeRegistry) SaveServerEmbedding(context.Context, string, string, *database.SemanticEmbedding) error {
+func (f *fakePlatformRuntimeRegistry) SetServerEmbedding(context.Context, string, string, *database.SemanticEmbedding) error {
 	return nil
 }
 
-func (f *fakePlatformRuntimeRegistry) ServerEmbeddingMetadata(context.Context, string, string) (*database.SemanticEmbeddingMetadata, error) {
+func (f *fakePlatformRuntimeRegistry) GetServerEmbeddingMetadata(context.Context, string, string) (*database.SemanticEmbeddingMetadata, error) {
 	return nil, database.ErrNotFound
 }
 
-func (f *fakePlatformRuntimeRegistry) BrowseAgents(context.Context, *database.AgentFilter, string, int) ([]*models.AgentResponse, string, error) {
+func (f *fakePlatformRuntimeRegistry) ListAgents(context.Context, *database.AgentFilter, string, int) ([]*models.AgentResponse, string, error) {
 	if f.agentResp != nil {
 		return []*models.AgentResponse{f.agentResp}, "", nil
 	}
 	return nil, "", nil
 }
 
-func (f *fakePlatformRuntimeRegistry) LookupAgent(ctx context.Context, agentName string) (*models.AgentResponse, error) {
+func (f *fakePlatformRuntimeRegistry) GetAgent(ctx context.Context, agentName string) (*models.AgentResponse, error) {
 	if f.getAgentFn != nil {
 		return f.getAgentFn(ctx, agentName, "")
 	}
@@ -106,7 +106,7 @@ func (f *fakePlatformRuntimeRegistry) LookupAgent(ctx context.Context, agentName
 	return nil, database.ErrNotFound
 }
 
-func (f *fakePlatformRuntimeRegistry) LookupAgentVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
+func (f *fakePlatformRuntimeRegistry) GetAgentVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
 	if f.getAgentFn != nil {
 		return f.getAgentFn(ctx, agentName, version)
 	}
@@ -116,7 +116,7 @@ func (f *fakePlatformRuntimeRegistry) LookupAgentVersion(ctx context.Context, ag
 	return nil, database.ErrNotFound
 }
 
-func (f *fakePlatformRuntimeRegistry) AgentHistory(context.Context, string) ([]*models.AgentResponse, error) {
+func (f *fakePlatformRuntimeRegistry) GetAgentVersions(context.Context, string) ([]*models.AgentResponse, error) {
 	if f.agentResp != nil {
 		return []*models.AgentResponse{f.agentResp}, nil
 	}
@@ -130,15 +130,15 @@ func (f *fakePlatformRuntimeRegistry) PublishAgent(context.Context, *models.Agen
 	return nil, database.ErrInvalidInput
 }
 
-func (f *fakePlatformRuntimeRegistry) RemoveAgent(context.Context, string, string) error {
+func (f *fakePlatformRuntimeRegistry) DeleteAgent(context.Context, string, string) error {
 	return nil
 }
 
-func (f *fakePlatformRuntimeRegistry) SaveAgentEmbedding(context.Context, string, string, *database.SemanticEmbedding) error {
+func (f *fakePlatformRuntimeRegistry) SetAgentEmbedding(context.Context, string, string, *database.SemanticEmbedding) error {
 	return nil
 }
 
-func (f *fakePlatformRuntimeRegistry) AgentEmbeddingMetadata(context.Context, string, string) (*database.SemanticEmbeddingMetadata, error) {
+func (f *fakePlatformRuntimeRegistry) GetAgentEmbeddingMetadata(context.Context, string, string) (*database.SemanticEmbeddingMetadata, error) {
 	return nil, database.ErrNotFound
 }
 
@@ -175,23 +175,23 @@ func (s *fakePlatformServerStore) SetServerStatus(context.Context, string, strin
 }
 
 func (s *fakePlatformServerStore) ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error) {
-	return s.registry.BrowseServers(ctx, filter, cursor, limit)
+	return s.registry.ListServers(ctx, filter, cursor, limit)
 }
 
 func (s *fakePlatformServerStore) GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
-	return s.registry.LookupServer(ctx, serverName)
+	return s.registry.GetServer(ctx, serverName)
 }
 
 func (s *fakePlatformServerStore) GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
-	return s.registry.LookupServerVersion(ctx, serverName, version)
+	return s.registry.GetServerVersion(ctx, serverName, version)
 }
 
 func (s *fakePlatformServerStore) GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
-	return s.registry.ServerHistory(ctx, serverName)
+	return s.registry.GetServerVersions(ctx, serverName)
 }
 
 func (s *fakePlatformServerStore) GetCurrentLatestVersion(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
-	return s.registry.LookupServer(ctx, serverName)
+	return s.registry.GetServer(ctx, serverName)
 }
 
 func (s *fakePlatformServerStore) CountServerVersions(context.Context, string) (int, error) {
@@ -245,23 +245,23 @@ func (s *fakePlatformAgentStore) SetAgentStatus(context.Context, string, string,
 }
 
 func (s *fakePlatformAgentStore) ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
-	return s.registry.BrowseAgents(ctx, filter, cursor, limit)
+	return s.registry.ListAgents(ctx, filter, cursor, limit)
 }
 
 func (s *fakePlatformAgentStore) GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error) {
-	return s.registry.LookupAgent(ctx, agentName)
+	return s.registry.GetAgent(ctx, agentName)
 }
 
 func (s *fakePlatformAgentStore) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
-	return s.registry.LookupAgentVersion(ctx, agentName, version)
+	return s.registry.GetAgentVersion(ctx, agentName, version)
 }
 
 func (s *fakePlatformAgentStore) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
-	return s.registry.AgentHistory(ctx, agentName)
+	return s.registry.GetAgentVersions(ctx, agentName)
 }
 
 func (s *fakePlatformAgentStore) GetCurrentLatestAgentVersion(ctx context.Context, agentName string) (*models.AgentResponse, error) {
-	return s.registry.LookupAgent(ctx, agentName)
+	return s.registry.GetAgent(ctx, agentName)
 }
 
 func (s *fakePlatformAgentStore) CountAgentVersions(context.Context, string) (int, error) {

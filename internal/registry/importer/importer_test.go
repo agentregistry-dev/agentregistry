@@ -58,7 +58,7 @@ func TestImportService_LocalFile(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the server was imported using registry service
-	servers, _, err := serverService.BrowseServers(context.Background(), nil, "", 10)
+	servers, _, err := serverService.ListServers(context.Background(), nil, "", 10)
 	require.NoError(t, err)
 	assert.Len(t, servers, 1)
 	assert.Equal(t, "io.github.test/test-server-1", servers[0].Server.Name)
@@ -104,7 +104,7 @@ func TestImportService_HTTPFile(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the server was imported
-	servers, _, err := serverService.BrowseServers(context.Background(), nil, "", 10)
+	servers, _, err := serverService.ListServers(context.Background(), nil, "", 10)
 	require.NoError(t, err)
 	assert.Len(t, servers, 1)
 	assert.Equal(t, "io.github.test/http-test-server", servers[0].Server.Name)
@@ -143,7 +143,7 @@ func TestImportService_RegistryPagination(t *testing.T) {
 
 	// Create test HTTP server that serves the registry API
 	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		servers, _, _ := serverService.BrowseServers(ctx, nil, "", 10)
+		servers, _, _ := serverService.ListServers(ctx, nil, "", 10)
 
 		// Convert to response format
 		serverValues := make([]apiv0.ServerResponse, len(servers))
@@ -172,7 +172,7 @@ func TestImportService_RegistryPagination(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify servers were imported
-	importedServers, _, err := targetServerService.BrowseServers(context.Background(), nil, "", 10)
+	importedServers, _, err := targetServerService.ListServers(context.Background(), nil, "", 10)
 	require.NoError(t, err)
 	assert.Len(t, importedServers, 2)
 
@@ -287,7 +287,7 @@ func TestImportService_ReadmeSeed(t *testing.T) {
 	err = importerService.ImportFromPath(context.Background(), serverSeedPath, false)
 	require.NoError(t, err)
 
-	readme, err := serverService.ServerReadme(context.Background(), "com.example/readme-server", "1.0.0")
+	readme, err := serverService.GetServerReadme(context.Background(), "com.example/readme-server", "1.0.0")
 	require.NoError(t, err)
 	require.NotNil(t, readme)
 	assert.Equal(t, "text/markdown", readme.ContentType)

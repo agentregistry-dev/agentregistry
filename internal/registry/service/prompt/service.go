@@ -22,12 +22,12 @@ type Dependencies struct {
 }
 
 type Registry interface {
-	BrowsePrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error)
-	LookupPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error)
-	LookupPromptVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error)
-	PromptHistory(ctx context.Context, promptName string) ([]*models.PromptResponse, error)
+	ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error)
+	GetPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error)
+	GetPromptVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error)
+	GetPromptVersions(ctx context.Context, promptName string) ([]*models.PromptResponse, error)
 	PublishPrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error)
-	RemovePrompt(ctx context.Context, promptName, version string) error
+	DeletePrompt(ctx context.Context, promptName, version string) error
 }
 
 type registry struct {
@@ -51,22 +51,22 @@ func New(deps Dependencies) Registry {
 	}
 }
 
-func (s *registry) BrowsePrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
+func (s *registry) ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
 	if limit <= 0 {
 		limit = 30
 	}
 	return s.prompts.ListPrompts(ctx, filter, cursor, limit)
 }
 
-func (s *registry) LookupPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error) {
+func (s *registry) GetPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error) {
 	return s.prompts.GetPromptByName(ctx, promptName)
 }
 
-func (s *registry) LookupPromptVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
+func (s *registry) GetPromptVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
 	return s.prompts.GetPromptByNameAndVersion(ctx, promptName, version)
 }
 
-func (s *registry) PromptHistory(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
+func (s *registry) GetPromptVersions(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
 	return s.prompts.GetAllVersionsByPromptName(ctx, promptName)
 }
 
@@ -76,7 +76,7 @@ func (s *registry) PublishPrompt(ctx context.Context, req *models.PromptJSON) (*
 	})
 }
 
-func (s *registry) RemovePrompt(ctx context.Context, promptName, version string) error {
+func (s *registry) DeletePrompt(ctx context.Context, promptName, version string) error {
 	return txutil.Run(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
 		return scope.Prompts().DeletePrompt(txCtx, promptName, version)
 	})

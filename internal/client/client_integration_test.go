@@ -211,13 +211,13 @@ func (f *fakeClientRegistry) UpsertAgentEmbedding(ctx context.Context, agentName
 func (f *fakeClientRegistry) GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
 	return nil, database.ErrNotFound
 }
-func (f *fakeClientRegistry) BrowseSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
+func (f *fakeClientRegistry) ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
 	if f.ListSkillsFn != nil {
 		return f.ListSkillsFn(ctx, filter, cursor, limit)
 	}
 	return f.Skills, "", nil
 }
-func (f *fakeClientRegistry) LookupSkill(ctx context.Context, skillName string) (*models.SkillResponse, error) {
+func (f *fakeClientRegistry) GetSkill(ctx context.Context, skillName string) (*models.SkillResponse, error) {
 	if f.GetSkillByNameFn != nil {
 		return f.GetSkillByNameFn(ctx, skillName)
 	}
@@ -226,13 +226,13 @@ func (f *fakeClientRegistry) LookupSkill(ctx context.Context, skillName string) 
 	}
 	return nil, database.ErrNotFound
 }
-func (f *fakeClientRegistry) LookupSkillVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
+func (f *fakeClientRegistry) GetSkillVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
 	if f.GetSkillByNameAndVersionFn != nil {
 		return f.GetSkillByNameAndVersionFn(ctx, skillName, version)
 	}
-	return f.LookupSkill(ctx, skillName)
+	return f.GetSkill(ctx, skillName)
 }
-func (f *fakeClientRegistry) SkillHistory(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
+func (f *fakeClientRegistry) GetSkillVersions(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
 	if f.GetAllVersionsBySkillNameFn != nil {
 		return f.GetAllVersionsBySkillNameFn(ctx, skillName)
 	}
@@ -244,19 +244,19 @@ func (f *fakeClientRegistry) PublishSkill(ctx context.Context, req *models.Skill
 	}
 	return nil, database.ErrNotFound
 }
-func (f *fakeClientRegistry) RemoveSkill(ctx context.Context, skillName, version string) error {
+func (f *fakeClientRegistry) DeleteSkill(ctx context.Context, skillName, version string) error {
 	if f.DeleteSkillFn != nil {
 		return f.DeleteSkillFn(ctx, skillName, version)
 	}
 	return database.ErrNotFound
 }
-func (f *fakeClientRegistry) BrowsePrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
+func (f *fakeClientRegistry) ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
 	if f.ListPromptsFn != nil {
 		return f.ListPromptsFn(ctx, filter, cursor, limit)
 	}
 	return f.Prompts, "", nil
 }
-func (f *fakeClientRegistry) LookupPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error) {
+func (f *fakeClientRegistry) GetPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error) {
 	if f.GetPromptByNameFn != nil {
 		return f.GetPromptByNameFn(ctx, promptName)
 	}
@@ -265,13 +265,13 @@ func (f *fakeClientRegistry) LookupPrompt(ctx context.Context, promptName string
 	}
 	return nil, database.ErrNotFound
 }
-func (f *fakeClientRegistry) LookupPromptVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
+func (f *fakeClientRegistry) GetPromptVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
 	if f.GetPromptByNameAndVersionFn != nil {
 		return f.GetPromptByNameAndVersionFn(ctx, promptName, version)
 	}
-	return f.LookupPrompt(ctx, promptName)
+	return f.GetPrompt(ctx, promptName)
 }
-func (f *fakeClientRegistry) PromptHistory(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
+func (f *fakeClientRegistry) GetPromptVersions(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
 	if f.GetAllVersionsByPromptNameFn != nil {
 		return f.GetAllVersionsByPromptNameFn(ctx, promptName)
 	}
@@ -283,7 +283,7 @@ func (f *fakeClientRegistry) PublishPrompt(ctx context.Context, req *models.Prom
 	}
 	return nil, database.ErrNotFound
 }
-func (f *fakeClientRegistry) RemovePrompt(ctx context.Context, promptName, version string) error {
+func (f *fakeClientRegistry) DeletePrompt(ctx context.Context, promptName, version string) error {
 	if f.DeletePromptFn != nil {
 		return f.DeletePromptFn(ctx, promptName, version)
 	}
@@ -319,13 +319,13 @@ func (f *fakeClientRegistry) DeleteProvider(ctx context.Context, providerID stri
 	}
 	return database.ErrNotFound
 }
-func (f *fakeClientRegistry) BrowseDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+func (f *fakeClientRegistry) ListDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	if f.GetDeploymentsFn != nil {
 		return f.GetDeploymentsFn(ctx, filter)
 	}
 	return nil, nil
 }
-func (f *fakeClientRegistry) LookupDeployment(ctx context.Context, id string) (*models.Deployment, error) {
+func (f *fakeClientRegistry) GetDeployment(ctx context.Context, id string) (*models.Deployment, error) {
 	if f.GetDeploymentByIDFn != nil {
 		return f.GetDeploymentByIDFn(ctx, id)
 	}
@@ -343,7 +343,7 @@ func (f *fakeClientRegistry) DeployAgent(ctx context.Context, agentName, version
 	}
 	return nil, database.ErrNotFound
 }
-func (f *fakeClientRegistry) ForgetDeployment(ctx context.Context, id string) error {
+func (f *fakeClientRegistry) DeleteDeployment(ctx context.Context, id string) error {
 	if f.RemoveDeploymentByIDFn != nil {
 		return f.RemoveDeploymentByIDFn(ctx, id)
 	}
@@ -361,7 +361,7 @@ func (f *fakeClientRegistry) UndeployDeployment(ctx context.Context, deployment 
 	}
 	return database.ErrNotFound
 }
-func (f *fakeClientRegistry) DeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error) {
+func (f *fakeClientRegistry) GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error) {
 	if f.GetDeploymentLogsFn != nil {
 		return f.GetDeploymentLogsFn(ctx, deployment)
 	}
@@ -563,23 +563,23 @@ func (s *fakeClientSkillStore) SetSkillStatus(context.Context, string, string, s
 }
 
 func (s *fakeClientSkillStore) ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
-	return s.registry.BrowseSkills(ctx, filter, cursor, limit)
+	return s.registry.ListSkills(ctx, filter, cursor, limit)
 }
 
 func (s *fakeClientSkillStore) GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error) {
-	return s.registry.LookupSkill(ctx, skillName)
+	return s.registry.GetSkill(ctx, skillName)
 }
 
 func (s *fakeClientSkillStore) GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
-	return s.registry.LookupSkillVersion(ctx, skillName, version)
+	return s.registry.GetSkillVersion(ctx, skillName, version)
 }
 
 func (s *fakeClientSkillStore) GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
-	return s.registry.SkillHistory(ctx, skillName)
+	return s.registry.GetSkillVersions(ctx, skillName)
 }
 
 func (s *fakeClientSkillStore) GetCurrentLatestSkillVersion(ctx context.Context, skillName string) (*models.SkillResponse, error) {
-	return s.registry.LookupSkill(ctx, skillName)
+	return s.registry.GetSkill(ctx, skillName)
 }
 
 func (s *fakeClientSkillStore) CountSkillVersions(_ context.Context, skillName string) (int, error) {
@@ -606,7 +606,7 @@ func (s *fakeClientSkillStore) UnmarkSkillAsLatest(context.Context, string) erro
 }
 
 func (s *fakeClientSkillStore) DeleteSkill(ctx context.Context, skillName, version string) error {
-	return s.registry.RemoveSkill(ctx, skillName, version)
+	return s.registry.DeleteSkill(ctx, skillName, version)
 }
 
 type fakeClientPromptStore struct{ registry *fakeClientRegistry }
@@ -616,23 +616,23 @@ func (s *fakeClientPromptStore) CreatePrompt(ctx context.Context, req *models.Pr
 }
 
 func (s *fakeClientPromptStore) ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
-	return s.registry.BrowsePrompts(ctx, filter, cursor, limit)
+	return s.registry.ListPrompts(ctx, filter, cursor, limit)
 }
 
 func (s *fakeClientPromptStore) GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error) {
-	return s.registry.LookupPrompt(ctx, promptName)
+	return s.registry.GetPrompt(ctx, promptName)
 }
 
 func (s *fakeClientPromptStore) GetPromptByNameAndVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
-	return s.registry.LookupPromptVersion(ctx, promptName, version)
+	return s.registry.GetPromptVersion(ctx, promptName, version)
 }
 
 func (s *fakeClientPromptStore) GetAllVersionsByPromptName(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
-	return s.registry.PromptHistory(ctx, promptName)
+	return s.registry.GetPromptVersions(ctx, promptName)
 }
 
 func (s *fakeClientPromptStore) GetCurrentLatestPromptVersion(ctx context.Context, promptName string) (*models.PromptResponse, error) {
-	return s.registry.LookupPrompt(ctx, promptName)
+	return s.registry.GetPrompt(ctx, promptName)
 }
 
 func (s *fakeClientPromptStore) CountPromptVersions(_ context.Context, promptName string) (int, error) {
@@ -659,7 +659,7 @@ func (s *fakeClientPromptStore) UnmarkPromptAsLatest(context.Context, string) er
 }
 
 func (s *fakeClientPromptStore) DeletePrompt(ctx context.Context, promptName, version string) error {
-	return s.registry.RemovePrompt(ctx, promptName, version)
+	return s.registry.DeletePrompt(ctx, promptName, version)
 }
 
 type fakeClientProviderStore struct{ registry *fakeClientRegistry }

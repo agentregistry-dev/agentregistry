@@ -162,12 +162,12 @@ func TestDomainServiceViewsShareRegistryState(t *testing.T) {
 		},
 	}
 
-	servers, _, err := svc.serverService().BrowseServers(ctx, nil, "", 1)
+	servers, _, err := svc.serverService().ListServers(ctx, nil, "", 1)
 	require.NoError(t, err)
 	require.Len(t, servers, 1)
 	assert.Equal(t, "com.example/weather", servers[0].Server.Name)
 
-	provider, err := svc.LookupProvider(ctx, "provider-1")
+	provider, err := svc.GetProvider(ctx, "provider-1")
 	require.NoError(t, err)
 	assert.Equal(t, "local", provider.Platform)
 
@@ -337,7 +337,7 @@ func TestGetServerByName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := serverService.LookupServer(ctx, tt.serverName)
+			result, err := serverService.GetServer(ctx, tt.serverName)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -430,7 +430,7 @@ func TestGetServerByNameAndVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := serverService.LookupServerVersion(ctx, tt.serverName, tt.version)
+			result, err := serverService.GetServerVersion(ctx, tt.serverName, tt.version)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -466,9 +466,9 @@ func TestStoreAndRetrieveServerReadme(t *testing.T) {
 
 	firstReadme := []byte("# Version 1\nHello world\n")
 	ctxWithAuth := internaldb.WithTestSession(ctx)
-	require.NoError(t, serverService.SaveServerReadme(ctxWithAuth, serverName, "1.0.0", firstReadme, ""))
+	require.NoError(t, serverService.SetServerReadme(ctxWithAuth, serverName, "1.0.0", firstReadme, ""))
 
-	readmeV1, err := serverService.ServerReadme(ctx, serverName, "1.0.0")
+	readmeV1, err := serverService.GetServerReadme(ctx, serverName, "1.0.0")
 	require.NoError(t, err)
 	require.NotNil(t, readmeV1)
 	assert.Equal(t, "1.0.0", readmeV1.Version)
@@ -477,7 +477,7 @@ func TestStoreAndRetrieveServerReadme(t *testing.T) {
 	assert.Equal(t, string(firstReadme), string(readmeV1.Content))
 	assert.NotEmpty(t, readmeV1.SHA256)
 
-	latest, err := serverService.LatestServerReadme(ctx, serverName)
+	latest, err := serverService.GetLatestServerReadme(ctx, serverName)
 	require.NoError(t, err)
 	require.NotNil(t, latest)
 	assert.Equal(t, "1.0.0", latest.Version)
@@ -492,15 +492,15 @@ func TestStoreAndRetrieveServerReadme(t *testing.T) {
 	require.NoError(t, err)
 
 	secondReadme := []byte("# Version 2\nUpdated\n")
-	require.NoError(t, serverService.SaveServerReadme(ctxWithAuth, serverName, "2.0.0", secondReadme, "text/markdown"))
+	require.NoError(t, serverService.SetServerReadme(ctxWithAuth, serverName, "2.0.0", secondReadme, "text/markdown"))
 
-	latest, err = serverService.LatestServerReadme(ctx, serverName)
+	latest, err = serverService.GetLatestServerReadme(ctx, serverName)
 	require.NoError(t, err)
 	require.NotNil(t, latest)
 	assert.Equal(t, "2.0.0", latest.Version)
 	assert.Equal(t, string(secondReadme), string(latest.Content))
 
-	readmeV1Again, err := serverService.ServerReadme(ctx, serverName, "1.0.0")
+	readmeV1Again, err := serverService.GetServerReadme(ctx, serverName, "1.0.0")
 	require.NoError(t, err)
 	assert.Equal(t, string(firstReadme), string(readmeV1Again.Content))
 }
@@ -520,11 +520,11 @@ func TestGetServerReadmeMissing(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = serverService.ServerReadme(ctx, serverName, "1.0.0")
+	_, err = serverService.GetServerReadme(ctx, serverName, "1.0.0")
 	require.Error(t, err)
 	assert.Equal(t, database.ErrNotFound, err)
 
-	_, err = serverService.LatestServerReadme(ctx, serverName)
+	_, err = serverService.GetLatestServerReadme(ctx, serverName)
 	require.Error(t, err)
 	assert.Equal(t, database.ErrNotFound, err)
 }
@@ -606,7 +606,7 @@ func TestGetAllVersionsByServerName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := serverService.ServerHistory(ctx, tt.serverName)
+			result, err := serverService.GetServerVersions(ctx, tt.serverName)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -665,7 +665,7 @@ func TestCreateServerConcurrentVersionsNoRace(t *testing.T) {
 	}
 
 	// Query database to check the final state after all creates complete
-	allVersions, err := serverService.ServerHistory(ctx, serverName)
+	allVersions, err := serverService.GetServerVersions(ctx, serverName)
 	require.NoError(t, err, "failed to get all versions")
 
 	latestCount := 0
@@ -769,7 +769,7 @@ func TestUpdateServer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctxWithAuth := internaldb.WithTestSession(ctx)
-			result, err := serverService.ReviseServer(ctxWithAuth, tt.serverName, tt.version, tt.updatedServer, tt.newStatus)
+			result, err := serverService.UpdateServer(ctxWithAuth, tt.serverName, tt.version, tt.updatedServer, tt.newStatus)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -824,11 +824,11 @@ func TestUpdateServer_SkipValidationForDeletedServers(t *testing.T) {
 	// First, set server to deleted status
 	ctxWithAuth := internaldb.WithTestSession(ctx)
 	deletedStatus := string(model.StatusDeleted)
-	_, err = serverService.ReviseServer(ctxWithAuth, serverName, version, invalidServer, &deletedStatus)
+	_, err = serverService.UpdateServer(ctxWithAuth, serverName, version, invalidServer, &deletedStatus)
 	require.NoError(t, err, "should be able to set server to deleted (validation should be skipped)")
 
 	// Verify server is now deleted
-	updatedServer, err := serverService.LookupServerVersion(ctx, serverName, version)
+	updatedServer, err := serverService.GetServerVersion(ctx, serverName, version)
 	require.NoError(t, err)
 	assert.Equal(t, model.StatusDeleted, updatedServer.Meta.Official.Status)
 
@@ -849,7 +849,7 @@ func TestUpdateServer_SkipValidationForDeletedServers(t *testing.T) {
 	}
 
 	// This should succeed despite invalid packages because server is deleted
-	result, err := serverService.ReviseServer(ctxWithAuth, serverName, version, updatedInvalidServer, nil)
+	result, err := serverService.UpdateServer(ctxWithAuth, serverName, version, updatedInvalidServer, nil)
 	require.NoError(t, err, "updating deleted server should skip registry validation")
 	assert.NotNil(t, result)
 	assert.Equal(t, "Updated description for deleted server", result.Server.Description)
@@ -879,7 +879,7 @@ func TestUpdateServer_SkipValidationForDeletedServers(t *testing.T) {
 
 	// Update server and set to deleted in same operation - should skip validation
 	newDeletedStatus := string(model.StatusDeleted)
-	result2, err := serverService.ReviseServer(ctxWithAuth, "com.example/being-deleted-test", "1.0.0", activeServer, &newDeletedStatus)
+	result2, err := serverService.UpdateServer(ctxWithAuth, "com.example/being-deleted-test", "1.0.0", activeServer, &newDeletedStatus)
 	require.NoError(t, err, "updating server being set to deleted should skip registry validation")
 	assert.NotNil(t, result2)
 	assert.Equal(t, model.StatusDeleted, result2.Meta.Official.Status)
@@ -959,7 +959,7 @@ func TestListServers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			results, nextCursor, err := serverService.BrowseServers(ctx, tt.filter, tt.cursor, tt.limit)
+			results, nextCursor, err := serverService.ListServers(ctx, tt.filter, tt.cursor, tt.limit)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -1010,14 +1010,14 @@ func TestVersionComparison(t *testing.T) {
 	}
 
 	// Get the latest version - should be 2.1.0 based on semantic versioning
-	latest, err := serverService.LookupServer(ctx, serverName)
+	latest, err := serverService.GetServer(ctx, serverName)
 	require.NoError(t, err)
 
 	assert.Equal(t, "2.1.0", latest.Server.Version, "Latest version should be 2.1.0")
 	assert.True(t, latest.Meta.Official.IsLatest)
 
 	// Verify only one version is marked as latest
-	allVersions, err := serverService.ServerHistory(ctx, serverName)
+	allVersions, err := serverService.GetServerVersions(ctx, serverName)
 	require.NoError(t, err)
 
 	latestCount := 0
@@ -1876,7 +1876,7 @@ func TestGetDeployments_AppendsDiscoveredDeploymentsFromAdapters(t *testing.T) {
 		},
 	}
 
-	got, err := svc.BrowseDeployments(context.Background(), nil)
+	got, err := svc.ListDeployments(context.Background(), nil)
 	require.NoError(t, err)
 	require.Len(t, got, 2)
 	assert.True(t, discoverCalled)
@@ -1926,7 +1926,7 @@ func TestGetDeployments_DedupesDiscoveredDeploymentsByIdentity(t *testing.T) {
 		},
 	}
 
-	got, err := svc.BrowseDeployments(context.Background(), nil)
+	got, err := svc.ListDeployments(context.Background(), nil)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "discovered", got[0].Origin)
@@ -1983,7 +1983,7 @@ func TestGetDeployments_KeepsDiscoveredDeploymentsDistinctAcrossNamespaces(t *te
 		},
 	}
 
-	got, err := svc.BrowseDeployments(context.Background(), nil)
+	got, err := svc.ListDeployments(context.Background(), nil)
 	require.NoError(t, err)
 	require.Len(t, got, 2)
 	assert.NotEqual(t, got[0].ID, got[1].ID)
@@ -2030,7 +2030,7 @@ func TestGetDeployments_ManagedOriginSkipsDiscovery(t *testing.T) {
 	}
 
 	filter := &models.DeploymentFilter{Origin: &originManaged}
-	got, err := svc.BrowseDeployments(context.Background(), filter)
+	got, err := svc.ListDeployments(context.Background(), filter)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.False(t, discoverCalled)
@@ -2077,7 +2077,7 @@ func TestGetDeploymentByID_FallsBackToDiscoveredDeployments(t *testing.T) {
 		},
 	}
 
-	got, err := svc.LookupDeployment(context.Background(), discoveredID)
+	got, err := svc.GetDeployment(context.Background(), discoveredID)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	assert.Equal(t, discoveredID, got.ID)

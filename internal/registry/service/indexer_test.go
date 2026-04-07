@@ -33,14 +33,14 @@ func newFakeIndexerRegistry() *fakeIndexerRegistry {
 	}
 }
 
-func (f *fakeIndexerRegistry) BrowseServers(_ context.Context, _ *database.ServerFilter, cursor string, _ int) ([]*apiv0.ServerResponse, string, error) {
+func (f *fakeIndexerRegistry) ListServers(_ context.Context, _ *database.ServerFilter, cursor string, _ int) ([]*apiv0.ServerResponse, string, error) {
 	if cursor != "" {
 		return nil, "", nil
 	}
 	return f.Servers, "", nil
 }
 
-func (f *fakeIndexerRegistry) ServerEmbeddingMetadata(_ context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
+func (f *fakeIndexerRegistry) GetServerEmbeddingMetadata(_ context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
 	key := serverName + "@" + version
 	if meta, ok := f.ServerEmbeddingMeta[key]; ok {
 		return meta, nil
@@ -48,19 +48,19 @@ func (f *fakeIndexerRegistry) ServerEmbeddingMetadata(_ context.Context, serverN
 	return nil, database.ErrNotFound
 }
 
-func (f *fakeIndexerRegistry) SaveServerEmbedding(_ context.Context, _, _ string, _ *database.SemanticEmbedding) error {
+func (f *fakeIndexerRegistry) SetServerEmbedding(_ context.Context, _, _ string, _ *database.SemanticEmbedding) error {
 	f.UpsertServerEmbeddingCalls++
 	return nil
 }
 
-func (f *fakeIndexerRegistry) BrowseAgents(_ context.Context, _ *database.AgentFilter, cursor string, _ int) ([]*models.AgentResponse, string, error) {
+func (f *fakeIndexerRegistry) ListAgents(_ context.Context, _ *database.AgentFilter, cursor string, _ int) ([]*models.AgentResponse, string, error) {
 	if cursor != "" {
 		return nil, "", nil
 	}
 	return f.Agents, "", nil
 }
 
-func (f *fakeIndexerRegistry) AgentEmbeddingMetadata(_ context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
+func (f *fakeIndexerRegistry) GetAgentEmbeddingMetadata(_ context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
 	key := agentName + "@" + version
 	if meta, ok := f.AgentEmbeddingMeta[key]; ok {
 		return meta, nil
@@ -68,7 +68,7 @@ func (f *fakeIndexerRegistry) AgentEmbeddingMetadata(_ context.Context, agentNam
 	return nil, database.ErrNotFound
 }
 
-func (f *fakeIndexerRegistry) SaveAgentEmbedding(_ context.Context, _, _ string, _ *database.SemanticEmbedding) error {
+func (f *fakeIndexerRegistry) SetAgentEmbedding(_ context.Context, _, _ string, _ *database.SemanticEmbedding) error {
 	f.UpsertAgentEmbeddingCalls++
 	return nil
 }

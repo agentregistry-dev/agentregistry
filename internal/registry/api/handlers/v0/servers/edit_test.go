@@ -96,7 +96,7 @@ func TestEditServerEndpoint(t *testing.T) {
 
 	// Set the server to deleted status
 	ctxWithAuth := database.WithTestSession(context.Background())
-	_, err = serverService.ReviseServer(ctxWithAuth, deletedServer.Name, deletedServer.Version, deletedServer, stringPtr(string(model.StatusDeleted)))
+	_, err = serverService.UpdateServer(ctxWithAuth, deletedServer.Name, deletedServer.Version, deletedServer, stringPtr(string(model.StatusDeleted)))
 	require.NoError(t, err)
 
 	// Create a server with build metadata for URL encoding test
@@ -479,7 +479,7 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 		// Set specific status if not active
 		if server.status != model.StatusActive {
 			ctxWithAuth := database.WithTestSession(context.Background())
-			_, err = serverService.ReviseServer(ctxWithAuth, server.name, server.version, &apiv0.ServerJSON{
+			_, err = serverService.UpdateServer(ctxWithAuth, server.name, server.version, &apiv0.ServerJSON{
 				Schema:      model.CurrentSchemaURL,
 				Name:        server.name,
 				Description: "Test server for editing",
@@ -692,7 +692,7 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 		assert.Equal(t, "1.0.0", response.Server.Version)
 
 		// Verify the other version wasn't affected
-		otherVersion, err := serverService.LookupServerVersion(context.Background(), "com.example/multi-version-server", "2.0.0")
+		otherVersion, err := serverService.GetServerVersion(context.Background(), "com.example/multi-version-server", "2.0.0")
 		require.NoError(t, err)
 		assert.NotEqual(t, "Updated v1.0.0 specifically", otherVersion.Server.Description)
 	})

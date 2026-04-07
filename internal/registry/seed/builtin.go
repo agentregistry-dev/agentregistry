@@ -87,7 +87,7 @@ func importServer(
 	}
 
 	if len(content) > 0 {
-		if err := registry.SaveServerReadme(ctx, srv.Name, srv.Version, content, contentType); err != nil {
+		if err := registry.SetServerReadme(ctx, srv.Name, srv.Version, content, contentType); err != nil {
 			slog.Warn("storing README failed", "name", srv.Name, "version", srv.Version, "error", err)
 		}
 		slog.Info("stored README", "name", srv.Name, "version", srv.Version)

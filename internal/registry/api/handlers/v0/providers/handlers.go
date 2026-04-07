@@ -90,7 +90,7 @@ func RegisterProvidersEndpoints(api huma.API, basePath string, providerSvc provi
 	}, func(ctx context.Context, input *ProviderListInput) (*ProvidersListResponse, error) {
 		resp := &ProvidersListResponse{}
 		resp.Body.Providers = []models.Provider{}
-		providers, err := providerSvc.BrowseProviders(ctx, input.Platform)
+		providers, err := providerSvc.ListProviders(ctx, input.Platform)
 		if err != nil {
 			return nil, providerListHTTPError(err)
 		}
@@ -142,7 +142,7 @@ func RegisterProvidersEndpoints(api huma.API, basePath string, providerSvc provi
 		Description: "Update mutable fields of a provider by ID.",
 		Tags:        []string{"providers"},
 	}, func(ctx context.Context, input *UpdateProviderRequest) (*ProviderResponse, error) {
-		updated, err := providerSvc.ReviseProvider(ctx, input.ProviderID, input.Platform, &input.Body)
+		updated, err := providerSvc.UpdateProvider(ctx, input.ProviderID, input.Platform, &input.Body)
 		if err != nil {
 			return nil, providerWriteHTTPError("Failed to update provider", err)
 		}
@@ -157,7 +157,7 @@ func RegisterProvidersEndpoints(api huma.API, basePath string, providerSvc provi
 		Description: "Delete a provider by ID.",
 		Tags:        []string{"providers"},
 	}, func(ctx context.Context, input *ProviderByIDInput) (*struct{}, error) {
-		err := providerSvc.RemoveProvider(ctx, input.ProviderID, input.Platform)
+		err := providerSvc.DeleteProvider(ctx, input.ProviderID, input.Platform)
 		if err != nil {
 			return nil, providerWriteHTTPError("Failed to delete provider", err)
 		}

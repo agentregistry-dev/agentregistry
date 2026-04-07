@@ -45,14 +45,14 @@ type Dependencies struct {
 }
 
 type Registry interface {
-	BrowseDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
-	LookupDeployment(ctx context.Context, id string) (*models.Deployment, error)
+	ListDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
+	GetDeployment(ctx context.Context, id string) (*models.Deployment, error)
 	DeployServer(ctx context.Context, serverName, version string, env map[string]string, preferRemote bool, providerID string) (*models.Deployment, error)
 	DeployAgent(ctx context.Context, agentName, version string, env map[string]string, preferRemote bool, providerID string) (*models.Deployment, error)
-	ForgetDeployment(ctx context.Context, id string) error
+	DeleteDeployment(ctx context.Context, id string) error
 	LaunchDeployment(ctx context.Context, req *models.Deployment) (*models.Deployment, error)
 	UndeployDeployment(ctx context.Context, deployment *models.Deployment) error
-	DeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
+	GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
 	CancelDeployment(ctx context.Context, deployment *models.Deployment) error
 }
 
@@ -97,7 +97,7 @@ func New(deps Dependencies) Registry {
 	}
 }
 
-func (s *registry) BrowseDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+func (s *registry) ListDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	dbDeployments, err := s.deployments.GetDeployments(ctx, filter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get deployments from DB: %w", err)
@@ -110,7 +110,7 @@ func (s *registry) BrowseDeployments(ctx context.Context, filter *models.Deploym
 	return deployments, nil
 }
 
-func (s *registry) LookupDeployment(ctx context.Context, id string) (*models.Deployment, error) {
+func (s *registry) GetDeployment(ctx context.Context, id string) (*models.Deployment, error) {
 	deployment, err := s.deployments.GetDeploymentByID(ctx, id)
 	if err == nil {
 		return deployment, nil
@@ -145,7 +145,7 @@ func (s *registry) DeployAgent(ctx context.Context, agentName, version string, e
 	})
 }
 
-func (s *registry) ForgetDeployment(ctx context.Context, id string) error {
+func (s *registry) DeleteDeployment(ctx context.Context, id string) error {
 	deployment, err := s.deployments.GetDeploymentByID(ctx, id)
 	if err != nil {
 		return err
@@ -222,7 +222,7 @@ func (s *registry) UndeployDeployment(ctx context.Context, deployment *models.De
 	return s.removeDeploymentRecord(ctx, deployment)
 }
 
-func (s *registry) DeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error) {
+func (s *registry) GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error) {
 	if deployment == nil {
 		return nil, database.ErrNotFound
 	}
@@ -327,7 +327,7 @@ func (s *registry) CreateManagedDeploymentRecord(ctx context.Context, req *model
 
 	switch deployment.ResourceType {
 	case resourceTypeMCP:
-		serverResp, err := s.servers.LookupServerVersion(ctx, deployment.ServerName, deployment.Version)
+		serverResp, err := s.servers.GetServerVersion(ctx, deployment.ServerName, deployment.Version)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, fmt.Errorf("server %s not found in registry: %w", deployment.ServerName, database.ErrNotFound)
@@ -336,7 +336,7 @@ func (s *registry) CreateManagedDeploymentRecord(ctx context.Context, req *model
 		}
 		deployment.Version = serverResp.Server.Version
 	case resourceTypeAgent:
-		agentResp, err := s.agents.LookupAgentVersion(ctx, deployment.ServerName, deployment.Version)
+		agentResp, err := s.agents.GetAgentVersion(ctx, deployment.ServerName, deployment.Version)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, fmt.Errorf("agent %s not found in registry: %w", deployment.ServerName, database.ErrNotFound)
@@ -487,7 +487,7 @@ func (s *registry) appendDiscoveredDeployments(ctx context.Context, deployments 
 		}
 	}
 
-	providers, err := s.providers.BrowseProviders(ctx, platform)
+	providers, err := s.providers.ListProviders(ctx, platform)
 	if err != nil {
 		log.Printf("Warning: Failed to list providers for discovery: %v", err)
 		return deployments
@@ -553,7 +553,7 @@ func (s *registry) getDiscoveredDeploymentByID(ctx context.Context, id string) (
 	}
 
 	origin := originDiscovered
-	deployments, err := s.BrowseDeployments(ctx, &models.DeploymentFilter{Origin: &origin})
+	deployments, err := s.ListDeployments(ctx, &models.DeploymentFilter{Origin: &origin})
 	if err != nil {
 		return nil, err
 	}
@@ -569,7 +569,7 @@ func (s *registry) resolveProviderByID(ctx context.Context, providerID string) (
 	if strings.TrimSpace(providerID) == "" {
 		return nil, fmt.Errorf("%w: provider id is required", database.ErrInvalidInput)
 	}
-	return s.providers.LookupProvider(ctx, providerID)
+	return s.providers.GetProvider(ctx, providerID)
 }
 
 func deploymentAdapterSupportsResourceType(adapter registrytypes.DeploymentPlatformAdapter, resourceType string) bool {

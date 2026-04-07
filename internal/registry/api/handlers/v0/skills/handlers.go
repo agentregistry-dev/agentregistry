@@ -75,7 +75,7 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, skillSvc skillsvc.
 			}
 		}
 
-		skills, nextCursor, err := skillSvc.BrowseSkills(ctx, filter, input.Cursor, input.Limit)
+		skills, nextCursor, err := skillSvc.ListSkills(ctx, filter, input.Cursor, input.Limit)
 		if err != nil {
 			if errors.Is(err, auth.ErrUnauthenticated) {
 				return nil, huma.Error401Unauthorized("Authentication required")
@@ -118,7 +118,7 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, skillSvc skillsvc.
 		if err != nil {
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
 		}
-		if err := skillSvc.RemoveSkill(ctx, skillName, version); err != nil {
+		if err := skillSvc.DeleteSkill(ctx, skillName, version); err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Skill not found")
 			}
@@ -155,9 +155,9 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, skillSvc skillsvc.
 
 		var skillResp *skillmodels.SkillResponse
 		if version == "latest" {
-			skillResp, err = skillSvc.LookupSkill(ctx, skillName)
+			skillResp, err = skillSvc.GetSkill(ctx, skillName)
 		} else {
-			skillResp, err = skillSvc.LookupSkillVersion(ctx, skillName, version)
+			skillResp, err = skillSvc.GetSkillVersion(ctx, skillName, version)
 		}
 		if err != nil {
 			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
@@ -189,7 +189,7 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, skillSvc skillsvc.
 		}
 
 		// Get all versions of the skill
-		skills, err := skillSvc.SkillHistory(ctx, skillName)
+		skills, err := skillSvc.GetSkillVersions(ctx, skillName)
 		if err != nil {
 			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Skill not found")

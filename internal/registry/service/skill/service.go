@@ -22,12 +22,12 @@ type Dependencies struct {
 }
 
 type Registry interface {
-	BrowseSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error)
-	LookupSkill(ctx context.Context, skillName string) (*models.SkillResponse, error)
-	LookupSkillVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error)
-	SkillHistory(ctx context.Context, skillName string) ([]*models.SkillResponse, error)
+	ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error)
+	GetSkill(ctx context.Context, skillName string) (*models.SkillResponse, error)
+	GetSkillVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error)
+	GetSkillVersions(ctx context.Context, skillName string) ([]*models.SkillResponse, error)
 	PublishSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error)
-	RemoveSkill(ctx context.Context, skillName, version string) error
+	DeleteSkill(ctx context.Context, skillName, version string) error
 }
 
 type registry struct {
@@ -51,22 +51,22 @@ func New(deps Dependencies) Registry {
 	}
 }
 
-func (s *registry) BrowseSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
+func (s *registry) ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
 	if limit <= 0 {
 		limit = 30
 	}
 	return s.skills.ListSkills(ctx, filter, cursor, limit)
 }
 
-func (s *registry) LookupSkill(ctx context.Context, skillName string) (*models.SkillResponse, error) {
+func (s *registry) GetSkill(ctx context.Context, skillName string) (*models.SkillResponse, error) {
 	return s.skills.GetSkillByName(ctx, skillName)
 }
 
-func (s *registry) LookupSkillVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
+func (s *registry) GetSkillVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
 	return s.skills.GetSkillByNameAndVersion(ctx, skillName, version)
 }
 
-func (s *registry) SkillHistory(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
+func (s *registry) GetSkillVersions(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
 	return s.skills.GetAllVersionsBySkillName(ctx, skillName)
 }
 
@@ -76,7 +76,7 @@ func (s *registry) PublishSkill(ctx context.Context, req *models.SkillJSON) (*mo
 	})
 }
 
-func (s *registry) RemoveSkill(ctx context.Context, skillName, version string) error {
+func (s *registry) DeleteSkill(ctx context.Context, skillName, version string) error {
 	return txutil.Run(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
 		return scope.Skills().DeleteSkill(txCtx, skillName, version)
 	})

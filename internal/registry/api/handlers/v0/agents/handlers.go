@@ -84,7 +84,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, agentSvc agentsvc.
 			}
 		}
 
-		agents, nextCursor, err := agentSvc.BrowseAgents(ctx, filter, input.Cursor, input.Limit)
+		agents, nextCursor, err := agentSvc.ListAgents(ctx, filter, input.Cursor, input.Limit)
 		if err != nil {
 			if errors.Is(err, database.ErrInvalidInput) {
 				return nil, huma.Error400BadRequest(err.Error(), err)
@@ -134,9 +134,9 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, agentSvc agentsvc.
 
 		var agentResp *agentmodels.AgentResponse
 		if version == "latest" {
-			agentResp, err = agentSvc.LookupAgent(ctx, agentName)
+			agentResp, err = agentSvc.GetAgent(ctx, agentName)
 		} else {
-			agentResp, err = agentSvc.LookupAgentVersion(ctx, agentName, version)
+			agentResp, err = agentSvc.GetAgentVersion(ctx, agentName, version)
 		}
 		if err != nil {
 			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
@@ -176,7 +176,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, agentSvc agentsvc.
 			return nil, huma.Error400BadRequest("Invalid version encoding", err)
 		}
 
-		if err := agentSvc.RemoveAgent(ctx, agentName, version); err != nil {
+		if err := agentSvc.DeleteAgent(ctx, agentName, version); err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Agent not found")
 			}
@@ -208,7 +208,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, agentSvc agentsvc.
 			return nil, huma.Error400BadRequest("Invalid agent name encoding", err)
 		}
 
-		agents, err := agentSvc.AgentHistory(ctx, agentName)
+		agents, err := agentSvc.GetAgentVersions(ctx, agentName)
 		if err != nil {
 			if err.Error() == errRecordNotFound || errors.Is(err, database.ErrNotFound) {
 				return nil, huma.Error404NotFound("Agent not found")

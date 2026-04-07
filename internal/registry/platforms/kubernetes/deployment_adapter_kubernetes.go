@@ -36,7 +36,7 @@ func (a *kubernetesDeploymentAdapter) Deploy(ctx context.Context, req *models.De
 		return nil, err
 	}
 
-	provider, err := a.providerRegistry.LookupProvider(ctx, req.ProviderID)
+	provider, err := a.providerRegistry.GetProvider(ctx, req.ProviderID)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func (a *kubernetesDeploymentAdapter) Undeploy(ctx context.Context, deployment *
 	if err := utils.ValidateDeploymentRequest(deployment, true); err != nil {
 		return err
 	}
-	provider, err := a.providerRegistry.LookupProvider(ctx, deployment.ProviderID)
+	provider, err := a.providerRegistry.GetProvider(ctx, deployment.ProviderID)
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func (a *kubernetesDeploymentAdapter) CleanupStale(ctx context.Context, deployme
 	if err := utils.ValidateDeploymentRequest(deployment, true); err != nil {
 		return err
 	}
-	provider, err := a.providerRegistry.LookupProvider(ctx, deployment.ProviderID)
+	provider, err := a.providerRegistry.GetProvider(ctx, deployment.ProviderID)
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func (a *kubernetesDeploymentAdapter) Cancel(_ context.Context, _ *models.Deploy
 }
 
 func (a *kubernetesDeploymentAdapter) Discover(ctx context.Context, providerID string) ([]*models.Deployment, error) {
-	provider, err := a.providerRegistry.LookupProvider(ctx, providerID)
+	provider, err := a.providerRegistry.GetProvider(ctx, providerID)
 	if err != nil {
 		return nil, err
 	}

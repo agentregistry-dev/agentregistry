@@ -218,7 +218,7 @@ func (s *Service) importServer(
 	if err != nil { //nolint:nestif
 		// If duplicate version and update is enabled, try update path
 		if s.updateIfExists && errors.Is(err, database.ErrInvalidVersion) {
-			if _, uerr := s.registry.ReviseServer(ctx, srv.Name, srv.Version, srv, nil); uerr != nil {
+			if _, uerr := s.registry.UpdateServer(ctx, srv.Name, srv.Version, srv, nil); uerr != nil {
 				s.logger.Error("failed to update existing server", "name", srv.Name, "error", uerr)
 			} else {
 				s.logger.Info("updated existing server", "name", srv.Name, "version", srv.Version)
@@ -230,7 +230,7 @@ func (s *Service) importServer(
 	}
 
 	if embeddingRecord != nil {
-		if err := s.registry.SaveServerEmbedding(ctx, srv.Name, srv.Version, embeddingRecord); err != nil {
+		if err := s.registry.SetServerEmbedding(ctx, srv.Name, srv.Version, embeddingRecord); err != nil {
 			s.logger.Warn("failed to store embedding", "name", srv.Name, "version", srv.Version, "error", err)
 		}
 	}
@@ -248,7 +248,7 @@ func (s *Service) importServer(
 		}
 	}
 	if len(readmeContent) > 0 {
-		if err := s.registry.SaveServerReadme(ctx, srv.Name, srv.Version, readmeContent, readmeContentType); err != nil {
+		if err := s.registry.SetServerReadme(ctx, srv.Name, srv.Version, readmeContent, readmeContentType); err != nil {
 			s.logger.Warn("storing README failed", "name", srv.Name, "version", srv.Version, "error", err)
 		}
 	}
