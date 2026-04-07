@@ -185,10 +185,10 @@ func TestStartIndex_JobAlreadyRunning(t *testing.T) {
 }
 
 func TestStartIndex_DefaultsApplied(t *testing.T) {
-	var capturedOpts service.IndexOptions
+	captured := make(chan service.IndexOptions, 1)
 	mockIdx := &mockIndexer{
 		runFunc: func(ctx context.Context, opts service.IndexOptions, onProgress service.IndexProgressCallback) (*service.IndexResult, error) {
-			capturedOpts = opts
+			captured <- opts
 			return &service.IndexResult{}, nil
 		},
 	}
@@ -208,11 +208,14 @@ func TestStartIndex_DefaultsApplied(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	time.Sleep(50 * time.Millisecond)
-
-	assert.True(t, capturedOpts.IncludeServers)
-	assert.True(t, capturedOpts.IncludeAgents)
-	assert.Equal(t, 100, capturedOpts.BatchSize)
+	select {
+	case capturedOpts := <-captured:
+		assert.True(t, capturedOpts.IncludeServers)
+		assert.True(t, capturedOpts.IncludeAgents)
+		assert.Equal(t, 100, capturedOpts.BatchSize)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for indexer to be called")
+	}
 }
 
 func TestGetJobStatus_Success(t *testing.T) {
