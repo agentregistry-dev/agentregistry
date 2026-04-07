@@ -5,16 +5,18 @@ import (
 	"path/filepath"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/skill/templates"
+	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
 	"github.com/agentregistry-dev/agentregistry/pkg/validators"
 
 	"github.com/spf13/cobra"
 )
 
 var InitCmd = &cobra.Command{
-	Use:   "init [skill-name]",
-	Short: "Initialize a new agentic skill project",
-	Long:  `Initialize a new agentic skill project.`,
-	RunE:  runInit,
+	Use:         "init [skill-name]",
+	Annotations: map[string]string{annotations.SkipDaemonAnnotation: "true"},
+	Short:       "Initialize a new agentic skill project",
+	Long:        `Initialize a new agentic skill project.`,
+	RunE:        runInit,
 }
 
 var (

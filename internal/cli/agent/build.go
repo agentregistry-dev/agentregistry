@@ -8,13 +8,15 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/project"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
+	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/spf13/cobra"
 )
 
 var BuildCmd = &cobra.Command{
-	Use:   "build [project-directory]",
-	Short: "Build Docker images for an agent project",
+	Use:         "build [project-directory]",
+	Annotations: map[string]string{annotations.SkipDaemonAnnotation: "true"},
+	Short:       "Build Docker images for an agent project",
 	Long: `Build Docker images for an agent project created with the init command.
 
 This command looks for agent.yaml in the specified directory, regenerates template artifacts,

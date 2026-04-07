@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/agentregistry-dev/agentregistry/internal/client"
+	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -35,39 +36,41 @@ func TestNormalizeBaseURL(t *testing.T) {
 }
 
 func TestPreRunBehavior(t *testing.T) {
+	skipAnnotation := map[string]string{annotations.SkipDaemonAnnotation: "true"}
+
 	root := &cobra.Command{Use: "arctl"}
 
 	agentCmd := &cobra.Command{Use: "agent"}
-	initCmd := &cobra.Command{Use: "init"}
-	buildCmd := &cobra.Command{Use: "build"}
+	initCmd := &cobra.Command{Use: "init", Annotations: skipAnnotation}
+	buildCmd := &cobra.Command{Use: "build", Annotations: skipAnnotation}
 	listCmd := &cobra.Command{Use: "list"}
 	agentCmd.AddCommand(initCmd)
 	agentCmd.AddCommand(buildCmd)
 	agentCmd.AddCommand(listCmd)
 
 	mcpCmd := &cobra.Command{Use: "mcp"}
-	mcpInitCmd := &cobra.Command{Use: "init"}
-	mcpBuildCmd := &cobra.Command{Use: "build"}
-	mcpAddToolCmd := &cobra.Command{Use: "add-tool"}
+	mcpInitCmd := &cobra.Command{Use: "init", Annotations: skipAnnotation}
+	mcpBuildCmd := &cobra.Command{Use: "build", Annotations: skipAnnotation}
+	mcpAddToolCmd := &cobra.Command{Use: "add-tool", Annotations: skipAnnotation}
 	mcpCmd.AddCommand(mcpInitCmd)
 	mcpCmd.AddCommand(mcpBuildCmd)
 	mcpCmd.AddCommand(mcpAddToolCmd)
 
 	skillCmd := &cobra.Command{Use: "skill"}
-	skillInitCmd := &cobra.Command{Use: "init"}
-	skillBuildCmd := &cobra.Command{Use: "build"}
+	skillInitCmd := &cobra.Command{Use: "init", Annotations: skipAnnotation}
+	skillBuildCmd := &cobra.Command{Use: "build", Annotations: skipAnnotation}
 	skillCmd.AddCommand(skillInitCmd)
 	skillCmd.AddCommand(skillBuildCmd)
 
-	// Subcommand under "mcp init" (e.g. arctl mcp init python mymcp)
+	// Subcommand under "mcp init" — inherits skip from annotated ancestor
 	initPythonCmd := &cobra.Command{Use: "python"}
 	mcpInitCmd.AddCommand(initPythonCmd)
 
-	configureCmd := &cobra.Command{Use: "configure"}
+	configureCmd := &cobra.Command{Use: "configure", Annotations: skipAnnotation}
 	completionCmd := &cobra.Command{Use: "completion"}
 	zshCompletionCmd := &cobra.Command{Use: "zsh"}
 	completionCmd.AddCommand(zshCompletionCmd)
-	versionCmd := &cobra.Command{Use: "version"}
+	versionCmd := &cobra.Command{Use: "version", Annotations: skipAnnotation}
 	root.AddCommand(agentCmd, mcpCmd, skillCmd, configureCmd, completionCmd, versionCmd)
 
 	tests := []struct {

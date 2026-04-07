@@ -9,6 +9,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
+	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
 	"github.com/agentregistry-dev/agentregistry/pkg/validators"
 	"github.com/spf13/cobra"
 )
@@ -22,8 +23,9 @@ const (
 )
 
 var InitCmd = &cobra.Command{
-	Use:   "init [framework] [language] [agent-name]",
-	Short: "Initialize a new agent project",
+	Use:         "init [framework] [language] [agent-name]",
+	Annotations: map[string]string{annotations.SkipDaemonAnnotation: "true"},
+	Short:       "Initialize a new agent project",
 	Long: `Initialize a new agent project using the specified framework and language.
 
 Supported frameworks and languages:
