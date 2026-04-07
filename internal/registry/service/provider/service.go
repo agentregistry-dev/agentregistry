@@ -19,12 +19,12 @@ type Dependencies struct {
 }
 
 type Registry interface {
-	ListProviders(ctx context.Context, platform string) ([]*models.Provider, error)
-	CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error)
-	GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error)
+	BrowseProviders(ctx context.Context, platform string) ([]*models.Provider, error)
+	RegisterProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error)
+	LookupProvider(ctx context.Context, providerID string) (*models.Provider, error)
 	ResolveProvider(ctx context.Context, providerID, platformHint string) (*models.Provider, error)
-	UpdateProvider(ctx context.Context, providerID, platformHint string, in *models.UpdateProviderInput) (*models.Provider, error)
-	DeleteProvider(ctx context.Context, providerID, platformHint string) error
+	ReviseProvider(ctx context.Context, providerID, platformHint string, in *models.UpdateProviderInput) (*models.Provider, error)
+	RemoveProvider(ctx context.Context, providerID, platformHint string) error
 }
 
 type UnsupportedPlatformError struct {
@@ -67,7 +67,7 @@ func New(deps Dependencies) Registry {
 	}
 }
 
-func (r *registry) ListProviders(ctx context.Context, platform string) ([]*models.Provider, error) {
+func (r *registry) BrowseProviders(ctx context.Context, platform string) ([]*models.Provider, error) {
 	normalizedPlatform := normalizePlatform(platform)
 	if normalizedPlatform != "" {
 		if adapter, ok := r.resolveAdapter(normalizedPlatform); ok {
@@ -106,7 +106,7 @@ func (r *registry) ListProviders(ctx context.Context, platform string) ([]*model
 	return providers, nil
 }
 
-func (r *registry) CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error) {
+func (r *registry) RegisterProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error) {
 	if in == nil {
 		return nil, database.ErrInvalidInput
 	}
@@ -126,7 +126,7 @@ func (r *registry) CreateProvider(ctx context.Context, in *models.CreateProvider
 	return r.providers.CreateProvider(ctx, in)
 }
 
-func (r *registry) GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error) {
+func (r *registry) LookupProvider(ctx context.Context, providerID string) (*models.Provider, error) {
 	return r.ResolveProvider(ctx, providerID, "")
 }
 
@@ -169,7 +169,7 @@ func (r *registry) ResolveProvider(ctx context.Context, providerID, platformHint
 	return nil, &UnsupportedPlatformError{Platform: provider.Platform}
 }
 
-func (r *registry) UpdateProvider(ctx context.Context, providerID, platformHint string, in *models.UpdateProviderInput) (*models.Provider, error) {
+func (r *registry) ReviseProvider(ctx context.Context, providerID, platformHint string, in *models.UpdateProviderInput) (*models.Provider, error) {
 	provider, err := r.ResolveProvider(ctx, providerID, platformHint)
 	if err != nil {
 		return nil, err
@@ -185,7 +185,7 @@ func (r *registry) UpdateProvider(ctx context.Context, providerID, platformHint 
 	return r.providers.UpdateProvider(ctx, provider.ID, in)
 }
 
-func (r *registry) DeleteProvider(ctx context.Context, providerID, platformHint string) error {
+func (r *registry) RemoveProvider(ctx context.Context, providerID, platformHint string) error {
 	provider, err := r.ResolveProvider(ctx, providerID, platformHint)
 	if err != nil {
 		return err

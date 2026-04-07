@@ -60,6 +60,10 @@ func (f *fakeProviderDeploymentService) ListProviders(context.Context, *string) 
 }
 
 func (f *fakeProviderDeploymentService) GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error) {
+	return f.LookupProvider(ctx, providerID)
+}
+
+func (f *fakeProviderDeploymentService) LookupProvider(ctx context.Context, providerID string) (*models.Provider, error) {
 	if f.GetProviderByIDFn != nil {
 		return f.GetProviderByIDFn(ctx, providerID)
 	}

@@ -33,7 +33,7 @@ func (f *fakePlatformRuntimeRegistry) LookupServer(ctx context.Context, serverNa
 	return nil, database.ErrNotFound
 }
 
-func (f *fakePlatformRuntimeRegistry) GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error) {
+func (f *fakePlatformRuntimeRegistry) LookupProvider(ctx context.Context, providerID string) (*models.Provider, error) {
 	if f.getProviderByIDFn != nil {
 		return f.getProviderByIDFn(ctx, providerID)
 	}

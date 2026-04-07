@@ -487,7 +487,7 @@ func (s *registry) appendDiscoveredDeployments(ctx context.Context, deployments 
 		}
 	}
 
-	providers, err := s.providers.ListProviders(ctx, platform)
+	providers, err := s.providers.BrowseProviders(ctx, platform)
 	if err != nil {
 		log.Printf("Warning: Failed to list providers for discovery: %v", err)
 		return deployments
@@ -569,7 +569,7 @@ func (s *registry) resolveProviderByID(ctx context.Context, providerID string) (
 	if strings.TrimSpace(providerID) == "" {
 		return nil, fmt.Errorf("%w: provider id is required", database.ErrInvalidInput)
 	}
-	return s.providers.GetProviderByID(ctx, providerID)
+	return s.providers.LookupProvider(ctx, providerID)
 }
 
 func deploymentAdapterSupportsResourceType(adapter registrytypes.DeploymentPlatformAdapter, resourceType string) bool {

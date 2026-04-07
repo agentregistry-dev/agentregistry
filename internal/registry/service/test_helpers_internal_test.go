@@ -139,6 +139,11 @@ func (s *registryServiceImpl) promptService() promptsvc.Registry {
 	return promptsvc.New(promptsvc.Dependencies{Prompts: stores.prompts, Tx: s.storeDB})
 }
 
+func (s *registryServiceImpl) providerService() providersvc.Registry {
+	stores := s.readStores()
+	return providersvc.New(providersvc.Dependencies{Providers: stores.providers})
+}
+
 type deploymentInternals interface {
 	deploymentsvc.Registry
 	ResolveDeploymentAdapter(platform string) (registrytypes.DeploymentPlatformAdapter, error)
@@ -307,6 +312,30 @@ func (s *registryServiceImpl) PublishPrompt(ctx context.Context, req *models.Pro
 
 func (s *registryServiceImpl) RemovePrompt(ctx context.Context, promptName, version string) error {
 	return s.promptService().RemovePrompt(ctx, promptName, version)
+}
+
+func (s *registryServiceImpl) BrowseProviders(ctx context.Context, platform string) ([]*models.Provider, error) {
+	return s.providerService().BrowseProviders(ctx, platform)
+}
+
+func (s *registryServiceImpl) LookupProvider(ctx context.Context, providerID string) (*models.Provider, error) {
+	return s.providerService().LookupProvider(ctx, providerID)
+}
+
+func (s *registryServiceImpl) RegisterProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error) {
+	return s.providerService().RegisterProvider(ctx, in)
+}
+
+func (s *registryServiceImpl) ResolveProvider(ctx context.Context, providerID, platformHint string) (*models.Provider, error) {
+	return s.providerService().ResolveProvider(ctx, providerID, platformHint)
+}
+
+func (s *registryServiceImpl) ReviseProvider(ctx context.Context, providerID, platformHint string, in *models.UpdateProviderInput) (*models.Provider, error) {
+	return s.providerService().ReviseProvider(ctx, providerID, platformHint, in)
+}
+
+func (s *registryServiceImpl) RemoveProvider(ctx context.Context, providerID, platformHint string) error {
+	return s.providerService().RemoveProvider(ctx, providerID, platformHint)
 }
 
 func (s *registryServiceImpl) ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error) {
