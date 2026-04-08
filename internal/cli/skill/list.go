@@ -31,6 +31,10 @@ func init() {
 }
 
 func runList(cmd *cobra.Command, args []string) error {
+	if listPageSize <= 0 {
+		return fmt.Errorf("--page-size must be a positive integer, got %d", listPageSize)
+	}
+
 	if apiClient == nil {
 		return fmt.Errorf("API client not initialized")
 	}
