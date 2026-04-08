@@ -217,10 +217,19 @@ type DeploymentStore interface {
 	DeleteDeployment(ctx context.Context, id string) error
 }
 
-type ProviderStore interface {
-	CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error)
+// ProviderReader is the read-only subset of ProviderStore.
+// Note: the service-layer providersvc.Registry exposes ListProviders with a plain string
+// (normalized platform) rather than *string, so it cannot structurally embed ProviderReader.
+// ProviderReader is still useful as a narrow dependency for consumers that only need
+// read access directly at the store level.
+type ProviderReader interface {
 	ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error)
 	GetProvider(ctx context.Context, providerID string) (*models.Provider, error)
+}
+
+type ProviderStore interface {
+	ProviderReader
+	CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error)
 	UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error)
 	DeleteProvider(ctx context.Context, providerID string) error
 }

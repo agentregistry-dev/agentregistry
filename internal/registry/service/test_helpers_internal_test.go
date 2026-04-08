@@ -50,6 +50,13 @@ func safeScopeStore[T any](read func() T) (value T) {
 	return read()
 }
 
+// registryServiceImpl is a test-only aggregate facade that wires all domain service
+// packages behind a single struct. It exists so that cross-domain integration tests
+// can share a common backing store while calling each domain service through its own
+// Registry interface. It is not a production seam and should not be treated as one.
+//
+// Individual domain services are constructed on demand from the current store bundle
+// (see serverService, agentService, etc.) to support partial store injection in tests.
 type registryServiceImpl struct {
 	storeDB            database.Store
 	serverRepo         database.ServerStore
@@ -222,6 +229,10 @@ func (s *registryServiceImpl) SetServerEmbedding(ctx context.Context, serverName
 	return s.serverService().SetServerEmbedding(ctx, serverName, version, embedding)
 }
 
+func (s *registryServiceImpl) GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
+	return s.serverService().GetServerEmbeddingMetadata(ctx, serverName, version)
+}
+
 func (s *registryServiceImpl) ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
 	return s.agentService().ListAgents(ctx, filter, cursor, limit)
 }
@@ -252,6 +263,14 @@ func (s *registryServiceImpl) ResolveAgentManifestPrompts(ctx context.Context, m
 
 func (s *registryServiceImpl) DeleteAgent(ctx context.Context, agentName, version string) error {
 	return s.agentService().DeleteAgent(ctx, agentName, version)
+}
+
+func (s *registryServiceImpl) SetAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error {
+	return s.agentService().SetAgentEmbedding(ctx, agentName, version, embedding)
+}
+
+func (s *registryServiceImpl) GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
+	return s.agentService().GetAgentEmbeddingMetadata(ctx, agentName, version)
 }
 
 func (s *registryServiceImpl) ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {

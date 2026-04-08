@@ -18,6 +18,12 @@ type Dependencies struct {
 	ProviderPlatforms map[string]registrytypes.ProviderPlatformAdapter
 }
 
+// Registry is the provider service wrapper interface.
+//
+// Unlike other domain registries, this interface does not embed database.ProviderReader.
+// The store-level ListProviders accepts *string for optional platform filtering; this
+// interface normalizes the input to a plain string and applies adapter dispatch logic,
+// so the signatures intentionally differ.
 type Registry interface {
 	ListProviders(ctx context.Context, platform string) ([]*models.Provider, error)
 	RegisterProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error)
