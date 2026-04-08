@@ -1353,7 +1353,7 @@ func (w *McpServerWizard) renderRegistryEnvStep() string {
 					displayValue = v[:7] + "***"
 				}
 			}
-			sb.WriteString(fmt.Sprintf("  • %s=%s\n", k, displayValue))
+			fmt.Fprintf(&sb, "  • %s=%s\n", k, displayValue)
 		}
 		sb.WriteString("\n")
 	}
@@ -1391,7 +1391,7 @@ func (w *McpServerWizard) renderHeadersStep() string {
 					displayValue = v[:7] + "***"
 				}
 			}
-			sb.WriteString(fmt.Sprintf("  • %s: %s\n", k, displayValue))
+			fmt.Fprintf(&sb, "  • %s: %s\n", k, displayValue)
 		}
 		sb.WriteString("\n")
 	}

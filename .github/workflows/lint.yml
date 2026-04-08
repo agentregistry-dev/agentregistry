@@ -19,9 +19,8 @@ jobs:
         with:
           go-version-file: "go.mod"
 
-      - uses: golangci/golangci-lint-action@v7
-        with:
-          version: v2.8.0
+      - name: Lint Go
+        run: make lint
 
   lint-ui:
     runs-on: ubuntu-latest
