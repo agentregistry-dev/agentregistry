@@ -33,7 +33,7 @@ func DiscoveredDeploymentIDWithNamespace(providerID, resourceType, name, version
 		strings.TrimSpace(version) + "|" +
 		strings.TrimSpace(namespace)
 	sum := sha256.Sum256([]byte(raw))
-	return "discovered-" + hex.EncodeToString(sum[:8])
+	return "discovered-" + hex.EncodeToString(sum[:16])
 }
 
 func discoveredDeploymentNamespace(dep *models.Deployment) string {

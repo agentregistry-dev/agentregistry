@@ -70,7 +70,7 @@ func registerIndexEndpoint(
 		}
 
 		if req.Stream {
-			return nil, huma.Error400BadRequest("SSE streaming should use GET /embeddings/index/stream with query parameters")
+			return nil, huma.Error400BadRequest("SSE streaming should use POST /embeddings/index/stream with a JSON body")
 		}
 
 		job, err := jobManager.CreateJob(jobs.IndexJobType)

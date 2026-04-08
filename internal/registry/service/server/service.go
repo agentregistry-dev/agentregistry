@@ -138,17 +138,24 @@ func (s *registry) SetServerEmbedding(ctx context.Context, serverName, version s
 
 func (s *registry) validateNoDuplicateRemoteURLs(ctx context.Context, servers database.ServerStore, serverDetail apiv0.ServerJSON) error {
 	for _, remote := range serverDetail.Remotes {
-		filter := &database.ServerFilter{RemoteURL: &remote.URL}
+		remoteURL := remote.URL
+		filter := &database.ServerFilter{RemoteURL: &remoteURL}
+		cursor := ""
 
-		conflictingServers, _, err := servers.ListServers(ctx, filter, "", 1000)
-		if err != nil {
-			return fmt.Errorf("failed to check remote URL conflict: %w", err)
-		}
-
-		for _, conflictingServer := range conflictingServers {
-			if conflictingServer.Server.Name != serverDetail.Name {
-				return fmt.Errorf("remote URL %s is already used by server %s", remote.URL, conflictingServer.Server.Name)
+		for {
+			conflictingServers, nextCursor, err := servers.ListServers(ctx, filter, cursor, 1000)
+			if err != nil {
+				return fmt.Errorf("failed to check remote URL conflict: %w", err)
 			}
+			for _, conflictingServer := range conflictingServers {
+				if conflictingServer.Server.Name != serverDetail.Name {
+					return fmt.Errorf("remote URL %s is already used by server %s", remoteURL, conflictingServer.Server.Name)
+				}
+			}
+			if nextCursor == "" {
+				break
+			}
+			cursor = nextCursor
 		}
 	}
 
@@ -156,6 +163,9 @@ func (s *registry) validateNoDuplicateRemoteURLs(ctx context.Context, servers da
 }
 
 func (s *registry) createServerInTransaction(ctx context.Context, servers database.ServerStore, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("%w: request body is required", database.ErrInvalidInput)
+	}
 	if err := validators.ValidatePublishRequest(ctx, *req, s.cfg); err != nil {
 		return nil, err
 	}
@@ -246,6 +256,9 @@ func (s *registry) createServerInTransaction(ctx context.Context, servers databa
 }
 
 func (s *registry) updateServerInTransaction(ctx context.Context, servers database.ServerStore, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("%w: request body is required", database.ErrInvalidInput)
+	}
 	currentServer, err := servers.GetServerVersion(ctx, serverName, version)
 	if err != nil {
 		return nil, err

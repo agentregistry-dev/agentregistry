@@ -97,7 +97,7 @@ func (s *registry) CreateManagedDeploymentRecord(ctx context.Context, req *model
 		UpdatedAt:        now,
 	}
 	if deployment.ServerName == "" || deployment.Version == "" {
-		return nil, fmt.Errorf("%w: serverName and version are required", database.ErrInvalidInput)
+		return nil, fmt.Errorf("%w: resource name and version are required", database.ErrInvalidInput)
 	}
 	if deployment.Env == nil {
 		deployment.Env = map[string]string{}

@@ -76,15 +76,24 @@ func (s *registry) createSkillInTransaction(ctx context.Context, skills database
 	skillJSON := *req
 
 	for _, remote := range skillJSON.Remotes {
-		filter := &database.SkillFilter{RemoteURL: &remote.URL}
-		existing, _, err := skills.ListSkills(ctx, filter, "", 1000)
-		if err != nil {
-			return nil, fmt.Errorf("failed to check remote URL conflict: %w", err)
-		}
-		for _, existingSkill := range existing {
-			if existingSkill.Skill.Name != skillJSON.Name {
-				return nil, fmt.Errorf("remote URL %s is already used by skill %s", remote.URL, existingSkill.Skill.Name)
+		remoteURL := remote.URL
+		filter := &database.SkillFilter{RemoteURL: &remoteURL}
+		cursor := ""
+
+		for {
+			existing, nextCursor, err := skills.ListSkills(ctx, filter, cursor, 1000)
+			if err != nil {
+				return nil, fmt.Errorf("failed to check remote URL conflict: %w", err)
 			}
+			for _, existingSkill := range existing {
+				if existingSkill.Skill.Name != skillJSON.Name {
+					return nil, fmt.Errorf("remote URL %s is already used by skill %s", remoteURL, existingSkill.Skill.Name)
+				}
+			}
+			if nextCursor == "" {
+				break
+			}
+			cursor = nextCursor
 		}
 	}
 
