@@ -98,7 +98,7 @@ func New(deps Dependencies) Registry {
 }
 
 func (s *registry) ListDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
-	dbDeployments, err := s.deployments.GetDeployments(ctx, filter)
+	dbDeployments, err := s.deployments.ListDeployments(ctx, filter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get deployments from DB: %w", err)
 	}
@@ -111,7 +111,7 @@ func (s *registry) ListDeployments(ctx context.Context, filter *models.Deploymen
 }
 
 func (s *registry) GetDeployment(ctx context.Context, id string) (*models.Deployment, error) {
-	deployment, err := s.deployments.GetDeploymentByID(ctx, id)
+	deployment, err := s.deployments.GetDeployment(ctx, id)
 	if err == nil {
 		return deployment, nil
 	}
@@ -146,7 +146,7 @@ func (s *registry) DeployAgent(ctx context.Context, agentName, version string, e
 }
 
 func (s *registry) DeleteDeployment(ctx context.Context, id string) error {
-	deployment, err := s.deployments.GetDeploymentByID(ctx, id)
+	deployment, err := s.deployments.GetDeployment(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -205,7 +205,7 @@ func (s *registry) LaunchDeployment(ctx context.Context, req *models.Deployment)
 		return nil, err
 	}
 
-	return s.deployments.GetDeploymentByID(ctx, created.ID)
+	return s.deployments.GetDeployment(ctx, created.ID)
 }
 
 func (s *registry) UndeployDeployment(ctx context.Context, deployment *models.Deployment) error {
@@ -294,7 +294,7 @@ func (s *registry) CleanupExistingDeployment(ctx context.Context, resourceName, 
 		log.Printf("Warning: failed stale cleanup for deployment %s on platform %s: %v", existing.ID, cleanupPlatform, err)
 	}
 
-	if err := s.deployments.RemoveDeploymentByID(ctx, existing.ID); err != nil && !errors.Is(err, database.ErrNotFound) {
+	if err := s.deployments.DeleteDeployment(ctx, existing.ID); err != nil && !errors.Is(err, database.ErrNotFound) {
 		return fmt.Errorf("removing stale deployment record: %w", err)
 	}
 
@@ -352,7 +352,7 @@ func (s *registry) CreateManagedDeploymentRecord(ctx context.Context, req *model
 		return nil, err
 	}
 
-	return s.deployments.GetDeploymentByID(ctx, deployment.ID)
+	return s.deployments.GetDeployment(ctx, deployment.ID)
 }
 
 func (s *registry) ApplyDeploymentActionResult(ctx context.Context, deploymentID string, result *models.DeploymentActionResult) error {
@@ -586,7 +586,7 @@ func deploymentAdapterSupportsResourceType(adapter registrytypes.DeploymentPlatf
 
 func (s *registry) findDeploymentByIdentity(ctx context.Context, resourceName, version, artifactType string) (*models.Deployment, error) {
 	filter := &models.DeploymentFilter{ResourceType: &artifactType, ResourceName: &resourceName}
-	deployments, err := s.deployments.GetDeployments(ctx, filter)
+	deployments, err := s.deployments.ListDeployments(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -641,5 +641,5 @@ func (s *registry) removeDeploymentRecord(ctx context.Context, deployment *model
 		return database.ErrInvalidInput
 	}
 
-	return s.deployments.RemoveDeploymentByID(ctx, deployment.ID)
+	return s.deployments.DeleteDeployment(ctx, deployment.ID)
 }

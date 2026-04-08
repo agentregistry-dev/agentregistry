@@ -104,8 +104,8 @@ func (s *providerStore) ListProviders(ctx context.Context, platform *string) ([]
 	return out, nil
 }
 
-// GetProviderByID gets a provider by ID.
-func (s *providerStore) GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error) {
+// GetProvider gets a provider by ID.
+func (s *providerStore) GetProvider(ctx context.Context, providerID string) (*models.Provider, error) {
 	executor := s.executor
 	query := `SELECT id, name, platform, COALESCE(config, '{}'::jsonb), created_at, updated_at FROM providers WHERE id = $1`
 	var p models.Provider
@@ -130,9 +130,9 @@ func (s *providerStore) GetProviderByID(ctx context.Context, providerID string) 
 // UpdateProvider updates mutable provider fields.
 func (s *providerStore) UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error) {
 	if in == nil {
-		return s.GetProviderByID(ctx, providerID)
+		return s.GetProvider(ctx, providerID)
 	}
-	current, err := s.GetProviderByID(ctx, providerID)
+	current, err := s.GetProvider(ctx, providerID)
 	if err != nil {
 		return nil, err
 	}

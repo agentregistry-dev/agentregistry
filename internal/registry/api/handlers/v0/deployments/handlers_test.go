@@ -59,10 +59,6 @@ func (f *fakeProviderDeploymentService) ListProviders(context.Context, *string) 
 	return nil, nil
 }
 
-func (f *fakeProviderDeploymentService) GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error) {
-	return f.GetProvider(ctx, providerID)
-}
-
 func (f *fakeProviderDeploymentService) GetProvider(ctx context.Context, providerID string) (*models.Provider, error) {
 	if f.GetProviderByIDFn != nil {
 		return f.GetProviderByIDFn(ctx, providerID)
@@ -85,7 +81,7 @@ func (f *fakeProviderDeploymentService) DeleteProvider(context.Context, string) 
 	return database.ErrNotFound
 }
 
-func (f *fakeProviderDeploymentService) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+func (f *fakeProviderDeploymentService) ListDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	if f.GetDeploymentsFn != nil {
 		return f.GetDeploymentsFn(ctx, filter)
 	}
@@ -96,7 +92,7 @@ func (f *fakeProviderDeploymentService) GetDeployments(ctx context.Context, filt
 	return deployments, nil
 }
 
-func (f *fakeProviderDeploymentService) GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error) {
+func (f *fakeProviderDeploymentService) GetDeployment(ctx context.Context, id string) (*models.Deployment, error) {
 	if f.GetDeploymentByIDFn != nil {
 		return f.GetDeploymentByIDFn(ctx, id)
 	}
@@ -155,7 +151,7 @@ func (f *fakeProviderDeploymentService) UpdateDeploymentState(ctx context.Contex
 	return nil
 }
 
-func (f *fakeProviderDeploymentService) RemoveDeploymentByID(ctx context.Context, id string) error {
+func (f *fakeProviderDeploymentService) DeleteDeployment(ctx context.Context, id string) error {
 	if f.RemoveDeploymentByIDFn != nil {
 		return f.RemoveDeploymentByIDFn(ctx, id)
 	}
@@ -183,27 +179,27 @@ func (f *fakeProviderDeploymentService) ListServers(context.Context, *database.S
 	return nil, "", nil
 }
 
-func (f *fakeProviderDeploymentService) GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
-	return f.GetServerByNameAndVersion(ctx, serverName, "latest")
+func (f *fakeProviderDeploymentService) GetServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+	return f.GetServerVersion(ctx, serverName, "latest")
 }
 
-func (f *fakeProviderDeploymentService) GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
+func (f *fakeProviderDeploymentService) GetServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
 	if f.GetServerByNameAndVersionFn != nil {
 		return f.GetServerByNameAndVersionFn(ctx, serverName, version)
 	}
 	return &apiv0.ServerResponse{Server: apiv0.ServerJSON{Name: serverName, Version: version}}, nil
 }
 
-func (f *fakeProviderDeploymentService) GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
-	server, err := f.GetServerByName(ctx, serverName)
+func (f *fakeProviderDeploymentService) GetServerVersions(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
+	server, err := f.GetServer(ctx, serverName)
 	if err != nil {
 		return nil, err
 	}
 	return []*apiv0.ServerResponse{server}, nil
 }
 
-func (f *fakeProviderDeploymentService) GetCurrentLatestVersion(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
-	return f.GetServerByName(ctx, serverName)
+func (f *fakeProviderDeploymentService) GetLatestServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+	return f.GetServer(ctx, serverName)
 }
 
 func (f *fakeProviderDeploymentService) CountServerVersions(context.Context, string) (int, error) {
@@ -258,27 +254,27 @@ func (f *fakeProviderDeploymentService) ListAgents(context.Context, *database.Ag
 	return nil, "", nil
 }
 
-func (f *fakeProviderDeploymentService) GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error) {
-	return f.GetAgentByNameAndVersion(ctx, agentName, "latest")
+func (f *fakeProviderDeploymentService) GetAgent(ctx context.Context, agentName string) (*models.AgentResponse, error) {
+	return f.GetAgentVersion(ctx, agentName, "latest")
 }
 
-func (f *fakeProviderDeploymentService) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
+func (f *fakeProviderDeploymentService) GetAgentVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
 	if f.GetAgentByNameAndVersionFn != nil {
 		return f.GetAgentByNameAndVersionFn(ctx, agentName, version)
 	}
 	return &models.AgentResponse{Agent: models.AgentJSON{AgentManifest: models.AgentManifest{Name: agentName}, Version: version}}, nil
 }
 
-func (f *fakeProviderDeploymentService) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
-	agent, err := f.GetAgentByName(ctx, agentName)
+func (f *fakeProviderDeploymentService) GetAgentVersions(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
+	agent, err := f.GetAgent(ctx, agentName)
 	if err != nil {
 		return nil, err
 	}
 	return []*models.AgentResponse{agent}, nil
 }
 
-func (f *fakeProviderDeploymentService) GetCurrentLatestAgentVersion(ctx context.Context, agentName string) (*models.AgentResponse, error) {
-	return f.GetAgentByName(ctx, agentName)
+func (f *fakeProviderDeploymentService) GetLatestAgent(ctx context.Context, agentName string) (*models.AgentResponse, error) {
+	return f.GetAgent(ctx, agentName)
 }
 
 func (f *fakeProviderDeploymentService) CountAgentVersions(context.Context, string) (int, error) {
@@ -321,19 +317,19 @@ func (f *fakeProviderDeploymentService) ListSkills(context.Context, *database.Sk
 	return nil, "", nil
 }
 
-func (f *fakeProviderDeploymentService) GetSkillByName(context.Context, string) (*models.SkillResponse, error) {
+func (f *fakeProviderDeploymentService) GetSkill(context.Context, string) (*models.SkillResponse, error) {
 	return nil, database.ErrNotFound
 }
 
-func (f *fakeProviderDeploymentService) GetSkillByNameAndVersion(context.Context, string, string) (*models.SkillResponse, error) {
+func (f *fakeProviderDeploymentService) GetSkillVersion(context.Context, string, string) (*models.SkillResponse, error) {
 	return nil, database.ErrNotFound
 }
 
-func (f *fakeProviderDeploymentService) GetAllVersionsBySkillName(context.Context, string) ([]*models.SkillResponse, error) {
+func (f *fakeProviderDeploymentService) GetSkillVersions(context.Context, string) ([]*models.SkillResponse, error) {
 	return nil, database.ErrNotFound
 }
 
-func (f *fakeProviderDeploymentService) GetCurrentLatestSkillVersion(context.Context, string) (*models.SkillResponse, error) {
+func (f *fakeProviderDeploymentService) GetLatestSkill(context.Context, string) (*models.SkillResponse, error) {
 	return nil, database.ErrNotFound
 }
 
@@ -361,19 +357,19 @@ func (f *fakeProviderDeploymentService) ListPrompts(context.Context, *database.P
 	return nil, "", nil
 }
 
-func (f *fakeProviderDeploymentService) GetPromptByName(context.Context, string) (*models.PromptResponse, error) {
+func (f *fakeProviderDeploymentService) GetPrompt(context.Context, string) (*models.PromptResponse, error) {
 	return nil, database.ErrNotFound
 }
 
-func (f *fakeProviderDeploymentService) GetPromptByNameAndVersion(context.Context, string, string) (*models.PromptResponse, error) {
+func (f *fakeProviderDeploymentService) GetPromptVersion(context.Context, string, string) (*models.PromptResponse, error) {
 	return nil, database.ErrNotFound
 }
 
-func (f *fakeProviderDeploymentService) GetAllVersionsByPromptName(context.Context, string) ([]*models.PromptResponse, error) {
+func (f *fakeProviderDeploymentService) GetPromptVersions(context.Context, string) ([]*models.PromptResponse, error) {
 	return nil, database.ErrNotFound
 }
 
-func (f *fakeProviderDeploymentService) GetCurrentLatestPromptVersion(context.Context, string) (*models.PromptResponse, error) {
+func (f *fakeProviderDeploymentService) GetLatestPrompt(context.Context, string) (*models.PromptResponse, error) {
 	return nil, database.ErrNotFound
 }
 

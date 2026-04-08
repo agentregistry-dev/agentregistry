@@ -137,7 +137,7 @@ func (s *promptStore) ListPrompts(ctx context.Context, filter *database.PromptFi
 	return results, nextCursor, nil
 }
 
-func (s *promptStore) GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error) {
+func (s *promptStore) GetPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -183,7 +183,7 @@ func (s *promptStore) GetPromptByName(ctx context.Context, promptName string) (*
 	}, nil
 }
 
-func (s *promptStore) GetPromptByNameAndVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
+func (s *promptStore) GetPromptVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -228,7 +228,7 @@ func (s *promptStore) GetPromptByNameAndVersion(ctx context.Context, promptName,
 	}, nil
 }
 
-func (s *promptStore) GetAllVersionsByPromptName(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
+func (s *promptStore) GetPromptVersions(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -330,7 +330,7 @@ func (s *promptStore) CreatePrompt(ctx context.Context, promptJSON *models.Promp
 	}, nil
 }
 
-func (s *promptStore) GetCurrentLatestPromptVersion(ctx context.Context, promptName string) (*models.PromptResponse, error) {
+func (s *promptStore) GetLatestPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -472,7 +472,7 @@ func (s *promptStore) DeletePrompt(ctx context.Context, promptName, version stri
 	}
 
 	// If the deleted version was latest, promote the most recently published
-	// remaining version so that GetPromptByName keeps working.
+	// remaining version so that GetPrompt keeps working.
 	if wasLatest {
 		promoteQuery := `
 			UPDATE prompts SET is_latest = true

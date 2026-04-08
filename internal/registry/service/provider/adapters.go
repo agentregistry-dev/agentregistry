@@ -34,7 +34,7 @@ func (a *providerAdapterBase) CreateProvider(ctx context.Context, in *models.Cre
 }
 
 func (a *providerAdapterBase) GetProvider(ctx context.Context, providerID string) (*models.Provider, error) {
-	provider, err := a.providers.GetProviderByID(ctx, providerID)
+	provider, err := a.providers.GetProvider(ctx, providerID)
 	if err != nil {
 		return nil, err
 	}

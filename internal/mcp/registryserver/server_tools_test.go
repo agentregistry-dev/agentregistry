@@ -285,7 +285,7 @@ func (h *fakeMCPDeploymentHarness) ListProviders(context.Context, *string) ([]*m
 	return []*models.Provider{{ID: "local", Platform: "local"}}, nil
 }
 
-func (h *fakeMCPDeploymentHarness) GetProviderByID(context.Context, string) (*models.Provider, error) {
+func (h *fakeMCPDeploymentHarness) GetProvider(context.Context, string) (*models.Provider, error) {
 	return &models.Provider{ID: "local", Platform: "local"}, nil
 }
 
@@ -561,11 +561,11 @@ func (s *fakeMCPServerStore) ListServers(ctx context.Context, filter *database.S
 	return s.registry.servers, "", nil
 }
 
-func (s *fakeMCPServerStore) GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
-	return s.GetServerByNameAndVersion(ctx, serverName, "latest")
+func (s *fakeMCPServerStore) GetServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+	return s.GetServerVersion(ctx, serverName, "latest")
 }
 
-func (s *fakeMCPServerStore) GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
+func (s *fakeMCPServerStore) GetServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
 	if s.registry.getServerByNameVersionFn != nil {
 		return s.registry.getServerByNameVersionFn(ctx, serverName, version)
 	}
@@ -575,22 +575,22 @@ func (s *fakeMCPServerStore) GetServerByNameAndVersion(ctx context.Context, serv
 	return &apiv0.ServerResponse{Server: apiv0.ServerJSON{Name: serverName, Version: version}}, nil
 }
 
-func (s *fakeMCPServerStore) GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
+func (s *fakeMCPServerStore) GetServerVersions(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
 	if s.registry.getAllServerVersionsFn != nil {
 		return s.registry.getAllServerVersionsFn(ctx, serverName)
 	}
 	if len(s.registry.servers) > 0 {
 		return s.registry.servers, nil
 	}
-	server, err := s.GetServerByName(ctx, serverName)
+	server, err := s.GetServer(ctx, serverName)
 	if err != nil {
 		return nil, err
 	}
 	return []*apiv0.ServerResponse{server}, nil
 }
 
-func (s *fakeMCPServerStore) GetCurrentLatestVersion(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
-	return s.GetServerByName(ctx, serverName)
+func (s *fakeMCPServerStore) GetLatestServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+	return s.GetServer(ctx, serverName)
 }
 
 func (s *fakeMCPServerStore) CountServerVersions(context.Context, string) (int, error) {
@@ -659,7 +659,7 @@ func (s *fakeMCPAgentStore) ListAgents(ctx context.Context, filter *database.Age
 	return s.registry.agents, "", nil
 }
 
-func (s *fakeMCPAgentStore) GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error) {
+func (s *fakeMCPAgentStore) GetAgent(ctx context.Context, agentName string) (*models.AgentResponse, error) {
 	if s.registry.getAgentByNameFn != nil {
 		return s.registry.getAgentByNameFn(ctx, agentName)
 	}
@@ -669,7 +669,7 @@ func (s *fakeMCPAgentStore) GetAgentByName(ctx context.Context, agentName string
 	return &models.AgentResponse{Agent: models.AgentJSON{AgentManifest: models.AgentManifest{Name: agentName}, Version: "latest"}}, nil
 }
 
-func (s *fakeMCPAgentStore) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
+func (s *fakeMCPAgentStore) GetAgentVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
 	if s.registry.getAgentByNameVersionFn != nil {
 		return s.registry.getAgentByNameVersionFn(ctx, agentName, version)
 	}
@@ -679,19 +679,19 @@ func (s *fakeMCPAgentStore) GetAgentByNameAndVersion(ctx context.Context, agentN
 	return &models.AgentResponse{Agent: models.AgentJSON{AgentManifest: models.AgentManifest{Name: agentName}, Version: version}}, nil
 }
 
-func (s *fakeMCPAgentStore) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
+func (s *fakeMCPAgentStore) GetAgentVersions(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
 	if len(s.registry.agents) > 0 {
 		return s.registry.agents, nil
 	}
-	agent, err := s.GetAgentByName(ctx, agentName)
+	agent, err := s.GetAgent(ctx, agentName)
 	if err != nil {
 		return nil, err
 	}
 	return []*models.AgentResponse{agent}, nil
 }
 
-func (s *fakeMCPAgentStore) GetCurrentLatestAgentVersion(ctx context.Context, agentName string) (*models.AgentResponse, error) {
-	return s.GetAgentByName(ctx, agentName)
+func (s *fakeMCPAgentStore) GetLatestAgent(ctx context.Context, agentName string) (*models.AgentResponse, error) {
+	return s.GetAgent(ctx, agentName)
 }
 
 func (s *fakeMCPAgentStore) CountAgentVersions(context.Context, string) (int, error) {
@@ -739,19 +739,19 @@ func (s *fakeMCPSkillStore) ListSkills(ctx context.Context, filter *database.Ski
 	return s.registry.skills, "", nil
 }
 
-func (s *fakeMCPSkillStore) GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error) {
+func (s *fakeMCPSkillStore) GetSkill(ctx context.Context, skillName string) (*models.SkillResponse, error) {
 	return s.registry.GetSkill(ctx, skillName)
 }
 
-func (s *fakeMCPSkillStore) GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
+func (s *fakeMCPSkillStore) GetSkillVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
 	return s.registry.GetSkillVersion(ctx, skillName, version)
 }
 
-func (s *fakeMCPSkillStore) GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
+func (s *fakeMCPSkillStore) GetSkillVersions(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
 	return s.registry.GetSkillVersions(ctx, skillName)
 }
 
-func (s *fakeMCPSkillStore) GetCurrentLatestSkillVersion(ctx context.Context, skillName string) (*models.SkillResponse, error) {
+func (s *fakeMCPSkillStore) GetLatestSkill(ctx context.Context, skillName string) (*models.SkillResponse, error) {
 	return s.registry.GetSkill(ctx, skillName)
 }
 

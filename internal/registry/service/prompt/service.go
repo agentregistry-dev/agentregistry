@@ -22,17 +22,14 @@ type Dependencies struct {
 }
 
 type Registry interface {
-	ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error)
-	GetPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error)
-	GetPromptVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error)
-	GetPromptVersions(ctx context.Context, promptName string) ([]*models.PromptResponse, error)
+	database.PromptReader
 	PublishPrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error)
 	DeletePrompt(ctx context.Context, promptName, version string) error
 }
 
 type registry struct {
-	prompts database.PromptStore
-	tx      database.Transactor
+	database.PromptStore
+	tx database.Transactor
 }
 
 var _ Registry = (*registry)(nil)
@@ -46,8 +43,8 @@ func New(deps Dependencies) Registry {
 	}
 
 	return &registry{
-		prompts: deps.Prompts,
-		tx:      deps.Tx,
+		PromptStore: deps.Prompts,
+		tx:          deps.Tx,
 	}
 }
 
@@ -55,19 +52,7 @@ func (s *registry) ListPrompts(ctx context.Context, filter *database.PromptFilte
 	if limit <= 0 {
 		limit = 30
 	}
-	return s.prompts.ListPrompts(ctx, filter, cursor, limit)
-}
-
-func (s *registry) GetPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error) {
-	return s.prompts.GetPromptByName(ctx, promptName)
-}
-
-func (s *registry) GetPromptVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
-	return s.prompts.GetPromptByNameAndVersion(ctx, promptName, version)
-}
-
-func (s *registry) GetPromptVersions(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
-	return s.prompts.GetAllVersionsByPromptName(ctx, promptName)
+	return s.PromptStore.ListPrompts(ctx, filter, cursor, limit)
 }
 
 func (s *registry) PublishPrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error) {
@@ -106,7 +91,7 @@ func (s *registry) createPromptInTransaction(ctx context.Context, prompts databa
 		return nil, database.ErrInvalidVersion
 	}
 
-	currentLatest, err := prompts.GetCurrentLatestPromptVersion(ctx, promptJSON.Name)
+	currentLatest, err := prompts.GetLatestPrompt(ctx, promptJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}

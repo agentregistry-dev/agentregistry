@@ -133,7 +133,7 @@ func TestPostgreSQL_GetServerByName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := db.Servers().GetServerByName(ctx, tt.serverName)
+			result, err := db.Servers().GetServer(ctx, tt.serverName)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -206,7 +206,7 @@ func TestPostgreSQL_GetServerByNameAndVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := db.Servers().GetServerByNameAndVersion(ctx, tt.serverName, tt.version)
+			result, err := db.Servers().GetServerVersion(ctx, tt.serverName, tt.version)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -574,7 +574,7 @@ func TestPostgreSQL_TransactionHandling(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify server was created
-		result, err := db.Servers().GetServerByName(ctx, "com.example/transaction-success")
+		result, err := db.Servers().GetServer(ctx, "com.example/transaction-success")
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 	})
@@ -606,7 +606,7 @@ func TestPostgreSQL_TransactionHandling(t *testing.T) {
 		assert.Equal(t, assert.AnError, err)
 
 		// Verify server was NOT created due to rollback
-		result, err := db.Servers().GetServerByName(ctx, "com.example/transaction-rollback")
+		result, err := db.Servers().GetServer(ctx, "com.example/transaction-rollback")
 		require.Error(t, err)
 		require.ErrorIs(t, err, database.ErrNotFound)
 		assert.Nil(t, result)
@@ -659,16 +659,16 @@ func TestPostgreSQL_HelperMethods(t *testing.T) {
 		assert.False(t, exists)
 	})
 
-	t.Run("GetCurrentLatestVersion", func(t *testing.T) {
-		latest, err := db.Servers().GetCurrentLatestVersion(ctx, serverName)
+	t.Run("GetLatestServer", func(t *testing.T) {
+		latest, err := db.Servers().GetLatestServer(ctx, serverName)
 		require.NoError(t, err)
 		assert.NotNil(t, latest)
 		assert.Equal(t, "2.0.0", latest.Server.Version)
 		assert.True(t, latest.Meta.Official.IsLatest)
 	})
 
-	t.Run("GetAllVersionsByServerName", func(t *testing.T) {
-		allVersions, err := db.Servers().GetAllVersionsByServerName(ctx, serverName)
+	t.Run("GetServerVersions", func(t *testing.T) {
+		allVersions, err := db.Servers().GetServerVersions(ctx, serverName)
 		require.NoError(t, err)
 		assert.Len(t, allVersions, 3)
 
@@ -687,7 +687,7 @@ func TestPostgreSQL_HelperMethods(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify no version is marked as latest
-		latest, err := db.Servers().GetCurrentLatestVersion(ctx, serverName)
+		latest, err := db.Servers().GetLatestServer(ctx, serverName)
 		require.Error(t, err)
 		require.ErrorIs(t, err, database.ErrNotFound)
 		assert.Nil(t, latest)
@@ -839,7 +839,7 @@ func TestPostgreSQL_PerformanceScenarios(t *testing.T) {
 		assert.Equal(t, versionCount, count)
 
 		// Test getting all versions
-		allVersions, err := db.Servers().GetAllVersionsByServerName(ctx, serverName)
+		allVersions, err := db.Servers().GetServerVersions(ctx, serverName)
 		require.NoError(t, err)
 		assert.Len(t, allVersions, versionCount)
 
@@ -926,7 +926,7 @@ func TestPostgreSQL_CreateDeployment_AllowsDuplicateArtifactIdentity(t *testing.
 		ResourceType: stringPtr("mcp"),
 		ResourceName: stringPtr("com.example/multi-weather"),
 	}
-	deployments, err := db.Deployments().GetDeployments(ctx, filter)
+	deployments, err := db.Deployments().ListDeployments(ctx, filter)
 	require.NoError(t, err)
 
 	count := 0
@@ -973,11 +973,11 @@ func TestPostgreSQL_UpdateDeploymentState_UsesID(t *testing.T) {
 		Status: stringPtr("failed"),
 	}))
 
-	firstUpdated, err := db.Deployments().GetDeploymentByID(ctxWithAuth, first.ID)
+	firstUpdated, err := db.Deployments().GetDeployment(ctxWithAuth, first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "failed", firstUpdated.Status)
 
-	secondUnchanged, err := db.Deployments().GetDeploymentByID(ctxWithAuth, second.ID)
+	secondUnchanged, err := db.Deployments().GetDeployment(ctxWithAuth, second.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "deploying", secondUnchanged.Status)
 
@@ -1015,7 +1015,7 @@ func TestPostgreSQL_UpdateDeploymentState_PatchesMetadataAndError(t *testing.T) 
 		ProviderMetadata: &providerMeta,
 	}))
 
-	updated, err := db.Deployments().GetDeploymentByID(ctxWithAuth, deployment.ID)
+	updated, err := db.Deployments().GetDeployment(ctxWithAuth, deployment.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "deployed", updated.Status)
 	assert.Empty(t, updated.Error)

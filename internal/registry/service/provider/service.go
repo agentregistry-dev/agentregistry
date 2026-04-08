@@ -159,7 +159,7 @@ func (r *registry) ResolveProvider(ctx context.Context, providerID, platformHint
 		}
 	}
 
-	provider, err := r.providers.GetProviderByID(ctx, resolvedProviderID)
+	provider, err := r.providers.GetProvider(ctx, resolvedProviderID)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +207,7 @@ func (r *registry) resolveAdapter(platform string) (registrytypes.ProviderPlatfo
 }
 
 func (r *registry) resolveProviderFromStore(ctx context.Context, providerID, platform string) (*models.Provider, error) {
-	provider, err := r.providers.GetProviderByID(ctx, providerID)
+	provider, err := r.providers.GetProvider(ctx, providerID)
 	if err != nil {
 		return nil, err
 	}

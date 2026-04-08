@@ -55,7 +55,7 @@ func runPull(cmd *cobra.Command, args []string) error {
 
 	// 2. Fetch skill metadata from registry
 	printer.PrintInfo("Fetching skill metadata from registry...")
-	skillResp, err := apiClient.GetSkillByNameAndVersion(skillName, version)
+	skillResp, err := apiClient.GetSkillVersion(skillName, version)
 	if err != nil {
 		return fmt.Errorf("failed to fetch skill from registry: %w", err)
 	}

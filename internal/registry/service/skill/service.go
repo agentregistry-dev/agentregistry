@@ -22,17 +22,14 @@ type Dependencies struct {
 }
 
 type Registry interface {
-	ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error)
-	GetSkill(ctx context.Context, skillName string) (*models.SkillResponse, error)
-	GetSkillVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error)
-	GetSkillVersions(ctx context.Context, skillName string) ([]*models.SkillResponse, error)
+	database.SkillReader
 	PublishSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error)
 	DeleteSkill(ctx context.Context, skillName, version string) error
 }
 
 type registry struct {
-	skills database.SkillStore
-	tx     database.Transactor
+	database.SkillStore
+	tx database.Transactor
 }
 
 var _ Registry = (*registry)(nil)
@@ -46,8 +43,8 @@ func New(deps Dependencies) Registry {
 	}
 
 	return &registry{
-		skills: deps.Skills,
-		tx:     deps.Tx,
+		SkillStore: deps.Skills,
+		tx:         deps.Tx,
 	}
 }
 
@@ -55,19 +52,7 @@ func (s *registry) ListSkills(ctx context.Context, filter *database.SkillFilter,
 	if limit <= 0 {
 		limit = 30
 	}
-	return s.skills.ListSkills(ctx, filter, cursor, limit)
-}
-
-func (s *registry) GetSkill(ctx context.Context, skillName string) (*models.SkillResponse, error) {
-	return s.skills.GetSkillByName(ctx, skillName)
-}
-
-func (s *registry) GetSkillVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
-	return s.skills.GetSkillByNameAndVersion(ctx, skillName, version)
-}
-
-func (s *registry) GetSkillVersions(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
-	return s.skills.GetAllVersionsBySkillName(ctx, skillName)
+	return s.SkillStore.ListSkills(ctx, filter, cursor, limit)
 }
 
 func (s *registry) PublishSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error) {
@@ -119,7 +104,7 @@ func (s *registry) createSkillInTransaction(ctx context.Context, skills database
 		return nil, database.ErrInvalidVersion
 	}
 
-	currentLatest, err := skills.GetCurrentLatestSkillVersion(ctx, skillJSON.Name)
+	currentLatest, err := skills.GetLatestSkill(ctx, skillJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}

@@ -239,9 +239,9 @@ func ResolveManifestPrompts(manifest *models.AgentManifest, verbose bool) ([]com
 		var promptResp *models.PromptResponse
 		var err error
 		if promptVersion != "" {
-			promptResp, err = apiClient.GetPromptByNameAndVersion(promptName, promptVersion)
+			promptResp, err = apiClient.GetPromptVersion(promptName, promptVersion)
 		} else {
-			promptResp, err = apiClient.GetPromptByName(promptName)
+			promptResp, err = apiClient.GetPrompt(promptName)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch prompt %q from registry: %w", promptName, err)

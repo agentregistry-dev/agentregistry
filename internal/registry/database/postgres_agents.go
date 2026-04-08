@@ -196,7 +196,7 @@ func (s *agentStore) ListAgents(ctx context.Context, filter *database.AgentFilte
 	return results, nextCursor, nil
 }
 
-func (s *agentStore) GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error) {
+func (s *agentStore) GetAgent(ctx context.Context, agentName string) (*models.AgentResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -243,7 +243,7 @@ func (s *agentStore) GetAgentByName(ctx context.Context, agentName string) (*mod
 	}, nil
 }
 
-func (s *agentStore) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
+func (s *agentStore) GetAgentVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -289,7 +289,7 @@ func (s *agentStore) GetAgentByNameAndVersion(ctx context.Context, agentName, ve
 	}, nil
 }
 
-func (s *agentStore) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
+func (s *agentStore) GetAgentVersions(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -486,7 +486,7 @@ func (s *agentStore) SetAgentStatus(ctx context.Context, agentName, version stri
 	}, nil
 }
 
-func (s *agentStore) GetCurrentLatestAgentVersion(ctx context.Context, agentName string) (*models.AgentResponse, error) {
+func (s *agentStore) GetLatestAgent(ctx context.Context, agentName string) (*models.AgentResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}

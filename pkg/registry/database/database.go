@@ -123,86 +123,106 @@ type Row interface {
 	Scan(dest ...any) error
 }
 
+// ServerReader is the read-only subset of ServerStore exposed through service Registry interfaces.
+type ServerReader interface {
+	ListServers(ctx context.Context, filter *ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
+	GetServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error)
+	GetServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error)
+	GetServerVersions(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error)
+	GetServerReadme(ctx context.Context, serverName, version string) (*ServerReadme, error)
+	GetLatestServerReadme(ctx context.Context, serverName string) (*ServerReadme, error)
+	GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*SemanticEmbeddingMetadata, error)
+}
+
 type ServerStore interface {
-	DeleteServer(ctx context.Context, serverName, version string) error
+	ServerReader
 	CreateServer(ctx context.Context, serverJSON *apiv0.ServerJSON, officialMeta *apiv0.RegistryExtensions) (*apiv0.ServerResponse, error)
 	UpdateServer(ctx context.Context, serverName, version string, serverJSON *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
 	SetServerStatus(ctx context.Context, serverName, version, status string) (*apiv0.ServerResponse, error)
-	ListServers(ctx context.Context, filter *ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
-	GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error)
-	GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error)
-	GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error)
-	GetCurrentLatestVersion(ctx context.Context, serverName string) (*apiv0.ServerResponse, error)
+	DeleteServer(ctx context.Context, serverName, version string) error
+	GetLatestServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error)
 	CountServerVersions(ctx context.Context, serverName string) (int, error)
 	CheckVersionExists(ctx context.Context, serverName, version string) (bool, error)
 	UnmarkAsLatest(ctx context.Context, serverName string) error
 	AcquireServerCreateLock(ctx context.Context, serverName string) error
 	SetServerEmbedding(ctx context.Context, serverName, version string, embedding *SemanticEmbedding) error
-	GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*SemanticEmbeddingMetadata, error)
 	UpsertServerReadme(ctx context.Context, readme *ServerReadme) error
-	GetServerReadme(ctx context.Context, serverName, version string) (*ServerReadme, error)
-	GetLatestServerReadme(ctx context.Context, serverName string) (*ServerReadme, error)
+}
+
+// AgentReader is the read-only subset of AgentStore exposed through service Registry interfaces.
+type AgentReader interface {
+	ListAgents(ctx context.Context, filter *AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error)
+	GetAgent(ctx context.Context, agentName string) (*models.AgentResponse, error)
+	GetAgentVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error)
+	GetAgentVersions(ctx context.Context, agentName string) ([]*models.AgentResponse, error)
+	GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*SemanticEmbeddingMetadata, error)
+}
+
+type AgentStore interface {
+	AgentReader
+	CreateAgent(ctx context.Context, agentJSON *models.AgentJSON, officialMeta *models.AgentRegistryExtensions) (*models.AgentResponse, error)
+	UpdateAgent(ctx context.Context, agentName, version string, agentJSON *models.AgentJSON) (*models.AgentResponse, error)
+	SetAgentStatus(ctx context.Context, agentName, version, status string) (*models.AgentResponse, error)
+	DeleteAgent(ctx context.Context, agentName, version string) error
+	GetLatestAgent(ctx context.Context, agentName string) (*models.AgentResponse, error)
+	CountAgentVersions(ctx context.Context, agentName string) (int, error)
+	CheckAgentVersionExists(ctx context.Context, agentName, version string) (bool, error)
+	UnmarkAgentAsLatest(ctx context.Context, agentName string) error
+	SetAgentEmbedding(ctx context.Context, agentName, version string, embedding *SemanticEmbedding) error
+}
+
+// SkillReader is the read-only subset of SkillStore exposed through service Registry interfaces.
+type SkillReader interface {
+	ListSkills(ctx context.Context, filter *SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error)
+	GetSkill(ctx context.Context, skillName string) (*models.SkillResponse, error)
+	GetSkillVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error)
+	GetSkillVersions(ctx context.Context, skillName string) ([]*models.SkillResponse, error)
+}
+
+type SkillStore interface {
+	SkillReader
+	CreateSkill(ctx context.Context, skillJSON *models.SkillJSON, officialMeta *models.SkillRegistryExtensions) (*models.SkillResponse, error)
+	UpdateSkill(ctx context.Context, skillName, version string, skillJSON *models.SkillJSON) (*models.SkillResponse, error)
+	SetSkillStatus(ctx context.Context, skillName, version, status string) (*models.SkillResponse, error)
+	DeleteSkill(ctx context.Context, skillName, version string) error
+	GetLatestSkill(ctx context.Context, skillName string) (*models.SkillResponse, error)
+	CountSkillVersions(ctx context.Context, skillName string) (int, error)
+	CheckSkillVersionExists(ctx context.Context, skillName, version string) (bool, error)
+	UnmarkSkillAsLatest(ctx context.Context, skillName string) error
+}
+
+// PromptReader is the read-only subset of PromptStore exposed through service Registry interfaces.
+type PromptReader interface {
+	ListPrompts(ctx context.Context, filter *PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error)
+	GetPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error)
+	GetPromptVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error)
+	GetPromptVersions(ctx context.Context, promptName string) ([]*models.PromptResponse, error)
+}
+
+type PromptStore interface {
+	PromptReader
+	CreatePrompt(ctx context.Context, promptJSON *models.PromptJSON, officialMeta *models.PromptRegistryExtensions) (*models.PromptResponse, error)
+	DeletePrompt(ctx context.Context, promptName, version string) error
+	GetLatestPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error)
+	CountPromptVersions(ctx context.Context, promptName string) (int, error)
+	CheckPromptVersionExists(ctx context.Context, promptName, version string) (bool, error)
+	UnmarkPromptAsLatest(ctx context.Context, promptName string) error
+}
+
+type DeploymentStore interface {
+	CreateDeployment(ctx context.Context, deployment *models.Deployment) error
+	ListDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
+	GetDeployment(ctx context.Context, id string) (*models.Deployment, error)
+	UpdateDeploymentState(ctx context.Context, id string, patch *models.DeploymentStatePatch) error
+	DeleteDeployment(ctx context.Context, id string) error
 }
 
 type ProviderStore interface {
 	CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error)
 	ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error)
-	GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error)
+	GetProvider(ctx context.Context, providerID string) (*models.Provider, error)
 	UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error)
 	DeleteProvider(ctx context.Context, providerID string) error
-}
-
-type AgentStore interface {
-	CreateAgent(ctx context.Context, agentJSON *models.AgentJSON, officialMeta *models.AgentRegistryExtensions) (*models.AgentResponse, error)
-	UpdateAgent(ctx context.Context, agentName, version string, agentJSON *models.AgentJSON) (*models.AgentResponse, error)
-	SetAgentStatus(ctx context.Context, agentName, version, status string) (*models.AgentResponse, error)
-	ListAgents(ctx context.Context, filter *AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error)
-	GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error)
-	GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error)
-	GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error)
-	GetCurrentLatestAgentVersion(ctx context.Context, agentName string) (*models.AgentResponse, error)
-	CountAgentVersions(ctx context.Context, agentName string) (int, error)
-	CheckAgentVersionExists(ctx context.Context, agentName, version string) (bool, error)
-	UnmarkAgentAsLatest(ctx context.Context, agentName string) error
-	DeleteAgent(ctx context.Context, agentName, version string) error
-	SetAgentEmbedding(ctx context.Context, agentName, version string, embedding *SemanticEmbedding) error
-	GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*SemanticEmbeddingMetadata, error)
-}
-
-type SkillStore interface {
-	CreateSkill(ctx context.Context, skillJSON *models.SkillJSON, officialMeta *models.SkillRegistryExtensions) (*models.SkillResponse, error)
-	UpdateSkill(ctx context.Context, skillName, version string, skillJSON *models.SkillJSON) (*models.SkillResponse, error)
-	SetSkillStatus(ctx context.Context, skillName, version, status string) (*models.SkillResponse, error)
-	ListSkills(ctx context.Context, filter *SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error)
-	GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error)
-	GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error)
-	GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error)
-	GetCurrentLatestSkillVersion(ctx context.Context, skillName string) (*models.SkillResponse, error)
-	CountSkillVersions(ctx context.Context, skillName string) (int, error)
-	CheckSkillVersionExists(ctx context.Context, skillName, version string) (bool, error)
-	UnmarkSkillAsLatest(ctx context.Context, skillName string) error
-	DeleteSkill(ctx context.Context, skillName, version string) error
-}
-
-type PromptStore interface {
-	CreatePrompt(ctx context.Context, promptJSON *models.PromptJSON, officialMeta *models.PromptRegistryExtensions) (*models.PromptResponse, error)
-	ListPrompts(ctx context.Context, filter *PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error)
-	GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error)
-	GetPromptByNameAndVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error)
-	GetAllVersionsByPromptName(ctx context.Context, promptName string) ([]*models.PromptResponse, error)
-	GetCurrentLatestPromptVersion(ctx context.Context, promptName string) (*models.PromptResponse, error)
-	CountPromptVersions(ctx context.Context, promptName string) (int, error)
-	CheckPromptVersionExists(ctx context.Context, promptName, version string) (bool, error)
-	UnmarkPromptAsLatest(ctx context.Context, promptName string) error
-	DeletePrompt(ctx context.Context, promptName, version string) error
-}
-
-type DeploymentStore interface {
-	CreateDeployment(ctx context.Context, deployment *models.Deployment) error
-	GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error)
-	GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error)
-	UpdateDeploymentState(ctx context.Context, id string, patch *models.DeploymentStatePatch) error
-	RemoveDeploymentByID(ctx context.Context, id string) error
 }
 
 // Scope exposes the domain repositories that share the same backing executor.

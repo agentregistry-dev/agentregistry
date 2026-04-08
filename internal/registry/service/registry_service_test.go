@@ -62,19 +62,19 @@ func (m *splitDomainViewMockDB) SetServerStatus(context.Context, string, string,
 	return nil, database.ErrInvalidInput
 }
 
-func (m *splitDomainViewMockDB) GetServerByName(context.Context, string) (*apiv0.ServerResponse, error) {
+func (m *splitDomainViewMockDB) GetServer(context.Context, string) (*apiv0.ServerResponse, error) {
 	return nil, database.ErrNotFound
 }
 
-func (m *splitDomainViewMockDB) GetServerByNameAndVersion(context.Context, string, string) (*apiv0.ServerResponse, error) {
+func (m *splitDomainViewMockDB) GetServerVersion(context.Context, string, string) (*apiv0.ServerResponse, error) {
 	return nil, database.ErrNotFound
 }
 
-func (m *splitDomainViewMockDB) GetAllVersionsByServerName(context.Context, string) ([]*apiv0.ServerResponse, error) {
+func (m *splitDomainViewMockDB) GetServerVersions(context.Context, string) ([]*apiv0.ServerResponse, error) {
 	return nil, database.ErrNotFound
 }
 
-func (m *splitDomainViewMockDB) GetCurrentLatestVersion(context.Context, string) (*apiv0.ServerResponse, error) {
+func (m *splitDomainViewMockDB) GetLatestServer(context.Context, string) (*apiv0.ServerResponse, error) {
 	return nil, database.ErrNotFound
 }
 
@@ -114,7 +114,7 @@ func (m *splitDomainViewMockDB) GetLatestServerReadme(context.Context, string) (
 	return nil, database.ErrNotFound
 }
 
-func (m *splitDomainViewMockDB) GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error) {
+func (m *splitDomainViewMockDB) GetProvider(ctx context.Context, providerID string) (*models.Provider, error) {
 	return m.getProviderByIDFn(ctx, providerID)
 }
 
@@ -1282,7 +1282,7 @@ func (m *deploymentMockDB) Deployments() database.DeploymentStore {
 	return m
 }
 
-func (m *deployCreateMockDB) GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error) {
+func (m *deployCreateMockDB) GetProvider(ctx context.Context, providerID string) (*models.Provider, error) {
 	return m.getProviderByIDFn(ctx, providerID)
 }
 
@@ -1322,19 +1322,19 @@ func (m *deployCreateMockDB) ListServers(context.Context, *database.ServerFilter
 	return nil, "", nil
 }
 
-func (m *deployCreateMockDB) GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
+func (m *deployCreateMockDB) GetServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
 	return m.getServerByNameAndVersionFn(ctx, serverName, version)
 }
 
-func (m *deployCreateMockDB) GetServerByName(context.Context, string) (*apiv0.ServerResponse, error) {
+func (m *deployCreateMockDB) GetServer(context.Context, string) (*apiv0.ServerResponse, error) {
 	return nil, database.ErrNotFound
 }
 
-func (m *deployCreateMockDB) GetAllVersionsByServerName(context.Context, string) ([]*apiv0.ServerResponse, error) {
+func (m *deployCreateMockDB) GetServerVersions(context.Context, string) ([]*apiv0.ServerResponse, error) {
 	return nil, database.ErrNotFound
 }
 
-func (m *deployCreateMockDB) GetCurrentLatestVersion(context.Context, string) (*apiv0.ServerResponse, error) {
+func (m *deployCreateMockDB) GetLatestServer(context.Context, string) (*apiv0.ServerResponse, error) {
 	return nil, database.ErrNotFound
 }
 
@@ -1374,7 +1374,7 @@ func (m *deployCreateMockDB) GetLatestServerReadme(context.Context, string) (*da
 	return nil, database.ErrNotFound
 }
 
-func (m *deployCreateMockDB) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
+func (m *deployCreateMockDB) GetAgentVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
 	return m.getAgentByNameAndVersionFn(ctx, agentName, version)
 }
 
@@ -1394,15 +1394,15 @@ func (m *deployCreateMockDB) ListAgents(context.Context, *database.AgentFilter, 
 	return nil, "", nil
 }
 
-func (m *deployCreateMockDB) GetAgentByName(context.Context, string) (*models.AgentResponse, error) {
+func (m *deployCreateMockDB) GetAgent(context.Context, string) (*models.AgentResponse, error) {
 	return nil, database.ErrNotFound
 }
 
-func (m *deployCreateMockDB) GetAllVersionsByAgentName(context.Context, string) ([]*models.AgentResponse, error) {
+func (m *deployCreateMockDB) GetAgentVersions(context.Context, string) ([]*models.AgentResponse, error) {
 	return nil, database.ErrNotFound
 }
 
-func (m *deployCreateMockDB) GetCurrentLatestAgentVersion(context.Context, string) (*models.AgentResponse, error) {
+func (m *deployCreateMockDB) GetLatestAgent(context.Context, string) (*models.AgentResponse, error) {
 	return nil, database.ErrNotFound
 }
 
@@ -1434,7 +1434,7 @@ func (m *deployCreateMockDB) CreateDeployment(ctx context.Context, deployment *m
 	return m.createDeploymentFn(ctx, deployment)
 }
 
-func (m *deployCreateMockDB) GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error) {
+func (m *deployCreateMockDB) GetDeployment(ctx context.Context, id string) (*models.Deployment, error) {
 	return m.getDeploymentByIDFn(ctx, id)
 }
 
@@ -1442,11 +1442,11 @@ func (m *deployCreateMockDB) UpdateDeploymentState(ctx context.Context, id strin
 	return m.updateDeploymentStateFn(ctx, id, patch)
 }
 
-func (m *deployCreateMockDB) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+func (m *deployCreateMockDB) ListDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	return m.getDeploymentsFn(ctx, filter)
 }
 
-func (m *deployCreateMockDB) RemoveDeploymentByID(ctx context.Context, id string) error {
+func (m *deployCreateMockDB) DeleteDeployment(ctx context.Context, id string) error {
 	return m.removeDeploymentByIDFn(ctx, id)
 }
 
@@ -1466,7 +1466,7 @@ func (m *deploymentMockDB) DeleteProvider(context.Context, string) error {
 	return nil
 }
 
-func (m *deploymentMockDB) GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error) {
+func (m *deploymentMockDB) GetDeployment(ctx context.Context, id string) (*models.Deployment, error) {
 	return m.getDeploymentByIDFn(ctx, id)
 }
 
@@ -1474,11 +1474,11 @@ func (m *deploymentMockDB) CreateDeployment(context.Context, *models.Deployment)
 	return database.ErrInvalidInput
 }
 
-func (m *deploymentMockDB) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+func (m *deploymentMockDB) ListDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	return m.getDeploymentsFn(ctx, filter)
 }
 
-func (m *deploymentMockDB) GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error) {
+func (m *deploymentMockDB) GetProvider(ctx context.Context, providerID string) (*models.Provider, error) {
 	return m.getProviderByIDFn(ctx, providerID)
 }
 
@@ -1486,7 +1486,7 @@ func (m *deploymentMockDB) UpdateDeploymentState(context.Context, string, *model
 	return nil
 }
 
-func (m *deploymentMockDB) RemoveDeploymentByID(ctx context.Context, id string) error {
+func (m *deploymentMockDB) DeleteDeployment(ctx context.Context, id string) error {
 	return m.removeDeploymentByIdFn(ctx, id)
 }
 
@@ -2086,7 +2086,7 @@ func TestGetDeploymentByID_FallsBackToDiscoveredDeployments(t *testing.T) {
 }
 
 // promptMockDB is a minimal mock for database.Store that only implements
-// GetPromptByName and GetPromptByNameAndVersion for testing ResolveAgentManifestPrompts.
+// GetPrompt and GetPromptVersion for testing ResolveAgentManifestPrompts.
 type promptMockDB struct {
 	database.Store
 	getPromptByNameFn           func(ctx context.Context, name string) (*models.PromptResponse, error)
@@ -2105,22 +2105,22 @@ func (m *promptMockDB) ListPrompts(context.Context, *database.PromptFilter, stri
 	return nil, "", nil
 }
 
-func (m *promptMockDB) GetPromptByName(ctx context.Context, name string) (*models.PromptResponse, error) {
+func (m *promptMockDB) GetPrompt(ctx context.Context, name string) (*models.PromptResponse, error) {
 	if m.getPromptByNameFn != nil {
 		return m.getPromptByNameFn(ctx, name)
 	}
 	return nil, database.ErrNotFound
 }
 
-func (m *promptMockDB) GetPromptByNameAndVersion(ctx context.Context, name, version string) (*models.PromptResponse, error) {
+func (m *promptMockDB) GetPromptVersion(ctx context.Context, name, version string) (*models.PromptResponse, error) {
 	return m.getPromptByNameAndVersionFn(ctx, name, version)
 }
 
-func (m *promptMockDB) GetAllVersionsByPromptName(context.Context, string) ([]*models.PromptResponse, error) {
+func (m *promptMockDB) GetPromptVersions(context.Context, string) ([]*models.PromptResponse, error) {
 	return nil, database.ErrNotFound
 }
 
-func (m *promptMockDB) GetCurrentLatestPromptVersion(context.Context, string) (*models.PromptResponse, error) {
+func (m *promptMockDB) GetLatestPrompt(context.Context, string) (*models.PromptResponse, error) {
 	return nil, database.ErrNotFound
 }
 

@@ -205,8 +205,8 @@ func (s *serverStore) ListServers(
 	return results, nextCursor, nil
 }
 
-// GetServerByName retrieves the latest version of a server by server name.
-func (s *serverStore) GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+// GetServer retrieves the latest version of a server by server name.
+func (s *serverStore) GetServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -259,8 +259,8 @@ func (s *serverStore) GetServerByName(ctx context.Context, serverName string) (*
 	return serverResponse, nil
 }
 
-// GetServerByNameAndVersion retrieves a specific version of a server by server name and version.
-func (s *serverStore) GetServerByNameAndVersion(ctx context.Context, serverName string, version string) (*apiv0.ServerResponse, error) {
+// GetServerVersion retrieves a specific version of a server by server name and version.
+func (s *serverStore) GetServerVersion(ctx context.Context, serverName string, version string) (*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -313,8 +313,8 @@ func (s *serverStore) GetServerByNameAndVersion(ctx context.Context, serverName 
 	return serverResponse, nil
 }
 
-// GetAllVersionsByServerName retrieves all versions of a server by server name.
-func (s *serverStore) GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
+// GetServerVersions retrieves all versions of a server by server name.
+func (s *serverStore) GetServerVersions(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -550,8 +550,8 @@ func (s *serverStore) SetServerStatus(ctx context.Context, serverName, version s
 	return serverResponse, nil
 }
 
-// GetCurrentLatestVersion retrieves the current latest version of a server by server name.
-func (s *serverStore) GetCurrentLatestVersion(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+// GetLatestServer retrieves the current latest version of a server by server name.
+func (s *serverStore) GetLatestServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}

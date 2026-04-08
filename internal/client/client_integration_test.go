@@ -94,7 +94,7 @@ func (f *fakeClientRegistry) ListServers(ctx context.Context, filter *database.S
 	}
 	return f.Servers, "", nil
 }
-func (f *fakeClientRegistry) GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+func (f *fakeClientRegistry) GetServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
 	if f.GetServerByNameFn != nil {
 		return f.GetServerByNameFn(ctx, serverName)
 	}
@@ -103,13 +103,13 @@ func (f *fakeClientRegistry) GetServerByName(ctx context.Context, serverName str
 	}
 	return nil, database.ErrNotFound
 }
-func (f *fakeClientRegistry) GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
+func (f *fakeClientRegistry) GetServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
 	if f.GetServerByNameAndVersionFn != nil {
 		return f.GetServerByNameAndVersionFn(ctx, serverName, version)
 	}
-	return f.GetServerByName(ctx, serverName)
+	return f.GetServer(ctx, serverName)
 }
-func (f *fakeClientRegistry) GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
+func (f *fakeClientRegistry) GetServerVersions(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
 	if f.GetAllVersionsByServerNameFn != nil {
 		return f.GetAllVersionsByServerNameFn(ctx, serverName)
 	}
@@ -166,7 +166,7 @@ func (f *fakeClientRegistry) ListAgents(ctx context.Context, filter *database.Ag
 	}
 	return f.Agents, "", nil
 }
-func (f *fakeClientRegistry) GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error) {
+func (f *fakeClientRegistry) GetAgent(ctx context.Context, agentName string) (*models.AgentResponse, error) {
 	if f.GetAgentByNameFn != nil {
 		return f.GetAgentByNameFn(ctx, agentName)
 	}
@@ -175,13 +175,13 @@ func (f *fakeClientRegistry) GetAgentByName(ctx context.Context, agentName strin
 	}
 	return nil, database.ErrNotFound
 }
-func (f *fakeClientRegistry) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
+func (f *fakeClientRegistry) GetAgentVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
 	if f.GetAgentByNameAndVersionFn != nil {
 		return f.GetAgentByNameAndVersionFn(ctx, agentName, version)
 	}
-	return f.GetAgentByName(ctx, agentName)
+	return f.GetAgent(ctx, agentName)
 }
-func (f *fakeClientRegistry) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
+func (f *fakeClientRegistry) GetAgentVersions(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
 	if f.GetAllVersionsByAgentNameFn != nil {
 		return f.GetAllVersionsByAgentNameFn(ctx, agentName)
 	}
@@ -295,7 +295,7 @@ func (f *fakeClientRegistry) ListProviders(ctx context.Context, platform *string
 	}
 	return nil, nil
 }
-func (f *fakeClientRegistry) GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error) {
+func (f *fakeClientRegistry) GetProvider(ctx context.Context, providerID string) (*models.Provider, error) {
 	if f.GetProviderByIDFn != nil {
 		return f.GetProviderByIDFn(ctx, providerID)
 	}
@@ -397,28 +397,28 @@ func (s *fakeClientServerStore) ListServers(ctx context.Context, filter *databas
 	return s.registry.ListServers(ctx, filter, cursor, limit)
 }
 
-func (s *fakeClientServerStore) GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
-	server, err := s.registry.GetServerByName(ctx, serverName)
+func (s *fakeClientServerStore) GetServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+	server, err := s.registry.GetServer(ctx, serverName)
 	if err == nil {
 		return server, nil
 	}
 	return &apiv0.ServerResponse{Server: apiv0.ServerJSON{Name: serverName, Version: "latest"}}, nil
 }
 
-func (s *fakeClientServerStore) GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
-	server, err := s.registry.GetServerByNameAndVersion(ctx, serverName, version)
+func (s *fakeClientServerStore) GetServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
+	server, err := s.registry.GetServerVersion(ctx, serverName, version)
 	if err == nil {
 		return server, nil
 	}
 	return &apiv0.ServerResponse{Server: apiv0.ServerJSON{Name: serverName, Version: version}}, nil
 }
 
-func (s *fakeClientServerStore) GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
-	return s.registry.GetAllVersionsByServerName(ctx, serverName)
+func (s *fakeClientServerStore) GetServerVersions(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
+	return s.registry.GetServerVersions(ctx, serverName)
 }
 
-func (s *fakeClientServerStore) GetCurrentLatestVersion(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
-	return s.registry.GetServerByName(ctx, serverName)
+func (s *fakeClientServerStore) GetLatestServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+	return s.registry.GetServer(ctx, serverName)
 }
 
 func (s *fakeClientServerStore) CountServerVersions(_ context.Context, serverName string) (int, error) {
@@ -489,28 +489,28 @@ func (s *fakeClientAgentStore) ListAgents(ctx context.Context, filter *database.
 	return s.registry.ListAgents(ctx, filter, cursor, limit)
 }
 
-func (s *fakeClientAgentStore) GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error) {
-	agent, err := s.registry.GetAgentByName(ctx, agentName)
+func (s *fakeClientAgentStore) GetAgent(ctx context.Context, agentName string) (*models.AgentResponse, error) {
+	agent, err := s.registry.GetAgent(ctx, agentName)
 	if err == nil {
 		return agent, nil
 	}
 	return &models.AgentResponse{Agent: models.AgentJSON{AgentManifest: models.AgentManifest{Name: agentName}, Version: "latest"}}, nil
 }
 
-func (s *fakeClientAgentStore) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
-	agent, err := s.registry.GetAgentByNameAndVersion(ctx, agentName, version)
+func (s *fakeClientAgentStore) GetAgentVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
+	agent, err := s.registry.GetAgentVersion(ctx, agentName, version)
 	if err == nil {
 		return agent, nil
 	}
 	return &models.AgentResponse{Agent: models.AgentJSON{AgentManifest: models.AgentManifest{Name: agentName}, Version: version}}, nil
 }
 
-func (s *fakeClientAgentStore) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
-	return s.registry.GetAllVersionsByAgentName(ctx, agentName)
+func (s *fakeClientAgentStore) GetAgentVersions(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
+	return s.registry.GetAgentVersions(ctx, agentName)
 }
 
-func (s *fakeClientAgentStore) GetCurrentLatestAgentVersion(ctx context.Context, agentName string) (*models.AgentResponse, error) {
-	return s.registry.GetAgentByName(ctx, agentName)
+func (s *fakeClientAgentStore) GetLatestAgent(ctx context.Context, agentName string) (*models.AgentResponse, error) {
+	return s.registry.GetAgent(ctx, agentName)
 }
 
 func (s *fakeClientAgentStore) CountAgentVersions(_ context.Context, agentName string) (int, error) {
@@ -566,19 +566,19 @@ func (s *fakeClientSkillStore) ListSkills(ctx context.Context, filter *database.
 	return s.registry.ListSkills(ctx, filter, cursor, limit)
 }
 
-func (s *fakeClientSkillStore) GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error) {
+func (s *fakeClientSkillStore) GetSkill(ctx context.Context, skillName string) (*models.SkillResponse, error) {
 	return s.registry.GetSkill(ctx, skillName)
 }
 
-func (s *fakeClientSkillStore) GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
+func (s *fakeClientSkillStore) GetSkillVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
 	return s.registry.GetSkillVersion(ctx, skillName, version)
 }
 
-func (s *fakeClientSkillStore) GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
+func (s *fakeClientSkillStore) GetSkillVersions(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
 	return s.registry.GetSkillVersions(ctx, skillName)
 }
 
-func (s *fakeClientSkillStore) GetCurrentLatestSkillVersion(ctx context.Context, skillName string) (*models.SkillResponse, error) {
+func (s *fakeClientSkillStore) GetLatestSkill(ctx context.Context, skillName string) (*models.SkillResponse, error) {
 	return s.registry.GetSkill(ctx, skillName)
 }
 
@@ -619,19 +619,19 @@ func (s *fakeClientPromptStore) ListPrompts(ctx context.Context, filter *databas
 	return s.registry.ListPrompts(ctx, filter, cursor, limit)
 }
 
-func (s *fakeClientPromptStore) GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error) {
+func (s *fakeClientPromptStore) GetPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error) {
 	return s.registry.GetPrompt(ctx, promptName)
 }
 
-func (s *fakeClientPromptStore) GetPromptByNameAndVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
+func (s *fakeClientPromptStore) GetPromptVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
 	return s.registry.GetPromptVersion(ctx, promptName, version)
 }
 
-func (s *fakeClientPromptStore) GetAllVersionsByPromptName(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
+func (s *fakeClientPromptStore) GetPromptVersions(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
 	return s.registry.GetPromptVersions(ctx, promptName)
 }
 
-func (s *fakeClientPromptStore) GetCurrentLatestPromptVersion(ctx context.Context, promptName string) (*models.PromptResponse, error) {
+func (s *fakeClientPromptStore) GetLatestPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error) {
 	return s.registry.GetPrompt(ctx, promptName)
 }
 
@@ -672,9 +672,9 @@ func (s *fakeClientProviderStore) ListProviders(ctx context.Context, platform *s
 	return s.registry.ListProviders(ctx, platform)
 }
 
-func (s *fakeClientProviderStore) GetProviderByID(ctx context.Context, providerID string) (*models.Provider, error) {
+func (s *fakeClientProviderStore) GetProvider(ctx context.Context, providerID string) (*models.Provider, error) {
 	if s.registry.GetProviderByIDFn != nil {
-		return s.registry.GetProviderByID(ctx, providerID)
+		return s.registry.GetProvider(ctx, providerID)
 	}
 	return &models.Provider{ID: providerID, Name: "Local provider", Platform: "local"}, nil
 }
@@ -719,7 +719,7 @@ func (s *fakeClientDeploymentStore) CreateDeployment(ctx context.Context, req *m
 	return nil
 }
 
-func (s *fakeClientDeploymentStore) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+func (s *fakeClientDeploymentStore) ListDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	if s.registry.GetDeploymentsFn != nil {
 		return s.registry.GetDeploymentsFn(ctx, filter)
 	}
@@ -730,7 +730,7 @@ func (s *fakeClientDeploymentStore) GetDeployments(ctx context.Context, filter *
 	return deployments, nil
 }
 
-func (s *fakeClientDeploymentStore) GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error) {
+func (s *fakeClientDeploymentStore) GetDeployment(ctx context.Context, id string) (*models.Deployment, error) {
 	if s.registry.GetDeploymentByIDFn != nil {
 		return s.registry.GetDeploymentByIDFn(ctx, id)
 	}
@@ -754,7 +754,7 @@ func (s *fakeClientDeploymentStore) UpdateDeploymentState(_ context.Context, id 
 	return nil
 }
 
-func (s *fakeClientDeploymentStore) RemoveDeploymentByID(ctx context.Context, id string) error {
+func (s *fakeClientDeploymentStore) DeleteDeployment(ctx context.Context, id string) error {
 	if s.registry.RemoveDeploymentByIDFn != nil {
 		return s.registry.RemoveDeploymentByIDFn(ctx, id)
 	}
@@ -1005,20 +1005,20 @@ func TestClientIntegration_CatalogRoutes_HappyPath(t *testing.T) {
 		t.Fatalf("GetPublishedServers() returned unexpected count: got %d, want 2", len(servers))
 	}
 
-	serverLatest, err := client.GetServerByName("acme/weather")
+	serverLatest, err := client.GetServer("acme/weather")
 	if err != nil {
-		t.Fatalf("GetServerByName() failed: %v", err)
+		t.Fatalf("GetServer() failed: %v", err)
 	}
 	if serverLatest == nil || serverLatest.Server.Version != "2.0.0" {
-		t.Fatalf("GetServerByName() returned unexpected server: %#v", serverLatest)
+		t.Fatalf("GetServer() returned unexpected server: %#v", serverLatest)
 	}
 
-	serverByVersion, err := client.GetServerByNameAndVersion("acme/weather", "1.0.0")
+	serverByVersion, err := client.GetServerVersion("acme/weather", "1.0.0")
 	if err != nil {
-		t.Fatalf("GetServerByNameAndVersion() failed: %v", err)
+		t.Fatalf("GetServerVersion() failed: %v", err)
 	}
 	if serverByVersion == nil || serverByVersion.Server.Version != "1.0.0" {
-		t.Fatalf("GetServerByNameAndVersion() returned unexpected server: %#v", serverByVersion)
+		t.Fatalf("GetServerVersion() returned unexpected server: %#v", serverByVersion)
 	}
 
 	serverVersions, err := client.GetServerVersions("acme/weather")
@@ -1057,20 +1057,20 @@ func TestClientIntegration_CatalogRoutes_HappyPath(t *testing.T) {
 		t.Fatalf("GetSkills() returned unexpected payload: %#v", skills)
 	}
 
-	skillByName, err := client.GetSkillByName("acme/translate")
+	skillByName, err := client.GetSkill("acme/translate")
 	if err != nil {
-		t.Fatalf("GetSkillByName() failed: %v", err)
+		t.Fatalf("GetSkill() failed: %v", err)
 	}
 	if skillByName == nil || skillByName.Skill.Version != "1.0.0" {
-		t.Fatalf("GetSkillByName() returned unexpected payload: %#v", skillByName)
+		t.Fatalf("GetSkill() returned unexpected payload: %#v", skillByName)
 	}
 
-	skillByVersion, err := client.GetSkillByNameAndVersion("acme/translate", "1.0.0")
+	skillByVersion, err := client.GetSkillVersion("acme/translate", "1.0.0")
 	if err != nil {
-		t.Fatalf("GetSkillByNameAndVersion() failed: %v", err)
+		t.Fatalf("GetSkillVersion() failed: %v", err)
 	}
 	if skillByVersion == nil || skillByVersion.Skill.Name != "acme/translate" {
-		t.Fatalf("GetSkillByNameAndVersion() returned unexpected payload: %#v", skillByVersion)
+		t.Fatalf("GetSkillVersion() returned unexpected payload: %#v", skillByVersion)
 	}
 
 	createdSkill, err := client.CreateSkill(&models.SkillJSON{
@@ -1093,20 +1093,20 @@ func TestClientIntegration_CatalogRoutes_HappyPath(t *testing.T) {
 		t.Fatalf("GetAgents() returned unexpected payload: %#v", agents)
 	}
 
-	agentByName, err := client.GetAgentByName("acme/planner")
+	agentByName, err := client.GetAgent("acme/planner")
 	if err != nil {
-		t.Fatalf("GetAgentByName() failed: %v", err)
+		t.Fatalf("GetAgent() failed: %v", err)
 	}
 	if agentByName == nil || agentByName.Agent.Version != "1.0.0" {
-		t.Fatalf("GetAgentByName() returned unexpected payload: %#v", agentByName)
+		t.Fatalf("GetAgent() returned unexpected payload: %#v", agentByName)
 	}
 
-	agentByVersion, err := client.GetAgentByNameAndVersion("acme/planner", "1.0.0")
+	agentByVersion, err := client.GetAgentVersion("acme/planner", "1.0.0")
 	if err != nil {
-		t.Fatalf("GetAgentByNameAndVersion() failed: %v", err)
+		t.Fatalf("GetAgentVersion() failed: %v", err)
 	}
 	if agentByVersion == nil || agentByVersion.Agent.Name != "acme/planner" {
-		t.Fatalf("GetAgentByNameAndVersion() returned unexpected payload: %#v", agentByVersion)
+		t.Fatalf("GetAgentVersion() returned unexpected payload: %#v", agentByVersion)
 	}
 
 	createdAgent, err := client.CreateAgent(&models.AgentJSON{
@@ -1246,25 +1246,25 @@ func TestClientIntegration_DeploymentRoutes_HappyPath(t *testing.T) {
 	if deployedServerSecond.ID == deployedServer.ID {
 		t.Fatalf("expected distinct deployment IDs, got %q", deployedServer.ID)
 	}
-	createdByGet, err := client.GetDeploymentByID(deployedServer.ID)
+	createdByGet, err := client.GetDeployment(deployedServer.ID)
 	if err != nil {
-		t.Fatalf("GetDeploymentByID() failed: %v", err)
+		t.Fatalf("GetDeployment() failed: %v", err)
 	}
 	if createdByGet == nil || createdByGet.ID != deployedServer.ID {
-		t.Fatalf("GetDeploymentByID() returned unexpected payload: %#v", createdByGet)
+		t.Fatalf("GetDeployment() returned unexpected payload: %#v", createdByGet)
 	}
-	createdByGetSecond, err := client.GetDeploymentByID(deployedServerSecond.ID)
+	createdByGetSecond, err := client.GetDeployment(deployedServerSecond.ID)
 	if err != nil {
-		t.Fatalf("GetDeploymentByID(second) failed: %v", err)
+		t.Fatalf("GetDeployment(second) failed: %v", err)
 	}
 	if createdByGetSecond == nil || createdByGetSecond.ID != deployedServerSecond.ID {
-		t.Fatalf("GetDeploymentByID(second) returned unexpected payload: %#v", createdByGetSecond)
+		t.Fatalf("GetDeployment(second) returned unexpected payload: %#v", createdByGetSecond)
 	}
-	if err := client.RemoveDeploymentByID(deployedServer.ID); err != nil {
-		t.Fatalf("RemoveDeploymentByID() failed: %v", err)
+	if err := client.DeleteDeployment(deployedServer.ID); err != nil {
+		t.Fatalf("DeleteDeployment() failed: %v", err)
 	}
-	if err := client.RemoveDeploymentByID(deployedServerSecond.ID); err != nil {
-		t.Fatalf("RemoveDeploymentByID(second) failed: %v", err)
+	if err := client.DeleteDeployment(deployedServerSecond.ID); err != nil {
+		t.Fatalf("DeleteDeployment(second) failed: %v", err)
 	}
 
 	deployedAgent, err := client.DeployAgent(
@@ -1303,11 +1303,11 @@ func TestClientIntegration_DeploymentRoutes_HappyPath(t *testing.T) {
 		t.Fatalf("expected distinct agent deployment IDs, got %q", deployedAgent.ID)
 	}
 
-	if err := client.RemoveDeploymentByID(deployedAgent.ID); err != nil {
-		t.Fatalf("RemoveDeploymentByID(agent) failed: %v", err)
+	if err := client.DeleteDeployment(deployedAgent.ID); err != nil {
+		t.Fatalf("DeleteDeployment(agent) failed: %v", err)
 	}
-	if err := client.RemoveDeploymentByID(deployedAgentSecond.ID); err != nil {
-		t.Fatalf("RemoveDeploymentByID(agent second) failed: %v", err)
+	if err := client.DeleteDeployment(deployedAgentSecond.ID); err != nil {
+		t.Fatalf("DeleteDeployment(agent second) failed: %v", err)
 	}
 
 	if len(createdDeployments) != 4 {

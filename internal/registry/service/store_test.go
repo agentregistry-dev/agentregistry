@@ -117,8 +117,8 @@ func (m *storeTestDB) ListProviders(ctx context.Context, platform *string) ([]*m
 	return m.Providers().ListProviders(ctx, platform)
 }
 
-func (m *storeTestDB) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
-	return m.Deployments().GetDeployments(ctx, filter)
+func (m *storeTestDB) ListDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+	return m.Deployments().ListDeployments(ctx, filter)
 }
 
 func (m *storeTestDB) DeleteServer(ctx context.Context, serverName, version string) error {
@@ -183,7 +183,7 @@ func (s storeTestProviderStore) ListProviders(ctx context.Context, platform *str
 	return s.db.listProvidersFn(ctx, s.txToken, platform)
 }
 
-func (s storeTestDeploymentStore) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+func (s storeTestDeploymentStore) ListDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	require.NotNil(s.db.testingT, s.db.testingT, "testingT must be set")
 	require.NotNil(s.db.testingT, s.db.getDeploymentsFn, "getDeploymentsFn must be set")
 	return s.db.getDeploymentsFn(ctx, s.txToken, filter)
@@ -352,7 +352,7 @@ func TestReadStoresUsesRepositoryOverrides(t *testing.T) {
 				svc.deploymentRepo = repo.Deployments()
 			},
 			invoke: func(t *testing.T, stores storeBundle) {
-				deployments, err := stores.deployments.GetDeployments(context.Background(), nil)
+				deployments, err := stores.deployments.ListDeployments(context.Background(), nil)
 				require.NoError(t, err)
 				require.Len(t, deployments, 1)
 				require.Equal(t, "override", deployments[0].ID)

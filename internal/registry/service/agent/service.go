@@ -34,20 +34,16 @@ type Dependencies struct {
 }
 
 type Registry interface {
-	ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error)
-	GetAgent(ctx context.Context, agentName string) (*models.AgentResponse, error)
-	GetAgentVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error)
-	GetAgentVersions(ctx context.Context, agentName string) ([]*models.AgentResponse, error)
+	database.AgentReader
 	PublishAgent(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error)
 	DeleteAgent(ctx context.Context, agentName, version string) error
 	SetAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error
-	GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error)
 	ResolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error)
 	ResolveAgentManifestPrompts(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.ResolvedPrompt, error)
 }
 
 type registry struct {
-	agents             database.AgentStore
+	database.AgentStore
 	skills             database.SkillStore
 	prompts            database.PromptStore
 	tx                 database.Transactor
@@ -78,7 +74,7 @@ func New(deps Dependencies) Registry {
 	}
 
 	return &registry{
-		agents:             deps.Agents,
+		AgentStore:         deps.Agents,
 		skills:             deps.Skills,
 		prompts:            deps.Prompts,
 		tx:                 deps.Tx,
@@ -97,19 +93,7 @@ func (s *registry) ListAgents(ctx context.Context, filter *database.AgentFilter,
 			return nil, "", err
 		}
 	}
-	return s.agents.ListAgents(ctx, filter, cursor, limit)
-}
-
-func (s *registry) GetAgent(ctx context.Context, agentName string) (*models.AgentResponse, error) {
-	return s.agents.GetAgentByName(ctx, agentName)
-}
-
-func (s *registry) GetAgentVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
-	return s.agents.GetAgentByNameAndVersion(ctx, agentName, version)
-}
-
-func (s *registry) GetAgentVersions(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
-	return s.agents.GetAllVersionsByAgentName(ctx, agentName)
+	return s.AgentStore.ListAgents(ctx, filter, cursor, limit)
 }
 
 func (s *registry) PublishAgent(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error) {
@@ -128,10 +112,6 @@ func (s *registry) SetAgentEmbedding(ctx context.Context, agentName, version str
 	return txutil.Run(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
 		return scope.Agents().SetAgentEmbedding(txCtx, agentName, version, embedding)
 	})
-}
-
-func (s *registry) GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
-	return s.agents.GetAgentEmbeddingMetadata(ctx, agentName, version)
 }
 
 func (s *registry) ResolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error) {
@@ -167,9 +147,9 @@ func (s *registry) ResolveAgentManifestPrompts(ctx context.Context, manifest *mo
 		var promptResp *models.PromptResponse
 		var err error
 		if version == "" || version == "latest" {
-			promptResp, err = s.prompts.GetPromptByName(ctx, promptName)
+			promptResp, err = s.prompts.GetPrompt(ctx, promptName)
 		} else {
-			promptResp, err = s.prompts.GetPromptByNameAndVersion(ctx, promptName, version)
+			promptResp, err = s.prompts.GetPromptVersion(ctx, promptName, version)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("resolve prompt %q version %q: %w", promptName, version, err)
@@ -225,7 +205,7 @@ func (s *registry) createAgentInTransaction(ctx context.Context, agents database
 		return nil, database.ErrInvalidVersion
 	}
 
-	currentLatest, err := agents.GetCurrentLatestAgentVersion(ctx, agentJSON.Name)
+	currentLatest, err := agents.GetLatestAgent(ctx, agentJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -302,7 +282,7 @@ func (s *registry) resolveSkillRef(ctx context.Context, skill models.SkillRef) (
 		version = "latest"
 	}
 
-	skillResp, err := s.skills.GetSkillByNameAndVersion(ctx, registrySkillName, version)
+	skillResp, err := s.skills.GetSkillVersion(ctx, registrySkillName, version)
 	if err != nil {
 		return platformtypes.AgentSkillRef{}, fmt.Errorf("fetch skill %q version %q: %w", registrySkillName, version, err)
 	}

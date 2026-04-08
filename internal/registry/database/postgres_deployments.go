@@ -103,8 +103,8 @@ func (s *deploymentStore) CreateDeployment(ctx context.Context, deployment *mode
 	return nil
 }
 
-// GetDeployments retrieves all deployed servers
-func (s *deploymentStore) GetDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
+// ListDeployments retrieves all deployed servers
+func (s *deploymentStore) ListDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	executor := s.executor
 
 	where, args, needsProviderJoin := buildDeploymentFilters(filter)
@@ -223,8 +223,8 @@ func buildDeploymentFilters(filter *models.DeploymentFilter) ([]string, []any, b
 	return where, args, needsProviderJoin
 }
 
-// GetDeploymentByID retrieves a specific deployment by UUID.
-func (s *deploymentStore) GetDeploymentByID(ctx context.Context, id string) (*models.Deployment, error) {
+// GetDeployment retrieves a specific deployment by UUID.
+func (s *deploymentStore) GetDeployment(ctx context.Context, id string) (*models.Deployment, error) {
 	executor := s.executor
 	query := `SELECT
 			id, server_name, version, deployed_at, updated_at, status, config, prefer_remote, resource_type,
@@ -291,7 +291,7 @@ func (s *deploymentStore) UpdateDeploymentState(ctx context.Context, id string, 
 		return fmt.Errorf("%w: deployment state patch is required", database.ErrInvalidInput)
 	}
 
-	deployment, err := s.GetDeploymentByID(ctx, id)
+	deployment, err := s.GetDeployment(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -372,9 +372,9 @@ func (s *deploymentStore) UpdateDeploymentState(ctx context.Context, id string, 
 	return nil
 }
 
-// RemoveDeploymentByID removes a deployment by UUID.
-func (s *deploymentStore) RemoveDeploymentByID(ctx context.Context, id string) error {
-	deployment, err := s.GetDeploymentByID(ctx, id)
+// DeleteDeployment removes a deployment by UUID.
+func (s *deploymentStore) DeleteDeployment(ctx context.Context, id string) error {
+	deployment, err := s.GetDeployment(ctx, id)
 	if err != nil {
 		return err
 	}

@@ -143,7 +143,7 @@ func (s *skillStore) ListSkills(ctx context.Context, filter *database.SkillFilte
 	return results, nextCursor, nil
 }
 
-func (s *skillStore) GetSkillByName(ctx context.Context, skillName string) (*models.SkillResponse, error) {
+func (s *skillStore) GetSkill(ctx context.Context, skillName string) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -189,7 +189,7 @@ func (s *skillStore) GetSkillByName(ctx context.Context, skillName string) (*mod
 	}, nil
 }
 
-func (s *skillStore) GetSkillByNameAndVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
+func (s *skillStore) GetSkillVersion(ctx context.Context, skillName, version string) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -234,7 +234,7 @@ func (s *skillStore) GetSkillByNameAndVersion(ctx context.Context, skillName, ve
 	}, nil
 }
 
-func (s *skillStore) GetAllVersionsBySkillName(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
+func (s *skillStore) GetSkillVersions(ctx context.Context, skillName string) ([]*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -431,7 +431,7 @@ func (s *skillStore) SetSkillStatus(ctx context.Context, skillName, version stri
 	}, nil
 }
 
-func (s *skillStore) GetCurrentLatestSkillVersion(ctx context.Context, skillName string) (*models.SkillResponse, error) {
+func (s *skillStore) GetLatestSkill(ctx context.Context, skillName string) (*models.SkillResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}

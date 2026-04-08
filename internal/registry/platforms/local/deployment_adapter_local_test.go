@@ -194,19 +194,19 @@ func (s *fakeLocalServerStore) ListServers(ctx context.Context, filter *database
 	return s.registry.ListServers(ctx, filter, cursor, limit)
 }
 
-func (s *fakeLocalServerStore) GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+func (s *fakeLocalServerStore) GetServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
 	return s.registry.GetServer(ctx, serverName)
 }
 
-func (s *fakeLocalServerStore) GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
+func (s *fakeLocalServerStore) GetServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
 	return s.registry.GetServerVersion(ctx, serverName, version)
 }
 
-func (s *fakeLocalServerStore) GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
+func (s *fakeLocalServerStore) GetServerVersions(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
 	return s.registry.GetServerVersions(ctx, serverName)
 }
 
-func (s *fakeLocalServerStore) GetCurrentLatestVersion(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+func (s *fakeLocalServerStore) GetLatestServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
 	return s.registry.GetServer(ctx, serverName)
 }
 
@@ -264,19 +264,19 @@ func (s *fakeLocalAgentStore) ListAgents(ctx context.Context, filter *database.A
 	return s.registry.ListAgents(ctx, filter, cursor, limit)
 }
 
-func (s *fakeLocalAgentStore) GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error) {
+func (s *fakeLocalAgentStore) GetAgent(ctx context.Context, agentName string) (*models.AgentResponse, error) {
 	return s.registry.GetAgent(ctx, agentName)
 }
 
-func (s *fakeLocalAgentStore) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
+func (s *fakeLocalAgentStore) GetAgentVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
 	return s.registry.GetAgentVersion(ctx, agentName, version)
 }
 
-func (s *fakeLocalAgentStore) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
+func (s *fakeLocalAgentStore) GetAgentVersions(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
 	return s.registry.GetAgentVersions(ctx, agentName)
 }
 
-func (s *fakeLocalAgentStore) GetCurrentLatestAgentVersion(ctx context.Context, agentName string) (*models.AgentResponse, error) {
+func (s *fakeLocalAgentStore) GetLatestAgent(ctx context.Context, agentName string) (*models.AgentResponse, error) {
 	return s.registry.GetAgent(ctx, agentName)
 }
 
@@ -314,7 +314,7 @@ func (s *fakeLocalPromptStore) ListPrompts(context.Context, *database.PromptFilt
 	return nil, "", nil
 }
 
-func (s *fakeLocalPromptStore) GetPromptByName(ctx context.Context, promptName string) (*models.PromptResponse, error) {
+func (s *fakeLocalPromptStore) GetPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error) {
 	if s.registry.getPromptByNameFn != nil {
 		return s.registry.getPromptByNameFn(ctx, promptName)
 	}
@@ -324,7 +324,7 @@ func (s *fakeLocalPromptStore) GetPromptByName(ctx context.Context, promptName s
 	return nil, database.ErrNotFound
 }
 
-func (s *fakeLocalPromptStore) GetPromptByNameAndVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
+func (s *fakeLocalPromptStore) GetPromptVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
 	if s.registry.getPromptByVerFn != nil {
 		return s.registry.getPromptByVerFn(ctx, promptName, version)
 	}
@@ -334,16 +334,16 @@ func (s *fakeLocalPromptStore) GetPromptByNameAndVersion(ctx context.Context, pr
 	return nil, database.ErrNotFound
 }
 
-func (s *fakeLocalPromptStore) GetAllVersionsByPromptName(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
-	prompt, err := s.GetPromptByName(ctx, promptName)
+func (s *fakeLocalPromptStore) GetPromptVersions(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
+	prompt, err := s.GetPrompt(ctx, promptName)
 	if err != nil {
 		return nil, err
 	}
 	return []*models.PromptResponse{prompt}, nil
 }
 
-func (s *fakeLocalPromptStore) GetCurrentLatestPromptVersion(ctx context.Context, promptName string) (*models.PromptResponse, error) {
-	return s.GetPromptByName(ctx, promptName)
+func (s *fakeLocalPromptStore) GetLatestPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error) {
+	return s.GetPrompt(ctx, promptName)
 }
 
 func (s *fakeLocalPromptStore) CountPromptVersions(context.Context, string) (int, error) {

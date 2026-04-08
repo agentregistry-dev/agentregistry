@@ -226,13 +226,13 @@ func (c *Client) GetPublishedServers() ([]*v0.ServerResponse, error) {
 	return all, nil
 }
 
-// GetServerByName returns a server by name (latest version)
-func (c *Client) GetServerByName(name string) (*v0.ServerResponse, error) {
-	return c.GetServerByNameAndVersion(name, "latest")
+// GetServer returns a server by name (latest version)
+func (c *Client) GetServer(name string) (*v0.ServerResponse, error) {
+	return c.GetServerVersion(name, "latest")
 }
 
-// GetServerByNameAndVersion returns a specific version of a server
-func (c *Client) GetServerByNameAndVersion(name, version string) (*v0.ServerResponse, error) {
+// GetServerVersion returns a specific version of a server
+func (c *Client) GetServerVersion(name, version string) (*v0.ServerResponse, error) {
 	encName := url.PathEscape(name)
 	encVersion := url.PathEscape(version)
 	q := "/servers/" + encName + "/versions/" + encVersion
@@ -309,8 +309,8 @@ func (c *Client) GetSkills() ([]*models.SkillResponse, error) {
 	return all, nil
 }
 
-// GetSkillByName returns a skill by name
-func (c *Client) GetSkillByName(name string) (*models.SkillResponse, error) {
+// GetSkill returns a skill by name
+func (c *Client) GetSkill(name string) (*models.SkillResponse, error) {
 	encName := url.PathEscape(name)
 	req, err := c.newRequest(http.MethodGet, "/skills/"+encName+"/versions/latest")
 	if err != nil {
@@ -384,7 +384,7 @@ func (c *Client) GetAgents() ([]*models.AgentResponse, error) {
 	return all, nil
 }
 
-func (c *Client) GetAgentByName(name string) (*models.AgentResponse, error) {
+func (c *Client) GetAgent(name string) (*models.AgentResponse, error) {
 	encName := url.PathEscape(name)
 	req, err := c.newRequest(http.MethodGet, "/agents/"+encName+"/versions/latest")
 	if err != nil {
@@ -397,8 +397,8 @@ func (c *Client) GetAgentByName(name string) (*models.AgentResponse, error) {
 	return &resp, nil
 }
 
-// GetAgentByNameAndVersion returns a specific version of an agent
-func (c *Client) GetAgentByNameAndVersion(name, version string) (*models.AgentResponse, error) {
+// GetAgentVersion returns a specific version of an agent
+func (c *Client) GetAgentVersion(name, version string) (*models.AgentResponse, error) {
 	encName := url.PathEscape(name)
 	encVersion := url.PathEscape(version)
 	req, err := c.newRequest(http.MethodGet, "/agents/"+encName+"/versions/"+encVersion)
@@ -447,8 +447,8 @@ func (c *Client) GetPrompts() ([]*models.PromptResponse, error) {
 	return all, nil
 }
 
-// GetPromptByName returns a prompt by name (latest version)
-func (c *Client) GetPromptByName(name string) (*models.PromptResponse, error) {
+// GetPrompt returns a prompt by name (latest version)
+func (c *Client) GetPrompt(name string) (*models.PromptResponse, error) {
 	encName := url.PathEscape(name)
 	req, err := c.newRequest(http.MethodGet, "/prompts/"+encName+"/versions/latest")
 	if err != nil {
@@ -464,8 +464,8 @@ func (c *Client) GetPromptByName(name string) (*models.PromptResponse, error) {
 	return &resp, nil
 }
 
-// GetPromptByNameAndVersion returns a specific version of a prompt
-func (c *Client) GetPromptByNameAndVersion(name, version string) (*models.PromptResponse, error) {
+// GetPromptVersion returns a specific version of a prompt
+func (c *Client) GetPromptVersion(name, version string) (*models.PromptResponse, error) {
 	encName := url.PathEscape(name)
 	encVersion := url.PathEscape(version)
 	req, err := c.newRequest(http.MethodGet, "/prompts/"+encName+"/versions/"+encVersion)
@@ -523,8 +523,8 @@ func (c *Client) CreateMCPServer(server *v0.ServerJSON) (*v0.ServerResponse, err
 	return &resp, err
 }
 
-// GetSkillByNameAndVersion returns a specific version of a skill
-func (c *Client) GetSkillByNameAndVersion(name, version string) (*models.SkillResponse, error) {
+// GetSkillVersion returns a specific version of a skill
+func (c *Client) GetSkillVersion(name, version string) (*models.SkillResponse, error) {
 	encName := url.PathEscape(name)
 	encVersion := url.PathEscape(version)
 
@@ -634,8 +634,8 @@ func (c *Client) GetDeployedServers() ([]*DeploymentResponse, error) {
 	return result, nil
 }
 
-// GetDeploymentByID retrieves a deployment by ID.
-func (c *Client) GetDeploymentByID(id string) (*DeploymentResponse, error) {
+// GetDeployment retrieves a deployment by ID.
+func (c *Client) GetDeployment(id string) (*DeploymentResponse, error) {
 	encID := url.PathEscape(id)
 	req, err := c.newRequest(http.MethodGet, "/deployments/"+encID)
 	if err != nil {
@@ -696,8 +696,8 @@ func (c *Client) DeployAgent(name, version string, env map[string]string, provid
 	return &deployment, nil
 }
 
-// RemoveDeploymentByID removes a deployment by ID.
-func (c *Client) RemoveDeploymentByID(id string) error {
+// DeleteDeployment removes a deployment by ID.
+func (c *Client) DeleteDeployment(id string) error {
 	encID := url.PathEscape(id)
 	req, err := c.newRequest(http.MethodDelete, "/deployments/"+encID)
 	if err != nil {

@@ -31,22 +31,16 @@ type Dependencies struct {
 }
 
 type Registry interface {
-	ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
-	GetServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error)
-	GetServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error)
-	GetServerVersions(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error)
+	database.ServerReader
 	PublishServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
 	UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error)
 	SetServerReadme(ctx context.Context, serverName, version string, content []byte, contentType string) error
-	GetLatestServerReadme(ctx context.Context, serverName string) (*database.ServerReadme, error)
-	GetServerReadme(ctx context.Context, serverName, version string) (*database.ServerReadme, error)
 	DeleteServer(ctx context.Context, serverName, version string) error
 	SetServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error
-	GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error)
 }
 
 type registry struct {
-	servers            database.ServerStore
+	database.ServerStore
 	tx                 database.Transactor
 	cfg                *config.Config
 	embeddingsProvider embeddings.Provider
@@ -69,7 +63,7 @@ func New(deps Dependencies) Registry {
 	}
 
 	return &registry{
-		servers:            deps.Servers,
+		ServerStore:        deps.Servers,
 		tx:                 deps.Tx,
 		cfg:                deps.Config,
 		embeddingsProvider: deps.EmbeddingsProvider,
@@ -88,19 +82,7 @@ func (s *registry) ListServers(ctx context.Context, filter *database.ServerFilte
 		}
 	}
 
-	return s.servers.ListServers(ctx, filter, cursor, limit)
-}
-
-func (s *registry) GetServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
-	return s.servers.GetServerByName(ctx, serverName)
-}
-
-func (s *registry) GetServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
-	return s.servers.GetServerByNameAndVersion(ctx, serverName, version)
-}
-
-func (s *registry) GetServerVersions(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
-	return s.servers.GetAllVersionsByServerName(ctx, serverName)
+	return s.ServerStore.ListServers(ctx, filter, cursor, limit)
 }
 
 func (s *registry) PublishServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
@@ -125,7 +107,7 @@ func (s *registry) SetServerReadme(ctx context.Context, serverName, version stri
 
 	return txutil.Run(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
 		servers := scope.Servers()
-		if _, err := servers.GetServerByNameAndVersion(txCtx, serverName, version); err != nil {
+		if _, err := servers.GetServerVersion(txCtx, serverName, version); err != nil {
 			return err
 		}
 
@@ -142,14 +124,6 @@ func (s *registry) SetServerReadme(ctx context.Context, serverName, version stri
 	})
 }
 
-func (s *registry) GetLatestServerReadme(ctx context.Context, serverName string) (*database.ServerReadme, error) {
-	return s.servers.GetLatestServerReadme(ctx, serverName)
-}
-
-func (s *registry) GetServerReadme(ctx context.Context, serverName, version string) (*database.ServerReadme, error) {
-	return s.servers.GetServerReadme(ctx, serverName, version)
-}
-
 func (s *registry) DeleteServer(ctx context.Context, serverName, version string) error {
 	return txutil.Run(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
 		return scope.Servers().DeleteServer(txCtx, serverName, version)
@@ -160,10 +134,6 @@ func (s *registry) SetServerEmbedding(ctx context.Context, serverName, version s
 	return txutil.Run(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
 		return scope.Servers().SetServerEmbedding(txCtx, serverName, version, embedding)
 	})
-}
-
-func (s *registry) GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
-	return s.servers.GetServerEmbeddingMetadata(ctx, serverName, version)
 }
 
 func (s *registry) validateNoDuplicateRemoteURLs(ctx context.Context, servers database.ServerStore, serverDetail apiv0.ServerJSON) error {
@@ -217,7 +187,7 @@ func (s *registry) createServerInTransaction(ctx context.Context, servers databa
 		return nil, database.ErrInvalidVersion
 	}
 
-	currentLatest, err := servers.GetCurrentLatestVersion(ctx, serverJSON.Name)
+	currentLatest, err := servers.GetLatestServer(ctx, serverJSON.Name)
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
@@ -276,7 +246,7 @@ func (s *registry) createServerInTransaction(ctx context.Context, servers databa
 }
 
 func (s *registry) updateServerInTransaction(ctx context.Context, servers database.ServerStore, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
-	currentServer, err := servers.GetServerByNameAndVersion(ctx, serverName, version)
+	currentServer, err := servers.GetServerVersion(ctx, serverName, version)
 	if err != nil {
 		return nil, err
 	}

@@ -178,19 +178,19 @@ func (s *fakePlatformServerStore) ListServers(ctx context.Context, filter *datab
 	return s.registry.ListServers(ctx, filter, cursor, limit)
 }
 
-func (s *fakePlatformServerStore) GetServerByName(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+func (s *fakePlatformServerStore) GetServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
 	return s.registry.GetServer(ctx, serverName)
 }
 
-func (s *fakePlatformServerStore) GetServerByNameAndVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
+func (s *fakePlatformServerStore) GetServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
 	return s.registry.GetServerVersion(ctx, serverName, version)
 }
 
-func (s *fakePlatformServerStore) GetAllVersionsByServerName(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
+func (s *fakePlatformServerStore) GetServerVersions(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
 	return s.registry.GetServerVersions(ctx, serverName)
 }
 
-func (s *fakePlatformServerStore) GetCurrentLatestVersion(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+func (s *fakePlatformServerStore) GetLatestServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
 	return s.registry.GetServer(ctx, serverName)
 }
 
@@ -248,19 +248,19 @@ func (s *fakePlatformAgentStore) ListAgents(ctx context.Context, filter *databas
 	return s.registry.ListAgents(ctx, filter, cursor, limit)
 }
 
-func (s *fakePlatformAgentStore) GetAgentByName(ctx context.Context, agentName string) (*models.AgentResponse, error) {
+func (s *fakePlatformAgentStore) GetAgent(ctx context.Context, agentName string) (*models.AgentResponse, error) {
 	return s.registry.GetAgent(ctx, agentName)
 }
 
-func (s *fakePlatformAgentStore) GetAgentByNameAndVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
+func (s *fakePlatformAgentStore) GetAgentVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
 	return s.registry.GetAgentVersion(ctx, agentName, version)
 }
 
-func (s *fakePlatformAgentStore) GetAllVersionsByAgentName(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
+func (s *fakePlatformAgentStore) GetAgentVersions(ctx context.Context, agentName string) ([]*models.AgentResponse, error) {
 	return s.registry.GetAgentVersions(ctx, agentName)
 }
 
-func (s *fakePlatformAgentStore) GetCurrentLatestAgentVersion(ctx context.Context, agentName string) (*models.AgentResponse, error) {
+func (s *fakePlatformAgentStore) GetLatestAgent(ctx context.Context, agentName string) (*models.AgentResponse, error) {
 	return s.registry.GetAgent(ctx, agentName)
 }
 
