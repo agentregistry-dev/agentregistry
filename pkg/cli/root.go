@@ -92,6 +92,7 @@ func init() {
 	rootCmd.AddCommand(prompt.PromptCmd)
 	rootCmd.AddCommand(configure.ConfigureCmd)
 	rootCmd.AddCommand(cli.VersionCmd)
+	rootCmd.AddCommand(cli.StatusCmd)
 	rootCmd.AddCommand(cli.ImportCmd)
 	rootCmd.AddCommand(cli.ExportCmd)
 	rootCmd.AddCommand(cli.EmbeddingsCmd)
@@ -155,6 +156,7 @@ var preRunSkipCommands = map[string]map[string]bool{
 	"arctl": {
 		"completion": true,
 		"configure":  true,
+		"status":     true,
 		"version":    true,
 	},
 	"agent": {
