@@ -1,0 +1,16 @@
+apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: summarizer
+  version: "1.0.0"
+spec:
+  image: ghcr.io/acme/summarizer:v1.0.0
+  language: python
+  framework: adk
+  modelProvider: Gemini         # OpenAI | Anthropic | Gemini | AzureOpenAI | Agentgateway
+  modelName: gemini-2.0-flash
+  description: "An agent that summarizes documents"
+  # repository:                 # optional: link to source code
+  #   url: https://github.com/acme/summarizer
+  #   source: github            # github | gitlab | bitbucket
+  # See full-stack.yaml for an agent with mcpServers, skills, and prompts references.
