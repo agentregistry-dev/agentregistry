@@ -156,7 +156,7 @@ func (s *Service) ImportFromPath(ctx context.Context, path string, enrichServerD
 
 	// Import each server using registry service CreateServer
 	total := len(pending)
-	var processed int32
+	var processed atomic.Int32
 
 	wg := &sync.WaitGroup{}
 	concurrencyLimit := 10
@@ -172,7 +172,7 @@ func (s *Service) ImportFromPath(ctx context.Context, path string, enrichServerD
 				wg.Done()
 			}()
 
-			current := atomic.AddInt32(&processed, 1)
+			current := processed.Add(1)
 			s.logger.Info("importing server", "current", current, "total", total, "name", srv.Name, "version", srv.Version)
 			s.importServer(ctx, srv, readmeSeeds, enrichServerData)
 		}()

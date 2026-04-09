@@ -5,11 +5,13 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -30,9 +32,13 @@ func TestMain(m *testing.M) {
 
 	checkPrerequisites()
 
+	var cleanupFns []func()
+
 	registryURL = os.Getenv("ARCTL_API_BASE_URL")
 	if IsK8sBackend() {
-		registryURL = discoverRegistryURL()
+		var cleanup func()
+		registryURL, cleanup = resolveRegistryURL()
+		cleanupFns = append(cleanupFns, cleanup)
 	}
 	if registryURL == "" {
 		log.Fatal("ARCTL_API_BASE_URL not set — run tests via `make test-e2e-docker` or `make test-e2e-k8s`")
@@ -46,14 +52,20 @@ func TestMain(m *testing.M) {
 		log.Printf("  Cluster:            %s (context: %s)", e2eClusterName, e2eKubeContext)
 	}
 
-	os.Exit(m.Run())
+	code := m.Run()
+	for i := len(cleanupFns) - 1; i >= 0; i-- {
+		cleanupFns[i]()
+	}
+	os.Exit(code)
 }
 
-// discoverRegistryURL resolves the registry URL from the LoadBalancer IP
-// assigned to the agentregistry service in the Kind cluster.
-func discoverRegistryURL() string {
+// resolveRegistryURL waits for the agentregistry LoadBalancer service to get an IP,
+// then returns the registry URL and a cleanup function. On macOS, MetalLB IPs are
+// not routable from the Docker Desktop host, so it falls back to a kubectl port-forward.
+func resolveRegistryURL() (string, func()) {
 	const timeout = 2 * time.Minute
 	const pollInterval = 3 * time.Second
+	const servicePort = 12121
 
 	var ip string
 	var lastErr error
@@ -66,7 +78,6 @@ func discoverRegistryURL() string {
 			lastErr = pollErr
 			return false, nil
 		}
-
 		ip = strings.TrimSpace(string(out))
 		return ip != "", nil
 	})
@@ -78,7 +89,62 @@ func discoverRegistryURL() string {
 		log.Fatalf("LoadBalancer IP not assigned to agentregistry service within %s — is MetalLB running?", timeout)
 	}
 
-	return fmt.Sprintf("http://%s:12121/v0", ip)
+	if runtime.GOOS == "darwin" {
+		log.Printf("macOS: LoadBalancer IP %s not routable from host — using port-forward", ip)
+		return startPortForward(servicePort)
+	}
+	return fmt.Sprintf("http://%s:%d/v0", ip, servicePort), func() {}
+}
+
+// startPortForward tunnels the agentregistry service to localhost so that tests
+// can reach it when the MetalLB IP is not routable from the host (macOS + Docker Desktop).
+// Returns the localhost URL once the forward is ready, and a stop function.
+func startPortForward(servicePort int) (string, func()) {
+	const localPort = 18121 // arbitrary local port; must not conflict with other services
+	const pollInterval = 500 * time.Millisecond
+	const readyTimeout = 30 * time.Second
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := exec.CommandContext(ctx, "kubectl",
+		"--context", e2eKubeContext,
+		"-n", "agentregistry",
+		"port-forward",
+		"svc/agentregistry",
+		fmt.Sprintf("%d:%d", localPort, servicePort),
+	)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	if err := cmd.Start(); err != nil {
+		cancel()
+		log.Fatalf("Failed to start kubectl port-forward: %v", err)
+	}
+	log.Printf("Port-forward started (pid %d): localhost:%d → agentregistry:%d", cmd.Process.Pid, localPort, servicePort)
+
+	stop := func() {
+		cancel()
+		if cmd.Process != nil {
+			cmd.Process.Kill() //nolint:errcheck
+		}
+		_ = cmd.Wait()
+	}
+
+	localURL := fmt.Sprintf("http://localhost:%d/v0", localPort)
+	client := &http.Client{Timeout: 2 * time.Second}
+
+	if err := wait.PollUntilContextTimeout(ctx, pollInterval, readyTimeout, true, func(_ context.Context) (bool, error) {
+		resp, err := client.Get(localURL)
+		if err != nil {
+			return false, nil
+		}
+		resp.Body.Close()
+		return true, nil
+	}); err != nil {
+		stop()
+		log.Fatalf("Port-forward did not become ready within %v at %s", readyTimeout, localURL)
+	}
+
+	log.Printf("Port-forward ready: %s", localURL)
+	return localURL, stop
 }
 
 // checkPrerequisites verifies required tools are available.
