@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -31,6 +32,7 @@ type Registry interface {
 	ResolveProvider(ctx context.Context, providerID, platformHint string) (*models.Provider, error)
 	UpdateProvider(ctx context.Context, providerID, platformHint string, in *models.UpdateProviderInput) (*models.Provider, error)
 	DeleteProvider(ctx context.Context, providerID, platformHint string) error
+	PlatformAdapters() map[string]registrytypes.ProviderPlatformAdapter
 }
 
 type UnsupportedPlatformError struct {
@@ -62,8 +64,16 @@ func New(deps Dependencies) Registry {
 		deps.Providers = deps.StoreDB.Providers()
 	}
 
-	adapters := deps.ProviderPlatforms
-	if adapters == nil {
+	// When StoreDB is provided (production path), build default platform adapters
+	// and merge any caller-supplied overrides on top. When only Providers is set
+	// directly (tests/custom wiring), use only what the caller supplies.
+	var adapters map[string]registrytypes.ProviderPlatformAdapter
+	if deps.StoreDB != nil && deps.Providers != nil {
+		adapters = defaultPlatformAdapters(deps.Providers)
+		maps.Copy(adapters, deps.ProviderPlatforms)
+	} else if deps.ProviderPlatforms != nil {
+		adapters = deps.ProviderPlatforms
+	} else {
 		adapters = map[string]registrytypes.ProviderPlatformAdapter{}
 	}
 
@@ -71,6 +81,10 @@ func New(deps Dependencies) Registry {
 		providers: deps.Providers,
 		adapters:  adapters,
 	}
+}
+
+func (r *registry) PlatformAdapters() map[string]registrytypes.ProviderPlatformAdapter {
+	return r.adapters
 }
 
 func (r *registry) ListProviders(ctx context.Context, platform string) ([]*models.Provider, error) {

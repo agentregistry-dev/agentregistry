@@ -74,10 +74,7 @@ type kubernetesProviderAdapter struct {
 	providerAdapterBase
 }
 
-// DefaultPlatformAdapters returns the OSS provider adapters for local and
-// kubernetes. Keeping this in the provider service domain avoids routing
-// packages owning provider CRUD extension behavior.
-func DefaultPlatformAdapters(providers database.ProviderStore) map[string]registrytypes.ProviderPlatformAdapter {
+func defaultPlatformAdapters(providers database.ProviderStore) map[string]registrytypes.ProviderPlatformAdapter {
 	return map[string]registrytypes.ProviderPlatformAdapter{
 		"local": &localProviderAdapter{
 			providerAdapterBase: providerAdapterBase{

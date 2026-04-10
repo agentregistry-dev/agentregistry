@@ -147,15 +147,11 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		Config:             cfg,
 		EmbeddingsProvider: embeddingProvider,
 	})
-	providerStore := db.Providers()
-
-	// Initialize extension registries once and use them for both routing and service behavior.
-	providerPlatforms := providersvc.DefaultPlatformAdapters(providerStore)
-	maps.Copy(providerPlatforms, options.ProviderPlatforms)
 	providerService := providersvc.New(providersvc.Dependencies{
-		Providers:         providerStore,
-		ProviderPlatforms: providerPlatforms,
+		StoreDB:           db,
+		ProviderPlatforms: options.ProviderPlatforms,
 	})
+	providerPlatforms := providerService.PlatformAdapters()
 	deploymentPlatforms := map[string]types.DeploymentPlatformAdapter{
 		"local":      local.NewLocalDeploymentAdapter(serverService, agentService, cfg.RuntimeDir, cfg.AgentGatewayPort),
 		"kubernetes": kubernetes.NewKubernetesDeploymentAdapter(providerService, serverService, agentService),

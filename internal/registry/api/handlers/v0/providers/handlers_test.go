@@ -11,6 +11,7 @@ import (
 	v0providers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/providers"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"github.com/stretchr/testify/assert"
@@ -66,6 +67,10 @@ func (f *fakeProviderService) DeleteProvider(ctx context.Context, providerID, pl
 		return f.deleteFn(ctx, providerID, platformHint)
 	}
 	return database.ErrNotFound
+}
+
+func (f *fakeProviderService) PlatformAdapters() map[string]types.ProviderPlatformAdapter {
+	return nil
 }
 
 func TestListProviders_EmptyReturnsEmpty(t *testing.T) {
