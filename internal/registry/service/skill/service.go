@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service/internal/txutil"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service/internal/versionutil"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -56,13 +55,13 @@ func (s *registry) ListSkills(ctx context.Context, filter *database.SkillFilter,
 }
 
 func (s *registry) PublishSkill(ctx context.Context, req *models.SkillJSON) (*models.SkillResponse, error) {
-	return txutil.RunT(ctx, s.tx, func(txCtx context.Context, scope database.Scope) (*models.SkillResponse, error) {
+	return database.InTransactionT(ctx, s.tx, func(txCtx context.Context, scope database.Scope) (*models.SkillResponse, error) {
 		return s.createSkillInTransaction(txCtx, scope.Skills(), req)
 	})
 }
 
 func (s *registry) DeleteSkill(ctx context.Context, skillName, version string) error {
-	return txutil.Run(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
+	return database.InTransaction(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
 		return scope.Skills().DeleteSkill(txCtx, skillName, version)
 	})
 }

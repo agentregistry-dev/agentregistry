@@ -49,7 +49,7 @@ func TestImportService_LocalFile(t *testing.T) {
 	defer func() { _ = os.Remove(tempFile) }()
 
 	// Create registry service
-	testDB := database.NewTestServiceDB(t)
+	testDB := database.NewTestDB(t)
 	serverService := newTestServerService(testDB, &config.Config{EnableRegistryValidation: false})
 
 	// Create importer service and test import
@@ -95,7 +95,7 @@ func TestImportService_HTTPFile(t *testing.T) {
 	defer httpServer.Close()
 
 	// Create registry service
-	testDB := database.NewTestServiceDB(t)
+	testDB := database.NewTestDB(t)
 	serverService := newTestServerService(testDB, &config.Config{EnableRegistryValidation: false})
 
 	// Create importer service and test import
@@ -117,7 +117,7 @@ func TestImportService_RegistryPagination(t *testing.T) {
 	ctx := context.Background()
 
 	// Create registry service with test data
-	testDB := database.NewTestServiceDB(t)
+	testDB := database.NewTestDB(t)
 	serverService := newTestServerService(testDB, &config.Config{EnableRegistryValidation: false})
 
 	// Setup source registry with test data
@@ -164,7 +164,7 @@ func TestImportService_RegistryPagination(t *testing.T) {
 	defer httpServer.Close()
 
 	// Create target registry for import
-	targetDB := database.NewTestServiceDB(t)
+	targetDB := database.NewTestDB(t)
 	targetServerService := newTestServerService(targetDB, &config.Config{EnableRegistryValidation: false})
 	// Create importer service and test registry import
 	importerService := importer.NewService(targetServerService)
@@ -187,7 +187,7 @@ func TestImportService_RegistryPagination(t *testing.T) {
 
 func TestImportService_ErrorHandling(t *testing.T) {
 	// Create registry service
-	testDB := database.NewTestServiceDB(t)
+	testDB := database.NewTestDB(t)
 	serverService := newTestServerService(testDB, &config.Config{EnableRegistryValidation: false})
 	importerService := importer.NewService(serverService)
 
@@ -278,7 +278,7 @@ func TestImportService_ReadmeSeed(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(readmeSeedPath, readmeData, 0o600))
 
-	testDB := database.NewTestServiceDB(t)
+	testDB := database.NewTestDB(t)
 	serverService := newTestServerService(testDB, &config.Config{EnableRegistryValidation: false})
 
 	importerService := importer.NewService(serverService)

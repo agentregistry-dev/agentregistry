@@ -342,13 +342,12 @@ func (s *promptStore) GetLatestPrompt(ctx context.Context, promptName string) (*
 		return nil, err
 	}
 
-	executor := s.executor
 	query := `
         SELECT prompt_name, version, status, value, published_at, updated_at, is_latest
         FROM prompts
         WHERE prompt_name = $1 AND is_latest = true
     `
-	row := executor.QueryRow(ctx, query, promptName)
+	row := s.executor.QueryRow(ctx, query, promptName)
 	var name, version, status string
 	var publishedAt, updatedAt time.Time
 	var isLatest bool
@@ -388,10 +387,9 @@ func (s *promptStore) CountPromptVersions(ctx context.Context, promptName string
 		return 0, err
 	}
 
-	executor := s.executor
 	query := `SELECT COUNT(*) FROM prompts WHERE prompt_name = $1`
 	var count int
-	if err := executor.QueryRow(ctx, query, promptName).Scan(&count); err != nil {
+	if err := s.executor.QueryRow(ctx, query, promptName).Scan(&count); err != nil {
 		return 0, fmt.Errorf("failed to count prompt versions: %w", err)
 	}
 	return count, nil
@@ -409,10 +407,9 @@ func (s *promptStore) CheckPromptVersionExists(ctx context.Context, promptName, 
 		return false, err
 	}
 
-	executor := s.executor
 	query := `SELECT EXISTS(SELECT 1 FROM prompts WHERE prompt_name = $1 AND version = $2)`
 	var exists bool
-	if err := executor.QueryRow(ctx, query, promptName, version).Scan(&exists); err != nil {
+	if err := s.executor.QueryRow(ctx, query, promptName, version).Scan(&exists); err != nil {
 		return false, fmt.Errorf("failed to check prompt version existence: %w", err)
 	}
 	return exists, nil
@@ -430,9 +427,8 @@ func (s *promptStore) UnmarkPromptAsLatest(ctx context.Context, promptName strin
 		return err
 	}
 
-	executor := s.executor
 	query := `UPDATE prompts SET is_latest = false WHERE prompt_name = $1 AND is_latest = true`
-	if _, err := executor.Exec(ctx, query, promptName); err != nil {
+	if _, err := s.executor.Exec(ctx, query, promptName); err != nil {
 		return fmt.Errorf("failed to unmark latest prompt version: %w", err)
 	}
 	return nil
@@ -446,11 +442,9 @@ func (s *promptStore) DeletePrompt(ctx context.Context, promptName, version stri
 		return err
 	}
 
-	executor := s.executor
-
 	// Check if the version being deleted is the current latest.
 	var wasLatest bool
-	err := executor.QueryRow(ctx,
+	err := s.executor.QueryRow(ctx,
 		`SELECT is_latest FROM prompts WHERE prompt_name = $1 AND version = $2`,
 		promptName, version,
 	).Scan(&wasLatest)
@@ -463,7 +457,7 @@ func (s *promptStore) DeletePrompt(ctx context.Context, promptName, version stri
 
 	// Delete the requested version.
 	query := `DELETE FROM prompts WHERE prompt_name = $1 AND version = $2`
-	result, err := executor.Exec(ctx, query, promptName, version)
+	result, err := s.executor.Exec(ctx, query, promptName, version)
 	if err != nil {
 		return fmt.Errorf("failed to delete prompt: %w", err)
 	}
@@ -484,7 +478,7 @@ func (s *promptStore) DeletePrompt(ctx context.Context, promptName, version stri
 			    LIMIT 1
 			  )
 		`
-		if _, err := executor.Exec(ctx, promoteQuery, promptName); err != nil {
+		if _, err := s.executor.Exec(ctx, promoteQuery, promptName); err != nil {
 			return fmt.Errorf("failed to promote next latest prompt version: %w", err)
 		}
 	}

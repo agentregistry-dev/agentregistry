@@ -11,7 +11,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service/internal/embeddingutil"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service/internal/txutil"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service/internal/versionutil"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -86,13 +85,13 @@ func (s *registry) ListServers(ctx context.Context, filter *database.ServerFilte
 }
 
 func (s *registry) PublishServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
-	return txutil.RunT(ctx, s.tx, func(txCtx context.Context, scope database.Scope) (*apiv0.ServerResponse, error) {
+	return database.InTransactionT(ctx, s.tx, func(txCtx context.Context, scope database.Scope) (*apiv0.ServerResponse, error) {
 		return s.createServerInTransaction(txCtx, scope.Servers(), req)
 	})
 }
 
 func (s *registry) UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
-	return txutil.RunT(ctx, s.tx, func(txCtx context.Context, scope database.Scope) (*apiv0.ServerResponse, error) {
+	return database.InTransactionT(ctx, s.tx, func(txCtx context.Context, scope database.Scope) (*apiv0.ServerResponse, error) {
 		return s.updateServerInTransaction(txCtx, scope.Servers(), serverName, version, req, newStatus)
 	})
 }
@@ -105,7 +104,7 @@ func (s *registry) SetServerReadme(ctx context.Context, serverName, version stri
 		contentType = "text/markdown"
 	}
 
-	return txutil.Run(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
+	return database.InTransaction(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
 		servers := scope.Servers()
 		if _, err := servers.GetServerVersion(txCtx, serverName, version); err != nil {
 			return err
@@ -125,13 +124,13 @@ func (s *registry) SetServerReadme(ctx context.Context, serverName, version stri
 }
 
 func (s *registry) DeleteServer(ctx context.Context, serverName, version string) error {
-	return txutil.Run(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
+	return database.InTransaction(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
 		return scope.Servers().DeleteServer(txCtx, serverName, version)
 	})
 }
 
 func (s *registry) SetServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error {
-	return txutil.Run(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
+	return database.InTransaction(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
 		return scope.Servers().SetServerEmbedding(txCtx, serverName, version, embedding)
 	})
 }

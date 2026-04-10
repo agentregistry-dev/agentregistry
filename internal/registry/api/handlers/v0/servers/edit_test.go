@@ -40,7 +40,7 @@ func TestEditServerEndpoint(t *testing.T) {
 	}
 
 	// Create registry service and test data
-	storeDB := database.NewTestServiceDB(t)
+	storeDB := database.NewTestDB(t)
 	serverService := serversvc.New(serversvc.Dependencies{StoreDB: storeDB, Config: cfg})
 	deploymentService := deploymentsvc.New(deploymentsvc.Dependencies{StoreDB: storeDB})
 
@@ -451,7 +451,7 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 	}
 
 	// Create registry service
-	storeDB := database.NewTestServiceDB(t)
+	storeDB := database.NewTestDB(t)
 	serverService := serversvc.New(serversvc.Dependencies{StoreDB: storeDB, Config: cfg})
 	deploymentService := deploymentsvc.New(deploymentsvc.Dependencies{StoreDB: storeDB})
 

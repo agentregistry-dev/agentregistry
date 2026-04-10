@@ -26,7 +26,6 @@ type serverStore struct {
 
 var _ database.ServerStore = (*serverStore)(nil)
 
-// ListServers returns paginated servers with filtering.
 func (s *serverStore) ListServers(
 	ctx context.Context,
 	filter *database.ServerFilter,
@@ -205,7 +204,6 @@ func (s *serverStore) ListServers(
 	return results, nextCursor, nil
 }
 
-// GetServer retrieves the latest version of a server by server name.
 func (s *serverStore) GetServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -259,7 +257,6 @@ func (s *serverStore) GetServer(ctx context.Context, serverName string) (*apiv0.
 	return serverResponse, nil
 }
 
-// GetServerVersion retrieves a specific version of a server by server name and version.
 func (s *serverStore) GetServerVersion(ctx context.Context, serverName string, version string) (*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -313,7 +310,6 @@ func (s *serverStore) GetServerVersion(ctx context.Context, serverName string, v
 	return serverResponse, nil
 }
 
-// GetServerVersions retrieves all versions of a server by server name.
 func (s *serverStore) GetServerVersions(ctx context.Context, serverName string) ([]*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -382,7 +378,6 @@ func (s *serverStore) GetServerVersions(ctx context.Context, serverName string) 
 	return results, nil
 }
 
-// CreateServer inserts a new server version with official metadata.
 func (s *serverStore) CreateServer(ctx context.Context, serverJSON *apiv0.ServerJSON, officialMeta *apiv0.RegistryExtensions) (*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -437,7 +432,6 @@ func (s *serverStore) CreateServer(ctx context.Context, serverJSON *apiv0.Server
 	return serverResponse, nil
 }
 
-// UpdateServer updates an existing server record with new server details.
 func (s *serverStore) UpdateServer(ctx context.Context, serverName, version string, serverJSON *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -497,7 +491,6 @@ func (s *serverStore) UpdateServer(ctx context.Context, serverName, version stri
 	return serverResponse, nil
 }
 
-// SetServerStatus updates the status of a specific server version.
 func (s *serverStore) SetServerStatus(ctx context.Context, serverName, version string, status string) (*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -550,7 +543,6 @@ func (s *serverStore) SetServerStatus(ctx context.Context, serverName, version s
 	return serverResponse, nil
 }
 
-// GetLatestServer retrieves the current latest version of a server by server name.
 func (s *serverStore) GetLatestServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -563,15 +555,13 @@ func (s *serverStore) GetLatestServer(ctx context.Context, serverName string) (*
 		return nil, err
 	}
 
-	executor := s.executor
-
 	query := `
 		SELECT server_name, version, status, value, published_at, updated_at, is_latest
 		FROM servers
 		WHERE server_name = $1 AND is_latest = true
 	`
 
-	row := executor.QueryRow(ctx, query, serverName)
+	row := s.executor.QueryRow(ctx, query, serverName)
 
 	var name, version, status string
 	var isLatest bool
@@ -605,7 +595,6 @@ func (s *serverStore) GetLatestServer(ctx context.Context, serverName string) (*
 	return serverResponse, nil
 }
 
-// CountServerVersions counts the number of versions for a server.
 func (s *serverStore) CountServerVersions(ctx context.Context, serverName string) (int, error) {
 	if ctx.Err() != nil {
 		return 0, ctx.Err()
@@ -618,12 +607,10 @@ func (s *serverStore) CountServerVersions(ctx context.Context, serverName string
 		return 0, err
 	}
 
-	executor := s.executor
-
 	query := `SELECT COUNT(*) FROM servers WHERE server_name = $1`
 
 	var count int
-	err := executor.QueryRow(ctx, query, serverName).Scan(&count)
+	err := s.executor.QueryRow(ctx, query, serverName).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count server versions: %w", err)
 	}
@@ -631,7 +618,6 @@ func (s *serverStore) CountServerVersions(ctx context.Context, serverName string
 	return count, nil
 }
 
-// CheckVersionExists checks if a specific version exists for a server.
 func (s *serverStore) CheckVersionExists(ctx context.Context, serverName, version string) (bool, error) {
 	if ctx.Err() != nil {
 		return false, ctx.Err()
@@ -644,12 +630,10 @@ func (s *serverStore) CheckVersionExists(ctx context.Context, serverName, versio
 		return false, err
 	}
 
-	executor := s.executor
-
 	query := `SELECT EXISTS(SELECT 1 FROM servers WHERE server_name = $1 AND version = $2)`
 
 	var exists bool
-	err := executor.QueryRow(ctx, query, serverName, version).Scan(&exists)
+	err := s.executor.QueryRow(ctx, query, serverName, version).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("failed to check version existence: %w", err)
 	}
@@ -657,7 +641,6 @@ func (s *serverStore) CheckVersionExists(ctx context.Context, serverName, versio
 	return exists, nil
 }
 
-// UnmarkAsLatest marks the current latest version of a server as no longer latest.
 func (s *serverStore) UnmarkAsLatest(ctx context.Context, serverName string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -670,11 +653,9 @@ func (s *serverStore) UnmarkAsLatest(ctx context.Context, serverName string) err
 		return err
 	}
 
-	executor := s.executor
-
 	query := `UPDATE servers SET is_latest = false WHERE server_name = $1 AND is_latest = true`
 
-	_, err := executor.Exec(ctx, query, serverName)
+	_, err := s.executor.Exec(ctx, query, serverName)
 	if err != nil {
 		return fmt.Errorf("failed to unmark latest version: %w", err)
 	}
@@ -682,7 +663,7 @@ func (s *serverStore) UnmarkAsLatest(ctx context.Context, serverName string) err
 	return nil
 }
 
-// AcquireServerCreateLock acquires a transaction-scoped advisory lock for server creation.
+// Acquires a transaction-scoped advisory lock to serialize concurrent creates.
 func (s *serverStore) AcquireServerCreateLock(ctx context.Context, serverName string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -698,7 +679,6 @@ func (s *serverStore) AcquireServerCreateLock(ctx context.Context, serverName st
 	return nil
 }
 
-// DeleteServer permanently removes a server version from the database.
 func (s *serverStore) DeleteServer(ctx context.Context, serverName, version string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -711,10 +691,8 @@ func (s *serverStore) DeleteServer(ctx context.Context, serverName, version stri
 		return err
 	}
 
-	executor := s.executor
-
 	var wasLatest bool
-	err := executor.QueryRow(ctx,
+	err := s.executor.QueryRow(ctx,
 		`SELECT is_latest FROM servers WHERE server_name = $1 AND version = $2`,
 		serverName, version,
 	).Scan(&wasLatest)
@@ -726,7 +704,7 @@ func (s *serverStore) DeleteServer(ctx context.Context, serverName, version stri
 	}
 
 	query := `DELETE FROM servers WHERE server_name = $1 AND version = $2`
-	result, err := executor.Exec(ctx, query, serverName, version)
+	result, err := s.executor.Exec(ctx, query, serverName, version)
 	if err != nil {
 		return fmt.Errorf("failed to delete server: %w", err)
 	}
@@ -745,7 +723,7 @@ func (s *serverStore) DeleteServer(ctx context.Context, serverName, version stri
 			    LIMIT 1
 			  )
 		`
-		if _, err := executor.Exec(ctx, promoteQuery, serverName); err != nil {
+		if _, err := s.executor.Exec(ctx, promoteQuery, serverName); err != nil {
 			return fmt.Errorf("failed to promote next latest server version: %w", err)
 		}
 	}
@@ -753,7 +731,6 @@ func (s *serverStore) DeleteServer(ctx context.Context, serverName, version stri
 	return nil
 }
 
-// SetServerEmbedding stores semantic embedding metadata for a server version.
 func (s *serverStore) SetServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -765,8 +742,6 @@ func (s *serverStore) SetServerEmbedding(ctx context.Context, serverName, versio
 	}); err != nil {
 		return err
 	}
-
-	executor := s.executor
 
 	var (
 		query string
@@ -812,7 +787,7 @@ func (s *serverStore) SetServerEmbedding(ctx context.Context, serverName, versio
 		}
 	}
 
-	result, err := executor.Exec(ctx, query, args...)
+	result, err := s.executor.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to update server embedding: %w", err)
 	}
@@ -822,7 +797,7 @@ func (s *serverStore) SetServerEmbedding(ctx context.Context, serverName, versio
 	return nil
 }
 
-// GetServerEmbeddingMetadata retrieves embedding metadata for a server version without loading the vector.
+// Returns metadata only, not the vector payload.
 func (s *serverStore) GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -835,7 +810,6 @@ func (s *serverStore) GetServerEmbeddingMetadata(ctx context.Context, serverName
 		return nil, err
 	}
 
-	executor := s.executor
 	query := `
 		SELECT
 			semantic_embedding IS NOT NULL AS has_embedding,
@@ -858,7 +832,7 @@ func (s *serverStore) GetServerEmbeddingMetadata(ctx context.Context, serverName
 		generatedAt  sql.NullTime
 	)
 
-	err := executor.QueryRow(ctx, query, serverName, version).Scan(
+	err := s.executor.QueryRow(ctx, query, serverName, version).Scan(
 		&hasEmbedding,
 		&provider,
 		&model,
@@ -927,7 +901,6 @@ func (s *serverStore) UpsertServerReadme(ctx context.Context, readme *database.S
 		readme.FetchedAt = time.Now()
 	}
 
-	executor := s.executor
 	query := `
         INSERT INTO server_readmes (server_name, version, content, content_type, size_bytes, sha256, fetched_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -939,7 +912,7 @@ func (s *serverStore) UpsertServerReadme(ctx context.Context, readme *database.S
             fetched_at = EXCLUDED.fetched_at
     `
 
-	if _, err := executor.Exec(ctx, query,
+	if _, err := s.executor.Exec(ctx, query,
 		readme.ServerName,
 		readme.Version,
 		readme.Content,
@@ -966,7 +939,6 @@ func (s *serverStore) GetServerReadme(ctx context.Context, serverName, version s
 		return nil, err
 	}
 
-	executor := s.executor
 	query := `
         SELECT server_name, version, content, content_type, size_bytes, sha256, fetched_at
         FROM server_readmes
@@ -974,7 +946,7 @@ func (s *serverStore) GetServerReadme(ctx context.Context, serverName, version s
         LIMIT 1
     `
 
-	row := executor.QueryRow(ctx, query, serverName, version)
+	row := s.executor.QueryRow(ctx, query, serverName, version)
 	return scanServerReadme(row)
 }
 
@@ -990,7 +962,6 @@ func (s *serverStore) GetLatestServerReadme(ctx context.Context, serverName stri
 		return nil, err
 	}
 
-	executor := s.executor
 	query := `
         SELECT sr.server_name, sr.version, sr.content, sr.content_type, sr.size_bytes, sr.sha256, sr.fetched_at
         FROM server_readmes sr
@@ -999,7 +970,7 @@ func (s *serverStore) GetLatestServerReadme(ctx context.Context, serverName stri
         LIMIT 1
     `
 
-	row := executor.QueryRow(ctx, query, serverName)
+	row := s.executor.QueryRow(ctx, query, serverName)
 	return scanServerReadme(row)
 }
 

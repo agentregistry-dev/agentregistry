@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service/internal/txutil"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service/internal/versionutil"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -56,13 +55,13 @@ func (s *registry) ListPrompts(ctx context.Context, filter *database.PromptFilte
 }
 
 func (s *registry) PublishPrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error) {
-	return txutil.RunT(ctx, s.tx, func(txCtx context.Context, scope database.Scope) (*models.PromptResponse, error) {
+	return database.InTransactionT(ctx, s.tx, func(txCtx context.Context, scope database.Scope) (*models.PromptResponse, error) {
 		return s.createPromptInTransaction(txCtx, scope.Prompts(), req)
 	})
 }
 
 func (s *registry) DeletePrompt(ctx context.Context, promptName, version string) error {
-	return txutil.Run(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
+	return database.InTransaction(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
 		return scope.Prompts().DeletePrompt(txCtx, promptName, version)
 	})
 }

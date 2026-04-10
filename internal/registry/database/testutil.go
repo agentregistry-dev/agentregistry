@@ -211,9 +211,3 @@ func NewTestDB(t *testing.T, opts ...testDBOption) regdb.Store {
 
 	return db
 }
-
-// NewTestServiceDB returns a test store.
-func NewTestServiceDB(t *testing.T, opts ...testDBOption) regdb.Store {
-	t.Helper()
-	return NewTestDB(t, opts...)
-}

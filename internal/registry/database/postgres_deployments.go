@@ -21,9 +21,7 @@ type deploymentStore struct {
 
 var _ database.DeploymentStore = (*deploymentStore)(nil)
 
-// CreateDeployment creates a new deployment record
 func (s *deploymentStore) CreateDeployment(ctx context.Context, deployment *models.Deployment) error {
-	// Authz check (determine resource type)
 	artifactType := auth.PermissionArtifactTypeServer
 	if deployment.ResourceType == "agent" {
 		artifactType = auth.PermissionArtifactTypeAgent
@@ -34,8 +32,6 @@ func (s *deploymentStore) CreateDeployment(ctx context.Context, deployment *mode
 	}); err != nil {
 		return err
 	}
-
-	executor := s.executor
 
 	envJSON, err := json.Marshal(deployment.Env)
 	if err != nil {
@@ -78,7 +74,7 @@ func (s *deploymentStore) CreateDeployment(ctx context.Context, deployment *mode
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, ''), $10, $11, $12)
 	`
 
-	_, err = executor.Exec(ctx, query,
+	_, err = s.executor.Exec(ctx, query,
 		deployment.ID,
 		deployment.ServerName,
 		deployment.Version,
@@ -103,10 +99,7 @@ func (s *deploymentStore) CreateDeployment(ctx context.Context, deployment *mode
 	return nil
 }
 
-// ListDeployments retrieves all deployed servers
 func (s *deploymentStore) ListDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
-	executor := s.executor
-
 	where, args, needsProviderJoin := buildDeploymentFilters(filter)
 
 	query := `SELECT
@@ -121,7 +114,7 @@ func (s *deploymentStore) ListDeployments(ctx context.Context, filter *models.De
 	}
 	query += " ORDER BY d.deployed_at DESC"
 
-	rows, err := executor.Query(ctx, query, args...)
+	rows, err := s.executor.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query deployments: %w", err)
 	}
@@ -223,9 +216,7 @@ func buildDeploymentFilters(filter *models.DeploymentFilter) ([]string, []any, b
 	return where, args, needsProviderJoin
 }
 
-// GetDeployment retrieves a specific deployment by UUID.
 func (s *deploymentStore) GetDeployment(ctx context.Context, id string) (*models.Deployment, error) {
-	executor := s.executor
 	query := `SELECT
 			id, server_name, version, deployed_at, updated_at, status, config, prefer_remote, resource_type,
 			origin, COALESCE(provider_id, ''), COALESCE(provider_config, '{}'::jsonb), COALESCE(provider_metadata, '{}'::jsonb), COALESCE(error, '')
@@ -236,7 +227,7 @@ func (s *deploymentStore) GetDeployment(ctx context.Context, id string) (*models
 	var envJSON []byte
 	var providerConfigJSON []byte
 	var providerMetadataJSON []byte
-	err := executor.QueryRow(ctx, query, id).Scan(
+	err := s.executor.QueryRow(ctx, query, id).Scan(
 		&d.ID,
 		&d.ServerName,
 		&d.Version,
@@ -285,7 +276,6 @@ func (s *deploymentStore) GetDeployment(ctx context.Context, id string) (*models
 	return &d, nil
 }
 
-// UpdateDeploymentState applies partial state updates to a deployment by ID.
 func (s *deploymentStore) UpdateDeploymentState(ctx context.Context, id string, patch *models.DeploymentStatePatch) error {
 	if patch == nil {
 		return fmt.Errorf("%w: deployment state patch is required", database.ErrInvalidInput)
@@ -306,7 +296,6 @@ func (s *deploymentStore) UpdateDeploymentState(ctx context.Context, id string, 
 		return err
 	}
 
-	executor := s.executor
 	setStatus := patch.Status != nil
 	statusValue := deployment.Status
 	if patch.Status != nil {
@@ -348,7 +337,7 @@ func (s *deploymentStore) UpdateDeploymentState(ctx context.Context, id string, 
 		WHERE id = $1
 	`
 
-	result, err := executor.Exec(
+	result, err := s.executor.Exec(
 		ctx,
 		query,
 		id,
@@ -372,7 +361,6 @@ func (s *deploymentStore) UpdateDeploymentState(ctx context.Context, id string, 
 	return nil
 }
 
-// DeleteDeployment removes a deployment by UUID.
 func (s *deploymentStore) DeleteDeployment(ctx context.Context, id string) error {
 	deployment, err := s.GetDeployment(ctx, id)
 	if err != nil {
@@ -389,10 +377,9 @@ func (s *deploymentStore) DeleteDeployment(ctx context.Context, id string) error
 		return err
 	}
 
-	executor := s.executor
 	query := `DELETE FROM deployments WHERE id = $1`
 
-	result, err := executor.Exec(ctx, query, id)
+	result, err := s.executor.Exec(ctx, query, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete deployment by id: %w", err)
 	}

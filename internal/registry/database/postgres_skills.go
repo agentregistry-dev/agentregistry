@@ -21,7 +21,6 @@ type skillStore struct {
 
 var _ database.SkillStore = (*skillStore)(nil)
 
-// ListSkills returns paginated skills with filtering
 func (s *skillStore) ListSkills(ctx context.Context, filter *database.SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error) {
 	if limit <= 0 {
 		limit = 10
@@ -443,13 +442,12 @@ func (s *skillStore) GetLatestSkill(ctx context.Context, skillName string) (*mod
 		return nil, err
 	}
 
-	executor := s.executor
 	query := `
         SELECT skill_name, version, status, value, published_at, updated_at, is_latest
         FROM skills
         WHERE skill_name = $1 AND is_latest = true
     `
-	row := executor.QueryRow(ctx, query, skillName)
+	row := s.executor.QueryRow(ctx, query, skillName)
 	var name, version, status string
 	var publishedAt, updatedAt time.Time
 	var isLatest bool
@@ -489,10 +487,9 @@ func (s *skillStore) CountSkillVersions(ctx context.Context, skillName string) (
 		return 0, err
 	}
 
-	executor := s.executor
 	query := `SELECT COUNT(*) FROM skills WHERE skill_name = $1`
 	var count int
-	if err := executor.QueryRow(ctx, query, skillName).Scan(&count); err != nil {
+	if err := s.executor.QueryRow(ctx, query, skillName).Scan(&count); err != nil {
 		return 0, fmt.Errorf("failed to count skill versions: %w", err)
 	}
 	return count, nil
@@ -510,10 +507,9 @@ func (s *skillStore) CheckSkillVersionExists(ctx context.Context, skillName, ver
 		return false, err
 	}
 
-	executor := s.executor
 	query := `SELECT EXISTS(SELECT 1 FROM skills WHERE skill_name = $1 AND version = $2)`
 	var exists bool
-	if err := executor.QueryRow(ctx, query, skillName, version).Scan(&exists); err != nil {
+	if err := s.executor.QueryRow(ctx, query, skillName, version).Scan(&exists); err != nil {
 		return false, fmt.Errorf("failed to check skill version existence: %w", err)
 	}
 	return exists, nil
@@ -533,15 +529,13 @@ func (s *skillStore) UnmarkSkillAsLatest(ctx context.Context, skillName string) 
 		return err
 	}
 
-	executor := s.executor
 	query := `UPDATE skills SET is_latest = false WHERE skill_name = $1 AND is_latest = true`
-	if _, err := executor.Exec(ctx, query, skillName); err != nil {
+	if _, err := s.executor.Exec(ctx, query, skillName); err != nil {
 		return fmt.Errorf("failed to unmark latest skill version: %w", err)
 	}
 	return nil
 }
 
-// DeleteSkill permanently removes a skill version from the database.
 func (s *skillStore) DeleteSkill(ctx context.Context, skillName, version string) error {
 	if err := s.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
 		Name: skillName,
@@ -550,11 +544,9 @@ func (s *skillStore) DeleteSkill(ctx context.Context, skillName, version string)
 		return err
 	}
 
-	executor := s.executor
-
 	// Check if the version being deleted is the current latest.
 	var wasLatest bool
-	err := executor.QueryRow(ctx,
+	err := s.executor.QueryRow(ctx,
 		`SELECT is_latest FROM skills WHERE skill_name = $1 AND version = $2`,
 		skillName, version,
 	).Scan(&wasLatest)
@@ -566,7 +558,7 @@ func (s *skillStore) DeleteSkill(ctx context.Context, skillName, version string)
 	}
 
 	query := `DELETE FROM skills WHERE skill_name = $1 AND version = $2`
-	result, err := executor.Exec(ctx, query, skillName, version)
+	result, err := s.executor.Exec(ctx, query, skillName, version)
 	if err != nil {
 		return fmt.Errorf("failed to delete skill: %w", err)
 	}
@@ -585,7 +577,7 @@ func (s *skillStore) DeleteSkill(ctx context.Context, skillName, version string)
 			    LIMIT 1
 			  )
 		`
-		if _, err := executor.Exec(ctx, promoteQuery, skillName); err != nil {
+		if _, err := s.executor.Exec(ctx, promoteQuery, skillName); err != nil {
 			return fmt.Errorf("failed to promote next latest skill version: %w", err)
 		}
 	}

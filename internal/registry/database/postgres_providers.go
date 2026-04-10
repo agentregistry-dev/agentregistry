@@ -11,16 +11,16 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
 type providerStore struct {
-	executor executor
+	repositoryBase
 }
 
 var _ database.ProviderStore = (*providerStore)(nil)
 
-// CreateProvider creates a provider record.
 func (s *providerStore) CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error) {
 	if in == nil {
 		return nil, database.ErrInvalidInput
@@ -28,7 +28,12 @@ func (s *providerStore) CreateProvider(ctx context.Context, in *models.CreatePro
 	if strings.TrimSpace(in.ID) == "" || strings.TrimSpace(in.Name) == "" || strings.TrimSpace(in.Platform) == "" {
 		return nil, database.ErrInvalidInput
 	}
-	executor := s.executor
+	if err := s.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
+		Name: in.ID,
+		Type: auth.PermissionArtifactTypeProvider,
+	}); err != nil {
+		return nil, err
+	}
 	configJSON, err := json.Marshal(in.Config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal provider config: %w", err)
@@ -40,7 +45,7 @@ func (s *providerStore) CreateProvider(ctx context.Context, in *models.CreatePro
 	`
 	var provider models.Provider
 	var configOut []byte
-	err = executor.QueryRow(ctx, query, in.ID, in.Name, in.Platform, configJSON).Scan(
+	err = s.executor.QueryRow(ctx, query, in.ID, in.Name, in.Platform, configJSON).Scan(
 		&provider.ID,
 		&provider.Name,
 		&provider.Platform,
@@ -66,9 +71,12 @@ func (s *providerStore) CreateProvider(ctx context.Context, in *models.CreatePro
 	return &provider, nil
 }
 
-// ListProviders lists providers, optionally filtered by platform.
 func (s *providerStore) ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error) {
-	executor := s.executor
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Type: auth.PermissionArtifactTypeProvider,
+	}); err != nil {
+		return nil, err
+	}
 	query := `SELECT id, name, platform, COALESCE(config, '{}'::jsonb), created_at, updated_at FROM providers`
 	args := []any{}
 	if platform != nil && strings.TrimSpace(*platform) != "" {
@@ -76,7 +84,7 @@ func (s *providerStore) ListProviders(ctx context.Context, platform *string) ([]
 		args = append(args, strings.TrimSpace(*platform))
 	}
 	query += ` ORDER BY created_at ASC`
-	rows, err := executor.Query(ctx, query, args...)
+	rows, err := s.executor.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list providers: %w", err)
 	}
@@ -104,13 +112,17 @@ func (s *providerStore) ListProviders(ctx context.Context, platform *string) ([]
 	return out, nil
 }
 
-// GetProvider gets a provider by ID.
 func (s *providerStore) GetProvider(ctx context.Context, providerID string) (*models.Provider, error) {
-	executor := s.executor
+	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: providerID,
+		Type: auth.PermissionArtifactTypeProvider,
+	}); err != nil {
+		return nil, err
+	}
 	query := `SELECT id, name, platform, COALESCE(config, '{}'::jsonb), created_at, updated_at FROM providers WHERE id = $1`
 	var p models.Provider
 	var configJSON []byte
-	if err := executor.QueryRow(ctx, query, providerID).Scan(&p.ID, &p.Name, &p.Platform, &configJSON, &p.CreatedAt, &p.UpdatedAt); err != nil {
+	if err := s.executor.QueryRow(ctx, query, providerID).Scan(&p.ID, &p.Name, &p.Platform, &configJSON, &p.CreatedAt, &p.UpdatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, database.ErrNotFound
 		}
@@ -127,8 +139,13 @@ func (s *providerStore) GetProvider(ctx context.Context, providerID string) (*mo
 	return &p, nil
 }
 
-// UpdateProvider updates mutable provider fields.
 func (s *providerStore) UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error) {
+	if err := s.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
+		Name: providerID,
+		Type: auth.PermissionArtifactTypeProvider,
+	}); err != nil {
+		return nil, err
+	}
 	if in == nil {
 		return s.GetProvider(ctx, providerID)
 	}
@@ -148,7 +165,6 @@ func (s *providerStore) UpdateProvider(ctx context.Context, providerID string, i
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal provider config: %w", err)
 	}
-	executor := s.executor
 	query := `
 		UPDATE providers
 		SET name = $2, config = $3, updated_at = NOW()
@@ -157,7 +173,7 @@ func (s *providerStore) UpdateProvider(ctx context.Context, providerID string, i
 	`
 	var p models.Provider
 	var configOut []byte
-	if err := executor.QueryRow(ctx, query, providerID, name, configJSON).Scan(&p.ID, &p.Name, &p.Platform, &configOut, &p.CreatedAt, &p.UpdatedAt); err != nil {
+	if err := s.executor.QueryRow(ctx, query, providerID, name, configJSON).Scan(&p.ID, &p.Name, &p.Platform, &configOut, &p.CreatedAt, &p.UpdatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, database.ErrNotFound
 		}
@@ -174,10 +190,14 @@ func (s *providerStore) UpdateProvider(ctx context.Context, providerID string, i
 	return &p, nil
 }
 
-// DeleteProvider removes a provider by ID.
 func (s *providerStore) DeleteProvider(ctx context.Context, providerID string) error {
-	executor := s.executor
-	result, err := executor.Exec(ctx, `DELETE FROM providers WHERE id = $1`, providerID)
+	if err := s.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
+		Name: providerID,
+		Type: auth.PermissionArtifactTypeProvider,
+	}); err != nil {
+		return err
+	}
+	result, err := s.executor.Exec(ctx, `DELETE FROM providers WHERE id = $1`, providerID)
 	if err != nil {
 		return fmt.Errorf("failed to delete provider: %w", err)
 	}

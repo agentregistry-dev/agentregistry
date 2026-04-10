@@ -12,7 +12,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service/internal/embeddingutil"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service/internal/txutil"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service/internal/versionutil"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
@@ -97,19 +96,19 @@ func (s *registry) ListAgents(ctx context.Context, filter *database.AgentFilter,
 }
 
 func (s *registry) PublishAgent(ctx context.Context, req *models.AgentJSON) (*models.AgentResponse, error) {
-	return txutil.RunT(ctx, s.tx, func(txCtx context.Context, scope database.Scope) (*models.AgentResponse, error) {
+	return database.InTransactionT(ctx, s.tx, func(txCtx context.Context, scope database.Scope) (*models.AgentResponse, error) {
 		return s.createAgentInTransaction(txCtx, scope.Agents(), req)
 	})
 }
 
 func (s *registry) DeleteAgent(ctx context.Context, agentName, version string) error {
-	return txutil.Run(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
+	return database.InTransaction(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
 		return scope.Agents().DeleteAgent(txCtx, agentName, version)
 	})
 }
 
 func (s *registry) SetAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error {
-	return txutil.Run(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
+	return database.InTransaction(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
 		return scope.Agents().SetAgentEmbedding(txCtx, agentName, version, embedding)
 	})
 }

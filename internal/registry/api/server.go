@@ -128,7 +128,6 @@ func TrailingSlashMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// Server represents the HTTP server
 type Server struct {
 	config  *config.Config
 	humaAPI huma.API
@@ -136,18 +135,15 @@ type Server struct {
 	server  *http.Server
 }
 
-// HumaAPI returns the Huma API instance, allowing registration of new routes
 func (s *Server) HumaAPI() huma.API {
 	return s.humaAPI
 }
 
-// Mux returns the HTTP ServeMux, allowing registration of custom HTTP handlers
 func (s *Server) Mux() *http.ServeMux {
 	return s.mux
 }
 
-// NewServer creates a new HTTP server
-// Note: AuthZ is handled at the DB/service layer, not at the API layer.
+// AuthZ is handled at the DB/service layer, not at the API layer.
 func NewServer(
 	cfg *config.Config,
 	svcs router.RegistryServices,
@@ -211,7 +207,6 @@ func NewServer(
 	return server
 }
 
-// Start begins listening for incoming HTTP requests
 func (s *Server) Start() error {
 	slog.Info("HTTP server starting", "address", s.config.ServerAddress)
 	slog.Info("web UI available", "url", fmt.Sprintf("http://localhost%s/", s.config.ServerAddress))
@@ -219,7 +214,6 @@ func (s *Server) Start() error {
 	return s.server.ListenAndServe()
 }
 
-// Shutdown gracefully shuts down the server
 func (s *Server) Shutdown(ctx context.Context) error {
 	return s.server.Shutdown(ctx)
 }

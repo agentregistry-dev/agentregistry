@@ -18,8 +18,9 @@ import (
 // PostgreSQL is the root PostgreSQL-backed store. It owns the pool, authz, and
 // transaction orchestration, while domain-specific repository structs own CRUD.
 type PostgreSQL struct {
-	pool  *pgxpool.Pool
-	authz auth.Authorizer
+	pool      *pgxpool.Pool
+	authz     auth.Authorizer
+	rootScope *postgresScope
 }
 
 type repositoryBase struct {
@@ -50,7 +51,7 @@ func newPostgresScope(executor executor, authz auth.Authorizer, tx pgx.Tx) *post
 	base := repositoryBase{executor: executor, authz: authz}
 	return &postgresScope{
 		servers:     &serverStore{repositoryBase: base, tx: tx},
-		providers:   &providerStore{executor: executor},
+		providers:   &providerStore{repositoryBase: base},
 		agents:      &agentStore{repositoryBase: base},
 		skills:      &skillStore{repositoryBase: base},
 		prompts:     &promptStore{repositoryBase: base},
@@ -82,7 +83,6 @@ func (s *postgresScope) Deployments() database.DeploymentStore {
 	return s.deployments
 }
 
-// NewPostgreSQL creates a new instance of the PostgreSQL database
 func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authorizer, vectorEnabled bool) (*PostgreSQL, error) {
 	// Parse connection config for pool settings
 	config, err := pgxpool.ParseConfig(connectionURI)
@@ -126,38 +126,20 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 		}
 	}
 
-	return &PostgreSQL{pool: pool, authz: authz}, nil
+	db := &PostgreSQL{pool: pool, authz: authz}
+	db.rootScope = newPostgresScope(pool, authz, nil)
+	return db, nil
 }
 
-func (db *PostgreSQL) scope() *postgresScope {
-	return newPostgresScope(db.pool, db.authz, nil)
-}
-
-func (db *PostgreSQL) Servers() database.ServerStore {
-	return db.scope().Servers()
-}
-
-func (db *PostgreSQL) Providers() database.ProviderStore {
-	return db.scope().Providers()
-}
-
-func (db *PostgreSQL) Agents() database.AgentStore {
-	return db.scope().Agents()
-}
-
-func (db *PostgreSQL) Skills() database.SkillStore {
-	return db.scope().Skills()
-}
-
-func (db *PostgreSQL) Prompts() database.PromptStore {
-	return db.scope().Prompts()
-}
-
+func (db *PostgreSQL) Servers() database.ServerStore     { return db.rootScope.servers }
+func (db *PostgreSQL) Providers() database.ProviderStore { return db.rootScope.providers }
+func (db *PostgreSQL) Agents() database.AgentStore       { return db.rootScope.agents }
+func (db *PostgreSQL) Skills() database.SkillStore       { return db.rootScope.skills }
+func (db *PostgreSQL) Prompts() database.PromptStore     { return db.rootScope.prompts }
 func (db *PostgreSQL) Deployments() database.DeploymentStore {
-	return db.scope().Deployments()
+	return db.rootScope.deployments
 }
 
-// InTransaction executes a function within a database transaction
 func (db *PostgreSQL) InTransaction(ctx context.Context, fn func(ctx context.Context, scope database.Scope) error) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -188,7 +170,6 @@ func (db *PostgreSQL) InTransaction(ctx context.Context, fn func(ctx context.Con
 	return nil
 }
 
-// Close closes the database connection
 func (db *PostgreSQL) Close() error {
 	db.pool.Close()
 	return nil

@@ -38,7 +38,7 @@ func TestCORSHeaders(t *testing.T) {
 	cfg.JWTPrivateKey = hex.EncodeToString(testSeed)
 
 	// Create test services
-	db := database.NewTestServiceDB(t)
+	db := database.NewTestDB(t)
 	serverService := serversvc.New(serversvc.Dependencies{StoreDB: db, Config: cfg})
 	agentService := agentsvc.New(agentsvc.Dependencies{StoreDB: db, Config: cfg})
 	skillService := skillsvc.New(skillsvc.Dependencies{StoreDB: db})
@@ -164,7 +164,7 @@ func TestCORSHeaderValues(t *testing.T) {
 	cfg.JWTPrivateKey = hex.EncodeToString(testSeed)
 
 	// Create test services
-	db := database.NewTestServiceDB(t)
+	db := database.NewTestDB(t)
 	serverService := serversvc.New(serversvc.Dependencies{StoreDB: db, Config: cfg})
 	agentService := agentsvc.New(agentsvc.Dependencies{StoreDB: db, Config: cfg})
 	skillService := skillsvc.New(skillsvc.Dependencies{StoreDB: db})

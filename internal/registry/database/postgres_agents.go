@@ -23,7 +23,6 @@ type agentStore struct {
 
 var _ database.AgentStore = (*agentStore)(nil)
 
-// ListAgents returns paginated agents with filtering
 func (s *agentStore) ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
 	if limit <= 0 {
 		limit = 10
@@ -201,7 +200,6 @@ func (s *agentStore) GetAgent(ctx context.Context, agentName string) (*models.Ag
 		return nil, ctx.Err()
 	}
 
-	// Authz check
 	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: agentName,
 		Type: auth.PermissionArtifactTypeAgent,
@@ -248,7 +246,6 @@ func (s *agentStore) GetAgentVersion(ctx context.Context, agentName, version str
 		return nil, ctx.Err()
 	}
 
-	// Authz check
 	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
 		Name: agentName,
 		Type: auth.PermissionArtifactTypeAgent,
@@ -498,13 +495,12 @@ func (s *agentStore) GetLatestAgent(ctx context.Context, agentName string) (*mod
 		return nil, err
 	}
 
-	executor := s.executor
 	query := `
 		SELECT agent_name, version, status, value, published_at, updated_at, is_latest
 		FROM agents
 		WHERE agent_name = $1 AND is_latest = true
 	`
-	row := executor.QueryRow(ctx, query, agentName)
+	row := s.executor.QueryRow(ctx, query, agentName)
 	var name, version, status string
 	var publishedAt, updatedAt time.Time
 	var isLatest bool
@@ -544,10 +540,9 @@ func (s *agentStore) CountAgentVersions(ctx context.Context, agentName string) (
 		return 0, err
 	}
 
-	executor := s.executor
 	query := `SELECT COUNT(*) FROM agents WHERE agent_name = $1`
 	var count int
-	if err := executor.QueryRow(ctx, query, agentName).Scan(&count); err != nil {
+	if err := s.executor.QueryRow(ctx, query, agentName).Scan(&count); err != nil {
 		return 0, fmt.Errorf("failed to count agent versions: %w", err)
 	}
 	return count, nil
@@ -565,10 +560,9 @@ func (s *agentStore) CheckAgentVersionExists(ctx context.Context, agentName, ver
 		return false, err
 	}
 
-	executor := s.executor
 	query := `SELECT EXISTS(SELECT 1 FROM agents WHERE agent_name = $1 AND version = $2)`
 	var exists bool
-	if err := executor.QueryRow(ctx, query, agentName, version).Scan(&exists); err != nil {
+	if err := s.executor.QueryRow(ctx, query, agentName, version).Scan(&exists); err != nil {
 		return false, fmt.Errorf("failed to check agent version existence: %w", err)
 	}
 	return exists, nil
@@ -588,15 +582,13 @@ func (s *agentStore) UnmarkAgentAsLatest(ctx context.Context, agentName string) 
 		return err
 	}
 
-	executor := s.executor
 	query := `UPDATE agents SET is_latest = false WHERE agent_name = $1 AND is_latest = true`
-	if _, err := executor.Exec(ctx, query, agentName); err != nil {
+	if _, err := s.executor.Exec(ctx, query, agentName); err != nil {
 		return fmt.Errorf("failed to unmark latest agent version: %w", err)
 	}
 	return nil
 }
 
-// SetAgentEmbedding stores semantic embedding metadata for an agent version.
 func (s *agentStore) SetAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -608,8 +600,6 @@ func (s *agentStore) SetAgentEmbedding(ctx context.Context, agentName, version s
 	}); err != nil {
 		return err
 	}
-
-	executor := s.executor
 
 	var (
 		query string
@@ -655,7 +645,7 @@ func (s *agentStore) SetAgentEmbedding(ctx context.Context, agentName, version s
 		}
 	}
 
-	result, err := executor.Exec(ctx, query, args...)
+	result, err := s.executor.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to update agent embedding: %w", err)
 	}
@@ -665,7 +655,7 @@ func (s *agentStore) SetAgentEmbedding(ctx context.Context, agentName, version s
 	return nil
 }
 
-// GetAgentEmbeddingMetadata retrieves embedding metadata for an agent version without loading the vector.
+// Returns metadata only, not the vector payload.
 func (s *agentStore) GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -678,7 +668,6 @@ func (s *agentStore) GetAgentEmbeddingMetadata(ctx context.Context, agentName, v
 		return nil, err
 	}
 
-	executor := s.executor
 	query := `
 		SELECT
 			semantic_embedding IS NOT NULL AS has_embedding,
@@ -701,7 +690,7 @@ func (s *agentStore) GetAgentEmbeddingMetadata(ctx context.Context, agentName, v
 		generatedAt  sql.NullTime
 	)
 
-	err := executor.QueryRow(ctx, query, agentName, version).Scan(
+	err := s.executor.QueryRow(ctx, query, agentName, version).Scan(
 		&hasEmbedding,
 		&provider,
 		&model,
@@ -738,9 +727,8 @@ func (s *agentStore) GetAgentEmbeddingMetadata(ctx context.Context, agentName, v
 	return meta, nil
 }
 
-// DeleteAgent permanently removes an agent version from the database.
-// If the deleted version was the current latest, the most recently published
-// remaining version is promoted to latest.
+// If the deleted version was latest, the most recently published remaining
+// version is promoted.
 func (s *agentStore) DeleteAgent(ctx context.Context, agentName, version string) error {
 	if err := s.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
 		Name: agentName,
@@ -749,11 +737,9 @@ func (s *agentStore) DeleteAgent(ctx context.Context, agentName, version string)
 		return err
 	}
 
-	executor := s.executor
-
 	// Check if the version being deleted is the current latest.
 	var wasLatest bool
-	err := executor.QueryRow(ctx,
+	err := s.executor.QueryRow(ctx,
 		`SELECT is_latest FROM agents WHERE agent_name = $1 AND version = $2`,
 		agentName, version,
 	).Scan(&wasLatest)
@@ -765,7 +751,7 @@ func (s *agentStore) DeleteAgent(ctx context.Context, agentName, version string)
 	}
 
 	query := `DELETE FROM agents WHERE agent_name = $1 AND version = $2`
-	result, err := executor.Exec(ctx, query, agentName, version)
+	result, err := s.executor.Exec(ctx, query, agentName, version)
 	if err != nil {
 		return fmt.Errorf("failed to delete agent: %w", err)
 	}
@@ -784,7 +770,7 @@ func (s *agentStore) DeleteAgent(ctx context.Context, agentName, version string)
 			    LIMIT 1
 			  )
 		`
-		if _, err := executor.Exec(ctx, promoteQuery, agentName); err != nil {
+		if _, err := s.executor.Exec(ctx, promoteQuery, agentName); err != nil {
 			return fmt.Errorf("failed to promote next latest agent version: %w", err)
 		}
 	}

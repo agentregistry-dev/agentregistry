@@ -22,7 +22,7 @@ import (
 
 func TestMCPListServers_HappyPath(t *testing.T) {
 	ctx := context.Background()
-	db := database.NewTestServiceDB(t)
+	db := database.NewTestDB(t)
 	cfg := &config.Config{EnableRegistryValidation: false}
 	serverService := serversvc.New(serversvc.Dependencies{StoreDB: db, Config: cfg})
 	agentService := agentsvc.New(agentsvc.Dependencies{StoreDB: db, Config: cfg})

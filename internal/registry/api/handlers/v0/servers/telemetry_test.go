@@ -36,7 +36,7 @@ func TestPrometheusHandler(t *testing.T) {
 		EnableRegistryValidation: false, // Disable for unit tests
 	}
 
-	storeDB := database.NewTestServiceDB(t)
+	storeDB := database.NewTestDB(t)
 	serverService := serversvc.New(serversvc.Dependencies{StoreDB: storeDB, Config: testConfig})
 	deploymentService := deploymentsvc.New(deploymentsvc.Dependencies{StoreDB: storeDB})
 	server, err := serverService.PublishServer(context.Background(), &apiv0.ServerJSON{
