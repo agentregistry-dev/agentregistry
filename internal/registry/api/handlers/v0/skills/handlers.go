@@ -50,8 +50,7 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, skillSvc skillsvc.
 		Description: "Get a paginated list of Agentic skills from the registry",
 		Tags:        tags,
 	}, func(ctx context.Context, input *apitypes.ListSkillsInput) (*types.Response[skillmodels.SkillListResponse], error) {
-	
-			filter := &database.SkillFilter{}
+		filter := &database.SkillFilter{}
 
 		if input.UpdatedSince != "" {
 			if updatedTime, err := time.Parse(time.RFC3339, input.UpdatedSince); err == nil {

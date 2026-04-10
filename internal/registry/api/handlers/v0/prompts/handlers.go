@@ -58,7 +58,7 @@ func RegisterPromptsEndpoints(api huma.API, pathPrefix string, promptSvc prompts
 		Description: "Get a paginated list of prompts from the registry",
 		Tags:        tags,
 	}, func(ctx context.Context, input *ListPromptsInput) (*types.Response[promptmodels.PromptListResponse], error) {
-			filter := &database.PromptFilter{}
+		filter := &database.PromptFilter{}
 
 		if input.UpdatedSince != "" {
 			if updatedTime, err := time.Parse(time.RFC3339, input.UpdatedSince); err == nil {

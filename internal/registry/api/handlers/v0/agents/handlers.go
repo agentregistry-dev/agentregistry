@@ -51,7 +51,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, agentSvc agentsvc.
 		Description: "Get a paginated list of Agentic agents from the registry",
 		Tags:        tags,
 	}, func(ctx context.Context, input *apitypes.ListAgentsInput) (*types.Response[agentmodels.AgentListResponse], error) {
-			filter := &database.AgentFilter{}
+		filter := &database.AgentFilter{}
 
 		if input.UpdatedSince != "" {
 			if updatedTime, err := time.Parse(time.RFC3339, input.UpdatedSince); err == nil {
