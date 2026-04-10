@@ -34,7 +34,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dep, err := apiClient.GetDeploymentByID(fullID)
+	dep, err := apiClient.GetDeployment(fullID)
 	if err != nil {
 		return fmt.Errorf("failed to get deployment: %w", err)
 	}
@@ -42,7 +42,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("deployment not found: %s", deploymentID)
 	}
 
-	if err := apiClient.RemoveDeploymentByID(fullID); err != nil {
+	if err := apiClient.DeleteDeployment(fullID); err != nil {
 		return fmt.Errorf("failed to delete deployment: %w", err)
 	}
 
@@ -54,7 +54,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 // by prefix-matching against all deployments.
 func resolveDeploymentID(idPrefix string) (string, error) {
 	// First try an exact match via the API
-	dep, err := apiClient.GetDeploymentByID(idPrefix)
+	dep, err := apiClient.GetDeployment(idPrefix)
 	if err == nil && dep != nil {
 		return dep.ID, nil
 	}

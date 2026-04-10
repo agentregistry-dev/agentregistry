@@ -38,7 +38,7 @@ func isServerPublished(serverName, version string) (bool, error) {
 		return false, errors.New("API client not initialized")
 	}
 
-	server, err := apiClient.GetServerByNameAndVersion(serverName, version)
+	server, err := apiClient.GetServerVersion(serverName, version)
 	if err != nil {
 		return false, err
 	}
@@ -55,7 +55,7 @@ func selectServerVersion(resourceName, requestedVersion string, autoYes bool) (*
 	// If a specific version was requested, try to get that version
 	if requestedVersion != "" && requestedVersion != "latest" {
 		fmt.Printf("Checking if MCP server '%s' version '%s' exists in registry...\n", resourceName, requestedVersion)
-		server, err := apiClient.GetServerByNameAndVersion(resourceName, requestedVersion)
+		server, err := apiClient.GetServerVersion(resourceName, requestedVersion)
 		if err != nil {
 			return nil, fmt.Errorf("error querying registry: %w", err)
 		}

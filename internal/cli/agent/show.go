@@ -27,7 +27,7 @@ func runShow(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API client not initialized")
 	}
 
-	agent, err := apiClient.GetAgentByName(agentName)
+	agent, err := apiClient.GetAgent(agentName)
 	if err != nil {
 		return fmt.Errorf("failed to get agent: %w", err)
 	}
