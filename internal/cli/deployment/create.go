@@ -114,7 +114,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 }
 
 func createAgentDeployment(name, version string, envMap map[string]string, providerID, namespace string, wait bool) error {
-	agentModel, err := apiClient.GetAgentByNameAndVersion(name, version)
+	agentModel, err := apiClient.GetAgentVersion(name, version)
 	if err != nil {
 		return fmt.Errorf("failed to fetch agent %q: %w", name, err)
 	}

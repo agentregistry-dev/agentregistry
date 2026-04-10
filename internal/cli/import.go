@@ -13,7 +13,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/importer"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/spf13/cobra"
 )
@@ -65,7 +65,7 @@ var ImportCmd = &cobra.Command{
 			}
 		}()
 
-		registryService := service.NewRegistryService(db, cfg, nil)
+		serverService := serversvc.New(serversvc.Dependencies{StoreDB: db, Config: cfg})
 
 		// Build HTTP client and headers for importer
 		httpClient := &http.Client{Timeout: importTimeout}
@@ -84,7 +84,7 @@ var ImportCmd = &cobra.Command{
 			headerMap[key] = value
 		}
 
-		importerService := importer.NewService(registryService)
+		importerService := importer.NewService(serverService)
 		importerService.SetHTTPClient(httpClient)
 		importerService.SetRequestHeaders(headerMap)
 		importerService.SetUpdateIfExists(importUpdate)

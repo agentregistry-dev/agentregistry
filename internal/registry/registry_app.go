@@ -18,7 +18,6 @@ import (
 	mcpregistry "github.com/agentregistry-dev/agentregistry/internal/mcp/registryserver"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api"
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
-	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
@@ -29,6 +28,12 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/local"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
+	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
+	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
+	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
+	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
+	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/logging"
@@ -79,7 +84,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	// entirely via AppOptions.DatabaseFactory (e.g. in-memory or custom backend) and
 	// do not want a real PostgreSQL connection. In that case DatabaseFactory is required.
 	// For normal deployments, set DATABASE_URL to a real Postgres connection string.
-	var db database.Database
+	var db database.Store
 	if cfg.DatabaseURL == "noop" { //nolint:nestif
 		if options.DatabaseFactory == nil {
 			return fmt.Errorf("DATABASE_URL=noop requires DatabaseFactory to be set in AppOptions")
@@ -128,26 +133,39 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		}
 	}
 
-	registryService := service.NewRegistryService(db, cfg, embeddingProvider)
-
-	// Initialize extension registries once and use them for both routing and service behavior.
-	providerPlatforms := v0.DefaultProviderPlatformAdapters(registryService)
-	maps.Copy(providerPlatforms, options.ProviderPlatforms)
+	serverService := serversvc.New(serversvc.Dependencies{
+		Servers:            db.Servers(),
+		Tx:                 db,
+		Config:             cfg,
+		EmbeddingsProvider: embeddingProvider,
+	})
+	agentService := agentsvc.New(agentsvc.Dependencies{
+		Agents:             db.Agents(),
+		Skills:             db.Skills(),
+		Prompts:            db.Prompts(),
+		Tx:                 db,
+		Config:             cfg,
+		EmbeddingsProvider: embeddingProvider,
+	})
+	providerService := providersvc.New(providersvc.Dependencies{
+		StoreDB:           db,
+		ProviderPlatforms: options.ProviderPlatforms,
+	})
+	providerPlatforms := providerService.PlatformAdapters()
 	deploymentPlatforms := map[string]types.DeploymentPlatformAdapter{
-		"local":      local.NewLocalDeploymentAdapter(registryService, cfg.RuntimeDir, cfg.AgentGatewayPort),
-		"kubernetes": kubernetes.NewKubernetesDeploymentAdapter(registryService),
+		"local":      local.NewLocalDeploymentAdapter(serverService, agentService, cfg.RuntimeDir, cfg.AgentGatewayPort),
+		"kubernetes": kubernetes.NewKubernetesDeploymentAdapter(providerService, serverService, agentService),
 	}
 	maps.Copy(deploymentPlatforms, options.DeploymentPlatforms)
-
-	type platformAdapterConfigurer interface {
-		SetPlatformAdapters(
-			map[string]types.DeploymentPlatformAdapter,
-		)
-	}
-	if cfgSvc, ok := registryService.(platformAdapterConfigurer); ok {
-		cfgSvc.SetPlatformAdapters(deploymentPlatforms)
-	}
-
+	skillService := skillsvc.New(skillsvc.Dependencies{Skills: db.Skills(), Tx: db})
+	promptService := promptsvc.New(promptsvc.Dependencies{Prompts: db.Prompts(), Tx: db})
+	deploymentService := deploymentsvc.New(deploymentsvc.Dependencies{
+		Deployments:        db.Deployments(),
+		Providers:          providerService,
+		Servers:            serverService,
+		Agents:             agentService,
+		DeploymentAdapters: deploymentPlatforms,
+	})
 	// Import builtin seed data unless it is disabled
 	if !cfg.DisableBuiltinSeed {
 		slog.Info("importing builtin seed data in the background")
@@ -157,7 +175,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 
 			ctx = auth.WithSystemContext(ctx)
 
-			if err := seed.ImportBuiltinSeedData(ctx, registryService); err != nil {
+			if err := seed.ImportBuiltinSeedData(ctx, serverService); err != nil {
 				slog.Error("failed to import builtin seed data", "error", err)
 			}
 		}()
@@ -172,7 +190,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 
 			ctx = auth.WithSystemContext(ctx)
 
-			importerService := importer.NewService(registryService)
+			importerService := importer.NewService(serverService)
 			if embeddingProvider != nil {
 				importerService.SetEmbeddingProvider(embeddingProvider)
 				importerService.SetEmbeddingDimensions(cfg.Embeddings.Dimensions)
@@ -213,14 +231,21 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	// Initialize job manager and indexer for embeddings.
 	if cfg.Embeddings.Enabled && embeddingProvider != nil {
 		jobManager := jobs.NewManager()
-		indexer := service.NewIndexer(registryService, embeddingProvider, cfg.Embeddings.Dimensions)
+		indexer := service.NewIndexer(serverService, agentService, embeddingProvider, cfg.Embeddings.Dimensions)
 		routeOpts.Indexer = indexer
 		routeOpts.JobManager = jobManager
 		slog.Info("embeddings indexing API enabled")
 	}
 
 	// Initialize HTTP server
-	baseServer := api.NewServer(cfg, registryService, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts)
+	baseServer := api.NewServer(cfg, router.RegistryServices{
+		Server:     serverService,
+		Agent:      agentService,
+		Skill:      skillService,
+		Prompt:     promptService,
+		Provider:   providerService,
+		Deployment: deploymentService,
+	}, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts)
 
 	var server types.Server
 	if options.HTTPServerFactory != nil {
@@ -235,7 +260,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 
 	var mcpHTTPServer *http.Server
 	if cfg.MCPPort > 0 {
-		mcpServer := mcpregistry.NewServer(registryService)
+		mcpServer := mcpregistry.NewServer(serverService, agentService, skillService, deploymentService)
 
 		var handler http.Handler = mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
 			return mcpServer

@@ -13,9 +13,15 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api"
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
+	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
+	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
+	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
+	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
+	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 )
 
@@ -33,7 +39,12 @@ func TestCORSHeaders(t *testing.T) {
 
 	// Create test services
 	db := database.NewTestDB(t)
-	registryService := service.NewRegistryService(db, cfg, nil)
+	serverService := serversvc.New(serversvc.Dependencies{StoreDB: db, Config: cfg})
+	agentService := agentsvc.New(agentsvc.Dependencies{StoreDB: db, Config: cfg})
+	skillService := skillsvc.New(skillsvc.Dependencies{StoreDB: db})
+	promptService := promptsvc.New(promptsvc.Dependencies{StoreDB: db})
+	providerService := providersvc.New(providersvc.Dependencies{StoreDB: db})
+	deploymentService := deploymentsvc.New(deploymentsvc.Dependencies{StoreDB: db})
 
 	shutdownTelemetry, metrics, err := telemetry.InitMetrics("test")
 	require.NoError(t, err)
@@ -46,7 +57,14 @@ func TestCORSHeaders(t *testing.T) {
 	}
 
 	// Create server
-	_ = api.NewServer(cfg, registryService, metrics, versionInfo, nil, nil, nil)
+	_ = api.NewServer(cfg, router.RegistryServices{
+		Server:     serverService,
+		Agent:      agentService,
+		Skill:      skillService,
+		Prompt:     promptService,
+		Provider:   providerService,
+		Deployment: deploymentService,
+	}, metrics, versionInfo, nil, nil, nil)
 
 	tests := []struct {
 		name           string
@@ -147,7 +165,12 @@ func TestCORSHeaderValues(t *testing.T) {
 
 	// Create test services
 	db := database.NewTestDB(t)
-	registryService := service.NewRegistryService(db, cfg, nil)
+	serverService := serversvc.New(serversvc.Dependencies{StoreDB: db, Config: cfg})
+	agentService := agentsvc.New(agentsvc.Dependencies{StoreDB: db, Config: cfg})
+	skillService := skillsvc.New(skillsvc.Dependencies{StoreDB: db})
+	promptService := promptsvc.New(promptsvc.Dependencies{StoreDB: db})
+	providerService := providersvc.New(providersvc.Dependencies{StoreDB: db})
+	deploymentService := deploymentsvc.New(deploymentsvc.Dependencies{StoreDB: db})
 
 	shutdownTelemetry, metrics, err := telemetry.InitMetrics("test")
 	require.NoError(t, err)
@@ -160,7 +183,14 @@ func TestCORSHeaderValues(t *testing.T) {
 	}
 
 	// Create server
-	_ = api.NewServer(cfg, registryService, metrics, versionInfo, nil, nil, nil)
+	_ = api.NewServer(cfg, router.RegistryServices{
+		Server:     serverService,
+		Agent:      agentService,
+		Skill:      skillService,
+		Prompt:     promptService,
+		Provider:   providerService,
+		Deployment: deploymentService,
+	}, metrics, versionInfo, nil, nil, nil)
 
 	// Test that CORS is configured with correct values
 	// This is more of a documentation test to ensure we know what CORS settings we use
