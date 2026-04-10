@@ -78,7 +78,6 @@ func providerWriteHTTPError(action string, err error) error {
 	}
 }
 
-// RegisterProvidersEndpoints registers provider CRUD endpoints.
 func RegisterProvidersEndpoints(api huma.API, basePath string, providerSvc providersvc.Registry) {
 	huma.Register(api, huma.Operation{
 		OperationID: "list-providers",

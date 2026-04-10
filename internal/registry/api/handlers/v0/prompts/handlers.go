@@ -43,7 +43,6 @@ type PromptVersionsInput struct {
 	PromptName string `path:"promptName" json:"promptName" doc:"Prompt name (letters, digits, hyphens, underscores)" example:"my-prompt"`
 }
 
-// RegisterPromptsEndpoints registers all prompt-related endpoints with a custom path prefix.
 func RegisterPromptsEndpoints(api huma.API, pathPrefix string, promptSvc promptsvc.Registry) {
 	tags := []string{"prompts"}
 	if strings.Contains(pathPrefix, "admin") {
@@ -59,8 +58,7 @@ func RegisterPromptsEndpoints(api huma.API, pathPrefix string, promptSvc prompts
 		Description: "Get a paginated list of prompts from the registry",
 		Tags:        tags,
 	}, func(ctx context.Context, input *ListPromptsInput) (*types.Response[promptmodels.PromptListResponse], error) {
-		// Build filter
-		filter := &database.PromptFilter{}
+			filter := &database.PromptFilter{}
 
 		if input.UpdatedSince != "" {
 			if updatedTime, err := time.Parse(time.RFC3339, input.UpdatedSince); err == nil {
@@ -247,7 +245,6 @@ func createPromptHandler(ctx context.Context, input *CreatePromptInput, promptSv
 	return &types.Response[promptmodels.PromptResponse]{Body: *createdPrompt}, nil
 }
 
-// RegisterPromptsCreateEndpoint registers POST /prompts (create or update; immediately visible).
 func RegisterPromptsCreateEndpoint(api huma.API, pathPrefix string, promptSvc promptsvc.Registry) {
 	huma.Register(api, huma.Operation{
 		OperationID: "create-prompt" + strings.ReplaceAll(pathPrefix, "/", "-"),

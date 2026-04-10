@@ -39,26 +39,22 @@ type IndexResult struct {
 // resource is "servers" or "agents".
 type IndexProgressCallback func(resource string, stats IndexStats)
 
-// ServerEmbeddingSource is the narrow interface the Indexer needs to index server embeddings.
 type ServerEmbeddingSource interface {
 	ListServers(ctx context.Context, filter *database.ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
 	GetServerEmbeddingMetadata(ctx context.Context, serverName, version string) (*database.SemanticEmbeddingMetadata, error)
 	SetServerEmbedding(ctx context.Context, serverName, version string, embedding *database.SemanticEmbedding) error
 }
 
-// AgentEmbeddingSource is the narrow interface the Indexer needs to index agent embeddings.
 type AgentEmbeddingSource interface {
 	ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error)
 	GetAgentEmbeddingMetadata(ctx context.Context, agentName, version string) (*database.SemanticEmbeddingMetadata, error)
 	SetAgentEmbedding(ctx context.Context, agentName, version string, embedding *database.SemanticEmbedding) error
 }
 
-// Indexer defines the interface for embedding indexing operations.
 type Indexer interface {
 	Run(ctx context.Context, opts IndexOptions, onProgress IndexProgressCallback) (*IndexResult, error)
 }
 
-// indexerImpl is the concrete implementation of Indexer.
 type indexerImpl struct {
 	servers    ServerEmbeddingSource
 	agents     AgentEmbeddingSource
@@ -67,7 +63,6 @@ type indexerImpl struct {
 	logger     *slog.Logger
 }
 
-// NewIndexer creates a new embeddings indexer.
 func NewIndexer(servers ServerEmbeddingSource, agents AgentEmbeddingSource, provider embeddings.Provider, dimensions int) Indexer {
 	return &indexerImpl{
 		servers:    servers,
@@ -78,7 +73,6 @@ func NewIndexer(servers ServerEmbeddingSource, agents AgentEmbeddingSource, prov
 	}
 }
 
-// Run executes the indexing operation with progress callbacks.
 func (s *indexerImpl) Run(ctx context.Context, opts IndexOptions, onProgress IndexProgressCallback) (*IndexResult, error) {
 	if s.provider == nil {
 		return nil, errors.New("embedding provider is not configured")

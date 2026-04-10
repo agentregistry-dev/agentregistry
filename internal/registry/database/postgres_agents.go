@@ -730,6 +730,10 @@ func (s *agentStore) GetAgentEmbeddingMetadata(ctx context.Context, agentName, v
 // If the deleted version was latest, the most recently published remaining
 // version is promoted.
 func (s *agentStore) DeleteAgent(ctx context.Context, agentName, version string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
 	if err := s.authz.Check(ctx, auth.PermissionActionDelete, auth.Resource{
 		Name: agentName,
 		Type: auth.PermissionArtifactTypeAgent,

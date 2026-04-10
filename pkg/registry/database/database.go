@@ -105,7 +105,6 @@ type SemanticSearchOptions struct {
 	HybridSubstring *string
 }
 
-// ServerReader is the read-only subset of ServerStore exposed through service Registry interfaces.
 type ServerReader interface {
 	ListServers(ctx context.Context, filter *ServerFilter, cursor string, limit int) ([]*apiv0.ServerResponse, string, error)
 	GetServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error)
@@ -131,7 +130,6 @@ type ServerStore interface {
 	UpsertServerReadme(ctx context.Context, readme *ServerReadme) error
 }
 
-// AgentReader is the read-only subset of AgentStore exposed through service Registry interfaces.
 type AgentReader interface {
 	ListAgents(ctx context.Context, filter *AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error)
 	GetAgent(ctx context.Context, agentName string) (*models.AgentResponse, error)
@@ -153,7 +151,6 @@ type AgentStore interface {
 	SetAgentEmbedding(ctx context.Context, agentName, version string, embedding *SemanticEmbedding) error
 }
 
-// SkillReader is the read-only subset of SkillStore exposed through service Registry interfaces.
 type SkillReader interface {
 	ListSkills(ctx context.Context, filter *SkillFilter, cursor string, limit int) ([]*models.SkillResponse, string, error)
 	GetSkill(ctx context.Context, skillName string) (*models.SkillResponse, error)
@@ -173,7 +170,6 @@ type SkillStore interface {
 	UnmarkSkillAsLatest(ctx context.Context, skillName string) error
 }
 
-// PromptReader is the read-only subset of PromptStore exposed through service Registry interfaces.
 type PromptReader interface {
 	ListPrompts(ctx context.Context, filter *PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error)
 	GetPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error)
@@ -199,11 +195,8 @@ type DeploymentStore interface {
 	DeleteDeployment(ctx context.Context, id string) error
 }
 
-// ProviderReader is the read-only subset of ProviderStore.
-// Note: the service-layer providersvc.Registry exposes ListProviders with a plain string
-// (normalized platform) rather than *string, so it cannot structurally embed ProviderReader.
-// ProviderReader is still useful as a narrow dependency for consumers that only need
-// read access directly at the store level.
+// ListProviders uses *string (not plain string) for optional platform filtering;
+// the service layer normalizes this, so providersvc.Registry cannot embed ProviderReader.
 type ProviderReader interface {
 	ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error)
 	GetProvider(ctx context.Context, providerID string) (*models.Provider, error)

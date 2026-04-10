@@ -29,7 +29,6 @@ type JobStatusInput struct {
 
 type JobStatusResponse = apitypes.JobStatusResponse
 
-// RegisterEmbeddingsEndpoints registers the embeddings admin endpoints.
 func RegisterEmbeddingsEndpoints(
 	api huma.API,
 	pathPrefix string,

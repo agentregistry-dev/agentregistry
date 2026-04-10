@@ -14,7 +14,6 @@ type PingBody struct {
 	Pong bool `json:"pong" example:"true" doc:"Ping response"`
 }
 
-// RegisterPingEndpoint registers the ping endpoint with a custom path prefix.
 func RegisterPingEndpoint(api huma.API, pathPrefix string) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ping" + strings.ReplaceAll(pathPrefix, "/", "-"),

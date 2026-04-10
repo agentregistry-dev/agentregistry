@@ -88,7 +88,6 @@ type ServerReadmeResponse struct {
 	FetchedAt   time.Time `json:"fetchedAt"`
 }
 
-// RegisterServersEndpoints registers all server-related endpoints with a custom path prefix.
 func RegisterServersEndpoints(api huma.API, pathPrefix string, serverSvc serversvc.Registry, deploymentSvc deploymentmeta.Lister) {
 	huma.Register(api, huma.Operation{
 		OperationID: "delete-server-version" + strings.ReplaceAll(pathPrefix, "/", "-"),
@@ -469,7 +468,6 @@ func createServerHandler(ctx context.Context, input *CreateServerInput, serverSv
 	}, nil
 }
 
-// RegisterServersCreateEndpoint registers POST /servers (create or update; immediately visible).
 func RegisterServersCreateEndpoint(api huma.API, pathPrefix string, serverSvc serversvc.Registry, deploymentSvc deploymentmeta.Lister) {
 	huma.Register(api, huma.Operation{
 		OperationID: "create-server" + strings.ReplaceAll(pathPrefix, "/", "-"),

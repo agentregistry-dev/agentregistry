@@ -21,7 +21,6 @@ type HealthBody struct {
 	PlatformMode   string `json:"platform_mode,omitempty" example:"docker" doc:"Platform mode" enum:"docker,kubernetes"`
 }
 
-// RegisterHealthEndpoint registers the health check endpoint with a custom path prefix.
 func RegisterHealthEndpoint(api huma.API, pathPrefix string, cfg *config.Config, metrics *telemetry.Metrics) {
 	huma.Register(api, huma.Operation{
 		OperationID: "get-health" + strings.ReplaceAll(pathPrefix, "/", "-"),

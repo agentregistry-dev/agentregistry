@@ -36,7 +36,6 @@ type AgentVersionsInput struct {
 	AgentName string `path:"agentName" json:"agentName" doc:"URL-encoded agent name" example:"com.example%2Fmy-agent"`
 }
 
-// RegisterAgentsEndpoints registers all agent-related endpoints with a custom path prefix.
 func RegisterAgentsEndpoints(api huma.API, pathPrefix string, agentSvc agentsvc.Registry, deploymentSvc deploymentmeta.Lister) {
 	tags := []string{"agents"}
 	if strings.Contains(pathPrefix, "admin") {
@@ -52,8 +51,7 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, agentSvc agentsvc.
 		Description: "Get a paginated list of Agentic agents from the registry",
 		Tags:        tags,
 	}, func(ctx context.Context, input *apitypes.ListAgentsInput) (*types.Response[agentmodels.AgentListResponse], error) {
-		// Build filter
-		filter := &database.AgentFilter{}
+			filter := &database.AgentFilter{}
 
 		if input.UpdatedSince != "" {
 			if updatedTime, err := time.Parse(time.RFC3339, input.UpdatedSince); err == nil {
@@ -269,7 +267,6 @@ func createAgentHandler(ctx context.Context, input *CreateAgentInput, agentSvc a
 	}, nil
 }
 
-// RegisterAgentsCreateEndpoint registers POST /agents (create or update; immediately visible).
 func RegisterAgentsCreateEndpoint(api huma.API, pathPrefix string, agentSvc agentsvc.Registry, deploymentSvc deploymentmeta.Lister) {
 	huma.Register(api, huma.Operation{
 		OperationID: "create-agent" + strings.ReplaceAll(pathPrefix, "/", "-"),

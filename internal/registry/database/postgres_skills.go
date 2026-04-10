@@ -295,18 +295,18 @@ func (s *skillStore) CreateSkill(ctx context.Context, skillJSON *models.SkillJSO
 		return nil, ctx.Err()
 	}
 
-	if err := s.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
-		Name: skillJSON.Name,
-		Type: auth.PermissionArtifactTypeSkill,
-	}); err != nil {
-		return nil, err
-	}
-
 	if skillJSON == nil || officialMeta == nil {
 		return nil, fmt.Errorf("skillJSON and officialMeta are required")
 	}
 	if skillJSON.Name == "" || skillJSON.Version == "" {
 		return nil, fmt.Errorf("skill name and version are required")
+	}
+
+	if err := s.authz.Check(ctx, auth.PermissionActionPublish, auth.Resource{
+		Name: skillJSON.Name,
+		Type: auth.PermissionArtifactTypeSkill,
+	}); err != nil {
+		return nil, err
 	}
 	valueJSON, err := json.Marshal(skillJSON)
 	if err != nil {

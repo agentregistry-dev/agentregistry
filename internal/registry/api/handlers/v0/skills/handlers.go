@@ -35,7 +35,6 @@ type SkillVersionsInput struct {
 	SkillName string `path:"skillName" json:"skillName" doc:"URL-encoded skill name" example:"com.example%2Fmy-skill"`
 }
 
-// RegisterSkillsEndpoints registers all skill-related endpoints with a custom path prefix.
 func RegisterSkillsEndpoints(api huma.API, pathPrefix string, skillSvc skillsvc.Registry) {
 	tags := []string{"skills"}
 	if strings.Contains(pathPrefix, "admin") {
@@ -51,10 +50,8 @@ func RegisterSkillsEndpoints(api huma.API, pathPrefix string, skillSvc skillsvc.
 		Description: "Get a paginated list of Agentic skills from the registry",
 		Tags:        tags,
 	}, func(ctx context.Context, input *apitypes.ListSkillsInput) (*types.Response[skillmodels.SkillListResponse], error) {
-		// Note: Authz filtering for list operations is handled at the database layer.
-
-		// Build filter
-		filter := &database.SkillFilter{}
+	
+			filter := &database.SkillFilter{}
 
 		if input.UpdatedSince != "" {
 			if updatedTime, err := time.Parse(time.RFC3339, input.UpdatedSince); err == nil {
@@ -241,7 +238,6 @@ func createSkillHandler(ctx context.Context, input *CreateSkillInput, skillSvc s
 	return &types.Response[skillmodels.SkillResponse]{Body: *createdSkill}, nil
 }
 
-// RegisterSkillsCreateEndpoint registers POST /skills (create or update; immediately visible).
 func RegisterSkillsCreateEndpoint(api huma.API, pathPrefix string, skillSvc skillsvc.Registry) {
 	huma.Register(api, huma.Operation{
 		OperationID: "create-skill" + strings.ReplaceAll(pathPrefix, "/", "-"),
