@@ -567,12 +567,12 @@ func newInitPromptCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "prompt NAME",
-		Short: "Create a new declarative prompt.yaml",
-		Long: `Create a new prompt.yaml in the current directory using the
+		Short: "Create a new declarative <name>.yaml for a prompt",
+		Long: `Create a new <name>.yaml in the current directory using the
 ar.dev/v1alpha1 declarative format. No code scaffolding is generated.
 
-The generated prompt.yaml can be applied directly:
-  arctl apply -f prompt.yaml`,
+The generated file can be applied directly:
+  arctl apply -f my-prompt.yaml`,
 		Example: `  arctl init prompt my-prompt
   arctl init prompt my-prompt --description "System prompt for summarization"`,
 		Args:         cobra.ExactArgs(1),

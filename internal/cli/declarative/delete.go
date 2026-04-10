@@ -65,7 +65,7 @@ func runDeclarativeDelete(cmd *cobra.Command, args []string) error {
 func deleteFromFile(cmd *cobra.Command, filename string) error {
 	resources, err := scheme.DecodeFile(filename)
 	if err != nil {
-		return fmt.Errorf("reading %s: %w", filename, err)
+		return fmt.Errorf("decoding %s: %w", filename, err)
 	}
 
 	errCount := 0

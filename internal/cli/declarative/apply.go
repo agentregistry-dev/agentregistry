@@ -85,10 +85,13 @@ func runApply(cmd *cobra.Command, _ []string) error {
 		allResources = append(allResources, resources...)
 	}
 
-	// 2. Validate all kinds before any API call.
+	// 2. Validate all kinds and required fields before any API call.
 	for _, r := range allResources {
 		if _, err := resource.Lookup(r.Kind); err != nil {
 			return err
+		}
+		if r.Metadata.Version == "" {
+			return fmt.Errorf("%s/%s: metadata.version is required", r.Kind, r.Metadata.Name)
 		}
 	}
 

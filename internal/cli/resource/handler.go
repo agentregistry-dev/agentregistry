@@ -76,13 +76,16 @@ func (reg *Registry) All() []ResourceHandler {
 			out = append(out, h)
 		}
 	}
-	// Append any kinds not in the fixed order. Note: map iteration is non-deterministic,
-	// so new resource types should be added to the order slice above to ensure stable output.
-	for kind, h := range reg.byKind {
-		found := slices.Contains(order, kind)
-		if !found {
-			out = append(out, h)
+	// Append any kinds not in the fixed order, sorted for deterministic output.
+	var extra []string
+	for kind := range reg.byKind {
+		if !slices.Contains(order, kind) {
+			extra = append(extra, kind)
 		}
+	}
+	slices.Sort(extra)
+	for _, kind := range extra {
+		out = append(out, reg.byKind[kind])
 	}
 	return out
 }
