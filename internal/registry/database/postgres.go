@@ -2451,6 +2451,12 @@ func (db *PostgreSQL) CreateProvider(ctx context.Context, tx pgx.Tx, in *models.
 	if strings.TrimSpace(in.ID) == "" || strings.TrimSpace(in.Name) == "" || strings.TrimSpace(in.Platform) == "" {
 		return nil, database.ErrInvalidInput
 	}
+	if err := db.authz.Check(ctx, auth.PermissionActionAdmin, auth.Resource{
+		Name: in.ID,
+		Type: auth.PermissionArtifactTypeProvider,
+	}); err != nil {
+		return nil, err
+	}
 	executor := db.getExecutor(tx)
 	configJSON, err := json.Marshal(in.Config)
 	if err != nil {
@@ -2529,6 +2535,12 @@ func (db *PostgreSQL) ListProviders(ctx context.Context, tx pgx.Tx, platform *st
 
 // GetProviderByID gets a provider by ID.
 func (db *PostgreSQL) GetProviderByID(ctx context.Context, tx pgx.Tx, providerID string) (*models.Provider, error) {
+	if err := db.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
+		Name: providerID,
+		Type: auth.PermissionArtifactTypeProvider,
+	}); err != nil {
+		return nil, err
+	}
 	executor := db.getExecutor(tx)
 	query := `SELECT id, name, platform, COALESCE(config, '{}'::jsonb), created_at, updated_at FROM providers WHERE id = $1`
 	var p models.Provider
@@ -2552,6 +2564,12 @@ func (db *PostgreSQL) GetProviderByID(ctx context.Context, tx pgx.Tx, providerID
 
 // UpdateProvider updates mutable provider fields.
 func (db *PostgreSQL) UpdateProvider(ctx context.Context, tx pgx.Tx, providerID string, in *models.UpdateProviderInput) (*models.Provider, error) {
+	if err := db.authz.Check(ctx, auth.PermissionActionAdmin, auth.Resource{
+		Name: providerID,
+		Type: auth.PermissionArtifactTypeProvider,
+	}); err != nil {
+		return nil, err
+	}
 	if in == nil {
 		return db.GetProviderByID(ctx, tx, providerID)
 	}
@@ -2599,6 +2617,12 @@ func (db *PostgreSQL) UpdateProvider(ctx context.Context, tx pgx.Tx, providerID 
 
 // DeleteProvider removes a provider by ID.
 func (db *PostgreSQL) DeleteProvider(ctx context.Context, tx pgx.Tx, providerID string) error {
+	if err := db.authz.Check(ctx, auth.PermissionActionAdmin, auth.Resource{
+		Name: providerID,
+		Type: auth.PermissionArtifactTypeProvider,
+	}); err != nil {
+		return err
+	}
 	executor := db.getExecutor(tx)
 	result, err := executor.Exec(ctx, `DELETE FROM providers WHERE id = $1`, providerID)
 	if err != nil {

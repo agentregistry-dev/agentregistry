@@ -18,10 +18,11 @@ import (
 type PermissionArtifactType string
 
 const (
-	PermissionArtifactTypeAgent  PermissionArtifactType = "agent"
-	PermissionArtifactTypeSkill  PermissionArtifactType = "skill"
-	PermissionArtifactTypeServer PermissionArtifactType = "server"
-	PermissionArtifactTypePrompt PermissionArtifactType = "prompt"
+	PermissionArtifactTypeAgent    PermissionArtifactType = "agent"
+	PermissionArtifactTypeSkill    PermissionArtifactType = "skill"
+	PermissionArtifactTypeServer   PermissionArtifactType = "server"
+	PermissionArtifactTypePrompt   PermissionArtifactType = "prompt"
+	PermissionArtifactTypeProvider PermissionArtifactType = "provider"
 )
 
 // PermissionAction represents the type of action that can be performed
@@ -33,6 +34,7 @@ const (
 	PermissionActionEdit    PermissionAction = "edit"
 	PermissionActionDelete  PermissionAction = "delete"
 	PermissionActionDeploy  PermissionAction = "deploy"
+	PermissionActionAdmin   PermissionAction = "admin"
 )
 
 type Permission struct {
