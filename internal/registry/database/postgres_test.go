@@ -1024,6 +1024,133 @@ func TestPostgreSQL_UpdateDeploymentState_PatchesMetadataAndError(t *testing.T) 
 	assert.Equal(t, "op-123", updated.ProviderMetadata["operationId"])
 }
 
+func TestPostgreSQL_CreateProvider(t *testing.T) {
+	db := internaldb.NewTestDB(t)
+	ctx := context.Background()
+
+	t.Run("successful creation", func(t *testing.T) {
+		provider, err := db.CreateProvider(ctx, nil, &models.CreateProviderInput{
+			ID:       "test-provider-1",
+			Name:     "Test Provider",
+			Platform: "kubernetes",
+			Config:   map[string]any{"region": "us-east-1"},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "test-provider-1", provider.ID)
+		assert.Equal(t, "Test Provider", provider.Name)
+		assert.Equal(t, "kubernetes", provider.Platform)
+		assert.Equal(t, "us-east-1", provider.Config["region"])
+	})
+
+	t.Run("duplicate ID fails", func(t *testing.T) {
+		_, err := db.CreateProvider(ctx, nil, &models.CreateProviderInput{
+			ID:       "test-provider-1",
+			Name:     "Duplicate",
+			Platform: "kubernetes",
+		})
+		require.ErrorIs(t, err, database.ErrAlreadyExists)
+	})
+
+	t.Run("nil input fails", func(t *testing.T) {
+		_, err := db.CreateProvider(ctx, nil, nil)
+		require.ErrorIs(t, err, database.ErrInvalidInput)
+	})
+}
+
+func TestPostgreSQL_GetProviderByID(t *testing.T) {
+	db := internaldb.NewTestDB(t)
+	ctx := context.Background()
+
+	_, err := db.CreateProvider(ctx, nil, &models.CreateProviderInput{
+		ID:       "get-test",
+		Name:     "Get Test",
+		Platform: "local",
+	})
+	require.NoError(t, err)
+
+	t.Run("existing provider", func(t *testing.T) {
+		provider, err := db.GetProviderByID(ctx, nil, "get-test")
+		require.NoError(t, err)
+		assert.Equal(t, "get-test", provider.ID)
+		assert.Equal(t, "Get Test", provider.Name)
+	})
+
+	t.Run("non-existent provider", func(t *testing.T) {
+		_, err := db.GetProviderByID(ctx, nil, "missing")
+		require.ErrorIs(t, err, database.ErrNotFound)
+	})
+}
+
+func TestPostgreSQL_UpdateProvider(t *testing.T) {
+	db := internaldb.NewTestDB(t)
+	ctx := context.Background()
+
+	_, err := db.CreateProvider(ctx, nil, &models.CreateProviderInput{
+		ID:       "update-test",
+		Name:     "Original Name",
+		Platform: "kubernetes",
+		Config:   map[string]any{"region": "us-east-1"},
+	})
+	require.NoError(t, err)
+
+	t.Run("update name", func(t *testing.T) {
+		newName := "Updated Name"
+		updated, err := db.UpdateProvider(ctx, nil, "update-test", &models.UpdateProviderInput{
+			Name: &newName,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "Updated Name", updated.Name)
+		assert.Equal(t, "us-east-1", updated.Config["region"])
+	})
+
+	t.Run("update config", func(t *testing.T) {
+		updated, err := db.UpdateProvider(ctx, nil, "update-test", &models.UpdateProviderInput{
+			Config: map[string]any{"region": "eu-west-1"},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "eu-west-1", updated.Config["region"])
+	})
+
+	t.Run("nil input returns current", func(t *testing.T) {
+		provider, err := db.UpdateProvider(ctx, nil, "update-test", nil)
+		require.NoError(t, err)
+		assert.Equal(t, "update-test", provider.ID)
+	})
+
+	t.Run("non-existent provider", func(t *testing.T) {
+		newName := "Nope"
+		_, err := db.UpdateProvider(ctx, nil, "missing", &models.UpdateProviderInput{
+			Name: &newName,
+		})
+		require.ErrorIs(t, err, database.ErrNotFound)
+	})
+}
+
+func TestPostgreSQL_DeleteProvider(t *testing.T) {
+	db := internaldb.NewTestDB(t)
+	ctx := context.Background()
+
+	_, err := db.CreateProvider(ctx, nil, &models.CreateProviderInput{
+		ID:       "delete-test",
+		Name:     "Delete Me",
+		Platform: "local",
+	})
+	require.NoError(t, err)
+
+	t.Run("successful delete", func(t *testing.T) {
+		err := db.DeleteProvider(ctx, nil, "delete-test")
+		require.NoError(t, err)
+
+		_, err = db.GetProviderByID(ctx, nil, "delete-test")
+		require.ErrorIs(t, err, database.ErrNotFound)
+	})
+
+	t.Run("delete non-existent", func(t *testing.T) {
+		err := db.DeleteProvider(ctx, nil, "missing")
+		require.ErrorIs(t, err, database.ErrNotFound)
+	})
+}
+
 // Helper functions for creating pointers to basic types
 func stringPtr(s string) *string {
 	return &s
