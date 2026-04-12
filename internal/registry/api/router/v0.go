@@ -9,7 +9,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	v0 "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0"
-	v0auth "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
@@ -47,7 +46,6 @@ func RegisterRoutes(
 	v0.RegisterServersEndpoints(api, pathPrefix, registry)
 	v0.RegisterServersCreateEndpoint(api, pathPrefix, registry)
 	v0.RegisterEditEndpoints(api, pathPrefix, registry)
-	v0auth.RegisterAuthEndpoints(api, pathPrefix, cfg)
 	platformExt := v0.PlatformExtensions{}
 	if opts != nil {
 		platformExt.ProviderPlatforms = opts.ProviderPlatforms
