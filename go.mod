@@ -8,7 +8,6 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/compose-spec/compose-go/v2 v2.9.1
-	github.com/coreos/go-oidc/v3 v3.16.0
 	github.com/danielgtaylor/huma/v2 v2.34.1
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/go-containerregistry v0.20.6
