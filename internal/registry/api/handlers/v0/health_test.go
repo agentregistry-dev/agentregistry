@@ -24,25 +24,11 @@ func TestHealthEndpoint(t *testing.T) {
 		expectedBody   v0.HealthBody
 	}{
 		{
-			name: "returns health status with github client id",
-			config: &config.Config{
-				GithubClientID: "test-github-client-id",
-			},
+			name:           "returns health status",
+			config:         &config.Config{},
 			expectedStatus: http.StatusOK,
 			expectedBody: v0.HealthBody{
-				Status:         "ok",
-				GitHubClientID: "test-github-client-id",
-			},
-		},
-		{
-			name: "returns health status without github client id",
-			config: &config.Config{
-				GithubClientID: "",
-			},
-			expectedStatus: http.StatusOK,
-			expectedBody: v0.HealthBody{
-				Status:         "ok",
-				GitHubClientID: "",
+				Status: "ok",
 			},
 		},
 	}
@@ -75,12 +61,6 @@ func TestHealthEndpoint(t *testing.T) {
 			// Since Huma adds a $schema field, we'll check individual fields
 			body := w.Body.String()
 			assert.Contains(t, body, `"status":"ok"`)
-
-			if tc.config.GithubClientID != "" {
-				assert.Contains(t, body, `"github_client_id":"test-github-client-id"`)
-			} else {
-				assert.NotContains(t, body, `"github_client_id"`)
-			}
 		})
 	}
 }

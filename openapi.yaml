@@ -1923,9 +1923,6 @@ components:
             type: object
             additionalProperties: false
             properties:
-                github_client_id:
-                    type: string
-                    description: GitHub OAuth App Client ID
                 platform_mode:
                     type: string
                     description: Platform mode
