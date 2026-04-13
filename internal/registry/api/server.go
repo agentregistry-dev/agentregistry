@@ -17,7 +17,6 @@ import (
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 )
@@ -129,28 +128,31 @@ func TrailingSlashMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// Server represents the HTTP server
 type Server struct {
-	config   *config.Config
-	registry service.RegistryService
-	humaAPI  huma.API
-	mux      *http.ServeMux
-	server   *http.Server
+	config  *config.Config
+	humaAPI huma.API
+	mux     *http.ServeMux
+	server  *http.Server
 }
 
-// HumaAPI returns the Huma API instance, allowing registration of new routes
 func (s *Server) HumaAPI() huma.API {
 	return s.humaAPI
 }
 
-// Mux returns the HTTP ServeMux, allowing registration of custom HTTP handlers
 func (s *Server) Mux() *http.ServeMux {
 	return s.mux
 }
 
-// NewServer creates a new HTTP server
-// Note: AuthZ is handled at the DB/service layer, not at the API layer.
-func NewServer(cfg *config.Config, registryService service.RegistryService, metrics *telemetry.Metrics, versionInfo *apitypes.VersionBody, customUIHandler http.Handler, authnProvider auth.AuthnProvider, routeOpts *router.RouteOptions) *Server {
+// AuthZ is handled at the DB/service layer, not at the API layer.
+func NewServer(
+	cfg *config.Config,
+	svcs router.RegistryServices,
+	metrics *telemetry.Metrics,
+	versionInfo *apitypes.VersionBody,
+	customUIHandler http.Handler,
+	authnProvider auth.AuthnProvider,
+	routeOpts *router.RouteOptions,
+) *Server {
 	// Create HTTP mux and Huma API
 	mux := http.NewServeMux()
 
@@ -169,7 +171,7 @@ func NewServer(cfg *config.Config, registryService service.RegistryService, metr
 		}
 	}
 
-	api := router.NewHumaAPI(cfg, registryService, mux, metrics, versionInfo, uiHandler, authnProvider, routeOpts)
+	api := router.NewHumaAPI(cfg, svcs, mux, metrics, versionInfo, uiHandler, authnProvider, routeOpts)
 
 	// Configure CORS with permissive settings for public API
 	corsHandler := cors.New(cors.Options{
@@ -192,10 +194,9 @@ func NewServer(cfg *config.Config, registryService service.RegistryService, metr
 	handler := TrailingSlashMiddleware(corsHandler.Handler(mux))
 
 	server := &Server{
-		config:   cfg,
-		registry: registryService,
-		humaAPI:  api,
-		mux:      mux,
+		config:  cfg,
+		humaAPI: api,
+		mux:     mux,
 		server: &http.Server{
 			Addr:              cfg.ServerAddress,
 			Handler:           handler,
@@ -206,7 +207,6 @@ func NewServer(cfg *config.Config, registryService service.RegistryService, metr
 	return server
 }
 
-// Start begins listening for incoming HTTP requests
 func (s *Server) Start() error {
 	slog.Info("HTTP server starting", "address", s.config.ServerAddress)
 	slog.Info("web UI available", "url", fmt.Sprintf("http://localhost%s/", s.config.ServerAddress))
@@ -214,7 +214,6 @@ func (s *Server) Start() error {
 	return s.server.ListenAndServe()
 }
 
-// Shutdown gracefully shuts down the server
 func (s *Server) Shutdown(ctx context.Context) error {
 	return s.server.Shutdown(ctx)
 }

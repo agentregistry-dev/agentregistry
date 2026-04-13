@@ -63,7 +63,7 @@ func isAgentPublished(agentName, version string) (bool, error) {
 		return false, fmt.Errorf("API client not initialized")
 	}
 
-	agent, err := apiClient.GetAgentByNameAndVersion(agentName, version)
+	agent, err := apiClient.GetAgentVersion(agentName, version)
 	if err != nil {
 		return false, err
 	}

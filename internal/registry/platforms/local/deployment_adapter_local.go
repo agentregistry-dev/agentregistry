@@ -10,13 +10,15 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
+	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
 type localDeploymentAdapter struct {
-	registry         service.RegistryService
+	serverService    serversvc.Registry
+	agentService     agentsvc.Registry
 	platformDir      string
 	agentGatewayPort uint16
 }
@@ -68,12 +70,14 @@ func (c *localAgentConfig) cleanup() error {
 }
 
 func NewLocalDeploymentAdapter(
-	registry service.RegistryService,
+	serverService serversvc.Registry,
+	agentService agentsvc.Registry,
 	platformDir string,
 	agentGatewayPort uint16,
 ) *localDeploymentAdapter {
 	return &localDeploymentAdapter{
-		registry:         registry,
+		serverService:    serverService,
+		agentService:     agentService,
 		platformDir:      platformDir,
 		agentGatewayPort: agentGatewayPort,
 	}
@@ -199,13 +203,13 @@ func (a *localDeploymentAdapter) buildLocalDesiredState(
 	resourceType := strings.ToLower(strings.TrimSpace(deployment.ResourceType))
 	switch resourceType {
 	case "mcp":
-		server, err := utils.BuildPlatformMCPServer(ctx, a.registry, deployment, "")
+		server, err := utils.BuildPlatformMCPServer(ctx, a.serverService, deployment, "")
 		if err != nil {
 			return nil, nil, err
 		}
 		return &platformtypes.DesiredState{MCPServers: []*platformtypes.MCPServer{server}}, nil, nil
 	case "agent":
-		resolved, err := utils.ResolveAgent(ctx, a.registry, deployment, "")
+		resolved, err := utils.ResolveAgent(ctx, a.serverService, a.agentService, deployment, "")
 		if err != nil {
 			return nil, nil, err
 		}
@@ -215,7 +219,7 @@ func (a *localDeploymentAdapter) buildLocalDesiredState(
 				AgentName: resolved.Agent.Name,
 				Version:   resolved.Agent.Version,
 			},
-			pythonServers: append(common.PythonServersFromManifest(mustAgentManifest(ctx, a.registry, deployment)), resolved.PythonConfigServers...),
+			pythonServers: append(common.PythonServersFromManifest(mustAgentManifest(ctx, a.agentService, deployment)), resolved.PythonConfigServers...),
 			pythonPrompts: pythonPromptsFromResolved(resolved.ResolvedPrompts),
 		}
 		return &platformtypes.DesiredState{

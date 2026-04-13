@@ -63,10 +63,10 @@ func generateSpec(apiVersion string) *huma.OpenAPI {
 		JWTPrivateKey: "0000000000000000000000000000000000000000000000000000000000000000",
 	}
 
-	// Register all routes. Service and metrics are nil because they are only
+	// Register all routes. Services and metrics are nil because they are only
 	// captured in handler closures and invoked at request time, not during
 	// route registration.
-	router.RegisterRoutes(api, cfg, nil, nil, nil, nil)
+	router.RegisterRoutes(api, cfg, router.RegistryServices{}, nil, nil, nil)
 
 	return api.OpenAPI()
 }

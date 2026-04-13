@@ -25,7 +25,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -33,7 +33,7 @@ import (
 
 // Service handles importing seed data into the registry
 type Service struct {
-	registry            service.RegistryService
+	registry            serversvc.Registry
 	httpClient          *http.Client
 	requestHeaders      map[string]string
 	updateIfExists      bool
@@ -49,7 +49,7 @@ type Service struct {
 }
 
 // NewService creates a new importer service with sane defaults
-func NewService(registry service.RegistryService) *Service {
+func NewService(registry serversvc.Registry) *Service {
 	// Allow user to override HTTP timeout via environment variable (seconds)
 	timeout := 30 * time.Second
 	if s := strings.TrimSpace(os.Getenv("AR_HTTP_TIMEOUT_SECONDS")); s != "" {
@@ -214,7 +214,7 @@ func (s *Service) importServer(
 		}
 	}
 
-	_, err := s.registry.CreateServer(ctx, srv)
+	_, err := s.registry.PublishServer(ctx, srv)
 	if err != nil { //nolint:nestif
 		// If duplicate version and update is enabled, try update path
 		if s.updateIfExists && errors.Is(err, database.ErrInvalidVersion) {
@@ -230,7 +230,7 @@ func (s *Service) importServer(
 	}
 
 	if embeddingRecord != nil {
-		if err := s.registry.UpsertServerEmbedding(ctx, srv.Name, srv.Version, embeddingRecord); err != nil {
+		if err := s.registry.SetServerEmbedding(ctx, srv.Name, srv.Version, embeddingRecord); err != nil {
 			s.logger.Warn("failed to store embedding", "name", srv.Name, "version", srv.Version, "error", err)
 		}
 	}
@@ -248,7 +248,7 @@ func (s *Service) importServer(
 		}
 	}
 	if len(readmeContent) > 0 {
-		if err := s.registry.StoreServerReadme(ctx, srv.Name, srv.Version, readmeContent, readmeContentType); err != nil {
+		if err := s.registry.SetServerReadme(ctx, srv.Name, srv.Version, readmeContent, readmeContentType); err != nil {
 			s.logger.Warn("storing README failed", "name", srv.Name, "version", srv.Version, "error", err)
 		}
 	}

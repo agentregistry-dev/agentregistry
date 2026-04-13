@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
@@ -19,13 +19,13 @@ const defaultPageSize = 100
 
 // Service handles exporting registry data into seed files.
 type Service struct {
-	registryService service.RegistryService
+	registryService serversvc.Registry
 	pageSize        int
 	readmeOutput    string
 }
 
 // NewService creates a new exporter service.
-func NewService(registryService service.RegistryService) *Service {
+func NewService(registryService serversvc.Registry) *Service {
 	return &Service{
 		registryService: registryService,
 		pageSize:        defaultPageSize,
@@ -161,7 +161,7 @@ func (s *Service) collectReadmes(ctx context.Context, servers []*apiv0.ServerJSO
 	result := make(seed.ReadmeFile)
 
 	for _, server := range servers {
-		readme, err := s.registryService.GetServerReadmeByVersion(ctx, server.Name, server.Version)
+		readme, err := s.registryService.GetServerReadme(ctx, server.Name, server.Version)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
 				continue
