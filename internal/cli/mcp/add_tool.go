@@ -10,12 +10,14 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/frameworks"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/templates"
+	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
 	"github.com/spf13/cobra"
 )
 
 var AddToolCmd = &cobra.Command{
-	Use:   "add-tool [tool-name]",
-	Short: "Add a new MCP tool to your project",
+	Use:         "add-tool [tool-name]",
+	Annotations: map[string]string{annotations.SkipDaemonAnnotation: "true"},
+	Short:       "Add a new MCP tool to your project",
 	Long: `Generate a new MCP tool that will be automatically loaded by the server.
 
 This command creates a new tool file in src/tools/ with a generic template.

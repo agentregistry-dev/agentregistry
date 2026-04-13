@@ -10,6 +10,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
+	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
 )
 
 var apiClient *client.Client
@@ -31,9 +32,10 @@ type versionOutput struct {
 var jsonOutput bool
 
 var VersionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Show version information",
-	Long:  `Displays the version of arctl.`,
+	Use:         "version",
+	Short:       "Show version information",
+	Long:        `Displays the version of arctl.`,
+	Annotations: map[string]string{annotations.SkipDaemonAnnotation: "true"},
 	Run: func(cmd *cobra.Command, args []string) {
 		output := versionOutput{
 			ArctlVersion: version.Version,

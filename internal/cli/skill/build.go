@@ -7,6 +7,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
+	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/spf13/cobra"
 )
@@ -15,8 +16,9 @@ import (
 const skillDockerfile = "FROM scratch\nCOPY . .\n"
 
 var BuildCmd = &cobra.Command{
-	Use:   "build <skill-folder-path>",
-	Short: "Build a skill as a Docker image",
+	Use:         "build <skill-folder-path>",
+	Annotations: map[string]string{annotations.SkipDaemonAnnotation: "true"},
+	Short:       "Build a skill as a Docker image",
 	Long: `Build a skill from a local folder containing SKILL.md.
 
 This command reads the SKILL.md frontmatter to determine the skill name,
