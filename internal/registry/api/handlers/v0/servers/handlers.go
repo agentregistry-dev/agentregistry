@@ -489,10 +489,7 @@ type ApplyServerInput struct {
 }
 
 // RegisterServersApplyEndpoint registers the server-side apply endpoint for MCP servers.
-// NOTE: This function is intentionally NOT called from the router because
-// PUT /servers/{serverName}/versions/{version} conflicts with the admin
-// RegisterEditEndpoints route. Kept here for reference; resolve the conflict
-// before wiring it in.
+// PUT is the idempotent upsert (create-or-update). Admin status edits live on PATCH.
 func RegisterServersApplyEndpoint(api huma.API, pathPrefix string, serverSvc serversvc.Registry, deploymentSvc deploymentmeta.Lister) {
 	huma.Register(api, huma.Operation{
 		OperationID: "apply-server" + strings.ReplaceAll(pathPrefix, "/", "-"),

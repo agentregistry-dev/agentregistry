@@ -572,6 +572,15 @@ func (c *Client) CreateMCPServer(server *v0.ServerJSON) (*v0.ServerResponse, err
 	return &resp, err
 }
 
+// ApplyMCPServer applies (creates or updates) an MCP server at a specific version.
+func (c *Client) ApplyMCPServer(serverName, version string, server *v0.ServerJSON) (*v0.ServerResponse, error) {
+	encName := url.PathEscape(serverName)
+	encVersion := url.PathEscape(version)
+	path := fmt.Sprintf("/servers/%s/versions/%s", encName, encVersion)
+	var resp v0.ServerResponse
+	return &resp, c.doJsonRequest(http.MethodPut, path, server, &resp)
+}
+
 // DeleteAgent deletes an agent from the registry
 func (c *Client) DeleteAgent(name, version string) error {
 	encName := url.PathEscape(name)
@@ -638,6 +647,18 @@ func asHTTPStatus(err error) int {
 		return http.StatusNotFound
 	}
 	return 0
+}
+
+// ApplyProvider applies (creates or updates) a provider.
+// platform must be provided when creating a new provider (e.g. "local", "kubernetes").
+func (c *Client) ApplyProvider(providerID, platform string, in *models.UpdateProviderInput) (*models.Provider, error) {
+	encID := url.PathEscape(providerID)
+	path := "/providers/" + encID
+	if platform != "" {
+		path += "?platform=" + url.QueryEscape(platform)
+	}
+	var resp models.Provider
+	return &resp, c.doJsonRequest(http.MethodPut, path, in, &resp)
 }
 
 // GetDeployedServers retrieves all deployed servers
@@ -720,6 +741,16 @@ func (c *Client) DeployAgent(name, version string, env map[string]string, provid
 		return nil, err
 	}
 
+	return &deployment, nil
+}
+
+// ApplyDeployment applies (creates or no-ops) a deployment idempotently.
+// If a deployment for the same resource already exists and is deployed, it is returned unchanged.
+func (c *Client) ApplyDeployment(req *deploymentRequest) (*DeploymentResponse, error) {
+	var deployment DeploymentResponse
+	if err := c.doJsonRequest(http.MethodPut, "/deployments", req, &deployment); err != nil {
+		return nil, err
+	}
 	return &deployment, nil
 }
 

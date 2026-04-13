@@ -1,7 +1,9 @@
 package deployment
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -267,4 +269,67 @@ func (s *registry) removeDeploymentRecord(ctx context.Context, deployment *model
 	}
 
 	return s.deployments.DeleteDeployment(ctx, deployment.ID)
+}
+
+// ApplyDeployment is an idempotent deploy: if a deployment with the same resource
+// identity (name + version + resourceType) is already in "deployed" status it is
+// returned unchanged. Otherwise any stale record is cleaned up and a new deployment
+// is launched.
+func (s *registry) ApplyDeployment(ctx context.Context, req *models.Deployment) (*models.Deployment, error) {
+	if req == nil {
+		return nil, fmt.Errorf("%w: deployment request is required", database.ErrInvalidInput)
+	}
+	resourceType := strings.ToLower(strings.TrimSpace(req.ResourceType))
+	if resourceType == "" {
+		resourceType = resourceTypeMCP
+	}
+
+	existing, err := s.findDeploymentByIdentity(ctx, req.ServerName, req.Version, resourceType)
+	if err != nil && !errors.Is(err, database.ErrNotFound) {
+		return nil, fmt.Errorf("checking existing deployment: %w", err)
+	}
+	if existing != nil && existing.Status == models.DeploymentStatusDeployed &&
+		envEqual(existing.Env, req.Env) &&
+		providerConfigEqual(existing.ProviderConfig, req.ProviderConfig) {
+		return existing, nil // identical desired state — idempotent no-op
+	}
+
+	// Clean up stale record (failed/cancelled/deploying) before launching fresh.
+	if err := s.CleanupExistingDeployment(ctx, req.ServerName, req.Version, resourceType); err != nil {
+		return nil, fmt.Errorf("cleaning up stale deployment: %w", err)
+	}
+
+	deployReq := *req
+	deployReq.ResourceType = resourceType
+	return s.LaunchDeployment(ctx, &deployReq)
+}
+
+// envEqual returns true if a and b contain the same key/value pairs.
+// nil and empty maps are treated as equal.
+func envEqual(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		bv, ok := b[k]
+		if !ok || bv != v {
+			return false
+		}
+	}
+	return true
+}
+
+// providerConfigEqual returns true if a and b serialize to equal canonical JSON.
+// nil and empty objects are treated as equal. Map key ordering is irrelevant
+// because encoding/json sorts keys.
+func providerConfigEqual(a, b models.JSONObject) bool {
+	if len(a) == 0 && len(b) == 0 {
+		return true
+	}
+	aBytes, errA := json.Marshal(a)
+	bBytes, errB := json.Marshal(b)
+	if errA != nil || errB != nil {
+		return false
+	}
+	return bytes.Equal(aBytes, bBytes)
 }

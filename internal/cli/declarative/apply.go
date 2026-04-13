@@ -35,7 +35,12 @@ Each file may contain one or more resources separated by ---. Supported kinds:
 Examples:
   arctl apply -f agent.yaml
   arctl apply -f stack.yaml --dry-run
-  cat stack.yaml | arctl apply -f -`,
+  cat stack.yaml | arctl apply -f -
+
+NOTE: Re-applying an agent YAML with a changed deploy.env section will
+undeploy and redeploy the existing cloud deployment. The new deployment
+will have a different ID. A failed redeploy may leave the resource
+undeployed; retry once the underlying issue is fixed.`,
 		SilenceUsage: true,
 		RunE:         runApply,
 	}

@@ -321,3 +321,46 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, deploymentSvc d
 		return &struct{}{}, nil
 	})
 }
+
+// RegisterDeploymentApplyEndpoint registers PUT /v0/deployments — idempotent deploy.
+func RegisterDeploymentApplyEndpoint(api huma.API, basePath string, deploymentSvc deploymentsvc.Registry) {
+	huma.Register(api, huma.Operation{
+		OperationID: "apply-deployment",
+		Method:      http.MethodPut,
+		Path:        basePath + "/deployments",
+		Summary:     "Apply deployment (idempotent deploy)",
+		Description: "Deploy a resource if not already deployed, or no-op if it is. Stale failed/cancelled deployments are cleaned up and re-deployed.",
+		Tags:        []string{"deployments"},
+	}, func(ctx context.Context, input *struct {
+		Body DeploymentRequest
+	}) (*DeploymentResponse, error) {
+		resourceType := input.Body.ResourceType
+		if resourceType == "" {
+			resourceType = "mcp"
+		}
+		if resourceType != "mcp" && resourceType != "agent" {
+			return nil, huma.Error400BadRequest("Invalid resource type. Must be 'mcp' or 'agent'")
+		}
+		providerID := strings.TrimSpace(input.Body.ProviderID)
+		if providerID == "" {
+			return nil, huma.Error400BadRequest("providerId is required")
+		}
+
+		deploymentReq := &models.Deployment{
+			ServerName:     input.Body.ServerName,
+			Version:        input.Body.Version,
+			ProviderID:     providerID,
+			ResourceType:   resourceType,
+			Origin:         "managed",
+			Env:            input.Body.Env,
+			ProviderConfig: input.Body.ProviderConfig,
+			PreferRemote:   input.Body.PreferRemote,
+		}
+
+		deployment, err := deploymentSvc.ApplyDeployment(ctx, deploymentReq)
+		if err != nil {
+			return nil, createDeploymentHTTPError(err)
+		}
+		return &DeploymentResponse{Body: *deployment}, nil
+	})
+}

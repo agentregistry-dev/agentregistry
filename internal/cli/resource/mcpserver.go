@@ -27,14 +27,8 @@ func (h *MCPServerHandler) Apply(c *client.Client, r *scheme.Resource) error {
 	if err != nil {
 		return err
 	}
-	// MCPServer has no server-side apply (PUT) endpoint due to a route conflict with
-	// the admin edit endpoint. Falls back to POST (create-only) — applying the same
-	// version twice will return an error.
-	_, err = c.CreateMCPServer(serverJSON)
-	if err != nil {
-		return fmt.Errorf("%w (MCPServer does not support idempotent apply; use a new version to update)", err)
-	}
-	return nil
+	_, err = c.ApplyMCPServer(serverJSON.Name, serverJSON.Version, serverJSON)
+	return err
 }
 
 func (h *MCPServerHandler) List(c *client.Client) ([]any, error) {

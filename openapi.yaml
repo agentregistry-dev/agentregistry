@@ -470,6 +470,31 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
+        put:
+            tags:
+                - deployments
+            summary: Apply a deployment (idempotent deploy)
+            description: Idempotently deploy a resource. Returns the existing deployment unchanged if the resource is already deployed; otherwise cleans up any stale record and launches a fresh deployment.
+            operationId: apply-deployment
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeploymentRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Deployment'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
     /v0/deployments/{id}:
         get:
             tags:
@@ -963,9 +988,9 @@ paths:
         put:
             tags:
                 - providers
-            summary: Update provider
-            description: Update mutable fields of a provider by ID.
-            operationId: update-provider
+            summary: Apply provider (create or update)
+            description: Idempotently upsert a provider. If the provider exists, mutable fields are updated. If it does not exist and a `platform` query parameter is supplied, the provider is created.
+            operationId: apply-provider
             parameters:
                 - name: providerId
                   in: path
@@ -1258,6 +1283,52 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
         put:
+            tags:
+                - servers
+            summary: Apply MCP server (create or update)
+            description: Idempotently upsert a specific version of an MCP server. Creates the resource if it does not exist; otherwise updates it.
+            operationId: apply-server-v0
+            parameters:
+                - name: serverName
+                  in: path
+                  description: URL-encoded server name
+                  required: true
+                  schema:
+                    type: string
+                    description: URL-encoded server name
+                    examples:
+                        - com.example%2Fmy-server
+                  example: com.example%2Fmy-server
+                - name: version
+                  in: path
+                  description: URL-encoded version to apply
+                  required: true
+                  schema:
+                    type: string
+                    description: URL-encoded version to apply
+                    examples:
+                        - 1.0.0
+                  example: 1.0.0
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ServerJSON'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ServerResponse'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        patch:
             tags:
                 - servers
                 - admin

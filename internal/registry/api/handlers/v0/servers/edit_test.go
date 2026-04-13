@@ -399,7 +399,7 @@ func TestEditServerEndpoint(t *testing.T) {
 				requestURL += "?status=" + tc.statusParam
 			}
 
-			req := httptest.NewRequest(http.MethodPut, requestURL, bytes.NewReader(requestBody))
+			req := httptest.NewRequest(http.MethodPatch, requestURL, bytes.NewReader(requestBody))
 			req.Header.Set("Content-Type", "application/json")
 
 			// Set authorization header
@@ -550,7 +550,7 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 				encodedName := url.PathEscape(tt.serverName)
 				requestURL := "/v0/servers/" + encodedName + "/versions/" + tt.version + "?status=" + tt.toStatus
 
-				req := httptest.NewRequest(http.MethodPut, requestURL, bytes.NewReader(bodyBytes))
+				req := httptest.NewRequest(http.MethodPatch, requestURL, bytes.NewReader(bodyBytes))
 				req.Header.Set("Content-Type", "application/json")
 
 				// Generate admin token
@@ -613,7 +613,7 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 		encodedName := url.PathEscape(specialServerName)
 		requestURL := "/v0/servers/" + encodedName + "/versions/1.0.0"
 
-		req := httptest.NewRequest(http.MethodPut, requestURL, bytes.NewReader(bodyBytes))
+		req := httptest.NewRequest(http.MethodPatch, requestURL, bytes.NewReader(bodyBytes))
 		req.Header.Set("Content-Type", "application/json")
 
 		// Generate admin token
@@ -660,7 +660,7 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 		encodedName := url.PathEscape("com.example/multi-version-server")
 		requestURL := "/v0/servers/" + encodedName + "/versions/1.0.0"
 
-		req := httptest.NewRequest(http.MethodPut, requestURL, bytes.NewReader(bodyBytes))
+		req := httptest.NewRequest(http.MethodPatch, requestURL, bytes.NewReader(bodyBytes))
 		req.Header.Set("Content-Type", "application/json")
 
 		// Generate admin token
