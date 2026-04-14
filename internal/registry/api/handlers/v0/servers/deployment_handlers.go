@@ -16,9 +16,9 @@ import (
 
 // ServerDeploymentApplyInput represents path parameters for apply-server-deployment.
 type ServerDeploymentApplyInput struct {
-	ServerName string `path:"serverName" doc:"URL-encoded server name"`
-	Version    string `path:"version" doc:"URL-encoded server version"`
-	ProviderID string `path:"providerId" doc:"Deployment provider ID"`
+	ServerName string                    `path:"serverName" doc:"URL-encoded server name"`
+	Version    string                    `path:"version" doc:"URL-encoded server version"`
+	ProviderID string                    `path:"providerId" doc:"Deployment provider ID"`
 	Body       ServerDeploymentApplyBody `body:""`
 }
 

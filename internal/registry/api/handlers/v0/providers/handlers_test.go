@@ -69,6 +69,10 @@ func (f *fakeProviderService) DeleteProvider(ctx context.Context, providerID, pl
 	return database.ErrNotFound
 }
 
+func (f *fakeProviderService) ApplyProvider(_ context.Context, _, _ string, _ *models.UpdateProviderInput) (*models.Provider, error) {
+	return nil, nil
+}
+
 func (f *fakeProviderService) PlatformAdapters() map[string]types.ProviderPlatformAdapter {
 	return nil
 }

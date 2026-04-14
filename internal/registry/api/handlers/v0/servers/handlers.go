@@ -483,8 +483,8 @@ func RegisterServersCreateEndpoint(api huma.API, pathPrefix string, serverSvc se
 
 // ApplyServerInput represents the input for applying (create or update) a specific server version
 type ApplyServerInput struct {
-	ServerName string          `path:"serverName"`
-	Version    string          `path:"version"`
+	ServerName string           `path:"serverName"`
+	Version    string           `path:"version"`
 	Body       apiv0.ServerJSON `body:""`
 }
 

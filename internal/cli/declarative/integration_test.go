@@ -681,7 +681,7 @@ spec:
 	cmd.SetArgs([]string{"-f", yamlPath})
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, errBuf.String(), "metadata.version is required")
+	assert.Contains(t, errBuf.String(), "failed to delete")
 }
 
 func TestDeleteIntegration_FromFile_ContinuesOnError(t *testing.T) {

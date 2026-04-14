@@ -30,7 +30,7 @@ func (m *mockDeploymentAdapter) deployCallCount() int {
 	return m.deployCount
 }
 
-func (m *mockDeploymentAdapter) Platform() string { return "mock" }
+func (m *mockDeploymentAdapter) Platform() string                 { return "mock" }
 func (m *mockDeploymentAdapter) SupportedResourceTypes() []string { return []string{"agent", "mcp"} }
 func (m *mockDeploymentAdapter) Deploy(_ context.Context, req *models.Deployment) (*models.DeploymentActionResult, error) {
 	m.deployed[req.ID] = true
@@ -38,9 +38,13 @@ func (m *mockDeploymentAdapter) Deploy(_ context.Context, req *models.Deployment
 	return &models.DeploymentActionResult{Status: models.DeploymentStatusDeployed}, nil
 }
 func (m *mockDeploymentAdapter) Undeploy(_ context.Context, _ *models.Deployment) error { return nil }
-func (m *mockDeploymentAdapter) GetLogs(_ context.Context, _ *models.Deployment) ([]string, error) { return nil, nil }
+func (m *mockDeploymentAdapter) GetLogs(_ context.Context, _ *models.Deployment) ([]string, error) {
+	return nil, nil
+}
 func (m *mockDeploymentAdapter) Cancel(_ context.Context, _ *models.Deployment) error { return nil }
-func (m *mockDeploymentAdapter) Discover(_ context.Context, _ string) ([]*models.Deployment, error) { return nil, nil }
+func (m *mockDeploymentAdapter) Discover(_ context.Context, _ string) ([]*models.Deployment, error) {
+	return nil, nil
+}
 
 var _ registrytypes.DeploymentPlatformAdapter = (*mockDeploymentAdapter)(nil)
 

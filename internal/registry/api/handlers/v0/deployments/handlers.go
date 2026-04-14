@@ -321,4 +321,3 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, deploymentSvc d
 		return &struct{}{}, nil
 	})
 }
-

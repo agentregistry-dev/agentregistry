@@ -16,9 +16,9 @@ import (
 
 // AgentDeploymentApplyInput represents path parameters for apply-agent-deployment.
 type AgentDeploymentApplyInput struct {
-	AgentName  string `path:"agentName" doc:"URL-encoded agent name"`
-	Version    string `path:"version" doc:"URL-encoded agent version"`
-	ProviderID string `path:"providerId" doc:"Deployment provider ID"`
+	AgentName  string              `path:"agentName" doc:"URL-encoded agent name"`
+	Version    string              `path:"version" doc:"URL-encoded agent version"`
+	ProviderID string              `path:"providerId" doc:"Deployment provider ID"`
 	Body       DeploymentApplyBody `body:""`
 }
 
