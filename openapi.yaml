@@ -191,6 +191,41 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
+        put:
+            tags:
+                - agents
+            summary: Apply agent (create or update)
+            operationId: apply-agent-v0
+            parameters:
+                - name: agentName
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AgentJSON'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AgentResponse'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
         delete:
             tags:
                 - agents
@@ -225,6 +260,55 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/EmptyResponse'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/agents/{agentName}/versions/{version}/deployments/{providerId}:
+        put:
+            tags:
+                - deployments
+                - agents
+            summary: Apply agent deployment (idempotent)
+            description: Idempotently deploy an agent. Returns the existing deployment unchanged if already deployed; otherwise cleans up any stale record and launches a fresh deployment.
+            operationId: apply-agent-deployment
+            parameters:
+                - name: agentName
+                  in: path
+                  description: URL-encoded agent name
+                  required: true
+                  schema:
+                    type: string
+                    description: URL-encoded agent name
+                - name: version
+                  in: path
+                  description: URL-encoded agent version
+                  required: true
+                  schema:
+                    type: string
+                    description: URL-encoded agent version
+                - name: providerId
+                  in: path
+                  description: Deployment provider ID
+                  required: true
+                  schema:
+                    type: string
+                    description: Deployment provider ID
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeploymentApplyBody'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Deployment'
                 default:
                     description: Error
                     content:
@@ -762,6 +846,41 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
+        put:
+            tags:
+                - prompts
+            summary: Apply prompt (create or update)
+            operationId: apply-prompt-v0
+            parameters:
+                - name: promptName
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PromptJSON'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PromptResponse'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
         delete:
             tags:
                 - prompts
@@ -893,9 +1012,9 @@ paths:
         put:
             tags:
                 - providers
-            summary: Update provider
-            description: Update mutable fields of a provider by ID.
-            operationId: update-provider
+            summary: Apply provider (create or update)
+            description: Create a provider if it does not exist, or update it if it does. Requires ?platform= when creating.
+            operationId: apply-provider
             parameters:
                 - name: providerId
                   in: path
@@ -1190,9 +1309,93 @@ paths:
         put:
             tags:
                 - servers
+            summary: Apply MCP server (create or update)
+            operationId: apply-server-v0
+            parameters:
+                - name: serverName
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ServerJSON'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ServerResponse'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        delete:
+            tags:
+                - servers
+                - admin
+            summary: Delete MCP server version
+            description: Permanently delete an MCP server version from the registry.
+            operationId: delete-server-version-v0
+            parameters:
+                - name: serverName
+                  in: path
+                  description: URL-encoded server name
+                  required: true
+                  schema:
+                    type: string
+                    description: URL-encoded server name
+                    examples:
+                        - com.example%2Fmy-server
+                  example: com.example%2Fmy-server
+                - name: version
+                  in: path
+                  description: URL-encoded server version
+                  required: true
+                  schema:
+                    type: string
+                    description: URL-encoded server version
+                    examples:
+                        - 1.0.0
+                  example: 1.0.0
+                - name: all
+                  in: query
+                  description: If true, return all versions of the server instead of a single version
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: If true, return all versions of the server instead of a single version
+                    default: false
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/EmptyResponse'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        patch:
+            tags:
+                - servers
                 - admin
             summary: Edit MCP server
-            description: Update a specific version of an existing MCP server (admin only).
+            description: Update a specific version of an existing MCP server (admin only). Use PUT for idempotent apply (create-or-update).
             operationId: edit-server-v0
             parameters:
                 - name: serverName
@@ -1247,13 +1450,14 @@ paths:
                                 $ref: '#/components/schemas/ErrorModel'
             security:
                 - bearer: []
-        delete:
+    /v0/servers/{serverName}/versions/{version}/deployments/{providerId}:
+        put:
             tags:
+                - deployments
                 - servers
-                - admin
-            summary: Delete MCP server version
-            description: Permanently delete an MCP server version from the registry.
-            operationId: delete-server-version-v0
+            summary: Apply server deployment (idempotent)
+            description: Idempotently deploy an MCP server. Returns the existing deployment unchanged if already deployed; otherwise cleans up any stale record and launches a fresh deployment.
+            operationId: apply-server-deployment
             parameters:
                 - name: serverName
                   in: path
@@ -1262,9 +1466,6 @@ paths:
                   schema:
                     type: string
                     description: URL-encoded server name
-                    examples:
-                        - com.example%2Fmy-server
-                  example: com.example%2Fmy-server
                 - name: version
                   in: path
                   description: URL-encoded server version
@@ -1272,24 +1473,26 @@ paths:
                   schema:
                     type: string
                     description: URL-encoded server version
-                    examples:
-                        - 1.0.0
-                  example: 1.0.0
-                - name: all
-                  in: query
-                  description: If true, return all versions of the server instead of a single version
-                  explode: false
+                - name: providerId
+                  in: path
+                  description: Deployment provider ID
+                  required: true
                   schema:
-                    type: boolean
-                    description: If true, return all versions of the server instead of a single version
-                    default: false
+                    type: string
+                    description: Deployment provider ID
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ServerDeploymentApplyBody'
+                required: true
             responses:
                 "200":
                     description: OK
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/EmptyResponse'
+                                $ref: '#/components/schemas/Deployment'
                 default:
                     description: Error
                     content:
@@ -1504,6 +1707,41 @@ paths:
                     examples:
                         - 1.0.0
                   example: 1.0.0
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillResponse'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        put:
+            tags:
+                - skills
+            summary: Apply skill (create or update)
+            operationId: apply-skill-v0
+            parameters:
+                - name: skillName
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SkillJSON'
+                required: true
             responses:
                 "200":
                     description: OK
@@ -1865,6 +2103,23 @@ components:
                 - preferRemote
                 - deployedAt
                 - updatedAt
+        DeploymentApplyBody:
+            type: object
+            additionalProperties: false
+            properties:
+                env:
+                    type: object
+                    description: Deployment environment variables.
+                    additionalProperties:
+                        type: string
+                preferRemote:
+                    type: boolean
+                    description: Prefer remote deployment over local
+                    default: false
+                providerConfig:
+                    type: object
+                    description: Optional provider-specific deployment settings.
+                    additionalProperties: {}
         DeploymentLogsBody:
             type: object
             additionalProperties: false
@@ -2485,6 +2740,23 @@ components:
             required:
                 - deployments
                 - count
+        ServerDeploymentApplyBody:
+            type: object
+            additionalProperties: false
+            properties:
+                env:
+                    type: object
+                    description: Deployment environment variables.
+                    additionalProperties:
+                        type: string
+                preferRemote:
+                    type: boolean
+                    description: Prefer remote deployment over local
+                    default: false
+                providerConfig:
+                    type: object
+                    description: Optional provider-specific deployment settings.
+                    additionalProperties: {}
         ServerJSON:
             type: object
             additionalProperties: false

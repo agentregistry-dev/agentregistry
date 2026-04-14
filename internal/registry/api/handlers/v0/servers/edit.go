@@ -30,10 +30,10 @@ func RegisterEditEndpoints(api huma.API, pathPrefix string, serverSvc serversvc.
 	// Edit server endpoint
 	huma.Register(api, huma.Operation{
 		OperationID: "edit-server" + strings.ReplaceAll(pathPrefix, "/", "-"),
-		Method:      http.MethodPut,
+		Method:      http.MethodPatch,
 		Path:        pathPrefix + "/servers/{serverName}/versions/{version}",
 		Summary:     "Edit MCP server",
-		Description: "Update a specific version of an existing MCP server (admin only).",
+		Description: "Update a specific version of an existing MCP server (admin only). Use PUT for idempotent apply (create-or-update).",
 		Tags:        []string{"servers", "admin"},
 		Security: []map[string][]string{
 			{"bearer": {}},

@@ -1,7 +1,9 @@
 package deployment
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -48,8 +50,8 @@ func (s *registry) ResolveDeploymentAdapterByProviderID(ctx context.Context, pro
 
 // CleanupExistingDeployment removes a stale managed deployment record for the given
 // resource, undeploying from its platform if possible.
-func (s *registry) CleanupExistingDeployment(ctx context.Context, resourceName, version, resourceType string) error {
-	existing, err := s.findDeploymentByIdentity(ctx, resourceName, version, resourceType)
+func (s *registry) CleanupExistingDeployment(ctx context.Context, resourceName, version, resourceType, providerID string) error {
+	existing, err := s.findDeploymentByIdentity(ctx, resourceName, version, resourceType, providerID)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
 			return nil
@@ -209,14 +211,14 @@ func deploymentAdapterSupportsResourceType(adapter registrytypes.DeploymentPlatf
 	return false
 }
 
-func (s *registry) findDeploymentByIdentity(ctx context.Context, resourceName, version, artifactType string) (*models.Deployment, error) {
+func (s *registry) findDeploymentByIdentity(ctx context.Context, resourceName, version, artifactType, providerID string) (*models.Deployment, error) {
 	filter := &models.DeploymentFilter{ResourceType: &artifactType, ResourceName: &resourceName}
 	deployments, err := s.deployments.ListDeployments(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
 	for _, deployment := range deployments {
-		if deployment.ServerName == resourceName && deployment.Version == version && deployment.ResourceType == artifactType {
+		if deployment.ServerName == resourceName && deployment.Version == version && deployment.ResourceType == artifactType && deployment.ProviderID == providerID {
 			return deployment, nil
 		}
 	}
@@ -267,4 +269,77 @@ func (s *registry) removeDeploymentRecord(ctx context.Context, deployment *model
 	}
 
 	return s.deployments.DeleteDeployment(ctx, deployment.ID)
+}
+
+// applyDeployment is the shared upsert logic for both agent and server deployments.
+// It checks for an existing deployment by identity, compares env/providerConfig,
+// and either returns the existing record (no-op), cleans up + relaunches (drift),
+// or launches fresh (no existing).
+func (s *registry) applyDeployment(ctx context.Context, resourceName, version, resourceType, providerID string, env map[string]string, providerConfig models.JSONObject, preferRemote bool) (*models.Deployment, error) {
+	if resourceName == "" || version == "" || providerID == "" {
+		return nil, fmt.Errorf("%w: resource name, version, and provider ID are required", database.ErrInvalidInput)
+	}
+
+	existing, err := s.findDeploymentByIdentity(ctx, resourceName, version, resourceType, providerID)
+	if err != nil && !errors.Is(err, database.ErrNotFound) {
+		return nil, fmt.Errorf("checking existing deployment: %w", err)
+	}
+	if existing != nil && existing.Status == models.DeploymentStatusDeployed &&
+		envEqual(existing.Env, env) &&
+		providerConfigEqual(existing.ProviderConfig, providerConfig) {
+		return existing, nil // identical desired state — idempotent no-op
+	}
+
+	// Clean up stale record (failed/cancelled/deploying/drift) before launching fresh.
+	if err := s.CleanupExistingDeployment(ctx, resourceName, version, resourceType, providerID); err != nil {
+		return nil, fmt.Errorf("cleaning up stale deployment: %w", err)
+	}
+
+	return s.LaunchDeployment(ctx, &models.Deployment{
+		ServerName:     resourceName,
+		Version:        version,
+		ResourceType:   resourceType,
+		ProviderID:     providerID,
+		Env:            env,
+		ProviderConfig: providerConfig,
+		PreferRemote:   preferRemote,
+	})
+}
+
+func (s *registry) ApplyAgentDeployment(ctx context.Context, agentName, version, providerID string, env map[string]string, providerConfig models.JSONObject) (*models.Deployment, error) {
+	return s.applyDeployment(ctx, agentName, version, resourceTypeAgent, providerID, env, providerConfig, false)
+}
+
+func (s *registry) ApplyServerDeployment(ctx context.Context, serverName, version, providerID string, env map[string]string, providerConfig models.JSONObject) (*models.Deployment, error) {
+	return s.applyDeployment(ctx, serverName, version, resourceTypeMCP, providerID, env, providerConfig, false)
+}
+
+// envEqual returns true if a and b contain the same key/value pairs.
+// nil and empty maps are treated as equal.
+func envEqual(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		bv, ok := b[k]
+		if !ok || bv != v {
+			return false
+		}
+	}
+	return true
+}
+
+// providerConfigEqual returns true if a and b serialize to equal canonical JSON.
+// nil and empty objects are treated as equal. Map key ordering is irrelevant
+// because encoding/json sorts keys.
+func providerConfigEqual(a, b models.JSONObject) bool {
+	if len(a) == 0 && len(b) == 0 {
+		return true
+	}
+	aBytes, errA := json.Marshal(a)
+	bBytes, errB := json.Marshal(b)
+	if errA != nil || errB != nil {
+		return false
+	}
+	return bytes.Equal(aBytes, bBytes)
 }

@@ -53,9 +53,9 @@ func (a *Authorizer) IsRegistryAdmin(ctx context.Context) bool {
 var PublicActions = map[PermissionAction]bool{
 	PermissionActionRead:    true,
 	PermissionActionPublish: true,
-	// PermissionActionEdit:    true,
-	PermissionActionDelete: true,
-	PermissionActionDeploy: true,
+	PermissionActionEdit:    true,
+	PermissionActionDelete:  true,
+	PermissionActionDeploy:  true,
 }
 
 // PublicAuthzProvider implements AuthzProvider for the public version.

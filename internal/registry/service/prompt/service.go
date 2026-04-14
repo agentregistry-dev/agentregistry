@@ -23,6 +23,7 @@ type Dependencies struct {
 type Registry interface {
 	database.PromptReader
 	PublishPrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error)
+	ApplyPrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error)
 	DeletePrompt(ctx context.Context, promptName, version string) error
 }
 
@@ -58,6 +59,26 @@ func (s *registry) PublishPrompt(ctx context.Context, req *models.PromptJSON) (*
 	return database.InTransactionT(ctx, s.tx, func(txCtx context.Context, scope database.Scope) (*models.PromptResponse, error) {
 		return s.createPromptInTransaction(txCtx, scope.Prompts(), req)
 	})
+}
+
+func (s *registry) ApplyPrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error) {
+	if req == nil || req.Name == "" || req.Version == "" {
+		return nil, fmt.Errorf("invalid prompt payload: name and version are required")
+	}
+	return database.InTransactionT(ctx, s.tx, func(txCtx context.Context, scope database.Scope) (*models.PromptResponse, error) {
+		return s.applyPromptInTransaction(txCtx, scope.Prompts(), req)
+	})
+}
+
+func (s *registry) applyPromptInTransaction(ctx context.Context, prompts database.PromptStore, req *models.PromptJSON) (*models.PromptResponse, error) {
+	exists, err := prompts.CheckPromptVersionExists(ctx, req.Name, req.Version)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return prompts.UpdatePrompt(ctx, req.Name, req.Version, req)
+	}
+	return s.createPromptInTransaction(ctx, prompts, req)
 }
 
 func (s *registry) DeletePrompt(ctx context.Context, promptName, version string) error {

@@ -212,6 +212,18 @@ func (f *fakeMCPRegistry) DeleteSkill(ctx context.Context, skillName, version st
 	return errors.New("not implemented")
 }
 
+func (f *fakeMCPRegistry) ApplySkill(_ context.Context, req *models.SkillJSON) (*models.SkillResponse, error) {
+	return &models.SkillResponse{Skill: *req}, nil
+}
+
+func (f *fakeMCPRegistry) ApplyServer(_ context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
+	return &apiv0.ServerResponse{Server: *req}, nil
+}
+
+func (f *fakeMCPRegistry) ApplyAgent(_ context.Context, req *models.AgentJSON) (*models.AgentResponse, error) {
+	return &models.AgentResponse{Agent: *req}, nil
+}
+
 func (f *fakeMCPRegistry) ListDeployments(ctx context.Context, filter *models.DeploymentFilter) ([]*models.Deployment, error) {
 	if f.getDeploymentsFn != nil {
 		return f.getDeploymentsFn(ctx, filter)
@@ -424,8 +436,30 @@ func (h *fakeMCPDeploymentHarness) ResolveDeploymentAdapterByProviderID(context.
 	return h, nil
 }
 
-func (h *fakeMCPDeploymentHarness) CleanupExistingDeployment(context.Context, string, string, string) error {
+func (h *fakeMCPDeploymentHarness) CleanupExistingDeployment(context.Context, string, string, string, string) error {
 	return nil
+}
+
+func (h *fakeMCPDeploymentHarness) ApplyAgentDeployment(_ context.Context, agentName, version, providerID string, env map[string]string, providerConfig models.JSONObject) (*models.Deployment, error) {
+	return h.LaunchDeployment(context.Background(), &models.Deployment{
+		ServerName:     agentName,
+		Version:        version,
+		ResourceType:   "agent",
+		ProviderID:     providerID,
+		Env:            env,
+		ProviderConfig: providerConfig,
+	})
+}
+
+func (h *fakeMCPDeploymentHarness) ApplyServerDeployment(_ context.Context, serverName, version, providerID string, env map[string]string, providerConfig models.JSONObject) (*models.Deployment, error) {
+	return h.LaunchDeployment(context.Background(), &models.Deployment{
+		ServerName:     serverName,
+		Version:        version,
+		ResourceType:   "mcp",
+		ProviderID:     providerID,
+		Env:            env,
+		ProviderConfig: providerConfig,
+	})
 }
 
 func (h *fakeMCPDeploymentHarness) ApplyDeploymentActionResult(ctx context.Context, deploymentID string, result *models.DeploymentActionResult) error {

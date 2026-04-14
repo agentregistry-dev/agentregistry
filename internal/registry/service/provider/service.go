@@ -27,6 +27,7 @@ type Registry interface {
 	GetProvider(ctx context.Context, providerID string) (*models.Provider, error)
 	ResolveProvider(ctx context.Context, providerID, platformHint string) (*models.Provider, error)
 	UpdateProvider(ctx context.Context, providerID, platformHint string, in *models.UpdateProviderInput) (*models.Provider, error)
+	ApplyProvider(ctx context.Context, providerID, platform string, in *models.UpdateProviderInput) (*models.Provider, error)
 	DeleteProvider(ctx context.Context, providerID, platformHint string) error
 	PlatformAdapters() map[string]registrytypes.ProviderPlatformAdapter
 }
@@ -199,6 +200,39 @@ func (r *registry) UpdateProvider(ctx context.Context, providerID, platformHint 
 		return nil, &UnsupportedPlatformError{Platform: platform}
 	}
 	return r.providers.UpdateProvider(ctx, provider.ID, in)
+}
+
+func (r *registry) ApplyProvider(ctx context.Context, providerID, platform string, in *models.UpdateProviderInput) (*models.Provider, error) {
+	resolvedID := strings.TrimSpace(providerID)
+	if resolvedID == "" {
+		return nil, fmt.Errorf("%w: provider id is required", database.ErrInvalidInput)
+	}
+	if in == nil {
+		return nil, database.ErrInvalidInput
+	}
+
+	existing, err := r.ResolveProvider(ctx, resolvedID, platform)
+	if err != nil && !errors.Is(err, database.ErrNotFound) {
+		return nil, err
+	}
+	if existing != nil {
+		return r.UpdateProvider(ctx, existing.ID, existing.Platform, in)
+	}
+
+	// Provider not found: only create when a platform is supplied.
+	if normalizePlatform(platform) == "" {
+		return nil, database.ErrNotFound
+	}
+	if in.Name == nil || strings.TrimSpace(*in.Name) == "" {
+		return nil, fmt.Errorf("%w: provider name is required when creating a new provider", database.ErrInvalidInput)
+	}
+	createIn := &models.CreateProviderInput{
+		ID:       resolvedID,
+		Name:     *in.Name,
+		Platform: normalizePlatform(platform),
+		Config:   in.Config,
+	}
+	return r.RegisterProvider(ctx, createIn)
 }
 
 func (r *registry) DeleteProvider(ctx context.Context, providerID, platformHint string) error {

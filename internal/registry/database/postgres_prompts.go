@@ -330,6 +330,57 @@ func (s *promptStore) CreatePrompt(ctx context.Context, promptJSON *models.Promp
 	}, nil
 }
 
+func (s *promptStore) UpdatePrompt(ctx context.Context, promptName, version string, promptJSON *models.PromptJSON) (*models.PromptResponse, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	if promptJSON == nil {
+		return nil, fmt.Errorf("promptJSON is required")
+	}
+	if promptJSON.Name == "" || promptJSON.Version == "" {
+		return nil, fmt.Errorf("prompt name and version are required")
+	}
+	if err := s.authz.Check(ctx, auth.PermissionActionEdit, auth.Resource{
+		Name: promptName,
+		Type: auth.PermissionArtifactTypePrompt,
+	}); err != nil {
+		return nil, err
+	}
+	if promptJSON.Name != promptName || promptJSON.Version != version {
+		return nil, fmt.Errorf("%w: prompt name and version in JSON must match parameters", database.ErrInvalidInput)
+	}
+	valueJSON, err := json.Marshal(promptJSON)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal updated prompt: %w", err)
+	}
+	query := `
+        UPDATE prompts
+        SET value = $1, updated_at = NOW()
+        WHERE prompt_name = $2 AND version = $3
+        RETURNING prompt_name, version, status, published_at, updated_at, is_latest
+    `
+	var name, vers, status string
+	var publishedAt, updatedAt time.Time
+	var isLatest bool
+	if err := s.executor.QueryRow(ctx, query, valueJSON, promptName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, database.ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to update prompt: %w", err)
+	}
+	return &models.PromptResponse{
+		Prompt: *promptJSON,
+		Meta: models.PromptResponseMeta{
+			Official: &models.PromptRegistryExtensions{
+				Status:      status,
+				PublishedAt: publishedAt,
+				UpdatedAt:   updatedAt,
+				IsLatest:    isLatest,
+			},
+		},
+	}, nil
+}
+
 func (s *promptStore) GetLatestPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()

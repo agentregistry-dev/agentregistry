@@ -413,6 +413,9 @@ func (f *fakeClientRegistry) CheckPromptVersionExists(_ context.Context, promptN
 	return false, nil
 }
 func (f *fakeClientRegistry) UnmarkPromptAsLatest(_ context.Context, _ string) error { return nil }
+func (f *fakeClientRegistry) UpdatePrompt(_ context.Context, _, _ string, req *models.PromptJSON) (*models.PromptResponse, error) {
+	return &models.PromptResponse{Prompt: *req}, nil
+}
 func (f *fakeClientRegistry) DeletePrompt(ctx context.Context, promptName, version string) error {
 	if f.DeletePromptFn != nil {
 		return f.DeletePromptFn(ctx, promptName, version)

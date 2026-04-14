@@ -180,6 +180,7 @@ type PromptReader interface {
 type PromptStore interface {
 	PromptReader
 	CreatePrompt(ctx context.Context, promptJSON *models.PromptJSON, officialMeta *models.PromptRegistryExtensions) (*models.PromptResponse, error)
+	UpdatePrompt(ctx context.Context, promptName, version string, req *models.PromptJSON) (*models.PromptResponse, error)
 	DeletePrompt(ctx context.Context, promptName, version string) error
 	GetLatestPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error)
 	CountPromptVersions(ctx context.Context, promptName string) (int, error)

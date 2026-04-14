@@ -134,18 +134,18 @@ func RegisterProvidersEndpoints(api huma.API, basePath string, providerSvc provi
 	})
 
 	huma.Register(api, huma.Operation{
-		OperationID: "update-provider",
+		OperationID: "apply-provider",
 		Method:      http.MethodPut,
 		Path:        basePath + "/providers/{providerId}",
-		Summary:     "Update provider",
-		Description: "Update mutable fields of a provider by ID.",
+		Summary:     "Apply provider (create or update)",
+		Description: "Create a provider if it does not exist, or update it if it does. Requires ?platform= when creating.",
 		Tags:        []string{"providers"},
 	}, func(ctx context.Context, input *UpdateProviderRequest) (*ProviderResponse, error) {
-		updated, err := providerSvc.UpdateProvider(ctx, input.ProviderID, input.Platform, &input.Body)
+		applied, err := providerSvc.ApplyProvider(ctx, input.ProviderID, input.Platform, &input.Body)
 		if err != nil {
-			return nil, providerWriteHTTPError("Failed to update provider", err)
+			return nil, providerWriteHTTPError("Failed to apply provider", err)
 		}
-		return &ProviderResponse{Body: *updated}, nil
+		return &ProviderResponse{Body: *applied}, nil
 	})
 
 	huma.Register(api, huma.Operation{

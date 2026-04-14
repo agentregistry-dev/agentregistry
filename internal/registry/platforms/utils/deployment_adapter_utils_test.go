@@ -156,6 +156,14 @@ func (f *fakePlatformRuntimeRegistry) ResolveAgentManifestPrompts(ctx context.Co
 	return nil, nil
 }
 
+func (f *fakePlatformRuntimeRegistry) ApplyServer(_ context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
+	return &apiv0.ServerResponse{Server: *req}, nil
+}
+
+func (f *fakePlatformRuntimeRegistry) ApplyAgent(_ context.Context, req *models.AgentJSON) (*models.AgentResponse, error) {
+	return &models.AgentResponse{Agent: *req}, nil
+}
+
 func newPlatformRuntimeServices(registry *fakePlatformRuntimeRegistry) (serversvc.Registry, agentsvc.Registry) {
 	return registry, registry
 }

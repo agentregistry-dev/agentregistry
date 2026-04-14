@@ -1352,7 +1352,7 @@ func (m *deploymentMockDB) DeleteDeployment(ctx context.Context, id string) erro
 type deploymentInternals interface {
 	deploymentsvc.Registry
 	ResolveDeploymentAdapter(platform string) (registrytypes.DeploymentPlatformAdapter, error)
-	CleanupExistingDeployment(ctx context.Context, resourceName, version, resourceType string) error
+	CleanupExistingDeployment(ctx context.Context, resourceName, version, resourceType, providerID string) error
 	CreateManagedDeploymentRecord(ctx context.Context, req *models.Deployment) (*models.Deployment, error)
 	ApplyDeploymentActionResult(ctx context.Context, deploymentID string, result *models.DeploymentActionResult) error
 	ApplyFailedDeploymentAction(ctx context.Context, deploymentID string, deployErr error, result *models.DeploymentActionResult) error
@@ -1501,10 +1501,44 @@ func TestCleanupExistingDeployment_UsesAdapterStaleCleanerWhenAvailable(t *testi
 		},
 	})
 
-	err := svc.CleanupExistingDeployment(ctx, "com.example/test", "1.0.0", "mcp")
+	err := svc.CleanupExistingDeployment(ctx, "com.example/test", "1.0.0", "mcp", "local")
 	require.NoError(t, err)
 	assert.True(t, cleanupCalled)
 	assert.True(t, removeCalled, "db record should still be removed after adapter stale cleanup")
+}
+
+func TestCleanupExistingDeployment_ProviderScopedIdentity(t *testing.T) {
+	ctx := context.Background()
+
+	// The mock DB returns a deployment for provider "provider-a".
+	// CleanupExistingDeployment with provider "provider-b" must NOT find it.
+	mockDB := &deploymentMockDB{
+		getDeploymentsFn: func(_ context.Context, _ *models.DeploymentFilter) ([]*models.Deployment, error) {
+			return []*models.Deployment{
+				{
+					ID:           "dep-provider-a",
+					ServerName:   "com.example/test",
+					Version:      "1.0.0",
+					ResourceType: "mcp",
+					ProviderID:   "provider-a",
+				},
+			}, nil
+		},
+		removeDeploymentByIdFn: func(_ context.Context, _ string) error {
+			t.Fatal("should not remove deployment belonging to a different provider")
+			return nil
+		},
+	}
+
+	svc := newDeploymentInternals(deploymentsvc.Dependencies{
+		Deployments:        mockDB.Deployments(),
+		Providers:          providersvc.New(providersvc.Dependencies{Providers: mockDB.Providers()}),
+		DeploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{},
+	})
+
+	// Cleanup for "provider-b" should be a no-op — the only deployment belongs to "provider-a".
+	err := svc.CleanupExistingDeployment(ctx, "com.example/test", "1.0.0", "mcp", "provider-b")
+	require.NoError(t, err)
 }
 
 func TestUndeployDeployment_UsesAdapterForLocalPlatform(t *testing.T) {
@@ -2021,6 +2055,10 @@ func (m *promptMockDB) UnmarkPromptAsLatest(context.Context, string) error {
 
 func (m *promptMockDB) DeletePrompt(context.Context, string, string) error {
 	return nil
+}
+
+func (m *promptMockDB) UpdatePrompt(_ context.Context, _, _ string, req *models.PromptJSON) (*models.PromptResponse, error) {
+	return &models.PromptResponse{Prompt: *req}, nil
 }
 
 func TestResolveAgentManifestPrompts(t *testing.T) {

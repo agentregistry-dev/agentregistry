@@ -437,7 +437,7 @@ func ValidatePublishRequest(ctx context.Context, req apiv0.ServerJSON, cfg *conf
 	}
 
 	// Validate registry ownership for all packages if validation is enabled
-	if cfg.EnableRegistryValidation {
+	if cfg != nil && cfg.EnableRegistryValidation {
 		for i, pkg := range req.Packages {
 			if err := ValidatePackage(ctx, pkg, req.Name); err != nil {
 				return fmt.Errorf("registry validation failed for package %d (%s): %w", i, pkg.Identifier, err)

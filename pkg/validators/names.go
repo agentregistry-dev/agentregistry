@@ -70,7 +70,7 @@ func ValidateAgentName(name string) error {
 	}
 
 	if !agentNameRegex.MatchString(name) {
-		return fmt.Errorf("agent name must start with a letter and contain only letters and digits (minimum 2 characters)")
+		return fmt.Errorf("agent name must start with a letter and contain only letters and digits (no hyphens, underscores, or dots; minimum 2 characters)")
 	}
 
 	// Reject Python keywords to avoid issues in generated code
