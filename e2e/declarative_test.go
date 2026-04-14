@@ -968,9 +968,9 @@ func TestApplyDeployment_HTTPIdempotent(t *testing.T) {
 	result = RunArctl(t, tmpDir, "agent", "publish", agentDir, "--registry-url", regURL)
 	RequireSuccess(t, result)
 
-	// Build the sub-resource deployment URL: PUT /v0/agents/{name}/versions/0.0.1/deployments/local
+	// Build the sub-resource deployment URL: PUT /v0/agents/{name}/versions/latest/deployments/local
 	encodedAgent := strings.ReplaceAll(agentName, "/", "%2F")
-	deployURL := fmt.Sprintf("%s/agents/%s/versions/0.0.1/deployments/local", regURL, encodedAgent)
+	deployURL := fmt.Sprintf("%s/agents/%s/versions/latest/deployments/local", regURL, encodedAgent)
 	deployBody := `{}`
 
 	httpClient := &http.Client{Timeout: 60 * time.Second}
@@ -1072,9 +1072,9 @@ func TestApplyDeployment_HTTPRedeploysOnEnvChange(t *testing.T) {
 	result = RunArctl(t, tmpDir, "agent", "publish", agentDir, "--registry-url", regURL)
 	RequireSuccess(t, result)
 
-	// Build the sub-resource deployment URL: PUT /v0/agents/{name}/versions/0.0.1/deployments/local
+	// Build the sub-resource deployment URL: PUT /v0/agents/{name}/versions/latest/deployments/local
 	encodedAgent := strings.ReplaceAll(agentName, "/", "%2F")
-	deployURL := fmt.Sprintf("%s/agents/%s/versions/0.0.1/deployments/local", regURL, encodedAgent)
+	deployURL := fmt.Sprintf("%s/agents/%s/versions/latest/deployments/local", regURL, encodedAgent)
 
 	httpClient := &http.Client{Timeout: 60 * time.Second}
 	doPut := func(t *testing.T, env string) string {
