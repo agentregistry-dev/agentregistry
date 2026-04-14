@@ -6919,7 +6919,7 @@
         "headers": [
           {
             "name": "Authorization",
-            "value": "Bearer {XQUIK_API_KEY}",
+            "value": "Bearer {xquik_api_key}",
             "description": "Xquik API key from https://dashboard.xquik.com/account",
             "isRequired": true,
             "isSecret": true
