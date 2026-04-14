@@ -287,25 +287,7 @@ export type ErrorModel = {
     type?: string;
 };
 
-export type GitHubOidcTokenExchangeInputBody = {
-    /**
-     * GitHub Actions OIDC token
-     */
-    oidc_token: string;
-};
-
-export type GitHubTokenExchangeInputBody = {
-    /**
-     * GitHub OAuth token
-     */
-    github_token: string;
-};
-
 export type HealthBody = {
-    /**
-     * GitHub OAuth App Client ID
-     */
-    github_client_id?: string;
     /**
      * Platform mode
      */
@@ -691,21 +673,6 @@ export type ServerSemanticMeta = {
     score: number;
 };
 
-export type SignatureTokenExchangeInput = {
-    /**
-     * Domain name
-     */
-    domain: string;
-    /**
-     * Hex-encoded signature of timestamp
-     */
-    signed_timestamp: string;
-    /**
-     * RFC3339 timestamp
-     */
-    timestamp: string;
-};
-
 export type SkillJson = {
     category?: string;
     description: string;
@@ -771,11 +738,6 @@ export type SkillResponse = {
 
 export type SkillResponseMeta = {
     'io.modelcontextprotocol.registry/official'?: SkillRegistryExtensions;
-};
-
-export type TokenResponse = {
-    expires_at: number;
-    registry_token: string;
 };
 
 export type Transport = {
@@ -1057,106 +1019,6 @@ export type ApplyAgentDeploymentResponses = {
 };
 
 export type ApplyAgentDeploymentResponse = ApplyAgentDeploymentResponses[keyof ApplyAgentDeploymentResponses];
-
-export type ExchangeDnsTokenV0Data = {
-    body: SignatureTokenExchangeInput;
-    path?: never;
-    query?: never;
-    url: '/v0/auth/dns';
-};
-
-export type ExchangeDnsTokenV0Errors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ExchangeDnsTokenV0Error = ExchangeDnsTokenV0Errors[keyof ExchangeDnsTokenV0Errors];
-
-export type ExchangeDnsTokenV0Responses = {
-    /**
-     * OK
-     */
-    200: TokenResponse;
-};
-
-export type ExchangeDnsTokenV0Response = ExchangeDnsTokenV0Responses[keyof ExchangeDnsTokenV0Responses];
-
-export type ExchangeGithubTokenV0Data = {
-    body: GitHubTokenExchangeInputBody;
-    path?: never;
-    query?: never;
-    url: '/v0/auth/github-at';
-};
-
-export type ExchangeGithubTokenV0Errors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ExchangeGithubTokenV0Error = ExchangeGithubTokenV0Errors[keyof ExchangeGithubTokenV0Errors];
-
-export type ExchangeGithubTokenV0Responses = {
-    /**
-     * OK
-     */
-    200: TokenResponse;
-};
-
-export type ExchangeGithubTokenV0Response = ExchangeGithubTokenV0Responses[keyof ExchangeGithubTokenV0Responses];
-
-export type ExchangeGithubOidcTokenV0Data = {
-    body: GitHubOidcTokenExchangeInputBody;
-    path?: never;
-    query?: never;
-    url: '/v0/auth/github-oidc';
-};
-
-export type ExchangeGithubOidcTokenV0Errors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ExchangeGithubOidcTokenV0Error = ExchangeGithubOidcTokenV0Errors[keyof ExchangeGithubOidcTokenV0Errors];
-
-export type ExchangeGithubOidcTokenV0Responses = {
-    /**
-     * OK
-     */
-    200: TokenResponse;
-};
-
-export type ExchangeGithubOidcTokenV0Response = ExchangeGithubOidcTokenV0Responses[keyof ExchangeGithubOidcTokenV0Responses];
-
-export type ExchangeHttpTokenV0Data = {
-    body: SignatureTokenExchangeInput;
-    path?: never;
-    query?: never;
-    url: '/v0/auth/http';
-};
-
-export type ExchangeHttpTokenV0Errors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ExchangeHttpTokenV0Error = ExchangeHttpTokenV0Errors[keyof ExchangeHttpTokenV0Errors];
-
-export type ExchangeHttpTokenV0Responses = {
-    /**
-     * OK
-     */
-    200: TokenResponse;
-};
-
-export type ExchangeHttpTokenV0Response = ExchangeHttpTokenV0Responses[keyof ExchangeHttpTokenV0Responses];
 
 export type ListDeploymentsData = {
     body?: never;
