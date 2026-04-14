@@ -183,6 +183,86 @@ func TestEditServerEndpoint(t *testing.T) {
 			},
 		},
 		{
+			// NOTE: With PermissionActionEdit in PublicActions, unauthenticated
+			// edit requests are allowed. Auth enforcement will be restored when
+			// proper authN/authZ providers are implemented.
+			name:       "missing authorization header",
+			serverName: "io.github.testuser/editable-server",
+			version:    "1.0.0",
+			authHeader: "", // No auth header
+			requestBody: apiv0.ServerJSON{
+				Schema:      model.CurrentSchemaURL,
+				Name:        "io.github.testuser/editable-server",
+				Description: "Test server",
+				Version:     "1.0.0",
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:       "invalid authorization header format",
+			serverName: "io.github.testuser/editable-server",
+			version:    "1.0.0",
+			authHeader: "InvalidFormat token123",
+			requestBody: apiv0.ServerJSON{
+				Schema:      model.CurrentSchemaURL,
+				Name:        "io.github.testuser/editable-server",
+				Description: "Test server",
+				Version:     "1.0.0",
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:       "invalid token",
+			serverName: "io.github.testuser/editable-server",
+			version:    "1.0.0",
+			authHeader: "Bearer invalid-token",
+			requestBody: apiv0.ServerJSON{
+				Schema:      model.CurrentSchemaURL,
+				Name:        "io.github.testuser/editable-server",
+				Description: "Test server",
+				Version:     "1.0.0",
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:       "edit succeeds without explicit edit permissions (Edit is public)",
+			serverName: "io.github.testuser/editable-server",
+			version:    "1.0.0",
+			authClaims: &auth.JWTClaims{
+				AuthMethod:        auth.MethodGitHubAT,
+				AuthMethodSubject: "testuser",
+				Permissions: []auth.Permission{
+					{Action: auth.PermissionActionPublish, ResourcePattern: "io.github.testuser/*"},
+				},
+			},
+			requestBody: apiv0.ServerJSON{
+				Schema:      model.CurrentSchemaURL,
+				Name:        "io.github.testuser/editable-server",
+				Description: "Updated test server",
+				Version:     "1.0.0",
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:       "edit succeeds for different namespace (Edit is public)",
+			serverName: "io.github.otheruser/other-server",
+			version:    "1.0.0",
+			authClaims: &auth.JWTClaims{
+				AuthMethod:        auth.MethodGitHubAT,
+				AuthMethodSubject: "testuser",
+				Permissions: []auth.Permission{
+					{Action: auth.PermissionActionEdit, ResourcePattern: "io.github.testuser/*"},
+				},
+			},
+			requestBody: apiv0.ServerJSON{
+				Schema:      model.CurrentSchemaURL,
+				Name:        "io.github.otheruser/other-server",
+				Description: "Updated test server",
+				Version:     "1.0.0",
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
 			name:       "server not found",
 			serverName: "io.github.testuser/non-existent",
 			version:    "1.0.0",
@@ -317,7 +397,7 @@ func TestEditServerEndpoint(t *testing.T) {
 				requestURL += "?status=" + tc.statusParam
 			}
 
-			req := httptest.NewRequest(http.MethodPut, requestURL, bytes.NewReader(requestBody))
+			req := httptest.NewRequest(http.MethodPatch, requestURL, bytes.NewReader(requestBody))
 			req.Header.Set("Content-Type", "application/json")
 
 			// Set authorization header
@@ -468,7 +548,7 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 				encodedName := url.PathEscape(tt.serverName)
 				requestURL := "/v0/servers/" + encodedName + "/versions/" + tt.version + "?status=" + tt.toStatus
 
-				req := httptest.NewRequest(http.MethodPut, requestURL, bytes.NewReader(bodyBytes))
+				req := httptest.NewRequest(http.MethodPatch, requestURL, bytes.NewReader(bodyBytes))
 				req.Header.Set("Content-Type", "application/json")
 
 				// Generate admin token
@@ -531,7 +611,7 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 		encodedName := url.PathEscape(specialServerName)
 		requestURL := "/v0/servers/" + encodedName + "/versions/1.0.0"
 
-		req := httptest.NewRequest(http.MethodPut, requestURL, bytes.NewReader(bodyBytes))
+		req := httptest.NewRequest(http.MethodPatch, requestURL, bytes.NewReader(bodyBytes))
 		req.Header.Set("Content-Type", "application/json")
 
 		// Generate admin token
@@ -578,7 +658,7 @@ func TestEditServerEndpointEdgeCases(t *testing.T) {
 		encodedName := url.PathEscape("com.example/multi-version-server")
 		requestURL := "/v0/servers/" + encodedName + "/versions/1.0.0"
 
-		req := httptest.NewRequest(http.MethodPut, requestURL, bytes.NewReader(bodyBytes))
+		req := httptest.NewRequest(http.MethodPatch, requestURL, bytes.NewReader(bodyBytes))
 		req.Header.Set("Content-Type", "application/json")
 
 		// Generate admin token

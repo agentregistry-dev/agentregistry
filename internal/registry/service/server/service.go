@@ -32,6 +32,7 @@ type Dependencies struct {
 type Registry interface {
 	database.ServerReader
 	PublishServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
+	ApplyServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error)
 	UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error)
 	SetServerReadme(ctx context.Context, serverName, version string, content []byte, contentType string) error
 	DeleteServer(ctx context.Context, serverName, version string) error
@@ -90,6 +91,37 @@ func (s *registry) PublishServer(ctx context.Context, req *apiv0.ServerJSON) (*a
 	})
 }
 
+func (s *registry) ApplyServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
+	if req == nil || req.Name == "" || req.Version == "" {
+		return nil, fmt.Errorf("invalid server payload: name and version are required")
+	}
+	return database.InTransactionT(ctx, s.tx, func(txCtx context.Context, scope database.Scope) (*apiv0.ServerResponse, error) {
+		return s.applyServerInTransaction(txCtx, scope.Servers(), req)
+	})
+}
+
+func (s *registry) applyServerInTransaction(ctx context.Context, servers database.ServerStore, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
+	exists, err := servers.CheckVersionExists(ctx, req.Name, req.Version)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		// Run the same remote URL conflict check as the create path: a
+		// different server must not already own any of the requested remotes.
+		if err := s.validateNoDuplicateRemoteURLs(ctx, servers, *req); err != nil {
+			return nil, err
+		}
+		result, err := servers.UpdateServer(ctx, req.Name, req.Version, req)
+		if err != nil {
+			return nil, err
+		}
+		// Trigger async embedding regeneration (spec may have changed)
+		s.triggerServerEmbeddingRegeneration(req)
+		return result, nil
+	}
+	return s.createServerInTransaction(ctx, servers, req)
+}
+
 func (s *registry) UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
 	return database.InTransactionT(ctx, s.tx, func(txCtx context.Context, scope database.Scope) (*apiv0.ServerResponse, error) {
 		return s.updateServerInTransaction(txCtx, scope.Servers(), serverName, version, req, newStatus)
@@ -133,6 +165,34 @@ func (s *registry) SetServerEmbedding(ctx context.Context, serverName, version s
 	return database.InTransaction(ctx, s.tx, func(txCtx context.Context, scope database.Scope) error {
 		return scope.Servers().SetServerEmbedding(txCtx, serverName, version, embedding)
 	})
+}
+
+// triggerServerEmbeddingRegeneration kicks off async embedding regeneration if
+// embedding-on-publish is enabled. The server value is copied into the closure
+// to avoid races with callers that may mutate the request after this returns.
+func (s *registry) triggerServerEmbeddingRegeneration(req *apiv0.ServerJSON) {
+	if !embeddingutil.EnabledOnPublish(s.cfg, s.embeddingsProvider) {
+		return
+	}
+	serverCopy := *req
+	go func() {
+		bgCtx := context.Background()
+		payload := embeddings.BuildServerEmbeddingPayload(&serverCopy)
+		if strings.TrimSpace(payload) == "" {
+			return
+		}
+		embedding, embErr := embeddings.GenerateSemanticEmbedding(bgCtx, s.embeddingsProvider, payload, s.cfg.Embeddings.Dimensions)
+		if embErr != nil {
+			s.logger.Warn("failed to generate embedding for server", "name", serverCopy.Name, "version", serverCopy.Version, "error", embErr)
+			return
+		}
+		if embedding == nil {
+			return
+		}
+		if storeErr := s.SetServerEmbedding(bgCtx, serverCopy.Name, serverCopy.Version, embedding); storeErr != nil {
+			s.logger.Warn("failed to store embedding for server", "name", serverCopy.Name, "version", serverCopy.Version, "error", storeErr)
+		}
+	}()
 }
 
 func (s *registry) validateNoDuplicateRemoteURLs(ctx context.Context, servers database.ServerStore, serverDetail apiv0.ServerJSON) error {
@@ -233,23 +293,7 @@ func (s *registry) createServerInTransaction(ctx context.Context, servers databa
 		return nil, err
 	}
 
-	if embeddingutil.EnabledOnPublish(s.cfg, s.embeddingsProvider) { //nolint:nestif
-		go func() {
-			bgCtx := context.Background()
-			payload := embeddings.BuildServerEmbeddingPayload(&serverJSON)
-			if strings.TrimSpace(payload) == "" {
-				return
-			}
-			embedding, err := embeddings.GenerateSemanticEmbedding(bgCtx, s.embeddingsProvider, payload, s.cfg.Embeddings.Dimensions)
-			if err != nil {
-				s.logger.Warn("failed to generate embedding for server", "name", serverJSON.Name, "version", serverJSON.Version, "error", err)
-			} else if embedding != nil {
-				if err := s.SetServerEmbedding(bgCtx, serverJSON.Name, serverJSON.Version, embedding); err != nil {
-					s.logger.Warn("failed to store embedding for server", "name", serverJSON.Name, "version", serverJSON.Version, "error", err)
-				}
-			}
-		}()
-	}
+	s.triggerServerEmbeddingRegeneration(&serverJSON)
 
 	return result, nil
 }

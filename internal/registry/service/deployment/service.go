@@ -46,6 +46,13 @@ type Registry interface {
 	DeployAgent(ctx context.Context, agentName, version string, env map[string]string, preferRemote bool, providerID string) (*models.Deployment, error)
 	DeleteDeployment(ctx context.Context, id string) error
 	LaunchDeployment(ctx context.Context, req *models.Deployment) (*models.Deployment, error)
+	// ApplyAgentDeployment idempotently deploys an agent. If an identical deployment
+	// is already running it is returned unchanged; otherwise any stale record is
+	// cleaned up and a fresh deployment is launched.
+	ApplyAgentDeployment(ctx context.Context, agentName, version, providerID string, env map[string]string, providerConfig models.JSONObject) (*models.Deployment, error)
+	// ApplyServerDeployment idempotently deploys an MCP server. Semantics are the
+	// same as ApplyAgentDeployment but for resource type "mcp".
+	ApplyServerDeployment(ctx context.Context, serverName, version, providerID string, env map[string]string, providerConfig models.JSONObject) (*models.Deployment, error)
 	UndeployDeployment(ctx context.Context, deployment *models.Deployment) error
 	GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
 	CancelDeployment(ctx context.Context, deployment *models.Deployment) error

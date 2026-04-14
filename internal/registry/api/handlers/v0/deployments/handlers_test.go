@@ -385,6 +385,10 @@ func (f *fakeProviderDeploymentService) UnmarkPromptAsLatest(context.Context, st
 	return nil
 }
 
+func (f *fakeProviderDeploymentService) UpdatePrompt(_ context.Context, _, _ string, req *models.PromptJSON) (*models.PromptResponse, error) {
+	return &models.PromptResponse{Prompt: *req}, nil
+}
+
 func (f *fakeProviderDeploymentService) Servers() database.ServerStore { return f }
 
 func (f *fakeProviderDeploymentService) Providers() database.ProviderStore { return f }
