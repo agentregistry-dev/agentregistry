@@ -70,11 +70,6 @@ func deleteFromFile(cmd *cobra.Command, filename string) error {
 
 	errCount := 0
 	for _, r := range resources {
-		if r.Metadata.Version == "" {
-			fmt.Fprintf(cmd.ErrOrStderr(), "error: %s/%s: metadata.version is required for delete\n", r.Kind, r.Metadata.Name)
-			errCount++
-			continue
-		}
 		h, err := resource.Lookup(r.Kind)
 		if err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "error: %v\n", err)
