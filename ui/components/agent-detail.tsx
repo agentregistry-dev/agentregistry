@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { AgentResponse } from "@/lib/admin-api"
+import { AgentElements } from "@/components/agent-elements"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -32,6 +33,7 @@ export function AgentDetail({ agent, allVersions: allVersionsProp }: AgentDetail
 
   const { agent: agentData, _meta } = selectedVersion
   const official = _meta?.['io.modelcontextprotocol.registry/official']
+  const extraElements = selectedVersion.extraElements ?? {}
 
   const handleVersionChange = (version: string) => {
     const newVersion = allVersions.find(v => v.agent.version === version)
@@ -50,6 +52,12 @@ export function AgentDetail({ agent, allVersions: allVersionsProp }: AgentDetail
     } catch {
       return dateString
     }
+  }
+
+  const rawDisplayData = {
+    agent: selectedVersion.agent,
+    _meta: selectedVersion._meta,
+    extraElements: selectedVersion.extraElements,
   }
 
   return (
@@ -166,6 +174,8 @@ export function AgentDetail({ agent, allVersions: allVersionsProp }: AgentDetail
               </div>
             </section>
 
+            <AgentElements extraElements={extraElements} />
+
             {agentData.repository?.url && (
               <section>
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Repository</h3>
@@ -243,7 +253,7 @@ export function AgentDetail({ agent, allVersions: allVersionsProp }: AgentDetail
                 Raw JSON
               </h3>
               <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs leading-relaxed">
-                {JSON.stringify(selectedVersion, null, 2)}
+                {JSON.stringify(rawDisplayData, null, 2)}
               </pre>
             </div>
           </TabsContent>

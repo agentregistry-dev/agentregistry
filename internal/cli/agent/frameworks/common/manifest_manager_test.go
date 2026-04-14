@@ -1,6 +1,8 @@
 package common
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -85,5 +87,55 @@ func TestValidateRemoteMcpServer(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestManifestManagerPreservesAdditionalElements(t *testing.T) {
+	projectDir := t.TempDir()
+	manifestPath := filepath.Join(projectDir, ManifestFileName)
+	content := `
+agentName: test-agent
+language: python
+framework: langgraph
+description: Preserves extra elements
+card:
+  name: test-agent
+  version: 1.0.0
+custom_element:
+  enabled: true
+`
+
+	if err := os.WriteFile(manifestPath, []byte(strings.TrimSpace(content)), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	manager := NewManifestManager(projectDir)
+	manifest, err := manager.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if _, ok := manifest.AdditionalElements["card"]; !ok {
+		t.Fatalf("expected card to be preserved, got %v", manifest.AdditionalElements)
+	}
+	if _, ok := manifest.AdditionalElements["custom_element"]; !ok {
+		t.Fatalf("expected custom_element to be preserved, got %v", manifest.AdditionalElements)
+	}
+
+	if err := manager.Save(manifest); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	savedData, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+
+	saved := string(savedData)
+	if !strings.Contains(saved, "card:") {
+		t.Fatalf("expected saved manifest to contain card, got:\n%s", saved)
+	}
+	if !strings.Contains(saved, "custom_element:") {
+		t.Fatalf("expected saved manifest to contain custom_element, got:\n%s", saved)
 	}
 }

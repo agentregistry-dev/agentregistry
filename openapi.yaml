@@ -1718,6 +1718,10 @@ components:
                     $ref: '#/components/schemas/AgentResponseMeta'
                 agent:
                     $ref: '#/components/schemas/AgentJSON'
+                extraElements:
+                    type: object
+                    description: Additional top-level elements preserved from the original agent payload for UI display and forward compatibility.
+                    additionalProperties: {}
             required:
                 - agent
                 - _meta

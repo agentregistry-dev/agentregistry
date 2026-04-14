@@ -2,6 +2,7 @@ package v0
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -247,13 +248,23 @@ func RegisterAgentsEndpoints(api huma.API, pathPrefix string, registry service.R
 
 // CreateAgentInput represents the input for creating/updating an agent
 type CreateAgentInput struct {
-	Body agentmodels.AgentJSON `body:""`
+	Body map[string]any `body:""`
 }
 
 // createAgentHandler is the shared handler logic for creating agents
 func createAgentHandler(ctx context.Context, input *CreateAgentInput, registry service.RegistryService) (*types.Response[agentmodels.AgentResponse], error) {
+	payload, err := json.Marshal(input.Body)
+	if err != nil {
+		return nil, huma.Error400BadRequest("Failed to parse agent payload", err)
+	}
+
+	var agentJSON agentmodels.AgentJSON
+	if err := json.Unmarshal(payload, &agentJSON); err != nil {
+		return nil, huma.Error400BadRequest("Failed to parse agent payload", err)
+	}
+
 	// Create/update the agent (published defaults to false in the service layer)
-	createdAgent, err := registry.CreateAgent(ctx, &input.Body)
+	createdAgent, err := registry.CreateAgent(ctx, &agentJSON)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
 			return nil, huma.Error404NotFound("Not found")

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 	"time"
 
@@ -1290,21 +1291,9 @@ func (db *PostgreSQL) ListAgents(ctx context.Context, tx pgx.Tx, filter *databas
 			return nil, "", fmt.Errorf("failed to scan agent row: %w", err)
 		}
 
-		var agentJSON models.AgentJSON
-		if err := json.Unmarshal(valueJSON, &agentJSON); err != nil {
-			return nil, "", fmt.Errorf("failed to unmarshal agent JSON: %w", err)
-		}
-
-		resp := &models.AgentResponse{
-			Agent: agentJSON,
-			Meta: models.AgentResponseMeta{
-				Official: &models.AgentRegistryExtensions{
-					Status:      status,
-					PublishedAt: publishedAt,
-					UpdatedAt:   updatedAt,
-					IsLatest:    isLatest,
-				},
-			},
+		resp, err := buildAgentResponse(valueJSON, status, publishedAt, updatedAt, isLatest)
+		if err != nil {
+			return nil, "", err
 		}
 		if semanticActive && semanticScore.Valid {
 			resp.Meta.Semantic = &models.AgentSemanticMeta{
@@ -1355,21 +1344,7 @@ func (db *PostgreSQL) GetAgentByName(ctx context.Context, tx pgx.Tx, agentName s
 		}
 		return nil, fmt.Errorf("failed to get agent by name: %w", err)
 	}
-	var agentJSON models.AgentJSON
-	if err := json.Unmarshal(valueJSON, &agentJSON); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal agent JSON: %w", err)
-	}
-	return &models.AgentResponse{
-		Agent: agentJSON,
-		Meta: models.AgentResponseMeta{
-			Official: &models.AgentRegistryExtensions{
-				Status:      status,
-				PublishedAt: publishedAt,
-				UpdatedAt:   updatedAt,
-				IsLatest:    isLatest,
-			},
-		},
-	}, nil
+	return buildAgentResponse(valueJSON, status, publishedAt, updatedAt, isLatest)
 }
 
 func (db *PostgreSQL) GetAgentByNameAndVersion(ctx context.Context, tx pgx.Tx, agentName, version string) (*models.AgentResponse, error) {
@@ -1401,12 +1376,20 @@ func (db *PostgreSQL) GetAgentByNameAndVersion(ctx context.Context, tx pgx.Tx, a
 		}
 		return nil, fmt.Errorf("failed to get agent by name and version: %w", err)
 	}
+	return buildAgentResponse(valueJSON, status, publishedAt, updatedAt, isLatest)
+}
+
+func buildAgentResponse(valueJSON []byte, status string, publishedAt, updatedAt time.Time, isLatest bool) (*models.AgentResponse, error) {
 	var agentJSON models.AgentJSON
 	if err := json.Unmarshal(valueJSON, &agentJSON); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal agent JSON: %w", err)
 	}
+
+	agentForResponse := agentJSON
+	agentForResponse.AdditionalElements = nil
+
 	return &models.AgentResponse{
-		Agent: agentJSON,
+		Agent: agentForResponse,
 		Meta: models.AgentResponseMeta{
 			Official: &models.AgentRegistryExtensions{
 				Status:      status,
@@ -1415,6 +1398,7 @@ func (db *PostgreSQL) GetAgentByNameAndVersion(ctx context.Context, tx pgx.Tx, a
 				IsLatest:    isLatest,
 			},
 		},
+		ExtraElements: cloneStringAnyMap(agentJSON.AdditionalElements),
 	}, nil
 }
 
@@ -1450,21 +1434,11 @@ func (db *PostgreSQL) GetAllVersionsByAgentName(ctx context.Context, tx pgx.Tx, 
 		if err := rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
 			return nil, fmt.Errorf("failed to scan agent row: %w", err)
 		}
-		var agentJSON models.AgentJSON
-		if err := json.Unmarshal(valueJSON, &agentJSON); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal agent JSON: %w", err)
+		resp, err := buildAgentResponse(valueJSON, status, publishedAt, updatedAt, isLatest)
+		if err != nil {
+			return nil, err
 		}
-		results = append(results, &models.AgentResponse{
-			Agent: agentJSON,
-			Meta: models.AgentResponseMeta{
-				Official: &models.AgentRegistryExtensions{
-					Status:      status,
-					PublishedAt: publishedAt,
-					UpdatedAt:   updatedAt,
-					IsLatest:    isLatest,
-				},
-			},
-		})
+		results = append(results, resp)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating agent rows: %w", err)
@@ -1512,12 +1486,7 @@ func (db *PostgreSQL) CreateAgent(ctx context.Context, tx pgx.Tx, agentJSON *mod
 	); err != nil {
 		return nil, fmt.Errorf("failed to insert agent: %w", err)
 	}
-	return &models.AgentResponse{
-		Agent: *agentJSON,
-		Meta: models.AgentResponseMeta{
-			Official: officialMeta,
-		},
-	}, nil
+	return buildAgentResponse(valueJSON, officialMeta.Status, officialMeta.PublishedAt, officialMeta.UpdatedAt, officialMeta.IsLatest)
 }
 
 func (db *PostgreSQL) UpdateAgent(ctx context.Context, tx pgx.Tx, agentName, version string, agentJSON *models.AgentJSON) (*models.AgentResponse, error) {
@@ -1557,17 +1526,17 @@ func (db *PostgreSQL) UpdateAgent(ctx context.Context, tx pgx.Tx, agentName, ver
 		}
 		return nil, fmt.Errorf("failed to update agent: %w", err)
 	}
-	return &models.AgentResponse{
-		Agent: *agentJSON,
-		Meta: models.AgentResponseMeta{
-			Official: &models.AgentRegistryExtensions{
-				Status:      status,
-				PublishedAt: publishedAt,
-				UpdatedAt:   updatedAt,
-				IsLatest:    isLatest,
-			},
-		},
-	}, nil
+	return buildAgentResponse(valueJSON, status, publishedAt, updatedAt, isLatest)
+}
+
+func cloneStringAnyMap(input map[string]any) map[string]any {
+	if len(input) == 0 {
+		return nil
+	}
+
+	cloned := make(map[string]any, len(input))
+	maps.Copy(cloned, input)
+	return cloned
 }
 
 func (db *PostgreSQL) SetAgentStatus(ctx context.Context, tx pgx.Tx, agentName, version string, status string) (*models.AgentResponse, error) {
@@ -1598,21 +1567,7 @@ func (db *PostgreSQL) SetAgentStatus(ctx context.Context, tx pgx.Tx, agentName, 
 		}
 		return nil, fmt.Errorf("failed to update agent status: %w", err)
 	}
-	var agentJSON models.AgentJSON
-	if err := json.Unmarshal(valueJSON, &agentJSON); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal agent JSON: %w", err)
-	}
-	return &models.AgentResponse{
-		Agent: agentJSON,
-		Meta: models.AgentResponseMeta{
-			Official: &models.AgentRegistryExtensions{
-				Status:      currentStatus,
-				PublishedAt: publishedAt,
-				UpdatedAt:   updatedAt,
-				IsLatest:    isLatest,
-			},
-		},
-	}, nil
+	return buildAgentResponse(valueJSON, currentStatus, publishedAt, updatedAt, isLatest)
 }
 
 func (db *PostgreSQL) GetCurrentLatestAgentVersion(ctx context.Context, tx pgx.Tx, agentName string) (*models.AgentResponse, error) {
@@ -1644,21 +1599,7 @@ func (db *PostgreSQL) GetCurrentLatestAgentVersion(ctx context.Context, tx pgx.T
 		}
 		return nil, fmt.Errorf("failed to scan agent row: %w", err)
 	}
-	var agentJSON models.AgentJSON
-	if err := json.Unmarshal(jsonValue, &agentJSON); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal agent JSON: %w", err)
-	}
-	return &models.AgentResponse{
-		Agent: agentJSON,
-		Meta: models.AgentResponseMeta{
-			Official: &models.AgentRegistryExtensions{
-				PublishedAt: publishedAt,
-				UpdatedAt:   updatedAt,
-				IsLatest:    isLatest,
-				Status:      status,
-			},
-		},
-	}, nil
+	return buildAgentResponse(jsonValue, status, publishedAt, updatedAt, isLatest)
 }
 
 func (db *PostgreSQL) CountAgentVersions(ctx context.Context, tx pgx.Tx, agentName string) (int, error) {

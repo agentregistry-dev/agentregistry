@@ -60,6 +60,9 @@ export type AgentRegistryExtensions = {
 export type AgentResponse = {
     _meta: AgentResponseMeta;
     agent: AgentJson;
+    extraElements?: {
+        [key: string]: unknown;
+    };
 };
 
 export type AgentResponseMeta = {

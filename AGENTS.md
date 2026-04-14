@@ -363,6 +363,83 @@ huma.Get(api, "/agents/{id}", func(ctx context.Context, input *GetAgentInput) (*
 })
 ```
 
+### Extensible Agent Manifests
+
+Agent manifests support custom fields beyond the standard schema for forward compatibility and extensibility. Any additional top-level fields in an agent manifest are:
+
+- **Captured during registration** - Unknown fields are preserved in `AdditionalElements`
+- **Stored in the database** - Extra fields persist across the API lifecycle
+- **Returned in API responses** - Available as `extraElements` in `AgentResponse`
+- **Displayed in the UI** - Rendered in the agent detail view under "Additional Elements"
+
+**Example agent manifest with custom fields:**
+
+```json
+{
+  "name": "emailTemplateAgent",
+  "version": "1.0.0",
+  "framework": "custom",
+  "language": "python",
+  "description": "Template stateless email-channel agent",
+  "modelProvider": "openai",
+  "modelName": "gpt-4o-mini",
+  "card": {
+    "displayName": "Email Template Agent",
+    "category": "communication",
+    "tags": ["email", "templates"]
+  },
+  "deployment": {
+    "namespace": "email-template-dev",
+    "replicas": 3,
+    "resources": {
+      "limits": {"cpu": "500m", "memory": "512Mi"}
+    }
+  }
+}
+```
+
+**Implementation details:**
+
+The `AgentJSON` type implements custom `MarshalJSON` and `UnmarshalJSON` methods to handle additional fields:
+
+```go
+// Custom fields are captured during unmarshaling
+var agent AgentJSON
+json.Unmarshal(data, &agent)
+// agent.AdditionalElements now contains "card" and "deployment"
+
+// Custom fields are merged during marshaling
+data, _ := json.Marshal(agent)
+// data contains all standard fields plus additional elements at top level
+```
+
+**Use cases:**
+
+- **Custom metadata** - Add display names, categories, or tags for UI purposes
+- **Deployment configuration** - Include platform-specific deployment settings
+- **Integration hooks** - Store webhook URLs or external service configurations
+- **Organization context** - Add cost centers, ownership, or compliance metadata
+- **Forward compatibility** - Future schema extensions don't break existing clients
+
+**API response structure:**
+
+```json
+{
+  "agent": {
+    "name": "emailTemplateAgent",
+    "version": "1.0.0",
+    ...standard fields...
+  },
+  "extraElements": {
+    "card": {...},
+    "deployment": {...}
+  },
+  "_meta": {
+    "io.modelcontextprotocol.registry/official": {...}
+  }
+}
+```
+
 ---
 
 ## Frontend Development

@@ -4,19 +4,20 @@ import "time"
 
 // AgentManifest represents the agent project configuration and metadata.
 type AgentManifest struct {
-	Name              string          `yaml:"agentName" json:"name"`
-	Image             string          `yaml:"image" json:"image"`
-	Language          string          `yaml:"language" json:"language"`
-	Framework         string          `yaml:"framework" json:"framework"`
-	ModelProvider     string          `yaml:"modelProvider" json:"modelProvider"`
-	ModelName         string          `yaml:"modelName" json:"modelName"`
-	Description       string          `yaml:"description" json:"description"`
-	Version           string          `yaml:"version,omitempty" json:"version,omitempty"`
-	TelemetryEndpoint string          `yaml:"telemetryEndpoint,omitempty" json:"telemetryEndpoint,omitempty"`
-	McpServers        []McpServerType `yaml:"mcpServers,omitempty" json:"mcpServers,omitempty"`
-	Skills            []SkillRef      `yaml:"skills,omitempty" json:"skills,omitempty"`
-	Prompts           []PromptRef     `yaml:"prompts,omitempty" json:"prompts,omitempty"`
-	UpdatedAt         time.Time       `yaml:"updatedAt,omitempty" json:"updatedAt,omitempty"`
+	Name               string          `yaml:"agentName" json:"name"`
+	Image              string          `yaml:"image" json:"image"`
+	Language           string          `yaml:"language" json:"language"`
+	Framework          string          `yaml:"framework" json:"framework"`
+	ModelProvider      string          `yaml:"modelProvider" json:"modelProvider"`
+	ModelName          string          `yaml:"modelName" json:"modelName"`
+	Description        string          `yaml:"description" json:"description"`
+	Version            string          `yaml:"version,omitempty" json:"version,omitempty"`
+	TelemetryEndpoint  string          `yaml:"telemetryEndpoint,omitempty" json:"telemetryEndpoint,omitempty"`
+	McpServers         []McpServerType `yaml:"mcpServers,omitempty" json:"mcpServers,omitempty"`
+	Skills             []SkillRef      `yaml:"skills,omitempty" json:"skills,omitempty"`
+	Prompts            []PromptRef     `yaml:"prompts,omitempty" json:"prompts,omitempty"`
+	UpdatedAt          time.Time       `yaml:"updatedAt,omitempty" json:"updatedAt,omitempty"`
+	AdditionalElements map[string]any  `yaml:",inline" json:"-"`
 }
 
 // SkillRef represents a skill reference in the agent manifest.
