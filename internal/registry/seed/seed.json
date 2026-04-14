@@ -264,7 +264,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "ai.smithery/brave",
-    "description": "Visit https://brave.com/search/api/ for a free API key. Search the web, local businesses, images,…",
+    "description": "Visit https://brave.com/search/api/ for a free API key. Search the web, local businesses, images,\u2026",
     "repository": {
       "url": "https://github.com/brave/brave-search-mcp-server",
       "source": "github"
@@ -445,7 +445,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "ai.smithery/LinkupPlatform-linkup-mcp-server",
-    "description": "Search the web in real time to get trustworthy, source-backed answers. Find the latest news and co…",
+    "description": "Search the web in real time to get trustworthy, source-backed answers. Find the latest news and co\u2026",
     "repository": {
       "url": "https://github.com/LinkupPlatform/linkup-mcp-server",
       "source": "github"
@@ -536,7 +536,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "ai.smithery/ref-tools-ref-tools-mcp",
-    "description": "Provide your AI coding tools with token-efficient access to up-to-date technical documentation for…",
+    "description": "Provide your AI coding tools with token-efficient access to up-to-date technical documentation for\u2026",
     "repository": {
       "url": "https://github.com/ref-tools/ref-tools-mcp",
       "source": "github"
@@ -637,7 +637,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "ai.smithery/ScrapeGraphAI-scrapegraph-mcp",
-    "description": "Enable language models to perform advanced AI-powered web scraping with enterprise-grade reliabili…",
+    "description": "Enable language models to perform advanced AI-powered web scraping with enterprise-grade reliabili\u2026",
     "repository": {
       "url": "https://github.com/ScrapeGraphAI/scrapegraph-mcp",
       "source": "github"
@@ -1530,7 +1530,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "com.consulatehq/consulate",
-    "description": "Dispute resolution: payments, service, contracts, SLAs. Regulation E. For platforms \u0026 agents.",
+    "description": "Dispute resolution: payments, service, contracts, SLAs. Regulation E. For platforms & agents.",
     "title": "Consulate Agentic Dispute Resolution",
     "version": "1.0.1",
     "remotes": [
@@ -1550,7 +1550,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "com.consulatehq/consulate",
-    "description": "Dispute arbitration: payments, service, contracts, SLAs. Regulation E. For platforms \u0026 agents.",
+    "description": "Dispute arbitration: payments, service, contracts, SLAs. Regulation E. For platforms & agents.",
     "title": "Consulate Agentic Dispute Resolution",
     "version": "1.0.2",
     "remotes": [
@@ -2275,7 +2275,7 @@
         },
         "environmentVariables": [
           {
-            "description": "Files.com API Key. Create at \u003cyour-site\u003e.files.com/ui/apiKeys.",
+            "description": "Files.com API Key. Create at <your-site>.files.com/ui/apiKeys.",
             "isRequired": true,
             "format": "string",
             "isSecret": true,
@@ -3937,7 +3937,7 @@
         "url": "https://mcp.paypal.com/mcp",
         "headers": [
           {
-            "description": "OAuth Bearer token for API authentication (format: Bearer \u003ctoken\u003e)",
+            "description": "OAuth Bearer token for API authentication (format: Bearer <token>)",
             "isRequired": true,
             "isSecret": true,
             "name": "Authorization"
@@ -3949,7 +3949,7 @@
         "url": "https://mcp.paypal.com/sse",
         "headers": [
           {
-            "description": "OAuth Bearer token for API authentication (format: Bearer \u003ctoken\u003e)",
+            "description": "OAuth Bearer token for API authentication (format: Bearer <token>)",
             "isRequired": true,
             "isSecret": true,
             "name": "Authorization"
@@ -4365,7 +4365,7 @@
       "url": "https://github.com/qualityclouds/qc_mcp_server",
       "source": "github"
     },
-    "version": "1.0.1º",
+    "version": "1.0.1\u00ba",
     "remotes": [
       {
         "type": "streamable-http",
@@ -6904,6 +6904,32 @@
   },
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+    "name": "com.xquik/mcp",
+    "description": "Real-time X (Twitter) data platform for AI agents. 2 MCP tools covering 122 REST API endpoints: tweet search, user lookup, bulk extraction (23 tools), write actions, giveaway draws, account monitoring, HMAC webhooks, and trending topics.",
+    "repository": {
+      "url": "https://github.com/Xquik-dev/x-twitter-scraper",
+      "source": "github"
+    },
+    "version": "2.3.0",
+    "websiteUrl": "https://xquik.com",
+    "remotes": [
+      {
+        "type": "streamable-http",
+        "url": "https://xquik.com/mcp",
+        "headers": [
+          {
+            "name": "Authorization",
+            "value": "Bearer {XQUIK_API_KEY}",
+            "description": "Xquik API key from https://dashboard.xquik.com/account",
+            "isRequired": true,
+            "isSecret": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "dev.ohmyposh/validator",
     "description": "Validate oh-my-posh configurations and segment snippets against the official schema.",
     "title": "Oh My Posh Validator",
@@ -7797,7 +7823,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "directory.brick/mcp",
-    "description": "Provides data for LEGO sets, minifigures, parts and elements. Not affiliated with LEGO® Group.",
+    "description": "Provides data for LEGO sets, minifigures, parts and elements. Not affiliated with LEGO\u00ae Group.",
     "title": "Brick Directory",
     "repository": {},
     "version": "2025.10.23.1321",
@@ -7858,7 +7884,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "finance.orbt/intelligence",
-    "description": "Bitcoin-native credit ratings. ⚡ Lightning pay-per-query (99 sats) or API subscriptions.",
+    "description": "Bitcoin-native credit ratings. \u26a1 Lightning pay-per-query (99 sats) or API subscriptions.",
     "title": "ORBT - The first Bitcoin-native credit rating agency!",
     "version": "3.2.1",
     "packages": [
@@ -7888,7 +7914,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "finance.orbt/intelligence",
-    "description": "Bitcoin-native credit ratings. ⚡ Lightning pay-per-query (99 sats) or API subscriptions.",
+    "description": "Bitcoin-native credit ratings. \u26a1 Lightning pay-per-query (99 sats) or API subscriptions.",
     "title": "ORBT - The first Bitcoin-native credit rating agency!",
     "version": "3.2.3",
     "packages": [
@@ -7918,7 +7944,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "finance.orbt/intelligence",
-    "description": "Bitcoin-native credit ratings. ⚡ Lightning pay-per-query (99 sats) or API subscriptions.",
+    "description": "Bitcoin-native credit ratings. \u26a1 Lightning pay-per-query (99 sats) or API subscriptions.",
     "title": "ORBT - The first Bitcoin-native credit rating agency!",
     "version": "3.3.0",
     "packages": [
@@ -7948,7 +7974,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "finance.orbt/intelligence",
-    "description": "Bitcoin-native credit ratings. ⚡ Lightning pay-per-query (99 sats) or API subscriptions.",
+    "description": "Bitcoin-native credit ratings. \u26a1 Lightning pay-per-query (99 sats) or API subscriptions.",
     "title": "ORBT - The first Bitcoin-native credit rating agency!",
     "version": "3.3.0.1",
     "packages": [
@@ -14280,7 +14306,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.Asthanaji05/pokeapi-mcp-server",
-    "description": "Empower your AI with Pokédex powers! Fetch and explore Pokémon data seamlessly via PokeAPI.",
+    "description": "Empower your AI with Pok\u00e9dex powers! Fetch and explore Pok\u00e9mon data seamlessly via PokeAPI.",
     "repository": {
       "url": "https://github.com/Asthanaji05/MCP_Pokemon",
       "source": "github"
@@ -14391,7 +14417,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.Asthanaji05/pokeapi-mcp-server",
-    "description": "Empower your AI with Pokédex powers! Fetch and explore Pokémon data seamlessly via PokeAPI.",
+    "description": "Empower your AI with Pok\u00e9dex powers! Fetch and explore Pok\u00e9mon data seamlessly via PokeAPI.",
     "repository": {
       "url": "https://github.com/Asthanaji05/MCP_Pokemon",
       "source": "github"
@@ -14502,7 +14528,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.Asthanaji05/pokeapi-mcp-server",
-    "description": "Empower your AI with Pokédex powers! Fetch and explore Pokémon data seamlessly via PokeAPI.",
+    "description": "Empower your AI with Pok\u00e9dex powers! Fetch and explore Pok\u00e9mon data seamlessly via PokeAPI.",
     "repository": {
       "url": "https://github.com/Asthanaji05/MCP_Pokemon",
       "source": "github"
@@ -14613,7 +14639,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.Asthanaji05/pokeapi-mcp-server",
-    "description": "Empower your AI with Pokédex powers! Fetch and explore Pokémon data seamlessly via PokeAPI.",
+    "description": "Empower your AI with Pok\u00e9dex powers! Fetch and explore Pok\u00e9mon data seamlessly via PokeAPI.",
     "repository": {
       "url": "https://github.com/Asthanaji05/MCP_Pokemon",
       "source": "github"
@@ -14724,7 +14750,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.Asthanaji05/pokeapi-mcp-server",
-    "description": "Empower your AI with Pokédex powers! Fetch and explore Pokémon data seamlessly via PokeAPI.",
+    "description": "Empower your AI with Pok\u00e9dex powers! Fetch and explore Pok\u00e9mon data seamlessly via PokeAPI.",
     "repository": {
       "url": "https://github.com/Asthanaji05/MCP_Pokemon",
       "source": "github"
@@ -14835,7 +14861,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.Asthanaji05/pokeapi-mcp-server",
-    "description": "Empower your AI with Pokédex powers! Fetch and explore Pokémon data seamlessly via PokeAPI.",
+    "description": "Empower your AI with Pok\u00e9dex powers! Fetch and explore Pok\u00e9mon data seamlessly via PokeAPI.",
     "repository": {
       "url": "https://github.com/Asthanaji05/MCP_Pokemon",
       "source": "github"
@@ -14946,7 +14972,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.Asthanaji05/pokeapi-mcp-server",
-    "description": "Empower your AI with Pokédex powers! Fetch and explore Pokémon data seamlessly via PokeAPI.",
+    "description": "Empower your AI with Pok\u00e9dex powers! Fetch and explore Pok\u00e9mon data seamlessly via PokeAPI.",
     "repository": {
       "url": "https://github.com/Asthanaji05/MCP_Pokemon",
       "source": "github"
@@ -15057,7 +15083,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.Asthanaji05/pokeapi-mcp-server",
-    "description": "Empower your AI with Pokédex powers! Fetch and explore Pokémon data seamlessly via PokeAPI.",
+    "description": "Empower your AI with Pok\u00e9dex powers! Fetch and explore Pok\u00e9mon data seamlessly via PokeAPI.",
     "repository": {
       "url": "https://github.com/Asthanaji05/MCP_Pokemon",
       "source": "github"
@@ -15168,7 +15194,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.Asthanaji05/pokeapi-mcp-server",
-    "description": "Empower your AI with Pokédex powers! Fetch and explore Pokémon data seamlessly via PokeAPI.",
+    "description": "Empower your AI with Pok\u00e9dex powers! Fetch and explore Pok\u00e9mon data seamlessly via PokeAPI.",
     "repository": {
       "url": "https://github.com/Asthanaji05/MCP_Pokemon",
       "source": "github"
@@ -15279,7 +15305,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.Asthanaji05/pokeapi-mcp-server",
-    "description": "Empower your AI with Pokédex powers! Fetch and explore Pokémon data seamlessly via PokeAPI.",
+    "description": "Empower your AI with Pok\u00e9dex powers! Fetch and explore Pok\u00e9mon data seamlessly via PokeAPI.",
     "repository": {
       "url": "https://github.com/Asthanaji05/MCP_Pokemon",
       "source": "github"
@@ -15390,7 +15416,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.Asthanaji05/pokeapi-mcp-server",
-    "description": "Empower your AI with Pokédex powers! Fetch and explore Pokémon data seamlessly via PokeAPI.",
+    "description": "Empower your AI with Pok\u00e9dex powers! Fetch and explore Pok\u00e9mon data seamlessly via PokeAPI.",
     "repository": {
       "url": "https://github.com/Asthanaji05/MCP_Pokemon",
       "source": "github"
@@ -15501,7 +15527,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.Asthanaji05/pokeapi-mcp-server",
-    "description": "Empower your AI with Pokédex powers! Fetch and explore Pokémon data seamlessly via PokeAPI.",
+    "description": "Empower your AI with Pok\u00e9dex powers! Fetch and explore Pok\u00e9mon data seamlessly via PokeAPI.",
     "repository": {
       "url": "https://github.com/Asthanaji05/MCP_Pokemon",
       "source": "github"
@@ -16179,7 +16205,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.brightdata/brightdata-mcp",
-    "description": "Bright Data's Web MCP server enabling AI agents to search, extract \u0026 navigate the web",
+    "description": "Bright Data's Web MCP server enabling AI agents to search, extract & navigate the web",
     "repository": {
       "url": "https://github.com/brightdata/brightdata-mcp",
       "source": "github"
@@ -17294,7 +17320,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.cyanheads/git-mcp-server",
-    "description": "Comprehensive Git MCP server enabling native git tools including clone, commit, worktree, \u0026 more.",
+    "description": "Comprehensive Git MCP server enabling native git tools including clone, commit, worktree, & more.",
     "repository": {
       "url": "https://github.com/cyanheads/git-mcp-server",
       "source": "github"
@@ -17518,7 +17544,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.cyanheads/git-mcp-server",
-    "description": "Comprehensive Git MCP server enabling native git tools including clone, commit, worktree, \u0026 more.",
+    "description": "Comprehensive Git MCP server enabling native git tools including clone, commit, worktree, & more.",
     "repository": {
       "url": "https://github.com/cyanheads/git-mcp-server",
       "source": "github"
@@ -17742,7 +17768,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.cyanheads/git-mcp-server",
-    "description": "Comprehensive Git MCP server enabling native git tools including clone, commit, worktree, \u0026 more.",
+    "description": "Comprehensive Git MCP server enabling native git tools including clone, commit, worktree, & more.",
     "repository": {
       "url": "https://github.com/cyanheads/git-mcp-server",
       "source": "github"
@@ -17966,7 +17992,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.cyanheads/git-mcp-server",
-    "description": "Comprehensive Git MCP server enabling native git tools including clone, commit, worktree, \u0026 more.",
+    "description": "Comprehensive Git MCP server enabling native git tools including clone, commit, worktree, & more.",
     "repository": {
       "url": "https://github.com/cyanheads/git-mcp-server",
       "source": "github"
@@ -19179,7 +19205,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.dgahagan/weather-mcp",
-    "description": "Global weather forecasts, location search, current conditions \u0026 historical data (1940-present).",
+    "description": "Global weather forecasts, location search, current conditions & historical data (1940-present).",
     "title": "Weather Data MCP Server",
     "version": "0.4.0",
     "packages": [
@@ -19196,7 +19222,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.dgahagan/weather-mcp",
-    "description": "Weather forecasts, alerts, air quality, marine conditions \u0026 historical data. NOAA + Open-Meteo.",
+    "description": "Weather forecasts, alerts, air quality, marine conditions & historical data. NOAA + Open-Meteo.",
     "title": "Weather Data MCP Server",
     "version": "1.0.0",
     "packages": [
@@ -19213,7 +19239,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.dgahagan/weather-mcp",
-    "description": "Weather forecasts, alerts, air quality, marine conditions \u0026 historical data. NOAA + Open-Meteo.",
+    "description": "Weather forecasts, alerts, air quality, marine conditions & historical data. NOAA + Open-Meteo.",
     "title": "Weather Data MCP Server",
     "version": "1.0.1",
     "packages": [
@@ -19230,7 +19256,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.dgahagan/weather-mcp",
-    "description": "Weather forecasts, alerts, air quality, marine conditions \u0026 historical data. NOAA + Open-Meteo.",
+    "description": "Weather forecasts, alerts, air quality, marine conditions & historical data. NOAA + Open-Meteo.",
     "title": "Weather Data MCP Server",
     "version": "1.1.0",
     "packages": [
@@ -19870,7 +19896,7 @@
         },
         "runtimeArguments": [
           {
-            "description": "Username or UID in docker (format: \u003cname|uid\u003e[:\u003cgroup|gid\u003e])",
+            "description": "Username or UID in docker (format: <name|uid>[:<group|gid>])",
             "value": "{user}:{group}",
             "variables": {
               "group": {
@@ -20077,7 +20103,7 @@
         },
         "runtimeArguments": [
           {
-            "description": "Username or UID in docker (format: \u003cname|uid\u003e[:\u003cgroup|gid\u003e])",
+            "description": "Username or UID in docker (format: <name|uid>[:<group|gid>])",
             "value": "{user}:{group}",
             "variables": {
               "group": {
@@ -30888,7 +30914,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.robotmcp/ros-mcp-server",
-    "description": "Connect AI models like Claude \u0026 ChatGPT with ROS robots using MCP",
+    "description": "Connect AI models like Claude & ChatGPT with ROS robots using MCP",
     "repository": {
       "url": "https://github.com/robotmcp/ros-mcp-server",
       "source": "github"
@@ -30996,7 +31022,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.robotmcp/ros-mcp-server",
-    "description": "Connect AI models like Claude \u0026 ChatGPT with ROS robots using MCP",
+    "description": "Connect AI models like Claude & ChatGPT with ROS robots using MCP",
     "repository": {
       "url": "https://github.com/robotmcp/ros-mcp-server",
       "source": "github"
@@ -31104,7 +31130,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.robotmcp/ros-mcp-server",
-    "description": "Connect AI models like Claude \u0026 ChatGPT with ROS robots using MCP",
+    "description": "Connect AI models like Claude & ChatGPT with ROS robots using MCP",
     "repository": {
       "url": "https://github.com/robotmcp/ros-mcp-server",
       "source": "github"
@@ -31362,7 +31388,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.schemacrawler/schemacrawler-ai",
-    "description": "Enables natural language schema queries — explore tables, keys, procedures, and get SQL help fast",
+    "description": "Enables natural language schema queries \u2014 explore tables, keys, procedures, and get SQL help fast",
     "repository": {
       "url": "https://github.com/schemacrawler/SchemaCrawler-AI",
       "source": "github"
@@ -31568,7 +31594,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.schemacrawler/schemacrawler-ai",
-    "description": "Enables natural language schema queries — explore tables, keys, procedures, and get SQL help fast",
+    "description": "Enables natural language schema queries \u2014 explore tables, keys, procedures, and get SQL help fast",
     "repository": {
       "url": "https://github.com/schemacrawler/SchemaCrawler-AI",
       "source": "github"
@@ -31962,7 +31988,7 @@
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.sharksalesinfo-blip/portfolio",
     "description": "Marketing strateeg portfolio met AI kennisbank voor marketing, sales en strategie inzichten.",
-    "title": "SharkSales Portfolio \u0026 Kennisbank",
+    "title": "SharkSales Portfolio & Kennisbank",
     "repository": {},
     "version": "1.0.0",
     "remotes": [
@@ -34683,7 +34709,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.xplusplusai/fo-semantic-mcp",
-    "description": "Semantic search over 50,000+ Dynamics 365 F\u0026O artifacts: tables, forms, classes, and more.",
+    "description": "Semantic search over 50,000+ Dynamics 365 F&O artifacts: tables, forms, classes, and more.",
     "title": "FO Semantic MCP",
     "repository": {},
     "version": "2.0.0",
@@ -34701,7 +34727,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.xplusplusai/fo-semantic-mcp",
-    "description": "Semantic search over 50,000+ Dynamics 365 F\u0026O artifacts: tables, forms, classes, and more.",
+    "description": "Semantic search over 50,000+ Dynamics 365 F&O artifacts: tables, forms, classes, and more.",
     "title": "FO Semantic MCP",
     "repository": {},
     "version": "2.0.3",
@@ -34719,7 +34745,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.xplusplusai/fo-semantic-mcp",
-    "description": "Semantic search over 50,000+ Dynamics 365 F\u0026O artifacts: tables, forms, classes, and more.",
+    "description": "Semantic search over 50,000+ Dynamics 365 F&O artifacts: tables, forms, classes, and more.",
     "title": "FO Semantic MCP",
     "repository": {},
     "version": "2.0.7",
@@ -34737,7 +34763,7 @@
   {
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
     "name": "io.github.xplusplusai/fo-semantic-mcp",
-    "description": "Semantic search over 50,000+ Dynamics 365 F\u0026O artifacts: tables, forms, classes, and more.",
+    "description": "Semantic search over 50,000+ Dynamics 365 F&O artifacts: tables, forms, classes, and more.",
     "title": "FO Semantic MCP",
     "repository": {},
     "version": "2.0.8",
@@ -35429,7 +35455,7 @@
         "url": "https://www.ai.moda/mcp-servers/remote-camera/mcp",
         "headers": [
           {
-            "description": "S3 credentials token in format: Bearer \u003cbase64-encoded-json\u003e. The JSON should contain: {s3Url, accessKeyId, secretAccessKey, region}. Visit https://www.ai.moda/mcp-servers/remote-camera/ to set up your S3 auth token.",
+            "description": "S3 credentials token in format: Bearer <base64-encoded-json>. The JSON should contain: {s3Url, accessKeyId, secretAccessKey, region}. Visit https://www.ai.moda/mcp-servers/remote-camera/ to set up your S3 auth token.",
             "isRequired": true,
             "isSecret": true,
             "placeholder": "Bearer eyJzM1VybCI6Imh0dHBzOi8vczMu...",
