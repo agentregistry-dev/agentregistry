@@ -1852,6 +1852,18 @@ components:
                     $ref: '#/components/schemas/AgentResponseMeta'
                 agent:
                     $ref: '#/components/schemas/AgentJSON'
+                mcpServerRefs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RegistryRef'
+                promptRefs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RegistryRef'
+                skillRefs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RegistryRef'
             required:
                 - agent
                 - _meta
@@ -2346,8 +2358,9 @@ components:
                     type: string
                 url:
                     type: string
+                version:
+                    type: string
             required:
-                - type
                 - name
         Package:
             type: object
@@ -2576,6 +2589,16 @@ components:
                 - status
                 - publishedAt
                 - isLatest
+        RegistryRef:
+            type: object
+            additionalProperties: false
+            properties:
+                name:
+                    type: string
+                version:
+                    type: string
+            required:
+                - name
         Repository:
             type: object
             additionalProperties: false
