@@ -5,11 +5,160 @@ import (
 	"testing"
 
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
-	servicetesting "github.com/agentregistry-dev/agentregistry/internal/registry/service/testing"
+	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
+	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 )
+
+type fakePlatformRuntimeRegistry struct {
+	agentResp         *models.AgentResponse
+	getAgentFn        func(ctx context.Context, agentName, version string) (*models.AgentResponse, error)
+	resolveSkillsFn   func(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error)
+	resolvePromptsFn  func(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.ResolvedPrompt, error)
+	getServerByVerFn  func(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error)
+	getProviderByIDFn func(ctx context.Context, providerID string) (*models.Provider, error)
+}
+
+func (f *fakePlatformRuntimeRegistry) ListServers(context.Context, *database.ServerFilter, string, int) ([]*apiv0.ServerResponse, string, error) {
+	return nil, "", nil
+}
+
+func (f *fakePlatformRuntimeRegistry) GetServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
+	if f.getServerByVerFn != nil {
+		return f.getServerByVerFn(ctx, serverName, "")
+	}
+	return nil, database.ErrNotFound
+}
+
+func (f *fakePlatformRuntimeRegistry) GetProvider(ctx context.Context, providerID string) (*models.Provider, error) {
+	if f.getProviderByIDFn != nil {
+		return f.getProviderByIDFn(ctx, providerID)
+	}
+	return nil, database.ErrNotFound
+}
+
+func (f *fakePlatformRuntimeRegistry) GetServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
+	if f.getServerByVerFn != nil {
+		return f.getServerByVerFn(ctx, serverName, version)
+	}
+	return nil, database.ErrNotFound
+}
+
+func (f *fakePlatformRuntimeRegistry) GetServerVersions(context.Context, string) ([]*apiv0.ServerResponse, error) {
+	return nil, nil
+}
+
+func (f *fakePlatformRuntimeRegistry) PublishServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
+	if req == nil {
+		return nil, database.ErrInvalidInput
+	}
+	return &apiv0.ServerResponse{Server: *req}, nil
+}
+
+func (f *fakePlatformRuntimeRegistry) UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
+	_ = serverName
+	_ = version
+	_ = newStatus
+	return f.PublishServer(ctx, req)
+}
+
+func (f *fakePlatformRuntimeRegistry) SetServerReadme(context.Context, string, string, []byte, string) error {
+	return nil
+}
+
+func (f *fakePlatformRuntimeRegistry) GetLatestServerReadme(context.Context, string) (*database.ServerReadme, error) {
+	return nil, database.ErrNotFound
+}
+
+func (f *fakePlatformRuntimeRegistry) GetServerReadme(context.Context, string, string) (*database.ServerReadme, error) {
+	return nil, database.ErrNotFound
+}
+
+func (f *fakePlatformRuntimeRegistry) DeleteServer(context.Context, string, string) error {
+	return nil
+}
+
+func (f *fakePlatformRuntimeRegistry) SetServerEmbedding(context.Context, string, string, *database.SemanticEmbedding) error {
+	return nil
+}
+
+func (f *fakePlatformRuntimeRegistry) GetServerEmbeddingMetadata(context.Context, string, string) (*database.SemanticEmbeddingMetadata, error) {
+	return nil, database.ErrNotFound
+}
+
+func (f *fakePlatformRuntimeRegistry) ListAgents(context.Context, *database.AgentFilter, string, int) ([]*models.AgentResponse, string, error) {
+	if f.agentResp != nil {
+		return []*models.AgentResponse{f.agentResp}, "", nil
+	}
+	return nil, "", nil
+}
+
+func (f *fakePlatformRuntimeRegistry) GetAgent(ctx context.Context, agentName string) (*models.AgentResponse, error) {
+	if f.getAgentFn != nil {
+		return f.getAgentFn(ctx, agentName, "")
+	}
+	if f.agentResp != nil {
+		return f.agentResp, nil
+	}
+	return nil, database.ErrNotFound
+}
+
+func (f *fakePlatformRuntimeRegistry) GetAgentVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
+	if f.getAgentFn != nil {
+		return f.getAgentFn(ctx, agentName, version)
+	}
+	if f.agentResp != nil {
+		return f.agentResp, nil
+	}
+	return nil, database.ErrNotFound
+}
+
+func (f *fakePlatformRuntimeRegistry) GetAgentVersions(context.Context, string) ([]*models.AgentResponse, error) {
+	if f.agentResp != nil {
+		return []*models.AgentResponse{f.agentResp}, nil
+	}
+	return nil, nil
+}
+
+func (f *fakePlatformRuntimeRegistry) PublishAgent(context.Context, *models.AgentJSON) (*models.AgentResponse, error) {
+	if f.agentResp != nil {
+		return f.agentResp, nil
+	}
+	return nil, database.ErrInvalidInput
+}
+
+func (f *fakePlatformRuntimeRegistry) DeleteAgent(context.Context, string, string) error {
+	return nil
+}
+
+func (f *fakePlatformRuntimeRegistry) SetAgentEmbedding(context.Context, string, string, *database.SemanticEmbedding) error {
+	return nil
+}
+
+func (f *fakePlatformRuntimeRegistry) GetAgentEmbeddingMetadata(context.Context, string, string) (*database.SemanticEmbeddingMetadata, error) {
+	return nil, database.ErrNotFound
+}
+
+func (f *fakePlatformRuntimeRegistry) ResolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error) {
+	if f.resolveSkillsFn != nil {
+		return f.resolveSkillsFn(ctx, manifest)
+	}
+	return nil, nil
+}
+
+func (f *fakePlatformRuntimeRegistry) ResolveAgentManifestPrompts(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.ResolvedPrompt, error) {
+	if f.resolvePromptsFn != nil {
+		return f.resolvePromptsFn(ctx, manifest)
+	}
+	return nil, nil
+}
+
+func newPlatformRuntimeServices(registry *fakePlatformRuntimeRegistry) (serversvc.Registry, agentsvc.Registry) {
+	return registry, registry
+}
 
 func TestSplitDeploymentRuntimeInputs(t *testing.T) {
 	envValues, argValues, headerValues := splitDeploymentRuntimeInputs(map[string]string{
@@ -171,8 +320,7 @@ func TestTranslateMCPServerLocalIncludesOverridesAndExtraArgs(t *testing.T) {
 }
 
 func TestResolveAgentDefaultsLocalPort(t *testing.T) {
-	registry := servicetesting.NewFakeRegistry()
-	registry.Agents = []*models.AgentResponse{{
+	registry := &fakePlatformRuntimeRegistry{agentResp: &models.AgentResponse{
 		Agent: models.AgentJSON{
 			AgentManifest: models.AgentManifest{
 				Name:          "planner",
@@ -182,8 +330,9 @@ func TestResolveAgentDefaultsLocalPort(t *testing.T) {
 			Version: "1.0.0",
 		},
 	}}
+	serverService, agentService := newPlatformRuntimeServices(registry)
 
-	resolved, err := ResolveAgent(context.Background(), registry, &models.Deployment{
+	resolved, err := ResolveAgent(context.Background(), serverService, agentService, &models.Deployment{
 		ID:         "dep-123",
 		ServerName: "planner",
 		Version:    "1.0.0",
@@ -198,9 +347,8 @@ func TestResolveAgentDefaultsLocalPort(t *testing.T) {
 }
 
 func TestResolveAgentNamespaceDefaulting(t *testing.T) {
-	newRegistry := func() *servicetesting.FakeRegistry {
-		r := servicetesting.NewFakeRegistry()
-		r.Agents = []*models.AgentResponse{{
+	newRegistry := func() *fakePlatformRuntimeRegistry {
+		return &fakePlatformRuntimeRegistry{agentResp: &models.AgentResponse{
 			Agent: models.AgentJSON{
 				AgentManifest: models.AgentManifest{
 					Name:          "planner",
@@ -210,7 +358,6 @@ func TestResolveAgentNamespaceDefaulting(t *testing.T) {
 				Version: "1.0.0",
 			},
 		}}
-		return r
 	}
 
 	tests := []struct {
@@ -247,7 +394,9 @@ func TestResolveAgentNamespaceDefaulting(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolved, err := ResolveAgent(context.Background(), newRegistry(), &models.Deployment{
+			registry := newRegistry()
+			serverService, agentService := newPlatformRuntimeServices(registry)
+			resolved, err := ResolveAgent(context.Background(), serverService, agentService, &models.Deployment{
 				ID:         "dep-123",
 				ServerName: "planner",
 				Version:    "1.0.0",

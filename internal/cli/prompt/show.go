@@ -31,7 +31,7 @@ func runShow(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API client not initialized")
 	}
 
-	prompt, err := apiClient.GetPromptByName(promptName)
+	prompt, err := apiClient.GetPrompt(promptName)
 	if err != nil {
 		return fmt.Errorf("failed to get prompt: %w", err)
 	}

@@ -19,7 +19,7 @@ func WaitForDeploymentReady(c *client.Client, deploymentID string) error {
 	deadline := time.Now().Add(defaultWaitTimeout)
 
 	for {
-		dep, err := c.GetDeploymentByID(deploymentID)
+		dep, err := c.GetDeployment(deploymentID)
 		if err != nil {
 			return fmt.Errorf("polling deployment status: %w", err)
 		}

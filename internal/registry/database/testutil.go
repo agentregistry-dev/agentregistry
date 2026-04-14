@@ -13,7 +13,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	regdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
@@ -146,7 +146,7 @@ func WithVector() testDBOption {
 // The template database has migrations pre-applied, so each test is fast.
 // Requires PostgreSQL to be running on localhost:5432 (e.g., via docker-compose).
 // Pass WithVector() to also apply vector migrations.
-func NewTestDB(t *testing.T, opts ...testDBOption) database.Database {
+func NewTestDB(t *testing.T, opts ...testDBOption) regdb.Store {
 	t.Helper()
 
 	var cfg testDBConfig

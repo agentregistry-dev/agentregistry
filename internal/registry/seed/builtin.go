@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
@@ -19,7 +19,7 @@ var builtinSeedData []byte
 //go:embed seed-readme.json
 var builtinReadmeData []byte
 
-func ImportBuiltinSeedData(ctx context.Context, registry service.RegistryService) error {
+func ImportBuiltinSeedData(ctx context.Context, registry serversvc.Registry) error {
 	servers, err := loadSeedData(builtinSeedData)
 	if err != nil {
 		return err
@@ -61,11 +61,11 @@ func loadReadmeSeedData(data []byte) (ReadmeFile, error) {
 
 func importServer(
 	ctx context.Context,
-	registry service.RegistryService,
+	registry serversvc.Registry,
 	srv *apiv0.ServerJSON,
 	readmes ReadmeFile,
 ) {
-	_, err := registry.CreateServer(ctx, srv)
+	_, err := registry.PublishServer(ctx, srv)
 	if err != nil {
 		// If duplicate version and update is enabled, try update path
 		if !errors.Is(err, database.ErrInvalidVersion) {
@@ -87,7 +87,7 @@ func importServer(
 	}
 
 	if len(content) > 0 {
-		if err := registry.StoreServerReadme(ctx, srv.Name, srv.Version, content, contentType); err != nil {
+		if err := registry.SetServerReadme(ctx, srv.Name, srv.Version, content, contentType); err != nil {
 			slog.Warn("storing README failed", "name", srv.Name, "version", srv.Version, "error", err)
 		}
 		slog.Info("stored README", "name", srv.Name, "version", srv.Version)
