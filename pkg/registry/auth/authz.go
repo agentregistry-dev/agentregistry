@@ -47,9 +47,9 @@ func (a *Authorizer) IsRegistryAdmin(ctx context.Context) bool {
 	return a.Authz.IsRegistryAdmin(ctx, s)
 }
 
-// PublicActions defines which actions are allowed without authentication (non-destructive actions).
-// NOTE: In the meantime, we'll allow all actions to be performed locally without authentication.
-// Once we implement better authN/authZ handling, we'll want to remove these, and just have read-only (above) actions as "public".
+// PublicActions defines which actions are allowed without authentication.
+// NOTE: All actions are currently public. Once we implement authN/authZ providers,
+// we should lock this down to read-only.
 var PublicActions = map[PermissionAction]bool{
 	PermissionActionRead:    true,
 	PermissionActionPublish: true,
