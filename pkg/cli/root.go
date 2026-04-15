@@ -23,6 +23,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	// AnnotationSkipAuthn can be set on a cobra.Command's Annotations map to skip
+	// CLI authentication (token resolution) during pre-run setup.
+	// The command will still get an API client, just without an auth token.
+	// Child commands inherit this from their parents.
+	AnnotationSkipAuthn = "skipAuthentication"
+)
+
 // ClientFactory creates an API client for the given base URL and token.
 // Used for testing when nil; production uses client.NewClientWithConfig.
 type ClientFactory func(ctx context.Context, baseURL, token string) (*client.Client, error)
@@ -198,10 +206,21 @@ func preRunBehavior(cmd *cobra.Command) (skipSetup bool) {
 	return false
 }
 
+// shouldSkipAuthn returns true if the command (or any of its parents) has the
+// AnnotationSkipAuthn annotation set to "true".
+func shouldSkipAuthn(cmd *cobra.Command) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		if c.Annotations[AnnotationSkipAuthn] == "true" {
+			return true
+		}
+	}
+	return false
+}
+
 // preRunSetup resolves auth and creates the API client.
 func preRunSetup(ctx context.Context, cmd *cobra.Command, baseURL, token string) (*client.Client, error) {
 	// Get authentication token if no token override was provided
-	if token == "" && cliOptions.AuthnProviderFactory != nil {
+	if token == "" && cliOptions.AuthnProviderFactory != nil && !shouldSkipAuthn(cmd) {
 		resolvedToken, err := resolveAuthToken(ctx, cmd, cliOptions.AuthnProviderFactory)
 		if err != nil {
 			return nil, err

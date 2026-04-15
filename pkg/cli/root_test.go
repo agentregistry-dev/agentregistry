@@ -101,6 +101,44 @@ func TestPreRunBehavior(t *testing.T) {
 	}
 }
 
+func TestShouldSkipAuthn(t *testing.T) {
+	root := &cobra.Command{Use: "arctl"}
+
+	// Command with annotation
+	annotatedCmd := &cobra.Command{
+		Use:         "no-auth-cmd",
+		Annotations: map[string]string{AnnotationSkipAuthn: "true"},
+	}
+	// Child inherits from annotated parent
+	childOfAnnotated := &cobra.Command{Use: "child"}
+	annotatedCmd.AddCommand(childOfAnnotated)
+
+	// Command without annotation
+	normalCmd := &cobra.Command{Use: "normal-cmd"}
+
+	root.AddCommand(annotatedCmd, normalCmd)
+
+	tests := []struct {
+		name     string
+		cmd      *cobra.Command
+		wantSkip bool
+	}{
+		{"annotated command", annotatedCmd, true},
+		{"child inherits from annotated parent", childOfAnnotated, true},
+		{"command without annotation", normalCmd, false},
+		{"root command", root, false},
+		{"nil command", nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shouldSkipAuthn(tt.cmd)
+			if got != tt.wantSkip {
+				t.Errorf("shouldSkipAuthn() = %v, want %v", got, tt.wantSkip)
+			}
+		})
+	}
+}
+
 func TestResolveRegistryTarget(t *testing.T) {
 	env := map[string]string{
 		"ARCTL_API_BASE_URL": "http://env.example.com",
@@ -213,6 +251,74 @@ func TestPreRunSetup(t *testing.T) {
 		}
 		if authnToken != "authn-token" {
 			t.Errorf("expected token from AuthnProvider, got %q", authnToken)
+		}
+	})
+
+	t.Run("skip_authn_annotation_skips_token_resolution", func(t *testing.T) {
+		authnCalled := false
+		var mockAuthnProviderFactory = func(_ *cobra.Command) (types.CLIAuthnProvider, error) {
+			authnCalled = true
+			return &mockAuthnProvider{token: "should-not-be-used"}, nil
+		}
+
+		var clientToken string
+		Configure(CLIOptions{
+			AuthnProviderFactory: mockAuthnProviderFactory,
+			ClientFactory: func(_ context.Context, u, tok string) (*client.Client, error) {
+				clientToken = tok
+				return client.NewClient(u, tok), nil
+			},
+		})
+		defer func() { Configure(oldOpts) }()
+
+		annotatedCmd := &cobra.Command{
+			Use:         "skip-auth",
+			Annotations: map[string]string{AnnotationSkipAuthn: "true"},
+		}
+
+		c, err := preRunSetup(ctx, annotatedCmd, baseURL, "")
+		if err != nil {
+			t.Fatalf("preRunSetup: %v", err)
+		}
+		if c == nil {
+			t.Fatal("preRunSetup: expected client")
+		}
+		if authnCalled {
+			t.Error("expected authn provider to NOT be called when SkipAuthn annotation is set")
+		}
+		if clientToken != "" {
+			t.Errorf("expected empty token, got %q", clientToken)
+		}
+	})
+
+	t.Run("skip_authn_annotation_still_uses_explicit_token", func(t *testing.T) {
+		var clientToken string
+		Configure(CLIOptions{
+			AuthnProviderFactory: func(_ *cobra.Command) (types.CLIAuthnProvider, error) {
+				t.Fatal("authn provider should not be called when explicit token is provided")
+				return nil, nil
+			},
+			ClientFactory: func(_ context.Context, u, tok string) (*client.Client, error) {
+				clientToken = tok
+				return client.NewClient(u, tok), nil
+			},
+		})
+		defer func() { Configure(oldOpts) }()
+
+		annotatedCmd := &cobra.Command{
+			Use:         "skip-auth",
+			Annotations: map[string]string{AnnotationSkipAuthn: "true"},
+		}
+
+		c, err := preRunSetup(ctx, annotatedCmd, baseURL, "explicit-token")
+		if err != nil {
+			t.Fatalf("preRunSetup: %v", err)
+		}
+		if c == nil {
+			t.Fatal("preRunSetup: expected client")
+		}
+		if clientToken != "explicit-token" {
+			t.Errorf("expected explicit-token, got %q", clientToken)
 		}
 	})
 
