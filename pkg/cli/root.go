@@ -206,12 +206,12 @@ func preRunBehavior(cmd *cobra.Command) (skipSetup bool) {
 	return false
 }
 
-// shouldSkipAuthn returns true if the command (or any of its parents) has the
-// AnnotationSkipAuthn annotation set to "true".
+// shouldSkipAuthn checks the command and its ancestors for the AnnotationSkipAuthn annotation.
+// The nearest (most specific) annotation wins: a child can override a parent's setting.
 func shouldSkipAuthn(cmd *cobra.Command) bool {
 	for c := cmd; c != nil; c = c.Parent() {
-		if c.Annotations[AnnotationSkipAuthn] == "true" {
-			return true
+		if v, ok := c.Annotations[AnnotationSkipAuthn]; ok {
+			return v == "true"
 		}
 	}
 	return false

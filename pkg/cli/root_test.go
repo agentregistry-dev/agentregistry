@@ -113,6 +113,17 @@ func TestShouldSkipAuthn(t *testing.T) {
 	childOfAnnotated := &cobra.Command{Use: "child"}
 	annotatedCmd.AddCommand(childOfAnnotated)
 
+	// Child explicitly opts back in to authn (overrides parent)
+	childOptIn := &cobra.Command{
+		Use:         "secure-child",
+		Annotations: map[string]string{AnnotationSkipAuthn: "false"},
+	}
+	annotatedCmd.AddCommand(childOptIn)
+
+	// Grandchild of opt-in child (no annotation — inherits "false" from childOptIn)
+	grandchild := &cobra.Command{Use: "grandchild"}
+	childOptIn.AddCommand(grandchild)
+
 	// Command without annotation
 	normalCmd := &cobra.Command{Use: "normal-cmd"}
 
@@ -125,6 +136,8 @@ func TestShouldSkipAuthn(t *testing.T) {
 	}{
 		{"annotated command", annotatedCmd, true},
 		{"child inherits from annotated parent", childOfAnnotated, true},
+		{"child overrides parent with false", childOptIn, false},
+		{"grandchild inherits false from nearest parent", grandchild, false},
 		{"command without annotation", normalCmd, false},
 		{"root command", root, false},
 		{"nil command", nil, false},
