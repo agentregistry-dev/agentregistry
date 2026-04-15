@@ -25,7 +25,7 @@ import (
 
 const (
 	// AnnotationSkipAuthn can be set on a cobra.Command's Annotations map to skip
-	// CLI authentication (token resolution) during pre-run setup.
+	// CLI authentication (OIDC discovery and token resolution) during pre-run setup.
 	// The command will still get an API client, just without an auth token.
 	// Child commands inherit this from their parents.
 	AnnotationSkipAuthn = "skipAuthentication"
