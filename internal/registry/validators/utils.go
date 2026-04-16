@@ -1,10 +1,23 @@
 package validators
 
 import (
+	"fmt"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 )
+
+// insecureSkipMCPHostVerifyEnv is the name of the environment variable that, when
+// set to "true", disables localhost/host-verification checks for MCP remote URLs.
+// This is intended for local development only and should never be enabled in production.
+const insecureSkipMCPHostVerifyEnv = "INSECURE_SKIP_MCP_HOST_VERIFY"
+
+// shouldSkipMCPHostVerify reports whether MCP remote URL host verification should be
+// bypassed based on the INSECURE_SKIP_MCP_HOST_VERIFY environment variable.
+func shouldSkipMCPHostVerify() bool {
+	return strings.EqualFold(os.Getenv(insecureSkipMCPHostVerifyEnv), "true")
+}
 
 var (
 	// gitRepoURLRegex validates repository URLs for common git hosting providers
@@ -12,12 +25,16 @@ var (
 	gitRepoURLRegex = regexp.MustCompile(`^https?://(www\.)?(github\.com|gitlab\.com|bitbucket\.org)/[\w.-]+/[\w.-]+/?$`)
 )
 
-// IsValidRepositoryURL checks if the given URL is valid for the specified repository source
-func IsValidRepositoryURL(source RepositorySource, rawURL string) bool {
+// ValidateRepoURL validates a repository URL for the specified source type.
+// Returns a descriptive error if validation fails, nil if valid.
+func ValidateRepoURL(source RepositorySource, rawURL string) error {
 	if source != SourceGit {
-		return false
+		return fmt.Errorf("%w: source must be %q, got %q", ErrInvalidRepositoryURL, SourceGit, source)
 	}
-	return gitRepoURLRegex.MatchString(rawURL)
+	if !gitRepoURLRegex.MatchString(rawURL) {
+		return fmt.Errorf("%w: %s (expected https://github.com|gitlab.com|bitbucket.org/OWNER/REPO)", ErrInvalidRepositoryURL, rawURL)
+	}
+	return nil
 }
 
 // HasNoSpaces checks if a string contains no spaces
@@ -132,10 +149,13 @@ func IsValidRemoteURL(rawURL string) bool {
 		return false
 	}
 
-	// Reject localhost URLs for remotes (security/production concerns)
-	hostname := u.Hostname()
-	if hostname == "localhost" || hostname == "127.0.0.1" || strings.HasSuffix(hostname, ".localhost") {
-		return false
+	// Reject localhost URLs for remotes (security/production concerns).
+	// This check is bypassed when INSECURE_SKIP_MCP_HOST_VERIFY=true (dev-only).
+	if !shouldSkipMCPHostVerify() {
+		hostname := u.Hostname()
+		if hostname == "localhost" || hostname == "127.0.0.1" || strings.HasSuffix(hostname, ".localhost") {
+			return false
+		}
 	}
 
 	return true

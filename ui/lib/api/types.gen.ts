@@ -60,6 +60,9 @@ export type AgentRegistryExtensions = {
 export type AgentResponse = {
     _meta: AgentResponseMeta;
     agent: AgentJson;
+    mcpServerRefs?: Array<RegistryRef>;
+    promptRefs?: Array<RegistryRef>;
+    skillRefs?: Array<RegistryRef>;
 };
 
 export type AgentResponseMeta = {
@@ -396,8 +399,9 @@ export type McpServerType = {
     registryServerPreferRemote?: boolean;
     registryServerVersion?: string;
     registryURL?: string;
-    type: string;
+    type?: string;
     url?: string;
+    version?: string;
 };
 
 export type Package = {
@@ -523,6 +527,11 @@ export type RegistryExtensions = {
      * Timestamp when the server entry was last updated
      */
     updatedAt?: string;
+};
+
+export type RegistryRef = {
+    name: string;
+    version?: string;
 };
 
 export type Repository = {
