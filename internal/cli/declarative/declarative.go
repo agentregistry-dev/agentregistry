@@ -226,6 +226,22 @@ func newCLIRegistry() *kinds.Registry {
 		Plural:   "providers",
 		Aliases:  []string{"Provider"},
 		SpecType: reflect.TypeFor[kinds.ProviderSpec](),
+		TableColumns: []kinds.Column{
+			{Header: "NAME"}, {Header: "PLATFORM"},
+		},
+		ListFunc: kinds.MakeListFunc(func() ([]*models.Provider, error) {
+			return apiClient.GetProviders()
+		}),
+		RowFunc: func(item any) []string {
+			p := item.(*models.Provider)
+			return []string{p.Name, p.Platform}
+		},
+		Get: func(_ context.Context, name, _ string) (any, error) {
+			return apiClient.GetProvider(name)
+		},
+		Delete: func(_ context.Context, name, _ string) error {
+			return apiClient.DeleteProvider(name)
+		},
 	})
 	reg.Register(kinds.Kind{
 		Kind:     "deployment",

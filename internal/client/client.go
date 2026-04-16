@@ -375,6 +375,43 @@ func (c *Client) GetSkillVersion(name, version string) (*models.SkillResponse, e
 	return &resp, nil
 }
 
+// GetProviders returns all providers.
+func (c *Client) GetProviders() ([]*models.Provider, error) {
+	req, err := c.newRequest(http.MethodGet, "/providers")
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Providers []*models.Provider `json:"providers"`
+	}
+	if err := c.doJSON(req, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Providers, nil
+}
+
+// GetProvider returns a single provider by ID.
+func (c *Client) GetProvider(providerID string) (*models.Provider, error) {
+	req, err := c.newRequest(http.MethodGet, "/providers/"+url.PathEscape(providerID))
+	if err != nil {
+		return nil, err
+	}
+	var resp models.Provider
+	if err := c.doJSON(req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// DeleteProvider deletes a provider by ID.
+func (c *Client) DeleteProvider(providerID string) error {
+	req, err := c.newRequest(http.MethodDelete, "/providers/"+url.PathEscape(providerID))
+	if err != nil {
+		return err
+	}
+	return c.doJSON(req, nil)
+}
+
 // GetAgents returns all agents from connected registries
 func (c *Client) GetAgents() ([]*models.AgentResponse, error) {
 	limit := 100
