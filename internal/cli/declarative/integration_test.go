@@ -341,11 +341,14 @@ func TestDeleteIntegration_MissingVersion(t *testing.T) {
 	defer cleanup()
 	declarative.SetAPIClient(c)
 
+	// Version is optional at the CLI level (providers don't use it).
+	// For agents, the server returns a 404 when version is empty.
 	cmd := declarative.NewDeleteCmd()
 	cmd.SetArgs([]string{"agent", "acme/bot"}) // no --version
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "version")
+	// Error comes from the server (404), not from CLI version validation.
+	assert.NotContains(t, err.Error(), "required flag")
 }
 
 func TestDeleteIntegration_WrongArgCount(t *testing.T) {

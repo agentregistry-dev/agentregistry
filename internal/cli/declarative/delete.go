@@ -104,12 +104,22 @@ func deleteResource(cmd *cobra.Command, typeName, name, version string) error {
 		return fmt.Errorf("API client not initialized")
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Deleting %s %s version %s...\n", k.Kind, name, version)
+	if version != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "Deleting %s %s version %s...\n", k.Kind, name, version)
+	} else {
+		fmt.Fprintf(cmd.OutOrStdout(), "Deleting %s %s...\n", k.Kind, name)
+	}
 	if err := deleteItem(k, name, version); err != nil {
-		return fmt.Errorf("failed to delete %s %q version %s: %w",
-			k.Kind, name, version, err)
+		if version != "" {
+			return fmt.Errorf("failed to delete %s %q version %s: %w", k.Kind, name, version, err)
+		}
+		return fmt.Errorf("failed to delete %s %q: %w", k.Kind, name, err)
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Deleted: %s/%s (%s)\n", strings.ToLower(k.Kind), name, version)
+	if version != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "Deleted: %s/%s (%s)\n", strings.ToLower(k.Kind), name, version)
+	} else {
+		fmt.Fprintf(cmd.OutOrStdout(), "Deleted: %s/%s\n", strings.ToLower(k.Kind), name)
+	}
 	return nil
 }
