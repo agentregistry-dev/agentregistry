@@ -126,13 +126,18 @@ func TestKubernetesTranslatePlatformConfig_LocalMCP(t *testing.T) {
 func TestKubernetesTranslatePlatformConfig_AgentWithMCPServers(t *testing.T) {
 	ctx := context.Background()
 
+	// MCP server config is now injected via MCP_SERVERS_CONFIG env var by ResolveAgent,
+	// so the K8s translation layer should not create a ConfigMap for MCP-server-only agents.
 	desired := &platformtypes.DesiredState{
 		Agents: []*platformtypes.Agent{{
 			Name:    "test-agent",
 			Version: "v1",
 			Deployment: platformtypes.AgentDeployment{
 				Image: "agent-image:latest",
-				Env:   map[string]string{"ENV_VAR": "value"},
+				Env: map[string]string{
+					"ENV_VAR":            "value",
+					"MCP_SERVERS_CONFIG": `[{"name":"sqlite","type":"command"},{"name":"brave-search","type":"remote","url":"http://brave-search:8080/mcp","headers":{"X-Custom":"header-value"}}]`,
+				},
 			},
 			ResolvedMCPServers: []platformtypes.ResolvedMCPServerConfig{
 				{Name: "sqlite", Type: "command"},
@@ -150,28 +155,36 @@ func TestKubernetesTranslatePlatformConfig_AgentWithMCPServers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("kubernetesTranslatePlatformConfig failed: %v", err)
 	}
-	if len(config.ConfigMaps) != 1 {
-		t.Fatalf("expected 1 ConfigMap, got %d", len(config.ConfigMaps))
-	}
-	cm := config.ConfigMaps[0]
-	expectedCMName := "test-agent-v1-agent-config"
-	if cm.Name != expectedCMName {
-		t.Errorf("expected ConfigMap name %s, got %s", expectedCMName, cm.Name)
+
+	// No ConfigMap should be created -- MCP config is delivered via env var.
+	if len(config.ConfigMaps) != 0 {
+		t.Fatalf("expected 0 ConfigMaps (MCP config is env-based), got %d", len(config.ConfigMaps))
 	}
 
-	jsonContent, ok := cm.Data["mcp-servers.json"]
-	if !ok {
-		t.Fatal("ConfigMap missing mcp-servers.json key")
+	// Verify the agent resource was created and MCP_SERVERS_CONFIG env var is present.
+	if len(config.Agents) != 1 {
+		t.Fatalf("expected 1 agent, got %d", len(config.Agents))
 	}
-	var savedConfigs []platformtypes.ResolvedMCPServerConfig
-	if err := json.Unmarshal([]byte(jsonContent), &savedConfigs); err != nil {
-		t.Fatalf("failed to decode mcp-servers.json: %v", err)
+	agent := config.Agents[0]
+	var foundMCPEnv bool
+	for _, env := range agent.Spec.BYO.Deployment.Env {
+		if env.Name == "MCP_SERVERS_CONFIG" {
+			foundMCPEnv = true
+			var savedConfigs []platformtypes.ResolvedMCPServerConfig
+			if err := json.Unmarshal([]byte(env.Value), &savedConfigs); err != nil {
+				t.Fatalf("failed to decode MCP_SERVERS_CONFIG env: %v", err)
+			}
+			if len(savedConfigs) != 2 {
+				t.Errorf("expected 2 MCP configs in env var, got %d", len(savedConfigs))
+			}
+			if savedConfigs[1].URL != "http://brave-search:8080/mcp" {
+				t.Errorf("unexpected URL in MCP config: %s", savedConfigs[1].URL)
+			}
+			break
+		}
 	}
-	if len(savedConfigs) != 2 {
-		t.Errorf("expected 2 saved MCP configs, got %d", len(savedConfigs))
-	}
-	if savedConfigs[1].URL != "http://brave-search:8080/mcp" {
-		t.Errorf("unexpected URL in saved config: %s", savedConfigs[1].URL)
+	if !foundMCPEnv {
+		t.Error("MCP_SERVERS_CONFIG env var not found on agent")
 	}
 }
 
@@ -311,9 +324,9 @@ func TestKubernetesTranslatePlatformConfig_DeploymentIDMetadataAndNaming(t *test
 	if got := agent.Annotations[kubernetesDeploymentIDAnnotationKey]; got != "dep-agent-123" {
 		t.Fatalf("agent deployment-id annotation = %q, want %q", got, "dep-agent-123")
 	}
-	configMap := config.ConfigMaps[0]
-	if configMap.Name != "demo-agent-1-0-0-agent-config-dep-agent-123" {
-		t.Fatalf("unexpected configmap name: %s", configMap.Name)
+	// No ConfigMap for MCP-server-only agents (config is now delivered via env var).
+	if len(config.ConfigMaps) != 0 {
+		t.Fatalf("expected 0 ConfigMaps (MCP config is env-based), got %d", len(config.ConfigMaps))
 	}
 	remote := config.RemoteMCPServers[0]
 	if remote.Name != "demo-mcp-dep-mcp-123" {
@@ -436,13 +449,18 @@ func TestKubernetesTranslatePlatformConfig_AgentWithPromptsOnly(t *testing.T) {
 func TestKubernetesTranslatePlatformConfig_AgentWithMCPServersAndPrompts(t *testing.T) {
 	ctx := context.Background()
 
+	// MCP server config is delivered via MCP_SERVERS_CONFIG env var.
+	// ConfigMap and volume mounts are only used for prompts.
 	desired := &platformtypes.DesiredState{
 		Agents: []*platformtypes.Agent{{
 			Name:    "full-agent",
 			Version: "v1",
 			Deployment: platformtypes.AgentDeployment{
 				Image: "agent-image:latest",
-				Env:   map[string]string{"KAGENT_NAMESPACE": "test-ns"},
+				Env: map[string]string{
+					"KAGENT_NAMESPACE":   "test-ns",
+					"MCP_SERVERS_CONFIG": `[{"name":"my-mcp","type":"remote","url":"http://my-mcp:8080/mcp"}]`,
+				},
 			},
 			ResolvedMCPServers: []platformtypes.ResolvedMCPServerConfig{
 				{Name: "my-mcp", Type: "remote", URL: "http://my-mcp:8080/mcp"},
@@ -462,8 +480,10 @@ func TestKubernetesTranslatePlatformConfig_AgentWithMCPServersAndPrompts(t *test
 		t.Fatalf("expected 1 ConfigMap, got %d", len(config.ConfigMaps))
 	}
 	cm := config.ConfigMaps[0]
-	if _, ok := cm.Data["mcp-servers.json"]; !ok {
-		t.Error("ConfigMap should contain mcp-servers.json")
+
+	// ConfigMap should only contain prompts.json -- MCP config is env-based.
+	if _, ok := cm.Data["mcp-servers.json"]; ok {
+		t.Error("ConfigMap should not contain mcp-servers.json (now delivered via env var)")
 	}
 	if _, ok := cm.Data["prompts.json"]; !ok {
 		t.Error("ConfigMap should contain prompts.json")
@@ -477,17 +497,14 @@ func TestKubernetesTranslatePlatformConfig_AgentWithMCPServersAndPrompts(t *test
 		t.Fatalf("expected 2 prompts, got %d", len(savedPrompts))
 	}
 
+	// Volume should only mount prompts.json.
 	agent := config.Agents[0]
 	vol := agent.Spec.BYO.Deployment.Volumes[0]
-	if len(vol.ConfigMap.Items) != 2 {
-		t.Fatalf("expected 2 volume items, got %d", len(vol.ConfigMap.Items))
+	if len(vol.ConfigMap.Items) != 1 {
+		t.Fatalf("expected 1 volume item (prompts.json only), got %d", len(vol.ConfigMap.Items))
 	}
-	itemKeys := map[string]bool{}
-	for _, item := range vol.ConfigMap.Items {
-		itemKeys[item.Key] = true
-	}
-	if !itemKeys["mcp-servers.json"] || !itemKeys["prompts.json"] {
-		t.Errorf("expected volume items for mcp-servers.json and prompts.json, got %+v", vol.ConfigMap.Items)
+	if vol.ConfigMap.Items[0].Key != "prompts.json" {
+		t.Errorf("expected volume item for prompts.json, got %s", vol.ConfigMap.Items[0].Key)
 	}
 }
 

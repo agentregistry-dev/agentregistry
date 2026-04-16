@@ -4,13 +4,13 @@
 import json
 import os
 import re
-from pathlib import Path
 from typing import List, Optional, Union
 
 from google.adk.tools.base_toolset import ToolPredicate
 from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StreamableHTTPConnectionParams
 
 
+# TODO(legacy): remove _MCP_SERVERS once declarative API is the only supported path
 _MCP_SERVERS = [
 {{- range .McpServers }}
 {{- if ne .Type "registry" }}
@@ -53,36 +53,29 @@ def _get_terminate_on_close() -> bool:
 
 
 def _load_runtime_mcp_servers() -> List[dict]:
-    """Load MCP servers resolved at runtime (registry types) from config file."""
-    # The agent-specific directory is mounted to /config, so the file is at /config/mcp-servers.json
-    config_paths = [Path(__file__).parent / "mcp-servers.json", Path("/config/mcp-servers.json")]
+    """Load MCP servers from MCP_SERVERS_CONFIG env var (JSON).
 
-    # Allow override via environment variable for testing/debugging
-    env_path = os.environ.get("MCP_SERVERS_CONFIG_PATH")
-    if env_path:
-        config_paths.insert(0, Path(env_path))
-
-    for config_path in config_paths:
-        if not config_path.exists():
-            continue
-        try:
-            with open(config_path, "r") as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    return data
-                elif isinstance(data, dict) and "servers" in data:
-                    return data["servers"]
-        except (json.JSONDecodeError, IOError):
-            continue
-
+    This env var is injected at deploy time by the registry backend
+    after resolving all MCP server refs from the DB.
+    """
+    env_config = os.environ.get("MCP_SERVERS_CONFIG")
+    if not env_config:
+        return []
+    try:
+        data = json.loads(env_config)
+        if isinstance(data, list):
+            return data
+    except json.JSONDecodeError:
+        pass
     return []
 
 
 def _get_all_mcp_servers() -> List[dict]:
     """Get all MCP servers, merging baked-in and runtime-resolved servers."""
+    # TODO(legacy): remove _MCP_SERVERS merge once declarative API is the only supported path
     servers = list(_MCP_SERVERS)  # Only command/remote servers (registry filtered out at template time)
 
-    # Load runtime-resolved servers (registry types)
+    # Load runtime-resolved servers (from MCP_SERVERS_CONFIG env var)
     runtime_servers = _load_runtime_mcp_servers()
 
     # Append runtime servers, avoiding duplicates by name
