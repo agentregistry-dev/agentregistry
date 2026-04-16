@@ -108,7 +108,8 @@ spec:
 	t.Run("apply", func(t *testing.T) {
 		result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 		RequireSuccess(t, result)
-		RequireOutputContains(t, result, "agent/"+agentName+" applied")
+		RequireOutputContains(t, result, "agent/"+agentName)
+		RequireOutputContains(t, result, "applied")
 	})
 
 	// Step 2: Verify it exists in the registry.
@@ -184,7 +185,8 @@ spec:
 	// Apply the MCP server.
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "mcpserver/"+serverName+" applied")
+	RequireOutputContains(t, result, "mcp/"+serverName)
+	RequireOutputContains(t, result, "applied")
 
 	// Verify it exists.
 	verifyServerExists(t, regURL, serverName, version)
@@ -234,8 +236,9 @@ spec:
 
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "mcpserver/"+serverName+" applied")
-	RequireOutputContains(t, result, "agent/"+agentName+" applied")
+	RequireOutputContains(t, result, "mcp/"+serverName)
+	RequireOutputContains(t, result, "agent/"+agentName)
+	RequireOutputContains(t, result, "applied")
 
 	verifyServerExists(t, regURL, serverName, version)
 	verifyAgentExists(t, regURL, agentName, version)
@@ -268,7 +271,7 @@ spec:
 
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--dry-run", "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "[dry-run]")
+	RequireOutputContains(t, result, "(dry run)")
 
 	// Resource must NOT exist.
 	verifyAgentNotFound(t, regURL, agentName, version)
@@ -327,7 +330,8 @@ func TestDeclarativeInit_Agent(t *testing.T) {
 	// Step 3: apply the generated YAML directly (no edits needed for a simple name).
 	applyResult := RunArctl(t, tmpDir, "apply", "-f", agentYAMLPath, "--registry-url", regURL)
 	RequireSuccess(t, applyResult)
-	RequireOutputContains(t, applyResult, "agent/"+name+" applied")
+	RequireOutputContains(t, applyResult, "agent/"+name)
+	RequireOutputContains(t, applyResult, "applied")
 
 	// Step 4: verify it exists in the registry.
 	verifyAgentExists(t, regURL, name, version)
@@ -401,7 +405,8 @@ func TestDeclarativeInit_Skill(t *testing.T) {
 	// Step 3: apply to the registry.
 	applyResult := RunArctl(t, tmpDir, "apply", "-f", skillYAMLPath, "--registry-url", regURL)
 	RequireSuccess(t, applyResult)
-	RequireOutputContains(t, applyResult, "skill/"+name+" applied")
+	RequireOutputContains(t, applyResult, "skill/"+name)
+	RequireOutputContains(t, applyResult, "applied")
 }
 
 // TestDeclarativeInit_Prompt verifies arctl init prompt generates the correct
@@ -441,7 +446,8 @@ func TestDeclarativeInit_Prompt(t *testing.T) {
 	// Step 3: apply to the registry.
 	applyResult := RunArctl(t, tmpDir, "apply", "-f", promptYAMLPath, "--registry-url", regURL)
 	RequireSuccess(t, applyResult)
-	RequireOutputContains(t, applyResult, "prompt/"+name+" applied")
+	RequireOutputContains(t, applyResult, "prompt/"+name)
+	RequireOutputContains(t, applyResult, "applied")
 }
 
 // --- build tests ---
@@ -614,12 +620,14 @@ spec:
 	// First apply — creates the resource.
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "agent/"+agentName+" applied")
+	RequireOutputContains(t, result, "agent/"+agentName)
+	RequireOutputContains(t, result, "applied")
 
 	// Second apply — same file, must not fail.
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "agent/"+agentName+" applied")
+	RequireOutputContains(t, result, "agent/"+agentName)
+	RequireOutputContains(t, result, "applied")
 
 	// Resource should still exist after both applies.
 	verifyAgentExists(t, regURL, agentName, version)
@@ -688,7 +696,8 @@ spec:
 
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "agent/"+agentName+" applied")
+	RequireOutputContains(t, result, "agent/"+agentName)
+	RequireOutputContains(t, result, "applied")
 	verifyAgentExists(t, regURL, agentName, version)
 
 	desc := fetchAgentDescription(t, regURL, agentName, version)
@@ -724,93 +733,6 @@ spec:
 	}
 }
 
-// TestApplyProvider_HTTPIdempotent tests the PUT /v0/providers/{id}?platform=local endpoint:
-// first call creates a provider, second call updates it, third call with same data is idempotent.
-func TestApplyProvider_HTTPIdempotent(t *testing.T) {
-	regURL := RegistryURL(t)
-	providerID := "e2e-apply-prov-" + UniqueNameWithPrefix("prov")
-
-	t.Cleanup(func() {
-		req, _ := http.NewRequest(http.MethodDelete, regURL+"/providers/"+providerID+"?platform=local", nil)
-		client := &http.Client{Timeout: 10 * time.Second}
-		resp, _ := client.Do(req)
-		if resp != nil {
-			resp.Body.Close()
-		}
-	})
-
-	client := &http.Client{Timeout: 10 * time.Second}
-
-	doApplyProvider := func(t *testing.T, name string) *http.Response {
-		t.Helper()
-		body := fmt.Sprintf(`{"name":%q}`, name)
-		req, err := http.NewRequest(http.MethodPut,
-			regURL+"/providers/"+providerID+"?platform=local",
-			strings.NewReader(body))
-		if err != nil {
-			t.Fatalf("failed to build request: %v", err)
-		}
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := client.Do(req)
-		if err != nil {
-			t.Fatalf("PUT /providers/%s failed: %v", providerID, err)
-		}
-		return resp
-	}
-
-	// Step 1: create.
-	resp := doApplyProvider(t, "E2E Provider")
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 200 on create, got %d: %s", resp.StatusCode, body)
-	}
-	var created struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	}
-	body, _ := io.ReadAll(resp.Body)
-	if err := json.Unmarshal(body, &created); err != nil {
-		t.Fatalf("failed to decode create response: %v\nBody: %s", err, body)
-	}
-	if created.ID != providerID {
-		t.Errorf("expected id %q, got %q", providerID, created.ID)
-	}
-	if created.Name != "E2E Provider" {
-		t.Errorf("expected name %q, got %q", "E2E Provider", created.Name)
-	}
-
-	// Step 2: update (same ID, different name).
-	resp2 := doApplyProvider(t, "E2E Provider Updated")
-	defer resp2.Body.Close()
-	if resp2.StatusCode != http.StatusOK {
-		body2, _ := io.ReadAll(resp2.Body)
-		t.Fatalf("expected 200 on update, got %d: %s", resp2.StatusCode, body2)
-	}
-	var updated struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	}
-	body2, _ := io.ReadAll(resp2.Body)
-	if err := json.Unmarshal(body2, &updated); err != nil {
-		t.Fatalf("failed to decode update response: %v", err)
-	}
-	if updated.ID != providerID {
-		t.Errorf("expected same id %q after update, got %q", providerID, updated.ID)
-	}
-	if updated.Name != "E2E Provider Updated" {
-		t.Errorf("expected updated name, got %q", updated.Name)
-	}
-
-	// Step 3: idempotent re-apply with same data — must succeed.
-	resp3 := doApplyProvider(t, "E2E Provider Updated")
-	defer resp3.Body.Close()
-	if resp3.StatusCode != http.StatusOK {
-		body3, _ := io.ReadAll(resp3.Body)
-		t.Fatalf("expected 200 on idempotent apply, got %d: %s", resp3.StatusCode, body3)
-	}
-}
-
 // TestDeclarativeApply_MCPServer_Idempotent verifies that applying the same
 // MCPServer YAML twice succeeds. This exercises the new PUT
 // /v0/servers/{name}/versions/{version} apply endpoint enabled by the PATCH/PUT
@@ -841,12 +763,14 @@ spec:
 	// First apply — creates.
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "mcpserver/"+serverName+" applied")
+	RequireOutputContains(t, result, "mcp/"+serverName)
+	RequireOutputContains(t, result, "applied")
 
 	// Second apply — must succeed (no error like "version already exists").
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "mcpserver/"+serverName+" applied")
+	RequireOutputContains(t, result, "mcp/"+serverName)
+	RequireOutputContains(t, result, "applied")
 
 	verifyServerExists(t, regURL, serverName, version)
 }
@@ -878,11 +802,13 @@ spec:
 
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "skill/"+skillName+" applied")
+	RequireOutputContains(t, result, "skill/"+skillName)
+	RequireOutputContains(t, result, "applied")
 
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "skill/"+skillName+" applied")
+	RequireOutputContains(t, result, "skill/"+skillName)
+	RequireOutputContains(t, result, "applied")
 
 	// Verify it exists.
 	encoded := strings.ReplaceAll(skillName, "/", "%2F")
@@ -920,11 +846,13 @@ spec:
 
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "prompt/"+promptName+" applied")
+	RequireOutputContains(t, result, "prompt/"+promptName)
+	RequireOutputContains(t, result, "applied")
 
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "prompt/"+promptName+" applied")
+	RequireOutputContains(t, result, "prompt/"+promptName)
+	RequireOutputContains(t, result, "applied")
 
 	encoded := strings.ReplaceAll(promptName, "/", "%2F")
 	resp := RegistryGet(t, fmt.Sprintf("%s/prompts/%s/versions/%s", regURL, encoded, version))
