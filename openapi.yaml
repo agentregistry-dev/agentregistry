@@ -312,110 +312,6 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-    /v0/auth/dns:
-        post:
-            tags:
-                - auth
-            summary: Exchange DNS signature for Registry JWT
-            description: Authenticate using DNS TXT record public key and signed timestamp
-            operationId: exchange-dns-token-v0
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/SignatureTokenExchangeInput'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/TokenResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/auth/github-at:
-        post:
-            tags:
-                - auth
-            summary: Exchange GitHub OAuth access token for Registry JWT
-            description: Exchange a GitHub OAuth access token for a short-lived Registry JWT token
-            operationId: exchange-github-token-v0
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/GitHubTokenExchangeInputBody'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/TokenResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/auth/github-oidc:
-        post:
-            tags:
-                - auth
-            summary: Exchange GitHub OIDC token for Registry JWT
-            description: Exchange a GitHub Actions OIDC token for a short-lived Registry JWT token
-            operationId: exchange-github-oidc-token-v0
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/GitHubOIDCTokenExchangeInputBody'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/TokenResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/auth/http:
-        post:
-            tags:
-                - auth
-            summary: Exchange HTTP signature for Registry JWT
-            description: Authenticate using HTTP-hosted public key and signed timestamp
-            operationId: exchange-http-token-v0
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/SignatureTokenExchangeInput'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/TokenResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
     /v0/deployments:
         get:
             tags:
@@ -2074,31 +1970,10 @@ components:
                     default: about:blank
                     examples:
                         - https://example.com/errors/example
-        GitHubOIDCTokenExchangeInputBody:
-            type: object
-            additionalProperties: false
-            properties:
-                oidc_token:
-                    type: string
-                    description: GitHub Actions OIDC token
-            required:
-                - oidc_token
-        GitHubTokenExchangeInputBody:
-            type: object
-            additionalProperties: false
-            properties:
-                github_token:
-                    type: string
-                    description: GitHub OAuth token
-            required:
-                - github_token
         HealthBody:
             type: object
             additionalProperties: false
             properties:
-                github_client_id:
-                    type: string
-                    description: GitHub OAuth App Client ID
                 platform_mode:
                     type: string
                     description: Platform mode
@@ -2711,29 +2586,6 @@ components:
                     format: double
             required:
                 - score
-        SignatureTokenExchangeInput:
-            type: object
-            additionalProperties: false
-            properties:
-                domain:
-                    type: string
-                    description: Domain name
-                    examples:
-                        - example.com
-                signed_timestamp:
-                    type: string
-                    description: Hex-encoded signature of timestamp
-                    examples:
-                        - abcdef1234567890
-                timestamp:
-                    type: string
-                    description: RFC3339 timestamp
-                    examples:
-                        - "2023-01-01T00:00:00Z"
-            required:
-                - domain
-                - timestamp
-                - signed_timestamp
         SkillJSON:
             type: object
             additionalProperties: false
@@ -2886,18 +2738,6 @@ components:
             properties:
                 io.modelcontextprotocol.registry/official:
                     $ref: '#/components/schemas/SkillRegistryExtensions'
-        TokenResponse:
-            type: object
-            additionalProperties: false
-            properties:
-                expires_at:
-                    type: integer
-                    format: int64
-                registry_token:
-                    type: string
-            required:
-                - registry_token
-                - expires_at
         Transport:
             type: object
             additionalProperties: false

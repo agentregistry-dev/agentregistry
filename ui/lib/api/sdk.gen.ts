@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ApplyData, ApplyErrors, ApplyResponses, CancelDeploymentData, CancelDeploymentErrors, CancelDeploymentResponses, CreateAgentV0Data, CreateAgentV0Errors, CreateAgentV0Responses, CreatePromptV0Data, CreatePromptV0Errors, CreatePromptV0Responses, CreateProviderData, CreateProviderErrors, CreateProviderResponses, CreateServerV0Data, CreateServerV0Errors, CreateServerV0Responses, CreateSkillV0Data, CreateSkillV0Errors, CreateSkillV0Responses, DeleteAgentVersionV0Data, DeleteAgentVersionV0Errors, DeleteAgentVersionV0Responses, DeleteApplyData, DeleteApplyErrors, DeleteApplyResponses, DeletePromptVersionV0Data, DeletePromptVersionV0Errors, DeletePromptVersionV0Responses, DeleteProviderData, DeleteProviderErrors, DeleteProviderResponses, DeleteServerVersionV0Data, DeleteServerVersionV0Errors, DeleteServerVersionV0Responses, DeleteSkillVersionV0Data, DeleteSkillVersionV0Errors, DeleteSkillVersionV0Responses, DeployServerData, DeployServerErrors, DeployServerResponses, EditServerV0Data, EditServerV0Errors, EditServerV0Responses, ExchangeDnsTokenV0Data, ExchangeDnsTokenV0Errors, ExchangeDnsTokenV0Responses, ExchangeGithubOidcTokenV0Data, ExchangeGithubOidcTokenV0Errors, ExchangeGithubOidcTokenV0Responses, ExchangeGithubTokenV0Data, ExchangeGithubTokenV0Errors, ExchangeGithubTokenV0Responses, ExchangeHttpTokenV0Data, ExchangeHttpTokenV0Errors, ExchangeHttpTokenV0Responses, GetAgentVersionsV0Data, GetAgentVersionsV0Errors, GetAgentVersionsV0Responses, GetAgentVersionV0Data, GetAgentVersionV0Errors, GetAgentVersionV0Responses, GetDeploymentData, GetDeploymentErrors, GetDeploymentLogsData, GetDeploymentLogsErrors, GetDeploymentLogsResponses, GetDeploymentResponses, GetHealthV0Data, GetHealthV0Errors, GetHealthV0Responses, GetPromptVersionsV0Data, GetPromptVersionsV0Errors, GetPromptVersionsV0Responses, GetPromptVersionV0Data, GetPromptVersionV0Errors, GetPromptVersionV0Responses, GetProviderData, GetProviderErrors, GetProviderResponses, GetServerReadmeV0Data, GetServerReadmeV0Errors, GetServerReadmeV0Responses, GetServerVersionReadmeV0Data, GetServerVersionReadmeV0Errors, GetServerVersionReadmeV0Responses, GetServerVersionsV0Data, GetServerVersionsV0Errors, GetServerVersionsV0Responses, GetServerVersionV0Data, GetServerVersionV0Errors, GetServerVersionV0Responses, GetSkillVersionsV0Data, GetSkillVersionsV0Errors, GetSkillVersionsV0Responses, GetSkillVersionV0Data, GetSkillVersionV0Errors, GetSkillVersionV0Responses, GetVersionV0Data, GetVersionV0Errors, GetVersionV0Responses, ListAgentsV0Data, ListAgentsV0Errors, ListAgentsV0Responses, ListDeploymentsData, ListDeploymentsErrors, ListDeploymentsResponses, ListPromptsV0Data, ListPromptsV0Errors, ListPromptsV0Responses, ListProvidersData, ListProvidersErrors, ListProvidersResponses, ListServersV0Data, ListServersV0Errors, ListServersV0Responses, ListSkillsV0Data, ListSkillsV0Errors, ListSkillsV0Responses, PingV0Data, PingV0Errors, PingV0Responses, RemoveDeploymentData, RemoveDeploymentErrors, RemoveDeploymentResponses } from './types.gen';
+import type { ApplyData, ApplyErrors, ApplyResponses, CancelDeploymentData, CancelDeploymentErrors, CancelDeploymentResponses, CreateAgentV0Data, CreateAgentV0Errors, CreateAgentV0Responses, CreatePromptV0Data, CreatePromptV0Errors, CreatePromptV0Responses, CreateProviderData, CreateProviderErrors, CreateProviderResponses, CreateServerV0Data, CreateServerV0Errors, CreateServerV0Responses, CreateSkillV0Data, CreateSkillV0Errors, CreateSkillV0Responses, DeleteAgentVersionV0Data, DeleteAgentVersionV0Errors, DeleteAgentVersionV0Responses, DeleteApplyData, DeleteApplyErrors, DeleteApplyResponses, DeletePromptVersionV0Data, DeletePromptVersionV0Errors, DeletePromptVersionV0Responses, DeleteProviderData, DeleteProviderErrors, DeleteProviderResponses, DeleteServerVersionV0Data, DeleteServerVersionV0Errors, DeleteServerVersionV0Responses, DeleteSkillVersionV0Data, DeleteSkillVersionV0Errors, DeleteSkillVersionV0Responses, DeployServerData, DeployServerErrors, DeployServerResponses, EditServerV0Data, EditServerV0Errors, EditServerV0Responses, GetAgentVersionsV0Data, GetAgentVersionsV0Errors, GetAgentVersionsV0Responses, GetAgentVersionV0Data, GetAgentVersionV0Errors, GetAgentVersionV0Responses, GetDeploymentData, GetDeploymentErrors, GetDeploymentLogsData, GetDeploymentLogsErrors, GetDeploymentLogsResponses, GetDeploymentResponses, GetHealthV0Data, GetHealthV0Errors, GetHealthV0Responses, GetPromptVersionsV0Data, GetPromptVersionsV0Errors, GetPromptVersionsV0Responses, GetPromptVersionV0Data, GetPromptVersionV0Errors, GetPromptVersionV0Responses, GetProviderData, GetProviderErrors, GetProviderResponses, GetServerReadmeV0Data, GetServerReadmeV0Errors, GetServerReadmeV0Responses, GetServerVersionReadmeV0Data, GetServerVersionReadmeV0Errors, GetServerVersionReadmeV0Responses, GetServerVersionsV0Data, GetServerVersionsV0Errors, GetServerVersionsV0Responses, GetServerVersionV0Data, GetServerVersionV0Errors, GetServerVersionV0Responses, GetSkillVersionsV0Data, GetSkillVersionsV0Errors, GetSkillVersionsV0Responses, GetSkillVersionV0Data, GetSkillVersionV0Errors, GetSkillVersionV0Responses, GetVersionV0Data, GetVersionV0Errors, GetVersionV0Responses, ListAgentsV0Data, ListAgentsV0Errors, ListAgentsV0Responses, ListDeploymentsData, ListDeploymentsErrors, ListDeploymentsResponses, ListPromptsV0Data, ListPromptsV0Errors, ListPromptsV0Responses, ListProvidersData, ListProvidersErrors, ListProvidersResponses, ListServersV0Data, ListServersV0Errors, ListServersV0Responses, ListSkillsV0Data, ListSkillsV0Errors, ListSkillsV0Responses, PingV0Data, PingV0Errors, PingV0Responses, RemoveDeploymentData, RemoveDeploymentErrors, RemoveDeploymentResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -82,62 +82,6 @@ export const apply = <ThrowOnError extends boolean = false>(options: Options<App
     ...options,
     headers: {
         'Content-Type': 'application/yaml,application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Exchange DNS signature for Registry JWT
- *
- * Authenticate using DNS TXT record public key and signed timestamp
- */
-export const exchangeDnsTokenV0 = <ThrowOnError extends boolean = false>(options: Options<ExchangeDnsTokenV0Data, ThrowOnError>) => (options.client ?? client).post<ExchangeDnsTokenV0Responses, ExchangeDnsTokenV0Errors, ThrowOnError>({
-    url: '/v0/auth/dns',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Exchange GitHub OAuth access token for Registry JWT
- *
- * Exchange a GitHub OAuth access token for a short-lived Registry JWT token
- */
-export const exchangeGithubTokenV0 = <ThrowOnError extends boolean = false>(options: Options<ExchangeGithubTokenV0Data, ThrowOnError>) => (options.client ?? client).post<ExchangeGithubTokenV0Responses, ExchangeGithubTokenV0Errors, ThrowOnError>({
-    url: '/v0/auth/github-at',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Exchange GitHub OIDC token for Registry JWT
- *
- * Exchange a GitHub Actions OIDC token for a short-lived Registry JWT token
- */
-export const exchangeGithubOidcTokenV0 = <ThrowOnError extends boolean = false>(options: Options<ExchangeGithubOidcTokenV0Data, ThrowOnError>) => (options.client ?? client).post<ExchangeGithubOidcTokenV0Responses, ExchangeGithubOidcTokenV0Errors, ThrowOnError>({
-    url: '/v0/auth/github-oidc',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Exchange HTTP signature for Registry JWT
- *
- * Authenticate using HTTP-hosted public key and signed timestamp
- */
-export const exchangeHttpTokenV0 = <ThrowOnError extends boolean = false>(options: Options<ExchangeHttpTokenV0Data, ThrowOnError>) => (options.client ?? client).post<ExchangeHttpTokenV0Responses, ExchangeHttpTokenV0Errors, ThrowOnError>({
-    url: '/v0/auth/http',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
         ...options.headers
     }
 });

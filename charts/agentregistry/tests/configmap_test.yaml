@@ -49,12 +49,6 @@ tests:
           path: data.AGENT_REGISTRY_ENABLE_REGISTRY_VALIDATION
           value: "false"
 
-  - it: sets AGENT_REGISTRY_ENABLE_ANONYMOUS_AUTH
-    asserts:
-      - equal:
-          path: data.AGENT_REGISTRY_ENABLE_ANONYMOUS_AUTH
-          value: "false"
-
   - it: sets AGENT_REGISTRY_DISABLE_BUILTIN_SEED
     asserts:
       - equal:

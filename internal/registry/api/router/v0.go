@@ -26,7 +26,6 @@ import (
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 
-	v0auth "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/auth"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
@@ -78,7 +77,6 @@ func RegisterRoutes(
 	v0servers.RegisterServersEndpoints(api, pathPrefix, svcs.Server, svcs.Deployment)
 	v0servers.RegisterServersCreateEndpoint(api, pathPrefix, svcs.Server, svcs.Deployment)
 	v0servers.RegisterEditEndpoints(api, pathPrefix, svcs.Server, svcs.Deployment)
-	v0auth.RegisterAuthEndpoints(api, pathPrefix, cfg)
 	v0providers.RegisterProvidersEndpoints(api, pathPrefix, svcs.Provider)
 	v0deployments.RegisterDeploymentsEndpoints(api, pathPrefix, svcs.Deployment)
 	v0agents.RegisterAgentsEndpoints(api, pathPrefix, svcs.Agent, svcs.Deployment)
