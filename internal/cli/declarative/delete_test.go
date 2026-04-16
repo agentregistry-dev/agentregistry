@@ -127,13 +127,15 @@ func TestDeleteFileModeNoAPIClient(t *testing.T) {
 	assert.Contains(t, err.Error(), "API client not initialized")
 }
 
-// TestDeleteExplicitModeRequiresVersion verifies that explicit mode without --version errors.
-func TestDeleteExplicitModeRequiresVersion(t *testing.T) {
+// TestDeleteExplicitModeWithoutVersion verifies that --version is optional
+// (providers don't use versions; the server validates if needed).
+func TestDeleteExplicitModeWithoutVersion(t *testing.T) {
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"agent", "acme/bot"})
+	cmd.SetArgs([]string{"provider", "my-aws"})
 	err := cmd.Execute()
+	// Fails because no API client is set, but NOT because of missing version.
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "version")
+	assert.NotContains(t, err.Error(), "version")
 }
 
 // TestDeleteExplicitModeRequiresTwoArgs verifies that explicit mode without two args errors.

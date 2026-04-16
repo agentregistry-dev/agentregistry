@@ -51,14 +51,11 @@ func runDeclarativeDelete(cmd *cobra.Command, args []string) error {
 		return deleteFromFile(cmd, filename)
 	}
 
-	// Explicit mode: TYPE NAME --version VERSION
+	// Explicit mode: TYPE NAME [--version VERSION]
 	if len(args) != 2 {
 		return fmt.Errorf("explicit mode requires TYPE and NAME arguments (or use -f FILE)")
 	}
 	version, _ := cmd.Flags().GetString("version")
-	if version == "" {
-		return fmt.Errorf("required flag \"version\" not set (or use -f FILE to read from YAML)")
-	}
 	return deleteResource(cmd, args[0], args[1], version)
 }
 
