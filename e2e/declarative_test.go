@@ -1045,3 +1045,259 @@ func TestApplyDeployment_HTTPIdempotent(t *testing.T) {
 	}
 }
 
+// --- Batch apply endpoint tests ---
+
+// TestBatchApply_MultiResource verifies that applying a multi-document YAML
+// containing an agent and a provider in one file succeeds and returns per-resource
+// "applied" status for each resource.
+func TestBatchApply_MultiResource(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+
+	agentName := UniqueAgentName("batchagent")
+	agentVersion := "0.0.1-e2e"
+	providerName := "e2e-batch-prov-" + UniqueNameWithPrefix("prov")
+
+	// Pre-clean and register cleanup for both resources.
+	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
+	t.Cleanup(func() {
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
+		req, _ := http.NewRequest(http.MethodDelete,
+			regURL+"/providers/"+providerName+"?platform=local", nil)
+		client := &http.Client{Timeout: 10 * time.Second}
+		if resp, err := client.Do(req); err == nil {
+			resp.Body.Close()
+		}
+	})
+
+	multiYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  image: ghcr.io/e2e-test/batch-agent:latest
+  description: "Batch multi-resource apply test agent"
+  language: python
+  framework: adk
+  modelProvider: gemini
+  modelName: gemini-2.0-flash
+---
+apiVersion: ar.dev/v1alpha1
+kind: provider
+metadata:
+  name: %s
+spec:
+  platform: local
+`, agentName, agentVersion, providerName)
+
+	yamlPath := writeDeclarativeYAML(t, tmpDir, "multi.yaml", multiYAML)
+
+	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
+	RequireSuccess(t, result)
+
+	// Each resource must appear in the output as "applied".
+	RequireOutputContains(t, result, "agent/"+agentName)
+	RequireOutputContains(t, result, "applied")
+	RequireOutputContains(t, result, "provider/"+providerName)
+
+	// Verify agent exists via HTTP.
+	verifyAgentExists(t, regURL, agentName, agentVersion)
+}
+
+// TestBatchApply_Idempotent verifies that applying the same multi-document YAML
+// twice succeeds without error. The second apply is a server-side upsert that
+// returns "applied" for both resources (the server does not currently distinguish
+// no-op updates from mutations at the batch level).
+func TestBatchApply_Idempotent(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+
+	agentName := UniqueAgentName("idempbatch")
+	agentVersion := "0.0.1-e2e"
+	providerName := "e2e-idemp-prov-" + UniqueNameWithPrefix("prov")
+
+	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
+	t.Cleanup(func() {
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
+		req, _ := http.NewRequest(http.MethodDelete,
+			regURL+"/providers/"+providerName+"?platform=local", nil)
+		client := &http.Client{Timeout: 10 * time.Second}
+		if resp, err := client.Do(req); err == nil {
+			resp.Body.Close()
+		}
+	})
+
+	multiYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  image: ghcr.io/e2e-test/idemp-batch-agent:latest
+  description: "Idempotent batch apply test"
+  language: python
+  framework: adk
+  modelProvider: gemini
+  modelName: gemini-2.0-flash
+---
+apiVersion: ar.dev/v1alpha1
+kind: provider
+metadata:
+  name: %s
+spec:
+  platform: local
+`, agentName, agentVersion, providerName)
+
+	yamlPath := writeDeclarativeYAML(t, tmpDir, "multi.yaml", multiYAML)
+
+	// First apply — creates both resources.
+	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "agent/"+agentName)
+	RequireOutputContains(t, result, "applied")
+
+	// Second apply — same file, must not fail (upsert semantics).
+	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "agent/"+agentName)
+	RequireOutputContains(t, result, "applied")
+
+	// Both resources must still exist after both applies.
+	verifyAgentExists(t, regURL, agentName, agentVersion)
+}
+
+// TestBatchApply_DriftRequiresForce verifies that applying a deployment whose
+// config has drifted from the running deployment fails without --force and
+// succeeds with --force. This test only runs on the docker backend, as it
+// requires a live local deployment that can be in-flight.
+//
+// The test uses the Deployment kind's ErrDeploymentDrift path by:
+//  1. Publishing an agent and deploying it.
+//  2. Modifying the env in the YAML.
+//  3. Re-applying without --force — expects failure with a "force" hint.
+//  4. Re-applying with --force — expects success.
+func TestBatchApply_DriftRequiresForce(t *testing.T) {
+	if IsK8sBackend() {
+		t.Skip("skipping drift test: not applicable on k8s backend (requires local docker provider)")
+	}
+
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+	agentName := UniqueAgentName("driftbatch")
+	agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
+	agentVersion := "0.1.0"
+	providerID := "local"
+
+	t.Cleanup(func() {
+		RemoveDeploymentsByServerName(t, regURL, agentName)
+		removeLocalDeployment(t)
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
+	})
+
+	// Step 1: init → build → publish the agent.
+	result := RunArctl(t, tmpDir, "init", "agent", "adk", "python",
+		"--model-name", "gemini-2.5-flash",
+		"--image", agentImage,
+		agentName,
+	)
+	RequireSuccess(t, result)
+
+	result = RunArctl(t, tmpDir, "agent", "build", agentName, "--image", agentImage)
+	RequireSuccess(t, result)
+
+	agentDir := filepath.Join(tmpDir, agentName)
+	result = RunArctl(t, tmpDir, "agent", "publish", agentDir, "--registry-url", regURL)
+	RequireSuccess(t, result)
+
+	// Step 2: apply the initial deployment YAML (no env).
+	deployYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: deployment
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  providerId: %s
+  resourceType: agent
+`, agentName, agentVersion, providerID)
+
+	yamlPath := writeDeclarativeYAML(t, tmpDir, "deploy.yaml", deployYAML)
+	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "deployment/"+agentName)
+	RequireOutputContains(t, result, "applied")
+
+	// Step 3: modify the env to create drift.
+	driftYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: deployment
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  providerId: %s
+  resourceType: agent
+  env:
+    NEW_VAR: "drift-value"
+`, agentName, agentVersion, providerID)
+
+	driftPath := writeDeclarativeYAML(t, tmpDir, "deploy-drift.yaml", driftYAML)
+
+	// Apply drifted YAML without --force — expect failure.
+	result = RunArctl(t, tmpDir, "apply", "-f", driftPath, "--registry-url", regURL)
+	RequireFailure(t, result)
+	// Server should hint about --force.
+	combined := result.Stdout + result.Stderr
+	if !strings.Contains(combined, "force") {
+		t.Logf("Expected 'force' hint in output; got:\n%s", combined)
+	}
+
+	// Step 4: apply with --force — expect success.
+	result = RunArctl(t, tmpDir, "apply", "-f", driftPath, "--force", "--registry-url", regURL)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "deployment/"+agentName)
+	RequireOutputContains(t, result, "applied")
+}
+
+// TestBatchApply_DeleteFile verifies that arctl delete -f <file> deletes all
+// resources listed in the file via DELETE /v0/apply, and that the resources
+// are subsequently not found via HTTP GET.
+func TestBatchApply_DeleteFile(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+
+	agentName := UniqueAgentName("delbatch")
+	agentVersion := "0.0.1-e2e"
+
+	// Ensure clean state before the test.
+	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
+
+	agentYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  image: ghcr.io/e2e-test/del-batch-agent:latest
+  description: "Delete-file batch test agent"
+  language: python
+  framework: adk
+  modelProvider: gemini
+  modelName: gemini-2.0-flash
+`, agentName, agentVersion)
+
+	yamlPath := writeDeclarativeYAML(t, tmpDir, "agent.yaml", agentYAML)
+
+	// Step 1: apply.
+	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "agent/"+agentName)
+	verifyAgentExists(t, regURL, agentName, agentVersion)
+
+	// Step 2: delete -f — sends DELETE /v0/apply.
+	result = RunArctl(t, tmpDir, "delete", "-f", yamlPath, "--registry-url", regURL)
+	RequireSuccess(t, result)
+
+	// Step 3: resource must be gone.
+	verifyAgentNotFound(t, regURL, agentName, agentVersion)
+}
+

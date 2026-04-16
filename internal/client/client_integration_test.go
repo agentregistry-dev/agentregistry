@@ -529,6 +529,8 @@ func (s *fakeDeploymentStore) DeleteDeployment(ctx context.Context, id string) e
 	return nil
 }
 
+func (s *fakeDeploymentStore) AcquireApplyLock(context.Context, string) error { return nil }
+
 type fakeClientDeploymentAdapter struct{ registry *fakeClientRegistry }
 
 func (a *fakeClientDeploymentAdapter) Platform() string { return "local" }

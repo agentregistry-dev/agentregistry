@@ -17,6 +17,7 @@ import (
 
 type deploymentStore struct {
 	repositoryBase
+	tx pgx.Tx
 }
 
 var _ database.DeploymentStore = (*deploymentStore)(nil)
@@ -385,6 +386,24 @@ func (s *deploymentStore) DeleteDeployment(ctx context.Context, id string) error
 	}
 	if result.RowsAffected() == 0 {
 		return database.ErrNotFound
+	}
+	return nil
+}
+
+// AcquireApplyLock takes a transaction-scoped Postgres advisory lock derived
+// from the given identity key. Serializes concurrent applies for the same
+// (resource, version, type, provider) tuple. MUST be called inside a
+// transaction; the lock auto-releases on commit/rollback.
+func (s *deploymentStore) AcquireApplyLock(ctx context.Context, identityKey string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if s.tx == nil {
+		return fmt.Errorf("deployment apply lock requires an active transaction")
+	}
+	lockKey := "deployment." + identityKey
+	if _, err := s.tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", lockKey); err != nil {
+		return fmt.Errorf("failed to acquire deployment apply lock: %w", err)
 	}
 	return nil
 }
