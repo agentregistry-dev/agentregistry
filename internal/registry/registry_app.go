@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"reflect"
 	"strconv"
 	"syscall"
-	"reflect"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
