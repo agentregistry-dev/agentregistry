@@ -45,7 +45,7 @@ func newCLIRegistry() *kinds.Registry {
 		Kind:     "agent",
 		Plural:   "agents",
 		Aliases:  []string{"Agent"},
-		SpecType: reflect.TypeOf(kinds.AgentSpec{}),
+		SpecType: reflect.TypeFor[kinds.AgentSpec](),
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return apiClient.GetAgent(name)
 		},
@@ -94,7 +94,7 @@ func newCLIRegistry() *kinds.Registry {
 		Kind:     "mcp",
 		Plural:   "mcps",
 		Aliases:  []string{"MCPServer", "mcpserver", "mcp-server", "mcpservers"},
-		SpecType: reflect.TypeOf(kinds.MCPSpec{}),
+		SpecType: reflect.TypeFor[kinds.MCPSpec](),
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return apiClient.GetServer(name)
 		},
@@ -137,7 +137,7 @@ func newCLIRegistry() *kinds.Registry {
 		Kind:     "skill",
 		Plural:   "skills",
 		Aliases:  []string{"Skill"},
-		SpecType: reflect.TypeOf(kinds.SkillSpec{}),
+		SpecType: reflect.TypeFor[kinds.SkillSpec](),
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return apiClient.GetSkill(name)
 		},
@@ -182,7 +182,7 @@ func newCLIRegistry() *kinds.Registry {
 		Kind:     "prompt",
 		Plural:   "prompts",
 		Aliases:  []string{"Prompt"},
-		SpecType: reflect.TypeOf(kinds.PromptSpec{}),
+		SpecType: reflect.TypeFor[kinds.PromptSpec](),
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return apiClient.GetPrompt(name)
 		},
@@ -225,13 +225,13 @@ func newCLIRegistry() *kinds.Registry {
 		Kind:     "provider",
 		Plural:   "providers",
 		Aliases:  []string{"Provider"},
-		SpecType: reflect.TypeOf(kinds.ProviderSpec{}),
+		SpecType: reflect.TypeFor[kinds.ProviderSpec](),
 	})
 	reg.Register(kinds.Kind{
 		Kind:     "deployment",
 		Plural:   "deployments",
 		Aliases:  []string{"Deployment"},
-		SpecType: reflect.TypeOf(kinds.DeploymentSpec{}),
+		SpecType: reflect.TypeFor[kinds.DeploymentSpec](),
 	})
 	return reg
 }

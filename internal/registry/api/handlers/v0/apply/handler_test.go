@@ -48,7 +48,7 @@ func demoKind(applyFn kinds.ApplyFunc, deleteFn kinds.DeleteFunc) kinds.Kind {
 	return kinds.Kind{
 		Kind:     "demo",
 		Plural:   "demos",
-		SpecType: reflect.TypeOf(demoSpec{}),
+		SpecType: reflect.TypeFor[demoSpec](),
 		Apply:    applyFn,
 		Delete:   deleteFn,
 	}

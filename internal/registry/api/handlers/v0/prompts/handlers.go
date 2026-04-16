@@ -257,4 +257,3 @@ func RegisterPromptsCreateEndpoint(api huma.API, pathPrefix string, promptSvc pr
 		return createPromptHandler(ctx, input, promptSvc)
 	})
 }
-

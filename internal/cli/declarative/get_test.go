@@ -44,7 +44,7 @@ func TestGetCmd_RegistryDrivenColumnLookup(t *testing.T) {
 		Kind:     "agent",
 		Plural:   "agents",
 		Aliases:  []string{"Agent"},
-		SpecType: reflect.TypeOf(kinds.AgentSpec{}),
+		SpecType: reflect.TypeFor[kinds.AgentSpec](),
 		TableColumns: []kinds.Column{
 			{Header: "NAME"},
 			{Header: "VERSION"},

@@ -5,8 +5,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
+	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
 	"github.com/spf13/cobra"
 )

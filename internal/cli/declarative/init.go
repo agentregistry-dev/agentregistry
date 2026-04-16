@@ -252,9 +252,9 @@ func writeDeclarativeAgentYAML(projectDir, name, ver, image, language, framework
 	}
 
 	doc := struct {
-		APIVersion string         `yaml:"apiVersion"`
-		Kind       string         `yaml:"kind"`
-		Metadata   kinds.Metadata `yaml:"metadata"`
+		APIVersion string          `yaml:"apiVersion"`
+		Kind       string          `yaml:"kind"`
+		Metadata   kinds.Metadata  `yaml:"metadata"`
 		Spec       kinds.AgentSpec `yaml:"spec"`
 	}{
 		APIVersion: scheme.APIVersion,
@@ -450,7 +450,7 @@ func writeDeclarativeMCPYAML(projectDir, name, ver, image, description string) e
 		APIVersion string         `yaml:"apiVersion"`
 		Kind       string         `yaml:"kind"`
 		Metadata   kinds.Metadata `yaml:"metadata"`
-		Spec       kinds.MCPSpec   `yaml:"spec"`
+		Spec       kinds.MCPSpec  `yaml:"spec"`
 	}{
 		APIVersion: scheme.APIVersion,
 		Kind:       "MCPServer",
@@ -546,7 +546,7 @@ func writeDeclarativeSkillYAML(projectDir, name, ver, description, category stri
 		APIVersion string          `yaml:"apiVersion"`
 		Kind       string          `yaml:"kind"`
 		Metadata   kinds.Metadata  `yaml:"metadata"`
-		Spec       kinds.SkillSpec  `yaml:"spec"`
+		Spec       kinds.SkillSpec `yaml:"spec"`
 	}{
 		APIVersion: scheme.APIVersion,
 		Kind:       "Skill",
@@ -630,9 +630,9 @@ func writeDeclarativePromptYAML(path, name, ver, description, content string) er
 	}
 
 	doc := struct {
-		APIVersion string          `yaml:"apiVersion"`
-		Kind       string          `yaml:"kind"`
-		Metadata   kinds.Metadata  `yaml:"metadata"`
+		APIVersion string           `yaml:"apiVersion"`
+		Kind       string           `yaml:"kind"`
+		Metadata   kinds.Metadata   `yaml:"metadata"`
 		Spec       kinds.PromptSpec `yaml:"spec"`
 	}{
 		APIVersion: scheme.APIVersion,

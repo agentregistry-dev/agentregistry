@@ -17,7 +17,7 @@ func fakeKind() kinds.Kind {
 		Kind:     "fake",
 		Plural:   "fakes",
 		Aliases:  []string{"Fake"},
-		SpecType: reflect.TypeOf(fakeSpec{}),
+		SpecType: reflect.TypeFor[fakeSpec](),
 	}
 }
 
@@ -65,7 +65,7 @@ func TestRegisterEmptyKindPanics(t *testing.T) {
 			t.Fatal("expected panic for empty Kind")
 		}
 	}()
-	r.Register(kinds.Kind{SpecType: reflect.TypeOf(fakeSpec{})})
+	r.Register(kinds.Kind{SpecType: reflect.TypeFor[fakeSpec]()})
 }
 
 func TestRegisterNilSpecTypePanics(t *testing.T) {
@@ -166,9 +166,9 @@ spec: {foo: b}
 
 func TestAllReturnsRegistrationOrder(t *testing.T) {
 	r := kinds.NewRegistry()
-	r.Register(kinds.Kind{Kind: "a", SpecType: reflect.TypeOf(fakeSpec{})})
-	r.Register(kinds.Kind{Kind: "b", SpecType: reflect.TypeOf(fakeSpec{})})
-	r.Register(kinds.Kind{Kind: "c", SpecType: reflect.TypeOf(fakeSpec{})})
+	r.Register(kinds.Kind{Kind: "a", SpecType: reflect.TypeFor[fakeSpec]()})
+	r.Register(kinds.Kind{Kind: "b", SpecType: reflect.TypeFor[fakeSpec]()})
+	r.Register(kinds.Kind{Kind: "c", SpecType: reflect.TypeFor[fakeSpec]()})
 	all := r.All()
 	if len(all) != 3 || all[0].Kind != "a" || all[1].Kind != "b" || all[2].Kind != "c" {
 		t.Fatalf("unexpected order: %+v", all)

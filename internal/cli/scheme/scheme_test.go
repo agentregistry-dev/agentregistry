@@ -24,13 +24,13 @@ func newTestRegistry() *kinds.Registry {
 		Kind:     "agent",
 		Plural:   "agents",
 		Aliases:  []string{"Agent"},
-		SpecType: reflect.TypeOf(syntheticSpec{}),
+		SpecType: reflect.TypeFor[syntheticSpec](),
 	})
 	reg.Register(kinds.Kind{
 		Kind:     "mcpserver",
 		Plural:   "mcpservers",
 		Aliases:  []string{"MCPServer"},
-		SpecType: reflect.TypeOf(syntheticSpec{}),
+		SpecType: reflect.TypeFor[syntheticSpec](),
 	})
 	return reg
 }
@@ -111,7 +111,7 @@ spec: {}
 `
 	_, err := scheme.DecodeBytes(reg, []byte(input))
 	require.Error(t, err)
-	assert.True(t, err != nil, "expected error for unknown kind")
+	assert.NotEqual(t, err, nil, "expected error for unknown kind")
 }
 
 func TestDecodeBytes_EmptyInput(t *testing.T) {

@@ -63,7 +63,7 @@ func RegisterApplyEndpoints(api huma.API, pathPrefix string, reg *kinds.Registry
 // rawEnvelope is used for the first-pass YAML decode to extract kind/metadata
 // before dispatching to the registry's full Decode.
 type rawEnvelope struct {
-	Kind     string        `yaml:"kind"`
+	Kind     string         `yaml:"kind"`
 	Metadata kinds.Metadata `yaml:"metadata"`
 }
 

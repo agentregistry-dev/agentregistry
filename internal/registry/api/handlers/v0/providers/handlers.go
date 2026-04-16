@@ -24,7 +24,6 @@ type CreateProviderRequest struct {
 	Body models.CreateProviderInput
 }
 
-
 type ProvidersListResponse struct {
 	Body struct {
 		Providers []models.Provider `json:"providers"`

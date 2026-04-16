@@ -1146,10 +1146,10 @@ func (m *deploymentMockDB) Deployments() database.DeploymentStore {
 	return m
 }
 
-func (m *deploymentMockDB) Servers() database.ServerStore  { return nil }
-func (m *deploymentMockDB) Agents() database.AgentStore    { return nil }
-func (m *deploymentMockDB) Skills() database.SkillStore    { return nil }
-func (m *deploymentMockDB) Prompts() database.PromptStore  { return nil }
+func (m *deploymentMockDB) Servers() database.ServerStore { return nil }
+func (m *deploymentMockDB) Agents() database.AgentStore   { return nil }
+func (m *deploymentMockDB) Skills() database.SkillStore   { return nil }
+func (m *deploymentMockDB) Prompts() database.PromptStore { return nil }
 
 func (m *deployCreateMockDB) GetProvider(ctx context.Context, providerID string) (*models.Provider, error) {
 	return m.getProviderByIDFn(ctx, providerID)

@@ -480,4 +480,3 @@ func RegisterServersCreateEndpoint(api huma.API, pathPrefix string, serverSvc se
 		return createServerHandler(ctx, input, serverSvc, deploymentSvc)
 	})
 }
-

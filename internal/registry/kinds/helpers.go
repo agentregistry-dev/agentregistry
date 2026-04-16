@@ -39,7 +39,7 @@ func MakeApplyFunc[Spec any, Req any, ApplyResp any, GetResp any](
 			}
 			_, err := svcGet(ctx, doc.Metadata.Name, doc.Metadata.Version)
 			if err != nil {
-				result.Status = StatusCreated    // not found → would create
+				result.Status = StatusCreated // not found → would create
 			} else {
 				result.Status = StatusConfigured // found → would update (kubectl-style)
 			}
@@ -90,8 +90,6 @@ func MakeInitTemplate[Spec any](kind string, defaultSpec Spec) InitTemplateFunc 
 		return enc.Encode(doc)
 	}
 }
-
-
 
 // AppliedResult returns an applied Result. Used by kinds whose Apply functions
 // have custom service-call logic (e.g. provider, deployment).

@@ -99,13 +99,13 @@ type AgentRemote struct {
 // SkillSpec is the typed spec: block for a kind: skill declarative document.
 // Fields mirror the SkillJSON wire contract so that typed decode is lossless.
 type SkillSpec struct {
-	Title       string             `yaml:"title,omitempty" json:"title,omitempty"`
-	Category    string             `yaml:"category,omitempty" json:"category,omitempty"`
-	Description string             `yaml:"description,omitempty" json:"description,omitempty"`
-	WebsiteURL  string             `yaml:"websiteUrl,omitempty" json:"websiteUrl,omitempty"`
-	Repository  *SkillRepository   `yaml:"repository,omitempty" json:"repository,omitempty"`
-	Packages    []SkillPackageRef  `yaml:"packages,omitempty" json:"packages,omitempty"`
-	Remotes     []SkillRemoteInfo  `yaml:"remotes,omitempty" json:"remotes,omitempty"`
+	Title       string            `yaml:"title,omitempty" json:"title,omitempty"`
+	Category    string            `yaml:"category,omitempty" json:"category,omitempty"`
+	Description string            `yaml:"description,omitempty" json:"description,omitempty"`
+	WebsiteURL  string            `yaml:"websiteUrl,omitempty" json:"websiteUrl,omitempty"`
+	Repository  *SkillRepository  `yaml:"repository,omitempty" json:"repository,omitempty"`
+	Packages    []SkillPackageRef `yaml:"packages,omitempty" json:"packages,omitempty"`
+	Remotes     []SkillRemoteInfo `yaml:"remotes,omitempty" json:"remotes,omitempty"`
 }
 
 // SkillRepository mirrors models.SkillRepository.
@@ -147,14 +147,14 @@ type PromptSpec struct {
 // MCPSpec is the typed spec: block for a kind: mcp declarative document.
 // Fields mirror the ServerJSON wire contract so that typed decode is lossless.
 type MCPSpec struct {
-	Schema      string           `yaml:"$schema,omitempty" json:"$schema,omitempty"`
-	Description string           `yaml:"description,omitempty" json:"description,omitempty"`
-	Title       string           `yaml:"title,omitempty" json:"title,omitempty"`
-	WebsiteURL  string           `yaml:"websiteUrl,omitempty" json:"websiteUrl,omitempty"`
-	Repository  *MCPRepository   `yaml:"repository,omitempty" json:"repository,omitempty"`
-	Icons       []MCPIcon        `yaml:"icons,omitempty" json:"icons,omitempty"`
-	Packages    []MCPPackage     `yaml:"packages,omitempty" json:"packages,omitempty"`
-	Remotes     []MCPTransport   `yaml:"remotes,omitempty" json:"remotes,omitempty"`
+	Schema      string         `yaml:"$schema,omitempty" json:"$schema,omitempty"`
+	Description string         `yaml:"description,omitempty" json:"description,omitempty"`
+	Title       string         `yaml:"title,omitempty" json:"title,omitempty"`
+	WebsiteURL  string         `yaml:"websiteUrl,omitempty" json:"websiteUrl,omitempty"`
+	Repository  *MCPRepository `yaml:"repository,omitempty" json:"repository,omitempty"`
+	Icons       []MCPIcon      `yaml:"icons,omitempty" json:"icons,omitempty"`
+	Packages    []MCPPackage   `yaml:"packages,omitempty" json:"packages,omitempty"`
+	Remotes     []MCPTransport `yaml:"remotes,omitempty" json:"remotes,omitempty"`
 }
 
 // MCPRepository mirrors model.Repository.

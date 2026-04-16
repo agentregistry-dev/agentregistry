@@ -249,4 +249,3 @@ func RegisterSkillsCreateEndpoint(api huma.API, pathPrefix string, skillSvc skil
 		return createSkillHandler(ctx, input, skillSvc)
 	})
 }
-

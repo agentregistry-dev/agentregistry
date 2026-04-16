@@ -279,4 +279,3 @@ func RegisterAgentsCreateEndpoint(api huma.API, pathPrefix string, agentSvc agen
 		return createAgentHandler(ctx, input, agentSvc, deploymentSvc)
 	})
 }
-

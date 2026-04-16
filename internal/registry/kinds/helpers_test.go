@@ -281,7 +281,6 @@ func TestAssertSpec_TypeMismatch(t *testing.T) {
 	}
 }
 
-
 func TestAppliedResult(t *testing.T) {
 	doc := &kinds.Document{
 		Metadata: kinds.Metadata{Name: "n", Version: "v"},

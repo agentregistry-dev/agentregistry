@@ -52,7 +52,7 @@ func (a *successAdapter) SupportedResourceTypes() []string { return []string{"ag
 func (a *successAdapter) Deploy(_ context.Context, _ *models.Deployment) (*models.DeploymentActionResult, error) {
 	return &models.DeploymentActionResult{Status: models.DeploymentStatusDeployed}, nil
 }
-func (a *successAdapter) Undeploy(_ context.Context, _ *models.Deployment) error  { return nil }
+func (a *successAdapter) Undeploy(_ context.Context, _ *models.Deployment) error { return nil }
 func (a *successAdapter) GetLogs(_ context.Context, _ *models.Deployment) ([]string, error) {
 	return nil, nil
 }
@@ -155,7 +155,7 @@ func TestCleanupExistingDeploymentDoesNotDeleteDBRecordOnPlatformFailure(t *test
 	_ = reg.cleanupExistingDeployment(ctx, existing)
 
 	_, fetchErr := reg.deployments.GetDeployment(ctx, existing.ID)
-	assert.False(t, errors.Is(fetchErr, regdb.ErrNotFound), "DB record must still exist after platform failure")
+	assert.NotErrorIs(t, fetchErr, regdb.ErrNotFound, "DB record must still exist after platform failure")
 }
 
 func TestCleanupExistingDeploymentDeletesDBRecordWhenPlatformUnresolvable(t *testing.T) {
@@ -211,7 +211,7 @@ func TestCleanupExistingDeploymentDeletesDBRecordWhenPlatformUnresolvable(t *tes
 	require.NoError(t, err, "platform unresolvable must not return an error")
 
 	_, fetchErr := reg.deployments.GetDeployment(ctx, existing.ID)
-	assert.True(t, errors.Is(fetchErr, regdb.ErrNotFound), "DB record must be deleted even when platform is unresolvable")
+	assert.ErrorIs(t, fetchErr, regdb.ErrNotFound, "DB record must be deleted even when platform is unresolvable")
 }
 
 func TestEnvEqual(t *testing.T) {
@@ -297,7 +297,7 @@ func TestApplyAgentDeploymentDriftWithoutForceErrors(t *testing.T) {
 	_, err = reg.ApplyAgentDeployment(ctx, "drift-agent", "1.0.0", providerID,
 		map[string]string{"A": "2"}, nil, false, false)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrDeploymentDrift), "expected ErrDeploymentDrift, got: %v", err)
+	assert.ErrorIs(t, err, ErrDeploymentDrift, "expected ErrDeploymentDrift, got: %v", err)
 }
 
 func TestApplyAgentDeploymentDriftWithForceSucceeds(t *testing.T) {
@@ -332,7 +332,7 @@ func TestApplyAgentDeploymentIdempotentIncludesPreferRemote(t *testing.T) {
 	_, err = reg.ApplyAgentDeployment(ctx, "remote-agent", "1.0.0", providerID,
 		map[string]string{}, nil, false, false)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrDeploymentDrift), "preferRemote change should trigger drift, got: %v", err)
+	assert.ErrorIs(t, err, ErrDeploymentDrift, "preferRemote change should trigger drift, got: %v", err)
 }
 
 func TestApplyAgentDeploymentNoOpWhenAllEqual(t *testing.T) {
