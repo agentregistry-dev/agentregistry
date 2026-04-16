@@ -20,7 +20,7 @@ import (
 type ApplyInput struct {
 	Force   bool   `query:"force" doc:"Force overwrite even when the resource has drifted"`
 	DryRun  bool   `query:"dryRun" doc:"Validate without persisting changes"`
-	RawBody []byte `contentType:"application/yaml,application/json" required:"true" doc:"Multi-document YAML or JSON array of resource documents"`
+	RawBody []byte `contentType:"application/yaml" required:"true" doc:"Multi-document YAML or JSON array of resource documents (JSON is also accepted because it is valid YAML)"`
 }
 
 // ApplyOutput is the response envelope.

@@ -68,7 +68,7 @@ export const deleteApply = <ThrowOnError extends boolean = false>(options: Optio
     url: '/v0/apply',
     ...options,
     headers: {
-        'Content-Type': 'application/yaml,application/json',
+        'Content-Type': 'application/yaml',
         ...options.headers
     }
 });
@@ -81,7 +81,7 @@ export const apply = <ThrowOnError extends boolean = false>(options: Options<App
     url: '/v0/apply',
     ...options,
     headers: {
-        'Content-Type': 'application/yaml,application/json',
+        'Content-Type': 'application/yaml',
         ...options.headers
     }
 });

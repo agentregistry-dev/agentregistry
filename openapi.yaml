@@ -254,7 +254,7 @@ paths:
                     description: Validate without persisting changes
             requestBody:
                 content:
-                    application/yaml,application/json:
+                    application/yaml:
                         schema:
                             type: string
                             format: binary
@@ -294,7 +294,7 @@ paths:
                     description: Validate without persisting changes
             requestBody:
                 content:
-                    application/yaml,application/json:
+                    application/yaml:
                         schema:
                             type: string
                             format: binary

@@ -11,9 +11,8 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
-	"time"
-
 	"reflect"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
