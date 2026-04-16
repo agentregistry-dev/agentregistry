@@ -111,7 +111,7 @@ spec: {}
 `
 	_, err := scheme.DecodeBytes(reg, []byte(input))
 	require.Error(t, err)
-	assert.NotEqual(t, err, nil, "expected error for unknown kind")
+	assert.Error(t, err, "expected error for unknown kind")
 }
 
 func TestDecodeBytes_EmptyInput(t *testing.T) {
