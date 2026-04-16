@@ -86,7 +86,8 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&registryURL, "registry-url", os.Getenv("ARCTL_API_BASE_URL"), "Registry URL (overrides ARCTL_API_BASE_URL env var; defaults to http://localhost:12121)")
-	rootCmd.PersistentFlags().StringVar(&registryToken, "registry-token", os.Getenv("ARCTL_API_TOKEN"), "Registry bearer token (overrides ARCTL_API_TOKEN)")
+	// Don't use the default value from the env var here as the CLI help text would print it and this is a sensitive credential to access the API
+	rootCmd.PersistentFlags().StringVar(&registryToken, "registry-token", "", "Registry bearer token (defaults to value of ARCTL_API_TOKEN env var)")
 
 	rootCmd.AddCommand(mcp.McpCmd)
 	rootCmd.AddCommand(agent.AgentCmd)
