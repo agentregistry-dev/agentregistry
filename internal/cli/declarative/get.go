@@ -27,7 +27,7 @@ func newGetCmd() *cobra.Command {
 		Short: "List or retrieve registry resources",
 		Long: `List or retrieve registry resources by type.
 
-Supported types: agents, mcps, skills, prompts, providers
+Supported types: agents, mcps, skills, prompts, providers, deployments
 (singular and uppercase forms also accepted, e.g. Agent, agent, agents)
 
 Examples:

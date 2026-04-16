@@ -248,6 +248,23 @@ func newCLIRegistry() *kinds.Registry {
 		Plural:   "deployments",
 		Aliases:  []string{"Deployment"},
 		SpecType: reflect.TypeFor[kinds.DeploymentSpec](),
+		TableColumns: []kinds.Column{
+			{Header: "ID"}, {Header: "NAME"}, {Header: "VERSION"},
+			{Header: "TYPE"}, {Header: "PROVIDER"}, {Header: "STATUS"},
+		},
+		ListFunc: kinds.MakeListFunc(func() ([]*models.Deployment, error) {
+			resp, err := apiClient.GetDeployedServers()
+			if err != nil {
+				return nil, err
+			}
+			result := make([]*models.Deployment, len(resp))
+			copy(result, resp)
+			return result, nil
+		}),
+		RowFunc: func(item any) []string {
+			d := item.(*models.Deployment)
+			return []string{d.ID, d.ServerName, d.Version, d.ResourceType, d.ProviderID, d.Status}
+		},
 	})
 	return reg
 }
