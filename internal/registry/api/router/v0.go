@@ -6,6 +6,7 @@ import (
 
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	v0agents "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/agents"
+	v0apply "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/apply"
 	v0deployments "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deployments"
 	v0embeddings "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/embeddings"
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
@@ -15,6 +16,7 @@ import (
 	v0servers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/servers"
 	v0skills "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/skills"
 	v0version "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/version"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
 	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
@@ -52,6 +54,10 @@ type RouteOptions struct {
 
 	// Optional callback for integration-owned route registration.
 	ExtraRoutes func(api huma.API, pathPrefix string)
+
+	// KindRegistry is the declarative kind registry used by POST/DELETE /v0/apply.
+	// When non-nil the batch apply endpoints are registered.
+	KindRegistry *kinds.Registry
 }
 
 // RegisterRoutes registers all API routes under /v0.
@@ -70,27 +76,24 @@ func RegisterRoutes(
 	v0version.RegisterVersionEndpoint(api, pathPrefix, versionInfo)
 	v0servers.RegisterServersEndpoints(api, pathPrefix, svcs.Server, svcs.Deployment)
 	v0servers.RegisterServersCreateEndpoint(api, pathPrefix, svcs.Server, svcs.Deployment)
-	v0servers.RegisterServersApplyEndpoint(api, pathPrefix, svcs.Server, svcs.Deployment)
-	v0servers.RegisterServersDeploymentApplyEndpoint(api, pathPrefix, svcs.Deployment)
 	v0servers.RegisterEditEndpoints(api, pathPrefix, svcs.Server, svcs.Deployment)
 	v0providers.RegisterProvidersEndpoints(api, pathPrefix, svcs.Provider)
 	v0deployments.RegisterDeploymentsEndpoints(api, pathPrefix, svcs.Deployment)
 	v0agents.RegisterAgentsEndpoints(api, pathPrefix, svcs.Agent, svcs.Deployment)
 	v0agents.RegisterAgentsCreateEndpoint(api, pathPrefix, svcs.Agent, svcs.Deployment)
-	v0agents.RegisterAgentsApplyEndpoint(api, pathPrefix, svcs.Agent, svcs.Deployment)
-	v0agents.RegisterAgentsDeploymentApplyEndpoint(api, pathPrefix, svcs.Deployment)
 	v0skills.RegisterSkillsEndpoints(api, pathPrefix, svcs.Skill)
 	v0skills.RegisterSkillsCreateEndpoint(api, pathPrefix, svcs.Skill)
-	v0skills.RegisterSkillsApplyEndpoint(api, pathPrefix, svcs.Skill)
 	v0prompts.RegisterPromptsEndpoints(api, pathPrefix, svcs.Prompt)
 	v0prompts.RegisterPromptsCreateEndpoint(api, pathPrefix, svcs.Prompt)
-	v0prompts.RegisterPromptsApplyEndpoint(api, pathPrefix, svcs.Prompt)
 
 	if opts != nil && opts.Indexer != nil && opts.JobManager != nil {
 		v0embeddings.RegisterEmbeddingsEndpoints(api, pathPrefix, opts.Indexer, opts.JobManager)
 		if opts.Mux != nil {
 			v0embeddings.RegisterEmbeddingsSSEHandler(opts.Mux, pathPrefix, opts.Indexer, opts.JobManager)
 		}
+	}
+	if opts != nil && opts.KindRegistry != nil {
+		v0apply.RegisterApplyEndpoints(api, pathPrefix, opts.KindRegistry)
 	}
 	if opts != nil && opts.ExtraRoutes != nil {
 		opts.ExtraRoutes(api, pathPrefix)

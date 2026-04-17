@@ -60,6 +60,9 @@ export type AgentRegistryExtensions = {
 export type AgentResponse = {
     _meta: AgentResponseMeta;
     agent: AgentJson;
+    mcpServerRefs?: Array<RegistryRef>;
+    promptRefs?: Array<RegistryRef>;
+    skillRefs?: Array<RegistryRef>;
 };
 
 export type AgentResponseMeta = {
@@ -70,6 +73,10 @@ export type AgentResponseMeta = {
 
 export type AgentSemanticMeta = {
     score: number;
+};
+
+export type ApplyOutputBody = {
+    results: Array<Result>;
 };
 
 export type Argument = {
@@ -159,25 +166,6 @@ export type Deployment = {
     status: string;
     updatedAt: string;
     version: string;
-};
-
-export type DeploymentApplyBody = {
-    /**
-     * Deployment environment variables.
-     */
-    env?: {
-        [key: string]: string;
-    };
-    /**
-     * Prefer remote deployment over local
-     */
-    preferRemote?: boolean;
-    /**
-     * Optional provider-specific deployment settings.
-     */
-    providerConfig?: {
-        [key: string]: unknown;
-    };
 };
 
 export type DeploymentLogsBody = {
@@ -411,8 +399,9 @@ export type McpServerType = {
     registryServerPreferRemote?: boolean;
     registryServerVersion?: string;
     registryURL?: string;
-    type: string;
+    type?: string;
     url?: string;
+    version?: string;
 };
 
 export type Package = {
@@ -540,6 +529,11 @@ export type RegistryExtensions = {
     updatedAt?: string;
 };
 
+export type RegistryRef = {
+    name: string;
+    version?: string;
+};
+
 export type Repository = {
     /**
      * Repository identifier from the hosting service (e.g., GitHub repo ID). Owned and determined by the source forge. Should remain stable across repository renames and may be used to detect repository resurrection attacks - if a repository is deleted and recreated, the ID should change. For GitHub, use: gh api repos/<owner>/<repo> --jq '.id'
@@ -564,23 +558,12 @@ export type ResourceDeploymentsMeta = {
     deployments: Array<DeploymentSummary>;
 };
 
-export type ServerDeploymentApplyBody = {
-    /**
-     * Deployment environment variables.
-     */
-    env?: {
-        [key: string]: string;
-    };
-    /**
-     * Prefer remote deployment over local
-     */
-    preferRemote?: boolean;
-    /**
-     * Optional provider-specific deployment settings.
-     */
-    providerConfig?: {
-        [key: string]: unknown;
-    };
+export type Result = {
+    error?: string;
+    kind: string;
+    name: string;
+    status: string;
+    version?: string;
 };
 
 export type ServerJson = {
@@ -753,13 +736,6 @@ export type Transport = {
      * URL for streamable-http or sse transports
      */
     url?: string;
-};
-
-export type UpdateProviderInput = {
-    config?: {
-        [key: string]: unknown;
-    };
-    name?: string;
 };
 
 export type VersionBody = {
@@ -954,71 +930,73 @@ export type GetAgentVersionV0Responses = {
 
 export type GetAgentVersionV0Response = GetAgentVersionV0Responses[keyof GetAgentVersionV0Responses];
 
-export type ApplyAgentV0Data = {
-    body: AgentJson;
-    path: {
-        agentName: string;
-        version: string;
+export type DeleteApplyData = {
+    body: Blob | File;
+    path?: never;
+    query?: {
+        /**
+         * Force overwrite even when the resource has drifted
+         */
+        force?: boolean;
+        /**
+         * Validate without persisting changes
+         */
+        dryRun?: boolean;
     };
-    query?: never;
-    url: '/v0/agents/{agentName}/versions/{version}';
+    url: '/v0/apply';
 };
 
-export type ApplyAgentV0Errors = {
+export type DeleteApplyErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type ApplyAgentV0Error = ApplyAgentV0Errors[keyof ApplyAgentV0Errors];
+export type DeleteApplyError = DeleteApplyErrors[keyof DeleteApplyErrors];
 
-export type ApplyAgentV0Responses = {
+export type DeleteApplyResponses = {
     /**
      * OK
      */
-    200: AgentResponse;
+    200: ApplyOutputBody;
 };
 
-export type ApplyAgentV0Response = ApplyAgentV0Responses[keyof ApplyAgentV0Responses];
+export type DeleteApplyResponse = DeleteApplyResponses[keyof DeleteApplyResponses];
 
-export type ApplyAgentDeploymentData = {
-    body: DeploymentApplyBody;
-    path: {
+export type ApplyData = {
+    body: Blob | File;
+    path?: never;
+    query?: {
         /**
-         * URL-encoded agent name
+         * Force overwrite even when the resource has drifted
          */
-        agentName: string;
+        force?: boolean;
         /**
-         * URL-encoded agent version
+         * Validate without persisting changes
          */
-        version: string;
-        /**
-         * Deployment provider ID
-         */
-        providerId: string;
+        dryRun?: boolean;
     };
-    query?: never;
-    url: '/v0/agents/{agentName}/versions/{version}/deployments/{providerId}';
+    url: '/v0/apply';
 };
 
-export type ApplyAgentDeploymentErrors = {
+export type ApplyErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type ApplyAgentDeploymentError = ApplyAgentDeploymentErrors[keyof ApplyAgentDeploymentErrors];
+export type ApplyError = ApplyErrors[keyof ApplyErrors];
 
-export type ApplyAgentDeploymentResponses = {
+export type ApplyResponses = {
     /**
      * OK
      */
-    200: Deployment;
+    200: ApplyOutputBody;
 };
 
-export type ApplyAgentDeploymentResponse = ApplyAgentDeploymentResponses[keyof ApplyAgentDeploymentResponses];
+export type ApplyResponse = ApplyResponses[keyof ApplyResponses];
 
 export type ListDeploymentsData = {
     body?: never;
@@ -1434,34 +1412,6 @@ export type GetPromptVersionV0Responses = {
 
 export type GetPromptVersionV0Response = GetPromptVersionV0Responses[keyof GetPromptVersionV0Responses];
 
-export type ApplyPromptV0Data = {
-    body: PromptJson;
-    path: {
-        promptName: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/prompts/{promptName}/versions/{version}';
-};
-
-export type ApplyPromptV0Errors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ApplyPromptV0Error = ApplyPromptV0Errors[keyof ApplyPromptV0Errors];
-
-export type ApplyPromptV0Responses = {
-    /**
-     * OK
-     */
-    200: PromptResponse;
-};
-
-export type ApplyPromptV0Response = ApplyPromptV0Responses[keyof ApplyPromptV0Responses];
-
 export type ListProvidersData = {
     body?: never;
     path?: never;
@@ -1586,41 +1536,6 @@ export type GetProviderResponses = {
 };
 
 export type GetProviderResponse = GetProviderResponses[keyof GetProviderResponses];
-
-export type ApplyProviderData = {
-    body: UpdateProviderInput;
-    path: {
-        /**
-         * Provider ID
-         */
-        providerId: string;
-    };
-    query?: {
-        /**
-         * Provider platform hint (optional)
-         */
-        platform?: string;
-    };
-    url: '/v0/providers/{providerId}';
-};
-
-export type ApplyProviderErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ApplyProviderError = ApplyProviderErrors[keyof ApplyProviderErrors];
-
-export type ApplyProviderResponses = {
-    /**
-     * OK
-     */
-    200: Provider;
-};
-
-export type ApplyProviderResponse = ApplyProviderResponses[keyof ApplyProviderResponses];
 
 export type ListServersV0Data = {
     body?: never;
@@ -1878,72 +1793,6 @@ export type EditServerV0Responses = {
 
 export type EditServerV0Response = EditServerV0Responses[keyof EditServerV0Responses];
 
-export type ApplyServerV0Data = {
-    body: ServerJson;
-    path: {
-        serverName: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/servers/{serverName}/versions/{version}';
-};
-
-export type ApplyServerV0Errors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ApplyServerV0Error = ApplyServerV0Errors[keyof ApplyServerV0Errors];
-
-export type ApplyServerV0Responses = {
-    /**
-     * OK
-     */
-    200: ServerResponse;
-};
-
-export type ApplyServerV0Response = ApplyServerV0Responses[keyof ApplyServerV0Responses];
-
-export type ApplyServerDeploymentData = {
-    body: ServerDeploymentApplyBody;
-    path: {
-        /**
-         * URL-encoded server name
-         */
-        serverName: string;
-        /**
-         * URL-encoded server version
-         */
-        version: string;
-        /**
-         * Deployment provider ID
-         */
-        providerId: string;
-    };
-    query?: never;
-    url: '/v0/servers/{serverName}/versions/{version}/deployments/{providerId}';
-};
-
-export type ApplyServerDeploymentErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ApplyServerDeploymentError = ApplyServerDeploymentErrors[keyof ApplyServerDeploymentErrors];
-
-export type ApplyServerDeploymentResponses = {
-    /**
-     * OK
-     */
-    200: Deployment;
-};
-
-export type ApplyServerDeploymentResponse = ApplyServerDeploymentResponses[keyof ApplyServerDeploymentResponses];
-
 export type GetServerVersionReadmeV0Data = {
     body?: never;
     path: {
@@ -2151,34 +2000,6 @@ export type GetSkillVersionV0Responses = {
 };
 
 export type GetSkillVersionV0Response = GetSkillVersionV0Responses[keyof GetSkillVersionV0Responses];
-
-export type ApplySkillV0Data = {
-    body: SkillJson;
-    path: {
-        skillName: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/skills/{skillName}/versions/{version}';
-};
-
-export type ApplySkillV0Errors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ApplySkillV0Error = ApplySkillV0Errors[keyof ApplySkillV0Errors];
-
-export type ApplySkillV0Responses = {
-    /**
-     * OK
-     */
-    200: SkillResponse;
-};
-
-export type ApplySkillV0Response = ApplySkillV0Responses[keyof ApplySkillV0Responses];
 
 export type GetVersionV0Data = {
     body?: never;

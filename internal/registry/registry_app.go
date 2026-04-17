@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"reflect"
 	"strconv"
 	"syscall"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/importer"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/kubernetes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/local"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
@@ -37,9 +39,9 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/logging"
+	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
-
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
@@ -160,6 +162,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	skillService := skillsvc.New(skillsvc.Dependencies{Skills: db.Skills(), Tx: db})
 	promptService := promptsvc.New(promptsvc.Dependencies{Prompts: db.Prompts(), Tx: db})
 	deploymentService := deploymentsvc.New(deploymentsvc.Dependencies{
+		StoreDB:            db,
 		Deployments:        db.Deployments(),
 		Providers:          providerService,
 		Servers:            serverService,
@@ -222,10 +225,93 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		}
 	}()
 
+	// Build the kind registry and register all 6 OSS kinds.
+	kindReg := kinds.NewRegistry()
+	kindReg.Register(kinds.Kind{
+		Kind:     "agent",
+		Plural:   "agents",
+		Aliases:  []string{"Agent"},
+		SpecType: reflect.TypeFor[kinds.AgentSpec](),
+		Apply:    kinds.MakeApplyFunc("agent", kinds.ToAgentJSON, agentService.ApplyAgent, agentService.GetAgentVersion),
+		Get:      kinds.MakeGetFunc(agentService.GetAgent, agentService.GetAgentVersion),
+		Delete:   agentService.DeleteAgent,
+		TableColumns: []kinds.Column{
+			{Header: "NAME"}, {Header: "VERSION"}, {Header: "FRAMEWORK"},
+			{Header: "LANGUAGE"}, {Header: "PROVIDER"}, {Header: "MODEL"},
+		},
+		InitTemplate: kinds.MakeInitTemplate("agent", kinds.AgentSpec{Description: "TODO: describe your agent"}),
+	})
+	kindReg.Register(kinds.Kind{
+		Kind:     "skill",
+		Plural:   "skills",
+		Aliases:  []string{"Skill"},
+		SpecType: reflect.TypeFor[kinds.SkillSpec](),
+		Apply:    kinds.MakeApplyFunc("skill", kinds.ToSkillJSON, skillService.ApplySkill, skillService.GetSkillVersion),
+		Get:      kinds.MakeGetFunc(skillService.GetSkill, skillService.GetSkillVersion),
+		Delete:   skillService.DeleteSkill,
+		TableColumns: []kinds.Column{
+			{Header: "NAME"}, {Header: "VERSION"}, {Header: "CATEGORY"}, {Header: "DESCRIPTION"},
+		},
+		InitTemplate: kinds.MakeInitTemplate("skill", kinds.SkillSpec{Description: "TODO: describe your skill"}),
+	})
+	kindReg.Register(kinds.Kind{
+		Kind:     "prompt",
+		Plural:   "prompts",
+		Aliases:  []string{"Prompt"},
+		SpecType: reflect.TypeFor[kinds.PromptSpec](),
+		Apply:    kinds.MakeApplyFunc("prompt", kinds.ToPromptJSON, promptService.ApplyPrompt, promptService.GetPromptVersion),
+		Get:      kinds.MakeGetFunc(promptService.GetPrompt, promptService.GetPromptVersion),
+		Delete:   promptService.DeletePrompt,
+		TableColumns: []kinds.Column{
+			{Header: "NAME"}, {Header: "VERSION"}, {Header: "DESCRIPTION"},
+		},
+		InitTemplate: kinds.MakeInitTemplate("prompt", kinds.PromptSpec{Description: "TODO: describe your prompt", Content: "TODO: write your prompt content"}),
+	})
+	kindReg.Register(kinds.Kind{
+		Kind:     "mcp",
+		Plural:   "mcps",
+		Aliases:  []string{"MCPServer", "mcpserver", "mcp-server", "mcpservers"},
+		SpecType: reflect.TypeFor[kinds.MCPSpec](),
+		Apply:    kinds.MakeApplyFunc("mcp", kinds.ToServerJSON, serverService.ApplyServer, serverService.GetServerVersion),
+		Get:      kinds.MakeGetFunc(serverService.GetServer, serverService.GetServerVersion),
+		Delete:   serverService.DeleteServer,
+		TableColumns: []kinds.Column{
+			{Header: "NAME"}, {Header: "VERSION"}, {Header: "DESCRIPTION"},
+		},
+		InitTemplate: kinds.MakeInitTemplate("mcp", kinds.MCPSpec{Description: "TODO: describe your MCP server"}),
+	})
+	kindReg.Register(kinds.Kind{
+		Kind:     "provider",
+		Plural:   "providers",
+		Aliases:  []string{"Provider"},
+		SpecType: reflect.TypeFor[kinds.ProviderSpec](),
+		Apply:    providerApplyFunc(providerService),
+		Get:      func(ctx context.Context, name, _ string) (any, error) { return providerService.GetProvider(ctx, name) },
+		Delete:   func(ctx context.Context, name, _ string) error { return providerService.DeleteProvider(ctx, name, "") },
+		TableColumns: []kinds.Column{
+			{Header: "NAME"}, {Header: "PLATFORM"},
+		},
+		InitTemplate: kinds.MakeInitTemplate("provider", kinds.ProviderSpec{
+			Platform: "kubernetes",
+		}),
+	})
+	kindReg.Register(kinds.Kind{
+		Kind:     "deployment",
+		Plural:   "deployments",
+		Aliases:  []string{"Deployment"},
+		SpecType: reflect.TypeFor[kinds.DeploymentSpec](),
+		Apply:    deploymentApplyFunc(deploymentService),
+		TableColumns: []kinds.Column{
+			{Header: "NAME"}, {Header: "VERSION"}, {Header: "RESOURCE_TYPE"},
+			{Header: "PROVIDER"}, {Header: "STATUS"},
+		},
+	})
+
 	routeOpts := &router.RouteOptions{
 		ProviderPlatforms:   providerPlatforms,
 		DeploymentPlatforms: deploymentPlatforms,
 		ExtraRoutes:         options.ExtraRoutes,
+		KindRegistry:        kindReg,
 	}
 
 	// Initialize job manager and indexer for embeddings.
@@ -352,4 +438,79 @@ func setupLogging(levelStr string) {
 	}
 	// set all loggers to the specified level
 	logging.Reset(level)
+}
+
+// providerApplyFunc returns the Apply function for the provider kind.
+// Extracted from the inline registration to keep the registration block declarative.
+func providerApplyFunc(svc providersvc.Registry) kinds.ApplyFunc {
+	return func(ctx context.Context, doc *kinds.Document, opts kinds.ApplyOpts) (*kinds.Result, error) {
+		spec, err := kinds.AssertSpec[kinds.ProviderSpec]("provider", doc)
+		if err != nil {
+			return nil, err
+		}
+		if spec.Platform == "" {
+			return nil, fmt.Errorf("provider: spec.platform is required")
+		}
+		if opts.DryRun {
+			_, err := svc.GetProvider(ctx, doc.Metadata.Name)
+			if err != nil {
+				return &kinds.Result{Kind: "provider", Name: doc.Metadata.Name, Status: kinds.StatusCreated}, nil
+			}
+			return &kinds.Result{Kind: "provider", Name: doc.Metadata.Name, Status: kinds.StatusConfigured}, nil
+		}
+		name := doc.Metadata.Name
+		cfg := spec.Config
+		if cfg == nil {
+			cfg = map[string]any{}
+		}
+		if _, err := svc.ApplyProvider(ctx, name, spec.Platform, &models.UpdateProviderInput{
+			Name: &name, Config: cfg,
+		}); err != nil {
+			return nil, err
+		}
+		return kinds.AppliedResult("provider", doc), nil
+	}
+}
+
+// deploymentApplyFunc returns the Apply function for the deployment kind.
+// Extracted from the inline registration to keep the registration block declarative.
+func deploymentApplyFunc(svc deploymentsvc.Registry) kinds.ApplyFunc {
+	return func(ctx context.Context, doc *kinds.Document, opts kinds.ApplyOpts) (*kinds.Result, error) {
+		spec, err := kinds.AssertSpec[kinds.DeploymentSpec]("deployment", doc)
+		if err != nil {
+			return nil, err
+		}
+		if spec.ProviderID == "" {
+			return nil, fmt.Errorf("deployment: spec.providerId is required")
+		}
+		rt := spec.ResourceType
+		// "server" is accepted as an alias for "mcp" for backwards compatibility.
+		if rt != "agent" && rt != "mcp" && rt != "server" {
+			return nil, fmt.Errorf("deployment: spec.resourceType must be one of \"agent\", \"mcp\", \"server\"; got %q", rt)
+		}
+		if opts.DryRun {
+			resourceName := doc.Metadata.Name
+			existing, listErr := svc.ListDeployments(ctx, &models.DeploymentFilter{ResourceName: &resourceName})
+			status := kinds.StatusCreated
+			if listErr == nil {
+				for _, d := range existing {
+					if d.ServerName == doc.Metadata.Name && (doc.Metadata.Version == "" || d.Version == doc.Metadata.Version) {
+						status = kinds.StatusConfigured
+						break
+					}
+				}
+			}
+			return &kinds.Result{Kind: "deployment", Name: doc.Metadata.Name, Version: doc.Metadata.Version, Status: status}, nil
+		}
+		if rt == "agent" {
+			if _, err := svc.ApplyAgentDeployment(ctx, doc.Metadata.Name, doc.Metadata.Version, spec.ProviderID, spec.Env, spec.ProviderConfig, spec.PreferRemote, opts.Force); err != nil {
+				return nil, err
+			}
+		} else {
+			if _, err := svc.ApplyServerDeployment(ctx, doc.Metadata.Name, doc.Metadata.Version, spec.ProviderID, spec.Env, spec.ProviderConfig, spec.PreferRemote, opts.Force); err != nil {
+				return nil, err
+			}
+		}
+		return kinds.AppliedResult("deployment", doc), nil
+	}
 }

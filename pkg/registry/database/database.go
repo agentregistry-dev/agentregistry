@@ -194,6 +194,11 @@ type DeploymentStore interface {
 	GetDeployment(ctx context.Context, id string) (*models.Deployment, error)
 	UpdateDeploymentState(ctx context.Context, id string, patch *models.DeploymentStatePatch) error
 	DeleteDeployment(ctx context.Context, id string) error
+	// AcquireApplyLock takes a transaction-scoped Postgres advisory lock derived
+	// from the given identity key. Used by deployment apply to serialize concurrent
+	// applies for the same (resource, version, type, provider) tuple. MUST be called
+	// inside a transaction; the lock auto-releases on commit/rollback.
+	AcquireApplyLock(ctx context.Context, identityKey string) error
 }
 
 // ListProviders uses *string (not plain string) for optional platform filtering;

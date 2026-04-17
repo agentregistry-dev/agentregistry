@@ -48,11 +48,13 @@ type Registry interface {
 	LaunchDeployment(ctx context.Context, req *models.Deployment) (*models.Deployment, error)
 	// ApplyAgentDeployment idempotently deploys an agent. If an identical deployment
 	// is already running it is returned unchanged; otherwise any stale record is
-	// cleaned up and a fresh deployment is launched.
-	ApplyAgentDeployment(ctx context.Context, agentName, version, providerID string, env map[string]string, providerConfig models.JSONObject) (*models.Deployment, error)
+	// cleaned up and a fresh deployment is launched. When preferRemote is true the
+	// deployment favors remote execution. When force is true, config drift on a
+	// running deployment triggers a redeploy instead of returning ErrDeploymentDrift.
+	ApplyAgentDeployment(ctx context.Context, agentName, version, providerID string, env map[string]string, providerConfig models.JSONObject, preferRemote, force bool) (*models.Deployment, error)
 	// ApplyServerDeployment idempotently deploys an MCP server. Semantics are the
 	// same as ApplyAgentDeployment but for resource type "mcp".
-	ApplyServerDeployment(ctx context.Context, serverName, version, providerID string, env map[string]string, providerConfig models.JSONObject) (*models.Deployment, error)
+	ApplyServerDeployment(ctx context.Context, serverName, version, providerID string, env map[string]string, providerConfig models.JSONObject, preferRemote, force bool) (*models.Deployment, error)
 	UndeployDeployment(ctx context.Context, deployment *models.Deployment) error
 	GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
 	CancelDeployment(ctx context.Context, deployment *models.Deployment) error
@@ -64,6 +66,7 @@ type registry struct {
 	servers     serversvc.Registry
 	agents      agentsvc.Registry
 	adapters    map[string]registrytypes.DeploymentPlatformAdapter
+	tx          database.Transactor
 }
 
 var _ Registry = (*registry)(nil)
@@ -96,6 +99,7 @@ func New(deps Dependencies) Registry {
 		servers:     deps.Servers,
 		agents:      deps.Agents,
 		adapters:    adapters,
+		tx:          deps.StoreDB,
 	}
 }
 

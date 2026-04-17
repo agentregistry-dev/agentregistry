@@ -2,6 +2,15 @@ package models
 
 import "time"
 
+// RegistryRef is the unified reference type for all agent dependencies
+// (MCP servers, skills, prompts) in the declarative agent spec.
+// Resources are looked up in the registry by (Name, Version) which matches
+// the composite primary keys used across all registry tables.
+type RegistryRef struct {
+	Name    string `json:"name" yaml:"name"`                           // registry resource name (e.g. "myorg/weather-mcp")
+	Version string `json:"version,omitempty" yaml:"version,omitempty"` // version; empty = resolve to latest
+}
+
 // AgentManifest represents the agent project configuration and metadata.
 type AgentManifest struct {
 	Name              string          `yaml:"agentName" json:"name"`
@@ -46,10 +55,16 @@ type PromptRef struct {
 }
 
 // McpServerType represents a single MCP server configuration.
+// New declarative format: only Name + Version are set (Name is the registry server name).
+// Legacy format: Type is set ("remote", "command", or "registry") with type-specific fields.
 type McpServerType struct {
-	// MCP Server Type -- remote, command, registry
-	Type    string            `yaml:"type" json:"type"`
-	Name    string            `yaml:"name" json:"name"`
+	// Name is the registry server name (new format) or local display name (legacy format).
+	Name string `yaml:"name" json:"name"`
+	// Version is the server version for the new declarative format.
+	Version string `yaml:"version,omitempty" json:"version,omitempty"`
+	// TODO(legacy): remove fields below once declarative API is the only supported path
+	// Type is the MCP server type -- remote, command, registry (legacy format only).
+	Type    string            `yaml:"type,omitempty" json:"type,omitempty"`
 	Image   string            `yaml:"image,omitempty" json:"image,omitempty"`
 	Build   string            `yaml:"build,omitempty" json:"build,omitempty"`
 	Command string            `yaml:"command,omitempty" json:"command,omitempty"`
@@ -62,4 +77,31 @@ type McpServerType struct {
 	RegistryServerName         string `yaml:"registryServerName,omitempty" json:"registryServerName,omitempty"`
 	RegistryServerVersion      string `yaml:"registryServerVersion,omitempty" json:"registryServerVersion,omitempty"`
 	RegistryServerPreferRemote bool   `yaml:"registryServerPreferRemote,omitempty" json:"registryServerPreferRemote,omitempty"`
+}
+
+// IsLegacyFormat returns true if this MCP server entry uses the legacy format
+// (Type or RegistryServerName set), false if it uses the new RegistryRef format.
+func (m *McpServerType) IsLegacyFormat() bool {
+	return m.Type != "" || m.RegistryServerName != ""
+}
+
+// ToRegistryRef converts a new-format McpServerType entry to a RegistryRef.
+// Returns nil if this is a legacy-format entry.
+func (m *McpServerType) ToRegistryRef() *RegistryRef {
+	if m.IsLegacyFormat() {
+		return nil
+	}
+	return &RegistryRef{Name: m.Name, Version: m.Version}
+}
+
+// ExtractMCPServerRefs extracts RegistryRef entries from the manifest's McpServers list.
+// Only new-format entries (no Type or RegistryServerName set) are included.
+func (am *AgentManifest) ExtractMCPServerRefs() []RegistryRef {
+	var refs []RegistryRef
+	for _, s := range am.McpServers {
+		if ref := s.ToRegistryRef(); ref != nil {
+			refs = append(refs, *ref)
+		}
+	}
+	return refs
 }

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	v0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
@@ -374,6 +375,43 @@ func (c *Client) GetSkillVersion(name, version string) (*models.SkillResponse, e
 	return &resp, nil
 }
 
+// GetProviders returns all providers.
+func (c *Client) GetProviders() ([]*models.Provider, error) {
+	req, err := c.newRequest(http.MethodGet, "/providers")
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Providers []*models.Provider `json:"providers"`
+	}
+	if err := c.doJSON(req, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Providers, nil
+}
+
+// GetProvider returns a single provider by ID.
+func (c *Client) GetProvider(providerID string) (*models.Provider, error) {
+	req, err := c.newRequest(http.MethodGet, "/providers/"+url.PathEscape(providerID))
+	if err != nil {
+		return nil, err
+	}
+	var resp models.Provider
+	if err := c.doJSON(req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// DeleteProvider deletes a provider by ID.
+func (c *Client) DeleteProvider(providerID string) error {
+	req, err := c.newRequest(http.MethodDelete, "/providers/"+url.PathEscape(providerID))
+	if err != nil {
+		return err
+	}
+	return c.doJSON(req, nil)
+}
+
 // GetAgents returns all agents from connected registries
 func (c *Client) GetAgents() ([]*models.AgentResponse, error) {
 	limit := 100
@@ -511,15 +549,6 @@ func (c *Client) CreatePrompt(prompt *models.PromptJSON) (*models.PromptResponse
 	return &resp, err
 }
 
-// ApplyPrompt applies (creates or updates) a prompt at a specific version
-func (c *Client) ApplyPrompt(promptName, version string, prompt *models.PromptJSON) (*models.PromptResponse, error) {
-	encName := url.PathEscape(promptName)
-	encVersion := url.PathEscape(version)
-	path := fmt.Sprintf("/prompts/%s/versions/%s", encName, encVersion)
-	var resp models.PromptResponse
-	return &resp, c.doJsonRequest(http.MethodPut, path, prompt, &resp)
-}
-
 // DeletePrompt deletes a prompt from the registry
 func (c *Client) DeletePrompt(name, version string) error {
 	encName := url.PathEscape(name)
@@ -540,15 +569,6 @@ func (c *Client) CreateSkill(skill *models.SkillJSON) (*models.SkillResponse, er
 	return &resp, err
 }
 
-// ApplySkill applies (creates or updates) a skill at a specific version
-func (c *Client) ApplySkill(skillName, version string, skill *models.SkillJSON) (*models.SkillResponse, error) {
-	encName := url.PathEscape(skillName)
-	encVersion := url.PathEscape(version)
-	path := fmt.Sprintf("/skills/%s/versions/%s", encName, encVersion)
-	var resp models.SkillResponse
-	return &resp, c.doJsonRequest(http.MethodPut, path, skill, &resp)
-}
-
 // CreateAgent creates or updates an agent entry.
 func (c *Client) CreateAgent(agent *models.AgentJSON) (*models.AgentResponse, error) {
 	var resp models.AgentResponse
@@ -556,29 +576,11 @@ func (c *Client) CreateAgent(agent *models.AgentJSON) (*models.AgentResponse, er
 	return &resp, err
 }
 
-// ApplyAgent applies (creates or updates) an agent at a specific version
-func (c *Client) ApplyAgent(agentName, version string, agent *models.AgentJSON) (*models.AgentResponse, error) {
-	encName := url.PathEscape(agentName)
-	encVersion := url.PathEscape(version)
-	path := fmt.Sprintf("/agents/%s/versions/%s", encName, encVersion)
-	var resp models.AgentResponse
-	return &resp, c.doJsonRequest(http.MethodPut, path, agent, &resp)
-}
-
 // CreateMCPServer creates or updates an MCP server entry.
 func (c *Client) CreateMCPServer(server *v0.ServerJSON) (*v0.ServerResponse, error) {
 	var resp v0.ServerResponse
 	err := c.doJsonRequest(http.MethodPost, "/servers", server, &resp)
 	return &resp, err
-}
-
-// ApplyMCPServer applies (creates or updates) an MCP server at a specific version.
-func (c *Client) ApplyMCPServer(serverName, version string, server *v0.ServerJSON) (*v0.ServerResponse, error) {
-	encName := url.PathEscape(serverName)
-	encVersion := url.PathEscape(version)
-	path := fmt.Sprintf("/servers/%s/versions/%s", encName, encVersion)
-	var resp v0.ServerResponse
-	return &resp, c.doJsonRequest(http.MethodPut, path, server, &resp)
 }
 
 // DeleteAgent deletes an agent from the registry
@@ -647,18 +649,6 @@ func asHTTPStatus(err error) int {
 		return http.StatusNotFound
 	}
 	return 0
-}
-
-// ApplyProvider applies (creates or updates) a provider.
-// platform must be provided when creating a new provider (e.g. "local", "kubernetes").
-func (c *Client) ApplyProvider(providerID, platform string, in *models.UpdateProviderInput) (*models.Provider, error) {
-	encID := url.PathEscape(providerID)
-	path := "/providers/" + encID
-	if platform != "" {
-		path += "?platform=" + url.QueryEscape(platform)
-	}
-	var resp models.Provider
-	return &resp, c.doJsonRequest(http.MethodPut, path, in, &resp)
 }
 
 // GetDeployedServers retrieves all deployed servers
@@ -744,41 +734,6 @@ func (c *Client) DeployAgent(name, version string, env map[string]string, provid
 	return &deployment, nil
 }
 
-// DeploymentApplyBody carries the mutable fields for a sub-resource deployment apply.
-type DeploymentApplyBody struct {
-	Env            map[string]string `json:"env,omitempty"`
-	ProviderConfig map[string]any    `json:"providerConfig,omitempty"`
-	PreferRemote   bool              `json:"preferRemote,omitempty"`
-}
-
-// ApplyAgentDeployment applies (creates or no-ops) an agent deployment idempotently.
-// PUT /v0/agents/{agentName}/versions/{version}/deployments/{providerId}
-func (c *Client) ApplyAgentDeployment(agentName, version, providerID string, body *DeploymentApplyBody) (*DeploymentResponse, error) {
-	encName := url.PathEscape(agentName)
-	encVersion := url.PathEscape(version)
-	encProvider := url.PathEscape(providerID)
-	path := fmt.Sprintf("/agents/%s/versions/%s/deployments/%s", encName, encVersion, encProvider)
-	var deployment DeploymentResponse
-	if err := c.doJsonRequest(http.MethodPut, path, body, &deployment); err != nil {
-		return nil, err
-	}
-	return &deployment, nil
-}
-
-// ApplyServerDeployment applies (creates or no-ops) an MCP server deployment idempotently.
-// PUT /v0/servers/{serverName}/versions/{version}/deployments/{providerId}
-func (c *Client) ApplyServerDeployment(serverName, version, providerID string, body *DeploymentApplyBody) (*DeploymentResponse, error) {
-	encName := url.PathEscape(serverName)
-	encVersion := url.PathEscape(version)
-	encProvider := url.PathEscape(providerID)
-	path := fmt.Sprintf("/servers/%s/versions/%s/deployments/%s", encName, encVersion, encProvider)
-	var deployment DeploymentResponse
-	if err := c.doJsonRequest(http.MethodPut, path, body, &deployment); err != nil {
-		return nil, err
-	}
-	return &deployment, nil
-}
-
 // DeleteDeployment removes a deployment by ID.
 func (c *Client) DeleteDeployment(id string) error {
 	encID := url.PathEscape(id)
@@ -788,6 +743,93 @@ func (c *Client) DeleteDeployment(id string) error {
 	}
 
 	return c.doJSON(req, nil)
+}
+
+// ApplyOpts carries cross-cutting batch options for the POST /v0/apply endpoint.
+type ApplyOpts struct {
+	Force  bool
+	DryRun bool
+}
+
+// Apply sends a multi-doc YAML body to POST /v0/apply and returns per-resource results.
+// Returns an error only on request-level failures (network, 4xx from server).
+// Per-resource errors are encoded in the returned results.
+func (c *Client) Apply(ctx context.Context, body []byte, opts ApplyOpts) ([]kinds.Result, error) {
+	u := strings.TrimRight(c.BaseURL, "/") + "/apply"
+	q := url.Values{}
+	if opts.Force {
+		q.Set("force", "true")
+	}
+	if opts.DryRun {
+		q.Set("dryRun", "true")
+	}
+	if enc := q.Encode(); enc != "" {
+		u += "?" + enc
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/yaml")
+	req.Header.Set("Accept", "application/json")
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("POST /v0/apply returned %d: %s", resp.StatusCode, string(b))
+	}
+
+	var out struct {
+		Results []kinds.Result `json:"results"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decoding apply response: %w", err)
+	}
+	return out.Results, nil
+}
+
+// DeleteViaApply sends a DELETE /v0/apply with a YAML body and returns per-resource results.
+// Mirrors Apply but uses the DELETE HTTP method.
+func (c *Client) DeleteViaApply(ctx context.Context, body []byte) ([]kinds.Result, error) {
+	u := strings.TrimRight(c.BaseURL, "/") + "/apply"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, u, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/yaml")
+	req.Header.Set("Accept", "application/json")
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("DELETE /v0/apply returned %d: %s", resp.StatusCode, string(b))
+	}
+
+	var out struct {
+		Results []kinds.Result `json:"results"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+	return out.Results, nil
 }
 
 // SSEClient returns the HTTP client used for SSE requests.

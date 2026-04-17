@@ -23,6 +23,28 @@ type agentStore struct {
 
 var _ database.AgentStore = (*agentStore)(nil)
 
+// scanRegistryRefs unmarshals JSONB ref columns into []RegistryRef slices.
+func scanRegistryRefs(mcpJSON, skillJSON, promptJSON []byte) ([]models.RegistryRef, []models.RegistryRef, []models.RegistryRef, error) {
+	var mcpRefs, skillRefs, promptRefs []models.RegistryRef
+	var errs error
+	if len(mcpJSON) > 0 {
+		if err := json.Unmarshal(mcpJSON, &mcpRefs); err != nil {
+			errs = errors.Join(errs, fmt.Errorf("unmarshal mcp refs: %w", err))
+		}
+	}
+	if len(skillJSON) > 0 {
+		if err := json.Unmarshal(skillJSON, &skillRefs); err != nil {
+			errs = errors.Join(errs, fmt.Errorf("unmarshal skill refs: %w", err))
+		}
+	}
+	if len(promptJSON) > 0 {
+		if err := json.Unmarshal(promptJSON, &promptRefs); err != nil {
+			errs = errors.Join(errs, fmt.Errorf("unmarshal prompt refs: %w", err))
+		}
+	}
+	return mcpRefs, skillRefs, promptRefs, errs
+}
+
 func (s *agentStore) ListAgents(ctx context.Context, filter *database.AgentFilter, cursor string, limit int) ([]*models.AgentResponse, string, error) {
 	if limit <= 0 {
 		limit = 10
@@ -103,7 +125,8 @@ func (s *agentStore) ListAgents(ctx context.Context, filter *database.AgentFilte
 	}
 
 	selectClause := `
-		SELECT agent_name, version, status, published_at, updated_at, is_latest, value`
+		SELECT agent_name, version, status, published_at, updated_at, is_latest, value,
+		       mcp_server_refs, skill_refs, prompt_refs`
 	orderClause := "ORDER BY agent_name, version"
 
 	if semanticActive {
@@ -146,18 +169,18 @@ func (s *agentStore) ListAgents(ctx context.Context, filter *database.AgentFilte
 		var name, version, status string
 		var publishedAt, updatedAt time.Time
 		var isLatest bool
-		var valueJSON []byte
+		var valueJSON, mcpRefsJSON, skillRefsJSON, promptRefsJSON []byte
 		var semanticScore sql.NullFloat64
 
 		var scanErr error
 		if semanticActive {
-			scanErr = rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON, &semanticScore)
+			scanErr = rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON, &mcpRefsJSON, &skillRefsJSON, &promptRefsJSON, &semanticScore)
 		} else {
-			scanErr = rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON)
+			scanErr = rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON, &mcpRefsJSON, &skillRefsJSON, &promptRefsJSON)
 		}
 
 		if scanErr != nil {
-			return nil, "", fmt.Errorf("failed to scan agent row: %w", err)
+			return nil, "", fmt.Errorf("failed to scan agent row: %w", scanErr)
 		}
 
 		var agentJSON models.AgentJSON
@@ -165,8 +188,15 @@ func (s *agentStore) ListAgents(ctx context.Context, filter *database.AgentFilte
 			return nil, "", fmt.Errorf("failed to unmarshal agent JSON: %w", err)
 		}
 
+		mcpRefs, skillRefs, promptRefs, err := scanRegistryRefs(mcpRefsJSON, skillRefsJSON, promptRefsJSON)
+		if err != nil {
+			return nil, "", fmt.Errorf("decode agent registry refs: %w", err)
+		}
 		resp := &models.AgentResponse{
-			Agent: agentJSON,
+			Agent:         agentJSON,
+			MCPServerRefs: mcpRefs,
+			SkillRefs:     skillRefs,
+			PromptRefs:    promptRefs,
 			Meta: models.AgentResponseMeta{
 				Official: &models.AgentRegistryExtensions{
 					Status:      status,
@@ -208,7 +238,8 @@ func (s *agentStore) GetAgent(ctx context.Context, agentName string) (*models.Ag
 	}
 
 	query := `
-		SELECT agent_name, version, status, published_at, updated_at, is_latest, value
+		SELECT agent_name, version, status, published_at, updated_at, is_latest, value,
+		       mcp_server_refs, skill_refs, prompt_refs
 		FROM agents
 		WHERE agent_name = $1 AND is_latest = true
 		ORDER BY published_at DESC
@@ -217,8 +248,8 @@ func (s *agentStore) GetAgent(ctx context.Context, agentName string) (*models.Ag
 	var name, version, status string
 	var publishedAt, updatedAt time.Time
 	var isLatest bool
-	var valueJSON []byte
-	if err := s.executor.QueryRow(ctx, query, agentName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+	var valueJSON, mcpRefsJSON, skillRefsJSON, promptRefsJSON []byte
+	if err := s.executor.QueryRow(ctx, query, agentName).Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON, &mcpRefsJSON, &skillRefsJSON, &promptRefsJSON); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, database.ErrNotFound
 		}
@@ -228,8 +259,15 @@ func (s *agentStore) GetAgent(ctx context.Context, agentName string) (*models.Ag
 	if err := json.Unmarshal(valueJSON, &agentJSON); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal agent JSON: %w", err)
 	}
+	mcpRefs, skillRefs, promptRefs, err := scanRegistryRefs(mcpRefsJSON, skillRefsJSON, promptRefsJSON)
+	if err != nil {
+		return nil, fmt.Errorf("decode agent registry refs: %w", err)
+	}
 	return &models.AgentResponse{
-		Agent: agentJSON,
+		Agent:         agentJSON,
+		MCPServerRefs: mcpRefs,
+		SkillRefs:     skillRefs,
+		PromptRefs:    promptRefs,
 		Meta: models.AgentResponseMeta{
 			Official: &models.AgentRegistryExtensions{
 				Status:      status,
@@ -254,7 +292,8 @@ func (s *agentStore) GetAgentVersion(ctx context.Context, agentName, version str
 	}
 
 	query := `
-		SELECT agent_name, version, status, published_at, updated_at, is_latest, value
+		SELECT agent_name, version, status, published_at, updated_at, is_latest, value,
+		       mcp_server_refs, skill_refs, prompt_refs
 		FROM agents
 		WHERE agent_name = $1 AND version = $2
 		LIMIT 1
@@ -262,8 +301,8 @@ func (s *agentStore) GetAgentVersion(ctx context.Context, agentName, version str
 	var name, vers, status string
 	var publishedAt, updatedAt time.Time
 	var isLatest bool
-	var valueJSON []byte
-	if err := s.executor.QueryRow(ctx, query, agentName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+	var valueJSON, mcpRefsJSON, skillRefsJSON, promptRefsJSON []byte
+	if err := s.executor.QueryRow(ctx, query, agentName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON, &mcpRefsJSON, &skillRefsJSON, &promptRefsJSON); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, database.ErrNotFound
 		}
@@ -273,8 +312,15 @@ func (s *agentStore) GetAgentVersion(ctx context.Context, agentName, version str
 	if err := json.Unmarshal(valueJSON, &agentJSON); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal agent JSON: %w", err)
 	}
+	mcpRefs, skillRefs, promptRefs, err := scanRegistryRefs(mcpRefsJSON, skillRefsJSON, promptRefsJSON)
+	if err != nil {
+		return nil, fmt.Errorf("decode agent registry refs: %w", err)
+	}
 	return &models.AgentResponse{
-		Agent: agentJSON,
+		Agent:         agentJSON,
+		MCPServerRefs: mcpRefs,
+		SkillRefs:     skillRefs,
+		PromptRefs:    promptRefs,
 		Meta: models.AgentResponseMeta{
 			Official: &models.AgentRegistryExtensions{
 				Status:      status,
@@ -299,7 +345,8 @@ func (s *agentStore) GetAgentVersions(ctx context.Context, agentName string) ([]
 	}
 
 	query := `
-		SELECT agent_name, version, status, published_at, updated_at, is_latest, value
+		SELECT agent_name, version, status, published_at, updated_at, is_latest, value,
+		       mcp_server_refs, skill_refs, prompt_refs
 		FROM agents
 		WHERE agent_name = $1
 		ORDER BY published_at DESC
@@ -314,16 +361,23 @@ func (s *agentStore) GetAgentVersions(ctx context.Context, agentName string) ([]
 		var name, version, status string
 		var publishedAt, updatedAt time.Time
 		var isLatest bool
-		var valueJSON []byte
-		if err := rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON); err != nil {
+		var valueJSON, mcpRefsJSON, skillRefsJSON, promptRefsJSON []byte
+		if err := rows.Scan(&name, &version, &status, &publishedAt, &updatedAt, &isLatest, &valueJSON, &mcpRefsJSON, &skillRefsJSON, &promptRefsJSON); err != nil {
 			return nil, fmt.Errorf("failed to scan agent row: %w", err)
 		}
 		var agentJSON models.AgentJSON
 		if err := json.Unmarshal(valueJSON, &agentJSON); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal agent JSON: %w", err)
 		}
+		mcpRefs, skillRefs, promptRefs, err := scanRegistryRefs(mcpRefsJSON, skillRefsJSON, promptRefsJSON)
+		if err != nil {
+			return nil, fmt.Errorf("decode agent registry refs: %w", err)
+		}
 		results = append(results, &models.AgentResponse{
-			Agent: agentJSON,
+			Agent:         agentJSON,
+			MCPServerRefs: mcpRefs,
+			SkillRefs:     skillRefs,
+			PromptRefs:    promptRefs,
 			Meta: models.AgentResponseMeta{
 				Official: &models.AgentRegistryExtensions{
 					Status:      status,
@@ -365,9 +419,24 @@ func (s *agentStore) CreateAgent(ctx context.Context, agentJSON *models.AgentJSO
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal agent JSON: %w", err)
 	}
+
+	mcpRefs, skillRefs, promptRefs := extractRegistryRefs(agentJSON)
+	mcpRefsJSON, err := json.Marshal(mcpRefs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal MCP server refs: %w", err)
+	}
+	skillRefsJSON, err := json.Marshal(skillRefs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal skill refs: %w", err)
+	}
+	promptRefsJSON, err := json.Marshal(promptRefs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal prompt refs: %w", err)
+	}
+
 	insert := `
-		INSERT INTO agents (agent_name, version, status, published_at, updated_at, is_latest, value)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO agents (agent_name, version, status, published_at, updated_at, is_latest, value, mcp_server_refs, skill_refs, prompt_refs)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 	if _, err := s.executor.Exec(ctx, insert,
 		agentJSON.Name,
@@ -377,15 +446,35 @@ func (s *agentStore) CreateAgent(ctx context.Context, agentJSON *models.AgentJSO
 		officialMeta.UpdatedAt,
 		officialMeta.IsLatest,
 		valueJSON,
+		mcpRefsJSON,
+		skillRefsJSON,
+		promptRefsJSON,
 	); err != nil {
 		return nil, fmt.Errorf("failed to insert agent: %w", err)
 	}
 	return &models.AgentResponse{
-		Agent: *agentJSON,
+		Agent:         *agentJSON,
+		MCPServerRefs: mcpRefs,
+		SkillRefs:     skillRefs,
+		PromptRefs:    promptRefs,
 		Meta: models.AgentResponseMeta{
 			Official: officialMeta,
 		},
 	}, nil
+}
+
+// extractRegistryRefs extracts new-format RegistryRef entries from an AgentJSON.
+func extractRegistryRefs(agentJSON *models.AgentJSON) ([]models.RegistryRef, []models.RegistryRef, []models.RegistryRef) {
+	mcpRefs := agentJSON.ExtractMCPServerRefs()
+	// Skills and prompts only support the legacy inline format for now.
+	// The skill_refs/prompt_refs DB columns are kept empty until the
+	// new ref-based format for skills and prompts is implemented.
+	skillRefs := []models.RegistryRef{}
+	promptRefs := []models.RegistryRef{}
+	if mcpRefs == nil {
+		mcpRefs = []models.RegistryRef{}
+	}
+	return mcpRefs, skillRefs, promptRefs
 }
 
 func (s *agentStore) UpdateAgent(ctx context.Context, agentName, version string, agentJSON *models.AgentJSON) (*models.AgentResponse, error) {
@@ -410,23 +499,41 @@ func (s *agentStore) UpdateAgent(ctx context.Context, agentName, version string,
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal updated agent: %w", err)
 	}
+
+	mcpRefs, skillRefs, promptRefs := extractRegistryRefs(agentJSON)
+	mcpRefsJSON, err := json.Marshal(mcpRefs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal MCP server refs: %w", err)
+	}
+	skillRefsJSON, err := json.Marshal(skillRefs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal skill refs: %w", err)
+	}
+	promptRefsJSON, err := json.Marshal(promptRefs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal prompt refs: %w", err)
+	}
+
 	query := `
 		UPDATE agents
-		SET value = $1, updated_at = NOW()
+		SET value = $1, mcp_server_refs = $4, skill_refs = $5, prompt_refs = $6, updated_at = NOW()
 		WHERE agent_name = $2 AND version = $3
 		RETURNING agent_name, version, status, published_at, updated_at, is_latest
 	`
 	var name, vers, status string
 	var publishedAt, updatedAt time.Time
 	var isLatest bool
-	if err := s.executor.QueryRow(ctx, query, valueJSON, agentName, version).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest); err != nil {
+	if err := s.executor.QueryRow(ctx, query, valueJSON, agentName, version, mcpRefsJSON, skillRefsJSON, promptRefsJSON).Scan(&name, &vers, &status, &publishedAt, &updatedAt, &isLatest); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, database.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to update agent: %w", err)
 	}
 	return &models.AgentResponse{
-		Agent: *agentJSON,
+		Agent:         *agentJSON,
+		MCPServerRefs: mcpRefs,
+		SkillRefs:     skillRefs,
+		PromptRefs:    promptRefs,
 		Meta: models.AgentResponseMeta{
 			Official: &models.AgentRegistryExtensions{
 				Status:      status,
@@ -496,7 +603,8 @@ func (s *agentStore) GetLatestAgent(ctx context.Context, agentName string) (*mod
 	}
 
 	query := `
-		SELECT agent_name, version, status, value, published_at, updated_at, is_latest
+		SELECT agent_name, version, status, value, published_at, updated_at, is_latest,
+		       mcp_server_refs, skill_refs, prompt_refs
 		FROM agents
 		WHERE agent_name = $1 AND is_latest = true
 	`
@@ -504,8 +612,8 @@ func (s *agentStore) GetLatestAgent(ctx context.Context, agentName string) (*mod
 	var name, version, status string
 	var publishedAt, updatedAt time.Time
 	var isLatest bool
-	var jsonValue []byte
-	if err := row.Scan(&name, &version, &status, &jsonValue, &publishedAt, &updatedAt, &isLatest); err != nil {
+	var jsonValue, mcpRefsJSON, skillRefsJSON, promptRefsJSON []byte
+	if err := row.Scan(&name, &version, &status, &jsonValue, &publishedAt, &updatedAt, &isLatest, &mcpRefsJSON, &skillRefsJSON, &promptRefsJSON); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, database.ErrNotFound
 		}
@@ -515,8 +623,15 @@ func (s *agentStore) GetLatestAgent(ctx context.Context, agentName string) (*mod
 	if err := json.Unmarshal(jsonValue, &agentJSON); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal agent JSON: %w", err)
 	}
+	mcpRefs, skillRefs, promptRefs, err := scanRegistryRefs(mcpRefsJSON, skillRefsJSON, promptRefsJSON)
+	if err != nil {
+		return nil, fmt.Errorf("decode agent registry refs: %w", err)
+	}
 	return &models.AgentResponse{
-		Agent: agentJSON,
+		Agent:         agentJSON,
+		MCPServerRefs: mcpRefs,
+		SkillRefs:     skillRefs,
+		PromptRefs:    promptRefs,
 		Meta: models.AgentResponseMeta{
 			Official: &models.AgentRegistryExtensions{
 				PublishedAt: publishedAt,

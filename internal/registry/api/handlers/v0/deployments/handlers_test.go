@@ -159,6 +159,8 @@ func (f *fakeProviderDeploymentService) DeleteDeployment(ctx context.Context, id
 	return nil
 }
 
+func (f *fakeProviderDeploymentService) AcquireApplyLock(context.Context, string) error { return nil }
+
 func (f *fakeProviderDeploymentService) DeleteServer(context.Context, string, string) error {
 	return nil
 }

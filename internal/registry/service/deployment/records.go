@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -48,8 +47,35 @@ func (s *registry) ResolveDeploymentAdapterByProviderID(ctx context.Context, pro
 	return s.ResolveDeploymentAdapter(providerPlatform)
 }
 
-// CleanupExistingDeployment removes a stale managed deployment record for the given
-// resource, undeploying from its platform if possible.
+// cleanupExistingDeployment removes a deployment both on its platform and in the DB.
+// Caller supplies the existing record to avoid a second lookup.
+//
+// Behavior on platform resolution:
+//   - Platform resolvable AND undeploy succeeds: DB record deleted. (happy path)
+//   - Platform resolvable AND undeploy FAILS: error, DB record preserved so
+//     the system state stays consistent with what actually happened on the platform.
+//   - Platform NOT resolvable (provider deleted or transient): skip platform call
+//     silently, still delete the DB record (the platform-side resource is already
+//     orphaned and nothing we can do here; the DB record is stale).
+func (s *registry) cleanupExistingDeployment(ctx context.Context, existing *models.Deployment) error {
+	platform, err := s.resolveExistingDeploymentCleanupPlatform(ctx, existing)
+	if err != nil {
+		return err
+	}
+	if platform != "" {
+		if err := s.cleanupStaleDeploymentOnPlatform(ctx, platform, existing); err != nil {
+			return fmt.Errorf("platform undeploy failed for %s on %s: %w", existing.ID, platform, err)
+		}
+	}
+	// Delete DB record (regardless of whether platform was resolvable).
+	if err := s.deployments.DeleteDeployment(ctx, existing.ID); err != nil && !errors.Is(err, database.ErrNotFound) {
+		return fmt.Errorf("removing stale deployment record: %w", err)
+	}
+	return nil
+}
+
+// CleanupExistingDeployment is the public entry point for callers without the
+// existing record in hand. It looks up the record and delegates to cleanupExistingDeployment.
 func (s *registry) CleanupExistingDeployment(ctx context.Context, resourceName, version, resourceType, providerID string) error {
 	existing, err := s.findDeploymentByIdentity(ctx, resourceName, version, resourceType, providerID)
 	if err != nil {
@@ -61,22 +87,7 @@ func (s *registry) CleanupExistingDeployment(ctx context.Context, resourceName, 
 	if existing == nil {
 		return nil
 	}
-
-	cleanupPlatform, err := s.resolveExistingDeploymentCleanupPlatform(ctx, existing)
-	if err != nil {
-		return err
-	}
-	if cleanupPlatform == "" {
-		log.Printf("Warning: skipping stale cleanup for deployment %s: provider platform unavailable", existing.ID)
-	} else if err := s.cleanupStaleDeploymentOnPlatform(ctx, cleanupPlatform, existing); err != nil {
-		log.Printf("Warning: failed stale cleanup for deployment %s on platform %s: %v", existing.ID, cleanupPlatform, err)
-	}
-
-	if err := s.deployments.DeleteDeployment(ctx, existing.ID); err != nil && !errors.Is(err, database.ErrNotFound) {
-		return fmt.Errorf("removing stale deployment record: %w", err)
-	}
-
-	return nil
+	return s.cleanupExistingDeployment(ctx, existing)
 }
 
 // CreateManagedDeploymentRecord validates the resource exists in the registry and
@@ -212,8 +223,12 @@ func deploymentAdapterSupportsResourceType(adapter registrytypes.DeploymentPlatf
 }
 
 func (s *registry) findDeploymentByIdentity(ctx context.Context, resourceName, version, artifactType, providerID string) (*models.Deployment, error) {
+	return findDeploymentByIdentityIn(ctx, s.deployments, resourceName, version, artifactType, providerID)
+}
+
+func findDeploymentByIdentityIn(ctx context.Context, store database.DeploymentStore, resourceName, version, artifactType, providerID string) (*models.Deployment, error) {
 	filter := &models.DeploymentFilter{ResourceType: &artifactType, ResourceName: &resourceName}
-	deployments, err := s.deployments.ListDeployments(ctx, filter)
+	deployments, err := store.ListDeployments(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -247,6 +262,9 @@ func (s *registry) resolveExistingDeploymentCleanupPlatform(ctx context.Context,
 func (s *registry) cleanupStaleDeploymentOnPlatform(ctx context.Context, cleanupPlatform string, existing *models.Deployment) error {
 	adapter, err := s.ResolveDeploymentAdapter(cleanupPlatform)
 	if err != nil {
+		if IsUnsupportedDeploymentPlatformError(err) {
+			return nil
+		}
 		return fmt.Errorf("resolve deployment adapter: %w", err)
 	}
 
@@ -272,46 +290,87 @@ func (s *registry) removeDeploymentRecord(ctx context.Context, deployment *model
 }
 
 // applyDeployment is the shared upsert logic for both agent and server deployments.
-// It checks for an existing deployment by identity, compares env/providerConfig,
-// and either returns the existing record (no-op), cleans up + relaunches (drift),
-// or launches fresh (no existing).
-func (s *registry) applyDeployment(ctx context.Context, resourceName, version, resourceType, providerID string, env map[string]string, providerConfig models.JSONObject, preferRemote bool) (*models.Deployment, error) {
+// It wraps the entire decision-and-launch in a transaction with an advisory lock
+// so that concurrent applies for the same tuple serialize. It compares env,
+// providerConfig, and preferRemote when determining drift.
+func (s *registry) applyDeployment(ctx context.Context, resourceName, version, resourceType, providerID string,
+	env map[string]string, providerConfig models.JSONObject, preferRemote, force bool,
+) (*models.Deployment, error) {
 	if resourceName == "" || version == "" || providerID == "" {
 		return nil, fmt.Errorf("%w: resource name, version, and provider ID are required", database.ErrInvalidInput)
 	}
 
-	existing, err := s.findDeploymentByIdentity(ctx, resourceName, version, resourceType, providerID)
-	if err != nil && !errors.Is(err, database.ErrNotFound) {
-		return nil, fmt.Errorf("checking existing deployment: %w", err)
-	}
-	if existing != nil && existing.Status == models.DeploymentStatusDeployed &&
-		envEqual(existing.Env, env) &&
-		providerConfigEqual(existing.ProviderConfig, providerConfig) {
-		return existing, nil // identical desired state — idempotent no-op
-	}
+	return database.InTransactionT(ctx, s.tx, func(txCtx context.Context, scope database.Scope) (*models.Deployment, error) {
+		deployments := scope.Deployments()
+		identity := fmt.Sprintf("%s/%s/%s/%s", resourceType, resourceName, version, providerID)
+		if err := deployments.AcquireApplyLock(txCtx, identity); err != nil {
+			return nil, err
+		}
 
-	// Clean up stale record (failed/cancelled/deploying/drift) before launching fresh.
-	if err := s.CleanupExistingDeployment(ctx, resourceName, version, resourceType, providerID); err != nil {
-		return nil, fmt.Errorf("cleaning up stale deployment: %w", err)
-	}
+		existing, err := findDeploymentByIdentityIn(txCtx, deployments, resourceName, version, resourceType, providerID)
+		if err != nil && !errors.Is(err, database.ErrNotFound) {
+			return nil, fmt.Errorf("checking existing deployment: %w", err)
+		}
 
-	return s.LaunchDeployment(ctx, &models.Deployment{
-		ServerName:     resourceName,
-		Version:        version,
-		ResourceType:   resourceType,
-		ProviderID:     providerID,
-		Env:            env,
-		ProviderConfig: providerConfig,
-		PreferRemote:   preferRemote,
+		if existing == nil {
+			return s.LaunchDeployment(txCtx, &models.Deployment{
+				ServerName:     resourceName,
+				Version:        version,
+				ResourceType:   resourceType,
+				ProviderID:     providerID,
+				Env:            env,
+				ProviderConfig: providerConfig,
+				PreferRemote:   preferRemote,
+			})
+		}
+
+		if existing.Status == models.DeploymentStatusDeployed &&
+			envEqual(existing.Env, env) &&
+			providerConfigEqual(existing.ProviderConfig, providerConfig) &&
+			existing.PreferRemote == preferRemote {
+			return existing, nil // identical desired state — idempotent no-op
+		}
+
+		// Drift is only an error for healthy (Deployed) deployments — those are "live"
+		// and the user must explicitly acknowledge replacement via --force. For Failed,
+		// Deploying, or otherwise non-healthy statuses we fall through to cleanup+launch
+		// because the existing record doesn't represent a running deployment the user
+		// would expect us to preserve.
+		if existing.Status == models.DeploymentStatusDeployed && !force {
+			return nil, fmt.Errorf("%w: deployment %s", ErrDeploymentDrift, existing.ID)
+		}
+
+		// cleanupExistingDeployment and LaunchDeployment below use the service's
+		// default s.deployments store rather than scope.Deployments(), but they
+		// still run inside this transaction: pgx propagates the active tx via
+		// txCtx, so any s.deployments.Exec/Query call here is executed on the
+		// same transaction that holds the advisory lock.
+		if err := s.cleanupExistingDeployment(txCtx, existing); err != nil {
+			return nil, fmt.Errorf("cleaning up stale deployment: %w", err)
+		}
+
+		return s.LaunchDeployment(txCtx, &models.Deployment{
+			ServerName:     resourceName,
+			Version:        version,
+			ResourceType:   resourceType,
+			ProviderID:     providerID,
+			Env:            env,
+			ProviderConfig: providerConfig,
+			PreferRemote:   preferRemote,
+		})
 	})
 }
 
-func (s *registry) ApplyAgentDeployment(ctx context.Context, agentName, version, providerID string, env map[string]string, providerConfig models.JSONObject) (*models.Deployment, error) {
-	return s.applyDeployment(ctx, agentName, version, resourceTypeAgent, providerID, env, providerConfig, false)
+func (s *registry) ApplyAgentDeployment(ctx context.Context, agentName, version, providerID string,
+	env map[string]string, providerConfig models.JSONObject, preferRemote, force bool,
+) (*models.Deployment, error) {
+	return s.applyDeployment(ctx, agentName, version, resourceTypeAgent, providerID, env, providerConfig, preferRemote, force)
 }
 
-func (s *registry) ApplyServerDeployment(ctx context.Context, serverName, version, providerID string, env map[string]string, providerConfig models.JSONObject) (*models.Deployment, error) {
-	return s.applyDeployment(ctx, serverName, version, resourceTypeMCP, providerID, env, providerConfig, false)
+func (s *registry) ApplyServerDeployment(ctx context.Context, serverName, version, providerID string,
+	env map[string]string, providerConfig models.JSONObject, preferRemote, force bool,
+) (*models.Deployment, error) {
+	return s.applyDeployment(ctx, serverName, version, resourceTypeMCP, providerID, env, providerConfig, preferRemote, force)
 }
 
 // envEqual returns true if a and b contain the same key/value pairs.

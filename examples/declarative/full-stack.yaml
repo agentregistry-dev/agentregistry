@@ -56,12 +56,10 @@ spec:
   modelProvider: gemini
   modelName: gemini-2.0-flash
   description: "An agent that summarizes documents using Gemini"
+  # References to resources defined above -- resolved from the registry at deploy time.
   mcpServers:
-    - type: registry
-      name: fetch
-      registryURL: http://127.0.0.1:12121      # override with ARCTL_API_BASE_URL
-      registryServerName: acme/fetch
-      registryServerVersion: "1.0.0"
+    - name: acme/fetch
+      version: "1.0.0"
   skills:
     - name: summarize
       registryURL: http://127.0.0.1:12121

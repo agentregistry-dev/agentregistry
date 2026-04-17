@@ -325,10 +325,10 @@ func (f *FakeRegistry) CancelDeployment(_ context.Context, _ *models.Deployment)
 	return nil
 }
 
-func (f *FakeRegistry) ApplyAgentDeployment(_ context.Context, _, _, _ string, _ map[string]string, _ models.JSONObject) (*models.Deployment, error) {
+func (f *FakeRegistry) ApplyAgentDeployment(_ context.Context, _, _, _ string, _ map[string]string, _ models.JSONObject, _, _ bool) (*models.Deployment, error) {
 	return nil, ErrNotFound
 }
 
-func (f *FakeRegistry) ApplyServerDeployment(_ context.Context, _, _, _ string, _ map[string]string, _ models.JSONObject) (*models.Deployment, error) {
+func (f *FakeRegistry) ApplyServerDeployment(_ context.Context, _, _, _ string, _ map[string]string, _ models.JSONObject, _, _ bool) (*models.Deployment, error) {
 	return nil, ErrNotFound
 }

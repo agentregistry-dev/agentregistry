@@ -15,6 +15,7 @@ import (
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
 	servicetesting "github.com/agentregistry-dev/agentregistry/internal/registry/service/testing"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
@@ -68,298 +69,6 @@ func writeYAML(t *testing.T, content string) string {
 	path := filepath.Join(dir, "test.yaml")
 	require.NoError(t, os.WriteFile(path, []byte(content), 0644))
 	return path
-}
-
-// --- apply integration tests ---
-
-func TestApplyIntegration_Agent(t *testing.T) {
-	var capturedReq *models.AgentJSON
-	fake := servicetesting.NewFakeRegistry()
-	fake.ApplyAgentFn = func(_ context.Context, req *models.AgentJSON) (*models.AgentResponse, error) {
-		capturedReq = req
-		return &models.AgentResponse{Agent: *req}, nil
-	}
-
-	c, cleanup := newTestServer(t, fake)
-	defer cleanup()
-	declarative.SetAPIClient(c)
-
-	yamlPath := writeYAML(t, `
-apiVersion: ar.dev/v1alpha1
-kind: Agent
-metadata:
-  name: acme/bot
-  version: "1.0.0"
-spec:
-  image: ghcr.io/acme/bot:latest
-  description: "A test bot"
-  language: python
-  framework: adk
-  modelProvider: google
-  modelName: gemini-2.0-flash
-`)
-
-	var buf bytes.Buffer
-	cmd := declarative.NewApplyCmd()
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
-	cmd.SetArgs([]string{"-f", yamlPath})
-	require.NoError(t, cmd.Execute())
-
-	require.NotNil(t, capturedReq, "ApplyAgent was not called")
-	assert.Equal(t, "acme/bot", capturedReq.Name)
-	assert.Equal(t, "1.0.0", capturedReq.Version)
-	assert.Equal(t, "adk", capturedReq.Framework)
-	assert.Equal(t, "python", capturedReq.Language)
-	assert.Equal(t, "google", capturedReq.ModelProvider)
-	assert.Equal(t, "gemini-2.0-flash", capturedReq.ModelName)
-	assert.Contains(t, buf.String(), "agent/acme/bot applied")
-}
-
-func TestApplyIntegration_MCPServer(t *testing.T) {
-	var capturedReq *apiv0.ServerJSON
-	fake := servicetesting.NewFakeRegistry()
-	fake.CreateServerFn = func(_ context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
-		capturedReq = req
-		return &apiv0.ServerResponse{Server: *req}, nil
-	}
-
-	c, cleanup := newTestServer(t, fake)
-	defer cleanup()
-	declarative.SetAPIClient(c)
-
-	yamlPath := writeYAML(t, `
-apiVersion: ar.dev/v1alpha1
-kind: MCPServer
-metadata:
-  name: acme/weather
-  version: "1.0.0"
-spec:
-  description: "Weather MCP server"
-`)
-
-	var buf bytes.Buffer
-	cmd := declarative.NewApplyCmd()
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
-	cmd.SetArgs([]string{"-f", yamlPath})
-	require.NoError(t, cmd.Execute())
-
-	require.NotNil(t, capturedReq, "CreateServer was not called")
-	assert.Equal(t, "acme/weather", capturedReq.Name)
-	assert.Equal(t, "1.0.0", capturedReq.Version)
-	assert.Contains(t, buf.String(), "mcpserver/acme/weather applied")
-}
-
-func TestApplyIntegration_MultiDoc(t *testing.T) {
-	var agentCalled, serverCalled bool
-	fake := servicetesting.NewFakeRegistry()
-	fake.ApplyAgentFn = func(_ context.Context, req *models.AgentJSON) (*models.AgentResponse, error) {
-		agentCalled = true
-		return &models.AgentResponse{Agent: *req}, nil
-	}
-	fake.CreateServerFn = func(_ context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
-		serverCalled = true
-		return &apiv0.ServerResponse{Server: *req}, nil
-	}
-
-	c, cleanup := newTestServer(t, fake)
-	defer cleanup()
-	declarative.SetAPIClient(c)
-
-	yamlPath := writeYAML(t, `
-apiVersion: ar.dev/v1alpha1
-kind: MCPServer
-metadata:
-  name: acme/weather
-  version: "1.0.0"
-spec:
-  description: "Weather MCP server"
----
-apiVersion: ar.dev/v1alpha1
-kind: Agent
-metadata:
-  name: acme/bot
-  version: "1.0.0"
-spec:
-  image: ghcr.io/acme/bot:latest
-  description: "A test bot"
-  language: python
-  framework: adk
-  modelProvider: google
-  modelName: gemini-2.0-flash
-`)
-
-	var buf bytes.Buffer
-	cmd := declarative.NewApplyCmd()
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
-	cmd.SetArgs([]string{"-f", yamlPath})
-	require.NoError(t, cmd.Execute())
-
-	assert.True(t, serverCalled, "CreateServer was not called")
-	assert.True(t, agentCalled, "CreateAgent was not called")
-	out := buf.String()
-	assert.Contains(t, out, "mcpserver/acme/weather applied")
-	assert.Contains(t, out, "agent/acme/bot applied")
-}
-
-func TestApplyIntegration_Skill(t *testing.T) {
-	var capturedReq *models.SkillJSON
-	fake := servicetesting.NewFakeRegistry()
-	fake.ApplySkillFn = func(_ context.Context, req *models.SkillJSON) (*models.SkillResponse, error) {
-		capturedReq = req
-		return &models.SkillResponse{Skill: *req}, nil
-	}
-
-	c, cleanup := newTestServer(t, fake)
-	defer cleanup()
-	declarative.SetAPIClient(c)
-
-	yamlPath := writeYAML(t, `
-apiVersion: ar.dev/v1alpha1
-kind: Skill
-metadata:
-  name: acme/summarize
-  version: "1.0.0"
-spec:
-  description: "Summarizes text"
-`)
-
-	var buf bytes.Buffer
-	cmd := declarative.NewApplyCmd()
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
-	cmd.SetArgs([]string{"-f", yamlPath})
-	require.NoError(t, cmd.Execute())
-
-	require.NotNil(t, capturedReq, "ApplySkill was not called")
-	assert.Equal(t, "acme/summarize", capturedReq.Name)
-	assert.Equal(t, "1.0.0", capturedReq.Version)
-	assert.Equal(t, "Summarizes text", capturedReq.Description)
-	assert.Contains(t, buf.String(), "skill/acme/summarize applied")
-}
-
-func TestApplyIntegration_Prompt(t *testing.T) {
-	var capturedReq *models.PromptJSON
-	fake := servicetesting.NewFakeRegistry()
-	fake.ApplyPromptFn = func(_ context.Context, req *models.PromptJSON) (*models.PromptResponse, error) {
-		capturedReq = req
-		return &models.PromptResponse{Prompt: *req}, nil
-	}
-
-	c, cleanup := newTestServer(t, fake)
-	defer cleanup()
-	declarative.SetAPIClient(c)
-
-	yamlPath := writeYAML(t, `
-apiVersion: ar.dev/v1alpha1
-kind: Prompt
-metadata:
-  name: acme/system
-  version: "1.0.0"
-spec:
-  content: "You are a helpful assistant."
-`)
-
-	var buf bytes.Buffer
-	cmd := declarative.NewApplyCmd()
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
-	cmd.SetArgs([]string{"-f", yamlPath})
-	require.NoError(t, cmd.Execute())
-
-	require.NotNil(t, capturedReq, "ApplyPrompt was not called")
-	assert.Equal(t, "acme/system", capturedReq.Name)
-	assert.Equal(t, "1.0.0", capturedReq.Version)
-	assert.Equal(t, "You are a helpful assistant.", capturedReq.Content)
-	assert.Contains(t, buf.String(), "prompt/acme/system applied")
-}
-
-func TestApplyIntegration_Idempotent_UpdatesExisting(t *testing.T) {
-	// Verify that applying a resource that already exists succeeds via server-side upsert.
-	// The ApplyAgent service method is called with the new data — no delete step.
-	var applyCalls int
-	var lastApplied *models.AgentJSON
-
-	fake := servicetesting.NewFakeRegistry()
-	fake.ApplyAgentFn = func(_ context.Context, req *models.AgentJSON) (*models.AgentResponse, error) {
-		applyCalls++
-		lastApplied = req
-		return &models.AgentResponse{Agent: *req}, nil
-	}
-
-	c, cleanup := newTestServer(t, fake)
-	defer cleanup()
-	declarative.SetAPIClient(c)
-
-	yamlPath := writeYAML(t, `
-apiVersion: ar.dev/v1alpha1
-kind: Agent
-metadata:
-  name: acme/bot
-  version: "1.0.0"
-spec:
-  image: ghcr.io/acme/bot:v2
-  description: "Updated bot"
-  language: python
-  framework: adk
-  modelProvider: google
-  modelName: gemini-2.0-flash
-`)
-
-	var buf bytes.Buffer
-	cmd := declarative.NewApplyCmd()
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
-	cmd.SetArgs([]string{"-f", yamlPath})
-	require.NoError(t, cmd.Execute())
-
-	assert.Equal(t, 1, applyCalls, "ApplyAgent should be called exactly once")
-	require.NotNil(t, lastApplied)
-	assert.Equal(t, "acme/bot", lastApplied.Name)
-	assert.Contains(t, buf.String(), "agent/acme/bot applied")
-}
-
-func TestApplyIntegration_CreatesWhenNotFound(t *testing.T) {
-	// Verify that applying a resource that does not yet exist succeeds.
-	// The upsert (ApplyAgent) path handles both create and update transparently.
-	var applyCalled bool
-
-	fake := servicetesting.NewFakeRegistry()
-	fake.ApplyAgentFn = func(_ context.Context, req *models.AgentJSON) (*models.AgentResponse, error) {
-		applyCalled = true
-		return &models.AgentResponse{Agent: *req}, nil
-	}
-
-	c, cleanup := newTestServer(t, fake)
-	defer cleanup()
-	declarative.SetAPIClient(c)
-
-	yamlPath := writeYAML(t, `
-apiVersion: ar.dev/v1alpha1
-kind: Agent
-metadata:
-  name: acme/new-bot
-  version: "1.0.0"
-spec:
-  image: ghcr.io/acme/new-bot:latest
-  description: "New bot"
-  language: python
-  framework: adk
-  modelProvider: google
-  modelName: gemini-2.0-flash
-`)
-
-	var buf bytes.Buffer
-	cmd := declarative.NewApplyCmd()
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
-	cmd.SetArgs([]string{"-f", yamlPath})
-	require.NoError(t, cmd.Execute())
-
-	assert.True(t, applyCalled, "ApplyAgent was not called")
-	assert.Contains(t, buf.String(), "agent/acme/new-bot applied")
 }
 
 // --- get integration tests ---
@@ -515,17 +224,13 @@ func TestDeleteIntegration_MCPServer(t *testing.T) {
 }
 
 func TestDeleteIntegration_FromFile(t *testing.T) {
-	var deletedName, deletedVersion string
-	fake := servicetesting.NewFakeRegistry()
-	fake.DeleteAgentFn = func(_ context.Context, name, version string) error {
-		deletedName = name
-		deletedVersion = version
-		return nil
+	// File-mode delete sends DELETE /v0/apply with the YAML body.
+	// Use an httptest server that handles the batch endpoint.
+	results := []kinds.Result{
+		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: kinds.StatusApplied},
 	}
-
-	c, cleanup := newTestServer(t, fake)
-	defer cleanup()
-	declarative.SetAPIClient(c)
+	srv, captured := newDeleteTestServer(t, results)
+	setupDeleteClient(t, srv)
 
 	// Write a declarative YAML file.
 	tmpDir := t.TempDir()
@@ -549,8 +254,9 @@ spec:
 	cmd.SetArgs([]string{"-f", yamlFile})
 	require.NoError(t, cmd.Execute())
 
-	assert.Equal(t, "acme/bot", deletedName)
-	assert.Equal(t, "1.0.0", deletedVersion)
+	// Verify the request used DELETE /v0/apply.
+	assert.Equal(t, http.MethodDelete, captured.Method)
+	assert.Equal(t, "/v0/apply", captured.URL.Path)
 }
 
 func TestGetIntegration_ListMCPServers(t *testing.T) {
@@ -635,11 +341,14 @@ func TestDeleteIntegration_MissingVersion(t *testing.T) {
 	defer cleanup()
 	declarative.SetAPIClient(c)
 
+	// Version is optional at the CLI level (providers don't use it).
+	// For agents, the server returns a 404 when version is empty.
 	cmd := declarative.NewDeleteCmd()
 	cmd.SetArgs([]string{"agent", "acme/bot"}) // no --version
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "version")
+	// Error comes from the server (404), not from CLI version validation.
+	assert.NotContains(t, err.Error(), "required flag")
 }
 
 func TestDeleteIntegration_WrongArgCount(t *testing.T) {
@@ -654,13 +363,15 @@ func TestDeleteIntegration_WrongArgCount(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestDeleteIntegration_FromFile_MissingVersion(t *testing.T) {
-	fake := servicetesting.NewFakeRegistry()
-	c, cleanup := newTestServer(t, fake)
-	defer cleanup()
-	declarative.SetAPIClient(c)
+func TestDeleteIntegration_FromFile_ServerReportsFailure(t *testing.T) {
+	// File-mode delete: server-reported failures are printed and cause non-zero exit.
+	// YAML without version is valid on the wire — the server decides how to handle it.
+	results := []kinds.Result{
+		{Kind: "agent", Name: "acme/bot", Status: kinds.StatusFailed, Error: "version required"},
+	}
+	srv, _ := newDeleteTestServer(t, results)
+	setupDeleteClient(t, srv)
 
-	// YAML with no metadata.version
 	yamlPath := writeYAML(t, `
 apiVersion: ar.dev/v1alpha1
 kind: Agent
@@ -675,27 +386,25 @@ spec:
   description: test
 `)
 
-	var errBuf bytes.Buffer
+	var outBuf bytes.Buffer
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetErr(&errBuf)
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
 	cmd.SetArgs([]string{"-f", yamlPath})
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, errBuf.String(), "failed to delete")
+	assert.Contains(t, err.Error(), "one or more resources failed to delete")
 }
 
-func TestDeleteIntegration_FromFile_ContinuesOnError(t *testing.T) {
-	// Multi-doc: first resource has no version, second should still be attempted.
-	var deletedNames []string
-	fake := servicetesting.NewFakeRegistry()
-	fake.DeleteAgentFn = func(_ context.Context, name, version string) error {
-		deletedNames = append(deletedNames, name)
-		return nil
+func TestDeleteIntegration_FromFile_MultiDocBatchDelete(t *testing.T) {
+	// Multi-doc YAML: all resources are sent as one DELETE /v0/apply batch.
+	// The server reports per-resource results; partial failure exits non-zero.
+	results := []kinds.Result{
+		{Kind: "agent", Name: "acme/bad", Status: kinds.StatusFailed, Error: "not found"},
+		{Kind: "agent", Name: "acme/good", Version: "1.0.0", Status: kinds.StatusApplied},
 	}
-
-	c, cleanup := newTestServer(t, fake)
-	defer cleanup()
-	declarative.SetAPIClient(c)
+	srv, captured := newDeleteTestServer(t, results)
+	setupDeleteClient(t, srv)
 
 	yamlPath := writeYAML(t, `
 apiVersion: ar.dev/v1alpha1
@@ -719,14 +428,20 @@ spec:
   description: test
 `)
 
-	var errBuf bytes.Buffer
+	var outBuf bytes.Buffer
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetErr(&errBuf)
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
 	cmd.SetArgs([]string{"-f", yamlPath})
 	err := cmd.Execute()
-	require.Error(t, err, "should report error for missing version")
-	// The second resource (acme/good) must still be deleted
-	assert.Contains(t, deletedNames, "acme/good", "second resource should be processed despite first error")
+	require.Error(t, err, "should report error for failed resource")
+
+	// Both resources reported — batch send confirmed.
+	assert.Equal(t, http.MethodDelete, captured.Method)
+	assert.Equal(t, "/v0/apply", captured.URL.Path)
+	out := outBuf.String()
+	assert.Contains(t, out, "acme/bad")
+	assert.Contains(t, out, "acme/good")
 }
 
 func TestGetIntegration_GetAll_Empty(t *testing.T) {

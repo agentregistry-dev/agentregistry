@@ -6,6 +6,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/constants"
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
@@ -142,7 +143,7 @@ func (a *kubernetesDeploymentAdapter) buildKubernetesDesiredState(
 
 func deploymentNamespace(deployment *models.Deployment, provider *models.Provider) string {
 	if deployment != nil && deployment.Env != nil {
-		if namespace := strings.TrimSpace(deployment.Env["KAGENT_NAMESPACE"]); namespace != "" {
+		if namespace := strings.TrimSpace(deployment.Env[constants.EnvKagentNamespace]); namespace != "" {
 			return namespace
 		}
 	}

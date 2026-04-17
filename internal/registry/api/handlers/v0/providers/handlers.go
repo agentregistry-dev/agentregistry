@@ -24,12 +24,6 @@ type CreateProviderRequest struct {
 	Body models.CreateProviderInput
 }
 
-type UpdateProviderRequest struct {
-	ProviderID string `path:"providerId" json:"providerId" doc:"Provider ID"`
-	Platform   string `query:"platform" json:"platform,omitempty" doc:"Provider platform hint (optional)"`
-	Body       models.UpdateProviderInput
-}
-
 type ProvidersListResponse struct {
 	Body struct {
 		Providers []models.Provider `json:"providers"`
@@ -131,21 +125,6 @@ func RegisterProvidersEndpoints(api huma.API, basePath string, providerSvc provi
 			return nil, providerReadHTTPError("Failed to get provider", err)
 		}
 		return &ProviderResponse{Body: *provider}, nil
-	})
-
-	huma.Register(api, huma.Operation{
-		OperationID: "apply-provider",
-		Method:      http.MethodPut,
-		Path:        basePath + "/providers/{providerId}",
-		Summary:     "Apply provider (create or update)",
-		Description: "Create a provider if it does not exist, or update it if it does. Requires ?platform= when creating.",
-		Tags:        []string{"providers"},
-	}, func(ctx context.Context, input *UpdateProviderRequest) (*ProviderResponse, error) {
-		applied, err := providerSvc.ApplyProvider(ctx, input.ProviderID, input.Platform, &input.Body)
-		if err != nil {
-			return nil, providerWriteHTTPError("Failed to apply provider", err)
-		}
-		return &ProviderResponse{Body: *applied}, nil
 	})
 
 	huma.Register(api, huma.Operation{

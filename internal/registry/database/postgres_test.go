@@ -1023,6 +1023,49 @@ func TestPostgreSQL_UpdateDeploymentState_PatchesMetadataAndError(t *testing.T) 
 	assert.Equal(t, "op-123", updated.ProviderMetadata["operationId"])
 }
 
+func TestAcquireApplyLockSerializesConcurrentCallers(t *testing.T) {
+	db := internaldb.NewTestDB(t)
+	ctx := context.Background()
+
+	start := make(chan struct{})
+	done := make(chan time.Time, 2)
+	errs := make(chan error, 2)
+
+	go func() {
+		errs <- db.InTransaction(ctx, func(txCtx context.Context, scope database.Scope) error {
+			if err := scope.Deployments().AcquireApplyLock(txCtx, "agent/foo/1.0.0/prov-1"); err != nil {
+				return fmt.Errorf("acquire 1: %w", err)
+			}
+			close(start)
+			time.Sleep(100 * time.Millisecond)
+			done <- time.Now()
+			return nil
+		})
+	}()
+
+	<-start
+
+	go func() {
+		errs <- db.InTransaction(ctx, func(txCtx context.Context, scope database.Scope) error {
+			if err := scope.Deployments().AcquireApplyLock(txCtx, "agent/foo/1.0.0/prov-1"); err != nil {
+				return fmt.Errorf("acquire 2: %w", err)
+			}
+			done <- time.Now()
+			return nil
+		})
+	}()
+
+	first := <-done
+	second := <-done
+
+	require.NoError(t, <-errs)
+	require.NoError(t, <-errs)
+
+	if !second.After(first) {
+		t.Fatalf("expected second acquire to happen after first; first=%v second=%v", first, second)
+	}
+}
+
 // Helper functions for creating pointers to basic types
 func stringPtr(s string) *string {
 	return &s
