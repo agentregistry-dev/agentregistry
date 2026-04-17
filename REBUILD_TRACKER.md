@@ -312,38 +312,53 @@ covers every validator's happy + unhappy path.
 
 ## 7. Seed + importer pipelines
 
-**Current state**:
-- `internal/registry/seed/seed.json` (35k lines of curated MCP metadata)
-- `internal/registry/seed/seed-readme.json` (1.2k lines of READMEs)
-- `internal/registry/seed/builtin.go` — boot-time seed loader
-- `internal/registry/seed/readme.go` — README attach helper
-- `internal/registry/importer/importer.go` — import from path/URL
-- `internal/registry/importer/container_scan.go` — Trivy-like image scan
-- `internal/registry/importer/dependency_health.go` — upstream health
-- `internal/registry/importer/osv_scan.go` — OSV CVE lookup
+**Status**:
+- Seed loader ported (`internal/registry/seed/builtin_v1alpha1.go`, ee07520).
+- v1alpha1 importer + Scanner interface + FindingsStore landed
+  (64ff130 + e2e6f8f). Core pipeline (decode → validate → enrich →
+  upsert → findings-write) covered by 13 integration tests.
+- **Native scanner ports still pending** (see below).
+
+**Landed**:
+- `pkg/importer/scanner.go` — Scanner interface + EnrichmentPrefix
+  vocabulary + PromotedToLabels list.
+- `pkg/importer/findings_store.go` — atomic replace-per-source writer
+  over `v1alpha1.enrichment_findings`.
+- `pkg/importer/importer.go` — `Importer.Import(ctx, Options) []ImportResult`
+  with dry-run, namespace defaulting, WhichScans filtering.
+- `internal/registry/database/migrations_v1alpha1/002_enrichment_findings.sql`.
+
+**Legacy still in tree (to delete once port targets land)**:
+- `internal/registry/importer/importer.go` (1535 LOC)
+- `internal/registry/importer/container_scan.go` — Trivy shell-out
+- `internal/registry/importer/dependency_health.go` — endpoint probes
+- `internal/registry/importer/osv_scan.go` — OSV API client
 - `internal/registry/importer/scorecard_lib.go` — OpenSSF scorecard
 
-**Port plan**:
-- `seed.builtin.ImportBuiltinSeedData` now reads seed JSON and writes
-  `*v1alpha1.MCPServer` objects via `store.Upsert`.
-- `importer` wraps the same path but for arbitrary directories.
-- Security enrichment (OSV, scorecard) attached as Status.Conditions or
-  ObjectMeta.Labels on the imported object.
+**Native scanner ports (follow-up PRs)**:
+- [ ] `pkg/importer/scanners/osv.go` — reimplement OSV scanner on the
+      new Scanner interface. Writes AnnoOSVStatus + per-severity
+      counts; emits Finding per CVE.
+- [ ] `pkg/importer/scanners/scorecard.go` — Scorecard library wrap;
+      writes AnnoScorecardScore + AnnoScorecardBucket; promotes
+      scorecard-bucket to labels.
+- [ ] `pkg/importer/scanners/container.go` — Trivy shell-out; writes
+      AnnoContainerStatus + Finding per CVE layer.
+- [ ] Dependency health probes — decide whether to keep as a Scanner
+      or drop in favor of reconciler-driven health.
 
-**Business logic to preserve**:
-- [ ] Seed idempotency: running seed twice on a populated DB is a no-op
-      (matching spec = no generation bump — already in Store.Upsert).
-- [ ] Empty-DB detection: seed loader runs only if no rows exist for the
-      kinds it owns.
-- [ ] Importer handles `--enrich` flag to opt into OSV + scorecard.
-- [ ] OSV scan results attach as `osv-vulns` annotation or similar.
-- [ ] Scorecard result attaches as `scorecard-score` annotation.
-- [ ] Container-scan (Trivy CLI wrapper) optional, off-by-default.
-- [ ] Import error policy: warn + continue vs fail-fast.
+**Wiring**:
+- [ ] `internal/registry/app.Bootstrap` constructs the Importer with
+      the OSS scanner set and registers it on the server.
+- [ ] HTTP endpoint `POST /v0/import` (or reuse `arctl import` against
+      the apply endpoint, depending on CLI direction).
+- [ ] Enterprise builds register proprietary scanners through
+      `importer.Config.Scanners`.
 
-**Finish-line signal**: first-boot against empty DB populates ~N MCPServer
-rows from seed.json; `arctl import --from <dir>` pulls in user manifests;
-security enrichment observable on the imported rows.
+**Finish-line signal**: `arctl import --from <dir> --enrich`
+populates rows + writes findings; UI drill-down reads
+`v1alpha1.enrichment_findings`; label filters by osv-status +
+scorecard-bucket work end-to-end.
 
 ---
 
