@@ -28,7 +28,9 @@ import (
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
-// Config is the per-kind configuration for Register. Every field is required.
+// Config is the per-kind configuration for Register. Kind / BasePrefix /
+// Store are required; Resolver is optional (enables cross-kind ref
+// existence checks on apply).
 type Config struct {
 	// Kind is the canonical Kind name (e.g. v1alpha1.KindAgent = "Agent").
 	Kind string
@@ -41,6 +43,11 @@ type Config struct {
 	// Store is the database.Store bound to this kind's table. Callers
 	// construct one Store per kind; this package does not create them.
 	Store *database.Store
+	// Resolver is optional; when set, the apply handler calls
+	// obj.ResolveRefs with it so dangling references surface as 400
+	// errors. Leave nil to skip ref resolution (e.g. for kinds with no
+	// ResourceRef fields).
+	Resolver v1alpha1.ResolverFunc
 }
 
 // Input/output wire types. Registered per-kind so OpenAPI schemas stay typed.
@@ -202,6 +209,27 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		}
 		if meta.Version != "" && meta.Version != in.Version {
 			return nil, huma.Error400BadRequest("metadata.version does not match path")
+		}
+
+		// Stamp path-derived identity into metadata so Validate sees the
+		// resolved values (clients may omit namespace/name/version in the
+		// body and rely on the path).
+		meta.Namespace = in.Namespace
+		meta.Name = in.Name
+		meta.Version = in.Version
+		body.SetMetadata(*meta)
+
+		// Structural validation first — cheap, no I/O.
+		if err := body.Validate(); err != nil {
+			return nil, huma.Error400BadRequest("validation: " + err.Error())
+		}
+
+		// Ref resolution — optional, cross-kind. Skipped when no resolver
+		// is configured (e.g. kinds whose spec carries no ResourceRefs).
+		if cfg.Resolver != nil {
+			if err := body.ResolveRefs(ctx, cfg.Resolver); err != nil {
+				return nil, huma.Error400BadRequest("refs: " + err.Error())
+			}
 		}
 
 		specJSON, err := body.MarshalSpec()

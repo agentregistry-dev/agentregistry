@@ -3,6 +3,7 @@
 package resource_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -221,6 +222,90 @@ func TestResourceRegister_AgentPathMismatchRejected(t *testing.T) {
 	}
 	resp := api.Put("/v0/namespaces/default/agents/alice/v1", body)
 	require.Equal(t, http.StatusBadRequest, resp.Code, fmt.Sprintf("body=%s", resp.Body.String()))
+}
+
+func TestResourceRegister_ValidationRejectsBadVersion(t *testing.T) {
+	pool := database.NewV1Alpha1TestPool(t)
+	store := database.NewStore(pool, "v1alpha1.agents")
+	_, api := humatest.New(t)
+	registerAgent(api, store)
+
+	body := v1alpha1.Agent{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "bad", Version: "latest"},
+		Spec:     v1alpha1.AgentSpec{Title: "B"},
+	}
+	resp := api.Put("/v0/namespaces/default/agents/bad/latest", body)
+	require.Equal(t, http.StatusBadRequest, resp.Code)
+	require.Contains(t, resp.Body.String(), "metadata.version")
+}
+
+func TestResourceRegister_ValidationRejectsHTTPWebsite(t *testing.T) {
+	pool := database.NewV1Alpha1TestPool(t)
+	store := database.NewStore(pool, "v1alpha1.agents")
+	_, api := humatest.New(t)
+	registerAgent(api, store)
+
+	body := v1alpha1.Agent{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "ins", Version: "v1"},
+		Spec:     v1alpha1.AgentSpec{Title: "I", WebsiteURL: "http://example.com"}, // http not allowed
+	}
+	resp := api.Put("/v0/namespaces/default/agents/ins/v1", body)
+	require.Equal(t, http.StatusBadRequest, resp.Code)
+	require.Contains(t, resp.Body.String(), "spec.websiteUrl")
+}
+
+func TestResourceRegister_ResolverDetectsDanglingRef(t *testing.T) {
+	pool := database.NewV1Alpha1TestPool(t)
+	agentStore := database.NewStore(pool, "v1alpha1.agents")
+	mcpStore := database.NewStore(pool, "v1alpha1.mcp_servers")
+
+	// Resolver: only MCPServer "tools" in namespace "default" exists.
+	resolver := func(ctx context.Context, ref v1alpha1.ResourceRef) error {
+		if ref.Kind != v1alpha1.KindMCPServer {
+			return nil
+		}
+		_, err := mcpStore.Get(ctx, ref.Namespace, ref.Name, ref.Version)
+		return err
+	}
+
+	// Seed the one existing MCPServer.
+	_, err := mcpStore.Upsert(context.Background(), "default", "tools", "v1",
+		mustSpec(t, v1alpha1.MCPServerSpec{Title: "T"}), nil, database.UpsertOpts{})
+	require.NoError(t, err)
+
+	_, api := humatest.New(t)
+	resource.Register[*v1alpha1.Agent](api, resource.Config{
+		Kind:       v1alpha1.KindAgent,
+		BasePrefix: "/v0",
+		Store:      agentStore,
+		Resolver:   resolver,
+	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+
+	// Reference a missing MCPServer.
+	body := v1alpha1.Agent{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "dangling", Version: "v1"},
+		Spec: v1alpha1.AgentSpec{
+			MCPServers: []v1alpha1.ResourceRef{
+				{Kind: v1alpha1.KindMCPServer, Name: "tools", Version: "v1"},
+				{Kind: v1alpha1.KindMCPServer, Name: "missing", Version: "v1"},
+			},
+		},
+	}
+	resp := api.Put("/v0/namespaces/default/agents/dangling/v1", body)
+	require.Equal(t, http.StatusBadRequest, resp.Code)
+	require.Contains(t, resp.Body.String(), "spec.mcpServers[1]")
+}
+
+// mustSpec is a test helper duplicated from the database package tests.
+// Kept local so we don't create a test-util cycle.
+func mustSpec(t *testing.T, spec any) []byte {
+	t.Helper()
+	b, err := json.Marshal(spec)
+	require.NoError(t, err)
+	return b
 }
 
 func TestResourceRegister_SoftDeleteFinalizerGC(t *testing.T) {

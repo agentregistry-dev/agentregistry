@@ -1,6 +1,9 @@
 package v1alpha1
 
-import "encoding/json"
+import (
+	"context"
+	"encoding/json"
+)
 
 // Object is the minimal interface satisfied by every typed v1alpha1 envelope
 // (Agent, MCPServer, Skill, Prompt, Provider, Deployment). It lets generic
@@ -17,6 +20,14 @@ type Object interface {
 	MarshalSpec() (json.RawMessage, error)
 	// UnmarshalSpec decodes the given JSON bytes into this object's Spec field.
 	UnmarshalSpec(data json.RawMessage) error
+	// Validate runs structural validation (no I/O) and returns a FieldErrors
+	// (or nil on success). Callers typically invoke this at the apply
+	// boundary before Store.Upsert.
+	Validate() error
+	// ResolveRefs checks that every ResourceRef in the object's Spec
+	// resolves via the supplied resolver. A nil resolver is a no-op.
+	// Returns a FieldErrors when one or more refs dangle.
+	ResolveRefs(ctx context.Context, resolver ResolverFunc) error
 }
 
 // Pointer receivers so SetMetadata/SetStatus mutate the caller's value.
