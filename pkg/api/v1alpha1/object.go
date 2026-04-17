@@ -12,27 +12,55 @@ type TypeMeta struct {
 	Kind       string `json:"kind" yaml:"kind"`
 }
 
+// DefaultNamespace is the namespace used when a caller doesn't supply one
+// (blank metadata.namespace in a YAML apply, for instance). Servers fill
+// missing namespaces with this value so identity is always fully qualified
+// at rest. The string matches the Kubernetes convention for consistency.
+const DefaultNamespace = "default"
+
 // ObjectMeta is the metadata block common to every resource.
 //
-// Name, Version, and Labels are user-set. Generation, CreatedAt, and UpdatedAt
-// are server-managed: the API ignores them on apply and overwrites them on
-// response. They are exposed in the wire format so that clients can observe
-// reconciliation convergence by comparing metadata.generation against
-// status.observedGeneration — the same reason Kubernetes surfaces generation.
+// Namespace, Name, Version, and Labels are user-set. Generation, CreatedAt,
+// UpdatedAt, DeletionTimestamp, and Finalizers are server-managed: the API
+// ignores them on apply and overwrites them on response. They are exposed in
+// the wire format so clients can observe reconciliation convergence by
+// comparing metadata.generation against status.observedGeneration — the
+// same reason Kubernetes surfaces generation.
 //
-// Name and Version together form the identity of a resource; (Name, Version)
-// is the composite primary key at the database level. Version is user-set
-// (semver-like or any opaque string). Generation increments on spec mutation
-// only — no-op reapplies preserve generation.
+// (Namespace, Name, Version) together form the identity of a resource; that
+// triple is the composite primary key at the database level. Namespace
+// scopes the object, Name identifies it within the namespace, Version is
+// user-set (semver-like or any opaque string). Generation increments on
+// spec mutation only — no-op reapplies preserve generation.
+//
+// DeletionTimestamp + Finalizers implement Kubernetes-style soft delete:
+// Delete sets DeletionTimestamp and leaves the row in place until every
+// finalizer has been removed by its owner. A GC pass hard-deletes rows
+// where DeletionTimestamp != nil AND Finalizers is empty.
 type ObjectMeta struct {
-	Name    string            `json:"name" yaml:"name"`
-	Version string            `json:"version,omitempty" yaml:"version,omitempty"`
-	Labels  map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
-	// Generation is server-managed. Clients MUST NOT set it on apply; it is
-	// overwritten by the Store on every Upsert.
+	Namespace string            `json:"namespace" yaml:"namespace"`
+	Name      string            `json:"name" yaml:"name"`
+	Version   string            `json:"version,omitempty" yaml:"version,omitempty"`
+	Labels    map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
+
+	// Generation is server-managed. Clients MUST NOT set it on apply; the
+	// Store overwrites on every Upsert.
 	Generation int64     `json:"generation,omitempty" yaml:"generation,omitempty"`
 	CreatedAt  time.Time `json:"createdAt,omitzero" yaml:"createdAt,omitempty"`
 	UpdatedAt  time.Time `json:"updatedAt,omitzero" yaml:"updatedAt,omitempty"`
+
+	// DeletionTimestamp is set by the Store when Delete is called. A non-nil
+	// DeletionTimestamp means the object is terminating; callers may still
+	// observe it until Finalizers drains, then it is hard-deleted by GC.
+	// Clients MUST NOT set this on apply.
+	DeletionTimestamp *time.Time `json:"deletionTimestamp,omitempty" yaml:"deletionTimestamp,omitempty"`
+
+	// Finalizers are string tokens owned by reconcilers/controllers; each
+	// owner removes its token when its cleanup for this object has finished.
+	// The GC pass requires this slice to be empty before hard-deleting a
+	// terminating row. Clients may add/remove finalizers on apply; the Store
+	// preserves them across spec updates.
+	Finalizers []string `json:"finalizers,omitempty" yaml:"finalizers,omitempty"`
 }
 
 // RawObject is the generic wire envelope used during decode and apply dispatch

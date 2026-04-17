@@ -25,18 +25,31 @@ type rowScanner interface {
 // scanRow reads one row worth of columns (in the order emitted by Get/List
 // queries) into a v1alpha1.RawObject. Spec and Status are retained as their
 // wire-form representations so callers can unmarshal into typed structs.
+//
+// Column order must match:
+//
+//	namespace, name, version, generation, labels, spec, status,
+//	deletion_timestamp, finalizers, created_at, updated_at
 func scanRow(row rowScanner) (*v1alpha1.RawObject, error) {
 	var (
-		name       string
-		version    string
-		generation int64
-		labelsJSON []byte
-		specJSON   []byte
-		statusJSON []byte
-		createdAt  time.Time
-		updatedAt  time.Time
+		namespace         string
+		name              string
+		version           string
+		generation        int64
+		labelsJSON        []byte
+		specJSON          []byte
+		statusJSON        []byte
+		deletionTimestamp *time.Time
+		finalizersJSON    []byte
+		createdAt         time.Time
+		updatedAt         time.Time
 	)
-	if err := row.Scan(&name, &version, &generation, &labelsJSON, &specJSON, &statusJSON, &createdAt, &updatedAt); err != nil {
+	if err := row.Scan(
+		&namespace, &name, &version, &generation,
+		&labelsJSON, &specJSON, &statusJSON,
+		&deletionTimestamp, &finalizersJSON,
+		&createdAt, &updatedAt,
+	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, pkgdb.ErrNotFound
 		}
@@ -57,14 +70,24 @@ func scanRow(row rowScanner) (*v1alpha1.RawObject, error) {
 		}
 	}
 
+	var finalizers []string
+	if len(finalizersJSON) > 0 {
+		if err := json.Unmarshal(finalizersJSON, &finalizers); err != nil {
+			return nil, fmt.Errorf("decode finalizers: %w", err)
+		}
+	}
+
 	return &v1alpha1.RawObject{
 		Metadata: v1alpha1.ObjectMeta{
-			Name:       name,
-			Version:    version,
-			Labels:     labels,
-			Generation: generation,
-			CreatedAt:  createdAt,
-			UpdatedAt:  updatedAt,
+			Namespace:         namespace,
+			Name:              name,
+			Version:           version,
+			Labels:            labels,
+			Generation:        generation,
+			CreatedAt:         createdAt,
+			UpdatedAt:         updatedAt,
+			DeletionTimestamp: deletionTimestamp,
+			Finalizers:        finalizers,
 		},
 		Spec:   json.RawMessage(specJSON),
 		Status: status,

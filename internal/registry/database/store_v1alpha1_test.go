@@ -15,6 +15,7 @@ import (
 )
 
 const testTable = "v1alpha1.agents"
+const testNS = "default"
 
 func mustSpec(t *testing.T, spec any) json.RawMessage {
 	t.Helper()
@@ -29,14 +30,15 @@ func TestV1Alpha1Store_UpsertCreatesRow(t *testing.T) {
 	ctx := context.Background()
 
 	spec := mustSpec(t, v1alpha1.AgentSpec{Title: "alpha"})
-	res, err := store.Upsert(ctx, "foo", "v1.0.0", spec, nil)
+	res, err := store.Upsert(ctx, testNS, "foo", "v1.0.0", spec, nil, UpsertOpts{})
 	require.NoError(t, err)
 	require.True(t, res.Created)
 	require.True(t, res.SpecChanged)
 	require.EqualValues(t, 1, res.Generation)
 
-	obj, err := store.Get(ctx, "foo", "v1.0.0")
+	obj, err := store.Get(ctx, testNS, "foo", "v1.0.0")
 	require.NoError(t, err)
+	require.Equal(t, testNS, obj.Metadata.Namespace)
 	require.Equal(t, "foo", obj.Metadata.Name)
 	require.Equal(t, "v1.0.0", obj.Metadata.Version)
 	require.EqualValues(t, 1, obj.Metadata.Generation)
@@ -49,11 +51,10 @@ func TestV1Alpha1Store_UpsertNoOpPreservesGeneration(t *testing.T) {
 	ctx := context.Background()
 
 	spec := mustSpec(t, v1alpha1.AgentSpec{Title: "alpha"})
-	_, err := store.Upsert(ctx, "foo", "v1", spec, nil)
+	_, err := store.Upsert(ctx, testNS, "foo", "v1", spec, nil, UpsertOpts{})
 	require.NoError(t, err)
 
-	// Re-apply identical spec: generation must not bump.
-	res, err := store.Upsert(ctx, "foo", "v1", spec, nil)
+	res, err := store.Upsert(ctx, testNS, "foo", "v1", spec, nil, UpsertOpts{})
 	require.NoError(t, err)
 	require.False(t, res.Created)
 	require.False(t, res.SpecChanged)
@@ -68,15 +69,15 @@ func TestV1Alpha1Store_UpsertBumpsGenerationOnSpecChange(t *testing.T) {
 	spec1 := mustSpec(t, v1alpha1.AgentSpec{Title: "first"})
 	spec2 := mustSpec(t, v1alpha1.AgentSpec{Title: "second"})
 
-	_, err := store.Upsert(ctx, "foo", "v1", spec1, nil)
+	_, err := store.Upsert(ctx, testNS, "foo", "v1", spec1, nil, UpsertOpts{})
 	require.NoError(t, err)
 
-	res, err := store.Upsert(ctx, "foo", "v1", spec2, nil)
+	res, err := store.Upsert(ctx, testNS, "foo", "v1", spec2, nil, UpsertOpts{})
 	require.NoError(t, err)
 	require.True(t, res.SpecChanged)
 	require.EqualValues(t, 2, res.Generation)
 
-	obj, err := store.Get(ctx, "foo", "v1")
+	obj, err := store.Get(ctx, testNS, "foo", "v1")
 	require.NoError(t, err)
 	require.EqualValues(t, 2, obj.Metadata.Generation)
 }
@@ -87,18 +88,13 @@ func TestV1Alpha1Store_LatestVersionSemverToggle(t *testing.T) {
 	ctx := context.Background()
 
 	for _, v := range []string{"v1.0.0", "v1.2.0", "v0.9.0", "v2.0.0", "v1.10.1"} {
-		_, err := store.Upsert(ctx, "foo", v, mustSpec(t, v1alpha1.AgentSpec{Title: v}), nil)
+		_, err := store.Upsert(ctx, testNS, "foo", v, mustSpec(t, v1alpha1.AgentSpec{Title: v}), nil, UpsertOpts{})
 		require.NoError(t, err)
 	}
 
-	latest, err := store.GetLatest(ctx, "foo")
+	latest, err := store.GetLatest(ctx, testNS, "foo")
 	require.NoError(t, err)
 	require.Equal(t, "v2.0.0", latest.Metadata.Version, "v2.0.0 is highest semver")
-
-	// Per-row is_latest_version is a derived column — Get returns the raw row
-	// and the metadata we expose doesn't carry that bit, but GetLatest works
-	// off it, so a successful GetLatest with the correct version is proof
-	// enough that the partial unique index picked the right winner.
 }
 
 func TestV1Alpha1Store_LatestVersionFallbackOnInvalidSemver(t *testing.T) {
@@ -106,13 +102,12 @@ func TestV1Alpha1Store_LatestVersionFallbackOnInvalidSemver(t *testing.T) {
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
-	// Non-semver versions: expect most-recently-updated to win.
 	for _, v := range []string{"alpha", "beta", "gamma"} {
-		_, err := store.Upsert(ctx, "foo", v, mustSpec(t, v1alpha1.AgentSpec{Title: v}), nil)
+		_, err := store.Upsert(ctx, testNS, "foo", v, mustSpec(t, v1alpha1.AgentSpec{Title: v}), nil, UpsertOpts{})
 		require.NoError(t, err)
 	}
 
-	latest, err := store.GetLatest(ctx, "foo")
+	latest, err := store.GetLatest(ctx, testNS, "foo")
 	require.NoError(t, err)
 	require.Equal(t, "gamma", latest.Metadata.Version, "last-upserted non-semver wins")
 }
@@ -123,23 +118,18 @@ func TestV1Alpha1Store_PatchStatusDisjointFromSpec(t *testing.T) {
 	ctx := context.Background()
 
 	spec := mustSpec(t, v1alpha1.AgentSpec{Title: "alpha"})
-	_, err := store.Upsert(ctx, "foo", "v1", spec, nil)
+	_, err := store.Upsert(ctx, testNS, "foo", "v1", spec, nil, UpsertOpts{})
 	require.NoError(t, err)
 
-	// Patch status with a Ready condition.
-	err = store.PatchStatus(ctx, "foo", "v1", func(s *v1alpha1.Status) {
+	err = store.PatchStatus(ctx, testNS, "foo", "v1", func(s *v1alpha1.Status) {
 		s.ObservedGeneration = 1
-		s.SetCondition(v1alpha1.Condition{
-			Type:   "Ready",
-			Status: v1alpha1.ConditionTrue,
-			Reason: "Converged",
-		})
+		s.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionTrue, Reason: "Converged"})
 	})
 	require.NoError(t, err)
 
-	obj, err := store.Get(ctx, "foo", "v1")
+	obj, err := store.Get(ctx, testNS, "foo", "v1")
 	require.NoError(t, err)
-	require.EqualValues(t, 1, obj.Metadata.Generation, "generation must not change on status patch")
+	require.EqualValues(t, 1, obj.Metadata.Generation)
 	require.EqualValues(t, 1, obj.Status.ObservedGeneration)
 	require.Len(t, obj.Status.Conditions, 1)
 	require.Equal(t, "Ready", obj.Status.Conditions[0].Type)
@@ -151,7 +141,7 @@ func TestV1Alpha1Store_PatchStatusNotFound(t *testing.T) {
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
-	err := store.PatchStatus(ctx, "nope", "v1", func(s *v1alpha1.Status) {})
+	err := store.PatchStatus(ctx, testNS, "nope", "v1", func(s *v1alpha1.Status) {})
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 }
 
@@ -160,32 +150,71 @@ func TestV1Alpha1Store_GetNotFound(t *testing.T) {
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
-	_, err := store.Get(ctx, "nope", "v1")
+	_, err := store.Get(ctx, testNS, "nope", "v1")
 	require.True(t, errors.Is(err, pkgdb.ErrNotFound))
 
-	_, err = store.GetLatest(ctx, "nope")
+	_, err = store.GetLatest(ctx, testNS, "nope")
 	require.True(t, errors.Is(err, pkgdb.ErrNotFound))
 }
 
-func TestV1Alpha1Store_Delete(t *testing.T) {
+func TestV1Alpha1Store_DeleteSoftAndPromoteLatest(t *testing.T) {
 	pool := NewV1Alpha1TestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
-	_, err := store.Upsert(ctx, "foo", "v1", mustSpec(t, v1alpha1.AgentSpec{}), nil)
+	_, err := store.Upsert(ctx, testNS, "foo", "v1", mustSpec(t, v1alpha1.AgentSpec{}), nil, UpsertOpts{})
 	require.NoError(t, err)
-	_, err = store.Upsert(ctx, "foo", "v2", mustSpec(t, v1alpha1.AgentSpec{}), nil)
+	_, err = store.Upsert(ctx, testNS, "foo", "v2", mustSpec(t, v1alpha1.AgentSpec{}), nil, UpsertOpts{})
 	require.NoError(t, err)
 
-	require.NoError(t, store.Delete(ctx, "foo", "v2"))
+	require.NoError(t, store.Delete(ctx, testNS, "foo", "v2"))
 
-	// After deleting v2, v1 must be promoted to latest.
-	latest, err := store.GetLatest(ctx, "foo")
+	latest, err := store.GetLatest(ctx, testNS, "foo")
 	require.NoError(t, err)
 	require.Equal(t, "v1", latest.Metadata.Version)
 
-	// Non-existent delete returns ErrNotFound.
-	err = store.Delete(ctx, "foo", "v99")
+	v2, err := store.Get(ctx, testNS, "foo", "v2")
+	require.NoError(t, err)
+	require.NotNil(t, v2.Metadata.DeletionTimestamp)
+
+	err = store.Delete(ctx, testNS, "foo", "v99")
+	require.ErrorIs(t, err, pkgdb.ErrNotFound)
+
+	require.NoError(t, store.Delete(ctx, testNS, "foo", "v2"))
+}
+
+func TestV1Alpha1Store_FinalizerGC(t *testing.T) {
+	pool := NewV1Alpha1TestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	_, err := store.Upsert(ctx, testNS, "fin", "v1", mustSpec(t, v1alpha1.AgentSpec{}), nil,
+		UpsertOpts{Finalizers: []string{"cleanup.example/thing"}})
+	require.NoError(t, err)
+
+	obj, err := store.Get(ctx, testNS, "fin", "v1")
+	require.NoError(t, err)
+	require.Equal(t, []string{"cleanup.example/thing"}, obj.Metadata.Finalizers)
+
+	require.NoError(t, store.Delete(ctx, testNS, "fin", "v1"))
+
+	obj, err = store.Get(ctx, testNS, "fin", "v1")
+	require.NoError(t, err)
+	require.NotNil(t, obj.Metadata.DeletionTimestamp)
+	require.Len(t, obj.Metadata.Finalizers, 1)
+
+	n, err := store.PurgeFinalized(ctx)
+	require.NoError(t, err)
+	require.EqualValues(t, 0, n)
+
+	err = store.PatchFinalizers(ctx, testNS, "fin", "v1", func(f []string) []string { return nil })
+	require.NoError(t, err)
+
+	n, err = store.PurgeFinalized(ctx)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+
+	_, err = store.Get(ctx, testNS, "fin", "v1")
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 }
 
@@ -194,30 +223,38 @@ func TestV1Alpha1Store_List(t *testing.T) {
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
-	_, err := store.Upsert(ctx, "a", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "A"}), map[string]string{"owner": "x"})
+	_, err := store.Upsert(ctx, "team-a", "a", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "A"}), map[string]string{"owner": "x"}, UpsertOpts{})
 	require.NoError(t, err)
-	_, err = store.Upsert(ctx, "b", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "B"}), map[string]string{"owner": "y"})
+	_, err = store.Upsert(ctx, "team-a", "b", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "B"}), map[string]string{"owner": "y"}, UpsertOpts{})
 	require.NoError(t, err)
-	_, err = store.Upsert(ctx, "c", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "C"}), map[string]string{"owner": "x"})
+	_, err = store.Upsert(ctx, "team-b", "c", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "C"}), map[string]string{"owner": "x"}, UpsertOpts{})
 	require.NoError(t, err)
 
-	// No filter → all rows.
 	all, _, err := store.List(ctx, ListOpts{})
 	require.NoError(t, err)
 	require.Len(t, all, 3)
 
-	// Label filter.
-	filtered, _, err := store.List(ctx, ListOpts{LabelSelector: map[string]string{"owner": "x"}})
+	teamA, _, err := store.List(ctx, ListOpts{Namespace: "team-a"})
 	require.NoError(t, err)
-	require.Len(t, filtered, 2)
-	for _, r := range filtered {
-		require.Equal(t, "x", r.Metadata.Labels["owner"])
-	}
+	require.Len(t, teamA, 2)
 
-	// LatestOnly returns one row per name (each has only v1 here, so all 3).
-	latest, _, err := store.List(ctx, ListOpts{LatestOnly: true})
+	ownerX, _, err := store.List(ctx, ListOpts{LabelSelector: map[string]string{"owner": "x"}})
 	require.NoError(t, err)
-	require.Len(t, latest, 3)
+	require.Len(t, ownerX, 2)
+
+	teamAOwnerX, _, err := store.List(ctx, ListOpts{Namespace: "team-a", LabelSelector: map[string]string{"owner": "x"}})
+	require.NoError(t, err)
+	require.Len(t, teamAOwnerX, 1)
+
+	require.NoError(t, store.Delete(ctx, "team-a", "a", "v1"))
+
+	alive, _, err := store.List(ctx, ListOpts{})
+	require.NoError(t, err)
+	require.Len(t, alive, 2)
+
+	withTerm, _, err := store.List(ctx, ListOpts{IncludeTerminating: true})
+	require.NoError(t, err)
+	require.Len(t, withTerm, 3)
 }
 
 func TestV1Alpha1Store_FindReferrers(t *testing.T) {
@@ -225,25 +262,24 @@ func TestV1Alpha1Store_FindReferrers(t *testing.T) {
 	agents := NewStore(pool, "v1alpha1.agents")
 	ctx := context.Background()
 
-	_, err := agents.Upsert(ctx, "refs-bar", "v1",
+	_, err := agents.Upsert(ctx, testNS, "refs-bar", "v1",
 		mustSpec(t, v1alpha1.AgentSpec{
 			MCPServers: []v1alpha1.ResourceRef{{Kind: v1alpha1.KindMCPServer, Name: "bar", Version: "v1"}},
-		}), nil)
+		}), nil, UpsertOpts{})
 	require.NoError(t, err)
 
-	_, err = agents.Upsert(ctx, "refs-baz", "v1",
+	_, err = agents.Upsert(ctx, testNS, "refs-baz", "v1",
 		mustSpec(t, v1alpha1.AgentSpec{
 			MCPServers: []v1alpha1.ResourceRef{{Kind: v1alpha1.KindMCPServer, Name: "baz", Version: "v1"}},
-		}), nil)
+		}), nil, UpsertOpts{})
 	require.NoError(t, err)
 
-	// Look up every agent that references mcp "bar@v1".
 	pattern, err := json.Marshal(map[string]any{
 		"mcpServers": []map[string]string{{"name": "bar", "version": "v1"}},
 	})
 	require.NoError(t, err)
 
-	results, err := agents.FindReferrers(ctx, pattern, false)
+	results, err := agents.FindReferrers(ctx, "", pattern, false)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Equal(t, "refs-bar", results[0].Metadata.Name)
@@ -254,7 +290,7 @@ func TestV1Alpha1Store_SeededProviders(t *testing.T) {
 	providers := NewStore(pool, "v1alpha1.providers")
 	ctx := context.Background()
 
-	local, err := providers.GetLatest(ctx, "local")
+	local, err := providers.GetLatest(ctx, "default", "local")
 	require.NoError(t, err)
 	require.Equal(t, "v1", local.Metadata.Version)
 
@@ -262,7 +298,7 @@ func TestV1Alpha1Store_SeededProviders(t *testing.T) {
 	require.NoError(t, json.Unmarshal(local.Spec, &spec))
 	require.Equal(t, v1alpha1.PlatformLocal, spec.Platform)
 
-	k8s, err := providers.GetLatest(ctx, "kubernetes-default")
+	k8s, err := providers.GetLatest(ctx, "default", "kubernetes-default")
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(k8s.Spec, &spec))
 	require.Equal(t, v1alpha1.PlatformKubernetes, spec.Platform)
