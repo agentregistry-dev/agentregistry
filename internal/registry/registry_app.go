@@ -301,6 +301,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		Aliases:  []string{"Deployment"},
 		SpecType: reflect.TypeFor[kinds.DeploymentSpec](),
 		Apply:    deploymentApplyFunc(deploymentService),
+		Delete:   deploymentDeleteFunc(deploymentService),
 		TableColumns: []kinds.Column{
 			{Header: "NAME"}, {Header: "VERSION"}, {Header: "RESOURCE_TYPE"},
 			{Header: "PROVIDER"}, {Header: "STATUS"},
@@ -512,5 +513,42 @@ func deploymentApplyFunc(svc deploymentsvc.Registry) kinds.ApplyFunc {
 			}
 		}
 		return kinds.AppliedResult("deployment", doc), nil
+	}
+}
+
+// deploymentDeleteFunc returns the Delete function for the deployment kind.
+// The server-side DELETE /v0/apply batch handler dispatches here when a
+// deployment doc is included. Identity is (name, version) — the same
+// (name, version) can map to multiple deployments (one per provider), so
+// all matches are removed.
+func deploymentDeleteFunc(svc deploymentsvc.Registry) kinds.DeleteFunc {
+	return func(ctx context.Context, name, version string) error {
+		matches, err := svc.ListDeployments(ctx, &models.DeploymentFilter{ResourceName: &name})
+		if err != nil {
+			return fmt.Errorf("listing deployments: %w", err)
+		}
+		var toDelete []*models.Deployment
+		for _, d := range matches {
+			if d == nil {
+				continue
+			}
+			if d.ServerName != name {
+				continue
+			}
+			if version != "" && d.Version != version {
+				continue
+			}
+			toDelete = append(toDelete, d)
+		}
+		if len(toDelete) == 0 {
+			return database.ErrNotFound
+		}
+		var errs []error
+		for _, d := range toDelete {
+			if err := svc.DeleteDeployment(ctx, d.ID); err != nil {
+				errs = append(errs, fmt.Errorf("deleting %s (provider %s): %w", d.ID, d.ProviderID, err))
+			}
+		}
+		return errors.Join(errs...)
 	}
 }
