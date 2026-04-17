@@ -29,6 +29,11 @@ func readAgentYAML(t *testing.T, dir, name string) map[string]any {
 	return readYAMLFile(t, filepath.Join(dir, name, "agent.yaml"))
 }
 
+func readPromptYAML(t *testing.T, dir, name string) map[string]any {
+	t.Helper()
+	return readYAMLFile(t, filepath.Join(dir, name, "prompt.yaml"))
+}
+
 func TestInitAgentCmd_BasicScaffold(t *testing.T) {
 	tmpDir := t.TempDir()
 	origDir, err := os.Getwd()
@@ -283,6 +288,27 @@ func TestInitAgentCmd_DeclarativeYAMLHasCorrectStructure(t *testing.T) {
 	assert.Contains(t, content, "spec:")
 }
 
+func TestInitAgentCmd_OutputDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	outputDir := filepath.Join("generated", "agents")
+
+	var buf bytes.Buffer
+	cmd := declarative.NewInitCmd()
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"--output-dir", outputDir, "agent", "adk", "python", "myagent"})
+	require.NoError(t, cmd.Execute())
+
+	projectDir := filepath.Join(tmpDir, outputDir, "myagent")
+	_, err = os.Stat(filepath.Join(projectDir, "agent.yaml"))
+	require.NoError(t, err, "agent.yaml should exist in output directory")
+	assert.Contains(t, buf.String(), "cd "+projectDir)
+}
+
 // ---- mcp init ----
 
 func TestInitMCPCmd_BasicScaffold(t *testing.T) {
@@ -399,6 +425,27 @@ func TestInitMCPCmd_ProjectFilesCreated(t *testing.T) {
 	require.NoError(t, err, "mcp.yaml should exist")
 }
 
+func TestInitMCPCmd_OutputDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	outputDir := filepath.Join("generated", "mcps")
+
+	var buf bytes.Buffer
+	cmd := declarative.NewInitCmd()
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"--output-dir", outputDir, "mcp", "fastmcp-python", "myorg/myserver"})
+	require.NoError(t, cmd.Execute())
+
+	projectDir := filepath.Join(tmpDir, outputDir, "myserver")
+	_, err = os.Stat(filepath.Join(projectDir, "mcp.yaml"))
+	require.NoError(t, err, "mcp.yaml should exist in output directory")
+	assert.Contains(t, buf.String(), "cd "+projectDir)
+}
+
 // ---- skill init ----
 
 func TestInitSkillCmd_BasicScaffold(t *testing.T) {
@@ -468,6 +515,27 @@ func TestInitSkillCmd_ProjectFilesCreated(t *testing.T) {
 	require.NoError(t, err, "skill.yaml should exist")
 }
 
+func TestInitSkillCmd_OutputDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	outputDir := filepath.Join("generated", "skills")
+
+	var buf bytes.Buffer
+	cmd := declarative.NewInitCmd()
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"--output-dir", outputDir, "skill", "myskill"})
+	require.NoError(t, cmd.Execute())
+
+	projectDir := filepath.Join(tmpDir, outputDir, "myskill")
+	_, err = os.Stat(filepath.Join(projectDir, "skill.yaml"))
+	require.NoError(t, err, "skill.yaml should exist in output directory")
+	assert.Contains(t, buf.String(), "cd "+projectDir)
+}
+
 // ---- prompt init ----
 
 func TestInitPromptCmd_BasicScaffold(t *testing.T) {
@@ -481,8 +549,7 @@ func TestInitPromptCmd_BasicScaffold(t *testing.T) {
 	cmd.SetArgs([]string{"prompt", "myprompt"})
 	require.NoError(t, cmd.Execute())
 
-	// Prompt writes NAME.yaml in cwd, not a subdir
-	m := readYAMLFile(t, filepath.Join(tmpDir, "myprompt.yaml"))
+	m := readPromptYAML(t, tmpDir, "myprompt")
 	assert.Equal(t, "ar.dev/v1alpha1", m["apiVersion"])
 	assert.Equal(t, "Prompt", m["kind"])
 
@@ -511,7 +578,7 @@ func TestInitPromptCmd_CustomContent(t *testing.T) {
 	})
 	require.NoError(t, cmd.Execute())
 
-	m := readYAMLFile(t, filepath.Join(tmpDir, "summarizer.yaml"))
+	m := readPromptYAML(t, tmpDir, "summarizer")
 	metadata := m["metadata"].(map[string]any)
 	assert.Equal(t, "2.0.0", metadata["version"])
 
@@ -520,7 +587,7 @@ func TestInitPromptCmd_CustomContent(t *testing.T) {
 	assert.Equal(t, "You are a text summarizer. Be concise.", spec["content"])
 }
 
-func TestInitPromptCmd_WritesFileNotDirectory(t *testing.T) {
+func TestInitPromptCmd_ProjectFilesCreated(t *testing.T) {
 	tmpDir := t.TempDir()
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
@@ -531,11 +598,31 @@ func TestInitPromptCmd_WritesFileNotDirectory(t *testing.T) {
 	cmd.SetArgs([]string{"prompt", "myprompt"})
 	require.NoError(t, cmd.Execute())
 
-	// Must write myprompt.yaml in cwd, NOT create a directory
-	info, err := os.Stat(filepath.Join(tmpDir, "myprompt.yaml"))
-	require.NoError(t, err, "myprompt.yaml should exist")
-	assert.False(t, info.IsDir(), "myprompt.yaml should be a file, not a directory")
+	info, err := os.Stat(filepath.Join(tmpDir, "myprompt"))
+	require.NoError(t, err, "prompt project directory should exist")
+	assert.True(t, info.IsDir(), "myprompt should be a directory")
 
-	_, err = os.Stat(filepath.Join(tmpDir, "myprompt"))
-	assert.True(t, os.IsNotExist(err), "no directory named myprompt should be created")
+	_, err = os.Stat(filepath.Join(tmpDir, "myprompt", "prompt.yaml"))
+	require.NoError(t, err, "prompt.yaml should exist")
+}
+
+func TestInitPromptCmd_OutputDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	outputDir := filepath.Join("generated", "prompts")
+
+	var buf bytes.Buffer
+	cmd := declarative.NewInitCmd()
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"--output-dir", outputDir, "prompt", "myprompt"})
+	require.NoError(t, cmd.Execute())
+
+	projectDir := filepath.Join(tmpDir, outputDir, "myprompt")
+	_, err = os.Stat(filepath.Join(projectDir, "prompt.yaml"))
+	require.NoError(t, err, "prompt.yaml should exist in output directory")
+	assert.Contains(t, buf.String(), "cd "+projectDir)
 }
