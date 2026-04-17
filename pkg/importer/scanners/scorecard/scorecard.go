@@ -82,16 +82,17 @@ func (s *Scanner) Name() string { return ScannerName }
 
 // Supports returns true for Agent, MCPServer, or Skill with a
 // GitHub repository URL. Scorecard only speaks GitHub in remote
-// mode so other SCMs return false.
+// mode so other SCMs return false. Dispatch is via the shared
+// importer.GitHubRepoFor helper.
 func (s *Scanner) Supports(obj v1alpha1.Object) bool {
-	_, _, ok := repoFor(obj)
+	_, _, ok := importer.GitHubRepoFor(obj)
 	return ok
 }
 
 // Scan runs the configured engine against obj's Repository URL and
 // translates the response into annotations + labels + findings.
 func (s *Scanner) Scan(ctx context.Context, obj v1alpha1.Object) (importer.ScanResult, error) {
-	owner, repo, ok := repoFor(obj)
+	owner, repo, ok := importer.GitHubRepoFor(obj)
 	if !ok {
 		return importer.ScanResult{}, nil
 	}
@@ -106,53 +107,11 @@ func (s *Scanner) Scan(ctx context.Context, obj v1alpha1.Object) (importer.ScanR
 	return buildResult(aggregate, headSHA, checks, s.cfg.HighlightLimit), nil
 }
 
-// repoFor extracts (owner, repo) from obj's Spec.Repository.
-func repoFor(obj v1alpha1.Object) (string, string, bool) {
-	var url string
-	switch v := obj.(type) {
-	case *v1alpha1.Agent:
-		if v.Spec.Repository != nil {
-			url = v.Spec.Repository.URL
-		}
-	case *v1alpha1.MCPServer:
-		if v.Spec.Repository != nil {
-			url = v.Spec.Repository.URL
-		}
-	case *v1alpha1.Skill:
-		if v.Spec.Repository != nil {
-			url = v.Spec.Repository.URL
-		}
-	default:
-		return "", "", false
-	}
-	if url == "" {
-		return "", "", false
-	}
-	return parseGitHubRepoSplit(url)
-}
-
-// parseGitHubRepoSplit returns (owner, repo, ok) from the common
-// GitHub URL shapes — https / https-with-.git / ssh / bare "o/r".
-func parseGitHubRepoSplit(raw string) (string, string, bool) {
-	raw = strings.TrimSpace(raw)
-	raw = strings.TrimSuffix(raw, ".git")
-	var path string
-	switch {
-	case strings.Contains(raw, "github.com/"):
-		parts := strings.Split(raw, "github.com/")
-		path = parts[len(parts)-1]
-	case strings.Contains(raw, "github.com:"):
-		parts := strings.Split(raw, "github.com:")
-		path = parts[len(parts)-1]
-	default:
-		return "", "", false
-	}
-	segs := strings.Split(strings.Trim(path, "/"), "/")
-	if len(segs) < 2 || segs[0] == "" || segs[1] == "" {
-		return "", "", false
-	}
-	return segs[0], segs[1], true
-}
+// repoFor + parseGitHubRepoSplit were moved to
+// pkg/importer/githubrepo.go (importer.GitHubRepoFor) so the OSV
+// and Scorecard scanners share one resolution path. git blame for
+// the deleted verbatim bodies traces back through the
+// `git mv scorecard_lib.go` commit.
 
 // -----------------------------------------------------------------------------
 // Result assembly (new for v1alpha1 enrichment surface)
