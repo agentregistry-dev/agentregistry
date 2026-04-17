@@ -465,8 +465,13 @@ func (s *Service) enrichServer(ctx context.Context, server *apiv0.ServerJSON) er
 	dependencySummary, _ := s.fetchDependencyHealthSummary(ctx, owner, repo)
 	containerSummary, _ := fetchDockerHubSummary(ctx, s.httpClient, owner, repo, server)
 
-	// OSV vulnerability scan (npm, pip, go) via manifests at repo root
-	osvRes, _ := s.runOSVScan(ctx, owner, repo)
+	// OSV vulnerability scan moved to pkg/importer/scanners/osv; legacy
+	// Service no longer runs it. Retained as nil so nil-guarded sites
+	// below continue to compile without emitting OSV data.
+	var osvRes *struct {
+		Summary string
+		Details []string
+	}
 
 	// Endpoint health probe (first remote only)
 	var endpointReachable any = nil

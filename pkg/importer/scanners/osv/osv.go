@@ -1,9 +1,11 @@
-package importer
+package osv
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -42,18 +44,24 @@ type osvScanResult struct {
 }
 
 // runOSVScan fetches basic manifests from the repo root and queries OSV for npm, pip, and go.
-func (s *Service) runOSVScan(ctx context.Context, owner, repo string) (*osvScanResult, error) {
+//
+// Decoupled from internal/registry/importer.Service during the move to
+// pkg/importer/scanners/osv: the Service receiver's httpClient and
+// fetchRepoContentFile dependencies are now explicit (client + token)
+// params plus an inlined fetchRepoContentFile helper below. Body is
+// otherwise unchanged from internal/registry/importer/osv_scan.go.
+func runOSVScan(ctx context.Context, client *http.Client, githubToken, owner, repo string) (*osvScanResult, error) {
 	timeout := 30 * time.Second
-	if s.httpClient != nil && s.httpClient.Timeout > 0 {
-		timeout = s.httpClient.Timeout
+	if client != nil && client.Timeout > 0 {
+		timeout = client.Timeout
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	// Try to fetch manifests at repo root via GitHub contents API
-	pkgLock, _ := s.fetchRepoContentFile(ctx, owner, repo, "package-lock.json")
-	reqTxt, _ := s.fetchRepoContentFile(ctx, owner, repo, "requirements.txt")
-	goMod, _ := s.fetchRepoContentFile(ctx, owner, repo, "go.mod")
+	pkgLock, _ := fetchRepoContentFile(ctx, client, githubToken, owner, repo, "package-lock.json")
+	reqTxt, _ := fetchRepoContentFile(ctx, client, githubToken, owner, repo, "requirements.txt")
+	goMod, _ := fetchRepoContentFile(ctx, client, githubToken, owner, repo, "go.mod")
 
 	var queries []osvPackageQuery
 	if len(pkgLock) > 0 {
@@ -80,7 +88,7 @@ func (s *Service) runOSVScan(ctx context.Context, owner, repo string) (*osvScanR
 		queries = append(queries, q)
 	}
 
-	vulnsPerIndex, ids, totals, err := s.queryOSVBatch(ctx, queries)
+	vulnsPerIndex, ids, totals, err := queryOSVBatch(ctx, client, queries)
 	if err != nil {
 		return nil, err
 	}
@@ -250,14 +258,17 @@ type osvSeverityTotals struct {
 	Medium   int
 }
 
-func (s *Service) queryOSVBatch(ctx context.Context, queries []osvPackageQuery) ([]int, [][]string, *osvSeverityTotals, error) {
+// queryOSVBatch posts a dedup'd query list against OSV's batch
+// endpoint. Body is identical to the legacy importer implementation
+// (ported from internal/registry/importer/osv_scan.go) aside from the
+// receiver → explicit client parameter swap.
+func queryOSVBatch(ctx context.Context, client *http.Client, queries []osvPackageQuery) ([]int, [][]string, *osvSeverityTotals, error) {
 	body, _ := json.Marshal(osvBatchRequest{Queries: queries})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.osv.dev/v1/querybatch", strings.NewReader(string(body)))
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	client := s.httpClient
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -304,4 +315,51 @@ func (s *Service) queryOSVBatch(ctx context.Context, queries []osvPackageQuery) 
 		}
 	}
 	return counts, ids, totals, nil
+}
+
+// fetchRepoContentFile reads a single file from the GitHub contents
+// API. Body is ported from the legacy importer's
+// fetchRepoContentFileWithRename (internal/registry/importer/importer.go)
+// minus the rename-detection retry path, which was specific to the
+// legacy dedup/reimport flow and not required by a scanner invocation.
+func fetchRepoContentFile(ctx context.Context, client *http.Client, githubToken, owner, repo, path string) ([]byte, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/%s", owner, repo, path)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if githubToken != "" {
+		req.Header.Set("Authorization", "Bearer "+githubToken)
+	}
+	if req.Header.Get("Accept") == "" {
+		req.Header.Set("Accept", "application/vnd.github+json")
+	}
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("content %s status %d", path, resp.StatusCode)
+	}
+	var payload struct {
+		Content  string `json:"content"`
+		Encoding string `json:"encoding"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, err
+	}
+	if strings.ToLower(payload.Encoding) == "base64" {
+		data, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(payload.Content, "\n", ""))
+		if err != nil {
+			return nil, err
+		}
+		return data, nil
+	}
+	// fallback: sometimes API may return raw
+	body, _ := io.ReadAll(resp.Body)
+	return body, nil
 }
