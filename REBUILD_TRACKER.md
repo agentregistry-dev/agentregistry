@@ -243,9 +243,30 @@ flips True; cancellation tears it down cleanly.
 
 ---
 
-## 6. Validators
+## 6. Validators — **STRUCTURAL PORTED** (commit 81e732e, 2026-04-17)
 
-**Current state**:
+Per-kind `Validate()` + `ResolveRefs()` now live on every v1alpha1 typed
+envelope and are called by the generic resource handler's PUT path.
+Config.Resolver plugs in an optional cross-kind existence checker.
+
+**Ported**: name/namespace/version format, URL (https-only), repository
+source (git), label/finalizer shape, per-kind spec structural checks,
+ResourceRef kind allowlists (MCPServers must be MCPServer, TargetRef
+must be Agent/MCPServer, ProviderRef must be Provider), namespace
+inheritance on blank ref namespaces. 28 unit tests + 3 integration
+tests green.
+
+**Still deferred**: HTTP-based external-registry validation
+(NPM/PyPI/NuGet/OCI/MCPB identifier probing), duplicate-URL detection
+across packages+remotes, `_meta.publisherProvided` size limit, namespace
+↔ domain mapping, auto-write of `Validated` condition on apply. These
+come back in follow-up PRs — legacy code for them still lives in
+`internal/registry/validators/registries/` and gets restored into
+`pkg/api/v1alpha1/validation/registries/` when needed.
+
+**Legacy files still present** (owned by per-kind services not yet
+ported — Group 3):
+
 - `internal/registry/validators/validators.go` — `ValidateAgentJSON`,
   `ValidateServerJSON`, `ValidateSkillJSON`, `ValidatePromptJSON` (~600 LOC).
 - `internal/registry/validators/utils.go` — URL check, slug, semver helpers.
