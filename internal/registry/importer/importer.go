@@ -452,12 +452,12 @@ func (s *Service) enrichServer(ctx context.Context, server *apiv0.ServerJSON) er
 	// OpenSSF Scorecard (public API)
 	ossfScore, _ := s.fetchOpenSSFScore(ctx, owner, repo)
 
+	// Scorecard library-backed scan moved to
+	// pkg/importer/scanners/scorecard; legacy Service no longer
+	// invokes it. The CLI fallback (runScorecardLocal) is preserved
+	// below for the legacy enrichment path.
 	var scorecardHighlights []string
-	trimmedToken := strings.TrimSpace(s.githubToken)
-	if score, highlights, err := runScorecardLibrary(ctx, owner, repo, trimmedToken); err == nil && score > 0 {
-		ossfScore = score
-		scorecardHighlights = highlights
-	} else if score, err := runScorecardLocal(ctx, owner, repo); err == nil && score > 0 {
+	if score, err := runScorecardLocal(ctx, owner, repo); err == nil && score > 0 {
 		ossfScore = score
 	}
 
