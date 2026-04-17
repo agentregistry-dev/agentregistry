@@ -5,6 +5,28 @@ import (
 	"fmt"
 )
 
+// Registry type identifiers for RegistryPackage.RegistryType. Values
+// match the modelcontextprotocol/registry vocabulary — on-the-wire
+// string literals, not an enum — so existing seed data and
+// manifests round-trip unchanged.
+const (
+	RegistryTypeNPM   = "npm"
+	RegistryTypePyPI  = "pypi"
+	RegistryTypeOCI   = "oci"
+	RegistryTypeNuGet = "nuget"
+	RegistryTypeMCPB  = "mcpb"
+)
+
+// Canonical public registry base URLs the validators check
+// RegistryBaseURL against when the field is set explicitly.
+const (
+	RegistryURLNPM    = "https://registry.npmjs.org"
+	RegistryURLPyPI   = "https://pypi.org"
+	RegistryURLNuGet  = "https://api.nuget.org"
+	RegistryURLGitHub = "https://github.com"
+	RegistryURLGitLab = "https://gitlab.com"
+)
+
 // RegistryPackage is the minimal package view a registry validator
 // consumes. AgentPackage, SkillPackage, and MCPPackage each expose
 // these fields; the per-kind ValidateRegistries method converts its

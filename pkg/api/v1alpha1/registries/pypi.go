@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/modelcontextprotocol/registry/pkg/model"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 var (
@@ -25,10 +25,10 @@ type PyPIPackageResponse struct {
 }
 
 // ValidatePyPI validates that a PyPI package contains the correct MCP server name
-func ValidatePyPI(ctx context.Context, pkg model.Package, serverName string) error {
+func ValidatePyPI(ctx context.Context, pkg v1alpha1.RegistryPackage, serverName string) error {
 	// Set default registry base URL if empty
 	if pkg.RegistryBaseURL == "" {
-		pkg.RegistryBaseURL = model.RegistryURLPyPI
+		pkg.RegistryBaseURL = v1alpha1.RegistryURLPyPI
 	}
 
 	if pkg.Identifier == "" {
@@ -45,9 +45,9 @@ func ValidatePyPI(ctx context.Context, pkg model.Package, serverName string) err
 	}
 
 	// Validate that the registry base URL matches PyPI exactly
-	if pkg.RegistryBaseURL != model.RegistryURLPyPI {
+	if pkg.RegistryBaseURL != v1alpha1.RegistryURLPyPI {
 		return fmt.Errorf("registry type and base URL do not match: '%s' is not valid for registry type '%s'. Expected: %s",
-			pkg.RegistryBaseURL, model.RegistryTypePyPI, model.RegistryURLPyPI)
+			pkg.RegistryBaseURL, v1alpha1.RegistryTypePyPI, v1alpha1.RegistryURLPyPI)
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}

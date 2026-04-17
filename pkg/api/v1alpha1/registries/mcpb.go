@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/modelcontextprotocol/registry/pkg/model"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 var (
@@ -18,7 +18,7 @@ var (
 	ErrMissingFileSHA256ForMCPB = fmt.Errorf("must include a fileSha256 hash for integrity verification")
 )
 
-func ValidateMCPB(ctx context.Context, pkg model.Package, _ string) error {
+func ValidateMCPB(ctx context.Context, pkg v1alpha1.RegistryPackage, _ string) error {
 	// MCPB packages must include a file hash for integrity verification
 	if pkg.FileSHA256 == "" {
 		return ErrMissingFileSHA256ForMCPB

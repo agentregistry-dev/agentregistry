@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/validators/registries"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	v1alpha1registries "github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 )
 
@@ -14,27 +13,30 @@ import (
 // 1. allowed on the official registry (based on registry base url); and
 // 2. owned by the publisher, by checking for a matching server name in the package metadata
 //
-// OCI validation dispatches to the v1alpha1 port; other registries
-// still fall through to the legacy validators until their per-registry
-// ports land.
+// All per-registry validators now live under pkg/api/v1alpha1/registries
+// and operate on v1alpha1.RegistryPackage. This function preserves the
+// legacy model.Package entry point (still called by the legacy
+// importer + service layer) and translates on the fly; new-path
+// callers use registries.Validator directly.
 func ValidatePackage(ctx context.Context, pkg model.Package, serverName string) error {
+	rp := v1alpha1.RegistryPackage{
+		RegistryType:    pkg.RegistryType,
+		Identifier:      pkg.Identifier,
+		Version:         pkg.Version,
+		RegistryBaseURL: pkg.RegistryBaseURL,
+		FileSHA256:      pkg.FileSHA256,
+	}
 	switch pkg.RegistryType {
 	case model.RegistryTypeNPM:
-		return registries.ValidateNPM(ctx, pkg, serverName)
+		return registries.ValidateNPM(ctx, rp, serverName)
 	case model.RegistryTypePyPI:
-		return registries.ValidatePyPI(ctx, pkg, serverName)
+		return registries.ValidatePyPI(ctx, rp, serverName)
 	case model.RegistryTypeNuGet:
-		return registries.ValidateNuGet(ctx, pkg, serverName)
+		return registries.ValidateNuGet(ctx, rp, serverName)
 	case model.RegistryTypeOCI:
-		return v1alpha1registries.ValidateOCI(ctx, v1alpha1.RegistryPackage{
-			RegistryType:    pkg.RegistryType,
-			Identifier:      pkg.Identifier,
-			Version:         pkg.Version,
-			RegistryBaseURL: pkg.RegistryBaseURL,
-			FileSHA256:      pkg.FileSHA256,
-		}, serverName)
+		return registries.ValidateOCI(ctx, rp, serverName)
 	case model.RegistryTypeMCPB:
-		return registries.ValidateMCPB(ctx, pkg, serverName)
+		return registries.ValidateMCPB(ctx, rp, serverName)
 	default:
 		return fmt.Errorf("unsupported registry type: %s", pkg.RegistryType)
 	}

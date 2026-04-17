@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/validators/registries"
-	"github.com/modelcontextprotocol/registry/pkg/model"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -96,8 +96,8 @@ func TestValidateNuGet_RealPackages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pkg := model.Package{
-				RegistryType: model.RegistryTypeNuGet,
+			pkg := v1alpha1.RegistryPackage{
+				RegistryType: v1alpha1.RegistryTypeNuGet,
 				Identifier:   tt.packageName,
 				Version:      tt.version,
 			}

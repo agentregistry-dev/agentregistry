@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/validators/registries"
-	"github.com/modelcontextprotocol/registry/pkg/model"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -103,8 +103,8 @@ func TestValidateMCPB(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pkg := model.Package{
-				RegistryType: model.RegistryTypeMCPB,
+			pkg := v1alpha1.RegistryPackage{
+				RegistryType: v1alpha1.RegistryTypeMCPB,
 				Identifier:   tt.packageName,
 				FileSHA256:   tt.fileSHA256,
 			}
@@ -126,14 +126,14 @@ func TestValidateMCPB_OptionalFields(t *testing.T) {
 
 	tests := []struct {
 		name         string
-		pkg          model.Package
+		pkg          v1alpha1.RegistryPackage
 		expectError  bool
 		errorMessage string
 	}{
 		{
 			name: "MCPB package with optional version field should pass",
-			pkg: model.Package{
-				RegistryType: model.RegistryTypeMCPB,
+			pkg: v1alpha1.RegistryPackage{
+				RegistryType: v1alpha1.RegistryTypeMCPB,
 				Identifier:   "https://github.com/domdomegg/airtable-mcp-server/releases/download/v1.7.2/airtable-mcp-server.mcpb",
 				Version:      "1.7.2",
 				FileSHA256:   "8220de07a08ebe908f04da139ea03dbfe29758141347e945da60535fb7bcca20",
@@ -142,8 +142,8 @@ func TestValidateMCPB_OptionalFields(t *testing.T) {
 		},
 		{
 			name: "MCPB package without version field should pass",
-			pkg: model.Package{
-				RegistryType: model.RegistryTypeMCPB,
+			pkg: v1alpha1.RegistryPackage{
+				RegistryType: v1alpha1.RegistryTypeMCPB,
 				Identifier:   "https://github.com/domdomegg/airtable-mcp-server/releases/download/v1.7.2/airtable-mcp-server.mcpb",
 				FileSHA256:   "8220de07a08ebe908f04da139ea03dbfe29758141347e945da60535fb7bcca20",
 			},
@@ -151,8 +151,8 @@ func TestValidateMCPB_OptionalFields(t *testing.T) {
 		},
 		{
 			name: "MCPB package with registryBaseUrl should be rejected",
-			pkg: model.Package{
-				RegistryType:    model.RegistryTypeMCPB,
+			pkg: v1alpha1.RegistryPackage{
+				RegistryType:    v1alpha1.RegistryTypeMCPB,
 				Identifier:      "https://github.com/domdomegg/airtable-mcp-server/releases/download/v1.7.2/airtable-mcp-server.mcpb",
 				RegistryBaseURL: "https://github.com",
 				FileSHA256:      "8220de07a08ebe908f04da139ea03dbfe29758141347e945da60535fb7bcca20",
@@ -162,8 +162,8 @@ func TestValidateMCPB_OptionalFields(t *testing.T) {
 		},
 		{
 			name: "MCPB package with both version and registryBaseUrl should fail on registryBaseUrl",
-			pkg: model.Package{
-				RegistryType:    model.RegistryTypeMCPB,
+			pkg: v1alpha1.RegistryPackage{
+				RegistryType:    v1alpha1.RegistryTypeMCPB,
 				Identifier:      "https://github.com/domdomegg/airtable-mcp-server/releases/download/v1.7.2/airtable-mcp-server.mcpb",
 				Version:         "1.7.2",
 				RegistryBaseURL: "https://github.com",

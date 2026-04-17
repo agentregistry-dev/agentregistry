@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/modelcontextprotocol/registry/pkg/model"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 var (
@@ -23,10 +23,10 @@ type NPMPackageResponse struct {
 }
 
 // ValidateNPM validates that an NPM package contains the correct MCP server name
-func ValidateNPM(ctx context.Context, pkg model.Package, serverName string) error {
+func ValidateNPM(ctx context.Context, pkg v1alpha1.RegistryPackage, serverName string) error {
 	// Set default registry base URL if empty
 	if pkg.RegistryBaseURL == "" {
-		pkg.RegistryBaseURL = model.RegistryURLNPM
+		pkg.RegistryBaseURL = v1alpha1.RegistryURLNPM
 	}
 
 	if pkg.Identifier == "" {
@@ -47,9 +47,9 @@ func ValidateNPM(ctx context.Context, pkg model.Package, serverName string) erro
 	}
 
 	// Validate that the registry base URL matches NPM exactly
-	if pkg.RegistryBaseURL != model.RegistryURLNPM {
+	if pkg.RegistryBaseURL != v1alpha1.RegistryURLNPM {
 		return fmt.Errorf("registry type and base URL do not match: '%s' is not valid for registry type '%s'. Expected: %s",
-			pkg.RegistryBaseURL, model.RegistryTypeNPM, model.RegistryURLNPM)
+			pkg.RegistryBaseURL, v1alpha1.RegistryTypeNPM, v1alpha1.RegistryURLNPM)
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}

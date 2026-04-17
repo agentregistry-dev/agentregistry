@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/modelcontextprotocol/registry/pkg/model"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 var (
@@ -18,10 +18,10 @@ var (
 )
 
 // ValidateNuGet validates that a NuGet package contains the correct MCP server name
-func ValidateNuGet(ctx context.Context, pkg model.Package, serverName string) error {
+func ValidateNuGet(ctx context.Context, pkg v1alpha1.RegistryPackage, serverName string) error {
 	// Set default registry base URL if empty
 	if pkg.RegistryBaseURL == "" {
-		pkg.RegistryBaseURL = model.RegistryURLNuGet
+		pkg.RegistryBaseURL = v1alpha1.RegistryURLNuGet
 	}
 
 	if pkg.Identifier == "" {
@@ -34,9 +34,9 @@ func ValidateNuGet(ctx context.Context, pkg model.Package, serverName string) er
 	}
 
 	// Validate that the registry base URL matches NuGet exactly
-	if pkg.RegistryBaseURL != model.RegistryURLNuGet {
+	if pkg.RegistryBaseURL != v1alpha1.RegistryURLNuGet {
 		return fmt.Errorf("registry type and base URL do not match: '%s' is not valid for registry type '%s'. Expected: %s",
-			pkg.RegistryBaseURL, model.RegistryTypeNuGet, model.RegistryURLNuGet)
+			pkg.RegistryBaseURL, v1alpha1.RegistryTypeNuGet, v1alpha1.RegistryURLNuGet)
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
