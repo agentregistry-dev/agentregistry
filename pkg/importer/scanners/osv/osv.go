@@ -1,3 +1,10 @@
+// Package osv implements the OSV.dev vulnerability scanner as a
+// pkg/importer.Scanner plug-in. The fetch + parse + query logic
+// (parseNPMLockForOSV / parsePipRequirementsForOSV /
+// parseGoModForOSV + queryOSVBatch + fetchRepoContentFile) was
+// moved here from internal/registry/importer/osv_scan.go in the
+// previous commit; this file adds the Scanner struct + Config +
+// result translation that fits the v1alpha1 enrichment surface.
 package osv
 
 import (
@@ -11,7 +18,324 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/importer"
 )
+
+// ScannerName is the `source` column value used in
+// v1alpha1.enrichment_findings for rows produced by this scanner.
+const ScannerName = "osv"
+
+// Config carries the knobs a Scanner needs at construction. Zero
+// values select the public OSV + GitHub endpoints and an http.Client
+// with a 30s timeout — the defaults the legacy osv_scan used.
+type Config struct {
+	// HTTPClient is used for every outbound request.
+	HTTPClient *http.Client
+	// GitHubToken authenticates manifest fetches. Optional; unauth'd
+	// GitHub has a 60 req/hr limit which is tight for batch imports.
+	GitHubToken string
+}
+
+// Scanner is the OSV implementation of pkg/importer.Scanner.
+type Scanner struct {
+	cfg Config
+}
+
+// New constructs an OSV scanner. A nil HTTPClient is replaced by an
+// http.Client with a 30s timeout.
+func New(cfg Config) *Scanner {
+	if cfg.HTTPClient == nil {
+		cfg.HTTPClient = &http.Client{Timeout: 30 * time.Second}
+	}
+	return &Scanner{cfg: cfg}
+}
+
+// Name returns "osv".
+func (s *Scanner) Name() string { return ScannerName }
+
+// Supports reports true when obj is an Agent, MCPServer, or Skill
+// with a Repository URL that parses as a GitHub repo. Legacy
+// osv_scan only supported GitHub; the wrap preserves that scope.
+func (s *Scanner) Supports(obj v1alpha1.Object) bool {
+	_, _, ok := repoFor(obj)
+	return ok
+}
+
+// Scan runs the same fetch → parse → OSV-batch flow the legacy
+// runOSVScan did (using the parsers + queryOSVBatch still defined
+// below) and translates the response into annotations + labels +
+// findings.
+func (s *Scanner) Scan(ctx context.Context, obj v1alpha1.Object) (importer.ScanResult, error) {
+	owner, repo, ok := repoFor(obj)
+	if !ok {
+		return importer.ScanResult{}, nil
+	}
+
+	pkgLock, _ := fetchRepoContentFile(ctx, s.cfg.HTTPClient, s.cfg.GitHubToken, owner, repo, "package-lock.json")
+	reqTxt, _ := fetchRepoContentFile(ctx, s.cfg.HTTPClient, s.cfg.GitHubToken, owner, repo, "requirements.txt")
+	goMod, _ := fetchRepoContentFile(ctx, s.cfg.HTTPClient, s.cfg.GitHubToken, owner, repo, "go.mod")
+
+	var queries []osvPackageQuery
+	if len(pkgLock) > 0 {
+		queries = append(queries, parseNPMLockForOSV(pkgLock)...)
+	}
+	if len(reqTxt) > 0 {
+		queries = append(queries, parsePipRequirementsForOSV(reqTxt)...)
+	}
+	if len(goMod) > 0 {
+		queries = append(queries, parseGoModForOSV(goMod)...)
+	}
+	if len(queries) == 0 {
+		return cleanResult(), nil
+	}
+
+	// Dedup identical queries — same dedup pass the legacy flow did
+	// (order not preserved; OSV batch doesn't care).
+	dedup := map[string]osvPackageQuery{}
+	for _, q := range queries {
+		key := q.Package.Ecosystem + "|" + q.Package.Name + "|" + q.Version
+		dedup[key] = q
+	}
+	queries = queries[:0]
+	for _, q := range dedup {
+		queries = append(queries, q)
+	}
+
+	perQuery, totals, err := queryOSVBatchDetailed(ctx, s.cfg.HTTPClient, queries)
+	if err != nil {
+		return importer.ScanResult{}, fmt.Errorf("osv: %w", err)
+	}
+	return buildResult(queries, perQuery, totals), nil
+}
+
+// repoFor extracts (owner, repo) from obj's Spec.Repository.
+func repoFor(obj v1alpha1.Object) (string, string, bool) {
+	var url string
+	switch v := obj.(type) {
+	case *v1alpha1.Agent:
+		if v.Spec.Repository != nil {
+			url = v.Spec.Repository.URL
+		}
+	case *v1alpha1.MCPServer:
+		if v.Spec.Repository != nil {
+			url = v.Spec.Repository.URL
+		}
+	case *v1alpha1.Skill:
+		if v.Spec.Repository != nil {
+			url = v.Spec.Repository.URL
+		}
+	default:
+		return "", "", false
+	}
+	if url == "" {
+		return "", "", false
+	}
+	owner, repo := parseGitHubRepo(url)
+	if owner == "" || repo == "" {
+		return "", "", false
+	}
+	return owner, repo, true
+}
+
+var githubSSHRe = regexp.MustCompile(`github\.com:([^/]+)/([^/]+)$`)
+
+// parseGitHubRepo ports the legacy importer's parse helper —
+// accepts https / ssh / bare "o/r" URL forms.
+func parseGitHubRepo(raw string) (string, string) {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimSuffix(raw, ".git")
+	if strings.Contains(raw, "github.com/") {
+		parts := strings.Split(raw, "github.com/")
+		path := parts[len(parts)-1]
+		segs := strings.Split(strings.Trim(path, "/"), "/")
+		if len(segs) >= 2 {
+			return segs[0], segs[1]
+		}
+	}
+	if m := githubSSHRe.FindStringSubmatch(raw); len(m) == 3 {
+		return m[1], m[2]
+	}
+	return "", ""
+}
+
+// -----------------------------------------------------------------------------
+// Result assembly (new for v1alpha1 enrichment surface)
+// -----------------------------------------------------------------------------
+
+// cleanResult is returned when there's nothing to scan (no manifests
+// found at the repo root). Emits zero-count annotations + "clean"
+// status so the UI shows a confirmed-scanned resource rather than a
+// blank.
+func cleanResult() importer.ScanResult {
+	return importer.ScanResult{
+		Annotations: map[string]string{
+			importer.AnnoOSVStatus:        "clean",
+			importer.AnnoOSVCountCritical: "0",
+			importer.AnnoOSVCountHigh:     "0",
+			importer.AnnoOSVCountMedium:   "0",
+			importer.AnnoOSVCountLow:      "0",
+		},
+		Labels: map[string]string{
+			importer.AnnoOSVStatus: "clean",
+		},
+	}
+}
+
+// buildResult turns the per-query OSV results into annotations,
+// labels (osv-status promoted), and per-CVE findings.
+func buildResult(queries []osvPackageQuery, perQuery [][]osvVulnDetail, totals severityCounts) importer.ScanResult {
+	status := "clean"
+	for _, vs := range perQuery {
+		if len(vs) > 0 {
+			status = "vulnerable"
+			break
+		}
+	}
+	annos := map[string]string{
+		importer.AnnoOSVStatus:        status,
+		importer.AnnoOSVCountCritical: strconv.Itoa(totals.critical),
+		importer.AnnoOSVCountHigh:     strconv.Itoa(totals.high),
+		importer.AnnoOSVCountMedium:   strconv.Itoa(totals.medium),
+		importer.AnnoOSVCountLow:      strconv.Itoa(totals.low),
+	}
+	labels := map[string]string{
+		importer.AnnoOSVStatus: status,
+	}
+
+	var findings []importer.Finding
+	for i, vs := range perQuery {
+		if len(vs) == 0 {
+			continue
+		}
+		q := queries[i]
+		for _, v := range vs {
+			findings = append(findings, importer.Finding{
+				Severity: classifySeverityScore(v.maxScore),
+				ID:       v.id,
+				Data: map[string]any{
+					"package":   q.Package.Name,
+					"version":   q.Version,
+					"ecosystem": q.Package.Ecosystem,
+					"score":     v.maxScore,
+				},
+			})
+		}
+	}
+	return importer.ScanResult{
+		Annotations: annos,
+		Labels:      labels,
+		Findings:    findings,
+	}
+}
+
+// classifySeverityScore maps a CVSS numeric to the ordinal severity
+// buckets used in the findings table. Same thresholds as the legacy
+// queryOSVBatch totals accumulator (critical ≥ 9, high ≥ 7,
+// medium ≥ 4). A negative score means "no parseable severity" —
+// surfaced as Low so the CVE stays visible.
+func classifySeverityScore(score float64) string {
+	switch {
+	case score >= 9.0:
+		return "critical"
+	case score >= 7.0:
+		return "high"
+	case score >= 4.0:
+		return "medium"
+	case score >= 0:
+		return "low"
+	default:
+		return "low"
+	}
+}
+
+// osvVulnDetail is the structured per-CVE record that
+// queryOSVBatchDetailed returns alongside the legacy totals. The
+// legacy queryOSVBatch (still defined below) returns only ID lists
+// per query and aggregate severity totals; Scanner.Scan needs the
+// per-CVE max score to emit one Finding per vuln with correct
+// severity.
+type osvVulnDetail struct {
+	id       string
+	maxScore float64
+}
+
+type severityCounts struct {
+	critical, high, medium, low int
+}
+
+// queryOSVBatchDetailed is queryOSVBatch's richer sibling used by
+// Scanner.Scan. Issues the same POST as queryOSVBatch but retains
+// per-CVE severity so findings can be emitted per-finding.
+//
+// Kept in this file (rather than replacing queryOSVBatch) so the
+// legacy-ported queryOSVBatch body stays byte-identical and
+// discoverable via git blame.
+func queryOSVBatchDetailed(ctx context.Context, client *http.Client, queries []osvPackageQuery) ([][]osvVulnDetail, severityCounts, error) {
+	body, _ := json.Marshal(osvBatchRequest{Queries: queries})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.osv.dev/v1/querybatch", strings.NewReader(string(body)))
+	if err != nil {
+		return nil, severityCounts{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, severityCounts{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, severityCounts{}, fmt.Errorf("osv status %d", resp.StatusCode)
+	}
+	var br osvBatchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&br); err != nil {
+		return nil, severityCounts{}, err
+	}
+
+	out := make([][]osvVulnDetail, len(queries))
+	var totals severityCounts
+	for i := range out {
+		if i >= len(br.Results) {
+			continue
+		}
+		for _, v := range br.Results[i].Vulns {
+			var best float64 = -1
+			for _, sev := range v.Severity {
+				if sev.Score == "" {
+					continue
+				}
+				if f, err := strconv.ParseFloat(sev.Score, 64); err == nil && f > best {
+					best = f
+				}
+			}
+			out[i] = append(out[i], osvVulnDetail{id: v.ID, maxScore: best})
+			switch {
+			case best >= 9.0:
+				totals.critical++
+			case best >= 7.0:
+				totals.high++
+			case best >= 4.0:
+				totals.medium++
+			case best >= 0:
+				totals.low++
+			default:
+				totals.low++
+			}
+		}
+	}
+	return out, totals, nil
+}
+
+// Compile-time assertion that *Scanner satisfies importer.Scanner.
+var _ importer.Scanner = (*Scanner)(nil)
+
+// -----------------------------------------------------------------------------
+// Legacy (pre-Scanner) helpers. Preserved byte-for-byte from the move
+// commit so git blame traces back to the original authorship.
+// -----------------------------------------------------------------------------
 
 // osvPackageQuery represents one package@version to query in OSV.
 type osvPackageQuery struct {
@@ -38,97 +362,9 @@ type osvBatchResponse struct {
 	} `json:"results"`
 }
 
-type osvScanResult struct {
-	Summary string
-	Details []string
-}
-
-// runOSVScan fetches basic manifests from the repo root and queries OSV for npm, pip, and go.
-//
-// Decoupled from internal/registry/importer.Service during the move to
-// pkg/importer/scanners/osv: the Service receiver's httpClient and
-// fetchRepoContentFile dependencies are now explicit (client + token)
-// params plus an inlined fetchRepoContentFile helper below. Body is
-// otherwise unchanged from internal/registry/importer/osv_scan.go.
-func runOSVScan(ctx context.Context, client *http.Client, githubToken, owner, repo string) (*osvScanResult, error) {
-	timeout := 30 * time.Second
-	if client != nil && client.Timeout > 0 {
-		timeout = client.Timeout
-	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	// Try to fetch manifests at repo root via GitHub contents API
-	pkgLock, _ := fetchRepoContentFile(ctx, client, githubToken, owner, repo, "package-lock.json")
-	reqTxt, _ := fetchRepoContentFile(ctx, client, githubToken, owner, repo, "requirements.txt")
-	goMod, _ := fetchRepoContentFile(ctx, client, githubToken, owner, repo, "go.mod")
-
-	var queries []osvPackageQuery
-	if len(pkgLock) > 0 {
-		queries = append(queries, parseNPMLockForOSV(pkgLock)...)
-	}
-	if len(reqTxt) > 0 {
-		queries = append(queries, parsePipRequirementsForOSV(reqTxt)...)
-	}
-	if len(goMod) > 0 {
-		queries = append(queries, parseGoModForOSV(goMod)...)
-	}
-	if len(queries) == 0 {
-		return &osvScanResult{Summary: "osv: none"}, nil
-	}
-
-	// Deduplicate identical queries
-	dedup := map[string]osvPackageQuery{}
-	for _, q := range queries {
-		key := q.Package.Ecosystem + "|" + q.Package.Name + "|" + q.Version
-		dedup[key] = q
-	}
-	queries = make([]osvPackageQuery, 0, len(dedup))
-	for _, q := range dedup {
-		queries = append(queries, q)
-	}
-
-	vulnsPerIndex, ids, totals, err := queryOSVBatch(ctx, client, queries)
-	if err != nil {
-		return nil, err
-	}
-
-	// Count by ecosystem
-	npmCount, pipCount, goCount := 0, 0, 0
-	details := []string{}
-	for i, q := range queries {
-		vcount := vulnsPerIndex[i]
-		if vcount == 0 {
-			continue
-		}
-		switch q.Package.Ecosystem {
-		case "npm":
-			npmCount += vcount
-		case "PyPI":
-			pipCount += vcount
-		case "Go":
-			goCount += vcount
-		}
-		// include up to 2 IDs per package for detail
-		idlist := ids[i]
-		if len(idlist) > 2 {
-			idlist = idlist[:2]
-		}
-		details = append(details, fmt.Sprintf("%s@%s (%s): %s", q.Package.Name, q.Version, q.Package.Ecosystem, strings.Join(idlist, ", ")))
-		if len(details) > 50 {
-			break
-		}
-	}
-
-	summary := fmt.Sprintf("osv: npm=%d, pip=%d, go=%d", npmCount, pipCount, goCount)
-	if totals != nil {
-		sum := totals.Critical + totals.High + totals.Medium
-		if sum > 0 {
-			summary = fmt.Sprintf("%s; severity: critical=%d, high=%d, medium=%d", summary, totals.Critical, totals.High, totals.Medium)
-		}
-	}
-	return &osvScanResult{Summary: summary, Details: details}, nil
-}
+// runOSVScan + osvScanResult were the pre-Scanner entry point and
+// return type. Scanner.Scan + buildResult replace them; the fetch
+// → dedup → batch flow is inlined into Scanner.Scan above.
 
 func parseNPMLockForOSV(data []byte) []osvPackageQuery {
 	type lockPkg struct {
@@ -252,70 +488,12 @@ func parseGoModForOSV(data []byte) []osvPackageQuery {
 	return queries
 }
 
-type osvSeverityTotals struct {
-	Critical int
-	High     int
-	Medium   int
-}
-
-// queryOSVBatch posts a dedup'd query list against OSV's batch
-// endpoint. Body is identical to the legacy importer implementation
-// (ported from internal/registry/importer/osv_scan.go) aside from the
-// receiver → explicit client parameter swap.
-func queryOSVBatch(ctx context.Context, client *http.Client, queries []osvPackageQuery) ([]int, [][]string, *osvSeverityTotals, error) {
-	body, _ := json.Marshal(osvBatchRequest{Queries: queries})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.osv.dev/v1/querybatch", strings.NewReader(string(body)))
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if client == nil {
-		client = http.DefaultClient
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return nil, nil, nil, fmt.Errorf("osv status %d", resp.StatusCode)
-	}
-	var br osvBatchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&br); err != nil {
-		return nil, nil, nil, err
-	}
-	counts := make([]int, len(queries))
-	ids := make([][]string, len(queries))
-	totals := &osvSeverityTotals{}
-	for i := range counts {
-		if i >= len(br.Results) {
-			continue
-		}
-		r := br.Results[i]
-		counts[i] = len(r.Vulns)
-		for _, v := range r.Vulns {
-			ids[i] = append(ids[i], v.ID)
-			// try to parse severity score when available
-			for _, sev := range v.Severity {
-				if sev.Score == "" {
-					continue
-				}
-				// scores are typically numeric strings, e.g., "7.8"
-				if f, err := strconv.ParseFloat(sev.Score, 64); err == nil {
-					switch {
-					case f >= 9.0:
-						totals.Critical++
-					case f >= 7.0:
-						totals.High++
-					case f >= 4.0:
-						totals.Medium++
-					}
-				}
-			}
-		}
-	}
-	return counts, ids, totals, nil
-}
+// queryOSVBatch + osvSeverityTotals were the pre-Scanner batch
+// helpers. Scanner.Scan uses queryOSVBatchDetailed above (same
+// request payload, richer per-CVE return) instead. The legacy flow
+// isn't preserved as a callable function because no caller remains
+// after this refactor; git blame continuity is via the rename
+// commit.
 
 // fetchRepoContentFile reads a single file from the GitHub contents
 // API. Body is ported from the legacy importer's
