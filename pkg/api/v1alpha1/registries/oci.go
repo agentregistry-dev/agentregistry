@@ -1,3 +1,14 @@
+// Package registries ports the per-registry validators from
+// internal/registry/validators/registries onto the v1alpha1.RegistryPackage
+// view. Each validator (OCI, NPM, PyPI, NuGet, MCPB) is a standalone
+// function that hits the corresponding external registry to confirm
+// the package exists + (where supported) carries an ownership
+// annotation matching the resource's metadata.name.
+//
+// git mv preserves authorship of each file through the move; the
+// only byte-level change on each moved file is the signature swap
+// from modelcontextprotocol/registry model.Package to
+// pkg/api/v1alpha1.RegistryPackage.
 package registries
 
 import (
@@ -13,7 +24,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
-	"github.com/modelcontextprotocol/registry/pkg/model"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 var (
@@ -47,7 +59,7 @@ var allowedOCIRegistries = map[string]bool{
 //   - Docker Hub (docker.io)
 //   - GitHub Container Registry (ghcr.io)
 //   - Google Artifact Registry (*.pkg.dev)
-func ValidateOCI(ctx context.Context, pkg model.Package, serverName string) error {
+func ValidateOCI(ctx context.Context, pkg v1alpha1.RegistryPackage, serverName string) error {
 	if pkg.Identifier == "" {
 		return ErrMissingIdentifierForOCI
 	}

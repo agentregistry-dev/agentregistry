@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/validators/registries"
-	"github.com/modelcontextprotocol/registry/pkg/model"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -96,8 +96,8 @@ func TestValidateOCI_RegistryAllowlist(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pkg := model.Package{
-				RegistryType: model.RegistryTypeOCI,
+			pkg := v1alpha1.RegistryPackage{
+				RegistryType: "oci",
 				Identifier:   tt.identifier,
 			}
 
@@ -119,13 +119,13 @@ func TestValidateOCI_RejectsOldFormat(t *testing.T) {
 
 	tests := []struct {
 		name         string
-		pkg          model.Package
+		pkg          v1alpha1.RegistryPackage
 		errorMessage string
 	}{
 		{
 			name: "OCI package with registryBaseUrl should be rejected",
-			pkg: model.Package{
-				RegistryType:    model.RegistryTypeOCI,
+			pkg: v1alpha1.RegistryPackage{
+				RegistryType:    "oci",
 				RegistryBaseURL: "https://docker.io",
 				Identifier:      "docker.io/test/image:latest",
 			},
@@ -133,8 +133,8 @@ func TestValidateOCI_RejectsOldFormat(t *testing.T) {
 		},
 		{
 			name: "OCI package with version field should be rejected",
-			pkg: model.Package{
-				RegistryType: model.RegistryTypeOCI,
+			pkg: v1alpha1.RegistryPackage{
+				RegistryType: "oci",
 				Identifier:   "docker.io/test/image:latest",
 				Version:      "1.0.0",
 			},
@@ -142,8 +142,8 @@ func TestValidateOCI_RejectsOldFormat(t *testing.T) {
 		},
 		{
 			name: "OCI package with fileSha256 field should be rejected",
-			pkg: model.Package{
-				RegistryType: model.RegistryTypeOCI,
+			pkg: v1alpha1.RegistryPackage{
+				RegistryType: "oci",
 				Identifier:   "docker.io/test/image:latest",
 				FileSHA256:   "abcd1234",
 			},
@@ -180,8 +180,8 @@ func TestValidateOCI_InvalidReferences(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pkg := model.Package{
-				RegistryType: model.RegistryTypeOCI,
+			pkg := v1alpha1.RegistryPackage{
+				RegistryType: "oci",
 				Identifier:   tt.identifier,
 			}
 
@@ -195,8 +195,8 @@ func TestValidateOCI_InvalidReferences(t *testing.T) {
 func TestValidateOCI_EmptyIdentifier(t *testing.T) {
 	ctx := context.Background()
 
-	pkg := model.Package{
-		RegistryType: model.RegistryTypeOCI,
+	pkg := v1alpha1.RegistryPackage{
+		RegistryType: "oci",
 		Identifier:   "",
 	}
 
@@ -209,8 +209,8 @@ func TestValidateOCI_SuccessfulValidation(t *testing.T) {
 	ctx := context.Background()
 
 	// Test with a real MCP server image that has the correct label
-	pkg := model.Package{
-		RegistryType: model.RegistryTypeOCI,
+	pkg := v1alpha1.RegistryPackage{
+		RegistryType: "oci",
 		Identifier:   "ghcr.io/github/github-mcp-server:latest",
 	}
 
@@ -223,8 +223,8 @@ func TestValidateOCI_LabelMismatch(t *testing.T) {
 
 	// Test with a real MCP server image but wrong expected server name
 	// This should fail because the label doesn't match
-	pkg := model.Package{
-		RegistryType: model.RegistryTypeOCI,
+	pkg := v1alpha1.RegistryPackage{
+		RegistryType: "oci",
 		Identifier:   "ghcr.io/github/github-mcp-server:latest",
 	}
 

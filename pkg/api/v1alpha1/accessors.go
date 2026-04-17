@@ -28,6 +28,12 @@ type Object interface {
 	// resolves via the supplied resolver. A nil resolver is a no-op.
 	// Returns a FieldErrors when one or more refs dangle.
 	ResolveRefs(ctx context.Context, resolver ResolverFunc) error
+	// ValidateRegistries runs a per-package validation against the
+	// supplied RegistryValidatorFunc (typically an OCI/NPM/PyPI/etc.
+	// dispatcher that hits external registries). A nil validator is
+	// a no-op so structural tests don't need the network. Returns a
+	// FieldErrors aggregating all failing packages.
+	ValidateRegistries(ctx context.Context, v RegistryValidatorFunc) error
 }
 
 // Pointer receivers so SetMetadata/SetStatus mutate the caller's value.
