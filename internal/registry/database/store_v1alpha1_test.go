@@ -24,7 +24,7 @@ func mustSpec(t *testing.T, spec any) json.RawMessage {
 }
 
 func TestV1Alpha1Store_UpsertCreatesRow(t *testing.T) {
-	pool := newV1Alpha1TestPool(t)
+	pool := NewV1Alpha1TestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -44,7 +44,7 @@ func TestV1Alpha1Store_UpsertCreatesRow(t *testing.T) {
 }
 
 func TestV1Alpha1Store_UpsertNoOpPreservesGeneration(t *testing.T) {
-	pool := newV1Alpha1TestPool(t)
+	pool := NewV1Alpha1TestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -61,7 +61,7 @@ func TestV1Alpha1Store_UpsertNoOpPreservesGeneration(t *testing.T) {
 }
 
 func TestV1Alpha1Store_UpsertBumpsGenerationOnSpecChange(t *testing.T) {
-	pool := newV1Alpha1TestPool(t)
+	pool := NewV1Alpha1TestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -82,7 +82,7 @@ func TestV1Alpha1Store_UpsertBumpsGenerationOnSpecChange(t *testing.T) {
 }
 
 func TestV1Alpha1Store_LatestVersionSemverToggle(t *testing.T) {
-	pool := newV1Alpha1TestPool(t)
+	pool := NewV1Alpha1TestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -102,7 +102,7 @@ func TestV1Alpha1Store_LatestVersionSemverToggle(t *testing.T) {
 }
 
 func TestV1Alpha1Store_LatestVersionFallbackOnInvalidSemver(t *testing.T) {
-	pool := newV1Alpha1TestPool(t)
+	pool := NewV1Alpha1TestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -118,7 +118,7 @@ func TestV1Alpha1Store_LatestVersionFallbackOnInvalidSemver(t *testing.T) {
 }
 
 func TestV1Alpha1Store_PatchStatusDisjointFromSpec(t *testing.T) {
-	pool := newV1Alpha1TestPool(t)
+	pool := NewV1Alpha1TestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -147,7 +147,7 @@ func TestV1Alpha1Store_PatchStatusDisjointFromSpec(t *testing.T) {
 }
 
 func TestV1Alpha1Store_PatchStatusNotFound(t *testing.T) {
-	pool := newV1Alpha1TestPool(t)
+	pool := NewV1Alpha1TestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -156,7 +156,7 @@ func TestV1Alpha1Store_PatchStatusNotFound(t *testing.T) {
 }
 
 func TestV1Alpha1Store_GetNotFound(t *testing.T) {
-	pool := newV1Alpha1TestPool(t)
+	pool := NewV1Alpha1TestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -168,7 +168,7 @@ func TestV1Alpha1Store_GetNotFound(t *testing.T) {
 }
 
 func TestV1Alpha1Store_Delete(t *testing.T) {
-	pool := newV1Alpha1TestPool(t)
+	pool := NewV1Alpha1TestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -190,7 +190,7 @@ func TestV1Alpha1Store_Delete(t *testing.T) {
 }
 
 func TestV1Alpha1Store_List(t *testing.T) {
-	pool := newV1Alpha1TestPool(t)
+	pool := NewV1Alpha1TestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -221,7 +221,7 @@ func TestV1Alpha1Store_List(t *testing.T) {
 }
 
 func TestV1Alpha1Store_FindReferrers(t *testing.T) {
-	pool := newV1Alpha1TestPool(t)
+	pool := NewV1Alpha1TestPool(t)
 	agents := NewStore(pool, "agents")
 	ctx := context.Background()
 
@@ -250,7 +250,7 @@ func TestV1Alpha1Store_FindReferrers(t *testing.T) {
 }
 
 func TestV1Alpha1Store_SeededProviders(t *testing.T) {
-	pool := newV1Alpha1TestPool(t)
+	pool := NewV1Alpha1TestPool(t)
 	providers := NewStore(pool, "providers")
 	ctx := context.Background()
 
