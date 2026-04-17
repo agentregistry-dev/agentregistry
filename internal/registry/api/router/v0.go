@@ -49,20 +49,17 @@ type RegistryServices struct {
 	Deployment deploymentsvc.Registry
 }
 
-// V1Alpha1Stores bundles the per-kind generic Stores used by the v1alpha1
-// resource handler. Each Store is bound to its schema-qualified table
-// (`v1alpha1.agents`, etc.). When non-nil on RouteOptions, RegisterRoutes
-// wires the v1alpha1 generic handler at
-// `/v0/namespaces/{ns}/{plural}/...` alongside the legacy per-kind
-// handlers at the unnamespaced `/v0/{plural}/...` paths.
-type V1Alpha1Stores struct {
-	Agents      *internaldb.Store
-	MCPServers  *internaldb.Store
-	Skills      *internaldb.Store
-	Prompts     *internaldb.Store
-	Providers   *internaldb.Store
-	Deployments *internaldb.Store
-}
+// V1Alpha1Stores is the per-kind Store map used by the v1alpha1
+// resource handler, keyed by v1alpha1 Kind name (e.g. "Agent",
+// "MCPServer"). Produced by database.NewV1Alpha1Stores; enterprise
+// builds may extend the map with additional kinds before passing it
+// in.
+//
+// When non-nil on RouteOptions, RegisterRoutes wires the v1alpha1
+// generic handler at `/v0/namespaces/{ns}/{plural}/...` alongside the
+// legacy per-kind handlers at the unnamespaced `/v0/{plural}/...`
+// paths.
+type V1Alpha1Stores = map[string]*internaldb.Store
 
 // RouteOptions contains optional services for route registration.
 type RouteOptions struct {
@@ -74,10 +71,10 @@ type RouteOptions struct {
 	ProviderPlatforms   map[string]registrytypes.ProviderPlatformAdapter
 	DeploymentPlatforms map[string]registrytypes.DeploymentPlatformAdapter
 
-	// V1Alpha1Stores, when non-nil, enables the generic v1alpha1 handler
+	// V1Alpha1Stores, when non-empty, enables the generic v1alpha1 handler
 	// at `/v0/namespaces/{ns}/{plural}/...`. Legacy routes stay live
 	// regardless; clients migrate off them incrementally.
-	V1Alpha1Stores *V1Alpha1Stores
+	V1Alpha1Stores V1Alpha1Stores
 
 	// Optional callback for integration-owned route registration.
 	ExtraRoutes func(api huma.API, pathPrefix string)
@@ -124,7 +121,7 @@ func RegisterRoutes(
 	// Lives alongside the legacy per-kind routes; clients migrate over
 	// time. Cross-kind dangling-ref detection uses a Store-backed
 	// resolver.
-	if opts != nil && opts.V1Alpha1Stores != nil {
+	if opts != nil && len(opts.V1Alpha1Stores) > 0 {
 		registerV1Alpha1Routes(api, pathPrefix, opts.V1Alpha1Stores)
 	}
 
@@ -138,17 +135,18 @@ func RegisterRoutes(
 
 // registerV1Alpha1Routes wires the generic resource handler for every
 // built-in kind at `{basePrefix}/namespaces/{ns}/{plural}/...` plus
-// cross-namespace list at `{basePrefix}/{plural}`. Cross-kind
-// ResourceRef existence is validated via a resolver that dispatches by
-// Kind into the appropriate Store.
-func registerV1Alpha1Routes(api huma.API, basePrefix string, stores *V1Alpha1Stores) {
+// cross-namespace list at `{basePrefix}/{plural}`, and the multi-doc
+// apply endpoint at `{basePrefix}/apply`. The shared cross-kind
+// Resolver dispatches ResourceRef existence checks by Kind into the
+// appropriate Store — one lookup table drives every path.
+func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stores) {
 	// resolver maps a v1alpha1 ResourceRef into a Get call against the
 	// Store bound to that kind's table. Returns v1alpha1.ErrDanglingRef
 	// when the row is missing so callers can distinguish a ref problem
 	// from an infrastructure error.
 	resolver := func(ctx context.Context, ref v1alpha1.ResourceRef) error {
-		store := storeForKind(stores, ref.Kind)
-		if store == nil {
+		store, ok := stores[ref.Kind]
+		if !ok {
 			return fmt.Errorf("%w: unknown kind %q", v1alpha1.ErrInvalidRef, ref.Kind)
 		}
 		var err error
@@ -166,70 +164,15 @@ func registerV1Alpha1Routes(api huma.API, basePrefix string, stores *V1Alpha1Sto
 		return nil
 	}
 
-	resource.Register[*v1alpha1.Agent](api, resource.Config{
-		Kind: v1alpha1.KindAgent, BasePrefix: basePrefix,
-		Store: stores.Agents, Resolver: resolver,
-	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+	// Per-kind CRUD endpoints — one call per built-in kind, hidden
+	// inside resource.RegisterBuiltins.
+	resource.RegisterBuiltins(api, basePrefix, stores, resolver)
 
-	resource.Register[*v1alpha1.MCPServer](api, resource.Config{
-		Kind: v1alpha1.KindMCPServer, BasePrefix: basePrefix,
-		Store: stores.MCPServers, Resolver: resolver,
-	}, func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
-
-	resource.Register[*v1alpha1.Skill](api, resource.Config{
-		Kind: v1alpha1.KindSkill, BasePrefix: basePrefix,
-		Store: stores.Skills, Resolver: resolver,
-	}, func() *v1alpha1.Skill { return &v1alpha1.Skill{} })
-
-	resource.Register[*v1alpha1.Prompt](api, resource.Config{
-		Kind: v1alpha1.KindPrompt, BasePrefix: basePrefix,
-		Store: stores.Prompts, Resolver: resolver,
-	}, func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} })
-
-	resource.Register[*v1alpha1.Provider](api, resource.Config{
-		Kind: v1alpha1.KindProvider, BasePrefix: basePrefix,
-		Store: stores.Providers, Resolver: resolver,
-	}, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
-
-	resource.Register[*v1alpha1.Deployment](api, resource.Config{
-		Kind: v1alpha1.KindDeployment, BasePrefix: basePrefix,
-		Store: stores.Deployments, Resolver: resolver,
-	}, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
-
-	// POST {basePrefix}/apply — multi-doc YAML batch apply. Decodes via
-	// v1alpha1.Scheme, then per-doc: Validate → ResolveRefs → Upsert
-	// against the Store for that doc's kind. Returns per-doc results.
+	// Multi-doc YAML batch apply at POST {basePrefix}/apply. Shares
+	// the same Stores map + Resolver — no second per-kind table here.
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: basePrefix,
-		Stores: map[string]*internaldb.Store{
-			v1alpha1.KindAgent:      stores.Agents,
-			v1alpha1.KindMCPServer:  stores.MCPServers,
-			v1alpha1.KindSkill:      stores.Skills,
-			v1alpha1.KindPrompt:     stores.Prompts,
-			v1alpha1.KindProvider:   stores.Providers,
-			v1alpha1.KindDeployment: stores.Deployments,
-		},
-		Resolver: resolver,
+		Stores:     stores,
+		Resolver:   resolver,
 	})
-}
-
-// storeForKind maps a v1alpha1 Kind to the matching Store. Returns nil
-// for unknown kinds (enterprise-registered kinds, for instance — those
-// should bring their own resolver/adapter, not piggyback on this one).
-func storeForKind(s *V1Alpha1Stores, kind string) *internaldb.Store {
-	switch kind {
-	case v1alpha1.KindAgent:
-		return s.Agents
-	case v1alpha1.KindMCPServer:
-		return s.MCPServers
-	case v1alpha1.KindSkill:
-		return s.Skills
-	case v1alpha1.KindPrompt:
-		return s.Prompts
-	case v1alpha1.KindProvider:
-		return s.Providers
-	case v1alpha1.KindDeployment:
-		return s.Deployments
-	}
-	return nil
 }

@@ -334,15 +334,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	if pg, ok := db.(interface {
 		Pool() *pgxpool.Pool
 	}); ok {
-		pool := pg.Pool()
-		routeOpts.V1Alpha1Stores = &router.V1Alpha1Stores{
-			Agents:      internaldb.NewStore(pool, "v1alpha1.agents"),
-			MCPServers:  internaldb.NewStore(pool, "v1alpha1.mcp_servers"),
-			Skills:      internaldb.NewStore(pool, "v1alpha1.skills"),
-			Prompts:     internaldb.NewStore(pool, "v1alpha1.prompts"),
-			Providers:   internaldb.NewStore(pool, "v1alpha1.providers"),
-			Deployments: internaldb.NewStore(pool, "v1alpha1.deployments"),
-		}
+		routeOpts.V1Alpha1Stores = internaldb.NewV1Alpha1Stores(pg.Pool())
 		slog.Info("v1alpha1 routes enabled")
 	} else {
 		slog.Info("v1alpha1 routes disabled: database does not expose Pool() (likely noop/DatabaseFactory)")
