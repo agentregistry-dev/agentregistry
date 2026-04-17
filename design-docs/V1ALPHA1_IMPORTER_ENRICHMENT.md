@@ -221,7 +221,64 @@ Can wait for the KRT reconciler (Group 2).
 
 ---
 
-## Open questions
+## Resolutions (2026-04-17)
+
+All 8 questions reviewed; all resolved below. The Open questions
+section that follows preserves the trade-off discussion.
+
+1. **Add ObjectMeta.Annotations → land now as its own small PR**.
+   Separate additive design-PR (`annotations JSONB NOT NULL DEFAULT
+   '{}'::jsonb` on all 6 tables; `Annotations map[string]string` on
+   ObjectMeta; round-trip tests). Unblocks platform-adapter
+   ProviderMetadata and enrichment annotations in one go.
+
+2. **Promote hot enrichment annotations to labels for query speed →
+   yes, 3 keys**. Importer writes these to both annotations AND
+   labels:
+   - `security.agentregistry.solo.io/osv-status` = `clean|vulnerable|unknown`
+   - `security.agentregistry.solo.io/scorecard-bucket` = `A|B|C|D|F` (bucketed score)
+   - `security.agentregistry.solo.io/last-scanned-stale` = `true|false`
+   UI + API filters hit the GIN-indexed labels column; details pulled
+   from annotations on drill-down.
+
+3. **Findings table → OSS, open to enterprise-added scanners**.
+   `v1alpha1.enrichment_findings` lives in OSS migrations. Enterprise
+   proprietary scanners register via the Scanner plug-in interface
+   and write to the same table under their own `source` value.
+
+4. **Importer trust model → always validate, no bypass**. User-
+   authored manifests imported via `arctl import` always run
+   `obj.Validate()`. Broken manifests surface at import time as an
+   `ImportResult.Status=failed`. Seed-style bypass stays server-side
+   only (seed is curated, imports aren't).
+
+5. **Stale findings removal → DELETE + INSERT per scan in one tx**.
+   When a scan produces a new set of findings for (object, source),
+   the old findings for that pair are deleted and new ones inserted
+   in a single transaction. Keeps the table bounded and the rows
+   authoritative as of the last scan.
+
+6. **Per-kind applicability → scanners self-declare via
+   `Supports(obj)`**. OSV supports Agent + Skill + MCPServer;
+   Scorecard supports anything with Repository; Prompt gets skipped
+   silently. Scanners that don't support a kind return `false` and
+   are never invoked.
+
+7. **Rate-limiting → scanner-internal**. Each scanner owns its own
+   `golang.org/x/time/rate` bucket tuned to the target external
+   API's published limits. Importer doesn't coordinate; bursty
+   imports just serialize inside each scanner.
+
+8. **Failure isolation → non-fatal, logged, carried on
+   ImportResult**. `ImportResult.EnrichmentStatus` is
+   `ok|partial|failed`; importer always proceeds to Upsert the
+   object even if scanners errored. Per-scanner errors aggregated
+   into `EnrichmentErrors []string`. UI shows "scan failed, retry
+   later" instead of blocking the import.
+
+---
+
+## Open questions (for reference)
 
 ### 1. Where does `ObjectMeta.Annotations` go on the wire?
 

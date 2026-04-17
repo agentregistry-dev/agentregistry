@@ -188,7 +188,63 @@ type DiscoveryResult struct {
 
 ---
 
-## Open questions (decide before implementation)
+## Resolutions (2026-04-17)
+
+User + drafter reviewed every open question; all 8 resolved below.
+The section that follows preserves the trade-off discussion; the
+decision on each is inlined.
+
+1. **Sync vs async Apply → always async**. Every adapter returns
+   immediately with a `Progressing` condition; adapters run their
+   own internal watch loop to later write `Ready=True` via
+   `Store.PatchStatus`. Local adapter spins a goroutine + state
+   table alongside docker-compose so it matches Kubernetes semantics.
+   Trades off simplicity for uniform reconciler behavior.
+
+2. **ProviderMetadata home → Annotations**. `ObjectMeta.Annotations`
+   lands as its own small PR (see Importer doc, resolved) before
+   the adapter port so adapters can write their state there from
+   day one. No temporary inline `Status.ProviderMetadata` needed.
+
+3. **Cross-namespace refs → allowed on both target + provider**.
+   ResourceRef already has optional Namespace. Authz layer gates
+   reads across namespaces. Common case: platform-owned Providers
+   in `platform` namespace, team-owned Agents in `team-*`,
+   Deployments that combine the two.
+
+4. **Finalizer ownership → adapter declares, reconciler plumbs**.
+   Apply returns `AddFinalizers`; Remove returns `RemoveFinalizers`;
+   reconciler calls `Store.PatchFinalizers` with the lists.
+   Enterprise adapters use their own prefix; naming collision is
+   their responsibility.
+
+5. **Provider credentials → keep map[string]any, document + authz
+   gate, defer SecretRef to a separate design**. Legacy already
+   stores kubeconfig inline as a string; matching that behavior
+   preserves existing deployments. Tracker item: a dedicated
+   SecretRef design pass covering K8s Secrets, Vault, AWS SM, and
+   registry-managed secret store backends. **Not a prerequisite for
+   this port.**
+
+6. **Typed Provider config → map[string]any, adapters unmarshal**.
+   No server-side schema check on Provider.Spec.Config; adapters
+   unmarshal at Apply time and surface a `ProviderConfigured=False`
+   condition on parse failure. Preflight validation hook rejected
+   as over-engineering for demo-mode.
+
+7. **Adapter dispatch → registry `map[platform]Adapter`**.
+   AppOptions carries the map; reconciler looks up by
+   `Provider.Spec.Platform`. Matches the existing pattern.
+
+8. **Discovery output → return-and-caller-writes**. Adapter.Discover
+   returns `[]DiscoveryResult`; Syncer (or an OSS equivalent) owns
+   the writes to `discovered_local` / `discovered_kubernetes`.
+   Adapter stays side-effect-free outside its own Deployment's
+   Status.
+
+---
+
+## Trade-offs considered (for reference)
 
 ### 1. Synchronous Apply vs reconciler loop
 
