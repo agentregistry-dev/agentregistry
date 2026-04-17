@@ -41,6 +41,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func App(ctx context.Context, opts ...types.AppOptions) error {
@@ -226,6 +227,28 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		ProviderPlatforms:   providerPlatforms,
 		DeploymentPlatforms: deploymentPlatforms,
 		ExtraRoutes:         options.ExtraRoutes,
+	}
+
+	// Wire the v1alpha1 generic routes at /v0/namespaces/{ns}/{plural}/...
+	// when the underlying DB supports the v1alpha1 schema (all PostgreSQL
+	// deployments after migration 001_v1alpha1_schema.sql runs). The
+	// legacy per-kind handlers at /v0/{plural}/... stay live regardless;
+	// clients migrate off them incrementally.
+	if pg, ok := db.(interface {
+		Pool() *pgxpool.Pool
+	}); ok {
+		pool := pg.Pool()
+		routeOpts.V1Alpha1Stores = &router.V1Alpha1Stores{
+			Agents:      internaldb.NewStore(pool, "v1alpha1.agents"),
+			MCPServers:  internaldb.NewStore(pool, "v1alpha1.mcp_servers"),
+			Skills:      internaldb.NewStore(pool, "v1alpha1.skills"),
+			Prompts:     internaldb.NewStore(pool, "v1alpha1.prompts"),
+			Providers:   internaldb.NewStore(pool, "v1alpha1.providers"),
+			Deployments: internaldb.NewStore(pool, "v1alpha1.deployments"),
+		}
+		slog.Info("v1alpha1 routes enabled")
+	} else {
+		slog.Info("v1alpha1 routes disabled: database does not expose Pool() (likely noop/DatabaseFactory)")
 	}
 
 	// Initialize job manager and indexer for embeddings.

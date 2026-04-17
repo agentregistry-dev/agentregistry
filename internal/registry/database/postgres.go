@@ -119,6 +119,15 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 		return nil, fmt.Errorf("failed to run database migrations: %w", err)
 	}
 
+	// v1alpha1 schema coexists with legacy `public.*` under a dedicated
+	// `v1alpha1` PostgreSQL schema. Production DBs run both sets of
+	// migrations while subsystems port; the final cutover drops the
+	// legacy tables.
+	v1alpha1Migrator := database.NewMigrator(conn.Conn(), V1Alpha1MigratorConfig())
+	if err := v1alpha1Migrator.Migrate(ctx); err != nil {
+		return nil, fmt.Errorf("failed to run v1alpha1 migrations: %w", err)
+	}
+
 	if vectorEnabled {
 		vectorMigrator := database.NewMigrator(conn.Conn(), VectorMigratorConfig())
 		if err := vectorMigrator.Migrate(ctx); err != nil {
