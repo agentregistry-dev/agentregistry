@@ -518,11 +518,16 @@ func deploymentApplyFunc(svc deploymentsvc.Registry) kinds.ApplyFunc {
 
 // deploymentDeleteFunc returns the Delete function for the deployment kind.
 // The server-side DELETE /v0/apply batch handler dispatches here when a
-// deployment doc is included. Identity is (name, version) — the same
-// (name, version) can map to multiple deployments (one per provider), so
-// all matches are removed.
+// deployment doc is included. A non-empty version is required — deployments
+// are identified by (name, version, provider), so an empty version could
+// span multiple versions and cause surprise bulk deletes. The same
+// (name, version) can still map to multiple deployments (one per provider);
+// all of those are removed.
 func deploymentDeleteFunc(svc deploymentsvc.Registry) kinds.DeleteFunc {
 	return func(ctx context.Context, name, version string) error {
+		if version == "" {
+			return fmt.Errorf("%w: version is required when deleting deployments", database.ErrInvalidInput)
+		}
 		matches, err := svc.ListDeployments(ctx, &models.DeploymentFilter{ResourceName: &name})
 		if err != nil {
 			return fmt.Errorf("listing deployments: %w", err)
@@ -532,10 +537,7 @@ func deploymentDeleteFunc(svc deploymentsvc.Registry) kinds.DeleteFunc {
 			if d == nil {
 				continue
 			}
-			if d.ServerName != name {
-				continue
-			}
-			if version != "" && d.Version != version {
+			if d.ServerName != name || d.Version != version {
 				continue
 			}
 			toDelete = append(toDelete, d)

@@ -274,9 +274,14 @@ func newCLIRegistry() *kinds.Registry {
 }
 
 // deploymentDeleteFunc looks up deployments by (name, version) and deletes each match
-// by ID. The same (name, version) can have multiple deployments (one per provider),
-// so all matches are removed.
+// by ID. A non-empty version is required — deployments are identified by
+// (name, version, provider), so omitting version could span multiple versions
+// and cause surprise bulk deletes. The same (name, version) can still map to
+// multiple deployments (one per provider); all of those are removed.
 func deploymentDeleteFunc(_ context.Context, name, version string) error {
+	if version == "" {
+		return fmt.Errorf("%w: --version is required when deleting deployments", database.ErrInvalidInput)
+	}
 	all, err := apiClient.GetDeployedServers()
 	if err != nil {
 		return fmt.Errorf("listing deployments: %w", err)
@@ -286,7 +291,7 @@ func deploymentDeleteFunc(_ context.Context, name, version string) error {
 		if d == nil {
 			continue
 		}
-		if d.ServerName == name && (version == "" || d.Version == version) {
+		if d.ServerName == name && d.Version == version {
 			matches = append(matches, d)
 		}
 	}
