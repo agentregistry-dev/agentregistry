@@ -192,6 +192,22 @@ func registerV1Alpha1Routes(api huma.API, basePrefix string, stores *V1Alpha1Sto
 		Kind: v1alpha1.KindDeployment, BasePrefix: basePrefix,
 		Store: stores.Deployments, Resolver: resolver,
 	}, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
+
+	// POST {basePrefix}/apply — multi-doc YAML batch apply. Decodes via
+	// v1alpha1.Scheme, then per-doc: Validate → ResolveRefs → Upsert
+	// against the Store for that doc's kind. Returns per-doc results.
+	resource.RegisterApply(api, resource.ApplyConfig{
+		BasePrefix: basePrefix,
+		Stores: map[string]*internaldb.Store{
+			v1alpha1.KindAgent:      stores.Agents,
+			v1alpha1.KindMCPServer:  stores.MCPServers,
+			v1alpha1.KindSkill:      stores.Skills,
+			v1alpha1.KindPrompt:     stores.Prompts,
+			v1alpha1.KindProvider:   stores.Providers,
+			v1alpha1.KindDeployment: stores.Deployments,
+		},
+		Resolver: resolver,
+	})
 }
 
 // storeForKind maps a v1alpha1 Kind to the matching Store. Returns nil
