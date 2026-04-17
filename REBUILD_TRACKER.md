@@ -335,17 +335,24 @@ covers every validator's happy + unhappy path.
 - `internal/registry/importer/osv_scan.go` — OSV API client
 - `internal/registry/importer/scorecard_lib.go` — OpenSSF scorecard
 
-**Native scanner ports (follow-up PRs)**:
-- [ ] `pkg/importer/scanners/osv.go` — reimplement OSV scanner on the
-      new Scanner interface. Writes AnnoOSVStatus + per-severity
-      counts; emits Finding per CVE.
-- [ ] `pkg/importer/scanners/scorecard.go` — Scorecard library wrap;
-      writes AnnoScorecardScore + AnnoScorecardBucket; promotes
-      scorecard-bucket to labels.
-- [ ] `pkg/importer/scanners/container.go` — Trivy shell-out; writes
-      AnnoContainerStatus + Finding per CVE layer.
-- [ ] Dependency health probes — decide whether to keep as a Scanner
-      or drop in favor of reconciler-driven health.
+**Native scanner ports**:
+- [x] `pkg/importer/scanners/osv/osv.go` — OSV.dev batch query.
+      `git mv osv_scan.go` (commit `0ec9297`) preserves blame
+      lineage back to the original `#18 Enrich server data with import`
+      commit; Scanner wrap + test seams follow in `d2ba661` / `69eaf58`;
+      14 unit tests in `4ad509c`.
+- [x] `pkg/importer/scanners/scorecard/scorecard.go` — OpenSSF
+      Scorecard wrap. `git mv scorecard_lib.go` (commit `4e2afd7`,
+      99% similarity) preserves blame; Scanner wrap follows in
+      `3f65d84`; 12 unit tests in `a44cad1`.
+- [ ] `pkg/importer/scanners/container/` — NOT a direct port.
+      Legacy `container_scan.go` is a Docker Hub metadata fetcher
+      (pull count, last-updated), not Trivy. A real image CVE
+      scanner is net-new work; scope separately if needed.
+- [ ] `pkg/importer/scanners/dephealth/` — Legacy
+      `dependency_health.go` does deps.dev license/ecosystem
+      rollups, not CVE scanning. Non-security. Port only if the UI
+      needs the metadata; currently not wired.
 
 **Wiring**:
 - [ ] `internal/registry/app.Bootstrap` constructs the Importer with
