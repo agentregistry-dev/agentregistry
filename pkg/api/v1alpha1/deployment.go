@@ -22,15 +22,15 @@ const (
 
 // DeploymentSpec is the deployment resource's declarative body.
 //
-// TemplateRef is required and must name a top-level Agent or MCPServer. The
+// TargetRef is required and must name a top-level Agent or MCPServer. The
 // referenced resource's spec is the source of truth for what to run; this
 // Deployment contributes only runtime overrides (env, providerConfig) and
 // lifecycle intent (desiredState).
 //
 // ProviderRef is required and must name a top-level Provider. The Provider
-// resolves how/where the template is executed (local daemon, kubernetes, etc.).
+// resolves how/where the target is executed (local daemon, kubernetes, etc.).
 type DeploymentSpec struct {
-	TemplateRef    ResourceRef       `json:"templateRef" yaml:"templateRef"`
+	TargetRef      ResourceRef       `json:"targetRef" yaml:"targetRef"`
 	ProviderRef    ResourceRef       `json:"providerRef" yaml:"providerRef"`
 	DesiredState   string            `json:"desiredState,omitempty" yaml:"desiredState,omitempty"`
 	Env            map[string]string `json:"env,omitempty" yaml:"env,omitempty"`

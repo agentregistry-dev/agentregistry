@@ -120,7 +120,7 @@ kind: Deployment
 metadata:
   name: summarizer-prod
 spec:
-  templateRef:
+  targetRef:
     kind: Agent
     name: summarizer
     version: "1.0.0"
@@ -139,8 +139,8 @@ spec:
 	if !ok {
 		t.Fatalf("want *Deployment, got %T", obj)
 	}
-	if d.Spec.TemplateRef.Kind != KindAgent || d.Spec.TemplateRef.Name != "summarizer" {
-		t.Fatalf("templateRef mismatch: %+v", d.Spec.TemplateRef)
+	if d.Spec.TargetRef.Kind != KindAgent || d.Spec.TargetRef.Name != "summarizer" {
+		t.Fatalf("targetRef mismatch: %+v", d.Spec.TargetRef)
 	}
 	if d.Spec.DesiredState != DesiredStateDeployed {
 		t.Fatalf("desiredState mismatch: %q", d.Spec.DesiredState)
@@ -273,7 +273,7 @@ func TestEncode_RoundTrip_JSON(t *testing.T) {
 		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindDeployment},
 		Metadata: ObjectMeta{Name: "prod", Version: "1"},
 		Spec: DeploymentSpec{
-			TemplateRef:  ResourceRef{Kind: KindAgent, Name: "x", Version: "1"},
+			TargetRef:    ResourceRef{Kind: KindAgent, Name: "x", Version: "1"},
 			ProviderRef:  ResourceRef{Kind: KindProvider, Name: "local"},
 			DesiredState: DesiredStateDeployed,
 			Env:          map[string]string{"FOO": "bar"},

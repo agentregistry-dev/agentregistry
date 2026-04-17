@@ -14,18 +14,25 @@ type TypeMeta struct {
 
 // ObjectMeta is the metadata block common to every resource.
 //
+// Name, Version, and Labels are user-set. Generation, CreatedAt, and UpdatedAt
+// are server-managed: the API ignores them on apply and overwrites them on
+// response. They are exposed in the wire format so that clients can observe
+// reconciliation convergence by comparing metadata.generation against
+// status.observedGeneration — the same reason Kubernetes surfaces generation.
+//
 // Name and Version together form the identity of a resource; (Name, Version)
 // is the composite primary key at the database level. Version is user-set
-// (semver-like or any opaque string). Generation is server-assigned and
-// increments on spec mutation — it is the counter that Status.ObservedGeneration
-// tracks against.
+// (semver-like or any opaque string). Generation increments on spec mutation
+// only — no-op reapplies preserve generation.
 type ObjectMeta struct {
-	Name       string            `json:"name" yaml:"name"`
-	Version    string            `json:"version,omitempty" yaml:"version,omitempty"`
-	Labels     map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
-	Generation int64             `json:"generation,omitempty" yaml:"generation,omitempty"`
-	CreatedAt  time.Time         `json:"createdAt,omitzero" yaml:"createdAt,omitempty"`
-	UpdatedAt  time.Time         `json:"updatedAt,omitzero" yaml:"updatedAt,omitempty"`
+	Name    string            `json:"name" yaml:"name"`
+	Version string            `json:"version,omitempty" yaml:"version,omitempty"`
+	Labels  map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
+	// Generation is server-managed. Clients MUST NOT set it on apply; it is
+	// overwritten by the Store on every Upsert.
+	Generation int64     `json:"generation,omitempty" yaml:"generation,omitempty"`
+	CreatedAt  time.Time `json:"createdAt,omitzero" yaml:"createdAt,omitempty"`
+	UpdatedAt  time.Time `json:"updatedAt,omitzero" yaml:"updatedAt,omitempty"`
 }
 
 // RawObject is the generic wire envelope used during decode and apply dispatch
