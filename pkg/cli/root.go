@@ -12,6 +12,7 @@ import (
 	agentutils "github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/configure"
 	clidaemon "github.com/agentregistry-dev/agentregistry/internal/cli/daemon"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/deployment"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/prompt"
@@ -78,13 +79,15 @@ var rootCmd = &cobra.Command{
 		prompt.SetAPIClient(c)
 		deployment.SetAPIClient(c)
 		cli.SetAPIClient(c)
+		declarative.SetAPIClient(c)
 		return nil
 	},
 }
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&registryURL, "registry-url", os.Getenv("ARCTL_API_BASE_URL"), "Registry URL (overrides ARCTL_API_BASE_URL env var; defaults to http://localhost:12121)")
-	rootCmd.PersistentFlags().StringVar(&registryToken, "registry-token", os.Getenv("ARCTL_API_TOKEN"), "Registry bearer token (overrides ARCTL_API_TOKEN)")
+	// Don't use the default value from the env var here as the CLI help text would print it and this is a sensitive credential to access the API
+	rootCmd.PersistentFlags().StringVar(&registryToken, "registry-token", "", "Registry bearer token (defaults to value of ARCTL_API_TOKEN env var)")
 
 	rootCmd.AddCommand(mcp.McpCmd)
 	rootCmd.AddCommand(agent.AgentCmd)
@@ -97,6 +100,11 @@ func init() {
 	rootCmd.AddCommand(cli.EmbeddingsCmd)
 	rootCmd.AddCommand(deployment.DeploymentCmd)
 	rootCmd.AddCommand(clidaemon.New(dockercompose.NewManager(dockercompose.DefaultConfig())))
+	rootCmd.AddCommand(declarative.ApplyCmd)
+	rootCmd.AddCommand(declarative.GetCmd)
+	rootCmd.AddCommand(declarative.DeleteCmd)
+	rootCmd.AddCommand(declarative.InitCmd)
+	rootCmd.AddCommand(declarative.BuildCmd)
 }
 
 // resolveRegistryTarget returns base URL and token from flags and env.
@@ -156,6 +164,8 @@ var preRunSkipCommands = map[string]map[string]bool{
 		"completion": true,
 		"configure":  true,
 		"version":    true,
+		"init":       true,
+		"build":      true,
 	},
 	"agent": {
 		"build": true,

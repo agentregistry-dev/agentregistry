@@ -1,0 +1,72 @@
+# full-stack.yaml
+#
+# A single file defining an agent and all its dependencies.
+# Apply with: arctl apply -f full-stack.yaml
+#
+# Resources are applied in document order, so define dependencies first:
+#   1. MCP servers and skills the agent references
+#   2. Prompts the agent uses
+#   3. The agent itself
+---
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: acme/fetch
+  version: "1.0.0"
+spec:
+  title: Fetch Server
+  description: "Fetches and extracts content from URLs"
+  packages:
+    - registryType: oci
+      identifier: ghcr.io/acme/fetch:1.0.0     # version goes in the image tag for OCI
+      runtimeHint: docker
+      transport:
+        type: stdio
+---
+apiVersion: ar.dev/v1alpha1
+kind: Skill
+metadata:
+  name: summarize
+  version: "1.0.0"
+spec:
+  title: Summarization
+  category: nlp
+  description: "Summarizes long text into concise form"
+---
+apiVersion: ar.dev/v1alpha1
+kind: Prompt
+metadata:
+  name: summarizer-system-prompt
+  version: "1.0.0"
+spec:
+  description: "Default system prompt for summarization agents"
+  content: |
+    You are a document summarization assistant.
+    Keep summaries concise and accurate.
+---
+apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: summarizer
+  version: "1.0.0"
+spec:
+  image: ghcr.io/acme/summarizer:v1.0.0
+  language: python
+  framework: adk
+  modelProvider: gemini
+  modelName: gemini-2.0-flash
+  description: "An agent that summarizes documents using Gemini"
+  # References to resources defined above -- resolved from the registry at deploy time.
+  mcpServers:
+    - name: acme/fetch
+      version: "1.0.0"
+  skills:
+    - name: summarize
+      registryURL: http://127.0.0.1:12121
+      registrySkillName: summarize
+      registrySkillVersion: "1.0.0"
+  prompts:
+    - name: summarizer-system-prompt
+      registryURL: http://127.0.0.1:12121
+      registryPromptName: summarizer-system-prompt
+      registryPromptVersion: "1.0.0"

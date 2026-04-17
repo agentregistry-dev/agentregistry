@@ -8,10 +8,18 @@ ifneq (,$(wildcard .env))
 endif
 
 # Image configuration
-DOCKER_REGISTRY ?= localhost:5001
+REGISTRY_PORT ?= 5001
+DOCKER_REGISTRY ?= localhost:$(REGISTRY_PORT)
 BASE_IMAGE_REGISTRY ?= ghcr.io
 DOCKER_REPO ?= agentregistry-dev/agentregistry
 DOCKER_BUILDER ?= docker buildx
+BUILDX_BUILDER_NAME ?= agentregistry-builder
+BUILDX_BUILDER_NETWORK ?= buildnet
+OUTDIR ?= _output
+# The buildx builder runs inside a container on buildnet and cannot reach
+# localhost:5001 for pushes. Push directly to kind-registry:5000 on buildnet instead.
+# DOCKER_REGISTRY (localhost:5001) is kept for helm chart image references.
+DOCKER_BUILD_REGISTRY ?= kind-registry:5000
 DOCKER_BUILD_ARGS ?= --push --platform linux/$(LOCALARCH)
 BUILD_DATE ?= $(shell date -u '+%Y-%m-%d')
 GIT_COMMIT ?= $(shell git rev-parse --short HEAD || echo "unknown")
@@ -256,27 +264,56 @@ dev-build: build-ui ## Build quickly for local development
 
 # Build custom agent gateway image with npx/uvx support
 .PHONY: docker-agentgateway
-docker-agentgateway: ## Build the custom agent gateway image
+docker-agentgateway: buildx-create ## Build the custom agent gateway image
 	@echo "Building custom agent gateway image..."
-	$(DOCKER_BUILDER) build $(DOCKER_BUILD_ARGS) -f docker/agentgateway.Dockerfile -t $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:$(VERSION) .
+	$(DOCKER_BUILDER) build --builder $(BUILDX_BUILDER_NAME) $(DOCKER_BUILD_ARGS) -f docker/agentgateway.Dockerfile -t $(DOCKER_BUILD_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:$(VERSION) .
 	echo "✓ Agent gateway image built successfully";
 
 .PHONY: docker-server
-docker-server: .env ## Build the server Docker image
+docker-server: .env buildx-create ## Build the server Docker image
 	@echo "Building server Docker image..."
-	$(DOCKER_BUILDER) build $(DOCKER_BUILD_ARGS) -f docker/server.Dockerfile -t $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) --build-arg LDFLAGS="$(LDFLAGS)" .
+	$(DOCKER_BUILDER) build --builder $(BUILDX_BUILDER_NAME) $(DOCKER_BUILD_ARGS) -f docker/server.Dockerfile -t $(DOCKER_BUILD_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) --build-arg LDFLAGS="$(LDFLAGS)" .
 	@echo "✓ Docker image built successfully"
 
+.PHONY: builder-network
+builder-network:
+	@if ! docker network ls | grep -q "$(BUILDX_BUILDER_NETWORK)"; then \
+		docker network create $(BUILDX_BUILDER_NETWORK); \
+	fi
+
+.PHONY: buildx-rm
+buildx-rm: ## Remove the buildx builder
+	@if docker buildx inspect "$(BUILDX_BUILDER_NAME)" >/dev/null 2>&1; then \
+		docker buildx rm "$(BUILDX_BUILDER_NAME)" || true; \
+	fi
+
 .PHONY: local-registry
-local-registry: ## Ensure the local registry (kind-registry) is running on port 5001
-	@echo "Ensuring local registry is running on port 5001..."
+local-registry: builder-network ## Ensure the local registry (kind-registry) is running on port $(REGISTRY_PORT)
+	@echo "Ensuring local registry is running on port $(REGISTRY_PORT)..."
 	@if [ "$$(docker inspect -f '{{.State.Running}}' kind-registry 2>/dev/null || true)" = "true" ]; then \
 		echo "kind-registry already running. Skipping." ; \
 	elif docker inspect kind-registry >/dev/null 2>&1; then \
 		docker start kind-registry ; \
 	else \
 		docker run \
-		-d --restart=always -p "127.0.0.1:5001:5000" --network bridge --name kind-registry "docker.io/library/registry:2" ; \
+		-d --restart=always -p "127.0.0.1:$(REGISTRY_PORT):5000" \
+		--network $(BUILDX_BUILDER_NETWORK) --name kind-registry "docker.io/library/registry:2" ; \
+	fi
+	@docker network connect $(BUILDX_BUILDER_NETWORK) kind-registry 2>/dev/null || true
+	@docker network connect kind kind-registry 2>/dev/null || true
+
+.PHONY: buildx-create
+buildx-create: local-registry ## Create the buildx builder on buildnet (run once per machine)
+	@if docker buildx inspect "$(BUILDX_BUILDER_NAME)" >/dev/null 2>&1; then \
+		echo "Buildx builder $(BUILDX_BUILDER_NAME) already exists"; \
+		docker buildx use "$(BUILDX_BUILDER_NAME)" 2>/dev/null || true; \
+	else \
+		mkdir -p $(OUTDIR)/buildkit; \
+		REGISTRY_PORT=$(REGISTRY_PORT) envsubst < docker/buildkit.tpl > $(OUTDIR)/buildkit/buildkit.toml; \
+		docker buildx create --use --bootstrap \
+			--name $(BUILDX_BUILDER_NAME) \
+			--driver-opt network=$(BUILDX_BUILDER_NETWORK) \
+			--config $(OUTDIR)/buildkit/buildkit.toml; \
 	fi
 
 .PHONY: docker
@@ -363,7 +400,6 @@ endif
 	    --set image.repository=$(DOCKER_REPO) \
 	    --set image.tag=$(VERSION) \
 	    --set config.jwtPrivateKey="$$JWT_KEY" \
-	    --set config.enableAnonymousAuth="true" \
 	    --set service.type=LoadBalancer \
 	    --set database.postgres.bundled.image.repository=pgvector \
 	    --set database.postgres.bundled.image.name=pgvector \

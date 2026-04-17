@@ -54,3 +54,5 @@ Thumbs.db
 # Generated Helm chart manifest
 charts/agentregistry/Chart.yaml
 
+_output/
+

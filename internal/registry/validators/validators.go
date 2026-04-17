@@ -127,10 +127,9 @@ func validateRepository(obj *model.Repository) error {
 		return nil
 	}
 
-	// validate the repository source
-	repoSource := RepositorySource(obj.Source)
-	if !IsValidRepositoryURL(repoSource, obj.URL) {
-		return fmt.Errorf("%w: %s", ErrInvalidRepositoryURL, obj.URL)
+	// validate the repository source and URL
+	if err := ValidateRepoURL(RepositorySource(obj.Source), obj.URL); err != nil {
+		return err
 	}
 
 	// validate subfolder if present
@@ -437,7 +436,7 @@ func ValidatePublishRequest(ctx context.Context, req apiv0.ServerJSON, cfg *conf
 	}
 
 	// Validate registry ownership for all packages if validation is enabled
-	if cfg.EnableRegistryValidation {
+	if cfg != nil && cfg.EnableRegistryValidation {
 		for i, pkg := range req.Packages {
 			if err := ValidatePackage(ctx, pkg, req.Name); err != nil {
 				return fmt.Errorf("registry validation failed for package %d (%s): %w", i, pkg.Identifier, err)
@@ -549,6 +548,11 @@ func validateRemoteURLMatchesNamespace(remoteURL, namespace string) error {
 	hostname := parsedURL.Hostname()
 	if hostname == "" {
 		return fmt.Errorf("URL must have a valid hostname")
+	}
+
+	// Bypass host verification entirely when INSECURE_SKIP_MCP_HOST_VERIFY=true (dev-only).
+	if shouldSkipMCPHostVerify() {
+		return nil
 	}
 
 	// Skip validation for localhost and local development URLs

@@ -14,12 +14,17 @@ func TestCommandTree(t *testing.T) {
 
 	expectedTopLevel := []string{
 		"agent",
+		"apply",
+		"build",
 		"configure",
 		"daemon",
+		"delete",
 		"deployments",
 		"embeddings",
 		"export",
+		"get",
 		"import",
+		"init",
 		"mcp",
 		"prompt",
 		"skill",

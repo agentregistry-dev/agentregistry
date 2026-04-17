@@ -106,9 +106,9 @@ func fetchSkillFromRegistry(registryURL, skillName, version string) (*models.Ski
 			return nil, fmt.Errorf("API client not initialized")
 		}
 		if strings.EqualFold(version, "latest") {
-			return apiClient.GetSkillByName(skillName)
+			return apiClient.GetSkill(skillName)
 		}
-		return apiClient.GetSkillByNameAndVersion(skillName, version)
+		return apiClient.GetSkillVersion(skillName, version)
 	}
 
 	baseURL, err := normalizeSkillRegistryURL(registryURL)
@@ -119,14 +119,14 @@ func fetchSkillFromRegistry(registryURL, skillName, version string) (*models.Ski
 	// TODO: DI the client.
 	client := arclient.NewClient(baseURL, "")
 	if strings.EqualFold(version, "latest") {
-		resp, err := client.GetSkillByName(skillName)
+		resp, err := client.GetSkill(skillName)
 		if err != nil {
 			return nil, fmt.Errorf("fetch skill %q from %s: %w", skillName, baseURL, err)
 		}
 		return resp, nil
 	}
 
-	resp, err := client.GetSkillByNameAndVersion(skillName, version)
+	resp, err := client.GetSkillVersion(skillName, version)
 	if err != nil {
 		return nil, fmt.Errorf("fetch skill %q version %q from %s: %w", skillName, version, baseURL, err)
 	}

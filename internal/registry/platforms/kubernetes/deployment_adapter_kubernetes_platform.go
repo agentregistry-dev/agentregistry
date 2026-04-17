@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
+	"github.com/agentregistry-dev/agentregistry/internal/constants"
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	platformutils "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
@@ -277,7 +278,9 @@ func kubernetesTranslatePlatformConfig(ctx context.Context, desired *platformtyp
 		}
 		agents = append(agents, resource)
 
-		if len(agent.ResolvedMCPServers) > 0 || len(agent.ResolvedPrompts) > 0 {
+		// MCP server config is injected via MCP_SERVERS_CONFIG env var (set by ResolveAgent).
+		// ConfigMap is only needed for prompts.
+		if len(agent.ResolvedPrompts) > 0 {
 			configMap, err := kubernetesTranslateAgentConfigMap(agent)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create ConfigMap for agent %s: %w", agent.Name, err)
@@ -324,7 +327,7 @@ func kubernetesTranslateAgent(agent *platformtypes.Agent) (*v1alpha2.Agent, erro
 		return nil, fmt.Errorf("image must be specified for Agent %s", agent.Name)
 	}
 
-	namespace := agent.Deployment.Env["KAGENT_NAMESPACE"]
+	namespace := agent.Deployment.Env[constants.EnvKagentNamespace]
 
 	envVars := make([]corev1.EnvVar, 0, len(agent.Deployment.Env))
 	if len(agent.Deployment.Env) > 0 {
@@ -339,15 +342,13 @@ func kubernetesTranslateAgent(agent *platformtypes.Agent) (*v1alpha2.Agent, erro
 	}
 
 	sharedSpec := v1alpha2.SharedDeploymentSpec{Env: envVars}
-	if len(agent.ResolvedMCPServers) > 0 || len(agent.ResolvedPrompts) > 0 {
+	// MCP server config is now injected via MCP_SERVERS_CONFIG env var (set by ResolveAgent).
+	// ConfigMap volume mount is only needed for prompts.json.
+	if len(agent.ResolvedPrompts) > 0 {
 		configMapName := kubernetesAgentConfigMapName(agent.Name, agent.Version, agent.DeploymentID)
 		volumeName := "agent-config"
-		var items []corev1.KeyToPath
-		if len(agent.ResolvedMCPServers) > 0 {
-			items = append(items, corev1.KeyToPath{Key: "mcp-servers.json", Path: "mcp-servers.json"})
-		}
-		if len(agent.ResolvedPrompts) > 0 {
-			items = append(items, corev1.KeyToPath{Key: "prompts.json", Path: "prompts.json"})
+		items := []corev1.KeyToPath{
+			{Key: "prompts.json", Path: "prompts.json"},
 		}
 		sharedSpec.Volumes = []corev1.Volume{{
 			Name: volumeName,
@@ -499,7 +500,7 @@ func kubernetesTranslateLocalMCPServer(server *platformtypes.MCPServer) (*kmcpv1
 
 	namespace := server.Namespace
 	if namespace == "" {
-		namespace = server.Local.Deployment.Env["KAGENT_NAMESPACE"]
+		namespace = server.Local.Deployment.Env[constants.EnvKagentNamespace]
 	}
 	deployment := kmcpv1alpha1.MCPServerDeployment{
 		Image: server.Local.Deployment.Image,
@@ -539,16 +540,11 @@ func kubernetesTranslateLocalMCPServer(server *platformtypes.MCPServer) (*kmcpv1
 }
 
 func kubernetesTranslateAgentConfigMap(agent *platformtypes.Agent) (*corev1.ConfigMap, error) {
-	namespace := agent.Deployment.Env["KAGENT_NAMESPACE"]
+	namespace := agent.Deployment.Env[constants.EnvKagentNamespace]
 
 	data := make(map[string]string)
-	if len(agent.ResolvedMCPServers) > 0 {
-		serversJSON, err := json.MarshalIndent(agent.ResolvedMCPServers, "", "  ")
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal MCP servers config: %w", err)
-		}
-		data["mcp-servers.json"] = string(serversJSON)
-	}
+	// MCP server config is now injected via MCP_SERVERS_CONFIG env var (set by ResolveAgent).
+	// No longer written to ConfigMap.
 	if len(agent.ResolvedPrompts) > 0 {
 		promptsJSON, err := json.MarshalIndent(agent.ResolvedPrompts, "", "  ")
 		if err != nil {

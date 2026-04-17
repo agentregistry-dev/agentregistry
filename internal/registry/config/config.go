@@ -21,24 +21,9 @@ type Config struct {
 	EnrichServerData         bool   `env:"ENRICH_SERVER_DATA" envDefault:"false"`
 	DisableBuiltinSeed       bool   `env:"DISABLE_BUILTIN_SEED" envDefault:"true"`
 	Version                  string `env:"VERSION" envDefault:"dev"`
-	GithubClientID           string `env:"GITHUB_CLIENT_ID" envDefault:""`
-	GithubClientSecret       string `env:"GITHUB_CLIENT_SECRET" envDefault:""`
 	JWTPrivateKey            string `env:"JWT_PRIVATE_KEY" envDefault:""`
-	EnableAnonymousAuth      bool   `env:"ENABLE_ANONYMOUS_AUTH" envDefault:"false"`
 	EnableRegistryValidation bool   `env:"ENABLE_REGISTRY_VALIDATION" envDefault:"true"`
 	LogLevel                 string `env:"LOG_LEVEL" envDefault:"info"`
-
-	// OIDC Configuration
-	OIDCEnabled      bool   `env:"OIDC_ENABLED" envDefault:"false"`
-	OIDCIssuer       string `env:"OIDC_ISSUER" envDefault:""`
-	OIDCClientID     string `env:"OIDC_CLIENT_ID" envDefault:""`
-	OIDCExtraClaims  string `env:"OIDC_EXTRA_CLAIMS" envDefault:""`
-	OIDCEditPerms    string `env:"OIDC_EDIT_PERMISSIONS" envDefault:""`
-	OIDCPublishPerms string `env:"OIDC_PUBLISH_PERMISSIONS" envDefault:""`
-	OIDCReadPerms    string `env:"OIDC_READ_PERMISSIONS" envDefault:""`
-	OIDCPushPerms    string `env:"OIDC_PUSH_PERMISSIONS" envDefault:""`
-	OIDCDeletePerms  string `env:"OIDC_DELETE_PERMISSIONS" envDefault:""`
-	OIDCDeployPerms  string `env:"OIDC_DEPLOY_PERMISSIONS" envDefault:""`
 
 	// Platform mode: "docker" or "kubernetes". Controls which deployment
 	// provider IDs are available in the UI. Defaults to "kubernetes" so

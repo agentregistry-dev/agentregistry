@@ -46,8 +46,11 @@ type AgentResponseMeta struct {
 }
 
 type AgentResponse struct {
-	Agent AgentJSON         `json:"agent"`
-	Meta  AgentResponseMeta `json:"_meta"`
+	Agent         AgentJSON         `json:"agent"`
+	Meta          AgentResponseMeta `json:"_meta"`
+	MCPServerRefs []RegistryRef     `json:"mcpServerRefs,omitempty"`
+	SkillRefs     []RegistryRef     `json:"skillRefs,omitempty"`
+	PromptRefs    []RegistryRef     `json:"promptRefs,omitempty"`
 }
 
 type AgentMetadata struct {

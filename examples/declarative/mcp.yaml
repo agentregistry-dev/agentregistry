@@ -1,0 +1,14 @@
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: acme/fetch
+  version: "1.0.0"
+spec:
+  title: Fetch Server
+  description: "Fetches and extracts content from URLs"
+  packages:
+    - registryType: oci
+      identifier: ghcr.io/acme/fetch:1.0.0     # version goes in the image tag for OCI
+      runtimeHint: docker                       # optional: hint for local runtime
+      transport:
+        type: stdio                             # stdio | sse | streamable-http

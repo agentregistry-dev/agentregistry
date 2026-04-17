@@ -8,6 +8,7 @@ import (
 
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	cliUtils "github.com/agentregistry-dev/agentregistry/internal/cli/utils"
+	"github.com/agentregistry-dev/agentregistry/internal/constants"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/spf13/cobra"
 )
@@ -101,7 +102,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	if namespace != "" {
-		envMap["KAGENT_NAMESPACE"] = namespace
+		envMap[constants.EnvKagentNamespace] = namespace
 	}
 
 	switch resourceType {
@@ -114,7 +115,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 }
 
 func createAgentDeployment(name, version string, envMap map[string]string, providerID, namespace string, wait bool) error {
-	agentModel, err := apiClient.GetAgentByNameAndVersion(name, version)
+	agentModel, err := apiClient.GetAgentVersion(name, version)
 	if err != nil {
 		return fmt.Errorf("failed to fetch agent %q: %w", name, err)
 	}
@@ -130,7 +131,7 @@ func createAgentDeployment(name, version string, envMap map[string]string, provi
 
 	config := buildAgentDeployConfig(manifest, envMap)
 	if namespace != "" {
-		config["KAGENT_NAMESPACE"] = namespace
+		config[constants.EnvKagentNamespace] = namespace
 	}
 
 	if providerID == "local" {

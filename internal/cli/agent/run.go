@@ -70,7 +70,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return runFromDirectory(cmd.Context(), target, envMap)
 	}
 
-	agentModel, err := apiClient.GetAgentByName(target)
+	agentModel, err := apiClient.GetAgent(target)
 	if err != nil {
 		return fmt.Errorf("failed to resolve agent %q: %w", target, err)
 	}

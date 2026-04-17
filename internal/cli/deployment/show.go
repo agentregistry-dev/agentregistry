@@ -41,7 +41,7 @@ func runShow(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dep, err := apiClient.GetDeploymentByID(fullID)
+	dep, err := apiClient.GetDeployment(fullID)
 	if err != nil {
 		return fmt.Errorf("failed to get deployment: %w", err)
 	}

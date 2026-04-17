@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -12,8 +13,10 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
+	"github.com/agentregistry-dev/agentregistry/internal/constants"
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
+	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
@@ -51,11 +54,11 @@ func ValidateDeploymentRequest(deployment *models.Deployment, allowExisting bool
 
 func BuildPlatformMCPServer(
 	ctx context.Context,
-	registryService service.RegistryService,
+	serverService serversvc.Registry,
 	deployment *models.Deployment,
 	namespace string,
 ) (*platformtypes.MCPServer, error) {
-	serverResp, err := registryService.GetServerByNameAndVersion(ctx, deployment.ServerName, deployment.Version)
+	serverResp, err := serverService.GetServerVersion(ctx, deployment.ServerName, deployment.Version)
 	if err != nil {
 		return nil, fmt.Errorf("load mcp server %s@%s: %w", deployment.ServerName, deployment.Version, err)
 	}
@@ -79,40 +82,86 @@ func BuildPlatformMCPServer(
 
 func ResolveAgent(
 	ctx context.Context,
-	registryService service.RegistryService,
+	serverService serversvc.Registry,
+	agentService agentsvc.Registry,
 	deployment *models.Deployment,
 	namespace string,
 ) (*platformtypes.ResolvedAgentConfig, error) {
-	agentResp, err := registryService.GetAgentByNameAndVersion(ctx, deployment.ServerName, deployment.Version)
+	agentResp, err := agentService.GetAgentVersion(ctx, deployment.ServerName, deployment.Version)
 	if err != nil {
 		return nil, fmt.Errorf("load agent %s@%s: %w", deployment.ServerName, deployment.Version, err)
 	}
 	envValues := copyStringMap(deployment.Env)
-	if envValues["KAGENT_NAMESPACE"] == "" {
+	if envValues[constants.EnvKagentNamespace] == "" {
 		if namespace != "" {
-			envValues["KAGENT_NAMESPACE"] = namespace
+			envValues[constants.EnvKagentNamespace] = namespace
 		} else {
 			// We always need a namespace when deploying to local/docker (kagent-adk requires it)
 			// so even if namespace isn't explicitly provided, we should set it to default.
-			envValues["KAGENT_NAMESPACE"] = "default"
+			envValues[constants.EnvKagentNamespace] = "default"
 		}
 	}
-	envValues["KAGENT_URL"] = "http://localhost"
-	envValues["KAGENT_NAME"] = agentResp.Agent.Name
-	envValues["AGENT_NAME"] = agentResp.Agent.Name
-	envValues["MODEL_PROVIDER"] = agentResp.Agent.ModelProvider
-	envValues["MODEL_NAME"] = agentResp.Agent.ModelName
+	envValues[constants.EnvKagentURL] = "http://localhost"
+	envValues[constants.EnvKagentName] = agentResp.Agent.Name
+	envValues[constants.EnvAgentName] = agentResp.Agent.Name
+	envValues[constants.EnvModelProvider] = agentResp.Agent.ModelProvider
+	envValues[constants.EnvModelName] = agentResp.Agent.ModelName
 
-	resolvedServers, resolvedConfigs, _, err := resolveAgentManifestPlatformMCPServers(ctx, registryService, deployment.ID, &agentResp.Agent.AgentManifest, namespace)
+	// Resolve MCP servers from both new-format DB ref columns and legacy manifest entries.
+	var resolvedServers []*platformtypes.MCPServer
+	var resolvedConfigs []platformtypes.ResolvedMCPServerConfig
+
+	// New declarative path: resolve from DB ref columns (mcp_server_refs).
+	if len(agentResp.MCPServerRefs) > 0 {
+		for _, ref := range agentResp.MCPServerRefs {
+			servers, configs, err := resolveRegistryRef(ctx, serverService, deployment.ID, ref, namespace)
+			if err != nil {
+				return nil, err
+			}
+			resolvedServers = append(resolvedServers, servers...)
+			resolvedConfigs = append(resolvedConfigs, configs...)
+		}
+	}
+
+	// TODO(legacy): remove once declarative API is the only supported path
+	// Legacy path: resolve from embedded manifest McpServers.
+	legacyServers, legacyConfigs, _, err := resolveAgentManifestPlatformMCPServers(ctx, serverService, deployment.ID, &agentResp.Agent.AgentManifest, namespace)
 	if err != nil {
 		return nil, err
 	}
-	skills, err := registryService.ResolveAgentManifestSkills(ctx, &agentResp.Agent.AgentManifest)
+	// Merge legacy configs, skipping any that conflict with new-format refs by name.
+	// Note: legacyConfigs and legacyServers are not guaranteed to be index-aligned;
+	// some legacy manifest entries (e.g. type:"remote") produce a config without a
+	// corresponding platform server.
+	existingNames := make(map[string]bool, len(resolvedConfigs))
+	for _, c := range resolvedConfigs {
+		existingNames[c.Name] = true
+	}
+	for i, c := range legacyConfigs {
+		if existingNames[c.Name] {
+			continue
+		}
+		if i < len(legacyServers) {
+			resolvedServers = append(resolvedServers, legacyServers[i])
+		}
+		resolvedConfigs = append(resolvedConfigs, c)
+	}
+
+	// Inject resolved MCP config as MCP_SERVERS_CONFIG env var.
+	if len(resolvedConfigs) > 0 {
+		mcpJSON, err := json.Marshal(resolvedConfigs)
+		if err != nil {
+			return nil, fmt.Errorf("marshal MCP servers config: %w", err)
+		}
+		envValues[constants.EnvMCPServersConfig] = string(mcpJSON)
+	}
+
+	skills, err := agentService.ResolveAgentManifestSkills(ctx, &agentResp.Agent.AgentManifest)
 	if err != nil {
 		return nil, err
 	}
 
-	prompts, err := registryService.ResolveAgentManifestPrompts(ctx, &agentResp.Agent.AgentManifest)
+	prompts, err := agentService.ResolveAgentManifestPrompts(ctx, &agentResp.Agent.AgentManifest)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +184,7 @@ func ResolveAgent(
 
 func resolveAgentManifestPlatformMCPServers(
 	ctx context.Context,
-	registryService service.RegistryService,
+	serverService serversvc.Registry,
 	deploymentID string,
 	manifest *models.AgentManifest,
 	namespace string,
@@ -149,47 +198,109 @@ func resolveAgentManifestPlatformMCPServers(
 	var pythonServers []common.PythonMCPServer
 
 	for _, mcpServer := range manifest.McpServers {
-		if mcpServer.Type != "registry" {
+		switch {
+		case !mcpServer.IsLegacyFormat():
+			// New RegistryRef format: resolved via resolveRegistryRef in ResolveAgent().
+			// Skip here -- these are handled by the mcp_server_refs DB column path.
 			continue
-		}
 
-		version := strings.TrimSpace(mcpServer.RegistryServerVersion)
-		if version == "" {
-			version = "latest"
-		}
+		// TODO(legacy): remove cases below once declarative API is the only supported path
+		case mcpServer.Type == "registry":
+			version := strings.TrimSpace(mcpServer.RegistryServerVersion)
+			if version == "" {
+				version = "latest"
+			}
 
-		serverResp, err := registryService.GetServerByNameAndVersion(ctx, mcpServer.RegistryServerName, version)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("load resolved MCP server %s@%s: %w", mcpServer.RegistryServerName, version, err)
-		}
+			serverResp, err := serverService.GetServerVersion(ctx, mcpServer.RegistryServerName, version)
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("load resolved MCP server %s@%s: %w", mcpServer.RegistryServerName, version, err)
+			}
 
-		platformServer, err := TranslateMCPServer(ctx, &MCPServerRunRequest{
-			RegistryServer: &serverResp.Server,
-			DeploymentID:   deploymentID,
-			PreferRemote:   mcpServer.RegistryServerPreferRemote,
-			EnvValues:      map[string]string{},
-			ArgValues:      map[string]string{},
-			HeaderValues:   map[string]string{},
-		})
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		if namespace != "" && platformServer.Namespace == "" {
-			platformServer.Namespace = namespace
-		}
-		platformServers = append(platformServers, platformServer)
+			platformServer, err := TranslateMCPServer(ctx, &MCPServerRunRequest{
+				RegistryServer: &serverResp.Server,
+				DeploymentID:   deploymentID,
+				PreferRemote:   mcpServer.RegistryServerPreferRemote,
+				EnvValues:      map[string]string{},
+				ArgValues:      map[string]string{},
+				HeaderValues:   map[string]string{},
+			})
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			if namespace != "" && platformServer.Namespace == "" {
+				platformServer.Namespace = namespace
+			}
+			platformServers = append(platformServers, platformServer)
 
-		configServer := resolvedMCPConfigFromRegistryServer(&serverResp.Server, deploymentID, mcpServer.RegistryServerPreferRemote)
-		configServers = append(configServers, configServer)
-		pythonServers = append(pythonServers, common.PythonMCPServer{
-			Name:    configServer.Name,
-			Type:    configServer.Type,
-			URL:     configServer.URL,
-			Headers: configServer.Headers,
-		})
+			configServer := resolvedMCPConfigFromRegistryServer(&serverResp.Server, deploymentID, mcpServer.RegistryServerPreferRemote)
+			configServers = append(configServers, configServer)
+			pythonServers = append(pythonServers, common.PythonMCPServer{
+				Name:    configServer.Name,
+				Type:    configServer.Type,
+				URL:     configServer.URL,
+				Headers: configServer.Headers,
+			})
+
+		case mcpServer.Type == "remote":
+			// TODO(legacy): remove once declarative API is the only supported path
+			configServers = append(configServers, platformtypes.ResolvedMCPServerConfig{
+				Name:    mcpServer.Name,
+				Type:    "remote",
+				URL:     mcpServer.URL,
+				Headers: mcpServer.Headers,
+			})
+			// command type: still handled by baked-in _MCP_SERVERS in mcp_tools.py (needs local infra)
+		}
 	}
 
 	return platformServers, configServers, pythonServers, nil
+}
+
+// resolveRegistryRef resolves a RegistryRef to platform MCP servers and config.
+// The transport (remote vs local) is determined by the MCP server's own spec.
+func resolveRegistryRef(
+	ctx context.Context,
+	serverService serversvc.Registry,
+	deploymentID string,
+	ref models.RegistryRef,
+	namespace string,
+) ([]*platformtypes.MCPServer, []platformtypes.ResolvedMCPServerConfig, error) {
+	name := strings.TrimSpace(ref.Name)
+	if name == "" {
+		return nil, nil, fmt.Errorf("MCP server name is required")
+	}
+
+	version := strings.TrimSpace(ref.Version)
+	if version == "" {
+		version = "latest"
+	}
+
+	serverResp, err := serverService.GetServerVersion(ctx, name, version)
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolve MCP server ref %s@%s: %w", name, version, err)
+	}
+
+	// Determine transport preference from server spec: use remote if available.
+	preferRemote := len(serverResp.Server.Remotes) > 0
+
+	platformServer, err := TranslateMCPServer(ctx, &MCPServerRunRequest{
+		RegistryServer: &serverResp.Server,
+		DeploymentID:   deploymentID,
+		PreferRemote:   preferRemote,
+		EnvValues:      map[string]string{},
+		ArgValues:      map[string]string{},
+		HeaderValues:   map[string]string{},
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if namespace != "" && platformServer.Namespace == "" {
+		platformServer.Namespace = namespace
+	}
+
+	configServer := resolvedMCPConfigFromRegistryServer(&serverResp.Server, deploymentID, preferRemote)
+
+	return []*platformtypes.MCPServer{platformServer}, []platformtypes.ResolvedMCPServerConfig{configServer}, nil
 }
 
 func resolvedMCPConfigFromRegistryServer(

@@ -6,19 +6,24 @@ import (
 	"log"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/constants"
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
+	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
+	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
 type kubernetesDeploymentAdapter struct {
-	registry service.RegistryService
+	providerRegistry providersvc.Registry
+	serverService    serversvc.Registry
+	agentService     agentsvc.Registry
 }
 
-func NewKubernetesDeploymentAdapter(registry service.RegistryService) *kubernetesDeploymentAdapter {
-	return &kubernetesDeploymentAdapter{registry: registry}
+func NewKubernetesDeploymentAdapter(providerRegistry providersvc.Registry, serverService serversvc.Registry, agentService agentsvc.Registry) *kubernetesDeploymentAdapter {
+	return &kubernetesDeploymentAdapter{providerRegistry: providerRegistry, serverService: serverService, agentService: agentService}
 }
 
 func (a *kubernetesDeploymentAdapter) Platform() string { return "kubernetes" }
@@ -32,7 +37,7 @@ func (a *kubernetesDeploymentAdapter) Deploy(ctx context.Context, req *models.De
 		return nil, err
 	}
 
-	provider, err := a.registry.GetProviderByID(ctx, req.ProviderID)
+	provider, err := a.providerRegistry.GetProvider(ctx, req.ProviderID)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +56,7 @@ func (a *kubernetesDeploymentAdapter) Undeploy(ctx context.Context, deployment *
 	if err := utils.ValidateDeploymentRequest(deployment, true); err != nil {
 		return err
 	}
-	provider, err := a.registry.GetProviderByID(ctx, deployment.ProviderID)
+	provider, err := a.providerRegistry.GetProvider(ctx, deployment.ProviderID)
 	if err != nil {
 		return err
 	}
@@ -63,7 +68,7 @@ func (a *kubernetesDeploymentAdapter) CleanupStale(ctx context.Context, deployme
 	if err := utils.ValidateDeploymentRequest(deployment, true); err != nil {
 		return err
 	}
-	provider, err := a.registry.GetProviderByID(ctx, deployment.ProviderID)
+	provider, err := a.providerRegistry.GetProvider(ctx, deployment.ProviderID)
 	if err != nil {
 		return err
 	}
@@ -82,7 +87,7 @@ func (a *kubernetesDeploymentAdapter) Cancel(_ context.Context, _ *models.Deploy
 }
 
 func (a *kubernetesDeploymentAdapter) Discover(ctx context.Context, providerID string) ([]*models.Deployment, error) {
-	provider, err := a.registry.GetProviderByID(ctx, providerID)
+	provider, err := a.providerRegistry.GetProvider(ctx, providerID)
 	if err != nil {
 		return nil, err
 	}
@@ -117,13 +122,13 @@ func (a *kubernetesDeploymentAdapter) buildKubernetesDesiredState(
 	resourceType := strings.ToLower(strings.TrimSpace(deployment.ResourceType))
 	switch resourceType {
 	case "mcp":
-		server, err := utils.BuildPlatformMCPServer(ctx, a.registry, deployment, namespace)
+		server, err := utils.BuildPlatformMCPServer(ctx, a.serverService, deployment, namespace)
 		if err != nil {
 			return nil, err
 		}
 		return &platformtypes.DesiredState{MCPServers: []*platformtypes.MCPServer{server}}, nil
 	case "agent":
-		resolved, err := utils.ResolveAgent(ctx, a.registry, deployment, namespace)
+		resolved, err := utils.ResolveAgent(ctx, a.serverService, a.agentService, deployment, namespace)
 		if err != nil {
 			return nil, err
 		}
@@ -138,7 +143,7 @@ func (a *kubernetesDeploymentAdapter) buildKubernetesDesiredState(
 
 func deploymentNamespace(deployment *models.Deployment, provider *models.Provider) string {
 	if deployment != nil && deployment.Env != nil {
-		if namespace := strings.TrimSpace(deployment.Env["KAGENT_NAMESPACE"]); namespace != "" {
+		if namespace := strings.TrimSpace(deployment.Env[constants.EnvKagentNamespace]); namespace != "" {
 			return namespace
 		}
 	}

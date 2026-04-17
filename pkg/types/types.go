@@ -42,9 +42,9 @@ type DeploymentPlatformAdapter interface {
 	Discover(ctx context.Context, providerID string) ([]*models.Deployment, error)
 }
 
-// DatabaseFactory is a function type that creates a database implementation.
-// This allows implementors to run additional migrations and wrap the database.
-type DatabaseFactory func(ctx context.Context, databaseURL string, baseDB database.Database, authz auth.Authorizer) (database.Database, error)
+// DatabaseFactory is a function type that creates a store implementation.
+// This allows implementors to run additional migrations and wrap the base store.
+type DatabaseFactory func(ctx context.Context, databaseURL string, baseStore database.Store, authz auth.Authorizer) (database.Store, error)
 
 // AppOptions contains configuration for the registry app.
 // All fields are optional and allow external developers to extend functionality.
@@ -135,7 +135,7 @@ type CLIAuthnProviderFactory func(root *cobra.Command) (CLIAuthnProvider, error)
 //
 // The factory receives a Server interface and should return a Server after
 // registering new routes using base.HumaAPI() or base.Mux().
-type HTTPServerFactory func(base Server, db database.Database) Server
+type HTTPServerFactory func(base Server, store database.Store) Server
 
 // DaemonConfig allows customization of the default daemon manager
 type DaemonConfig struct {
