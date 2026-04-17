@@ -167,7 +167,11 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		Agents:             agentService,
 		DeploymentAdapters: deploymentPlatforms,
 	})
-	// Import builtin seed data unless it is disabled
+	// Import builtin seed data unless disabled. Runs both the legacy
+	// seeder (populates public.servers) and the v1alpha1 seeder
+	// (populates v1alpha1.mcp_servers) so both stacks have curated
+	// content during the port. The v1alpha1 path is skipped when the
+	// underlying store doesn't expose a raw pool (noop/test backends).
 	if !cfg.DisableBuiltinSeed {
 		slog.Info("importing builtin seed data in the background")
 		go func() {
@@ -177,7 +181,14 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 			ctx = auth.WithSystemContext(ctx)
 
 			if err := seed.ImportBuiltinSeedData(ctx, serverService); err != nil {
-				slog.Error("failed to import builtin seed data", "error", err)
+				slog.Error("failed to import builtin seed data (legacy)", "error", err)
+			}
+			if pg, ok := db.(interface {
+				Pool() *pgxpool.Pool
+			}); ok {
+				if err := seed.ImportBuiltinSeedDataV1Alpha1(ctx, pg.Pool()); err != nil {
+					slog.Error("failed to import builtin seed data (v1alpha1)", "error", err)
+				}
 			}
 		}()
 	}
