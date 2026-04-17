@@ -161,6 +161,9 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object) ApplyRe
 	if meta.Finalizers != nil {
 		upsertOpts.Finalizers = meta.Finalizers
 	}
+	if meta.Annotations != nil {
+		upsertOpts.Annotations = meta.Annotations
+	}
 	res, err := store.Upsert(ctx, meta.Namespace, meta.Name, meta.Version, specJSON, meta.Labels, upsertOpts)
 	if err != nil {
 		result.Status = ApplyStatusFailed

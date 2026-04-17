@@ -20,12 +20,13 @@ const DefaultNamespace = "default"
 
 // ObjectMeta is the metadata block common to every resource.
 //
-// Namespace, Name, Version, and Labels are user-set. Generation, CreatedAt,
-// UpdatedAt, DeletionTimestamp, and Finalizers are server-managed: the API
-// ignores them on apply and overwrites them on response. They are exposed in
-// the wire format so clients can observe reconciliation convergence by
-// comparing metadata.generation against status.observedGeneration — the
-// same reason Kubernetes surfaces generation.
+// Namespace, Name, Version, Labels, Annotations, and Finalizers are
+// user/controller-set. Generation, CreatedAt, UpdatedAt, and
+// DeletionTimestamp are server-managed: the API ignores them on apply and
+// overwrites them on response. They are exposed in the wire format so
+// clients can observe reconciliation convergence by comparing
+// metadata.generation against status.observedGeneration — the same reason
+// Kubernetes surfaces generation.
 //
 // (Namespace, Name, Version) together form the identity of a resource; that
 // triple is the composite primary key at the database level. Namespace
@@ -33,15 +34,23 @@ const DefaultNamespace = "default"
 // user-set (semver-like or any opaque string). Generation increments on
 // spec mutation only — no-op reapplies preserve generation.
 //
+// Labels vs Annotations (Kubernetes convention):
+//   - Labels are queryable: short key/value pairs, GIN-indexed, used for
+//     filtering + selection. Enforce the K8s label format.
+//   - Annotations are narrative: arbitrary key/value pairs for controller
+//     state, tool metadata, etc. Not indexed; can carry larger payloads.
+//     Callers read annotations by key; the server never filters on them.
+//
 // DeletionTimestamp + Finalizers implement Kubernetes-style soft delete:
 // Delete sets DeletionTimestamp and leaves the row in place until every
 // finalizer has been removed by its owner. A GC pass hard-deletes rows
 // where DeletionTimestamp != nil AND Finalizers is empty.
 type ObjectMeta struct {
-	Namespace string            `json:"namespace" yaml:"namespace"`
-	Name      string            `json:"name" yaml:"name"`
-	Version   string            `json:"version,omitempty" yaml:"version,omitempty"`
-	Labels    map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
+	Namespace   string            `json:"namespace" yaml:"namespace"`
+	Name        string            `json:"name" yaml:"name"`
+	Version     string            `json:"version,omitempty" yaml:"version,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
+	Annotations map[string]string `json:"annotations,omitempty" yaml:"annotations,omitempty"`
 
 	// Generation is server-managed. Clients MUST NOT set it on apply; the
 	// Store overwrites on every Upsert.

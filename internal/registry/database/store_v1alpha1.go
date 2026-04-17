@@ -76,12 +76,22 @@ type ListOpts struct {
 	IncludeTerminating bool
 }
 
-// UpsertOpts carries optional knobs on Upsert. Finalizers is the desired
-// set of finalizer tokens on the row post-apply; nil means "leave
-// existing finalizers unchanged", while an explicit empty slice means
-// "clear all finalizers".
+// UpsertOpts carries optional knobs on Upsert.
+//
+// Finalizers is the desired set of finalizer tokens on the row
+// post-apply; nil means "leave existing finalizers unchanged", while an
+// explicit empty slice means "clear all finalizers".
+//
+// Annotations is the desired set of annotation key/value pairs on the
+// row post-apply; nil means "leave existing annotations unchanged",
+// while an explicit empty map means "clear all annotations".
+//
+// Labels go through Upsert's positional `labels` argument (not here)
+// because labels are always fully replaced on apply — they're part of
+// the user-authored resource state.
 type UpsertOpts struct {
-	Finalizers []string
+	Finalizers  []string
+	Annotations map[string]string
 }
 
 // Upsert writes the given object under its (namespace, name, version). On
@@ -113,18 +123,19 @@ func (s *Store) Upsert(ctx context.Context, namespace, name, version string, spe
 	res := &UpsertResult{}
 	err = runInTx(ctx, s.pool, func(tx pgx.Tx) error {
 		var (
-			oldSpec          []byte
-			oldGeneration    int64
-			oldFinalizersRaw []byte
-			found            bool
+			oldSpec           []byte
+			oldGeneration     int64
+			oldFinalizersRaw  []byte
+			oldAnnotationsRaw []byte
+			found             bool
 		)
 		err := tx.QueryRow(ctx,
 			fmt.Sprintf(`
-				SELECT spec, generation, finalizers
+				SELECT spec, generation, finalizers, annotations
 				FROM %s
 				WHERE namespace=$1 AND name=$2 AND version=$3
 				FOR UPDATE`, s.table),
-			namespace, name, version).Scan(&oldSpec, &oldGeneration, &oldFinalizersRaw)
+			namespace, name, version).Scan(&oldSpec, &oldGeneration, &oldFinalizersRaw, &oldAnnotationsRaw)
 		switch {
 		case err == nil:
 			found = true
@@ -163,17 +174,32 @@ func (s *Store) Upsert(ctx context.Context, namespace, name, version string, spe
 			finalizersJSON = f
 		}
 
+		// Annotation handling mirrors finalizers: nil preserves existing,
+		// non-nil (including empty map) replaces.
+		annotationsJSON := oldAnnotationsRaw
+		if !found {
+			annotationsJSON = []byte("{}")
+		}
+		if opts.Annotations != nil {
+			a, err := json.Marshal(opts.Annotations)
+			if err != nil {
+				return fmt.Errorf("marshal annotations: %w", err)
+			}
+			annotationsJSON = a
+		}
+
 		_, err = tx.Exec(ctx,
 			fmt.Sprintf(`
-				INSERT INTO %s (namespace, name, version, generation, labels, spec, finalizers)
-				VALUES ($1, $2, $3, $4, $5, $6, $7)
+				INSERT INTO %s (namespace, name, version, generation, labels, annotations, spec, finalizers)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 				ON CONFLICT (namespace, name, version) DO UPDATE
 				SET generation  = EXCLUDED.generation,
 				    labels      = EXCLUDED.labels,
+				    annotations = EXCLUDED.annotations,
 				    spec        = EXCLUDED.spec,
 				    finalizers  = EXCLUDED.finalizers
 			`, s.table),
-			namespace, name, version, newGen, labelsJSON, []byte(specJSON), finalizersJSON)
+			namespace, name, version, newGen, labelsJSON, annotationsJSON, []byte(specJSON), finalizersJSON)
 		if err != nil {
 			return fmt.Errorf("upsert row: %w", err)
 		}
@@ -285,7 +311,7 @@ func (s *Store) PatchFinalizers(ctx context.Context, namespace, name, version st
 func (s *Store) Get(ctx context.Context, namespace, name, version string) (*v1alpha1.RawObject, error) {
 	row := s.pool.QueryRow(ctx,
 		fmt.Sprintf(`
-			SELECT namespace, name, version, generation, labels, spec, status,
+			SELECT namespace, name, version, generation, labels, annotations, spec, status,
 			       deletion_timestamp, finalizers, created_at, updated_at
 			FROM %s
 			WHERE namespace=$1 AND name=$2 AND version=$3`, s.table),
@@ -299,7 +325,7 @@ func (s *Store) Get(ctx context.Context, namespace, name, version string) (*v1al
 func (s *Store) GetLatest(ctx context.Context, namespace, name string) (*v1alpha1.RawObject, error) {
 	row := s.pool.QueryRow(ctx,
 		fmt.Sprintf(`
-			SELECT namespace, name, version, generation, labels, spec, status,
+			SELECT namespace, name, version, generation, labels, annotations, spec, status,
 			       deletion_timestamp, finalizers, created_at, updated_at
 			FROM %s
 			WHERE namespace=$1 AND name=$2 AND is_latest_version`, s.table),
@@ -395,7 +421,7 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 	}
 
 	query := fmt.Sprintf(`
-		SELECT namespace, name, version, generation, labels, spec, status,
+		SELECT namespace, name, version, generation, labels, annotations, spec, status,
 		       deletion_timestamp, finalizers, created_at, updated_at
 		FROM %s`, s.table)
 	if len(where) > 0 {
@@ -440,7 +466,7 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 func (s *Store) FindReferrers(ctx context.Context, namespace string, pathJSON json.RawMessage, latestOnly bool) ([]*v1alpha1.RawObject, error) {
 	args := []any{[]byte(pathJSON)}
 	query := fmt.Sprintf(`
-		SELECT namespace, name, version, generation, labels, spec, status,
+		SELECT namespace, name, version, generation, labels, annotations, spec, status,
 		       deletion_timestamp, finalizers, created_at, updated_at
 		FROM %s
 		WHERE spec @> $1::jsonb AND deletion_timestamp IS NULL`, s.table)

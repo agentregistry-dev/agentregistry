@@ -28,7 +28,7 @@ type rowScanner interface {
 //
 // Column order must match:
 //
-//	namespace, name, version, generation, labels, spec, status,
+//	namespace, name, version, generation, labels, annotations, spec, status,
 //	deletion_timestamp, finalizers, created_at, updated_at
 func scanRow(row rowScanner) (*v1alpha1.RawObject, error) {
 	var (
@@ -37,6 +37,7 @@ func scanRow(row rowScanner) (*v1alpha1.RawObject, error) {
 		version           string
 		generation        int64
 		labelsJSON        []byte
+		annotationsJSON   []byte
 		specJSON          []byte
 		statusJSON        []byte
 		deletionTimestamp *time.Time
@@ -46,7 +47,7 @@ func scanRow(row rowScanner) (*v1alpha1.RawObject, error) {
 	)
 	if err := row.Scan(
 		&namespace, &name, &version, &generation,
-		&labelsJSON, &specJSON, &statusJSON,
+		&labelsJSON, &annotationsJSON, &specJSON, &statusJSON,
 		&deletionTimestamp, &finalizersJSON,
 		&createdAt, &updatedAt,
 	); err != nil {
@@ -60,6 +61,13 @@ func scanRow(row rowScanner) (*v1alpha1.RawObject, error) {
 	if len(labelsJSON) > 0 {
 		if err := json.Unmarshal(labelsJSON, &labels); err != nil {
 			return nil, fmt.Errorf("decode labels: %w", err)
+		}
+	}
+
+	var annotations map[string]string
+	if len(annotationsJSON) > 0 {
+		if err := json.Unmarshal(annotationsJSON, &annotations); err != nil {
+			return nil, fmt.Errorf("decode annotations: %w", err)
 		}
 	}
 
@@ -83,6 +91,7 @@ func scanRow(row rowScanner) (*v1alpha1.RawObject, error) {
 			Name:              name,
 			Version:           version,
 			Labels:            labels,
+			Annotations:       annotations,
 			Generation:        generation,
 			CreatedAt:         createdAt,
 			UpdatedAt:         updatedAt,

@@ -240,6 +240,9 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		if meta.Finalizers != nil {
 			upsertOpts.Finalizers = meta.Finalizers
 		}
+		if meta.Annotations != nil {
+			upsertOpts.Annotations = meta.Annotations
+		}
 		if _, err := cfg.Store.Upsert(ctx, in.Namespace, in.Name, in.Version, specJSON, meta.Labels, upsertOpts); err != nil {
 			return nil, huma.Error500InternalServerError("upsert "+kind, err)
 		}
