@@ -2,8 +2,8 @@
 
 Companion to `REVIEW_GUIDE.md`. `REBUILD_TRACKER.md` has the full per-subsystem inventory; this file is the 3-minute read.
 
-Current branch: `refactor/v1alpha1-types` (31 commits, +9.9k / -0.4k).
-Scope remaining: approximately 70% of the subsystem ports. The commits landed so far establish the v1alpha1 foundation + its generic Store + HTTP surface, the multi-doc apply endpoint, seeding, the adapter interface (no natives), the importer pipeline with OSV + Scorecard scanners, and a deduplication pass (`d31a56e`, `80c903a`) that collapsed the kind→store mapping and shared GitHub resolution across scanners.
+Current branch: `refactor/v1alpha1-types` (36 commits).
+Scope remaining: approximately 50% of the subsystem ports. Commits landed so far establish the v1alpha1 foundation + its generic Store + HTTP surface (incl. multi-doc apply + POST /v0/import), seeding, the adapter interface (no natives), the importer pipeline with OSV + Scorecard scanners, all five per-registry validators (OCI + NPM + PyPI + NuGet + MCPB) ported and wired into apply/import, and two deduplication passes that collapsed the kind→store mapping + shared GitHub resolution across scanners.
 
 Order below follows the dependency chain — earlier items unlock later ones.
 
@@ -11,27 +11,23 @@ Order below follows the dependency chain — earlier items unlock later ones.
 
 ## Near-term (unblock the rest)
 
-### 1. Finish Group 7 (importer)
-**Status**: pipeline + Scanner interface + OSV + Scorecard shipped. Wire-up and legacy deletion remain.
-
-- [ ] Wire `importer.Importer` into `internal/registry/app.Bootstrap`. Construct with OSS scanners (OSV + Scorecard), register on the server.
-- [ ] Add `POST /v0/import` HTTP endpoint, or route `arctl import` through the existing `/v0/apply` endpoint (decide based on CLI direction).
-- [ ] Delete `internal/registry/importer/` wholesale once the above lands. The package currently carries ~2k LOC of legacy orchestration that has no callers after deletion.
+### 1. Finish Group 7 (importer) — **MOSTLY DONE**
+- [x] Wire `importer.Importer` into `internal/registry/app.Bootstrap` (commit `8d13ee4`).
+- [x] Add `POST /v0/import` HTTP endpoint (commit `8d13ee4`).
+- [x] Route `cfg.SeedFrom` goroutine through the new Importer (commit `20abd73`).
+- [ ] Delete `internal/registry/importer/` wholesale. Blocked by `internal/cli/import.go` (still imports the legacy package). CLI port is on a separate branch per plan; legacy importer stays in tree until that branch merges.
 - [ ] (Optional, scope separately) Port `container_scan.go` (Docker Hub popularity metadata) or `dependency_health.go` (deps.dev license rollups). Neither is a security scan; defer unless the UI needs the data.
 
-**Why first**: closes a complete subsystem and removes the largest single legacy package. Makes the next port cleaner because there's less dead code.
+### 2. Group 6 remainder — registry/URL validators — **DONE**
+- [x] OCI registry allowlist + label ownership — ported via `git mv` (commit `4f2f212`).
+- [x] NPM / PyPI / NuGet / MCPB "identifier exists in registry" checks — ported via `git mv` (commit `a6ea729`).
+- [x] `registries.Dispatcher` + wire-up into apply + import paths (commit `020e2bf`).
+- [x] Legacy `internal/registry/validators/registries/` directory empty + removed.
+- [x] Legacy `ValidatePackage(ctx, model.Package, name)` dispatcher updated to route every RegistryType through the new validators via on-the-fly `v1alpha1.RegistryPackage` translation — both stacks call the same code.
 
-### 2. Group 6 remainder — registry/URL validators
-**Status**: structural port complete (`81e732e`). Registry-type and URL-allowlist validators still in `internal/registry/validators/`.
+**Still pending on the validator side** (lives under the broader Group 3 umbrella rather than Group 6): duplicate-URL detection across packages + remotes within a single spec. Moves onto `(Spec).Validate()` when `internal/registry/validators/validators.go ValidateServerJSON` gets ported.
 
-- [ ] Port OCI registry allowlist (Docker Hub variants, GHCR, Quay, public registries) into a spec-level validator, probably `pkg/api/v1alpha1/registry_validate.go` shared across kinds.
-- [ ] Port NPM / PyPI / NuGet / MCPB "identifier exists in registry" checks. These hit external APIs — likely belong in a separate `(Spec).ValidateRegistry(ctx, client)` method that apply handlers can call with a shared rate-limited HTTP client.
-- [ ] Port duplicate-URL detection (across packages + remotes within a single spec).
-- [ ] Port per-Package `registryType` allowlist enforcement.
-
-**Why next**: `obj.Validate()` is on the hot path for every apply. Leaving registry checks in the legacy validators package means the new path silently doesn't enforce them.
-
-### 3. Group 3 — service-layer dissolution
+### 3. Group 3 — service-layer dissolution — **NEXT UP**
 **Status**: legacy service packages still carry business logic.
 
 - [ ] Move `Agent.PublishAgent` URL-dedup logic onto `AgentSpec.Validate`.

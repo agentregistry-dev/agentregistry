@@ -1,7 +1,7 @@
 # v1alpha1 API Refactor — Review Guide
 
 Branch: `refactor/v1alpha1-types`
-Scope: 31 commits, +9.9k / -0.4k lines across 63 files.
+Scope: 36 commits. Foundation + generic Store + HTTP surface + importer pipeline + all 5 per-registry validators + dedup passes.
 Epic: replace the five-layer type stack (`kinds.Document` → `Spec` → wire DTO → `Record` → JSONB blob) with a single Kubernetes-style `ar.dev/v1alpha1` envelope that flows YAML → HTTP → Go client → service → DB.
 
 This guide is written so a reviewer can pick it up cold and land at a specific commit in under five minutes. Each section points at the commits to read together, what the intent was, and where the design debate sits.
@@ -183,6 +183,36 @@ Post-review cleanup. These don't change behavior; they collapse structural dupli
 - `internal/registry/api/handlers/v0/resource/builtins.go` — houses the six `Register[*v1alpha1.X]` generic calls. They can't be collapsed further (Go generics are compile-time) but they're localized here, not scattered in the router.
 - `internal/registry/api/router/v0.go registerV1Alpha1Routes` — one `RegisterBuiltins` call plus one `RegisterApply` call. The resolver closure uses `stores[ref.Kind]` directly.
 - `pkg/importer/githubrepo.go` — exported `GitHubRepoFor(obj)` handles Agent, MCPServer, Skill. Any future GitHub-only scanner should import it.
+
+### Group 7 — Importer bootstrap wire-up (`8d13ee4`, `20abd73`, 2 commits)
+
+Closes the server-side half of the importer subsystem. The Importer + scanners from earlier commits are now constructed at bootstrap and exposed via HTTP.
+
+| Commit | Subject | Focus |
+|--------|---------|-------|
+| `8d13ee4` | wire v1alpha1 Importer + POST /v0/import | New `Importer.ImportBytes` method; `POST /v0/import` endpoint; `internaldb.NewV1Alpha1Resolver` extracted so router + Importer + bootstrap all share one ref-existence definition. 8 integration tests. |
+| `20abd73` | route `cfg.SeedFrom` through the v1alpha1 Importer | Hoist Stores + Importer construction up to the top of bootstrap. SeedFrom goroutine prefers the v1alpha1 Importer; falls back to legacy `importer.Service` when Pool() isn't exposed (noop / test backends). |
+
+**What to pay attention to**
+- `pkg/importer/importer.go ImportBytes` — decode + loop shared with `Import` via `importStream`; source string labels records for debugging.
+- `internal/registry/api/handlers/v0/resource/import.go` — nil Importer skips route registration. Query params mirror `importer.Options` (namespace, enrich, scans, dryRun, scannedBy).
+- `internal/registry/database/store_v1alpha1_tables.go NewV1Alpha1Resolver` — one ResolverFunc factory; both router's apply handler and the Importer call it.
+- `internal/registry/registry_app.go runSeedFromImport` — v1alpha1 path preferred; legacy fallback intact.
+
+### Group 8 — Registry validators port (`4f2f212`, `a6ea729`, `020e2bf`, 3 commits)
+
+The legacy per-registry validators (OCI allowlist + label match; NPM/PyPI/NuGet "identifier exists" checks; MCPB checksum) moved from `internal/registry/validators/registries/` to `pkg/api/v1alpha1/registries/` via `git mv`. 86-100% rename similarity per file — reviewers can diff each to see only the model.Package → v1alpha1.RegistryPackage type swap. Dispatcher + apply/import wire-up in the third commit.
+
+| Commit | Subject | Focus |
+|--------|---------|-------|
+| `4f2f212` | port OCI validator to v1alpha1 | `git mv oci.go{,_test.go}`; add `v1alpha1.RegistryPackage` + `RegistryValidatorFunc` + `(Object).ValidateRegistries` interface surface. Legacy dispatcher rewired to route OCI through the new validator. |
+| `a6ea729` | port NPM / PyPI / NuGet / MCPB validators | Same pattern across four validators. Re-exports `RegistryType{NPM,...}` + `RegistryURL{NPM,...}` constants in v1alpha1 so seed data + manifests round-trip unchanged. Legacy registries directory deleted. |
+| `020e2bf` | wire registries.Dispatcher into apply + import | `registries.Dispatcher` is the v1alpha1-native `RegistryValidatorFunc`. Threaded through `resource.Config` + `ApplyConfig` + `RegisterBuiltins` + `Importer.Config`. Bootstrap passes it everywhere. |
+
+**What to pay attention to**
+- `pkg/api/v1alpha1/registry_validate.go` — the `RegistryPackage` shape, the per-kind `ValidateRegistries` methods, and the `validatePackages` helper that accumulates FieldErrors per bad package.
+- `pkg/api/v1alpha1/registries/dispatcher.go` — how the switch routes RegistryType to the per-registry validator. Add a new `case` here when a new registry type lands.
+- `internal/registry/validators/package.go` — legacy `ValidatePackage(model.Package)` now translates to `v1alpha1.RegistryPackage` on the fly and calls the same dispatcher. Both stacks share the validator code.
 
 ### Group 7 — Design docs + tracker (`d21b566`, `f575541`, `c0a89e2`, et al.)
 
