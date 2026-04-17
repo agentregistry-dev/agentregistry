@@ -6,39 +6,31 @@ import (
 	"maps"
 
 	platformutils "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
-// TranslateRegistryServer converts a registry ServerSpec into a common.McpServerType
+// TranslateRegistryServer converts an API ServerJSON into a McpServerType
 // that can be used by the docker-compose generator.
 func TranslateRegistryServer(
 	name string,
-	serverSpec *types.ServerSpec,
+	server *apiv0.ServerJSON,
 	envOverrides map[string]string,
 	preferRemote bool,
 ) (*models.McpServerType, error) {
-	if len(serverSpec.Remotes) == 0 && len(serverSpec.Packages) == 0 {
-		return nil, fmt.Errorf("server %q has no remotes or packages", serverSpec.Name)
+	if len(server.Remotes) == 0 && len(server.Packages) == 0 {
+		return nil, fmt.Errorf("server %q has no remotes or packages", server.Name)
 	}
 
 	runEnv := make(map[string]string, len(envOverrides))
 	maps.Copy(runEnv, envOverrides)
 
 	translated, err := platformutils.TranslateMCPServer(context.Background(), &platformutils.MCPServerRunRequest{
-		RegistryServer: &apiv0.ServerJSON{
-			Name:        serverSpec.Name,
-			Title:       serverSpec.Title,
-			Description: serverSpec.Description,
-			Version:     serverSpec.Version,
-			Packages:    serverSpec.Packages,
-			Remotes:     serverSpec.Remotes,
-		},
-		PreferRemote: preferRemote,
-		EnvValues:    runEnv,
-		ArgValues:    map[string]string{},
-		HeaderValues: map[string]string{},
+		RegistryServer: server,
+		PreferRemote:   preferRemote,
+		EnvValues:      runEnv,
+		ArgValues:      map[string]string{},
+		HeaderValues:   map[string]string{},
 	})
 	if err != nil {
 		return nil, err
@@ -46,8 +38,8 @@ func TranslateRegistryServer(
 
 	switch translated.MCPServerType {
 	case "remote":
-		if len(serverSpec.Remotes) == 0 || serverSpec.Remotes[0].URL == "" {
-			return nil, fmt.Errorf("server %q remote has no URL", serverSpec.Name)
+		if len(server.Remotes) == 0 || server.Remotes[0].URL == "" {
+			return nil, fmt.Errorf("server %q remote has no URL", server.Name)
 		}
 		headers := make(map[string]string, len(translated.Remote.Headers))
 		for _, header := range translated.Remote.Headers {
@@ -56,16 +48,16 @@ func TranslateRegistryServer(
 		return &models.McpServerType{
 			Type:    "remote",
 			Name:    name,
-			URL:     serverSpec.Remotes[0].URL,
+			URL:     server.Remotes[0].URL,
 			Headers: headers,
 		}, nil
 	case "local":
 		if translated.Local == nil {
-			return nil, fmt.Errorf("server %q local translation missing deployment config", serverSpec.Name)
+			return nil, fmt.Errorf("server %q local translation missing deployment config", server.Name)
 		}
 		buildPath := ""
-		if len(serverSpec.Packages) > 0 {
-			config, _, err := platformutils.GetRegistryConfig(serverSpec.Packages[0], nil)
+		if len(server.Packages) > 0 {
+			config, _, err := platformutils.GetRegistryConfig(server.Packages[0], nil)
 			if err != nil {
 				return nil, err
 			}
