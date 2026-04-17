@@ -55,7 +55,7 @@ func newPostgresScope(executor executor, authz auth.Authorizer, tx pgx.Tx) *post
 		agents:      &agentStore{repositoryBase: base},
 		skills:      &skillStore{repositoryBase: base},
 		prompts:     &promptStore{repositoryBase: base},
-		deployments: &deploymentStore{repositoryBase: base},
+		deployments: &deploymentStore{repositoryBase: base, tx: tx},
 	}
 }
 

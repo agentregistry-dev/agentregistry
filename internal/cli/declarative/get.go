@@ -2,10 +2,11 @@ package declarative
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/resource"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -26,7 +27,7 @@ func newGetCmd() *cobra.Command {
 		Short: "List or retrieve registry resources",
 		Long: `List or retrieve registry resources by type.
 
-Supported types: agents, mcps, skills, prompts
+Supported types: agents, mcps, skills, prompts, providers, deployments
 (singular and uppercase forms also accepted, e.g. Agent, agent, agents)
 
 Examples:
@@ -52,7 +53,8 @@ func runGet(cmd *cobra.Command, args []string) error {
 	}
 
 	typeName := args[0]
-	h, err := resource.Lookup(typeName)
+
+	k, err := defaultRegistry.Lookup(typeName)
 	if err != nil {
 		return err
 	}
@@ -63,26 +65,26 @@ func runGet(cmd *cobra.Command, args []string) error {
 
 	if len(args) == 2 {
 		name := args[1]
-		item, err := h.Get(apiClient, name)
+		item, err := getItem(k, name)
 		if err != nil {
-			return fmt.Errorf("getting %s %q: %w", h.Singular(), name, err)
+			return fmt.Errorf("getting %s %q: %w", k.Kind, name, err)
 		}
 		if item == nil {
-			fmt.Fprintf(cmd.OutOrStdout(), "%s %q not found\n", h.Singular(), name)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s %q not found\n", k.Kind, name)
 			return nil
 		}
-		return printItem(cmd, h, item, outputFormat)
+		return printItem(cmd, k, item, outputFormat)
 	}
 
-	items, err := h.List(apiClient)
+	items, err := listItems(k)
 	if err != nil {
-		return fmt.Errorf("listing %s: %w", h.Plural(), err)
+		return fmt.Errorf("listing %s: %w", kindPlural(k), err)
 	}
 	if len(items) == 0 {
-		fmt.Fprintf(cmd.OutOrStdout(), "No %s found.\n", h.Plural())
+		fmt.Fprintf(cmd.OutOrStdout(), "No %s found.\n", kindPlural(k))
 		return nil
 	}
-	return printItems(cmd, h, items, outputFormat)
+	return printItems(cmd, k, items, outputFormat)
 }
 
 func runGetAll(cmd *cobra.Command, outputFormat string) error {
@@ -90,12 +92,15 @@ func runGetAll(cmd *cobra.Command, outputFormat string) error {
 		return fmt.Errorf("API client not initialized")
 	}
 
-	handlers := resource.All()
+	allKinds := defaultRegistry.All()
 	first := true
-	for _, h := range handlers {
-		items, err := h.List(apiClient)
+	for _, k := range allKinds {
+		items, err := listItems(k)
+		if errors.Is(err, errNotListable) {
+			continue
+		}
 		if err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "Error listing %s: %v\n", h.Plural(), err)
+			fmt.Fprintf(cmd.ErrOrStderr(), "warning: listing %s: %v\n", kindPlural(k), err)
 			continue
 		}
 		if len(items) == 0 {
@@ -105,8 +110,8 @@ func runGetAll(cmd *cobra.Command, outputFormat string) error {
 			fmt.Fprintln(cmd.OutOrStdout())
 		}
 		first = false
-		fmt.Fprintf(cmd.OutOrStdout(), "%s\n", h.Plural())
-		if err := printItems(cmd, h, items, outputFormat); err != nil {
+		fmt.Fprintf(cmd.OutOrStdout(), "%s\n", kindPlural(k))
+		if err := printItems(cmd, k, items, outputFormat); err != nil {
 			return err
 		}
 	}
@@ -116,29 +121,31 @@ func runGetAll(cmd *cobra.Command, outputFormat string) error {
 	return nil
 }
 
-func printItem(cmd *cobra.Command, h resource.ResourceHandler, item any, outputFormat string) error {
+// printItem renders a single item.
+func printItem(cmd *cobra.Command, k *kinds.Kind, item any, outputFormat string) error {
 	switch outputFormat {
 	case "yaml":
-		r := h.ToResource(item)
+		r := toResource(k, item)
 		if r == nil {
-			return fmt.Errorf("failed to convert %s to YAML", h.Singular())
+			return fmt.Errorf("failed to convert %s to YAML", k.Kind)
 		}
 		return marshalYAML(cmd, r)
 	case "json":
 		return marshalJSON(cmd, item)
 	default:
 		t := printer.NewTablePrinter(cmd.OutOrStdout())
-		t.SetHeaders(h.TableColumns()...)
-		t.AddRow(stringsToAny(h.TableRow(item))...)
+		t.SetHeaders(tableColumns(k)...)
+		t.AddRow(stringsToAny(tableRow(k, item))...)
 		return t.Render()
 	}
 }
 
-func printItems(cmd *cobra.Command, h resource.ResourceHandler, items []any, outputFormat string) error {
+// printItems renders a list of items.
+func printItems(cmd *cobra.Command, k *kinds.Kind, items []any, outputFormat string) error {
 	switch outputFormat {
 	case "yaml":
 		for i, item := range items {
-			r := h.ToResource(item)
+			r := toResource(k, item)
 			if r == nil {
 				continue
 			}
@@ -154,9 +161,9 @@ func printItems(cmd *cobra.Command, h resource.ResourceHandler, items []any, out
 		return marshalJSON(cmd, items)
 	default:
 		t := printer.NewTablePrinter(cmd.OutOrStdout())
-		t.SetHeaders(h.TableColumns()...)
+		t.SetHeaders(tableColumns(k)...)
 		for _, item := range items {
-			t.AddRow(stringsToAny(h.TableRow(item))...)
+			t.AddRow(stringsToAny(tableRow(k, item))...)
 		}
 		return t.Render()
 	}

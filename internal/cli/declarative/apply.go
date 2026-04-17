@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/resource"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
+	"github.com/agentregistry-dev/agentregistry/internal/client"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
 	"github.com/spf13/cobra"
 )
 
@@ -17,106 +17,122 @@ var ApplyCmd = newApplyCmd()
 
 // NewApplyCmd returns a new "apply" cobra command. Each call creates an
 // independent command with its own flag state, which is required for testing
-// since cobra's StringArray flags accumulate across Execute() calls on the
-// same command instance.
+// since cobra flags accumulate across Execute() calls on the same command instance.
 func NewApplyCmd() *cobra.Command {
 	return newApplyCmd()
 }
 
 func newApplyCmd() *cobra.Command {
+	var force, dryRun bool
 	cmd := &cobra.Command{
 		Use:   "apply -f FILE",
-		Short: "Create or update registry resources from YAML files",
-		Long: `Apply declarative YAML files to the registry.
+		Short: "Apply one or more resources from a YAML file",
+		Long: `Apply reads a YAML file (or stdin with -f -) containing one or more resource
+documents and applies them via POST /v0/apply.
 
-Each file may contain one or more resources separated by ---. Supported kinds:
-  Agent, MCPServer, Skill, Prompt
+Each resource is applied atomically; the server reports per-resource status.
+Best-effort: per-resource errors are reported without aborting the batch.
 
 Examples:
   arctl apply -f agent.yaml
   arctl apply -f stack.yaml --dry-run
-  cat stack.yaml | arctl apply -f -
-
-NOTE: Re-applying an agent YAML with a changed deploy.env section will
-undeploy and redeploy the existing cloud deployment. The new deployment
-will have a different ID. A failed redeploy may leave the resource
-undeployed; retry once the underlying issue is fixed.`,
+  cat stack.yaml | arctl apply -f -`,
 		SilenceUsage: true,
-		RunE:         runApply,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runApply(cmd, force, dryRun)
+		},
 	}
 	cmd.Flags().StringArrayP("filename", "f", nil,
 		"YAML file to apply (repeatable; use - for stdin)")
 	_ = cmd.MarkFlagRequired("filename")
-	cmd.Flags().Bool("dry-run", false,
-		"Preview what would be applied without making API calls")
+	cmd.Flags().BoolVar(&force, "force", false,
+		"Replace drifted deployments (required when drift is detected)")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false,
+		"Validate and simulate without mutating state")
 	return cmd
 }
 
-func runApply(cmd *cobra.Command, _ []string) error {
+func runApply(cmd *cobra.Command, force, dryRun bool) error {
 	filePaths, err := cmd.Flags().GetStringArray("filename")
 	if err != nil {
 		return fmt.Errorf("getting filename flag: %w", err)
 	}
-	dryRun, err := cmd.Flags().GetBool("dry-run")
-	if err != nil {
-		return fmt.Errorf("getting dry-run flag: %w", err)
-	}
-	// 1. Parse all input files into resources.
-	var allResources []*scheme.Resource
+
+	// 1. Read and validate all input files before sending anything.
+	var allData [][]byte
 	for _, path := range filePaths {
-		var resources []*scheme.Resource
-		var readErr error
-
+		var data []byte
 		if path == "-" {
-			data, ioErr := io.ReadAll(os.Stdin)
-			if ioErr != nil {
-				return fmt.Errorf("reading stdin: %w", ioErr)
+			data, err = io.ReadAll(os.Stdin)
+			if err != nil {
+				return fmt.Errorf("reading stdin: %w", err)
 			}
-			resources, readErr = scheme.DecodeBytes(data)
 		} else {
-			resources, readErr = scheme.DecodeFile(path)
+			data, err = os.ReadFile(path)
+			if err != nil {
+				return err
+			}
 		}
-		if readErr != nil {
-			return fmt.Errorf("file %s: %w", path, readErr)
+
+		// Validate locally via registry decode — catches unknown kinds before sending.
+		if defaultRegistry != nil {
+			if _, err := scheme.DecodeBytes(defaultRegistry, data); err != nil {
+				return fmt.Errorf("parsing %s: %w", path, err)
+			}
 		}
-		allResources = append(allResources, resources...)
+		allData = append(allData, data)
 	}
 
-	// 2. Validate all kinds before any API call.
-	// Field-level validation (name, version, etc.) is handled by each handler's Apply method,
-	// since different resource kinds have different requirements (e.g., providers have no version).
-	for _, r := range allResources {
-		if _, err := resource.Lookup(r.Kind); err != nil {
-			return err
-		}
-	}
-
-	// 3. Dry-run: just print what would happen.
-	if dryRun {
-		for _, r := range allResources {
-			fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] would apply %s/%s\n", strings.ToLower(r.Kind), r.Metadata.Name)
-		}
-		return nil
-	}
-
-	// 4. Apply each resource; continue on error (kubectl-style).
+	// 2. Dry-run with --dry-run uses the server-side dryRun flag.
+	// We still need an API client for the batch endpoint (unlike the old per-resource dry-run).
 	if apiClient == nil {
 		return fmt.Errorf("API client not initialized")
 	}
 
-	var errCount int
-	for _, r := range allResources {
-		h, _ := resource.Lookup(r.Kind) // already validated above
-		if err := h.Apply(apiClient, r); err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "Error: %s/%s: %v\n", strings.ToLower(r.Kind), r.Metadata.Name, err)
-			errCount++
+	// 3. Send each file as a separate batch call (preserves document separation).
+	var anyFailure bool
+	for i, data := range allData {
+		results, err := apiClient.Apply(cmd.Context(), data, client.ApplyOpts{
+			Force:  force,
+			DryRun: dryRun,
+		})
+		if err != nil {
+			// Request-level error (network, 4xx) — report and continue if multiple files.
+			fmt.Fprintf(cmd.ErrOrStderr(), "Error applying %s: %v\n", filePaths[i], err)
+			anyFailure = true
 			continue
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "%s/%s applied\n", strings.ToLower(r.Kind), r.Metadata.Name)
+		printResults(cmd.OutOrStdout(), results, dryRun)
+		for _, r := range results {
+			if r.Status == kinds.StatusFailed {
+				anyFailure = true
+			}
+		}
 	}
 
-	if errCount > 0 {
-		return fmt.Errorf("%d resource(s) failed to apply", errCount)
+	if anyFailure {
+		return fmt.Errorf("one or more resources failed to apply")
 	}
 	return nil
+}
+
+func printResults(out io.Writer, results []kinds.Result, dryRun bool) {
+	for _, r := range results {
+		mark := "✓"
+		if r.Status == kinds.StatusFailed {
+			mark = "✗"
+		}
+		fmt.Fprintf(out, "%s %s/%s", mark, r.Kind, r.Name)
+		if r.Version != "" {
+			fmt.Fprintf(out, " (%s)", r.Version)
+		}
+		fmt.Fprintf(out, " %s", r.Status)
+		if dryRun {
+			fmt.Fprint(out, " (dry run)")
+		}
+		if r.Error != "" {
+			fmt.Fprintf(out, ": %s", r.Error)
+		}
+		fmt.Fprintln(out)
+	}
 }

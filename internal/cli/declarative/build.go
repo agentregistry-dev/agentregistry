@@ -10,6 +10,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
 	mcpbuild "github.com/agentregistry-dev/agentregistry/internal/cli/mcp/build"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/spf13/cobra"
 )
@@ -64,18 +65,31 @@ Examples:
 				return err
 			}
 
+			// Validate the kind against the registry, then dispatch by canonical kind name.
+			// Build is intentionally kept as a CLI-side per-kind dispatch because the build
+			// logic depends on CLI packages (docker executor, mcp builder) that must not be
+			// imported by the server-side registry/kinds packages. The dispatch key is the
+			// canonical kind string from the registry — not a raw YAML field.
+			if defaultRegistry != nil {
+				if _, kerr := defaultRegistry.Lookup(r.Kind); kerr != nil {
+					return fmt.Errorf("unknown kind %q in %s", r.Kind, yamlFile)
+				}
+			}
+
 			out := cmd.OutOrStdout()
 			switch r.Kind {
-			case "Agent":
+			case "agent":
 				return buildAgent(out, projectDir, r, buildImage, buildPlatform, buildPush)
-			case "MCPServer":
+			case "mcp":
 				return buildMCPServer(out, projectDir, r, buildImage, buildPlatform, buildPush)
-			case "Skill":
+			case "skill":
 				return buildSkill(out, projectDir, r, buildImage, buildPlatform, buildPush)
-			case "Prompt":
+			case "prompt":
 				return fmt.Errorf("prompts have no build step — use 'arctl apply -f %s' directly", yamlFile)
 			default:
-				return fmt.Errorf("unknown kind %q in %s", r.Kind, yamlFile)
+				// Registry validated the kind above; reaching here means a kind that exists in
+				// the registry has no build action — skip silently (acceptable per task spec).
+				return nil
 			}
 		},
 	}
@@ -96,7 +110,7 @@ func findDeclarativeResource(projectDir string) (*scheme.Resource, string, error
 		if _, err := os.Stat(path); err != nil {
 			continue
 		}
-		resources, err := scheme.DecodeFile(path)
+		resources, err := scheme.DecodeFile(defaultRegistry, path)
 		if err != nil {
 			return nil, name, fmt.Errorf("parsing %s: %w", name, err)
 		}
@@ -134,26 +148,28 @@ func resolveImage(flagImage, specImage, name string) string {
 	return defaultImage(name)
 }
 
-// specString extracts a string field from the resource spec.
-func specString(r *scheme.Resource, key string) string {
-	if v, ok := r.Spec[key].(string); ok {
-		return v
+// agentSpecImage extracts spec.image for an Agent resource.
+func agentSpecImage(r *scheme.Resource) string {
+	if spec, ok := r.Spec.(*kinds.AgentSpec); ok {
+		return spec.Image
 	}
 	return ""
 }
 
-// specPackageIdentifier extracts spec.packages[0].identifier for MCPServer / Skill.
-func specPackageIdentifier(r *scheme.Resource) string {
-	pkgs, ok := r.Spec["packages"].([]any)
-	if !ok || len(pkgs) == 0 {
-		return ""
+// mcpSpecPackageIdentifier extracts spec.packages[0].identifier for an MCPServer resource.
+func mcpSpecPackageIdentifier(r *scheme.Resource) string {
+	if spec, ok := r.Spec.(*kinds.MCPSpec); ok && len(spec.Packages) > 0 {
+		return spec.Packages[0].Identifier
 	}
-	pkg, ok := pkgs[0].(map[string]any)
-	if !ok {
-		return ""
+	return ""
+}
+
+// skillSpecPackageIdentifier extracts spec.packages[0].identifier for a Skill resource.
+func skillSpecPackageIdentifier(r *scheme.Resource) string {
+	if spec, ok := r.Spec.(*kinds.SkillSpec); ok && len(spec.Packages) > 0 {
+		return spec.Packages[0].Identifier
 	}
-	id, _ := pkg["identifier"].(string)
-	return id
+	return ""
 }
 
 func buildAgent(out io.Writer, projectDir string, r *scheme.Resource, flagImage, platform string, push bool) error {
@@ -162,7 +178,7 @@ func buildAgent(out io.Writer, projectDir string, r *scheme.Resource, flagImage,
 		return fmt.Errorf("dockerfile not found in %s", projectDir)
 	}
 
-	image := resolveImage(flagImage, specString(r, "image"), r.Metadata.Name)
+	image := resolveImage(flagImage, agentSpecImage(r), r.Metadata.Name)
 
 	exec := docker.NewExecutor(false, projectDir)
 	if err := exec.CheckAvailability(); err != nil {
@@ -185,7 +201,7 @@ func buildAgent(out io.Writer, projectDir string, r *scheme.Resource, flagImage,
 }
 
 func buildMCPServer(out io.Writer, projectDir string, r *scheme.Resource, flagImage, platform string, push bool) error {
-	image := resolveImage(flagImage, specPackageIdentifier(r), r.Metadata.Name)
+	image := resolveImage(flagImage, mcpSpecPackageIdentifier(r), r.Metadata.Name)
 
 	fmt.Fprintf(out, "Building MCP server image: %s\n", image)
 	builder := mcpbuild.New()
@@ -215,7 +231,7 @@ func CheckDockerAvailable() error {
 const skillDockerfile = "FROM scratch\nCOPY . .\n"
 
 func buildSkill(out io.Writer, projectDir string, r *scheme.Resource, flagImage, platform string, push bool) error {
-	image := resolveImage(flagImage, specPackageIdentifier(r), r.Metadata.Name)
+	image := resolveImage(flagImage, skillSpecPackageIdentifier(r), r.Metadata.Name)
 
 	fmt.Fprintf(out, "Building skill image: %s\n", image)
 

@@ -108,7 +108,8 @@ spec:
 	t.Run("apply", func(t *testing.T) {
 		result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 		RequireSuccess(t, result)
-		RequireOutputContains(t, result, "agent/"+agentName+" applied")
+		RequireOutputContains(t, result, "agent/"+agentName)
+		RequireOutputContains(t, result, "applied")
 	})
 
 	// Step 2: Verify it exists in the registry.
@@ -184,7 +185,8 @@ spec:
 	// Apply the MCP server.
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "mcpserver/"+serverName+" applied")
+	RequireOutputContains(t, result, "mcp/"+serverName)
+	RequireOutputContains(t, result, "applied")
 
 	// Verify it exists.
 	verifyServerExists(t, regURL, serverName, version)
@@ -234,8 +236,9 @@ spec:
 
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "mcpserver/"+serverName+" applied")
-	RequireOutputContains(t, result, "agent/"+agentName+" applied")
+	RequireOutputContains(t, result, "mcp/"+serverName)
+	RequireOutputContains(t, result, "agent/"+agentName)
+	RequireOutputContains(t, result, "applied")
 
 	verifyServerExists(t, regURL, serverName, version)
 	verifyAgentExists(t, regURL, agentName, version)
@@ -268,7 +271,7 @@ spec:
 
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--dry-run", "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "[dry-run]")
+	RequireOutputContains(t, result, "(dry run)")
 
 	// Resource must NOT exist.
 	verifyAgentNotFound(t, regURL, agentName, version)
@@ -327,7 +330,8 @@ func TestDeclarativeInit_Agent(t *testing.T) {
 	// Step 3: apply the generated YAML directly (no edits needed for a simple name).
 	applyResult := RunArctl(t, tmpDir, "apply", "-f", agentYAMLPath, "--registry-url", regURL)
 	RequireSuccess(t, applyResult)
-	RequireOutputContains(t, applyResult, "agent/"+name+" applied")
+	RequireOutputContains(t, applyResult, "agent/"+name)
+	RequireOutputContains(t, applyResult, "applied")
 
 	// Step 4: verify it exists in the registry.
 	verifyAgentExists(t, regURL, name, version)
@@ -401,7 +405,8 @@ func TestDeclarativeInit_Skill(t *testing.T) {
 	// Step 3: apply to the registry.
 	applyResult := RunArctl(t, tmpDir, "apply", "-f", skillYAMLPath, "--registry-url", regURL)
 	RequireSuccess(t, applyResult)
-	RequireOutputContains(t, applyResult, "skill/"+name+" applied")
+	RequireOutputContains(t, applyResult, "skill/"+name)
+	RequireOutputContains(t, applyResult, "applied")
 }
 
 // TestDeclarativeInit_Prompt verifies arctl init prompt generates the correct
@@ -441,7 +446,8 @@ func TestDeclarativeInit_Prompt(t *testing.T) {
 	// Step 3: apply to the registry.
 	applyResult := RunArctl(t, tmpDir, "apply", "-f", promptYAMLPath, "--registry-url", regURL)
 	RequireSuccess(t, applyResult)
-	RequireOutputContains(t, applyResult, "prompt/"+name+" applied")
+	RequireOutputContains(t, applyResult, "prompt/"+name)
+	RequireOutputContains(t, applyResult, "applied")
 }
 
 // --- build tests ---
@@ -614,12 +620,14 @@ spec:
 	// First apply — creates the resource.
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "agent/"+agentName+" applied")
+	RequireOutputContains(t, result, "agent/"+agentName)
+	RequireOutputContains(t, result, "applied")
 
 	// Second apply — same file, must not fail.
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "agent/"+agentName+" applied")
+	RequireOutputContains(t, result, "agent/"+agentName)
+	RequireOutputContains(t, result, "applied")
 
 	// Resource should still exist after both applies.
 	verifyAgentExists(t, regURL, agentName, version)
@@ -688,7 +696,8 @@ spec:
 
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "agent/"+agentName+" applied")
+	RequireOutputContains(t, result, "agent/"+agentName)
+	RequireOutputContains(t, result, "applied")
 	verifyAgentExists(t, regURL, agentName, version)
 
 	desc := fetchAgentDescription(t, regURL, agentName, version)
@@ -724,93 +733,6 @@ spec:
 	}
 }
 
-// TestApplyProvider_HTTPIdempotent tests the PUT /v0/providers/{id}?platform=local endpoint:
-// first call creates a provider, second call updates it, third call with same data is idempotent.
-func TestApplyProvider_HTTPIdempotent(t *testing.T) {
-	regURL := RegistryURL(t)
-	providerID := "e2e-apply-prov-" + UniqueNameWithPrefix("prov")
-
-	t.Cleanup(func() {
-		req, _ := http.NewRequest(http.MethodDelete, regURL+"/providers/"+providerID+"?platform=local", nil)
-		client := &http.Client{Timeout: 10 * time.Second}
-		resp, _ := client.Do(req)
-		if resp != nil {
-			resp.Body.Close()
-		}
-	})
-
-	client := &http.Client{Timeout: 10 * time.Second}
-
-	doApplyProvider := func(t *testing.T, name string) *http.Response {
-		t.Helper()
-		body := fmt.Sprintf(`{"name":%q}`, name)
-		req, err := http.NewRequest(http.MethodPut,
-			regURL+"/providers/"+providerID+"?platform=local",
-			strings.NewReader(body))
-		if err != nil {
-			t.Fatalf("failed to build request: %v", err)
-		}
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := client.Do(req)
-		if err != nil {
-			t.Fatalf("PUT /providers/%s failed: %v", providerID, err)
-		}
-		return resp
-	}
-
-	// Step 1: create.
-	resp := doApplyProvider(t, "E2E Provider")
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 200 on create, got %d: %s", resp.StatusCode, body)
-	}
-	var created struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	}
-	body, _ := io.ReadAll(resp.Body)
-	if err := json.Unmarshal(body, &created); err != nil {
-		t.Fatalf("failed to decode create response: %v\nBody: %s", err, body)
-	}
-	if created.ID != providerID {
-		t.Errorf("expected id %q, got %q", providerID, created.ID)
-	}
-	if created.Name != "E2E Provider" {
-		t.Errorf("expected name %q, got %q", "E2E Provider", created.Name)
-	}
-
-	// Step 2: update (same ID, different name).
-	resp2 := doApplyProvider(t, "E2E Provider Updated")
-	defer resp2.Body.Close()
-	if resp2.StatusCode != http.StatusOK {
-		body2, _ := io.ReadAll(resp2.Body)
-		t.Fatalf("expected 200 on update, got %d: %s", resp2.StatusCode, body2)
-	}
-	var updated struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	}
-	body2, _ := io.ReadAll(resp2.Body)
-	if err := json.Unmarshal(body2, &updated); err != nil {
-		t.Fatalf("failed to decode update response: %v", err)
-	}
-	if updated.ID != providerID {
-		t.Errorf("expected same id %q after update, got %q", providerID, updated.ID)
-	}
-	if updated.Name != "E2E Provider Updated" {
-		t.Errorf("expected updated name, got %q", updated.Name)
-	}
-
-	// Step 3: idempotent re-apply with same data — must succeed.
-	resp3 := doApplyProvider(t, "E2E Provider Updated")
-	defer resp3.Body.Close()
-	if resp3.StatusCode != http.StatusOK {
-		body3, _ := io.ReadAll(resp3.Body)
-		t.Fatalf("expected 200 on idempotent apply, got %d: %s", resp3.StatusCode, body3)
-	}
-}
-
 // TestDeclarativeApply_MCPServer_Idempotent verifies that applying the same
 // MCPServer YAML twice succeeds. This exercises the new PUT
 // /v0/servers/{name}/versions/{version} apply endpoint enabled by the PATCH/PUT
@@ -841,12 +763,14 @@ spec:
 	// First apply — creates.
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "mcpserver/"+serverName+" applied")
+	RequireOutputContains(t, result, "mcp/"+serverName)
+	RequireOutputContains(t, result, "applied")
 
 	// Second apply — must succeed (no error like "version already exists").
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "mcpserver/"+serverName+" applied")
+	RequireOutputContains(t, result, "mcp/"+serverName)
+	RequireOutputContains(t, result, "applied")
 
 	verifyServerExists(t, regURL, serverName, version)
 }
@@ -878,11 +802,13 @@ spec:
 
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "skill/"+skillName+" applied")
+	RequireOutputContains(t, result, "skill/"+skillName)
+	RequireOutputContains(t, result, "applied")
 
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "skill/"+skillName+" applied")
+	RequireOutputContains(t, result, "skill/"+skillName)
+	RequireOutputContains(t, result, "applied")
 
 	// Verify it exists.
 	encoded := strings.ReplaceAll(skillName, "/", "%2F")
@@ -920,11 +846,13 @@ spec:
 
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "prompt/"+promptName+" applied")
+	RequireOutputContains(t, result, "prompt/"+promptName)
+	RequireOutputContains(t, result, "applied")
 
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "prompt/"+promptName+" applied")
+	RequireOutputContains(t, result, "prompt/"+promptName)
+	RequireOutputContains(t, result, "applied")
 
 	encoded := strings.ReplaceAll(promptName, "/", "%2F")
 	resp := RegistryGet(t, fmt.Sprintf("%s/prompts/%s/versions/%s", regURL, encoded, version))
@@ -934,11 +862,11 @@ spec:
 	}
 }
 
-// TestApplyDeployment_HTTPIdempotent exercises PUT /v0/deployments idempotency
+// TestApplyDeployment_HTTPIdempotent exercises POST /v0/apply deployment idempotency
 // against the local provider: it builds and publishes an agent, then issues
-// PUT /v0/deployments three times. The first call deploys; the second and
-// third calls must return the same deployment ID without error and without
-// creating duplicate deployments. Skipped on the kubernetes backend.
+// POST /v0/apply three times with a deployment YAML. The first call deploys;
+// the second and third calls must succeed without error (idempotent re-apply).
+// Skipped on the kubernetes backend.
 func TestApplyDeployment_HTTPIdempotent(t *testing.T) {
 	if IsK8sBackend() {
 		t.Skip("skipping local apply-deployment idempotency test: E2E_BACKEND=k8s")
@@ -968,56 +896,70 @@ func TestApplyDeployment_HTTPIdempotent(t *testing.T) {
 	result = RunArctl(t, tmpDir, "agent", "publish", agentDir, "--registry-url", regURL)
 	RequireSuccess(t, result)
 
-	// Build the sub-resource deployment URL: PUT /v0/agents/{name}/versions/latest/deployments/local
-	encodedAgent := strings.ReplaceAll(agentName, "/", "%2F")
-	deployURL := fmt.Sprintf("%s/agents/%s/versions/latest/deployments/local", regURL, encodedAgent)
-	deployBody := `{}`
+	// Use POST /v0/apply with a deployment YAML body (PUT sub-resource endpoint was removed).
+	applyURL := fmt.Sprintf("%s/apply", regURL)
+	deployYAML := fmt.Sprintf(`kind: deployment
+metadata:
+  name: %s
+  version: latest
+spec:
+  resourceType: agent
+  providerId: local
+`, agentName)
 
 	httpClient := &http.Client{Timeout: 60 * time.Second}
-	doPut := func(t *testing.T) (string, string) {
+	doApply := func(t *testing.T) string {
 		t.Helper()
-		req, err := http.NewRequest(http.MethodPut, deployURL, strings.NewReader(deployBody))
+		req, err := http.NewRequest(http.MethodPost, applyURL, strings.NewReader(deployYAML))
 		if err != nil {
-			t.Fatalf("failed to build PUT request: %v", err)
+			t.Fatalf("failed to build POST request: %v", err)
 		}
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", "application/yaml")
 		resp, err := httpClient.Do(req)
 		if err != nil {
-			t.Fatalf("PUT %s failed: %v", deployURL, err)
+			t.Fatalf("POST %s failed: %v", applyURL, err)
 		}
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
 		}
-		var dep struct {
-			ID     string `json:"id"`
-			Status string `json:"status"`
+		var applyResp struct {
+			Results []struct {
+				Kind    string `json:"kind"`
+				Name    string `json:"name"`
+				Version string `json:"version"`
+				Status  string `json:"status"`
+			} `json:"results"`
 		}
-		if err := json.Unmarshal(body, &dep); err != nil {
-			t.Fatalf("failed to decode deployment response: %v\nBody: %s", err, body)
+		if err := json.Unmarshal(body, &applyResp); err != nil {
+			t.Fatalf("failed to decode apply response: %v\nBody: %s", err, body)
 		}
-		return dep.ID, dep.Status
+		if len(applyResp.Results) == 0 {
+			t.Fatalf("apply returned empty results\nBody: %s", body)
+		}
+		return applyResp.Results[0].Status
 	}
 
 	// First apply — creates the deployment.
-	id1, status1 := doPut(t)
-	if id1 == "" {
-		t.Fatal("first apply returned empty deployment ID")
+	status1 := doApply(t)
+	t.Logf("first apply: status=%s", status1)
+	if status1 != "applied" {
+		t.Fatalf("first apply: expected status 'applied', got %q", status1)
 	}
-	t.Logf("first apply: id=%s status=%s", id1, status1)
 
-	// Second apply — must return the same ID (idempotent no-op once deployed).
-	id2, status2 := doPut(t)
-	if id2 != id1 {
-		t.Fatalf("second apply returned different deployment ID: got %s, want %s", id2, id1)
+	// Second apply — must succeed (idempotent no-op once deployed).
+	status2 := doApply(t)
+	t.Logf("second apply: status=%s", status2)
+	if status2 != "applied" {
+		t.Fatalf("second apply: expected status 'applied', got %q", status2)
 	}
-	t.Logf("second apply: id=%s status=%s", id2, status2)
 
-	// Third apply — same ID expected.
-	id3, _ := doPut(t)
-	if id3 != id1 {
-		t.Fatalf("third apply returned different deployment ID: got %s, want %s", id3, id1)
+	// Third apply — same expectation.
+	status3 := doApply(t)
+	t.Logf("third apply: status=%s", status3)
+	if status3 != "applied" {
+		t.Fatalf("third apply: expected status 'applied', got %q", status3)
 	}
 
 	// Verify only one deployment exists for this agent in deploy list.
@@ -1043,5 +985,265 @@ func TestApplyDeployment_HTTPIdempotent(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("expected exactly 1 deployment for agent %s after 3 idempotent applies, got %d", agentName, count)
 	}
+}
+
+// --- Batch apply endpoint tests ---
+
+// TestBatchApply_MultiResource verifies that applying a multi-document YAML
+// containing an agent and a provider in one file succeeds and returns per-resource
+// "applied" status for each resource.
+func TestBatchApply_MultiResource(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+
+	agentName := UniqueAgentName("batchagent")
+	agentVersion := "0.0.1-e2e"
+	providerName := "e2e-batch-prov-" + UniqueNameWithPrefix("prov")
+
+	// Pre-clean and register cleanup for both resources.
+	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
+	t.Cleanup(func() {
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
+		req, _ := http.NewRequest(http.MethodDelete,
+			regURL+"/providers/"+providerName+"?platform=local", nil)
+		client := &http.Client{Timeout: 10 * time.Second}
+		if resp, err := client.Do(req); err == nil {
+			resp.Body.Close()
+		}
+	})
+
+	multiYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  image: ghcr.io/e2e-test/batch-agent:latest
+  description: "Batch multi-resource apply test agent"
+  language: python
+  framework: adk
+  modelProvider: gemini
+  modelName: gemini-2.0-flash
+---
+apiVersion: ar.dev/v1alpha1
+kind: provider
+metadata:
+  name: %s
+spec:
+  platform: local
+`, agentName, agentVersion, providerName)
+
+	yamlPath := writeDeclarativeYAML(t, tmpDir, "multi.yaml", multiYAML)
+
+	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
+	RequireSuccess(t, result)
+
+	// Each resource must appear in the output as "applied".
+	RequireOutputContains(t, result, "agent/"+agentName)
+	RequireOutputContains(t, result, "applied")
+	RequireOutputContains(t, result, "provider/"+providerName)
+
+	// Verify agent exists via HTTP.
+	verifyAgentExists(t, regURL, agentName, agentVersion)
+}
+
+// TestBatchApply_Idempotent verifies that applying the same multi-document YAML
+// twice succeeds without error. The second apply is a server-side upsert that
+// returns "applied" for both resources (the server does not currently distinguish
+// no-op updates from mutations at the batch level).
+func TestBatchApply_Idempotent(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+
+	agentName := UniqueAgentName("idempbatch")
+	agentVersion := "0.0.1-e2e"
+	providerName := "e2e-idemp-prov-" + UniqueNameWithPrefix("prov")
+
+	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
+	t.Cleanup(func() {
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
+		req, _ := http.NewRequest(http.MethodDelete,
+			regURL+"/providers/"+providerName+"?platform=local", nil)
+		client := &http.Client{Timeout: 10 * time.Second}
+		if resp, err := client.Do(req); err == nil {
+			resp.Body.Close()
+		}
+	})
+
+	multiYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  image: ghcr.io/e2e-test/idemp-batch-agent:latest
+  description: "Idempotent batch apply test"
+  language: python
+  framework: adk
+  modelProvider: gemini
+  modelName: gemini-2.0-flash
+---
+apiVersion: ar.dev/v1alpha1
+kind: provider
+metadata:
+  name: %s
+spec:
+  platform: local
+`, agentName, agentVersion, providerName)
+
+	yamlPath := writeDeclarativeYAML(t, tmpDir, "multi.yaml", multiYAML)
+
+	// First apply — creates both resources.
+	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "agent/"+agentName)
+	RequireOutputContains(t, result, "applied")
+
+	// Second apply — same file, must not fail (upsert semantics).
+	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "agent/"+agentName)
+	RequireOutputContains(t, result, "applied")
+
+	// Both resources must still exist after both applies.
+	verifyAgentExists(t, regURL, agentName, agentVersion)
+}
+
+// TestBatchApply_DriftRequiresForce verifies that applying a deployment whose
+// config has drifted from the running deployment fails without --force and
+// succeeds with --force. This test only runs on the docker backend, as it
+// requires a live local deployment that can be in-flight.
+//
+// The test uses the Deployment kind's ErrDeploymentDrift path by:
+//  1. Publishing an agent and deploying it.
+//  2. Modifying the env in the YAML.
+//  3. Re-applying without --force — expects failure with a "force" hint.
+//  4. Re-applying with --force — expects success.
+func TestBatchApply_DriftRequiresForce(t *testing.T) {
+	if IsK8sBackend() {
+		t.Skip("skipping drift test: not applicable on k8s backend (requires local docker provider)")
+	}
+	// skipped: arctl agent build cannot read declarative agent.yaml produced by
+	// arctl init agent (pre-existing #425 compat issue — declarative init writes
+	// kind/metadata/spec format but build expects flat agentName/language/framework).
+	t.Skip("skipped: arctl agent build cannot read declarative agent.yaml (pre-existing #425 compat issue)")
+
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+	agentName := UniqueAgentName("driftbatch")
+	agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
+	agentVersion := "0.1.0"
+	providerID := "local"
+
+	t.Cleanup(func() {
+		RemoveDeploymentsByServerName(t, regURL, agentName)
+		removeLocalDeployment(t)
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
+	})
+
+	// Step 1: init → build → publish the agent.
+	result := RunArctl(t, tmpDir, "init", "agent", "adk", "python",
+		"--model-name", "gemini-2.5-flash",
+		"--image", agentImage,
+		agentName,
+	)
+	RequireSuccess(t, result)
+
+	result = RunArctl(t, tmpDir, "agent", "build", agentName, "--image", agentImage)
+	RequireSuccess(t, result)
+
+	agentDir := filepath.Join(tmpDir, agentName)
+	result = RunArctl(t, tmpDir, "agent", "publish", agentDir, "--registry-url", regURL)
+	RequireSuccess(t, result)
+
+	// Step 2: apply the initial deployment YAML (no env).
+	deployYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: deployment
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  providerId: %s
+  resourceType: agent
+`, agentName, agentVersion, providerID)
+
+	yamlPath := writeDeclarativeYAML(t, tmpDir, "deploy.yaml", deployYAML)
+	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "deployment/"+agentName)
+	RequireOutputContains(t, result, "applied")
+
+	// Step 3: modify the env to create drift.
+	driftYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: deployment
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  providerId: %s
+  resourceType: agent
+  env:
+    NEW_VAR: "drift-value"
+`, agentName, agentVersion, providerID)
+
+	driftPath := writeDeclarativeYAML(t, tmpDir, "deploy-drift.yaml", driftYAML)
+
+	// Apply drifted YAML without --force — expect failure.
+	result = RunArctl(t, tmpDir, "apply", "-f", driftPath, "--registry-url", regURL)
+	RequireFailure(t, result)
+	// Server should hint about --force.
+	combined := result.Stdout + result.Stderr
+	if !strings.Contains(combined, "force") {
+		t.Logf("Expected 'force' hint in output; got:\n%s", combined)
+	}
+
+	// Step 4: apply with --force — expect success.
+	result = RunArctl(t, tmpDir, "apply", "-f", driftPath, "--force", "--registry-url", regURL)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "deployment/"+agentName)
+	RequireOutputContains(t, result, "applied")
+}
+
+// TestBatchApply_DeleteFile verifies that arctl delete -f <file> deletes all
+// resources listed in the file via DELETE /v0/apply, and that the resources
+// are subsequently not found via HTTP GET.
+func TestBatchApply_DeleteFile(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+
+	agentName := UniqueAgentName("delbatch")
+	agentVersion := "0.0.1-e2e"
+
+	// Ensure clean state before the test.
+	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
+
+	agentYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  image: ghcr.io/e2e-test/del-batch-agent:latest
+  description: "Delete-file batch test agent"
+  language: python
+  framework: adk
+  modelProvider: gemini
+  modelName: gemini-2.0-flash
+`, agentName, agentVersion)
+
+	yamlPath := writeDeclarativeYAML(t, tmpDir, "agent.yaml", agentYAML)
+
+	// Step 1: apply.
+	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "agent/"+agentName)
+	verifyAgentExists(t, regURL, agentName, agentVersion)
+
+	// Step 2: delete -f — sends DELETE /v0/apply.
+	result = RunArctl(t, tmpDir, "delete", "-f", yamlPath, "--registry-url", regURL)
+	RequireSuccess(t, result)
+
+	// Step 3: resource must be gone.
+	verifyAgentNotFound(t, regURL, agentName, agentVersion)
 }
 

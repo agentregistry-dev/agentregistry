@@ -41,6 +41,11 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
 {{- else if eq .ModelProvider "gemini" }}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+{{- else if eq .ModelProvider "bedrock" }}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_SESSION_TOKEN
+      - AWS_REGION=${AWS_REGION}
 {{- end }}
 {{- range .EnvVars }}
       - {{.}}=${{"{"}}{{.}}{{"}"}}

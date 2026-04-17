@@ -1,83 +1,37 @@
+// Package scheme is the thin CLI-side wrapper over kinds.Registry decoding.
+// It exists to keep CLI code decoupled from the registry package's fully-qualified
+// type names when reading YAML files.
 package scheme
 
 import (
-	"bytes"
-	"fmt"
-	"io"
 	"os"
-	"time"
 
-	"gopkg.in/yaml.v3"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
+	"github.com/agentregistry-dev/agentregistry/pkg/models"
 )
 
-const APIVersion = "ar.dev/v1alpha1"
+// APIVersion is the canonical apiVersion string for arctl declarative YAML files.
+// This re-exports models.APIVersion so CLI code does not need to import pkg/models directly.
+const APIVersion = models.APIVersion
 
-// Resource is the universal declarative envelope for all registry resources.
-type Resource struct {
-	APIVersion string         `yaml:"apiVersion"`
-	Kind       string         `yaml:"kind"`
-	Metadata   Metadata       `yaml:"metadata"`
-	Spec       map[string]any `yaml:"spec"`
+// Resource is an alias for kinds.Document. All CLI code should read doc.Spec via a
+// typed assertion against the per-kind Spec struct (e.g. *agent.Spec).
+type Resource = kinds.Document
+
+// Metadata re-exports kinds.Metadata for CLI callers.
+type Metadata = kinds.Metadata
+
+// DecodeBytes parses one or more YAML documents using the provided registry.
+// Returns an error if any document has an unknown kind or an unparseable spec.
+func DecodeBytes(reg *kinds.Registry, b []byte) ([]*Resource, error) {
+	return reg.DecodeMulti(b)
 }
 
-// Metadata holds the resource identity and server-generated timestamps.
-type Metadata struct {
-	Name        string     `yaml:"name"`
-	Version     string     `yaml:"version,omitempty"`
-	PublishedAt *time.Time `yaml:"publishedAt,omitempty"`
-	UpdatedAt   *time.Time `yaml:"updatedAt,omitempty"`
-}
-
-// DecodeBytes parses one or more YAML documents from b.
-// Each document must have apiVersion, kind, and metadata.name.
-// Returns an error if any document is invalid or if no documents are found.
-func DecodeBytes(b []byte) ([]*Resource, error) {
-	dec := yaml.NewDecoder(bytes.NewReader(b))
-	var resources []*Resource
-
-	for {
-		var r Resource
-		if err := dec.Decode(&r); err != nil {
-			if err == io.EOF {
-				break
-			}
-			return nil, fmt.Errorf("parsing YAML: %w", err)
-		}
-
-		// Skip entirely empty documents (e.g. trailing ---)
-		if r.Kind == "" && r.APIVersion == "" && r.Metadata.Name == "" {
-			continue
-		}
-
-		if r.Kind == "" {
-			return nil, fmt.Errorf("resource missing required field 'kind'")
-		}
-		if r.APIVersion == "" {
-			return nil, fmt.Errorf("resource %q missing required field 'apiVersion'", r.Kind)
-		}
-		if r.APIVersion != APIVersion {
-			return nil, fmt.Errorf("resource %s/%s: unsupported apiVersion %q; expected %q",
-				r.Kind, r.Metadata.Name, r.APIVersion, APIVersion)
-		}
-		if r.Metadata.Name == "" {
-			return nil, fmt.Errorf("resource %q missing required field 'metadata.name'", r.Kind)
-		}
-
-		resources = append(resources, &r)
-	}
-
-	if len(resources) == 0 {
-		return nil, fmt.Errorf("no resources found in input")
-	}
-
-	return resources, nil
-}
-
-// DecodeFile reads a file at path and parses its YAML documents.
-func DecodeFile(path string) ([]*Resource, error) {
-	data, err := os.ReadFile(path)
+// DecodeFile reads a YAML file and decodes it using the provided registry.
+func DecodeFile(reg *kinds.Registry, path string) ([]*Resource, error) {
+	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", path, err)
+		return nil, err
 	}
-	return DecodeBytes(data)
+	return DecodeBytes(reg, b)
 }

@@ -13,6 +13,7 @@ import (
 	mcptemplates "github.com/agentregistry-dev/agentregistry/internal/cli/mcp/templates"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	skilltemplates "github.com/agentregistry-dev/agentregistry/internal/cli/skill/templates"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/validators"
 	"github.com/spf13/cobra"
@@ -193,79 +194,76 @@ func localMCPName(registryName string) string {
 }
 
 // writeDeclarativeAgentYAML writes agent.yaml in the ar.dev/v1alpha1 declarative format.
+// Uses the typed kinds.AgentSpec struct instead of map[string]any to ensure compile-time
+// field validation and consistent YAML key naming.
 func writeDeclarativeAgentYAML(projectDir, name, ver, image, language, framework, modelProvider, modelName, description, gitURL string, mcps, skills, prompts []string) error {
 	registryURL := agentutils.GetDefaultRegistryURL()
 
-	spec := map[string]any{
-		"image":         image,
-		"language":      language,
-		"framework":     framework,
-		"modelProvider": modelProvider,
-		"modelName":     modelName,
-	}
-	if description != "" {
-		spec["description"] = description
-	} else {
-		spec["description"] = fmt.Sprintf("%s agent", name)
-	}
-	if gitURL != "" {
-		spec["repository"] = map[string]any{
-			"url":    gitURL,
-			"source": "git",
-		}
-	}
-	if len(mcps) > 0 {
-		var mcpList []map[string]any
-		for _, raw := range mcps {
-			serverName, version := parseNameVersion(raw)
-			mcpList = append(mcpList, map[string]any{
-				"type":                  "registry",
-				"name":                  localMCPName(serverName),
-				"registryURL":           registryURL,
-				"registryServerName":    serverName,
-				"registryServerVersion": version,
-			})
-		}
-		spec["mcpServers"] = mcpList
-	}
-	if len(skills) > 0 {
-		var skillList []map[string]any
-		for _, raw := range skills {
-			skillName, version := parseNameVersion(raw)
-			skillList = append(skillList, map[string]any{
-				"name":                 skillName,
-				"registryURL":          registryURL,
-				"registrySkillName":    skillName,
-				"registrySkillVersion": version,
-			})
-		}
-		spec["skills"] = skillList
-	}
-	if len(prompts) > 0 {
-		var promptList []map[string]any
-		for _, raw := range prompts {
-			promptName, version := parseNameVersion(raw)
-			promptList = append(promptList, map[string]any{
-				"name":                  promptName,
-				"registryURL":           registryURL,
-				"registryPromptName":    promptName,
-				"registryPromptVersion": version,
-			})
-		}
-		spec["prompts"] = promptList
+	desc := description
+	if desc == "" {
+		desc = fmt.Sprintf("%s agent", name)
 	}
 
-	r := &scheme.Resource{
+	spec := kinds.AgentSpec{
+		Image:         image,
+		Language:      language,
+		Framework:     framework,
+		ModelProvider: modelProvider,
+		ModelName:     modelName,
+		Description:   desc,
+	}
+
+	if gitURL != "" {
+		spec.Repository = &kinds.AgentRepository{
+			URL:    gitURL,
+			Source: "git",
+		}
+	}
+
+	for _, raw := range mcps {
+		serverName, mcpVer := parseNameVersion(raw)
+		spec.McpServers = append(spec.McpServers, kinds.AgentMcpServer{
+			Type:                  "registry",
+			Name:                  localMCPName(serverName),
+			RegistryURL:           registryURL,
+			RegistryServerName:    serverName,
+			RegistryServerVersion: mcpVer,
+		})
+	}
+
+	for _, raw := range skills {
+		skillName, skillVer := parseNameVersion(raw)
+		spec.Skills = append(spec.Skills, kinds.AgentSkillRef{
+			Name:                 skillName,
+			RegistryURL:          registryURL,
+			RegistrySkillName:    skillName,
+			RegistrySkillVersion: skillVer,
+		})
+	}
+
+	for _, raw := range prompts {
+		promptName, promptVer := parseNameVersion(raw)
+		spec.Prompts = append(spec.Prompts, kinds.AgentPromptRef{
+			Name:                  promptName,
+			RegistryURL:           registryURL,
+			RegistryPromptName:    promptName,
+			RegistryPromptVersion: promptVer,
+		})
+	}
+
+	doc := struct {
+		APIVersion string          `yaml:"apiVersion"`
+		Kind       string          `yaml:"kind"`
+		Metadata   kinds.Metadata  `yaml:"metadata"`
+		Spec       kinds.AgentSpec `yaml:"spec"`
+	}{
 		APIVersion: scheme.APIVersion,
 		Kind:       "Agent",
-		Metadata: scheme.Metadata{
-			Name:    name,
-			Version: ver,
-		},
-		Spec: spec,
+		Metadata:   kinds.Metadata{Name: name, Version: ver},
+		Spec:       spec,
 	}
 
-	b, err := yaml.Marshal(r)
+	b, err := yaml.Marshal(doc)
 	if err != nil {
 		return err
 	}
@@ -427,38 +425,40 @@ Supported frameworks: fastmcp-python, mcp-go`,
 }
 
 func writeDeclarativeMCPYAML(projectDir, name, ver, image, description string) error {
-	spec := map[string]any{
-		"title": name,
-		"packages": []map[string]any{
+	nameParts := strings.SplitN(name, "/", 2)
+	shortName := nameParts[len(nameParts)-1]
+
+	desc := description
+	if desc == "" {
+		desc = fmt.Sprintf("%s MCP server", shortName)
+	}
+
+	spec := kinds.MCPSpec{
+		Title:       shortName,
+		Description: desc,
+		Packages: []kinds.MCPPackage{
 			{
-				"registryType": "oci",
-				"identifier":   image,
-				"version":      ver,
-				"transport": map[string]any{
-					"type": "stdio",
-				},
+				RegistryType: "oci",
+				Identifier:   image,
+				Version:      ver,
+				Transport:    kinds.MCPTransport{Type: "stdio"},
 			},
 		},
 	}
-	if description != "" {
-		spec["description"] = description
-	} else {
-		// Use just the name part after the slash for the description.
-		parts := strings.SplitN(name, "/", 2)
-		spec["description"] = fmt.Sprintf("%s MCP server", parts[len(parts)-1])
-	}
-	// title should also use just the name part.
-	nameParts := strings.SplitN(name, "/", 2)
-	spec["title"] = nameParts[len(nameParts)-1]
 
-	r := &scheme.Resource{
+	doc := struct {
+		APIVersion string         `yaml:"apiVersion"`
+		Kind       string         `yaml:"kind"`
+		Metadata   kinds.Metadata `yaml:"metadata"`
+		Spec       kinds.MCPSpec  `yaml:"spec"`
+	}{
 		APIVersion: scheme.APIVersion,
 		Kind:       "MCPServer",
-		Metadata:   scheme.Metadata{Name: name, Version: ver},
+		Metadata:   kinds.Metadata{Name: name, Version: ver},
 		Spec:       spec,
 	}
 
-	b, err := yaml.Marshal(r)
+	b, err := yaml.Marshal(doc)
 	if err != nil {
 		return err
 	}
@@ -531,24 +531,30 @@ The generated skill.yaml can be applied directly:
 }
 
 func writeDeclarativeSkillYAML(projectDir, name, ver, description, category string) error {
-	spec := map[string]any{
-		"title":    name,
-		"category": category,
-	}
-	if description != "" {
-		spec["description"] = description
-	} else {
-		spec["description"] = fmt.Sprintf("%s skill", name)
+	desc := description
+	if desc == "" {
+		desc = fmt.Sprintf("%s skill", name)
 	}
 
-	r := &scheme.Resource{
+	spec := kinds.SkillSpec{
+		Title:       name,
+		Category:    category,
+		Description: desc,
+	}
+
+	doc := struct {
+		APIVersion string          `yaml:"apiVersion"`
+		Kind       string          `yaml:"kind"`
+		Metadata   kinds.Metadata  `yaml:"metadata"`
+		Spec       kinds.SkillSpec `yaml:"spec"`
+	}{
 		APIVersion: scheme.APIVersion,
 		Kind:       "Skill",
-		Metadata:   scheme.Metadata{Name: name, Version: ver},
+		Metadata:   kinds.Metadata{Name: name, Version: ver},
 		Spec:       spec,
 	}
 
-	b, err := yaml.Marshal(r)
+	b, err := yaml.Marshal(doc)
 	if err != nil {
 		return err
 	}
@@ -613,23 +619,29 @@ The generated file can be applied directly:
 }
 
 func writeDeclarativePromptYAML(path, name, ver, description, content string) error {
-	spec := map[string]any{
-		"content": content,
-	}
-	if description != "" {
-		spec["description"] = description
-	} else {
-		spec["description"] = fmt.Sprintf("%s prompt", name)
+	desc := description
+	if desc == "" {
+		desc = fmt.Sprintf("%s prompt", name)
 	}
 
-	r := &scheme.Resource{
+	spec := kinds.PromptSpec{
+		Description: desc,
+		Content:     content,
+	}
+
+	doc := struct {
+		APIVersion string           `yaml:"apiVersion"`
+		Kind       string           `yaml:"kind"`
+		Metadata   kinds.Metadata   `yaml:"metadata"`
+		Spec       kinds.PromptSpec `yaml:"spec"`
+	}{
 		APIVersion: scheme.APIVersion,
 		Kind:       "Prompt",
-		Metadata:   scheme.Metadata{Name: name, Version: ver},
+		Metadata:   kinds.Metadata{Name: name, Version: ver},
 		Spec:       spec,
 	}
 
-	b, err := yaml.Marshal(r)
+	b, err := yaml.Marshal(doc)
 	if err != nil {
 		return err
 	}

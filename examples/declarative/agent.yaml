@@ -13,4 +13,14 @@ spec:
   # repository:                 # optional: link to source code
   #   url: https://github.com/acme/summarizer
   #   source: github            # github | gitlab | bitbucket
-  # See full-stack.yaml for an agent with mcpServers, skills, and prompts references.
+  # References to other registry resources -- resolved at deploy time:
+  # mcpServers:
+  #   - name: acme/fetch        # published via: arctl apply -f mcp.yaml
+  #     version: "1.0.0"
+  # skills:
+  #   - name: summarize         # published via: arctl apply -f skill.yaml
+  #     version: "1.0.0"
+  # prompts:
+  #   - name: my-prompt         # published via: arctl apply -f prompt.yaml
+  #     version: "1.0.0"
+  # See full-stack.yaml for a complete example with all dependencies.

@@ -1119,6 +1119,14 @@ func (m *deployCreateMockDB) Deployments() database.DeploymentStore {
 	return m
 }
 
+func (m *deployCreateMockDB) Skills() database.SkillStore {
+	return nil
+}
+
+func (m *deployCreateMockDB) Prompts() database.PromptStore {
+	return nil
+}
+
 // deploymentMockDB is a minimal mock for database.Store that only implements
 // the methods needed for testing deployment cleanup logic. All other methods panic.
 type deploymentMockDB struct {
@@ -1137,6 +1145,11 @@ func (m *deploymentMockDB) Providers() database.ProviderStore {
 func (m *deploymentMockDB) Deployments() database.DeploymentStore {
 	return m
 }
+
+func (m *deploymentMockDB) Servers() database.ServerStore { return nil }
+func (m *deploymentMockDB) Agents() database.AgentStore   { return nil }
+func (m *deploymentMockDB) Skills() database.SkillStore   { return nil }
+func (m *deploymentMockDB) Prompts() database.PromptStore { return nil }
 
 func (m *deployCreateMockDB) GetProvider(ctx context.Context, providerID string) (*models.Provider, error) {
 	return m.getProviderByIDFn(ctx, providerID)
@@ -1306,6 +1319,8 @@ func (m *deployCreateMockDB) DeleteDeployment(ctx context.Context, id string) er
 	return m.removeDeploymentByIDFn(ctx, id)
 }
 
+func (m *deployCreateMockDB) AcquireApplyLock(context.Context, string) error { return nil }
+
 func (m *deploymentMockDB) ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error) {
 	return m.listProvidersFn(ctx, platform)
 }
@@ -1345,6 +1360,8 @@ func (m *deploymentMockDB) UpdateDeploymentState(context.Context, string, *model
 func (m *deploymentMockDB) DeleteDeployment(ctx context.Context, id string) error {
 	return m.removeDeploymentByIdFn(ctx, id)
 }
+
+func (m *deploymentMockDB) AcquireApplyLock(context.Context, string) error { return nil }
 
 // deploymentInternals is a test-only interface that exposes unexported-via-interface
 // methods on the deployment service's concrete type, used by tests that need to

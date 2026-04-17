@@ -191,41 +191,6 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-        put:
-            tags:
-                - agents
-            summary: Apply agent (create or update)
-            operationId: apply-agent-v0
-            parameters:
-                - name: agentName
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/AgentJSON'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/AgentResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
         delete:
             tags:
                 - agents
@@ -266,41 +231,33 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-    /v0/agents/{agentName}/versions/{version}/deployments/{providerId}:
-        put:
+    /v0/apply:
+        post:
             tags:
-                - deployments
-                - agents
-            summary: Apply agent deployment (idempotent)
-            description: Idempotently deploy an agent. Returns the existing deployment unchanged if already deployed; otherwise cleans up any stale record and launches a fresh deployment.
-            operationId: apply-agent-deployment
+                - apply
+            summary: Apply one or more resources
+            operationId: apply
             parameters:
-                - name: agentName
-                  in: path
-                  description: URL-encoded agent name
-                  required: true
+                - name: force
+                  in: query
+                  description: Force overwrite even when the resource has drifted
+                  explode: false
                   schema:
-                    type: string
-                    description: URL-encoded agent name
-                - name: version
-                  in: path
-                  description: URL-encoded agent version
-                  required: true
+                    type: boolean
+                    description: Force overwrite even when the resource has drifted
+                - name: dryRun
+                  in: query
+                  description: Validate without persisting changes
+                  explode: false
                   schema:
-                    type: string
-                    description: URL-encoded agent version
-                - name: providerId
-                  in: path
-                  description: Deployment provider ID
-                  required: true
-                  schema:
-                    type: string
-                    description: Deployment provider ID
+                    type: boolean
+                    description: Validate without persisting changes
             requestBody:
                 content:
-                    application/json:
+                    application/yaml:
                         schema:
-                            $ref: '#/components/schemas/DeploymentApplyBody'
+                            type: string
+                            format: binary
                 required: true
             responses:
                 "200":
@@ -308,7 +265,47 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/Deployment'
+                                $ref: '#/components/schemas/ApplyOutputBody'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        delete:
+            tags:
+                - apply
+            summary: Delete one or more resources by YAML document
+            operationId: delete-apply
+            parameters:
+                - name: force
+                  in: query
+                  description: Force overwrite even when the resource has drifted
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Force overwrite even when the resource has drifted
+                - name: dryRun
+                  in: query
+                  description: Validate without persisting changes
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Validate without persisting changes
+            requestBody:
+                content:
+                    application/yaml:
+                        schema:
+                            type: string
+                            format: binary
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApplyOutputBody'
                 default:
                     description: Error
                     content:
@@ -742,41 +739,6 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-        put:
-            tags:
-                - prompts
-            summary: Apply prompt (create or update)
-            operationId: apply-prompt-v0
-            parameters:
-                - name: promptName
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/PromptJSON'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/PromptResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
         delete:
             tags:
                 - prompts
@@ -892,46 +854,6 @@ paths:
                   schema:
                     type: string
                     description: Provider platform hint (optional)
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Provider'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-        put:
-            tags:
-                - providers
-            summary: Apply provider (create or update)
-            description: Create a provider if it does not exist, or update it if it does. Requires ?platform= when creating.
-            operationId: apply-provider
-            parameters:
-                - name: providerId
-                  in: path
-                  description: Provider ID
-                  required: true
-                  schema:
-                    type: string
-                    description: Provider ID
-                - name: platform
-                  in: query
-                  description: Provider platform hint (optional)
-                  explode: false
-                  schema:
-                    type: string
-                    description: Provider platform hint (optional)
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/UpdateProviderInput'
-                required: true
             responses:
                 "200":
                     description: OK
@@ -1202,41 +1124,6 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-        put:
-            tags:
-                - servers
-            summary: Apply MCP server (create or update)
-            operationId: apply-server-v0
-            parameters:
-                - name: serverName
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/ServerJSON'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ServerResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
         delete:
             tags:
                 - servers
@@ -1346,55 +1233,6 @@ paths:
                                 $ref: '#/components/schemas/ErrorModel'
             security:
                 - bearer: []
-    /v0/servers/{serverName}/versions/{version}/deployments/{providerId}:
-        put:
-            tags:
-                - deployments
-                - servers
-            summary: Apply server deployment (idempotent)
-            description: Idempotently deploy an MCP server. Returns the existing deployment unchanged if already deployed; otherwise cleans up any stale record and launches a fresh deployment.
-            operationId: apply-server-deployment
-            parameters:
-                - name: serverName
-                  in: path
-                  description: URL-encoded server name
-                  required: true
-                  schema:
-                    type: string
-                    description: URL-encoded server name
-                - name: version
-                  in: path
-                  description: URL-encoded server version
-                  required: true
-                  schema:
-                    type: string
-                    description: URL-encoded server version
-                - name: providerId
-                  in: path
-                  description: Deployment provider ID
-                  required: true
-                  schema:
-                    type: string
-                    description: Deployment provider ID
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/ServerDeploymentApplyBody'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Deployment'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
     /v0/servers/{serverName}/versions/{version}/readme:
         get:
             tags:
@@ -1616,41 +1454,6 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-        put:
-            tags:
-                - skills
-            summary: Apply skill (create or update)
-            operationId: apply-skill-v0
-            parameters:
-                - name: skillName
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/SkillJSON'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/SkillResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
         delete:
             tags:
                 - skills
@@ -1852,6 +1655,18 @@ components:
                     $ref: '#/components/schemas/AgentResponseMeta'
                 agent:
                     $ref: '#/components/schemas/AgentJSON'
+                mcpServerRefs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RegistryRef'
+                promptRefs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RegistryRef'
+                skillRefs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RegistryRef'
             required:
                 - agent
                 - _meta
@@ -1874,6 +1689,16 @@ components:
                     format: double
             required:
                 - score
+        ApplyOutputBody:
+            type: object
+            additionalProperties: false
+            properties:
+                results:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Result'
+            required:
+                - results
         Argument:
             type: object
             additionalProperties: false
@@ -1999,23 +1824,6 @@ components:
                 - preferRemote
                 - deployedAt
                 - updatedAt
-        DeploymentApplyBody:
-            type: object
-            additionalProperties: false
-            properties:
-                env:
-                    type: object
-                    description: Deployment environment variables.
-                    additionalProperties:
-                        type: string
-                preferRemote:
-                    type: boolean
-                    description: Prefer remote deployment over local
-                    default: false
-                providerConfig:
-                    type: object
-                    description: Optional provider-specific deployment settings.
-                    additionalProperties: {}
         DeploymentLogsBody:
             type: object
             additionalProperties: false
@@ -2346,8 +2154,9 @@ components:
                     type: string
                 url:
                     type: string
+                version:
+                    type: string
             required:
-                - type
                 - name
         Package:
             type: object
@@ -2576,6 +2385,16 @@ components:
                 - status
                 - publishedAt
                 - isLatest
+        RegistryRef:
+            type: object
+            additionalProperties: false
+            properties:
+                name:
+                    type: string
+                version:
+                    type: string
+            required:
+                - name
         Repository:
             type: object
             additionalProperties: false
@@ -2615,23 +2434,24 @@ components:
             required:
                 - deployments
                 - count
-        ServerDeploymentApplyBody:
+        Result:
             type: object
             additionalProperties: false
             properties:
-                env:
-                    type: object
-                    description: Deployment environment variables.
-                    additionalProperties:
-                        type: string
-                preferRemote:
-                    type: boolean
-                    description: Prefer remote deployment over local
-                    default: false
-                providerConfig:
-                    type: object
-                    description: Optional provider-specific deployment settings.
-                    additionalProperties: {}
+                error:
+                    type: string
+                kind:
+                    type: string
+                name:
+                    type: string
+                status:
+                    type: string
+                version:
+                    type: string
+            required:
+                - kind
+                - name
+                - status
         ServerJSON:
             type: object
             additionalProperties: false
@@ -2962,15 +2782,6 @@ components:
                         - https://api.example.com/mcp
             required:
                 - type
-        UpdateProviderInput:
-            type: object
-            additionalProperties: false
-            properties:
-                config:
-                    type: object
-                    additionalProperties: {}
-                name:
-                    type: string
         VersionBody:
             type: object
             additionalProperties: false

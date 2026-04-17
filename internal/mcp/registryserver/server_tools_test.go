@@ -440,7 +440,7 @@ func (h *fakeMCPDeploymentHarness) CleanupExistingDeployment(context.Context, st
 	return nil
 }
 
-func (h *fakeMCPDeploymentHarness) ApplyAgentDeployment(_ context.Context, agentName, version, providerID string, env map[string]string, providerConfig models.JSONObject) (*models.Deployment, error) {
+func (h *fakeMCPDeploymentHarness) ApplyAgentDeployment(_ context.Context, agentName, version, providerID string, env map[string]string, providerConfig models.JSONObject, _, _ bool) (*models.Deployment, error) {
 	return h.LaunchDeployment(context.Background(), &models.Deployment{
 		ServerName:     agentName,
 		Version:        version,
@@ -451,7 +451,7 @@ func (h *fakeMCPDeploymentHarness) ApplyAgentDeployment(_ context.Context, agent
 	})
 }
 
-func (h *fakeMCPDeploymentHarness) ApplyServerDeployment(_ context.Context, serverName, version, providerID string, env map[string]string, providerConfig models.JSONObject) (*models.Deployment, error) {
+func (h *fakeMCPDeploymentHarness) ApplyServerDeployment(_ context.Context, serverName, version, providerID string, env map[string]string, providerConfig models.JSONObject, _, _ bool) (*models.Deployment, error) {
 	return h.LaunchDeployment(context.Background(), &models.Deployment{
 		ServerName:     serverName,
 		Version:        version,
