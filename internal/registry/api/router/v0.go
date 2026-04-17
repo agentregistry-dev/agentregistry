@@ -4,6 +4,8 @@ package router
 import (
 	"net/http"
 
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
+
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	v0agents "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/agents"
 	v0apply "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/apply"
@@ -155,16 +157,19 @@ func RegisterRoutes(
 // Importer both see the same ref-existence semantics.
 func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stores) {
 	resolver := internaldb.NewV1Alpha1Resolver(stores)
+	registryValidator := registries.Dispatcher
 
 	// Per-kind CRUD endpoints — one call per built-in kind, hidden
 	// inside resource.RegisterBuiltins.
-	resource.RegisterBuiltins(api, basePrefix, stores, resolver)
+	resource.RegisterBuiltins(api, basePrefix, stores, resolver, registryValidator)
 
 	// Multi-doc YAML batch apply at POST {basePrefix}/apply. Shares
-	// the same Stores map + Resolver — no second per-kind table here.
+	// the same Stores map + Resolver + RegistryValidator — no second
+	// per-kind table here.
 	resource.RegisterApply(api, resource.ApplyConfig{
-		BasePrefix: basePrefix,
-		Stores:     stores,
-		Resolver:   resolver,
+		BasePrefix:        basePrefix,
+		Stores:            stores,
+		Resolver:          resolver,
+		RegistryValidator: registryValidator,
 	})
 }

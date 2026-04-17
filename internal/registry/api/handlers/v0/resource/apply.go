@@ -24,6 +24,9 @@ type ApplyConfig struct {
 	Stores map[string]*database.Store
 	// Resolver is forwarded to each decoded object's ResolveRefs.
 	Resolver v1alpha1.ResolverFunc
+	// RegistryValidator is forwarded to each decoded object's
+	// ValidateRegistries. Nil skips external-registry validation.
+	RegistryValidator v1alpha1.RegistryValidatorFunc
 	// Scheme decodes the incoming YAML/JSON stream. Defaults to
 	// v1alpha1.Default when nil.
 	Scheme *v1alpha1.Scheme
@@ -146,6 +149,13 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object) ApplyRe
 		if err := obj.ResolveRefs(ctx, cfg.Resolver); err != nil {
 			result.Status = ApplyStatusFailed
 			result.Error = "refs: " + err.Error()
+			return result
+		}
+	}
+	if cfg.RegistryValidator != nil {
+		if err := obj.ValidateRegistries(ctx, cfg.RegistryValidator); err != nil {
+			result.Status = ApplyStatusFailed
+			result.Error = "registries: " + err.Error()
 			return result
 		}
 	}

@@ -38,6 +38,7 @@ import (
 	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 	pkgimporter "github.com/agentregistry-dev/agentregistry/pkg/importer"
 	osvscanner "github.com/agentregistry-dev/agentregistry/pkg/importer/scanners/osv"
 	scorecardscanner "github.com/agentregistry-dev/agentregistry/pkg/importer/scanners/scorecard"
@@ -198,7 +199,8 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 				osvscanner.New(osvscanner.Config{GitHubToken: githubToken}),
 				scorecardscanner.New(scorecardscanner.Config{GitHubToken: githubToken}),
 			},
-			Resolver: internaldb.NewV1Alpha1Resolver(v1alpha1Stores),
+			Resolver:          internaldb.NewV1Alpha1Resolver(v1alpha1Stores),
+			RegistryValidator: registries.Dispatcher,
 		})
 		if err != nil {
 			slog.Warn("failed to construct v1alpha1 importer; HTTP import + seed-from disabled for this path", "error", err)

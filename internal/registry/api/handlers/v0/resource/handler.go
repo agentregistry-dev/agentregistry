@@ -48,6 +48,12 @@ type Config struct {
 	// errors. Leave nil to skip ref resolution (e.g. for kinds with no
 	// ResourceRef fields).
 	Resolver v1alpha1.ResolverFunc
+	// RegistryValidator is optional; when set, the apply handler
+	// calls obj.ValidateRegistries with it so external-registry
+	// failures (package missing, OCI label mismatch, etc.) surface
+	// as 400 errors. Leave nil to skip registry validation (tests,
+	// offline imports, air-gapped servers).
+	RegistryValidator v1alpha1.RegistryValidatorFunc
 }
 
 // Input/output wire types. Registered per-kind so OpenAPI schemas stay typed.
@@ -229,6 +235,14 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		if cfg.Resolver != nil {
 			if err := body.ResolveRefs(ctx, cfg.Resolver); err != nil {
 				return nil, huma.Error400BadRequest("refs: " + err.Error())
+			}
+		}
+
+		// External-registry validation — optional, network-heavy.
+		// Skipped when no validator is configured.
+		if cfg.RegistryValidator != nil {
+			if err := body.ValidateRegistries(ctx, cfg.RegistryValidator); err != nil {
+				return nil, huma.Error400BadRequest("registries: " + err.Error())
 			}
 		}
 

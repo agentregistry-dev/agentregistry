@@ -30,6 +30,7 @@ func RegisterBuiltins(
 	basePrefix string,
 	stores map[string]*database.Store,
 	resolver v1alpha1.ResolverFunc,
+	registryValidator v1alpha1.RegistryValidatorFunc,
 ) {
 	cfgFor := func(kind string) (Config, bool) {
 		store, ok := stores[kind]
@@ -37,10 +38,11 @@ func RegisterBuiltins(
 			return Config{}, false
 		}
 		return Config{
-			Kind:       kind,
-			BasePrefix: basePrefix,
-			Store:      store,
-			Resolver:   resolver,
+			Kind:              kind,
+			BasePrefix:        basePrefix,
+			Store:             store,
+			Resolver:          resolver,
+			RegistryValidator: registryValidator,
 		}, true
 	}
 

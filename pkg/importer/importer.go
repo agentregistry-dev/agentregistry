@@ -127,17 +127,24 @@ type Importer struct {
 	// namespace-aware cross-kind resolver that hits the generic Store.
 	resolver v1alpha1.ResolverFunc
 
+	// RegistryValidator forwards to obj.ValidateRegistries on each
+	// decoded object. A nil validator skips external-registry
+	// checks — useful for offline imports, air-gapped deployments,
+	// or tests. Typical servers pass registries.Dispatcher.
+	registryValidator v1alpha1.RegistryValidatorFunc
+
 	logger *slog.Logger
 }
 
 // Config carries the dependencies a new Importer needs.
 type Config struct {
-	Stores   map[string]*database.Store
-	Findings *FindingsStore
-	Scanners []Scanner
-	Scheme   *v1alpha1.Scheme
-	Resolver v1alpha1.ResolverFunc
-	Logger   *slog.Logger
+	Stores            map[string]*database.Store
+	Findings          *FindingsStore
+	Scanners          []Scanner
+	Scheme            *v1alpha1.Scheme
+	Resolver          v1alpha1.ResolverFunc
+	RegistryValidator v1alpha1.RegistryValidatorFunc
+	Logger            *slog.Logger
 }
 
 // New wires a configured Importer. Stores is required; everything else
@@ -155,12 +162,13 @@ func New(cfg Config) (*Importer, error) {
 		logger = slog.Default().With("component", "importer")
 	}
 	return &Importer{
-		stores:   cfg.Stores,
-		findings: cfg.Findings,
-		scanners: append([]Scanner(nil), cfg.Scanners...),
-		scheme:   scheme,
-		resolver: cfg.Resolver,
-		logger:   logger,
+		stores:            cfg.Stores,
+		findings:          cfg.Findings,
+		scanners:          append([]Scanner(nil), cfg.Scanners...),
+		scheme:            scheme,
+		resolver:          cfg.Resolver,
+		registryValidator: cfg.RegistryValidator,
+		logger:            logger,
 	}, nil
 }
 
@@ -286,6 +294,13 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 		if err := obj.ResolveRefs(ctx, i.resolver); err != nil {
 			res.Status = ImportStatusFailed
 			res.Error = "refs: " + err.Error()
+			return res
+		}
+	}
+	if i.registryValidator != nil {
+		if err := obj.ValidateRegistries(ctx, i.registryValidator); err != nil {
+			res.Status = ImportStatusFailed
+			res.Error = "registries: " + err.Error()
 			return res
 		}
 	}
