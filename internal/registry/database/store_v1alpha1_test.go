@@ -14,7 +14,7 @@ import (
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
-const testTable = "agents"
+const testTable = "v1alpha1.agents"
 
 func mustSpec(t *testing.T, spec any) json.RawMessage {
 	t.Helper()
@@ -222,7 +222,7 @@ func TestV1Alpha1Store_List(t *testing.T) {
 
 func TestV1Alpha1Store_FindReferrers(t *testing.T) {
 	pool := NewV1Alpha1TestPool(t)
-	agents := NewStore(pool, "agents")
+	agents := NewStore(pool, "v1alpha1.agents")
 	ctx := context.Background()
 
 	_, err := agents.Upsert(ctx, "refs-bar", "v1",
@@ -251,7 +251,7 @@ func TestV1Alpha1Store_FindReferrers(t *testing.T) {
 
 func TestV1Alpha1Store_SeededProviders(t *testing.T) {
 	pool := NewV1Alpha1TestPool(t)
-	providers := NewStore(pool, "providers")
+	providers := NewStore(pool, "v1alpha1.providers")
 	ctx := context.Background()
 
 	local, err := providers.GetLatest(ctx, "local")

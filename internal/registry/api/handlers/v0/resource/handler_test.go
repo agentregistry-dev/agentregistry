@@ -39,7 +39,7 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 	t.Helper()
 
 	pool := database.NewV1Alpha1TestPool(t)
-	store := database.NewStore(pool, "agents")
+	store := database.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -120,7 +120,7 @@ func TestResourceRegister_AgentWrongKindRejected(t *testing.T) {
 	t.Helper()
 
 	pool := database.NewV1Alpha1TestPool(t)
-	store := database.NewStore(pool, "agents")
+	store := database.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -138,7 +138,7 @@ func TestResourceRegister_AgentWrongKindRejected(t *testing.T) {
 func TestResourceRegister_AgentPathMismatchRejected(t *testing.T) {
 	t.Helper()
 	pool := database.NewV1Alpha1TestPool(t)
-	store := database.NewStore(pool, "agents")
+	store := database.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
