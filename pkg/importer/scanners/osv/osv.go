@@ -36,6 +36,15 @@ type Config struct {
 	// GitHubToken authenticates manifest fetches. Optional; unauth'd
 	// GitHub has a 60 req/hr limit which is tight for batch imports.
 	GitHubToken string
+	// OSVEndpoint overrides https://api.osv.dev/v1/querybatch for
+	// tests. Must speak the OSV batch protocol.
+	OSVEndpoint string
+	// GitHubContentsEndpoint overrides
+	// https://api.github.com/repos/{owner}/{repo}/contents/{path}.
+	// Tests point this at a local httptest server. The literal
+	// "{owner}", "{repo}", "{path}" placeholders are substituted
+	// per request.
+	GitHubContentsEndpoint string
 }
 
 // Scanner is the OSV implementation of pkg/importer.Scanner.
@@ -44,10 +53,17 @@ type Scanner struct {
 }
 
 // New constructs an OSV scanner. A nil HTTPClient is replaced by an
-// http.Client with a 30s timeout.
+// http.Client with a 30s timeout; empty endpoints default to the
+// public OSV + GitHub URLs.
 func New(cfg Config) *Scanner {
 	if cfg.HTTPClient == nil {
 		cfg.HTTPClient = &http.Client{Timeout: 30 * time.Second}
+	}
+	if cfg.OSVEndpoint == "" {
+		cfg.OSVEndpoint = "https://api.osv.dev/v1/querybatch"
+	}
+	if cfg.GitHubContentsEndpoint == "" {
+		cfg.GitHubContentsEndpoint = "https://api.github.com/repos/{owner}/{repo}/contents/{path}"
 	}
 	return &Scanner{cfg: cfg}
 }
@@ -73,9 +89,9 @@ func (s *Scanner) Scan(ctx context.Context, obj v1alpha1.Object) (importer.ScanR
 		return importer.ScanResult{}, nil
 	}
 
-	pkgLock, _ := fetchRepoContentFile(ctx, s.cfg.HTTPClient, s.cfg.GitHubToken, owner, repo, "package-lock.json")
-	reqTxt, _ := fetchRepoContentFile(ctx, s.cfg.HTTPClient, s.cfg.GitHubToken, owner, repo, "requirements.txt")
-	goMod, _ := fetchRepoContentFile(ctx, s.cfg.HTTPClient, s.cfg.GitHubToken, owner, repo, "go.mod")
+	pkgLock, _ := fetchRepoContentFile(ctx, s.cfg.HTTPClient, s.cfg.GitHubContentsEndpoint, s.cfg.GitHubToken, owner, repo, "package-lock.json")
+	reqTxt, _ := fetchRepoContentFile(ctx, s.cfg.HTTPClient, s.cfg.GitHubContentsEndpoint, s.cfg.GitHubToken, owner, repo, "requirements.txt")
+	goMod, _ := fetchRepoContentFile(ctx, s.cfg.HTTPClient, s.cfg.GitHubContentsEndpoint, s.cfg.GitHubToken, owner, repo, "go.mod")
 
 	var queries []osvPackageQuery
 	if len(pkgLock) > 0 {
@@ -103,7 +119,7 @@ func (s *Scanner) Scan(ctx context.Context, obj v1alpha1.Object) (importer.ScanR
 		queries = append(queries, q)
 	}
 
-	perQuery, totals, err := queryOSVBatchDetailed(ctx, s.cfg.HTTPClient, queries)
+	perQuery, totals, err := queryOSVBatchDetailed(ctx, s.cfg.HTTPClient, s.cfg.OSVEndpoint, queries)
 	if err != nil {
 		return importer.ScanResult{}, fmt.Errorf("osv: %w", err)
 	}
@@ -272,9 +288,9 @@ type severityCounts struct {
 // Kept in this file (rather than replacing queryOSVBatch) so the
 // legacy-ported queryOSVBatch body stays byte-identical and
 // discoverable via git blame.
-func queryOSVBatchDetailed(ctx context.Context, client *http.Client, queries []osvPackageQuery) ([][]osvVulnDetail, severityCounts, error) {
+func queryOSVBatchDetailed(ctx context.Context, client *http.Client, endpoint string, queries []osvPackageQuery) ([][]osvVulnDetail, severityCounts, error) {
 	body, _ := json.Marshal(osvBatchRequest{Queries: queries})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.osv.dev/v1/querybatch", strings.NewReader(string(body)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(body)))
 	if err != nil {
 		return nil, severityCounts{}, err
 	}
@@ -500,8 +516,12 @@ func parseGoModForOSV(data []byte) []osvPackageQuery {
 // fetchRepoContentFileWithRename (internal/registry/importer/importer.go)
 // minus the rename-detection retry path, which was specific to the
 // legacy dedup/reimport flow and not required by a scanner invocation.
-func fetchRepoContentFile(ctx context.Context, client *http.Client, githubToken, owner, repo, path string) ([]byte, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/%s", owner, repo, path)
+//
+// The endpoint parameter carries the URL template with literal
+// {owner}/{repo}/{path} placeholders, enabling test-time override.
+// In production this is the public GitHub URL set by New().
+func fetchRepoContentFile(ctx context.Context, client *http.Client, endpoint, githubToken, owner, repo, path string) ([]byte, error) {
+	url := strings.NewReplacer("{owner}", owner, "{repo}", repo, "{path}", path).Replace(endpoint)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
