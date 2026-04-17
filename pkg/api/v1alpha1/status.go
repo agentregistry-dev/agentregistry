@@ -26,13 +26,13 @@ type Condition struct {
 	ObservedGeneration int64           `json:"observedGeneration,omitempty" yaml:"observedGeneration,omitempty"`
 }
 
-// Status is the observed-state subresource. ObservedGeneration is the top-level
-// roll-up of the highest metadata.generation any reconciler has acted on; Phase
-// is an optional short status summary; Conditions is the list of fine-grained
-// state facets written by the reconciler and service layer.
+// Status is the observed-state subresource. ObservedGeneration is the highest
+// metadata.generation any reconciler has acted on; Conditions is the list of
+// fine-grained state facets written by the reconciler and service layer.
+// No Phase roll-up — K8s deprecated it in favor of Conditions, and carrying
+// a string summary encourages downstream string-comparison anti-patterns.
 type Status struct {
 	ObservedGeneration int64       `json:"observedGeneration,omitempty" yaml:"observedGeneration,omitempty"`
-	Phase              string      `json:"phase,omitempty" yaml:"phase,omitempty"`
 	Conditions         []Condition `json:"conditions,omitempty" yaml:"conditions,omitempty"`
 }
 
