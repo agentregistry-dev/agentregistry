@@ -194,29 +194,53 @@ func (i *Importer) Import(ctx context.Context, opts Options) ([]ImportResult, er
 			})
 			continue
 		}
-		docs, err := i.scheme.DecodeMulti(data)
-		if err != nil {
+		out = append(out, i.importStream(ctx, f, data, opts)...)
+	}
+	return out, nil
+}
+
+// ImportBytes runs the import pipeline over an in-memory multi-doc
+// YAML/JSON stream. Used by HTTP callers that already have the
+// manifest bytes (e.g. `POST /v0/import`). Source is a free-form
+// label (filename, request ID, etc.) recorded on every result for
+// debugging; callers without one can pass "".
+//
+// Top-level decode failures return a single failed ImportResult —
+// never an error — so callers can treat the return shape the same
+// as Import.
+func (i *Importer) ImportBytes(ctx context.Context, source string, data []byte, opts Options) []ImportResult {
+	if opts.ScannedBy == "" {
+		opts.ScannedBy = defaultScannedBy
+	}
+	return i.importStream(ctx, source, data, opts)
+}
+
+// importStream decodes one multi-doc YAML/JSON blob and runs each
+// document through importOne. Shared by Import (per-file loop) and
+// ImportBytes (single call).
+func (i *Importer) importStream(ctx context.Context, source string, data []byte, opts Options) []ImportResult {
+	docs, err := i.scheme.DecodeMulti(data)
+	if err != nil {
+		return []ImportResult{{
+			Source: source,
+			Status: ImportStatusFailed,
+			Error:  fmt.Sprintf("decode: %v", err),
+		}}
+	}
+	out := make([]ImportResult, 0, len(docs))
+	for _, d := range docs {
+		obj, ok := d.(v1alpha1.Object)
+		if !ok {
 			out = append(out, ImportResult{
-				Source: f,
+				Source: source,
 				Status: ImportStatusFailed,
-				Error:  fmt.Sprintf("decode: %v", err),
+				Error:  fmt.Sprintf("decoded value does not satisfy v1alpha1.Object: %T", d),
 			})
 			continue
 		}
-		for _, d := range docs {
-			obj, ok := d.(v1alpha1.Object)
-			if !ok {
-				out = append(out, ImportResult{
-					Source: f,
-					Status: ImportStatusFailed,
-					Error:  fmt.Sprintf("decoded value does not satisfy v1alpha1.Object: %T", d),
-				})
-				continue
-			}
-			out = append(out, i.importOne(ctx, f, obj, opts))
-		}
+		out = append(out, i.importOne(ctx, source, obj, opts))
 	}
-	return out, nil
+	return out
 }
 
 // importOne runs one decoded object through validate → enrich →

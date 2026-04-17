@@ -2,9 +2,6 @@
 package router
 
 import (
-	"context"
-	"errors"
-	"fmt"
 	"net/http"
 
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
@@ -28,8 +25,7 @@ import (
 	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
 	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
-	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/importer"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 
@@ -75,6 +71,12 @@ type RouteOptions struct {
 	// at `/v0/namespaces/{ns}/{plural}/...`. Legacy routes stay live
 	// regardless; clients migrate off them incrementally.
 	V1Alpha1Stores V1Alpha1Stores
+
+	// V1Alpha1Importer, when non-nil, enables POST /v0/import. Typically
+	// constructed alongside V1Alpha1Stores at bootstrap with the OSS
+	// scanner set (OSV + Scorecard) + a FindingsStore bound to the
+	// same pool.
+	V1Alpha1Importer *importer.Importer
 
 	// Optional callback for integration-owned route registration.
 	ExtraRoutes func(api huma.API, pathPrefix string)
@@ -125,6 +127,17 @@ func RegisterRoutes(
 		registerV1Alpha1Routes(api, pathPrefix, opts.V1Alpha1Stores)
 	}
 
+	// POST /v0/import — runs decoded manifests through the enrichment
+	// pipeline (validate + scanners + findings-write) before Upsert.
+	// Independent of V1Alpha1Stores wiring because enterprise builds
+	// may provide their own Importer.
+	if opts != nil && opts.V1Alpha1Importer != nil {
+		resource.RegisterImport(api, resource.ImportConfig{
+			BasePrefix: pathPrefix,
+			Importer:   opts.V1Alpha1Importer,
+		})
+	}
+
 	if opts != nil && opts.KindRegistry != nil {
 		v0apply.RegisterApplyEndpoints(api, pathPrefix, opts.KindRegistry)
 	}
@@ -136,33 +149,12 @@ func RegisterRoutes(
 // registerV1Alpha1Routes wires the generic resource handler for every
 // built-in kind at `{basePrefix}/namespaces/{ns}/{plural}/...` plus
 // cross-namespace list at `{basePrefix}/{plural}`, and the multi-doc
-// apply endpoint at `{basePrefix}/apply`. The shared cross-kind
-// Resolver dispatches ResourceRef existence checks by Kind into the
-// appropriate Store — one lookup table drives every path.
+// apply endpoint at `{basePrefix}/apply`. Cross-kind ResourceRef
+// existence dispatches through the shared
+// internaldb.NewV1Alpha1Resolver so the router and any server-side
+// Importer both see the same ref-existence semantics.
 func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stores) {
-	// resolver maps a v1alpha1 ResourceRef into a Get call against the
-	// Store bound to that kind's table. Returns v1alpha1.ErrDanglingRef
-	// when the row is missing so callers can distinguish a ref problem
-	// from an infrastructure error.
-	resolver := func(ctx context.Context, ref v1alpha1.ResourceRef) error {
-		store, ok := stores[ref.Kind]
-		if !ok {
-			return fmt.Errorf("%w: unknown kind %q", v1alpha1.ErrInvalidRef, ref.Kind)
-		}
-		var err error
-		if ref.Version == "" {
-			_, err = store.GetLatest(ctx, ref.Namespace, ref.Name)
-		} else {
-			_, err = store.Get(ctx, ref.Namespace, ref.Name, ref.Version)
-		}
-		if err != nil {
-			if errors.Is(err, pkgdb.ErrNotFound) {
-				return v1alpha1.ErrDanglingRef
-			}
-			return err
-		}
-		return nil
-	}
+	resolver := internaldb.NewV1Alpha1Resolver(stores)
 
 	// Per-kind CRUD endpoints — one call per built-in kind, hidden
 	// inside resource.RegisterBuiltins.

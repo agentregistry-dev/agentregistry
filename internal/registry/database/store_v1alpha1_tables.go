@@ -1,9 +1,14 @@
 package database
 
 import (
+	"context"
+	"errors"
+	"fmt"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
 // V1Alpha1TableFor is the canonical mapping from v1alpha1 Kind name to
@@ -45,4 +50,34 @@ func NewV1Alpha1Stores(pool *pgxpool.Pool) map[string]*Store {
 		out[kind] = NewStore(pool, table)
 	}
 	return out
+}
+
+// NewV1Alpha1Resolver returns a v1alpha1.ResolverFunc that dispatches
+// cross-kind ResourceRef existence checks against the supplied
+// Stores map. Consumers: the router wires one into its apply
+// handler; the Importer consumes one during per-object ResolveRefs.
+//
+// Dangling references return v1alpha1.ErrDanglingRef so callers can
+// distinguish "row missing" from "database unavailable"; unknown
+// kinds return wrapped v1alpha1.ErrInvalidRef.
+func NewV1Alpha1Resolver(stores map[string]*Store) v1alpha1.ResolverFunc {
+	return func(ctx context.Context, ref v1alpha1.ResourceRef) error {
+		store, ok := stores[ref.Kind]
+		if !ok {
+			return fmt.Errorf("%w: unknown kind %q", v1alpha1.ErrInvalidRef, ref.Kind)
+		}
+		var err error
+		if ref.Version == "" {
+			_, err = store.GetLatest(ctx, ref.Namespace, ref.Name)
+		} else {
+			_, err = store.Get(ctx, ref.Namespace, ref.Name, ref.Version)
+		}
+		if err != nil {
+			if errors.Is(err, pkgdb.ErrNotFound) {
+				return v1alpha1.ErrDanglingRef
+			}
+			return err
+		}
+		return nil
+	}
 }

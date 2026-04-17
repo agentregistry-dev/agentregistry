@@ -38,6 +38,9 @@ import (
 	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
+	pkgimporter "github.com/agentregistry-dev/agentregistry/pkg/importer"
+	osvscanner "github.com/agentregistry-dev/agentregistry/pkg/importer/scanners/osv"
+	scorecardscanner "github.com/agentregistry-dev/agentregistry/pkg/importer/scanners/scorecard"
 	"github.com/agentregistry-dev/agentregistry/pkg/logging"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
@@ -334,7 +337,32 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	if pg, ok := db.(interface {
 		Pool() *pgxpool.Pool
 	}); ok {
-		routeOpts.V1Alpha1Stores = internaldb.NewV1Alpha1Stores(pg.Pool())
+		pool := pg.Pool()
+		routeOpts.V1Alpha1Stores = internaldb.NewV1Alpha1Stores(pool)
+
+		// Construct the server-side Importer with the OSS scanner set
+		// (OSV + Scorecard), the shared FindingsStore, and a resolver
+		// backed by the same Stores map the router + apply use. The
+		// HTTP import endpoint POST /v0/import dispatches into this.
+		// GITHUB_TOKEN (when set in env) authenticates scanner fetches
+		// against GitHub's contents + repo API to raise the 60 req/hr
+		// unauthenticated limit.
+		githubToken := os.Getenv("GITHUB_TOKEN")
+		importerSvc, err := pkgimporter.New(pkgimporter.Config{
+			Stores:   routeOpts.V1Alpha1Stores,
+			Findings: pkgimporter.NewFindingsStore(pool),
+			Scanners: []pkgimporter.Scanner{
+				osvscanner.New(osvscanner.Config{GitHubToken: githubToken}),
+				scorecardscanner.New(scorecardscanner.Config{GitHubToken: githubToken}),
+			},
+			Resolver: internaldb.NewV1Alpha1Resolver(routeOpts.V1Alpha1Stores),
+		})
+		if err != nil {
+			slog.Warn("failed to construct v1alpha1 importer; POST /v0/import disabled", "error", err)
+		} else {
+			routeOpts.V1Alpha1Importer = importerSvc
+		}
+
 		slog.Info("v1alpha1 routes enabled")
 	} else {
 		slog.Info("v1alpha1 routes disabled: database does not expose Pool() (likely noop/DatabaseFactory)")
