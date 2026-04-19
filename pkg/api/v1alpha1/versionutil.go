@@ -1,15 +1,23 @@
-package versionutil
+package v1alpha1
 
 import (
 	"strings"
 	"time"
 
-	versionpkg "github.com/agentregistry-dev/agentregistry/internal/version"
 	"golang.org/x/mod/semver"
 )
 
+// ensureVPrefix inlines internal/version.EnsureVPrefix so this file
+// is importable from pkg/*.
+func ensureVPrefix(s string) string {
+	if strings.HasPrefix(s, "v") {
+		return s
+	}
+	return "v" + s
+}
+
 func IsSemanticVersion(version string) bool {
-	versionWithV := versionpkg.EnsureVPrefix(version)
+	versionWithV := ensureVPrefix(version)
 	if !semver.IsValid(versionWithV) {
 		return false
 	}
@@ -31,7 +39,7 @@ func CompareVersions(version1, version2 string, timestamp1, timestamp2 time.Time
 	isSemver2 := IsSemanticVersion(version2)
 
 	if isSemver1 && isSemver2 {
-		return semver.Compare(versionpkg.EnsureVPrefix(version1), versionpkg.EnsureVPrefix(version2))
+		return semver.Compare(ensureVPrefix(version1), ensureVPrefix(version2))
 	}
 
 	if !isSemver1 && !isSemver2 {

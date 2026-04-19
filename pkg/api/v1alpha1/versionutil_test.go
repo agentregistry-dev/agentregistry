@@ -1,10 +1,10 @@
-package versionutil_test
+package v1alpha1_test
 
 import (
 	"testing"
 	"time"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service/internal/versionutil"
+	versionutil "github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 func TestIsSemanticVersion(t *testing.T) {
