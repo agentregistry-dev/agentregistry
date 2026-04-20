@@ -2,6 +2,7 @@ package seed
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,9 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
+
+//go:embed seed.json
+var builtinSeedData []byte
 
 // ImportBuiltinSeedDataV1Alpha1 populates the v1alpha1.mcp_servers table
 // from the embedded seed.json corpus on first boot. Intended as the

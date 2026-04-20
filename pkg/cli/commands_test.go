@@ -21,9 +21,7 @@ func TestCommandTree(t *testing.T) {
 		"delete",
 		"deployments",
 		"embeddings",
-		"export",
 		"get",
-		"import",
 		"init",
 		"mcp",
 		"prompt",
@@ -98,7 +96,7 @@ func TestCommandsHaveRequiredMetadata(t *testing.T) {
 	}
 }
 
-// TestHiddenCommands verifies that import and export are hidden.
+// TestHiddenCommands verifies visibility of top-level commands.
 func TestHiddenCommands(t *testing.T) {
 	root := Root()
 
@@ -106,8 +104,6 @@ func TestHiddenCommands(t *testing.T) {
 		name       string
 		wantHidden bool
 	}{
-		{"import", true},
-		{"export", true},
 		{"agent", false},
 		{"mcp", false},
 		{"skill", false},

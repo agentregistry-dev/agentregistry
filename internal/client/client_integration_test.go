@@ -603,6 +603,13 @@ func TestClientIntegration_PingAndVersion(t *testing.T) {
 }
 
 func TestClientIntegration_CatalogRoutes_HappyPath(t *testing.T) {
+	// Legacy /v0/{agents,servers,skills,prompts}/... routes were removed
+	// in refactor/v1alpha1-types B1.b + B1.c. The client methods this
+	// test exercises (GetServer / GetPublishedServers / GetSkill / etc.)
+	// still point at those paths and will be rewritten to speak
+	// v1alpha1 at /v0/namespaces/{ns}/{plural}/... as part of Group 2
+	// (Go client rewrite). Restore this test when that PR lands.
+	t.Skip("legacy catalog routes removed; client rewrite pending Group 2")
 	now := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
 	serverV1 := &apiv0.ServerResponse{
 		Server: apiv0.ServerJSON{

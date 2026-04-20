@@ -22,7 +22,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/importer"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/kubernetes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/local"
@@ -210,41 +209,38 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		slog.Info("v1alpha1 routes disabled: database does not expose Pool() (likely noop/DatabaseFactory)")
 	}
 
-	// Import builtin seed data unless disabled. Runs both the legacy
-	// seeder (populates public.servers) and the v1alpha1 seeder
-	// (populates v1alpha1.mcp_servers) so both stacks have curated
-	// content during the port. The v1alpha1 path is skipped when the
-	// underlying store doesn't expose a raw pool (noop/test backends).
+	// Import builtin seed data unless disabled. Writes to v1alpha1.*
+	// tables via the generic Store. Skipped when the underlying DB
+	// doesn't expose a pgxpool (noop/test backends) — seeding is
+	// decorative for those anyway.
 	if !cfg.DisableBuiltinSeed {
-		slog.Info("importing builtin seed data in the background")
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-			defer cancel()
-
-			ctx = auth.WithSystemContext(ctx)
-
-			if err := seed.ImportBuiltinSeedData(ctx, serverService); err != nil {
-				slog.Error("failed to import builtin seed data (legacy)", "error", err)
-			}
-			if pg, ok := db.(interface {
-				Pool() *pgxpool.Pool
-			}); ok {
+		if pg, ok := db.(interface {
+			Pool() *pgxpool.Pool
+		}); ok {
+			slog.Info("importing builtin seed data in the background")
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+				defer cancel()
+				ctx = auth.WithSystemContext(ctx)
 				if err := seed.ImportBuiltinSeedDataV1Alpha1(ctx, pg.Pool()); err != nil {
 					slog.Error("failed to import builtin seed data (v1alpha1)", "error", err)
 				}
-			}
-		}()
+			}()
+		} else {
+			slog.Info("builtin seed skipped: database does not expose Pool()")
+		}
 	}
 
-	// Import seed data if seed source is provided. Prefers the
-	// v1alpha1 Importer when available (writes to v1alpha1.* tables
-	// via the generic Store + optional enrichment scanners) and
-	// falls back to the legacy importer Service when not — which
-	// happens for backends without Pool() support or when bundle
-	// construction failed above.
+	// Import seed data if seed source is provided. Requires the
+	// v1alpha1 Importer; backends without Pool() support can't seed
+	// from disk in the new model.
 	if cfg.SeedFrom != "" {
-		slog.Info("importing data in the background", "seed_from", cfg.SeedFrom)
-		go runSeedFromImport(cfg, v1alpha1Importer, serverService, embeddingProvider)
+		if v1alpha1Importer == nil {
+			slog.Warn("--seed-from requested but v1alpha1 importer unavailable; skipping", "seed_from", cfg.SeedFrom)
+		} else {
+			slog.Info("importing data in the background", "seed_from", cfg.SeedFrom)
+			go runSeedFromImport(cfg, v1alpha1Importer)
+		}
 	}
 
 	slog.Info("starting agentregistry", "version", version.Version, "commit", version.GitCommit)
@@ -406,52 +402,31 @@ func setupLogging(levelStr string) {
 	logging.Reset(level)
 }
 
-// runSeedFromImport drives the cfg.SeedFrom import in the background.
-// Prefers the v1alpha1 Importer when it was successfully constructed
-// (writes to v1alpha1.* tables via the generic Store + optional
-// enrichment scanners) and falls back to the legacy importer Service
-// when not — happens for backends without Pool() support.
-func runSeedFromImport(
-	cfg *config.Config,
-	v1alpha1Importer *pkgimporter.Importer,
-	serverService serversvc.Registry,
-	embeddingProvider embeddings.Provider,
-) {
+// runSeedFromImport drives the cfg.SeedFrom import in the background
+// via the v1alpha1 Importer. Caller guarantees v1alpha1Importer != nil.
+func runSeedFromImport(cfg *config.Config, v1alpha1Importer *pkgimporter.Importer) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	ctx = auth.WithSystemContext(ctx)
 
-	if v1alpha1Importer != nil {
-		results, err := v1alpha1Importer.Import(ctx, pkgimporter.Options{
-			Path:   cfg.SeedFrom,
-			Enrich: cfg.EnrichServerData,
-		})
-		if err != nil {
-			slog.Error("failed to import seed data (v1alpha1)", "error", err)
-			return
-		}
-		var failed int
-		for _, r := range results {
-			if r.Status == pkgimporter.ImportStatusFailed {
-				failed++
-				slog.Warn("v1alpha1 import failed for document",
-					"source", r.Source, "kind", r.Kind,
-					"name", r.Name, "error", r.Error)
-			}
-		}
-		slog.Info("v1alpha1 import complete",
-			"seed_from", cfg.SeedFrom,
-			"total", len(results), "failed", failed)
+	results, err := v1alpha1Importer.Import(ctx, pkgimporter.Options{
+		Path:   cfg.SeedFrom,
+		Enrich: cfg.EnrichServerData,
+	})
+	if err != nil {
+		slog.Error("failed to import seed data (v1alpha1)", "error", err)
 		return
 	}
-
-	importerService := importer.NewService(serverService)
-	if embeddingProvider != nil {
-		importerService.SetEmbeddingProvider(embeddingProvider)
-		importerService.SetEmbeddingDimensions(cfg.Embeddings.Dimensions)
-		importerService.SetGenerateEmbeddings(cfg.Embeddings.Enabled)
+	var failed int
+	for _, r := range results {
+		if r.Status == pkgimporter.ImportStatusFailed {
+			failed++
+			slog.Warn("v1alpha1 import failed for document",
+				"source", r.Source, "kind", r.Kind,
+				"name", r.Name, "error", r.Error)
+		}
 	}
-	if err := importerService.ImportFromPath(ctx, cfg.SeedFrom, cfg.EnrichServerData); err != nil {
-		slog.Error("failed to import seed data", "error", err)
-	}
+	slog.Info("v1alpha1 import complete",
+		"seed_from", cfg.SeedFrom,
+		"total", len(results), "failed", failed)
 }
