@@ -199,27 +199,109 @@ streamable → cancel tears down.
 
 ---
 
-## 5. Platform adapters (local + kubernetes)
+## 5. Platform adapters (local + kubernetes) — **SURVEY DONE, READY TO PORT**
 
 **Current state**:
-- `internal/registry/platforms/local/deployment_adapter_local.go` +
-  `..._platform.go` + tests
+- `internal/registry/platforms/local/deployment_adapter_local.go` (367 LOC)
+  + `..._platform.go` (665 LOC) + tests — satisfies legacy
+  `registrytypes.DeploymentPlatformAdapter` with Deploy / Undeploy /
+  GetLogs / Cancel / CleanupStale / Discover methods that speak
+  `*models.Deployment`.
 - `internal/registry/platforms/kubernetes/deployment_adapter_kubernetes.go`
-  + `..._platform.go` + tests
+  + `..._platform.go` + tests — same shape, kagent + kmcp CRDs.
 - `internal/registry/platforms/types/types.go` +
-  `agentgateway_types.go` (~450 LOC of gateway config shapes)
-- `internal/registry/platforms/utils/deployment_adapter_utils.go` + tests
+  `agentgateway_types.go` (~450 LOC of gateway config shapes). These
+  are the adapter-internal DSL; they stay on legacy types during the
+  port.
+- `internal/registry/platforms/utils/deployment_adapter_utils.go`
+  (~720 LOC) — `BuildPlatformMCPServer`, `ResolveAgent`,
+  `TranslateMCPServer`, env/arg processing, `GenerateInternalNameForDeployment`.
+  Six call sites into agent/server services via this file.
+- `pkg/types/adapter_v1alpha1.go` — **NEW** interface already shipped
+  (commit `4a6e1a6`) with Apply / Remove / Logs / Discover + typed
+  input/output structs returning `[]v1alpha1.Condition`.
+- `internal/registry/platforms/noop/adapter.go` — reference impl of
+  the new interface; 106 LOC.
 
-**Port plan**:
-- New `pkg/types.DeploymentPlatformAdapter` (or same name, renamed)
-  interface with methods `Deploy(*v1alpha1.Deployment) error`,
-  `Undeploy(...)`, `Logs(...)`, `Cancel(...)`, `Discover(providerID) ([]*v1alpha1.Deployment, error)`.
-- Adapters continue to accept a `Resource` fetcher so they can look up
-  the Agent or MCPServer they're deploying — but the fetcher now returns
-  `*v1alpha1.Agent` / `*v1alpha1.MCPServer`.
-- Agentgateway config synthesis (for local adapter) continues to produce
-  gateway config from an Agent's `Spec.MCPServers` + fetching each
-  MCPServer; just types change.
+**Port plan — sub-commits (each a PR)**:
+
+**5.a — Local adapter port (first)**. Add `Apply` / `Remove` / `Logs` /
+`Discover` / `SupportedTargetKinds` methods to `localDeploymentAdapter`
+*alongside* the legacy `Deploy` / `Undeploy` / etc. so it satisfies
+both interfaces. New translation helpers live in a new file
+(`local/v1alpha1_translate.go`) that converts `v1alpha1.MCPServerSpec`
+→ `platformtypes.MCPServer` and `v1alpha1.AgentSpec` → `platformtypes.Agent`,
+reading nested refs via `ApplyInput.Resolver` instead of `serverService`
+/ `agentService`. Returns `[]v1alpha1.Condition` with `Progressing=True`
+on success; async convergence watch deferred to Phase 2 KRT. Tests
+exercise round-trip against docker-compose shell-out seams (fakeable
+via `runLocalComposeUp` global).
+
+**5.b — Kubernetes adapter port**. Same pattern as 5.a. kagent CRDs
+are controller-runtime objects; translation produces the same
+`*v1alpha2.Agent` / `*kmcpv1alpha1.MCPServer` / `*corev1.ConfigMap`
+graph, just fed from v1alpha1 specs. `sanitizeKubernetesName`,
+`kubernetesDeploymentManagedLabels`, `deploymentNamespace` stay.
+
+**5.c — Platform/utils v1alpha1 helpers**. New `utils/resolve_v1alpha1.go`
+with `ResolveAgentV1Alpha1` + `BuildPlatformMCPServerV1Alpha1` calling
+through `ResolverFunc` instead of the legacy services. Keeps legacy
+funcs alive until deployment service ports (5.d).
+
+**5.d — Deployment service port (Group 4 rolls in)**. Rewrite
+`internal/registry/service/deployment/` to speak `*v1alpha1.Deployment`
+on its public surface. Registry interface collapses — `LaunchDeployment`,
+`ApplyAgentDeployment`, `ApplyServerDeployment`, `UndeployDeployment`
+all accept/return v1alpha1 types. Calls adapters via the new interface
+(`types.DeploymentAdapter`). Status writes via `Store.PatchStatus`
+with `[]v1alpha1.Condition` merged. Transaction-locked idempotent
+upsert + drift detection preserved.
+
+**5.e — Deployment HTTP handlers (B1.f)**. Port
+`internal/registry/api/handlers/v0/deployments/handlers.go` to speak
+v1alpha1 on the wire. Six routes: list / get / create / delete /
+logs / cancel. No SSE watch endpoint currently (research confirmed —
+that's a Phase 2 KRT addition, not an existing seam). Delete
+`apitypes.DeploymentRequest` + `models.Deployment` wire types.
+
+**5.f — Legacy adapter + platform/utils + service deletion cascade**.
+After 5.a–e, drop legacy Deploy/Undeploy/GetLogs/Cancel/Discover
+methods from both adapters; delete `platforms/utils/deployment_adapter_utils.go`
+legacy functions; delete `pkg/registry/database.DeploymentStore`
+legacy interface + postgres_deployments.go; delete
+`internal/registry/service/{agent,server,provider}/` (last
+consumers gone); delete `pkg/models/{agent,manifest,server_response,
+skill,prompt,deployment,provider}.go`.
+
+**Sequencing reason**: each sub-commit leaves both stacks runnable.
+Adapter ports (5.a/5.b) ship first because the v1alpha1 interface
+exists + noop works — adapters can satisfy both interfaces during
+transition. Service port (5.d) lands after adapters so it has a new
+interface to call. Handlers (5.e) last because they own the external
+wire contract and break UI if rushed.
+
+**Adapter-Interface coexistence pattern**: one struct satisfies both
+`registrytypes.DeploymentPlatformAdapter` (legacy) and
+`pkg/types.DeploymentAdapter` (new) until 5.f. Compile-time
+assertions:
+```go
+var _ registrytypes.DeploymentPlatformAdapter = (*localDeploymentAdapter)(nil)
+var _ types.DeploymentAdapter               = (*localDeploymentAdapter)(nil)
+```
+
+**What the survey uncovered (clarifications to upstream plan)**:
+- **No SSE watch endpoint exists** in current code. `REBUILD_TRACKER.md` earlier noted
+  "SSE watch endpoint" as a hard seam — actual state: no such handler.
+  Phase 2 KRT owns the future watch surface; no byte-identical wire
+  contract to preserve here. Simplifies 5.e.
+- **Deployment service is heavy orchestrator** (not a thin wrapper):
+  `LaunchDeployment`, `ApplyAgentDeployment`/`ApplyServerDeployment`
+  do transaction-locked idempotent upsert with drift detection +
+  cleanup + adapter dispatch. Preserve that behavior through the
+  port; it's load-bearing.
+- **Discovery (adapter-side)**: only kubernetes has a real Discover;
+  local returns empty slice. New `DiscoveryResult` shape allows
+  either.
 
 **Business logic to preserve**:
 - [ ] Local: docker-compose YAML rendering with proper port allocation,
