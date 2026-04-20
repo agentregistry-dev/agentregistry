@@ -26,8 +26,8 @@ image:
   repository: agentregistry-dev/agentregistry
   # -- Agent Registry image name
   name: server
-  # -- Agent Registry image tag (immutable tags recommended)
-  tag: "0.2.1"
+  # -- Agent Registry image tag (immutable tags recommended). Leave empty to use .Chart.AppVersion.
+  tag: ""
   # -- Agent Registry image digest (overrides tag if set)
   digest: ""
   # -- Agent Registry image pull policy
