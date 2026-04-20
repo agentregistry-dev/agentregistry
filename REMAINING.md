@@ -27,14 +27,14 @@ Order below follows the dependency chain — earlier items unlock later ones.
 
 **Still pending on the validator side** (lives under the broader Group 3 umbrella rather than Group 6): duplicate-URL detection across packages + remotes within a single spec. Moves onto `(Spec).Validate()` when `internal/registry/validators/validators.go ValidateServerJSON` gets ported.
 
-### 3. Group 3 — service-layer dissolution — **NEXT UP**
-**Status**: legacy service packages still carry business logic.
+### 3. Group 3 — service-layer dissolution — **IN PROGRESS**
+**Status**: version-lock helper hoisted (`2972363`); cross-row uniqueness + ref-resolution remain; service-package deletion waits on Group 1.
 
-- [ ] Move `Agent.PublishAgent` URL-dedup logic onto `AgentSpec.Validate`.
-- [ ] Move `Agent.ResolveAgentManifestSkills / ResolveAgentManifestPrompts` onto `AgentSpec.ResolveRefs` (partial — resolver is in place, but specific shape mapping may need work).
-- [ ] Move `Server.PublishServer` duplicate-URL detection onto `MCPServerSpec.Validate`.
-- [ ] Move version-lock semantics (`internal/registry/service/internal/versionutil`) onto either `Store.Upsert` or a shared `pkg/api/v1alpha1/versionlock.go` helper.
-- [ ] Delete `internal/registry/service/{agent,server,skill,prompt,provider,set}/`, `testing/fake_registry.go`, `registry_service_test.go`.
+- [x] versionutil hoisted to `pkg/api/v1alpha1` as shared helper (`2972363`; git mv, 72% source / 97% test similarity). `IsSemanticVersion` + `CompareVersions` now public; legacy service packages swap imports in the same commit.
+- [ ] URL-uniqueness port. Legacy `service/*/validateNoDuplicateRemoteURLs` checks "no other object claims this remote URL" via `List*` filter. Port as a new `Object` interface method `ValidateUniqueRemoteURLs(ctx, UniqueRemoteURLsFunc)` parallel to `ResolveRefs` / `ValidateRegistries`; concrete implementation uses `Store.FindReferrers` against a JSONB `spec.remotes[*].url` path. Wire into apply + import handlers.
+- [ ] Agent ref resolution parity check. `AgentSpec.ResolveRefs` already handles Skills + Prompts + MCPServer refs. Audit against legacy `ResolveAgentManifestSkills/Prompts` (which produce typed `platformtypes.ResolvedPrompt` for the reconciler) to confirm parity and port any missing output fields.
+- [ ] Move version-lock policy onto the apply handler as a pre-Upsert check using the new `v1alpha1.CompareVersions` helper. Reject apply when `new < latest` unless a `--force` flag is set.
+- [ ] Delete `internal/registry/service/{agent,server,skill,prompt,provider,set}/`, `testing/fake_registry.go`, `registry_service_test.go`. Blocked by Group 1: legacy `/v0/{plural}/...` handlers still call these services. Deletion coordinates with the handler collapse.
 
 **Why**: handlers (Group 1) call services; until services are dissolved, Group 1 can't fully move to the generic handler.
 
