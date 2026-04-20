@@ -50,8 +50,12 @@ func (a *kubernetesDeploymentAdapter) Deploy(ctx context.Context, req *models.De
 	}
 	if err := kubernetesApplyPlatformConfig(ctx, provider, cfg, false); err != nil {
 		if isKagentCRDNotFoundError(err) {
-			// Wrap original to preserve chain for logging; message is user-actionable.
-			return nil, fmt.Errorf("kagent CRD not found in cluster — kagent may not be installed or may be partially installed: install from https://kagent.dev: %w", err)
+			// Classify as invalid input/precondition so the API can map it to a 4xx,
+			// while preserving the original cause for logging and diagnostics.
+			return nil, errors.Join(
+				database.ErrInvalidInput,
+				fmt.Errorf("kagent CRD not found in cluster — kagent may not be installed or may be partially installed: install from https://kagent.dev: %w", err),
+			)
 		}
 		return nil, fmt.Errorf("apply kubernetes platform config: %w", err)
 	}
