@@ -7,16 +7,12 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
-	v0agents "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/agents"
 	v0deployments "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deployments"
 	v0embeddings "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/embeddings"
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
 	v0ping "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/ping"
-	v0prompts "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/prompts"
-	v0providers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/providers"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/resource"
 	v0servers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/servers"
-	v0skills "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/skills"
 	v0version "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/version"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
@@ -96,17 +92,15 @@ func RegisterRoutes(
 	v0health.RegisterHealthEndpoint(api, pathPrefix, cfg, metrics)
 	v0ping.RegisterPingEndpoint(api, pathPrefix)
 	v0version.RegisterVersionEndpoint(api, pathPrefix, versionInfo)
+	// Legacy MCPServer handlers still serve /v0/servers/... until B1.c
+	// ports them onto /v0/namespaces/{ns}/mcpservers/... via the generic
+	// resource handler.
 	v0servers.RegisterServersEndpoints(api, pathPrefix, svcs.Server, svcs.Deployment)
 	v0servers.RegisterServersCreateEndpoint(api, pathPrefix, svcs.Server, svcs.Deployment)
 	v0servers.RegisterEditEndpoints(api, pathPrefix, svcs.Server, svcs.Deployment)
-	v0providers.RegisterProvidersEndpoints(api, pathPrefix, svcs.Provider)
+	// Legacy deployment RPC endpoints (SSE watch, logs, cancel) still
+	// served until B1.f / Group 4 deployment service port.
 	v0deployments.RegisterDeploymentsEndpoints(api, pathPrefix, svcs.Deployment)
-	v0agents.RegisterAgentsEndpoints(api, pathPrefix, svcs.Agent, svcs.Deployment)
-	v0agents.RegisterAgentsCreateEndpoint(api, pathPrefix, svcs.Agent, svcs.Deployment)
-	v0skills.RegisterSkillsEndpoints(api, pathPrefix, svcs.Skill)
-	v0skills.RegisterSkillsCreateEndpoint(api, pathPrefix, svcs.Skill)
-	v0prompts.RegisterPromptsEndpoints(api, pathPrefix, svcs.Prompt)
-	v0prompts.RegisterPromptsCreateEndpoint(api, pathPrefix, svcs.Prompt)
 
 	if opts != nil && opts.Indexer != nil && opts.JobManager != nil {
 		v0embeddings.RegisterEmbeddingsEndpoints(api, pathPrefix, opts.Indexer, opts.JobManager)

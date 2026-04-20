@@ -1,10 +1,12 @@
 # v1alpha1 API Refactor — Review Guide
 
 Branch: `refactor/v1alpha1-types`
-Scope: 36 commits. Foundation + generic Store + HTTP surface + importer pipeline + all 5 per-registry validators + dedup passes.
+Scope: 40 commits, ~11.8k LOC added / 1.3k deleted across ~100 files. Foundation + generic Store + HTTP surface + importer pipeline + all 5 per-registry validators + Group-3 service-layer port in progress (versionutil hoist, URL-uniqueness port, `/v0/apply` consolidation).
 Epic: replace the five-layer type stack (`kinds.Document` → `Spec` → wire DTO → `Record` → JSONB blob) with a single Kubernetes-style `ar.dev/v1alpha1` envelope that flows YAML → HTTP → Go client → service → DB.
 
 This guide is written so a reviewer can pick it up cold and land at a specific commit in under five minutes. Each section points at the commits to read together, what the intent was, and where the design debate sits.
+
+**Recommended companion reads** (in order): `REBUILD_TRACKER.md` (per-subsystem port inventory + finish-line signals) → this file (commit-grouped reading order) → `REMAINING.md` (3-minute punch list of what's still deferred) → `design-docs/V1ALPHA1_PLATFORM_ADAPTERS.md` + `design-docs/V1ALPHA1_IMPORTER_ENRICHMENT.md` (design rationale; every open question was resolved on 2026-04-17).
 
 ---
 
@@ -61,6 +63,10 @@ Key design decisions embedded in the code:
 | Kind → table mapping | `internal/registry/database/store_v1alpha1_tables.go V1Alpha1TableFor` |
 | One-line Stores constructor | `database.NewV1Alpha1Stores(pool)` |
 | Six generic `Register[*T]` calls | behind `resource.RegisterBuiltins` |
+| Shared version-lock helper | `pkg/api/v1alpha1/versionutil.go` (`IsSemanticVersion`, `CompareVersions`) |
+| Unified apply pipeline | `resource.RegisterApply` mounts POST + DELETE at `/v0/apply` |
+| Apply result wire contract | `internal/registry/api/apitypes/apply.go` |
+| Cross-row URL-uniqueness invariant | `(Object).ValidateUniqueRemoteURLs` + `database.NewV1Alpha1UniqueRemoteURLsChecker` |
 
 ---
 
@@ -214,6 +220,26 @@ The legacy per-registry validators (OCI allowlist + label match; NPM/PyPI/NuGet 
 - `pkg/api/v1alpha1/registries/dispatcher.go` — how the switch routes RegistryType to the per-registry validator. Add a new `case` here when a new registry type lands.
 - `internal/registry/validators/package.go` — legacy `ValidatePackage(model.Package)` now translates to `v1alpha1.RegistryPackage` on the fly and calls the same dispatcher. Both stacks share the validator code.
 
+### Group 9 — Service-layer port in flight (`2972363`, `e9ef6fb`, `2f667eb`, 3 commits)
+
+The first three pieces of the Group 3 port (dissolving `internal/registry/service/{agent,server,skill,prompt,provider}/`). Each moves one business-logic slice off the legacy service packages onto a v1alpha1-native surface. The service packages themselves stay alive until Group 1 handler collapse lands.
+
+| Commit | Subject | Focus |
+|--------|---------|-------|
+| `2972363` | hoist versionutil to `pkg/api/v1alpha1` as shared helper | `git mv internal/registry/service/internal/versionutil/{versionutil,versionutil_test}.go pkg/api/v1alpha1/` (72% / 97% similarity; docstrings trimmed to stay above the rename-detection threshold). `IsSemanticVersion` + `CompareVersions` keep signatures; 4 legacy service files update imports in the same commit. `EnsureVPrefix` inlined as unexported `ensureVPrefix` because `internal/version` isn't importable from `pkg/*`. |
+| `e9ef6fb` | port URL-uniqueness to Object interface | New `(Object).ValidateUniqueRemoteURLs(ctx, UniqueRemoteURLsFunc)` parallel to `ResolveRefs` + `ValidateRegistries`. Concrete impls on Agent / MCPServer / Skill iterate `spec.remotes[*].url`; no-op on Prompt / Provider / Deployment. `database.NewV1Alpha1UniqueRemoteURLsChecker` builds the checker from `Store.FindReferrers` with JSONB containment fragment `{"remotes":[{"url":"..."}]}`. **Cross-namespace by design** — a URL is a global real-world identifier. Wired through `resource.Config` + `ApplyConfig` + `RegisterBuiltins` + `importer.Config`. PUT returns 409 Conflict; apply surfaces as `Status="failed"`. 7 unit + 2 integration tests. |
+| `2f667eb` | consolidate /v0/apply onto the v1alpha1 resource handler | Deletes `internal/registry/api/handlers/v0/apply/` + `handlers/v0/common/apply_errors.go` + ~160 LOC of `kindReg`/`providerApplyFunc`/`deploymentApplyFunc` wiring in `registry_app.go`. The v1alpha1 resource handler's `RegisterApply` gains `DryRun` + `Force` query params and a DELETE verb (soft-deletes every doc in the body). `ApplyResult` + status constants hoisted into `internal/registry/api/apitypes/apply.go` so `internal/client` and CLI consume the wire type without pulling a handler package. `RouteOptions.KindRegistry` dropped. |
+
+**What to pay attention to**
+
+- `pkg/api/v1alpha1/versionutil.go` — two exported functions. `CompareVersions` is the authority for `isLatest` decisions; apply-path version-locking is explicitly **not** enforced (legacy only used this to decide latest, not to reject old-version applies — see `REBUILD_TRACKER.md` §3 for the audit trail).
+- `pkg/api/v1alpha1/remote_urls_validate.go:1-100` — implementation is surprisingly subtle: within a single manifest, only the **first** conflicting URL is reported; across manifests, `Store.FindReferrers` does the heavy lift via GIN-indexed JSONB lookup. The checker runs after `ResolveRefs` so dangling-ref errors surface first.
+- `internal/registry/api/handlers/v0/resource/apply.go:65-68` — `DryRun` runs the full validate/resolve/registries/uniqueness pipeline and short-circuits before Upsert; `Force` is accepted for CLI wire compatibility and is a **no-op** (v1alpha1's `Store.Upsert` handles version+generation semantics; no cross-apply drift gate required).
+- `internal/registry/api/handlers/v0/resource/apply.go:104-111` — the DELETE `/v0/apply` verb is new. Takes the same multi-doc YAML body, runs validation (for error-surface parity) then calls `Store.Delete`. Missing rows return `Status="failed"` rather than a silent success.
+- `internal/registry/api/apitypes/apply.go` — the wire contract is now OSS-facing package-level (not in `handlers/v0/apply/`). `ApplyStatus{Created,Configured,Unchanged,Deleted,DryRun,Failed}` strings are public; clients type-switch on them.
+- `internal/client/client.go Apply / DeleteViaApply` — both now return `[]apitypes.ApplyResult`. The `applyBatch` helper factors the shared POST/DELETE path.
+- **What is NOT deleted yet**: `internal/registry/kinds/` stays alive because the CLI client-side still decodes YAML through `kinds.Registry` for local validation before POST. CLI port is a separate branch.
+
 ### Group 7 — Design docs + tracker (`d21b566`, `f575541`, `c0a89e2`, et al.)
 
 The paper trail. These are reference documents, not code changes. Useful if you want context on *why* before reading a specific commit.
@@ -296,10 +322,11 @@ All three must be green on this branch.
 See `REMAINING.md` for the full punch list. Highlights:
 
 - Native platform adapter ports (`local` docker-compose ~1k LOC; `kubernetes` CRD templating ~1.5k LOC). Interface is in; implementations are not.
-- Importer bootstrap wire-up + `POST /v0/import` HTTP endpoint. The `Importer` struct exists and is fully tested, but no server actually constructs one yet.
-- Legacy importer package deletion. Stays in tree until bootstrap wire-up lands.
-- Registry-validators port (Group 6 remainder: OCI/NPM/PyPI allowlists, repo-ref resolution).
-- Per-kind service packages deletion (Group 3). Business logic still lives in `internal/registry/service/{agent,server,...}/`.
-- Go client rewrite (Group 2). Still 1.8k LOC of typed per-kind methods.
+- Legacy importer package deletion. Blocked by `internal/cli/import.go` still importing `internal/registry/importer` for manifest-level preprocessing; CLI port is on a separate branch.
+- Per-kind service packages deletion (Group 3 remainder). versionutil + URL-uniqueness already hoisted out; full deletion waits on Group 1 handler collapse (legacy `/v0/{plural}/...` handlers still call the services).
+- Go client rewrite (Group 2). Still ~1.8k LOC of typed per-kind methods; `Apply` / `DeleteViaApply` are the only v1alpha1-native entry points so far.
+- Legacy per-kind HTTP handlers under `internal/registry/api/handlers/v0/{agents,servers,skills,prompts,providers,deployments}/`. Coexist with the new generic handler at different routes; collapse lands in Group 1.
+- Deployment-specific endpoints (SSE watch, cancel, logs) + `server_readmes` BYTEA table. Watch in particular is a hard seam for Phase 2 KRT (see REBUILD_TRACKER §1).
 - UI TypeScript client regen + component fixups (Group after Go client).
-- Phase 2 KRT reconciler rebase onto this branch.
+- `internal/registry/kinds/` — used by CLI-side YAML validation; removed when the declarative CLI branch merges.
+- Phase 2 KRT reconciler rebase onto this branch. Wraps `models.Deployment` → `*v1alpha1.Deployment` at ingest, converts scalar-status checks to condition queries, repoints `UpdateDeploymentState` → `Store.PatchStatus`.
