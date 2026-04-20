@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/spf13/cobra"
 )
 
@@ -86,7 +86,7 @@ func deleteFromFile(cmd *cobra.Command, filename string) error {
 	printResults(cmd.OutOrStdout(), results, false)
 
 	for _, r := range results {
-		if r.Status == kinds.StatusFailed {
+		if r.Status == apitypes.ApplyStatusFailed {
 			return fmt.Errorf("one or more resources failed to delete")
 		}
 	}

@@ -14,7 +14,6 @@ import (
 	"time"
 
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	v0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
@@ -754,7 +753,18 @@ type ApplyOpts struct {
 // Apply sends a multi-doc YAML body to POST /v0/apply and returns per-resource results.
 // Returns an error only on request-level failures (network, 4xx from server).
 // Per-resource errors are encoded in the returned results.
-func (c *Client) Apply(ctx context.Context, body []byte, opts ApplyOpts) ([]kinds.Result, error) {
+func (c *Client) Apply(ctx context.Context, body []byte, opts ApplyOpts) ([]apitypes.ApplyResult, error) {
+	return c.applyBatch(ctx, http.MethodPost, body, opts)
+}
+
+// DeleteViaApply sends a DELETE /v0/apply with a YAML body and returns per-resource results.
+// Mirrors Apply but uses the DELETE HTTP method. DryRun is honored; Force is accepted for
+// backwards compatibility but is a no-op under v1alpha1.
+func (c *Client) DeleteViaApply(ctx context.Context, body []byte) ([]apitypes.ApplyResult, error) {
+	return c.applyBatch(ctx, http.MethodDelete, body, ApplyOpts{})
+}
+
+func (c *Client) applyBatch(ctx context.Context, method string, body []byte, opts ApplyOpts) ([]apitypes.ApplyResult, error) {
 	u := strings.TrimRight(c.BaseURL, "/") + "/apply"
 	q := url.Values{}
 	if opts.Force {
@@ -767,7 +777,7 @@ func (c *Client) Apply(ctx context.Context, body []byte, opts ApplyOpts) ([]kind
 		u += "?" + enc
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, method, u, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -785,49 +795,12 @@ func (c *Client) Apply(ctx context.Context, body []byte, opts ApplyOpts) ([]kind
 
 	if resp.StatusCode >= 400 {
 		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("POST /v0/apply returned %d: %s", resp.StatusCode, string(b))
+		return nil, fmt.Errorf("%s /v0/apply returned %d: %s", method, resp.StatusCode, string(b))
 	}
 
-	var out struct {
-		Results []kinds.Result `json:"results"`
-	}
+	var out apitypes.ApplyResultsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, fmt.Errorf("decoding apply response: %w", err)
-	}
-	return out.Results, nil
-}
-
-// DeleteViaApply sends a DELETE /v0/apply with a YAML body and returns per-resource results.
-// Mirrors Apply but uses the DELETE HTTP method.
-func (c *Client) DeleteViaApply(ctx context.Context, body []byte) ([]kinds.Result, error) {
-	u := strings.TrimRight(c.BaseURL, "/") + "/apply"
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, u, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/yaml")
-	req.Header.Set("Accept", "application/json")
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode >= 400 {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("DELETE /v0/apply returned %d: %s", resp.StatusCode, string(b))
-	}
-
-	var out struct {
-		Results []kinds.Result `json:"results"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return nil, fmt.Errorf("decoding response: %w", err)
 	}
 	return out.Results, nil
 }

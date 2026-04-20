@@ -8,7 +8,6 @@ import (
 
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	v0agents "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/agents"
-	v0apply "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/apply"
 	v0deployments "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deployments"
 	v0embeddings "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/embeddings"
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
@@ -20,7 +19,6 @@ import (
 	v0skills "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/skills"
 	v0version "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/version"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
 	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
@@ -82,10 +80,6 @@ type RouteOptions struct {
 
 	// Optional callback for integration-owned route registration.
 	ExtraRoutes func(api huma.API, pathPrefix string)
-
-	// KindRegistry is the declarative kind registry used by POST/DELETE /v0/apply.
-	// When non-nil the batch apply endpoints are registered.
-	KindRegistry *kinds.Registry
 }
 
 // RegisterRoutes registers all API routes under /v0.
@@ -140,9 +134,6 @@ func RegisterRoutes(
 		})
 	}
 
-	if opts != nil && opts.KindRegistry != nil {
-		v0apply.RegisterApplyEndpoints(api, pathPrefix, opts.KindRegistry)
-	}
 	if opts != nil && opts.ExtraRoutes != nil {
 		opts.ExtraRoutes(api, pathPrefix)
 	}

@@ -7,7 +7,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/spf13/cobra"
 )
 
@@ -104,7 +104,7 @@ func runApply(cmd *cobra.Command, force, dryRun bool) error {
 		}
 		printResults(cmd.OutOrStdout(), results, dryRun)
 		for _, r := range results {
-			if r.Status == kinds.StatusFailed {
+			if r.Status == apitypes.ApplyStatusFailed {
 				anyFailure = true
 			}
 		}
@@ -116,10 +116,10 @@ func runApply(cmd *cobra.Command, force, dryRun bool) error {
 	return nil
 }
 
-func printResults(out io.Writer, results []kinds.Result, dryRun bool) {
+func printResults(out io.Writer, results []apitypes.ApplyResult, dryRun bool) {
 	for _, r := range results {
 		mark := "✓"
-		if r.Status == kinds.StatusFailed {
+		if r.Status == apitypes.ApplyStatusFailed {
 			mark = "✗"
 		}
 		fmt.Fprintf(out, "%s %s/%s", mark, r.Kind, r.Name)
