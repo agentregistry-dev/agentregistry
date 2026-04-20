@@ -75,6 +75,14 @@ func (fe *FieldErrors) Append(path string, cause error) {
 // errors (DB failures, etc.) propagate as-is.
 type ResolverFunc func(ctx context.Context, ref ResourceRef) error
 
+// GetterFunc fetches a ResourceRef as a typed Object. It returns
+// ErrDanglingRef when the referenced object is missing; other errors
+// propagate as-is. Used by reconcilers / platform adapters that need
+// the target's Spec (not just an existence check) — for example, the
+// local adapter walking an AgentSpec.MCPServers entry to build
+// agentgateway upstream config.
+type GetterFunc func(ctx context.Context, ref ResourceRef) (Object, error)
+
 // -----------------------------------------------------------------------------
 // Format rules — regexes and constants shared across every kind's validator.
 // -----------------------------------------------------------------------------

@@ -576,7 +576,7 @@ func (a *fakeClientDeploymentAdapter) Cancel(ctx context.Context, deployment *mo
 	return database.ErrNotFound
 }
 
-func (a *fakeClientDeploymentAdapter) Discover(context.Context, string) ([]*models.Deployment, error) {
+func (a *fakeClientDeploymentAdapter) LegacyDiscover(context.Context, string) ([]*models.Deployment, error) {
 	return nil, nil
 }
 

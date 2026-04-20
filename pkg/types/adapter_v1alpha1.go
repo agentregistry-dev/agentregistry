@@ -98,12 +98,16 @@ type ApplyInput struct {
 	// Provider is the resolved ProviderRef.
 	Provider *v1alpha1.Provider
 
-	// Resolver is passed so adapters can resolve nested refs mid-Apply
-	// (e.g. the local adapter walking AgentSpec.MCPServers to build
-	// agentgateway upstream config). Blank-namespace refs inherit
-	// from the referencing object — same rules as v1alpha1.Object
-	// ResolveRefs.
+	// Resolver is passed so adapters can check nested ref existence
+	// mid-Apply (blank-namespace refs inherit from the referencing
+	// object — same rules as v1alpha1.Object ResolveRefs).
 	Resolver v1alpha1.ResolverFunc
+
+	// Getter fetches the typed Object for a ResourceRef. Adapters use
+	// this when they need the target's Spec (not just an existence
+	// check) — for example, the local adapter walking
+	// AgentSpec.MCPServers to build agentgateway upstream config.
+	Getter v1alpha1.GetterFunc
 }
 
 // ApplyResult captures the status + finalizer deltas the reconciler

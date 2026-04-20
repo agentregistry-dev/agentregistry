@@ -165,7 +165,10 @@ func (a *localDeploymentAdapter) Cancel(_ context.Context, _ *models.Deployment)
 	return utils.ErrDeploymentNotSupported
 }
 
-func (a *localDeploymentAdapter) Discover(_ context.Context, _ string) ([]*models.Deployment, error) {
+// LegacyDiscover satisfies the legacy DeploymentPlatformAdapter interface.
+// The v1alpha1 Discover(ctx, DiscoverInput) lives in v1alpha1_adapter.go; both
+// coexist on this struct during the Group 5 transition and collapse in 5.f.
+func (a *localDeploymentAdapter) LegacyDiscover(_ context.Context, _ string) ([]*models.Deployment, error) {
 	return []*models.Deployment{}, nil
 }
 

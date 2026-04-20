@@ -86,7 +86,7 @@ func (a *kubernetesDeploymentAdapter) Cancel(_ context.Context, _ *models.Deploy
 	return utils.ErrDeploymentNotSupported
 }
 
-func (a *kubernetesDeploymentAdapter) Discover(ctx context.Context, providerID string) ([]*models.Deployment, error) {
+func (a *kubernetesDeploymentAdapter) LegacyDiscover(ctx context.Context, providerID string) ([]*models.Deployment, error) {
 	provider, err := a.providerRegistry.GetProvider(ctx, providerID)
 	if err != nil {
 		return nil, err

@@ -42,7 +42,7 @@ func (m *mockDeploymentAdapter) GetLogs(_ context.Context, _ *models.Deployment)
 	return nil, nil
 }
 func (m *mockDeploymentAdapter) Cancel(_ context.Context, _ *models.Deployment) error { return nil }
-func (m *mockDeploymentAdapter) Discover(_ context.Context, _ string) ([]*models.Deployment, error) {
+func (m *mockDeploymentAdapter) LegacyDiscover(_ context.Context, _ string) ([]*models.Deployment, error) {
 	return nil, nil
 }
 

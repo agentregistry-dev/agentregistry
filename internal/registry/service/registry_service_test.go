@@ -1463,7 +1463,7 @@ func (a *testDeploymentAdapter) Cancel(ctx context.Context, deployment *models.D
 	return a.cancelFn(ctx, deployment)
 }
 
-func (a *testDeploymentAdapter) Discover(ctx context.Context, providerID string) ([]*models.Deployment, error) {
+func (a *testDeploymentAdapter) LegacyDiscover(ctx context.Context, providerID string) ([]*models.Deployment, error) {
 	if a.discoverFn == nil {
 		return []*models.Deployment{}, nil
 	}

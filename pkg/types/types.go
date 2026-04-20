@@ -39,7 +39,7 @@ type DeploymentPlatformAdapter interface {
 	Undeploy(ctx context.Context, deployment *models.Deployment) error
 	GetLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
 	Cancel(ctx context.Context, deployment *models.Deployment) error
-	Discover(ctx context.Context, providerID string) ([]*models.Deployment, error)
+	LegacyDiscover(ctx context.Context, providerID string) ([]*models.Deployment, error)
 }
 
 // DatabaseFactory is a function type that creates a store implementation.

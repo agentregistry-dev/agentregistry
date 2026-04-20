@@ -83,6 +83,55 @@ func NewV1Alpha1Resolver(stores map[string]*Store) v1alpha1.ResolverFunc {
 	}
 }
 
+// NewV1Alpha1Getter returns a v1alpha1.GetterFunc that dispatches a
+// cross-kind ResourceRef fetch against the supplied Stores map and
+// decodes the RawObject into its typed envelope via v1alpha1.Default.
+// Consumers: reconcilers / platform adapters that need the referenced
+// object's Spec (not just an existence check).
+//
+// Dangling references return v1alpha1.ErrDanglingRef; unknown kinds
+// return wrapped v1alpha1.ErrInvalidRef.
+func NewV1Alpha1Getter(stores map[string]*Store) v1alpha1.GetterFunc {
+	return func(ctx context.Context, ref v1alpha1.ResourceRef) (v1alpha1.Object, error) {
+		store, ok := stores[ref.Kind]
+		if !ok {
+			return nil, fmt.Errorf("%w: unknown kind %q", v1alpha1.ErrInvalidRef, ref.Kind)
+		}
+		var (
+			raw *v1alpha1.RawObject
+			err error
+		)
+		if ref.Version == "" {
+			raw, err = store.GetLatest(ctx, ref.Namespace, ref.Name)
+		} else {
+			raw, err = store.Get(ctx, ref.Namespace, ref.Name, ref.Version)
+		}
+		if err != nil {
+			if errors.Is(err, pkgdb.ErrNotFound) {
+				return nil, v1alpha1.ErrDanglingRef
+			}
+			return nil, err
+		}
+		_, newObj, ok := v1alpha1.Default.Lookup(ref.Kind)
+		if !ok {
+			return nil, fmt.Errorf("%w: unknown kind %q in scheme", v1alpha1.ErrInvalidRef, ref.Kind)
+		}
+		obj, ok := newObj().(v1alpha1.Object)
+		if !ok {
+			return nil, fmt.Errorf("scheme constructor for %q did not return v1alpha1.Object", ref.Kind)
+		}
+		obj.SetTypeMeta(raw.TypeMeta)
+		obj.SetMetadata(raw.Metadata)
+		obj.SetStatus(raw.Status)
+		if len(raw.Spec) > 0 {
+			if err := obj.UnmarshalSpec(raw.Spec); err != nil {
+				return nil, fmt.Errorf("decode %s spec: %w", ref.Kind, err)
+			}
+		}
+		return obj, nil
+	}
+}
+
 // NewV1Alpha1UniqueRemoteURLsChecker returns a v1alpha1.UniqueRemoteURLsFunc
 // that scans the kind's table via Store.FindReferrers with JSONB
 // containment fragment `{"remotes":[{"url":"<url>"}]}`. Kinds that don't

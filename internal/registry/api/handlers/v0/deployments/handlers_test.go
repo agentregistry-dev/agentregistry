@@ -519,7 +519,7 @@ func (f *fakeDeploymentAdapter) Cancel(_ context.Context, _ *models.Deployment) 
 	f.cancelCalled = true
 	return f.cancelErr
 }
-func (f *fakeDeploymentAdapter) Discover(_ context.Context, _ string) ([]*models.Deployment, error) {
+func (f *fakeDeploymentAdapter) LegacyDiscover(_ context.Context, _ string) ([]*models.Deployment, error) {
 	return []*models.Deployment{}, nil
 }
 

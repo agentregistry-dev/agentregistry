@@ -114,7 +114,7 @@ func (s *registry) appendDiscoveredDeployments(ctx context.Context, deployments 
 			log.Printf("Warning: Failed to resolve deployment adapter for provider %s (%s): %v", provider.ID, provider.Platform, err)
 			continue
 		}
-		discovered, err := adapter.Discover(ctx, provider.ID)
+		discovered, err := adapter.LegacyDiscover(ctx, provider.ID)
 		if err != nil {
 			log.Printf("Warning: Failed to discover deployments for provider %s: %v", provider.ID, err)
 			continue

@@ -557,7 +557,7 @@ func (h *fakeMCPDeploymentHarness) CancelDeployment(ctx context.Context, deploym
 	return h.Cancel(ctx, deployment)
 }
 
-func (h *fakeMCPDeploymentHarness) Discover(context.Context, string) ([]*models.Deployment, error) {
+func (h *fakeMCPDeploymentHarness) LegacyDiscover(context.Context, string) ([]*models.Deployment, error) {
 	return nil, nil
 }
 

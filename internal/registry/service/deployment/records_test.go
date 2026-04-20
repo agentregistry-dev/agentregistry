@@ -33,7 +33,7 @@ func (a *failingUndeployAdapter) GetLogs(_ context.Context, _ *models.Deployment
 	return nil, nil
 }
 func (a *failingUndeployAdapter) Cancel(_ context.Context, _ *models.Deployment) error { return nil }
-func (a *failingUndeployAdapter) Discover(_ context.Context, _ string) ([]*models.Deployment, error) {
+func (a *failingUndeployAdapter) LegacyDiscover(_ context.Context, _ string) ([]*models.Deployment, error) {
 	return nil, nil
 }
 
@@ -57,7 +57,7 @@ func (a *successAdapter) GetLogs(_ context.Context, _ *models.Deployment) ([]str
 	return nil, nil
 }
 func (a *successAdapter) Cancel(_ context.Context, _ *models.Deployment) error { return nil }
-func (a *successAdapter) Discover(_ context.Context, _ string) ([]*models.Deployment, error) {
+func (a *successAdapter) LegacyDiscover(_ context.Context, _ string) ([]*models.Deployment, error) {
 	return nil, nil
 }
 
