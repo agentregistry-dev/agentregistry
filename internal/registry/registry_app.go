@@ -301,6 +301,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		Aliases:  []string{"Deployment"},
 		SpecType: reflect.TypeFor[kinds.DeploymentSpec](),
 		Apply:    deploymentApplyFunc(deploymentService),
+		Delete:   deploymentDeleteFunc(deploymentService),
 		TableColumns: []kinds.Column{
 			{Header: "NAME"}, {Header: "VERSION"}, {Header: "RESOURCE_TYPE"},
 			{Header: "PROVIDER"}, {Header: "STATUS"},
@@ -512,5 +513,44 @@ func deploymentApplyFunc(svc deploymentsvc.Registry) kinds.ApplyFunc {
 			}
 		}
 		return kinds.AppliedResult("deployment", doc), nil
+	}
+}
+
+// deploymentDeleteFunc returns the Delete function for the deployment kind.
+// The server-side DELETE /v0/apply batch handler dispatches here when a
+// deployment doc is included. A non-empty version is required — deployments
+// are identified by (name, version, provider), so an empty version could
+// span multiple versions and cause surprise bulk deletes. The same
+// (name, version) can still map to multiple deployments (one per provider);
+// all of those are removed.
+func deploymentDeleteFunc(svc deploymentsvc.Registry) kinds.DeleteFunc {
+	return func(ctx context.Context, name, version string) error {
+		if version == "" {
+			return fmt.Errorf("%w: version is required when deleting deployments", database.ErrInvalidInput)
+		}
+		matches, err := svc.ListDeployments(ctx, &models.DeploymentFilter{ResourceName: &name})
+		if err != nil {
+			return fmt.Errorf("listing deployments: %w", err)
+		}
+		var toDelete []*models.Deployment
+		for _, d := range matches {
+			if d == nil {
+				continue
+			}
+			if d.ServerName != name || d.Version != version {
+				continue
+			}
+			toDelete = append(toDelete, d)
+		}
+		if len(toDelete) == 0 {
+			return database.ErrNotFound
+		}
+		var errs []error
+		for _, d := range toDelete {
+			if err := svc.DeleteDeployment(ctx, d.ID); err != nil {
+				errs = append(errs, fmt.Errorf("deleting %s (provider %s): %w", d.ID, d.ProviderID, err))
+			}
+		}
+		return errors.Join(errs...)
 	}
 }

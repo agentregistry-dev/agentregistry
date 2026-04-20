@@ -62,7 +62,7 @@ func providerWriteHTTPError(action string, err error) error {
 	case providersvc.IsUnsupportedPlatformError(err):
 		return huma.Error400BadRequest(err.Error())
 	case errors.Is(err, database.ErrInvalidInput):
-		return huma.Error400BadRequest("Invalid provider input")
+		return huma.Error400BadRequest(err.Error())
 	case errors.Is(err, database.ErrAlreadyExists):
 		return huma.Error409Conflict("Provider already exists")
 	case errors.Is(err, database.ErrNotFound):
