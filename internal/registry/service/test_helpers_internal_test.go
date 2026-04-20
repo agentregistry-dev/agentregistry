@@ -9,7 +9,6 @@ import (
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
-	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
 	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
 	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
@@ -127,11 +126,6 @@ func (s *registryServiceImpl) agentService() agentsvc.Registry {
 func (s *registryServiceImpl) skillService() skillsvc.Registry {
 	stores := s.readStores()
 	return skillsvc.New(skillsvc.Dependencies{Skills: stores.skills, Tx: s.storeDB})
-}
-
-func (s *registryServiceImpl) promptService() promptsvc.Registry {
-	stores := s.readStores()
-	return promptsvc.New(promptsvc.Dependencies{Prompts: stores.prompts, Tx: s.storeDB})
 }
 
 func (s *registryServiceImpl) providerService() providersvc.Registry {
@@ -260,30 +254,6 @@ func (s *registryServiceImpl) PublishSkill(ctx context.Context, req *models.Skil
 
 func (s *registryServiceImpl) DeleteSkill(ctx context.Context, skillName, version string) error {
 	return s.skillService().DeleteSkill(ctx, skillName, version)
-}
-
-func (s *registryServiceImpl) ListPrompts(ctx context.Context, filter *database.PromptFilter, cursor string, limit int) ([]*models.PromptResponse, string, error) {
-	return s.promptService().ListPrompts(ctx, filter, cursor, limit)
-}
-
-func (s *registryServiceImpl) GetPrompt(ctx context.Context, promptName string) (*models.PromptResponse, error) {
-	return s.promptService().GetPrompt(ctx, promptName)
-}
-
-func (s *registryServiceImpl) GetPromptVersion(ctx context.Context, promptName, version string) (*models.PromptResponse, error) {
-	return s.promptService().GetPromptVersion(ctx, promptName, version)
-}
-
-func (s *registryServiceImpl) GetPromptVersions(ctx context.Context, promptName string) ([]*models.PromptResponse, error) {
-	return s.promptService().GetPromptVersions(ctx, promptName)
-}
-
-func (s *registryServiceImpl) PublishPrompt(ctx context.Context, req *models.PromptJSON) (*models.PromptResponse, error) {
-	return s.promptService().PublishPrompt(ctx, req)
-}
-
-func (s *registryServiceImpl) DeletePrompt(ctx context.Context, promptName, version string) error {
-	return s.promptService().DeletePrompt(ctx, promptName, version)
 }
 
 func (s *registryServiceImpl) ListProviders(ctx context.Context, platform string) ([]*models.Provider, error) {

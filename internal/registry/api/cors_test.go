@@ -18,7 +18,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
-	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
 	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
 	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
@@ -42,7 +41,6 @@ func TestCORSHeaders(t *testing.T) {
 	serverService := serversvc.New(serversvc.Dependencies{StoreDB: db, Config: cfg})
 	agentService := agentsvc.New(agentsvc.Dependencies{StoreDB: db, Config: cfg})
 	skillService := skillsvc.New(skillsvc.Dependencies{StoreDB: db})
-	promptService := promptsvc.New(promptsvc.Dependencies{StoreDB: db})
 	providerService := providersvc.New(providersvc.Dependencies{StoreDB: db})
 	deploymentService := deploymentsvc.New(deploymentsvc.Dependencies{StoreDB: db})
 
@@ -61,7 +59,6 @@ func TestCORSHeaders(t *testing.T) {
 		Server:     serverService,
 		Agent:      agentService,
 		Skill:      skillService,
-		Prompt:     promptService,
 		Provider:   providerService,
 		Deployment: deploymentService,
 	}, metrics, versionInfo, nil, nil, nil)
@@ -168,7 +165,6 @@ func TestCORSHeaderValues(t *testing.T) {
 	serverService := serversvc.New(serversvc.Dependencies{StoreDB: db, Config: cfg})
 	agentService := agentsvc.New(agentsvc.Dependencies{StoreDB: db, Config: cfg})
 	skillService := skillsvc.New(skillsvc.Dependencies{StoreDB: db})
-	promptService := promptsvc.New(promptsvc.Dependencies{StoreDB: db})
 	providerService := providersvc.New(providersvc.Dependencies{StoreDB: db})
 	deploymentService := deploymentsvc.New(deploymentsvc.Dependencies{StoreDB: db})
 
@@ -187,7 +183,6 @@ func TestCORSHeaderValues(t *testing.T) {
 		Server:     serverService,
 		Agent:      agentService,
 		Skill:      skillService,
-		Prompt:     promptService,
 		Provider:   providerService,
 		Deployment: deploymentService,
 	}, metrics, versionInfo, nil, nil, nil)

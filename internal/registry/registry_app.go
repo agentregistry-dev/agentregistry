@@ -29,7 +29,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
 	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
-	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
 	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
 	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
@@ -161,7 +160,6 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	}
 	maps.Copy(deploymentPlatforms, options.DeploymentPlatforms)
 	skillService := skillsvc.New(skillsvc.Dependencies{Skills: db.Skills(), Tx: db})
-	promptService := promptsvc.New(promptsvc.Dependencies{Prompts: db.Prompts(), Tx: db})
 	deploymentService := deploymentsvc.New(deploymentsvc.Dependencies{
 		StoreDB:            db,
 		Deployments:        db.Deployments(),
@@ -290,7 +288,6 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		Server:     serverService,
 		Agent:      agentService,
 		Skill:      skillService,
-		Prompt:     promptService,
 		Provider:   providerService,
 		Deployment: deploymentService,
 	}, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts)

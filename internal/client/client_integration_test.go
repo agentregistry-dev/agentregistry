@@ -14,7 +14,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
-	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
 	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
 	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
@@ -1117,7 +1116,6 @@ func newClientWithInProcessServer(t *testing.T, fake *fakeClientRegistry) (*Clie
 			Server:   serversvc.New(serversvc.Dependencies{StoreDB: fake, Config: cfg}),
 			Agent:    agentsvc.New(agentsvc.Dependencies{StoreDB: fake, Config: cfg}),
 			Skill:    skillsvc.New(skillsvc.Dependencies{StoreDB: fake}),
-			Prompt:   promptsvc.New(promptsvc.Dependencies{StoreDB: fake}),
 			Provider: providerRegistry,
 			Deployment: deploymentsvc.New(deploymentsvc.Dependencies{
 				StoreDB:            fake,

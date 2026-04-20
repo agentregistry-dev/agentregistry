@@ -28,13 +28,14 @@ Order below follows the dependency chain — earlier items unlock later ones.
 **Still pending on the validator side** (lives under the broader Group 3 umbrella rather than Group 6): duplicate-URL detection across packages + remotes within a single spec. Moves onto `(Spec).Validate()` when `internal/registry/validators/validators.go ValidateServerJSON` gets ported.
 
 ### 3. Group 3 — service-layer dissolution — **IN PROGRESS**
-**Status**: version-lock helper hoisted (`2972363`); URL-uniqueness ported; ref-resolution parity audit folded into Group 1; service-package deletion waits on Group 1.
+**Status**: version-lock helper hoisted (`2972363`); URL-uniqueness ported; `prompt` + `testing` packages deleted; `agent` / `server` / `skill` / `provider` services still kept (MCP + platform adapters).
 
 - [x] versionutil hoisted to `pkg/api/v1alpha1` as shared helper (`2972363`; git mv, 72% source / 97% test similarity). `IsSemanticVersion` + `CompareVersions` now public; legacy service packages swap imports in the same commit.
 - [x] URL-uniqueness port. New `Object` interface method `ValidateUniqueRemoteURLs(ctx, UniqueRemoteURLsFunc)` parallel to `ResolveRefs` / `ValidateRegistries`. Implementation on Agent / MCPServer / Skill; no-op on Prompt / Provider / Deployment. Checker factory `database.NewV1Alpha1UniqueRemoteURLsChecker` uses `Store.FindReferrers` against JSONB `{"remotes":[{"url":"..."}]}` (cross-namespace by design — URL is a global identifier). Wired through `resource.Config` + `ApplyConfig` + `importer.Config`. 7 unit tests + 2 integration tests.
 - [~] Agent ref resolution parity audit. Folded into Group 1: any missing output fields from `AgentSpec.ResolveRefs` vs legacy `ResolveAgentManifestSkills/Prompts` will surface as test failures during the handler collapse, at which point they get ported.
 - [~] Version-lock policy on the apply handler. **Dropped**: on reread of legacy behavior, `versionutil.CompareVersions` is only used to decide `isNewLatest`, not to reject old-version applies. `Store.Upsert` + `pickLatestVersion` already preserve that semantic on the new side — no additional enforcement needed.
-- [ ] Delete `internal/registry/service/{agent,server,skill,prompt,provider,set}/`, `testing/fake_registry.go`, `registry_service_test.go`. Blocked by Group 1: legacy `/v0/{plural}/...` handlers still call these services. Deletion coordinates with the handler collapse.
+- [x] Delete `internal/registry/service/prompt/` + `testing/fake_registry.go` (B1.e). Handlers gone → no remaining consumers.
+- [ ] Delete `internal/registry/service/{agent,server,skill,provider}/`. **Still blocked**: MCP registryserver (Group 9) consumes agent / server / skill; deployment service consumes agent / server / provider; platform/utils (Group 5) consumes agent + server. These services stay alive until their consumers port.
 
 **Why**: handlers (Group 1) call services; until services are dissolved, Group 1 can't fully move to the generic handler.
 

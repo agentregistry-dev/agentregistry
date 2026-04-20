@@ -16,7 +16,6 @@ import (
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
-	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
 	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
 	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
@@ -30,12 +29,17 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 )
 
-// RegistryServices bundles all per-domain service registries for route registration.
+// RegistryServices bundles the per-domain service registries that the
+// remaining legacy handlers + deployment orchestration still require.
+// Every field here is a port target for the v1alpha1 cutover:
+//   - Server / Agent / Skill feed MCP registryserver tools (Group 9)
+//     and platform/utils deployment target lookups (Group 5).
+//   - Provider feeds the deployment service's platform selection.
+//   - Deployment still owns the SSE watch + logs + cancel RPCs (B1.f).
 type RegistryServices struct {
 	Server     serversvc.Registry
 	Agent      agentsvc.Registry
 	Skill      skillsvc.Registry
-	Prompt     promptsvc.Registry
 	Provider   providersvc.Registry
 	Deployment deploymentsvc.Registry
 }
