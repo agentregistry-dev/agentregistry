@@ -136,16 +136,19 @@ Extract (2) into:
   regen fires on the status-change NOTIFY stream.
 
 **Business logic to preserve**:
-- [ ] Agent.PublishAgent: validate no duplicate remote URLs across spec.
-- [ ] Agent.ResolveAgentManifestSkills / ResolveAgentManifestPrompts.
-- [ ] Server.PublishServer: duplicate URL detection.
+- [x] Agent / Server / Skill: duplicate remote URL detection. Ported as
+      `(Object).ValidateUniqueRemoteURLs` + `database.NewV1Alpha1UniqueRemoteURLsChecker`
+      backed by `Store.FindReferrers`; cross-namespace, per-Kind.
+- [ ] Agent.ResolveAgentManifestSkills / ResolveAgentManifestPrompts
+      parity — folded into Group 1; audited during handler collapse.
 - [ ] Server.UpdateServer: idempotent patch-status pattern.
-- [ ] Skill.PublishSkill: version lock + duplicate URL check.
 - [ ] Provider.RegisterProvider: platform-adapter dispatch.
 - [ ] Provider.PlatformAdapters() registration API (enterprise extension).
-- [ ] Version-lock semantics (`service/internal/versionutil`): if version
-      looks like semver, new apply must be ≥ existing or match exactly.
-      Today's Store Upsert bumps generation but doesn't enforce this.
+- [x] Version-lock semantics — kept as helper
+      (`v1alpha1.CompareVersions`). Legacy never rejected old-version
+      applies; it only decided which row was `isLatest`. `Store.Upsert`
+      + `pickLatestVersion` already preserve that semantic — no extra
+      enforcement on the apply path.
 
 **Finish-line signal**: `internal/registry/service/{agent,server,skill,prompt,provider}/`
 and `testing/`, `set/`, `registry_service_test.go`,

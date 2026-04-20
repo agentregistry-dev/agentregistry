@@ -158,18 +158,20 @@ func RegisterRoutes(
 func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stores) {
 	resolver := internaldb.NewV1Alpha1Resolver(stores)
 	registryValidator := registries.Dispatcher
+	uniqueRemoteURLs := internaldb.NewV1Alpha1UniqueRemoteURLsChecker(stores)
 
 	// Per-kind CRUD endpoints — one call per built-in kind, hidden
 	// inside resource.RegisterBuiltins.
-	resource.RegisterBuiltins(api, basePrefix, stores, resolver, registryValidator)
+	resource.RegisterBuiltins(api, basePrefix, stores, resolver, registryValidator, uniqueRemoteURLs)
 
 	// Multi-doc YAML batch apply at POST {basePrefix}/apply. Shares
-	// the same Stores map + Resolver + RegistryValidator — no second
-	// per-kind table here.
+	// the same Stores map + Resolver + RegistryValidator + uniqueness
+	// checker — no second per-kind table here.
 	resource.RegisterApply(api, resource.ApplyConfig{
-		BasePrefix:        basePrefix,
-		Stores:            stores,
-		Resolver:          resolver,
-		RegistryValidator: registryValidator,
+		BasePrefix:              basePrefix,
+		Stores:                  stores,
+		Resolver:                resolver,
+		RegistryValidator:       registryValidator,
+		UniqueRemoteURLsChecker: uniqueRemoteURLs,
 	})
 }

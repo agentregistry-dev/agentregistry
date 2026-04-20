@@ -308,6 +308,95 @@ func mustSpec(t *testing.T, spec any) []byte {
 	return b
 }
 
+// TestResourceRegister_UniqueRemoteURLsAcrossAgents exercises the
+// cross-row uniqueness check: two Agents can't claim the same remote URL,
+// but multiple versions of the same Agent can.
+func TestResourceRegister_UniqueRemoteURLsAcrossAgents(t *testing.T) {
+	pool := database.NewV1Alpha1TestPool(t)
+	stores := database.NewV1Alpha1Stores(pool)
+
+	checker := database.NewV1Alpha1UniqueRemoteURLsChecker(stores)
+
+	_, api := humatest.New(t)
+	resource.Register[*v1alpha1.Agent](api, resource.Config{
+		Kind:                    v1alpha1.KindAgent,
+		BasePrefix:              "/v0",
+		Store:                   stores[v1alpha1.KindAgent],
+		UniqueRemoteURLsChecker: checker,
+	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+
+	newAgent := func(name, version, url string) v1alpha1.Agent {
+		return v1alpha1.Agent{
+			TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
+			Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name, Version: version},
+			Spec: v1alpha1.AgentSpec{
+				Remotes: []v1alpha1.AgentRemote{{Type: "sse", URL: url}},
+			},
+		}
+	}
+
+	sharedURL := "https://api.example.com/shared"
+
+	// First Agent claims the URL — OK.
+	resp := api.Put("/v0/namespaces/default/agents/alice/v1", newAgent("alice", "v1", sharedURL))
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
+	// Same Agent, different version, same URL — OK (same name).
+	resp = api.Put("/v0/namespaces/default/agents/alice/v2", newAgent("alice", "v2", sharedURL))
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
+	// Different Agent, same URL — 409 Conflict.
+	resp = api.Put("/v0/namespaces/default/agents/bob/v1", newAgent("bob", "v1", sharedURL))
+	require.Equal(t, http.StatusConflict, resp.Code, resp.Body.String())
+	require.Contains(t, resp.Body.String(), sharedURL)
+	require.Contains(t, resp.Body.String(), "alice")
+
+	// Different Agent, different URL — OK.
+	resp = api.Put("/v0/namespaces/default/agents/bob/v1", newAgent("bob", "v1", "https://api.example.com/other"))
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+}
+
+// TestResourceRegister_UniqueRemoteURLsPerKind confirms that uniqueness
+// is per-Kind: an Agent and an MCPServer may share a URL.
+func TestResourceRegister_UniqueRemoteURLsPerKind(t *testing.T) {
+	pool := database.NewV1Alpha1TestPool(t)
+	stores := database.NewV1Alpha1Stores(pool)
+	checker := database.NewV1Alpha1UniqueRemoteURLsChecker(stores)
+
+	_, api := humatest.New(t)
+	resource.Register[*v1alpha1.Agent](api, resource.Config{
+		Kind: v1alpha1.KindAgent, BasePrefix: "/v0",
+		Store: stores[v1alpha1.KindAgent], UniqueRemoteURLsChecker: checker,
+	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+	resource.Register[*v1alpha1.MCPServer](api, resource.Config{
+		Kind: v1alpha1.KindMCPServer, BasePrefix: "/v0", PluralKind: "mcpservers",
+		Store: stores[v1alpha1.KindMCPServer], UniqueRemoteURLsChecker: checker,
+	}, func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
+
+	sharedURL := "https://mcp.example.com/endpoint"
+
+	agent := v1alpha1.Agent{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "shared", Version: "v1"},
+		Spec: v1alpha1.AgentSpec{
+			Remotes: []v1alpha1.AgentRemote{{Type: "sse", URL: sharedURL}},
+		},
+	}
+	resp := api.Put("/v0/namespaces/default/agents/shared/v1", agent)
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
+	mcp := v1alpha1.MCPServer{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "shared", Version: "v1"},
+		Spec: v1alpha1.MCPServerSpec{
+			Remotes: []v1alpha1.MCPTransport{{Type: "streamable-http", URL: sharedURL}},
+		},
+	}
+	// Same URL on a different Kind is allowed.
+	resp = api.Put("/v0/namespaces/default/mcpservers/shared/v1", mcp)
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+}
+
 func TestResourceRegister_SoftDeleteFinalizerGC(t *testing.T) {
 	pool := database.NewV1Alpha1TestPool(t)
 	store := database.NewStore(pool, "v1alpha1.agents")

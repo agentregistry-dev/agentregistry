@@ -201,6 +201,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 			},
 			Resolver:          internaldb.NewV1Alpha1Resolver(v1alpha1Stores),
 			RegistryValidator: registries.Dispatcher,
+			UniqueRemoteURLs:  internaldb.NewV1Alpha1UniqueRemoteURLsChecker(v1alpha1Stores),
 		})
 		if err != nil {
 			slog.Warn("failed to construct v1alpha1 importer; HTTP import + seed-from disabled for this path", "error", err)

@@ -27,6 +27,9 @@ type ApplyConfig struct {
 	// RegistryValidator is forwarded to each decoded object's
 	// ValidateRegistries. Nil skips external-registry validation.
 	RegistryValidator v1alpha1.RegistryValidatorFunc
+	// UniqueRemoteURLsChecker is forwarded to each decoded object's
+	// ValidateUniqueRemoteURLs. Nil skips the uniqueness check.
+	UniqueRemoteURLsChecker v1alpha1.UniqueRemoteURLsFunc
 	// Scheme decodes the incoming YAML/JSON stream. Defaults to
 	// v1alpha1.Default when nil.
 	Scheme *v1alpha1.Scheme
@@ -156,6 +159,13 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object) ApplyRe
 		if err := obj.ValidateRegistries(ctx, cfg.RegistryValidator); err != nil {
 			result.Status = ApplyStatusFailed
 			result.Error = "registries: " + err.Error()
+			return result
+		}
+	}
+	if cfg.UniqueRemoteURLsChecker != nil {
+		if err := obj.ValidateUniqueRemoteURLs(ctx, cfg.UniqueRemoteURLsChecker); err != nil {
+			result.Status = ApplyStatusFailed
+			result.Error = "remote urls: " + err.Error()
 			return result
 		}
 	}

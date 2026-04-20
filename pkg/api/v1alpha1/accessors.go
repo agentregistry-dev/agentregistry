@@ -34,6 +34,11 @@ type Object interface {
 	// a no-op so structural tests don't need the network. Returns a
 	// FieldErrors aggregating all failing packages.
 	ValidateRegistries(ctx context.Context, v RegistryValidatorFunc) error
+	// ValidateUniqueRemoteURLs enforces the cross-row invariant that no
+	// two resources of the same Kind own the same remote URL. A nil
+	// checker is a no-op; implementations on kinds without a Remotes
+	// field (Prompt, Provider, Deployment) are always no-ops.
+	ValidateUniqueRemoteURLs(ctx context.Context, check UniqueRemoteURLsFunc) error
 }
 
 // Pointer receivers so SetMetadata/SetStatus mutate the caller's value.
