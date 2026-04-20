@@ -4,21 +4,25 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
-	v0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
-// Client is a lightweight API client replacing the previous SQLite backend
+// Client is a lightweight API client for the agentregistry HTTP surface.
+// Every resource method speaks v1alpha1 at /v0/namespaces/{ns}/{plural}/...;
+// only deployment + embeddings RPCs continue to use legacy paths until their
+// respective Group ports land (Group 4 for deployments, Group 8 for
+// embeddings).
 type Client struct {
 	BaseURL    string
 	httpClient *http.Client
@@ -49,7 +53,12 @@ type DeploymentResponse = models.Deployment
 
 type DeploymentsListResponse = apitypes.DeploymentsListResponse
 
-// NewClientFromEnv constructs a client using environment variables
+// ErrNotFound is returned by Get / GetLatest / Delete / PatchStatus when
+// the server responds with 404. Callers can errors.Is(err, ErrNotFound)
+// to branch cleanly.
+var ErrNotFound = errors.New("resource not found")
+
+// NewClientFromEnv constructs a client using environment variables.
 func NewClientFromEnv() (*Client, error) {
 	base := os.Getenv("ARCTL_API_BASE_URL")
 	token := os.Getenv("ARCTL_API_TOKEN")
@@ -82,7 +91,8 @@ func ensureV0Suffix(u string) string {
 	return u
 }
 
-// NewClientWithConfig constructs a client from explicit inputs (flag/env), applies defaults, and verifies connectivity.
+// NewClientWithConfig constructs a client from explicit inputs (flag/env),
+// applies defaults, and verifies connectivity.
 func NewClientWithConfig(baseURL, token string) (*Client, error) {
 	c := NewClient(baseURL, token)
 	if err := c.Ping(); err != nil {
@@ -91,7 +101,7 @@ func NewClientWithConfig(baseURL, token string) (*Client, error) {
 	return c, nil
 }
 
-// Close is a no-op in API mode
+// Close is a no-op in API mode.
 func (c *Client) Close() error { return nil }
 
 func (c *Client) newRequest(method, pathWithQuery string) (*http.Request, error) {
@@ -115,6 +125,9 @@ func (c *Client) doJSON(req *http.Request, out any) error {
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return ErrNotFound
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		if msg := extractAPIErrorMessage(errBody); msg != "" {
@@ -125,8 +138,7 @@ func (c *Client) doJSON(req *http.Request, out any) error {
 	if out == nil {
 		return nil
 	}
-	dec := json.NewDecoder(resp.Body)
-	return dec.Decode(out)
+	return json.NewDecoder(resp.Body).Decode(out)
 }
 
 // extractAPIErrorMessage parses a Huma-style JSON error body and returns a
@@ -170,7 +182,11 @@ func (c *Client) doJsonRequest(method, pathWithQuery string, in, out any) error 
 	return c.doJSON(req, out)
 }
 
-// Ping checks connectivity to the API
+// =============================================================================
+// Connectivity / version
+// =============================================================================
+
+// Ping checks connectivity to the API.
 func (c *Client) Ping() error {
 	req, err := c.newRequest(http.MethodGet, "/ping")
 	if err != nil {
@@ -179,6 +195,7 @@ func (c *Client) Ping() error {
 	return c.doJSON(req, nil)
 }
 
+// GetVersion returns the server's version metadata.
 func (c *Client) GetVersion() (*VersionBody, error) {
 	req, err := c.newRequest(http.MethodGet, "/version")
 	if err != nil {
@@ -191,558 +208,122 @@ func (c *Client) GetVersion() (*VersionBody, error) {
 	return &resp, nil
 }
 
-// GetPublishedServers returns all published MCP servers
-func (c *Client) GetPublishedServers() ([]*v0.ServerResponse, error) {
-	// Cursor-based pagination to fetch all servers
-	limit := 100
-	cursor := ""
-	var all []*v0.ServerResponse
+// =============================================================================
+// Generic resource methods — v1alpha1
+// =============================================================================
 
-	for {
-		q := fmt.Sprintf("/servers?limit=%d", limit)
-		if cursor != "" {
-			q += "&cursor=" + url.QueryEscape(cursor)
-		}
-		req, err := c.newRequest(http.MethodGet, q)
-		if err != nil {
-			return nil, err
-		}
-
-		var resp v0.ServerListResponse
-		if err := c.doJSON(req, &resp); err != nil {
-			return nil, err
-		}
-
-		for _, s := range resp.Servers {
-			all = append(all, &s)
-		}
-
-		if resp.Metadata.NextCursor == "" {
-			break
-		}
-		cursor = resp.Metadata.NextCursor
-	}
-
-	return all, nil
+// ListOpts controls the query parameters on List. Namespace "" means
+// cross-namespace (GET /v0/{plural}); a non-empty namespace scopes to
+// GET /v0/namespaces/{namespace}/{plural}.
+type ListOpts struct {
+	Namespace          string
+	Labels             string
+	Limit              int
+	Cursor             string
+	LatestOnly         bool
+	IncludeTerminating bool
 }
 
-// GetServer returns a server by name (latest version)
-func (c *Client) GetServer(name string) (*v0.ServerResponse, error) {
-	return c.GetServerVersion(name, "latest")
+// listResponse mirrors the resource handler's list envelope shape.
+type listResponse struct {
+	Items      []v1alpha1.RawObject `json:"items"`
+	NextCursor string               `json:"nextCursor,omitempty"`
 }
 
-// GetServerVersion returns a specific version of a server
-func (c *Client) GetServerVersion(name, version string) (*v0.ServerResponse, error) {
-	encName := url.PathEscape(name)
-	encVersion := url.PathEscape(version)
-	q := "/servers/" + encName + "/versions/" + encVersion
-	req, err := c.newRequest(http.MethodGet, q)
+// Get returns the resource at (kind, namespace, name, version). Returns
+// ErrNotFound when the row doesn't exist.
+func (c *Client) Get(ctx context.Context, kind, namespace, name, version string) (*v1alpha1.RawObject, error) {
+	path := fmt.Sprintf("/namespaces/%s/%s/%s/%s",
+		url.PathEscape(namespace),
+		v1alpha1.PluralFor(kind),
+		url.PathEscape(name),
+		url.PathEscape(version))
+	return c.getRaw(ctx, path)
+}
+
+// GetLatest returns the is_latest_version row for (kind, namespace, name).
+func (c *Client) GetLatest(ctx context.Context, kind, namespace, name string) (*v1alpha1.RawObject, error) {
+	path := fmt.Sprintf("/namespaces/%s/%s/%s",
+		url.PathEscape(namespace),
+		v1alpha1.PluralFor(kind),
+		url.PathEscape(name))
+	return c.getRaw(ctx, path)
+}
+
+func (c *Client) getRaw(ctx context.Context, path string) (*v1alpha1.RawObject, error) {
+	req, err := c.newRequest(http.MethodGet, path)
 	if err != nil {
 		return nil, err
 	}
-	// The endpoint now returns ServerListResponse (even for a single version)
-	var resp v0.ServerListResponse
-	if err := c.doJSON(req, &resp); err != nil {
-		// 404 -> not found returns nil
-		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get server by name and version: %w", err)
+	req = req.WithContext(ctx)
+	var out v1alpha1.RawObject
+	if err := c.doJSON(req, &out); err != nil {
+		return nil, err
 	}
-
-	if len(resp.Servers) == 0 {
-		return nil, nil
-	}
-
-	return &resp.Servers[0], nil
+	return &out, nil
 }
 
-// GetServerVersions returns all versions of a server by name (public endpoint - only published)
-func (c *Client) GetServerVersions(name string) ([]v0.ServerResponse, error) {
-	encName := url.PathEscape(name)
-	req, err := c.newRequest(http.MethodGet, "/servers/"+encName+"/versions")
+// List returns rows of kind, paginated. Empty opts.Namespace lists across
+// all namespaces. The returned string is the nextCursor; empty means no
+// more pages.
+func (c *Client) List(ctx context.Context, kind string, opts ListOpts) ([]v1alpha1.RawObject, string, error) {
+	var base string
+	if opts.Namespace == "" {
+		base = "/" + v1alpha1.PluralFor(kind)
+	} else {
+		base = fmt.Sprintf("/namespaces/%s/%s", url.PathEscape(opts.Namespace), v1alpha1.PluralFor(kind))
+	}
+	q := url.Values{}
+	if opts.Limit > 0 {
+		q.Set("limit", fmt.Sprintf("%d", opts.Limit))
+	}
+	if opts.Cursor != "" {
+		q.Set("cursor", opts.Cursor)
+	}
+	if opts.Labels != "" {
+		q.Set("labels", opts.Labels)
+	}
+	if opts.LatestOnly {
+		q.Set("latestOnly", "true")
+	}
+	if opts.IncludeTerminating {
+		q.Set("includeTerminating", "true")
+	}
+	if enc := q.Encode(); enc != "" {
+		base += "?" + enc
+	}
+	req, err := c.newRequest(http.MethodGet, base)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-
-	var resp v0.ServerListResponse
+	req = req.WithContext(ctx)
+	var resp listResponse
 	if err := c.doJSON(req, &resp); err != nil {
-		// 404 -> not found returns empty list
-		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get server versions: %w", err)
+		return nil, "", err
 	}
-
-	return resp.Servers, nil
+	return resp.Items, resp.NextCursor, nil
 }
 
-// GetSkills returns all skills from connected registries
-func (c *Client) GetSkills() ([]*models.SkillResponse, error) {
-	limit := 100
-	cursor := ""
-	var all []*models.SkillResponse
-
-	for {
-		q := fmt.Sprintf("/skills?limit=%d", limit)
-		if cursor != "" {
-			q += "&cursor=" + url.QueryEscape(cursor)
-		}
-		req, err := c.newRequest(http.MethodGet, q)
-		if err != nil {
-			return nil, err
-		}
-
-		var resp models.SkillListResponse
-		if err := c.doJSON(req, &resp); err != nil {
-			return nil, err
-		}
-		for _, sk := range resp.Skills {
-			all = append(all, &sk)
-		}
-		if resp.Metadata.NextCursor == "" {
-			break
-		}
-		cursor = resp.Metadata.NextCursor
-	}
-
-	return all, nil
-}
-
-// GetSkill returns a skill by name
-func (c *Client) GetSkill(name string) (*models.SkillResponse, error) {
-	encName := url.PathEscape(name)
-	req, err := c.newRequest(http.MethodGet, "/skills/"+encName+"/versions/latest")
-	if err != nil {
-		return nil, err
-	}
-	var resp models.SkillResponse
-	if err := c.doJSON(req, &resp); err != nil {
-		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get skill by name: %w", err)
-	}
-	return &resp, nil
-}
-
-// GetSkillVersions returns all versions for a skill by name.
-func (c *Client) GetSkillVersions(name string) ([]*models.SkillResponse, error) {
-	encName := url.PathEscape(name)
-	req, err := c.newRequest(http.MethodGet, "/skills/"+encName+"/versions")
-	if err != nil {
-		return nil, err
-	}
-
-	var resp models.SkillListResponse
-	if err := c.doJSON(req, &resp); err != nil {
-		// 404 -> not found returns empty list
-		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get skill versions: %w", err)
-	}
-
-	// Convert to pointer slice to match existing client method conventions.
-	result := make([]*models.SkillResponse, len(resp.Skills))
-	for i := range resp.Skills {
-		result[i] = &resp.Skills[i]
-	}
-
-	return result, nil
-}
-
-// GetSkillVersion returns a specific version of a skill
-func (c *Client) GetSkillVersion(name, version string) (*models.SkillResponse, error) {
-	encName := url.PathEscape(name)
-	encVersion := url.PathEscape(version)
-
-	req, err := c.newRequest(http.MethodGet, "/skills/"+encName+"/versions/"+encVersion)
-	if err != nil {
-		return nil, err
-	}
-
-	var resp models.SkillResponse
-	if err := c.doJSON(req, &resp); err != nil {
-		// 404 -> not found returns nil
-		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get skill by name and version: %w", err)
-	}
-
-	return &resp, nil
-}
-
-// GetProviders returns all providers.
-func (c *Client) GetProviders() ([]*models.Provider, error) {
-	req, err := c.newRequest(http.MethodGet, "/providers")
-	if err != nil {
-		return nil, err
-	}
-	var resp struct {
-		Providers []*models.Provider `json:"providers"`
-	}
-	if err := c.doJSON(req, &resp); err != nil {
-		return nil, err
-	}
-	return resp.Providers, nil
-}
-
-// GetProvider returns a single provider by ID.
-func (c *Client) GetProvider(providerID string) (*models.Provider, error) {
-	req, err := c.newRequest(http.MethodGet, "/providers/"+url.PathEscape(providerID))
-	if err != nil {
-		return nil, err
-	}
-	var resp models.Provider
-	if err := c.doJSON(req, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
-}
-
-// DeleteProvider deletes a provider by ID.
-func (c *Client) DeleteProvider(providerID string) error {
-	req, err := c.newRequest(http.MethodDelete, "/providers/"+url.PathEscape(providerID))
+// Delete soft-deletes the (kind, namespace, name, version) row. Returns
+// ErrNotFound when the row doesn't exist. See Store.Delete for the
+// soft-delete + finalizer semantics.
+func (c *Client) Delete(ctx context.Context, kind, namespace, name, version string) error {
+	path := fmt.Sprintf("/namespaces/%s/%s/%s/%s",
+		url.PathEscape(namespace),
+		v1alpha1.PluralFor(kind),
+		url.PathEscape(name),
+		url.PathEscape(version))
+	req, err := c.newRequest(http.MethodDelete, path)
 	if err != nil {
 		return err
 	}
+	req = req.WithContext(ctx)
 	return c.doJSON(req, nil)
 }
 
-// GetAgents returns all agents from connected registries
-func (c *Client) GetAgents() ([]*models.AgentResponse, error) {
-	limit := 100
-	cursor := ""
-	var all []*models.AgentResponse
-
-	for {
-		q := fmt.Sprintf("/agents?limit=%d", limit)
-		if cursor != "" {
-			q += "&cursor=" + url.QueryEscape(cursor)
-		}
-		req, err := c.newRequest(http.MethodGet, q)
-		if err != nil {
-			return nil, err
-		}
-
-		var resp models.AgentListResponse
-		if err := c.doJSON(req, &resp); err != nil {
-			return nil, err
-		}
-		for _, ag := range resp.Agents {
-			all = append(all, &ag)
-		}
-		if resp.Metadata.NextCursor == "" {
-			break
-		}
-		cursor = resp.Metadata.NextCursor
-	}
-
-	return all, nil
-}
-
-func (c *Client) GetAgent(name string) (*models.AgentResponse, error) {
-	encName := url.PathEscape(name)
-	req, err := c.newRequest(http.MethodGet, "/agents/"+encName+"/versions/latest")
-	if err != nil {
-		return nil, err
-	}
-	var resp models.AgentResponse
-	if err := c.doJSON(req, &resp); err != nil {
-		return nil, fmt.Errorf("failed to get agent by name: %w", err)
-	}
-	return &resp, nil
-}
-
-// GetAgentVersion returns a specific version of an agent
-func (c *Client) GetAgentVersion(name, version string) (*models.AgentResponse, error) {
-	encName := url.PathEscape(name)
-	encVersion := url.PathEscape(version)
-	req, err := c.newRequest(http.MethodGet, "/agents/"+encName+"/versions/"+encVersion)
-	if err != nil {
-		return nil, err
-	}
-	var resp models.AgentResponse
-	if err := c.doJSON(req, &resp); err != nil {
-		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get agent by name and version: %w", err)
-	}
-	return &resp, nil
-}
-
-// GetPrompts returns all prompts from the registry
-func (c *Client) GetPrompts() ([]*models.PromptResponse, error) {
-	limit := 100
-	cursor := ""
-	var all []*models.PromptResponse
-
-	for {
-		q := fmt.Sprintf("/prompts?limit=%d", limit)
-		if cursor != "" {
-			q += "&cursor=" + url.QueryEscape(cursor)
-		}
-		req, err := c.newRequest(http.MethodGet, q)
-		if err != nil {
-			return nil, err
-		}
-
-		var resp models.PromptListResponse
-		if err := c.doJSON(req, &resp); err != nil {
-			return nil, err
-		}
-		for _, p := range resp.Prompts {
-			all = append(all, &p)
-		}
-		if resp.Metadata.NextCursor == "" {
-			break
-		}
-		cursor = resp.Metadata.NextCursor
-	}
-
-	return all, nil
-}
-
-// GetPrompt returns a prompt by name (latest version)
-func (c *Client) GetPrompt(name string) (*models.PromptResponse, error) {
-	encName := url.PathEscape(name)
-	req, err := c.newRequest(http.MethodGet, "/prompts/"+encName+"/versions/latest")
-	if err != nil {
-		return nil, err
-	}
-	var resp models.PromptResponse
-	if err := c.doJSON(req, &resp); err != nil {
-		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get prompt by name: %w", err)
-	}
-	return &resp, nil
-}
-
-// GetPromptVersion returns a specific version of a prompt
-func (c *Client) GetPromptVersion(name, version string) (*models.PromptResponse, error) {
-	encName := url.PathEscape(name)
-	encVersion := url.PathEscape(version)
-	req, err := c.newRequest(http.MethodGet, "/prompts/"+encName+"/versions/"+encVersion)
-	if err != nil {
-		return nil, err
-	}
-	var resp models.PromptResponse
-	if err := c.doJSON(req, &resp); err != nil {
-		if respErr := asHTTPStatus(err); respErr == http.StatusNotFound {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get prompt by name and version: %w", err)
-	}
-	return &resp, nil
-}
-
-// CreatePrompt creates a prompt in the registry (immediately visible)
-func (c *Client) CreatePrompt(prompt *models.PromptJSON) (*models.PromptResponse, error) {
-	var resp models.PromptResponse
-	err := c.doJsonRequest(http.MethodPost, "/prompts", prompt, &resp)
-	return &resp, err
-}
-
-// DeletePrompt deletes a prompt from the registry
-func (c *Client) DeletePrompt(name, version string) error {
-	encName := url.PathEscape(name)
-	encVersion := url.PathEscape(version)
-
-	req, err := c.newRequest(http.MethodDelete, "/prompts/"+encName+"/versions/"+encVersion)
-	if err != nil {
-		return err
-	}
-
-	return c.doJSON(req, nil)
-}
-
-// CreateSkill creates a skill in the registry (immediately visible)
-func (c *Client) CreateSkill(skill *models.SkillJSON) (*models.SkillResponse, error) {
-	var resp models.SkillResponse
-	err := c.doJsonRequest(http.MethodPost, "/skills", skill, &resp)
-	return &resp, err
-}
-
-// CreateAgent creates or updates an agent entry.
-func (c *Client) CreateAgent(agent *models.AgentJSON) (*models.AgentResponse, error) {
-	var resp models.AgentResponse
-	err := c.doJsonRequest(http.MethodPost, "/agents", agent, &resp)
-	return &resp, err
-}
-
-// CreateMCPServer creates or updates an MCP server entry.
-func (c *Client) CreateMCPServer(server *v0.ServerJSON) (*v0.ServerResponse, error) {
-	var resp v0.ServerResponse
-	err := c.doJsonRequest(http.MethodPost, "/servers", server, &resp)
-	return &resp, err
-}
-
-// DeleteAgent deletes an agent from the registry
-func (c *Client) DeleteAgent(name, version string) error {
-	encName := url.PathEscape(name)
-	encVersion := url.PathEscape(version)
-
-	req, err := c.newRequest(http.MethodDelete, "/agents/"+encName+"/versions/"+encVersion)
-	if err != nil {
-		return err
-	}
-
-	return c.doJSON(req, nil)
-}
-
-// DeleteSkill deletes a skill from the registry
-// Note: This uses DELETE HTTP method. If the endpoint doesn't exist, it will return an error.
-func (c *Client) DeleteSkill(name, version string) error {
-	encName := url.PathEscape(name)
-	encVersion := url.PathEscape(version)
-
-	req, err := c.newRequest(http.MethodDelete, "/skills/"+encName+"/versions/"+encVersion)
-	if err != nil {
-		return err
-	}
-
-	return c.doJSON(req, nil)
-}
-
-// DeleteMCPServer deletes an MCP server from the registry by setting its status to deleted
-func (c *Client) DeleteMCPServer(name, version string) error {
-	encName := url.PathEscape(name)
-	encVersion := url.PathEscape(version)
-
-	req, err := c.newRequest(http.MethodDelete, "/servers/"+encName+"/versions/"+encVersion)
-	if err != nil {
-		return err
-	}
-	return c.doJSON(req, nil)
-}
-
-// Helpers to convert API errors
-func asHTTPStatus(err error) int {
-	if err == nil {
-		return 0
-	}
-	errStr := err.Error()
-
-	// Try "unexpected status: CODE ..." (unparsed JSON fallback)
-	if strings.Contains(errStr, "unexpected status:") {
-		parts := strings.Split(errStr, "unexpected status: ")
-		if len(parts) > 1 {
-			statusPart := strings.Split(parts[1], " ")[0]
-			if code, parseErr := strconv.Atoi(statusPart); parseErr == nil {
-				return code
-			}
-		}
-	}
-
-	// Try "CODE Status Text: message" (parsed API error)
-	if code, parseErr := strconv.Atoi(strings.Split(errStr, " ")[0]); parseErr == nil {
-		return code
-	}
-
-	if strings.Contains(errStr, "404") || strings.Contains(errStr, "Not Found") {
-		return http.StatusNotFound
-	}
-	return 0
-}
-
-// GetDeployedServers retrieves all deployed servers
-func (c *Client) GetDeployedServers() ([]*DeploymentResponse, error) {
-	req, err := c.newRequest(http.MethodGet, "/deployments")
-	if err != nil {
-		return nil, err
-	}
-
-	var resp DeploymentsListResponse
-	if err := c.doJSON(req, &resp); err != nil {
-		return nil, err
-	}
-
-	// Convert to pointer slice
-	result := make([]*DeploymentResponse, len(resp.Deployments))
-	for i := range resp.Deployments {
-		result[i] = &resp.Deployments[i]
-	}
-
-	return result, nil
-}
-
-// GetDeployment retrieves a deployment by ID.
-func (c *Client) GetDeployment(id string) (*DeploymentResponse, error) {
-	encID := url.PathEscape(id)
-	req, err := c.newRequest(http.MethodGet, "/deployments/"+encID)
-	if err != nil {
-		return nil, err
-	}
-
-	var deployment DeploymentResponse
-	if err := c.doJSON(req, &deployment); err != nil {
-		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "Not Found") {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get deployment: %w", err)
-	}
-
-	return &deployment, nil
-}
-
-// DeployServer deploys a server with deployment environment variables.
-func (c *Client) DeployServer(name, version string, env map[string]string, preferRemote bool, providerID string) (*DeploymentResponse, error) {
-	if strings.TrimSpace(providerID) == "" {
-		providerID = defaultDeployProviderID
-	}
-	payload := deploymentRequest{
-		ServerName:   name,
-		Version:      version,
-		Env:          env,
-		PreferRemote: preferRemote,
-		ResourceType: "mcp",
-		ProviderID:   providerID,
-	}
-
-	var deployment DeploymentResponse
-	if err := c.doJsonRequest(http.MethodPost, "/deployments", payload, &deployment); err != nil {
-		return nil, err
-	}
-
-	return &deployment, nil
-}
-
-// DeployAgent deploys an agent with deployment environment variables.
-func (c *Client) DeployAgent(name, version string, env map[string]string, providerID string) (*DeploymentResponse, error) {
-	if strings.TrimSpace(providerID) == "" {
-		providerID = defaultDeployProviderID
-	}
-	payload := deploymentRequest{
-		ServerName:   name,
-		Version:      version,
-		Env:          env,
-		ResourceType: "agent",
-		ProviderID:   providerID,
-	}
-
-	var deployment DeploymentResponse
-	if err := c.doJsonRequest(http.MethodPost, "/deployments", payload, &deployment); err != nil {
-		return nil, err
-	}
-
-	return &deployment, nil
-}
-
-// DeleteDeployment removes a deployment by ID.
-func (c *Client) DeleteDeployment(id string) error {
-	encID := url.PathEscape(id)
-	req, err := c.newRequest(http.MethodDelete, "/deployments/"+encID)
-	if err != nil {
-		return err
-	}
-
-	return c.doJSON(req, nil)
-}
+// =============================================================================
+// Apply batch — multi-doc YAML
+// =============================================================================
 
 // ApplyOpts carries cross-cutting batch options for the POST /v0/apply endpoint.
 type ApplyOpts struct {
@@ -805,7 +386,104 @@ func (c *Client) applyBatch(ctx context.Context, method string, body []byte, opt
 	return out.Results, nil
 }
 
-// SSEClient returns the HTTP client used for SSE requests.
+// =============================================================================
+// Deployment RPCs — still served by legacy /v0/deployments/* handlers
+// until Group 4 (deployment service v1alpha1 port) lands.
+// =============================================================================
+
+// GetDeployedServers retrieves all deployed servers.
+func (c *Client) GetDeployedServers() ([]*DeploymentResponse, error) {
+	req, err := c.newRequest(http.MethodGet, "/deployments")
+	if err != nil {
+		return nil, err
+	}
+	var resp DeploymentsListResponse
+	if err := c.doJSON(req, &resp); err != nil {
+		return nil, err
+	}
+	result := make([]*DeploymentResponse, len(resp.Deployments))
+	for i := range resp.Deployments {
+		result[i] = &resp.Deployments[i]
+	}
+	return result, nil
+}
+
+// GetDeployment retrieves a deployment by ID. Returns (nil, nil) on 404
+// to preserve the pre-refactor signature that some CLI callers use as
+// an existence check. New callers should prefer the Get path on the
+// generic v1alpha1 surface once Group 4 lands.
+func (c *Client) GetDeployment(id string) (*DeploymentResponse, error) {
+	encID := url.PathEscape(id)
+	req, err := c.newRequest(http.MethodGet, "/deployments/"+encID)
+	if err != nil {
+		return nil, err
+	}
+	var deployment DeploymentResponse
+	if err := c.doJSON(req, &deployment); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get deployment: %w", err)
+	}
+	return &deployment, nil
+}
+
+// DeployServer deploys a server with deployment environment variables.
+func (c *Client) DeployServer(name, version string, env map[string]string, preferRemote bool, providerID string) (*DeploymentResponse, error) {
+	if strings.TrimSpace(providerID) == "" {
+		providerID = defaultDeployProviderID
+	}
+	payload := deploymentRequest{
+		ServerName:   name,
+		Version:      version,
+		Env:          env,
+		PreferRemote: preferRemote,
+		ResourceType: "mcp",
+		ProviderID:   providerID,
+	}
+	var deployment DeploymentResponse
+	if err := c.doJsonRequest(http.MethodPost, "/deployments", payload, &deployment); err != nil {
+		return nil, err
+	}
+	return &deployment, nil
+}
+
+// DeployAgent deploys an agent with deployment environment variables.
+func (c *Client) DeployAgent(name, version string, env map[string]string, providerID string) (*DeploymentResponse, error) {
+	if strings.TrimSpace(providerID) == "" {
+		providerID = defaultDeployProviderID
+	}
+	payload := deploymentRequest{
+		ServerName:   name,
+		Version:      version,
+		Env:          env,
+		ResourceType: "agent",
+		ProviderID:   providerID,
+	}
+	var deployment DeploymentResponse
+	if err := c.doJsonRequest(http.MethodPost, "/deployments", payload, &deployment); err != nil {
+		return nil, err
+	}
+	return &deployment, nil
+}
+
+// DeleteDeployment removes a deployment by ID.
+func (c *Client) DeleteDeployment(id string) error {
+	encID := url.PathEscape(id)
+	req, err := c.newRequest(http.MethodDelete, "/deployments/"+encID)
+	if err != nil {
+		return err
+	}
+	return c.doJSON(req, nil)
+}
+
+// =============================================================================
+// Embeddings index — still served by legacy /v0/embeddings handlers until
+// Group 8 (indexer port) lands.
+// =============================================================================
+
+// SSEClient returns the HTTP client used for SSE requests. Timeout is
+// cleared to allow long-lived streams.
 func (c *Client) SSEClient() *http.Client {
 	return &http.Client{
 		Transport:     c.httpClient.Transport,

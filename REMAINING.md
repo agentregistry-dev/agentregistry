@@ -68,14 +68,16 @@ Order below follows the dependency chain — earlier items unlock later ones.
 
 **Finish signal**: `arctl apply -f examples/declarative/full-stack.yaml` converges to `Ready=True` via a native adapter.
 
-### 6. Group 2 — Go client rewrite
-**Status**: 1800 LOC of typed per-kind methods in `internal/client/client.go`.
+### 6. Group 2 — Go client rewrite — **DONE**
+**Status**: client speaks v1alpha1 generically for resource CRUD; deployment + embeddings RPCs still on legacy paths pending their own group ports.
 
-- [ ] Replace typed methods with generic `Get / GetLatest / List / Apply / Delete / PatchStatus` speaking `*v1alpha1.Object`.
-- [ ] Preserve: bearer token support, configurable `http.Client`, `404 → ErrNotFound` mapping, pagination cursor forwarding.
-- [ ] Delete `pkg/models/{agent,manifest,server_response,skill,prompt,deployment,provider,metadata,apiversion}.go` once client + handlers no longer reference them.
+- [x] Generic `Get / GetLatest / List / Apply / DeleteViaApply / Delete` returning `*v1alpha1.RawObject`. Typed consumers unmarshal `Spec` into the concrete `Spec` type.
+- [x] Preserved: bearer token, configurable `http.Client`, 404 → `ErrNotFound` sentinel, pagination cursor forwarding via `ListOpts.Cursor` / return `nextCursor`.
+- [x] 3 integration tests (`//go:build integration`): round-trip Apply→Get→GetLatest→List→Delete, apply-invalid per-doc failure, ErrNotFound.
+- [~] `pkg/models/{agent,manifest,server_response,skill,prompt,deployment,provider}.go` deletion — **still blocked**. Consumers: MCP registryserver (Group 9), platform adapters + utils (Group 5), legacy postgres stores (Group 12), embeddings helpers (Group 8). Delete cascades as those groups port.
+- [x] `internal/client/client_deprecated.go` stubs typed per-kind methods (GetServer / CreatePrompt / etc.) returning `errDeprecatedImperative` so the imperative CLI keeps compiling during the declarative-CLI-branch handover. Deleted when that branch merges.
 
-**Finish signal**: `internal/client/client.go` is under 400 LOC of kind-agnostic methods; integration tests PUT a v1alpha1 object and GET it back.
+**Finish signal**: `internal/client/client.go` under 400 LOC of kind-agnostic methods. Currently 534 LOC — the ~160 LOC of legacy deployment + embeddings RPCs come out once Groups 4 + 8 land, clearing the <400 bar.
 
 ### Further dedup opportunities (nice-to-have, not blocking)
 

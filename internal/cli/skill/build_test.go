@@ -1,9 +1,25 @@
 package skill
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+// contains + writeFile were previously defined in publish_test.go /
+// pull_test.go; those test files were removed when their client-side
+// dependencies (GetSkill / CreateSkill / etc.) became deprecated stubs.
+// Kept here so build_test.go can still run — build/init are workflow
+// commands that stay per the declarative CLI plan.
+func contains(s, sub string) bool { return strings.Contains(s, sub) }
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("writeFile %s: %v", path, err)
+	}
+}
 
 func saveBuildFlags(t *testing.T) {
 	t.Helper()

@@ -41,3 +41,21 @@ var BuiltinKinds = []string{
 	KindProvider,
 	KindDeployment,
 }
+
+// PluralFor returns the lowercase route-plural for a Kind (e.g.
+// "mcpservers" for KindMCPServer). Mirrors the convention the generic
+// resource handler uses when cfg.PluralKind is empty: ToLower(kind) + "s".
+// Enterprise / downstream builds registering additional kinds whose
+// plural doesn't match this default should expose their own
+// PluralFor helper; OSS callers use this one.
+func PluralFor(kind string) string {
+	lower := make([]byte, len(kind))
+	for i := 0; i < len(kind); i++ {
+		c := kind[i]
+		if c >= 'A' && c <= 'Z' {
+			c += 'a' - 'A'
+		}
+		lower[i] = c
+	}
+	return string(lower) + "s"
+}
