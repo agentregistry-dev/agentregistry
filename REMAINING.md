@@ -42,17 +42,19 @@ Order below follows the dependency chain — earlier items unlock later ones.
 
 ## Medium-term
 
-### 4. Group 1 — HTTP handlers collapse
-**Status**: generic `resource.Register[T]` shipped (`ec84636`). Legacy per-kind handlers still live.
+### 4. Group 1 — HTTP handlers collapse — **IN PROGRESS**
 
-- [ ] Delete `internal/registry/api/handlers/v0/{agents,servers,skills,prompts,providers,deployments}/` once Group 3 is done (handlers currently call services).
-- [ ] Port `server_readmes` (rename to `mcpserver_readmes`, keep separate BYTEA table) — still legacy-backed.
+- [x] `resource.Register[T]` generic handler (`ec84636`).
+- [x] Delete `internal/registry/api/handlers/v0/apply/` + `common/` (B1.a, commit `2f667eb`). Apply + delete consolidated onto `resource.RegisterApply` with DryRun / Force / DELETE.
+- [x] Delete `handlers/v0/{agents,skills,prompts,providers}/` (B1.b, commit `8be4067`). 1,117 LOC removed.
+- [x] Delete `handlers/v0/servers/` + `deploymentmeta/` (B1.c). `/v0/servers/...` retired in favor of `/v0/namespaces/{ns}/mcpservers/...`. deploymentmeta inline attachment dropped — UI drills into deployments separately.
+- [ ] `server_readmes` BYTEA port — **deferred**. Legacy table still written by seeder/importer and readable by legacy MCP; no v1alpha1 equivalent. Revisit as either an MCPServerSpec field or a new sub-handler once the data model decision is made.
 - [ ] Port deployment-specific endpoints (SSE watch, cancel, logs). Watch is a hard seam for Phase 2 KRT — keep `TableWatcher.ChangeHandler` signature stable.
-- [ ] Port apply-handler knobs: dry-run flag (preview without persisting); force flag (version-lock bypass).
+- [x] Port apply-handler knobs: dry-run (B1.a). Force accepted as no-op under v1alpha1.
 - [ ] Port embeddings-aware list: `?semantic=<q>` param.
-- [ ] Decide deploymentmeta attachment: keep inline summary on agent/server GET, or drop in favor of a separate deployments-for query.
+- [x] Deploymentmeta attachment dropped (B1.c).
 
-**Finish signal**: `router/v0.go` imports only `resource`, `health`, `ping`, `version`, `embeddings`, `apply`.
+**Finish signal**: `router/v0.go` imports only `resource`, `health`, `ping`, `version`, `embeddings`, `deployments`. Currently carries all six. `deployments` leaves once B1.f lands.
 
 ### 5. Group 4 + 5 — Deployment service + platform adapters
 **Status**: `DeploymentAdapter` interface + `noop` reference shipped (`4a6e1a6`). Native adapters NOT ported.

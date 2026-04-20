@@ -12,7 +12,6 @@ import (
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
 	v0ping "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/ping"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/resource"
-	v0servers "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/servers"
 	v0version "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/version"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
@@ -92,12 +91,6 @@ func RegisterRoutes(
 	v0health.RegisterHealthEndpoint(api, pathPrefix, cfg, metrics)
 	v0ping.RegisterPingEndpoint(api, pathPrefix)
 	v0version.RegisterVersionEndpoint(api, pathPrefix, versionInfo)
-	// Legacy MCPServer handlers still serve /v0/servers/... until B1.c
-	// ports them onto /v0/namespaces/{ns}/mcpservers/... via the generic
-	// resource handler.
-	v0servers.RegisterServersEndpoints(api, pathPrefix, svcs.Server, svcs.Deployment)
-	v0servers.RegisterServersCreateEndpoint(api, pathPrefix, svcs.Server, svcs.Deployment)
-	v0servers.RegisterEditEndpoints(api, pathPrefix, svcs.Server, svcs.Deployment)
 	// Legacy deployment RPC endpoints (SSE watch, logs, cancel) still
 	// served until B1.f / Group 4 deployment service port.
 	v0deployments.RegisterDeploymentsEndpoints(api, pathPrefix, svcs.Deployment)
