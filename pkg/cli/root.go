@@ -81,6 +81,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		agentutils.SetDefaultRegistryURL(c.BaseURL)
+		agentutils.SetRegistryAPIClient(c)
 		mcp.SetAPIClient(c)
 		agent.SetAPIClient(c)
 		skill.SetAPIClient(c)
