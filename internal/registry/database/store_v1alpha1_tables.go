@@ -120,7 +120,11 @@ func NewV1Alpha1Getter(stores map[string]*Store) v1alpha1.GetterFunc {
 		if !ok {
 			return nil, fmt.Errorf("scheme constructor for %q did not return v1alpha1.Object", ref.Kind)
 		}
-		obj.SetTypeMeta(raw.TypeMeta)
+		// scanRow leaves RawObject.TypeMeta zero (apiVersion/kind aren't
+		// persisted as columns — they're implicit per table), so pin them
+		// from the ref + scheme defaults. Adapters rely on GetKind() to
+		// dispatch.
+		obj.SetTypeMeta(v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: ref.Kind})
 		obj.SetMetadata(raw.Metadata)
 		obj.SetStatus(raw.Status)
 		if len(raw.Spec) > 0 {
