@@ -314,8 +314,8 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	}
 
 	var mcpHTTPServer *http.Server
-	if cfg.MCPPort > 0 {
-		mcpServer := mcpregistry.NewServer(serverService, agentService, skillService, deploymentService)
+	if cfg.MCPPort > 0 && v1alpha1Stores != nil {
+		mcpServer := mcpregistry.NewServer(v1alpha1Stores)
 
 		var handler http.Handler = mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
 			return mcpServer
