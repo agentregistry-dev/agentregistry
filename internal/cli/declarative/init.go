@@ -49,6 +49,7 @@ Examples:
   arctl init prompt my-prompt`,
 		SilenceUsage: true,
 	}
+	cmd.PersistentFlags().String("output-dir", "", "Output directory for generated projects. If not provided, projects are created in the current directory under the resource name.")
 	cmd.AddCommand(newInitAgentCmd())
 	cmd.AddCommand(newInitMCPCmd())
 	cmd.AddCommand(newInitSkillCmd())
@@ -113,11 +114,10 @@ Supported languages:  python (for adk)`,
 				image = fmt.Sprintf("%s/%s:latest", registry, name)
 			}
 
-			cwd, err := os.Getwd()
+			projectDir, err := resolveInitProjectPath(cmd, name)
 			if err != nil {
-				return fmt.Errorf("getting working directory: %w", err)
+				return err
 			}
-			projectDir := filepath.Join(cwd, name)
 
 			// Scaffold all code files (Dockerfile, Python source, etc.) using
 			// the existing framework generator. This also writes a flat agent.yaml
@@ -152,7 +152,7 @@ Supported languages:  python (for adk)`,
 
 			fmt.Fprintf(cmd.OutOrStdout(), "✓ Successfully created agent: %s\n", name)
 			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "  1. cd %s\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "  1. cd %s\n", projectDir)
 			fmt.Fprintf(cmd.OutOrStdout(), "  2. (Optional) Build and push the image if developing locally:\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "     arctl build . --push\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "  3. Publish the agent to the registry:\n")
@@ -381,11 +381,10 @@ Supported frameworks: fastmcp-python, mcp-go`,
 				image = fmt.Sprintf("%s/%s:latest", registry, dirName)
 			}
 
-			cwd, err := os.Getwd()
+			projectDir, err := resolveInitProjectPath(cmd, dirName)
 			if err != nil {
-				return fmt.Errorf("getting working directory: %w", err)
+				return err
 			}
-			projectDir := filepath.Join(cwd, dirName)
 
 			generator, err := mcpframeworks.GetGenerator(framework)
 			if err != nil {
@@ -408,7 +407,7 @@ Supported frameworks: fastmcp-python, mcp-go`,
 
 			fmt.Fprintf(cmd.OutOrStdout(), "✓ Successfully created MCP server: %s\n", fullName)
 			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "  1. cd %s\n", dirName)
+			fmt.Fprintf(cmd.OutOrStdout(), "  1. cd %s\n", projectDir)
 			fmt.Fprintf(cmd.OutOrStdout(), "  2. (Optional) Build and push the image if developing locally:\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "     arctl build . --push\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "  3. Publish the MCP server to the registry:\n")
@@ -494,11 +493,10 @@ The generated skill.yaml can be applied directly:
 				return fmt.Errorf("invalid skill name: %w", err)
 			}
 
-			cwd, err := os.Getwd()
+			projectDir, err := resolveInitProjectPath(cmd, name)
 			if err != nil {
-				return fmt.Errorf("getting working directory: %w", err)
+				return err
 			}
-			projectDir := filepath.Join(cwd, name)
 
 			if err := skilltemplates.NewGenerator().GenerateProject(skilltemplates.ProjectConfig{
 				ProjectName: name,
@@ -514,7 +512,7 @@ The generated skill.yaml can be applied directly:
 
 			fmt.Fprintf(cmd.OutOrStdout(), "✓ Successfully created skill: %s\n", name)
 			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "  1. cd %s\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "  1. cd %s\n", projectDir)
 			fmt.Fprintf(cmd.OutOrStdout(), "  2. (Optional) Build and push the image if developing locally:\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "     arctl build . --push\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "  3. Publish the skill to the registry:\n")
@@ -573,12 +571,12 @@ func newInitPromptCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "prompt NAME",
-		Short: "Create a new declarative <name>.yaml for a prompt",
-		Long: `Create a new <name>.yaml in the current directory using the
-ar.dev/v1alpha1 declarative format. No code scaffolding is generated.
+		Short: "Scaffold a new prompt project with declarative prompt.yaml",
+		Long: `Scaffold a new prompt project. Creates a project directory
+containing a declarative prompt.yaml (ar.dev/v1alpha1).
 
 The generated file can be applied directly:
-  arctl apply -f my-prompt.yaml`,
+  arctl apply -f NAME/prompt.yaml`,
 		Example: `  arctl init prompt my-prompt
   arctl init prompt my-prompt --description "System prompt for summarization"`,
 		Args:         cobra.ExactArgs(1),
@@ -591,12 +589,14 @@ The generated file can be applied directly:
 				return fmt.Errorf("invalid prompt name: %w", err)
 			}
 
-			cwd, err := os.Getwd()
+			projectDir, err := resolveInitProjectPath(cmd, name)
 			if err != nil {
-				return fmt.Errorf("getting working directory: %w", err)
+				return err
 			}
-			// Prompts are just a YAML file — no project directory needed.
-			outPath := filepath.Join(cwd, name+".yaml")
+			if err := os.MkdirAll(projectDir, 0o755); err != nil {
+				return fmt.Errorf("creating prompt project directory: %w", err)
+			}
+			outPath := filepath.Join(projectDir, "prompt.yaml")
 
 			if err := writeDeclarativePromptYAML(outPath, name, initVersion, initDescription, initContent); err != nil {
 				return fmt.Errorf("writing declarative prompt.yaml: %w", err)
@@ -604,9 +604,10 @@ The generated file can be applied directly:
 
 			fmt.Fprintf(cmd.OutOrStdout(), "✓ Successfully created prompt: %s\n", name)
 			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "  1. Edit %s.yaml if needed\n", name)
-			fmt.Fprintf(cmd.OutOrStdout(), "  2. Publish the prompt to the registry:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "     arctl apply -f %s.yaml\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "  1. cd %s\n", projectDir)
+			fmt.Fprintf(cmd.OutOrStdout(), "  2. Edit prompt.yaml if needed\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "  3. Publish the prompt to the registry:\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "     arctl apply -f prompt.yaml\n")
 			return nil
 		},
 	}
@@ -647,4 +648,24 @@ func writeDeclarativePromptYAML(path, name, ver, description, content string) er
 	}
 
 	return os.WriteFile(path, b, 0o644)
+}
+
+func resolveInitProjectPath(cmd *cobra.Command, projectName string) (string, error) {
+	outputDir, err := cmd.Flags().GetString("output-dir")
+	if err != nil {
+		return "", fmt.Errorf("reading output directory flag: %w", err)
+	}
+	if outputDir != "" {
+		base, err := filepath.Abs(outputDir)
+		if err != nil {
+			return "", fmt.Errorf("getting absolute output directory: %w", err)
+		}
+		return filepath.Join(base, projectName), nil
+	}
+
+	projectDir, err := filepath.Abs(projectName)
+	if err != nil {
+		return "", fmt.Errorf("getting absolute project directory: %w", err)
+	}
+	return projectDir, nil
 }
