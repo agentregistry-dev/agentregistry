@@ -268,9 +268,28 @@ func newCLIRegistry() *kinds.Registry {
 			d := item.(*models.Deployment)
 			return []string{d.ID, d.ServerName, d.Version, d.ResourceType, d.ProviderID, d.Status}
 		},
+		Get:    deploymentGetFunc,
 		Delete: deploymentDeleteFunc,
 	})
 	return reg
+}
+
+// deploymentGetFunc returns the first deployment matching ServerName == name.
+// Deployments are keyed by ID but users refer to them by name; a single name
+// can map to multiple deployments (different versions/providers). For `get`
+// we surface the first match — callers that need to disambiguate should use
+// `arctl get deployments` for the full list.
+func deploymentGetFunc(_ context.Context, name, _ string) (any, error) {
+	all, err := apiClient.GetDeployedServers()
+	if err != nil {
+		return nil, err
+	}
+	for _, d := range all {
+		if d != nil && d.ServerName == name {
+			return d, nil
+		}
+	}
+	return nil, database.ErrNotFound
 }
 
 // deploymentDeleteFunc looks up deployments by (name, version) and deletes each match
