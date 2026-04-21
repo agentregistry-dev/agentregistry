@@ -96,3 +96,43 @@ func TestDeploymentGet_ListReturnsAll(t *testing.T) {
 	assert.Contains(t, out.String(), "summarizer")
 	assert.Contains(t, out.String(), "other")
 }
+
+// (5) `-o yaml` emits the declarative envelope (apiVersion/kind/metadata/spec)
+// and strips server-managed fields so the output round-trips through apply.
+func TestDeploymentGet_YAMLOutputRoundTrips(t *testing.T) {
+	deployments := []models.Deployment{
+		{
+			ID: "aws-v1", ServerName: "summarizer", Version: "1.0.0",
+			ProviderID: "my-aws", ResourceType: "agent", Status: "deployed",
+			Origin:           "managed",
+			Env:              map[string]string{"GOOGLE_API_KEY": "xxx"},
+			ProviderMetadata: models.JSONObject{"remoteId": "secret-runtime-id"},
+		},
+	}
+	srv, _ := deploymentTestServer(t, deployments, nil)
+	setupClientForServer(t, srv)
+
+	out := &bytes.Buffer{}
+	cmd := declarative.NewGetCmd()
+	cmd.SetOut(out)
+	cmd.SetArgs([]string{"deployment", "summarizer", "-o", "yaml"})
+	require.NoError(t, cmd.Execute())
+
+	got := out.String()
+	// Envelope shape — apply expects these keys at the top.
+	assert.Contains(t, got, "apiVersion: ar.dev/v1alpha1")
+	assert.Contains(t, got, "kind: Deployment")
+	assert.Contains(t, got, "name: summarizer")
+	assert.Contains(t, got, "version: 1.0.0")
+	// Declarative spec fields.
+	assert.Contains(t, got, "providerId: my-aws")
+	assert.Contains(t, got, "resourceType: agent")
+	assert.Contains(t, got, "GOOGLE_API_KEY: xxx")
+	// Server-managed fields must be stripped.
+	assert.NotContains(t, got, "aws-v1", "spec must not leak the server-assigned id")
+	assert.NotContains(t, got, "status:", "spec must not leak the runtime status")
+	assert.NotContains(t, got, "origin:", "spec must not leak the managed/discovered origin")
+	assert.NotContains(t, got, "providerMetadata:", "spec must not leak provider-runtime metadata")
+	assert.NotContains(t, got, "deployedAt", "spec must not leak server timestamps")
+	assert.NotContains(t, got, "updatedAt", "spec must not leak server timestamps")
+}
