@@ -1,11 +1,28 @@
 package resource
 
 import (
+	"context"
+
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
+
+// DeploymentHooks groups post-persist callbacks used by RegisterBuiltins
+// to drive adapter reconciliation on the Deployment kind. Callers supply
+// one instance per registry build — typically wrapping a
+// V1Alpha1Coordinator. Nil hooks are ignored.
+type DeploymentHooks struct {
+	// PostUpsert runs after a Deployment PUT persists the row. Intended
+	// to call coordinator.Apply which resolves refs + dispatches to the
+	// platform adapter + patches status.
+	PostUpsert func(ctx context.Context, deployment *v1alpha1.Deployment) error
+	// PostDelete runs after a Deployment DELETE sets DeletionTimestamp.
+	// Intended to call coordinator.Remove which tears down runtime
+	// resources + drops the adapter finalizer.
+	PostDelete func(ctx context.Context, deployment *v1alpha1.Deployment) error
+}
 
 // RegisterBuiltins wires the namespace-scoped + cross-namespace
 // endpoints for every built-in v1alpha1 Kind against the supplied
@@ -32,6 +49,7 @@ func RegisterBuiltins(
 	resolver v1alpha1.ResolverFunc,
 	registryValidator v1alpha1.RegistryValidatorFunc,
 	uniqueRemoteURLsChecker v1alpha1.UniqueRemoteURLsFunc,
+	deploymentHooks DeploymentHooks,
 ) {
 	cfgFor := func(kind string) (Config, bool) {
 		store, ok := stores[kind]
@@ -65,6 +83,16 @@ func RegisterBuiltins(
 		case v1alpha1.KindProvider:
 			Register[*v1alpha1.Provider](api, cfg, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
 		case v1alpha1.KindDeployment:
+			if deploymentHooks.PostUpsert != nil {
+				cfg.PostUpsert = func(ctx context.Context, obj v1alpha1.Object) error {
+					return deploymentHooks.PostUpsert(ctx, obj.(*v1alpha1.Deployment))
+				}
+			}
+			if deploymentHooks.PostDelete != nil {
+				cfg.PostDelete = func(ctx context.Context, obj v1alpha1.Object) error {
+					return deploymentHooks.PostDelete(ctx, obj.(*v1alpha1.Deployment))
+				}
+			}
 			Register[*v1alpha1.Deployment](api, cfg, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
 		}
 	}

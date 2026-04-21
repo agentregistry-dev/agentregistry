@@ -59,6 +59,24 @@ type Config struct {
 	// same Kind claiming the same remote URL surface as 409 errors.
 	// Leave nil to skip (tests, single-tenant offline setups).
 	UniqueRemoteURLsChecker v1alpha1.UniqueRemoteURLsFunc
+
+	// PostUpsert is optional; when set, the apply handler invokes it
+	// after a successful Upsert + read-back so the kind can drive
+	// post-persist reconciliation. Deployment uses this to call
+	// V1Alpha1Coordinator.Apply, which dispatches to the platform
+	// adapter and patches status + finalizers.
+	//
+	// Hook errors surface as 500 — the row is already persisted, so a
+	// failure here indicates degraded state the caller should retry.
+	PostUpsert func(ctx context.Context, obj v1alpha1.Object) error
+
+	// PostDelete is optional; when set, the delete handler invokes it
+	// after Store.Delete (which sets DeletionTimestamp). The row still
+	// exists at this point — finalizers keep it around. Deployment uses
+	// this to call V1Alpha1Coordinator.Remove, which tears down runtime
+	// resources and drops its finalizer so PurgeFinalized GC can
+	// hard-delete the row.
+	PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 }
 
 // Input/output wire types. Registered per-kind so OpenAPI schemas stay typed.
@@ -283,6 +301,23 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		if err != nil {
 			return nil, huma.Error500InternalServerError("decode "+kind, err)
 		}
+
+		if cfg.PostUpsert != nil {
+			if err := cfg.PostUpsert(ctx, obj); err != nil {
+				return nil, huma.Error500InternalServerError(kind+" post-upsert", err)
+			}
+			// Re-read so the response reflects any status/finalizer writes
+			// the post-upsert hook performed (e.g. Progressing condition,
+			// adapter finalizer). Failure to re-read leaves the hook
+			// changes invisible to the caller; degrade to the pre-hook
+			// view rather than fail the already-successful apply.
+			if refreshed, err := cfg.Store.Get(ctx, in.Namespace, in.Name, in.Version); err == nil {
+				if refreshedObj, err := envelopeFromRow(newObj, refreshed, kind); err == nil {
+					obj = refreshedObj
+				}
+			}
+		}
+
 		return &bodyOutput[T]{Body: obj}, nil
 	})
 
@@ -294,11 +329,33 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		Summary:       fmt.Sprintf("Delete a %s (soft-delete: sets deletionTimestamp)", kind),
 		DefaultStatus: http.StatusNoContent,
 	}, func(ctx context.Context, in *deleteInput) (*deleteOutput, error) {
+		// Pre-read so PostDelete has the final spec + finalizer set to
+		// work with. Skipped when no hook is registered; a missing row
+		// still surfaces as 404 via Store.Delete below.
+		var preDelete T
+		if cfg.PostDelete != nil {
+			row, err := cfg.Store.Get(ctx, in.Namespace, in.Name, in.Version)
+			if err != nil {
+				return nil, mapNotFound(err, kind, in.Namespace, in.Name, in.Version)
+			}
+			obj, err := envelopeFromRow(newObj, row, kind)
+			if err != nil {
+				return nil, huma.Error500InternalServerError("decode "+kind, err)
+			}
+			preDelete = obj
+		}
+
 		if err := cfg.Store.Delete(ctx, in.Namespace, in.Name, in.Version); err != nil {
 			if errors.Is(err, pkgdb.ErrNotFound) {
 				return nil, mapNotFound(err, kind, in.Namespace, in.Name, in.Version)
 			}
 			return nil, huma.Error500InternalServerError("delete "+kind, err)
+		}
+
+		if cfg.PostDelete != nil {
+			if err := cfg.PostDelete(ctx, preDelete); err != nil {
+				return nil, huma.Error500InternalServerError(kind+" post-delete", err)
+			}
 		}
 		return &deleteOutput{}, nil
 	})

@@ -274,6 +274,27 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	routeOpts.V1Alpha1Stores = v1alpha1Stores
 	routeOpts.V1Alpha1Importer = v1alpha1Importer
 
+	// Coordinator drives post-persist adapter dispatch for the
+	// Deployment kind. Built only when v1alpha1 stores exist (no pool
+	// ⇒ no Deployment table ⇒ no coordinator). Reuses the same adapter
+	// instances registered for the legacy path — local + kubernetes
+	// both satisfy types.DeploymentAdapter alongside the legacy
+	// registrytypes.DeploymentPlatformAdapter during the Group 5
+	// coexistence window.
+	if v1alpha1Stores != nil {
+		v1alpha1Adapters := map[string]types.DeploymentAdapter{}
+		for platform, adapter := range deploymentPlatforms {
+			if v1 := toV1Alpha1Adapter(adapter); v1 != nil {
+				v1alpha1Adapters[platform] = v1
+			}
+		}
+		routeOpts.V1Alpha1DeploymentCoordinator = deploymentsvc.NewV1Alpha1Coordinator(deploymentsvc.V1Alpha1Dependencies{
+			Stores:   v1alpha1Stores,
+			Adapters: v1alpha1Adapters,
+			Getter:   internaldb.NewV1Alpha1Getter(v1alpha1Stores),
+		})
+	}
+
 	// Initialize job manager and indexer for embeddings.
 	if cfg.Embeddings.Enabled && embeddingProvider != nil {
 		jobManager := jobs.NewManager()
@@ -426,4 +447,17 @@ func runSeedFromImport(cfg *config.Config, v1alpha1Importer *pkgimporter.Importe
 	slog.Info("v1alpha1 import complete",
 		"seed_from", cfg.SeedFrom,
 		"total", len(results), "failed", failed)
+}
+
+// toV1Alpha1Adapter narrows a legacy DeploymentPlatformAdapter to the
+// v1alpha1 DeploymentAdapter interface via a type assertion. Both local
+// and kubernetes adapters satisfy both interfaces during the Group 5
+// transition — enterprise adapters that only implement the legacy
+// interface return nil here and are simply not registered with the
+// coordinator.
+func toV1Alpha1Adapter(adapter types.DeploymentPlatformAdapter) types.DeploymentAdapter {
+	if v1, ok := adapter.(types.DeploymentAdapter); ok {
+		return v1
+	}
+	return nil
 }

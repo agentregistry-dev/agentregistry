@@ -4,6 +4,7 @@ package router
 import (
 	"net/http"
 
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
@@ -77,6 +78,14 @@ type RouteOptions struct {
 	// same pool.
 	V1Alpha1Importer *importer.Importer
 
+	// V1Alpha1DeploymentCoordinator drives post-persist reconciliation
+	// for the Deployment kind: PUT → adapter.Apply; DELETE → adapter.Remove.
+	// Constructed alongside V1Alpha1Stores at bootstrap, wired into the
+	// generic resource handler via resource.DeploymentHooks. Nil disables
+	// Deployment reconciliation — PUT still persists the row, DELETE
+	// still soft-deletes, but no adapter dispatch happens.
+	V1Alpha1DeploymentCoordinator *deploymentsvc.V1Alpha1Coordinator
+
 	// Optional callback for integration-owned route registration.
 	ExtraRoutes func(api huma.API, pathPrefix string)
 }
@@ -109,9 +118,10 @@ func RegisterRoutes(
 	// v1alpha1 generic routes — wired when V1Alpha1Stores is provided.
 	// Lives alongside the legacy per-kind routes; clients migrate over
 	// time. Cross-kind dangling-ref detection uses a Store-backed
-	// resolver.
+	// resolver. Deployment reconciliation hooks plug in when the
+	// coordinator is supplied.
 	if opts != nil && len(opts.V1Alpha1Stores) > 0 {
-		registerV1Alpha1Routes(api, pathPrefix, opts.V1Alpha1Stores)
+		registerV1Alpha1Routes(api, pathPrefix, opts.V1Alpha1Stores, opts.V1Alpha1DeploymentCoordinator)
 	}
 
 	// POST /v0/import — runs decoded manifests through the enrichment
@@ -137,14 +147,34 @@ func RegisterRoutes(
 // existence dispatches through the shared
 // internaldb.NewV1Alpha1Resolver so the router and any server-side
 // Importer both see the same ref-existence semantics.
-func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stores) {
+//
+// When coord is non-nil, Deployment PUT/DELETE fire
+// coord.Apply/coord.Remove after the row is persisted so the platform
+// adapter converges runtime state synchronously with the API call.
+func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stores, coord *deploymentsvc.V1Alpha1Coordinator) {
 	resolver := internaldb.NewV1Alpha1Resolver(stores)
 	registryValidator := registries.Dispatcher
 	uniqueRemoteURLs := internaldb.NewV1Alpha1UniqueRemoteURLsChecker(stores)
 
+	hooks := resource.DeploymentHooks{}
+	if coord != nil {
+		hooks.PostUpsert = coord.Apply
+		hooks.PostDelete = coord.Remove
+	}
+
 	// Per-kind CRUD endpoints — one call per built-in kind, hidden
 	// inside resource.RegisterBuiltins.
-	resource.RegisterBuiltins(api, basePrefix, stores, resolver, registryValidator, uniqueRemoteURLs)
+	resource.RegisterBuiltins(api, basePrefix, stores, resolver, registryValidator, uniqueRemoteURLs, hooks)
+
+	// Deployment-specific endpoints: logs stream (cancel is subsumed
+	// by DesiredState=undeployed + DELETE in the v1alpha1 lifecycle).
+	if coord != nil {
+		resource.RegisterDeploymentLogs(api, resource.DeploymentLogsConfig{
+			BasePrefix:  basePrefix,
+			Store:       stores[v1alpha1.KindDeployment],
+			Coordinator: coord,
+		})
+	}
 
 	// Multi-doc YAML batch apply at POST {basePrefix}/apply. Shares
 	// the same Stores map + Resolver + RegistryValidator + uniqueness
