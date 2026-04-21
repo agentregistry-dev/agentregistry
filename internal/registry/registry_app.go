@@ -302,6 +302,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		SpecType: reflect.TypeFor[kinds.DeploymentSpec](),
 		Apply:    deploymentApplyFunc(deploymentService),
 		Delete:   deploymentDeleteFunc(deploymentService),
+		Get:      deploymentGetFunc(deploymentService),
 		TableColumns: []kinds.Column{
 			{Header: "NAME"}, {Header: "VERSION"}, {Header: "RESOURCE_TYPE"},
 			{Header: "PROVIDER"}, {Header: "STATUS"},
@@ -552,5 +553,25 @@ func deploymentDeleteFunc(svc deploymentsvc.Registry) kinds.DeleteFunc {
 			}
 		}
 		return errors.Join(errs...)
+	}
+}
+
+// deploymentGetFunc returns the Get function for the deployment kind. Users
+// reference deployments by name but the canonical key is ID; a single name
+// can map to multiple deployments (different versions/providers). This
+// surfaces the first match and leaves disambiguation to `list` / client-side
+// filtering.
+func deploymentGetFunc(svc deploymentsvc.Registry) kinds.GetFunc {
+	return func(ctx context.Context, name, _ string) (any, error) {
+		matches, err := svc.ListDeployments(ctx, &models.DeploymentFilter{ResourceName: &name})
+		if err != nil {
+			return nil, fmt.Errorf("listing deployments: %w", err)
+		}
+		for _, d := range matches {
+			if d != nil && d.ServerName == name {
+				return d, nil
+			}
+		}
+		return nil, database.ErrNotFound
 	}
 }
