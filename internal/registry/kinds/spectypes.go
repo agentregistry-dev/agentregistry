@@ -36,8 +36,9 @@ type AgentSpec struct {
 
 // AgentMcpServer mirrors models.McpServerType.
 type AgentMcpServer struct {
-	Type                       string            `yaml:"type" json:"type"`
 	Name                       string            `yaml:"name" json:"name"`
+	Version                    string            `yaml:"version,omitempty" json:"version,omitempty"`
+	Type                       string            `yaml:"type,omitempty" json:"type,omitempty"`
 	Image                      string            `yaml:"image,omitempty" json:"image,omitempty"`
 	Build                      string            `yaml:"build,omitempty" json:"build,omitempty"`
 	Command                    string            `yaml:"command,omitempty" json:"command,omitempty"`
