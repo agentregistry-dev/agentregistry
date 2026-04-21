@@ -1,0 +1,268 @@
+package kubernetes
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/agentregistry-dev/agentregistry/internal/constants"
+	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
+)
+
+// FinalizerName is the token the kubernetes adapter pins on every
+// Deployment it owns. Remove drops the same token once kagent/kmcp
+// resources have been deleted so PurgeFinalized can hard-delete the row.
+const FinalizerName = "kubernetes.agentregistry.solo.io/cleanup"
+
+// SupportedTargetKinds reports the v1alpha1 Kinds this adapter can
+// deploy: Agent and MCPServer.
+func (a *kubernetesDeploymentAdapter) SupportedTargetKinds() []string {
+	return []string{v1alpha1.KindAgent, v1alpha1.KindMCPServer}
+}
+
+// Apply translates + applies kagent/kmcp CRDs onto the provider's cluster.
+// Returns Progressing=True immediately; the reconciler's (Phase 2 KRT) watch
+// loop is responsible for flipping Ready=True once the rollout converges.
+// Adapters MAY produce a Degraded condition on permanent translation or
+// apply errors; transient failures bubble up as a returned error.
+func (a *kubernetesDeploymentAdapter) Apply(ctx context.Context, in types.ApplyInput) (*types.ApplyResult, error) {
+	if in.Deployment == nil {
+		return nil, fmt.Errorf("apply: deployment is required")
+	}
+	legacyProvider := providerBridgeFromV1Alpha1(in.Provider)
+	namespace := namespaceFromV1Alpha1(in.Deployment, in.Provider)
+
+	desired, err := a.buildDesiredStateFromV1Alpha1(ctx, in, namespace)
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := kubernetesTranslatePlatformConfig(ctx, desired)
+	if err != nil {
+		return nil, fmt.Errorf("translate kubernetes platform config: %w", err)
+	}
+	if cfg == nil {
+		return nil, fmt.Errorf("kubernetes platform config is required")
+	}
+	if err := kubernetesApplyPlatformConfig(ctx, legacyProvider, cfg, false); err != nil {
+		return nil, fmt.Errorf("apply kubernetes platform config: %w", err)
+	}
+
+	now := time.Now().UTC()
+	gen := in.Deployment.Metadata.Generation
+	return &types.ApplyResult{
+		Conditions: []v1alpha1.Condition{{
+			Type:               "Progressing",
+			Status:             v1alpha1.ConditionTrue,
+			Reason:             "Applied",
+			Message:            "kagent resources reconciled; waiting for rollout",
+			LastTransitionTime: now,
+			ObservedGeneration: gen,
+		}, {
+			Type:               "ProviderConfigured",
+			Status:             v1alpha1.ConditionTrue,
+			Reason:             "KubernetesProvider",
+			Message:            "kubernetes provider reachable",
+			LastTransitionTime: now,
+			ObservedGeneration: gen,
+		}},
+		AddFinalizers: []string{FinalizerName},
+	}, nil
+}
+
+// Remove deletes every kagent/kmcp resource owned by this Deployment (agent
+// + mcp + remote-mcp kinds) via the shared deploymentID label selector. Both
+// target kinds are swept because RemoveInput doesn't carry the resolved
+// target; sweep-both is cheap and idempotent.
+func (a *kubernetesDeploymentAdapter) Remove(ctx context.Context, in types.RemoveInput) (*types.RemoveResult, error) {
+	if in.Deployment == nil {
+		return nil, fmt.Errorf("remove: deployment is required")
+	}
+	legacyProvider := providerBridgeFromV1Alpha1(in.Provider)
+	namespace := namespaceFromV1Alpha1(in.Deployment, in.Provider)
+	deploymentID := in.Deployment.Metadata.Name
+
+	// Sweep both kinds — delete-by-label is a no-op when nothing matches.
+	for _, resourceType := range []string{"agent", "mcp"} {
+		if err := kubernetesDeleteResourcesByDeploymentID(ctx, legacyProvider, deploymentID, resourceType, namespace); err != nil {
+			return nil, fmt.Errorf("remove %s resources: %w", resourceType, err)
+		}
+	}
+
+	now := time.Now().UTC()
+	gen := in.Deployment.Metadata.Generation
+	return &types.RemoveResult{
+		Conditions: []v1alpha1.Condition{{
+			Type:               "Ready",
+			Status:             v1alpha1.ConditionFalse,
+			Reason:             "Removed",
+			Message:            "kagent resources deleted",
+			LastTransitionTime: now,
+			ObservedGeneration: gen,
+		}},
+		RemoveFinalizers: []string{FinalizerName},
+	}, nil
+}
+
+// Logs is not yet implemented for the kubernetes adapter's v1alpha1 surface;
+// the legacy GetLogs path returned ErrDeploymentNotSupported for parity.
+// Returns an immediately-closed channel so callers don't block.
+func (a *kubernetesDeploymentAdapter) Logs(ctx context.Context, in types.LogsInput) (<-chan types.LogLine, error) {
+	ch := make(chan types.LogLine)
+	close(ch)
+	return ch, nil
+}
+
+// Discover enumerates unmanaged kagent/kmcp workloads in the provider's
+// namespace and returns them as DiscoveryResult entries. The Syncer (OSS or
+// enterprise) persists these into the discovered_kubernetes table.
+//
+// Uses the same "managed" label check as the legacy discovery path — rows
+// carrying aregistry.ai/managed=true are skipped because they correspond to
+// existing Deployment rows.
+func (a *kubernetesDeploymentAdapter) Discover(ctx context.Context, in types.DiscoverInput) ([]types.DiscoveryResult, error) {
+	legacyProvider := providerBridgeFromV1Alpha1(in.Provider)
+	namespace := kubernetesProviderNamespace(legacyProvider)
+
+	isManaged := func(labels map[string]string) bool {
+		return labels != nil && labels[kubernetesManagedLabelKey] == "true"
+	}
+
+	var out []types.DiscoveryResult
+	agents, err := kubernetesListAgents(ctx, legacyProvider, namespace)
+	if err == nil {
+		for _, agent := range agents {
+			if isManaged(agent.Labels) {
+				continue
+			}
+			out = append(out, types.DiscoveryResult{
+				TargetKind: v1alpha1.KindAgent,
+				Namespace:  agent.Namespace,
+				Name:       agent.Name,
+			})
+		}
+	}
+
+	mcpServers, err := kubernetesListMCPServers(ctx, legacyProvider, namespace)
+	if err == nil {
+		for _, mcp := range mcpServers {
+			if isManaged(mcp.Labels) {
+				continue
+			}
+			out = append(out, types.DiscoveryResult{
+				TargetKind: v1alpha1.KindMCPServer,
+				Namespace:  mcp.Namespace,
+				Name:       mcp.Name,
+			})
+		}
+	}
+
+	remoteMCPs, err := kubernetesListRemoteMCPServers(ctx, legacyProvider, namespace)
+	if err == nil {
+		for _, remote := range remoteMCPs {
+			if isManaged(remote.Labels) {
+				continue
+			}
+			out = append(out, types.DiscoveryResult{
+				TargetKind: v1alpha1.KindMCPServer,
+				Namespace:  remote.Namespace,
+				Name:       remote.Name,
+			})
+		}
+	}
+
+	return out, nil
+}
+
+// buildDesiredStateFromV1Alpha1 constructs a *platformtypes.DesiredState from
+// the v1alpha1 ApplyInput. Target dispatches by Kind — MCPServer goes
+// straight through translate; Agent walks every MCPServers ref via
+// in.Getter to build the gateway-free kagent resource graph.
+func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
+	ctx context.Context,
+	in types.ApplyInput,
+	namespace string,
+) (*platformtypes.DesiredState, error) {
+	if in.Target == nil {
+		return nil, fmt.Errorf("apply: target is required")
+	}
+	deploymentID := in.Deployment.Metadata.Name
+	envValues, argValues, headerValues := splitDeploymentRuntimeInputs(in.Deployment.Spec.Env)
+
+	switch target := in.Target.(type) {
+	case *v1alpha1.MCPServer:
+		server, err := specToPlatformMCPServer(
+			ctx,
+			target.Metadata,
+			target.Spec,
+			deploymentID,
+			in.Deployment.Spec.PreferRemote,
+			envValues,
+			argValues,
+			headerValues,
+			namespace,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return &platformtypes.DesiredState{MCPServers: []*platformtypes.MCPServer{server}}, nil
+	case *v1alpha1.Agent:
+		agent, servers, err := specToPlatformAgent(
+			ctx,
+			target.Metadata,
+			target.Spec,
+			deploymentID,
+			envValues,
+			in.Getter,
+			namespace,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return &platformtypes.DesiredState{
+			Agents:     []*platformtypes.Agent{agent},
+			MCPServers: servers,
+		}, nil
+	default:
+		return nil, fmt.Errorf("apply: unsupported target kind %q", in.Target.GetKind())
+	}
+}
+
+// providerBridgeFromV1Alpha1 projects a *v1alpha1.Provider onto a legacy
+// *models.Provider so the existing kubernetesGetClient /
+// kubernetesApplyPlatformConfig / kubernetesDeleteResourcesByDeploymentID
+// helpers work unchanged. These helpers only read (ID, Config); nothing else
+// from *models.Provider is touched. Temporary shim — collapses with 5.f.
+func providerBridgeFromV1Alpha1(provider *v1alpha1.Provider) *models.Provider {
+	if provider == nil {
+		return nil
+	}
+	return &models.Provider{
+		ID:     provider.Metadata.Name,
+		Config: map[string]any(provider.Spec.Config),
+	}
+}
+
+// namespaceFromV1Alpha1 picks the target kubernetes namespace:
+//  1. Deployment.Spec.Env[KAGENT_NAMESPACE] (user override).
+//  2. Provider.Spec.Config.namespace.
+//  3. Ambient kubeconfig default.
+func namespaceFromV1Alpha1(deployment *v1alpha1.Deployment, provider *v1alpha1.Provider) string {
+	if deployment != nil {
+		if ns := strings.TrimSpace(deployment.Spec.Env[constants.EnvKagentNamespace]); ns != "" {
+			return ns
+		}
+	}
+	if ns := kubernetesProviderNamespace(providerBridgeFromV1Alpha1(provider)); ns != "" {
+		return ns
+	}
+	return kubernetesDefaultNamespace()
+}
+
+// Compile-time assertion that the kubernetes adapter satisfies the v1alpha1
+// interface. The legacy DeploymentPlatformAdapter assertion lives with the
+// existing wiring; both surfaces coexist during the Group 5 transition.
+var _ types.DeploymentAdapter = (*kubernetesDeploymentAdapter)(nil)
