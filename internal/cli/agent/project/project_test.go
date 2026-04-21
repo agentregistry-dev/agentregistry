@@ -7,6 +7,8 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConstructImageName(t *testing.T) {
@@ -231,4 +233,89 @@ func TestEnsureOtelCollectorConfig(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLoadManifest_EnvelopeFormat(t *testing.T) {
+	dir := t.TempDir()
+	envelopeYAML := `apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: summarizer
+  version: "1.0.0"
+spec:
+  image: ghcr.io/acme/summarizer:v1
+  language: python
+  framework: adk
+  modelProvider: gemini
+  modelName: gemini-2.0-flash
+  description: "Summarizes documents"
+  telemetryEndpoint: "http://localhost:4318/v1/traces"
+  mcpServers:
+    - type: registry
+      name: fetch
+      registryServerName: acme/fetch
+      registryServerVersion: "1.0.0"
+  skills:
+    - name: summarize
+      registrySkillName: acme/summarize
+      registrySkillVersion: "1.0.0"
+  prompts:
+    - name: system
+      registryPromptName: acme/system
+      registryPromptVersion: "1.0.0"
+  repository:
+    url: https://github.com/acme/summarizer
+    source: github
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "agent.yaml"), []byte(envelopeYAML), 0o644))
+	got, err := LoadManifest(dir)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+
+	assert.Equal(t, "summarizer", got.Name)
+	assert.Equal(t, "1.0.0", got.Version)
+	assert.Equal(t, "ghcr.io/acme/summarizer:v1", got.Image)
+	assert.Equal(t, "python", got.Language)
+	assert.Equal(t, "adk", got.Framework)
+	assert.Equal(t, "gemini", got.ModelProvider)
+	assert.Equal(t, "gemini-2.0-flash", got.ModelName)
+	assert.Equal(t, "Summarizes documents", got.Description)
+	assert.Equal(t, "http://localhost:4318/v1/traces", got.TelemetryEndpoint)
+
+	require.Len(t, got.McpServers, 1)
+	assert.Equal(t, "registry", got.McpServers[0].Type)
+	assert.Equal(t, "fetch", got.McpServers[0].Name)
+	assert.Equal(t, "acme/fetch", got.McpServers[0].RegistryServerName)
+	assert.Equal(t, "1.0.0", got.McpServers[0].RegistryServerVersion)
+
+	require.Len(t, got.Skills, 1)
+	assert.Equal(t, "summarize", got.Skills[0].Name)
+	assert.Equal(t, "acme/summarize", got.Skills[0].RegistrySkillName)
+	assert.Equal(t, "1.0.0", got.Skills[0].RegistrySkillVersion)
+
+	require.Len(t, got.Prompts, 1)
+	assert.Equal(t, "system", got.Prompts[0].Name)
+	assert.Equal(t, "acme/system", got.Prompts[0].RegistryPromptName)
+	assert.Equal(t, "1.0.0", got.Prompts[0].RegistryPromptVersion)
+}
+
+func TestLoadManifest_LegacyFlatFormat(t *testing.T) {
+	dir := t.TempDir()
+	flatYAML := `agentName: legacy
+image: ghcr.io/acme/legacy:v1
+language: python
+framework: adk
+modelProvider: gemini
+modelName: gemini-2.0-flash
+description: "Legacy flat manifest"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "agent.yaml"), []byte(flatYAML), 0o644))
+	got, err := LoadManifest(dir)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+
+	assert.Equal(t, "legacy", got.Name)
+	assert.Equal(t, "ghcr.io/acme/legacy:v1", got.Image)
+	assert.Equal(t, "python", got.Language)
+	assert.Equal(t, "adk", got.Framework)
 }

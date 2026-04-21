@@ -72,7 +72,7 @@ tests/                  # Generated tests
 
 1. **Build Docker Image**:
    ```bash
-   arctl mcp build --verbose
+   arctl build --verbose
    ```
 
 2. **Run in Container**:
@@ -84,9 +84,9 @@ tests/                  # Generated tests
    ```bash
    # Create a new tool
    arctl mcp add-tool weather
-   
+
    # Edit the tool file, then rebuild
-   arctl mcp build
+   arctl build
    ```
 
 ## HTTP Transport Mode
@@ -199,7 +199,7 @@ uv run mypy .
 
 ```bash
 # Build image (handles lockfile automatically)
-arctl mcp build
+arctl build
 
 # Run container
 docker run -i {{.ProjectName}}:latest

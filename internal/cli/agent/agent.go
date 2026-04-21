@@ -13,28 +13,15 @@ func SetAPIClient(client *client.Client) {
 }
 
 var AgentCmd = &cobra.Command{
-	Use:   "agent",
-	Short: "Commands for managing agents",
-	Long:  `Commands for managing agents.`,
-	Args:  cobra.ArbitraryArgs,
-	Example: `arctl agent list
-arctl agent show dice
-arctl agent publish ./my-agent
-arctl agent delete dice
-arctl agent run ./my-agent`,
+	Use:     "agent",
+	Short:   "Commands for managing agents",
+	Long:    `Commands for managing agents.`,
+	Args:    cobra.ArbitraryArgs,
+	Example: `arctl agent run ./my-agent`,
 }
 
 func init() {
 	AgentCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 
-	AgentCmd.AddCommand(InitCmd)
-	AgentCmd.AddCommand(BuildCmd)
 	AgentCmd.AddCommand(RunCmd)
-	AgentCmd.AddCommand(AddSkillCmd)
-	AgentCmd.AddCommand(AddPromptCmd)
-	AgentCmd.AddCommand(AddMcpCmd)
-	AgentCmd.AddCommand(PublishCmd)
-	AgentCmd.AddCommand(DeleteCmd)
-	AgentCmd.AddCommand(ListCmd)
-	AgentCmd.AddCommand(ShowCmd)
 }

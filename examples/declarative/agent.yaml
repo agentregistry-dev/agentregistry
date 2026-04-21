@@ -8,7 +8,7 @@ spec:
   language: python
   framework: adk
   modelProvider: gemini         # OpenAI | Anthropic | Gemini | AzureOpenAI | Agentgateway
-  modelName: gemini-2.0-flash
+  modelName: gemini-2.5-flash
   description: "An agent that summarizes documents"
   # repository:                 # optional: link to source code
   #   url: https://github.com/acme/summarizer

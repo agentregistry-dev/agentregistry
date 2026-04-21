@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -57,6 +58,43 @@ func verifyAgentNotFound(t *testing.T, regURL, name, version string) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("Expected agent %s@%s to be deleted (HTTP 404) but got %d", name, version, resp.StatusCode)
+	}
+}
+
+func verifyServerNotFound(t *testing.T, regURL, name, version string) {
+	t.Helper()
+	encoded := url.PathEscape(name)
+	resp, err := http.Get(fmt.Sprintf("%s/servers/%s/versions/%s", regURL, encoded, version))
+	if err != nil {
+		t.Fatalf("GET mcp after delete failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for mcp %s after delete, got %d", name, resp.StatusCode)
+	}
+}
+
+func verifySkillNotFound(t *testing.T, regURL, name, version string) {
+	t.Helper()
+	resp, err := http.Get(fmt.Sprintf("%s/skills/%s/versions/%s", regURL, name, version))
+	if err != nil {
+		t.Fatalf("GET skill after delete failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for skill %s after delete, got %d", name, resp.StatusCode)
+	}
+}
+
+func verifyPromptNotFound(t *testing.T, regURL, name, version string) {
+	t.Helper()
+	resp, err := http.Get(fmt.Sprintf("%s/prompts/%s/versions/%s", regURL, name, version))
+	if err != nil {
+		t.Fatalf("GET prompt after delete failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for prompt %s after delete, got %d", name, resp.StatusCode)
 	}
 }
 
@@ -165,9 +203,9 @@ func TestDeclarativeApply_MCPServer(t *testing.T) {
 	version := "0.0.1-e2e"
 
 	// Clean up any stale entry.
-	RunArctl(t, tmpDir, "mcp", "delete", serverName, "--version", version, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "mcp", "delete", serverName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
 	})
 
 	serverYAML := fmt.Sprintf(`
@@ -202,10 +240,10 @@ func TestDeclarativeApply_MultiDoc(t *testing.T) {
 	version := "0.0.1-e2e"
 
 	// Clean up.
-	RunArctl(t, tmpDir, "mcp", "delete", serverName, "--version", version, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
 	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "mcp", "delete", serverName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
 		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
 	})
 
@@ -744,9 +782,9 @@ func TestDeclarativeApply_MCPServer_Idempotent(t *testing.T) {
 	serverName := "e2e-test/" + UniqueNameWithPrefix("decl-mcp-idemp")
 	version := "0.0.1-e2e"
 
-	RunArctl(t, tmpDir, "mcp", "delete", serverName, "--version", version, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "mcp", "delete", serverName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
 	})
 
 	serverYAML := fmt.Sprintf(`
@@ -1123,10 +1161,6 @@ func TestBatchApply_DriftRequiresForce(t *testing.T) {
 	if IsK8sBackend() {
 		t.Skip("skipping drift test: not applicable on k8s backend (requires local docker provider)")
 	}
-	// skipped: arctl agent build cannot read declarative agent.yaml produced by
-	// arctl init agent (pre-existing #425 compat issue — declarative init writes
-	// kind/metadata/spec format but build expects flat agentName/language/framework).
-	t.Skip("skipped: arctl agent build cannot read declarative agent.yaml (pre-existing #425 compat issue)")
 
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
@@ -1247,3 +1281,557 @@ spec:
 	verifyAgentNotFound(t, regURL, agentName, agentVersion)
 }
 
+// TestDeclarative_MCPRoundTrip exercises the full apply → get (table/yaml/json)
+// → delete lifecycle for an MCPServer resource via the declarative CLI.
+func TestDeclarative_MCPRoundTrip(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+
+	serverName := "e2e-test/" + UniqueNameWithPrefix("mcp-rt")
+	version := "0.0.1-e2e"
+
+	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
+	t.Cleanup(func() {
+		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
+	})
+
+	serverYAML := fmt.Sprintf(`
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  description: "MCP round-trip test server"
+`, serverName, version)
+	yamlPath := writeDeclarativeYAML(t, tmpDir, "server.yaml", serverYAML)
+
+	t.Run("apply", func(t *testing.T) {
+		result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
+		RequireSuccess(t, result)
+		RequireOutputContains(t, result, "mcp/"+serverName)
+		RequireOutputContains(t, result, "applied")
+	})
+
+	t.Run("verify_exists", func(t *testing.T) {
+		verifyServerExists(t, regURL, serverName, version)
+	})
+
+	t.Run("get_table", func(t *testing.T) {
+		result := RunArctl(t, tmpDir, "get", "mcps", "--registry-url", regURL)
+		RequireSuccess(t, result)
+		RequireOutputContains(t, result, serverName)
+	})
+
+	t.Run("get_yaml", func(t *testing.T) {
+		result := RunArctl(t, tmpDir, "get", "mcp", serverName, "-o", "yaml", "--registry-url", regURL)
+		RequireSuccess(t, result)
+		RequireOutputContains(t, result, "apiVersion: ar.dev/v1alpha1")
+		RequireOutputContains(t, result, "kind: MCPServer")
+		RequireOutputContains(t, result, serverName)
+	})
+
+	t.Run("get_json", func(t *testing.T) {
+		result := RunArctl(t, tmpDir, "get", "mcp", serverName, "-o", "json", "--registry-url", regURL)
+		RequireSuccess(t, result)
+		var parsed map[string]any
+		if err := json.Unmarshal([]byte(result.Stdout), &parsed); err != nil {
+			t.Fatalf("Expected valid JSON, got: %s", result.Stdout)
+		}
+	})
+
+	t.Run("delete", func(t *testing.T) {
+		result := RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
+		RequireSuccess(t, result)
+	})
+
+	t.Run("verify_deleted", func(t *testing.T) {
+		verifyServerNotFound(t, regURL, serverName, version)
+	})
+}
+
+// TestDeclarative_SkillRoundTrip exercises the full apply → get (table/yaml)
+// → delete lifecycle for a Skill resource via the declarative CLI.
+func TestDeclarative_SkillRoundTrip(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+
+	skillName := UniqueNameWithPrefix("skill-rt")
+	version := "0.0.1-e2e"
+
+	RunArctl(t, tmpDir, "delete", "skill", skillName, "--version", version, "--registry-url", regURL)
+	t.Cleanup(func() {
+		RunArctl(t, tmpDir, "delete", "skill", skillName, "--version", version, "--registry-url", regURL)
+	})
+
+	skillYAML := fmt.Sprintf(`
+apiVersion: ar.dev/v1alpha1
+kind: Skill
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  description: "Skill round-trip test"
+  category: nlp
+`, skillName, version)
+	yamlPath := writeDeclarativeYAML(t, tmpDir, "skill.yaml", skillYAML)
+
+	t.Run("apply", func(t *testing.T) {
+		result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
+		RequireSuccess(t, result)
+		RequireOutputContains(t, result, "skill/"+skillName)
+		RequireOutputContains(t, result, "applied")
+	})
+
+	t.Run("verify_exists", func(t *testing.T) {
+		resp, err := http.Get(fmt.Sprintf("%s/skills/%s/versions/%s", regURL, skillName, version))
+		if err != nil {
+			t.Fatalf("GET skill failed: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200 for existing skill, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("get_table", func(t *testing.T) {
+		result := RunArctl(t, tmpDir, "get", "skills", "--registry-url", regURL)
+		RequireSuccess(t, result)
+		RequireOutputContains(t, result, skillName)
+	})
+
+	t.Run("get_yaml", func(t *testing.T) {
+		result := RunArctl(t, tmpDir, "get", "skill", skillName, "-o", "yaml", "--registry-url", regURL)
+		RequireSuccess(t, result)
+		RequireOutputContains(t, result, "apiVersion: ar.dev/v1alpha1")
+		RequireOutputContains(t, result, "kind: Skill")
+		RequireOutputContains(t, result, skillName)
+	})
+
+	t.Run("get_json", func(t *testing.T) {
+		result := RunArctl(t, tmpDir, "get", "skill", skillName, "-o", "json", "--registry-url", regURL)
+		RequireSuccess(t, result)
+		var parsed map[string]any
+		if err := json.Unmarshal([]byte(result.Stdout), &parsed); err != nil {
+			t.Fatalf("Expected valid JSON, got: %s", result.Stdout)
+		}
+	})
+
+	t.Run("delete", func(t *testing.T) {
+		result := RunArctl(t, tmpDir, "delete", "skill", skillName, "--version", version, "--registry-url", regURL)
+		RequireSuccess(t, result)
+	})
+
+	t.Run("verify_deleted", func(t *testing.T) {
+		verifySkillNotFound(t, regURL, skillName, version)
+	})
+}
+
+// TestDeclarative_PromptRoundTrip exercises the full apply → get (table/yaml)
+// → delete lifecycle for a Prompt resource via the declarative CLI.
+func TestDeclarative_PromptRoundTrip(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+
+	promptName := UniqueNameWithPrefix("prompt-rt")
+	version := "0.0.1-e2e"
+
+	RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", version, "--registry-url", regURL)
+	t.Cleanup(func() {
+		RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", version, "--registry-url", regURL)
+	})
+
+	promptYAML := fmt.Sprintf(`
+apiVersion: ar.dev/v1alpha1
+kind: Prompt
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  description: "Prompt round-trip test"
+  content: "You are a test assistant."
+`, promptName, version)
+	yamlPath := writeDeclarativeYAML(t, tmpDir, "prompt.yaml", promptYAML)
+
+	t.Run("apply", func(t *testing.T) {
+		result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
+		RequireSuccess(t, result)
+		RequireOutputContains(t, result, "prompt/"+promptName)
+		RequireOutputContains(t, result, "applied")
+	})
+
+	t.Run("verify_exists", func(t *testing.T) {
+		resp, err := http.Get(fmt.Sprintf("%s/prompts/%s/versions/%s", regURL, promptName, version))
+		if err != nil {
+			t.Fatalf("GET prompt failed: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200 for existing prompt, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("get_table", func(t *testing.T) {
+		result := RunArctl(t, tmpDir, "get", "prompts", "--registry-url", regURL)
+		RequireSuccess(t, result)
+		RequireOutputContains(t, result, promptName)
+	})
+
+	t.Run("get_yaml", func(t *testing.T) {
+		result := RunArctl(t, tmpDir, "get", "prompt", promptName, "-o", "yaml", "--registry-url", regURL)
+		RequireSuccess(t, result)
+		RequireOutputContains(t, result, "apiVersion: ar.dev/v1alpha1")
+		RequireOutputContains(t, result, "kind: Prompt")
+		RequireOutputContains(t, result, promptName)
+	})
+
+	t.Run("get_json", func(t *testing.T) {
+		result := RunArctl(t, tmpDir, "get", "prompt", promptName, "-o", "json", "--registry-url", regURL)
+		RequireSuccess(t, result)
+		var parsed map[string]any
+		if err := json.Unmarshal([]byte(result.Stdout), &parsed); err != nil {
+			t.Fatalf("Expected valid JSON, got: %s", result.Stdout)
+		}
+	})
+
+	t.Run("delete", func(t *testing.T) {
+		result := RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", version, "--registry-url", regURL)
+		RequireSuccess(t, result)
+	})
+
+	t.Run("verify_deleted", func(t *testing.T) {
+		verifyPromptNotFound(t, regURL, promptName, version)
+	})
+}
+
+// TestDeclarative_DeleteFileMultiKind verifies that `arctl delete -f multi.yaml`
+// removes all kinds (agent, mcp, skill, prompt) in a single batch.
+func TestDeclarative_DeleteFileMultiKind(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+
+	agentName := UniqueAgentName("delmulti")
+	mcpName := "e2e-test/" + UniqueNameWithPrefix("delmulti-mcp")
+	skillName := UniqueNameWithPrefix("delmulti-skill")
+	promptName := UniqueNameWithPrefix("delmulti-prompt")
+	version := "0.0.1-e2e"
+
+	// Pre-clean and post-clean via the same declarative command.
+	cleanup := func() {
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "mcp", mcpName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "skill", skillName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", version, "--registry-url", regURL)
+	}
+	cleanup()
+	t.Cleanup(cleanup)
+
+	multiYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  image: ghcr.io/e2e-test/delmulti-agent:latest
+  description: "multi-kind delete test"
+  language: python
+  framework: adk
+  modelProvider: gemini
+  modelName: gemini-2.0-flash
+---
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  description: "multi-kind delete test mcp"
+---
+apiVersion: ar.dev/v1alpha1
+kind: Skill
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  description: "multi-kind delete test skill"
+---
+apiVersion: ar.dev/v1alpha1
+kind: Prompt
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  description: "multi-kind delete test prompt"
+  content: "noop"
+`, agentName, version, mcpName, version, skillName, version, promptName, version)
+
+	yamlPath := writeDeclarativeYAML(t, tmpDir, "multi.yaml", multiYAML)
+
+	// Step 1: apply.
+	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
+	RequireSuccess(t, result)
+	verifyAgentExists(t, regURL, agentName, version)
+	verifyServerExists(t, regURL, mcpName, version)
+
+	// Step 2: delete -f — sends DELETE /v0/apply.
+	result = RunArctl(t, tmpDir, "delete", "-f", yamlPath, "--registry-url", regURL)
+	RequireSuccess(t, result)
+
+	// Step 3: every kind must be gone.
+	verifyAgentNotFound(t, regURL, agentName, version)
+	verifyServerNotFound(t, regURL, mcpName, version)
+	verifySkillNotFound(t, regURL, skillName, version)
+	verifyPromptNotFound(t, regURL, promptName, version)
+}
+
+// TestArctl_DeletedCommandsGone asserts that every imperative CRUD command
+// removed in this PR returns a non-zero exit code when invoked with --help.
+func TestArctl_DeletedCommandsGone(t *testing.T) {
+	t.Parallel()
+	cases := [][]string{
+		{"agent", "publish"}, {"agent", "list"}, {"agent", "show"}, {"agent", "delete"},
+		{"agent", "init"}, {"agent", "build"},
+		{"agent", "add-mcp"}, {"agent", "add-skill"}, {"agent", "add-prompt"},
+		{"mcp", "publish"}, {"mcp", "list"}, {"mcp", "show"}, {"mcp", "delete"},
+		{"mcp", "init"}, {"mcp", "build"},
+		{"skill", "publish"}, {"skill", "list"}, {"skill", "show"}, {"skill", "delete"},
+		{"skill", "init"}, {"skill", "build"},
+		{"prompt", "publish"}, {"prompt", "list"}, {"prompt", "show"}, {"prompt", "delete"},
+		{"prompt"},
+	}
+	for _, args := range cases {
+		args := args
+		t.Run(strings.Join(args, "_"), func(t *testing.T) {
+			t.Parallel()
+			helpArgs := append([]string{}, args...)
+			helpArgs = append(helpArgs, "--help")
+			result := RunArctl(t, t.TempDir(), helpArgs...)
+			RequireFailure(t, result)
+		})
+	}
+}
+
+// TestArctl_KeptCommandsResolve asserts every surviving command resolves via
+// --help after the imperative CRUD deletion PR. It is live from commit one
+// (every listed command exists today and will continue to exist after the PR).
+func TestArctl_KeptCommandsResolve(t *testing.T) {
+	t.Parallel()
+	cases := [][]string{
+		{"agent", "run"},
+		{"mcp", "run"},
+		{"mcp", "add-tool"},
+		{"skill", "pull"},
+		{"apply"},
+		{"get"},
+		{"delete"},
+		{"init"},
+		{"build"},
+	}
+	for _, args := range cases {
+		args := args
+		t.Run(strings.Join(args, "_"), func(t *testing.T) {
+			t.Parallel()
+			helpArgs := append([]string{}, args...)
+			helpArgs = append(helpArgs, "--help")
+			result := RunArctl(t, t.TempDir(), helpArgs...)
+			RequireSuccess(t, result)
+		})
+	}
+}
+
+// TestAgentBuild_EnvelopeManifest verifies that `arctl build` against a
+// project directory generated by the declarative `arctl init agent` command
+// succeeds. `arctl init agent` writes envelope YAML (apiVersion/kind/metadata/
+// spec); `arctl build` calls project.LoadManifest which detects and decodes
+// that envelope. Regression guard for the envelope path.
+func TestAgentBuild_EnvelopeManifest(t *testing.T) {
+	skipIfNoDocker(t)
+	tmpDir := t.TempDir()
+
+	name := UniqueAgentName("envagent")
+	image := "localhost:5001/" + name + ":latest"
+	CleanupDockerImage(t, image)
+
+	result := RunArctl(t, tmpDir, "init", "agent", "adk", "python", name)
+	RequireSuccess(t, result)
+
+	projectDir := filepath.Join(tmpDir, name)
+	RequireDirExists(t, projectDir)
+
+	// Sanity: init wrote an envelope YAML.
+	RequireFileContains(t, filepath.Join(projectDir, "agent.yaml"), "apiVersion: ar.dev/v1alpha1")
+	RequireFileContains(t, filepath.Join(projectDir, "agent.yaml"), "kind: Agent")
+
+	result = RunArctl(t, tmpDir, "build", projectDir)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "Building agent image:")
+	if !DockerImageExists(t, image) {
+		t.Errorf("Expected Docker image %s after build of envelope project", image)
+	}
+}
+
+// TestMCPBuild_EnvelopeManifest is the MCP counterpart of
+// TestAgentBuild_EnvelopeManifest. Verifies that mcp/manifest.Manager.Load
+// accepts envelope YAML written by `arctl init mcp`.
+func TestMCPBuild_EnvelopeManifest(t *testing.T) {
+	skipIfNoDocker(t)
+	tmpDir := t.TempDir()
+
+	dirName := UniqueNameWithPrefix("envmcp")
+	fullName := "e2e-test/" + dirName
+	image := "localhost:5001/" + dirName + ":latest"
+	CleanupDockerImage(t, image)
+
+	result := RunArctl(t, tmpDir, "init", "mcp", "fastmcp-python", fullName)
+	RequireSuccess(t, result)
+
+	projectDir := filepath.Join(tmpDir, dirName)
+	RequireDirExists(t, projectDir)
+
+	RequireFileContains(t, filepath.Join(projectDir, "mcp.yaml"), "apiVersion: ar.dev/v1alpha1")
+	RequireFileContains(t, filepath.Join(projectDir, "mcp.yaml"), "kind: MCPServer")
+
+	result = RunArctl(t, tmpDir, "build", projectDir)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "Building MCP server image:")
+	if !DockerImageExists(t, image) {
+		t.Errorf("Expected Docker image %s after build of envelope project", image)
+	}
+}
+
+// --- declarative validation edge cases ---
+//
+// Coverage for error paths exercised only through the declarative CLI surface.
+
+// TestDeclarativeBuild_NonexistentDir verifies that `arctl build` fails when
+// pointed at a directory that does not exist. TestDeclarativeBuild_NoYAML
+// covers the empty-directory case; this covers the missing-directory case.
+func TestDeclarativeBuild_NonexistentDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	result := RunArctl(t, tmpDir, "build", filepath.Join(tmpDir, "nonexistent"))
+	RequireFailure(t, result)
+	RequireOutputContains(t, result, "project directory not found:")
+}
+
+// TestDeclarativeApply_InvalidKind verifies that `arctl apply` rejects a YAML
+// document whose `kind` is not registered in the CLI's kinds registry. The
+// failure is client-side: the kinds registry lookup returns an error before
+// any HTTP request is sent.
+func TestDeclarativeApply_InvalidKind(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+
+	invalidYAML := `apiVersion: ar.dev/v1alpha1
+kind: NotARealKind
+metadata:
+  name: e2e-test/invalid-kind
+  version: "0.0.1-e2e"
+spec:
+  description: "bogus kind for client-side rejection test"
+`
+	yamlPath := writeDeclarativeYAML(t, tmpDir, "invalid-kind.yaml", invalidYAML)
+
+	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
+	RequireFailure(t, result)
+	// Matches kinds.ErrUnknownKind.
+	RequireOutputContains(t, result, "unknown kind")
+}
+
+// TestDeclarativeDelete_NotFound verifies `arctl delete` reports failure when
+// the target resource does not exist.
+func TestDeclarativeDelete_NotFound(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+
+	result := RunArctl(t, tmpDir,
+		"delete", "prompt", "nonexistent-prompt-xyz-12345",
+		"--version", "1.0.0",
+		"--registry-url", regURL,
+	)
+	RequireFailure(t, result)
+	RequireOutputContains(t, result, "not found")
+}
+
+// TestDeclarativeInit_AgentWithRefs verifies that arctl init agent's --mcp,
+// --skill, and --prompt flags produce the correct declarative ref entries in
+// the generated agent.yaml. These flags are the declarative replacement for
+// the deleted arctl agent add-mcp / add-skill / add-prompt commands.
+func TestDeclarativeInit_AgentWithRefs(t *testing.T) {
+	tmpDir := t.TempDir()
+	name := UniqueAgentName("initrefs")
+
+	// init is offline; no registry-url required for generation.
+	result := RunArctl(t, tmpDir, "init", "agent", "adk", "python", name,
+		"--mcp", "acme/fetch@1.0.0",
+		"--mcp", "acme/time@2.0.0",
+		"--skill", "summarize@1.0.0",
+		"--skill", "refine",
+		"--prompt", "sys-prompt@1.0.0",
+	)
+	RequireSuccess(t, result)
+
+	agentYAMLPath := filepath.Join(tmpDir, name, "agent.yaml")
+	RequireFileExists(t, agentYAMLPath)
+
+	m := parseDeclarativeYAML(t, agentYAMLPath)
+	spec, ok := m["spec"].(map[string]any)
+	if !ok {
+		t.Fatalf("spec missing or wrong type in generated agent.yaml: %v", m["spec"])
+	}
+
+	// mcpServers — two registry refs, @version parsed correctly.
+	mcps, ok := spec["mcpServers"].([]any)
+	if !ok || len(mcps) != 2 {
+		t.Fatalf("expected 2 mcpServers, got %v", spec["mcpServers"])
+	}
+	for i, expected := range []struct {
+		registryName, registryVersion string
+	}{
+		{"acme/fetch", "1.0.0"},
+		{"acme/time", "2.0.0"},
+	} {
+		entry, _ := mcps[i].(map[string]any)
+		if entry["type"] != "registry" {
+			t.Errorf("mcpServers[%d]: expected type=registry, got %v", i, entry["type"])
+		}
+		if entry["registryServerName"] != expected.registryName {
+			t.Errorf("mcpServers[%d]: registryServerName expected %q, got %v", i, expected.registryName, entry["registryServerName"])
+		}
+		if entry["registryServerVersion"] != expected.registryVersion {
+			t.Errorf("mcpServers[%d]: registryServerVersion expected %q, got %v", i, expected.registryVersion, entry["registryServerVersion"])
+		}
+	}
+
+	// skills — two entries; second uses default version "latest".
+	skills, ok := spec["skills"].([]any)
+	if !ok || len(skills) != 2 {
+		t.Fatalf("expected 2 skills, got %v", spec["skills"])
+	}
+	for i, expected := range []struct {
+		registryName, registryVersion string
+	}{
+		{"summarize", "1.0.0"},
+		{"refine", "latest"},
+	} {
+		entry, _ := skills[i].(map[string]any)
+		if entry["registrySkillName"] != expected.registryName {
+			t.Errorf("skills[%d]: registrySkillName expected %q, got %v", i, expected.registryName, entry["registrySkillName"])
+		}
+		if entry["registrySkillVersion"] != expected.registryVersion {
+			t.Errorf("skills[%d]: registrySkillVersion expected %q, got %v", i, expected.registryVersion, entry["registrySkillVersion"])
+		}
+	}
+
+	// prompts — one entry with explicit version.
+	prompts, ok := spec["prompts"].([]any)
+	if !ok || len(prompts) != 1 {
+		t.Fatalf("expected 1 prompt, got %v", spec["prompts"])
+	}
+	entry, _ := prompts[0].(map[string]any)
+	if entry["registryPromptName"] != "sys-prompt" {
+		t.Errorf("prompts[0]: registryPromptName expected %q, got %v", "sys-prompt", entry["registryPromptName"])
+	}
+	if entry["registryPromptVersion"] != "1.0.0" {
+		t.Errorf("prompts[0]: registryPromptVersion expected %q, got %v", "1.0.0", entry["registryPromptVersion"])
+	}
+}

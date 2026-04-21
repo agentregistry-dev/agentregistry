@@ -13,24 +13,15 @@ func SetAPIClient(client *client.Client) {
 }
 
 var SkillCmd = &cobra.Command{
-	Use:   "skill",
-	Short: "Commands for managing skills",
-	Long:  `Commands for managing skills.`,
-	Args:  cobra.ArbitraryArgs,
-	Example: `arctl skill list
-arctl skill show my-skill
-arctl skill publish ./my-skill
-arctl skill delete my-skill --version 1.0.0`,
+	Use:     "skill",
+	Short:   "Commands for managing skills",
+	Long:    `Commands for managing skills.`,
+	Args:    cobra.ArbitraryArgs,
+	Example: `arctl skill pull my-skill`,
 }
 
 func init() {
 	SkillCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 
-	SkillCmd.AddCommand(BuildCmd)
-	SkillCmd.AddCommand(InitCmd)
-	SkillCmd.AddCommand(ListCmd)
-	SkillCmd.AddCommand(PublishCmd)
-	SkillCmd.AddCommand(DeleteCmd)
 	SkillCmd.AddCommand(PullCmd)
-	SkillCmd.AddCommand(ShowCmd)
 }

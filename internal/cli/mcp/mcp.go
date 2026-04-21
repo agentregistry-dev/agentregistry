@@ -17,21 +17,13 @@ var McpCmd = &cobra.Command{
 	Short: "Commands for managing MCP servers",
 	Long:  `Commands for managing MCP servers.`,
 	Args:  cobra.ArbitraryArgs,
-	Example: `arctl mcp list
-arctl mcp show my-mcp-server
-arctl mcp publish ./my-mcp-server
-arctl mcp deploy my-mcp-server`,
+	Example: `arctl mcp run my-mcp-server
+arctl mcp add-tool my-tool`,
 }
 
 func init() {
 	McpCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 
-	McpCmd.AddCommand(InitCmd)
-	McpCmd.AddCommand(BuildCmd)
 	McpCmd.AddCommand(AddToolCmd)
-	McpCmd.AddCommand(PublishCmd)
-	McpCmd.AddCommand(DeleteCmd)
-	McpCmd.AddCommand(ListCmd)
 	McpCmd.AddCommand(RunCmd)
-	McpCmd.AddCommand(ShowCmd)
 }
