@@ -91,7 +91,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 			return fmt.Errorf("failed to create database via factory: %w", err)
 		}
 	} else {
-		baseDB, err := internaldb.NewPostgreSQL(dbCtx, cfg.DatabaseURL, authz, cfg.DatabaseVectorEnabled)
+		baseDB, err := internaldb.NewPostgreSQL(dbCtx, cfg.DatabaseURL, authz)
 		if err != nil {
 			return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
 		}
@@ -117,10 +117,6 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 			slog.Info("database connection closed successfully")
 		}
 	}()
-
-	if cfg.Embeddings.Enabled {
-		slog.Warn("semantic embeddings disabled: indexer + provider stack retired pending Group 8 v1alpha1 port")
-	}
 
 	// v1alpha1 DeploymentAdapter map consumed by the coordinator below.
 	// Built OSS-side from the local + kubernetes ports; enterprise extends

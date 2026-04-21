@@ -24,7 +24,7 @@ type PostgreSQL struct {
 // generic v1alpha1 Store. The legacy public.* tables are no longer
 // migrated — every domain the server speaks in production lives under
 // the v1alpha1 schema.
-func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authorizer, _ bool) (*PostgreSQL, error) {
+func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authorizer) (*PostgreSQL, error) {
 	config, err := pgxpool.ParseConfig(connectionURI)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse PostgreSQL config: %w", err)

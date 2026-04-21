@@ -18,10 +18,7 @@ import (
 )
 
 // Client is a lightweight API client for the agentregistry HTTP surface.
-// Every resource method speaks v1alpha1 at /v0/namespaces/{ns}/{plural}/...;
-// only deployment + embeddings RPCs continue to use legacy paths until their
-// respective Group ports land (Group 4 for deployments, Group 8 for
-// embeddings).
+// Every resource method speaks v1alpha1 at /v0/namespaces/{ns}/{plural}/...
 type Client struct {
 	BaseURL    string
 	httpClient *http.Client
@@ -29,9 +26,8 @@ type Client struct {
 }
 
 const (
-	defaultBaseURL          = "http://localhost:12121/v0"
-	DefaultBaseURL          = defaultBaseURL
-	defaultDeployProviderID = "local"
+	defaultBaseURL = "http://localhost:12121/v0"
+	DefaultBaseURL = defaultBaseURL
 )
 
 type VersionBody = apitypes.VersionBody
@@ -147,22 +143,6 @@ func extractAPIErrorMessage(body []byte) string {
 		return strings.Join(msgs, "; ")
 	}
 	return apiErr.Detail
-}
-
-func (c *Client) doJsonRequest(method, pathWithQuery string, in, out any) error {
-	req, err := c.newRequest(method, pathWithQuery)
-	if err != nil {
-		return err
-	}
-	if in != nil {
-		inBytes, err := json.Marshal(in)
-		if err != nil {
-			return fmt.Errorf("failed to marshal %T: %w", in, err)
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Body = io.NopCloser(bytes.NewReader(inBytes))
-	}
-	return c.doJSON(req, out)
 }
 
 // =============================================================================
