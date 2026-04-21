@@ -6,6 +6,7 @@ import (
 	"time"
 
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
@@ -120,33 +121,28 @@ func (a *localDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 		return nil, fmt.Errorf("apply: target is required")
 	}
 	deploymentID := in.Deployment.Metadata.Name
-	envValues, argValues, headerValues := splitDeploymentRuntimeInputs(in.Deployment.Spec.Env)
+	envValues, argValues, headerValues := utils.SplitDeploymentRuntimeInputs(in.Deployment.Spec.Env)
 
 	switch target := in.Target.(type) {
 	case *v1alpha1.MCPServer:
-		server, err := specToPlatformMCPServer(
-			ctx,
-			target.Metadata,
-			target.Spec,
-			deploymentID,
-			in.Deployment.Spec.PreferRemote,
-			envValues,
-			argValues,
-			headerValues,
-		)
+		server, err := utils.SpecToPlatformMCPServer(ctx, target.Metadata, target.Spec, utils.MCPServerTranslateOpts{
+			DeploymentID: deploymentID,
+			PreferRemote: in.Deployment.Spec.PreferRemote,
+			EnvValues:    envValues,
+			ArgValues:    argValues,
+			HeaderValues: headerValues,
+		})
 		if err != nil {
 			return nil, err
 		}
 		return &platformtypes.DesiredState{MCPServers: []*platformtypes.MCPServer{server}}, nil
 	case *v1alpha1.Agent:
-		agent, servers, err := specToPlatformAgent(
-			ctx,
-			target.Metadata,
-			target.Spec,
-			deploymentID,
-			envValues,
-			in.Getter,
-		)
+		agent, servers, err := utils.SpecToPlatformAgent(ctx, target.Metadata, target.Spec, utils.AgentTranslateOpts{
+			DeploymentID:  deploymentID,
+			KagentURL:     "http://localhost",
+			DeploymentEnv: envValues,
+			Getter:        in.Getter,
+		})
 		if err != nil {
 			return nil, err
 		}

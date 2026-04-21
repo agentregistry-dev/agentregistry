@@ -1,4 +1,4 @@
-package local
+package utils
 
 import (
 	"context"
@@ -9,74 +9,104 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/constants"
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 )
 
-// specToPlatformMCPServer translates a v1alpha1 MCPServer envelope into the
+// MCPServerTranslateOpts bundles knobs for SpecToPlatformMCPServer that vary
+// per-adapter. Zero values mean "use the natural fallback" (preferRemote
+// defaults to spec-driven; Namespace falls back to meta.Namespace).
+type MCPServerTranslateOpts struct {
+	DeploymentID string
+	PreferRemote bool
+	// Namespace, when non-empty, overrides meta.Namespace on the emitted
+	// platform MCPServer. k8s callers set it to the provider's runtime
+	// namespace so label selectors line up; local callers usually leave it
+	// blank.
+	Namespace    string
+	EnvValues    map[string]string
+	ArgValues    map[string]string
+	HeaderValues map[string]string
+}
+
+// SpecToPlatformMCPServer translates a v1alpha1 MCPServer envelope into the
 // platform-internal *platformtypes.MCPServer by projecting Spec onto the
-// upstream apiv0.ServerJSON shape that utils.TranslateMCPServer already
-// understands. preferRemote=true forces remote transport selection when both
-// Packages and Remotes are defined; the default policy mirrors the legacy
-// deployment path (remote wins when Packages is empty).
-func specToPlatformMCPServer(
+// upstream apiv0.ServerJSON shape TranslateMCPServer already understands.
+// preferRemote=true (or empty Packages) forces remote transport selection;
+// otherwise package-first wins when both are defined.
+func SpecToPlatformMCPServer(
 	ctx context.Context,
 	meta v1alpha1.ObjectMeta,
 	spec v1alpha1.MCPServerSpec,
-	deploymentID string,
-	preferRemote bool,
-	envValues map[string]string,
-	argValues map[string]string,
-	headerValues map[string]string,
+	opts MCPServerTranslateOpts,
 ) (*platformtypes.MCPServer, error) {
 	server := mcpServerSpecToServerJSON(meta, spec)
-	req := &utils.MCPServerRunRequest{
+	req := &MCPServerRunRequest{
 		RegistryServer: server,
-		DeploymentID:   deploymentID,
-		PreferRemote:   preferRemote || (len(spec.Remotes) > 0 && len(spec.Packages) == 0),
-		EnvValues:      nonNilStringMap(envValues),
-		ArgValues:      nonNilStringMap(argValues),
-		HeaderValues:   nonNilStringMap(headerValues),
+		DeploymentID:   opts.DeploymentID,
+		PreferRemote:   opts.PreferRemote || (len(spec.Remotes) > 0 && len(spec.Packages) == 0),
+		EnvValues:      nonNilStringMap(opts.EnvValues),
+		ArgValues:      nonNilStringMap(opts.ArgValues),
+		HeaderValues:   nonNilStringMap(opts.HeaderValues),
 	}
-	platformServer, err := utils.TranslateMCPServer(ctx, req)
+	platformServer, err := TranslateMCPServer(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("translate mcp server %s@%s: %w", meta.Name, meta.Version, err)
 	}
-	if meta.Namespace != "" && platformServer.Namespace == "" {
+	if opts.Namespace != "" {
+		platformServer.Namespace = opts.Namespace
+	} else if meta.Namespace != "" && platformServer.Namespace == "" {
 		platformServer.Namespace = meta.Namespace
 	}
 	return platformServer, nil
 }
 
-// specToPlatformAgent translates a v1alpha1 Agent envelope + Deployment
+// AgentTranslateOpts bundles knobs for SpecToPlatformAgent.
+type AgentTranslateOpts struct {
+	DeploymentID string
+	// Namespace is the target runtime namespace — populates KAGENT_NAMESPACE
+	// and propagates to every nested MCPServer the agent references. Empty ⇒
+	// meta.Namespace ⇒ v1alpha1.DefaultNamespace.
+	Namespace string
+	// KagentURL is the KAGENT_URL env value the agent process gets.
+	// "http://localhost" for local, "http://kagent-controller.kagent.svc
+	// .cluster.local" for in-cluster, etc.
+	KagentURL string
+	// DeploymentEnv is the raw Deployment.Spec.Env map pre-split — callers
+	// pass it as-is; SpecToPlatformAgent treats it as plain env overrides.
+	// Use SplitDeploymentRuntimeInputs upstream if the deployment encodes
+	// ARG_/HEADER_ prefixes.
+	DeploymentEnv map[string]string
+	// Getter resolves AgentSpec.MCPServers refs to v1alpha1.MCPServer objects.
+	Getter v1alpha1.GetterFunc
+}
+
+// SpecToPlatformAgent translates a v1alpha1 Agent envelope + Deployment
 // overrides into the platform-internal *platformtypes.Agent plus the set of
 // resolved MCPServers that should be deployed alongside it. Nested
-// AgentSpec.MCPServers refs are fetched via the supplied GetterFunc;
-// dangling refs surface as ErrDanglingRef.
-//
-// deploymentEnv carries Deployment.Spec.Env — per-deployment overrides that
-// beat AgentSpec and spec-embedded defaults. deploymentID is the
-// Deployment.Metadata.Name (used for per-deployment name disambiguation,
-// matching the legacy behavior).
-func specToPlatformAgent(
+// AgentSpec.MCPServers refs are fetched via opts.Getter; dangling refs
+// surface as v1alpha1.ErrDanglingRef.
+func SpecToPlatformAgent(
 	ctx context.Context,
 	agentMeta v1alpha1.ObjectMeta,
 	agentSpec v1alpha1.AgentSpec,
-	deploymentID string,
-	deploymentEnv map[string]string,
-	getter v1alpha1.GetterFunc,
+	opts AgentTranslateOpts,
 ) (*platformtypes.Agent, []*platformtypes.MCPServer, error) {
-	envValues := nonNilStringMap(deploymentEnv)
+	envValues := nonNilStringMap(opts.DeploymentEnv)
 	if envValues[constants.EnvKagentNamespace] == "" {
-		if agentMeta.Namespace != "" {
+		switch {
+		case opts.Namespace != "":
+			envValues[constants.EnvKagentNamespace] = opts.Namespace
+		case agentMeta.Namespace != "":
 			envValues[constants.EnvKagentNamespace] = agentMeta.Namespace
-		} else {
+		default:
 			envValues[constants.EnvKagentNamespace] = v1alpha1.DefaultNamespace
 		}
 	}
-	envValues[constants.EnvKagentURL] = "http://localhost"
+	if opts.KagentURL != "" {
+		envValues[constants.EnvKagentURL] = opts.KagentURL
+	}
 	envValues[constants.EnvKagentName] = agentMeta.Name
 	envValues[constants.EnvAgentName] = agentMeta.Name
 	envValues[constants.EnvModelProvider] = agentSpec.ModelProvider
@@ -92,10 +122,10 @@ func specToPlatformAgent(
 		if normalized.Namespace == "" {
 			normalized.Namespace = agentMeta.Namespace
 		}
-		if getter == nil {
+		if opts.Getter == nil {
 			return nil, nil, fmt.Errorf("spec.mcpServers[%d]: getter required to resolve ref", i)
 		}
-		obj, err := getter(ctx, normalized)
+		obj, err := opts.Getter(ctx, normalized)
 		if err != nil {
 			return nil, nil, fmt.Errorf("spec.mcpServers[%d] resolve %s/%s: %w", i, normalized.Namespace, normalized.Name, err)
 		}
@@ -103,12 +133,15 @@ func specToPlatformAgent(
 		if !ok || mcp == nil {
 			return nil, nil, fmt.Errorf("spec.mcpServers[%d]: getter returned unexpected type for %s/%s", i, normalized.Namespace, normalized.Name)
 		}
-		platformServer, err := specToPlatformMCPServer(ctx, mcp.Metadata, mcp.Spec, deploymentID, false, nil, nil, nil)
+		platformServer, err := SpecToPlatformMCPServer(ctx, mcp.Metadata, mcp.Spec, MCPServerTranslateOpts{
+			DeploymentID: opts.DeploymentID,
+			Namespace:    opts.Namespace,
+		})
 		if err != nil {
 			return nil, nil, fmt.Errorf("spec.mcpServers[%d]: %w", i, err)
 		}
 		resolvedServers = append(resolvedServers, platformServer)
-		resolvedConfigs = append(resolvedConfigs, mcpServerConfigFromSpec(mcp.Metadata.Name, mcp.Spec, deploymentID))
+		resolvedConfigs = append(resolvedConfigs, mcpServerConfigFromSpec(mcp.Metadata.Name, mcp.Spec, opts.DeploymentID))
 	}
 
 	if len(resolvedConfigs) > 0 {
@@ -122,22 +155,46 @@ func specToPlatformAgent(
 	agent := &platformtypes.Agent{
 		Name:         agentMeta.Name,
 		Version:      agentMeta.Version,
-		DeploymentID: deploymentID,
+		DeploymentID: opts.DeploymentID,
 		Deployment: platformtypes.AgentDeployment{
 			Image: agentSpec.Image,
 			Env:   envValues,
-			Port:  utils.DefaultLocalAgentPort,
+			Port:  DefaultLocalAgentPort,
 		},
 		ResolvedMCPServers: resolvedConfigs,
 	}
 	return agent, resolvedServers, nil
 }
 
-// mcpServerSpecToServerJSON projects a v1alpha1.MCPServer envelope onto the
-// apiv0.ServerJSON shape that utils.TranslateMCPServer consumes. The mapping
-// is one-to-one on every field the translator inspects (Name, Packages,
-// Remotes); other ServerJSON fields are populated where trivially available
-// so downstream logging remains meaningful.
+// SplitDeploymentRuntimeInputs splits a Deployment.Spec.Env map into env /
+// arg / header buckets via the legacy ARG_/HEADER_ prefix convention. Keeps
+// parity with splitDeploymentRuntimeInputs in deployment_adapter_utils.go so
+// legacy and v1alpha1 code paths produce identical runtime wiring.
+func SplitDeploymentRuntimeInputs(input map[string]string) (env, args, headers map[string]string) {
+	env = map[string]string{}
+	args = map[string]string{}
+	headers = map[string]string{}
+	for key, value := range input {
+		switch {
+		case strings.HasPrefix(key, "ARG_"):
+			if name := strings.TrimPrefix(key, "ARG_"); name != "" {
+				args[name] = value
+			}
+		case strings.HasPrefix(key, "HEADER_"):
+			if name := strings.TrimPrefix(key, "HEADER_"); name != "" {
+				headers[name] = value
+			}
+		default:
+			env[key] = value
+		}
+	}
+	return env, args, headers
+}
+
+// -----------------------------------------------------------------------------
+// Private projection helpers — v1alpha1 → apiv0.ServerJSON shape.
+// -----------------------------------------------------------------------------
+
 func mcpServerSpecToServerJSON(meta v1alpha1.ObjectMeta, spec v1alpha1.MCPServerSpec) *apiv0.ServerJSON {
 	out := &apiv0.ServerJSON{
 		Name:        meta.Name,
@@ -259,13 +316,13 @@ func mcpVariablesToModel(in map[string]v1alpha1.MCPInputVariable) map[string]mod
 	return out
 }
 
-// mcpServerConfigFromSpec builds the per-server entry injected into
-// MCP_SERVERS_CONFIG env var. Remote transport wins when the spec offers
-// one; otherwise we tag the entry as "command" for the agent process to
-// dial via the gateway.
+// mcpServerConfigFromSpec builds the per-server entry injected into the
+// MCP_SERVERS_CONFIG env var on the agent. Remote transport wins when the
+// spec offers one; otherwise we tag the entry as "command" for the agent
+// process to dial via the gateway.
 func mcpServerConfigFromSpec(name string, spec v1alpha1.MCPServerSpec, deploymentID string) platformtypes.ResolvedMCPServerConfig {
 	cfg := platformtypes.ResolvedMCPServerConfig{
-		Name: utils.GenerateInternalNameForDeployment(name, deploymentID),
+		Name: GenerateInternalNameForDeployment(name, deploymentID),
 		Type: "command",
 	}
 	if len(spec.Remotes) > 0 {
@@ -289,30 +346,4 @@ func nonNilStringMap(in map[string]string) map[string]string {
 	}
 	maps.Copy(out, in)
 	return out
-}
-
-// splitDeploymentRuntimeInputs splits Deployment.Spec.Env into env / arg /
-// header buckets via the legacy ARG_/HEADER_ prefix convention. Keeps parity
-// with the legacy utils.splitDeploymentRuntimeInputs so applying the same
-// Deployment through either code path produces the same docker-compose
-// output.
-func splitDeploymentRuntimeInputs(input map[string]string) (env, args, headers map[string]string) {
-	env = map[string]string{}
-	args = map[string]string{}
-	headers = map[string]string{}
-	for key, value := range input {
-		switch {
-		case strings.HasPrefix(key, "ARG_"):
-			if name := strings.TrimPrefix(key, "ARG_"); name != "" {
-				args[name] = value
-			}
-		case strings.HasPrefix(key, "HEADER_"):
-			if name := strings.TrimPrefix(key, "HEADER_"); name != "" {
-				headers[name] = value
-			}
-		default:
-			env[key] = value
-		}
-	}
-	return env, args, headers
 }

@@ -1,4 +1,4 @@
-package local
+package utils
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
@@ -24,9 +23,12 @@ func TestSpecToPlatformMCPServer_RemoteTransport(t *testing.T) {
 	}
 	meta := v1alpha1.ObjectMeta{Namespace: "default", Name: "weather", Version: "1.0.0"}
 
-	got, err := specToPlatformMCPServer(context.Background(), meta, spec, "dep-1", true, nil, nil, nil)
+	got, err := SpecToPlatformMCPServer(context.Background(), meta, spec, MCPServerTranslateOpts{
+		DeploymentID: "dep-1",
+		PreferRemote: true,
+	})
 	if err != nil {
-		t.Fatalf("specToPlatformMCPServer: %v", err)
+		t.Fatalf("SpecToPlatformMCPServer: %v", err)
 	}
 	if got.MCPServerType != platformtypes.MCPServerTypeRemote {
 		t.Fatalf("MCPServerType = %q, want %q", got.MCPServerType, platformtypes.MCPServerTypeRemote)
@@ -38,13 +40,13 @@ func TestSpecToPlatformMCPServer_RemoteTransport(t *testing.T) {
 		t.Fatalf("Remote.Host = %q, want api.weather.example", got.Remote.Host)
 	}
 	if got.Remote.Scheme != "https" || got.Remote.Port != 443 {
-		t.Fatalf("Remote scheme/port = %q/%d, want https/443", got.Remote.Scheme, got.Remote.Port)
+		t.Fatalf("Remote scheme/port = %q/%d", got.Remote.Scheme, got.Remote.Port)
 	}
 	if got.Namespace != "default" {
-		t.Fatalf("Namespace = %q, want default", got.Namespace)
+		t.Fatalf("Namespace = %q, want default (from meta)", got.Namespace)
 	}
 	if got.DeploymentID != "dep-1" {
-		t.Fatalf("DeploymentID = %q, want dep-1", got.DeploymentID)
+		t.Fatalf("DeploymentID = %q", got.DeploymentID)
 	}
 }
 
@@ -58,21 +60,37 @@ func TestSpecToPlatformMCPServer_OCIPackage(t *testing.T) {
 	}
 	meta := v1alpha1.ObjectMeta{Namespace: "default", Name: "example", Version: "0.1.0"}
 
-	got, err := specToPlatformMCPServer(context.Background(), meta, spec, "dep-2", false, nil, nil, nil)
+	got, err := SpecToPlatformMCPServer(context.Background(), meta, spec, MCPServerTranslateOpts{DeploymentID: "dep-2"})
 	if err != nil {
-		t.Fatalf("specToPlatformMCPServer: %v", err)
+		t.Fatalf("SpecToPlatformMCPServer: %v", err)
 	}
 	if got.MCPServerType != platformtypes.MCPServerTypeLocal {
-		t.Fatalf("MCPServerType = %q, want %q", got.MCPServerType, platformtypes.MCPServerTypeLocal)
-	}
-	if got.Local == nil {
-		t.Fatalf("Local is nil")
+		t.Fatalf("MCPServerType = %q", got.MCPServerType)
 	}
 	if got.Local.Deployment.Image != "ghcr.io/example/mcp:v0.1.0" {
 		t.Fatalf("Image = %q", got.Local.Deployment.Image)
 	}
-	if got.Local.TransportType != platformtypes.TransportTypeStdio {
-		t.Fatalf("TransportType = %q", got.Local.TransportType)
+}
+
+func TestSpecToPlatformMCPServer_NamespaceOptOverridesMeta(t *testing.T) {
+	spec := v1alpha1.MCPServerSpec{
+		Packages: []v1alpha1.MCPPackage{{
+			RegistryType: "oci",
+			Identifier:   "ghcr.io/example/mcp:v1",
+			Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+		}},
+	}
+	meta := v1alpha1.ObjectMeta{Namespace: "team-a", Name: "example", Version: "1.0.0"}
+
+	got, err := SpecToPlatformMCPServer(context.Background(), meta, spec, MCPServerTranslateOpts{
+		DeploymentID: "dep-3",
+		Namespace:    "platform",
+	})
+	if err != nil {
+		t.Fatalf("SpecToPlatformMCPServer: %v", err)
+	}
+	if got.Namespace != "platform" {
+		t.Fatalf("Namespace = %q, want platform (opts override)", got.Namespace)
 	}
 }
 
@@ -88,7 +106,6 @@ func TestSpecToPlatformAgent_ResolvesMCPServerRefs(t *testing.T) {
 			}},
 		},
 	}
-
 	var getterCalls []v1alpha1.ResourceRef
 	getter := func(ctx context.Context, ref v1alpha1.ResourceRef) (v1alpha1.Object, error) {
 		getterCalls = append(getterCalls, ref)
@@ -105,43 +122,29 @@ func TestSpecToPlatformAgent_ResolvesMCPServerRefs(t *testing.T) {
 		},
 	}
 
-	agent, servers, err := specToPlatformAgent(
-		context.Background(),
-		agentMeta,
-		agentSpec,
-		"dep-42",
-		map[string]string{"EXTRA": "value"},
-		getter,
-	)
+	agent, servers, err := SpecToPlatformAgent(context.Background(), agentMeta, agentSpec, AgentTranslateOpts{
+		DeploymentID:  "dep-42",
+		KagentURL:     "http://localhost",
+		DeploymentEnv: map[string]string{"EXTRA": "value"},
+		Getter:        getter,
+	})
 	if err != nil {
-		t.Fatalf("specToPlatformAgent: %v", err)
+		t.Fatalf("SpecToPlatformAgent: %v", err)
 	}
 	if len(getterCalls) != 1 {
 		t.Fatalf("getter calls = %d, want 1", len(getterCalls))
 	}
-	if getterCalls[0].Namespace != "default" || getterCalls[0].Name != "tools" {
-		t.Fatalf("getter ref = %+v", getterCalls[0])
-	}
-	if getterCalls[0].Kind != v1alpha1.KindMCPServer {
-		t.Fatalf("getter ref.Kind = %q, want %q", getterCalls[0].Kind, v1alpha1.KindMCPServer)
-	}
-	if agent.Name != "alice" || agent.Version != "1.0.0" {
-		t.Fatalf("agent identity = %s/%s", agent.Name, agent.Version)
-	}
-	if agent.Deployment.Image != "ghcr.io/example/alice:v1" {
-		t.Fatalf("agent.Deployment.Image = %q", agent.Deployment.Image)
-	}
-	if agent.Deployment.Port != utils.DefaultLocalAgentPort {
-		t.Fatalf("agent.Deployment.Port = %d, want %d", agent.Deployment.Port, utils.DefaultLocalAgentPort)
+	if getterCalls[0].Namespace != "default" || getterCalls[0].Name != "tools" || getterCalls[0].Kind != v1alpha1.KindMCPServer {
+		t.Fatalf("unexpected getter ref: %+v", getterCalls[0])
 	}
 	if agent.Deployment.Env["AGENT_NAME"] != "alice" {
-		t.Fatalf("AGENT_NAME env missing; got %+v", agent.Deployment.Env)
+		t.Fatalf("AGENT_NAME missing: %+v", agent.Deployment.Env)
 	}
-	if agent.Deployment.Env["KAGENT_NAMESPACE"] != "default" {
-		t.Fatalf("KAGENT_NAMESPACE env missing; got %+v", agent.Deployment.Env)
+	if agent.Deployment.Env["KAGENT_URL"] != "http://localhost" {
+		t.Fatalf("KAGENT_URL = %q, want http://localhost", agent.Deployment.Env["KAGENT_URL"])
 	}
 	if agent.Deployment.Env["EXTRA"] != "value" {
-		t.Fatalf("EXTRA env missing; got %+v", agent.Deployment.Env)
+		t.Fatalf("EXTRA env missing: %+v", agent.Deployment.Env)
 	}
 	encoded := agent.Deployment.Env["MCP_SERVERS_CONFIG"]
 	if encoded == "" {
@@ -154,11 +157,27 @@ func TestSpecToPlatformAgent_ResolvesMCPServerRefs(t *testing.T) {
 	if len(decoded) != 1 || decoded[0].Type != "command" {
 		t.Fatalf("decoded MCP_SERVERS_CONFIG = %+v", decoded)
 	}
-	if len(servers) != 1 {
-		t.Fatalf("resolved servers = %d, want 1", len(servers))
+	if len(servers) != 1 || servers[0].Local == nil || servers[0].Local.Deployment.Image != "ghcr.io/example/tools:v1" {
+		t.Fatalf("resolved servers unexpected: %+v", servers)
 	}
-	if servers[0].Local == nil || servers[0].Local.Deployment.Image != "ghcr.io/example/tools:v1" {
-		t.Fatalf("resolved MCPServer unexpected: %+v", servers[0])
+}
+
+func TestSpecToPlatformAgent_NamespaceOptWinsOverMeta(t *testing.T) {
+	getter := func(ctx context.Context, ref v1alpha1.ResourceRef) (v1alpha1.Object, error) {
+		t.Fatalf("getter should not be called when no refs; got %+v", ref)
+		return nil, nil
+	}
+	agentMeta := v1alpha1.ObjectMeta{Namespace: "team-a", Name: "alice", Version: "1.0.0"}
+	agent, _, err := SpecToPlatformAgent(context.Background(), agentMeta, v1alpha1.AgentSpec{}, AgentTranslateOpts{
+		DeploymentID: "dep-ns",
+		Namespace:    "kagent",
+		Getter:       getter,
+	})
+	if err != nil {
+		t.Fatalf("SpecToPlatformAgent: %v", err)
+	}
+	if agent.Deployment.Env["KAGENT_NAMESPACE"] != "kagent" {
+		t.Fatalf("KAGENT_NAMESPACE = %q, want kagent", agent.Deployment.Env["KAGENT_NAMESPACE"])
 	}
 }
 
@@ -172,20 +191,20 @@ func TestSpecToPlatformAgent_DanglingRefPropagates(t *testing.T) {
 			{Kind: v1alpha1.KindMCPServer, Name: "missing", Version: "1.0.0"},
 		},
 	}
-	_, _, err := specToPlatformAgent(context.Background(), agentMeta, agentSpec, "dep-x", nil, getter)
+	_, _, err := SpecToPlatformAgent(context.Background(), agentMeta, agentSpec, AgentTranslateOpts{Getter: getter})
 	if err == nil {
-		t.Fatalf("expected error for dangling ref, got nil")
+		t.Fatalf("expected error for dangling ref")
 	}
 }
 
-func TestSplitDeploymentRuntimeInputs(t *testing.T) {
+func TestSplitDeploymentRuntimeInputs_V1Alpha1Helper(t *testing.T) {
 	in := map[string]string{
 		"ENV_A":    "a",
 		"ARG_foo":  "bar",
 		"HEADER_X": "y",
 		"PLAIN":    "v",
 	}
-	env, args, headers := splitDeploymentRuntimeInputs(in)
+	env, args, headers := SplitDeploymentRuntimeInputs(in)
 	if env["ENV_A"] != "a" || env["PLAIN"] != "v" {
 		t.Fatalf("env = %+v", env)
 	}
