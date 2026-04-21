@@ -2,73 +2,37 @@
 package router
 
 import (
-	"net/http"
-
-	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
-
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
-	v0embeddings "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/embeddings"
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
 	v0ping "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/ping"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/resource"
 	v0version "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/version"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
-	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
-	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
-	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 	"github.com/agentregistry-dev/agentregistry/pkg/importer"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
-
-	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 )
-
-// RegistryServices bundles the per-domain service registries that the
-// remaining legacy handlers + deployment orchestration still require.
-// Every field here is a port target for the v1alpha1 cutover:
-//   - Server / Agent / Skill feed MCP registryserver tools (Group 9)
-//     and platform/utils deployment target lookups (Group 5).
-//   - Provider feeds the deployment service's platform selection.
-//   - Deployment still owns the SSE watch + logs + cancel RPCs (B1.f).
-type RegistryServices struct {
-	Server     serversvc.Registry
-	Agent      agentsvc.Registry
-	Skill      skillsvc.Registry
-	Provider   providersvc.Registry
-	Deployment deploymentsvc.Registry
-}
 
 // V1Alpha1Stores is the per-kind Store map used by the v1alpha1
 // resource handler, keyed by v1alpha1 Kind name (e.g. "Agent",
 // "MCPServer"). Produced by database.NewV1Alpha1Stores; enterprise
 // builds may extend the map with additional kinds before passing it
 // in.
-//
-// When non-nil on RouteOptions, RegisterRoutes wires the v1alpha1
-// generic handler at `/v0/namespaces/{ns}/{plural}/...` alongside the
-// legacy per-kind handlers at the unnamespaced `/v0/{plural}/...`
-// paths.
 type V1Alpha1Stores = map[string]*internaldb.Store
 
 // RouteOptions contains optional services for route registration.
 type RouteOptions struct {
-	Indexer    service.Indexer
-	JobManager *jobs.Manager
-	Mux        *http.ServeMux
-
-	// Optional provider adapters keyed by platform. Deployment adapters
-	// live on the coordinator below.
+	// ProviderPlatforms registers platform-side provider adapters keyed by
+	// platform string (enterprise extension point).
 	ProviderPlatforms map[string]registrytypes.ProviderPlatformAdapter
 
 	// V1Alpha1Stores, when non-empty, enables the generic v1alpha1 handler
-	// at `/v0/namespaces/{ns}/{plural}/...`. Legacy routes stay live
-	// regardless; clients migrate off them incrementally.
+	// at `/v0/namespaces/{ns}/{plural}/...`.
 	V1Alpha1Stores V1Alpha1Stores
 
 	// V1Alpha1Importer, when non-nil, enables POST /v0/import. Typically
@@ -93,7 +57,6 @@ type RouteOptions struct {
 func RegisterRoutes(
 	api huma.API,
 	cfg *config.Config,
-	svcs RegistryServices,
 	metrics *telemetry.Metrics,
 	versionInfo *apitypes.VersionBody,
 	opts *RouteOptions,
@@ -103,26 +66,17 @@ func RegisterRoutes(
 	v0health.RegisterHealthEndpoint(api, pathPrefix, cfg, metrics)
 	v0ping.RegisterPingEndpoint(api, pathPrefix)
 	v0version.RegisterVersionEndpoint(api, pathPrefix, versionInfo)
-	if opts != nil && opts.Indexer != nil && opts.JobManager != nil {
-		v0embeddings.RegisterEmbeddingsEndpoints(api, pathPrefix, opts.Indexer, opts.JobManager)
-		if opts.Mux != nil {
-			v0embeddings.RegisterEmbeddingsSSEHandler(opts.Mux, pathPrefix, opts.Indexer, opts.JobManager)
-		}
-	}
 
 	// v1alpha1 generic routes — wired when V1Alpha1Stores is provided.
-	// Lives alongside the legacy per-kind routes; clients migrate over
-	// time. Cross-kind dangling-ref detection uses a Store-backed
-	// resolver. Deployment reconciliation hooks plug in when the
-	// coordinator is supplied.
+	// Cross-kind dangling-ref detection uses a Store-backed resolver.
+	// Deployment reconciliation hooks plug in when the coordinator is
+	// supplied.
 	if opts != nil && len(opts.V1Alpha1Stores) > 0 {
 		registerV1Alpha1Routes(api, pathPrefix, opts.V1Alpha1Stores, opts.V1Alpha1DeploymentCoordinator)
 	}
 
 	// POST /v0/import — runs decoded manifests through the enrichment
 	// pipeline (validate + scanners + findings-write) before Upsert.
-	// Independent of V1Alpha1Stores wiring because enterprise builds
-	// may provide their own Importer.
 	if opts != nil && opts.V1Alpha1Importer != nil {
 		resource.RegisterImport(api, resource.ImportConfig{
 			BasePrefix: pathPrefix,
@@ -171,9 +125,7 @@ func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stor
 		})
 	}
 
-	// Multi-doc YAML batch apply at POST {basePrefix}/apply. Shares
-	// the same Stores map + Resolver + RegistryValidator + uniqueness
-	// checker — no second per-kind table here.
+	// Multi-doc YAML batch apply at POST {basePrefix}/apply.
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix:              basePrefix,
 		Stores:                  stores,

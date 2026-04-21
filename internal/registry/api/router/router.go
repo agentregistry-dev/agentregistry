@@ -133,7 +133,6 @@ func handle404(w http.ResponseWriter, r *http.Request) {
 // Note: authz is handled at the DB/service layer, not at the API layer.
 func NewHumaAPI(
 	cfg *config.Config,
-	svcs RegistryServices,
 	mux *http.ServeMux,
 	metrics *telemetry.Metrics,
 	versionInfo *apitypes.VersionBody,
@@ -203,13 +202,8 @@ func NewHumaAPI(
 		WithSkipPaths("/health", "/metrics", "/ping", "/docs", "/logging"),
 	))
 
-	// Set the mux on routeOpts for SSE handlers that need direct mux access
-	if routeOpts != nil {
-		routeOpts.Mux = mux
-	}
-
 	// Register all API routes under /v0
-	RegisterRoutes(api, cfg, svcs, metrics, versionInfo, routeOpts)
+	RegisterRoutes(api, cfg, metrics, versionInfo, routeOpts)
 
 	// Add /metrics for Prometheus metrics using promhttp
 	mux.Handle("/metrics", metrics.PrometheusHandler())

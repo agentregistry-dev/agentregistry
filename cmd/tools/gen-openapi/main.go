@@ -66,7 +66,7 @@ func generateSpec(apiVersion string) *huma.OpenAPI {
 	// Register all routes. Services and metrics are nil because they are only
 	// captured in handler closures and invoked at request time, not during
 	// route registration.
-	router.RegisterRoutes(api, cfg, router.RegistryServices{}, nil, nil, &router.RouteOptions{})
+	router.RegisterRoutes(api, cfg, nil, nil, &router.RouteOptions{})
 
 	return api.OpenAPI()
 }

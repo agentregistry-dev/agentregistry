@@ -15,7 +15,6 @@ import (
 
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
 )
 
 // Client is a lightweight API client for the agentregistry HTTP surface.
@@ -36,22 +35,6 @@ const (
 )
 
 type VersionBody = apitypes.VersionBody
-
-type deploymentRequest = apitypes.DeploymentRequest
-
-type IndexRequest = apitypes.IndexRequest
-
-type IndexJobResponse = apitypes.IndexJobResponse
-
-type JobProgress = apitypes.JobProgress
-
-type JobResult = apitypes.JobResult
-
-type JobStatusResponse = apitypes.JobStatusResponse
-
-type DeploymentResponse = models.Deployment
-
-type DeploymentsListResponse = apitypes.DeploymentsListResponse
 
 // ErrNotFound is returned by Get / GetLatest / Delete / PatchStatus when
 // the server responds with 404. Callers can errors.Is(err, ErrNotFound)
@@ -387,148 +370,3 @@ func (c *Client) applyBatch(ctx context.Context, method string, body []byte, opt
 }
 
 // =============================================================================
-// Deployment RPCs — still served by legacy /v0/deployments/* handlers
-// until Group 4 (deployment service v1alpha1 port) lands.
-// =============================================================================
-
-// GetDeployedServers retrieves all deployed servers.
-func (c *Client) GetDeployedServers() ([]*DeploymentResponse, error) {
-	req, err := c.newRequest(http.MethodGet, "/deployments")
-	if err != nil {
-		return nil, err
-	}
-	var resp DeploymentsListResponse
-	if err := c.doJSON(req, &resp); err != nil {
-		return nil, err
-	}
-	result := make([]*DeploymentResponse, len(resp.Deployments))
-	for i := range resp.Deployments {
-		result[i] = &resp.Deployments[i]
-	}
-	return result, nil
-}
-
-// GetDeployment retrieves a deployment by ID. Returns (nil, nil) on 404
-// to preserve the pre-refactor signature that some CLI callers use as
-// an existence check. New callers should prefer the Get path on the
-// generic v1alpha1 surface once Group 4 lands.
-func (c *Client) GetDeployment(id string) (*DeploymentResponse, error) {
-	encID := url.PathEscape(id)
-	req, err := c.newRequest(http.MethodGet, "/deployments/"+encID)
-	if err != nil {
-		return nil, err
-	}
-	var deployment DeploymentResponse
-	if err := c.doJSON(req, &deployment); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get deployment: %w", err)
-	}
-	return &deployment, nil
-}
-
-// DeployServer deploys a server with deployment environment variables.
-func (c *Client) DeployServer(name, version string, env map[string]string, preferRemote bool, providerID string) (*DeploymentResponse, error) {
-	if strings.TrimSpace(providerID) == "" {
-		providerID = defaultDeployProviderID
-	}
-	payload := deploymentRequest{
-		ServerName:   name,
-		Version:      version,
-		Env:          env,
-		PreferRemote: preferRemote,
-		ResourceType: "mcp",
-		ProviderID:   providerID,
-	}
-	var deployment DeploymentResponse
-	if err := c.doJsonRequest(http.MethodPost, "/deployments", payload, &deployment); err != nil {
-		return nil, err
-	}
-	return &deployment, nil
-}
-
-// DeployAgent deploys an agent with deployment environment variables.
-func (c *Client) DeployAgent(name, version string, env map[string]string, providerID string) (*DeploymentResponse, error) {
-	if strings.TrimSpace(providerID) == "" {
-		providerID = defaultDeployProviderID
-	}
-	payload := deploymentRequest{
-		ServerName:   name,
-		Version:      version,
-		Env:          env,
-		ResourceType: "agent",
-		ProviderID:   providerID,
-	}
-	var deployment DeploymentResponse
-	if err := c.doJsonRequest(http.MethodPost, "/deployments", payload, &deployment); err != nil {
-		return nil, err
-	}
-	return &deployment, nil
-}
-
-// DeleteDeployment removes a deployment by ID.
-func (c *Client) DeleteDeployment(id string) error {
-	encID := url.PathEscape(id)
-	req, err := c.newRequest(http.MethodDelete, "/deployments/"+encID)
-	if err != nil {
-		return err
-	}
-	return c.doJSON(req, nil)
-}
-
-// =============================================================================
-// Embeddings index — still served by legacy /v0/embeddings handlers until
-// Group 8 (indexer port) lands.
-// =============================================================================
-
-// SSEClient returns the HTTP client used for SSE requests. Timeout is
-// cleared to allow long-lived streams.
-func (c *Client) SSEClient() *http.Client {
-	return &http.Client{
-		Transport:     c.httpClient.Transport,
-		CheckRedirect: c.httpClient.CheckRedirect,
-		Jar:           c.httpClient.Jar,
-		Timeout:       0,
-	}
-}
-
-// NewSSERequest creates a request for streaming embedding indexing events.
-func (c *Client) NewSSERequest(ctx context.Context, reqBody IndexRequest) (*http.Request, error) {
-	req, err := c.newRequest(http.MethodPost, "/embeddings/index/stream")
-	if err != nil {
-		return nil, err
-	}
-	body, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal index request: %w", err)
-	}
-	req = req.WithContext(ctx)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "text/event-stream")
-	req.Body = io.NopCloser(bytes.NewReader(body))
-	return req, nil
-}
-
-// StartIndex starts a non-streaming indexing job.
-func (c *Client) StartIndex(req IndexRequest) (*IndexJobResponse, error) {
-	var resp IndexJobResponse
-	if err := c.doJsonRequest(http.MethodPost, "/embeddings/index", req, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
-}
-
-// GetIndexStatus fetches indexing job status by job ID.
-func (c *Client) GetIndexStatus(jobID string) (*JobStatusResponse, error) {
-	encJobID := url.PathEscape(jobID)
-	req, err := c.newRequest(http.MethodGet, "/embeddings/index/"+encJobID)
-	if err != nil {
-		return nil, err
-	}
-	var resp JobStatusResponse
-	if err := c.doJSON(req, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
-}

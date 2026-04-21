@@ -21,17 +21,10 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/kubernetes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/local"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
-	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
-	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
-	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
-	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
@@ -125,35 +118,10 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		}
 	}()
 
-	var embeddingProvider embeddings.Provider
 	if cfg.Embeddings.Enabled {
-		client := &http.Client{Timeout: 30 * time.Second}
-		if provider, err := embeddings.Factory(&cfg.Embeddings, client); err != nil {
-			slog.Warn("semantic embeddings disabled", "error", err)
-		} else {
-			embeddingProvider = provider
-		}
+		slog.Warn("semantic embeddings disabled: indexer + provider stack retired pending Group 8 v1alpha1 port")
 	}
 
-	serverService := serversvc.New(serversvc.Dependencies{
-		Servers:            db.Servers(),
-		Tx:                 db,
-		Config:             cfg,
-		EmbeddingsProvider: embeddingProvider,
-	})
-	agentService := agentsvc.New(agentsvc.Dependencies{
-		Agents:             db.Agents(),
-		Skills:             db.Skills(),
-		Prompts:            db.Prompts(),
-		Tx:                 db,
-		Config:             cfg,
-		EmbeddingsProvider: embeddingProvider,
-	})
-	providerService := providersvc.New(providersvc.Dependencies{
-		StoreDB:           db,
-		ProviderPlatforms: options.ProviderPlatforms,
-	})
-	providerPlatforms := providerService.PlatformAdapters()
 	// v1alpha1 DeploymentAdapter map consumed by the coordinator below.
 	// Built OSS-side from the local + kubernetes ports; enterprise extends
 	// via AppOptions.DeploymentAdapters.
@@ -162,12 +130,6 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		"kubernetes": kubernetes.NewKubernetesDeploymentAdapter(),
 	}
 	maps.Copy(v1alpha1Adapters, options.DeploymentAdapters)
-	skillService := skillsvc.New(skillsvc.Dependencies{Skills: db.Skills(), Tx: db})
-	deploymentService := deploymentsvc.New(deploymentsvc.Dependencies{
-		StoreDB:     db,
-		Deployments: db.Deployments(),
-		Providers:   providerService,
-	})
 	// Set up the v1alpha1 Stores + Importer bundle early so both the
 	// seed goroutine below and the HTTP router later can use them.
 	// Skipped for backends (noop / tests) that don't expose a
@@ -262,7 +224,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	}()
 
 	routeOpts := &router.RouteOptions{
-		ProviderPlatforms: providerPlatforms,
+		ProviderPlatforms: options.ProviderPlatforms,
 		ExtraRoutes:       options.ExtraRoutes,
 	}
 
@@ -284,23 +246,8 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		})
 	}
 
-	// Initialize job manager and indexer for embeddings.
-	if cfg.Embeddings.Enabled && embeddingProvider != nil {
-		jobManager := jobs.NewManager()
-		indexer := service.NewIndexer(serverService, agentService, embeddingProvider, cfg.Embeddings.Dimensions)
-		routeOpts.Indexer = indexer
-		routeOpts.JobManager = jobManager
-		slog.Info("embeddings indexing API enabled")
-	}
-
 	// Initialize HTTP server
-	baseServer := api.NewServer(cfg, router.RegistryServices{
-		Server:     serverService,
-		Agent:      agentService,
-		Skill:      skillService,
-		Provider:   providerService,
-		Deployment: deploymentService,
-	}, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts)
+	baseServer := api.NewServer(cfg, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts)
 
 	var server types.Server
 	if options.HTTPServerFactory != nil {

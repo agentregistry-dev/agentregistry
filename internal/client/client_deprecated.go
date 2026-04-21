@@ -131,3 +131,33 @@ func (*Client) GetProvider(string) (*models.Provider, error) {
 func (*Client) DeleteProvider(string) error {
 	return errDeprecatedImperative
 }
+
+// --- Deployment legacy shape ---
+//
+// Deployment-side imperative client methods are retired alongside the
+// legacy /v0/deployments endpoints (Group 5.f). Remaining callers live
+// in the imperative CLI which is being replaced by a declarative-only
+// CLI on a separate branch; stubs keep the build green until that
+// branch merges.
+
+type DeploymentResponse = models.Deployment
+
+func (*Client) GetDeployedServers() ([]*DeploymentResponse, error) {
+	return nil, errDeprecatedImperative
+}
+
+func (*Client) GetDeployment(string) (*DeploymentResponse, error) {
+	return nil, errDeprecatedImperative
+}
+
+func (*Client) DeployServer(string, string, map[string]string, bool, string) (*DeploymentResponse, error) {
+	return nil, errDeprecatedImperative
+}
+
+func (*Client) DeployAgent(string, string, map[string]string, string) (*DeploymentResponse, error) {
+	return nil, errDeprecatedImperative
+}
+
+func (*Client) DeleteDeployment(string) error {
+	return errDeprecatedImperative
+}
