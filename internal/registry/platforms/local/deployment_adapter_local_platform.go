@@ -14,10 +14,8 @@ import (
 
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	platformutils "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
-	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"go.yaml.in/yaml/v3"
 )
@@ -500,19 +498,6 @@ func defaultAgentPort(agent *platformtypes.Agent) uint16 {
 		return platformutils.DefaultLocalAgentPort
 	}
 	return agent.Deployment.Port
-}
-
-func mustAgentManifest(
-	ctx context.Context,
-	agentService agentsvc.Registry,
-	deployment *models.Deployment,
-) *models.AgentManifest {
-	agentResp, err := agentService.GetAgentVersion(ctx, deployment.ServerName, deployment.Version)
-	if err != nil {
-		return nil
-	}
-	manifestCopy := agentResp.Agent.AgentManifest
-	return &manifestCopy
 }
 
 func extractServiceNames(config *platformtypes.LocalPlatformConfig) []string {

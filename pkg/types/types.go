@@ -30,18 +30,6 @@ type ProviderPlatformAdapter interface {
 	DeleteProvider(ctx context.Context, providerID string) error
 }
 
-// DeploymentPlatformAdapter defines deployment behavior for a provider platform type.
-// This is the intended long-term adapter contract for /v0/deployments dispatch.
-type DeploymentPlatformAdapter interface {
-	Platform() string
-	SupportedResourceTypes() []string
-	Deploy(ctx context.Context, req *models.Deployment) (*models.DeploymentActionResult, error)
-	Undeploy(ctx context.Context, deployment *models.Deployment) error
-	GetLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
-	Cancel(ctx context.Context, deployment *models.Deployment) error
-	LegacyDiscover(ctx context.Context, providerID string) ([]*models.Deployment, error)
-}
-
 // DatabaseFactory is a function type that creates a store implementation.
 // This allows implementors to run additional migrations and wrap the base store.
 type DatabaseFactory func(ctx context.Context, databaseURL string, baseStore database.Store, authz auth.Authorizer) (database.Store, error)
@@ -60,8 +48,11 @@ type AppOptions struct {
 	// ProviderPlatforms registers adapters for provider CRUD by provider platform type.
 	ProviderPlatforms map[string]ProviderPlatformAdapter
 
-	// DeploymentPlatforms registers adapters for deployment lifecycle by provider platform type.
-	DeploymentPlatforms map[string]DeploymentPlatformAdapter
+	// DeploymentAdapters registers v1alpha1 DeploymentAdapter implementations
+	// keyed by Provider.Spec.Platform ("local", "kubernetes", ...). The
+	// reconciler/coordinator looks up by platform string; enterprise builds
+	// inject additional adapters here.
+	DeploymentAdapters map[string]DeploymentAdapter
 
 	// ExtraRoutes allows external integrations to register additional HTTP routes
 	// using the same API instance and path prefix as OSS core routes.

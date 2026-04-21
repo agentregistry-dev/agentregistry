@@ -4,11 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"maps"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	"github.com/agentregistry-dev/agentregistry/internal/constants"
@@ -800,74 +798,4 @@ func kubernetesDeleteMCPResourcesByDeploymentID(ctx context.Context, c client.Cl
 		}
 	}
 	return nil
-}
-
-func kubernetesDiscoverDeployments(ctx context.Context, provider *models.Provider) ([]*models.Deployment, error) {
-	providerID := defaultKubernetesProviderID
-	if provider != nil && strings.TrimSpace(provider.ID) != "" {
-		providerID = strings.TrimSpace(provider.ID)
-	}
-	namespace := kubernetesProviderNamespace(provider)
-
-	isManaged := func(labels map[string]string) bool {
-		return labels != nil && labels[kubernetesManagedLabelKey] == "true"
-	}
-
-	discovered := make([]*models.Deployment, 0)
-	appendResource := func(resType, name, resourceNamespace string, labels map[string]string, creation time.Time) {
-		if isManaged(labels) {
-			return
-		}
-		resourceType := "agent"
-		if resType == "mcpserver" || resType == "remotemcpserver" {
-			resourceType = "mcp"
-		}
-		preferRemote := resType == "remotemcpserver"
-		meta, _ := models.UnmarshalFrom(models.KubernetesProviderMetadata{
-			IsExternal: true,
-			Namespace:  resourceNamespace,
-		})
-		discovered = append(discovered, &models.Deployment{
-			ServerName:       name,
-			Version:          "unknown",
-			DeployedAt:       creation,
-			UpdatedAt:        creation,
-			Status:           models.DeploymentStatusDeployed,
-			Origin:           "discovered",
-			ProviderID:       providerID,
-			ResourceType:     resourceType,
-			PreferRemote:     preferRemote,
-			Env:              labels,
-			ProviderMetadata: meta,
-		})
-	}
-
-	agents, err := kubernetesListAgents(ctx, provider, namespace)
-	if err != nil {
-		log.Printf("Warning: failed to list kubernetes agents for discovery: %v", err)
-	} else {
-		for _, agent := range agents {
-			appendResource("agent", agent.Name, agent.Namespace, agent.Labels, agent.CreationTimestamp.Time)
-		}
-	}
-
-	mcpServers, err := kubernetesListMCPServers(ctx, provider, namespace)
-	if err != nil {
-		log.Printf("Warning: failed to list kubernetes MCP servers for discovery: %v", err)
-	} else {
-		for _, mcp := range mcpServers {
-			appendResource("mcpserver", mcp.Name, mcp.Namespace, mcp.Labels, mcp.CreationTimestamp.Time)
-		}
-	}
-
-	remoteMCPs, err := kubernetesListRemoteMCPServers(ctx, provider, namespace)
-	if err != nil {
-		log.Printf("Warning: failed to list kubernetes remote MCP servers for discovery: %v", err)
-	} else {
-		for _, remote := range remoteMCPs {
-			appendResource("remotemcpserver", remote.Name, remote.Namespace, remote.Labels, remote.CreationTimestamp.Time)
-		}
-	}
-
-	return discovered, nil
 }

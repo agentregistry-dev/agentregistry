@@ -8,7 +8,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
-	v0deployments "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deployments"
 	v0embeddings "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/embeddings"
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
 	v0ping "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/ping"
@@ -63,9 +62,9 @@ type RouteOptions struct {
 	JobManager *jobs.Manager
 	Mux        *http.ServeMux
 
-	// Optional deployment adapters keyed by provider platform type.
-	ProviderPlatforms   map[string]registrytypes.ProviderPlatformAdapter
-	DeploymentPlatforms map[string]registrytypes.DeploymentPlatformAdapter
+	// Optional provider adapters keyed by platform. Deployment adapters
+	// live on the coordinator below.
+	ProviderPlatforms map[string]registrytypes.ProviderPlatformAdapter
 
 	// V1Alpha1Stores, when non-empty, enables the generic v1alpha1 handler
 	// at `/v0/namespaces/{ns}/{plural}/...`. Legacy routes stay live
@@ -104,10 +103,6 @@ func RegisterRoutes(
 	v0health.RegisterHealthEndpoint(api, pathPrefix, cfg, metrics)
 	v0ping.RegisterPingEndpoint(api, pathPrefix)
 	v0version.RegisterVersionEndpoint(api, pathPrefix, versionInfo)
-	// Legacy deployment RPC endpoints (SSE watch, logs, cancel) still
-	// served until B1.f / Group 4 deployment service port.
-	v0deployments.RegisterDeploymentsEndpoints(api, pathPrefix, svcs.Deployment)
-
 	if opts != nil && opts.Indexer != nil && opts.JobManager != nil {
 		v0embeddings.RegisterEmbeddingsEndpoints(api, pathPrefix, opts.Indexer, opts.JobManager)
 		if opts.Mux != nil {

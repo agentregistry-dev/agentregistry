@@ -29,7 +29,7 @@ func TestV1Alpha1Apply_MCPServerTarget_WritesComposeAndMarksProgressing(t *testi
 	}
 	runLocalComposeDown = func(context.Context, string, bool) error { return nil }
 
-	adapter := NewLocalDeploymentAdapter(nil, nil, tmpDir, 21212)
+	adapter := NewLocalDeploymentAdapter(tmpDir, 21212)
 
 	target := &v1alpha1.MCPServer{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},
@@ -117,7 +117,7 @@ func TestV1Alpha1Remove_ClearsFinalizerAndCallsComposeDown(t *testing.T) {
 		return nil
 	}
 
-	adapter := NewLocalDeploymentAdapter(nil, nil, tmpDir, 21212)
+	adapter := NewLocalDeploymentAdapter(tmpDir, 21212)
 
 	deployment := &v1alpha1.Deployment{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
@@ -142,7 +142,7 @@ func TestV1Alpha1Remove_ClearsFinalizerAndCallsComposeDown(t *testing.T) {
 }
 
 func TestV1Alpha1SupportedTargetKinds(t *testing.T) {
-	adapter := NewLocalDeploymentAdapter(nil, nil, t.TempDir(), 21212)
+	adapter := NewLocalDeploymentAdapter(t.TempDir(), 21212)
 	kinds := adapter.SupportedTargetKinds()
 	want := map[string]bool{v1alpha1.KindAgent: false, v1alpha1.KindMCPServer: false}
 	for _, k := range kinds {
@@ -158,7 +158,7 @@ func TestV1Alpha1SupportedTargetKinds(t *testing.T) {
 }
 
 func TestV1Alpha1Logs_ReturnsClosedChannel(t *testing.T) {
-	adapter := NewLocalDeploymentAdapter(nil, nil, t.TempDir(), 21212)
+	adapter := NewLocalDeploymentAdapter(t.TempDir(), 21212)
 	ch, err := adapter.Logs(context.Background(), types.LogsInput{})
 	if err != nil {
 		t.Fatalf("Logs: %v", err)

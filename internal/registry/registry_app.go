@@ -154,19 +154,19 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		ProviderPlatforms: options.ProviderPlatforms,
 	})
 	providerPlatforms := providerService.PlatformAdapters()
-	deploymentPlatforms := map[string]types.DeploymentPlatformAdapter{
-		"local":      local.NewLocalDeploymentAdapter(serverService, agentService, cfg.RuntimeDir, cfg.AgentGatewayPort),
-		"kubernetes": kubernetes.NewKubernetesDeploymentAdapter(providerService, serverService, agentService),
+	// v1alpha1 DeploymentAdapter map consumed by the coordinator below.
+	// Built OSS-side from the local + kubernetes ports; enterprise extends
+	// via AppOptions.DeploymentAdapters.
+	v1alpha1Adapters := map[string]types.DeploymentAdapter{
+		"local":      local.NewLocalDeploymentAdapter(cfg.RuntimeDir, cfg.AgentGatewayPort),
+		"kubernetes": kubernetes.NewKubernetesDeploymentAdapter(),
 	}
-	maps.Copy(deploymentPlatforms, options.DeploymentPlatforms)
+	maps.Copy(v1alpha1Adapters, options.DeploymentAdapters)
 	skillService := skillsvc.New(skillsvc.Dependencies{Skills: db.Skills(), Tx: db})
 	deploymentService := deploymentsvc.New(deploymentsvc.Dependencies{
-		StoreDB:            db,
-		Deployments:        db.Deployments(),
-		Providers:          providerService,
-		Servers:            serverService,
-		Agents:             agentService,
-		DeploymentAdapters: deploymentPlatforms,
+		StoreDB:     db,
+		Deployments: db.Deployments(),
+		Providers:   providerService,
 	})
 	// Set up the v1alpha1 Stores + Importer bundle early so both the
 	// seed goroutine below and the HTTP router later can use them.
@@ -262,9 +262,8 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	}()
 
 	routeOpts := &router.RouteOptions{
-		ProviderPlatforms:   providerPlatforms,
-		DeploymentPlatforms: deploymentPlatforms,
-		ExtraRoutes:         options.ExtraRoutes,
+		ProviderPlatforms: providerPlatforms,
+		ExtraRoutes:       options.ExtraRoutes,
 	}
 
 	// Reuse the v1alpha1 bundle constructed before the seed goroutines.
@@ -276,18 +275,8 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 
 	// Coordinator drives post-persist adapter dispatch for the
 	// Deployment kind. Built only when v1alpha1 stores exist (no pool
-	// ⇒ no Deployment table ⇒ no coordinator). Reuses the same adapter
-	// instances registered for the legacy path — local + kubernetes
-	// both satisfy types.DeploymentAdapter alongside the legacy
-	// registrytypes.DeploymentPlatformAdapter during the Group 5
-	// coexistence window.
+	// ⇒ no Deployment table ⇒ no coordinator).
 	if v1alpha1Stores != nil {
-		v1alpha1Adapters := map[string]types.DeploymentAdapter{}
-		for platform, adapter := range deploymentPlatforms {
-			if v1 := toV1Alpha1Adapter(adapter); v1 != nil {
-				v1alpha1Adapters[platform] = v1
-			}
-		}
 		routeOpts.V1Alpha1DeploymentCoordinator = deploymentsvc.NewV1Alpha1Coordinator(deploymentsvc.V1Alpha1Dependencies{
 			Stores:   v1alpha1Stores,
 			Adapters: v1alpha1Adapters,
@@ -447,17 +436,4 @@ func runSeedFromImport(cfg *config.Config, v1alpha1Importer *pkgimporter.Importe
 	slog.Info("v1alpha1 import complete",
 		"seed_from", cfg.SeedFrom,
 		"total", len(results), "failed", failed)
-}
-
-// toV1Alpha1Adapter narrows a legacy DeploymentPlatformAdapter to the
-// v1alpha1 DeploymentAdapter interface via a type assertion. Both local
-// and kubernetes adapters satisfy both interfaces during the Group 5
-// transition — enterprise adapters that only implement the legacy
-// interface return nil here and are simply not registered with the
-// coordinator.
-func toV1Alpha1Adapter(adapter types.DeploymentPlatformAdapter) types.DeploymentAdapter {
-	if v1, ok := adapter.(types.DeploymentAdapter); ok {
-		return v1
-	}
-	return nil
 }

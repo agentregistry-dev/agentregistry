@@ -62,7 +62,7 @@ func TestK8sV1Alpha1Apply_MCPServerTarget_CreatesResource(t *testing.T) {
 		},
 	}
 
-	adapter := NewKubernetesDeploymentAdapter(nil, nil, nil)
+	adapter := NewKubernetesDeploymentAdapter()
 	res, err := adapter.Apply(context.Background(), adapterpkgtypes.ApplyInput{
 		Deployment: deployment,
 		Target:     target,
@@ -113,7 +113,7 @@ func TestK8sV1Alpha1Remove_DeletesResourcesByDeploymentID(t *testing.T) {
 	}
 	fakeClient := withFakeKubeClient(t, seedAgent, seedMCP)
 
-	adapter := NewKubernetesDeploymentAdapter(nil, nil, nil)
+	adapter := NewKubernetesDeploymentAdapter()
 
 	provider := &v1alpha1.Provider{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "kube-local", Version: "1"},
@@ -148,7 +148,7 @@ func TestK8sV1Alpha1Remove_DeletesResourcesByDeploymentID(t *testing.T) {
 }
 
 func TestK8sV1Alpha1SupportedTargetKinds(t *testing.T) {
-	adapter := NewKubernetesDeploymentAdapter(nil, nil, nil)
+	adapter := NewKubernetesDeploymentAdapter()
 	kinds := adapter.SupportedTargetKinds()
 	want := map[string]bool{v1alpha1.KindAgent: false, v1alpha1.KindMCPServer: false}
 	for _, k := range kinds {
@@ -176,7 +176,7 @@ func TestK8sV1Alpha1Discover_SkipsManagedResources(t *testing.T) {
 	}
 	withFakeKubeClient(t, unmanaged, managed)
 
-	adapter := NewKubernetesDeploymentAdapter(nil, nil, nil)
+	adapter := NewKubernetesDeploymentAdapter()
 	provider := &v1alpha1.Provider{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "kube-local", Version: "1"},
 		Spec:     v1alpha1.ProviderSpec{Platform: v1alpha1.PlatformKubernetes, Config: map[string]any{"namespace": "kagent"}},
@@ -197,7 +197,7 @@ func TestK8sV1Alpha1Discover_SkipsManagedResources(t *testing.T) {
 }
 
 func TestK8sV1Alpha1Logs_ReturnsClosedChannel(t *testing.T) {
-	adapter := NewKubernetesDeploymentAdapter(nil, nil, nil)
+	adapter := NewKubernetesDeploymentAdapter()
 	ch, err := adapter.Logs(context.Background(), adapterpkgtypes.LogsInput{})
 	if err != nil {
 		t.Fatalf("Logs: %v", err)

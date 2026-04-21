@@ -362,19 +362,17 @@ type getDeploymentArgs struct {
 	ID string `json:"id"`
 }
 
-type deployToolArgs struct {
-	ServerName   string            `json:"serverName" required:"true"`
-	Version      string            `json:"version" required:"true"`
-	Env          map[string]string `json:"env,omitempty"`
-	PreferRemote bool              `json:"preferRemote,omitempty"`
-	ProviderID   string            `json:"providerId,omitempty"`
-}
-
 type deploymentsResponse struct {
 	Deployments []models.Deployment `json:"deployments"`
 	Count       int                 `json:"count"`
 }
 
+// addDeploymentTools exposes the surviving read-only deployment tools.
+// deploy_server / deploy_agent / remove_deployment were retired alongside
+// the legacy deployment service during Group 5.f — clients drive
+// deployments through the v1alpha1 apply surface at
+// /v0/namespaces/.../deployments/... now. The MCP deploy-equivalents
+// return as part of Group 9 when the whole bridge ports to v1alpha1.
 func addDeploymentTools(server *mcp.Server, registry deploymentsvc.Registry) {
 	// List deployments
 	mcp.AddTool(server, &mcp.Tool{
@@ -415,64 +413,6 @@ func addDeploymentTools(server *mcp.Server, registry deploymentsvc.Registry) {
 			return nil, models.Deployment{}, err
 		}
 		return nil, *deployment, nil
-	})
-
-	// Deploy server
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "deploy_server",
-		Description: "Deploy a server by name/version with optional config",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, args deployToolArgs) (*mcp.CallToolResult, models.Deployment, error) {
-		if args.ServerName == "" || args.Version == "" {
-			return nil, models.Deployment{}, errors.New("name and version are required")
-		}
-
-		providerID := args.ProviderID
-		if providerID == "" {
-			providerID = "local"
-		}
-		deployment, err := registry.DeployServer(ctx, args.ServerName, args.Version, args.Env, args.PreferRemote, providerID)
-		if err != nil {
-			return nil, models.Deployment{}, err
-		}
-		return nil, *deployment, nil
-	})
-
-	// Deploy agent
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "deploy_agent",
-		Description: "Deploy an agent by name/version with optional config",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, args deployToolArgs) (*mcp.CallToolResult, models.Deployment, error) {
-		if args.ServerName == "" || args.Version == "" {
-			return nil, models.Deployment{}, errors.New("name and version are required")
-		}
-
-		providerID := args.ProviderID
-		if providerID == "" {
-			providerID = "local"
-		}
-		deployment, err := registry.DeployAgent(ctx, args.ServerName, args.Version, args.Env, args.PreferRemote, providerID)
-		if err != nil {
-			return nil, models.Deployment{}, err
-		}
-		return nil, *deployment, nil
-	})
-
-	// Remove deployment
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "remove_deployment",
-		Description: "Remove a deployment by ID",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, args getDeploymentArgs) (*mcp.CallToolResult, map[string]string, error) {
-		if args.ID == "" {
-			return nil, nil, errors.New("id is required")
-		}
-		deployment, err := registry.GetDeployment(ctx, args.ID)
-		if err != nil {
-			return nil, nil, err
-		}
-		if err := registry.UndeployDeployment(ctx, deployment); err != nil {
-			return nil, nil, err
-		}
-		return nil, map[string]string{"status": "deleted"}, nil
 	})
 }
 
