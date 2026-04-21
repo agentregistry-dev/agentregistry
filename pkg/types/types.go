@@ -119,16 +119,16 @@ type DaemonManager interface {
 	Purge() error
 }
 
-// CLIAuthnProvider provides authentication for CLI commands.
-// External libraries can implement this to support different auth mechanisms
-type CLIAuthnProvider interface {
-	// Authenticate returns credentials for API calls.
-	Authenticate(ctx context.Context) (token string, err error)
+// CLITokenProvider provides tokens for CLI commands.
+// External libraries can implement this to support fetching tokens from defined sources
+type CLITokenProvider interface {
+	// Token returns token for API calls.
+	Token(ctx context.Context) (token string, err error)
 }
 
-// CLIAuthnProviderFactory is a function type that creates a CLI authentication provider.
+// CLITokenProviderFactory is a function type that creates a CLI token provider.
 // The factory optionally receives the root command, which can be used to access command-specific configuration (e.g. flags).
-type CLIAuthnProviderFactory func(root *cobra.Command) (CLIAuthnProvider, error)
+type CLITokenProviderFactory func(root *cobra.Command) (CLITokenProvider, error)
 
 // HTTPServerFactory is a function type that creates a server implementation that
 // adds new API routes and handlers.

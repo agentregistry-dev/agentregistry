@@ -103,6 +103,57 @@ func TestPreRunBehavior(t *testing.T) {
 	}
 }
 
+func TestShouldSkipTokenResolution(t *testing.T) {
+	root := &cobra.Command{Use: "arctl"}
+
+	// Command with annotation
+	annotatedCmd := &cobra.Command{
+		Use:         "no-auth-cmd",
+		Annotations: map[string]string{AnnotationSkipTokenResolution: "true"},
+	}
+	// Child inherits from annotated parent
+	childOfAnnotated := &cobra.Command{Use: "child"}
+	annotatedCmd.AddCommand(childOfAnnotated)
+
+	// Child explicitly opts back in to resolving token (overrides parent)
+	childOptIn := &cobra.Command{
+		Use:         "secure-child",
+		Annotations: map[string]string{AnnotationSkipTokenResolution: "false"},
+	}
+	annotatedCmd.AddCommand(childOptIn)
+
+	// Grandchild of opt-in child (no annotation — inherits "false" from childOptIn)
+	grandchild := &cobra.Command{Use: "grandchild"}
+	childOptIn.AddCommand(grandchild)
+
+	// Command without annotation
+	normalCmd := &cobra.Command{Use: "normal-cmd"}
+
+	root.AddCommand(annotatedCmd, normalCmd)
+
+	tests := []struct {
+		name     string
+		cmd      *cobra.Command
+		wantSkip bool
+	}{
+		{"annotated command", annotatedCmd, true},
+		{"child inherits from annotated parent", childOfAnnotated, true},
+		{"child overrides parent with false", childOptIn, false},
+		{"grandchild inherits false from nearest parent", grandchild, false},
+		{"command without annotation", normalCmd, false},
+		{"root command", root, false},
+		{"nil command", nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shouldSkipTokenResolution(tt.cmd)
+			if got != tt.wantSkip {
+				t.Errorf("shouldSkipTokenResolution() = %v, want %v", got, tt.wantSkip)
+			}
+		})
+	}
+}
+
 func TestResolveRegistryTarget(t *testing.T) {
 	env := map[string]string{
 		"ARCTL_API_BASE_URL": "http://env.example.com",
@@ -175,7 +226,7 @@ func TestPreRunSetup(t *testing.T) {
 		return client.NewClient(u, tok), nil
 	}
 
-	// Use a dummy command for testing, since some code paths may access cmd.Root() for authn provider
+	// Use a dummy command for testing, since some code paths may access cmd.Root() for token provider
 	mockCmd := &cobra.Command{Use: "test"}
 
 	oldOpts := cliOptions
@@ -194,14 +245,14 @@ func TestPreRunSetup(t *testing.T) {
 		}
 	})
 
-	t.Run("authn_provider_supplies_token", func(t *testing.T) {
-		var mockAuthnProviderFactory = func(_ *cobra.Command) (types.CLIAuthnProvider, error) {
-			return &mockAuthnProvider{token: "authn-token"}, nil
+	t.Run("token_provider_supplies_token", func(t *testing.T) {
+		var mockTokenProviderFactory = func(_ *cobra.Command) (types.CLITokenProvider, error) {
+			return &mockTokenProvider{token: "authn-token"}, nil
 		}
 
 		var authnToken string
 		Configure(CLIOptions{
-			AuthnProviderFactory: mockAuthnProviderFactory,
+			TokenProviderFactory: mockTokenProviderFactory,
 			ClientFactory: func(_ context.Context, u, tok string) (*client.Client, error) {
 				authnToken = tok
 				return dummyClient, nil
@@ -214,27 +265,95 @@ func TestPreRunSetup(t *testing.T) {
 			t.Fatalf("preRunSetup: %v", err)
 		}
 		if authnToken != "authn-token" {
-			t.Errorf("expected token from AuthnProvider, got %q", authnToken)
+			t.Errorf("expected token from TokenProvider, got %q", authnToken)
 		}
 	})
 
-	t.Run("authn_provider_error", func(t *testing.T) {
-		authnErr := errors.New("auth failed")
-		var mockAuthnProviderFactory = func(_ *cobra.Command) (types.CLIAuthnProvider, error) {
-			return &mockAuthnProvider{err: authnErr}, nil
+	t.Run("skip_token_resolution_annotation_skips_token_resolution", func(t *testing.T) {
+		tokenResolutionCalled := false
+		var mockTokenProviderFactory = func(_ *cobra.Command) (types.CLITokenProvider, error) {
+			tokenResolutionCalled = true
+			return &mockTokenProvider{token: "should-not-be-used"}, nil
+		}
+
+		var clientToken string
+		Configure(CLIOptions{
+			TokenProviderFactory: mockTokenProviderFactory,
+			ClientFactory: func(_ context.Context, u, tok string) (*client.Client, error) {
+				clientToken = tok
+				return client.NewClient(u, tok), nil
+			},
+		})
+		defer func() { Configure(oldOpts) }()
+
+		annotatedCmd := &cobra.Command{
+			Use:         "skip-auth",
+			Annotations: map[string]string{AnnotationSkipTokenResolution: "true"},
+		}
+
+		c, err := preRunSetup(ctx, annotatedCmd, baseURL, "")
+		if err != nil {
+			t.Fatalf("preRunSetup: %v", err)
+		}
+		if c == nil {
+			t.Fatal("preRunSetup: expected client")
+		}
+		if tokenResolutionCalled {
+			t.Error("expected token provider to NOT be called when SkipTokenResolution annotation is set")
+		}
+		if clientToken != "" {
+			t.Errorf("expected empty token, got %q", clientToken)
+		}
+	})
+
+	t.Run("skip_token_resolution_annotation_still_uses_explicit_token", func(t *testing.T) {
+		var clientToken string
+		Configure(CLIOptions{
+			TokenProviderFactory: func(_ *cobra.Command) (types.CLITokenProvider, error) {
+				t.Fatal("token provider should not be called when explicit token is provided")
+				return nil, nil
+			},
+			ClientFactory: func(_ context.Context, u, tok string) (*client.Client, error) {
+				clientToken = tok
+				return client.NewClient(u, tok), nil
+			},
+		})
+		defer func() { Configure(oldOpts) }()
+
+		annotatedCmd := &cobra.Command{
+			Use:         "skip-auth",
+			Annotations: map[string]string{AnnotationSkipTokenResolution: "true"},
+		}
+
+		c, err := preRunSetup(ctx, annotatedCmd, baseURL, "explicit-token")
+		if err != nil {
+			t.Fatalf("preRunSetup: %v", err)
+		}
+		if c == nil {
+			t.Fatal("preRunSetup: expected client")
+		}
+		if clientToken != "explicit-token" {
+			t.Errorf("expected explicit-token, got %q", clientToken)
+		}
+	})
+
+	t.Run("token_provider_error", func(t *testing.T) {
+		tokenProviderErr := errors.New("auth failed")
+		var mockTokenProviderFactory = func(_ *cobra.Command) (types.CLITokenProvider, error) {
+			return &mockTokenProvider{err: tokenProviderErr}, nil
 		}
 
 		Configure(CLIOptions{
-			AuthnProviderFactory: mockAuthnProviderFactory,
+			TokenProviderFactory: mockTokenProviderFactory,
 			ClientFactory:        clientFactory,
 		})
 		defer func() { Configure(oldOpts) }()
 
 		_, err := preRunSetup(ctx, mockCmd, baseURL, "")
 		if err == nil {
-			t.Fatal("expected error from AuthnProvider")
+			t.Fatal("expected error from TokenProvider")
 		}
-		if !errors.Is(err, authnErr) {
+		if !errors.Is(err, tokenProviderErr) {
 			t.Errorf("expected auth error (wrapped), got %v", err)
 		}
 	})
@@ -310,17 +429,17 @@ func TestPreRunSetup(t *testing.T) {
 	})
 }
 
-// mockAuthnProvider for unit tests.
-type mockAuthnProvider struct {
+// mockTokenProvider for unit tests.
+type mockTokenProvider struct {
 	token string
 	err   error
 }
 
-func (m *mockAuthnProvider) Authenticate(context.Context) (string, error) {
+func (m *mockTokenProvider) Token(context.Context) (string, error) {
 	if m.err != nil {
 		return "", m.err
 	}
 	return m.token, nil
 }
 
-var _ types.CLIAuthnProvider = (*mockAuthnProvider)(nil)
+var _ types.CLITokenProvider = (*mockTokenProvider)(nil)
