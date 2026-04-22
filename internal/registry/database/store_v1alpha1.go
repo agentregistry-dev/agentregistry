@@ -3,6 +3,7 @@ package database
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,6 +57,9 @@ type UpsertResult struct {
 	Generation  int64
 }
 
+// ErrInvalidCursor reports that a list pagination cursor could not be parsed.
+var ErrInvalidCursor = errors.New("v1alpha1 store: invalid cursor")
+
 // ListOpts controls paginated list queries.
 type ListOpts struct {
 	// Namespace narrows results to a specific namespace. Empty means "across
@@ -74,6 +78,13 @@ type ListOpts struct {
 	// IncludeTerminating includes rows with deletion_timestamp set. Default
 	// false — callers asking for "alive" rows shouldn't see terminating ones.
 	IncludeTerminating bool
+}
+
+type listCursor struct {
+	UpdatedAt time.Time `json:"updatedAt"`
+	Namespace string    `json:"namespace"`
+	Name      string    `json:"name"`
+	Version   string    `json:"version"`
 }
 
 // UpsertOpts carries optional knobs on Upsert.
@@ -388,10 +399,10 @@ func (s *Store) PurgeFinalized(ctx context.Context) (int64, error) {
 	return tag.RowsAffected(), nil
 }
 
-// List returns rows filtered by opts, ordered by updated_at DESC. A
-// pagination cursor is returned when more rows are available; pass it
-// back via ListOpts.Cursor to continue. Terminating rows are excluded
-// unless IncludeTerminating is true.
+// List returns rows filtered by opts, ordered by updated_at DESC with
+// stable identity tie-breakers. A pagination cursor is returned when
+// more rows are available; pass it back via ListOpts.Cursor to continue.
+// Terminating rows are excluded unless IncludeTerminating is true.
 func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject, string, error) {
 	limit := opts.Limit
 	if limit <= 0 {
@@ -419,6 +430,17 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 		args = append(args, labelJSON)
 		where = append(where, fmt.Sprintf("labels @> $%d", len(args)))
 	}
+	if opts.Cursor != "" {
+		cursor, err := decodeListCursor(opts.Cursor)
+		if err != nil {
+			return nil, "", err
+		}
+		args = append(args, cursor.UpdatedAt, cursor.Namespace, cursor.Name, cursor.Version)
+		where = append(where, fmt.Sprintf(
+			"(updated_at, namespace, name, version) < ($%d, $%d, $%d, $%d)",
+			len(args)-3, len(args)-2, len(args)-1, len(args),
+		))
+	}
 
 	query := fmt.Sprintf(`
 		SELECT namespace, name, version, generation, labels, annotations, spec, status,
@@ -428,7 +450,7 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 		query += " WHERE " + join(where, " AND ")
 	}
 	args = append(args, limit+1)
-	query += fmt.Sprintf(" ORDER BY updated_at DESC LIMIT $%d", len(args))
+	query += fmt.Sprintf(" ORDER BY updated_at DESC, namespace DESC, name DESC, version DESC LIMIT $%d", len(args))
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -451,9 +473,48 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 	var nextCursor string
 	if len(out) > limit {
 		out = out[:limit]
-		nextCursor = "more"
+		cursor, err := encodeListCursor(out[len(out)-1])
+		if err != nil {
+			return nil, "", fmt.Errorf("encode next cursor: %w", err)
+		}
+		nextCursor = cursor
 	}
 	return out, nextCursor, nil
+}
+
+func decodeListCursor(token string) (listCursor, error) {
+	var cursor listCursor
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return listCursor{}, fmt.Errorf("%w: decode token: %v", ErrInvalidCursor, err)
+	}
+	if err := json.Unmarshal(raw, &cursor); err != nil {
+		return listCursor{}, fmt.Errorf("%w: decode payload: %v", ErrInvalidCursor, err)
+	}
+	if cursor.UpdatedAt.IsZero() || cursor.Namespace == "" || cursor.Name == "" || cursor.Version == "" {
+		return listCursor{}, fmt.Errorf("%w: missing position fields", ErrInvalidCursor)
+	}
+	return cursor, nil
+}
+
+func encodeListCursor(obj *v1alpha1.RawObject) (string, error) {
+	if obj == nil {
+		return "", errors.New("nil row")
+	}
+	cursor := listCursor{
+		UpdatedAt: obj.Metadata.UpdatedAt,
+		Namespace: obj.Metadata.Namespace,
+		Name:      obj.Metadata.Name,
+		Version:   obj.Metadata.Version,
+	}
+	if cursor.UpdatedAt.IsZero() || cursor.Namespace == "" || cursor.Name == "" || cursor.Version == "" {
+		return "", errors.New("missing row position")
+	}
+	payload, err := json.Marshal(cursor)
+	if err != nil {
+		return "", fmt.Errorf("marshal cursor: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(payload), nil
 }
 
 // FindReferrers returns rows from this Store's table whose spec JSONB

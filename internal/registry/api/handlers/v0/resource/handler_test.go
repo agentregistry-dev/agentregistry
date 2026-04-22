@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -187,6 +188,64 @@ func TestResourceRegister_AgentNamespaceIsolation(t *testing.T) {
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Len(t, list.Items, 1)
 	require.Equal(t, "team-a", list.Items[0].Metadata.Namespace)
+}
+
+func TestResourceRegister_AgentListCursorPagination(t *testing.T) {
+	pool := database.NewV1Alpha1TestPool(t)
+	store := database.NewStore(pool, "v1alpha1.agents")
+
+	_, api := humatest.New(t)
+	registerAgent(api, store)
+
+	for _, name := range []string{"one", "two", "three"} {
+		body := v1alpha1.Agent{
+			TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
+			Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name, Version: "v1"},
+			Spec:     v1alpha1.AgentSpec{Title: name},
+		}
+		resp := api.Put(fmt.Sprintf("/v0/namespaces/default/agents/%s/v1", url.PathEscape(name)), body)
+		require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	}
+
+	var page struct {
+		Items      []v1alpha1.Agent `json:"items"`
+		NextCursor string           `json:"nextCursor,omitempty"`
+	}
+
+	resp := api.Get("/v0/agents?limit=2")
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &page))
+	require.Len(t, page.Items, 2)
+	require.NotEmpty(t, page.NextCursor)
+
+	resp = api.Get("/v0/agents?limit=2&cursor=" + url.QueryEscape(page.NextCursor))
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	var page2 struct {
+		Items      []v1alpha1.Agent `json:"items"`
+		NextCursor string           `json:"nextCursor,omitempty"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &page2))
+	require.Len(t, page2.Items, 1)
+	require.Empty(t, page2.NextCursor)
+
+	seen := map[string]bool{}
+	for _, item := range append(page.Items, page2.Items...) {
+		require.False(t, seen[item.Metadata.Name], "cursor pagination should not repeat rows")
+		seen[item.Metadata.Name] = true
+	}
+	require.Len(t, seen, 3)
+}
+
+func TestResourceRegister_AgentListRejectsInvalidCursor(t *testing.T) {
+	pool := database.NewV1Alpha1TestPool(t)
+	store := database.NewStore(pool, "v1alpha1.agents")
+
+	_, api := humatest.New(t)
+	registerAgent(api, store)
+
+	resp := api.Get("/v0/agents?cursor=not-a-valid-cursor")
+	require.Equal(t, http.StatusBadRequest, resp.Code, resp.Body.String())
+	require.Contains(t, resp.Body.String(), "invalid cursor")
 }
 
 func TestResourceRegister_AgentWrongKindRejected(t *testing.T) {

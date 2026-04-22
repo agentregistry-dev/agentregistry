@@ -257,6 +257,43 @@ func TestV1Alpha1Store_List(t *testing.T) {
 	require.Len(t, withTerm, 3)
 }
 
+func TestV1Alpha1Store_ListCursorPagination(t *testing.T) {
+	pool := NewV1Alpha1TestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	for _, name := range []string{"first", "second", "third"} {
+		_, err := store.Upsert(ctx, testNS, name, "v1", mustSpec(t, v1alpha1.AgentSpec{Title: name}), nil, UpsertOpts{})
+		require.NoError(t, err)
+	}
+
+	page1, nextCursor, err := store.List(ctx, ListOpts{Limit: 2})
+	require.NoError(t, err)
+	require.Len(t, page1, 2)
+	require.NotEmpty(t, nextCursor)
+	require.NotEqual(t, "more", nextCursor)
+
+	page2, nextCursor2, err := store.List(ctx, ListOpts{Limit: 2, Cursor: nextCursor})
+	require.NoError(t, err)
+	require.Len(t, page2, 1)
+	require.Empty(t, nextCursor2)
+
+	seen := map[string]bool{}
+	for _, obj := range append(page1, page2...) {
+		require.False(t, seen[obj.Metadata.Name], "cursor pagination should not repeat rows")
+		seen[obj.Metadata.Name] = true
+	}
+	require.Len(t, seen, 3)
+}
+
+func TestV1Alpha1Store_ListRejectsInvalidCursor(t *testing.T) {
+	pool := NewV1Alpha1TestPool(t)
+	store := NewStore(pool, testTable)
+
+	_, _, err := store.List(context.Background(), ListOpts{Cursor: "not-a-valid-cursor"})
+	require.ErrorIs(t, err, ErrInvalidCursor)
+}
+
 func TestV1Alpha1Store_FindReferrers(t *testing.T) {
 	pool := NewV1Alpha1TestPool(t)
 	agents := NewStore(pool, "v1alpha1.agents")

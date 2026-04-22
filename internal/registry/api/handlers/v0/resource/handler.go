@@ -441,6 +441,9 @@ func runList[T v1alpha1.Object](
 	}
 	rows, nextCursor, err := cfg.Store.List(ctx, opts)
 	if err != nil {
+		if errors.Is(err, database.ErrInvalidCursor) {
+			return nil, huma.Error400BadRequest("invalid cursor")
+		}
 		return nil, huma.Error500InternalServerError("list "+cfg.Kind, err)
 	}
 	items := make([]T, 0, len(rows))
