@@ -23,6 +23,7 @@ import (
 	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
 	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 
@@ -47,6 +48,13 @@ type RouteOptions struct {
 	Indexer    service.Indexer
 	JobManager *jobs.Manager
 	Mux        *http.ServeMux
+
+	// Authz gates admin-scope handlers (e.g. embeddings indexing) on an API level.
+	Authz auth.Authorizer
+
+	// AuthnProvider is used by handlers registered outside the Huma adapter
+	// (e.g. SSE), which must run authentication inline.
+	AuthnProvider auth.AuthnProvider
 
 	// Optional deployment adapters keyed by provider platform type.
 	ProviderPlatforms   map[string]registrytypes.ProviderPlatformAdapter
@@ -87,9 +95,11 @@ func RegisterRoutes(
 	v0prompts.RegisterPromptsCreateEndpoint(api, pathPrefix, svcs.Prompt)
 
 	if opts != nil && opts.Indexer != nil && opts.JobManager != nil {
-		v0embeddings.RegisterEmbeddingsEndpoints(api, pathPrefix, opts.Indexer, opts.JobManager)
+		v0embeddings.RegisterEmbeddingsEndpoints(api, pathPrefix, opts.Indexer, opts.JobManager, opts.Authz)
 		if opts.Mux != nil {
-			v0embeddings.RegisterEmbeddingsSSEHandler(opts.Mux, pathPrefix, opts.Indexer, opts.JobManager)
+			// SSE Handler goes through raw mux, meaning it skips Huma middleware (including authn), so we pass the AuthnProvider and Authorizer explicitly.
+			// We should consider refactoring to unify the streaming and non-streaming endpoints under Huma in the future to reduce auth complexity.
+			v0embeddings.RegisterEmbeddingsSSEHandler(opts.Mux, pathPrefix, opts.Indexer, opts.JobManager, opts.AuthnProvider, opts.Authz)
 		}
 	}
 	if opts != nil && opts.KindRegistry != nil {

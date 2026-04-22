@@ -18,7 +18,24 @@ import (
 	v0embeddings "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 )
+
+// publicAuthz wraps the public provider. IsRegistryAdmin returns true under
+// it, so admin gates pass in tests without a fake session.
+var publicAuthz = auth.Authorizer{Authz: auth.NewPublicAuthzProvider(nil)}
+
+// denyAdminAuthzProvider is a mock provider that refuses IsRegistryAdmin so tests can assert the gate fires.
+type denyAdminAuthzProvider struct{}
+
+func (denyAdminAuthzProvider) Check(context.Context, auth.Session, auth.PermissionAction, auth.Resource) error {
+	return nil
+}
+func (denyAdminAuthzProvider) IsRegistryAdmin(context.Context, auth.Session) bool {
+	return false
+}
+
+var denyAdminAuthz = auth.Authorizer{Authz: denyAdminAuthzProvider{}}
 
 type mockIndexer struct {
 	mu       sync.Mutex
@@ -51,7 +68,7 @@ func TestStartIndex_Success(t *testing.T) {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, publicAuthz)
 
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
@@ -83,7 +100,7 @@ func TestStartIndex_WithOptions(t *testing.T) {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, publicAuthz)
 
 	body := strings.NewReader(`{"batchSize": 50, "force": true, "dryRun": true, "includeServers": true, "includeAgents": true}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
@@ -111,7 +128,7 @@ func TestStartIndex_IndexerNil(t *testing.T) {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", nil, jobManager)
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", nil, jobManager, publicAuthz)
 
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
@@ -131,7 +148,7 @@ func TestStartIndex_StreamTrue(t *testing.T) {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, publicAuthz)
 
 	body := strings.NewReader(`{"stream": true}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
@@ -159,7 +176,7 @@ func TestStartIndex_JobAlreadyRunning(t *testing.T) {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, publicAuthz)
 
 	body1 := strings.NewReader(`{}`)
 	req1 := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body1)
@@ -197,7 +214,7 @@ func TestStartIndex_DefaultsApplied(t *testing.T) {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, publicAuthz)
 
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
@@ -229,7 +246,7 @@ func TestGetJobStatus_Success(t *testing.T) {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, publicAuthz)
 
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
@@ -265,7 +282,7 @@ func TestGetJobStatus_NotFound(t *testing.T) {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, publicAuthz)
 
 	req := httptest.NewRequest(http.MethodGet, "/v0/embeddings/index/non-existent-job-id", nil)
 	w := httptest.NewRecorder()
@@ -290,7 +307,7 @@ func TestGetJobStatus_Completed(t *testing.T) {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, publicAuthz)
 
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
@@ -336,7 +353,7 @@ func TestGetJobStatus_Failed(t *testing.T) {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
 
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, publicAuthz)
 
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
@@ -366,4 +383,42 @@ func TestGetJobStatus_Failed(t *testing.T) {
 	assert.Equal(t, "failed", statusResp.Status)
 	require.NotNil(t, statusResp.Result)
 	assert.NotEmpty(t, statusResp.Result.Error)
+}
+
+func TestStartIndex_NonAdmin_Forbidden(t *testing.T) {
+	mockIdx := &mockIndexer{}
+	jobManager := jobs.NewManager()
+	mux := http.NewServeMux()
+	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
+
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, denyAdminAuthz)
+
+	body := strings.NewReader(`{}`)
+	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	// Indexer must not have been invoked.
+	mockIdx.mu.Lock()
+	callCount := len(mockIdx.runCalls)
+	mockIdx.mu.Unlock()
+	assert.Equal(t, 0, callCount, "indexer must not run when admin gate denies")
+}
+
+func TestJobStatus_NonAdmin_Forbidden(t *testing.T) {
+	mockIdx := &mockIndexer{}
+	jobManager := jobs.NewManager()
+	mux := http.NewServeMux()
+	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
+
+	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, denyAdminAuthz)
+
+	// Any job ID is fine — the gate must fire before GetJob runs.
+	req := httptest.NewRequest(http.MethodGet, "/v0/embeddings/index/any-id", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
 }

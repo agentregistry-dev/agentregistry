@@ -34,9 +34,10 @@ func RegisterEmbeddingsEndpoints(
 	pathPrefix string,
 	indexer service.Indexer,
 	jobManager *jobs.Manager,
+	authz auth.Authorizer,
 ) {
-	registerIndexEndpoint(api, pathPrefix, indexer, jobManager)
-	registerJobStatusEndpoint(api, pathPrefix, jobManager)
+	registerIndexEndpoint(api, pathPrefix, indexer, jobManager, authz)
+	registerJobStatusEndpoint(api, pathPrefix, jobManager, authz)
 }
 
 func registerIndexEndpoint(
@@ -44,6 +45,7 @@ func registerIndexEndpoint(
 	pathPrefix string,
 	indexer service.Indexer,
 	jobManager *jobs.Manager,
+	authz auth.Authorizer,
 ) {
 	huma.Register(api, huma.Operation{
 		OperationID: "start-embeddings-index" + strings.ReplaceAll(pathPrefix, "/", "-"),
@@ -53,6 +55,10 @@ func registerIndexEndpoint(
 		Description: "Start a background job to generate embeddings for servers and/or agents. Use stream=true for SSE progress updates.",
 		Tags:        []string{"embeddings"},
 	}, func(ctx context.Context, input *IndexInput) (*types.Response[IndexJobResponse], error) {
+		// ensure only registry admins can start indexing jobs
+		if !authz.IsRegistryAdmin(ctx) {
+			return nil, huma.Error403Forbidden("Forbidden")
+		}
 		if indexer == nil {
 			return nil, huma.Error503ServiceUnavailable("embeddings service is not configured")
 		}
@@ -160,6 +166,7 @@ func registerJobStatusEndpoint(
 	api huma.API,
 	pathPrefix string,
 	jobManager *jobs.Manager,
+	authz auth.Authorizer,
 ) {
 	huma.Register(api, huma.Operation{
 		OperationID: "get-embeddings-index-status" + strings.ReplaceAll(pathPrefix, "/", "-"),
@@ -169,6 +176,10 @@ func registerJobStatusEndpoint(
 		Description: "Get the status and progress of an indexing job.",
 		Tags:        []string{"embeddings"},
 	}, func(ctx context.Context, input *JobStatusInput) (*types.Response[JobStatusResponse], error) {
+		// Same gate as job creation to avoid leaking job existence.
+		if !authz.IsRegistryAdmin(ctx) {
+			return nil, huma.Error403Forbidden("Forbidden")
+		}
 		job, err := jobManager.GetJob(jobs.JobID(input.JobID))
 		if err != nil {
 			if err == jobs.ErrJobNotFound {

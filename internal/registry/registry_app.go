@@ -310,6 +310,8 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	})
 
 	routeOpts := &router.RouteOptions{
+		Authz:               authz,
+		AuthnProvider:       authnProvider,
 		ProviderPlatforms:   providerPlatforms,
 		DeploymentPlatforms: deploymentPlatforms,
 		ExtraRoutes:         options.ExtraRoutes,

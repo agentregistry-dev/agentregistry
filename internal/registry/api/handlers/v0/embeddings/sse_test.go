@@ -55,7 +55,7 @@ func TestSSEIndex_Success(t *testing.T) {
 
 	jobManager := jobs.NewManager()
 	mux := http.NewServeMux()
-	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager, nil, publicAuthz)
 
 	body := strings.NewReader(`{"includeServers": true}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index/stream", body)
@@ -76,7 +76,7 @@ func TestSSEIndex_Success(t *testing.T) {
 func TestSSEIndex_IndexerNil(t *testing.T) {
 	jobManager := jobs.NewManager()
 	mux := http.NewServeMux()
-	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", nil, jobManager)
+	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", nil, jobManager, nil, publicAuthz)
 
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index/stream", body)
@@ -94,7 +94,7 @@ func TestSSEIndex_InvalidJSON(t *testing.T) {
 
 	jobManager := jobs.NewManager()
 	mux := http.NewServeMux()
-	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager, nil, publicAuthz)
 
 	body := strings.NewReader(`{invalid json`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index/stream", body)
@@ -120,7 +120,7 @@ func TestSSEIndex_JobAlreadyRunning(t *testing.T) {
 
 	jobManager := jobs.NewManager()
 	mux := http.NewServeMux()
-	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager, nil, publicAuthz)
 
 	go func() {
 		body := strings.NewReader(`{}`)
@@ -154,7 +154,7 @@ func TestSSEIndex_IndexerError(t *testing.T) {
 
 	jobManager := jobs.NewManager()
 	mux := http.NewServeMux()
-	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager, nil, publicAuthz)
 
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index/stream", body)
@@ -188,7 +188,7 @@ func TestSSEIndex_Headers(t *testing.T) {
 
 	jobManager := jobs.NewManager()
 	mux := http.NewServeMux()
-	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager, nil, publicAuthz)
 
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index/stream", body)
@@ -219,7 +219,7 @@ func TestSSEIndex_ProgressEvents(t *testing.T) {
 
 	jobManager := jobs.NewManager()
 	mux := http.NewServeMux()
-	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager, nil, publicAuthz)
 
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index/stream", body)
@@ -260,7 +260,7 @@ func TestSSEIndex_DefaultsApplied(t *testing.T) {
 
 	jobManager := jobs.NewManager()
 	mux := http.NewServeMux()
-	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager)
+	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager, nil, publicAuthz)
 
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index/stream", body)
@@ -273,4 +273,24 @@ func TestSSEIndex_DefaultsApplied(t *testing.T) {
 	assert.True(t, capturedOpts.IncludeServers)
 	assert.True(t, capturedOpts.IncludeAgents)
 	assert.Equal(t, 100, capturedOpts.BatchSize)
+}
+
+func TestSSEIndex_NonAdmin_Forbidden(t *testing.T) {
+	mockIdx := &mockIndexer{}
+	jobManager := jobs.NewManager()
+	mux := http.NewServeMux()
+	v0embeddings.RegisterEmbeddingsSSEHandler(mux, "/v0", mockIdx, jobManager, nil, denyAdminAuthz)
+
+	body := strings.NewReader(`{}`)
+	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index/stream", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	// Indexer must not have been invoked.
+	mockIdx.mu.Lock()
+	callCount := len(mockIdx.runCalls)
+	mockIdx.mu.Unlock()
+	assert.Equal(t, 0, callCount, "indexer must not run when admin gate denies")
 }

@@ -22,15 +22,21 @@ type SSEEvent struct {
 }
 
 // RegisterEmbeddingsSSEHandler registers the SSE streaming endpoint for indexing.
+//
+// Registered on the raw mux instead of through Huma, meaning the AuthnMiddleware
+// does not run for this path; authn and authz are instead invoked inline in handleSSEIndex.
+// TODO: Refactor to go through Huma so that middleware is applied consistently.
 func RegisterEmbeddingsSSEHandler(
 	mux *http.ServeMux,
 	pathPrefix string,
 	indexer service.Indexer,
 	jobManager *jobs.Manager,
+	authn auth.AuthnProvider,
+	authz auth.Authorizer,
 ) {
 	path := "POST " + pathPrefix + "/embeddings/index/stream"
 	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
-		handleSSEIndex(w, r, indexer, jobManager)
+		handleSSEIndex(w, r, indexer, jobManager, authn, authz)
 	})
 }
 
@@ -39,7 +45,28 @@ func handleSSEIndex(
 	r *http.Request,
 	indexer service.Indexer,
 	jobManager *jobs.Manager,
+	authn auth.AuthnProvider,
+	authz auth.Authorizer,
 ) {
+	// Inline authn mirrors AuthnMiddleware: nil provider means authn is not
+	// configured, so identity extraction is skipped.
+	reqCtx := r.Context()
+	if authn != nil {
+		session, err := authn.Authenticate(reqCtx, r.Header.Get, r.URL.Query())
+		if err != nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if session != nil {
+			reqCtx = auth.AuthSessionTo(reqCtx, session)
+		}
+	}
+
+	if !authz.IsRegistryAdmin(reqCtx) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
 	if indexer == nil {
 		http.Error(w, "Embeddings service is not configured", http.StatusServiceUnavailable)
 		return
