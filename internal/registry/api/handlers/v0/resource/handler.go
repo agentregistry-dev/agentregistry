@@ -15,7 +15,6 @@ package resource
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -128,8 +127,10 @@ type listInput struct {
 }
 
 // namespacedListInput is listInput + a namespace path segment. Separate
-// struct because Huma reflects the whole input; mixing in a path tag on a
+// struct because Huma reflects the whole input; a path tag on a
 // cross-namespace list endpoint would make namespace mandatory there.
+// (Tried to collapse via embedding; Huma's body/query schema reflection
+// drops promoted fields, so the duplication stays.)
 type namespacedListInput struct {
 	Namespace          string  `path:"namespace"`
 	Limit              int     `query:"limit" doc:"Max items to return (default 50)." default:"50"`
@@ -537,8 +538,8 @@ func mapNotFound(err error, kind, namespace, name, version string) error {
 }
 
 // parseLabelSelector decodes "key=value,key2=value2" into a map. Values
-// containing an `=` or `,` are not currently supported (no quoting rules
-// yet); callers with that need should file a follow-up.
+// may contain `=` (split is on the first `=` only); values with `,` are
+// not supported and would split mid-pair.
 func parseLabelSelector(s string) (map[string]string, error) {
 	out := make(map[string]string)
 	for pair := range strings.SplitSeq(s, ",") {
@@ -559,6 +560,3 @@ func parseLabelSelector(s string) (map[string]string, error) {
 	}
 	return out, nil
 }
-
-// Ensure unused-import complaints stay quiet.
-var _ = json.RawMessage(nil)

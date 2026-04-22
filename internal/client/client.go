@@ -25,10 +25,9 @@ type Client struct {
 	token      string
 }
 
-const (
-	defaultBaseURL = "http://localhost:12121/v0"
-	DefaultBaseURL = defaultBaseURL
-)
+// DefaultBaseURL is used when NewClient / NewClientFromEnv sees an empty
+// base URL. Includes the `/v0` API prefix.
+const DefaultBaseURL = "http://localhost:12121/v0"
 
 type VersionBody = apitypes.VersionBody
 

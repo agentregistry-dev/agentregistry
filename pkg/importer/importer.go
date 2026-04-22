@@ -50,36 +50,41 @@ type Options struct {
 
 // ImportResult is the per-object outcome of Importer.Import. One
 // result is produced per decoded document, including ones that fail
-// to validate or upsert.
+// to validate or upsert. JSON tags are authoritative for the
+// POST /v0/import wire format — the HTTP handler serializes this
+// struct directly.
 type ImportResult struct {
 	// Source file path the object was decoded from. Empty if decoded
 	// inline.
-	Source string
+	Source string `json:"source,omitempty"`
 
 	// Identity of the imported object. Zero if the document failed to
 	// decode before reaching a typed object.
-	Kind, Namespace, Name, Version string
+	Kind      string `json:"kind,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Version   string `json:"version,omitempty"`
 
 	// Status is one of "created" | "updated" | "unchanged" | "failed"
 	// | "dry-run". Matches the apply-handler vocabulary.
-	Status string
+	Status string `json:"status"`
 
 	// EnrichmentStatus is "skipped" (Enrich=false or no supporting
 	// scanner) | "ok" (all supporting scanners succeeded) | "partial"
 	// (at least one scanner errored, others succeeded) | "failed"
 	// (every supporting scanner errored).
-	EnrichmentStatus string
+	EnrichmentStatus string `json:"enrichmentStatus,omitempty"`
 
 	// EnrichmentErrors carries the formatted error from each scanner
 	// that failed. Empty when EnrichmentStatus is "ok" or "skipped".
-	EnrichmentErrors []string
+	EnrichmentErrors []string `json:"enrichmentErrors,omitempty"`
 
 	// Error is the import-level failure message for Status="failed".
-	Error string
+	Error string `json:"error,omitempty"`
 
 	// Generation is the server-assigned generation after Upsert. Zero
 	// for failed or dry-run results.
-	Generation int64
+	Generation int64 `json:"generation,omitempty"`
 }
 
 const (

@@ -83,17 +83,21 @@ func RegisterRoutes(
 	v0ping.RegisterPingEndpoint(api, pathPrefix)
 	v0version.RegisterVersionEndpoint(api, pathPrefix, versionInfo)
 
+	if opts == nil {
+		return
+	}
+
 	// v1alpha1 generic routes — wired when V1Alpha1Stores is provided.
 	// Cross-kind dangling-ref detection uses a Store-backed resolver.
 	// Deployment reconciliation hooks plug in when the coordinator is
 	// supplied.
-	if opts != nil && len(opts.V1Alpha1Stores) > 0 {
+	if len(opts.V1Alpha1Stores) > 0 {
 		registerV1Alpha1Routes(api, pathPrefix, opts.V1Alpha1Stores, opts.V1Alpha1DeploymentCoordinator, opts.V1Alpha1SemanticSearch)
 	}
 
 	// POST /v0/import — runs decoded manifests through the enrichment
 	// pipeline (validate + scanners + findings-write) before Upsert.
-	if opts != nil && opts.V1Alpha1Importer != nil {
+	if opts.V1Alpha1Importer != nil {
 		resource.RegisterImport(api, resource.ImportConfig{
 			BasePrefix: pathPrefix,
 			Importer:   opts.V1Alpha1Importer,
@@ -102,7 +106,7 @@ func RegisterRoutes(
 
 	// Embeddings indexer endpoints — wired only when both the indexer
 	// and job manager are present.
-	if opts != nil && opts.V1Alpha1Indexer != nil && opts.V1Alpha1JobManager != nil {
+	if opts.V1Alpha1Indexer != nil && opts.V1Alpha1JobManager != nil {
 		v0embeddings.Register(api, v0embeddings.Config{
 			BasePrefix: pathPrefix,
 			Indexer:    opts.V1Alpha1Indexer,
@@ -110,7 +114,7 @@ func RegisterRoutes(
 		})
 	}
 
-	if opts != nil && opts.ExtraRoutes != nil {
+	if opts.ExtraRoutes != nil {
 		opts.ExtraRoutes(api, pathPrefix)
 	}
 }

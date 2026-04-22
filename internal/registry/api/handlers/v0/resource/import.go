@@ -32,22 +32,9 @@ type importInput struct {
 	RawBody []byte `contentType:"application/yaml" doc:"Multi-document YAML stream of v1alpha1 resources."`
 }
 
-type importResultWire struct {
-	Source           string   `json:"source,omitempty"`
-	Kind             string   `json:"kind,omitempty"`
-	Namespace        string   `json:"namespace,omitempty"`
-	Name             string   `json:"name,omitempty"`
-	Version          string   `json:"version,omitempty"`
-	Status           string   `json:"status"`
-	EnrichmentStatus string   `json:"enrichmentStatus,omitempty"`
-	EnrichmentErrors []string `json:"enrichmentErrors,omitempty"`
-	Error            string   `json:"error,omitempty"`
-	Generation       int64    `json:"generation,omitempty"`
-}
-
 type importOutput struct {
 	Body struct {
-		Results []importResultWire `json:"results"`
+		Results []importer.ImportResult `json:"results"`
 	}
 }
 
@@ -84,24 +71,8 @@ func RegisterImport(api huma.API, cfg ImportConfig) {
 			}
 		}
 
-		results := cfg.Importer.ImportBytes(ctx, "", in.RawBody, opts)
-
 		out := &importOutput{}
-		out.Body.Results = make([]importResultWire, len(results))
-		for i, r := range results {
-			out.Body.Results[i] = importResultWire{
-				Source:           r.Source,
-				Kind:             r.Kind,
-				Namespace:        r.Namespace,
-				Name:             r.Name,
-				Version:          r.Version,
-				Status:           r.Status,
-				EnrichmentStatus: r.EnrichmentStatus,
-				EnrichmentErrors: r.EnrichmentErrors,
-				Error:            r.Error,
-				Generation:       r.Generation,
-			}
-		}
+		out.Body.Results = cfg.Importer.ImportBytes(ctx, "", in.RawBody, opts)
 		return out, nil
 	})
 }

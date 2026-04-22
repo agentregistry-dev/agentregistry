@@ -36,7 +36,7 @@ func TestNewClient_BaseURL(t *testing.T) {
 		baseURL string
 		wantURL string
 	}{
-		{"empty defaults to defaultBaseURL", "", defaultBaseURL},
+		{"empty defaults to DefaultBaseURL", "", DefaultBaseURL},
 		{"bare URL gets /v0 appended", "http://localhost:12121", "http://localhost:12121/v0"},
 		{"URL with /v0 unchanged", "http://localhost:12121/v0", "http://localhost:12121/v0"},
 		{"trailing slash normalized", "http://localhost:12121/", "http://localhost:12121/v0"},
