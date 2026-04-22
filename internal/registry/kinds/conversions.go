@@ -33,6 +33,7 @@ func ToAgentJSON(md Metadata, spec *AgentSpec) *models.AgentJSON {
 		aj.McpServers = append(aj.McpServers, models.McpServerType{
 			Type:                       s.Type,
 			Name:                       s.Name,
+			Version:                    s.Version,
 			Image:                      s.Image,
 			Build:                      s.Build,
 			Command:                    s.Command,

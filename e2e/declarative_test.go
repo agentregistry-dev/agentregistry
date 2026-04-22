@@ -1943,3 +1943,136 @@ spec:
 			result.Stdout, result.Stderr)
 	}
 }
+
+// TestMCPServer_PackagesShape verifies apply → get → delete round-trip for
+// an MCPServer with spec.packages (OCI image reference, the default form
+// emitted by `arctl init mcp`). Apply must preserve the packages block and
+// -o yaml must render it cleanly on the way out.
+func TestMCPServer_PackagesShape(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+	serverName := "user/" + UniqueNameWithPrefix("e2epkg")
+	version := "0.1.0"
+
+	t.Cleanup(func() {
+		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
+	})
+
+	yaml := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  title: e2e-packages
+  description: "packages-shape round-trip test"
+  packages:
+    - registryType: oci
+      identifier: ghcr.io/example/mcp:%s
+      version: "%s"
+      transport:
+        type: stdio
+`, serverName, version, version, version)
+
+	path := writeDeclarativeYAML(t, tmpDir, "mcp-pkg.yaml", yaml)
+	result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "mcp/"+serverName)
+
+	// Verify the packages block round-trips through -o yaml.
+	result = RunArctl(t, tmpDir, "get", "mcp", serverName, "-o", "yaml", "--registry-url", regURL)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "packages:")
+	RequireOutputContains(t, result, "registryType: oci")
+	RequireOutputContains(t, result, "ghcr.io/example/mcp:")
+	RequireOutputContains(t, result, "type: stdio")
+	// Exclusive shape — must not leak a remotes or repository block.
+	if strings.Contains(result.Stdout, "remotes:") {
+		t.Errorf("packages-shape MCP unexpectedly has remotes block:\n%s", result.Stdout)
+	}
+}
+
+// TestMCPServer_RemotesShape verifies apply → get round-trip for an MCPServer
+// with spec.remotes (unmanaged URL — no image, no build). Used for
+// third-party servers or dev-loop MCPs the user runs themselves.
+func TestMCPServer_RemotesShape(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+	serverName := "local/" + UniqueNameWithPrefix("e2erem")
+	version := "1.0.0"
+
+	t.Cleanup(func() {
+		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
+	})
+
+	yaml := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  title: e2e-remotes
+  description: "remotes-shape round-trip test"
+  remotes:
+    - type: streamable-http
+      url: http://localhost:3005/mcp
+`, serverName, version)
+
+	path := writeDeclarativeYAML(t, tmpDir, "mcp-remote.yaml", yaml)
+	result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "mcp/"+serverName)
+
+	result = RunArctl(t, tmpDir, "get", "mcp", serverName, "-o", "yaml", "--registry-url", regURL)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "remotes:")
+	RequireOutputContains(t, result, "streamable-http")
+	RequireOutputContains(t, result, "http://localhost:3005/mcp")
+	if strings.Contains(result.Stdout, "packages:") {
+		t.Errorf("remotes-shape MCP unexpectedly has packages block:\n%s", result.Stdout)
+	}
+}
+
+// TestMCPServer_RepositoryShape verifies apply → get round-trip for an
+// MCPServer with spec.repository (git-bundled — built + deployed from
+// source by the provider adapter at deploy time).
+func TestMCPServer_RepositoryShape(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+	serverName := "repo/" + UniqueNameWithPrefix("e2erepo")
+	version := "1.0.0"
+
+	t.Cleanup(func() {
+		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
+	})
+
+	yaml := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  title: e2e-repository
+  description: "repository-shape round-trip test"
+  repository:
+    url: https://github.com/agentregistry-dev/testmcpserver
+    source: git
+`, serverName, version)
+
+	path := writeDeclarativeYAML(t, tmpDir, "mcp-repo.yaml", yaml)
+	result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "mcp/"+serverName)
+
+	result = RunArctl(t, tmpDir, "get", "mcp", serverName, "-o", "yaml", "--registry-url", regURL)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "repository:")
+	RequireOutputContains(t, result, "source: git")
+	RequireOutputContains(t, result, "github.com/agentregistry-dev/testmcpserver")
+	if strings.Contains(result.Stdout, "packages:") {
+		t.Errorf("repository-shape MCP unexpectedly has packages block:\n%s", result.Stdout)
+	}
+	if strings.Contains(result.Stdout, "remotes:") {
+		t.Errorf("repository-shape MCP unexpectedly has remotes block:\n%s", result.Stdout)
+	}
+}
