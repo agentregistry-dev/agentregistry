@@ -3,12 +3,15 @@ package router
 
 import (
 	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
+	v0embeddings "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/embeddings"
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
 	v0ping "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/ping"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/resource"
 	v0version "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/version"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
@@ -49,6 +52,19 @@ type RouteOptions struct {
 	// still soft-deletes, but no adapter dispatch happens.
 	V1Alpha1DeploymentCoordinator *deploymentsvc.V1Alpha1Coordinator
 
+	// V1Alpha1Indexer + V1Alpha1JobManager, when both non-nil, enable
+	// POST /v0/embeddings/index + GET /v0/embeddings/index/{jobId}.
+	// Constructed at bootstrap only when AGENT_REGISTRY_EMBEDDINGS_ENABLED
+	// is set and a provider is reachable; nil disables the endpoints.
+	V1Alpha1Indexer    *embeddings.Indexer
+	V1Alpha1JobManager *jobs.Manager
+
+	// V1Alpha1SemanticSearch, when non-nil, enables
+	// `?semantic=<q>&semanticThreshold=<f>` on list endpoints. The
+	// func embeds the query string and returns the vector; the list
+	// handler then routes through Store.SemanticList.
+	V1Alpha1SemanticSearch resource.SemanticSearchFunc
+
 	// Optional callback for integration-owned route registration.
 	ExtraRoutes func(api huma.API, pathPrefix string)
 }
@@ -72,7 +88,7 @@ func RegisterRoutes(
 	// Deployment reconciliation hooks plug in when the coordinator is
 	// supplied.
 	if opts != nil && len(opts.V1Alpha1Stores) > 0 {
-		registerV1Alpha1Routes(api, pathPrefix, opts.V1Alpha1Stores, opts.V1Alpha1DeploymentCoordinator)
+		registerV1Alpha1Routes(api, pathPrefix, opts.V1Alpha1Stores, opts.V1Alpha1DeploymentCoordinator, opts.V1Alpha1SemanticSearch)
 	}
 
 	// POST /v0/import — runs decoded manifests through the enrichment
@@ -81,6 +97,16 @@ func RegisterRoutes(
 		resource.RegisterImport(api, resource.ImportConfig{
 			BasePrefix: pathPrefix,
 			Importer:   opts.V1Alpha1Importer,
+		})
+	}
+
+	// Embeddings indexer endpoints — wired only when both the indexer
+	// and job manager are present.
+	if opts != nil && opts.V1Alpha1Indexer != nil && opts.V1Alpha1JobManager != nil {
+		v0embeddings.Register(api, v0embeddings.Config{
+			BasePrefix: pathPrefix,
+			Indexer:    opts.V1Alpha1Indexer,
+			Manager:    opts.V1Alpha1JobManager,
 		})
 	}
 
@@ -100,7 +126,7 @@ func RegisterRoutes(
 // When coord is non-nil, Deployment PUT/DELETE fire
 // coord.Apply/coord.Remove after the row is persisted so the platform
 // adapter converges runtime state synchronously with the API call.
-func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stores, coord *deploymentsvc.V1Alpha1Coordinator) {
+func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stores, coord *deploymentsvc.V1Alpha1Coordinator, semantic resource.SemanticSearchFunc) {
 	resolver := internaldb.NewV1Alpha1Resolver(stores)
 	registryValidator := registries.Dispatcher
 	uniqueRemoteURLs := internaldb.NewV1Alpha1UniqueRemoteURLsChecker(stores)
@@ -113,7 +139,7 @@ func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stor
 
 	// Per-kind CRUD endpoints — one call per built-in kind, hidden
 	// inside resource.RegisterBuiltins.
-	resource.RegisterBuiltins(api, basePrefix, stores, resolver, registryValidator, uniqueRemoteURLs, hooks)
+	resource.RegisterBuiltins(api, basePrefix, stores, resolver, registryValidator, uniqueRemoteURLs, hooks, semantic)
 
 	// Deployment-specific endpoints: logs stream (cancel is subsumed
 	// by DesiredState=undeployed + DELETE in the v1alpha1 lifecycle).

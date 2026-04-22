@@ -55,6 +55,7 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*databas
 			PostUpsert: coord.Apply,
 			PostDelete: coord.Remove,
 		},
+		nil, // semanticSearch disabled in this test
 	)
 	resource.RegisterDeploymentLogs(api, resource.DeploymentLogsConfig{
 		BasePrefix:  "/v0",

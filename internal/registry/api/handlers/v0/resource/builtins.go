@@ -50,6 +50,7 @@ func RegisterBuiltins(
 	registryValidator v1alpha1.RegistryValidatorFunc,
 	uniqueRemoteURLsChecker v1alpha1.UniqueRemoteURLsFunc,
 	deploymentHooks DeploymentHooks,
+	semanticSearch SemanticSearchFunc,
 ) {
 	cfgFor := func(kind string) (Config, bool) {
 		store, ok := stores[kind]
@@ -63,6 +64,7 @@ func RegisterBuiltins(
 			Resolver:                resolver,
 			RegistryValidator:       registryValidator,
 			UniqueRemoteURLsChecker: uniqueRemoteURLsChecker,
+			SemanticSearch:          semanticSearch,
 		}, true
 	}
 
