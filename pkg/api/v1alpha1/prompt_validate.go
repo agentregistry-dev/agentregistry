@@ -1,7 +1,5 @@
 package v1alpha1
 
-import "context"
-
 func (p *Prompt) Validate() error {
 	var errs FieldErrors
 	errs = append(errs, ValidateObjectMeta(p.Metadata)...)
@@ -13,6 +11,3 @@ func (p *Prompt) Validate() error {
 	}
 	return errs
 }
-
-// ResolveRefs on a Prompt is a no-op — PromptSpec holds no ResourceRefs.
-func (p *Prompt) ResolveRefs(ctx context.Context, resolver ResolverFunc) error { return nil }

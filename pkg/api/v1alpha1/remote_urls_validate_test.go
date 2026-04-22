@@ -148,13 +148,13 @@ func TestKindsWithoutRemotes_AreNoOps(t *testing.T) {
 	ctx := context.Background()
 
 	p := &v1.Prompt{Metadata: v1.ObjectMeta{Namespace: "default", Name: "p", Version: "v1"}}
-	require.NoError(t, p.ValidateUniqueRemoteURLs(ctx, fc.Check))
+	require.NoError(t, v1.ValidateObjectRemoteURLs(ctx, p, fc.Check))
 
 	prov := &v1.Provider{Metadata: v1.ObjectMeta{Namespace: "default", Name: "local", Version: "v1"}}
-	require.NoError(t, prov.ValidateUniqueRemoteURLs(ctx, fc.Check))
+	require.NoError(t, v1.ValidateObjectRemoteURLs(ctx, prov, fc.Check))
 
 	d := &v1.Deployment{Metadata: v1.ObjectMeta{Namespace: "default", Name: "d", Version: "v1"}}
-	require.NoError(t, d.ValidateUniqueRemoteURLs(ctx, fc.Check))
+	require.NoError(t, v1.ValidateObjectRemoteURLs(ctx, d, fc.Check))
 
 	require.Empty(t, fc.calls, "kinds without Remotes should not invoke the checker")
 }

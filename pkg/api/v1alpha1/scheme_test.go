@@ -237,6 +237,51 @@ spec: { content: x }
 	}
 }
 
+func TestScheme_DecodeMulti_EmptyInput(t *testing.T) {
+	objs, err := Default.DecodeMulti([]byte(" \n\t"))
+	if err != nil {
+		t.Fatalf("DecodeMulti: %v", err)
+	}
+	if len(objs) != 0 {
+		t.Fatalf("want 0 docs for empty input, got %d", len(objs))
+	}
+}
+
+func TestScheme_DecodeInto_OK(t *testing.T) {
+	doc := []byte(`
+apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: summarizer
+  version: "1.0.0"
+spec:
+  title: Summarizer
+`)
+	var got Agent
+	if err := Default.DecodeInto(doc, &got); err != nil {
+		t.Fatalf("DecodeInto: %v", err)
+	}
+	if got.Kind != KindAgent || got.Metadata.Name != "summarizer" {
+		t.Fatalf("decoded envelope mismatch: %+v", got)
+	}
+}
+
+func TestScheme_DecodeInto_RejectsKindMismatch(t *testing.T) {
+	doc := []byte(`
+apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: summarizer
+spec:
+  title: Summarizer
+`)
+	var got MCPServer
+	err := Default.DecodeInto(doc, &got)
+	if err == nil || !strings.Contains(err.Error(), "does not match decoded type") {
+		t.Fatalf("expected type mismatch error, got %v", err)
+	}
+}
+
 func TestEncode_RoundTrip_YAML(t *testing.T) {
 	original := &Agent{
 		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindAgent},

@@ -13,6 +13,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/resource"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/semantic"
 )
 
 // zeroPadVec returns a fixed-1536-dim vector with the first positions
@@ -38,7 +39,7 @@ func TestSemanticSearch_ListEndpointRanksByDistance(t *testing.T) {
 		require.NoError(t, err)
 		_, err = agents.Upsert(ctx, "default", name, "v1", spec, nil, database.UpsertOpts{})
 		require.NoError(t, err)
-		require.NoError(t, agents.SetEmbedding(ctx, "default", name, "v1", v1alpha1.SemanticEmbedding{
+		require.NoError(t, agents.SetEmbedding(ctx, "default", name, "v1", semantic.SemanticEmbedding{
 			Vector:     vec,
 			Provider:   "fake",
 			Dimensions: 1536,

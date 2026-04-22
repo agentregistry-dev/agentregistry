@@ -1,6 +1,10 @@
-package v1alpha1
+package semantic
 
-import "time"
+import (
+	"time"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+)
 
 // SemanticEmbedding is the payload written to a v1alpha1.* row's
 // semantic_embedding columns. The indexer produces one of these per object
@@ -42,6 +46,6 @@ type SemanticEmbeddingMetadata struct {
 // want a relevance score can compute `1 - Score` to invert to a typical
 // similarity range.
 type SemanticResult struct {
-	Object *RawObject
+	Object *v1alpha1.RawObject
 	Score  float32
 }

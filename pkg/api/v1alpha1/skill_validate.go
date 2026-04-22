@@ -1,9 +1,6 @@
 package v1alpha1
 
-import (
-	"context"
-	"fmt"
-)
+import "fmt"
 
 func (s *Skill) Validate() error {
 	var errs FieldErrors
@@ -14,9 +11,6 @@ func (s *Skill) Validate() error {
 	}
 	return errs
 }
-
-// ResolveRefs on a Skill is a no-op — SkillSpec holds no ResourceRefs.
-func (s *Skill) ResolveRefs(ctx context.Context, resolver ResolverFunc) error { return nil }
 
 func validateSkillSpec(s *SkillSpec) FieldErrors {
 	var errs FieldErrors

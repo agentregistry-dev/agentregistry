@@ -1,7 +1,6 @@
 package v1alpha1
 
 import (
-	"context"
 	"fmt"
 )
 
@@ -27,9 +26,6 @@ func (p *Provider) Validate() error {
 	}
 	return errs
 }
-
-// ResolveRefs on a Provider is a no-op — ProviderSpec holds no refs.
-func (p *Provider) ResolveRefs(ctx context.Context, resolver ResolverFunc) error { return nil }
 
 func knownPlatformNames() []string {
 	out := make([]string, 0, len(KnownPlatforms))

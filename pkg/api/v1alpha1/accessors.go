@@ -5,6 +5,76 @@ import (
 	"encoding/json"
 )
 
+func (tm *TypeMeta) GetAPIVersion() string { return tm.APIVersion }
+func (tm *TypeMeta) GetKind() string       { return tm.Kind }
+func (tm *TypeMeta) SetTypeMeta(t TypeMeta) {
+	*tm = t
+}
+
+func (m *ObjectMeta) GetMetadata() *ObjectMeta { return m }
+func (m *ObjectMeta) SetMetadata(meta ObjectMeta) {
+	*m = meta
+}
+
+func (s *Status) GetStatus() *Status { return s }
+func (s *Status) SetStatus(status Status) {
+	*s = status
+}
+
+func (a *Agent) GetMetadata() *ObjectMeta { return &a.Metadata }
+func (a *Agent) SetMetadata(meta ObjectMeta) {
+	a.Metadata = meta
+}
+func (a *Agent) GetStatus() *Status { return &a.Status }
+func (a *Agent) SetStatus(status Status) {
+	a.Status = status
+}
+
+func (m *MCPServer) GetMetadata() *ObjectMeta { return &m.Metadata }
+func (m *MCPServer) SetMetadata(meta ObjectMeta) {
+	m.Metadata = meta
+}
+func (m *MCPServer) GetStatus() *Status { return &m.Status }
+func (m *MCPServer) SetStatus(status Status) {
+	m.Status = status
+}
+
+func (s *Skill) GetMetadata() *ObjectMeta { return &s.Metadata }
+func (s *Skill) SetMetadata(meta ObjectMeta) {
+	s.Metadata = meta
+}
+func (s *Skill) GetStatus() *Status { return &s.Status }
+func (s *Skill) SetStatus(status Status) {
+	s.Status = status
+}
+
+func (p *Prompt) GetMetadata() *ObjectMeta { return &p.Metadata }
+func (p *Prompt) SetMetadata(meta ObjectMeta) {
+	p.Metadata = meta
+}
+func (p *Prompt) GetStatus() *Status { return &p.Status }
+func (p *Prompt) SetStatus(status Status) {
+	p.Status = status
+}
+
+func (p *Provider) GetMetadata() *ObjectMeta { return &p.Metadata }
+func (p *Provider) SetMetadata(meta ObjectMeta) {
+	p.Metadata = meta
+}
+func (p *Provider) GetStatus() *Status { return &p.Status }
+func (p *Provider) SetStatus(status Status) {
+	p.Status = status
+}
+
+func (d *Deployment) GetMetadata() *ObjectMeta { return &d.Metadata }
+func (d *Deployment) SetMetadata(meta ObjectMeta) {
+	d.Metadata = meta
+}
+func (d *Deployment) GetStatus() *Status { return &d.Status }
+func (d *Deployment) SetStatus(status Status) {
+	d.Status = status
+}
+
 // Object is the minimal interface satisfied by every typed v1alpha1 envelope
 // (Agent, MCPServer, Skill, Prompt, Provider, Deployment). It lets generic
 // code operate on any resource without reflection.
@@ -20,77 +90,69 @@ type Object interface {
 	MarshalSpec() (json.RawMessage, error)
 	// UnmarshalSpec decodes the given JSON bytes into this object's Spec field.
 	UnmarshalSpec(data json.RawMessage) error
-	// Validate runs structural validation (no I/O) and returns a FieldErrors
-	// (or nil on success). Callers typically invoke this at the apply
-	// boundary before Store.Upsert.
+}
+
+// StructuralValidator runs zero-I/O validation on an envelope.
+type StructuralValidator interface {
 	Validate() error
-	// ResolveRefs checks that every ResourceRef in the object's Spec
-	// resolves via the supplied resolver. A nil resolver is a no-op.
-	// Returns a FieldErrors when one or more refs dangle.
+}
+
+// RefResolver validates cross-resource references for an envelope.
+type RefResolver interface {
 	ResolveRefs(ctx context.Context, resolver ResolverFunc) error
-	// ValidateRegistries runs a per-package validation against the
-	// supplied RegistryValidatorFunc (typically an OCI/NPM/PyPI/etc.
-	// dispatcher that hits external registries). A nil validator is
-	// a no-op so structural tests don't need the network. Returns a
-	// FieldErrors aggregating all failing packages.
+}
+
+// RegistryValidatable validates packages against external registry metadata.
+type RegistryValidatable interface {
 	ValidateRegistries(ctx context.Context, v RegistryValidatorFunc) error
-	// ValidateUniqueRemoteURLs enforces the cross-row invariant that no
-	// two resources of the same Kind own the same remote URL. A nil
-	// checker is a no-op; implementations on kinds without a Remotes
-	// field (Prompt, Provider, Deployment) are always no-ops.
+}
+
+// UniqueRemoteURLsValidatable checks the cross-row remote URL invariant.
+type UniqueRemoteURLsValidatable interface {
 	ValidateUniqueRemoteURLs(ctx context.Context, check UniqueRemoteURLsFunc) error
 }
 
-// Pointer receivers so SetMetadata/SetStatus mutate the caller's value.
-// Trivially mechanical across all six kinds.
+// ValidateObject runs structural validation when obj opts into it.
+func ValidateObject(obj Object) error {
+	if v, ok := any(obj).(StructuralValidator); ok {
+		return v.Validate()
+	}
+	return nil
+}
 
-func (a *Agent) GetAPIVersion() string    { return a.APIVersion }
-func (a *Agent) GetKind() string          { return a.Kind }
-func (a *Agent) SetTypeMeta(t TypeMeta)   { a.TypeMeta = t }
-func (a *Agent) GetMetadata() *ObjectMeta { return &a.Metadata }
-func (a *Agent) SetMetadata(m ObjectMeta) { a.Metadata = m }
-func (a *Agent) GetStatus() *Status       { return &a.Status }
-func (a *Agent) SetStatus(s Status)       { a.Status = s }
+// ResolveObjectRefs validates cross-resource refs when obj carries them.
+func ResolveObjectRefs(ctx context.Context, obj Object, resolver ResolverFunc) error {
+	if resolver == nil {
+		return nil
+	}
+	if v, ok := any(obj).(RefResolver); ok {
+		return v.ResolveRefs(ctx, resolver)
+	}
+	return nil
+}
 
-func (m *MCPServer) GetAPIVersion() string       { return m.APIVersion }
-func (m *MCPServer) GetKind() string             { return m.Kind }
-func (m *MCPServer) SetTypeMeta(t TypeMeta)      { m.TypeMeta = t }
-func (m *MCPServer) GetMetadata() *ObjectMeta    { return &m.Metadata }
-func (m *MCPServer) SetMetadata(meta ObjectMeta) { m.Metadata = meta }
-func (m *MCPServer) GetStatus() *Status          { return &m.Status }
-func (m *MCPServer) SetStatus(s Status)          { m.Status = s }
+// ValidateObjectRegistries validates package registries when obj exposes them.
+func ValidateObjectRegistries(ctx context.Context, obj Object, v RegistryValidatorFunc) error {
+	if v == nil {
+		return nil
+	}
+	if rv, ok := any(obj).(RegistryValidatable); ok {
+		return rv.ValidateRegistries(ctx, v)
+	}
+	return nil
+}
 
-func (s *Skill) GetAPIVersion() string    { return s.APIVersion }
-func (s *Skill) GetKind() string          { return s.Kind }
-func (s *Skill) SetTypeMeta(t TypeMeta)   { s.TypeMeta = t }
-func (s *Skill) GetMetadata() *ObjectMeta { return &s.Metadata }
-func (s *Skill) SetMetadata(m ObjectMeta) { s.Metadata = m }
-func (s *Skill) GetStatus() *Status       { return &s.Status }
-func (s *Skill) SetStatus(st Status)      { s.Status = st }
-
-func (p *Prompt) GetAPIVersion() string    { return p.APIVersion }
-func (p *Prompt) GetKind() string          { return p.Kind }
-func (p *Prompt) SetTypeMeta(t TypeMeta)   { p.TypeMeta = t }
-func (p *Prompt) GetMetadata() *ObjectMeta { return &p.Metadata }
-func (p *Prompt) SetMetadata(m ObjectMeta) { p.Metadata = m }
-func (p *Prompt) GetStatus() *Status       { return &p.Status }
-func (p *Prompt) SetStatus(s Status)       { p.Status = s }
-
-func (p *Provider) GetAPIVersion() string    { return p.APIVersion }
-func (p *Provider) GetKind() string          { return p.Kind }
-func (p *Provider) SetTypeMeta(t TypeMeta)   { p.TypeMeta = t }
-func (p *Provider) GetMetadata() *ObjectMeta { return &p.Metadata }
-func (p *Provider) SetMetadata(m ObjectMeta) { p.Metadata = m }
-func (p *Provider) GetStatus() *Status       { return &p.Status }
-func (p *Provider) SetStatus(s Status)       { p.Status = s }
-
-func (d *Deployment) GetAPIVersion() string    { return d.APIVersion }
-func (d *Deployment) GetKind() string          { return d.Kind }
-func (d *Deployment) SetTypeMeta(t TypeMeta)   { d.TypeMeta = t }
-func (d *Deployment) GetMetadata() *ObjectMeta { return &d.Metadata }
-func (d *Deployment) SetMetadata(m ObjectMeta) { d.Metadata = m }
-func (d *Deployment) GetStatus() *Status       { return &d.Status }
-func (d *Deployment) SetStatus(s Status)       { d.Status = s }
+// ValidateObjectRemoteURLs validates remote URL uniqueness when obj exposes
+// remote endpoints.
+func ValidateObjectRemoteURLs(ctx context.Context, obj Object, check UniqueRemoteURLsFunc) error {
+	if check == nil {
+		return nil
+	}
+	if rv, ok := any(obj).(UniqueRemoteURLsValidatable); ok {
+		return rv.ValidateUniqueRemoteURLs(ctx, check)
+	}
+	return nil
+}
 
 // Spec marshal/unmarshal methods. json.Marshal/Unmarshal on a typed Spec
 // round-trips cleanly; these are the shim for generic handlers that deal

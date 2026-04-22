@@ -165,9 +165,19 @@ func (s *Scheme) DecodeMulti(data []byte) ([]any, error) {
 // typed envelope (e.g. &Agent{}) and Decode fills it in place. Useful when
 // the kind is known statically.
 func (s *Scheme) DecodeInto(data []byte, dst any) error {
-	if err := yaml.Unmarshal(data, dst); err != nil {
-		return fmt.Errorf("v1alpha1: decode: %w", err)
+	dstValue := reflect.ValueOf(dst)
+	if !dstValue.IsValid() || dstValue.Kind() != reflect.Ptr || dstValue.IsNil() {
+		return fmt.Errorf("v1alpha1: decode into requires a non-nil pointer destination, got %T", dst)
 	}
+	obj, err := s.Decode(data)
+	if err != nil {
+		return err
+	}
+	objValue := reflect.ValueOf(obj)
+	if objValue.Type() != dstValue.Type() {
+		return fmt.Errorf("v1alpha1: decode into destination %s does not match decoded type %s", dstValue.Type(), objValue.Type())
+	}
+	dstValue.Elem().Set(objValue.Elem())
 	return nil
 }
 
@@ -175,7 +185,11 @@ func (s *Scheme) DecodeInto(data []byte, dst any) error {
 // Leading/trailing whitespace is preserved inside each document. For a pure
 // JSON input (no `---` separators) the entire input is returned as one doc.
 func splitYAMLDocs(data []byte) ([][]byte, error) {
-	if bytes.TrimSpace(data)[0] == '{' || bytes.TrimSpace(data)[0] == '[' {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 {
+		return nil, nil
+	}
+	if trimmed[0] == '{' || trimmed[0] == '[' {
 		return [][]byte{data}, nil
 	}
 	var docs [][]byte

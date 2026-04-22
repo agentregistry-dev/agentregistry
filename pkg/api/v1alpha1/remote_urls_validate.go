@@ -93,10 +93,3 @@ func (s *Skill) ValidateUniqueRemoteURLs(ctx context.Context, check UniqueRemote
 	}
 	return errs
 }
-
-// Prompt / Provider / Deployment have no Remotes — no-op.
-func (p *Prompt) ValidateUniqueRemoteURLs(context.Context, UniqueRemoteURLsFunc) error   { return nil }
-func (p *Provider) ValidateUniqueRemoteURLs(context.Context, UniqueRemoteURLsFunc) error { return nil }
-func (d *Deployment) ValidateUniqueRemoteURLs(context.Context, UniqueRemoteURLsFunc) error {
-	return nil
-}

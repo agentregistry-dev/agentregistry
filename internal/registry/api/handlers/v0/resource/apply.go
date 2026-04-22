@@ -248,31 +248,25 @@ func prepareApplyDoc(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object) 
 		res.Namespace = meta.Namespace
 	}
 
-	if err := obj.Validate(); err != nil {
+	if err := v1alpha1.ValidateObject(obj); err != nil {
 		res.Status = ApplyStatusFailed
 		res.Error = "validation: " + err.Error()
 		return res, nil, nil, false
 	}
-	if cfg.Resolver != nil {
-		if err := obj.ResolveRefs(ctx, cfg.Resolver); err != nil {
-			res.Status = ApplyStatusFailed
-			res.Error = "refs: " + err.Error()
-			return res, nil, nil, false
-		}
+	if err := v1alpha1.ResolveObjectRefs(ctx, obj, cfg.Resolver); err != nil {
+		res.Status = ApplyStatusFailed
+		res.Error = "refs: " + err.Error()
+		return res, nil, nil, false
 	}
-	if cfg.RegistryValidator != nil {
-		if err := obj.ValidateRegistries(ctx, cfg.RegistryValidator); err != nil {
-			res.Status = ApplyStatusFailed
-			res.Error = "registries: " + err.Error()
-			return res, nil, nil, false
-		}
+	if err := v1alpha1.ValidateObjectRegistries(ctx, obj, cfg.RegistryValidator); err != nil {
+		res.Status = ApplyStatusFailed
+		res.Error = "registries: " + err.Error()
+		return res, nil, nil, false
 	}
-	if cfg.UniqueRemoteURLsChecker != nil {
-		if err := obj.ValidateUniqueRemoteURLs(ctx, cfg.UniqueRemoteURLsChecker); err != nil {
-			res.Status = ApplyStatusFailed
-			res.Error = "remote urls: " + err.Error()
-			return res, nil, nil, false
-		}
+	if err := v1alpha1.ValidateObjectRemoteURLs(ctx, obj, cfg.UniqueRemoteURLsChecker); err != nil {
+		res.Status = ApplyStatusFailed
+		res.Error = "remote urls: " + err.Error()
+		return res, nil, nil, false
 	}
 
 	return res, store, meta, true

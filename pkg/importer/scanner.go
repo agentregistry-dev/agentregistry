@@ -22,7 +22,7 @@ import (
 //
 // Lifecycle per-import:
 //  1. importer decodes a resource
-//  2. validates via obj.Validate()
+//  2. validates via v1alpha1.ValidateObject(obj)
 //  3. asks each registered Scanner whether it Supports(obj)
 //  4. calls Scan concurrently on supporting scanners
 //  5. merges returned Annotations into ObjectMeta, appends Labels,

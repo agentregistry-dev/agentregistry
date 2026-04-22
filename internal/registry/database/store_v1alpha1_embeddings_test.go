@@ -11,6 +11,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/semantic"
 )
 
 // zeroPadVec returns a fixed-dimension vector with the first few positions
@@ -40,7 +41,7 @@ func TestV1Alpha1Store_SetEmbedding_RoundTrip(t *testing.T) {
 		mustSpec(t, v1alpha1.AgentSpec{Title: "embed"}), nil, UpsertOpts{})
 	require.NoError(t, err)
 
-	emb := v1alpha1.SemanticEmbedding{
+	emb := semantic.SemanticEmbedding{
 		Vector:     zeroPadVec(0.1, 0.2, 0.3),
 		Provider:   "openai",
 		Model:      "text-embedding-3-small",
@@ -88,7 +89,7 @@ func TestV1Alpha1Store_SetEmbedding_ErrNotFound(t *testing.T) {
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
-	err := store.SetEmbedding(ctx, testNS, "nope", "v1", v1alpha1.SemanticEmbedding{
+	err := store.SetEmbedding(ctx, testNS, "nope", "v1", semantic.SemanticEmbedding{
 		Vector: zeroPadVec(1),
 	})
 	require.True(t, errors.Is(err, pkgdb.ErrNotFound))
@@ -105,7 +106,7 @@ func TestV1Alpha1Store_SemanticList_RanksByDistance(t *testing.T) {
 			mustSpec(t, v1alpha1.AgentSpec{Title: name}), nil, UpsertOpts{})
 		require.NoError(t, err)
 		require.NoError(t, store.SetEmbedding(ctx, testNS, name, "v1",
-			v1alpha1.SemanticEmbedding{
+			semantic.SemanticEmbedding{
 				Vector:     vec,
 				Provider:   "test",
 				Model:      "fake",
@@ -144,7 +145,7 @@ func TestV1Alpha1Store_SemanticList_ThresholdFilter(t *testing.T) {
 			mustSpec(t, v1alpha1.AgentSpec{Title: name}), nil, UpsertOpts{})
 		require.NoError(t, err)
 		require.NoError(t, store.SetEmbedding(ctx, testNS, name, "v1",
-			v1alpha1.SemanticEmbedding{Vector: vec, Provider: "test", Dimensions: 1536}))
+			semantic.SemanticEmbedding{Vector: vec, Provider: "test", Dimensions: 1536}))
 	}
 	mkAgent("exact", zeroPadVec(1, 0, 0))
 	mkAgent("orthogonal", zeroPadVec(0, 1, 0))
@@ -172,7 +173,7 @@ func TestV1Alpha1Store_SemanticList_SkipsRowsWithoutEmbedding(t *testing.T) {
 		mustSpec(t, v1alpha1.AgentSpec{}), nil, UpsertOpts{})
 	require.NoError(t, err)
 	require.NoError(t, store.SetEmbedding(ctx, testNS, "with-emb", "v1",
-		v1alpha1.SemanticEmbedding{Vector: zeroPadVec(1, 0, 0), Dimensions: 1536}))
+		semantic.SemanticEmbedding{Vector: zeroPadVec(1, 0, 0), Dimensions: 1536}))
 
 	results, err := store.SemanticList(ctx, SemanticListOpts{
 		Query:     zeroPadVec(1, 0, 0),
@@ -193,7 +194,7 @@ func TestV1Alpha1Store_SemanticList_LatestOnly(t *testing.T) {
 			mustSpec(t, v1alpha1.AgentSpec{Title: v}), nil, UpsertOpts{})
 		require.NoError(t, err)
 		require.NoError(t, store.SetEmbedding(ctx, testNS, "foo", v,
-			v1alpha1.SemanticEmbedding{Vector: zeroPadVec(1, 0, 0), Dimensions: 1536}))
+			semantic.SemanticEmbedding{Vector: zeroPadVec(1, 0, 0), Dimensions: 1536}))
 	}
 
 	// Both versions return by default.

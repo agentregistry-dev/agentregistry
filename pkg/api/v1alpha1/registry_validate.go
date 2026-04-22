@@ -141,9 +141,3 @@ func (s *Skill) ValidateRegistries(ctx context.Context, v RegistryValidatorFunc)
 	}
 	return errs
 }
-
-// Prompt / Provider / Deployment have no packages — registry
-// validation is a no-op.
-func (p *Prompt) ValidateRegistries(context.Context, RegistryValidatorFunc) error     { return nil }
-func (p *Provider) ValidateRegistries(context.Context, RegistryValidatorFunc) error   { return nil }
-func (d *Deployment) ValidateRegistries(context.Context, RegistryValidatorFunc) error { return nil }

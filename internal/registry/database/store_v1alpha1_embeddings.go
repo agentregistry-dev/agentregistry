@@ -14,6 +14,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/semantic"
 )
 
 // SetEmbedding writes a SemanticEmbedding onto the row identified by
@@ -24,7 +25,7 @@ import (
 // Checksum.
 //
 // Returns pkgdb.ErrNotFound if the row doesn't exist.
-func (s *Store) SetEmbedding(ctx context.Context, namespace, name, version string, emb v1alpha1.SemanticEmbedding) error {
+func (s *Store) SetEmbedding(ctx context.Context, namespace, name, version string, emb semantic.SemanticEmbedding) error {
 	if namespace == "" || name == "" || version == "" {
 		return errors.New("v1alpha1 store: namespace, name, and version are required")
 	}
@@ -61,7 +62,7 @@ func (s *Store) SetEmbedding(ctx context.Context, namespace, name, version strin
 //
 // Returns pkgdb.ErrNotFound if the row doesn't exist. Returns (nil, nil)
 // when the row exists but has no embedding yet (generated_at IS NULL).
-func (s *Store) GetEmbeddingMetadata(ctx context.Context, namespace, name, version string) (*v1alpha1.SemanticEmbeddingMetadata, error) {
+func (s *Store) GetEmbeddingMetadata(ctx context.Context, namespace, name, version string) (*semantic.SemanticEmbeddingMetadata, error) {
 	var (
 		provider    *string
 		model       *string
@@ -86,7 +87,7 @@ func (s *Store) GetEmbeddingMetadata(ctx context.Context, namespace, name, versi
 	if generatedAt == nil {
 		return nil, nil
 	}
-	meta := &v1alpha1.SemanticEmbeddingMetadata{GeneratedAt: *generatedAt}
+	meta := &semantic.SemanticEmbeddingMetadata{GeneratedAt: *generatedAt}
 	if provider != nil {
 		meta.Provider = *provider
 	}
@@ -127,7 +128,7 @@ type SemanticListOpts struct {
 // opts.Query and returns them with their distance scores. Rows with
 // NULL semantic_embedding are implicitly skipped (the `<=>` operator
 // can't rank them).
-func (s *Store) SemanticList(ctx context.Context, opts SemanticListOpts) ([]v1alpha1.SemanticResult, error) {
+func (s *Store) SemanticList(ctx context.Context, opts SemanticListOpts) ([]semantic.SemanticResult, error) {
 	if len(opts.Query) == 0 {
 		return nil, errors.New("v1alpha1 store: SemanticList requires a non-empty Query vector")
 	}
@@ -182,13 +183,13 @@ func (s *Store) SemanticList(ctx context.Context, opts SemanticListOpts) ([]v1al
 	}
 	defer rows.Close()
 
-	out := make([]v1alpha1.SemanticResult, 0, limit)
+	out := make([]semantic.SemanticResult, 0, limit)
 	for rows.Next() {
 		obj, score, err := scanSemanticRow(rows)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, v1alpha1.SemanticResult{Object: obj, Score: score})
+		out = append(out, semantic.SemanticResult{Object: obj, Score: score})
 	}
 	return out, rows.Err()
 }

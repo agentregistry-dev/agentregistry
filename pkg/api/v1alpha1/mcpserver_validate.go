@@ -1,9 +1,6 @@
 package v1alpha1
 
-import (
-	"context"
-	"fmt"
-)
+import "fmt"
 
 // Validate runs structural validation on the MCPServer envelope.
 func (m *MCPServer) Validate() error {
@@ -15,11 +12,6 @@ func (m *MCPServer) Validate() error {
 	}
 	return errs
 }
-
-// ResolveRefs on an MCPServer is a no-op — MCPServerSpec holds no
-// ResourceRefs today. Implemented so MCPServer satisfies the Object
-// interface uniformly.
-func (m *MCPServer) ResolveRefs(ctx context.Context, resolver ResolverFunc) error { return nil }
 
 func validateMCPServerSpec(s *MCPServerSpec) FieldErrors {
 	var errs FieldErrors

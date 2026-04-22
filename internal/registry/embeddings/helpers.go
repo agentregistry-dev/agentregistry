@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/semantic"
 )
 
 // BuildMCPServerEmbeddingPayload assembles the canonical text used to
@@ -82,7 +83,7 @@ func PayloadChecksum(payload string) string {
 // Store.SetEmbedding. The payload must be non-empty; when
 // expectedDimensions > 0 the provider output is validated against it
 // so schema mismatches surface early rather than at DB-write time.
-func GenerateSemanticEmbedding(ctx context.Context, provider Provider, payload string, expectedDimensions int) (*v1alpha1.SemanticEmbedding, error) {
+func GenerateSemanticEmbedding(ctx context.Context, provider Provider, payload string, expectedDimensions int) (*semantic.SemanticEmbedding, error) {
 	if provider == nil {
 		return nil, errors.New("embedding provider is not configured")
 	}
@@ -107,7 +108,7 @@ func GenerateSemanticEmbedding(ctx context.Context, provider Provider, payload s
 	// semantic_embedding_generated_at with NOW() at write time, making
 	// the provider's local timestamp redundant.
 
-	return &v1alpha1.SemanticEmbedding{
+	return &semantic.SemanticEmbedding{
 		Vector:     result.Vector,
 		Provider:   result.Provider,
 		Model:      result.Model,

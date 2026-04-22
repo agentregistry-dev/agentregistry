@@ -293,31 +293,25 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 		return res
 	}
 
-	if err := obj.Validate(); err != nil {
+	if err := v1alpha1.ValidateObject(obj); err != nil {
 		res.Status = ImportStatusFailed
 		res.Error = "validation: " + err.Error()
 		return res
 	}
-	if i.resolver != nil {
-		if err := obj.ResolveRefs(ctx, i.resolver); err != nil {
-			res.Status = ImportStatusFailed
-			res.Error = "refs: " + err.Error()
-			return res
-		}
+	if err := v1alpha1.ResolveObjectRefs(ctx, obj, i.resolver); err != nil {
+		res.Status = ImportStatusFailed
+		res.Error = "refs: " + err.Error()
+		return res
 	}
-	if i.registryValidator != nil {
-		if err := obj.ValidateRegistries(ctx, i.registryValidator); err != nil {
-			res.Status = ImportStatusFailed
-			res.Error = "registries: " + err.Error()
-			return res
-		}
+	if err := v1alpha1.ValidateObjectRegistries(ctx, obj, i.registryValidator); err != nil {
+		res.Status = ImportStatusFailed
+		res.Error = "registries: " + err.Error()
+		return res
 	}
-	if i.uniqueRemoteURLs != nil {
-		if err := obj.ValidateUniqueRemoteURLs(ctx, i.uniqueRemoteURLs); err != nil {
-			res.Status = ImportStatusFailed
-			res.Error = "remote urls: " + err.Error()
-			return res
-		}
+	if err := v1alpha1.ValidateObjectRemoteURLs(ctx, obj, i.uniqueRemoteURLs); err != nil {
+		res.Status = ImportStatusFailed
+		res.Error = "remote urls: " + err.Error()
+		return res
 	}
 
 	// Enrichment: mutate obj's annotations/labels in place, accumulate

@@ -14,6 +14,8 @@
 // object by kind.
 package v1alpha1
 
+import "strings"
+
 // GroupVersion is the apiVersion string used by every resource in this package.
 const GroupVersion = "ar.dev/v1alpha1"
 
@@ -49,13 +51,5 @@ var BuiltinKinds = []string{
 // plural doesn't match this default should expose their own
 // PluralFor helper; OSS callers use this one.
 func PluralFor(kind string) string {
-	lower := make([]byte, len(kind))
-	for i := 0; i < len(kind); i++ {
-		c := kind[i]
-		if c >= 'A' && c <= 'Z' {
-			c += 'a' - 'A'
-		}
-		lower[i] = c
-	}
-	return string(lower) + "s"
+	return strings.ToLower(kind) + "s"
 }

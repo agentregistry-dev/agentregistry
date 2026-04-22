@@ -292,33 +292,27 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		body.SetMetadata(*meta)
 
 		// Structural validation first — cheap, no I/O.
-		if err := body.Validate(); err != nil {
+		if err := v1alpha1.ValidateObject(body); err != nil {
 			return nil, huma.Error400BadRequest("validation: " + err.Error())
 		}
 
 		// Ref resolution — optional, cross-kind. Skipped when no resolver
 		// is configured (e.g. kinds whose spec carries no ResourceRefs).
-		if cfg.Resolver != nil {
-			if err := body.ResolveRefs(ctx, cfg.Resolver); err != nil {
-				return nil, huma.Error400BadRequest("refs: " + err.Error())
-			}
+		if err := v1alpha1.ResolveObjectRefs(ctx, body, cfg.Resolver); err != nil {
+			return nil, huma.Error400BadRequest("refs: " + err.Error())
 		}
 
 		// External-registry validation — optional, network-heavy.
 		// Skipped when no validator is configured.
-		if cfg.RegistryValidator != nil {
-			if err := body.ValidateRegistries(ctx, cfg.RegistryValidator); err != nil {
-				return nil, huma.Error400BadRequest("registries: " + err.Error())
-			}
+		if err := v1alpha1.ValidateObjectRegistries(ctx, body, cfg.RegistryValidator); err != nil {
+			return nil, huma.Error400BadRequest("registries: " + err.Error())
 		}
 
 		// Cross-row remote-URL uniqueness. Optional; skipped when no
 		// checker is configured. 409 Conflict is the right status — the
 		// manifest is structurally valid but conflicts with existing state.
-		if cfg.UniqueRemoteURLsChecker != nil {
-			if err := body.ValidateUniqueRemoteURLs(ctx, cfg.UniqueRemoteURLsChecker); err != nil {
-				return nil, huma.Error409Conflict("remote urls: " + err.Error())
-			}
+		if err := v1alpha1.ValidateObjectRemoteURLs(ctx, body, cfg.UniqueRemoteURLsChecker); err != nil {
+			return nil, huma.Error409Conflict("remote urls: " + err.Error())
 		}
 
 		specJSON, err := body.MarshalSpec()

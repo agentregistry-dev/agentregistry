@@ -14,7 +14,7 @@ import (
 //
 // Use it directly as the v argument to obj.ValidateRegistries:
 //
-//	err := obj.ValidateRegistries(ctx, registries.Dispatcher)
+//	err := v1alpha1.ValidateObjectRegistries(ctx, obj, registries.Dispatcher)
 //
 // Callers that want to disable a subset of registries (e.g. unit
 // tests, offline imports, air-gapped deployments) can wrap this
