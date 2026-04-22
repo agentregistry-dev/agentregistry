@@ -71,6 +71,13 @@ type MCPInputVariable struct {
 	Choices     []string `json:"choices,omitempty" yaml:"choices,omitempty"`
 }
 
+// MCPArgument.Type values. Kept as string literals to match the YAML wire
+// format; platform translators compare against these.
+const (
+	MCPArgumentTypePositional = "positional"
+	MCPArgumentTypeNamed      = "named"
+)
+
 // MCPArgument is a positional or named argument passed to a package's runtime.
 type MCPArgument struct {
 	Type        string                      `json:"type" yaml:"type"`

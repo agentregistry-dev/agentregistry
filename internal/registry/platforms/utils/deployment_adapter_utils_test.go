@@ -5,29 +5,18 @@ import (
 	"testing"
 
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
-	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
-	"github.com/modelcontextprotocol/registry/pkg/model"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 func TestTranslateMCPServerRemoteAppliesHeaderOverridesAndDefaults(t *testing.T) {
 	server, err := TranslateMCPServer(context.Background(), &MCPServerRunRequest{
-		RegistryServer: &apiv0.ServerJSON{
-			Name: "remote server",
-			Remotes: []model.Transport{{
+		Name: "remote server",
+		Spec: v1alpha1.MCPServerSpec{
+			Remotes: []v1alpha1.MCPTransport{{
 				URL: "https://example.com/mcp",
-				Headers: []model.KeyValueInput{
-					{
-						Name: "Authorization",
-						InputWithVariables: model.InputWithVariables{
-							Input: model.Input{IsRequired: true},
-						},
-					},
-					{
-						Name: "X-Trace",
-						InputWithVariables: model.InputWithVariables{
-							Input: model.Input{Default: "trace-default"},
-						},
-					},
+				Headers: []v1alpha1.MCPKeyValueInput{
+					{Name: "Authorization", IsRequired: true},
+					{Name: "X-Trace", Default: "trace-default"},
 				},
 			}},
 		},
@@ -60,45 +49,27 @@ func TestTranslateMCPServerRemoteAppliesHeaderOverridesAndDefaults(t *testing.T)
 
 func TestTranslateMCPServerLocalIncludesOverridesAndExtraArgs(t *testing.T) {
 	server, err := TranslateMCPServer(context.Background(), &MCPServerRunRequest{
-		RegistryServer: &apiv0.ServerJSON{
-			Name: "test/server",
-			Packages: []model.Package{{
-				RegistryType: model.RegistryTypeNPM,
+		Name: "test/server",
+		Spec: v1alpha1.MCPServerSpec{
+			Packages: []v1alpha1.MCPPackage{{
+				RegistryType: v1alpha1.RegistryTypeNPM,
 				Identifier:   "@test/server",
 				Version:      "1.2.3",
-				RuntimeArguments: []model.Argument{
-					{
-						Name: "--token",
-						Type: model.ArgumentTypeNamed,
-						InputWithVariables: model.InputWithVariables{
-							Input: model.Input{Default: "default-token"},
-						},
-					},
+				RuntimeArguments: []v1alpha1.MCPArgument{{
+					Name:    "--token",
+					Type:    v1alpha1.MCPArgumentTypeNamed,
+					Default: "default-token",
+				}},
+				PackageArguments: []v1alpha1.MCPArgument{{
+					Name:  "--mode",
+					Type:  v1alpha1.MCPArgumentTypeNamed,
+					Value: "safe",
+				}},
+				EnvironmentVariables: []v1alpha1.MCPKeyValueInput{
+					{Name: "API_KEY", IsRequired: true},
+					{Name: "OPTIONAL", Default: "fallback"},
 				},
-				PackageArguments: []model.Argument{
-					{
-						Name: "--mode",
-						Type: model.ArgumentTypeNamed,
-						InputWithVariables: model.InputWithVariables{
-							Input: model.Input{Value: "safe"},
-						},
-					},
-				},
-				EnvironmentVariables: []model.KeyValueInput{
-					{
-						Name: "API_KEY",
-						InputWithVariables: model.InputWithVariables{
-							Input: model.Input{IsRequired: true},
-						},
-					},
-					{
-						Name: "OPTIONAL",
-						InputWithVariables: model.InputWithVariables{
-							Input: model.Input{Default: "fallback"},
-						},
-					},
-				},
-				Transport: model.Transport{
+				Transport: v1alpha1.MCPTransport{
 					Type: "http",
 					URL:  "http://localhost:7777/mcp",
 				},

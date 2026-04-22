@@ -10,8 +10,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/constants"
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
-	"github.com/modelcontextprotocol/registry/pkg/model"
 )
 
 // MCPServerTranslateOpts bundles knobs for SpecToPlatformMCPServer that vary
@@ -31,24 +29,24 @@ type MCPServerTranslateOpts struct {
 }
 
 // SpecToPlatformMCPServer translates a v1alpha1 MCPServer envelope into the
-// platform-internal *platformtypes.MCPServer by projecting Spec onto the
-// upstream apiv0.ServerJSON shape TranslateMCPServer already understands.
-// preferRemote=true (or empty Packages) forces remote transport selection;
-// otherwise package-first wins when both are defined.
+// platform-internal *platformtypes.MCPServer by calling TranslateMCPServer
+// directly on the v1alpha1 types. preferRemote=true (or empty Packages)
+// forces remote transport selection; otherwise package-first wins when both
+// are defined.
 func SpecToPlatformMCPServer(
 	ctx context.Context,
 	meta v1alpha1.ObjectMeta,
 	spec v1alpha1.MCPServerSpec,
 	opts MCPServerTranslateOpts,
 ) (*platformtypes.MCPServer, error) {
-	server := mcpServerSpecToServerJSON(meta, spec)
 	req := &MCPServerRunRequest{
-		RegistryServer: server,
-		DeploymentID:   opts.DeploymentID,
-		PreferRemote:   opts.PreferRemote || (len(spec.Remotes) > 0 && len(spec.Packages) == 0),
-		EnvValues:      nonNilStringMap(opts.EnvValues),
-		ArgValues:      nonNilStringMap(opts.ArgValues),
-		HeaderValues:   nonNilStringMap(opts.HeaderValues),
+		Name:         meta.Name,
+		Spec:         spec,
+		DeploymentID: opts.DeploymentID,
+		PreferRemote: opts.PreferRemote || (len(spec.Remotes) > 0 && len(spec.Packages) == 0),
+		EnvValues:    nonNilStringMap(opts.EnvValues),
+		ArgValues:    nonNilStringMap(opts.ArgValues),
+		HeaderValues: nonNilStringMap(opts.HeaderValues),
 	}
 	platformServer, err := TranslateMCPServer(ctx, req)
 	if err != nil {
@@ -167,9 +165,9 @@ func SpecToPlatformAgent(
 }
 
 // SplitDeploymentRuntimeInputs splits a Deployment.Spec.Env map into env /
-// arg / header buckets via the legacy ARG_/HEADER_ prefix convention. Keeps
-// parity with splitDeploymentRuntimeInputs in deployment_adapter_utils.go so
-// legacy and v1alpha1 code paths produce identical runtime wiring.
+// arg / header buckets via the ARG_/HEADER_ prefix convention. Prefix-free
+// keys are plain env; ARG_<name> and HEADER_<name> route to arg and header
+// overrides respectively.
 func SplitDeploymentRuntimeInputs(input map[string]string) (env, args, headers map[string]string) {
 	env = map[string]string{}
 	args = map[string]string{}
@@ -189,131 +187,6 @@ func SplitDeploymentRuntimeInputs(input map[string]string) (env, args, headers m
 		}
 	}
 	return env, args, headers
-}
-
-// -----------------------------------------------------------------------------
-// Private projection helpers — v1alpha1 → apiv0.ServerJSON shape.
-// -----------------------------------------------------------------------------
-
-func mcpServerSpecToServerJSON(meta v1alpha1.ObjectMeta, spec v1alpha1.MCPServerSpec) *apiv0.ServerJSON {
-	out := &apiv0.ServerJSON{
-		Name:        meta.Name,
-		Description: spec.Description,
-		Title:       spec.Title,
-		Version:     meta.Version,
-		WebsiteURL:  spec.WebsiteURL,
-	}
-	if spec.Repository != nil {
-		out.Repository = &model.Repository{
-			URL:       spec.Repository.URL,
-			Source:    spec.Repository.Source,
-			ID:        spec.Repository.ID,
-			Subfolder: spec.Repository.Subfolder,
-		}
-	}
-	out.Packages = make([]model.Package, 0, len(spec.Packages))
-	for _, p := range spec.Packages {
-		out.Packages = append(out.Packages, model.Package{
-			RegistryType:         p.RegistryType,
-			RegistryBaseURL:      p.RegistryBaseURL,
-			Identifier:           p.Identifier,
-			Version:              p.Version,
-			FileSHA256:           p.FileSHA256,
-			RunTimeHint:          p.RuntimeHint,
-			Transport:            mcpTransportToModel(p.Transport),
-			RuntimeArguments:     mcpArgsToModel(p.RuntimeArguments),
-			PackageArguments:     mcpArgsToModel(p.PackageArguments),
-			EnvironmentVariables: mcpKVsToModel(p.EnvironmentVariables),
-		})
-	}
-	out.Remotes = make([]model.Transport, 0, len(spec.Remotes))
-	for _, r := range spec.Remotes {
-		out.Remotes = append(out.Remotes, mcpTransportToModel(r))
-	}
-	return out
-}
-
-func mcpTransportToModel(t v1alpha1.MCPTransport) model.Transport {
-	return model.Transport{
-		Type:    t.Type,
-		URL:     t.URL,
-		Headers: mcpKVsToModel(t.Headers),
-	}
-}
-
-func mcpArgsToModel(args []v1alpha1.MCPArgument) []model.Argument {
-	if len(args) == 0 {
-		return nil
-	}
-	out := make([]model.Argument, 0, len(args))
-	for _, a := range args {
-		out = append(out, model.Argument{
-			InputWithVariables: model.InputWithVariables{
-				Input: model.Input{
-					Description: a.Description,
-					IsRequired:  a.IsRequired,
-					Format:      model.Format(a.Format),
-					Value:       a.Value,
-					IsSecret:    a.IsSecret,
-					Default:     a.Default,
-					Placeholder: a.Placeholder,
-					Choices:     a.Choices,
-				},
-				Variables: mcpVariablesToModel(a.Variables),
-			},
-			Type:       model.ArgumentType(a.Type),
-			Name:       a.Name,
-			ValueHint:  a.ValueHint,
-			IsRepeated: a.IsRepeated,
-		})
-	}
-	return out
-}
-
-func mcpKVsToModel(kvs []v1alpha1.MCPKeyValueInput) []model.KeyValueInput {
-	if len(kvs) == 0 {
-		return nil
-	}
-	out := make([]model.KeyValueInput, 0, len(kvs))
-	for _, kv := range kvs {
-		out = append(out, model.KeyValueInput{
-			InputWithVariables: model.InputWithVariables{
-				Input: model.Input{
-					Description: kv.Description,
-					IsRequired:  kv.IsRequired,
-					Format:      model.Format(kv.Format),
-					Value:       kv.Value,
-					IsSecret:    kv.IsSecret,
-					Default:     kv.Default,
-					Placeholder: kv.Placeholder,
-					Choices:     kv.Choices,
-				},
-				Variables: mcpVariablesToModel(kv.Variables),
-			},
-			Name: kv.Name,
-		})
-	}
-	return out
-}
-
-func mcpVariablesToModel(in map[string]v1alpha1.MCPInputVariable) map[string]model.Input {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]model.Input, len(in))
-	for k, v := range in {
-		out[k] = model.Input{
-			Description: v.Description,
-			IsRequired:  v.IsRequired,
-			Format:      model.Format(v.Format),
-			Value:       v.Value,
-			IsSecret:    v.IsSecret,
-			Default:     v.Default,
-			Placeholder: v.Placeholder,
-			Choices:     v.Choices,
-		}
-	}
-	return out
 }
 
 // mcpServerConfigFromSpec builds the per-server entry injected into the

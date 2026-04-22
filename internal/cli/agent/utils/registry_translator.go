@@ -27,14 +27,15 @@ func TranslateRegistryServer(
 	maps.Copy(runEnv, envOverrides)
 
 	translated, err := platformutils.TranslateMCPServer(context.Background(), &platformutils.MCPServerRunRequest{
-		RegistryServer: &apiv0.ServerJSON{
+		Name: serverSpec.Name,
+		Spec: models.ServerJSONToV1Alpha1Spec(&apiv0.ServerJSON{
 			Name:        serverSpec.Name,
 			Title:       serverSpec.Title,
 			Description: serverSpec.Description,
 			Version:     serverSpec.Version,
 			Packages:    serverSpec.Packages,
 			Remotes:     serverSpec.Remotes,
-		},
+		}),
 		PreferRemote: preferRemote,
 		EnvValues:    runEnv,
 		ArgValues:    map[string]string{},
@@ -65,7 +66,7 @@ func TranslateRegistryServer(
 		}
 		buildPath := ""
 		if len(serverSpec.Packages) > 0 {
-			config, _, err := platformutils.GetRegistryConfig(serverSpec.Packages[0], nil)
+			config, _, err := platformutils.GetRegistryConfig(models.PackageToV1Alpha1(serverSpec.Packages[0]), nil)
 			if err != nil {
 				return nil, err
 			}

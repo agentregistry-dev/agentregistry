@@ -17,6 +17,7 @@ import (
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	platformutils "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
+	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/spf13/cobra"
 	"github.com/stoewer/go-strcase"
@@ -102,11 +103,12 @@ func runMCPServerWithPlatform(ctx context.Context, server *apiv0.ServerResponse)
 	}
 
 	runRequest := &platformutils.MCPServerRunRequest{
-		RegistryServer: &server.Server,
-		PreferRemote:   false,
-		EnvValues:      envValues,
-		ArgValues:      argValues,
-		HeaderValues:   headerValues,
+		Name:         server.Server.Name,
+		Spec:         models.ServerJSONToV1Alpha1Spec(&server.Server),
+		PreferRemote: false,
+		EnvValues:    envValues,
+		ArgValues:    argValues,
+		HeaderValues: headerValues,
 	}
 
 	// Generate a random platform working directory name and project name.
