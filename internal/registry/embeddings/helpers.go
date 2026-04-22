@@ -1,0 +1,134 @@
+package embeddings
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+)
+
+// BuildMCPServerEmbeddingPayload assembles the canonical text used to
+// generate an MCPServer's semantic embedding. Deterministic across runs
+// so the checksum can gate idempotent re-index passes.
+//
+// Ported from the legacy BuildServerEmbeddingPayload which operated on
+// upstream apiv0.ServerJSON. The payload shape preserves the same field
+// set minus the old _meta.publisherProvided blob (v1alpha1 has no
+// equivalent; enrichment annotations aren't part of the search payload).
+func BuildMCPServerEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.MCPServerSpec) string {
+	var parts []string
+	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version, spec.WebsiteURL)
+	appendJSON(&parts, spec.Repository)
+	appendJSON(&parts, spec.Packages)
+	appendJSON(&parts, spec.Remotes)
+	return strings.Join(parts, "\n")
+}
+
+// BuildAgentEmbeddingPayload assembles the canonical text for an Agent.
+// Mirrors the legacy BuildAgentEmbeddingPayload shape on v1alpha1 types.
+func BuildAgentEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.AgentSpec) string {
+	var parts []string
+	appendIf(&parts,
+		meta.Name,
+		spec.Title,
+		spec.Description,
+		meta.Version,
+		spec.WebsiteURL,
+		spec.Language,
+		spec.Framework,
+		spec.ModelProvider,
+		spec.ModelName,
+		spec.Image,
+	)
+	appendJSON(&parts, spec.MCPServers)
+	appendJSON(&parts, spec.Skills)
+	appendJSON(&parts, spec.Prompts)
+	appendJSON(&parts, spec.Repository)
+	return strings.Join(parts, "\n")
+}
+
+// BuildSkillEmbeddingPayload assembles the canonical text for a Skill.
+func BuildSkillEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.SkillSpec) string {
+	var parts []string
+	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version, spec.WebsiteURL)
+	appendJSON(&parts, spec.Repository)
+	return strings.Join(parts, "\n")
+}
+
+// BuildPromptEmbeddingPayload assembles the canonical text for a Prompt.
+// Content is the interesting signal — include it verbatim so queries that
+// match against prompt text actually find the prompt.
+func BuildPromptEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.PromptSpec) string {
+	var parts []string
+	appendIf(&parts, meta.Name, spec.Description, meta.Version, spec.Content)
+	return strings.Join(parts, "\n")
+}
+
+// PayloadChecksum returns the deterministic checksum for an embedding
+// payload. Callers use it as SemanticEmbedding.Checksum so the indexer
+// can skip rows whose payload hasn't changed since the last index pass.
+func PayloadChecksum(payload string) string {
+	sum := sha256.Sum256([]byte(payload))
+	return hex.EncodeToString(sum[:])
+}
+
+// GenerateSemanticEmbedding runs the provider against the supplied
+// payload and returns a fully-populated SemanticEmbedding ready for
+// Store.SetEmbedding. The payload must be non-empty; when
+// expectedDimensions > 0 the provider output is validated against it
+// so schema mismatches surface early rather than at DB-write time.
+func GenerateSemanticEmbedding(ctx context.Context, provider Provider, payload string, expectedDimensions int) (*v1alpha1.SemanticEmbedding, error) {
+	if provider == nil {
+		return nil, errors.New("embedding provider is not configured")
+	}
+	if strings.TrimSpace(payload) == "" {
+		return nil, errors.New("embedding payload is empty")
+	}
+
+	result, err := provider.Generate(ctx, Payload{Text: payload})
+	if err != nil {
+		return nil, err
+	}
+
+	dims := result.Dimensions
+	if dims == 0 {
+		dims = len(result.Vector)
+	}
+	if expectedDimensions > 0 && dims != expectedDimensions {
+		return nil, fmt.Errorf("embedding dimensions mismatch: expected %d, got %d", expectedDimensions, dims)
+	}
+
+	// result.GeneratedAt is ignored here — Store.SetEmbedding stamps
+	// semantic_embedding_generated_at with NOW() at write time, making
+	// the provider's local timestamp redundant.
+
+	return &v1alpha1.SemanticEmbedding{
+		Vector:     result.Vector,
+		Provider:   result.Provider,
+		Model:      result.Model,
+		Dimensions: dims,
+		Checksum:   PayloadChecksum(payload),
+	}, nil
+}
+
+func appendIf(parts *[]string, values ...string) {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			*parts = append(*parts, v)
+		}
+	}
+}
+
+func appendJSON(parts *[]string, value any) {
+	if value == nil {
+		return
+	}
+	if data, err := json.Marshal(value); err == nil && len(data) > 0 && string(data) != "null" {
+		*parts = append(*parts, string(data))
+	}
+}

@@ -35,6 +35,25 @@ type Config struct {
 	// Runtime Configuration
 	RuntimeDir string `env:"RUNTIME_DIR" envDefault:"/tmp/arctl-runtime"`
 	Verbose    bool   `env:"VERBOSE" envDefault:"false"`
+
+	// Embeddings / Semantic Search
+	Embeddings EmbeddingsConfig
+}
+
+// EmbeddingsConfig captures configuration needed to generate embeddings.
+// Resurrected from the cruft-sweep commit (58401c7) that dropped it when
+// the indexer stack was removed; brought back to drive the v1alpha1
+// embeddings restore. Enabled=false keeps the indexer dormant and the
+// semantic_embedding columns NULL on every row.
+type EmbeddingsConfig struct {
+	Enabled       bool   `env:"EMBEDDINGS_ENABLED" envDefault:"false"`
+	Provider      string `env:"EMBEDDINGS_PROVIDER" envDefault:"openai"`
+	Model         string `env:"EMBEDDINGS_MODEL" envDefault:"text-embedding-3-small"`
+	Dimensions    int    `env:"EMBEDDINGS_DIMENSIONS" envDefault:"1536"`
+	OpenAIAPIKey  string `env:"OPENAI_API_KEY" envDefault:""`
+	OpenAIBaseURL string `env:"OPENAI_BASE_URL" envDefault:"https://api.openai.com/v1"`
+	OpenAIOrg     string `env:"OPENAI_ORG" envDefault:""`
+	OnPublish     bool   `env:"EMBEDDINGS_ON_PUBLISH" envDefault:"false"`
 }
 
 // NewConfig creates a new configuration with default values
