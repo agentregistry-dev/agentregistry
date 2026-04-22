@@ -2,10 +2,12 @@ package manifest
 
 import (
 	"fmt"
+	"os"
 	"slices"
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/manifest"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
 )
 
 const ManifestFileName = "mcp.yaml"
@@ -94,6 +96,23 @@ func NewManager(projectRoot string) *Manager {
 			&MCPManifestValidator{},
 		),
 	}
+}
+
+// Load reads and parses mcp.yaml, routing declarative envelope YAML through
+// the envelope translator. Legacy flat-manifest files continue to flow
+// through the embedded generic manager (which applies the strict validator).
+func (m *Manager) Load() (*ProjectManifest, error) {
+	path := m.Path()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		// Defer to the embedded manager so the canonical "not found" and
+		// other OS-error messages are produced by a single code path.
+		return m.Manager.Load()
+	}
+	if kinds.IsEnvelopeYAML(data) {
+		return loadFromEnvelope(data)
+	}
+	return m.LoadFromBytes(data)
 }
 
 // Save updates the timestamp and saves the manifest.

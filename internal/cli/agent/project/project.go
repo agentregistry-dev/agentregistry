@@ -10,6 +10,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/adk/python"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
@@ -17,8 +18,21 @@ import (
 
 // LoadManifest loads the agent manifest from the project directory.
 func LoadManifest(projectDir string) (*models.AgentManifest, error) {
-	manager := common.NewManifestManager(projectDir)
-	return manager.Load()
+	path := filepath.Join(projectDir, "agent.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		// File missing / permission denied — delegate to the legacy manager so
+		// the canonical "<filename> not found in <dir>" error shape is produced
+		// by a single code path. (Legacy manager will re-issue the read and
+		// surface the real os error.)
+		return common.NewManifestManager(projectDir).Load()
+	}
+	if kinds.IsEnvelopeYAML(data) {
+		return loadAgentFromEnvelope(data)
+	}
+	// Legacy flat-manifest path: decode the bytes we already have, preserving
+	// validator symmetry with the canonical Load() code path.
+	return common.NewManifestManager(projectDir).LoadFromBytes(data)
 }
 
 // AgentNameFromManifest attempts to read the agent name, falling back to directory name.
@@ -183,7 +197,7 @@ func RegenerateDockerCompose(projectDir string, manifest *models.AgentManifest, 
 // EnsureOtelCollectorConfig generates the OpenTelemetry collector config file
 // when the manifest has a telemetryEndpoint but the file is missing. This
 // handles the case where a user manually adds telemetryEndpoint to agent.yaml
-// without going through arctl agent init --telemetry.
+// without having the scaffold generate the collector config file.
 func EnsureOtelCollectorConfig(projectDir string, manifest *models.AgentManifest, verbose bool) error {
 	if manifest.TelemetryEndpoint == "" {
 		return nil

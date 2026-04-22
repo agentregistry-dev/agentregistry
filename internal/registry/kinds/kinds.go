@@ -20,11 +20,19 @@ type Metadata struct {
 
 // Document is a single apply/delete unit.
 // After Decode, Spec holds a concrete typed pointer (e.g. *AgentSpec).
+//
+// Status is server-populated on read paths (arctl get -o yaml) and
+// intentionally omitted on apply: the server-side envelope decoder at
+// decodeNode only unmarshals apiVersion/kind/metadata/spec, so any
+// status block on input is silently ignored. This keeps `arctl get X -o yaml
+// | arctl apply -f -` round-tripping cleanly while still surfacing
+// runtime state for debugging.
 type Document struct {
 	APIVersion string   `yaml:"apiVersion" json:"apiVersion"`
 	Kind       string   `yaml:"kind" json:"kind"`
 	Metadata   Metadata `yaml:"metadata" json:"metadata"`
 	Spec       any      `yaml:"spec" json:"spec"`
+	Status     any      `yaml:"status,omitempty" json:"status,omitempty"`
 }
 
 // Status is the per-document outcome of an apply call.

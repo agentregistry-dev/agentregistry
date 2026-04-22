@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +16,11 @@ import (
 	"testing"
 	"time"
 )
+
+// localDeployComposeProject is the docker-compose project label the local
+// deploy adapter uses for its runtime containers. Tests that apply a
+// deployment with `providerId: local` use this to clean up after themselves.
+const localDeployComposeProject = "agentregistry_runtime"
 
 // registryURL is set during TestMain setup and used by all tests that need the registry.
 var registryURL string
@@ -288,4 +294,29 @@ func UniqueNameWithPrefix(prefix string) string {
 // must start with a letter, contain only letters and digits, minimum 2 characters.
 func UniqueAgentName(prefix string) string {
 	return fmt.Sprintf("%s%d", prefix, time.Now().UnixNano()%100000)
+}
+
+// removeLocalDeployment tears down any docker-compose containers left behind
+// by a local-provider deployment. Idempotent — no-op when nothing matches.
+// Used in t.Cleanup from tests that apply deployments with `providerId: local`.
+// Survives even if the test's apply step failed before a deployment ran.
+func removeLocalDeployment(t *testing.T) {
+	t.Helper()
+	t.Logf("Cleaning up local deployment...")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	projectFilter := "label=com.docker.compose.project=" + localDeployComposeProject
+
+	listCmd := exec.CommandContext(ctx, "docker", "ps", "-a", "-q", "--filter", projectFilter)
+	out, err := listCmd.Output()
+	if err != nil || strings.TrimSpace(string(out)) == "" {
+		return
+	}
+
+	ids := strings.Fields(strings.TrimSpace(string(out)))
+	rmArgs := append([]string{"rm", "-f"}, ids...)
+	rmCmd := exec.CommandContext(ctx, "docker", rmArgs...)
+	if out, err := rmCmd.CombinedOutput(); err != nil {
+		t.Logf("Warning: failed to remove local deployment containers: %v\n%s", err, string(out))
+	}
 }

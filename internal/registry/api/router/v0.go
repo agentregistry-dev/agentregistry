@@ -17,6 +17,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 	"github.com/agentregistry-dev/agentregistry/pkg/importer"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -65,6 +66,11 @@ type RouteOptions struct {
 	// handler then routes through Store.SemanticList.
 	V1Alpha1SemanticSearch resource.SemanticSearchFunc
 
+	// Authz gates admin-scope handlers (e.g. embeddings indexing) on
+	// an API level. Nil falls back to the public provider so the
+	// handlers register but every admin check short-circuits to allow.
+	Authz auth.Authorizer
+
 	// Optional callback for integration-owned route registration.
 	ExtraRoutes func(api huma.API, pathPrefix string)
 }
@@ -105,12 +111,15 @@ func RegisterRoutes(
 	}
 
 	// Embeddings indexer endpoints — wired only when both the indexer
-	// and job manager are present.
+	// and job manager are present. Authz gates admin-only operations;
+	// when zero-valued it falls through to the public provider which
+	// allows every check, matching the historical OSS default.
 	if opts.V1Alpha1Indexer != nil && opts.V1Alpha1JobManager != nil {
 		v0embeddings.Register(api, v0embeddings.Config{
 			BasePrefix: pathPrefix,
 			Indexer:    opts.V1Alpha1Indexer,
 			Manager:    opts.V1Alpha1JobManager,
+			Authz:      opts.Authz,
 		})
 	}
 

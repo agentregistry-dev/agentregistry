@@ -15,12 +15,19 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/deployment"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp"
-	"github.com/agentregistry-dev/agentregistry/internal/cli/prompt"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/daemon/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/spf13/cobra"
+)
+
+const (
+	// AnnotationSkipTokenResolution can be set on a cobra.Command's Annotations map to skip
+	// CLI token resolution during pre-run setup.
+	// The command will still get an API client, just without an auth token.
+	// Child commands inherit this from their parents.
+	AnnotationSkipTokenResolution = "skipTokenResolution"
 )
 
 // ClientFactory creates an API client for the given base URL and token.
@@ -30,8 +37,8 @@ type ClientFactory func(ctx context.Context, baseURL, token string) (*client.Cli
 // CLIOptions configures the CLI behavior.
 // Can be extended for more options (e.g. client factory).
 type CLIOptions struct {
-	// AuthnProviderFactory provides CLI-specific authentication.
-	AuthnProviderFactory types.CLIAuthnProviderFactory
+	// TokenProviderFactory allows for extensions to provide tokens to CLI.
+	TokenProviderFactory types.CLITokenProviderFactory
 
 	// OnTokenResolved is called when a token is resolved.
 	// This allows extensions to perform additional actions when a token is resolved (e.g. storing locally).
@@ -76,7 +83,6 @@ var rootCmd = &cobra.Command{
 		mcp.SetAPIClient(c)
 		agent.SetAPIClient(c)
 		skill.SetAPIClient(c)
-		prompt.SetAPIClient(c)
 		deployment.SetAPIClient(c)
 		cli.SetAPIClient(c)
 		declarative.SetAPIClient(c)
@@ -92,7 +98,6 @@ func init() {
 	rootCmd.AddCommand(mcp.McpCmd)
 	rootCmd.AddCommand(agent.AgentCmd)
 	rootCmd.AddCommand(skill.SkillCmd)
-	rootCmd.AddCommand(prompt.PromptCmd)
 	rootCmd.AddCommand(configure.ConfigureCmd)
 	rootCmd.AddCommand(cli.VersionCmd)
 	rootCmd.AddCommand(deployment.DeploymentCmd)
@@ -120,8 +125,8 @@ func resolveRegistryTarget(getEnv func(string) string) (baseURL, token string) {
 	return base, token
 }
 
-// resolveAuthToken resolves the authentication token from the CLI authentication provider.
-func resolveAuthToken(ctx context.Context, cmd *cobra.Command, factory types.CLIAuthnProviderFactory) (string, error) {
+// resolveAuthToken resolves the authentication token from the CLI token provider.
+func resolveAuthToken(ctx context.Context, cmd *cobra.Command, factory types.CLITokenProviderFactory) (string, error) {
 	provider, err := factory(cmd.Root())
 	if err != nil {
 		if errors.Is(err, types.ErrNoOIDCDefined) {
@@ -133,7 +138,7 @@ func resolveAuthToken(ctx context.Context, cmd *cobra.Command, factory types.CLI
 		return "", nil // non-blocking, user may be running a command that does not require authentication
 	}
 
-	token, err := provider.Authenticate(ctx)
+	token, err := provider.Token(ctx)
 	if err != nil {
 		if errors.Is(err, types.ErrCLINoStoredToken) {
 			return "", nil // non-blocking, user may be running a command that does not require authentication
@@ -164,22 +169,12 @@ var preRunSkipCommands = map[string]map[string]bool{
 		"init":       true,
 		"build":      true,
 	},
-	"agent": {
-		"build": true,
-		"init":  true,
-	},
 	"mcp": {
 		"add-tool": true,
-		"build":    true,
-		"init":     true,
-	},
-	"skill": {
-		"build": true,
-		"init":  true,
 	},
 }
 
-// preRunBehavior returns whether to skip pre-run setup (e.g. agent/mcp/skill init).
+// preRunBehavior returns whether to skip pre-run setup (e.g. init/build, which run locally).
 func preRunBehavior(cmd *cobra.Command) (skipSetup bool) {
 	if cmd == nil {
 		return false
@@ -196,11 +191,22 @@ func preRunBehavior(cmd *cobra.Command) (skipSetup bool) {
 	return false
 }
 
-// preRunSetup resolves auth and creates the API client.
+// shouldSkipTokenResolution checks the command and its ancestors for the AnnotationSkipTokenResolution annotation.
+// The nearest (most specific) annotation wins: a child can override a parent's setting.
+func shouldSkipTokenResolution(cmd *cobra.Command) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		if v, ok := c.Annotations[AnnotationSkipTokenResolution]; ok {
+			return v == "true"
+		}
+	}
+	return false
+}
+
+// preRunSetup resolves the API token and creates the API client.
 func preRunSetup(ctx context.Context, cmd *cobra.Command, baseURL, token string) (*client.Client, error) {
 	// Get authentication token if no token override was provided
-	if token == "" && cliOptions.AuthnProviderFactory != nil {
-		resolvedToken, err := resolveAuthToken(ctx, cmd, cliOptions.AuthnProviderFactory)
+	if token == "" && cliOptions.TokenProviderFactory != nil && !shouldSkipTokenResolution(cmd) {
+		resolvedToken, err := resolveAuthToken(ctx, cmd, cliOptions.TokenProviderFactory)
 		if err != nil {
 			return nil, err
 		}

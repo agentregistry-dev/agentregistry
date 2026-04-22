@@ -91,20 +91,8 @@ func (o *PublicAuthzProvider) Check(ctx context.Context, s Session, verb Permiss
 	return o.jwtManager.Check(ctx, s, verb, resource)
 }
 
-func (o *PublicAuthzProvider) IsRegistryAdmin(ctx context.Context, s Session) bool {
-	if s == nil {
-		return false
-	}
-
-	// the system session is exempt from authz checks and acts as a global admin, similar to the registry admin
-	if IsSystemSession(s) {
-		return true
-	}
-
-	for _, permission := range s.Principal().User.Permissions {
-		if permission.ResourcePattern == "*" {
-			return true
-		}
-	}
-	return false
+// IsRegistryAdmin always returns true for the public provider, mirroring
+// the PublicActions convention.
+func (o *PublicAuthzProvider) IsRegistryAdmin(_ context.Context, _ Session) bool {
+	return true
 }

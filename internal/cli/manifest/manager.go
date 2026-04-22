@@ -48,16 +48,22 @@ func (m *Manager[T]) Load() (T, error) {
 		return manifest, fmt.Errorf("reading %s: %w", m.filename, err)
 	}
 
+	return m.LoadFromBytes(data)
+}
+
+// LoadFromBytes parses already-read manifest bytes, validates, and returns
+// the result. Lets callers that have already read the file (e.g. for envelope
+// detection) avoid re-issuing the read.
+func (m *Manager[T]) LoadFromBytes(data []byte) (T, error) {
+	var manifest T
 	if err := yaml.Unmarshal(data, &manifest); err != nil {
 		return manifest, fmt.Errorf("parsing %s: %w", m.filename, err)
 	}
-
 	if m.validator != nil {
 		if err := m.validator.Validate(manifest); err != nil {
 			return manifest, fmt.Errorf("invalid %s: %w", m.filename, err)
 		}
 	}
-
 	return manifest, nil
 }
 

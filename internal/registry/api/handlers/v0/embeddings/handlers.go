@@ -18,6 +18,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 )
 
 // IndexRequest is the POST /v0/embeddings/index body.
@@ -52,18 +53,25 @@ type JobStatusResponse struct {
 }
 
 // Config bundles the dependencies the handler needs. Registered only
-// when Indexer + Manager are both non-nil.
+// when Indexer + Manager are both non-nil. Authz gates admin-only
+// operations (indexing + job status); zero-valued Authz falls through
+// to the public provider which allows every check.
 type Config struct {
 	BasePrefix string
 	Indexer    *embeddings.Indexer
 	Manager    *jobs.Manager
+	Authz      auth.Authorizer
 }
 
 // Register wires POST + GET under {BasePrefix}/embeddings/index.
-// Callers pass BasePrefix="/v0".
+// Callers pass BasePrefix="/v0". Authz defaults to a permissive public
+// provider when zero-valued so existing OSS deployments keep working.
 func Register(api huma.API, cfg Config) {
 	if cfg.Indexer == nil || cfg.Manager == nil {
 		return
+	}
+	if cfg.Authz.Authz == nil {
+		cfg.Authz = auth.Authorizer{Authz: auth.NewPublicAuthzProvider(nil)}
 	}
 	registerIndex(api, cfg)
 	registerStatus(api, cfg)
@@ -85,6 +93,11 @@ func registerIndex(api huma.API, cfg Config) {
 		Summary:     "Start a background indexing pass",
 		Tags:        []string{"embeddings"},
 	}, func(ctx context.Context, in *indexInput) (*indexOutput, error) {
+		// Only registry admins may trigger an indexing pass — the
+		// operation touches every row and is a resource hog.
+		if !cfg.Authz.IsRegistryAdmin(ctx) {
+			return nil, huma.Error403Forbidden("Forbidden")
+		}
 		job, err := cfg.Manager.CreateJob(jobs.IndexJobType)
 		if err != nil {
 			if errors.Is(err, jobs.ErrJobAlreadyRunning) {
@@ -169,6 +182,10 @@ func registerStatus(api huma.API, cfg Config) {
 		Summary:     "Get an embeddings indexing job's status",
 		Tags:        []string{"embeddings"},
 	}, func(ctx context.Context, in *statusInput) (*statusOutput, error) {
+		// Same gate as job creation to avoid leaking job existence.
+		if !cfg.Authz.IsRegistryAdmin(ctx) {
+			return nil, huma.Error403Forbidden("Forbidden")
+		}
 		job, err := cfg.Manager.GetJob(jobs.JobID(in.JobID))
 		if err != nil {
 			if errors.Is(err, jobs.ErrJobNotFound) {

@@ -283,7 +283,7 @@ func TestInitAgentCmd_DeclarativeYAMLHasCorrectStructure(t *testing.T) {
 	assert.Contains(t, content, "spec:")
 }
 
-// ---- mcp init ----
+// ---- init mcp ----
 
 func TestInitMCPCmd_BasicScaffold(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -399,7 +399,7 @@ func TestInitMCPCmd_ProjectFilesCreated(t *testing.T) {
 	require.NoError(t, err, "mcp.yaml should exist")
 }
 
-// ---- skill init ----
+// ---- init skill ----
 
 func TestInitSkillCmd_BasicScaffold(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -468,7 +468,7 @@ func TestInitSkillCmd_ProjectFilesCreated(t *testing.T) {
 	require.NoError(t, err, "skill.yaml should exist")
 }
 
-// ---- prompt init ----
+// ---- init prompt ----
 
 func TestInitPromptCmd_BasicScaffold(t *testing.T) {
 	tmpDir := t.TempDir()

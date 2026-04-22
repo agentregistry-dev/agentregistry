@@ -225,6 +225,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	routeOpts := &router.RouteOptions{
 		ProviderPlatforms: options.ProviderPlatforms,
 		ExtraRoutes:       options.ExtraRoutes,
+		Authz:             authz,
 	}
 
 	// Reuse the v1alpha1 bundle constructed before the seed goroutines.
@@ -445,3 +446,4 @@ func wireEmbeddings(cfg *config.Config, stores map[string]*internaldb.Store, rou
 		"provider", cfg.Embeddings.Provider,
 		"model", cfg.Embeddings.Model)
 }
+

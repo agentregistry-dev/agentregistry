@@ -16,7 +16,19 @@ import (
 	pkgemb "github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 )
+
+// denyAdminAuthzProvider refuses IsRegistryAdmin so tests can assert
+// the admin gate fires.
+type denyAdminAuthzProvider struct{}
+
+func (denyAdminAuthzProvider) Check(context.Context, auth.Session, auth.PermissionAction, auth.Resource) error {
+	return nil
+}
+func (denyAdminAuthzProvider) IsRegistryAdmin(context.Context, auth.Session) bool {
+	return false
+}
 
 // fakeProvider returns a deterministic vector so tests don't need
 // network access and can assert progress + result shape precisely.
@@ -214,4 +226,38 @@ func TestHandler_JobNotFound(t *testing.T) {
 	api, _, _ := setupHandlerFixture(t)
 	resp := api.Get("/v0/embeddings/index/nope")
 	require.Equal(t, 404, resp.Code)
+}
+
+func TestHandler_NonAdmin_Forbidden(t *testing.T) {
+	pool := database.NewV1Alpha1TestPool(t)
+	store := database.NewStore(pool, "v1alpha1.agents")
+	seedAgent(t, store, "one")
+
+	indexer, err := pkgemb.NewIndexer(pkgemb.IndexerConfig{
+		Bindings: []pkgemb.KindBinding{{
+			Kind:         v1alpha1.KindAgent,
+			Store:        store,
+			BuildPayload: func(row *v1alpha1.RawObject) (string, error) { return row.Metadata.Name, nil },
+		}},
+		Provider:   &fakeProvider{},
+		Dimensions: 1536,
+	})
+	require.NoError(t, err)
+
+	manager := jobs.NewManager()
+	_, api := humatest.New(t)
+	Register(api, Config{
+		BasePrefix: "/v0",
+		Indexer:    indexer,
+		Manager:    manager,
+		Authz:      auth.Authorizer{Authz: denyAdminAuthzProvider{}},
+	})
+
+	// POST is gated.
+	resp := api.Post("/v0/embeddings/index", strings.NewReader(`{}`))
+	require.Equal(t, 403, resp.Code, resp.Body.String())
+
+	// GET is also gated (prevents job-existence leaks).
+	resp = api.Get("/v0/embeddings/index/anything")
+	require.Equal(t, 403, resp.Code, resp.Body.String())
 }

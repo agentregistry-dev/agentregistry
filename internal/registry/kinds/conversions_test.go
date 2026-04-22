@@ -158,6 +158,27 @@ func TestToAgentJSON(t *testing.T) {
 	assert.Equal(t, "http://remote", got.Remotes[0].URL)
 }
 
+func TestToAgentJSON_McpServerVersion(t *testing.T) {
+	md := kinds.Metadata{Name: "agent-with-mcp-ver", Version: "1.0.0"}
+	spec := &kinds.AgentSpec{
+		Description: "agent with new-format mcp server",
+		McpServers: []kinds.AgentMcpServer{
+			{
+				Name:    "local/test-mcp",
+				Version: "2.3.0",
+			},
+		},
+	}
+
+	got := kinds.ToAgentJSON(md, spec)
+
+	require.NotNil(t, got)
+	require.Len(t, got.McpServers, 1)
+	assert.Equal(t, "local/test-mcp", got.McpServers[0].Name)
+	assert.Equal(t, "2.3.0", got.McpServers[0].Version)
+	assert.Empty(t, got.McpServers[0].Type, "new-format entry should have no Type")
+}
+
 func TestToAgentJSON_NilRepository(t *testing.T) {
 	md := kinds.Metadata{Name: "agent-no-repo", Version: "0.1.0"}
 	spec := &kinds.AgentSpec{Description: "no repo"}

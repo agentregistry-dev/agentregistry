@@ -9,6 +9,7 @@ import (
 	agentframeworks "github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks"
 	agentcommon "github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	agentutils "github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	mcpframeworks "github.com/agentregistry-dev/agentregistry/internal/cli/mcp/frameworks"
 	mcptemplates "github.com/agentregistry-dev/agentregistry/internal/cli/mcp/templates"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
@@ -53,6 +54,10 @@ Examples:
 	cmd.AddCommand(newInitMCPCmd())
 	cmd.AddCommand(newInitSkillCmd())
 	cmd.AddCommand(newInitPromptCmd())
+
+	// init is an offline scaffolding command — hide inherited registry flags
+	// from --help output. Subcommands inherit the help func from the parent.
+	common.HideRegistryFlags(cmd)
 	return cmd
 }
 
@@ -327,7 +332,7 @@ func defaultInitModelName(provider string) (string, bool) {
 	}
 }
 
-// --- mcp init ---
+// --- init mcp ---
 
 var supportedMCPFrameworks = map[string]struct{}{
 	"fastmcp-python": {},
@@ -466,13 +471,14 @@ func writeDeclarativeMCPYAML(projectDir, name, ver, image, description string) e
 	return os.WriteFile(filepath.Join(projectDir, "mcp.yaml"), b, 0o644)
 }
 
-// --- skill init ---
+// --- init skill ---
 
 func newInitSkillCmd() *cobra.Command {
 	var (
 		initVersion     string
 		initDescription string
 		initCategory    string
+		initImage       string
 	)
 
 	cmd := &cobra.Command{
@@ -494,6 +500,15 @@ The generated skill.yaml can be applied directly:
 				return fmt.Errorf("invalid skill name: %w", err)
 			}
 
+			image := initImage
+			if image == "" {
+				registry := strings.TrimSuffix(version.DockerRegistry, "/")
+				if registry == "" {
+					registry = "localhost:5001"
+				}
+				image = fmt.Sprintf("%s/%s:latest", registry, name)
+			}
+
 			cwd, err := os.Getwd()
 			if err != nil {
 				return fmt.Errorf("getting working directory: %w", err)
@@ -508,7 +523,7 @@ The generated skill.yaml can be applied directly:
 				return fmt.Errorf("generating skill project: %w", err)
 			}
 
-			if err := writeDeclarativeSkillYAML(projectDir, name, initVersion, initDescription, initCategory); err != nil {
+			if err := writeDeclarativeSkillYAML(projectDir, name, initVersion, initDescription, initCategory, image); err != nil {
 				return fmt.Errorf("writing declarative skill.yaml: %w", err)
 			}
 
@@ -526,11 +541,12 @@ The generated skill.yaml can be applied directly:
 	cmd.Flags().StringVar(&initVersion, "version", "0.1.0", "Initial version")
 	cmd.Flags().StringVar(&initDescription, "description", "", "Skill description")
 	cmd.Flags().StringVar(&initCategory, "category", "general", "Skill category (e.g. nlp, general)")
+	cmd.Flags().StringVar(&initImage, "image", "", "Docker image (default: localhost:5001/<name>:latest)")
 
 	return cmd
 }
 
-func writeDeclarativeSkillYAML(projectDir, name, ver, description, category string) error {
+func writeDeclarativeSkillYAML(projectDir, name, ver, description, category, image string) error {
 	desc := description
 	if desc == "" {
 		desc = fmt.Sprintf("%s skill", name)
@@ -540,6 +556,18 @@ func writeDeclarativeSkillYAML(projectDir, name, ver, description, category stri
 		Title:       name,
 		Category:    category,
 		Description: desc,
+	}
+	if image != "" {
+		// Skills use RegistryType "docker" (matching legacy `arctl skill publish`
+		// and the `arctl skill pull` consumer). MCPs use "oci" — different
+		// per-kind convention.
+		pkg := kinds.SkillPackageRef{
+			RegistryType: "docker",
+			Identifier:   image,
+			Version:      ver,
+		}
+		pkg.Transport.Type = "docker"
+		spec.Packages = []kinds.SkillPackageRef{pkg}
 	}
 
 	doc := struct {
@@ -562,7 +590,7 @@ func writeDeclarativeSkillYAML(projectDir, name, ver, description, category stri
 	return os.WriteFile(filepath.Join(projectDir, "skill.yaml"), b, 0o644)
 }
 
-// --- prompt init ---
+// --- init prompt ---
 
 func newInitPromptCmd() *cobra.Command {
 	var (

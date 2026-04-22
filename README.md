@@ -104,8 +104,8 @@ That's it. Your IDE now has access to the deployed server through the agentgatew
 Create, scaffold, and publish the building blocks of your agentic infrastructure.
 
 - **MCP servers** — Register servers from npm (`npx`), PyPI (`uvx`), OCI/Docker images, or remote HTTP/SSE endpoints. Each entry supports versioning, environment variables, package references, and automated quality scores.
-- **Skills** — Build structured knowledge packages that extend what an agent knows. A skill is a `SKILL.md` bundled with code examples, docs, PDFs, and reference URLs. Scaffold with `arctl skill init`, publish with `arctl skill publish` to Docker Hub, any OCI registry, or a GitHub repository.
-- **Agents** — Define agents that bundle an identity with dependencies: which MCP servers it needs, which skills it uses, and how it should be configured. Scaffold with `arctl agent init`, then package everything into a versioned blueprint for one-step deployment.
+- **Skills** — Build structured knowledge packages that extend what an agent knows. A skill is a `SKILL.md` bundled with code examples, docs, PDFs, and reference URLs. Scaffold with `arctl init skill`, package and push the image with `arctl build ./skill --push`, then register the skill record with `arctl apply -f skill.yaml`.
+- **Agents** — Define agents that bundle an identity with dependencies: which MCP servers it needs, which skills it uses, and how it should be configured. Scaffold with `arctl init agent`, build and push the image with `arctl build ./agent --push`, then register the versioned agent record with `arctl apply -f agent.yaml`.
 - **Prompts** — Create reusable instruction templates that define how an agent should behave in specific contexts. Version and store them alongside agents, skills, and servers so they're discoverable and shareable across your team.
 
 ### Web UI
@@ -175,7 +175,7 @@ Instead of exposing every MCP server individually, agentgateway acts as an AI-na
   <img src="img/arch-diagram.png" alt="agentgateway architecture diagram" width="800"/>
 </p>
 
-When you run `arctl deploy`, agentregistry automatically configures the gateway routing so your MCP servers are reachable through the secured proxy. Run `arctl configure cursor` to point your IDE at the gateway endpoint.
+When you run `arctl apply -f deployment.yaml`, agentregistry automatically configures the gateway routing so your MCP servers are reachable through the secured proxy. Run `arctl configure cursor` to point your IDE at the gateway endpoint.
 
 ---
 
