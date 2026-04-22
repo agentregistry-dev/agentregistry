@@ -163,6 +163,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	promptService := promptsvc.New(promptsvc.Dependencies{Prompts: db.Prompts(), Tx: db})
 	deploymentService := deploymentsvc.New(deploymentsvc.Dependencies{
 		StoreDB:            db,
+		Authz:              authz,
 		Deployments:        db.Deployments(),
 		Providers:          providerService,
 		Servers:            serverService,

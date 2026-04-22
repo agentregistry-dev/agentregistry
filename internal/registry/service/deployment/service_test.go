@@ -10,6 +10,7 @@ import (
 	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
 	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 	"github.com/modelcontextprotocol/registry/pkg/model"
@@ -18,17 +19,19 @@ import (
 )
 
 type mockDeploymentAdapter struct {
-	deployed    map[string]bool
-	deployCount int
+	deployed      map[string]bool
+	deployCount   int
+	undeployCount int
+	cancelCount   int
 }
 
 func newMockAdapter() *mockDeploymentAdapter {
 	return &mockDeploymentAdapter{deployed: map[string]bool{}}
 }
 
-func (m *mockDeploymentAdapter) deployCallCount() int {
-	return m.deployCount
-}
+func (m *mockDeploymentAdapter) deployCallCount() int   { return m.deployCount }
+func (m *mockDeploymentAdapter) undeployCallCount() int { return m.undeployCount }
+func (m *mockDeploymentAdapter) cancelCallCount() int   { return m.cancelCount }
 
 func (m *mockDeploymentAdapter) Platform() string                 { return "mock" }
 func (m *mockDeploymentAdapter) SupportedResourceTypes() []string { return []string{"agent", "mcp"} }
@@ -37,11 +40,17 @@ func (m *mockDeploymentAdapter) Deploy(_ context.Context, req *models.Deployment
 	m.deployCount++
 	return &models.DeploymentActionResult{Status: models.DeploymentStatusDeployed}, nil
 }
-func (m *mockDeploymentAdapter) Undeploy(_ context.Context, _ *models.Deployment) error { return nil }
+func (m *mockDeploymentAdapter) Undeploy(_ context.Context, _ *models.Deployment) error {
+	m.undeployCount++
+	return nil
+}
 func (m *mockDeploymentAdapter) GetLogs(_ context.Context, _ *models.Deployment) ([]string, error) {
 	return nil, nil
 }
-func (m *mockDeploymentAdapter) Cancel(_ context.Context, _ *models.Deployment) error { return nil }
+func (m *mockDeploymentAdapter) Cancel(_ context.Context, _ *models.Deployment) error {
+	m.cancelCount++
+	return nil
+}
 func (m *mockDeploymentAdapter) Discover(_ context.Context, _ string) ([]*models.Deployment, error) {
 	return nil, nil
 }
@@ -297,4 +306,98 @@ func TestApplyServerDeployment_Create(t *testing.T) {
 	assert.Equal(t, "mcp", dep.ResourceType)
 	assert.Equal(t, providerID, dep.ProviderID)
 	assert.Equal(t, "V", dep.Env["K"])
+}
+
+// denyDeployAuthzProvider refuses the Deploy verb so tests can assert that
+// the service-layer gates on Undeploy and Cancel fire before the adapter runs.
+type denyDeployAuthzProvider struct{}
+
+func (denyDeployAuthzProvider) Check(_ context.Context, _ auth.Session, verb auth.PermissionAction, _ auth.Resource) error {
+	if verb == auth.PermissionActionDeploy {
+		return auth.ErrForbidden
+	}
+	return nil
+}
+func (denyDeployAuthzProvider) IsRegistryAdmin(context.Context, auth.Session) bool { return false }
+
+var denyDeployAuthz = auth.Authorizer{Authz: denyDeployAuthzProvider{}}
+
+func newTestDeploymentServiceWithAuthz(t *testing.T, adapter *mockDeploymentAdapter, authz auth.Authorizer) (deploymentsvc.Registry, *models.Deployment) {
+	t.Helper()
+	testDB := internaldb.NewTestDB(t)
+	ctx := testCtx()
+
+	// Seed an agent and a provider so we can produce a valid deployment row.
+	agentName := "deny-test-agent"
+	agentSvc := agentsvc.New(agentsvc.Dependencies{StoreDB: testDB})
+	_, err := agentSvc.PublishAgent(ctx, &models.AgentJSON{
+		AgentManifest: models.AgentManifest{
+			Name:          agentName,
+			Image:         "ghcr.io/test/agent:v1",
+			Language:      "python",
+			Framework:     "adk",
+			ModelProvider: "openai",
+			ModelName:     "gpt-4o",
+			Description:   "Test agent",
+		},
+		Version: "1.0.0",
+	})
+	require.NoError(t, err)
+
+	providerID := "test-mock-provider"
+	provSvc := providersvc.New(providersvc.Dependencies{Providers: testDB.Providers()})
+	_, err = provSvc.RegisterProvider(ctx, &models.CreateProviderInput{
+		ID:       providerID,
+		Name:     "Mock Provider",
+		Platform: "mock",
+	})
+	require.NoError(t, err)
+
+	// Build the service WITHOUT the deny authz, so Launch can succeed and seed
+	// a deployment row for Undeploy/Cancel tests to act on.
+	seedSvc := deploymentsvc.New(deploymentsvc.Dependencies{
+		StoreDB:   testDB,
+		Providers: provSvc,
+		DeploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+			"mock": adapter,
+		},
+	})
+	dep, err := seedSvc.ApplyAgentDeployment(ctx, agentName, "1.0.0", providerID, nil, nil, false, false)
+	require.NoError(t, err)
+	require.NotNil(t, dep)
+
+	// Now construct the service for testing, with the deny-deploy authz.
+	svc := deploymentsvc.New(deploymentsvc.Dependencies{
+		StoreDB:   testDB,
+		Authz:     authz,
+		Providers: provSvc,
+		DeploymentAdapters: map[string]registrytypes.DeploymentPlatformAdapter{
+			"mock": adapter,
+		},
+	})
+	return svc, dep
+}
+
+func TestUndeployDeployment_DeployDenied_DoesNotCallAdapter(t *testing.T) {
+	mockAdapter := newMockAdapter()
+	svc, dep := newTestDeploymentServiceWithAuthz(t, mockAdapter, denyDeployAuthz)
+
+	before := mockAdapter.undeployCallCount()
+	err := svc.UndeployDeployment(testCtx(), dep)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, auth.ErrForbidden)
+	assert.Equal(t, before, mockAdapter.undeployCallCount(), "adapter.Undeploy must not run when Deploy is denied")
+}
+
+func TestCancelDeployment_DeployDenied_DoesNotCallAdapter(t *testing.T) {
+	mockAdapter := newMockAdapter()
+	svc, dep := newTestDeploymentServiceWithAuthz(t, mockAdapter, denyDeployAuthz)
+
+	before := mockAdapter.cancelCallCount()
+	err := svc.CancelDeployment(testCtx(), dep)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, auth.ErrForbidden)
+	assert.Equal(t, before, mockAdapter.cancelCallCount(), "adapter.Cancel must not run when Deploy is denied")
 }

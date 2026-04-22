@@ -11,6 +11,7 @@ import (
 	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
 	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 )
@@ -30,7 +31,9 @@ func IsUnsupportedDeploymentPlatformError(err error) bool {
 }
 
 type Dependencies struct {
-	StoreDB            database.Store
+	StoreDB database.Store
+	// Authz gates non-data operations that reach external platform adapters (e.g. Undeploy, Cancel).
+	Authz              auth.Authorizer
 	Deployments        database.DeploymentStore
 	Providers          providersvc.Registry
 	ProviderPlatforms  map[string]registrytypes.ProviderPlatformAdapter
@@ -61,12 +64,23 @@ type Registry interface {
 }
 
 type registry struct {
+	authz       auth.Authorizer
 	deployments database.DeploymentStore
 	providers   providersvc.Registry
 	servers     serversvc.Registry
 	agents      agentsvc.Registry
 	adapters    map[string]registrytypes.DeploymentPlatformAdapter
 	tx          database.Transactor
+}
+
+// deploymentArtifactType returns the authz artifact type that a deployment's
+// permissions are evaluated against. Deployments are not a first-class resource
+// type; every check authorizes against the underlying agent or server.
+func deploymentArtifactType(deployment *models.Deployment) auth.PermissionArtifactType {
+	if deployment != nil && deployment.ResourceType == resourceTypeAgent {
+		return auth.PermissionArtifactTypeAgent
+	}
+	return auth.PermissionArtifactTypeServer
 }
 
 var _ Registry = (*registry)(nil)
@@ -94,6 +108,7 @@ func New(deps Dependencies) Registry {
 	}
 
 	return &registry{
+		authz:       deps.Authz,
 		deployments: deps.Deployments,
 		providers:   deps.Providers,
 		servers:     deps.Servers,
@@ -218,6 +233,14 @@ func (s *registry) UndeployDeployment(ctx context.Context, deployment *models.De
 	if deployment == nil {
 		return database.ErrNotFound
 	}
+	// Gate before the external platform teardown, so a denied caller can't leave
+	// infra torn down with the registry row still present.
+	if err := s.authz.Check(ctx, auth.PermissionActionDeploy, auth.Resource{
+		Name: deployment.ServerName,
+		Type: deploymentArtifactType(deployment),
+	}); err != nil {
+		return err
+	}
 	adapter, err := s.ResolveDeploymentAdapterByProviderID(ctx, deployment.ProviderID)
 	if err != nil {
 		return err
@@ -242,6 +265,14 @@ func (s *registry) GetDeploymentLogs(ctx context.Context, deployment *models.Dep
 func (s *registry) CancelDeployment(ctx context.Context, deployment *models.Deployment) error {
 	if deployment == nil {
 		return database.ErrNotFound
+	}
+	// Cancel touches external infra via the adapter and has no downstream DB
+	// write that would carry an authz check, so the gate has to fire here.
+	if err := s.authz.Check(ctx, auth.PermissionActionDeploy, auth.Resource{
+		Name: deployment.ServerName,
+		Type: deploymentArtifactType(deployment),
+	}); err != nil {
+		return err
 	}
 	adapter, err := s.ResolveDeploymentAdapterByProviderID(ctx, deployment.ProviderID)
 	if err != nil {
