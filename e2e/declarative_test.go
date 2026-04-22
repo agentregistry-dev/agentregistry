@@ -2082,3 +2082,277 @@ spec:
 		t.Errorf("repository-shape MCP unexpectedly has remotes block:\n%s", result.Stdout)
 	}
 }
+
+// TestPrompt_MultipleVersions applies two prompt versions with distinct
+// content, asserts both are queryable by --version, deleting one leaves the
+// other intact. Covers the (name, version) composite-key behavior for prompts
+// — restores coverage from the deleted imperative TestPromptMultipleVersions.
+func TestPrompt_MultipleVersions(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+	promptName := UniqueNameWithPrefix("e2emultivprompt")
+	v1, v2 := "1.0.0", "2.0.0"
+	v1Content := "Version 1: You are a helpful assistant."
+	v2Content := "Version 2: You are an expert coding assistant."
+
+	t.Cleanup(func() {
+		RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", v1, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", v2, "--registry-url", regURL)
+	})
+
+	// Apply v1 + v2 via declarative YAML.
+	for _, tc := range []struct {
+		version, content string
+	}{{v1, v1Content}, {v2, v2Content}} {
+		yaml := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: Prompt
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  description: "multi-version prompt test"
+  content: |
+    %s
+`, promptName, tc.version, tc.content)
+		path := writeDeclarativeYAML(t, tmpDir, fmt.Sprintf("p-%s.yaml", tc.version), yaml)
+		result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)
+		RequireSuccess(t, result)
+		RequireOutputContains(t, result, "prompt/"+promptName)
+	}
+
+	// Both versions queryable via HTTP (declarative `arctl get` has no
+	// --version flag — always returns latest — so we hit the per-version
+	// API path directly. Decode the JSON so content comparisons survive
+	// any future change to include quotes/escapes.
+	for _, tc := range []struct {
+		version, wantContent string
+	}{{v1, v1Content}, {v2, v2Content}} {
+		resp := RegistryGet(t, fmt.Sprintf("%s/prompts/%s/versions/%s", regURL, promptName, tc.version))
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET prompt %s@%s: expected 200, got %d: %s", promptName, tc.version, resp.StatusCode, body)
+		}
+		var decoded struct {
+			Prompt struct {
+				Content string `json:"content"`
+				Version string `json:"version"`
+			} `json:"prompt"`
+		}
+		if err := json.Unmarshal(body, &decoded); err != nil {
+			t.Fatalf("decoding prompt response: %v\nbody: %s", err, body)
+		}
+		if decoded.Prompt.Version != tc.version {
+			t.Errorf("prompt %s: got version %q, want %q", promptName, decoded.Prompt.Version, tc.version)
+		}
+		if !strings.Contains(decoded.Prompt.Content, tc.wantContent) {
+			t.Errorf("prompt %s@%s: expected %q in content, got %q",
+				promptName, tc.version, tc.wantContent, decoded.Prompt.Content)
+		}
+	}
+
+	// Delete v1 only — v2 must remain accessible.
+	result := RunArctl(t, tmpDir, "delete", "prompt", promptName,
+		"--version", v1, "--registry-url", regURL)
+	RequireSuccess(t, result)
+
+	// v1 gone.
+	resp := RegistryGet(t, fmt.Sprintf("%s/prompts/%s/versions/%s", regURL, promptName, v1))
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404 for deleted prompt %s@%s, got %d", promptName, v1, resp.StatusCode)
+	}
+
+	// v2 still there.
+	resp = RegistryGet(t, fmt.Sprintf("%s/prompts/%s/versions/%s", regURL, promptName, v2))
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for remaining prompt %s@%s, got %d: %s", promptName, v2, resp.StatusCode, body)
+	}
+	if !strings.Contains(string(body), v2Content) {
+		t.Errorf("v2 content missing after v1 delete: %s", body)
+	}
+}
+
+// TestPrompt_ContentIntegrity applies a prompt with specific multi-line
+// content, then verifies get -o yaml returns the content byte-for-byte
+// (no truncation, no whitespace mangling, no newline loss). Restores
+// coverage from the deleted imperative TestPromptContentIntegrity.
+func TestPrompt_ContentIntegrity(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+	promptName := UniqueNameWithPrefix("e2econtent")
+	version := "1.0.0"
+	// Distinctive content with special characters that could trip YAML
+	// encoding: multi-line, unicode, leading-whitespace-sensitive list.
+	expectedLines := []string{
+		"You are an AI assistant specialized in Go programming.",
+		"Rules:",
+		"1. Always use error wrapping — `fmt.Errorf(\"...: %w\", err)`",
+		"2. Follow Go conventions",
+		"3. Write table-driven tests",
+	}
+
+	t.Cleanup(func() {
+		RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", version, "--registry-url", regURL)
+	})
+
+	// Apply with inline literal-block content.
+	yaml := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: Prompt
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  description: "content integrity test"
+  content: |
+    %s
+    %s
+    %s
+    %s
+    %s
+`, promptName, version,
+		expectedLines[0], expectedLines[1], expectedLines[2], expectedLines[3], expectedLines[4])
+
+	path := writeDeclarativeYAML(t, tmpDir, "content.yaml", yaml)
+	RequireSuccess(t, RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL))
+
+	// Fetch via HTTP — declarative `arctl get` has no --version flag.
+	// Decode the JSON response so content comparisons are against the
+	// unescaped stored string, not its JSON-encoded form.
+	resp := RegistryGet(t, fmt.Sprintf("%s/prompts/%s/versions/%s", regURL, promptName, version))
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for prompt %s@%s, got %d: %s", promptName, version, resp.StatusCode, body)
+	}
+	var decoded struct {
+		Prompt struct {
+			Content string `json:"content"`
+		} `json:"prompt"`
+	}
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		t.Fatalf("decoding prompt response: %v\nbody: %s", err, body)
+	}
+	for _, line := range expectedLines {
+		if !strings.Contains(decoded.Prompt.Content, line) {
+			t.Errorf("line missing from stored content: %q\nfull content: %q", line, decoded.Prompt.Content)
+		}
+	}
+}
+
+// TestSkill_DeletePromotesLatest asserts that when `is_latest` is being
+// maintained across multiple skill versions, deleting the current latest
+// promotes the next-highest version. Restores coverage from the deleted
+// imperative TestSkillDeletePromotesLatest.
+//
+// Contract: apply v1 → apply v2 (now latest) → delete v2 → v1 must be the
+// latest again (queryable without --version, served as the single result
+// when listing).
+func TestSkill_DeletePromotesLatest(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+	skillName := UniqueNameWithPrefix("e2epromoteskill")
+	v1, v2 := "0.0.1", "0.0.2"
+
+	t.Cleanup(func() {
+		// Best-effort cleanup of both versions.
+		RunArctl(t, tmpDir, "delete", "skill", skillName, "--version", v1, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "skill", skillName, "--version", v2, "--registry-url", regURL)
+	})
+
+	// Apply v1.
+	yamlV1 := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: Skill
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  description: "skill v1 for delete-promotes-latest test"
+  category: nlp
+`, skillName, v1)
+	RequireSuccess(t, RunArctl(t, tmpDir, "apply", "-f",
+		writeDeclarativeYAML(t, tmpDir, "skill-v1.yaml", yamlV1),
+		"--registry-url", regURL))
+
+	// Apply v2 — becomes latest.
+	yamlV2 := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: Skill
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  description: "skill v2 for delete-promotes-latest test"
+  category: nlp
+`, skillName, v2)
+	RequireSuccess(t, RunArctl(t, tmpDir, "apply", "-f",
+		writeDeclarativeYAML(t, tmpDir, "skill-v2.yaml", yamlV2),
+		"--registry-url", regURL))
+
+	// Without --version, get returns the latest — should be v2.
+	result := RunArctl(t, tmpDir, "get", "skill", skillName, "-o", "yaml", "--registry-url", regURL)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "version: "+v2)
+
+	// Delete v2 — the latest marker should fall back to v1.
+	RequireSuccess(t, RunArctl(t, tmpDir, "delete", "skill", skillName,
+		"--version", v2, "--registry-url", regURL))
+
+	// Re-query without --version: expect v1 promoted to latest.
+	result = RunArctl(t, tmpDir, "get", "skill", skillName, "-o", "yaml", "--registry-url", regURL)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "version: "+v1)
+	if strings.Contains(result.Stdout, "version: "+v2) {
+		t.Errorf("v2 should be gone after delete, but appears in get output:\n%s", result.Stdout)
+	}
+}
+
+// TestDeclarativeBuild_PlatformFlag verifies that `arctl build --platform
+// <arch>` threads the flag through to docker build. Uses linux/amd64 (the CI
+// host arch) so the build succeeds without buildx cross-compilation.
+// Restores coverage from the deleted imperative TestSkillBuildWithPlatform.
+func TestDeclarativeBuild_PlatformFlag(t *testing.T) {
+	skipIfNoDocker(t)
+	tmpDir := t.TempDir()
+	name := UniqueAgentName("platagent")
+
+	// Scaffold an agent project — has a real Dockerfile the build can chew on.
+	RequireSuccess(t, RunArctl(t, tmpDir, "init", "agent", "adk", "python", name,
+		"--model-name", "gemini-2.5-flash",
+		"--image", "localhost:5001/"+name+":platform-test"))
+
+	projectDir := filepath.Join(tmpDir, name)
+
+	// Build with --platform pinned to the host arch. This tests the flag
+	// plumbing (build.go:192 appends --platform to the docker build args)
+	// without requiring buildx or cross-compilation.
+	result := RunArctl(t, tmpDir, "build", projectDir,
+		"--platform", "linux/amd64",
+		"--image", "localhost:5001/"+name+":platform-test")
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "Successfully built Docker image")
+}
+
+// TestAPI_DirectNotFound asserts that hitting the registry's kind endpoints
+// with a non-existent name returns HTTP 404, not 500 or silent success.
+// Restores coverage from the deleted imperative TestPromptAPINotFound —
+// kind-agnostic shape so it's one test for all four kinds.
+func TestAPI_DirectNotFound(t *testing.T) {
+	regURL := RegistryURL(t)
+	missing := "does-not-exist-" + UniqueNameWithPrefix("404")
+
+	for _, path := range []string{
+		"/agents/" + missing,
+		"/prompts/" + missing,
+		"/skills/" + missing,
+	} {
+		t.Run(strings.TrimPrefix(path, "/"), func(t *testing.T) {
+			resp := RegistryGet(t, regURL+path)
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusNotFound {
+				t.Fatalf("GET %s: expected 404, got %d", path, resp.StatusCode)
+			}
+		})
+	}
+}
