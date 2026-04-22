@@ -99,7 +99,7 @@ Authz is enforced at the **database layer** by default — every store method ca
 
 Prefer DB-layer gates. If you add an API-layer gate, document the reason in the handler or service comment.
 
-See [docs/auth/matrix.md](./docs/auth/matrix.md) for the per-endpoint permission table.
+See [docs/auth/authz-matrix.md](./docs/auth/authz-matrix.md) for the per-endpoint permission table.
 
 ### Interface Design
 
@@ -481,4 +481,4 @@ When working with this codebase, AI assistants should:
 - [README.md](./README.md) - Project overview and quick start
 - [DEVELOPMENT.md](./DEVELOPMENT.md) - Architecture details
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Contribution guidelines
-- [docs/auth/matrix.md](./docs/auth/matrix.md) - AuthZ matrix for HTTP endpoints
+- [docs/auth/authz-matrix.md](./docs/auth/authz-matrix.md) - AuthZ matrix for HTTP endpoints
