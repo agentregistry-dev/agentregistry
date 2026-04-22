@@ -83,13 +83,22 @@ func NewClientWithConfig(baseURL, token string) (*Client, error) {
 func (c *Client) Close() error { return nil }
 
 func (c *Client) newRequest(method, pathWithQuery string) (*http.Request, error) {
+	return c.newRequestWithBody(method, pathWithQuery, nil, "")
+}
+
+// newRequestWithBody is the body-carrying variant used by the apply
+// endpoints. contentType is set on the request when non-empty.
+func (c *Client) newRequestWithBody(method, pathWithQuery string, body io.Reader, contentType string) (*http.Request, error) {
 	fullURL := strings.TrimRight(c.BaseURL, "/") + pathWithQuery
-	req, err := http.NewRequest(method, fullURL, nil)
+	req, err := http.NewRequest(method, fullURL, body)
 	if err != nil {
 		return nil, err
 	}
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
 	return req, nil
 }
@@ -308,7 +317,7 @@ func (c *Client) DeleteViaApply(ctx context.Context, body []byte) ([]apitypes.Ap
 }
 
 func (c *Client) applyBatch(ctx context.Context, method string, body []byte, opts ApplyOpts) ([]apitypes.ApplyResult, error) {
-	u := strings.TrimRight(c.BaseURL, "/") + "/apply"
+	path := "/apply"
 	q := url.Values{}
 	if opts.Force {
 		q.Set("force", "true")
@@ -317,33 +326,18 @@ func (c *Client) applyBatch(ctx context.Context, method string, body []byte, opt
 		q.Set("dryRun", "true")
 	}
 	if enc := q.Encode(); enc != "" {
-		u += "?" + enc
+		path += "?" + enc
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, u, bytes.NewReader(body))
+	req, err := c.newRequestWithBody(method, path, bytes.NewReader(body), "application/yaml")
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/yaml")
-	req.Header.Set("Accept", "application/json")
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode >= 400 {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("%s /v0/apply returned %d: %s", method, resp.StatusCode, string(b))
-	}
+	req = req.WithContext(ctx)
 
 	var out apitypes.ApplyResultsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return nil, fmt.Errorf("decoding apply response: %w", err)
+	if err := c.doJSON(req, &out); err != nil {
+		return nil, err
 	}
 	return out.Results, nil
 }
