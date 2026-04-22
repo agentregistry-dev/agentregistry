@@ -913,16 +913,18 @@ func TestApplyDeployment_HTTPIdempotent(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	agentName := UniqueAgentName("e2eapplydpl")
-	// Use a public image that docker-compose can pull and that stays up with
-	// no args. Local-provider deploy actually pulls + starts the image, so
-	// a fake `localhost:5001/...` tag would 404 at deploy time.
-	agentImage := "nginx:alpine"
+	// localhost:5001 is the private registry the daemon runs on the docker
+	// backend. `arctl build --push` pushes to it so the local-provider
+	// deploy can pull it back. Public images don't satisfy the adapter's
+	// expected container shape, so we build a real one.
+	agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
 
 	t.Cleanup(func() { RemoveDeploymentsByServerName(t, regURL, agentName) })
 	t.Cleanup(func() { removeLocalDeployment(t) })
 
-	// Init the agent project, then apply the scaffolded agent.yaml. Skip the
-	// local docker build; we use a public image above so deploy can pull.
+	// Init → build+push → apply. Build is required: the local-provider
+	// deploy actually pulls the tagged image and starts it, so the image
+	// must exist in the daemon's localhost:5001 registry first.
 	result := RunArctl(t, tmpDir,
 		"init", "agent", "adk", "python",
 		"--model-name", "gemini-2.5-flash",
@@ -932,6 +934,9 @@ func TestApplyDeployment_HTTPIdempotent(t *testing.T) {
 	RequireSuccess(t, result)
 
 	agentDir := filepath.Join(tmpDir, agentName)
+	result = RunArctl(t, tmpDir, "build", agentDir, "--push", "--image", agentImage)
+	RequireSuccess(t, result)
+
 	result = RunArctl(t, tmpDir, "apply", "-f", filepath.Join(agentDir, "agent.yaml"), "--registry-url", regURL)
 	RequireSuccess(t, result)
 
@@ -1176,8 +1181,9 @@ func TestBatchApply_DriftRequiresForce(t *testing.T) {
 		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
 	})
 
-	// Step 1: init → apply the agent. No docker build: this test exercises
-	// deployment drift detection at the API layer, not the image itself.
+	// Step 1: init → build+push → apply the agent. Build pushes to the
+	// daemon's private localhost:5001 registry so the subsequent local
+	// deploy can pull it.
 	result := RunArctl(t, tmpDir, "init", "agent", "adk", "python",
 		"--model-name", "gemini-2.5-flash",
 		"--image", agentImage,
@@ -1186,6 +1192,9 @@ func TestBatchApply_DriftRequiresForce(t *testing.T) {
 	RequireSuccess(t, result)
 
 	agentDir := filepath.Join(tmpDir, agentName)
+	result = RunArctl(t, tmpDir, "build", agentDir, "--push", "--image", agentImage)
+	RequireSuccess(t, result)
+
 	result = RunArctl(t, tmpDir, "apply", "-f", filepath.Join(agentDir, "agent.yaml"), "--registry-url", regURL)
 	RequireSuccess(t, result)
 
@@ -1822,27 +1831,27 @@ func TestDeploymentGet_YAMLIncludesStatus(t *testing.T) {
 	tmpDir := t.TempDir()
 	agentName := UniqueAgentName("e2estatus")
 	version := "0.1.0"
+	// Local-provider deploys pull from localhost:5001 (the daemon's private
+	// registry). Scaffold → build+push so the image resolves at deploy time.
+	agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
 
 	t.Cleanup(func() { RemoveDeploymentsByServerName(t, regURL, agentName) })
+	t.Cleanup(func() { removeLocalDeployment(t) })
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
 	})
 
-	agentYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
-kind: Agent
-metadata:
-  name: %s
-  version: "%s"
-spec:
-  image: ghcr.io/e2e/e2estatus:latest
-  description: "status-visibility e2e"
-  language: python
-  framework: adk
-  modelProvider: gemini
-  modelName: gemini-2.0-flash
-`, agentName, version)
-	agentPath := writeDeclarativeYAML(t, tmpDir, "agent.yaml", agentYAML)
-	RequireSuccess(t, RunArctl(t, tmpDir, "apply", "-f", agentPath, "--registry-url", regURL))
+	// init → build+push → apply — same shape as TestApplyDeployment_HTTPIdempotent.
+	RequireSuccess(t, RunArctl(t, tmpDir,
+		"init", "agent", "adk", "python",
+		"--model-name", "gemini-2.5-flash",
+		"--image", agentImage,
+		agentName,
+	))
+	agentDir := filepath.Join(tmpDir, agentName)
+	RequireSuccess(t, RunArctl(t, tmpDir, "build", agentDir, "--push", "--image", agentImage))
+	RequireSuccess(t, RunArctl(t, tmpDir, "apply", "-f",
+		filepath.Join(agentDir, "agent.yaml"), "--registry-url", regURL))
 
 	deployYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
 kind: deployment
@@ -2007,7 +2016,7 @@ spec:
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "remotes:")
 	RequireOutputContains(t, result, "streamable-http")
-	RequireOutputContains(t, result, "http://localhost:3005/mcp")
+	RequireOutputContains(t, result, "https://mcp.example.com/mcp")
 	if strings.Contains(result.Stdout, "packages:") {
 		t.Errorf("remotes-shape MCP unexpectedly has packages block:\n%s", result.Stdout)
 	}
