@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
@@ -288,10 +289,11 @@ func newCLIRegistry() *kinds.Registry {
 			if !ok {
 				return nil
 			}
-			// Render only the declarative DeploymentSpec fields so `-o yaml`
-			// output round-trips through `arctl apply -f`. Server-managed
-			// state (ID, Status, Origin, ProviderMetadata, DeployedAt, etc.)
-			// is intentionally omitted.
+			// Spec contains only declarative DeploymentSpec fields so the
+			// output round-trips through `arctl apply -f`. Runtime state
+			// goes in .status, which the server-side envelope decoder at
+			// internal/registry/kinds/registry.go:decodeNode silently
+			// ignores on apply.
 			return &kinds.Document{
 				APIVersion: scheme.APIVersion,
 				Kind:       "Deployment",
@@ -303,12 +305,35 @@ func newCLIRegistry() *kinds.Registry {
 					ProviderConfig: d.ProviderConfig,
 					PreferRemote:   d.PreferRemote,
 				},
+				Status: deploymentStatus{
+					ID:               d.ID,
+					Phase:            d.Status,
+					Origin:           d.Origin,
+					Error:            d.Error,
+					ProviderMetadata: d.ProviderMetadata,
+					DeployedAt:       d.DeployedAt,
+					UpdatedAt:        d.UpdatedAt,
+				},
 			}
 		},
 		Get:    deploymentGetFunc,
 		Delete: deploymentDeleteFunc,
 	})
 	return reg
+}
+
+// deploymentStatus is the shape emitted under .status when a deployment is
+// rendered as YAML/JSON. Server-managed fields only — the envelope decoder
+// ignores .status on apply, so this is safe to include in get output without
+// breaking round-trips through `arctl apply -f`.
+type deploymentStatus struct {
+	ID               string            `json:"id,omitempty" yaml:"id,omitempty"`
+	Phase            string            `json:"phase,omitempty" yaml:"phase,omitempty"`
+	Origin           string            `json:"origin,omitempty" yaml:"origin,omitempty"`
+	Error            string            `json:"error,omitempty" yaml:"error,omitempty"`
+	ProviderMetadata models.JSONObject `json:"providerMetadata,omitempty" yaml:"providerMetadata,omitempty"`
+	DeployedAt       time.Time         `json:"deployedAt,omitempty" yaml:"deployedAt,omitempty"`
+	UpdatedAt        time.Time         `json:"updatedAt,omitempty" yaml:"updatedAt,omitempty"`
 }
 
 // deploymentGetFunc returns the first deployment matching ServerName == name.

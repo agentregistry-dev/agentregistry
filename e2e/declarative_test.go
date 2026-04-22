@@ -918,20 +918,19 @@ func TestApplyDeployment_HTTPIdempotent(t *testing.T) {
 	t.Cleanup(func() { RemoveDeploymentsByServerName(t, regURL, agentName) })
 	t.Cleanup(func() { removeLocalDeployment(t) })
 
-	// Init, build, publish.
+	// Init the agent project, then apply the scaffolded agent.yaml. No docker
+	// build: the local-provider deployment path only needs the catalog record;
+	// this test doesn't exercise the image at runtime.
 	result := RunArctl(t, tmpDir,
-		"agent", "init", "adk", "python",
+		"init", "agent", "adk", "python",
 		"--model-name", "gemini-2.5-flash",
 		"--image", agentImage,
 		agentName,
 	)
 	RequireSuccess(t, result)
 
-	result = RunArctl(t, tmpDir, "agent", "build", agentName, "--image", agentImage)
-	RequireSuccess(t, result)
-
 	agentDir := filepath.Join(tmpDir, agentName)
-	result = RunArctl(t, tmpDir, "agent", "publish", agentDir, "--registry-url", regURL)
+	result = RunArctl(t, tmpDir, "apply", "-f", filepath.Join(agentDir, "agent.yaml"), "--registry-url", regURL)
 	RequireSuccess(t, result)
 
 	// Use POST /v0/apply with a deployment YAML body (PUT sub-resource endpoint was removed).
@@ -1175,7 +1174,8 @@ func TestBatchApply_DriftRequiresForce(t *testing.T) {
 		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
 	})
 
-	// Step 1: init → build → publish the agent.
+	// Step 1: init → apply the agent. No docker build: this test exercises
+	// deployment drift detection at the API layer, not the image itself.
 	result := RunArctl(t, tmpDir, "init", "agent", "adk", "python",
 		"--model-name", "gemini-2.5-flash",
 		"--image", agentImage,
@@ -1183,11 +1183,8 @@ func TestBatchApply_DriftRequiresForce(t *testing.T) {
 	)
 	RequireSuccess(t, result)
 
-	result = RunArctl(t, tmpDir, "agent", "build", agentName, "--image", agentImage)
-	RequireSuccess(t, result)
-
 	agentDir := filepath.Join(tmpDir, agentName)
-	result = RunArctl(t, tmpDir, "agent", "publish", agentDir, "--registry-url", regURL)
+	result = RunArctl(t, tmpDir, "apply", "-f", filepath.Join(agentDir, "agent.yaml"), "--registry-url", regURL)
 	RequireSuccess(t, result)
 
 	// Step 2: apply the initial deployment YAML (no env).
@@ -1833,5 +1830,116 @@ func TestDeclarativeInit_AgentWithRefs(t *testing.T) {
 	}
 	if entry["registryPromptVersion"] != "1.0.0" {
 		t.Errorf("prompts[0]: registryPromptVersion expected %q, got %v", "1.0.0", entry["registryPromptVersion"])
+	}
+}
+
+// TestDeploymentGet_YAMLIncludesStatus creates an agent + local deployment,
+// then checks that `arctl get deployment NAME -o yaml` renders a .status
+// block (phase/id/origin) in addition to the declarative spec. Round-trips
+// the output through `arctl apply` to confirm status is silently dropped on
+// input.
+func TestDeploymentGet_YAMLIncludesStatus(t *testing.T) {
+	if IsK8sBackend() {
+		t.Skip("skipping local deployment status test: E2E_BACKEND=k8s")
+	}
+
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+	agentName := UniqueAgentName("e2estatus")
+	version := "0.1.0"
+
+	t.Cleanup(func() { RemoveDeploymentsByServerName(t, regURL, agentName) })
+	t.Cleanup(func() {
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
+	})
+
+	agentYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  image: ghcr.io/e2e/e2estatus:latest
+  description: "status-visibility e2e"
+  language: python
+  framework: adk
+  modelProvider: gemini
+  modelName: gemini-2.0-flash
+`, agentName, version)
+	agentPath := writeDeclarativeYAML(t, tmpDir, "agent.yaml", agentYAML)
+	RequireSuccess(t, RunArctl(t, tmpDir, "apply", "-f", agentPath, "--registry-url", regURL))
+
+	deployYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: deployment
+metadata:
+  name: %s
+  version: "%s"
+spec:
+  resourceType: agent
+  providerId: local
+`, agentName, version)
+	deployPath := writeDeclarativeYAML(t, tmpDir, "deployment.yaml", deployYAML)
+	RequireSuccess(t, RunArctl(t, tmpDir, "apply", "-f", deployPath, "--registry-url", regURL))
+
+	// Fetch as YAML and assert both spec and status blocks are present.
+	result := RunArctl(t, tmpDir, "get", "deployment", agentName, "-o", "yaml", "--registry-url", regURL)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "apiVersion: ar.dev/v1alpha1")
+	RequireOutputContains(t, result, "kind: Deployment")
+	// Spec fields — declarative, round-trippable.
+	RequireOutputContains(t, result, "providerId: local")
+	RequireOutputContains(t, result, "resourceType: agent")
+	// Status block — server-managed.
+	RequireOutputContains(t, result, "status:")
+	// phase may be "deploying" or "deployed" depending on how fast the
+	// reconciler runs for the local platform; both assert the status block.
+	if !strings.Contains(result.Stdout, "phase:") {
+		t.Fatalf("expected .status.phase in get output, got:\n%s", result.Stdout)
+	}
+	if !strings.Contains(result.Stdout, "id:") {
+		t.Fatalf("expected .status.id (server-assigned UUID) in get output, got:\n%s", result.Stdout)
+	}
+
+	// Round-trip guarantee: apply the yaml we just fetched — the .status
+	// block must be silently ignored on decode; apply returns configured/
+	// unchanged rather than a "status not allowed" error.
+	roundTripPath := writeDeclarativeYAML(t, tmpDir, "roundtrip.yaml", result.Stdout)
+	result = RunArctl(t, tmpDir, "apply", "-f", roundTripPath, "--registry-url", regURL)
+	RequireSuccess(t, result)
+}
+
+// TestDeploymentApply_BadTemplateRef applies a deployment whose referenced
+// agent does not exist. Apply must exit non-zero with a clear error message
+// identifying the missing template — not silently create a ghost row.
+func TestDeploymentApply_BadTemplateRef(t *testing.T) {
+	if IsK8sBackend() {
+		t.Skip("skipping bad-templateRef test: E2E_BACKEND=k8s")
+	}
+
+	regURL := RegistryURL(t)
+	tmpDir := t.TempDir()
+	// Name intentionally NOT created as an agent.
+	missingName := UniqueAgentName("e2emissing")
+
+	deployYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: deployment
+metadata:
+  name: %s
+  version: "0.1.0"
+spec:
+  resourceType: agent
+  providerId: local
+`, missingName)
+	deployPath := writeDeclarativeYAML(t, tmpDir, "deployment.yaml", deployYAML)
+
+	result := RunArctl(t, tmpDir, "apply", "-f", deployPath, "--registry-url", regURL)
+	if result.ExitCode == 0 {
+		t.Fatalf("expected non-zero exit for missing templateRef, got zero\nstdout: %s\nstderr: %s",
+			result.Stdout, result.Stderr)
+	}
+	combined := result.Stdout + "\n" + result.Stderr
+	if !strings.Contains(strings.ToLower(combined), "not found") {
+		t.Fatalf("expected 'not found' in apply error, got:\nstdout: %s\nstderr: %s",
+			result.Stdout, result.Stderr)
 	}
 }
