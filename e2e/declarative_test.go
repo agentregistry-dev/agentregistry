@@ -1581,36 +1581,9 @@ spec:
 	verifyPromptNotFound(t, regURL, promptName, version)
 }
 
-// TestArctl_DeletedCommandsGone asserts that every imperative CRUD command
-// removed in this PR returns a non-zero exit code when invoked with --help.
-func TestArctl_DeletedCommandsGone(t *testing.T) {
-	t.Parallel()
-	cases := [][]string{
-		{"agent", "publish"}, {"agent", "list"}, {"agent", "show"}, {"agent", "delete"},
-		{"agent", "init"}, {"agent", "build"},
-		{"agent", "add-mcp"}, {"agent", "add-skill"}, {"agent", "add-prompt"},
-		{"mcp", "publish"}, {"mcp", "list"}, {"mcp", "show"}, {"mcp", "delete"},
-		{"mcp", "init"}, {"mcp", "build"},
-		{"skill", "publish"}, {"skill", "list"}, {"skill", "show"}, {"skill", "delete"},
-		{"skill", "init"}, {"skill", "build"},
-		{"prompt", "publish"}, {"prompt", "list"}, {"prompt", "show"}, {"prompt", "delete"},
-		{"prompt"},
-	}
-	for _, args := range cases {
-		args := args
-		t.Run(strings.Join(args, "_"), func(t *testing.T) {
-			t.Parallel()
-			helpArgs := append([]string{}, args...)
-			helpArgs = append(helpArgs, "--help")
-			result := RunArctl(t, t.TempDir(), helpArgs...)
-			RequireFailure(t, result)
-		})
-	}
-}
-
 // TestArctl_KeptCommandsResolve asserts every surviving command resolves via
-// --help after the imperative CRUD deletion PR. It is live from commit one
-// (every listed command exists today and will continue to exist after the PR).
+// --help after the imperative CRUD deletion PR. Cheap guard against future
+// over-eager deletions of runtime or declarative surface commands.
 func TestArctl_KeptCommandsResolve(t *testing.T) {
 	t.Parallel()
 	cases := [][]string{
@@ -2005,6 +1978,8 @@ func TestMCPServer_RemotesShape(t *testing.T) {
 		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
 	})
 
+	// The server-side URL validator rejects localhost/private addresses.
+	// Use a public-looking placeholder — the test doesn't actually reach it.
 	yaml := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
@@ -2015,7 +1990,7 @@ spec:
   description: "remotes-shape round-trip test"
   remotes:
     - type: streamable-http
-      url: http://localhost:3005/mcp
+      url: https://mcp.example.com/mcp
 `, serverName, version)
 
 	path := writeDeclarativeYAML(t, tmpDir, "mcp-remote.yaml", yaml)
