@@ -913,14 +913,16 @@ func TestApplyDeployment_HTTPIdempotent(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	agentName := UniqueAgentName("e2eapplydpl")
-	agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
+	// Use a public image that docker-compose can pull and that stays up with
+	// no args. Local-provider deploy actually pulls + starts the image, so
+	// a fake `localhost:5001/...` tag would 404 at deploy time.
+	agentImage := "nginx:alpine"
 
 	t.Cleanup(func() { RemoveDeploymentsByServerName(t, regURL, agentName) })
 	t.Cleanup(func() { removeLocalDeployment(t) })
 
-	// Init the agent project, then apply the scaffolded agent.yaml. No docker
-	// build: the local-provider deployment path only needs the catalog record;
-	// this test doesn't exercise the image at runtime.
+	// Init the agent project, then apply the scaffolded agent.yaml. Skip the
+	// local docker build; we use a public image above so deploy can pull.
 	result := RunArctl(t, tmpDir,
 		"init", "agent", "adk", "python",
 		"--model-name", "gemini-2.5-flash",
@@ -1971,7 +1973,10 @@ spec:
 func TestMCPServer_RemotesShape(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
-	serverName := "local/" + UniqueNameWithPrefix("e2erem")
+	// The server's MCP validator requires the namespace of metadata.name to
+	// be the reverse-DNS of the remote URL host. URL below is
+	// https://mcp.example.com/mcp → host mcp.example.com → namespace com.example.mcp.
+	serverName := "com.example.mcp/" + UniqueNameWithPrefix("e2erem")
 	version := "1.0.0"
 
 	t.Cleanup(func() {
