@@ -57,6 +57,25 @@ func scanRow(row rowScanner) (*v1alpha1.RawObject, error) {
 		return nil, fmt.Errorf("scan row: %w", err)
 	}
 
+	return decodeRow(
+		namespace, name, version, generation,
+		labelsJSON, annotationsJSON, specJSON, statusJSON,
+		deletionTimestamp, finalizersJSON, createdAt, updatedAt,
+	)
+}
+
+// decodeRow builds a RawObject from already-scanned column values. Split
+// from scanRow so callers that scan extra trailing columns (SemanticList's
+// distance score) can reuse the deserialization without repeating its
+// logic.
+func decodeRow(
+	namespace, name, version string,
+	generation int64,
+	labelsJSON, annotationsJSON, specJSON, statusJSON []byte,
+	deletionTimestamp *time.Time,
+	finalizersJSON []byte,
+	createdAt, updatedAt time.Time,
+) (*v1alpha1.RawObject, error) {
 	var labels map[string]string
 	if len(labelsJSON) > 0 {
 		if err := json.Unmarshal(labelsJSON, &labels); err != nil {
