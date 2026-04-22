@@ -245,3 +245,24 @@ func Encode(v any) ([]byte, error) { return yaml.Marshal(v) }
 
 // EncodeJSON marshals a typed envelope to canonical JSON.
 func EncodeJSON(v any) ([]byte, error) { return json.Marshal(v) }
+
+// EnvelopeFromRaw materializes a typed envelope T from a RawObject. It
+// stamps TypeMeta from the package-level GroupVersion + supplied kind,
+// copies ObjectMeta + Status, and unmarshals the raw spec JSON into the
+// typed Spec field. newObj must return a fresh zero value on each call.
+//
+// Shared helper used by every surface that reads RawObject rows (HTTP
+// resource handler, MCP bridge, etc.) so every API surface hands back
+// an identically-shaped envelope.
+func EnvelopeFromRaw[T Object](newObj func() T, raw *RawObject, kind string) (T, error) {
+	out := newObj()
+	out.SetTypeMeta(TypeMeta{APIVersion: GroupVersion, Kind: kind})
+	out.SetMetadata(raw.Metadata)
+	out.SetStatus(raw.Status)
+	if len(raw.Spec) > 0 {
+		if err := out.UnmarshalSpec(raw.Spec); err != nil {
+			return out, fmt.Errorf("unmarshal spec: %w", err)
+		}
+	}
+	return out, nil
+}

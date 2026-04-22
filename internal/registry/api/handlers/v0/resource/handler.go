@@ -231,7 +231,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		if err != nil {
 			return nil, mapNotFound(err, kind, in.Namespace, in.Name, "")
 		}
-		obj, err := envelopeFromRow(newObj, row, kind)
+		obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("decode "+kind, err)
 		}
@@ -249,7 +249,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		if err != nil {
 			return nil, mapNotFound(err, kind, in.Namespace, in.Name, in.Version)
 		}
-		obj, err := envelopeFromRow(newObj, row, kind)
+		obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("decode "+kind, err)
 		}
@@ -335,7 +335,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		if err != nil {
 			return nil, huma.Error500InternalServerError("read back "+kind, err)
 		}
-		obj, err := envelopeFromRow(newObj, row, kind)
+		obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("decode "+kind, err)
 		}
@@ -350,7 +350,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			// changes invisible to the caller; degrade to the pre-hook
 			// view rather than fail the already-successful apply.
 			if refreshed, err := cfg.Store.Get(ctx, in.Namespace, in.Name, in.Version); err == nil {
-				if refreshedObj, err := envelopeFromRow(newObj, refreshed, kind); err == nil {
+				if refreshedObj, err := v1alpha1.EnvelopeFromRaw(newObj, refreshed, kind); err == nil {
 					obj = refreshedObj
 				}
 			}
@@ -376,7 +376,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			if err != nil {
 				return nil, mapNotFound(err, kind, in.Namespace, in.Name, in.Version)
 			}
-			obj, err := envelopeFromRow(newObj, row, kind)
+			obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
 			if err != nil {
 				return nil, huma.Error500InternalServerError("decode "+kind, err)
 			}
@@ -449,7 +449,7 @@ func runList[T v1alpha1.Object](
 	}
 	items := make([]T, 0, len(rows))
 	for _, row := range rows {
-		obj, err := envelopeFromRow(newObj, row, cfg.Kind)
+		obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, cfg.Kind)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("decode "+cfg.Kind, err)
 		}
@@ -496,7 +496,7 @@ func runSemanticList[T v1alpha1.Object](
 	items := make([]T, 0, len(results))
 	scores := make([]float32, 0, len(results))
 	for _, r := range results {
-		obj, err := envelopeFromRow(newObj, r.Object, cfg.Kind)
+		obj, err := v1alpha1.EnvelopeFromRaw(newObj, r.Object, cfg.Kind)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("decode "+cfg.Kind, err)
 		}
@@ -509,21 +509,6 @@ func runSemanticList[T v1alpha1.Object](
 	return out, nil
 }
 
-// envelopeFromRow materializes a typed envelope from a *v1alpha1.RawObject.
-// Stamps TypeMeta (apiVersion + kind), copies ObjectMeta + Status, and
-// unmarshals the raw spec JSON into the typed Spec field.
-func envelopeFromRow[T v1alpha1.Object](newObj func() T, row *v1alpha1.RawObject, kind string) (T, error) {
-	out := newObj()
-	out.SetTypeMeta(v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: kind})
-	out.SetMetadata(row.Metadata)
-	out.SetStatus(row.Status)
-	if len(row.Spec) > 0 {
-		if err := out.UnmarshalSpec(row.Spec); err != nil {
-			return out, fmt.Errorf("unmarshal spec: %w", err)
-		}
-	}
-	return out, nil
-}
 
 // mapNotFound converts a pkgdb.ErrNotFound error into a Huma 404 with a
 // consistent message. Other errors fall through as 500.

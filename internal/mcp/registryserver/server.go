@@ -210,7 +210,7 @@ func envelopesFromRows[T v1alpha1.Object](
 		if needle != "" && !strings.Contains(strings.ToLower(raw.Metadata.Name), needle) {
 			continue
 		}
-		obj, err := envelopeFromRow(newObj, raw, kind)
+		obj, err := v1alpha1.EnvelopeFromRaw(newObj, raw, kind)
 		if err != nil {
 			return nil, err
 		}
@@ -252,28 +252,12 @@ func getEnvelope[T v1alpha1.Object](
 		}
 		return nil, zero, fmt.Errorf("fetch %s: %w", kind, err)
 	}
-	obj, err := envelopeFromRow(newObj, raw, kind)
+	obj, err := v1alpha1.EnvelopeFromRaw(newObj, raw, kind)
 	if err != nil {
 		var zero T
 		return nil, zero, fmt.Errorf("decode %s: %w", kind, err)
 	}
 	return nil, obj, nil
-}
-
-// envelopeFromRow materializes a typed envelope from a RawObject. Mirrors
-// the logic in the generic resource handler so the MCP bridge returns
-// byte-for-byte the same shape clients see from the HTTP API.
-func envelopeFromRow[T v1alpha1.Object](newObj func() T, raw *v1alpha1.RawObject, kind string) (T, error) {
-	out := newObj()
-	out.SetTypeMeta(v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: kind})
-	out.SetMetadata(raw.Metadata)
-	out.SetStatus(raw.Status)
-	if len(raw.Spec) > 0 {
-		if err := out.UnmarshalSpec(raw.Spec); err != nil {
-			return out, fmt.Errorf("unmarshal spec: %w", err)
-		}
-	}
-	return out, nil
 }
 
 func clampLimit(limit int) int {
