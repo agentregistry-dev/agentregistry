@@ -149,7 +149,7 @@ func TestDeploymentGet_YAMLOutputIncludesStatus(t *testing.T) {
 	// Use a regex over the whole output: spec: ... must not contain id:/phase: until status: is hit.
 	specIdx := strings.Index(got, "spec:")
 	statusIdx := strings.Index(got, "status:")
-	require.Greater(t, specIdx, 0)
+	require.Positive(t, specIdx)
 	require.Greater(t, statusIdx, specIdx, "status must come after spec")
 	specBlock := got[specIdx:statusIdx]
 	assert.NotContains(t, specBlock, "id: aws-v1", "server id must not leak into spec")

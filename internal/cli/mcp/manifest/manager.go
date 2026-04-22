@@ -112,7 +112,7 @@ func (m *Manager) Load() (*ProjectManifest, error) {
 	if kinds.IsEnvelopeYAML(data) {
 		return loadFromEnvelope(data)
 	}
-	return m.Manager.LoadFromBytes(data)
+	return m.LoadFromBytes(data)
 }
 
 // Save updates the timestamp and saves the manifest.

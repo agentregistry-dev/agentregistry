@@ -90,6 +90,9 @@ linters:
     paths:
       - zz_generated.*\.go$
       - .*conversion.*\.go$
+      # Vendored npm deps checked into the UI workspace carry bundled Go
+      # source (flatted); not our code, not linted.
+      - ui/node_modules/.*
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
@@ -102,3 +105,6 @@ formatters:
     paths:
       - zz_generated.*\.go$
       - .*conversion.*\.go$
+      # Vendored npm deps checked into the UI workspace carry bundled Go
+      # source (flatted); not our code, not linted.
+      - ui/node_modules/.*
