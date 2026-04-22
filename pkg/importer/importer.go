@@ -226,13 +226,15 @@ func (i *Importer) Import(ctx context.Context, opts Options) ([]ImportResult, er
 // label (filename, request ID, etc.) recorded on every result for
 // debugging; callers without one can pass "".
 //
+// Unlike Import, ImportBytes does NOT default opts.ScannedBy —
+// callers that care about provenance (HTTP server, tests, custom
+// pipelines) set it explicitly so the enrichment_findings.scanned_by
+// column carries the right label. Blank ScannedBy is written as-is.
+//
 // Top-level decode failures return a single failed ImportResult —
 // never an error — so callers can treat the return shape the same
 // as Import.
 func (i *Importer) ImportBytes(ctx context.Context, source string, data []byte, opts Options) []ImportResult {
-	if opts.ScannedBy == "" {
-		opts.ScannedBy = defaultScannedBy
-	}
 	return i.importStream(ctx, source, data, opts)
 }
 
@@ -407,7 +409,7 @@ func (i *Importer) runScanners(ctx context.Context, obj v1alpha1.Object, opts Op
 	want := opts.WhichScans
 	filtered := make([]Scanner, 0, len(i.scanners))
 	for _, sc := range i.scanners {
-		if len(want) > 0 && !sliceContains(want, sc.Name()) {
+		if len(want) > 0 && !slices.Contains(want, sc.Name()) {
 			continue
 		}
 		if !sc.Supports(obj) {
@@ -523,6 +525,3 @@ func collectFiles(path string) ([]string, error) {
 	return out, nil
 }
 
-func sliceContains(haystack []string, needle string) bool {
-	return slices.Contains(haystack, needle)
-}
