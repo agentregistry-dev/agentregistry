@@ -321,6 +321,34 @@ func TestValidate(t *testing.T) {
 			expectedError: validators.ErrInvalidRepositoryURL.Error(),
 		},
 		{
+			name: "server with valid repository URL ending in .git suffix",
+			serverDetail: apiv0.ServerJSON{
+				Schema:      model.CurrentSchemaURL,
+				Name:        "com.example/test-server",
+				Description: "A test server",
+				Repository: &model.Repository{
+					URL:    "https://github.com/owner/repo.git",
+					Source: "git",
+				},
+				Version: "1.0.0",
+			},
+			expectedError: "",
+		},
+		{
+			name: "server with invalid repository source 'github' instead of 'git'",
+			serverDetail: apiv0.ServerJSON{
+				Schema:      model.CurrentSchemaURL,
+				Name:        "com.example/test-server",
+				Description: "A test server",
+				Repository: &model.Repository{
+					URL:    "https://github.com/owner/repo",
+					Source: "github", // must be "git"
+				},
+				Version: "1.0.0",
+			},
+			expectedError: validators.ErrInvalidRepositoryURL.Error(),
+		},
+		{
 			name: "server with valid repository subfolder",
 			serverDetail: apiv0.ServerJSON{
 				Schema:      model.CurrentSchemaURL,

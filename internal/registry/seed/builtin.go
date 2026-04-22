@@ -9,6 +9,7 @@ import (
 	"log/slog"
 
 	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/validators"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
@@ -69,7 +70,13 @@ func importServer(
 	if err != nil {
 		// If duplicate version and update is enabled, try update path
 		if !errors.Is(err, database.ErrInvalidVersion) {
-			slog.Error("failed to create server", "name", srv.Name, "error", err)
+			// Invalid repository URL is a data quality issue in seed data, not a
+			// runtime error — log at WARN level to avoid polluting error logs.
+			if errors.Is(err, validators.ErrInvalidRepositoryURL) {
+				slog.Warn("skipping server with invalid repository URL in seed data", "name", srv.Name, "version", srv.Version, "error", err)
+			} else {
+				slog.Error("failed to create server", "name", srv.Name, "version", srv.Version, "error", err)
+			}
 			return
 		}
 	}
