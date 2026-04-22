@@ -31,6 +31,9 @@ const (
 // by v1alpha1 Stores. Tools are namespace-aware; when a tool input omits
 // the namespace, the server searches across all namespaces for backward
 // compatibility with pre-namespaced clients.
+//
+// Tool names are preserved across builds (`list_servers` not
+// `list_mcpservers`) so saved Claude MCP configs keep working.
 func NewServer(stores map[string]*internaldb.Store) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "agentregistry-mcp",
@@ -40,14 +43,84 @@ func NewServer(stores map[string]*internaldb.Store) *mcp.Server {
 		HasPrompts: true,
 	})
 
-	addAgentTools(server, stores[v1alpha1.KindAgent])
-	addServerTools(server, stores[v1alpha1.KindMCPServer])
-	addSkillTools(server, stores[v1alpha1.KindSkill])
-	addDeploymentTools(server, stores[v1alpha1.KindDeployment])
+	addKindTools(server, stores[v1alpha1.KindAgent], kindTools[*v1alpha1.Agent]{
+		Kind:     v1alpha1.KindAgent,
+		ListName: "list_agents",
+		GetName:  "get_agent",
+		ListDesc: "List published agents as v1alpha1 envelopes with optional namespace / substring-name / version filters.",
+		GetDesc:  "Fetch a published agent as a v1alpha1 envelope (defaults to the is_latest_version row).",
+		NewObj:   func() *v1alpha1.Agent { return &v1alpha1.Agent{} },
+	})
+	addKindTools(server, stores[v1alpha1.KindMCPServer], kindTools[*v1alpha1.MCPServer]{
+		Kind:     v1alpha1.KindMCPServer,
+		ListName: "list_servers",
+		GetName:  "get_server",
+		ListDesc: "List published MCP servers as v1alpha1 envelopes with optional namespace / substring-name / version filters.",
+		GetDesc:  "Fetch a published MCP server as a v1alpha1 envelope (defaults to the is_latest_version row).",
+		NewObj:   func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} },
+	})
+	addKindTools(server, stores[v1alpha1.KindSkill], kindTools[*v1alpha1.Skill]{
+		Kind:     v1alpha1.KindSkill,
+		ListName: "list_skills",
+		GetName:  "get_skill",
+		ListDesc: "List published skills as v1alpha1 envelopes with optional namespace / substring-name / version filters.",
+		GetDesc:  "Fetch a published skill as a v1alpha1 envelope (defaults to the is_latest_version row).",
+		NewObj:   func() *v1alpha1.Skill { return &v1alpha1.Skill{} },
+	})
+	addKindTools(server, stores[v1alpha1.KindDeployment], kindTools[*v1alpha1.Deployment]{
+		Kind:     v1alpha1.KindDeployment,
+		ListName: "list_deployments",
+		GetName:  "get_deployment",
+		ListDesc: "List deployments as v1alpha1 envelopes with optional namespace / substring-name / version filters.",
+		GetDesc:  "Fetch a deployment as a v1alpha1 envelope (defaults to the is_latest_version row).",
+		NewObj:   func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} },
+	})
 	addMetaTools(server)
 	addServerPrompts(server)
 
 	return server
+}
+
+// kindTools bundles the per-kind inputs the generic addKindTools helper
+// needs to register `list_X` + `get_X` for a v1alpha1 kind. Tool names
+// are explicit (not derived from Kind) because they are user-facing in
+// Claude — `list_servers` is kept, not renamed to `list_mcpservers`.
+type kindTools[T v1alpha1.Object] struct {
+	Kind     string
+	ListName string
+	GetName  string
+	ListDesc string
+	GetDesc  string
+	NewObj   func() T
+}
+
+// addKindTools registers list_X + get_X MCP tools for a v1alpha1 kind.
+// Nil store is a no-op so bootstrap can wire every kind unconditionally
+// and skip ones the backend doesn't expose.
+func addKindTools[T v1alpha1.Object](server *mcp.Server, store *internaldb.Store, cfg kindTools[T]) {
+	if store == nil {
+		return
+	}
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        cfg.ListName,
+		Description: cfg.ListDesc,
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listInput) (*mcp.CallToolResult, listOutput[T], error) {
+		raws, next, err := runList(ctx, store, args)
+		if err != nil {
+			return nil, listOutput[T]{}, err
+		}
+		items, err := envelopesFromRows(raws, cfg.Kind, cfg.NewObj, args.Search)
+		if err != nil {
+			return nil, listOutput[T]{}, err
+		}
+		return nil, listOutput[T]{Items: items, NextCursor: next, Count: len(items)}, nil
+	})
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        cfg.GetName,
+		Description: cfg.GetDesc,
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, args getByRefInput) (*mcp.CallToolResult, T, error) {
+		return getEnvelope(ctx, store, cfg.Kind, args, cfg.NewObj)
+	})
 }
 
 // listInput is the shared shape for list_* tools. Kept narrow — the
@@ -77,117 +150,10 @@ type listOutput[T v1alpha1.Object] struct {
 	Count      int    `json:"count"`
 }
 
-func addAgentTools(server *mcp.Server, store *internaldb.Store) {
-	if store == nil {
-		return
-	}
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "list_agents",
-		Description: "List published agents as v1alpha1 envelopes with optional namespace / substring-name / version filters.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listInput) (*mcp.CallToolResult, listOutput[*v1alpha1.Agent], error) {
-		raws, next, err := runList(ctx, store, args)
-		if err != nil {
-			return nil, listOutput[*v1alpha1.Agent]{}, err
-		}
-		items, err := envelopesFromRows[*v1alpha1.Agent](raws, v1alpha1.KindAgent, func() *v1alpha1.Agent { return &v1alpha1.Agent{} }, args.Search)
-		if err != nil {
-			return nil, listOutput[*v1alpha1.Agent]{}, err
-		}
-		return nil, listOutput[*v1alpha1.Agent]{Items: items, NextCursor: next, Count: len(items)}, nil
-	})
-
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "get_agent",
-		Description: "Fetch a published agent as a v1alpha1 envelope (defaults to the is_latest_version row).",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, args getByRefInput) (*mcp.CallToolResult, *v1alpha1.Agent, error) {
-		return getEnvelope[*v1alpha1.Agent](ctx, store, v1alpha1.KindAgent, args, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
-	})
-}
-
-func addServerTools(server *mcp.Server, store *internaldb.Store) {
-	if store == nil {
-		return
-	}
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "list_servers",
-		Description: "List published MCP servers as v1alpha1 envelopes with optional namespace / substring-name / version filters.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listInput) (*mcp.CallToolResult, listOutput[*v1alpha1.MCPServer], error) {
-		raws, next, err := runList(ctx, store, args)
-		if err != nil {
-			return nil, listOutput[*v1alpha1.MCPServer]{}, err
-		}
-		items, err := envelopesFromRows[*v1alpha1.MCPServer](raws, v1alpha1.KindMCPServer, func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} }, args.Search)
-		if err != nil {
-			return nil, listOutput[*v1alpha1.MCPServer]{}, err
-		}
-		return nil, listOutput[*v1alpha1.MCPServer]{Items: items, NextCursor: next, Count: len(items)}, nil
-	})
-
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "get_server",
-		Description: "Fetch a published MCP server as a v1alpha1 envelope (defaults to the is_latest_version row).",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, args getByRefInput) (*mcp.CallToolResult, *v1alpha1.MCPServer, error) {
-		return getEnvelope[*v1alpha1.MCPServer](ctx, store, v1alpha1.KindMCPServer, args, func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
-	})
-}
-
-func addSkillTools(server *mcp.Server, store *internaldb.Store) {
-	if store == nil {
-		return
-	}
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "list_skills",
-		Description: "List published skills as v1alpha1 envelopes with optional namespace / substring-name / version filters.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listInput) (*mcp.CallToolResult, listOutput[*v1alpha1.Skill], error) {
-		raws, next, err := runList(ctx, store, args)
-		if err != nil {
-			return nil, listOutput[*v1alpha1.Skill]{}, err
-		}
-		items, err := envelopesFromRows[*v1alpha1.Skill](raws, v1alpha1.KindSkill, func() *v1alpha1.Skill { return &v1alpha1.Skill{} }, args.Search)
-		if err != nil {
-			return nil, listOutput[*v1alpha1.Skill]{}, err
-		}
-		return nil, listOutput[*v1alpha1.Skill]{Items: items, NextCursor: next, Count: len(items)}, nil
-	})
-
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "get_skill",
-		Description: "Fetch a published skill as a v1alpha1 envelope (defaults to the is_latest_version row).",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, args getByRefInput) (*mcp.CallToolResult, *v1alpha1.Skill, error) {
-		return getEnvelope[*v1alpha1.Skill](ctx, store, v1alpha1.KindSkill, args, func() *v1alpha1.Skill { return &v1alpha1.Skill{} })
-	})
-}
-
-// addDeploymentTools exposes read-only deployment tools. Create + remove
-// equivalents live on the v1alpha1 apply surface at
+// Deployment note: only read tools (list + get) are exposed via MCP.
+// Create + delete equivalents live on the v1alpha1 apply surface at
 // /v0/namespaces/.../deployments/... — MCP clients that need to deploy
 // should PUT or DELETE against that HTTP path directly.
-func addDeploymentTools(server *mcp.Server, store *internaldb.Store) {
-	if store == nil {
-		return
-	}
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "list_deployments",
-		Description: "List deployments as v1alpha1 envelopes with optional namespace / substring-name / version filters.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listInput) (*mcp.CallToolResult, listOutput[*v1alpha1.Deployment], error) {
-		raws, next, err := runList(ctx, store, args)
-		if err != nil {
-			return nil, listOutput[*v1alpha1.Deployment]{}, err
-		}
-		items, err := envelopesFromRows[*v1alpha1.Deployment](raws, v1alpha1.KindDeployment, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} }, args.Search)
-		if err != nil {
-			return nil, listOutput[*v1alpha1.Deployment]{}, err
-		}
-		return nil, listOutput[*v1alpha1.Deployment]{Items: items, NextCursor: next, Count: len(items)}, nil
-	})
-
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "get_deployment",
-		Description: "Fetch a deployment as a v1alpha1 envelope (defaults to the is_latest_version row).",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, args getByRefInput) (*mcp.CallToolResult, *v1alpha1.Deployment, error) {
-		return getEnvelope[*v1alpha1.Deployment](ctx, store, v1alpha1.KindDeployment, args, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
-	})
-}
 
 func addMetaTools(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
