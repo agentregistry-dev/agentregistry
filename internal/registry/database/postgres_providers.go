@@ -72,11 +72,6 @@ func (s *providerStore) CreateProvider(ctx context.Context, in *models.CreatePro
 }
 
 func (s *providerStore) ListProviders(ctx context.Context, platform *string) ([]*models.Provider, error) {
-	if err := s.authz.Check(ctx, auth.PermissionActionRead, auth.Resource{
-		Type: auth.PermissionArtifactTypeProvider,
-	}); err != nil {
-		return nil, err
-	}
 	query := `SELECT id, name, platform, COALESCE(config, '{}'::jsonb), created_at, updated_at FROM providers`
 	args := []any{}
 	if platform != nil && strings.TrimSpace(*platform) != "" {
