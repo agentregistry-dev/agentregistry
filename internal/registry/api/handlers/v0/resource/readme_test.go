@@ -22,10 +22,13 @@ func registerAgentWithReadme(api huma.API, store *database.Store) {
 		BasePrefix: "/v0",
 		Store:      store,
 	}
-	resource.Register[*v1alpha1.Agent](api, cfg, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
-	resource.RegisterReadme[*v1alpha1.Agent](api, cfg, func() *v1alpha1.Agent { return &v1alpha1.Agent{} }, func(obj *v1alpha1.Agent) *v1alpha1.Readme {
+	newObj := func() *v1alpha1.Agent { return &v1alpha1.Agent{} }
+	// Readme routes first: the literal `/{name}/readme` needs to beat
+	// the generic `/{name}/{version}` route at the shared depth.
+	resource.RegisterReadme[*v1alpha1.Agent](api, cfg, newObj, func(obj *v1alpha1.Agent) *v1alpha1.Readme {
 		return obj.Spec.Readme
 	})
+	resource.Register[*v1alpha1.Agent](api, cfg, newObj)
 }
 
 func TestResourceRegister_AgentReadmeRoutesAndListProjection(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -267,9 +268,7 @@ func (c *V1Alpha1Coordinator) persistApplyResult(ctx context.Context, deployment
 			if annotations == nil {
 				annotations = map[string]string{}
 			}
-			for k, v := range result.ProviderMetadata {
-				annotations[k] = v
-			}
+			maps.Copy(annotations, result.ProviderMetadata)
 			return annotations
 		}
 	}

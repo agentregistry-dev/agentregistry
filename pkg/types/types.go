@@ -5,9 +5,9 @@
 //
 // The types are split by domain across files:
 //   - types.go              — AppOptions, Server, HTTPServerFactory,
-//                             Response/EmptyResponse wrappers
+//     Response/EmptyResponse wrappers
 //   - adapter_v1alpha1.go   — v1alpha1 deployment + provider adapter
-//                             surfaces (DeploymentAdapter, ProviderPlatformAdapter)
+//     surfaces (DeploymentAdapter, ProviderPlatformAdapter)
 //   - daemon.go             — CLI-side daemon + token provider hooks
 package types
 

@@ -76,29 +76,32 @@ func RegisterBuiltins(
 		switch kind {
 		case v1alpha1.KindAgent:
 			newObj := func() *v1alpha1.Agent { return &v1alpha1.Agent{} }
-			Register[*v1alpha1.Agent](api, cfg, newObj)
+			// RegisterReadme before Register so the literal
+			// `/{name}/readme` path wins over the generic
+			// `/{name}/{version}` catch-all when their depths collide.
 			RegisterReadme[*v1alpha1.Agent](api, cfg, newObj, func(obj *v1alpha1.Agent) *v1alpha1.Readme {
 				return obj.Spec.Readme
 			})
+			Register[*v1alpha1.Agent](api, cfg, newObj)
 		case v1alpha1.KindMCPServer:
 			newObj := func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} }
-			Register[*v1alpha1.MCPServer](api, cfg, newObj)
 			RegisterReadme[*v1alpha1.MCPServer](api, cfg, newObj, func(obj *v1alpha1.MCPServer) *v1alpha1.Readme {
 				return obj.Spec.Readme
 			})
+			Register[*v1alpha1.MCPServer](api, cfg, newObj)
 			RegisterLegacyServerReadme(api, basePrefix, cfg.Store)
 		case v1alpha1.KindSkill:
 			newObj := func() *v1alpha1.Skill { return &v1alpha1.Skill{} }
-			Register[*v1alpha1.Skill](api, cfg, newObj)
 			RegisterReadme[*v1alpha1.Skill](api, cfg, newObj, func(obj *v1alpha1.Skill) *v1alpha1.Readme {
 				return obj.Spec.Readme
 			})
+			Register[*v1alpha1.Skill](api, cfg, newObj)
 		case v1alpha1.KindPrompt:
 			newObj := func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} }
-			Register[*v1alpha1.Prompt](api, cfg, newObj)
 			RegisterReadme[*v1alpha1.Prompt](api, cfg, newObj, func(obj *v1alpha1.Prompt) *v1alpha1.Readme {
 				return obj.Spec.Readme
 			})
+			Register[*v1alpha1.Prompt](api, cfg, newObj)
 		case v1alpha1.KindProvider:
 			Register[*v1alpha1.Provider](api, cfg, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
 		case v1alpha1.KindDeployment:

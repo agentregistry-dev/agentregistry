@@ -788,4 +788,3 @@ func pickLatestVersion(versions []string) string {
 	}
 	return versions[0]
 }
-

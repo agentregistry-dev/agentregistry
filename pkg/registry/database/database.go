@@ -19,11 +19,11 @@ import (
 // Common database errors surfaced by both the v1alpha1 generic Store
 // and any enterprise DatabaseFactory that wraps it.
 var (
-	ErrNotFound     = errors.New("record not found")
-	ErrForbidden    = errors.New("forbidden")
+	ErrNotFound      = errors.New("record not found")
+	ErrForbidden     = errors.New("forbidden")
 	ErrAlreadyExists = errors.New("record already exists")
-	ErrInvalidInput = errors.New("invalid input")
-	ErrDatabase     = errors.New("database error")
+	ErrInvalidInput  = errors.New("invalid input")
+	ErrDatabase      = errors.New("database error")
 	// ErrDuplicateVersion is returned when an upsert would publish a
 	// version that already exists (e.g. a re-publish without bumping).
 	// Distinct from v1alpha1.ErrInvalidVersion which covers structural
