@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -78,6 +80,13 @@ type ListOpts struct {
 	// IncludeTerminating includes rows with deletion_timestamp set. Default
 	// false — callers asking for "alive" rows shouldn't see terminating ones.
 	IncludeTerminating bool
+	// ExtraWhere appends a caller-supplied SQL predicate to the WHERE
+	// clause. Placeholders inside the fragment are numbered relative to
+	// ExtraArgs (for example "namespace = ANY($1)") and are shifted so
+	// numbering continues after the Store's own filters.
+	ExtraWhere string
+	// ExtraArgs are the bind parameters for ExtraWhere.
+	ExtraArgs []any
 }
 
 type listCursor struct {
@@ -317,6 +326,58 @@ func (s *Store) PatchFinalizers(ctx context.Context, namespace, name, version st
 	})
 }
 
+// PatchAnnotations atomically reads+mutates+writes the annotations map for
+// (namespace, name, version). The mutate callback receives the current
+// annotations and returns the replacement map. Returning nil clears the map.
+// Generation and spec are not touched. Returns pkgdb.ErrNotFound if the row
+// doesn't exist.
+func (s *Store) PatchAnnotations(ctx context.Context, namespace, name, version string, mutate func(map[string]string) map[string]string) error {
+	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
+		var annotationsJSON []byte
+		err := tx.QueryRow(ctx,
+			fmt.Sprintf(`
+				SELECT annotations FROM %s
+				WHERE namespace=$1 AND name=$2 AND version=$3
+				FOR UPDATE`, s.table),
+			namespace, name, version).Scan(&annotationsJSON)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return pkgdb.ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("load annotations: %w", err)
+		}
+
+		annotations := map[string]string{}
+		if len(annotationsJSON) > 0 {
+			if err := json.Unmarshal(annotationsJSON, &annotations); err != nil {
+				return fmt.Errorf("decode annotations: %w", err)
+			}
+		}
+		if mutate != nil {
+			annotations = mutate(annotations)
+		}
+		if annotations == nil {
+			annotations = map[string]string{}
+		}
+
+		newAnnotationsJSON, err := json.Marshal(annotations)
+		if err != nil {
+			return fmt.Errorf("encode annotations: %w", err)
+		}
+
+		_, err = tx.Exec(ctx,
+			fmt.Sprintf(`
+				UPDATE %s
+				SET annotations=$4, updated_at=NOW()
+				WHERE namespace=$1 AND name=$2 AND version=$3`, s.table),
+			namespace, name, version, newAnnotationsJSON)
+		if err != nil {
+			return fmt.Errorf("update annotations: %w", err)
+		}
+		return nil
+	})
+}
+
 // Get returns a single row by (namespace, name, version), including
 // terminating rows. Returns pkgdb.ErrNotFound if missing.
 func (s *Store) Get(ctx context.Context, namespace, name, version string) (*v1alpha1.RawObject, error) {
@@ -441,6 +502,12 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 			len(args)-3, len(args)-2, len(args)-1, len(args),
 		))
 	}
+	if len(opts.ExtraArgs) > 0 {
+		args = append(args, opts.ExtraArgs...)
+	}
+	if opts.ExtraWhere != "" {
+		where = append(where, rebaseSQLPlaceholders(opts.ExtraWhere, len(args)-len(opts.ExtraArgs)))
+	}
 
 	query := fmt.Sprintf(`
 		SELECT namespace, name, version, generation, labels, annotations, spec, status,
@@ -480,6 +547,21 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 		nextCursor = cursor
 	}
 	return out, nextCursor, nil
+}
+
+var sqlPlaceholderPattern = regexp.MustCompile(`\$(\d+)`)
+
+func rebaseSQLPlaceholders(clause string, offset int) string {
+	if clause == "" || offset == 0 {
+		return clause
+	}
+	return sqlPlaceholderPattern.ReplaceAllStringFunc(clause, func(token string) string {
+		n, err := strconv.Atoi(token[1:])
+		if err != nil {
+			return token
+		}
+		return fmt.Sprintf("$%d", n+offset)
+	})
 }
 
 func decodeListCursor(token string) (listCursor, error) {

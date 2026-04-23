@@ -38,7 +38,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func App(ctx context.Context, opts ...types.AppOptions) error {
@@ -131,16 +130,12 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	maps.Copy(v1alpha1Adapters, options.DeploymentAdapters)
 	// Set up the v1alpha1 Stores + Importer bundle early so both the
 	// seed goroutine below and the HTTP router later can use them.
-	// Skipped for backends (noop / tests) that don't expose a
-	// *pgxpool.Pool.
+	// Skipped for backends (noop / tests) whose Store.Pool() returns nil.
 	var (
 		v1alpha1Stores   map[string]*internaldb.Store
 		v1alpha1Importer *pkgimporter.Importer
 	)
-	if pg, ok := db.(interface {
-		Pool() *pgxpool.Pool
-	}); ok {
-		pool := pg.Pool()
+	if pool := db.Pool(); pool != nil {
 		v1alpha1Stores = internaldb.NewV1Alpha1Stores(pool)
 
 		// GITHUB_TOKEN (when set in env) authenticates scanner fetches
@@ -165,28 +160,26 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		}
 		slog.Info("v1alpha1 routes enabled")
 	} else {
-		slog.Info("v1alpha1 routes disabled: database does not expose Pool() (likely noop/DatabaseFactory)")
+		slog.Info("v1alpha1 routes disabled: database Pool() is nil (likely noop/DatabaseFactory)")
 	}
 
 	// Import builtin seed data unless disabled. Writes to v1alpha1.*
 	// tables via the generic Store. Skipped when the underlying DB
-	// doesn't expose a pgxpool (noop/test backends) — seeding is
+	// returns a nil pool (noop/test backends) — seeding is
 	// decorative for those anyway.
 	if !cfg.DisableBuiltinSeed {
-		if pg, ok := db.(interface {
-			Pool() *pgxpool.Pool
-		}); ok {
+		if pool := db.Pool(); pool != nil {
 			slog.Info("importing builtin seed data in the background")
 			go func() {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 				defer cancel()
 				ctx = auth.WithSystemContext(ctx)
-				if err := seed.ImportBuiltinSeedDataV1Alpha1(ctx, pg.Pool()); err != nil {
+				if err := seed.ImportBuiltinSeedDataV1Alpha1(ctx, pool); err != nil {
 					slog.Error("failed to import builtin seed data (v1alpha1)", "error", err)
 				}
 			}()
 		} else {
-			slog.Info("builtin seed skipped: database does not expose Pool()")
+			slog.Info("builtin seed skipped: database Pool() is nil")
 		}
 	}
 
@@ -446,4 +439,3 @@ func wireEmbeddings(cfg *config.Config, stores map[string]*internaldb.Store, rou
 		"provider", cfg.Embeddings.Provider,
 		"model", cfg.Embeddings.Model)
 }
-

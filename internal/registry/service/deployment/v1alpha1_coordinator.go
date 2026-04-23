@@ -241,10 +241,10 @@ func (c *V1Alpha1Coordinator) resolveAdapter(platform string) (types.DeploymentA
 	return adapter, nil
 }
 
-// persistApplyResult merges adapter-returned Conditions + AddFinalizers
-// into the Deployment row. Status and Finalizers patches are independent
-// writes; a failure on the finalizer patch still leaves the status patch
-// applied so operators see the partial progress.
+// persistApplyResult merges adapter-returned Conditions, ProviderMetadata,
+// and AddFinalizers into the Deployment row. The patches are independent
+// writes; a later failure still leaves earlier patches applied so operators
+// can see partial progress.
 func (c *V1Alpha1Coordinator) persistApplyResult(ctx context.Context, deployment *v1alpha1.Deployment, result *types.ApplyResult) error {
 	if result == nil {
 		return nil
@@ -261,6 +261,19 @@ func (c *V1Alpha1Coordinator) persistApplyResult(ctx context.Context, deployment
 			}
 		}); err != nil {
 			return fmt.Errorf("patch status: %w", err)
+		}
+	}
+	if len(result.ProviderMetadata) > 0 {
+		if err := store.PatchAnnotations(ctx, deployment.Metadata.Namespace, deployment.Metadata.Name, deployment.Metadata.Version, func(annotations map[string]string) map[string]string {
+			if annotations == nil {
+				annotations = map[string]string{}
+			}
+			for k, v := range result.ProviderMetadata {
+				annotations[k] = v
+			}
+			return annotations
+		}); err != nil {
+			return fmt.Errorf("patch annotations: %w", err)
 		}
 	}
 	if len(result.AddFinalizers) > 0 {

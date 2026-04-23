@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
@@ -23,10 +23,10 @@ var ErrNoOIDCDefined = errors.New("OIDC is not defined")
 // ProviderPlatformAdapter defines provider CRUD behavior for a provider platform type.
 type ProviderPlatformAdapter interface {
 	Platform() string
-	ListProviders(ctx context.Context) ([]*models.Provider, error)
-	CreateProvider(ctx context.Context, in *models.CreateProviderInput) (*models.Provider, error)
-	GetProvider(ctx context.Context, providerID string) (*models.Provider, error)
-	UpdateProvider(ctx context.Context, providerID string, in *models.UpdateProviderInput) (*models.Provider, error)
+	ListProviders(ctx context.Context) ([]*v1alpha1.Provider, error)
+	CreateProvider(ctx context.Context, provider *v1alpha1.Provider) (*v1alpha1.Provider, error)
+	GetProvider(ctx context.Context, providerID string) (*v1alpha1.Provider, error)
+	UpdateProvider(ctx context.Context, providerID string, provider *v1alpha1.Provider) (*v1alpha1.Provider, error)
 	DeleteProvider(ctx context.Context, providerID string) error
 }
 

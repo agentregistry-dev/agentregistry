@@ -257,6 +257,41 @@ func TestV1Alpha1Store_List(t *testing.T) {
 	require.Len(t, withTerm, 3)
 }
 
+func TestV1Alpha1Store_ListExtraWhereRebasesPlaceholders(t *testing.T) {
+	pool := NewV1Alpha1TestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	for _, name := range []string{"a", "b", "c"} {
+		_, err := store.Upsert(ctx, "team-a", name, "v1", mustSpec(t, v1alpha1.AgentSpec{Title: name}), nil, UpsertOpts{})
+		require.NoError(t, err)
+	}
+
+	page1, nextCursor, err := store.List(ctx, ListOpts{
+		Namespace:  "team-a",
+		Limit:      1,
+		ExtraWhere: "name <> $1",
+		ExtraArgs:  []any{"b"},
+	})
+	require.NoError(t, err)
+	require.Len(t, page1, 1)
+	require.NotEmpty(t, nextCursor)
+	require.NotEqual(t, "b", page1[0].Metadata.Name)
+
+	page2, nextCursor2, err := store.List(ctx, ListOpts{
+		Namespace:  "team-a",
+		Limit:      1,
+		Cursor:     nextCursor,
+		ExtraWhere: "name <> $1",
+		ExtraArgs:  []any{"b"},
+	})
+	require.NoError(t, err)
+	require.Len(t, page2, 1)
+	require.Empty(t, nextCursor2)
+	require.NotEqual(t, "b", page2[0].Metadata.Name)
+	require.NotEqual(t, page1[0].Metadata.Name, page2[0].Metadata.Name)
+}
+
 func TestV1Alpha1Store_ListCursorPagination(t *testing.T) {
 	pool := NewV1Alpha1TestPool(t)
 	store := NewStore(pool, testTable)
@@ -292,6 +327,30 @@ func TestV1Alpha1Store_ListRejectsInvalidCursor(t *testing.T) {
 
 	_, _, err := store.List(context.Background(), ListOpts{Cursor: "not-a-valid-cursor"})
 	require.ErrorIs(t, err, ErrInvalidCursor)
+}
+
+func TestV1Alpha1Store_PatchAnnotationsPreservesExistingKeys(t *testing.T) {
+	pool := NewV1Alpha1TestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	_, err := store.Upsert(ctx, testNS, "annotated", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "annotated"}), nil, UpsertOpts{
+		Annotations: map[string]string{"keep": "me"},
+	})
+	require.NoError(t, err)
+
+	err = store.PatchAnnotations(ctx, testNS, "annotated", "v1", func(annotations map[string]string) map[string]string {
+		annotations["add"] = "value"
+		return annotations
+	})
+	require.NoError(t, err)
+
+	obj, err := store.Get(ctx, testNS, "annotated", "v1")
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{
+		"add":  "value",
+		"keep": "me",
+	}, obj.Metadata.Annotations)
 }
 
 func TestV1Alpha1Store_FindReferrers(t *testing.T) {

@@ -75,7 +75,32 @@ func TestV1Alpha1Coordinator_ApplyWritesConditionsAndFinalizer(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, raw.Status.GetCondition("Ready"), "noop adapter should have written Ready condition")
 	require.Contains(t, raw.Metadata.Finalizers, noop.FinalizerName)
+	require.Contains(t, raw.Metadata.Annotations, "platforms.agentregistry.solo.io/noop/applied-at")
 	require.Equal(t, deployment.Metadata.Generation, raw.Status.ObservedGeneration)
+}
+
+func TestV1Alpha1Coordinator_ApplyPreservesExistingAnnotations(t *testing.T) {
+	stores, deployment := seedV1Alpha1Fixtures(t)
+	ctx := context.Background()
+
+	err := stores[v1alpha1.KindDeployment].PatchAnnotations(ctx, "default", "weather-noop", "1", func(annotations map[string]string) map[string]string {
+		annotations["keep"] = "me"
+		return annotations
+	})
+	require.NoError(t, err)
+
+	coord := NewV1Alpha1Coordinator(V1Alpha1Dependencies{
+		Stores:   stores,
+		Adapters: map[string]types.DeploymentAdapter{noop.Platform: noop.New()},
+		Getter:   internaldb.NewV1Alpha1Getter(stores),
+	})
+
+	require.NoError(t, coord.Apply(ctx, deployment))
+
+	raw, err := stores[v1alpha1.KindDeployment].Get(ctx, "default", "weather-noop", "1")
+	require.NoError(t, err)
+	require.Equal(t, "me", raw.Metadata.Annotations["keep"])
+	require.Contains(t, raw.Metadata.Annotations, "platforms.agentregistry.solo.io/noop/applied-at")
 }
 
 func TestV1Alpha1Coordinator_RemoveClearsFinalizer(t *testing.T) {

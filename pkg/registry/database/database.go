@@ -10,7 +10,11 @@
 // schema.
 package database
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+)
 
 // Common database errors surfaced by both the v1alpha1 generic Store
 // and any enterprise DatabaseFactory that wraps it.
@@ -31,9 +35,12 @@ var (
 //
 // The contract is intentionally thin: v1alpha1 consumers reach through
 // Pool() to construct their own generic Stores via
-// internal/registry/database.NewV1Alpha1Stores. Close() releases any
-// pooled resources on shutdown.
+// internal/registry/database.NewV1Alpha1Stores. Backends without a real
+// PostgreSQL connection return nil from Pool(); callers must gate any
+// pgx-specific functionality accordingly. Close() releases any pooled
+// resources on shutdown.
 type Store interface {
+	Pool() *pgxpool.Pool
 	Close() error
 }
 
