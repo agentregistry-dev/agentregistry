@@ -288,7 +288,9 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		SpecType: reflect.TypeFor[kinds.ProviderSpec](),
 		Apply:    providerApplyFunc(providerService),
 		Get:      func(ctx context.Context, name, _ string) (any, error) { return providerService.GetProvider(ctx, name) },
-		Delete:   func(ctx context.Context, name, _ string, _ bool) error { return providerService.DeleteProvider(ctx, name, "") },
+		Delete: func(ctx context.Context, name, _ string, _ bool) error {
+			return providerService.DeleteProvider(ctx, name, "")
+		},
 		TableColumns: []kinds.Column{
 			{Header: "NAME"}, {Header: "PLATFORM"},
 		},
