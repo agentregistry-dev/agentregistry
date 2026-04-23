@@ -984,10 +984,10 @@ func TestClientIntegration_DeploymentRoutes_HappyPath(t *testing.T) {
 	if createdByGetSecond == nil || createdByGetSecond.ID != deployedServerSecond.ID {
 		t.Fatalf("GetDeployment(second) returned unexpected payload: %#v", createdByGetSecond)
 	}
-	if err := client.DeleteDeployment(deployedServer.ID); err != nil {
+	if err := client.DeleteDeployment(deployedServer.ID, false); err != nil {
 		t.Fatalf("DeleteDeployment() failed: %v", err)
 	}
-	if err := client.DeleteDeployment(deployedServerSecond.ID); err != nil {
+	if err := client.DeleteDeployment(deployedServerSecond.ID, false); err != nil {
 		t.Fatalf("DeleteDeployment(second) failed: %v", err)
 	}
 
@@ -1027,10 +1027,10 @@ func TestClientIntegration_DeploymentRoutes_HappyPath(t *testing.T) {
 		t.Fatalf("expected distinct agent deployment IDs, got %q", deployedAgent.ID)
 	}
 
-	if err := client.DeleteDeployment(deployedAgent.ID); err != nil {
+	if err := client.DeleteDeployment(deployedAgent.ID, false); err != nil {
 		t.Fatalf("DeleteDeployment(agent) failed: %v", err)
 	}
-	if err := client.DeleteDeployment(deployedAgentSecond.ID); err != nil {
+	if err := client.DeleteDeployment(deployedAgentSecond.ID, false); err != nil {
 		t.Fatalf("DeleteDeployment(agent second) failed: %v", err)
 	}
 

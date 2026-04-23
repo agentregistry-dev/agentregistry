@@ -42,7 +42,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("deployment not found: %s", deploymentID)
 	}
 
-	if err := apiClient.DeleteDeployment(fullID); err != nil {
+	if err := apiClient.DeleteDeployment(fullID, false); err != nil {
 		return fmt.Errorf("failed to delete deployment: %w", err)
 	}
 

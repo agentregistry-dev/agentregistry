@@ -35,12 +35,14 @@ TYPE must be one of: agent, mcp, skill, prompt
 		Example: `  arctl delete -f my-agent/agent.yaml
   arctl delete -f my-server/mcp.yaml
   arctl delete agent acme/summarizer --version 1.0.0
-  arctl delete mcp acme/fetch --version 1.0.0`,
+  arctl delete mcp acme/fetch --version 1.0.0
+  arctl delete deployment my-agent --version 1.0.0 --force`,
 		SilenceUsage: true,
 		RunE:         runDeclarativeDelete,
 	}
 	cmd.Flags().StringP("filename", "f", "", "YAML file to read resources from")
 	cmd.Flags().String("version", "", "Version to delete (required in explicit mode)")
+	cmd.Flags().Bool("force", false, "Skip cloud provider teardown and only remove the registry record (deployments only)")
 	return cmd
 }
 
@@ -56,6 +58,7 @@ func runDeclarativeDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("explicit mode requires TYPE and NAME arguments (or use -f FILE)")
 	}
 	version, _ := cmd.Flags().GetString("version")
+	deleteForceFlag, _ = cmd.Flags().GetBool("force")
 	return deleteResource(cmd, args[0], args[1], version)
 }
 

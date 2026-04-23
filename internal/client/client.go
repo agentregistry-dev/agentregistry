@@ -734,10 +734,15 @@ func (c *Client) DeployAgent(name, version string, env map[string]string, provid
 	return &deployment, nil
 }
 
-// DeleteDeployment removes a deployment by ID.
-func (c *Client) DeleteDeployment(id string) error {
+// DeleteDeployment removes a deployment by ID. When force is true, the cloud
+// provider teardown is skipped and only the registry record is removed.
+func (c *Client) DeleteDeployment(id string, force bool) error {
 	encID := url.PathEscape(id)
-	req, err := c.newRequest(http.MethodDelete, "/deployments/"+encID)
+	path := "/deployments/" + encID
+	if force {
+		path += "?force=true"
+	}
+	req, err := c.newRequest(http.MethodDelete, path)
 	if err != nil {
 		return err
 	}

@@ -58,7 +58,7 @@ type Registry interface {
 	// ApplyServerDeployment idempotently deploys an MCP server. Semantics are the
 	// same as ApplyAgentDeployment but for resource type "mcp".
 	ApplyServerDeployment(ctx context.Context, serverName, version, providerID string, env map[string]string, providerConfig models.JSONObject, preferRemote, force bool) (*models.Deployment, error)
-	UndeployDeployment(ctx context.Context, deployment *models.Deployment) error
+	UndeployDeployment(ctx context.Context, deployment *models.Deployment, force bool) error
 	GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error)
 	CancelDeployment(ctx context.Context, deployment *models.Deployment) error
 }
@@ -229,7 +229,7 @@ func (s *registry) LaunchDeployment(ctx context.Context, req *models.Deployment)
 	return s.deployments.GetDeployment(ctx, created.ID)
 }
 
-func (s *registry) UndeployDeployment(ctx context.Context, deployment *models.Deployment) error {
+func (s *registry) UndeployDeployment(ctx context.Context, deployment *models.Deployment, force bool) error {
 	if deployment == nil {
 		return database.ErrNotFound
 	}
@@ -241,12 +241,14 @@ func (s *registry) UndeployDeployment(ctx context.Context, deployment *models.De
 	}); err != nil {
 		return err
 	}
-	adapter, err := s.ResolveDeploymentAdapterByProviderID(ctx, deployment.ProviderID)
-	if err != nil {
-		return err
-	}
-	if err := adapter.Undeploy(ctx, deployment); err != nil {
-		return err
+	if !force {
+		adapter, err := s.ResolveDeploymentAdapterByProviderID(ctx, deployment.ProviderID)
+		if err != nil {
+			return err
+		}
+		if err := adapter.Undeploy(ctx, deployment); err != nil {
+			return err
+		}
 	}
 	return s.removeDeploymentRecord(ctx, deployment)
 }

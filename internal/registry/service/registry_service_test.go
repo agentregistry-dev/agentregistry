@@ -1584,7 +1584,7 @@ func TestUndeployDeployment_UsesAdapterForLocalPlatform(t *testing.T) {
 		},
 	}
 
-	err := svc.UndeployDeployment(context.Background(), &models.Deployment{ID: "dep-local-1", ProviderID: "local"})
+	err := svc.UndeployDeployment(context.Background(), &models.Deployment{ID: "dep-local-1", ProviderID: "local"}, false)
 	require.NoError(t, err)
 	assert.True(t, undeployCalled)
 	assert.True(t, removeCalled)
@@ -1630,7 +1630,7 @@ func TestUndeployDeployment_FailedOrCancelledRunsAdapterCleanup(t *testing.T) {
 				ID:         "dep-failed-1",
 				ProviderID: "local",
 				Status:     tt.status,
-			})
+			}, false)
 			require.NoError(t, err)
 			assert.True(t, undeployCalled)
 			assert.True(t, removeCalled)

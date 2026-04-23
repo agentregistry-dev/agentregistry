@@ -260,7 +260,7 @@ func (f *fakeMCPRegistry) LaunchDeployment(ctx context.Context, req *models.Depl
 	return nil, errors.New("not implemented")
 }
 
-func (f *fakeMCPRegistry) UndeployDeployment(ctx context.Context, deployment *models.Deployment) error {
+func (f *fakeMCPRegistry) UndeployDeployment(ctx context.Context, deployment *models.Deployment, _ bool) error {
 	if f.undeployFn != nil {
 		return f.undeployFn(ctx, deployment)
 	}
@@ -537,7 +537,7 @@ func (h *fakeMCPDeploymentHarness) Undeploy(ctx context.Context, deployment *mod
 	return nil
 }
 
-func (h *fakeMCPDeploymentHarness) UndeployDeployment(ctx context.Context, deployment *models.Deployment) error {
+func (h *fakeMCPDeploymentHarness) UndeployDeployment(ctx context.Context, deployment *models.Deployment, _ bool) error {
 	return h.Undeploy(ctx, deployment)
 }
 

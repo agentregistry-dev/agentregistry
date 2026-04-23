@@ -334,8 +334,8 @@ func (s *registryServiceImpl) LaunchDeployment(ctx context.Context, req *models.
 	return s.deploymentService().LaunchDeployment(ctx, req)
 }
 
-func (s *registryServiceImpl) UndeployDeployment(ctx context.Context, deployment *models.Deployment) error {
-	return s.deploymentService().UndeployDeployment(ctx, deployment)
+func (s *registryServiceImpl) UndeployDeployment(ctx context.Context, deployment *models.Deployment, force bool) error {
+	return s.deploymentService().UndeployDeployment(ctx, deployment, force)
 }
 
 func (s *registryServiceImpl) GetDeploymentLogs(ctx context.Context, deployment *models.Deployment) ([]string, error) {

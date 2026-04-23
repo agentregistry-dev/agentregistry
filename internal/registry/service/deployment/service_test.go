@@ -383,7 +383,7 @@ func TestUndeployDeployment_DeployDenied_DoesNotCallAdapter(t *testing.T) {
 	svc, dep := newTestDeploymentServiceWithAuthz(t, mockAdapter, denyDeployAuthz)
 
 	before := mockAdapter.undeployCallCount()
-	err := svc.UndeployDeployment(testCtx(), dep)
+	err := svc.UndeployDeployment(testCtx(), dep, false)
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, auth.ErrForbidden)

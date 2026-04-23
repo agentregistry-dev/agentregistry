@@ -34,6 +34,12 @@ type DeploymentByIDInput struct {
 	ID string `path:"id" json:"id" doc:"Deployment ID" example:"6b7ce4ab-ec3d-4789-95f4-8be5fac2e6be"`
 }
 
+// DeleteDeploymentInput extends DeploymentByIDInput with a force query parameter.
+type DeleteDeploymentInput struct {
+	ID    string `path:"id" json:"id" doc:"Deployment ID" example:"6b7ce4ab-ec3d-4789-95f4-8be5fac2e6be"`
+	Force bool   `query:"force" json:"force" doc:"Skip cloud provider teardown and only remove the registry record" default:"false"`
+}
+
 func normalizePlatform(platform string) string {
 	return strings.ToLower(strings.TrimSpace(platform))
 }
@@ -212,7 +218,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, deploymentSvc d
 		Summary:     "Remove a deployed resource",
 		Description: "Remove a deployment by ID",
 		Tags:        []string{"deployments"},
-	}, func(ctx context.Context, input *DeploymentByIDInput) (*struct{}, error) {
+	}, func(ctx context.Context, input *DeleteDeploymentInput) (*struct{}, error) {
 		deployment, err := deploymentSvc.GetDeployment(ctx, input.ID)
 		if err != nil {
 			if errors.Is(err, database.ErrNotFound) {
@@ -232,7 +238,7 @@ func RegisterDeploymentsEndpoints(api huma.API, basePath string, deploymentSvc d
 			return nil, huma.Error409Conflict("Discovered deployments cannot be deleted directly")
 		}
 
-		err = deploymentSvc.UndeployDeployment(ctx, deployment)
+		err = deploymentSvc.UndeployDeployment(ctx, deployment, input.Force)
 		if err != nil {
 			return nil, removeDeploymentHTTPError(err)
 		}

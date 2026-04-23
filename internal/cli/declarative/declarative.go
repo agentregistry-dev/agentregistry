@@ -329,6 +329,10 @@ func deploymentGetFunc(_ context.Context, name, _ string) (any, error) {
 	return nil, database.ErrNotFound
 }
 
+// deleteForceFlag is set by the delete command when --force is passed.
+// Used by deploymentDeleteFunc to skip cloud provider teardown.
+var deleteForceFlag bool
+
 // deploymentDeleteFunc looks up deployments by (name, version) and deletes each match
 // by ID. A non-empty version is required — deployments are identified by
 // (name, version, provider), so omitting version could span multiple versions
@@ -356,7 +360,7 @@ func deploymentDeleteFunc(_ context.Context, name, version string) error {
 	}
 	var errs []error
 	for _, d := range matches {
-		if err := apiClient.DeleteDeployment(d.ID); err != nil {
+		if err := apiClient.DeleteDeployment(d.ID, deleteForceFlag); err != nil {
 			errs = append(errs, fmt.Errorf("deleting %s (provider %s): %w", d.ID, d.ProviderID, err))
 		}
 	}

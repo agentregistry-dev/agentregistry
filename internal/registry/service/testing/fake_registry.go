@@ -313,7 +313,7 @@ func (f *FakeRegistry) LaunchDeployment(_ context.Context, _ *models.Deployment)
 	return nil, ErrNotFound
 }
 
-func (f *FakeRegistry) UndeployDeployment(_ context.Context, _ *models.Deployment) error {
+func (f *FakeRegistry) UndeployDeployment(_ context.Context, _ *models.Deployment, _ bool) error {
 	return nil
 }
 

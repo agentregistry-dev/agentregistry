@@ -469,7 +469,7 @@ func addDeploymentTools(server *mcp.Server, registry deploymentsvc.Registry) {
 		if err != nil {
 			return nil, nil, err
 		}
-		if err := registry.UndeployDeployment(ctx, deployment); err != nil {
+		if err := registry.UndeployDeployment(ctx, deployment, false); err != nil {
 			return nil, nil, err
 		}
 		return nil, map[string]string{"status": "deleted"}, nil
