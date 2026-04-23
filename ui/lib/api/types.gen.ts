@@ -1081,7 +1081,12 @@ export type RemoveDeploymentData = {
          */
         id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Skip provider-specific teardown and only remove the deployment record
+         */
+        force?: boolean;
+    };
     url: '/v0/deployments/{id}';
 };
 

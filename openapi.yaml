@@ -460,6 +460,14 @@ paths:
                     examples:
                         - 6b7ce4ab-ec3d-4789-95f4-8be5fac2e6be
                   example: 6b7ce4ab-ec3d-4789-95f4-8be5fac2e6be
+                - name: force
+                  in: query
+                  description: Skip provider-specific teardown and only remove the deployment record
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Skip provider-specific teardown and only remove the deployment record
+                    default: false
             responses:
                 "204":
                     description: No Content
