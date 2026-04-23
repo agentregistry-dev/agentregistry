@@ -7,7 +7,6 @@ package declarative
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -67,25 +66,6 @@ func toYAMLValue(k *scheme.Kind, item any) any {
 		return k.ToYAMLFunc(item)
 	}
 	return nil
-}
-
-// cleanServerFields removes server-managed fields that should not appear in the spec block.
-func cleanServerFields(spec map[string]any) {
-	delete(spec, "name")
-	delete(spec, "version")
-	delete(spec, "updatedAt")
-	delete(spec, "status")
-	delete(spec, "publishedAt")
-}
-
-// marshalToSpec is a helper that marshals an item to JSON and back to map[string]any,
-// then strips server-managed fields.
-func marshalToSpec(item any) map[string]any {
-	b, _ := json.Marshal(item)
-	var spec map[string]any
-	_ = json.Unmarshal(b, &spec)
-	cleanServerFields(spec)
-	return spec
 }
 
 // kindPlural returns the plural display name for a kind, used in "No X found." messages.

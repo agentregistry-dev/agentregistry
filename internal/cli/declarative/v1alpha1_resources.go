@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
@@ -225,14 +224,6 @@ func deploymentRow(dep *cliCommon.DeploymentRecord) []string {
 		dep.ProviderID,
 		dep.Status,
 	}
-}
-
-func deploymentResourceName(targetName, providerID string) string {
-	name := strings.ReplaceAll(targetName, "/", "-")
-	if providerID == "" {
-		return name
-	}
-	return fmt.Sprintf("%s-%s", name, providerID)
 }
 
 func errorsJoin(errs []error) error {

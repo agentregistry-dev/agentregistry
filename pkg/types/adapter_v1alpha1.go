@@ -198,32 +198,18 @@ type DiscoveryResult struct {
 }
 
 // -----------------------------------------------------------------------------
-// Provider adapter (separate surface from Deployment adapter).
+// Provider adapter.
 // -----------------------------------------------------------------------------
 
-// ProviderAdapter exposes platform-specific provider CRUD. Enterprise
-// uses this to plug cloud-provider-backed Providers (for example,
-// managed GKE / EKS clusters where provider lifecycle involves
-// infrastructure calls, not just row writes).
-//
-// OSS provides a trivial ProviderAdapter for local + kubernetes
-// platforms whose Register/Get/List/Update/Delete are pure Store
-// operations.
-type ProviderAdapter interface {
-	Platform() string
-
-	// Validate checks Provider.Spec.Config can parse into the
-	// adapter's typed internal shape. Called after Store.Upsert on
-	// a Provider row so misconfig surfaces as a ProviderConfigured
-	// condition. Idempotent; no side effects beyond parsing.
-	Validate(ctx context.Context, provider *v1alpha1.Provider) error
-}
-
 // ProviderPlatformAdapter defines provider CRUD behavior for a provider
-// platform type. Pre-dates the split between ProviderAdapter (declarative
-// validation) and DeploymentAdapter (Apply/Remove/Logs/Discover);
-// retained for enterprise builds whose provider-side surface is still
-// imperative.
+// platform type. Enterprise builds register one adapter per cloud
+// platform (GCP, AWS, Kagent, etc.) via AppOptions.ProviderPlatforms.
+//
+// NOTE: OSS currently does not consume AppOptions.ProviderPlatforms —
+// the v1alpha1 generic resource handler serves provider CRUD uniformly
+// across kinds via the Store. The field is retained so enterprise
+// assignments continue to compile while the extension point is
+// redesigned (tracked as a REMAINING.md follow-up).
 type ProviderPlatformAdapter interface {
 	Platform() string
 	ListProviders(ctx context.Context) ([]*v1alpha1.Provider, error)

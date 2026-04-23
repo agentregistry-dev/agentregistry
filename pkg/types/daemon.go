@@ -35,11 +35,6 @@ type DaemonManager interface {
 	Purge() error
 }
 
-// DaemonConfig allows customization of the default daemon manager.
-type DaemonConfig struct {
-	BaseURL string
-}
-
 // CLITokenProvider provides tokens for CLI commands.
 // External libraries can implement this to support fetching tokens from
 // defined sources.
