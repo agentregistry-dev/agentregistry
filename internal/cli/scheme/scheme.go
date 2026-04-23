@@ -7,12 +7,11 @@ import (
 	"os"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 // APIVersion is the canonical apiVersion string for arctl declarative YAML files.
-// This re-exports models.APIVersion so CLI code does not need to import pkg/models directly.
-const APIVersion = models.APIVersion
+const APIVersion = v1alpha1.GroupVersion
 
 // Resource is an alias for kinds.Document. All CLI code should read doc.Spec via a
 // typed assertion against the per-kind Spec struct (e.g. *agent.Spec).

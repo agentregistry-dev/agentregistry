@@ -20,7 +20,9 @@ import (
 	agentutils "github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
 	cliUtils "github.com/agentregistry-dev/agentregistry/internal/cli/utils"
+	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/spf13/cobra"
 	a2aclient "trpc.group/trpc-go/trpc-a2a-go/client"
@@ -70,13 +72,66 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return runFromDirectory(cmd.Context(), target, envMap)
 	}
 
-	agentModel, err := apiClient.GetAgent(target)
+	agentModel, err := client.GetTyped(
+		cmd.Context(),
+		apiClient,
+		v1alpha1.KindAgent,
+		v1alpha1.DefaultNamespace,
+		target,
+		"",
+		func() *v1alpha1.Agent { return &v1alpha1.Agent{} },
+	)
 	if err != nil {
 		return fmt.Errorf("failed to resolve agent %q: %w", target, err)
 	}
-	manifest := agentModel.Agent.AgentManifest
-	version := agentModel.Agent.Version
+	manifest := manifestFromAgent(agentModel)
+	version := agentModel.Metadata.Version
 	return runFromManifest(cmd.Context(), &manifest, version, nil, envMap)
+}
+
+func manifestFromAgent(agent *v1alpha1.Agent) models.AgentManifest {
+	if agent == nil {
+		return models.AgentManifest{}
+	}
+
+	manifest := models.AgentManifest{
+		Name:              agent.Metadata.Name,
+		Image:             agent.Spec.Image,
+		Language:          agent.Spec.Language,
+		Framework:         agent.Spec.Framework,
+		ModelProvider:     agent.Spec.ModelProvider,
+		ModelName:         agent.Spec.ModelName,
+		Description:       agent.Spec.Description,
+		Version:           agent.Metadata.Version,
+		TelemetryEndpoint: agent.Spec.TelemetryEndpoint,
+	}
+
+	for _, ref := range agent.Spec.MCPServers {
+		manifest.McpServers = append(manifest.McpServers, models.McpServerType{
+			Name:                       ref.Name,
+			Version:                    ref.Version,
+			Type:                       "registry",
+			RegistryServerName:         ref.Name,
+			RegistryServerVersion:      ref.Version,
+			RegistryServerPreferRemote: false,
+		})
+	}
+	for _, ref := range agent.Spec.Skills {
+		manifest.Skills = append(manifest.Skills, models.SkillRef{
+			Name:                 ref.Name,
+			RegistrySkillName:    ref.Name,
+			RegistrySkillVersion: ref.Version,
+		})
+	}
+	for _, ref := range agent.Spec.Prompts {
+		manifest.Prompts = append(manifest.Prompts, models.PromptRef{
+			Name:                  ref.Name,
+			RegistryPromptName:    ref.Name,
+			RegistryPromptVersion: ref.Version,
+		})
+	}
+
+	return manifest
 }
 
 // runFromDirectory runs an agent from a local project directory. It resolves

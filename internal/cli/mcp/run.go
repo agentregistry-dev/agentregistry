@@ -18,8 +18,7 @@ import (
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	platformutils "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
-	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/spf13/cobra"
 	"github.com/stoewer/go-strcase"
 )
@@ -86,7 +85,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 }
 
 // runMCPServerWithPlatform starts an MCP server using the local platform.
-func runMCPServerWithPlatform(ctx context.Context, server *apiv0.ServerResponse) error {
+func runMCPServerWithPlatform(ctx context.Context, server *v1alpha1.MCPServer) error {
 	// Parse environment variables, arguments, and headers from flags
 	envValues, err := parseKeyValuePairs(runEnvVars)
 	if err != nil {
@@ -104,8 +103,8 @@ func runMCPServerWithPlatform(ctx context.Context, server *apiv0.ServerResponse)
 	}
 
 	runRequest := &platformutils.MCPServerRunRequest{
-		Name:         server.Server.Name,
-		Spec:         models.ServerJSONToV1Alpha1Spec(&server.Server),
+		Name:         server.Metadata.Name,
+		Spec:         server.Spec,
 		PreferRemote: false,
 		EnvValues:    envValues,
 		ArgValues:    argValues,
@@ -144,7 +143,7 @@ func runMCPServerWithPlatform(ctx context.Context, server *apiv0.ServerResponse)
 		return fmt.Errorf("local platform config is required")
 	}
 
-	fmt.Printf("Starting MCP server: %s (version %s)...\n", server.Server.Name, server.Server.Version)
+	fmt.Printf("Starting MCP server: %s (version %s)...\n", server.Metadata.Name, server.Metadata.Version)
 
 	if err := localplatform.WriteLocalPlatformFiles(platformDir, cfg, agentGatewayPort); err != nil {
 		return fmt.Errorf("failed to write local platform files: %w", err)

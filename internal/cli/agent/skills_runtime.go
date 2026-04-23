@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	arclient "github.com/agentregistry-dev/agentregistry/internal/client"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 )
 
@@ -88,27 +90,24 @@ func resolveSkillSource(skill models.SkillRef) (resolvedSkillRef, error) {
 }
 
 // extractSkillRepoURL extracts a git repository URL from a skill response.
-func extractSkillRepoURL(skillResp *models.SkillResponse) (string, error) {
+func extractSkillRepoURL(skillResp *v1alpha1.Skill) (string, error) {
 	if skillResp == nil {
 		return "", fmt.Errorf("skill response is required")
 	}
-	if skillResp.Skill.Repository != nil &&
-		strings.TrimSpace(skillResp.Skill.Repository.URL) != "" {
-		return strings.TrimSpace(skillResp.Skill.Repository.URL), nil
+	if skillResp.Spec.Repository != nil &&
+		strings.TrimSpace(skillResp.Spec.Repository.URL) != "" {
+		return strings.TrimSpace(skillResp.Spec.Repository.URL), nil
 	}
 	return "", fmt.Errorf("no git repository found")
 }
 
-func fetchSkillFromRegistry(registryURL, skillName, version string) (*models.SkillResponse, error) {
+func fetchSkillFromRegistry(registryURL, skillName, version string) (*v1alpha1.Skill, error) {
 	// Use the default configured API client when registry URL is omitted.
 	if strings.TrimSpace(registryURL) == "" {
 		if apiClient == nil {
 			return nil, fmt.Errorf("API client not initialized")
 		}
-		if strings.EqualFold(version, "latest") {
-			return apiClient.GetSkill(skillName)
-		}
-		return apiClient.GetSkillVersion(skillName, version)
+		return fetchTypedSkill(context.Background(), apiClient, skillName, version)
 	}
 
 	baseURL, err := normalizeSkillRegistryURL(registryURL)
@@ -118,19 +117,27 @@ func fetchSkillFromRegistry(registryURL, skillName, version string) (*models.Ski
 
 	// TODO: DI the client.
 	client := arclient.NewClient(baseURL, "")
-	if strings.EqualFold(version, "latest") {
-		resp, err := client.GetSkill(skillName)
-		if err != nil {
-			return nil, fmt.Errorf("fetch skill %q from %s: %w", skillName, baseURL, err)
-		}
-		return resp, nil
-	}
-
-	resp, err := client.GetSkillVersion(skillName, version)
+	resp, err := fetchTypedSkill(context.Background(), client, skillName, version)
 	if err != nil {
 		return nil, fmt.Errorf("fetch skill %q version %q from %s: %w", skillName, version, baseURL, err)
 	}
 	return resp, nil
+}
+
+func fetchTypedSkill(ctx context.Context, c *arclient.Client, skillName, version string) (*v1alpha1.Skill, error) {
+	targetVersion := strings.TrimSpace(version)
+	if strings.EqualFold(targetVersion, "latest") {
+		targetVersion = ""
+	}
+	return arclient.GetTyped(
+		ctx,
+		c,
+		v1alpha1.KindSkill,
+		v1alpha1.DefaultNamespace,
+		skillName,
+		targetVersion,
+		func() *v1alpha1.Skill { return &v1alpha1.Skill{} },
+	)
 }
 
 func normalizeSkillRegistryURL(registryURL string) (string, error) {
@@ -146,13 +153,13 @@ func normalizeSkillRegistryURL(registryURL string) (string, error) {
 	return trimmed + "/v0", nil
 }
 
-func extractSkillImageRef(skillResp *models.SkillResponse) (string, error) {
+func extractSkillImageRef(skillResp *v1alpha1.Skill) (string, error) {
 	if skillResp == nil {
 		return "", fmt.Errorf("skill response is required")
 	}
 	// TODO: add support for git-based skill fetching. Requires
 	// https://github.com/kagent-dev/kagent/pull/1365.
-	for _, pkg := range skillResp.Skill.Packages {
+	for _, pkg := range skillResp.Spec.Packages {
 		typ := strings.ToLower(strings.TrimSpace(pkg.RegistryType))
 		if (typ == "docker" || typ == "oci") && strings.TrimSpace(pkg.Identifier) != "" {
 			return strings.TrimSpace(pkg.Identifier), nil

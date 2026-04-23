@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/registry"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 )
@@ -236,13 +238,15 @@ func ResolveManifestPrompts(manifest *models.AgentManifest, verbose bool) ([]com
 			clients[registryURL] = apiClient
 		}
 
-		var promptResp *models.PromptResponse
-		var err error
-		if promptVersion != "" {
-			promptResp, err = apiClient.GetPromptVersion(promptName, promptVersion)
-		} else {
-			promptResp, err = apiClient.GetPrompt(promptName)
-		}
+		promptResp, err := client.GetTyped(
+			context.Background(),
+			apiClient,
+			v1alpha1.KindPrompt,
+			v1alpha1.DefaultNamespace,
+			promptName,
+			promptVersion,
+			func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} },
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch prompt %q from registry: %w", promptName, err)
 		}
@@ -252,10 +256,13 @@ func ResolveManifestPrompts(manifest *models.AgentManifest, verbose bool) ([]com
 
 		if verbose {
 			fmt.Printf("[prompt-resolver] [%d] Successfully resolved prompt %q (version=%q, content length=%d)\n",
-				i, ref.Name, promptResp.Prompt.Version, len(promptResp.Prompt.Content))
+				i, ref.Name, promptResp.Metadata.Version, len(promptResp.Spec.Content))
 		}
 
-		resolved = append(resolved, common.PythonPromptFromResponse(ref.Name, &promptResp.Prompt))
+		resolved = append(resolved, common.PythonPrompt{
+			Name:    ref.Name,
+			Content: promptResp.Spec.Content,
+		})
 	}
 
 	if verbose {

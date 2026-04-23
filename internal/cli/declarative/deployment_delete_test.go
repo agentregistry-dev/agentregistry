@@ -11,36 +11,42 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // deploymentTestServer builds an httptest.Server routing:
-//   - GET    /v0/deployments       → returns `list`
-//   - DELETE /v0/deployments/{id}  → status 200 unless id is in `failIDs`, then 500
+//   - GET    /v0/namespaces/default/deployments                → returns `list`
+//   - DELETE /v0/namespaces/default/deployments/{name}/{ver}   → status 204 unless id is in `failIDs`, then 500
 //
 // Captures every received DELETE id in order for assertions.
-func deploymentTestServer(t *testing.T, list []models.Deployment, failIDs map[string]bool) (*httptest.Server, *[]string) {
+func deploymentTestServer(t *testing.T, list []v1alpha1.Deployment, failIDs map[string]bool) (*httptest.Server, *[]string) {
 	t.Helper()
 	var mu sync.Mutex
 	deleted := []string{}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/v0/deployments", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v0/namespaces/default/deployments", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{"deployments": list})
+			_ = json.NewEncoder(w).Encode(map[string]any{"items": list})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
-	mux.HandleFunc("/v0/deployments/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v0/namespaces/default/deployments/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodDelete {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		id := strings.TrimPrefix(r.URL.Path, "/v0/deployments/")
+		path := strings.TrimPrefix(r.URL.Path, "/v0/namespaces/default/deployments/")
+		parts := strings.Split(path, "/")
+		if len(parts) != 2 {
+			http.Error(w, `{"error":"bad delete path"}`, http.StatusBadRequest)
+			return
+		}
+		id := v1alpha1.DefaultNamespace + "/" + parts[0] + "/" + parts[1]
 		mu.Lock()
 		deleted = append(deleted, id)
 		mu.Unlock()
@@ -66,12 +72,11 @@ func setupClientForServer(t *testing.T, srv *httptest.Server) {
 // Deployments on other providers for the same (name, version) get deleted; deployments on
 // other versions are left alone.
 func TestDeploymentDelete_RemovesAllProviderMatchesForVersion(t *testing.T) {
-	t.Skip("TODO: port internal/cli/declarative to v1alpha1 generic client; these tests were written against legacy route shape in PR #453. Track: declarative CLI port commit.")
-	deployments := []models.Deployment{
-		{ID: "aws-v1", ServerName: "summarizer", Version: "1.0.0", ProviderID: "my-aws", ResourceType: "agent"},
-		{ID: "gcp-v1", ServerName: "summarizer", Version: "1.0.0", ProviderID: "my-gcp", ResourceType: "agent"},
-		{ID: "aws-v2", ServerName: "summarizer", Version: "2.0.0", ProviderID: "my-aws", ResourceType: "agent"},
-		{ID: "other", ServerName: "unrelated", Version: "1.0.0", ProviderID: "my-aws", ResourceType: "agent"},
+	deployments := []v1alpha1.Deployment{
+		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "pending"),
+		deploymentFixture("gcp-v1", "summarizer", "1.0.0", "my-gcp", "agent", "pending"),
+		deploymentFixture("aws-v2", "summarizer", "2.0.0", "my-aws", "agent", "pending"),
+		deploymentFixture("other", "unrelated", "1.0.0", "my-aws", "agent", "pending"),
 	}
 	srv, deleted := deploymentTestServer(t, deployments, nil)
 	setupClientForServer(t, srv)
@@ -80,15 +85,14 @@ func TestDeploymentDelete_RemovesAllProviderMatchesForVersion(t *testing.T) {
 	cmd.SetArgs([]string{"deployment", "summarizer", "--version", "1.0.0"})
 	require.NoError(t, cmd.Execute())
 
-	assert.ElementsMatch(t, []string{"aws-v1", "gcp-v1"}, *deleted,
+	assert.ElementsMatch(t, []string{"default/aws-v1/1.0.0", "default/gcp-v1/1.0.0"}, *deleted,
 		"both provider variants of summarizer 1.0.0 should be deleted; nothing else")
 }
 
 // (2) When no deployment matches (name, version), returns a not-found error.
 func TestDeploymentDelete_NotFound(t *testing.T) {
-	t.Skip("TODO: port internal/cli/declarative to v1alpha1 generic client; these tests were written against legacy route shape in PR #453. Track: declarative CLI port commit.")
-	deployments := []models.Deployment{
-		{ID: "aws-v2", ServerName: "summarizer", Version: "2.0.0", ProviderID: "my-aws", ResourceType: "agent"},
+	deployments := []v1alpha1.Deployment{
+		deploymentFixture("aws-v2", "summarizer", "2.0.0", "my-aws", "agent", "pending"),
 	}
 	srv, deleted := deploymentTestServer(t, deployments, nil)
 	setupClientForServer(t, srv)
@@ -105,33 +109,31 @@ func TestDeploymentDelete_NotFound(t *testing.T) {
 // (3) When the server rejects one of the matching deletes, the error is surfaced and
 // identifies the failing deployment — not silently ignored.
 func TestDeploymentDelete_PartialFailure(t *testing.T) {
-	t.Skip("TODO: port internal/cli/declarative to v1alpha1 generic client; these tests were written against legacy route shape in PR #453. Track: declarative CLI port commit.")
-	deployments := []models.Deployment{
-		{ID: "aws-v1", ServerName: "summarizer", Version: "1.0.0", ProviderID: "my-aws", ResourceType: "agent"},
-		{ID: "gcp-v1", ServerName: "summarizer", Version: "1.0.0", ProviderID: "my-gcp", ResourceType: "agent"},
+	deployments := []v1alpha1.Deployment{
+		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "pending"),
+		deploymentFixture("gcp-v1", "summarizer", "1.0.0", "my-gcp", "agent", "pending"),
 	}
 	// Fail the GCP delete only.
-	srv, deleted := deploymentTestServer(t, deployments, map[string]bool{"gcp-v1": true})
+	srv, deleted := deploymentTestServer(t, deployments, map[string]bool{"default/gcp-v1/1.0.0": true})
 	setupClientForServer(t, srv)
 
 	cmd := declarative.NewDeleteCmd()
 	cmd.SetArgs([]string{"deployment", "summarizer", "--version", "1.0.0"})
 	err := cmd.Execute()
 	require.Error(t, err, "partial failure must propagate")
-	assert.Contains(t, err.Error(), "gcp-v1", "error should identify which deployment failed")
+	assert.Contains(t, err.Error(), "default/gcp-v1/1.0.0", "error should identify which deployment failed")
 
 	// Both DELETEs should have been attempted — we don't stop on first failure.
-	assert.ElementsMatch(t, []string{"aws-v1", "gcp-v1"}, *deleted,
+	assert.ElementsMatch(t, []string{"default/aws-v1/1.0.0", "default/gcp-v1/1.0.0"}, *deleted,
 		"both matching deployments should be attempted even when one fails")
 }
 
 // (4) Guard against the earlier wildcard bug: empty --version must be rejected before
 // issuing any HTTP call, to prevent accidental bulk deletes across all versions.
 func TestDeploymentDelete_RejectsEmptyVersion(t *testing.T) {
-	t.Skip("TODO: port internal/cli/declarative to v1alpha1 generic client; these tests were written against legacy route shape in PR #453. Track: declarative CLI port commit.")
-	deployments := []models.Deployment{
-		{ID: "aws-v1", ServerName: "summarizer", Version: "1.0.0", ProviderID: "my-aws", ResourceType: "agent"},
-		{ID: "aws-v2", ServerName: "summarizer", Version: "2.0.0", ProviderID: "my-aws", ResourceType: "agent"},
+	deployments := []v1alpha1.Deployment{
+		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "pending"),
+		deploymentFixture("aws-v2", "summarizer", "2.0.0", "my-aws", "agent", "pending"),
 	}
 	srv, deleted := deploymentTestServer(t, deployments, nil)
 	setupClientForServer(t, srv)
