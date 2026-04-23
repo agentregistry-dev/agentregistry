@@ -37,7 +37,7 @@ type DeploymentByIDInput struct {
 // DeleteDeploymentInput extends DeploymentByIDInput with a force query parameter.
 type DeleteDeploymentInput struct {
 	ID    string `path:"id" json:"id" doc:"Deployment ID" example:"6b7ce4ab-ec3d-4789-95f4-8be5fac2e6be"`
-	Force bool   `query:"force" json:"force" doc:"Skip cloud provider teardown and only remove the registry record" default:"false"`
+	Force bool   `query:"force" json:"force" doc:"Skip provider-specific teardown and only remove the deployment record" default:"false"`
 }
 
 func normalizePlatform(platform string) string {

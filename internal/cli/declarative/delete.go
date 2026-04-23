@@ -42,7 +42,7 @@ TYPE must be one of: agent, mcp, skill, prompt
 	}
 	cmd.Flags().StringP("filename", "f", "", "YAML file to read resources from")
 	cmd.Flags().String("version", "", "Version to delete (required in explicit mode)")
-	cmd.Flags().Bool("force", false, "Skip cloud provider teardown and only remove the registry record (deployments only)")
+	cmd.Flags().Bool("force", false, "Skip provider-specific teardown and only remove the deployment record")
 	return cmd
 }
 

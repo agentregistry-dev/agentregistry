@@ -355,7 +355,7 @@ func deploymentGetFunc(_ context.Context, name, _ string) (any, error) {
 }
 
 // deleteForceFlag is set by the delete command when --force is passed.
-// Used by deploymentDeleteFunc to skip cloud provider teardown.
+// Used by deploymentDeleteFunc to skip provider-specific teardown.
 var deleteForceFlag bool
 
 // deploymentDeleteFunc looks up deployments by (name, version) and deletes each match
