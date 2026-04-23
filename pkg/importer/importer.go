@@ -524,4 +524,3 @@ func collectFiles(path string) ([]string, error) {
 	}
 	return out, nil
 }
-
