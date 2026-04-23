@@ -83,6 +83,49 @@ type Config struct {
 	// through Store.SemanticList. Nil disables semantic search (the
 	// query params return 400).
 	SemanticSearch SemanticSearchFunc
+
+	// Authorize is optional; when set, every read and write handler
+	// (get / list / apply / delete) invokes it as an access gate before
+	// touching the store. Return nil to allow; return a huma error
+	// (Error401Unauthorized / Error403Forbidden / etc.) to reject — the
+	// value propagates back to the client as-is so the hook controls the
+	// status code. Wrap a non-huma error in huma.Error500InternalServerError
+	// if you want the server to 500.
+	//
+	// nil hook matches the OSS default: public reads and writes, with
+	// authorization deferred to router-level middleware or the underlying
+	// auth.AuthzProvider. Enterprise builds that need per-kind gates
+	// (e.g. "only registry admins can mutate Role") wire this callback.
+	//
+	// The hook is called after path parsing and — for apply — after the
+	// body decodes, but before any validation or store I/O. For list +
+	// cross-namespace list, Name and Version are empty; for get-latest,
+	// Version is empty; Object is non-nil only for apply.
+	Authorize func(ctx context.Context, in AuthorizeInput) error
+}
+
+// AuthorizeInput is the context passed to Config.Authorize on every handler
+// invocation. Fields are populated per the verb being authorized (see
+// Config.Authorize comment for the combinations). New fields may be added
+// in future releases — callers should use named-field initialization and
+// tolerate unknown verbs by defaulting to deny.
+type AuthorizeInput struct {
+	// Verb is "get" | "list" | "apply" | "delete".
+	Verb string
+	// Kind is the canonical Kind the handler is serving (e.g. "Role").
+	Kind string
+	// Namespace is the URL-scoped namespace; empty for the cross-namespace
+	// list endpoint.
+	Namespace string
+	// Name is empty for list verbs.
+	Name string
+	// Version is empty for list or get-latest.
+	Version string
+	// Object is non-nil only when Verb == "apply"; it carries the decoded
+	// request body post-validation-stamping (path identity already merged
+	// into metadata), so the hook can inspect labels / annotations / spec
+	// in authz decisions.
+	Object v1alpha1.Object
 }
 
 // SemanticSearchFunc embeds a query string into a vector usable with
@@ -189,6 +232,11 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		Path:        crossNSList,
 		Summary:     fmt.Sprintf("List %s across all namespaces", kind),
 	}, func(ctx context.Context, in *listInput) (*listOutput[T], error) {
+		if cfg.Authorize != nil {
+			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "list", Kind: kind}); err != nil {
+				return nil, err
+			}
+		}
 		return runList(ctx, cfg, newObj, listParams{
 			Namespace:          "",
 			Labels:             in.Labels,
@@ -208,6 +256,11 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		Path:        nsList,
 		Summary:     fmt.Sprintf("List %s in a namespace", kind),
 	}, func(ctx context.Context, in *namespacedListInput) (*listOutput[T], error) {
+		if cfg.Authorize != nil {
+			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "list", Kind: kind, Namespace: in.Namespace}); err != nil {
+				return nil, err
+			}
+		}
 		return runList(ctx, cfg, newObj, listParams{
 			Namespace:          in.Namespace,
 			Labels:             in.Labels,
@@ -227,6 +280,11 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		Path:        nsItem,
 		Summary:     fmt.Sprintf("Get the latest version of a %s", kind),
 	}, func(ctx context.Context, in *getLatestInput) (*bodyOutput[T], error) {
+		if cfg.Authorize != nil {
+			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "get", Kind: kind, Namespace: in.Namespace, Name: in.Name}); err != nil {
+				return nil, err
+			}
+		}
 		row, err := cfg.Store.GetLatest(ctx, in.Namespace, in.Name)
 		if err != nil {
 			return nil, mapNotFound(err, kind, in.Namespace, in.Name, "")
@@ -245,6 +303,11 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		Path:        nsItemVersion,
 		Summary:     fmt.Sprintf("Get a %s by namespace, name, and version", kind),
 	}, func(ctx context.Context, in *getInput) (*bodyOutput[T], error) {
+		if cfg.Authorize != nil {
+			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "get", Kind: kind, Namespace: in.Namespace, Name: in.Name, Version: in.Version}); err != nil {
+				return nil, err
+			}
+		}
 		row, err := cfg.Store.Get(ctx, in.Namespace, in.Name, in.Version)
 		if err != nil {
 			return nil, mapNotFound(err, kind, in.Namespace, in.Name, in.Version)
@@ -291,6 +354,18 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		meta.Name = in.Name
 		meta.Version = in.Version
 		body.SetMetadata(*meta)
+
+		// Authorization — cheap, no I/O. Runs after path-stamping so the
+		// hook sees the fully-resolved identity and spec on the Object.
+		if cfg.Authorize != nil {
+			if err := cfg.Authorize(ctx, AuthorizeInput{
+				Verb: "apply", Kind: kind,
+				Namespace: in.Namespace, Name: in.Name, Version: in.Version,
+				Object: body,
+			}); err != nil {
+				return nil, err
+			}
+		}
 
 		// Structural validation first — cheap, no I/O.
 		if err := v1alpha1.ValidateObject(body); err != nil {
@@ -367,6 +442,14 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		Summary:       fmt.Sprintf("Delete a %s (soft-delete: sets deletionTimestamp)", kind),
 		DefaultStatus: http.StatusNoContent,
 	}, func(ctx context.Context, in *deleteInput) (*deleteOutput, error) {
+		if cfg.Authorize != nil {
+			if err := cfg.Authorize(ctx, AuthorizeInput{
+				Verb: "delete", Kind: kind,
+				Namespace: in.Namespace, Name: in.Name, Version: in.Version,
+			}); err != nil {
+				return nil, err
+			}
+		}
 		// Pre-read so PostDelete has the final spec + finalizer set to
 		// work with. Skipped when no hook is registered; a missing row
 		// still surfaces as 404 via Store.Delete below.
