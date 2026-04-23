@@ -175,7 +175,7 @@ func dispatchOne(ctx context.Context, reg *kinds.Registry, doc *kinds.Document, 
 				Status: kinds.StatusFailed, Error: "kind does not support delete",
 			}
 		}
-		if err := k.Delete(ctx, doc.Metadata.Name, doc.Metadata.Version); err != nil {
+		if err := k.Delete(ctx, doc.Metadata.Name, doc.Metadata.Version, false); err != nil {
 			status, msg := common.ClassifyApplyError(err)
 			return kinds.Result{
 				Kind: k.Kind, Name: doc.Metadata.Name, Version: doc.Metadata.Version,

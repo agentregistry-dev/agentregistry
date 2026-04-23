@@ -66,9 +66,11 @@ func MakeGetFunc[Resp any](
 	}
 }
 
-// MakeDeleteFunc wraps a typed delete into the generic DeleteFunc signature.
+// MakeDeleteFunc wraps a simple delete (no force support) into the generic DeleteFunc signature.
 func MakeDeleteFunc(del func(context.Context, string, string) error) DeleteFunc {
-	return del
+	return func(ctx context.Context, name, version string, _ bool) error {
+		return del(ctx, name, version)
+	}
 }
 
 // MakeInitTemplate creates a standard init template writer from a default spec value.

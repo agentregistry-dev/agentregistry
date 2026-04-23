@@ -235,7 +235,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		SpecType: reflect.TypeFor[kinds.AgentSpec](),
 		Apply:    kinds.MakeApplyFunc("agent", kinds.ToAgentJSON, agentService.ApplyAgent, agentService.GetAgentVersion),
 		Get:      kinds.MakeGetFunc(agentService.GetAgent, agentService.GetAgentVersion),
-		Delete:   agentService.DeleteAgent,
+		Delete:   kinds.MakeDeleteFunc(agentService.DeleteAgent),
 		TableColumns: []kinds.Column{
 			{Header: "NAME"}, {Header: "VERSION"}, {Header: "FRAMEWORK"},
 			{Header: "LANGUAGE"}, {Header: "PROVIDER"}, {Header: "MODEL"},
@@ -249,7 +249,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		SpecType: reflect.TypeFor[kinds.SkillSpec](),
 		Apply:    kinds.MakeApplyFunc("skill", kinds.ToSkillJSON, skillService.ApplySkill, skillService.GetSkillVersion),
 		Get:      kinds.MakeGetFunc(skillService.GetSkill, skillService.GetSkillVersion),
-		Delete:   skillService.DeleteSkill,
+		Delete:   kinds.MakeDeleteFunc(skillService.DeleteSkill),
 		TableColumns: []kinds.Column{
 			{Header: "NAME"}, {Header: "VERSION"}, {Header: "CATEGORY"}, {Header: "DESCRIPTION"},
 		},
@@ -262,7 +262,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		SpecType: reflect.TypeFor[kinds.PromptSpec](),
 		Apply:    kinds.MakeApplyFunc("prompt", kinds.ToPromptJSON, promptService.ApplyPrompt, promptService.GetPromptVersion),
 		Get:      kinds.MakeGetFunc(promptService.GetPrompt, promptService.GetPromptVersion),
-		Delete:   promptService.DeletePrompt,
+		Delete:   kinds.MakeDeleteFunc(promptService.DeletePrompt),
 		TableColumns: []kinds.Column{
 			{Header: "NAME"}, {Header: "VERSION"}, {Header: "DESCRIPTION"},
 		},
@@ -275,7 +275,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		SpecType: reflect.TypeFor[kinds.MCPSpec](),
 		Apply:    kinds.MakeApplyFunc("mcp", kinds.ToServerJSON, serverService.ApplyServer, serverService.GetServerVersion),
 		Get:      kinds.MakeGetFunc(serverService.GetServer, serverService.GetServerVersion),
-		Delete:   serverService.DeleteServer,
+		Delete:   kinds.MakeDeleteFunc(serverService.DeleteServer),
 		TableColumns: []kinds.Column{
 			{Header: "NAME"}, {Header: "VERSION"}, {Header: "DESCRIPTION"},
 		},
@@ -288,7 +288,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		SpecType: reflect.TypeFor[kinds.ProviderSpec](),
 		Apply:    providerApplyFunc(providerService),
 		Get:      func(ctx context.Context, name, _ string) (any, error) { return providerService.GetProvider(ctx, name) },
-		Delete:   func(ctx context.Context, name, _ string) error { return providerService.DeleteProvider(ctx, name, "") },
+		Delete:   func(ctx context.Context, name, _ string, _ bool) error { return providerService.DeleteProvider(ctx, name, "") },
 		TableColumns: []kinds.Column{
 			{Header: "NAME"}, {Header: "PLATFORM"},
 		},
@@ -528,7 +528,7 @@ func deploymentApplyFunc(svc deploymentsvc.Registry) kinds.ApplyFunc {
 // (name, version) can still map to multiple deployments (one per provider);
 // all of those are removed.
 func deploymentDeleteFunc(svc deploymentsvc.Registry) kinds.DeleteFunc {
-	return func(ctx context.Context, name, version string) error {
+	return func(ctx context.Context, name, version string, _ bool) error {
 		if version == "" {
 			return fmt.Errorf("%w: version is required when deleting deployments", database.ErrInvalidInput)
 		}

@@ -42,14 +42,18 @@ TYPE must be one of: agent, mcp, skill, prompt
 	}
 	cmd.Flags().StringP("filename", "f", "", "YAML file to read resources from")
 	cmd.Flags().String("version", "", "Version to delete (required in explicit mode)")
-	cmd.Flags().Bool("force", false, "Skip provider-specific teardown and only remove the deployment record")
+	cmd.Flags().Bool("force", false, "Skip provider-specific teardown and only remove the registry record (deployments only)")
 	return cmd
 }
 
 func runDeclarativeDelete(cmd *cobra.Command, args []string) error {
 	filename, _ := cmd.Flags().GetString("filename")
+	force, _ := cmd.Flags().GetBool("force")
 
 	if filename != "" {
+		if force {
+			return fmt.Errorf("--force cannot be used with -f; it only applies to explicit deployment deletes")
+		}
 		return deleteFromFile(cmd, filename)
 	}
 
@@ -58,8 +62,7 @@ func runDeclarativeDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("explicit mode requires TYPE and NAME arguments (or use -f FILE)")
 	}
 	version, _ := cmd.Flags().GetString("version")
-	deleteForceFlag, _ = cmd.Flags().GetBool("force")
-	return deleteResource(cmd, args[0], args[1], version)
+	return deleteResource(cmd, args[0], args[1], version, force)
 }
 
 // deleteFromFile reads a YAML file and sends a single DELETE /v0/apply request.
@@ -97,10 +100,14 @@ func deleteFromFile(cmd *cobra.Command, filename string) error {
 }
 
 // deleteResource performs an explicit per-kind delete using the registry to resolve the kind.
-func deleteResource(cmd *cobra.Command, typeName, name, version string) error {
+func deleteResource(cmd *cobra.Command, typeName, name, version string, force bool) error {
 	k, err := defaultRegistry.Lookup(typeName)
 	if err != nil {
 		return err
+	}
+
+	if force && k.Kind != "deployment" {
+		return fmt.Errorf("--force is only supported for deployments")
 	}
 
 	if apiClient == nil {
@@ -112,7 +119,7 @@ func deleteResource(cmd *cobra.Command, typeName, name, version string) error {
 	} else {
 		fmt.Fprintf(cmd.OutOrStdout(), "Deleting %s %s...\n", k.Kind, name)
 	}
-	if err := deleteItem(k, name, version); err != nil {
+	if err := deleteItem(k, name, version, force); err != nil {
 		if version != "" {
 			return fmt.Errorf("failed to delete %s %q version %s: %w", k.Kind, name, version, err)
 		}

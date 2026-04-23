@@ -37,11 +37,11 @@ func getItem(k *kinds.Kind, name string) (any, error) {
 }
 
 // deleteItem deletes a single item by (name, version) for the given kind.
-func deleteItem(k *kinds.Kind, name, version string) error {
+func deleteItem(k *kinds.Kind, name, version string, force bool) error {
 	if k.Delete == nil {
 		return fmt.Errorf("delete not supported for kind %q", k.Kind)
 	}
-	return k.Delete(context.Background(), name, version)
+	return k.Delete(context.Background(), name, version, force)
 }
 
 // tableRow returns a []string row for the given item, matching the TableColumns

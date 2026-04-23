@@ -233,7 +233,7 @@ func TestMakeDeleteFunc(t *testing.T) {
 	}
 
 	fn := kinds.MakeDeleteFunc(del)
-	if err := fn(context.Background(), "foo", "1.0"); err != nil {
+	if err := fn(context.Background(), "foo", "1.0", false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if gotName != "foo" || gotVersion != "1.0" {

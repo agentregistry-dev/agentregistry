@@ -88,7 +88,8 @@ type ApplyFunc func(ctx context.Context, doc *Document, opts ApplyOpts) (*Result
 type GetFunc func(ctx context.Context, name, version string) (any, error)
 
 // DeleteFunc deletes a single resource by (name, version). Version may be empty for all versions.
-type DeleteFunc func(ctx context.Context, name, version string) error
+// When force is true, provider-specific teardown is skipped and only the registry record is removed.
+type DeleteFunc func(ctx context.Context, name, version string, force bool) error
 
 // InitTemplateFunc writes a template YAML for `arctl init` to out.
 type InitTemplateFunc func(ctx context.Context, out io.Writer, params InitParams) error

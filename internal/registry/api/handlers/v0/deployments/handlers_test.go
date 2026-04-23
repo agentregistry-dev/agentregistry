@@ -707,6 +707,57 @@ func TestDeleteDeployment_UsesAdapterWhenRegistered(t *testing.T) {
 	assert.True(t, adapter.undeployCalled)
 }
 
+func TestDeleteDeployment_ForceSkipsAdapter(t *testing.T) {
+	reg := newFakeProviderDeploymentService()
+	reg.GetDeploymentByIDFn = func(ctx context.Context, id string) (*models.Deployment, error) {
+		return &models.Deployment{
+			ID:         id,
+			ProviderID: "local",
+			Status:     "deployed",
+		}, nil
+	}
+	reg.GetProviderByIDFn = func(ctx context.Context, providerID string) (*models.Provider, error) {
+		return &models.Provider{ID: providerID, Platform: "local"}, nil
+	}
+
+	adapter := &fakeDeploymentAdapter{}
+	mux := http.NewServeMux()
+	registerDeploymentTestEndpoints(mux, reg, map[string]registrytypes.DeploymentPlatformAdapter{"local": adapter})
+
+	req := httptest.NewRequest(http.MethodDelete, "/v0/deployments/dep-force-1?force=true", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.False(t, adapter.undeployCalled,
+		"adapter.Undeploy must not be called when force=true")
+}
+
+func TestDeleteDeployment_ForceDeletesWithoutRegisteredAdapter(t *testing.T) {
+	reg := newFakeProviderDeploymentService()
+	reg.GetDeploymentByIDFn = func(ctx context.Context, id string) (*models.Deployment, error) {
+		return &models.Deployment{
+			ID:         id,
+			ProviderID: "missing-provider",
+			Status:     "deployed",
+			Origin:     "managed",
+		}, nil
+	}
+	reg.GetProviderByIDFn = func(ctx context.Context, providerID string) (*models.Provider, error) {
+		return &models.Provider{ID: providerID, Platform: "missing-platform"}, nil
+	}
+
+	mux := http.NewServeMux()
+	registerDeploymentTestEndpoints(mux, reg, map[string]registrytypes.DeploymentPlatformAdapter{})
+
+	req := httptest.NewRequest(http.MethodDelete, "/v0/deployments/dep-orphan?force=true", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code,
+		"force delete must succeed even without a registered adapter")
+}
+
 func TestDeleteDeployment_UnsupportedPlatformReturnsBadRequest(t *testing.T) {
 	reg := newFakeProviderDeploymentService()
 	reg.GetDeploymentByIDFn = func(ctx context.Context, id string) (*models.Deployment, error) {

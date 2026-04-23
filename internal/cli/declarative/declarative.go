@@ -53,7 +53,7 @@ func newCLIRegistry() *kinds.Registry {
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return apiClient.GetAgent(name)
 		},
-		Delete: func(_ context.Context, name, version string) error {
+		Delete: func(_ context.Context, name, version string, _ bool) error {
 			return apiClient.DeleteAgent(name, version)
 		},
 		ListFunc: kinds.MakeListFunc(func() ([]*models.AgentResponse, error) {
@@ -102,7 +102,7 @@ func newCLIRegistry() *kinds.Registry {
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return apiClient.GetServer(name)
 		},
-		Delete: func(_ context.Context, name, version string) error {
+		Delete: func(_ context.Context, name, version string, _ bool) error {
 			return apiClient.DeleteMCPServer(name, version)
 		},
 		ListFunc: kinds.MakeListFunc(func() ([]*v0.ServerResponse, error) {
@@ -145,7 +145,7 @@ func newCLIRegistry() *kinds.Registry {
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return apiClient.GetSkill(name)
 		},
-		Delete: func(_ context.Context, name, version string) error {
+		Delete: func(_ context.Context, name, version string, _ bool) error {
 			return apiClient.DeleteSkill(name, version)
 		},
 		ListFunc: kinds.MakeListFunc(func() ([]*models.SkillResponse, error) {
@@ -190,7 +190,7 @@ func newCLIRegistry() *kinds.Registry {
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return apiClient.GetPrompt(name)
 		},
-		Delete: func(_ context.Context, name, version string) error {
+		Delete: func(_ context.Context, name, version string, _ bool) error {
 			return apiClient.DeletePrompt(name, version)
 		},
 		ListFunc: kinds.MakeListFunc(func() ([]*models.PromptResponse, error) {
@@ -258,7 +258,7 @@ func newCLIRegistry() *kinds.Registry {
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return apiClient.GetProvider(name)
 		},
-		Delete: func(_ context.Context, name, _ string) error {
+		Delete: func(_ context.Context, name, _ string, _ bool) error {
 			return apiClient.DeleteProvider(name)
 		},
 	})
@@ -354,16 +354,12 @@ func deploymentGetFunc(_ context.Context, name, _ string) (any, error) {
 	return nil, database.ErrNotFound
 }
 
-// deleteForceFlag is set by the delete command when --force is passed.
-// Used by deploymentDeleteFunc to skip provider-specific teardown.
-var deleteForceFlag bool
-
 // deploymentDeleteFunc looks up deployments by (name, version) and deletes each match
 // by ID. A non-empty version is required — deployments are identified by
 // (name, version, provider), so omitting version could span multiple versions
 // and cause surprise bulk deletes. The same (name, version) can still map to
 // multiple deployments (one per provider); all of those are removed.
-func deploymentDeleteFunc(_ context.Context, name, version string) error {
+func deploymentDeleteFunc(_ context.Context, name, version string, force bool) error {
 	if version == "" {
 		return fmt.Errorf("%w: --version is required when deleting deployments", database.ErrInvalidInput)
 	}
@@ -385,7 +381,7 @@ func deploymentDeleteFunc(_ context.Context, name, version string) error {
 	}
 	var errs []error
 	for _, d := range matches {
-		if err := apiClient.DeleteDeployment(d.ID, deleteForceFlag); err != nil {
+		if err := apiClient.DeleteDeployment(d.ID, force); err != nil {
 			errs = append(errs, fmt.Errorf("deleting %s (provider %s): %w", d.ID, d.ProviderID, err))
 		}
 	}

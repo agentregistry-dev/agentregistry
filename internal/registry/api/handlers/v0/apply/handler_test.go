@@ -192,7 +192,7 @@ func TestApplyMalformedBodyReturns400(t *testing.T) {
 func TestDeleteDispatchesToDeleteFn(t *testing.T) {
 	var mu sync.Mutex
 	deleted := map[string]bool{}
-	deleteFn := func(_ context.Context, name, version string) error {
+	deleteFn := func(_ context.Context, name, version string, _ bool) error {
 		mu.Lock()
 		deleted[name+"@"+version] = true
 		mu.Unlock()

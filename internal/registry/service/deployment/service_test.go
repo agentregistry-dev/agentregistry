@@ -390,6 +390,38 @@ func TestUndeployDeployment_DeployDenied_DoesNotCallAdapter(t *testing.T) {
 	assert.Equal(t, before, mockAdapter.undeployCallCount(), "adapter.Undeploy must not run when Deploy is denied")
 }
 
+func TestUndeployDeployment_ForceSkipsAdapter(t *testing.T) {
+	mockAdapter := newMockAdapter()
+	svc, providerID := newTestDeploymentServiceWithAdapter(t, mockAdapter, "force-skip-agent", "1.0.0")
+	ctx := testCtx()
+
+	dep, err := svc.ApplyAgentDeployment(ctx, "force-skip-agent", "1.0.0", providerID, nil, nil, false, false)
+	require.NoError(t, err)
+
+	before := mockAdapter.undeployCallCount()
+	err = svc.UndeployDeployment(ctx, dep, true)
+	require.NoError(t, err)
+	assert.Equal(t, before, mockAdapter.undeployCallCount(),
+		"adapter.Undeploy must not be called when force=true")
+
+	deployments, err := svc.ListDeployments(ctx, &models.DeploymentFilter{})
+	require.NoError(t, err)
+	assert.Empty(t, deployments, "deployment record must be removed after force delete")
+}
+
+func TestUndeployDeployment_ForceStillChecksAuthz(t *testing.T) {
+	mockAdapter := newMockAdapter()
+	svc, dep := newTestDeploymentServiceWithAuthz(t, mockAdapter, denyDeployAuthz)
+
+	before := mockAdapter.undeployCallCount()
+	err := svc.UndeployDeployment(testCtx(), dep, true)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, auth.ErrForbidden)
+	assert.Equal(t, before, mockAdapter.undeployCallCount(),
+		"adapter.Undeploy must not run when authz fails, even with force=true")
+}
+
 func TestCancelDeployment_DeployDenied_DoesNotCallAdapter(t *testing.T) {
 	mockAdapter := newMockAdapter()
 	svc, dep := newTestDeploymentServiceWithAuthz(t, mockAdapter, denyDeployAuthz)
