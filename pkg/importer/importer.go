@@ -341,14 +341,14 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 		return res
 	}
 
-	upsertOpts := database.UpsertOpts{}
+	upsertOpts := database.UpsertOpts{Labels: meta.Labels}
 	if meta.Finalizers != nil {
 		upsertOpts.Finalizers = meta.Finalizers
 	}
 	if meta.Annotations != nil {
 		upsertOpts.Annotations = meta.Annotations
 	}
-	up, err := store.Upsert(ctx, meta.Namespace, meta.Name, meta.Version, specJSON, meta.Labels, upsertOpts)
+	up, err := store.Upsert(ctx, meta.Namespace, meta.Name, meta.Version, specJSON, upsertOpts)
 	if err != nil {
 		res.Status = ImportStatusFailed
 		res.Error = "upsert: " + err.Error()

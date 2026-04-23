@@ -85,8 +85,7 @@ func TestIndexer_IndexesAgentsAndSkipsOnChecksumMatch(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := agents.Upsert(ctx, testNS, "foo", "v1",
-		mustSpec(t, v1alpha1.AgentSpec{Title: "Foo", Description: "hello"}),
-		nil, database.UpsertOpts{})
+		mustSpec(t, v1alpha1.AgentSpec{Title: "Foo", Description: "hello"}), database.UpsertOpts{})
 	require.NoError(t, err)
 
 	provider := newDeterministicProvider()
@@ -122,8 +121,7 @@ func TestIndexer_ForceRegeneratesAll(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := agents.Upsert(ctx, testNS, "foo", "v1",
-		mustSpec(t, v1alpha1.AgentSpec{Title: "x"}),
-		nil, database.UpsertOpts{})
+		mustSpec(t, v1alpha1.AgentSpec{Title: "x"}), database.UpsertOpts{})
 	require.NoError(t, err)
 
 	provider := newDeterministicProvider()
@@ -153,8 +151,7 @@ func TestIndexer_DryRunSkipsStoreWrites(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := agents.Upsert(ctx, testNS, "foo", "v1",
-		mustSpec(t, v1alpha1.AgentSpec{Title: "x"}),
-		nil, database.UpsertOpts{})
+		mustSpec(t, v1alpha1.AgentSpec{Title: "x"}), database.UpsertOpts{})
 	require.NoError(t, err)
 
 	provider := newDeterministicProvider()
@@ -187,8 +184,7 @@ func TestIndexer_ProviderErrorIncrementsFailures(t *testing.T) {
 
 	for _, name := range []string{"good", "bad"} {
 		_, err := agents.Upsert(ctx, testNS, name, "v1",
-			mustSpec(t, v1alpha1.AgentSpec{Title: name}),
-			nil, database.UpsertOpts{})
+			mustSpec(t, v1alpha1.AgentSpec{Title: name}), database.UpsertOpts{})
 		require.NoError(t, err)
 	}
 
@@ -218,7 +214,7 @@ func TestIndexer_ProgressCallbackInvoked(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := agents.Upsert(ctx, testNS, "foo", "v1",
-		mustSpec(t, v1alpha1.AgentSpec{}), nil, database.UpsertOpts{})
+		mustSpec(t, v1alpha1.AgentSpec{}), database.UpsertOpts{})
 	require.NoError(t, err)
 
 	provider := newDeterministicProvider()
@@ -250,10 +246,10 @@ func TestIndexer_KindsFilter(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := agents.Upsert(ctx, testNS, "a", "v1",
-		mustSpec(t, v1alpha1.AgentSpec{Title: "a"}), nil, database.UpsertOpts{})
+		mustSpec(t, v1alpha1.AgentSpec{Title: "a"}), database.UpsertOpts{})
 	require.NoError(t, err)
 	_, err = mcpStore.Upsert(ctx, testNS, "m", "v1",
-		mustSpec(t, v1alpha1.MCPServerSpec{Title: "m"}), nil, database.UpsertOpts{})
+		mustSpec(t, v1alpha1.MCPServerSpec{Title: "m"}), database.UpsertOpts{})
 	require.NoError(t, err)
 
 	idx, err := NewIndexer(IndexerConfig{

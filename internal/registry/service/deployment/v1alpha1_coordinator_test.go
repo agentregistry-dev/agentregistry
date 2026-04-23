@@ -30,12 +30,12 @@ func seedV1Alpha1Fixtures(t *testing.T) (map[string]*internaldb.Store, *v1alpha1
 		Remotes:     []v1alpha1.MCPTransport{{Type: "streamable-http", URL: "https://example.test/mcp"}},
 	})
 	require.NoError(t, err)
-	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, "default", "weather", "1.0.0", mcpSpec, nil, internaldb.UpsertOpts{})
+	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, "default", "weather", "1.0.0", mcpSpec, internaldb.UpsertOpts{})
 	require.NoError(t, err)
 
 	providerSpec, err := json.Marshal(v1alpha1.ProviderSpec{Platform: noop.Platform})
 	require.NoError(t, err)
-	_, err = stores[v1alpha1.KindProvider].Upsert(ctx, "default", "noop-provider", "1", providerSpec, nil, internaldb.UpsertOpts{})
+	_, err = stores[v1alpha1.KindProvider].Upsert(ctx, "default", "noop-provider", "1", providerSpec, internaldb.UpsertOpts{})
 	require.NoError(t, err)
 
 	depSpec, err := json.Marshal(v1alpha1.DeploymentSpec{
@@ -44,7 +44,7 @@ func seedV1Alpha1Fixtures(t *testing.T) (map[string]*internaldb.Store, *v1alpha1
 		DesiredState: v1alpha1.DesiredStateDeployed,
 	})
 	require.NoError(t, err)
-	upsertRes, err := stores[v1alpha1.KindDeployment].Upsert(ctx, "default", "weather-noop", "1", depSpec, nil, internaldb.UpsertOpts{})
+	upsertRes, err := stores[v1alpha1.KindDeployment].Upsert(ctx, "default", "weather-noop", "1", depSpec, internaldb.UpsertOpts{})
 	require.NoError(t, err)
 
 	deployment := &v1alpha1.Deployment{

@@ -30,7 +30,7 @@ func TestV1Alpha1Store_UpsertCreatesRow(t *testing.T) {
 	ctx := context.Background()
 
 	spec := mustSpec(t, v1alpha1.AgentSpec{Title: "alpha"})
-	res, err := store.Upsert(ctx, testNS, "foo", "v1.0.0", spec, nil, UpsertOpts{})
+	res, err := store.Upsert(ctx, testNS, "foo", "v1.0.0", spec, UpsertOpts{})
 	require.NoError(t, err)
 	require.True(t, res.Created)
 	require.True(t, res.SpecChanged)
@@ -51,10 +51,10 @@ func TestV1Alpha1Store_UpsertNoOpPreservesGeneration(t *testing.T) {
 	ctx := context.Background()
 
 	spec := mustSpec(t, v1alpha1.AgentSpec{Title: "alpha"})
-	_, err := store.Upsert(ctx, testNS, "foo", "v1", spec, nil, UpsertOpts{})
+	_, err := store.Upsert(ctx, testNS, "foo", "v1", spec, UpsertOpts{})
 	require.NoError(t, err)
 
-	res, err := store.Upsert(ctx, testNS, "foo", "v1", spec, nil, UpsertOpts{})
+	res, err := store.Upsert(ctx, testNS, "foo", "v1", spec, UpsertOpts{})
 	require.NoError(t, err)
 	require.False(t, res.Created)
 	require.False(t, res.SpecChanged)
@@ -69,10 +69,10 @@ func TestV1Alpha1Store_UpsertBumpsGenerationOnSpecChange(t *testing.T) {
 	spec1 := mustSpec(t, v1alpha1.AgentSpec{Title: "first"})
 	spec2 := mustSpec(t, v1alpha1.AgentSpec{Title: "second"})
 
-	_, err := store.Upsert(ctx, testNS, "foo", "v1", spec1, nil, UpsertOpts{})
+	_, err := store.Upsert(ctx, testNS, "foo", "v1", spec1, UpsertOpts{})
 	require.NoError(t, err)
 
-	res, err := store.Upsert(ctx, testNS, "foo", "v1", spec2, nil, UpsertOpts{})
+	res, err := store.Upsert(ctx, testNS, "foo", "v1", spec2, UpsertOpts{})
 	require.NoError(t, err)
 	require.True(t, res.SpecChanged)
 	require.EqualValues(t, 2, res.Generation)
@@ -88,7 +88,7 @@ func TestV1Alpha1Store_LatestVersionSemverToggle(t *testing.T) {
 	ctx := context.Background()
 
 	for _, v := range []string{"v1.0.0", "v1.2.0", "v0.9.0", "v2.0.0", "v1.10.1"} {
-		_, err := store.Upsert(ctx, testNS, "foo", v, mustSpec(t, v1alpha1.AgentSpec{Title: v}), nil, UpsertOpts{})
+		_, err := store.Upsert(ctx, testNS, "foo", v, mustSpec(t, v1alpha1.AgentSpec{Title: v}), UpsertOpts{})
 		require.NoError(t, err)
 	}
 
@@ -103,7 +103,7 @@ func TestV1Alpha1Store_LatestVersionFallbackOnInvalidSemver(t *testing.T) {
 	ctx := context.Background()
 
 	for _, v := range []string{"alpha", "beta", "gamma"} {
-		_, err := store.Upsert(ctx, testNS, "foo", v, mustSpec(t, v1alpha1.AgentSpec{Title: v}), nil, UpsertOpts{})
+		_, err := store.Upsert(ctx, testNS, "foo", v, mustSpec(t, v1alpha1.AgentSpec{Title: v}), UpsertOpts{})
 		require.NoError(t, err)
 	}
 
@@ -118,7 +118,7 @@ func TestV1Alpha1Store_PatchStatusDisjointFromSpec(t *testing.T) {
 	ctx := context.Background()
 
 	spec := mustSpec(t, v1alpha1.AgentSpec{Title: "alpha"})
-	_, err := store.Upsert(ctx, testNS, "foo", "v1", spec, nil, UpsertOpts{})
+	_, err := store.Upsert(ctx, testNS, "foo", "v1", spec, UpsertOpts{})
 	require.NoError(t, err)
 
 	err = store.PatchStatus(ctx, testNS, "foo", "v1", func(s *v1alpha1.Status) {
@@ -162,9 +162,9 @@ func TestV1Alpha1Store_DeleteSoftAndPromoteLatest(t *testing.T) {
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
-	_, err := store.Upsert(ctx, testNS, "foo", "v1", mustSpec(t, v1alpha1.AgentSpec{}), nil, UpsertOpts{})
+	_, err := store.Upsert(ctx, testNS, "foo", "v1", mustSpec(t, v1alpha1.AgentSpec{}), UpsertOpts{})
 	require.NoError(t, err)
-	_, err = store.Upsert(ctx, testNS, "foo", "v2", mustSpec(t, v1alpha1.AgentSpec{}), nil, UpsertOpts{})
+	_, err = store.Upsert(ctx, testNS, "foo", "v2", mustSpec(t, v1alpha1.AgentSpec{}), UpsertOpts{})
 	require.NoError(t, err)
 
 	require.NoError(t, store.Delete(ctx, testNS, "foo", "v2"))
@@ -188,8 +188,7 @@ func TestV1Alpha1Store_FinalizerGC(t *testing.T) {
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
-	_, err := store.Upsert(ctx, testNS, "fin", "v1", mustSpec(t, v1alpha1.AgentSpec{}), nil,
-		UpsertOpts{Finalizers: []string{"cleanup.example/thing"}})
+	_, err := store.Upsert(ctx, testNS, "fin", "v1", mustSpec(t, v1alpha1.AgentSpec{}), UpsertOpts{Finalizers: []string{"cleanup.example/thing"}})
 	require.NoError(t, err)
 
 	obj, err := store.Get(ctx, testNS, "fin", "v1")
@@ -223,11 +222,11 @@ func TestV1Alpha1Store_List(t *testing.T) {
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
-	_, err := store.Upsert(ctx, "team-a", "a", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "A"}), map[string]string{"owner": "x"}, UpsertOpts{})
+	_, err := store.Upsert(ctx, "team-a", "a", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "A"}), UpsertOpts{Labels: map[string]string{"owner": "x"}})
 	require.NoError(t, err)
-	_, err = store.Upsert(ctx, "team-a", "b", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "B"}), map[string]string{"owner": "y"}, UpsertOpts{})
+	_, err = store.Upsert(ctx, "team-a", "b", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "B"}), UpsertOpts{Labels: map[string]string{"owner": "y"}})
 	require.NoError(t, err)
-	_, err = store.Upsert(ctx, "team-b", "c", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "C"}), map[string]string{"owner": "x"}, UpsertOpts{})
+	_, err = store.Upsert(ctx, "team-b", "c", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "C"}), UpsertOpts{Labels: map[string]string{"owner": "x"}})
 	require.NoError(t, err)
 
 	all, _, err := store.List(ctx, ListOpts{})
@@ -263,7 +262,7 @@ func TestV1Alpha1Store_ListExtraWhereRebasesPlaceholders(t *testing.T) {
 	ctx := context.Background()
 
 	for _, name := range []string{"a", "b", "c"} {
-		_, err := store.Upsert(ctx, "team-a", name, "v1", mustSpec(t, v1alpha1.AgentSpec{Title: name}), nil, UpsertOpts{})
+		_, err := store.Upsert(ctx, "team-a", name, "v1", mustSpec(t, v1alpha1.AgentSpec{Title: name}), UpsertOpts{})
 		require.NoError(t, err)
 	}
 
@@ -337,7 +336,7 @@ func TestV1Alpha1Store_ListCursorPagination(t *testing.T) {
 	ctx := context.Background()
 
 	for _, name := range []string{"first", "second", "third"} {
-		_, err := store.Upsert(ctx, testNS, name, "v1", mustSpec(t, v1alpha1.AgentSpec{Title: name}), nil, UpsertOpts{})
+		_, err := store.Upsert(ctx, testNS, name, "v1", mustSpec(t, v1alpha1.AgentSpec{Title: name}), UpsertOpts{})
 		require.NoError(t, err)
 	}
 
@@ -373,7 +372,7 @@ func TestV1Alpha1Store_PatchAnnotationsPreservesExistingKeys(t *testing.T) {
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
-	_, err := store.Upsert(ctx, testNS, "annotated", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "annotated"}), nil, UpsertOpts{
+	_, err := store.Upsert(ctx, testNS, "annotated", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "annotated"}), UpsertOpts{
 		Annotations: map[string]string{"keep": "me"},
 	})
 	require.NoError(t, err)
@@ -400,13 +399,13 @@ func TestV1Alpha1Store_FindReferrers(t *testing.T) {
 	_, err := agents.Upsert(ctx, testNS, "refs-bar", "v1",
 		mustSpec(t, v1alpha1.AgentSpec{
 			MCPServers: []v1alpha1.ResourceRef{{Kind: v1alpha1.KindMCPServer, Name: "bar", Version: "v1"}},
-		}), nil, UpsertOpts{})
+		}), UpsertOpts{})
 	require.NoError(t, err)
 
 	_, err = agents.Upsert(ctx, testNS, "refs-baz", "v1",
 		mustSpec(t, v1alpha1.AgentSpec{
 			MCPServers: []v1alpha1.ResourceRef{{Kind: v1alpha1.KindMCPServer, Name: "baz", Version: "v1"}},
-		}), nil, UpsertOpts{})
+		}), UpsertOpts{})
 	require.NoError(t, err)
 
 	pattern, err := json.Marshal(map[string]any{

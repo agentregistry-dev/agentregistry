@@ -32,12 +32,12 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*databas
 		Remotes:     []v1alpha1.MCPTransport{{Type: "streamable-http", URL: "https://example.test/mcp"}},
 	})
 	require.NoError(t, err)
-	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, "default", "weather", "1.0.0", mcpSpec, nil, database.UpsertOpts{})
+	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, "default", "weather", "1.0.0", mcpSpec, database.UpsertOpts{})
 	require.NoError(t, err)
 
 	providerSpec, err := json.Marshal(v1alpha1.ProviderSpec{Platform: noop.Platform})
 	require.NoError(t, err)
-	_, err = stores[v1alpha1.KindProvider].Upsert(ctx, "default", "noop-provider", "1", providerSpec, nil, database.UpsertOpts{})
+	_, err = stores[v1alpha1.KindProvider].Upsert(ctx, "default", "noop-provider", "1", providerSpec, database.UpsertOpts{})
 	require.NoError(t, err)
 
 	coord := deploymentsvc.NewV1Alpha1Coordinator(deploymentsvc.V1Alpha1Dependencies{

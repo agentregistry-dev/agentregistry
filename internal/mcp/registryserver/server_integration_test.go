@@ -33,7 +33,7 @@ func TestMCPListServers_HappyPath(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, serverNamespace, serverName, serverVersion, spec, nil, internaldb.UpsertOpts{})
+	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, serverNamespace, serverName, serverVersion, spec, internaldb.UpsertOpts{})
 	require.NoError(t, err, "seed server")
 
 	// Wire up MCP server + client over in-memory transports.

@@ -21,8 +21,7 @@ func TestV1Alpha1Store_AnnotationsRoundTrip(t *testing.T) {
 		"internal.agentregistry.solo.io/import-source": "builtin-seed",
 	}
 	_, err := store.Upsert(ctx, testNS, "ann", "v1",
-		mustSpec(t, v1alpha1.AgentSpec{Title: "Ann"}), nil,
-		UpsertOpts{Annotations: annotations})
+		mustSpec(t, v1alpha1.AgentSpec{Title: "Ann"}), UpsertOpts{Annotations: annotations})
 	require.NoError(t, err)
 
 	obj, err := store.Get(ctx, testNS, "ann", "v1")
@@ -38,15 +37,13 @@ func TestV1Alpha1Store_AnnotationsPreservedOnNilUpsert(t *testing.T) {
 
 	// First apply with annotations.
 	_, err := store.Upsert(ctx, testNS, "preserve", "v1",
-		mustSpec(t, v1alpha1.AgentSpec{Title: "P"}), nil,
-		UpsertOpts{Annotations: map[string]string{"owner": "team-a"}})
+		mustSpec(t, v1alpha1.AgentSpec{Title: "P"}), UpsertOpts{Annotations: map[string]string{"owner": "team-a"}})
 	require.NoError(t, err)
 
 	// Re-apply with nil Annotations in opts (e.g. a controller that
 	// only updates spec). Annotations should survive.
 	_, err = store.Upsert(ctx, testNS, "preserve", "v1",
-		mustSpec(t, v1alpha1.AgentSpec{Title: "P"}), nil,
-		UpsertOpts{}) // Annotations nil
+		mustSpec(t, v1alpha1.AgentSpec{Title: "P"}), UpsertOpts{}) // Annotations nil
 	require.NoError(t, err)
 
 	obj, err := store.Get(ctx, testNS, "preserve", "v1")
@@ -61,14 +58,12 @@ func TestV1Alpha1Store_AnnotationsClearedOnEmptyMap(t *testing.T) {
 
 	// Apply with annotations.
 	_, err := store.Upsert(ctx, testNS, "clear", "v1",
-		mustSpec(t, v1alpha1.AgentSpec{Title: "C"}), nil,
-		UpsertOpts{Annotations: map[string]string{"owner": "team-a"}})
+		mustSpec(t, v1alpha1.AgentSpec{Title: "C"}), UpsertOpts{Annotations: map[string]string{"owner": "team-a"}})
 	require.NoError(t, err)
 
 	// Re-apply with explicit empty map — annotations should clear.
 	_, err = store.Upsert(ctx, testNS, "clear", "v1",
-		mustSpec(t, v1alpha1.AgentSpec{Title: "C"}), nil,
-		UpsertOpts{Annotations: map[string]string{}})
+		mustSpec(t, v1alpha1.AgentSpec{Title: "C"}), UpsertOpts{Annotations: map[string]string{}})
 	require.NoError(t, err)
 
 	obj, err := store.Get(ctx, testNS, "clear", "v1")

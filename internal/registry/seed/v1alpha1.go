@@ -65,8 +65,7 @@ func ImportBuiltinSeedDataV1Alpha1(ctx context.Context, pool *pgxpool.Pool) erro
 			srv.Name,
 			srv.Version,
 			specJSON,
-			labels,
-			internaldb.UpsertOpts{},
+			internaldb.UpsertOpts{Labels: labels},
 		)
 		if err != nil {
 			// Dup-version isn't fatal for seed; the existing row stays

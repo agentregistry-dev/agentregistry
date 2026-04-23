@@ -37,7 +37,7 @@ func TestSemanticSearch_ListEndpointRanksByDistance(t *testing.T) {
 	mkAgent := func(name string, vec []float32) {
 		spec, err := json.Marshal(v1alpha1.AgentSpec{Title: name})
 		require.NoError(t, err)
-		_, err = agents.Upsert(ctx, "default", name, "v1", spec, nil, database.UpsertOpts{})
+		_, err = agents.Upsert(ctx, "default", name, "v1", spec, database.UpsertOpts{})
 		require.NoError(t, err)
 		require.NoError(t, agents.SetEmbedding(ctx, "default", name, "v1", semantic.SemanticEmbedding{
 			Vector:     vec,

@@ -117,20 +117,26 @@ type listCursor struct {
 	Version   string    `json:"version"`
 }
 
-// UpsertOpts carries optional knobs on Upsert.
+// UpsertOpts carries optional metadata on Upsert. All three maps/slices
+// describe the desired post-apply state of their respective columns.
+//
+// Labels are the full replacement label set for the row. Apply-style
+// replacement: every Upsert fully overwrites the stored labels. Nil
+// and empty map both produce no labels after the call. (Controller-
+// managed labels don't survive a user apply unless the apply handler
+// merges them in before calling Upsert.)
 //
 // Finalizers is the desired set of finalizer tokens on the row
-// post-apply; nil means "leave existing finalizers unchanged", while an
-// explicit empty slice means "clear all finalizers".
+// post-apply; nil means "leave existing finalizers unchanged", while
+// an explicit empty slice means "clear all finalizers". Used by
+// reconcilers that own specific finalizer tokens across Upserts.
 //
 // Annotations is the desired set of annotation key/value pairs on the
 // row post-apply; nil means "leave existing annotations unchanged",
-// while an explicit empty map means "clear all annotations".
-//
-// Labels go through Upsert's positional `labels` argument (not here)
-// because labels are always fully replaced on apply — they're part of
-// the user-authored resource state.
+// while an explicit empty map means "clear all annotations". Used by
+// controllers that add annotations out-of-band with user applies.
 type UpsertOpts struct {
+	Labels      map[string]string
 	Finalizers  []string
 	Annotations map[string]string
 }
@@ -146,13 +152,14 @@ type UpsertOpts struct {
 // (fallback: most-recently-updated). Terminating rows (deletion_timestamp
 // IS NOT NULL) are excluded from the latest computation. All of this
 // happens inside a single transaction.
-func (s *Store) Upsert(ctx context.Context, namespace, name, version string, specJSON json.RawMessage, labels map[string]string, opts UpsertOpts) (*UpsertResult, error) {
+func (s *Store) Upsert(ctx context.Context, namespace, name, version string, specJSON json.RawMessage, opts UpsertOpts) (*UpsertResult, error) {
 	if namespace == "" || name == "" || version == "" {
 		return nil, errors.New("v1alpha1 store: namespace, name, and version are required")
 	}
 	if len(specJSON) == 0 {
 		return nil, errors.New("v1alpha1 store: spec is required")
 	}
+	labels := opts.Labels
 	if labels == nil {
 		labels = map[string]string{}
 	}
