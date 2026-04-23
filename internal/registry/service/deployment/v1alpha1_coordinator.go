@@ -242,9 +242,9 @@ func (c *V1Alpha1Coordinator) resolveAdapter(platform string) (types.DeploymentA
 }
 
 // persistApplyResult merges adapter-returned Conditions, ProviderMetadata,
-// and AddFinalizers into the Deployment row. The patches are independent
-// writes; a later failure still leaves earlier patches applied so operators
-// can see partial progress.
+// and AddFinalizers into the Deployment row in a single atomic patch —
+// one observation of the adapter equals one row update, so operators
+// never see partial state (status updated but annotations missing, etc).
 func (c *V1Alpha1Coordinator) persistApplyResult(ctx context.Context, deployment *v1alpha1.Deployment, result *types.ApplyResult) error {
 	if result == nil {
 		return nil
@@ -253,18 +253,17 @@ func (c *V1Alpha1Coordinator) persistApplyResult(ctx context.Context, deployment
 	if err != nil {
 		return err
 	}
+	patch := internaldb.PatchOpts{}
 	if len(result.Conditions) > 0 {
-		if err := store.PatchStatus(ctx, deployment.Metadata.Namespace, deployment.Metadata.Name, deployment.Metadata.Version, func(s *v1alpha1.Status) {
+		patch.Status = func(s *v1alpha1.Status) {
 			s.ObservedGeneration = deployment.Metadata.Generation
-			for _, c := range result.Conditions {
-				s.SetCondition(c)
+			for _, cond := range result.Conditions {
+				s.SetCondition(cond)
 			}
-		}); err != nil {
-			return fmt.Errorf("patch status: %w", err)
 		}
 	}
 	if len(result.ProviderMetadata) > 0 {
-		if err := store.PatchAnnotations(ctx, deployment.Metadata.Namespace, deployment.Metadata.Name, deployment.Metadata.Version, func(annotations map[string]string) map[string]string {
+		patch.Annotations = func(annotations map[string]string) map[string]string {
 			if annotations == nil {
 				annotations = map[string]string{}
 			}
@@ -272,27 +271,27 @@ func (c *V1Alpha1Coordinator) persistApplyResult(ctx context.Context, deployment
 				annotations[k] = v
 			}
 			return annotations
-		}); err != nil {
-			return fmt.Errorf("patch annotations: %w", err)
 		}
 	}
 	if len(result.AddFinalizers) > 0 {
-		if err := store.PatchFinalizers(ctx, deployment.Metadata.Namespace, deployment.Metadata.Name, deployment.Metadata.Version, func(finalizers []string) []string {
+		patch.Finalizers = func(finalizers []string) []string {
 			for _, f := range result.AddFinalizers {
 				if !slices.Contains(finalizers, f) {
 					finalizers = append(finalizers, f)
 				}
 			}
 			return finalizers
-		}); err != nil {
-			return fmt.Errorf("patch finalizers: %w", err)
 		}
+	}
+	if err := store.ApplyPatch(ctx, deployment.Metadata.Namespace, deployment.Metadata.Name, deployment.Metadata.Version, patch); err != nil {
+		return fmt.Errorf("persist apply result: %w", err)
 	}
 	return nil
 }
 
 // persistRemoveResult merges adapter-returned Conditions + removes any
-// finalizer tokens the adapter declared done.
+// finalizer tokens the adapter declared done. Applied as a single patch
+// so status and finalizer updates land together.
 func (c *V1Alpha1Coordinator) persistRemoveResult(ctx context.Context, deployment *v1alpha1.Deployment, result *types.RemoveResult) error {
 	if result == nil {
 		return nil
@@ -301,18 +300,17 @@ func (c *V1Alpha1Coordinator) persistRemoveResult(ctx context.Context, deploymen
 	if err != nil {
 		return err
 	}
+	patch := internaldb.PatchOpts{}
 	if len(result.Conditions) > 0 {
-		if err := store.PatchStatus(ctx, deployment.Metadata.Namespace, deployment.Metadata.Name, deployment.Metadata.Version, func(s *v1alpha1.Status) {
+		patch.Status = func(s *v1alpha1.Status) {
 			s.ObservedGeneration = deployment.Metadata.Generation
-			for _, c := range result.Conditions {
-				s.SetCondition(c)
+			for _, cond := range result.Conditions {
+				s.SetCondition(cond)
 			}
-		}); err != nil {
-			return fmt.Errorf("patch status: %w", err)
 		}
 	}
 	if len(result.RemoveFinalizers) > 0 {
-		if err := store.PatchFinalizers(ctx, deployment.Metadata.Namespace, deployment.Metadata.Name, deployment.Metadata.Version, func(finalizers []string) []string {
+		patch.Finalizers = func(finalizers []string) []string {
 			out := finalizers[:0]
 			for _, f := range finalizers {
 				if !slices.Contains(result.RemoveFinalizers, f) {
@@ -320,9 +318,10 @@ func (c *V1Alpha1Coordinator) persistRemoveResult(ctx context.Context, deploymen
 				}
 			}
 			return out
-		}); err != nil {
-			return fmt.Errorf("patch finalizers: %w", err)
 		}
+	}
+	if err := store.ApplyPatch(ctx, deployment.Metadata.Namespace, deployment.Metadata.Name, deployment.Metadata.Version, patch); err != nil {
+		return fmt.Errorf("persist remove result: %w", err)
 	}
 	return nil
 }

@@ -256,147 +256,142 @@ func (s *Store) Upsert(ctx context.Context, namespace, name, version string, spe
 	return res, nil
 }
 
-// PatchStatus atomically reads+mutates+writes the status column for
-// (namespace, name, version). The mutate callback receives the current
-// Status and may modify it (typically via SetCondition). Generation and
-// spec are not touched. Returns pkgdb.ErrNotFound if the row doesn't exist.
+// PatchOpts bundles optional column mutations applied atomically by
+// ApplyPatch. Nil mutators skip the corresponding column entirely; the
+// row's other fields (spec, generation, labels) are never touched.
+//
+//   - Status: callback receives a decoded *Status pointer to mutate in
+//     place (typically via Status.SetCondition).
+//   - Annotations: callback receives the current annotations map and
+//     returns the replacement. Returning nil clears the map. For
+//     idempotent merges, copy the input + overlay caller keys.
+//   - Finalizers: callback receives the current slice and returns the
+//     replacement. Nil → empty slice.
+type PatchOpts struct {
+	Status      func(*v1alpha1.Status)
+	Annotations func(map[string]string) map[string]string
+	Finalizers  func([]string) []string
+}
+
+// ApplyPatch atomically applies PatchOpts to the row at
+// (namespace, name, version) inside a single transaction. Columns whose
+// mutator is nil are left untouched. Returns pkgdb.ErrNotFound if the
+// row doesn't exist.
+//
+// Use this when a caller needs to update more than one column in lockstep
+// — e.g. the deployment coordinator threading adapter output into status,
+// annotations, and finalizers as a single observation.
+//
+// For single-column updates, the PatchStatus / PatchAnnotations /
+// PatchFinalizers wrappers below are thin shortcuts.
+func (s *Store) ApplyPatch(ctx context.Context, namespace, name, version string, patch PatchOpts) error {
+	if patch.Status == nil && patch.Annotations == nil && patch.Finalizers == nil {
+		return nil
+	}
+	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
+		var statusJSON, annotationsJSON, finalizersJSON []byte
+		err := tx.QueryRow(ctx,
+			fmt.Sprintf(`
+				SELECT status, annotations, finalizers FROM %s
+				WHERE namespace=$1 AND name=$2 AND version=$3
+				FOR UPDATE`, s.table),
+			namespace, name, version,
+		).Scan(&statusJSON, &annotationsJSON, &finalizersJSON)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return pkgdb.ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("load row: %w", err)
+		}
+
+		setClauses := make([]string, 0, 3)
+		args := []any{namespace, name, version}
+
+		if patch.Status != nil {
+			var status v1alpha1.Status
+			if len(statusJSON) > 0 {
+				if err := json.Unmarshal(statusJSON, &status); err != nil {
+					return fmt.Errorf("decode status: %w", err)
+				}
+			}
+			patch.Status(&status)
+			newJSON, err := json.Marshal(status)
+			if err != nil {
+				return fmt.Errorf("encode status: %w", err)
+			}
+			args = append(args, newJSON)
+			setClauses = append(setClauses, fmt.Sprintf("status=$%d", len(args)))
+		}
+
+		if patch.Annotations != nil {
+			annotations := map[string]string{}
+			if len(annotationsJSON) > 0 {
+				if err := json.Unmarshal(annotationsJSON, &annotations); err != nil {
+					return fmt.Errorf("decode annotations: %w", err)
+				}
+			}
+			annotations = patch.Annotations(annotations)
+			if annotations == nil {
+				annotations = map[string]string{}
+			}
+			newJSON, err := json.Marshal(annotations)
+			if err != nil {
+				return fmt.Errorf("encode annotations: %w", err)
+			}
+			args = append(args, newJSON)
+			setClauses = append(setClauses, fmt.Sprintf("annotations=$%d", len(args)))
+		}
+
+		if patch.Finalizers != nil {
+			var finalizers []string
+			if len(finalizersJSON) > 0 {
+				if err := json.Unmarshal(finalizersJSON, &finalizers); err != nil {
+					return fmt.Errorf("decode finalizers: %w", err)
+				}
+			}
+			finalizers = patch.Finalizers(finalizers)
+			if finalizers == nil {
+				finalizers = []string{}
+			}
+			newJSON, err := json.Marshal(finalizers)
+			if err != nil {
+				return fmt.Errorf("encode finalizers: %w", err)
+			}
+			args = append(args, newJSON)
+			setClauses = append(setClauses, fmt.Sprintf("finalizers=$%d", len(args)))
+		}
+
+		// updated_at is maintained by the v1alpha1.set_updated_at() BEFORE
+		// UPDATE trigger, so we don't set it explicitly here. Keeps
+		// PatchAnnotations / PatchStatus / PatchFinalizers consistent
+		// about when the timestamp advances.
+		_, err = tx.Exec(ctx,
+			fmt.Sprintf(`UPDATE %s SET %s WHERE namespace=$1 AND name=$2 AND version=$3`,
+				s.table, join(setClauses, ", ")),
+			args...)
+		if err != nil {
+			return fmt.Errorf("apply patch: %w", err)
+		}
+		return nil
+	})
+}
+
+// PatchStatus is a thin wrapper over ApplyPatch for the single-column
+// status case. See ApplyPatch for the semantics.
 func (s *Store) PatchStatus(ctx context.Context, namespace, name, version string, mutate func(*v1alpha1.Status)) error {
-	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
-		var statusJSON []byte
-		err := tx.QueryRow(ctx,
-			fmt.Sprintf(`
-				SELECT status FROM %s
-				WHERE namespace=$1 AND name=$2 AND version=$3
-				FOR UPDATE`, s.table),
-			namespace, name, version).Scan(&statusJSON)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return pkgdb.ErrNotFound
-		}
-		if err != nil {
-			return fmt.Errorf("load status: %w", err)
-		}
-
-		var status v1alpha1.Status
-		if len(statusJSON) > 0 {
-			if err := json.Unmarshal(statusJSON, &status); err != nil {
-				return fmt.Errorf("decode status: %w", err)
-			}
-		}
-		mutate(&status)
-
-		newStatusJSON, err := json.Marshal(status)
-		if err != nil {
-			return fmt.Errorf("encode status: %w", err)
-		}
-		_, err = tx.Exec(ctx,
-			fmt.Sprintf(`
-				UPDATE %s SET status=$4
-				WHERE namespace=$1 AND name=$2 AND version=$3`, s.table),
-			namespace, name, version, newStatusJSON)
-		if err != nil {
-			return fmt.Errorf("write status: %w", err)
-		}
-		return nil
-	})
+	return s.ApplyPatch(ctx, namespace, name, version, PatchOpts{Status: mutate})
 }
 
-// PatchFinalizers atomically reads+mutates+writes the finalizers list for
-// (namespace, name, version). Used by reconcilers/controllers to add or
-// remove a finalizer they own. Returns pkgdb.ErrNotFound if the row
-// doesn't exist.
-func (s *Store) PatchFinalizers(ctx context.Context, namespace, name, version string, mutate func(finalizers []string) []string) error {
-	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
-		var finalizersJSON []byte
-		err := tx.QueryRow(ctx,
-			fmt.Sprintf(`
-				SELECT finalizers FROM %s
-				WHERE namespace=$1 AND name=$2 AND version=$3
-				FOR UPDATE`, s.table),
-			namespace, name, version).Scan(&finalizersJSON)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return pkgdb.ErrNotFound
-		}
-		if err != nil {
-			return fmt.Errorf("load finalizers: %w", err)
-		}
-
-		var finalizers []string
-		if len(finalizersJSON) > 0 {
-			if err := json.Unmarshal(finalizersJSON, &finalizers); err != nil {
-				return fmt.Errorf("decode finalizers: %w", err)
-			}
-		}
-		finalizers = mutate(finalizers)
-		if finalizers == nil {
-			finalizers = []string{}
-		}
-
-		newJSON, err := json.Marshal(finalizers)
-		if err != nil {
-			return fmt.Errorf("encode finalizers: %w", err)
-		}
-		_, err = tx.Exec(ctx,
-			fmt.Sprintf(`
-				UPDATE %s SET finalizers=$4
-				WHERE namespace=$1 AND name=$2 AND version=$3`, s.table),
-			namespace, name, version, newJSON)
-		if err != nil {
-			return fmt.Errorf("write finalizers: %w", err)
-		}
-		return nil
-	})
+// PatchFinalizers is a thin wrapper over ApplyPatch for the single-
+// column finalizers case. See ApplyPatch for the semantics.
+func (s *Store) PatchFinalizers(ctx context.Context, namespace, name, version string, mutate func([]string) []string) error {
+	return s.ApplyPatch(ctx, namespace, name, version, PatchOpts{Finalizers: mutate})
 }
 
-// PatchAnnotations atomically reads+mutates+writes the annotations map for
-// (namespace, name, version). The mutate callback receives the current
-// annotations and returns the replacement map. Returning nil clears the map.
-// Generation and spec are not touched. Returns pkgdb.ErrNotFound if the row
-// doesn't exist.
+// PatchAnnotations is a thin wrapper over ApplyPatch for the single-
+// column annotations case. See ApplyPatch for the semantics.
 func (s *Store) PatchAnnotations(ctx context.Context, namespace, name, version string, mutate func(map[string]string) map[string]string) error {
-	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
-		var annotationsJSON []byte
-		err := tx.QueryRow(ctx,
-			fmt.Sprintf(`
-				SELECT annotations FROM %s
-				WHERE namespace=$1 AND name=$2 AND version=$3
-				FOR UPDATE`, s.table),
-			namespace, name, version).Scan(&annotationsJSON)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return pkgdb.ErrNotFound
-		}
-		if err != nil {
-			return fmt.Errorf("load annotations: %w", err)
-		}
-
-		annotations := map[string]string{}
-		if len(annotationsJSON) > 0 {
-			if err := json.Unmarshal(annotationsJSON, &annotations); err != nil {
-				return fmt.Errorf("decode annotations: %w", err)
-			}
-		}
-		if mutate != nil {
-			annotations = mutate(annotations)
-		}
-		if annotations == nil {
-			annotations = map[string]string{}
-		}
-
-		newAnnotationsJSON, err := json.Marshal(annotations)
-		if err != nil {
-			return fmt.Errorf("encode annotations: %w", err)
-		}
-
-		_, err = tx.Exec(ctx,
-			fmt.Sprintf(`
-				UPDATE %s
-				SET annotations=$4, updated_at=NOW()
-				WHERE namespace=$1 AND name=$2 AND version=$3`, s.table),
-			namespace, name, version, newAnnotationsJSON)
-		if err != nil {
-			return fmt.Errorf("update annotations: %w", err)
-		}
-		return nil
-	})
+	return s.ApplyPatch(ctx, namespace, name, version, PatchOpts{Annotations: mutate})
 }
 
 // Get returns a single row by (namespace, name, version), including
