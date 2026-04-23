@@ -30,8 +30,9 @@ once resolved" instruction.
 
 ## What's left
 
-### Group 11 — legacy `pkg/models` / `internal/registry/kinds` cleanup
-- [ ] Delete `pkg/models/{agent,manifest,server_response,skill,prompt,provider,deployment,apiversion}.go` and `internal/registry/kinds/` once the remaining workflow CLI surfaces are ported. `client_deprecated.go` is already gone in `709a23d`, and `pkg/types.ProviderPlatformAdapter` now speaks v1alpha1 resources; what remains is real usage in workflow CLI paths (`internal/cli/agent/*`, `internal/cli/mcp/manifest`, `internal/cli/scheme`) plus a few platform translation helpers.
+### Group 11 — workflow CLI envelope cleanup
+- [ ] Decide whether to keep or delete flat `agent.yaml` / `mcp.yaml` compatibility in `internal/cli/{agent,mcp}`. Registry-side DTOs are gone; the remaining dual-format behavior is local workflow-manifest loading only.
+- [ ] Reduce duplicated workflow manifest projection code in `internal/cli/agent/manifest` + `internal/cli/mcp/manifest` once the declarative CLI/workflow story settles.
 
 ### Group 8 — Embeddings indexer follow-ups
 Core restored (see DONE table). These are incremental improvements:
@@ -69,8 +70,8 @@ Spotted during review sweeps, deliberately deferred:
 - **Backwards-compat shims in the final state.** When a subsystem's
   port commit lands, its legacy code is gone. No parallel DTOs, no
   `// DEPRECATED` annotations. The temporary `client_deprecated.go`
-  bridge was removed in `709a23d`; remaining legacy packages are live
-  callers that still need a real port, not shims.
+  bridge was removed in `709a23d`; the remaining cleanup is workflow
+  CLI compatibility/duplication work, not registry-side DTO shims.
 - **Trivy / image CVE scanner.** Legacy `container_scan.go` was Docker
   Hub popularity metadata, not a security scanner. Real Trivy is
   net-new work; scope separately.

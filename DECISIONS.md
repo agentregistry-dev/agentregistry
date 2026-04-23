@@ -46,9 +46,9 @@ keep compiling.
 
 Follow-up commit `709a23d` deleted the file after porting the
 provider/deployment/declarative CLI paths onto the generic v1alpha1
-client + typed helpers. The remaining legacy debt now lives in
-`pkg/models/*.go` + `internal/registry/kinds/` + a few workflow CLI
-surfaces, not in runtime-error client stubs.
+client + typed helpers. The remaining cleanup now lives in workflow CLI
+manifest compatibility/projection code, not in runtime-error client
+stubs or registry-side DTO packages.
 
 **Why the temporary exception existed:** breaking the imperative CLI
 build mid-handoff would have blocked the parallel CLI work. The stubs
@@ -232,13 +232,16 @@ is mechanical.
 
 ### H3. README blobs don't move yet
 
-Legacy `server_readmes` BYTEA table is still written and read by the
-imperative CLI's publish path. No v1alpha1 equivalent exists; the
-schema choice (MCPServerSpec field vs. separate sub-resource) is
-unresolved.
+The old `server_readmes` BYTEA table was too server-specific for the new
+model. The replacement is a shared `Spec.Readme` block on Agent,
+MCPServer, Skill, and Prompt, plus generic readme subresource routes for
+lazy-loading the heavy markdown body. Collection endpoints strip
+`Readme.Content` so list calls stay cheap. A thin MCP-server alias route
+remains temporarily because downstream UIs still call the old path.
 
-**Decision:** defer until there's a concrete product need; right now
-the data is static.
+**Decision:** generalize the data model rather than keep an MCP-only
+table. Revisit separate storage only if inline-spec size becomes an
+actual performance problem.
 
 ---
 

@@ -453,6 +453,7 @@ func runList[T v1alpha1.Object](
 		if err != nil {
 			return nil, huma.Error500InternalServerError("decode "+cfg.Kind, err)
 		}
+		v1alpha1.StripObjectReadmeContent(obj)
 		items = append(items, obj)
 	}
 	out := &listOutput[T]{}
@@ -500,6 +501,7 @@ func runSemanticList[T v1alpha1.Object](
 		if err != nil {
 			return nil, huma.Error500InternalServerError("decode "+cfg.Kind, err)
 		}
+		v1alpha1.StripObjectReadmeContent(obj)
 		items = append(items, obj)
 		scores = append(scores, r.Score)
 	}
@@ -508,7 +510,6 @@ func runSemanticList[T v1alpha1.Object](
 	out.Body.SemanticScores = scores
 	return out, nil
 }
-
 
 // mapNotFound converts a pkgdb.ErrNotFound error into a Huma 404 with a
 // consistent message. Other errors fall through as 500.

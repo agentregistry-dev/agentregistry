@@ -1,41 +1,30 @@
 package scheme_test
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// syntheticSpec is the typed spec used in scheme tests.
-type syntheticSpec struct {
-	Image       string `yaml:"image"`
-	Description string `yaml:"description"`
-}
-
-// newTestRegistry returns a registry with Agent and MCPServer kinds registered
-// using syntheticSpec so tests do not depend on real service implementations.
-func newTestRegistry() *kinds.Registry {
-	reg := kinds.NewRegistry()
-	reg.Register(kinds.Kind{
-		Kind:     "agent",
-		Plural:   "agents",
-		Aliases:  []string{"Agent"},
-		SpecType: reflect.TypeFor[syntheticSpec](),
+func newTestRegistry() *scheme.Registry {
+	reg := scheme.NewRegistry()
+	reg.Register(scheme.Kind{
+		Kind:    "agent",
+		Plural:  "agents",
+		Aliases: []string{"Agent"},
 	})
-	reg.Register(kinds.Kind{
-		Kind:     "mcpserver",
-		Plural:   "mcpservers",
-		Aliases:  []string{"MCPServer"},
-		SpecType: reflect.TypeFor[syntheticSpec](),
+	reg.Register(scheme.Kind{
+		Kind:    "mcp",
+		Plural:  "mcps",
+		Aliases: []string{"MCPServer", "mcpserver", "mcpservers"},
 	})
 	return reg
 }
 
-func TestDecodeBytes_SingleDoc(t *testing.T) {
+func TestDecodeBytesSingleDoc(t *testing.T) {
 	reg := newTestRegistry()
 	input := `
 apiVersion: ar.dev/v1alpha1
@@ -47,6 +36,7 @@ spec:
   image: ghcr.io/acme/bot:latest
   description: "A bot"
 `
+
 	resources, err := scheme.DecodeBytes(reg, []byte(input))
 	require.NoError(t, err)
 	require.Len(t, resources, 1)
@@ -55,12 +45,13 @@ spec:
 	assert.Equal(t, "acme/bot", resources[0].Metadata.Name)
 	assert.Equal(t, "1.0.0", resources[0].Metadata.Version)
 
-	spec, ok := resources[0].Spec.(*syntheticSpec)
-	require.True(t, ok, "expected *syntheticSpec, got %T", resources[0].Spec)
+	spec, ok := resources[0].Spec.(*v1alpha1.AgentSpec)
+	require.True(t, ok, "expected *v1alpha1.AgentSpec, got %T", resources[0].Spec)
 	assert.Equal(t, "ghcr.io/acme/bot:latest", spec.Image)
+	assert.Nil(t, resources[0].Status)
 }
 
-func TestDecodeBytes_MultiDoc(t *testing.T) {
+func TestDecodeBytesMultiDoc(t *testing.T) {
 	reg := newTestRegistry()
 	input := `
 apiVersion: ar.dev/v1alpha1
@@ -80,14 +71,15 @@ spec:
   description: "A bot"
   image: ghcr.io/acme/bot:latest
 `
+
 	resources, err := scheme.DecodeBytes(reg, []byte(input))
 	require.NoError(t, err)
 	require.Len(t, resources, 2)
-	assert.Equal(t, "mcpserver", resources[0].Kind)
+	assert.Equal(t, "mcp", resources[0].Kind)
 	assert.Equal(t, "agent", resources[1].Kind)
 }
 
-func TestDecodeBytes_MissingKind(t *testing.T) {
+func TestDecodeBytesMissingKind(t *testing.T) {
 	reg := newTestRegistry()
 	input := `
 apiVersion: ar.dev/v1alpha1
@@ -100,7 +92,7 @@ spec:
 	assert.ErrorContains(t, err, "kind")
 }
 
-func TestDecodeBytes_UnknownKind(t *testing.T) {
+func TestDecodeBytesUnknownKind(t *testing.T) {
 	reg := newTestRegistry()
 	input := `
 apiVersion: ar.dev/v1alpha1
@@ -111,17 +103,17 @@ spec: {}
 `
 	_, err := scheme.DecodeBytes(reg, []byte(input))
 	require.Error(t, err)
-	assert.Error(t, err, "expected error for unknown kind")
+	assert.ErrorContains(t, err, "BogusKind")
 }
 
-func TestDecodeBytes_EmptyInput(t *testing.T) {
+func TestDecodeBytesEmptyInput(t *testing.T) {
 	reg := newTestRegistry()
 	docs, err := scheme.DecodeBytes(reg, []byte(""))
 	require.NoError(t, err)
 	assert.Empty(t, docs)
 }
 
-func TestDecodeBytes_MetadataNamePreserved(t *testing.T) {
+func TestDecodeBytesDropsIncomingStatus(t *testing.T) {
 	reg := newTestRegistry()
 	input := `
 apiVersion: ar.dev/v1alpha1
@@ -131,10 +123,18 @@ metadata:
   version: "1.0.0"
 spec:
   image: ghcr.io/acme/bot:latest
+status:
+  conditions:
+    - type: Ready
+      status: "True"
 `
+
 	resources, err := scheme.DecodeBytes(reg, []byte(input))
 	require.NoError(t, err)
 	require.Len(t, resources, 1)
-	assert.Equal(t, "acme/bot", resources[0].Metadata.Name)
-	assert.Equal(t, "1.0.0", resources[0].Metadata.Version)
+	assert.Nil(t, resources[0].Status)
+
+	agent, ok := resources[0].Object.(*v1alpha1.Agent)
+	require.True(t, ok)
+	assert.Empty(t, agent.Status.Conditions)
 }

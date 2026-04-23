@@ -9,20 +9,20 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // batchDeleteResponse builds a JSON body matching the DELETE /v0/apply response shape.
-func batchDeleteResponse(results []kinds.Result) []byte {
+func batchDeleteResponse(results []arv0.ApplyResult) []byte {
 	body, _ := json.Marshal(map[string]any{"results": results})
 	return body
 }
 
 // newDeleteTestServer creates an httptest.Server that records the last request and
 // replies with the provided batch response.
-func newDeleteTestServer(t *testing.T, results []kinds.Result) (*httptest.Server, *http.Request) {
+func newDeleteTestServer(t *testing.T, results []arv0.ApplyResult) (*httptest.Server, *http.Request) {
 	t.Helper()
 	captured := &http.Request{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -45,8 +45,8 @@ func setupDeleteClient(t *testing.T, srv *httptest.Server) {
 
 // TestDeleteFileModeUsesDeleteApplyEndpoint verifies that -f sends DELETE to /v0/apply.
 func TestDeleteFileModeUsesDeleteApplyEndpoint(t *testing.T) {
-	results := []kinds.Result{
-		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: kinds.StatusApplied},
+	results := []arv0.ApplyResult{
+		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: arv0.ApplyStatusDeleted},
 	}
 	srv, captured := newDeleteTestServer(t, results)
 	setupDeleteClient(t, srv)
@@ -64,8 +64,8 @@ func TestDeleteFileModeUsesDeleteApplyEndpoint(t *testing.T) {
 
 // TestDeleteFileModeReportsResults verifies that per-resource results are printed.
 func TestDeleteFileModeReportsResults(t *testing.T) {
-	results := []kinds.Result{
-		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: kinds.StatusApplied},
+	results := []arv0.ApplyResult{
+		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: arv0.ApplyStatusDeleted},
 	}
 	srv, _ := newDeleteTestServer(t, results)
 	setupDeleteClient(t, srv)
@@ -82,8 +82,8 @@ func TestDeleteFileModeReportsResults(t *testing.T) {
 
 // TestDeleteFileModeFailedResultsReturnError verifies that a failed result causes non-zero exit.
 func TestDeleteFileModeFailedResultsReturnError(t *testing.T) {
-	results := []kinds.Result{
-		{Kind: "agent", Name: "acme/bot", Status: kinds.StatusFailed, Error: "not found"},
+	results := []arv0.ApplyResult{
+		{Kind: "agent", Name: "acme/bot", Status: arv0.ApplyStatusFailed, Error: "not found"},
 	}
 	srv, _ := newDeleteTestServer(t, results)
 	setupDeleteClient(t, srv)

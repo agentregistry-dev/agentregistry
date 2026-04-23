@@ -11,8 +11,8 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
 	mcpbuild "github.com/agentregistry-dev/agentregistry/internal/cli/mcp/build"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/spf13/cobra"
 )
 
@@ -153,7 +153,7 @@ func resolveImage(flagImage, specImage, name string) string {
 
 // agentSpecImage extracts spec.image for an Agent resource.
 func agentSpecImage(r *scheme.Resource) string {
-	if spec, ok := r.Spec.(*kinds.AgentSpec); ok {
+	if spec, ok := r.Spec.(*v1alpha1.AgentSpec); ok {
 		return spec.Image
 	}
 	return ""
@@ -161,7 +161,7 @@ func agentSpecImage(r *scheme.Resource) string {
 
 // mcpSpecPackageIdentifier extracts spec.packages[0].identifier for an MCPServer resource.
 func mcpSpecPackageIdentifier(r *scheme.Resource) string {
-	if spec, ok := r.Spec.(*kinds.MCPSpec); ok && len(spec.Packages) > 0 {
+	if spec, ok := r.Spec.(*v1alpha1.MCPServerSpec); ok && len(spec.Packages) > 0 {
 		return spec.Packages[0].Identifier
 	}
 	return ""
@@ -169,7 +169,7 @@ func mcpSpecPackageIdentifier(r *scheme.Resource) string {
 
 // skillSpecPackageIdentifier extracts spec.packages[0].identifier for a Skill resource.
 func skillSpecPackageIdentifier(r *scheme.Resource) string {
-	if spec, ok := r.Spec.(*kinds.SkillSpec); ok && len(spec.Packages) > 0 {
+	if spec, ok := r.Spec.(*v1alpha1.SkillSpec); ok && len(spec.Packages) > 0 {
 		return spec.Packages[0].Identifier
 	}
 	return ""

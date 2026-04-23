@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"strings"
 
+	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	arclient "github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
 )
 
 type resolvedSkillRef struct {
@@ -22,7 +22,7 @@ type resolvedSkillRef struct {
 	repoURL string // Git repository URL (mutually exclusive with image)
 }
 
-func resolveSkillsForRuntime(manifest *models.AgentManifest) ([]resolvedSkillRef, error) {
+func resolveSkillsForRuntime(manifest *agentmanifest.AgentManifest) ([]resolvedSkillRef, error) {
 	if manifest == nil || len(manifest.Skills) == 0 {
 		return nil, nil
 	}
@@ -46,7 +46,7 @@ func resolveSkillsForRuntime(manifest *models.AgentManifest) ([]resolvedSkillRef
 // repository URL. When the skill is fetched from the registry, Docker/OCI
 // packages are preferred; if none are available, the skill's GitHub repository
 // is used as a fallback.
-func resolveSkillSource(skill models.SkillRef) (resolvedSkillRef, error) {
+func resolveSkillSource(skill agentmanifest.SkillRef) (resolvedSkillRef, error) {
 	image := strings.TrimSpace(skill.Image)
 	registrySkillName := strings.TrimSpace(skill.RegistrySkillName)
 	hasImage := image != ""

@@ -14,10 +14,10 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/rs/cors"
 
-	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 )
 
@@ -153,7 +153,7 @@ func (s *Server) Handler() http.Handler {
 func NewServer(
 	cfg *config.Config,
 	metrics *telemetry.Metrics,
-	versionInfo *apitypes.VersionBody,
+	versionInfo *arv0.VersionBody,
 	customUIHandler http.Handler,
 	authnProvider auth.AuthnProvider,
 	routeOpts *router.RouteOptions,

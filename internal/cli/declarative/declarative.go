@@ -2,12 +2,11 @@ package declarative
 
 import (
 	"context"
-	"reflect"
 	"time"
 
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
@@ -19,32 +18,28 @@ func SetAPIClient(c *client.Client) {
 	apiClient = c
 }
 
-// defaultRegistry is the kinds.Registry used by the declarative CLI for YAML decoding.
-// It is populated at package init time with decode-only (no service) kind entries
-// so that arctl can parse YAML files without a live registry connection.
+// defaultRegistry is the declarative CLI's kind registry. It owns user-facing
+// aliases, table metadata, and list/get/delete dispatch, while YAML decode itself
+// flows through pkg/api/v1alpha1.Scheme.
 var defaultRegistry = newCLIRegistry()
 
-// SetRegistry replaces the default decoding registry. Useful for tests and for
-// enterprise extensions that register additional kinds.
-func SetRegistry(r *kinds.Registry) {
+// SetRegistry replaces the default registry. Useful for tests and enterprise extensions.
+func SetRegistry(r *scheme.Registry) {
 	defaultRegistry = r
 }
 
-// NewCLIRegistry builds a decode-only registry containing the four built-in
-// kinds. Service functions (Apply, Get, Delete) are intentionally omitted here;
-// they are wired by the server-side kind packages (internal/registry/kinds/*).
-// Exported for use in tests that need to restore the default registry.
-func NewCLIRegistry() *kinds.Registry {
+// NewCLIRegistry returns the built-in declarative registry.
+func NewCLIRegistry() *scheme.Registry {
 	return newCLIRegistry()
 }
 
-func newCLIRegistry() *kinds.Registry {
-	reg := kinds.NewRegistry()
-	reg.Register(kinds.Kind{
-		Kind:     "agent",
-		Plural:   "agents",
-		Aliases:  []string{"Agent"},
-		SpecType: reflect.TypeFor[kinds.AgentSpec](),
+func newCLIRegistry() *scheme.Registry {
+	reg := scheme.NewRegistry()
+
+	reg.Register(scheme.Kind{
+		Kind:    "agent",
+		Plural:  "agents",
+		Aliases: []string{"Agent"},
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return getAny(context.Background(), v1alpha1.KindAgent, name, "", func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
 		},
@@ -55,20 +50,14 @@ func newCLIRegistry() *kinds.Registry {
 			return listLatestAny(context.Background(), v1alpha1.KindAgent, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
 		},
 		RowFunc: func(item any) []string {
-			a, ok := item.(*v1alpha1.Agent)
+			agent, ok := item.(*v1alpha1.Agent)
 			if !ok {
 				return []string{"<invalid>"}
 			}
-			return agentRow(a)
+			return agentRow(agent)
 		},
-		ToResourceFunc: func(item any) *kinds.Document {
-			a, ok := item.(*v1alpha1.Agent)
-			if !ok {
-				return nil
-			}
-			return agentToDocument(a)
-		},
-		TableColumns: []kinds.Column{
+		ToYAMLFunc: func(item any) any { return item },
+		TableColumns: []scheme.Column{
 			{Header: "NAME"},
 			{Header: "VERSION"},
 			{Header: "FRAMEWORK"},
@@ -77,11 +66,11 @@ func newCLIRegistry() *kinds.Registry {
 			{Header: "MODEL"},
 		},
 	})
-	reg.Register(kinds.Kind{
-		Kind:     "mcp",
-		Plural:   "mcps",
-		Aliases:  []string{"MCPServer", "mcpserver", "mcp-server", "mcpservers"},
-		SpecType: reflect.TypeFor[kinds.MCPSpec](),
+
+	reg.Register(scheme.Kind{
+		Kind:    "mcp",
+		Plural:  "mcps",
+		Aliases: []string{"MCPServer", "mcpserver", "mcp-server", "mcpservers"},
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return getAny(context.Background(), v1alpha1.KindMCPServer, name, "", func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
 		},
@@ -92,30 +81,24 @@ func newCLIRegistry() *kinds.Registry {
 			return listLatestAny(context.Background(), v1alpha1.KindMCPServer, func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
 		},
 		RowFunc: func(item any) []string {
-			s, ok := item.(*v1alpha1.MCPServer)
+			server, ok := item.(*v1alpha1.MCPServer)
 			if !ok {
 				return []string{"<invalid>"}
 			}
-			return mcpRow(s)
+			return mcpRow(server)
 		},
-		ToResourceFunc: func(item any) *kinds.Document {
-			s, ok := item.(*v1alpha1.MCPServer)
-			if !ok {
-				return nil
-			}
-			return mcpToDocument(s)
-		},
-		TableColumns: []kinds.Column{
+		ToYAMLFunc: func(item any) any { return item },
+		TableColumns: []scheme.Column{
 			{Header: "NAME"},
 			{Header: "VERSION"},
 			{Header: "DESCRIPTION"},
 		},
 	})
-	reg.Register(kinds.Kind{
-		Kind:     "skill",
-		Plural:   "skills",
-		Aliases:  []string{"Skill"},
-		SpecType: reflect.TypeFor[kinds.SkillSpec](),
+
+	reg.Register(scheme.Kind{
+		Kind:    "skill",
+		Plural:  "skills",
+		Aliases: []string{"Skill"},
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return getAny(context.Background(), v1alpha1.KindSkill, name, "", func() *v1alpha1.Skill { return &v1alpha1.Skill{} })
 		},
@@ -126,31 +109,25 @@ func newCLIRegistry() *kinds.Registry {
 			return listLatestAny(context.Background(), v1alpha1.KindSkill, func() *v1alpha1.Skill { return &v1alpha1.Skill{} })
 		},
 		RowFunc: func(item any) []string {
-			s, ok := item.(*v1alpha1.Skill)
+			skill, ok := item.(*v1alpha1.Skill)
 			if !ok {
 				return []string{"<invalid>"}
 			}
-			return skillRow(s)
+			return skillRow(skill)
 		},
-		ToResourceFunc: func(item any) *kinds.Document {
-			s, ok := item.(*v1alpha1.Skill)
-			if !ok {
-				return nil
-			}
-			return skillToDocument(s)
-		},
-		TableColumns: []kinds.Column{
+		ToYAMLFunc: func(item any) any { return item },
+		TableColumns: []scheme.Column{
 			{Header: "NAME"},
 			{Header: "VERSION"},
 			{Header: "CATEGORY"},
 			{Header: "DESCRIPTION"},
 		},
 	})
-	reg.Register(kinds.Kind{
-		Kind:     "prompt",
-		Plural:   "prompts",
-		Aliases:  []string{"Prompt"},
-		SpecType: reflect.TypeFor[kinds.PromptSpec](),
+
+	reg.Register(scheme.Kind{
+		Kind:    "prompt",
+		Plural:  "prompts",
+		Aliases: []string{"Prompt"},
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return getAny(context.Background(), v1alpha1.KindPrompt, name, "", func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} })
 		},
@@ -161,89 +138,91 @@ func newCLIRegistry() *kinds.Registry {
 			return listLatestAny(context.Background(), v1alpha1.KindPrompt, func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} })
 		},
 		RowFunc: func(item any) []string {
-			p, ok := item.(*v1alpha1.Prompt)
+			prompt, ok := item.(*v1alpha1.Prompt)
 			if !ok {
 				return []string{"<invalid>"}
 			}
-			return promptRow(p)
+			return promptRow(prompt)
 		},
-		ToResourceFunc: func(item any) *kinds.Document {
-			p, ok := item.(*v1alpha1.Prompt)
-			if !ok {
-				return nil
-			}
-			return promptToDocument(p)
-		},
-		TableColumns: []kinds.Column{
+		ToYAMLFunc: func(item any) any { return item },
+		TableColumns: []scheme.Column{
 			{Header: "NAME"},
 			{Header: "VERSION"},
 			{Header: "DESCRIPTION"},
 		},
 	})
-	reg.Register(kinds.Kind{
-		Kind:     "provider",
-		Plural:   "providers",
-		Aliases:  []string{"Provider"},
-		SpecType: reflect.TypeFor[kinds.ProviderSpec](),
-		TableColumns: []kinds.Column{
-			{Header: "NAME"}, {Header: "PLATFORM"},
-		},
-		ListFunc: func(_ context.Context) ([]any, error) {
-			return listLatestAny(context.Background(), v1alpha1.KindProvider, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
-		},
-		RowFunc: func(item any) []string {
-			p := item.(*v1alpha1.Provider)
-			return providerRow(p)
-		},
-		ToResourceFunc: func(item any) *kinds.Document {
-			p, ok := item.(*v1alpha1.Provider)
-			if !ok {
-				return nil
-			}
-			return providerToDocument(p)
-		},
+
+	reg.Register(scheme.Kind{
+		Kind:    "provider",
+		Plural:  "providers",
+		Aliases: []string{"Provider"},
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return getAny(context.Background(), v1alpha1.KindProvider, name, "", func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
 		},
 		Delete: func(_ context.Context, name, _ string) error {
 			return deleteAny(context.Background(), v1alpha1.KindProvider, name, "", func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
 		},
-	})
-	reg.Register(kinds.Kind{
-		Kind:     "deployment",
-		Plural:   "deployments",
-		Aliases:  []string{"Deployment"},
-		SpecType: reflect.TypeFor[kinds.DeploymentSpec](),
-		TableColumns: []kinds.Column{
-			{Header: "ID"}, {Header: "NAME"}, {Header: "VERSION"},
-			{Header: "TYPE"}, {Header: "PROVIDER"}, {Header: "STATUS"},
+		ListFunc: func(_ context.Context) ([]any, error) {
+			return listLatestAny(context.Background(), v1alpha1.KindProvider, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
 		},
-		ListFunc: func(_ context.Context) ([]any, error) { return listDeploymentAny(context.Background()) },
 		RowFunc: func(item any) []string {
-			d := item.(*cliCommon.DeploymentRecord)
-			return deploymentRow(d)
-		},
-		ToResourceFunc: func(item any) *kinds.Document {
-			d, ok := item.(*cliCommon.DeploymentRecord)
+			provider, ok := item.(*v1alpha1.Provider)
 			if !ok {
-				return nil
+				return []string{"<invalid>"}
 			}
-			return deploymentToDocument(d)
+			return providerRow(provider)
 		},
+		ToYAMLFunc: func(item any) any { return item },
+		TableColumns: []scheme.Column{
+			{Header: "NAME"},
+			{Header: "PLATFORM"},
+		},
+	})
+
+	reg.Register(scheme.Kind{
+		Kind:    "deployment",
+		Plural:  "deployments",
+		Aliases: []string{"Deployment"},
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return getDeploymentByTarget(context.Background(), name)
 		},
 		Delete: func(_ context.Context, name, version string) error {
 			return deleteDeploymentByTarget(context.Background(), name, version)
 		},
+		ListFunc: func(_ context.Context) ([]any, error) {
+			return listDeploymentAny(context.Background())
+		},
+		RowFunc: func(item any) []string {
+			deployment, ok := item.(*cliCommon.DeploymentRecord)
+			if !ok {
+				return []string{"<invalid>"}
+			}
+			return deploymentRow(deployment)
+		},
+		ToYAMLFunc: func(item any) any {
+			deployment, ok := item.(*cliCommon.DeploymentRecord)
+			if !ok {
+				return nil
+			}
+			return deploymentToDocument(deployment)
+		},
+		TableColumns: []scheme.Column{
+			{Header: "ID"},
+			{Header: "NAME"},
+			{Header: "VERSION"},
+			{Header: "TYPE"},
+			{Header: "PROVIDER"},
+			{Header: "STATUS"},
+		},
 	})
+
 	return reg
 }
 
 // deploymentStatus is the shape emitted under .status when a deployment is
-// rendered as YAML/JSON. Server-managed fields only — the envelope decoder
-// ignores .status on apply, so this is safe to include in get output without
-// breaking round-trips through `arctl apply -f`.
+// rendered as YAML/JSON. This is intentionally a CLI projection rather than the
+// raw v1alpha1.Status conditions block so imperative users keep the compact
+// fields they already consume while apply decode still ignores incoming status.
 type deploymentStatus struct {
 	ID               string         `json:"id,omitempty" yaml:"id,omitempty"`
 	Phase            string         `json:"phase,omitempty" yaml:"phase,omitempty"`

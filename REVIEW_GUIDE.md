@@ -35,11 +35,11 @@ Epic: replace the five-layer type stack (`kinds.Document` → `Spec` → wire DT
 │  ✔ ListOpts.ExtraWhere / ExtraArgs landed in current checkout                       │
 │  ⚙ Enterprise E0 revert + redo against the new OSS HEAD                             │
 ├───────────────────────── PENDING (after merge or separate) ─────────────────────────┤
-│  ◆ Remaining workflow CLI/model cleanup (`pkg/models` + `kinds/` + provider types)│
+│  ◆ Workflow CLI envelope cleanup (local manifest compatibility + projection code) │
 │  ◆ Phase 2 KRT reconciler rebase (async sibling of V1Alpha1Coordinator)           │
 │  ◆ UI TypeScript client regen + component fixups                                  │
 │  ◆ Deployment watch/SSE endpoint (logs ported; watch deferred)                    │
-│  ◆ server_readmes BYTEA surface data-model decision                               │
+│  ✔ Generic README surface (`Spec.Readme` + subresource routes) landed             │
 │  ◆ Per-platform deployment identities side table                                  │
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -48,7 +48,7 @@ Epic: replace the five-layer type stack (`kinds.Document` → `Spec` → wire DT
 
 ---
 
-**Merge state.** Every subsystem that has a live consumer is ported. Legacy `public.*` tables, per-kind services, embeddings stack (since re-built on v1alpha1), legacy importer/exporter/seeder, and every legacy HTTP handler are deleted. `internal/client/client_deprecated.go` is gone in `709a23d`; what remains is workflow/model cleanup (`pkg/models/*.go` + `internal/registry/kinds/` + a few workflow CLI / translation surfaces). Phase 2 KRT still rebases onto the coordinator contract without changing it.
+**Merge state.** Every subsystem that has a live consumer is ported. Legacy `public.*` tables, per-kind services, embeddings stack (since re-built on v1alpha1), legacy importer/exporter/seeder, and every legacy HTTP handler are deleted. `internal/client/client_deprecated.go`, `pkg/models/*.go`, and `internal/registry/kinds/` are gone; what remains is workflow CLI/local-manifest cleanup plus the separate Phase 2 KRT rebase.
 
 **Recommended companion reads** (in order): `REBUILD_TRACKER.md` (per-subsystem port inventory + finish-line signals) → this file (commit-grouped reading order) → `REMAINING.md` (the short list of what's still deferred) → `design-docs/V1ALPHA1_PLATFORM_ADAPTERS.md` + `design-docs/V1ALPHA1_IMPORTER_ENRICHMENT.md` (design rationale; every open question was resolved on 2026-04-17). These files are on disk as untracked working-tree entries (removed from git in `5e64cec` so the PR diff stays code-focused) — share them with reviewers out-of-band.
 
@@ -136,7 +136,7 @@ The coordinator is the synchronous sibling of the Phase 2 KRT reconciler. Same a
 | Cross-kind ref resolution | `database.NewV1Alpha1Resolver` |
 | Cross-row URL-uniqueness invariant | `(Object).ValidateUniqueRemoteURLs` + `database.NewV1Alpha1UniqueRemoteURLsChecker` |
 | Multi-doc YAML apply (POST + DELETE) | `resource/apply.go` |
-| Apply result wire contract | `internal/registry/api/apitypes/apply.go` |
+| Apply result wire contract | `pkg/api/v0/apply.go` |
 | Annotations (non-indexed) | `ObjectMeta.Annotations`; `annotations` JSONB column on every table |
 | Scanner plug-in contract | `pkg/importer/scanner.go` |
 | Enrichment findings side table | `migrations_v1alpha1/002_enrichment_findings.sql` |
@@ -316,8 +316,8 @@ Business logic moves off legacy service packages onto the v1alpha1 surface.
 **What to pay attention to**
 - `pkg/api/v1alpha1/versionutil.go` — two exported functions. `CompareVersions` is the authority for `isLatest`; apply-path version-locking is explicitly **not** enforced.
 - `pkg/api/v1alpha1/remote_urls_validate.go` — within a single manifest, only the first conflicting URL is reported; across manifests, `Store.FindReferrers` does the work via GIN-indexed JSONB containment. Cross-namespace by design.
-- `handlers/v0/resource/apply.go` — `DryRun` short-circuits before Upsert; `Force` is accepted for CLI compat and is a no-op; DELETE verb soft-deletes every doc in the body.
-- `internal/registry/api/apitypes/apply.go` — wire contract hoisted to OSS-facing package so the Go client + CLI don't import the handler package.
+- `handlers/v0/resource/apply.go` — `DryRun` short-circuits before Upsert; DELETE verb soft-deletes every doc in the body.
+- `pkg/api/v0/apply.go` — public wire contract shared by the server, Go client, and CLI.
 
 ### Group 10 — Legacy HTTP handler collapse (`8be4067`, `a7ab3a4`, 2 commits)
 
@@ -380,7 +380,7 @@ Tools Claude Code consumes get rewritten to speak v1alpha1. Tool names preserved
 **What to pay attention to**
 - `server.go` shrinks 590 → 263 LOC. `list_servers` + `get_server` now go through `Store.List` / `Store.Get`.
 - **Name-contains filtering is server-side in Go**, iterating over `Store.List` pages. Fine at current catalog size; flag if the filter moves to a hot path.
-- Deferred intentionally: `semantic_search` / `semantic_threshold` (embeddings is a green-field rebuild, see Group 15), `updated_since` filter, `get_server_readme` (README data-model decision still pending).
+- Deferred intentionally: `updated_since` filter only. Semantic search and README fetch are both live on the current checkout.
 - `registry_app.go` wires the MCP bridge only when v1alpha1 Stores exist; noop-backend tests never had MCP anyway.
 
 ### Group 15 — Final legacy purge (`2cbf1c2`, `df5986c`, `58401c7`, 3 commits)
@@ -395,11 +395,10 @@ Tools Claude Code consumes get rewritten to speak v1alpha1. Tool names preserved
 
 **What to pay attention to**
 - `internal/registry/database/migrations/` **does not exist**. Only `migrations_v1alpha1/` remains. Migrator config shrank accordingly.
-- **Embeddings is fully gone**, not ported. `/v0/embeddings/*`, `?semantic=` query, `internal/registry/embeddings/openai.go` — all deleted. Re-implementation is additive green-field work on v1alpha1 tables, not a port.
-- `pkg/registry/database/database.go` is now 41 LOC — just sentinel errors + migrator config.
-- **`pkg/models/*.go` still has 9 files on disk.** Dead but compiling; indirect consumers remain in the imperative CLI. Deletes on the declarative CLI merge.
+- **Embeddings is restored** on v1alpha1 in the current checkout. The remaining work is auto-regen / SSE polish / extra providers, not restoring the core feature.
+- `pkg/registry/database/database.go` is now the thin root contract (`Pool()` + `Close()`) plus sentinel errors.
+- **`pkg/models/*.go` and `internal/registry/kinds/` are gone.** Workflow CLI still has its own internal manifest projection types, but the registry-side DTO stack is deleted.
 - `internal/registry/validators/` — only the registries dispatcher + legacy per-kind `ValidatePackage` adapter remain. The 3k-LOC `validators.go` family is gone.
-- `internal/registry/api/handlers/v0/extensions/registries.go` — `PlatformExtensions` struct holds provider-side adapters only (deployment-side map deleted with the legacy stack). Currently has **zero importers**; kept as a dormant enterprise extension point. Flag if it stays dead longer than one release.
 
 ### Group 16 — Design docs + tracker (`d21b566`, `f575541`, `c0a89e2`, et al.)
 
@@ -517,7 +516,7 @@ Ranked by blast radius.
 
 11. **`git mv` rename detection.** OSV `0ec9297` (70%), Scorecard `4e2afd7` (99%), versionutil `2972363` (72%/97%), OCI `4f2f212`, NPM/PyPI/NuGet/MCPB `a6ea729` (86-100%), platform-adapter utils `8d4c3ea`. `git log --follow` traces original authorship everywhere. To verify logic wasn't disturbed, diff legacy vs. post-wrap.
 
-12. **Workflow CLI/model residue.** `client_deprecated.go` is gone, but `pkg/models/*.go` and `internal/registry/kinds/` still feed some workflow CLI and translation paths. Push on whether each remaining import is still justified or should move to native v1alpha1 envelopes.
+12. **Workflow CLI residue.** Registry-side DTOs are gone, but local workflow manifests still carry a separate internal projection plus dual-format loading. Push on whether flat manifest compatibility still deserves to exist.
 
 13. **MCP server-side substring filter.** `registryserver/server.go` does name-contains filtering in Go over paged `Store.List` results. Fine at current catalog size; risks latency at scale. Flag if the filter moves to a hot path before a `NameContains` option lands on `Store.List`.
 
@@ -550,13 +549,13 @@ Flag anything you disagree with.
 - **Status.Phase dropped.** Conditions are the only reconciliation-state surface.
 - **Refs are pure.** No inline fields coexisting with ref-style. Anywhere a ref can go, it's `ResourceRef{Kind, Namespace, Name, Version}`.
 - **Deployments have the same PK shape.** No UUID; `(namespace, name, version)`.
-- **Apply-path version-lock not enforced.** Legacy only used `CompareVersions` to decide `isLatest`, never to reject old-version applies. `Store.Upsert` + `pickLatestVersion` preserve that semantic. `Force` is accepted for wire compat; no-op.
+- **Apply-path version-lock not enforced.** Legacy only used `CompareVersions` to decide `isLatest`, never to reject old-version applies. `Store.Upsert` + `pickLatestVersion` preserve that semantic.
 - **Synchronous coordinator + KRT seam.** `V1Alpha1Coordinator` is synchronous; KRT is the async sibling. Same adapter contract, same `PatchStatus`/`PatchFinalizers` writes, different trigger. Coordinator explicitly does NOT Upsert so KRT can replace it without touching the apply handler.
 - **PostUpsert / PostDelete as kind-agnostic hooks.** Deployment isn't special in the handler — it just sets two `Config` fields. Any future kind wanting post-persist reconciliation uses the same pattern.
 - **Deployment cancel subsumed.** `DesiredState=undeployed` on apply + DELETE replace the legacy cancel endpoint.
 - **Embeddings is green-field, not deferred.** Deleted wholesale in `2cbf1c2`. Re-implementation is additive new work, not a port.
-- **Temporary deprecated-stub pattern is over.** `client_deprecated.go` existed only for the handoff window and was deleted in `709a23d`; the remaining cleanup is no longer stub removal, it's true model/kinds deletion work.
-- **README BYTEA deferred.** Pending data-model call (push into `MCPServerSpec` vs. keep a sub-handler).
+- **Temporary deprecated-stub pattern is over.** `client_deprecated.go` existed only for the handoff window and was deleted in `709a23d`; the remaining cleanup is workflow CLI/local-manifest cleanup, not registry DTO deletion.
+- **README generalized.** Long-form docs now live on shared `Spec.Readme` fields, list responses strip the heavy body, and generic readme subresource routes serve lazy-loaded content. A thin MCP-server alias remains for existing UI consumers.
 
 ---
 
@@ -583,10 +582,8 @@ All of these are currently green.
 
 Short list. See `REMAINING.md` for the full version.
 
-- **Remaining workflow CLI/model cleanup.** `pkg/models/*.go` + `internal/registry/kinds/` + a few workflow CLI/translation surfaces still need their final v1alpha1-native port.
+- **Remaining workflow CLI cleanup.** Local manifest compatibility and duplicated internal projection code still need their final cleanup pass.
 - **Phase 2 KRT reconciler rebase.** Async sibling of `V1Alpha1Coordinator`. Same adapter contract, same `PatchStatus` / `PatchFinalizers` writes, triggered by the status NOTIFY stream instead of HTTP apply.
 - **UI TypeScript client regen + component fixups.** Blocked on Go client finishing — the Go client is already at 352 LOC, so this just needs scheduling.
 - **Deployment watch / SSE endpoint.** Logs IS ported; watch is not. Open question whether to add it onto the coordinator or let KRT's NOTIFY subscription serve it.
-- **`server_readmes` BYTEA surface.** Data-model decision pending — `MCPServerSpec` field vs. sub-handler.
 - **Embeddings polish.** Core pgvector/indexer is back; remaining work is NOTIFY auto-regen, SSE job streaming, and extra providers.
-- **`pkg/models/*.go` / `internal/registry/kinds/` deletion.** Files still on disk because workflow CLI + translation surfaces reference them directly. Deletes once those paths are ported, not via a stub-removal merge.

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
 )
 
 // AgentConfig captures the data required to render an agent project from templates.
@@ -31,9 +31,9 @@ type AgentConfig struct {
 	TelemetryEndpoint     string
 	Port                  int
 
-	McpServers []models.McpServerType
+	McpServers []agentmanifest.McpServerType
 	EnvVars    []string
-	Skills     []models.SkillRef
+	Skills     []agentmanifest.SkillRef
 	InitGit    bool
 }
 

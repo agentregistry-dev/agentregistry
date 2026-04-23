@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api"
-	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 )
 
 // newCORSTestServer spins up a minimal API server without any services or
@@ -34,7 +34,7 @@ func newCORSTestServer(t *testing.T) *api.Server {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = shutdownTelemetry(nil) })
 
-	versionInfo := &apitypes.VersionBody{
+	versionInfo := &arv0.VersionBody{
 		Version:   "test",
 		GitCommit: "test",
 		BuildTime: "test",

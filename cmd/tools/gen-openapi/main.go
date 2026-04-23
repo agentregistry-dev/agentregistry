@@ -10,7 +10,9 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
+	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"gopkg.in/yaml.v3"
@@ -66,7 +68,13 @@ func generateSpec(apiVersion string) *huma.OpenAPI {
 	// Register all routes. Services and metrics are nil because they are only
 	// captured in handler closures and invoked at request time, not during
 	// route registration.
-	router.RegisterRoutes(api, cfg, nil, nil, &router.RouteOptions{})
+	router.RegisterRoutes(api, cfg, nil, &arv0.VersionBody{
+		Version:   apiVersion,
+		GitCommit: version.GitCommit,
+		BuildTime: version.BuildDate,
+	}, &router.RouteOptions{
+		V1Alpha1Stores: internaldb.NewV1Alpha1Stores(nil),
+	})
 
 	return api.OpenAPI()
 }

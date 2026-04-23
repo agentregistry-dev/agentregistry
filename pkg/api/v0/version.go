@@ -1,4 +1,4 @@
-package apitypes
+package v0
 
 // VersionBody represents API version information.
 type VersionBody struct {

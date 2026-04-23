@@ -214,6 +214,7 @@ func envelopesFromRows[T v1alpha1.Object](
 		if err != nil {
 			return nil, err
 		}
+		v1alpha1.StripObjectReadmeContent(obj)
 		out = append(out, obj)
 	}
 	return out, nil

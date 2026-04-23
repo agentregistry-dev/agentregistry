@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
+	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
 )
 
 // MCPConfigTarget describes where to place the resolved MCP config for an agent.
@@ -77,7 +77,7 @@ func RefreshMCPConfig(target *MCPConfigTarget, servers []PythonMCPServer, verbos
 
 // PythonServersFromManifest converts resolved MCP servers in a manifest into Python MCP server structs.
 // Registry-type servers are skipped because they are not directly runnable.
-func PythonServersFromManifest(manifest *models.AgentManifest) []PythonMCPServer {
+func PythonServersFromManifest(manifest *agentmanifest.AgentManifest) []PythonMCPServer {
 	if manifest == nil || len(manifest.McpServers) == 0 {
 		return nil
 	}

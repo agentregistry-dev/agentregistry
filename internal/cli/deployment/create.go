@@ -12,7 +12,7 @@ import (
 	cliUtils "github.com/agentregistry-dev/agentregistry/internal/cli/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/constants"
-	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/spf13/cobra"
 )
@@ -323,7 +323,7 @@ func applyDeploymentResource(ctx context.Context, deployment *v1alpha1.Deploymen
 		return fmt.Errorf("apply deployment: empty response")
 	}
 	for _, result := range results {
-		if result.Status == apitypes.ApplyStatusFailed {
+		if result.Status == arv0.ApplyStatusFailed {
 			return fmt.Errorf("apply deployment %s/%s: %s", result.Kind, result.Name, result.Error)
 		}
 	}

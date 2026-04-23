@@ -8,8 +8,8 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
@@ -44,18 +44,14 @@ type ApplyConfig struct {
 // the body as JSON.
 //
 // DryRun runs validate + resolve + registries + uniqueness but does not
-// mutate the store. Force is accepted for CLI compatibility and is
-// currently a no-op: v1alpha1's Store.Upsert handles version/spec
-// updates via generation + pickLatestVersion, so no cross-apply drift
-// gate is required.
+// mutate the store.
 type applyInput struct {
 	DryRun  bool   `query:"dryRun" doc:"Run validation and enrichment without mutating the store. Defaults to false."`
-	Force   bool   `query:"force" doc:"Accepted for backwards compatibility; no-op under v1alpha1."`
 	RawBody []byte `contentType:"application/yaml" doc:"Multi-document YAML stream of v1alpha1 resources."`
 }
 
 type applyOutput struct {
-	Body apitypes.ApplyResultsResponse
+	Body arv0.ApplyResultsResponse
 }
 
 // RegisterApply wires POST {BasePrefix}/apply and DELETE {BasePrefix}/apply.
@@ -102,18 +98,18 @@ func runApplyBatch(ctx context.Context, cfg ApplyConfig, scheme *v1alpha1.Scheme
 	out := &applyOutput{}
 	docs, err := scheme.DecodeMulti(in.RawBody)
 	if err != nil {
-		out.Body.Results = []apitypes.ApplyResult{{
-			Status: apitypes.ApplyStatusFailed,
+		out.Body.Results = []arv0.ApplyResult{{
+			Status: arv0.ApplyStatusFailed,
 			Error:  "decode: " + err.Error(),
 		}}
 		return out
 	}
-	out.Body.Results = make([]apitypes.ApplyResult, 0, len(docs))
+	out.Body.Results = make([]arv0.ApplyResult, 0, len(docs))
 	for _, d := range docs {
 		obj, ok := d.(v1alpha1.Object)
 		if !ok {
-			out.Body.Results = append(out.Body.Results, apitypes.ApplyResult{
-				Status: apitypes.ApplyStatusFailed,
+			out.Body.Results = append(out.Body.Results, arv0.ApplyResult{
+				Status: arv0.ApplyStatusFailed,
 				Error:  fmt.Sprintf("decoded value does not satisfy v1alpha1.Object: %T", d),
 			})
 			continue
@@ -132,7 +128,7 @@ func runApplyBatch(ctx context.Context, cfg ApplyConfig, scheme *v1alpha1.Scheme
 // the document, or a Store + ObjectMeta ready for Upsert/Delete when
 // validation passed. Exactly one of Ready / Result populated.
 type preparedDoc struct {
-	Result apitypes.ApplyResult
+	Result arv0.ApplyResult
 	Ready  bool
 	Store  *database.Store
 	Meta   *v1alpha1.ObjectMeta
@@ -141,7 +137,7 @@ type preparedDoc struct {
 // applyOne runs a single document through validation + ResolveRefs +
 // Store.Upsert (skipping Upsert on dryRun). Never errors; encodes any
 // failure into the returned ApplyResult.
-func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) apitypes.ApplyResult {
+func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
 	pd := prepareApplyDoc(ctx, cfg, obj)
 	if !pd.Ready {
 		return pd.Result
@@ -149,13 +145,13 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 	res, store, meta := pd.Result, pd.Store, pd.Meta
 
 	if dryRun {
-		res.Status = apitypes.ApplyStatusDryRun
+		res.Status = arv0.ApplyStatusDryRun
 		return res
 	}
 
 	specJSON, err := obj.MarshalSpec()
 	if err != nil {
-		res.Status = apitypes.ApplyStatusFailed
+		res.Status = arv0.ApplyStatusFailed
 		res.Error = "marshal spec: " + err.Error()
 		return res
 	}
@@ -169,18 +165,18 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 	}
 	up, err := store.Upsert(ctx, meta.Namespace, meta.Name, meta.Version, specJSON, meta.Labels, upsertOpts)
 	if err != nil {
-		res.Status = apitypes.ApplyStatusFailed
+		res.Status = arv0.ApplyStatusFailed
 		res.Error = "upsert: " + err.Error()
 		return res
 	}
 
 	switch {
 	case up.Created:
-		res.Status = apitypes.ApplyStatusCreated
+		res.Status = arv0.ApplyStatusCreated
 	case up.SpecChanged:
-		res.Status = apitypes.ApplyStatusConfigured
+		res.Status = arv0.ApplyStatusConfigured
 	default:
-		res.Status = apitypes.ApplyStatusUnchanged
+		res.Status = arv0.ApplyStatusUnchanged
 	}
 	res.Generation = up.Generation
 	return res
@@ -189,7 +185,7 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 // deleteOne runs a single document through validation (so 400-style
 // errors still surface) and then Store.Delete. Missing rows return
 // Status="failed" rather than a silent success.
-func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) apitypes.ApplyResult {
+func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
 	pd := prepareApplyDoc(ctx, cfg, obj)
 	if !pd.Ready {
 		return pd.Result
@@ -197,12 +193,12 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 	res, store, meta := pd.Result, pd.Store, pd.Meta
 
 	if dryRun {
-		res.Status = apitypes.ApplyStatusDryRun
+		res.Status = arv0.ApplyStatusDryRun
 		return res
 	}
 
 	if err := store.Delete(ctx, meta.Namespace, meta.Name, meta.Version); err != nil {
-		res.Status = apitypes.ApplyStatusFailed
+		res.Status = arv0.ApplyStatusFailed
 		if errors.Is(err, pkgdb.ErrNotFound) {
 			res.Error = fmt.Sprintf("not found: %s/%s/%s", meta.Namespace, meta.Name, meta.Version)
 		} else {
@@ -210,7 +206,7 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 		}
 		return res
 	}
-	res.Status = apitypes.ApplyStatusDeleted
+	res.Status = arv0.ApplyStatusDeleted
 	return res
 }
 
@@ -224,7 +220,7 @@ func prepareApplyDoc(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object) 
 	meta := obj.GetMetadata()
 
 	pd := preparedDoc{
-		Result: apitypes.ApplyResult{
+		Result: arv0.ApplyResult{
 			APIVersion: obj.GetAPIVersion(),
 			Kind:       kind,
 			Namespace:  meta.Namespace,
@@ -235,7 +231,7 @@ func prepareApplyDoc(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object) 
 
 	store, ok := cfg.Stores[kind]
 	if !ok || store == nil {
-		pd.Result.Status = apitypes.ApplyStatusFailed
+		pd.Result.Status = arv0.ApplyStatusFailed
 		pd.Result.Error = fmt.Sprintf("unknown or unconfigured kind %q", kind)
 		return pd
 	}
@@ -247,22 +243,22 @@ func prepareApplyDoc(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object) 
 	}
 
 	if err := v1alpha1.ValidateObject(obj); err != nil {
-		pd.Result.Status = apitypes.ApplyStatusFailed
+		pd.Result.Status = arv0.ApplyStatusFailed
 		pd.Result.Error = "validation: " + err.Error()
 		return pd
 	}
 	if err := v1alpha1.ResolveObjectRefs(ctx, obj, cfg.Resolver); err != nil {
-		pd.Result.Status = apitypes.ApplyStatusFailed
+		pd.Result.Status = arv0.ApplyStatusFailed
 		pd.Result.Error = "refs: " + err.Error()
 		return pd
 	}
 	if err := v1alpha1.ValidateObjectRegistries(ctx, obj, cfg.RegistryValidator); err != nil {
-		pd.Result.Status = apitypes.ApplyStatusFailed
+		pd.Result.Status = arv0.ApplyStatusFailed
 		pd.Result.Error = "registries: " + err.Error()
 		return pd
 	}
 	if err := v1alpha1.ValidateObjectRemoteURLs(ctx, obj, cfg.UniqueRemoteURLsChecker); err != nil {
-		pd.Result.Status = apitypes.ApplyStatusFailed
+		pd.Result.Status = arv0.ApplyStatusFailed
 		pd.Result.Error = "remote urls: " + err.Error()
 		return pd
 	}

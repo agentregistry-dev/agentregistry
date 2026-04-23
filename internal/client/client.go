@@ -9,11 +9,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
-	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
@@ -25,23 +24,16 @@ type Client struct {
 	token      string
 }
 
-// DefaultBaseURL is used when NewClient / NewClientFromEnv sees an empty
-// base URL. Includes the `/v0` API prefix.
+// DefaultBaseURL is used when NewClient sees an empty base URL. Includes
+// the `/v0` API prefix.
 const DefaultBaseURL = "http://localhost:12121/v0"
 
-type VersionBody = apitypes.VersionBody
+type VersionBody = arv0.VersionBody
 
 // ErrNotFound is returned by Get / GetLatest / Delete / PatchStatus when
 // the server responds with 404. Callers can errors.Is(err, ErrNotFound)
 // to branch cleanly.
 var ErrNotFound = errors.New("resource not found")
-
-// NewClientFromEnv constructs a client using environment variables.
-func NewClientFromEnv() (*Client, error) {
-	base := os.Getenv("ARCTL_API_BASE_URL")
-	token := os.Getenv("ARCTL_API_TOKEN")
-	return NewClientWithConfig(base, token)
-}
 
 // NewClient constructs a client with explicit baseURL and token.
 // The baseURL can be provided with or without the /v0 API prefix;
@@ -298,30 +290,25 @@ func (c *Client) Delete(ctx context.Context, kind, namespace, name, version stri
 
 // ApplyOpts carries cross-cutting batch options for the POST /v0/apply endpoint.
 type ApplyOpts struct {
-	Force  bool
 	DryRun bool
 }
 
 // Apply sends a multi-doc YAML body to POST /v0/apply and returns per-resource results.
 // Returns an error only on request-level failures (network, 4xx from server).
 // Per-resource errors are encoded in the returned results.
-func (c *Client) Apply(ctx context.Context, body []byte, opts ApplyOpts) ([]apitypes.ApplyResult, error) {
+func (c *Client) Apply(ctx context.Context, body []byte, opts ApplyOpts) ([]arv0.ApplyResult, error) {
 	return c.applyBatch(ctx, http.MethodPost, body, opts)
 }
 
 // DeleteViaApply sends a DELETE /v0/apply with a YAML body and returns per-resource results.
-// Mirrors Apply but uses the DELETE HTTP method. DryRun is honored; Force is accepted for
-// backwards compatibility but is a no-op under v1alpha1.
-func (c *Client) DeleteViaApply(ctx context.Context, body []byte) ([]apitypes.ApplyResult, error) {
+// Mirrors Apply but uses the DELETE HTTP method.
+func (c *Client) DeleteViaApply(ctx context.Context, body []byte) ([]arv0.ApplyResult, error) {
 	return c.applyBatch(ctx, http.MethodDelete, body, ApplyOpts{})
 }
 
-func (c *Client) applyBatch(ctx context.Context, method string, body []byte, opts ApplyOpts) ([]apitypes.ApplyResult, error) {
+func (c *Client) applyBatch(ctx context.Context, method string, body []byte, opts ApplyOpts) ([]arv0.ApplyResult, error) {
 	path := "/apply"
 	q := url.Values{}
-	if opts.Force {
-		q.Set("force", "true")
-	}
 	if opts.DryRun {
 		q.Set("dryRun", "true")
 	}
@@ -335,7 +322,7 @@ func (c *Client) applyBatch(ctx context.Context, method string, body []byte, opt
 	}
 	req = req.WithContext(ctx)
 
-	var out apitypes.ApplyResultsResponse
+	var out arv0.ApplyResultsResponse
 	if err := c.doJSON(req, &out); err != nil {
 		return nil, err
 	}

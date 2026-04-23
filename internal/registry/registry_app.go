@@ -13,11 +13,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	mcpregistry "github.com/agentregistry-dev/agentregistry/internal/mcp/registryserver"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api"
-	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/resource"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
@@ -30,6 +30,7 @@ import (
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 	pkgimporter "github.com/agentregistry-dev/agentregistry/pkg/importer"
 	osvscanner "github.com/agentregistry-dev/agentregistry/pkg/importer/scanners/osv"
@@ -128,77 +129,15 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		"kubernetes": kubernetes.NewKubernetesDeploymentAdapter(),
 	}
 	maps.Copy(v1alpha1Adapters, options.DeploymentAdapters)
-	// Set up the v1alpha1 Stores + Importer bundle early so both the
-	// seed goroutine below and the HTTP router later can use them.
-	// Skipped for backends (noop / tests) whose Store.Pool() returns nil.
-	var (
-		v1alpha1Stores   map[string]*internaldb.Store
-		v1alpha1Importer *pkgimporter.Importer
-	)
-	if pool := db.Pool(); pool != nil {
-		v1alpha1Stores = internaldb.NewV1Alpha1Stores(pool)
-
-		// GITHUB_TOKEN (when set in env) authenticates scanner fetches
-		// against GitHub's contents + repo API to raise the 60 req/hr
-		// unauthenticated limit.
-		githubToken := os.Getenv("GITHUB_TOKEN")
-		imp, err := pkgimporter.New(pkgimporter.Config{
-			Stores:   v1alpha1Stores,
-			Findings: pkgimporter.NewFindingsStore(pool),
-			Scanners: []pkgimporter.Scanner{
-				osvscanner.New(osvscanner.Config{GitHubToken: githubToken}),
-				scorecardscanner.New(scorecardscanner.Config{GitHubToken: githubToken}),
-			},
-			Resolver:          internaldb.NewV1Alpha1Resolver(v1alpha1Stores),
-			RegistryValidator: registries.Dispatcher,
-			UniqueRemoteURLs:  internaldb.NewV1Alpha1UniqueRemoteURLsChecker(v1alpha1Stores),
-		})
-		if err != nil {
-			slog.Warn("failed to construct v1alpha1 importer; HTTP import + seed-from disabled for this path", "error", err)
-		} else {
-			v1alpha1Importer = imp
-		}
-		slog.Info("v1alpha1 routes enabled")
-	} else {
-		slog.Info("v1alpha1 routes disabled: database Pool() is nil (likely noop/DatabaseFactory)")
-	}
-
-	// Import builtin seed data unless disabled. Writes to v1alpha1.*
-	// tables via the generic Store. Skipped when the underlying DB
-	// returns a nil pool (noop/test backends) — seeding is
-	// decorative for those anyway.
-	if !cfg.DisableBuiltinSeed {
-		if pool := db.Pool(); pool != nil {
-			slog.Info("importing builtin seed data in the background")
-			go func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-				defer cancel()
-				ctx = auth.WithSystemContext(ctx)
-				if err := seed.ImportBuiltinSeedDataV1Alpha1(ctx, pool); err != nil {
-					slog.Error("failed to import builtin seed data (v1alpha1)", "error", err)
-				}
-			}()
-		} else {
-			slog.Info("builtin seed skipped: database Pool() is nil")
-		}
-	}
-
-	// Import seed data if seed source is provided. Requires the
-	// v1alpha1 Importer; backends without Pool() support can't seed
-	// from disk in the new model.
-	if cfg.SeedFrom != "" {
-		if v1alpha1Importer == nil {
-			slog.Warn("--seed-from requested but v1alpha1 importer unavailable; skipping", "seed_from", cfg.SeedFrom)
-		} else {
-			slog.Info("importing data in the background", "seed_from", cfg.SeedFrom)
-			go runSeedFromImport(cfg, v1alpha1Importer)
-		}
-	}
+	pool := db.Pool()
+	v1alpha1Stores, v1alpha1Importer := buildV1Alpha1Bundle(pool)
+	startBuiltinSeedImport(cfg, pool)
+	startSeedFromImport(cfg, v1alpha1Importer)
 
 	slog.Info("starting agentregistry", "version", version.Version, "commit", version.GitCommit)
 
 	// Prepare version information
-	versionInfo := &apitypes.VersionBody{
+	versionInfo := &arv0.VersionBody{
 		Version:   version.Version,
 		GitCommit: version.GitCommit,
 		BuildTime: version.BuildDate,
@@ -215,38 +154,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		}
 	}()
 
-	routeOpts := &router.RouteOptions{
-		ProviderPlatforms: options.ProviderPlatforms,
-		ExtraRoutes:       options.ExtraRoutes,
-		Authz:             authz,
-	}
-
-	// Reuse the v1alpha1 bundle constructed before the seed goroutines.
-	// Nil stores means the underlying DB doesn't expose a pgxpool (noop
-	// / DatabaseFactory backends); routes + import endpoint skip
-	// registration in that case.
-	routeOpts.V1Alpha1Stores = v1alpha1Stores
-	routeOpts.V1Alpha1Importer = v1alpha1Importer
-
-	// Coordinator drives post-persist adapter dispatch for the
-	// Deployment kind. Built only when v1alpha1 stores exist (no pool
-	// ⇒ no Deployment table ⇒ no coordinator).
-	if v1alpha1Stores != nil {
-		routeOpts.V1Alpha1DeploymentCoordinator = deploymentsvc.NewV1Alpha1Coordinator(deploymentsvc.V1Alpha1Dependencies{
-			Stores:   v1alpha1Stores,
-			Adapters: v1alpha1Adapters,
-			Getter:   internaldb.NewV1Alpha1Getter(v1alpha1Stores),
-		})
-	}
-
-	// Embeddings pipeline — Provider + Indexer + jobs.Manager + the
-	// `?semantic=<q>` query-embedding func threaded through to the
-	// generic resource handler. Wired only when both v1alpha1 Stores
-	// exist (pgvector schema is a prerequisite) and
-	// AGENT_REGISTRY_EMBEDDINGS_ENABLED=true in config.
-	if v1alpha1Stores != nil && cfg.Embeddings.Enabled {
-		wireEmbeddings(cfg, v1alpha1Stores, routeOpts)
-	}
+	routeOpts := buildRouteOptions(cfg, options, authz, v1alpha1Stores, v1alpha1Importer, v1alpha1Adapters)
 
 	// Initialize HTTP server
 	baseServer := api.NewServer(cfg, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts)
@@ -322,6 +230,114 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 
 	slog.Info("server exiting")
 	return nil
+}
+
+func buildV1Alpha1Bundle(pool *pgxpool.Pool) (map[string]*internaldb.Store, *pkgimporter.Importer) {
+	if pool == nil {
+		slog.Info("v1alpha1 routes disabled: database Pool() is nil (likely noop/DatabaseFactory)")
+		return nil, nil
+	}
+
+	stores := internaldb.NewV1Alpha1Stores(pool)
+
+	// GITHUB_TOKEN (when set in env) authenticates scanner fetches
+	// against GitHub's contents + repo API to raise the 60 req/hr
+	// unauthenticated limit.
+	githubToken := os.Getenv("GITHUB_TOKEN")
+	imp, err := pkgimporter.New(pkgimporter.Config{
+		Stores:   stores,
+		Findings: pkgimporter.NewFindingsStore(pool),
+		Scanners: []pkgimporter.Scanner{
+			osvscanner.New(osvscanner.Config{GitHubToken: githubToken}),
+			scorecardscanner.New(scorecardscanner.Config{GitHubToken: githubToken}),
+		},
+		Resolver:          internaldb.NewV1Alpha1Resolver(stores),
+		RegistryValidator: registries.Dispatcher,
+		UniqueRemoteURLs:  internaldb.NewV1Alpha1UniqueRemoteURLsChecker(stores),
+	})
+	if err != nil {
+		slog.Warn("failed to construct v1alpha1 importer; HTTP import + seed-from disabled for this path", "error", err)
+		slog.Info("v1alpha1 routes enabled")
+		return stores, nil
+	}
+
+	slog.Info("v1alpha1 routes enabled")
+	return stores, imp
+}
+
+func startBuiltinSeedImport(cfg *config.Config, pool *pgxpool.Pool) {
+	// Import builtin seed data unless disabled. Writes to v1alpha1.*
+	// tables via the generic Store. Skipped when the underlying DB
+	// returns a nil pool (noop/test backends) — seeding is decorative
+	// for those anyway.
+	if cfg.DisableBuiltinSeed {
+		return
+	}
+	if pool == nil {
+		slog.Info("builtin seed skipped: database Pool() is nil")
+		return
+	}
+
+	slog.Info("importing builtin seed data in the background")
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		ctx = auth.WithSystemContext(ctx)
+		if err := seed.ImportBuiltinSeedDataV1Alpha1(ctx, pool); err != nil {
+			slog.Error("failed to import builtin seed data (v1alpha1)", "error", err)
+		}
+	}()
+}
+
+func startSeedFromImport(cfg *config.Config, v1alpha1Importer *pkgimporter.Importer) {
+	// Import seed data if seed source is provided. Requires the
+	// v1alpha1 Importer; backends without Pool() support can't seed
+	// from disk in the new model.
+	if cfg.SeedFrom == "" {
+		return
+	}
+	if v1alpha1Importer == nil {
+		slog.Warn("--seed-from requested but v1alpha1 importer unavailable; skipping", "seed_from", cfg.SeedFrom)
+		return
+	}
+
+	slog.Info("importing data in the background", "seed_from", cfg.SeedFrom)
+	go runSeedFromImport(cfg, v1alpha1Importer)
+}
+
+func buildRouteOptions(
+	cfg *config.Config,
+	options types.AppOptions,
+	authz auth.Authorizer,
+	stores map[string]*internaldb.Store,
+	importer *pkgimporter.Importer,
+	adapters map[string]types.DeploymentAdapter,
+) *router.RouteOptions {
+	routeOpts := &router.RouteOptions{
+		ExtraRoutes:      options.ExtraRoutes,
+		Authz:            authz,
+		V1Alpha1Stores:   stores,
+		V1Alpha1Importer: importer,
+	}
+
+	if stores != nil {
+		routeOpts.V1Alpha1DeploymentCoordinator = deploymentsvc.NewV1Alpha1Coordinator(deploymentsvc.V1Alpha1Dependencies{
+			Stores:   stores,
+			Adapters: adapters,
+			Getter:   internaldb.NewV1Alpha1Getter(stores),
+		})
+	}
+
+	// Embeddings pipeline — Provider + Indexer + jobs.Manager + the
+	// `?semantic=<q>` query-embedding func threaded through to the
+	// generic resource handler. Wired only when both v1alpha1 Stores
+	// exist (pgvector schema is a prerequisite) and
+	// AGENT_REGISTRY_EMBEDDINGS_ENABLED=true in config.
+	if stores != nil && cfg.Embeddings.Enabled {
+		wireEmbeddings(cfg, stores, routeOpts)
+	}
+
+	return routeOpts
 }
 
 // mcpAuthnMiddleware creates a middleware that uses the AuthnProvider to authenticate requests and add to session context.

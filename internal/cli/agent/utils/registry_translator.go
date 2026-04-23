@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"maps"
 
+	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
 	platformutils "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/types"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
 )
 
@@ -18,7 +18,7 @@ func TranslateRegistryServer(
 	serverSpec *types.ServerSpec,
 	envOverrides map[string]string,
 	preferRemote bool,
-) (*models.McpServerType, error) {
+) (*agentmanifest.McpServerType, error) {
 	if len(serverSpec.Remotes) == 0 && len(serverSpec.Packages) == 0 {
 		return nil, fmt.Errorf("server %q has no remotes or packages", serverSpec.Name)
 	}
@@ -28,7 +28,7 @@ func TranslateRegistryServer(
 
 	translated, err := platformutils.TranslateMCPServer(context.Background(), &platformutils.MCPServerRunRequest{
 		Name: serverSpec.Name,
-		Spec: models.ServerJSONToV1Alpha1Spec(&apiv0.ServerJSON{
+		Spec: agentmanifest.ServerJSONToV1Alpha1Spec(&apiv0.ServerJSON{
 			Name:        serverSpec.Name,
 			Title:       serverSpec.Title,
 			Description: serverSpec.Description,
@@ -54,7 +54,7 @@ func TranslateRegistryServer(
 		for _, header := range translated.Remote.Headers {
 			headers[header.Name] = header.Value
 		}
-		return &models.McpServerType{
+		return &agentmanifest.McpServerType{
 			Type:    "remote",
 			Name:    name,
 			URL:     serverSpec.Remotes[0].URL,
@@ -66,7 +66,7 @@ func TranslateRegistryServer(
 		}
 		buildPath := ""
 		if len(serverSpec.Packages) > 0 {
-			config, _, err := platformutils.GetRegistryConfig(models.PackageToV1Alpha1(serverSpec.Packages[0]), nil)
+			config, _, err := platformutils.GetRegistryConfig(agentmanifest.PackageToV1Alpha1(serverSpec.Packages[0]), nil)
 			if err != nil {
 				return nil, err
 			}
@@ -74,7 +74,7 @@ func TranslateRegistryServer(
 				buildPath = "registry/" + name
 			}
 		}
-		return &models.McpServerType{
+		return &agentmanifest.McpServerType{
 			Type:    "command",
 			Name:    name,
 			Image:   translated.Local.Deployment.Image,

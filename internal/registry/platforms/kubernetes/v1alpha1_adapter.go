@@ -10,7 +10,6 @@ import (
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
@@ -34,7 +33,6 @@ func (a *kubernetesDeploymentAdapter) Apply(ctx context.Context, in types.ApplyI
 	if in.Deployment == nil {
 		return nil, fmt.Errorf("apply: deployment is required")
 	}
-	legacyProvider := providerBridgeFromV1Alpha1(in.Provider)
 	namespace := namespaceFromV1Alpha1(in.Deployment, in.Provider)
 
 	desired, err := a.buildDesiredStateFromV1Alpha1(ctx, in, namespace)
@@ -48,7 +46,7 @@ func (a *kubernetesDeploymentAdapter) Apply(ctx context.Context, in types.ApplyI
 	if cfg == nil {
 		return nil, fmt.Errorf("kubernetes platform config is required")
 	}
-	if err := kubernetesApplyPlatformConfig(ctx, legacyProvider, cfg, false); err != nil {
+	if err := kubernetesApplyPlatformConfig(ctx, in.Provider, cfg, false); err != nil {
 		return nil, fmt.Errorf("apply kubernetes platform config: %w", err)
 	}
 
@@ -82,13 +80,12 @@ func (a *kubernetesDeploymentAdapter) Remove(ctx context.Context, in types.Remov
 	if in.Deployment == nil {
 		return nil, fmt.Errorf("remove: deployment is required")
 	}
-	legacyProvider := providerBridgeFromV1Alpha1(in.Provider)
 	namespace := namespaceFromV1Alpha1(in.Deployment, in.Provider)
 	deploymentID := in.Deployment.Metadata.Name
 
 	// Sweep both kinds — delete-by-label is a no-op when nothing matches.
 	for _, resourceType := range []string{"agent", "mcp"} {
-		if err := kubernetesDeleteResourcesByDeploymentID(ctx, legacyProvider, deploymentID, resourceType, namespace); err != nil {
+		if err := kubernetesDeleteResourcesByDeploymentID(ctx, in.Provider, deploymentID, resourceType, namespace); err != nil {
 			return nil, fmt.Errorf("remove %s resources: %w", resourceType, err)
 		}
 	}
@@ -125,15 +122,14 @@ func (a *kubernetesDeploymentAdapter) Logs(ctx context.Context, in types.LogsInp
 // carrying aregistry.ai/managed=true are skipped because they correspond to
 // existing Deployment rows.
 func (a *kubernetesDeploymentAdapter) Discover(ctx context.Context, in types.DiscoverInput) ([]types.DiscoveryResult, error) {
-	legacyProvider := providerBridgeFromV1Alpha1(in.Provider)
-	namespace := kubernetesProviderNamespace(legacyProvider)
+	namespace := kubernetesProviderNamespace(in.Provider)
 
 	isManaged := func(labels map[string]string) bool {
 		return labels != nil && labels[kubernetesManagedLabelKey] == "true"
 	}
 
 	var out []types.DiscoveryResult
-	agents, err := kubernetesListAgents(ctx, legacyProvider, namespace)
+	agents, err := kubernetesListAgents(ctx, in.Provider, namespace)
 	if err == nil {
 		for _, agent := range agents {
 			if isManaged(agent.Labels) {
@@ -147,7 +143,7 @@ func (a *kubernetesDeploymentAdapter) Discover(ctx context.Context, in types.Dis
 		}
 	}
 
-	mcpServers, err := kubernetesListMCPServers(ctx, legacyProvider, namespace)
+	mcpServers, err := kubernetesListMCPServers(ctx, in.Provider, namespace)
 	if err == nil {
 		for _, mcp := range mcpServers {
 			if isManaged(mcp.Labels) {
@@ -161,7 +157,7 @@ func (a *kubernetesDeploymentAdapter) Discover(ctx context.Context, in types.Dis
 		}
 	}
 
-	remoteMCPs, err := kubernetesListRemoteMCPServers(ctx, legacyProvider, namespace)
+	remoteMCPs, err := kubernetesListRemoteMCPServers(ctx, in.Provider, namespace)
 	if err == nil {
 		for _, remote := range remoteMCPs {
 			if isManaged(remote.Labels) {
@@ -227,21 +223,6 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 	}
 }
 
-// providerBridgeFromV1Alpha1 projects a *v1alpha1.Provider onto a legacy
-// *models.Provider so the existing kubernetesGetClient /
-// kubernetesApplyPlatformConfig / kubernetesDeleteResourcesByDeploymentID
-// helpers work unchanged. These helpers only read (ID, Config); nothing else
-// from *models.Provider is touched. Temporary shim — collapses with 5.f.
-func providerBridgeFromV1Alpha1(provider *v1alpha1.Provider) *models.Provider {
-	if provider == nil {
-		return nil
-	}
-	return &models.Provider{
-		ID:     provider.Metadata.Name,
-		Config: map[string]any(provider.Spec.Config),
-	}
-}
-
 // namespaceFromV1Alpha1 picks the target kubernetes namespace:
 //  1. Deployment.Spec.Env[KAGENT_NAMESPACE] (user override).
 //  2. Provider.Spec.Config.namespace.
@@ -252,7 +233,7 @@ func namespaceFromV1Alpha1(deployment *v1alpha1.Deployment, provider *v1alpha1.P
 			return ns
 		}
 	}
-	if ns := kubernetesProviderNamespace(providerBridgeFromV1Alpha1(provider)); ns != "" {
+	if ns := kubernetesProviderNamespace(provider); ns != "" {
 		return ns
 	}
 	return kubernetesDefaultNamespace()

@@ -2,7 +2,6 @@
 package router
 
 import (
-	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	v0embeddings "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/embeddings"
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
 	v0ping "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/ping"
@@ -14,11 +13,11 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 	"github.com/agentregistry-dev/agentregistry/pkg/importer"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
-	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -31,10 +30,6 @@ type V1Alpha1Stores = map[string]*internaldb.Store
 
 // RouteOptions contains optional services for route registration.
 type RouteOptions struct {
-	// ProviderPlatforms registers platform-side provider adapters keyed by
-	// platform string (enterprise extension point).
-	ProviderPlatforms map[string]registrytypes.ProviderPlatformAdapter
-
 	// V1Alpha1Stores, when non-empty, enables the generic v1alpha1 handler
 	// at `/v0/namespaces/{ns}/{plural}/...`.
 	V1Alpha1Stores V1Alpha1Stores
@@ -80,7 +75,7 @@ func RegisterRoutes(
 	api huma.API,
 	cfg *config.Config,
 	metrics *telemetry.Metrics,
-	versionInfo *apitypes.VersionBody,
+	versionInfo *arv0.VersionBody,
 	opts *RouteOptions,
 ) {
 	pathPrefix := "/v0"

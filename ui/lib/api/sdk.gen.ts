@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ApplyData, ApplyErrors, ApplyResponses, CancelDeploymentData, CancelDeploymentErrors, CancelDeploymentResponses, CreateAgentV0Data, CreateAgentV0Errors, CreateAgentV0Responses, CreatePromptV0Data, CreatePromptV0Errors, CreatePromptV0Responses, CreateProviderData, CreateProviderErrors, CreateProviderResponses, CreateServerV0Data, CreateServerV0Errors, CreateServerV0Responses, CreateSkillV0Data, CreateSkillV0Errors, CreateSkillV0Responses, DeleteAgentVersionV0Data, DeleteAgentVersionV0Errors, DeleteAgentVersionV0Responses, DeleteApplyData, DeleteApplyErrors, DeleteApplyResponses, DeletePromptVersionV0Data, DeletePromptVersionV0Errors, DeletePromptVersionV0Responses, DeleteProviderData, DeleteProviderErrors, DeleteProviderResponses, DeleteServerVersionV0Data, DeleteServerVersionV0Errors, DeleteServerVersionV0Responses, DeleteSkillVersionV0Data, DeleteSkillVersionV0Errors, DeleteSkillVersionV0Responses, DeployServerData, DeployServerErrors, DeployServerResponses, EditServerV0Data, EditServerV0Errors, EditServerV0Responses, GetAgentVersionsV0Data, GetAgentVersionsV0Errors, GetAgentVersionsV0Responses, GetAgentVersionV0Data, GetAgentVersionV0Errors, GetAgentVersionV0Responses, GetDeploymentData, GetDeploymentErrors, GetDeploymentLogsData, GetDeploymentLogsErrors, GetDeploymentLogsResponses, GetDeploymentResponses, GetHealthV0Data, GetHealthV0Errors, GetHealthV0Responses, GetPromptVersionsV0Data, GetPromptVersionsV0Errors, GetPromptVersionsV0Responses, GetPromptVersionV0Data, GetPromptVersionV0Errors, GetPromptVersionV0Responses, GetProviderData, GetProviderErrors, GetProviderResponses, GetServerReadmeV0Data, GetServerReadmeV0Errors, GetServerReadmeV0Responses, GetServerVersionReadmeV0Data, GetServerVersionReadmeV0Errors, GetServerVersionReadmeV0Responses, GetServerVersionsV0Data, GetServerVersionsV0Errors, GetServerVersionsV0Responses, GetServerVersionV0Data, GetServerVersionV0Errors, GetServerVersionV0Responses, GetSkillVersionsV0Data, GetSkillVersionsV0Errors, GetSkillVersionsV0Responses, GetSkillVersionV0Data, GetSkillVersionV0Errors, GetSkillVersionV0Responses, GetVersionV0Data, GetVersionV0Errors, GetVersionV0Responses, ListAgentsV0Data, ListAgentsV0Errors, ListAgentsV0Responses, ListDeploymentsData, ListDeploymentsErrors, ListDeploymentsResponses, ListPromptsV0Data, ListPromptsV0Errors, ListPromptsV0Responses, ListProvidersData, ListProvidersErrors, ListProvidersResponses, ListServersV0Data, ListServersV0Errors, ListServersV0Responses, ListSkillsV0Data, ListSkillsV0Errors, ListSkillsV0Responses, PingV0Data, PingV0Errors, PingV0Responses, RemoveDeploymentData, RemoveDeploymentErrors, RemoveDeploymentResponses } from './types.gen';
+import type { ApplyAgentData, ApplyAgentErrors, ApplyAgentResponses, ApplyBatchData, ApplyBatchErrors, ApplyBatchResponses, ApplyDeploymentData, ApplyDeploymentErrors, ApplyDeploymentResponses, ApplyMcpserverData, ApplyMcpserverErrors, ApplyMcpserverResponses, ApplyPromptData, ApplyPromptErrors, ApplyPromptResponses, ApplyProviderData, ApplyProviderErrors, ApplyProviderResponses, ApplySkillData, ApplySkillErrors, ApplySkillResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteBatchData, DeleteBatchErrors, DeleteBatchResponses, DeleteDeploymentData, DeleteDeploymentErrors, DeleteDeploymentResponses, DeleteMcpserverData, DeleteMcpserverErrors, DeleteMcpserverResponses, DeletePromptData, DeletePromptErrors, DeletePromptResponses, DeleteProviderData, DeleteProviderErrors, DeleteProviderResponses, DeleteSkillData, DeleteSkillErrors, DeleteSkillResponses, GetAgentData, GetAgentErrors, GetAgentReadmeData, GetAgentReadmeErrors, GetAgentReadmeResponses, GetAgentResponses, GetDeploymentData, GetDeploymentErrors, GetDeploymentResponses, GetHealthV0Data, GetHealthV0Errors, GetHealthV0Responses, GetLatestAgentData, GetLatestAgentErrors, GetLatestAgentReadmeData, GetLatestAgentReadmeErrors, GetLatestAgentReadmeResponses, GetLatestAgentResponses, GetLatestDeploymentData, GetLatestDeploymentErrors, GetLatestDeploymentResponses, GetLatestMcpserverData, GetLatestMcpserverErrors, GetLatestMcpserverReadmeData, GetLatestMcpserverReadmeErrors, GetLatestMcpserverReadmeResponses, GetLatestMcpserverResponses, GetLatestPromptData, GetLatestPromptErrors, GetLatestPromptReadmeData, GetLatestPromptReadmeErrors, GetLatestPromptReadmeResponses, GetLatestPromptResponses, GetLatestProviderData, GetLatestProviderErrors, GetLatestProviderResponses, GetLatestSkillData, GetLatestSkillErrors, GetLatestSkillReadmeData, GetLatestSkillReadmeErrors, GetLatestSkillReadmeResponses, GetLatestSkillResponses, GetMcpserverData, GetMcpserverErrors, GetMcpserverReadmeData, GetMcpserverReadmeErrors, GetMcpserverReadmeResponses, GetMcpserverResponses, GetPromptData, GetPromptErrors, GetPromptReadmeData, GetPromptReadmeErrors, GetPromptReadmeResponses, GetPromptResponses, GetProviderData, GetProviderErrors, GetProviderResponses, GetServerReadmeV0Data, GetServerReadmeV0Errors, GetServerReadmeV0Responses, GetServerVersionReadmeV0Data, GetServerVersionReadmeV0Errors, GetServerVersionReadmeV0Responses, GetSkillData, GetSkillErrors, GetSkillReadmeData, GetSkillReadmeErrors, GetSkillReadmeResponses, GetSkillResponses, GetVersionV0Data, GetVersionV0Errors, GetVersionV0Responses, ListAgentsAllNamespacesData, ListAgentsAllNamespacesErrors, ListAgentsAllNamespacesResponses, ListAgentsData, ListAgentsErrors, ListAgentsResponses, ListDeploymentsAllNamespacesData, ListDeploymentsAllNamespacesErrors, ListDeploymentsAllNamespacesResponses, ListDeploymentsData, ListDeploymentsErrors, ListDeploymentsResponses, ListMcpserversAllNamespacesData, ListMcpserversAllNamespacesErrors, ListMcpserversAllNamespacesResponses, ListMcpserversData, ListMcpserversErrors, ListMcpserversResponses, ListPromptsAllNamespacesData, ListPromptsAllNamespacesErrors, ListPromptsAllNamespacesResponses, ListPromptsData, ListPromptsErrors, ListPromptsResponses, ListProvidersAllNamespacesData, ListProvidersAllNamespacesErrors, ListProvidersAllNamespacesResponses, ListProvidersData, ListProvidersErrors, ListProvidersResponses, ListSkillsAllNamespacesData, ListSkillsAllNamespacesErrors, ListSkillsAllNamespacesResponses, ListSkillsData, ListSkillsErrors, ListSkillsResponses, PingV0Data, PingV0Errors, PingV0Responses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -19,51 +19,14 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 };
 
 /**
- * List Agentic agents
- *
- * Get a paginated list of Agentic agents from the registry
+ * List Agent across all namespaces
  */
-export const listAgentsV0 = <ThrowOnError extends boolean = false>(options?: Options<ListAgentsV0Data, ThrowOnError>) => (options?.client ?? client).get<ListAgentsV0Responses, ListAgentsV0Errors, ThrowOnError>({ url: '/v0/agents', ...options });
+export const listAgentsAllNamespaces = <ThrowOnError extends boolean = false>(options?: Options<ListAgentsAllNamespacesData, ThrowOnError>) => (options?.client ?? client).get<ListAgentsAllNamespacesResponses, ListAgentsAllNamespacesErrors, ThrowOnError>({ url: '/v0/agents', ...options });
 
 /**
- * Create or update agent
- *
- * Create a new Agentic agent in the registry or update an existing one. Resources are immediately visible after creation.
+ * Delete v1alpha1 resources identified by a multi-doc YAML stream
  */
-export const createAgentV0 = <ThrowOnError extends boolean = false>(options: Options<CreateAgentV0Data, ThrowOnError>) => (options.client ?? client).post<CreateAgentV0Responses, CreateAgentV0Errors, ThrowOnError>({
-    url: '/v0/agents',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Get all versions of an Agentic agent
- *
- * Get all available versions for a specific Agentic agent
- */
-export const getAgentVersionsV0 = <ThrowOnError extends boolean = false>(options: Options<GetAgentVersionsV0Data, ThrowOnError>) => (options.client ?? client).get<GetAgentVersionsV0Responses, GetAgentVersionsV0Errors, ThrowOnError>({ url: '/v0/agents/{agentName}/versions', ...options });
-
-/**
- * Delete an agent version (admin)
- *
- * Permanently delete a specific agent version from the registry. Admin only.
- */
-export const deleteAgentVersionV0 = <ThrowOnError extends boolean = false>(options: Options<DeleteAgentVersionV0Data, ThrowOnError>) => (options.client ?? client).delete<DeleteAgentVersionV0Responses, DeleteAgentVersionV0Errors, ThrowOnError>({ url: '/v0/agents/{agentName}/versions/{version}', ...options });
-
-/**
- * Get specific Agentic agent version
- *
- * Get detailed information about a specific version of an Agentic agent. Use the special version 'latest' to get the latest version.
- */
-export const getAgentVersionV0 = <ThrowOnError extends boolean = false>(options: Options<GetAgentVersionV0Data, ThrowOnError>) => (options.client ?? client).get<GetAgentVersionV0Responses, GetAgentVersionV0Errors, ThrowOnError>({ url: '/v0/agents/{agentName}/versions/{version}', ...options });
-
-/**
- * Delete one or more resources by YAML document
- */
-export const deleteApply = <ThrowOnError extends boolean = false>(options: Options<DeleteApplyData, ThrowOnError>) => (options.client ?? client).delete<DeleteApplyResponses, DeleteApplyErrors, ThrowOnError>({
+export const deleteBatch = <ThrowOnError extends boolean = false>(options: Options<DeleteBatchData, ThrowOnError>) => (options.client ?? client).delete<DeleteBatchResponses, DeleteBatchErrors, ThrowOnError>({
     bodySerializer: null,
     url: '/v0/apply',
     ...options,
@@ -74,9 +37,9 @@ export const deleteApply = <ThrowOnError extends boolean = false>(options: Optio
 });
 
 /**
- * Apply one or more resources
+ * Apply a multi-doc YAML stream of v1alpha1 resources
  */
-export const apply = <ThrowOnError extends boolean = false>(options: Options<ApplyData, ThrowOnError>) => (options.client ?? client).post<ApplyResponses, ApplyErrors, ThrowOnError>({
+export const applyBatch = <ThrowOnError extends boolean = false>(options: Options<ApplyBatchData, ThrowOnError>) => (options.client ?? client).post<ApplyBatchResponses, ApplyBatchErrors, ThrowOnError>({
     bodySerializer: null,
     url: '/v0/apply',
     ...options,
@@ -87,53 +50,9 @@ export const apply = <ThrowOnError extends boolean = false>(options: Options<App
 });
 
 /**
- * List deployed resources
- *
- * Retrieve all deployed resources (MCP servers, agents) with their configurations. Optionally filter by resource type.
+ * List Deployment across all namespaces
  */
-export const listDeployments = <ThrowOnError extends boolean = false>(options?: Options<ListDeploymentsData, ThrowOnError>) => (options?.client ?? client).get<ListDeploymentsResponses, ListDeploymentsErrors, ThrowOnError>({ url: '/v0/deployments', ...options });
-
-/**
- * Deploy a resource
- *
- * Deploy a resource (MCP server or agent) with deployment env vars (`env`) and optional provider-specific settings (`providerConfig`). Defaults to MCP server if resourceType is not specified.
- */
-export const deployServer = <ThrowOnError extends boolean = false>(options: Options<DeployServerData, ThrowOnError>) => (options.client ?? client).post<DeployServerResponses, DeployServerErrors, ThrowOnError>({
-    url: '/v0/deployments',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Remove a deployed resource
- *
- * Remove a deployment by ID
- */
-export const removeDeployment = <ThrowOnError extends boolean = false>(options: Options<RemoveDeploymentData, ThrowOnError>) => (options.client ?? client).delete<RemoveDeploymentResponses, RemoveDeploymentErrors, ThrowOnError>({ url: '/v0/deployments/{id}', ...options });
-
-/**
- * Get deployment details
- *
- * Retrieve details for a specific deployment by ID
- */
-export const getDeployment = <ThrowOnError extends boolean = false>(options: Options<GetDeploymentData, ThrowOnError>) => (options.client ?? client).get<GetDeploymentResponses, GetDeploymentErrors, ThrowOnError>({ url: '/v0/deployments/{id}', ...options });
-
-/**
- * Cancel deployment
- *
- * Cancel a deployment when supported by the provider
- */
-export const cancelDeployment = <ThrowOnError extends boolean = false>(options: Options<CancelDeploymentData, ThrowOnError>) => (options.client ?? client).post<CancelDeploymentResponses, CancelDeploymentErrors, ThrowOnError>({ url: '/v0/deployments/{id}/cancel', ...options });
-
-/**
- * Get deployment logs
- *
- * Get logs for async deployments when supported by the provider
- */
-export const getDeploymentLogs = <ThrowOnError extends boolean = false>(options: Options<GetDeploymentLogsData, ThrowOnError>) => (options.client ?? client).get<GetDeploymentLogsResponses, GetDeploymentLogsErrors, ThrowOnError>({ url: '/v0/deployments/{id}/logs', ...options });
+export const listDeploymentsAllNamespaces = <ThrowOnError extends boolean = false>(options?: Options<ListDeploymentsAllNamespacesData, ThrowOnError>) => (options?.client ?? client).get<ListDeploymentsAllNamespacesResponses, ListDeploymentsAllNamespacesErrors, ThrowOnError>({ url: '/v0/deployments', ...options });
 
 /**
  * Health check
@@ -143,6 +62,243 @@ export const getDeploymentLogs = <ThrowOnError extends boolean = false>(options:
 export const getHealthV0 = <ThrowOnError extends boolean = false>(options?: Options<GetHealthV0Data, ThrowOnError>) => (options?.client ?? client).get<GetHealthV0Responses, GetHealthV0Errors, ThrowOnError>({ url: '/v0/health', ...options });
 
 /**
+ * List MCPServer across all namespaces
+ */
+export const listMcpserversAllNamespaces = <ThrowOnError extends boolean = false>(options?: Options<ListMcpserversAllNamespacesData, ThrowOnError>) => (options?.client ?? client).get<ListMcpserversAllNamespacesResponses, ListMcpserversAllNamespacesErrors, ThrowOnError>({ url: '/v0/mcpservers', ...options });
+
+/**
+ * List Agent in a namespace
+ */
+export const listAgents = <ThrowOnError extends boolean = false>(options: Options<ListAgentsData, ThrowOnError>) => (options.client ?? client).get<ListAgentsResponses, ListAgentsErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/agents', ...options });
+
+/**
+ * Get the latest version of a Agent
+ */
+export const getLatestAgent = <ThrowOnError extends boolean = false>(options: Options<GetLatestAgentData, ThrowOnError>) => (options.client ?? client).get<GetLatestAgentResponses, GetLatestAgentErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/agents/{name}', ...options });
+
+/**
+ * Delete a Agent (soft-delete: sets deletionTimestamp)
+ */
+export const deleteAgent = <ThrowOnError extends boolean = false>(options: Options<DeleteAgentData, ThrowOnError>) => (options.client ?? client).delete<DeleteAgentResponses, DeleteAgentErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/agents/{name}/{version}', ...options });
+
+/**
+ * Get a Agent by namespace, name, and version
+ */
+export const getAgent = <ThrowOnError extends boolean = false>(options: Options<GetAgentData, ThrowOnError>) => (options.client ?? client).get<GetAgentResponses, GetAgentErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/agents/{name}/{version}', ...options });
+
+/**
+ * Apply a Agent (idempotent upsert)
+ */
+export const applyAgent = <ThrowOnError extends boolean = false>(options: Options<ApplyAgentData, ThrowOnError>) => (options.client ?? client).put<ApplyAgentResponses, ApplyAgentErrors, ThrowOnError>({
+    url: '/v0/namespaces/{namespace}/agents/{name}/{version}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get the latest Agent readme
+ */
+export const getLatestAgentReadme = <ThrowOnError extends boolean = false>(options: Options<GetLatestAgentReadmeData, ThrowOnError>) => (options.client ?? client).get<GetLatestAgentReadmeResponses, GetLatestAgentReadmeErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/agents/{name}/readme', ...options });
+
+/**
+ * Get a Agent readme by namespace, name, and version
+ */
+export const getAgentReadme = <ThrowOnError extends boolean = false>(options: Options<GetAgentReadmeData, ThrowOnError>) => (options.client ?? client).get<GetAgentReadmeResponses, GetAgentReadmeErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/agents/{name}/versions/{version}/readme', ...options });
+
+/**
+ * List Deployment in a namespace
+ */
+export const listDeployments = <ThrowOnError extends boolean = false>(options: Options<ListDeploymentsData, ThrowOnError>) => (options.client ?? client).get<ListDeploymentsResponses, ListDeploymentsErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/deployments', ...options });
+
+/**
+ * Get the latest version of a Deployment
+ */
+export const getLatestDeployment = <ThrowOnError extends boolean = false>(options: Options<GetLatestDeploymentData, ThrowOnError>) => (options.client ?? client).get<GetLatestDeploymentResponses, GetLatestDeploymentErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/deployments/{name}', ...options });
+
+/**
+ * Delete a Deployment (soft-delete: sets deletionTimestamp)
+ */
+export const deleteDeployment = <ThrowOnError extends boolean = false>(options: Options<DeleteDeploymentData, ThrowOnError>) => (options.client ?? client).delete<DeleteDeploymentResponses, DeleteDeploymentErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/deployments/{name}/{version}', ...options });
+
+/**
+ * Get a Deployment by namespace, name, and version
+ */
+export const getDeployment = <ThrowOnError extends boolean = false>(options: Options<GetDeploymentData, ThrowOnError>) => (options.client ?? client).get<GetDeploymentResponses, GetDeploymentErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/deployments/{name}/{version}', ...options });
+
+/**
+ * Apply a Deployment (idempotent upsert)
+ */
+export const applyDeployment = <ThrowOnError extends boolean = false>(options: Options<ApplyDeploymentData, ThrowOnError>) => (options.client ?? client).put<ApplyDeploymentResponses, ApplyDeploymentErrors, ThrowOnError>({
+    url: '/v0/namespaces/{namespace}/deployments/{name}/{version}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * List MCPServer in a namespace
+ */
+export const listMcpservers = <ThrowOnError extends boolean = false>(options: Options<ListMcpserversData, ThrowOnError>) => (options.client ?? client).get<ListMcpserversResponses, ListMcpserversErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/mcpservers', ...options });
+
+/**
+ * Get the latest version of a MCPServer
+ */
+export const getLatestMcpserver = <ThrowOnError extends boolean = false>(options: Options<GetLatestMcpserverData, ThrowOnError>) => (options.client ?? client).get<GetLatestMcpserverResponses, GetLatestMcpserverErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/mcpservers/{name}', ...options });
+
+/**
+ * Delete a MCPServer (soft-delete: sets deletionTimestamp)
+ */
+export const deleteMcpserver = <ThrowOnError extends boolean = false>(options: Options<DeleteMcpserverData, ThrowOnError>) => (options.client ?? client).delete<DeleteMcpserverResponses, DeleteMcpserverErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/mcpservers/{name}/{version}', ...options });
+
+/**
+ * Get a MCPServer by namespace, name, and version
+ */
+export const getMcpserver = <ThrowOnError extends boolean = false>(options: Options<GetMcpserverData, ThrowOnError>) => (options.client ?? client).get<GetMcpserverResponses, GetMcpserverErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/mcpservers/{name}/{version}', ...options });
+
+/**
+ * Apply a MCPServer (idempotent upsert)
+ */
+export const applyMcpserver = <ThrowOnError extends boolean = false>(options: Options<ApplyMcpserverData, ThrowOnError>) => (options.client ?? client).put<ApplyMcpserverResponses, ApplyMcpserverErrors, ThrowOnError>({
+    url: '/v0/namespaces/{namespace}/mcpservers/{name}/{version}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get the latest MCPServer readme
+ */
+export const getLatestMcpserverReadme = <ThrowOnError extends boolean = false>(options: Options<GetLatestMcpserverReadmeData, ThrowOnError>) => (options.client ?? client).get<GetLatestMcpserverReadmeResponses, GetLatestMcpserverReadmeErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/mcpservers/{name}/readme', ...options });
+
+/**
+ * Get a MCPServer readme by namespace, name, and version
+ */
+export const getMcpserverReadme = <ThrowOnError extends boolean = false>(options: Options<GetMcpserverReadmeData, ThrowOnError>) => (options.client ?? client).get<GetMcpserverReadmeResponses, GetMcpserverReadmeErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/mcpservers/{name}/versions/{version}/readme', ...options });
+
+/**
+ * List Prompt in a namespace
+ */
+export const listPrompts = <ThrowOnError extends boolean = false>(options: Options<ListPromptsData, ThrowOnError>) => (options.client ?? client).get<ListPromptsResponses, ListPromptsErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/prompts', ...options });
+
+/**
+ * Get the latest version of a Prompt
+ */
+export const getLatestPrompt = <ThrowOnError extends boolean = false>(options: Options<GetLatestPromptData, ThrowOnError>) => (options.client ?? client).get<GetLatestPromptResponses, GetLatestPromptErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/prompts/{name}', ...options });
+
+/**
+ * Delete a Prompt (soft-delete: sets deletionTimestamp)
+ */
+export const deletePrompt = <ThrowOnError extends boolean = false>(options: Options<DeletePromptData, ThrowOnError>) => (options.client ?? client).delete<DeletePromptResponses, DeletePromptErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/prompts/{name}/{version}', ...options });
+
+/**
+ * Get a Prompt by namespace, name, and version
+ */
+export const getPrompt = <ThrowOnError extends boolean = false>(options: Options<GetPromptData, ThrowOnError>) => (options.client ?? client).get<GetPromptResponses, GetPromptErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/prompts/{name}/{version}', ...options });
+
+/**
+ * Apply a Prompt (idempotent upsert)
+ */
+export const applyPrompt = <ThrowOnError extends boolean = false>(options: Options<ApplyPromptData, ThrowOnError>) => (options.client ?? client).put<ApplyPromptResponses, ApplyPromptErrors, ThrowOnError>({
+    url: '/v0/namespaces/{namespace}/prompts/{name}/{version}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get the latest Prompt readme
+ */
+export const getLatestPromptReadme = <ThrowOnError extends boolean = false>(options: Options<GetLatestPromptReadmeData, ThrowOnError>) => (options.client ?? client).get<GetLatestPromptReadmeResponses, GetLatestPromptReadmeErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/prompts/{name}/readme', ...options });
+
+/**
+ * Get a Prompt readme by namespace, name, and version
+ */
+export const getPromptReadme = <ThrowOnError extends boolean = false>(options: Options<GetPromptReadmeData, ThrowOnError>) => (options.client ?? client).get<GetPromptReadmeResponses, GetPromptReadmeErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/prompts/{name}/versions/{version}/readme', ...options });
+
+/**
+ * List Provider in a namespace
+ */
+export const listProviders = <ThrowOnError extends boolean = false>(options: Options<ListProvidersData, ThrowOnError>) => (options.client ?? client).get<ListProvidersResponses, ListProvidersErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/providers', ...options });
+
+/**
+ * Get the latest version of a Provider
+ */
+export const getLatestProvider = <ThrowOnError extends boolean = false>(options: Options<GetLatestProviderData, ThrowOnError>) => (options.client ?? client).get<GetLatestProviderResponses, GetLatestProviderErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/providers/{name}', ...options });
+
+/**
+ * Delete a Provider (soft-delete: sets deletionTimestamp)
+ */
+export const deleteProvider = <ThrowOnError extends boolean = false>(options: Options<DeleteProviderData, ThrowOnError>) => (options.client ?? client).delete<DeleteProviderResponses, DeleteProviderErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/providers/{name}/{version}', ...options });
+
+/**
+ * Get a Provider by namespace, name, and version
+ */
+export const getProvider = <ThrowOnError extends boolean = false>(options: Options<GetProviderData, ThrowOnError>) => (options.client ?? client).get<GetProviderResponses, GetProviderErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/providers/{name}/{version}', ...options });
+
+/**
+ * Apply a Provider (idempotent upsert)
+ */
+export const applyProvider = <ThrowOnError extends boolean = false>(options: Options<ApplyProviderData, ThrowOnError>) => (options.client ?? client).put<ApplyProviderResponses, ApplyProviderErrors, ThrowOnError>({
+    url: '/v0/namespaces/{namespace}/providers/{name}/{version}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * List Skill in a namespace
+ */
+export const listSkills = <ThrowOnError extends boolean = false>(options: Options<ListSkillsData, ThrowOnError>) => (options.client ?? client).get<ListSkillsResponses, ListSkillsErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/skills', ...options });
+
+/**
+ * Get the latest version of a Skill
+ */
+export const getLatestSkill = <ThrowOnError extends boolean = false>(options: Options<GetLatestSkillData, ThrowOnError>) => (options.client ?? client).get<GetLatestSkillResponses, GetLatestSkillErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/skills/{name}', ...options });
+
+/**
+ * Delete a Skill (soft-delete: sets deletionTimestamp)
+ */
+export const deleteSkill = <ThrowOnError extends boolean = false>(options: Options<DeleteSkillData, ThrowOnError>) => (options.client ?? client).delete<DeleteSkillResponses, DeleteSkillErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/skills/{name}/{version}', ...options });
+
+/**
+ * Get a Skill by namespace, name, and version
+ */
+export const getSkill = <ThrowOnError extends boolean = false>(options: Options<GetSkillData, ThrowOnError>) => (options.client ?? client).get<GetSkillResponses, GetSkillErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/skills/{name}/{version}', ...options });
+
+/**
+ * Apply a Skill (idempotent upsert)
+ */
+export const applySkill = <ThrowOnError extends boolean = false>(options: Options<ApplySkillData, ThrowOnError>) => (options.client ?? client).put<ApplySkillResponses, ApplySkillErrors, ThrowOnError>({
+    url: '/v0/namespaces/{namespace}/skills/{name}/{version}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get the latest Skill readme
+ */
+export const getLatestSkillReadme = <ThrowOnError extends boolean = false>(options: Options<GetLatestSkillReadmeData, ThrowOnError>) => (options.client ?? client).get<GetLatestSkillReadmeResponses, GetLatestSkillReadmeErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/skills/{name}/readme', ...options });
+
+/**
+ * Get a Skill readme by namespace, name, and version
+ */
+export const getSkillReadme = <ThrowOnError extends boolean = false>(options: Options<GetSkillReadmeData, ThrowOnError>) => (options.client ?? client).get<GetSkillReadmeResponses, GetSkillReadmeErrors, ThrowOnError>({ url: '/v0/namespaces/{namespace}/skills/{name}/versions/{version}/readme', ...options });
+
+/**
  * Ping
  *
  * Simple ping endpoint
@@ -150,193 +306,29 @@ export const getHealthV0 = <ThrowOnError extends boolean = false>(options?: Opti
 export const pingV0 = <ThrowOnError extends boolean = false>(options?: Options<PingV0Data, ThrowOnError>) => (options?.client ?? client).get<PingV0Responses, PingV0Errors, ThrowOnError>({ url: '/v0/ping', ...options });
 
 /**
- * List prompts
- *
- * Get a paginated list of prompts from the registry
+ * List Prompt across all namespaces
  */
-export const listPromptsV0 = <ThrowOnError extends boolean = false>(options?: Options<ListPromptsV0Data, ThrowOnError>) => (options?.client ?? client).get<ListPromptsV0Responses, ListPromptsV0Errors, ThrowOnError>({ url: '/v0/prompts', ...options });
+export const listPromptsAllNamespaces = <ThrowOnError extends boolean = false>(options?: Options<ListPromptsAllNamespacesData, ThrowOnError>) => (options?.client ?? client).get<ListPromptsAllNamespacesResponses, ListPromptsAllNamespacesErrors, ThrowOnError>({ url: '/v0/prompts', ...options });
 
 /**
- * Create or update prompt
- *
- * Create a new prompt in the registry or update an existing one. Resources are immediately visible after creation.
+ * List Provider across all namespaces
  */
-export const createPromptV0 = <ThrowOnError extends boolean = false>(options: Options<CreatePromptV0Data, ThrowOnError>) => (options.client ?? client).post<CreatePromptV0Responses, CreatePromptV0Errors, ThrowOnError>({
-    url: '/v0/prompts',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Get all versions of a prompt
- *
- * Get all available versions for a specific prompt
- */
-export const getPromptVersionsV0 = <ThrowOnError extends boolean = false>(options: Options<GetPromptVersionsV0Data, ThrowOnError>) => (options.client ?? client).get<GetPromptVersionsV0Responses, GetPromptVersionsV0Errors, ThrowOnError>({ url: '/v0/prompts/{promptName}/versions', ...options });
-
-/**
- * Delete a prompt version
- *
- * Permanently delete a specific prompt version from the registry.
- */
-export const deletePromptVersionV0 = <ThrowOnError extends boolean = false>(options: Options<DeletePromptVersionV0Data, ThrowOnError>) => (options.client ?? client).delete<DeletePromptVersionV0Responses, DeletePromptVersionV0Errors, ThrowOnError>({ url: '/v0/prompts/{promptName}/versions/{version}', ...options });
-
-/**
- * Get specific prompt version
- *
- * Get detailed information about a specific version of a prompt. Use the special version 'latest' to get the latest version.
- */
-export const getPromptVersionV0 = <ThrowOnError extends boolean = false>(options: Options<GetPromptVersionV0Data, ThrowOnError>) => (options.client ?? client).get<GetPromptVersionV0Responses, GetPromptVersionV0Errors, ThrowOnError>({ url: '/v0/prompts/{promptName}/versions/{version}', ...options });
-
-/**
- * List providers
- *
- * List configured deployment target providers.
- */
-export const listProviders = <ThrowOnError extends boolean = false>(options?: Options<ListProvidersData, ThrowOnError>) => (options?.client ?? client).get<ListProvidersResponses, ListProvidersErrors, ThrowOnError>({ url: '/v0/providers', ...options });
-
-/**
- * Create provider
- *
- * Create a deployment target provider for a specific platform type.
- */
-export const createProvider = <ThrowOnError extends boolean = false>(options: Options<CreateProviderData, ThrowOnError>) => (options.client ?? client).post<CreateProviderResponses, CreateProviderErrors, ThrowOnError>({
-    url: '/v0/providers',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Delete provider
- *
- * Delete a provider by ID.
- */
-export const deleteProvider = <ThrowOnError extends boolean = false>(options: Options<DeleteProviderData, ThrowOnError>) => (options.client ?? client).delete<DeleteProviderResponses, DeleteProviderErrors, ThrowOnError>({ url: '/v0/providers/{providerId}', ...options });
-
-/**
- * Get provider
- *
- * Get a provider by ID.
- */
-export const getProvider = <ThrowOnError extends boolean = false>(options: Options<GetProviderData, ThrowOnError>) => (options.client ?? client).get<GetProviderResponses, GetProviderErrors, ThrowOnError>({ url: '/v0/providers/{providerId}', ...options });
-
-/**
- * List MCP servers
- *
- * Get a paginated list of MCP servers from the registry
- */
-export const listServersV0 = <ThrowOnError extends boolean = false>(options?: Options<ListServersV0Data, ThrowOnError>) => (options?.client ?? client).get<ListServersV0Responses, ListServersV0Errors, ThrowOnError>({ url: '/v0/servers', ...options });
-
-/**
- * Create or update MCP server
- *
- * Create a new MCP server in the registry or update an existing one. Resources are immediately visible after creation.
- */
-export const createServerV0 = <ThrowOnError extends boolean = false>(options: Options<CreateServerV0Data, ThrowOnError>) => (options.client ?? client).post<CreateServerV0Responses, CreateServerV0Errors, ThrowOnError>({
-    url: '/v0/servers',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
+export const listProvidersAllNamespaces = <ThrowOnError extends boolean = false>(options?: Options<ListProvidersAllNamespacesData, ThrowOnError>) => (options?.client ?? client).get<ListProvidersAllNamespacesResponses, ListProvidersAllNamespacesErrors, ThrowOnError>({ url: '/v0/providers', ...options });
 
 /**
  * Get server README
- *
- * Fetch the README markdown document for the latest version of a server
  */
 export const getServerReadmeV0 = <ThrowOnError extends boolean = false>(options: Options<GetServerReadmeV0Data, ThrowOnError>) => (options.client ?? client).get<GetServerReadmeV0Responses, GetServerReadmeV0Errors, ThrowOnError>({ url: '/v0/servers/{serverName}/readme', ...options });
 
 /**
- * Get all versions of an MCP server
- *
- * Get all available versions for a specific MCP server
- */
-export const getServerVersionsV0 = <ThrowOnError extends boolean = false>(options: Options<GetServerVersionsV0Data, ThrowOnError>) => (options.client ?? client).get<GetServerVersionsV0Responses, GetServerVersionsV0Errors, ThrowOnError>({ url: '/v0/servers/{serverName}/versions', ...options });
-
-/**
- * Delete MCP server version
- *
- * Permanently delete an MCP server version from the registry.
- */
-export const deleteServerVersionV0 = <ThrowOnError extends boolean = false>(options: Options<DeleteServerVersionV0Data, ThrowOnError>) => (options.client ?? client).delete<DeleteServerVersionV0Responses, DeleteServerVersionV0Errors, ThrowOnError>({ url: '/v0/servers/{serverName}/versions/{version}', ...options });
-
-/**
- * Get specific MCP server version
- *
- * Get detailed information about a specific version of an MCP server. Set 'all=true' query parameter to get all versions.
- */
-export const getServerVersionV0 = <ThrowOnError extends boolean = false>(options: Options<GetServerVersionV0Data, ThrowOnError>) => (options.client ?? client).get<GetServerVersionV0Responses, GetServerVersionV0Errors, ThrowOnError>({ url: '/v0/servers/{serverName}/versions/{version}', ...options });
-
-/**
- * Edit MCP server
- *
- * Update a specific version of an existing MCP server (admin only). Use PUT for idempotent apply (create-or-update).
- */
-export const editServerV0 = <ThrowOnError extends boolean = false>(options: Options<EditServerV0Data, ThrowOnError>) => (options.client ?? client).patch<EditServerV0Responses, EditServerV0Errors, ThrowOnError>({
-    url: '/v0/servers/{serverName}/versions/{version}',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
  * Get server README for a version
- *
- * Fetch the README markdown document for a specific server version
  */
 export const getServerVersionReadmeV0 = <ThrowOnError extends boolean = false>(options: Options<GetServerVersionReadmeV0Data, ThrowOnError>) => (options.client ?? client).get<GetServerVersionReadmeV0Responses, GetServerVersionReadmeV0Errors, ThrowOnError>({ url: '/v0/servers/{serverName}/versions/{version}/readme', ...options });
 
 /**
- * List Agentic skills
- *
- * Get a paginated list of Agentic skills from the registry
+ * List Skill across all namespaces
  */
-export const listSkillsV0 = <ThrowOnError extends boolean = false>(options?: Options<ListSkillsV0Data, ThrowOnError>) => (options?.client ?? client).get<ListSkillsV0Responses, ListSkillsV0Errors, ThrowOnError>({ url: '/v0/skills', ...options });
-
-/**
- * Create or update skill
- *
- * Create a new Agentic skill in the registry or update an existing one. Resources are immediately visible after creation.
- */
-export const createSkillV0 = <ThrowOnError extends boolean = false>(options: Options<CreateSkillV0Data, ThrowOnError>) => (options.client ?? client).post<CreateSkillV0Responses, CreateSkillV0Errors, ThrowOnError>({
-    url: '/v0/skills',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Get all versions of an Agentic skill
- *
- * Get all available versions for a specific Agentic skill
- */
-export const getSkillVersionsV0 = <ThrowOnError extends boolean = false>(options: Options<GetSkillVersionsV0Data, ThrowOnError>) => (options.client ?? client).get<GetSkillVersionsV0Responses, GetSkillVersionsV0Errors, ThrowOnError>({ url: '/v0/skills/{skillName}/versions', ...options });
-
-/**
- * Delete skill version
- *
- * Permanently delete a specific skill version from the registry.
- */
-export const deleteSkillVersionV0 = <ThrowOnError extends boolean = false>(options: Options<DeleteSkillVersionV0Data, ThrowOnError>) => (options.client ?? client).delete<DeleteSkillVersionV0Responses, DeleteSkillVersionV0Errors, ThrowOnError>({ url: '/v0/skills/{skillName}/versions/{version}', ...options });
-
-/**
- * Get specific Agentic skill version
- *
- * Get detailed information about a specific version of an Agentic skill. Use the special version 'latest' to get the latest version.
- */
-export const getSkillVersionV0 = <ThrowOnError extends boolean = false>(options: Options<GetSkillVersionV0Data, ThrowOnError>) => (options.client ?? client).get<GetSkillVersionV0Responses, GetSkillVersionV0Errors, ThrowOnError>({ url: '/v0/skills/{skillName}/versions/{version}', ...options });
+export const listSkillsAllNamespaces = <ThrowOnError extends boolean = false>(options?: Options<ListSkillsAllNamespacesData, ThrowOnError>) => (options?.client ?? client).get<ListSkillsAllNamespacesResponses, ListSkillsAllNamespacesErrors, ThrowOnError>({ url: '/v0/skills', ...options });
 
 /**
  * Get version information

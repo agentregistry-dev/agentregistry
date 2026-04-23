@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/manifest"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 )
 
 const ManifestFileName = "mcp.yaml"
@@ -109,7 +109,7 @@ func (m *Manager) Load() (*ProjectManifest, error) {
 		// other OS-error messages are produced by a single code path.
 		return m.Manager.Load()
 	}
-	if kinds.IsEnvelopeYAML(data) {
+	if scheme.IsEnvelopeYAML(data) {
 		return loadFromEnvelope(data)
 	}
 	return m.LoadFromBytes(data)

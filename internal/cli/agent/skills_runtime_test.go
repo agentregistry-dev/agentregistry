@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
 )
 
 func TestExtractSkillImageRef(t *testing.T) {
@@ -101,7 +101,7 @@ func TestNormalizeSkillRegistryURL(t *testing.T) {
 }
 
 func TestResolveSkillSourceImagePassthrough(t *testing.T) {
-	ref := models.SkillRef{
+	ref := agentmanifest.SkillRef{
 		Name:  "local",
 		Image: "docker.io/org/skill:latest",
 	}
@@ -121,19 +121,19 @@ func TestResolveSkillSourceImagePassthrough(t *testing.T) {
 func TestResolveSkillSourceValidation(t *testing.T) {
 	tests := []struct {
 		name       string
-		ref        models.SkillRef
+		ref        agentmanifest.SkillRef
 		errContain string
 	}{
 		{
 			name: "missing image and registry skill name",
-			ref: models.SkillRef{
+			ref: agentmanifest.SkillRef{
 				Name: "missing",
 			},
 			errContain: "one of image or registrySkillName is required",
 		},
 		{
 			name: "both image and registry skill name set",
-			ref: models.SkillRef{
+			ref: agentmanifest.SkillRef{
 				Name:              "invalid-both",
 				Image:             "docker.io/org/skill:latest",
 				RegistrySkillName: "remote-skill",

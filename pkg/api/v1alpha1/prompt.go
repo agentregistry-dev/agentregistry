@@ -12,6 +12,7 @@ type Prompt struct {
 // prompt text inline; for large bodies or binary assets, use references via
 // a Skill resource instead.
 type PromptSpec struct {
-	Description string `json:"description,omitempty" yaml:"description,omitempty"`
-	Content     string `json:"content,omitempty" yaml:"content,omitempty"`
+	Description string  `json:"description,omitempty" yaml:"description,omitempty"`
+	Content     string  `json:"content,omitempty" yaml:"content,omitempty"`
+	Readme      *Readme `json:"readme,omitempty" yaml:"readme,omitempty"`
 }

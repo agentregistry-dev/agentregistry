@@ -12,7 +12,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/constants"
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	platformutils "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	v1alpha2 "github.com/kagent-dev/kagent/go/api/v1alpha2"
 	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -61,19 +61,37 @@ func kubernetesDefaultNamespace() string {
 	return ns
 }
 
-func kubernetesProviderConfig(provider *models.Provider) (*models.KubernetesProviderConfig, error) {
-	if provider == nil || len(provider.Config) == 0 {
-		return &models.KubernetesProviderConfig{}, nil
+type kubernetesProviderSettings struct {
+	Kubeconfig     string `json:"kubeconfig,omitempty"`
+	KubeconfigPath string `json:"kubeconfigPath,omitempty"`
+	Context        string `json:"context,omitempty"`
+	Namespace      string `json:"namespace,omitempty"`
+}
+
+func decodeProviderConfig(config map[string]any, dst any) error {
+	if len(config) == 0 {
+		return nil
+	}
+	body, err := json.Marshal(config)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(body, dst)
+}
+
+func kubernetesProviderConfig(provider *v1alpha1.Provider) (*kubernetesProviderSettings, error) {
+	if provider == nil || len(provider.Spec.Config) == 0 {
+		return &kubernetesProviderSettings{}, nil
 	}
 
-	cfg := &models.KubernetesProviderConfig{}
-	if err := models.JSONObject(provider.Config).UnmarshalInto(cfg); err != nil {
-		return nil, fmt.Errorf("decode kubernetes provider config for %s: %w", provider.ID, err)
+	cfg := &kubernetesProviderSettings{}
+	if err := decodeProviderConfig(provider.Spec.Config, cfg); err != nil {
+		return nil, fmt.Errorf("decode kubernetes provider config for %s: %w", provider.Metadata.Name, err)
 	}
 	return cfg, nil
 }
 
-func kubernetesRESTConfig(provider *models.Provider) (*rest.Config, error) {
+func kubernetesRESTConfig(provider *v1alpha1.Provider) (*rest.Config, error) {
 	providerCfg, err := kubernetesProviderConfig(provider)
 	if err != nil {
 		return nil, err
@@ -95,22 +113,22 @@ func kubernetesRESTConfig(provider *models.Provider) (*rest.Config, error) {
 }
 
 func kubernetesRESTConfigFromInlineKubeconfig(
-	provider *models.Provider,
-	providerCfg *models.KubernetesProviderConfig,
+	provider *v1alpha1.Provider,
+	providerCfg *kubernetesProviderSettings,
 	kubeconfig string,
 ) (*rest.Config, error) {
 	clientCfg, err := clientcmd.NewClientConfigFromBytes([]byte(kubeconfig))
 	if err != nil {
-		return nil, fmt.Errorf("load kubernetes provider kubeconfig for %s: %w", provider.ID, err)
+		return nil, fmt.Errorf("load kubernetes provider kubeconfig for %s: %w", provider.Metadata.Name, err)
 	}
 	rawConfig, err := clientCfg.RawConfig()
 	if err != nil {
-		return nil, fmt.Errorf("read kubernetes provider kubeconfig for %s: %w", provider.ID, err)
+		return nil, fmt.Errorf("read kubernetes provider kubeconfig for %s: %w", provider.Metadata.Name, err)
 	}
 	return clientcmd.NewDefaultClientConfig(rawConfig, kubernetesConfigOverrides(providerCfg)).ClientConfig()
 }
 
-func kubernetesRESTConfigFromPath(providerCfg *models.KubernetesProviderConfig, kubeconfigPath string) (*rest.Config, error) {
+func kubernetesRESTConfigFromPath(providerCfg *kubernetesProviderSettings, kubeconfigPath string) (*rest.Config, error) {
 	loadingRules := &clientcmd.ClientConfigLoadingRules{}
 	if kubeconfigPath != "" {
 		loadingRules.ExplicitPath = kubeconfigPath
@@ -118,7 +136,7 @@ func kubernetesRESTConfigFromPath(providerCfg *models.KubernetesProviderConfig, 
 	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, kubernetesConfigOverrides(providerCfg)).ClientConfig()
 }
 
-func kubernetesConfigOverrides(providerCfg *models.KubernetesProviderConfig) *clientcmd.ConfigOverrides {
+func kubernetesConfigOverrides(providerCfg *kubernetesProviderSettings) *clientcmd.ConfigOverrides {
 	overrides := &clientcmd.ConfigOverrides{}
 	if providerCfg == nil {
 		return overrides
@@ -129,7 +147,7 @@ func kubernetesConfigOverrides(providerCfg *models.KubernetesProviderConfig) *cl
 	return overrides
 }
 
-func kubernetesGetClient(provider *models.Provider) (client.Client, error) {
+func kubernetesGetClient(provider *v1alpha1.Provider) (client.Client, error) {
 	restConfig, err := kubernetesRESTConfig(provider)
 	if err != nil {
 		return nil, err
@@ -142,7 +160,7 @@ func kubernetesGetClient(provider *models.Provider) (client.Client, error) {
 	return c, nil
 }
 
-func kubernetesProviderNamespace(provider *models.Provider) string {
+func kubernetesProviderNamespace(provider *v1alpha1.Provider) string {
 	providerCfg, err := kubernetesProviderConfig(provider)
 	if err != nil || providerCfg == nil {
 		return ""
@@ -150,7 +168,7 @@ func kubernetesProviderNamespace(provider *models.Provider) string {
 	return strings.TrimSpace(providerCfg.Namespace)
 }
 
-func kubernetesApplyPlatformConfig(ctx context.Context, provider *models.Provider, cfg *platformtypes.KubernetesPlatformConfig, verbose bool) error {
+func kubernetesApplyPlatformConfig(ctx context.Context, provider *v1alpha1.Provider, cfg *platformtypes.KubernetesPlatformConfig, verbose bool) error {
 	if cfg == nil || (len(cfg.Agents) == 0 && len(cfg.RemoteMCPServers) == 0 && len(cfg.MCPServers) == 0 && len(cfg.ConfigMaps) == 0) {
 		return nil
 	}
@@ -186,7 +204,7 @@ func kubernetesApplyPlatformConfig(ctx context.Context, provider *models.Provide
 	return nil
 }
 
-func kubernetesDeleteResourcesByDeploymentID(ctx context.Context, provider *models.Provider, deploymentID, resourceType, namespace string) error {
+func kubernetesDeleteResourcesByDeploymentID(ctx context.Context, provider *v1alpha1.Provider, deploymentID, resourceType, namespace string) error {
 	if deploymentID == "" {
 		return fmt.Errorf("deployment id is required")
 	}
@@ -204,7 +222,7 @@ func kubernetesDeleteResourcesByDeploymentID(ctx context.Context, provider *mode
 	}
 }
 
-func kubernetesListAgents(ctx context.Context, provider *models.Provider, namespace string) ([]*v1alpha2.Agent, error) {
+func kubernetesListAgents(ctx context.Context, provider *v1alpha1.Provider, namespace string) ([]*v1alpha2.Agent, error) {
 	c, err := kubernetesGetClient(provider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
@@ -224,7 +242,7 @@ func kubernetesListAgents(ctx context.Context, provider *models.Provider, namesp
 	return agents, nil
 }
 
-func kubernetesListMCPServers(ctx context.Context, provider *models.Provider, namespace string) ([]*kmcpv1alpha1.MCPServer, error) {
+func kubernetesListMCPServers(ctx context.Context, provider *v1alpha1.Provider, namespace string) ([]*kmcpv1alpha1.MCPServer, error) {
 	c, err := kubernetesGetClient(provider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
@@ -244,7 +262,7 @@ func kubernetesListMCPServers(ctx context.Context, provider *models.Provider, na
 	return servers, nil
 }
 
-func kubernetesListRemoteMCPServers(ctx context.Context, provider *models.Provider, namespace string) ([]*v1alpha2.RemoteMCPServer, error) {
+func kubernetesListRemoteMCPServers(ctx context.Context, provider *v1alpha1.Provider, namespace string) ([]*v1alpha2.RemoteMCPServer, error) {
 	c, err := kubernetesGetClient(provider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)

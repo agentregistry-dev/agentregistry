@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	v1alpha2 "github.com/kagent-dev/kagent/go/api/v1alpha2"
 	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -508,15 +508,17 @@ func TestKubernetesTranslatePlatformConfig_AgentWithMCPServersAndPrompts(t *test
 }
 
 func TestKubernetesRESTConfig_UsesProviderSpecificKubeconfigContext(t *testing.T) {
-	provider := &models.Provider{
-		ID:       "kube-b",
-		Platform: "kubernetes",
-		Config: map[string]any{
-			"kubeconfig": testKubernetesProviderKubeconfig(map[string]string{
-				"ctx-a": "https://cluster-a.example.test",
-				"ctx-b": "https://cluster-b.example.test",
-			}, "ctx-a"),
-			"context": "ctx-b",
+	provider := &v1alpha1.Provider{
+		Metadata: v1alpha1.ObjectMeta{Name: "kube-b"},
+		Spec: v1alpha1.ProviderSpec{
+			Platform: v1alpha1.PlatformKubernetes,
+			Config: map[string]any{
+				"kubeconfig": testKubernetesProviderKubeconfig(map[string]string{
+					"ctx-a": "https://cluster-a.example.test",
+					"ctx-b": "https://cluster-b.example.test",
+				}, "ctx-a"),
+				"context": "ctx-b",
+			},
 		},
 	}
 

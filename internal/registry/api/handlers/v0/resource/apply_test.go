@@ -11,9 +11,9 @@ import (
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/stretchr/testify/require"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/resource"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
@@ -57,21 +57,21 @@ spec:
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
 	var out struct {
-		Results []apitypes.ApplyResult `json:"results"`
+		Results []arv0.ApplyResult `json:"results"`
 	}
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
 	require.Len(t, out.Results, 2)
 	require.Equal(t, v1alpha1.KindMCPServer, out.Results[0].Kind)
-	require.Equal(t, apitypes.ApplyStatusCreated, out.Results[0].Status)
+	require.Equal(t, arv0.ApplyStatusCreated, out.Results[0].Status)
 	require.Equal(t, v1alpha1.KindAgent, out.Results[1].Kind)
-	require.Equal(t, apitypes.ApplyStatusCreated, out.Results[1].Status)
+	require.Equal(t, arv0.ApplyStatusCreated, out.Results[1].Status)
 
 	// Re-apply identical YAML: both should report "unchanged".
 	resp = api.Post("/v0/apply", "Content-Type: application/yaml", strings.NewReader(string(yaml)))
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
-	require.Equal(t, apitypes.ApplyStatusUnchanged, out.Results[0].Status)
-	require.Equal(t, apitypes.ApplyStatusUnchanged, out.Results[1].Status)
+	require.Equal(t, arv0.ApplyStatusUnchanged, out.Results[0].Status)
+	require.Equal(t, arv0.ApplyStatusUnchanged, out.Results[1].Status)
 }
 
 func TestRegisterApply_PerDocFailureDoesntAbortBatch(t *testing.T) {
@@ -109,12 +109,12 @@ spec:
 	require.Equal(t, http.StatusOK, resp.Code)
 
 	var out struct {
-		Results []apitypes.ApplyResult `json:"results"`
+		Results []arv0.ApplyResult `json:"results"`
 	}
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
 	require.Len(t, out.Results, 2)
-	require.Equal(t, apitypes.ApplyStatusCreated, out.Results[0].Status)
-	require.Equal(t, apitypes.ApplyStatusFailed, out.Results[1].Status)
+	require.Equal(t, arv0.ApplyStatusCreated, out.Results[0].Status)
+	require.Equal(t, arv0.ApplyStatusFailed, out.Results[1].Status)
 	require.Contains(t, out.Results[1].Error, "unknown or unconfigured kind")
 }
 
@@ -141,10 +141,10 @@ spec:
 	require.Equal(t, http.StatusOK, resp.Code)
 
 	var out struct {
-		Results []apitypes.ApplyResult `json:"results"`
+		Results []arv0.ApplyResult `json:"results"`
 	}
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
 	require.Len(t, out.Results, 1)
-	require.Equal(t, apitypes.ApplyStatusFailed, out.Results[0].Status)
+	require.Equal(t, arv0.ApplyStatusFailed, out.Results[0].Status)
 	require.Contains(t, out.Results[0].Error, "metadata.version")
 }

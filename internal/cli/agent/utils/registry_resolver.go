@@ -8,10 +8,10 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
+	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/registry"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 )
 
@@ -32,8 +32,8 @@ func GetDefaultRegistryURL() string {
 }
 
 // ParseAgentManifestServers resolves registry-type MCP servers in an agent manifest, keeping non-registry servers as-is.
-func ParseAgentManifestServers(manifest *models.AgentManifest, verbose bool) ([]models.McpServerType, error) {
-	servers := []models.McpServerType{}
+func ParseAgentManifestServers(manifest *agentmanifest.AgentManifest, verbose bool) ([]agentmanifest.McpServerType, error) {
+	servers := []agentmanifest.McpServerType{}
 
 	if verbose {
 		fmt.Printf("[registry-resolver] Processing %d MCP servers from manifest\n", len(manifest.McpServers))
@@ -75,7 +75,7 @@ func ParseAgentManifestServers(manifest *models.AgentManifest, verbose bool) ([]
 }
 
 // resolveRegistryServer fetches a server from the registry and translates it to a runnable config
-func resolveRegistryServer(mcpServer models.McpServerType, verbose bool) (*models.McpServerType, error) {
+func resolveRegistryServer(mcpServer agentmanifest.McpServerType, verbose bool) (*agentmanifest.McpServerType, error) {
 	registryURL := mcpServer.RegistryURL
 	if registryURL == "" {
 		registryURL = defaultRegistryURL
@@ -205,7 +205,7 @@ func collectEnvOverrides(packages []model.Package) map[string]string {
 
 // ResolveManifestPrompts fetches prompts referenced in the agent manifest from the registry
 // and returns them as PythonPrompt structs ready to be written to prompts.json.
-func ResolveManifestPrompts(manifest *models.AgentManifest, verbose bool) ([]common.PythonPrompt, error) {
+func ResolveManifestPrompts(manifest *agentmanifest.AgentManifest, verbose bool) ([]common.PythonPrompt, error) {
 	if manifest == nil || len(manifest.Prompts) == 0 {
 		return nil, nil
 	}

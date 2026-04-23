@@ -38,21 +38,17 @@
 
 ---
 
-## 8. Embeddings / pgvector indexer — **NOT STARTED (net-new work)**
+## 8. Embeddings / pgvector indexer — **CORE RESTORED, follow-ups remain**
 
-**Status**: legacy indexer + provider + jobs + handlers deleted in
-commit `2cbf1c2`. v1alpha1-native pipeline is net-new work against
-the generic Store + NOTIFY stream.
+**Status**: the v1alpha1-native pipeline is back (`003_embeddings.sql`,
+`internal/registry/embeddings/`, `internal/registry/jobs/`, list
+semantic search, and `/v0/embeddings/index`). What remains is polish,
+not the core port.
 
-**Port plan**:
-- Additive migration `002_v1alpha1_embeddings.sql` adds
-  `semantic_embedding`, `semantic_embedding_provider`, `..._model`,
-  `..._dimensions` columns to every `v1alpha1.*` table.
-- Indexer reads rows via Store, generates embedding, writes via
-  `store.SetEmbedding(namespace, name, version, vec)` (new method).
-- SSE index endpoint targets v1alpha1 rows.
-- Subscribe to per-table status-change NOTIFY for incremental reindex
-  on spec change.
+**Follow-up plan**:
+- Subscribe to per-table NOTIFY for incremental reindex on spec change.
+- Add SSE/job-streaming ergonomics on top of the restored job manager.
+- Add more providers beyond the restored OpenAI path.
 
 **Business logic to preserve** (from the deleted legacy impl):
 - Per-kind text assembly (which Spec fields contribute to the
@@ -64,9 +60,8 @@ the generic Store + NOTIFY stream.
 - `?semanticThreshold=` param.
 - Provider abstraction so Azure OpenAI / Ollama / local models plug in.
 
-**Finish-line signal**: `arctl embeddings index --watch` surfaces
-progress; `GET /v0/agents?semantic=payments` returns relevance-ordered
-matches.
+**Finish-line signal**: indexing auto-regenerates on spec change and the
+CLI can drive it without hitting raw HTTP.
 
 ---
 
@@ -86,18 +81,18 @@ here.
 
 ---
 
-## 11. `pkg/models` DTOs / `internal/registry/kinds` — workflow CLI cleanup remaining
+## 11. Workflow CLI manifest cleanup remaining
 
-**Current remaining consumers**: workflow CLI + manifest paths
-(`internal/cli/{agent,mcp,scheme}/`, `internal/cli/agent/project`,
-`internal/cli/agent/frameworks/common`), selected platform translation
-helpers, and `internal/registry/kinds/`.
-`internal/client/client_deprecated.go` was deleted in `709a23d`; the
-remaining package is no longer blocked on a single declarative-CLI
-merge, just on finishing those real ports.
+**Current remaining consumers**: local workflow-manifest loaders and
+runtime projection code (`internal/cli/{agent,mcp,scheme}/`,
+`internal/cli/agent/project`, `internal/cli/agent/frameworks/common`,
+`internal/cli/agent/manifest`). `pkg/models/` and
+`internal/registry/kinds/` are gone; what remains is deciding whether
+flat local manifest compatibility should survive.
 
-**Finish-line signal**: `grep -r pkg/models internal pkg cmd`
-returns no hits → delete the package.
+**Finish-line signal**: workflow commands read/write only envelope-native
+manifests, and the remaining duplicate local projection helpers collapse
+to one obvious path.
 
 ---
 

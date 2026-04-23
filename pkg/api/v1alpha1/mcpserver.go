@@ -16,6 +16,7 @@ type MCPServerSpec struct {
 	Title       string      `json:"title,omitempty" yaml:"title,omitempty"`
 	Description string      `json:"description,omitempty" yaml:"description,omitempty"`
 	WebsiteURL  string      `json:"websiteUrl,omitempty" yaml:"websiteUrl,omitempty"`
+	Readme      *Readme     `json:"readme,omitempty" yaml:"readme,omitempty"`
 	Repository  *Repository `json:"repository,omitempty" yaml:"repository,omitempty"`
 	Icons       []MCPIcon   `json:"icons,omitempty" yaml:"icons,omitempty"`
 

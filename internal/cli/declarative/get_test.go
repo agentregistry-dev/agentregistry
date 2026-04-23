@@ -1,11 +1,10 @@
 package declarative_test
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -38,14 +37,12 @@ func TestGetCmd_NoAPIClientErrors(t *testing.T) {
 // TestGetCmd_RegistryDrivenColumnLookup verifies that the defaultRegistry has TableColumns
 // for known kinds, confirming the registry-driven path is active.
 func TestGetCmd_RegistryDrivenColumnLookup(t *testing.T) {
-	// Build a registry with a kind that has TableColumns set (same as the CLI registry).
-	reg := kinds.NewRegistry()
-	reg.Register(kinds.Kind{
-		Kind:     "agent",
-		Plural:   "agents",
-		Aliases:  []string{"Agent"},
-		SpecType: reflect.TypeFor[kinds.AgentSpec](),
-		TableColumns: []kinds.Column{
+	reg := scheme.NewRegistry()
+	reg.Register(scheme.Kind{
+		Kind:    "agent",
+		Plural:  "agents",
+		Aliases: []string{"Agent"},
+		TableColumns: []scheme.Column{
 			{Header: "NAME"},
 			{Header: "VERSION"},
 		},

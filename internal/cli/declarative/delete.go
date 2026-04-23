@@ -5,7 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/spf13/cobra"
 )
 
@@ -69,7 +70,7 @@ func deleteFromFile(cmd *cobra.Command, filename string) error {
 
 	// Validate locally so unknown kinds fail before hitting the network.
 	if defaultRegistry != nil {
-		if _, err := defaultRegistry.DecodeMulti(data); err != nil {
+		if _, err := scheme.DecodeBytes(defaultRegistry, data); err != nil {
 			return fmt.Errorf("parsing %s: %w", filename, err)
 		}
 	}
@@ -86,7 +87,7 @@ func deleteFromFile(cmd *cobra.Command, filename string) error {
 	printResults(cmd.OutOrStdout(), results, false)
 
 	for _, r := range results {
-		if r.Status == apitypes.ApplyStatusFailed {
+		if r.Status == arv0.ApplyStatusFailed {
 			return fmt.Errorf("one or more resources failed to delete")
 		}
 	}

@@ -75,13 +75,30 @@ func RegisterBuiltins(
 		}
 		switch kind {
 		case v1alpha1.KindAgent:
-			Register[*v1alpha1.Agent](api, cfg, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+			newObj := func() *v1alpha1.Agent { return &v1alpha1.Agent{} }
+			Register[*v1alpha1.Agent](api, cfg, newObj)
+			RegisterReadme[*v1alpha1.Agent](api, cfg, newObj, func(obj *v1alpha1.Agent) *v1alpha1.Readme {
+				return obj.Spec.Readme
+			})
 		case v1alpha1.KindMCPServer:
-			Register[*v1alpha1.MCPServer](api, cfg, func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
+			newObj := func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} }
+			Register[*v1alpha1.MCPServer](api, cfg, newObj)
+			RegisterReadme[*v1alpha1.MCPServer](api, cfg, newObj, func(obj *v1alpha1.MCPServer) *v1alpha1.Readme {
+				return obj.Spec.Readme
+			})
+			RegisterLegacyServerReadme(api, basePrefix, cfg.Store)
 		case v1alpha1.KindSkill:
-			Register[*v1alpha1.Skill](api, cfg, func() *v1alpha1.Skill { return &v1alpha1.Skill{} })
+			newObj := func() *v1alpha1.Skill { return &v1alpha1.Skill{} }
+			Register[*v1alpha1.Skill](api, cfg, newObj)
+			RegisterReadme[*v1alpha1.Skill](api, cfg, newObj, func(obj *v1alpha1.Skill) *v1alpha1.Readme {
+				return obj.Spec.Readme
+			})
 		case v1alpha1.KindPrompt:
-			Register[*v1alpha1.Prompt](api, cfg, func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} })
+			newObj := func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} }
+			Register[*v1alpha1.Prompt](api, cfg, newObj)
+			RegisterReadme[*v1alpha1.Prompt](api, cfg, newObj, func(obj *v1alpha1.Prompt) *v1alpha1.Readme {
+				return obj.Spec.Readme
+			})
 		case v1alpha1.KindProvider:
 			Register[*v1alpha1.Provider](api, cfg, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
 		case v1alpha1.KindDeployment:

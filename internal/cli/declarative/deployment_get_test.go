@@ -188,8 +188,11 @@ func TestDeploymentGet_YAMLOutputIncludesStatus(t *testing.T) {
 	assert.Contains(t, got, "version: 1.0.0")
 
 	// Spec block — declarative fields only.
-	assert.Contains(t, got, "providerId: my-aws")
-	assert.Contains(t, got, "resourceType: agent")
+	assert.Contains(t, got, "providerRef:")
+	assert.Contains(t, got, "kind: Provider")
+	assert.Contains(t, got, "name: my-aws")
+	assert.Contains(t, got, "targetRef:")
+	assert.Contains(t, got, "kind: Agent")
 	assert.Contains(t, got, "GOOGLE_API_KEY: xxx")
 
 	// Status block — server-managed runtime state, available for debugging.
@@ -218,11 +221,10 @@ func TestDeploymentGet_YAMLOutputIncludesStatus(t *testing.T) {
 // should produce the same spec without the incoming status leaking into the
 // stored record.
 func TestDeploymentApply_IgnoresIncomingStatus(t *testing.T) {
-	// The envelope decoder at internal/registry/kinds/registry.go:decodeNode
-	// unmarshals only apiVersion/kind/metadata/spec. The status field on
-	// Document is marshal-only from the server's perspective. This test
-	// guards that contract: round-tripping a status-bearing document through
-	// YAML decode produces zero-value Status.
+	// The v1alpha1 envelope decoder unmarshals only apiVersion/kind/metadata/spec
+	// on apply input. Status is server-owned and marshal-only from the API's
+	// perspective. This test guards that contract: round-tripping a
+	// status-bearing document through YAML decode produces zero-value Status.
 	raw := []byte(`apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/logging"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/danielgtaylor/huma/v2"
@@ -135,7 +135,7 @@ func NewHumaAPI(
 	cfg *config.Config,
 	mux *http.ServeMux,
 	metrics *telemetry.Metrics,
-	versionInfo *apitypes.VersionBody,
+	versionInfo *arv0.VersionBody,
 	uiHandler http.Handler,
 	authnProvider auth.AuthnProvider,
 	routeOpts *RouteOptions,

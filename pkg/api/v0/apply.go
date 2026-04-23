@@ -1,11 +1,8 @@
-package apitypes
+package v0
 
 // ApplyResult describes the outcome for a single document in a
 // multi-doc apply or delete batch. Returned by POST /v0/apply and
 // DELETE /v0/apply in the Body.Results slice.
-//
-// Clients outside the handler package (Go client, CLI) depend on this
-// shape, so it lives in apitypes to avoid an internal/internal import.
 type ApplyResult struct {
 	APIVersion string `json:"apiVersion,omitempty"`
 	Kind       string `json:"kind,omitempty"`
