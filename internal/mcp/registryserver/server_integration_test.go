@@ -10,14 +10,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 )
 
 func TestMCPListServers_HappyPath(t *testing.T) {
 	ctx := context.Background()
-	pool := internaldb.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
 	stores := internaldb.NewV1Alpha1Stores(pool)
 
 	// Seed a published MCPServer so the MCP tool has something to return.
@@ -33,7 +34,7 @@ func TestMCPListServers_HappyPath(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, serverNamespace, serverName, serverVersion, spec, internaldb.UpsertOpts{})
+	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, serverNamespace, serverName, serverVersion, spec, v1alpha1store.UpsertOpts{})
 	require.NoError(t, err, "seed server")
 
 	// Wire up MCP server + client over in-memory transports.

@@ -15,9 +15,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/internal/client"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/resource"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/builtins"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 )
 
 // TestClient_V1Alpha1RoundTrip exercises the new generic client methods
@@ -25,12 +27,12 @@ import (
 // resource handler backed by a test DB. Proves the wire contract end
 // to end and pins the shape the CLI + UI regen will consume.
 func TestClient_V1Alpha1RoundTrip(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
 	stores := database.NewV1Alpha1Stores(pool)
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("test", "v1"))
-	resource.RegisterBuiltins(api, "/v0", stores, nil, nil, nil, resource.DeploymentHooks{}, nil)
+	builtins.RegisterBuiltins(api, "/v0", stores, nil, nil, nil, builtins.DeploymentHooks{}, nil)
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
 		Stores:     stores,
@@ -106,7 +108,7 @@ spec:
 // TestClient_V1Alpha1_ApplyInvalid covers the apply pipeline's
 // per-document failure branch at the client level.
 func TestClient_V1Alpha1_ApplyInvalid(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
 	stores := database.NewV1Alpha1Stores(pool)
 
 	mux := http.NewServeMux()
@@ -142,12 +144,12 @@ spec:
 
 // TestClient_V1Alpha1_NotFound proves the ErrNotFound sentinel path.
 func TestClient_V1Alpha1_NotFound(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
 	stores := database.NewV1Alpha1Stores(pool)
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("test", "v1"))
-	resource.RegisterBuiltins(api, "/v0", stores, nil, nil, nil, resource.DeploymentHooks{}, nil)
+	builtins.RegisterBuiltins(api, "/v0", stores, nil, nil, nil, builtins.DeploymentHooks{}, nil)
 
 	ts := httptest.NewServer(mux)
 	defer ts.Close()

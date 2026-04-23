@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 // Options controls one invocation of Importer.Import.
@@ -108,10 +108,10 @@ const (
 // registered; callers invoke Import repeatedly per user request.
 type Importer struct {
 	// Stores maps Kind ("Agent", "MCPServer", ...) to the generic
-	// database.Store backing that kind's table. Must be populated for
+	// v1alpha1store.Store backing that kind's table. Must be populated for
 	// every kind the importer is expected to handle; missing entries
 	// turn into Status="failed" results.
-	stores map[string]*database.Store
+	stores map[string]*v1alpha1store.Store
 
 	// Findings is the writer for v1alpha1.enrichment_findings. May be
 	// nil, in which case findings are discarded and a warning is
@@ -149,7 +149,7 @@ type Importer struct {
 
 // Config carries the dependencies a new Importer needs.
 type Config struct {
-	Stores            map[string]*database.Store
+	Stores            map[string]*v1alpha1store.Store
 	Findings          *FindingsStore
 	Scanners          []Scanner
 	Scheme            *v1alpha1.Scheme
@@ -341,7 +341,7 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 		return res
 	}
 
-	upsertOpts := database.UpsertOpts{Labels: meta.Labels}
+	upsertOpts := v1alpha1store.UpsertOpts{Labels: meta.Labels}
 	if meta.Finalizers != nil {
 		upsertOpts.Finalizers = meta.Finalizers
 	}

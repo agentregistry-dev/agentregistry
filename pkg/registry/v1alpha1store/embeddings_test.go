@@ -1,6 +1,6 @@
 //go:build integration
 
-package database
+package v1alpha1store
 
 import (
 	"context"

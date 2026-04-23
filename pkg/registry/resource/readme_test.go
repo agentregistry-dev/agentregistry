@@ -11,12 +11,14 @@ import (
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/stretchr/testify/require"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/resource"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
+	builtins "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/builtins"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 )
 
-func registerAgentWithReadme(api huma.API, store *database.Store) {
+func registerAgentWithReadme(api huma.API, store *v1alpha1store.Store) {
 	cfg := resource.Config{
 		Kind:       v1alpha1.KindAgent,
 		BasePrefix: "/v0",
@@ -32,8 +34,8 @@ func registerAgentWithReadme(api huma.API, store *database.Store) {
 }
 
 func TestResourceRegister_AgentReadmeRoutesAndListProjection(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	store := database.NewStore(pool, "v1alpha1.agents")
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
 	registerAgentWithReadme(api, store)
@@ -84,11 +86,11 @@ func TestResourceRegister_AgentReadmeRoutesAndListProjection(t *testing.T) {
 }
 
 func TestRegisterBuiltins_LegacyServerReadmeAlias(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
 	stores := database.NewV1Alpha1Stores(pool)
 
 	_, api := humatest.New(t)
-	resource.RegisterBuiltins(api, "/v0", stores, nil, nil, nil, resource.DeploymentHooks{}, nil)
+	builtins.RegisterBuiltins(api, "/v0", stores, nil, nil, nil, builtins.DeploymentHooks{}, nil)
 
 	server := v1alpha1.MCPServer{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},

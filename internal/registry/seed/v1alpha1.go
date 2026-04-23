@@ -11,9 +11,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 //go:embed seed.json
@@ -39,7 +39,7 @@ func ImportBuiltinSeedDataV1Alpha1(ctx context.Context, pool *pgxpool.Pool) erro
 		return fmt.Errorf("parse seed: %w", err)
 	}
 
-	mcpStore := internaldb.NewStore(pool, "v1alpha1.mcp_servers")
+	mcpStore := v1alpha1store.NewStore(pool, "v1alpha1.mcp_servers")
 
 	for _, srv := range servers {
 		spec, err := seedServerToMCPSpec(srv)
@@ -65,7 +65,7 @@ func ImportBuiltinSeedDataV1Alpha1(ctx context.Context, pool *pgxpool.Pool) erro
 			srv.Name,
 			srv.Version,
 			specJSON,
-			internaldb.UpsertOpts{Labels: labels},
+			v1alpha1store.UpsertOpts{Labels: labels},
 		)
 		if err != nil {
 			// Dup-version isn't fatal for seed; the existing row stays

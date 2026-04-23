@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"slices"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 // IndexOptions configures one indexing pass. The indexer iterates over
@@ -61,7 +61,7 @@ type KindBinding struct {
 	// Kind is the v1alpha1 Kind constant (e.g. v1alpha1.KindAgent).
 	Kind string
 	// Store is the generic Store bound to this Kind's table.
-	Store *database.Store
+	Store *v1alpha1store.Store
 	// BuildPayload returns the canonical embedding text for one row.
 	// The RawObject carries the already-decoded metadata; the
 	// callback typically unmarshals RawObject.Spec into the typed
@@ -151,7 +151,7 @@ func (i *Indexer) runOne(ctx context.Context, b KindBinding, opts IndexOptions, 
 	stats := IndexStats{}
 	cursor := ""
 	for {
-		rows, next, err := b.Store.List(ctx, database.ListOpts{
+		rows, next, err := b.Store.List(ctx, v1alpha1store.ListOpts{
 			Namespace: opts.Namespace,
 			Limit:     batchSize,
 			Cursor:    cursor,
@@ -230,7 +230,7 @@ func (i *Indexer) indexRow(ctx context.Context, b KindBinding, row *v1alpha1.Raw
 // Prompt. Providers + Deployments are omitted (see 003 migration
 // rationale). Pass the Stores map returned by
 // database.NewV1Alpha1Stores(pool) as kindStores.
-func DefaultBindings(kindStores map[string]*database.Store) ([]KindBinding, error) {
+func DefaultBindings(kindStores map[string]*v1alpha1store.Store) ([]KindBinding, error) {
 	required := []string{
 		v1alpha1.KindAgent,
 		v1alpha1.KindMCPServer,

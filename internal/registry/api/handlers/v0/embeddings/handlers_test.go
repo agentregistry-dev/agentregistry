@@ -12,11 +12,11 @@ import (
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/stretchr/testify/require"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	pkgemb "github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 // denyAdminAuthzProvider refuses IsRegistryAdmin so tests can assert
@@ -48,18 +48,18 @@ func (f *fakeProvider) Generate(ctx context.Context, p pkgemb.Payload) (*pkgemb.
 	}, nil
 }
 
-func seedAgent(t *testing.T, store *database.Store, name string) {
+func seedAgent(t *testing.T, store *v1alpha1store.Store, name string) {
 	t.Helper()
 	spec, err := json.Marshal(v1alpha1.AgentSpec{Title: name, Description: name})
 	require.NoError(t, err)
-	_, err = store.Upsert(context.Background(), "default", name, "v1", spec, database.UpsertOpts{})
+	_, err = store.Upsert(context.Background(), "default", name, "v1", spec, v1alpha1store.UpsertOpts{})
 	require.NoError(t, err)
 }
 
-func setupHandlerFixture(t *testing.T) (humatest.TestAPI, *database.Store, *jobs.Manager) {
+func setupHandlerFixture(t *testing.T) (humatest.TestAPI, *v1alpha1store.Store, *jobs.Manager) {
 	t.Helper()
-	pool := database.NewV1Alpha1TestPool(t)
-	store := database.NewStore(pool, "v1alpha1.agents")
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	seedAgent(t, store, "one")
 	seedAgent(t, store, "two")
@@ -158,8 +158,8 @@ func TestHandler_GetJobStatus_ReportsCompletion(t *testing.T) {
 }
 
 func TestHandler_ConflictWhenJobAlreadyRunning(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	store := database.NewStore(pool, "v1alpha1.agents")
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	for i := 0; i < 50; i++ {
 		seedAgent(t, store, "row"+string(rune('a'+i%26))+string(rune('a'+i/26)))
@@ -229,8 +229,8 @@ func TestHandler_JobNotFound(t *testing.T) {
 }
 
 func TestHandler_NonAdmin_Forbidden(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	store := database.NewStore(pool, "v1alpha1.agents")
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 	seedAgent(t, store, "one")
 
 	indexer, err := pkgemb.NewIndexer(pkgemb.IndexerConfig{

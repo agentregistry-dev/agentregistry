@@ -5,7 +5,8 @@ import (
 	v0embeddings "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/embeddings"
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
 	v0ping "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/ping"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/resource"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
+	builtins "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/builtins"
 	v0version "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/version"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
@@ -19,6 +20,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/importer"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 // V1Alpha1Stores is the per-kind Store map used by the v1alpha1
@@ -26,7 +28,7 @@ import (
 // "MCPServer"). Produced by database.NewV1Alpha1Stores; enterprise
 // builds may extend the map with additional kinds before passing it
 // in.
-type V1Alpha1Stores = map[string]*internaldb.Store
+type V1Alpha1Stores = map[string]*v1alpha1store.Store
 
 // RouteOptions contains optional services for route registration.
 type RouteOptions struct {
@@ -43,7 +45,7 @@ type RouteOptions struct {
 	// V1Alpha1DeploymentCoordinator drives post-persist reconciliation
 	// for the Deployment kind: PUT → adapter.Apply; DELETE → adapter.Remove.
 	// Constructed alongside V1Alpha1Stores at bootstrap, wired into the
-	// generic resource handler via resource.DeploymentHooks. Nil disables
+	// generic resource handler via builtins.DeploymentHooks. Nil disables
 	// Deployment reconciliation — PUT still persists the row, DELETE
 	// still soft-deletes, but no adapter dispatch happens.
 	V1Alpha1DeploymentCoordinator *deploymentsvc.V1Alpha1Coordinator
@@ -99,7 +101,7 @@ func RegisterRoutes(
 	// POST /v0/import — runs decoded manifests through the enrichment
 	// pipeline (validate + scanners + findings-write) before Upsert.
 	if opts.V1Alpha1Importer != nil {
-		resource.RegisterImport(api, resource.ImportConfig{
+		builtins.RegisterImport(api, builtins.ImportConfig{
 			BasePrefix: pathPrefix,
 			Importer:   opts.V1Alpha1Importer,
 		})
@@ -139,20 +141,20 @@ func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stor
 	registryValidator := registries.Dispatcher
 	uniqueRemoteURLs := internaldb.NewV1Alpha1UniqueRemoteURLsChecker(stores)
 
-	hooks := resource.DeploymentHooks{}
+	hooks := builtins.DeploymentHooks{}
 	if coord != nil {
 		hooks.PostUpsert = coord.Apply
 		hooks.PostDelete = coord.Remove
 	}
 
 	// Per-kind CRUD endpoints — one call per built-in kind, hidden
-	// inside resource.RegisterBuiltins.
-	resource.RegisterBuiltins(api, basePrefix, stores, resolver, registryValidator, uniqueRemoteURLs, hooks, semantic)
+	// inside builtins.RegisterBuiltins.
+	builtins.RegisterBuiltins(api, basePrefix, stores, resolver, registryValidator, uniqueRemoteURLs, hooks, semantic)
 
 	// Deployment-specific endpoints: logs stream (cancel is subsumed
 	// by DesiredState=undeployed + DELETE in the v1alpha1 lifecycle).
 	if coord != nil {
-		resource.RegisterDeploymentLogs(api, resource.DeploymentLogsConfig{
+		builtins.RegisterDeploymentLogs(api, builtins.DeploymentLogsConfig{
 			BasePrefix:  basePrefix,
 			Store:       stores[v1alpha1.KindDeployment],
 			Coordinator: coord,

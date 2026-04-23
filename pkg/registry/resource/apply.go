@@ -8,14 +8,14 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 // ApplyConfig is the per-server configuration for the multi-doc apply
-// endpoints. Stores maps a v1alpha1 Kind to the matching database.Store.
+// endpoints. Stores maps a v1alpha1 Kind to the matching v1alpha1store.Store.
 // Resolver optionally checks cross-kind ResourceRef existence; when nil
 // ResolveRefs is skipped.
 type ApplyConfig struct {
@@ -24,7 +24,7 @@ type ApplyConfig struct {
 	// "{BasePrefix}/apply".
 	BasePrefix string
 	// Stores maps Kind ("Agent", "MCPServer", etc.) to its Store.
-	Stores map[string]*database.Store
+	Stores map[string]*v1alpha1store.Store
 	// Resolver is forwarded to each decoded object's ResolveRefs.
 	Resolver v1alpha1.ResolverFunc
 	// RegistryValidator is forwarded to each decoded object's
@@ -130,7 +130,7 @@ func runApplyBatch(ctx context.Context, cfg ApplyConfig, scheme *v1alpha1.Scheme
 type preparedDoc struct {
 	Result arv0.ApplyResult
 	Ready  bool
-	Store  *database.Store
+	Store  *v1alpha1store.Store
 	Meta   *v1alpha1.ObjectMeta
 }
 
@@ -156,7 +156,7 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		return res
 	}
 
-	upsertOpts := database.UpsertOpts{Labels: meta.Labels}
+	upsertOpts := v1alpha1store.UpsertOpts{Labels: meta.Labels}
 	if meta.Finalizers != nil {
 		upsertOpts.Finalizers = meta.Finalizers
 	}

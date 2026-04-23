@@ -11,21 +11,21 @@ import (
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/stretchr/testify/require"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/resource"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 func TestRegisterApply_MultiDocRoundTrip(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	agents := database.NewStore(pool, "v1alpha1.agents")
-	mcps := database.NewStore(pool, "v1alpha1.mcp_servers")
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	mcps := v1alpha1store.NewStore(pool, "v1alpha1.mcp_servers")
 
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
-		Stores: map[string]*database.Store{
+		Stores: map[string]*v1alpha1store.Store{
 			v1alpha1.KindAgent:     agents,
 			v1alpha1.KindMCPServer: mcps,
 		},
@@ -75,13 +75,13 @@ spec:
 }
 
 func TestRegisterApply_PerDocFailureDoesntAbortBatch(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	agents := database.NewStore(pool, "v1alpha1.agents")
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
-		Stores: map[string]*database.Store{
+		Stores: map[string]*v1alpha1store.Store{
 			v1alpha1.KindAgent: agents,
 		},
 	})
@@ -119,13 +119,13 @@ spec:
 }
 
 func TestRegisterApply_ValidationFailsPerDoc(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	agents := database.NewStore(pool, "v1alpha1.agents")
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
-		Stores:     map[string]*database.Store{v1alpha1.KindAgent: agents},
+		Stores:     map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents},
 	})
 
 	yaml := []byte(`apiVersion: ar.dev/v1alpha1

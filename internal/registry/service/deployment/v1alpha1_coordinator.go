@@ -8,14 +8,14 @@ import (
 	"slices"
 	"strings"
 
-	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 // V1Alpha1Coordinator is the v1alpha1-native orchestrator that glues the
-// generic database.Store to the set of registered DeploymentAdapter
+// generic v1alpha1store.Store to the set of registered DeploymentAdapter
 // implementations. It is the synchronous counterpart to the Phase 2 KRT
 // reconciler — HTTP handlers call it directly after Store.Upsert to drive
 // adapter.Apply / adapter.Remove and thread the results back into the
@@ -33,7 +33,7 @@ import (
 // happens upstream at the apply handler. Coordinator.Apply MUST be called
 // only after the row is persisted so status writes land on a real row.
 type V1Alpha1Coordinator struct {
-	stores   map[string]*internaldb.Store
+	stores   map[string]*v1alpha1store.Store
 	adapters map[string]types.DeploymentAdapter
 	getter   v1alpha1.GetterFunc
 }
@@ -42,7 +42,7 @@ type V1Alpha1Coordinator struct {
 type V1Alpha1Dependencies struct {
 	// Stores is the per-Kind generic Store map — output of
 	// internaldb.NewV1Alpha1Stores.
-	Stores map[string]*internaldb.Store
+	Stores map[string]*v1alpha1store.Store
 	// Adapters is the platform → adapter map. Coordinator looks up by
 	// Provider.Spec.Platform; unmapped platforms surface
 	// UnsupportedDeploymentPlatformError.
@@ -59,7 +59,7 @@ type V1Alpha1Dependencies struct {
 // resolution is needed.
 func NewV1Alpha1Coordinator(deps V1Alpha1Dependencies) *V1Alpha1Coordinator {
 	if deps.Stores == nil {
-		deps.Stores = map[string]*internaldb.Store{}
+		deps.Stores = map[string]*v1alpha1store.Store{}
 	}
 	if deps.Adapters == nil {
 		deps.Adapters = map[string]types.DeploymentAdapter{}
@@ -254,7 +254,7 @@ func (c *V1Alpha1Coordinator) persistApplyResult(ctx context.Context, deployment
 	if err != nil {
 		return err
 	}
-	patch := internaldb.PatchOpts{}
+	patch := v1alpha1store.PatchOpts{}
 	if len(result.Conditions) > 0 {
 		patch.Status = func(s *v1alpha1.Status) {
 			s.ObservedGeneration = deployment.Metadata.Generation
@@ -299,7 +299,7 @@ func (c *V1Alpha1Coordinator) persistRemoveResult(ctx context.Context, deploymen
 	if err != nil {
 		return err
 	}
-	patch := internaldb.PatchOpts{}
+	patch := v1alpha1store.PatchOpts{}
 	if len(result.Conditions) > 0 {
 		patch.Status = func(s *v1alpha1.Status) {
 			s.ObservedGeneration = deployment.Metadata.Generation
@@ -325,7 +325,7 @@ func (c *V1Alpha1Coordinator) persistRemoveResult(ctx context.Context, deploymen
 	return nil
 }
 
-func (c *V1Alpha1Coordinator) deploymentStore() (*internaldb.Store, error) {
+func (c *V1Alpha1Coordinator) deploymentStore() (*v1alpha1store.Store, error) {
 	store, ok := c.stores[v1alpha1.KindDeployment]
 	if !ok || store == nil {
 		return nil, errors.New("coordinator: no Deployment store registered")

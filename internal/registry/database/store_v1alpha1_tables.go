@@ -10,11 +10,12 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 // V1Alpha1TableFor is the canonical mapping from v1alpha1 Kind name to
 // its backing table in the dedicated `v1alpha1.*` PostgreSQL schema.
-// Callers that need a *Store should prefer NewV1Alpha1Stores below
+// Callers that need a *v1alpha1store.Store should prefer NewV1Alpha1Stores below
 // rather than constructing one per kind.
 //
 // Enterprise builds that register additional kinds via
@@ -30,7 +31,7 @@ var V1Alpha1TableFor = map[string]string{
 	v1alpha1.KindDeployment: "v1alpha1.deployments",
 }
 
-// NewV1Alpha1Stores builds one *Store per built-in v1alpha1 Kind,
+// NewV1Alpha1Stores builds one *v1alpha1store.Store per built-in v1alpha1 Kind,
 // bound to its canonical table. The returned map is keyed by Kind
 // name (e.g. "Agent", "MCPServer") and is the single input the
 // router/apply/importer layers take — they never look up tables by
@@ -38,8 +39,8 @@ var V1Alpha1TableFor = map[string]string{
 //
 // Iterates v1alpha1.BuiltinKinds so registration order stays stable
 // across builds (important for OpenAPI output).
-func NewV1Alpha1Stores(pool *pgxpool.Pool) map[string]*Store {
-	out := make(map[string]*Store, len(v1alpha1.BuiltinKinds))
+func NewV1Alpha1Stores(pool *pgxpool.Pool) map[string]*v1alpha1store.Store {
+	out := make(map[string]*v1alpha1store.Store, len(v1alpha1.BuiltinKinds))
 	for _, kind := range v1alpha1.BuiltinKinds {
 		table, ok := V1Alpha1TableFor[kind]
 		if !ok {
@@ -48,7 +49,7 @@ func NewV1Alpha1Stores(pool *pgxpool.Pool) map[string]*Store {
 			// than a panic here.
 			continue
 		}
-		out[kind] = NewStore(pool, table)
+		out[kind] = v1alpha1store.NewStore(pool, table)
 	}
 	return out
 }
@@ -61,7 +62,7 @@ func NewV1Alpha1Stores(pool *pgxpool.Pool) map[string]*Store {
 // Dangling references return v1alpha1.ErrDanglingRef so callers can
 // distinguish "row missing" from "database unavailable"; unknown
 // kinds return wrapped v1alpha1.ErrInvalidRef.
-func NewV1Alpha1Resolver(stores map[string]*Store) v1alpha1.ResolverFunc {
+func NewV1Alpha1Resolver(stores map[string]*v1alpha1store.Store) v1alpha1.ResolverFunc {
 	return func(ctx context.Context, ref v1alpha1.ResourceRef) error {
 		store, ok := stores[ref.Kind]
 		if !ok {
@@ -91,7 +92,7 @@ func NewV1Alpha1Resolver(stores map[string]*Store) v1alpha1.ResolverFunc {
 //
 // Dangling references return v1alpha1.ErrDanglingRef; unknown kinds
 // return wrapped v1alpha1.ErrInvalidRef.
-func NewV1Alpha1Getter(stores map[string]*Store) v1alpha1.GetterFunc {
+func NewV1Alpha1Getter(stores map[string]*v1alpha1store.Store) v1alpha1.GetterFunc {
 	return func(ctx context.Context, ref v1alpha1.ResourceRef) (v1alpha1.Object, error) {
 		store, ok := stores[ref.Kind]
 		if !ok {
@@ -149,7 +150,7 @@ func NewV1Alpha1Getter(stores map[string]*Store) v1alpha1.GetterFunc {
 //
 // On conflict, returns a plain error naming the conflicting (kind, name)
 // so the surrounding FieldError path captures the remote index.
-func NewV1Alpha1UniqueRemoteURLsChecker(stores map[string]*Store) v1alpha1.UniqueRemoteURLsFunc {
+func NewV1Alpha1UniqueRemoteURLsChecker(stores map[string]*v1alpha1store.Store) v1alpha1.UniqueRemoteURLsFunc {
 	return func(ctx context.Context, kind, _ /* namespace */, url, excludeName string) error {
 		store, ok := stores[kind]
 		if !ok {
@@ -161,7 +162,7 @@ func NewV1Alpha1UniqueRemoteURLsChecker(stores map[string]*Store) v1alpha1.Uniqu
 		if err != nil {
 			return fmt.Errorf("unique-remote-urls: encode fragment: %w", err)
 		}
-		refs, err := store.FindReferrers(ctx, fragment, FindReferrersOpts{})
+		refs, err := store.FindReferrers(ctx, fragment, v1alpha1store.FindReferrersOpts{})
 		if err != nil {
 			return fmt.Errorf("unique-remote-urls: scan: %w", err)
 		}

@@ -1,6 +1,6 @@
 // Package resource provides a single generic HTTP handler wiring for every
 // v1alpha1 kind. One call to Register() binds namespace-scoped and cross-
-// namespace endpoints for a kind, backed by a generic database.Store and a
+// namespace endpoints for a kind, backed by a generic v1alpha1store.Store and a
 // typed envelope T.
 //
 // Route shape (Kubernetes-inspired):
@@ -22,9 +22,9 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 // Config is the per-kind configuration for Register. Kind / BasePrefix /
@@ -39,9 +39,9 @@ type Config struct {
 	// BasePrefix is the HTTP route prefix shared across kinds (e.g. "/v0").
 	// Routes extend it with `/{plural}` and `/namespaces/{ns}/{plural}/...`.
 	BasePrefix string
-	// Store is the database.Store bound to this kind's table. Callers
+	// Store is the v1alpha1store.Store bound to this kind's table. Callers
 	// construct one Store per kind; this package does not create them.
-	Store *database.Store
+	Store *v1alpha1store.Store
 	// Resolver is optional; when set, the apply handler calls
 	// obj.ResolveRefs with it so dangling references surface as 400
 	// errors. Leave nil to skip ref resolution (e.g. for kinds with no
@@ -320,7 +320,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		if err != nil {
 			return nil, huma.Error400BadRequest("marshal spec: " + err.Error())
 		}
-		upsertOpts := database.UpsertOpts{Labels: meta.Labels}
+		upsertOpts := v1alpha1store.UpsertOpts{Labels: meta.Labels}
 		if meta.Finalizers != nil {
 			upsertOpts.Finalizers = meta.Finalizers
 		}
@@ -426,7 +426,7 @@ func runList[T v1alpha1.Object](
 		return runSemanticList(ctx, cfg, newObj, p)
 	}
 
-	opts := database.ListOpts{
+	opts := v1alpha1store.ListOpts{
 		Namespace:          p.Namespace,
 		Limit:              p.Limit,
 		Cursor:             p.Cursor,
@@ -442,7 +442,7 @@ func runList[T v1alpha1.Object](
 	}
 	rows, nextCursor, err := cfg.Store.List(ctx, opts)
 	if err != nil {
-		if errors.Is(err, database.ErrInvalidCursor) {
+		if errors.Is(err, v1alpha1store.ErrInvalidCursor) {
 			return nil, huma.Error400BadRequest("invalid cursor")
 		}
 		return nil, huma.Error500InternalServerError("list "+cfg.Kind, err)
@@ -475,7 +475,7 @@ func runSemanticList[T v1alpha1.Object](
 	if err != nil {
 		return nil, huma.Error500InternalServerError("embed query: "+err.Error(), err)
 	}
-	opts := database.SemanticListOpts{
+	opts := v1alpha1store.SemanticListOpts{
 		Query:              vec,
 		Threshold:          p.SemanticThreshold,
 		Limit:              p.Limit,

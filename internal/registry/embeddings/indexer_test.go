@@ -11,8 +11,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 const (
@@ -80,12 +80,12 @@ func indexOf(haystack, needle string) int {
 }
 
 func TestIndexer_IndexesAgentsAndSkipsOnChecksumMatch(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	agents := database.NewStore(pool, agentsTable)
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	agents := v1alpha1store.NewStore(pool, agentsTable)
 	ctx := context.Background()
 
 	_, err := agents.Upsert(ctx, testNS, "foo", "v1",
-		mustSpec(t, v1alpha1.AgentSpec{Title: "Foo", Description: "hello"}), database.UpsertOpts{})
+		mustSpec(t, v1alpha1.AgentSpec{Title: "Foo", Description: "hello"}), v1alpha1store.UpsertOpts{})
 	require.NoError(t, err)
 
 	provider := newDeterministicProvider()
@@ -116,12 +116,12 @@ func TestIndexer_IndexesAgentsAndSkipsOnChecksumMatch(t *testing.T) {
 }
 
 func TestIndexer_ForceRegeneratesAll(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	agents := database.NewStore(pool, agentsTable)
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	agents := v1alpha1store.NewStore(pool, agentsTable)
 	ctx := context.Background()
 
 	_, err := agents.Upsert(ctx, testNS, "foo", "v1",
-		mustSpec(t, v1alpha1.AgentSpec{Title: "x"}), database.UpsertOpts{})
+		mustSpec(t, v1alpha1.AgentSpec{Title: "x"}), v1alpha1store.UpsertOpts{})
 	require.NoError(t, err)
 
 	provider := newDeterministicProvider()
@@ -146,12 +146,12 @@ func TestIndexer_ForceRegeneratesAll(t *testing.T) {
 }
 
 func TestIndexer_DryRunSkipsStoreWrites(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	agents := database.NewStore(pool, agentsTable)
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	agents := v1alpha1store.NewStore(pool, agentsTable)
 	ctx := context.Background()
 
 	_, err := agents.Upsert(ctx, testNS, "foo", "v1",
-		mustSpec(t, v1alpha1.AgentSpec{Title: "x"}), database.UpsertOpts{})
+		mustSpec(t, v1alpha1.AgentSpec{Title: "x"}), v1alpha1store.UpsertOpts{})
 	require.NoError(t, err)
 
 	provider := newDeterministicProvider()
@@ -178,13 +178,13 @@ func TestIndexer_DryRunSkipsStoreWrites(t *testing.T) {
 }
 
 func TestIndexer_ProviderErrorIncrementsFailures(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	agents := database.NewStore(pool, agentsTable)
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	agents := v1alpha1store.NewStore(pool, agentsTable)
 	ctx := context.Background()
 
 	for _, name := range []string{"good", "bad"} {
 		_, err := agents.Upsert(ctx, testNS, name, "v1",
-			mustSpec(t, v1alpha1.AgentSpec{Title: name}), database.UpsertOpts{})
+			mustSpec(t, v1alpha1.AgentSpec{Title: name}), v1alpha1store.UpsertOpts{})
 		require.NoError(t, err)
 	}
 
@@ -209,12 +209,12 @@ func TestIndexer_ProviderErrorIncrementsFailures(t *testing.T) {
 }
 
 func TestIndexer_ProgressCallbackInvoked(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	agents := database.NewStore(pool, agentsTable)
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	agents := v1alpha1store.NewStore(pool, agentsTable)
 	ctx := context.Background()
 
 	_, err := agents.Upsert(ctx, testNS, "foo", "v1",
-		mustSpec(t, v1alpha1.AgentSpec{}), database.UpsertOpts{})
+		mustSpec(t, v1alpha1.AgentSpec{}), v1alpha1store.UpsertOpts{})
 	require.NoError(t, err)
 
 	provider := newDeterministicProvider()
@@ -240,16 +240,16 @@ func TestIndexer_ProgressCallbackInvoked(t *testing.T) {
 }
 
 func TestIndexer_KindsFilter(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	agents := database.NewStore(pool, agentsTable)
-	mcpStore := database.NewStore(pool, "v1alpha1.mcp_servers")
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	agents := v1alpha1store.NewStore(pool, agentsTable)
+	mcpStore := v1alpha1store.NewStore(pool, "v1alpha1.mcp_servers")
 	ctx := context.Background()
 
 	_, err := agents.Upsert(ctx, testNS, "a", "v1",
-		mustSpec(t, v1alpha1.AgentSpec{Title: "a"}), database.UpsertOpts{})
+		mustSpec(t, v1alpha1.AgentSpec{Title: "a"}), v1alpha1store.UpsertOpts{})
 	require.NoError(t, err)
 	_, err = mcpStore.Upsert(ctx, testNS, "m", "v1",
-		mustSpec(t, v1alpha1.MCPServerSpec{Title: "m"}), database.UpsertOpts{})
+		mustSpec(t, v1alpha1.MCPServerSpec{Title: "m"}), v1alpha1store.UpsertOpts{})
 	require.NoError(t, err)
 
 	idx, err := NewIndexer(IndexerConfig{
@@ -270,7 +270,7 @@ func TestIndexer_KindsFilter(t *testing.T) {
 }
 
 func TestDefaultBindings_RequiresAllFourKinds(t *testing.T) {
-	_, err := DefaultBindings(map[string]*database.Store{
+	_, err := DefaultBindings(map[string]*v1alpha1store.Store{
 		v1alpha1.KindAgent: nil,
 	})
 	require.Error(t, err)

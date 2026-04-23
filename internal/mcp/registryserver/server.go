@@ -16,10 +16,10 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 const (
@@ -34,7 +34,7 @@ const (
 //
 // Tool names are preserved across builds (`list_servers` not
 // `list_mcpservers`) so saved Claude MCP configs keep working.
-func NewServer(stores map[string]*internaldb.Store) *mcp.Server {
+func NewServer(stores map[string]*v1alpha1store.Store) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "agentregistry-mcp",
 		Version: version.Version,
@@ -97,7 +97,7 @@ type kindTools[T v1alpha1.Object] struct {
 // addKindTools registers list_X + get_X MCP tools for a v1alpha1 kind.
 // Nil store is a no-op so bootstrap can wire every kind unconditionally
 // and skip ones the backend doesn't expose.
-func addKindTools[T v1alpha1.Object](server *mcp.Server, store *internaldb.Store, cfg kindTools[T]) {
+func addKindTools[T v1alpha1.Object](server *mcp.Server, store *v1alpha1store.Store, cfg kindTools[T]) {
 	if store == nil {
 		return
 	}
@@ -179,8 +179,8 @@ func addMetaTools(server *mcp.Server) {
 // Internal glue — generic list + get helpers shared across kinds.
 // -----------------------------------------------------------------------------
 
-func runList(ctx context.Context, store *internaldb.Store, args listInput) ([]*v1alpha1.RawObject, string, error) {
-	opts := internaldb.ListOpts{
+func runList(ctx context.Context, store *v1alpha1store.Store, args listInput) ([]*v1alpha1.RawObject, string, error) {
+	opts := v1alpha1store.ListOpts{
 		Namespace: strings.TrimSpace(args.Namespace),
 		Limit:     clampLimit(args.Limit),
 		Cursor:    args.Cursor,
@@ -222,7 +222,7 @@ func envelopesFromRows[T v1alpha1.Object](
 
 func getEnvelope[T v1alpha1.Object](
 	ctx context.Context,
-	store *internaldb.Store,
+	store *v1alpha1store.Store,
 	kind string,
 	args getByRefInput,
 	newObj func() T,

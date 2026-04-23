@@ -18,7 +18,7 @@ import (
 
 	mcpregistry "github.com/agentregistry-dev/agentregistry/internal/mcp/registryserver"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/resource"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
@@ -37,8 +37,9 @@ import (
 	scorecardscanner "github.com/agentregistry-dev/agentregistry/pkg/importer/scanners/scorecard"
 	"github.com/agentregistry-dev/agentregistry/pkg/logging"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 func App(ctx context.Context, opts ...types.AppOptions) error {
@@ -176,7 +177,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	return nil
 }
 
-func buildV1Alpha1Bundle(pool *pgxpool.Pool) (map[string]*internaldb.Store, *pkgimporter.Importer) {
+func buildV1Alpha1Bundle(pool *pgxpool.Pool) (map[string]*v1alpha1store.Store, *pkgimporter.Importer) {
 	if pool == nil {
 		slog.Info("v1alpha1 routes disabled: database Pool() is nil (likely noop/DatabaseFactory)")
 		return nil, nil
@@ -253,7 +254,7 @@ func buildRouteOptions(
 	cfg *config.Config,
 	options types.AppOptions,
 	authz auth.Authorizer,
-	stores map[string]*internaldb.Store,
+	stores map[string]*v1alpha1store.Store,
 	importer *pkgimporter.Importer,
 	adapters map[string]types.DeploymentAdapter,
 ) *router.RouteOptions {
@@ -300,7 +301,7 @@ func openDatabase(
 	cfg *config.Config,
 	options types.AppOptions,
 	authz auth.Authorizer,
-) (database.Store, error) {
+) (pkgdb.Store, error) {
 	if cfg.DatabaseURL == "noop" {
 		if options.DatabaseFactory == nil {
 			return nil, fmt.Errorf("DATABASE_URL=noop requires DatabaseFactory to be set in AppOptions")
@@ -338,7 +339,7 @@ func openDatabase(
 // server on quit.
 func startMCPServer(
 	cfg *config.Config,
-	v1alpha1Stores map[string]*internaldb.Store,
+	v1alpha1Stores map[string]*v1alpha1store.Store,
 	authnProvider auth.AuthnProvider,
 ) *http.Server {
 	if cfg.MCPPort <= 0 || v1alpha1Stores == nil {
@@ -455,7 +456,7 @@ func makeSemanticSearchFunc(provider embeddings.Provider, dimensions int) resour
 // error-log + bail-out path, making the inline code deeply nested.
 // Any construction failure leaves the corresponding routeOpts fields
 // nil so the endpoints + list-handler `?semantic=` return 4xx/503.
-func wireEmbeddings(cfg *config.Config, stores map[string]*internaldb.Store, routeOpts *router.RouteOptions) {
+func wireEmbeddings(cfg *config.Config, stores map[string]*v1alpha1store.Store, routeOpts *router.RouteOptions) {
 	provider, err := embeddings.Factory(&cfg.Embeddings, nil)
 	if err != nil {
 		slog.Warn("embeddings enabled but provider factory failed; semantic search + indexing disabled",

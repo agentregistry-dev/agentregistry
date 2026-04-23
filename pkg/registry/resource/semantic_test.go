@@ -10,10 +10,10 @@ import (
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/stretchr/testify/require"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/resource"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/builtins"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/semantic"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 // zeroPadVec returns a fixed-1536-dim vector with the first positions
@@ -25,8 +25,8 @@ func zeroPadVec(values ...float32) []float32 {
 }
 
 func TestSemanticSearch_ListEndpointRanksByDistance(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	agents := database.NewStore(pool, "v1alpha1.agents")
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 	ctx := context.Background()
 
 	// Seed three agents with orthogonal embeddings so cosine distance
@@ -37,7 +37,7 @@ func TestSemanticSearch_ListEndpointRanksByDistance(t *testing.T) {
 	mkAgent := func(name string, vec []float32) {
 		spec, err := json.Marshal(v1alpha1.AgentSpec{Title: name})
 		require.NoError(t, err)
-		_, err = agents.Upsert(ctx, "default", name, "v1", spec, database.UpsertOpts{})
+		_, err = agents.Upsert(ctx, "default", name, "v1", spec, v1alpha1store.UpsertOpts{})
 		require.NoError(t, err)
 		require.NoError(t, agents.SetEmbedding(ctx, "default", name, "v1", semantic.SemanticEmbedding{
 			Vector:     vec,
@@ -54,9 +54,9 @@ func TestSemanticSearch_ListEndpointRanksByDistance(t *testing.T) {
 		return zeroPadVec(1, 0, 0), nil
 	}
 
-	stores := map[string]*database.Store{v1alpha1.KindAgent: agents}
+	stores := map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents}
 	_, api := humatest.New(t)
-	resource.RegisterBuiltins(api, "/v0", stores, nil, nil, nil, resource.DeploymentHooks{}, search)
+	builtins.RegisterBuiltins(api, "/v0", stores, nil, nil, nil, builtins.DeploymentHooks{}, search)
 
 	resp := api.Get("/v0/agents?semantic=anything")
 	require.Equal(t, 200, resp.Code, resp.Body.String())
@@ -80,13 +80,13 @@ func TestSemanticSearch_ListEndpointRanksByDistance(t *testing.T) {
 }
 
 func TestSemanticSearch_ListReturns400WhenDisabled(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	agents := database.NewStore(pool, "v1alpha1.agents")
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
-	stores := map[string]*database.Store{v1alpha1.KindAgent: agents}
+	stores := map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents}
 	_, api := humatest.New(t)
 	// SemanticSearch = nil ⇒ `?semantic=` endpoint surface returns 400.
-	resource.RegisterBuiltins(api, "/v0", stores, nil, nil, nil, resource.DeploymentHooks{}, nil)
+	builtins.RegisterBuiltins(api, "/v0", stores, nil, nil, nil, builtins.DeploymentHooks{}, nil)
 
 	resp := api.Get("/v0/agents?semantic=anything")
 	require.Equal(t, 400, resp.Code)

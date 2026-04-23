@@ -1,6 +1,6 @@
 //go:build integration
 
-package resource_test
+package builtins_test
 
 import (
 	"context"
@@ -12,10 +12,10 @@ import (
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/stretchr/testify/require"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/resource"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/builtins"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/importer"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 // stubScanner is a deterministic Scanner used to assert that
@@ -39,11 +39,11 @@ func (s *stubScanner) Scan(ctx context.Context, obj v1alpha1.Object) (importer.S
 	return res, nil
 }
 
-func newImportTestServer(t *testing.T, scanners ...importer.Scanner) (*database.Store, *importer.FindingsStore, humatest.TestAPI) {
+func newImportTestServer(t *testing.T, scanners ...importer.Scanner) (*v1alpha1store.Store, *importer.FindingsStore, humatest.TestAPI) {
 	t.Helper()
-	pool := database.NewV1Alpha1TestPool(t)
-	agents := database.NewStore(pool, "v1alpha1.agents")
-	stores := map[string]*database.Store{
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	stores := map[string]*v1alpha1store.Store{
 		v1alpha1.KindAgent: agents,
 	}
 	findings := importer.NewFindingsStore(pool)
@@ -55,7 +55,7 @@ func newImportTestServer(t *testing.T, scanners ...importer.Scanner) (*database.
 	require.NoError(t, err)
 
 	_, api := humatest.New(t)
-	resource.RegisterImport(api, resource.ImportConfig{
+	builtins.RegisterImport(api, builtins.ImportConfig{
 		BasePrefix: "/v0",
 		Importer:   imp,
 	})
@@ -195,7 +195,7 @@ func TestRegisterImport_InvalidYAMLSurfacesAsFailedResult(t *testing.T) {
 
 func TestRegisterImport_NilImporterSkipsRegistration(t *testing.T) {
 	_, api := humatest.New(t)
-	resource.RegisterImport(api, resource.ImportConfig{
+	builtins.RegisterImport(api, builtins.ImportConfig{
 		BasePrefix: "/v0",
 		Importer:   nil,
 	})

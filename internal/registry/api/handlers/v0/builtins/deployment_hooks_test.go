@@ -1,6 +1,6 @@
 //go:build integration
 
-package resource_test
+package builtins_test
 
 import (
 	"encoding/json"
@@ -10,20 +10,21 @@ import (
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/stretchr/testify/require"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/resource"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/builtins"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/noop"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 )
 
 // seedDeploymentFixtures prepares the DB with a noop Provider + MCPServer
 // so a Deployment PUT has refs to resolve. Returns the wired-up humatest
 // API + the underlying stores for assertions.
-func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*database.Store) {
+func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha1store.Store) {
 	t.Helper()
-	pool := database.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
 	stores := database.NewV1Alpha1Stores(pool)
 	ctx := t.Context()
 
@@ -32,12 +33,12 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*databas
 		Remotes:     []v1alpha1.MCPTransport{{Type: "streamable-http", URL: "https://example.test/mcp"}},
 	})
 	require.NoError(t, err)
-	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, "default", "weather", "1.0.0", mcpSpec, database.UpsertOpts{})
+	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, "default", "weather", "1.0.0", mcpSpec, v1alpha1store.UpsertOpts{})
 	require.NoError(t, err)
 
 	providerSpec, err := json.Marshal(v1alpha1.ProviderSpec{Platform: noop.Platform})
 	require.NoError(t, err)
-	_, err = stores[v1alpha1.KindProvider].Upsert(ctx, "default", "noop-provider", "1", providerSpec, database.UpsertOpts{})
+	_, err = stores[v1alpha1.KindProvider].Upsert(ctx, "default", "noop-provider", "1", providerSpec, v1alpha1store.UpsertOpts{})
 	require.NoError(t, err)
 
 	coord := deploymentsvc.NewV1Alpha1Coordinator(deploymentsvc.V1Alpha1Dependencies{
@@ -47,17 +48,17 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*databas
 	})
 
 	_, api := humatest.New(t)
-	resource.RegisterBuiltins(
+	builtins.RegisterBuiltins(
 		api, "/v0", stores,
 		database.NewV1Alpha1Resolver(stores),
 		nil, nil,
-		resource.DeploymentHooks{
+		builtins.DeploymentHooks{
 			PostUpsert: coord.Apply,
 			PostDelete: coord.Remove,
 		},
 		nil, // semanticSearch disabled in this test
 	)
-	resource.RegisterDeploymentLogs(api, resource.DeploymentLogsConfig{
+	builtins.RegisterDeploymentLogs(api, builtins.DeploymentLogsConfig{
 		BasePrefix:  "/v0",
 		Store:       stores[v1alpha1.KindDeployment],
 		Coordinator: coord,

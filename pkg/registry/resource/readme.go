@@ -8,8 +8,8 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 type readmeLatestInput struct {
@@ -81,7 +81,7 @@ func RegisterReadme[T v1alpha1.Object](
 // RegisterLegacyServerReadme preserves the historical MCP-server-specific
 // readme endpoints while downstream UIs migrate to the generic namespaced
 // shape.
-func RegisterLegacyServerReadme(api huma.API, basePrefix string, store *database.Store) {
+func RegisterLegacyServerReadme(api huma.API, basePrefix string, store *v1alpha1store.Store) {
 	if store == nil {
 		return
 	}

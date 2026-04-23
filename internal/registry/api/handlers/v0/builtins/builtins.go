@@ -1,12 +1,13 @@
-package resource
+package builtins
 
 import (
 	"context"
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 // DeploymentHooks groups post-persist callbacks used by RegisterBuiltins
@@ -35,7 +36,7 @@ type DeploymentHooks struct {
 // strict behavior should validate the map ahead of the call.
 //
 // Enterprise / downstream builds with additional Kinds should call
-// Register[T] directly for each custom kind; RegisterBuiltins owns
+// resource.Register[T] directly for each custom kind; RegisterBuiltins owns
 // only the OSS set.
 //
 // Because Go generics resolve at compile time, the six type
@@ -45,19 +46,19 @@ type DeploymentHooks struct {
 func RegisterBuiltins(
 	api huma.API,
 	basePrefix string,
-	stores map[string]*database.Store,
+	stores map[string]*v1alpha1store.Store,
 	resolver v1alpha1.ResolverFunc,
 	registryValidator v1alpha1.RegistryValidatorFunc,
 	uniqueRemoteURLsChecker v1alpha1.UniqueRemoteURLsFunc,
 	deploymentHooks DeploymentHooks,
-	semanticSearch SemanticSearchFunc,
+	semanticSearch resource.SemanticSearchFunc,
 ) {
-	cfgFor := func(kind string) (Config, bool) {
+	cfgFor := func(kind string) (resource.Config, bool) {
 		store, ok := stores[kind]
 		if !ok {
-			return Config{}, false
+			return resource.Config{}, false
 		}
-		return Config{
+		return resource.Config{
 			Kind:                    kind,
 			BasePrefix:              basePrefix,
 			Store:                   store,
@@ -76,34 +77,34 @@ func RegisterBuiltins(
 		switch kind {
 		case v1alpha1.KindAgent:
 			newObj := func() *v1alpha1.Agent { return &v1alpha1.Agent{} }
-			// RegisterReadme before Register so the literal
+			// resource.RegisterReadme before resource.Register so the literal
 			// `/{name}/readme` path wins over the generic
 			// `/{name}/{version}` catch-all when their depths collide.
-			RegisterReadme[*v1alpha1.Agent](api, cfg, newObj, func(obj *v1alpha1.Agent) *v1alpha1.Readme {
+			resource.RegisterReadme[*v1alpha1.Agent](api, cfg, newObj, func(obj *v1alpha1.Agent) *v1alpha1.Readme {
 				return obj.Spec.Readme
 			})
-			Register[*v1alpha1.Agent](api, cfg, newObj)
+			resource.Register[*v1alpha1.Agent](api, cfg, newObj)
 		case v1alpha1.KindMCPServer:
 			newObj := func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} }
-			RegisterReadme[*v1alpha1.MCPServer](api, cfg, newObj, func(obj *v1alpha1.MCPServer) *v1alpha1.Readme {
+			resource.RegisterReadme[*v1alpha1.MCPServer](api, cfg, newObj, func(obj *v1alpha1.MCPServer) *v1alpha1.Readme {
 				return obj.Spec.Readme
 			})
-			Register[*v1alpha1.MCPServer](api, cfg, newObj)
-			RegisterLegacyServerReadme(api, basePrefix, cfg.Store)
+			resource.Register[*v1alpha1.MCPServer](api, cfg, newObj)
+			resource.RegisterLegacyServerReadme(api, basePrefix, cfg.Store)
 		case v1alpha1.KindSkill:
 			newObj := func() *v1alpha1.Skill { return &v1alpha1.Skill{} }
-			RegisterReadme[*v1alpha1.Skill](api, cfg, newObj, func(obj *v1alpha1.Skill) *v1alpha1.Readme {
+			resource.RegisterReadme[*v1alpha1.Skill](api, cfg, newObj, func(obj *v1alpha1.Skill) *v1alpha1.Readme {
 				return obj.Spec.Readme
 			})
-			Register[*v1alpha1.Skill](api, cfg, newObj)
+			resource.Register[*v1alpha1.Skill](api, cfg, newObj)
 		case v1alpha1.KindPrompt:
 			newObj := func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} }
-			RegisterReadme[*v1alpha1.Prompt](api, cfg, newObj, func(obj *v1alpha1.Prompt) *v1alpha1.Readme {
+			resource.RegisterReadme[*v1alpha1.Prompt](api, cfg, newObj, func(obj *v1alpha1.Prompt) *v1alpha1.Readme {
 				return obj.Spec.Readme
 			})
-			Register[*v1alpha1.Prompt](api, cfg, newObj)
+			resource.Register[*v1alpha1.Prompt](api, cfg, newObj)
 		case v1alpha1.KindProvider:
-			Register[*v1alpha1.Provider](api, cfg, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
+			resource.Register[*v1alpha1.Provider](api, cfg, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
 		case v1alpha1.KindDeployment:
 			if deploymentHooks.PostUpsert != nil {
 				cfg.PostUpsert = func(ctx context.Context, obj v1alpha1.Object) error {
@@ -115,7 +116,7 @@ func RegisterBuiltins(
 					return deploymentHooks.PostDelete(ctx, obj.(*v1alpha1.Deployment))
 				}
 			}
-			Register[*v1alpha1.Deployment](api, cfg, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
+			resource.Register[*v1alpha1.Deployment](api, cfg, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
 		}
 	}
 }

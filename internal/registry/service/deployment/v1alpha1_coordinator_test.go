@@ -10,18 +10,19 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/noop"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 )
 
 // seedV1Alpha1Fixtures creates a MCPServer + Provider + Deployment row set
 // in a fresh pool so coordinator tests don't re-derive the fixture. Returns
 // the store map + the Deployment metadata coordinates.
-func seedV1Alpha1Fixtures(t *testing.T) (map[string]*internaldb.Store, *v1alpha1.Deployment) {
+func seedV1Alpha1Fixtures(t *testing.T) (map[string]*v1alpha1store.Store, *v1alpha1.Deployment) {
 	t.Helper()
-	pool := internaldb.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
 	stores := internaldb.NewV1Alpha1Stores(pool)
 	ctx := context.Background()
 
@@ -30,12 +31,12 @@ func seedV1Alpha1Fixtures(t *testing.T) (map[string]*internaldb.Store, *v1alpha1
 		Remotes:     []v1alpha1.MCPTransport{{Type: "streamable-http", URL: "https://example.test/mcp"}},
 	})
 	require.NoError(t, err)
-	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, "default", "weather", "1.0.0", mcpSpec, internaldb.UpsertOpts{})
+	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, "default", "weather", "1.0.0", mcpSpec, v1alpha1store.UpsertOpts{})
 	require.NoError(t, err)
 
 	providerSpec, err := json.Marshal(v1alpha1.ProviderSpec{Platform: noop.Platform})
 	require.NoError(t, err)
-	_, err = stores[v1alpha1.KindProvider].Upsert(ctx, "default", "noop-provider", "1", providerSpec, internaldb.UpsertOpts{})
+	_, err = stores[v1alpha1.KindProvider].Upsert(ctx, "default", "noop-provider", "1", providerSpec, v1alpha1store.UpsertOpts{})
 	require.NoError(t, err)
 
 	depSpec, err := json.Marshal(v1alpha1.DeploymentSpec{
@@ -44,7 +45,7 @@ func seedV1Alpha1Fixtures(t *testing.T) (map[string]*internaldb.Store, *v1alpha1
 		DesiredState: v1alpha1.DesiredStateDeployed,
 	})
 	require.NoError(t, err)
-	upsertRes, err := stores[v1alpha1.KindDeployment].Upsert(ctx, "default", "weather-noop", "1", depSpec, internaldb.UpsertOpts{})
+	upsertRes, err := stores[v1alpha1.KindDeployment].Upsert(ctx, "default", "weather-noop", "1", depSpec, v1alpha1store.UpsertOpts{})
 	require.NoError(t, err)
 
 	deployment := &v1alpha1.Deployment{

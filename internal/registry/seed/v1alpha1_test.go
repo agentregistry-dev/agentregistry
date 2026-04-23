@@ -9,26 +9,26 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 func TestImportBuiltinSeedDataV1Alpha1_Populates(t *testing.T) {
-	pool := internaldb.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
 	ctx := context.Background()
 
 	require.NoError(t, ImportBuiltinSeedDataV1Alpha1(ctx, pool))
 
-	store := internaldb.NewStore(pool, "v1alpha1.mcp_servers")
+	store := v1alpha1store.NewStore(pool, "v1alpha1.mcp_servers")
 
 	// Cross-namespace list should surface the seeded rows. 35k lines of
 	// seed.json → hundreds of rows.
-	rows, _, err := store.List(ctx, internaldb.ListOpts{})
+	rows, _, err := store.List(ctx, v1alpha1store.ListOpts{})
 	require.NoError(t, err)
 	require.Greater(t, len(rows), 10, "expected seed import to populate many MCPServer rows")
 
 	// Every seeded row should carry the seed label so ops can filter.
-	withLabel, _, err := store.List(ctx, internaldb.ListOpts{
+	withLabel, _, err := store.List(ctx, v1alpha1store.ListOpts{
 		LabelSelector: map[string]string{"agentregistry.solo.io/seed": "builtin"},
 	})
 	require.NoError(t, err)
@@ -36,13 +36,13 @@ func TestImportBuiltinSeedDataV1Alpha1_Populates(t *testing.T) {
 }
 
 func TestImportBuiltinSeedDataV1Alpha1_Idempotent(t *testing.T) {
-	pool := internaldb.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
 	ctx := context.Background()
 
 	require.NoError(t, ImportBuiltinSeedDataV1Alpha1(ctx, pool))
 
-	store := internaldb.NewStore(pool, "v1alpha1.mcp_servers")
-	rows, _, err := store.List(ctx, internaldb.ListOpts{Limit: 1000})
+	store := v1alpha1store.NewStore(pool, "v1alpha1.mcp_servers")
+	rows, _, err := store.List(ctx, v1alpha1store.ListOpts{Limit: 1000})
 	require.NoError(t, err)
 	require.NotEmpty(t, rows)
 
@@ -66,13 +66,13 @@ func TestImportBuiltinSeedDataV1Alpha1_Idempotent(t *testing.T) {
 }
 
 func TestImportBuiltinSeedDataV1Alpha1_SpecStructure(t *testing.T) {
-	pool := internaldb.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
 	ctx := context.Background()
 
 	require.NoError(t, ImportBuiltinSeedDataV1Alpha1(ctx, pool))
 
-	store := internaldb.NewStore(pool, "v1alpha1.mcp_servers")
-	rows, _, err := store.List(ctx, internaldb.ListOpts{Limit: 500})
+	store := v1alpha1store.NewStore(pool, "v1alpha1.mcp_servers")
+	rows, _, err := store.List(ctx, v1alpha1store.ListOpts{Limit: 500})
 	require.NoError(t, err)
 	require.NotEmpty(t, rows)
 

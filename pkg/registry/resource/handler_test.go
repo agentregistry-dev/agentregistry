@@ -14,15 +14,16 @@ import (
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/stretchr/testify/require"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/resource"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 )
 
 // registerAgent wires the generic resource handler for *v1alpha1.Agent onto
 // the given Huma API, against the supplied Store. It's a test-local helper
 // so we don't pull the full registry_app into these tests.
-func registerAgent(api huma.API, store *database.Store) {
+func registerAgent(api huma.API, store *v1alpha1store.Store) {
 	resource.Register[*v1alpha1.Agent](api, resource.Config{
 		Kind:       v1alpha1.KindAgent,
 		BasePrefix: "/v0",
@@ -35,8 +36,8 @@ func registerAgent(api huma.API, store *database.Store) {
 func TestResourceRegister_AgentCRUD(t *testing.T) {
 	t.Helper()
 
-	pool := database.NewV1Alpha1TestPool(t)
-	store := database.NewStore(pool, "v1alpha1.agents")
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -140,8 +141,8 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 }
 
 func TestResourceRegister_AgentNamespaceIsolation(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	store := database.NewStore(pool, "v1alpha1.agents")
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -191,8 +192,8 @@ func TestResourceRegister_AgentNamespaceIsolation(t *testing.T) {
 }
 
 func TestResourceRegister_AgentListCursorPagination(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	store := database.NewStore(pool, "v1alpha1.agents")
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -237,8 +238,8 @@ func TestResourceRegister_AgentListCursorPagination(t *testing.T) {
 }
 
 func TestResourceRegister_AgentListRejectsInvalidCursor(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	store := database.NewStore(pool, "v1alpha1.agents")
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -251,8 +252,8 @@ func TestResourceRegister_AgentListRejectsInvalidCursor(t *testing.T) {
 func TestResourceRegister_AgentWrongKindRejected(t *testing.T) {
 	t.Helper()
 
-	pool := database.NewV1Alpha1TestPool(t)
-	store := database.NewStore(pool, "v1alpha1.agents")
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -269,8 +270,8 @@ func TestResourceRegister_AgentWrongKindRejected(t *testing.T) {
 
 func TestResourceRegister_AgentPathMismatchRejected(t *testing.T) {
 	t.Helper()
-	pool := database.NewV1Alpha1TestPool(t)
-	store := database.NewStore(pool, "v1alpha1.agents")
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -284,8 +285,8 @@ func TestResourceRegister_AgentPathMismatchRejected(t *testing.T) {
 }
 
 func TestResourceRegister_ValidationRejectsBadVersion(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	store := database.NewStore(pool, "v1alpha1.agents")
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 	_, api := humatest.New(t)
 	registerAgent(api, store)
 
@@ -300,8 +301,8 @@ func TestResourceRegister_ValidationRejectsBadVersion(t *testing.T) {
 }
 
 func TestResourceRegister_ValidationRejectsHTTPWebsite(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	store := database.NewStore(pool, "v1alpha1.agents")
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 	_, api := humatest.New(t)
 	registerAgent(api, store)
 
@@ -316,9 +317,9 @@ func TestResourceRegister_ValidationRejectsHTTPWebsite(t *testing.T) {
 }
 
 func TestResourceRegister_ResolverDetectsDanglingRef(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	agentStore := database.NewStore(pool, "v1alpha1.agents")
-	mcpStore := database.NewStore(pool, "v1alpha1.mcp_servers")
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	agentStore := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	mcpStore := v1alpha1store.NewStore(pool, "v1alpha1.mcp_servers")
 
 	// Resolver: only MCPServer "tools" in namespace "default" exists.
 	resolver := func(ctx context.Context, ref v1alpha1.ResourceRef) error {
@@ -331,7 +332,7 @@ func TestResourceRegister_ResolverDetectsDanglingRef(t *testing.T) {
 
 	// Seed the one existing MCPServer.
 	_, err := mcpStore.Upsert(context.Background(), "default", "tools", "v1",
-		mustSpec(t, v1alpha1.MCPServerSpec{Title: "T"}), database.UpsertOpts{})
+		mustSpec(t, v1alpha1.MCPServerSpec{Title: "T"}), v1alpha1store.UpsertOpts{})
 	require.NoError(t, err)
 
 	_, api := humatest.New(t)
@@ -371,7 +372,7 @@ func mustSpec(t *testing.T, spec any) []byte {
 // cross-row uniqueness check: two Agents can't claim the same remote URL,
 // but multiple versions of the same Agent can.
 func TestResourceRegister_UniqueRemoteURLsAcrossAgents(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
 	stores := database.NewV1Alpha1Stores(pool)
 
 	checker := database.NewV1Alpha1UniqueRemoteURLsChecker(stores)
@@ -418,7 +419,7 @@ func TestResourceRegister_UniqueRemoteURLsAcrossAgents(t *testing.T) {
 // TestResourceRegister_UniqueRemoteURLsPerKind confirms that uniqueness
 // is per-Kind: an Agent and an MCPServer may share a URL.
 func TestResourceRegister_UniqueRemoteURLsPerKind(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
 	stores := database.NewV1Alpha1Stores(pool)
 	checker := database.NewV1Alpha1UniqueRemoteURLsChecker(stores)
 
@@ -457,8 +458,8 @@ func TestResourceRegister_UniqueRemoteURLsPerKind(t *testing.T) {
 }
 
 func TestResourceRegister_SoftDeleteFinalizerGC(t *testing.T) {
-	pool := database.NewV1Alpha1TestPool(t)
-	store := database.NewStore(pool, "v1alpha1.agents")
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)

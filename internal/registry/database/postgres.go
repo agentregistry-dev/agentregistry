@@ -9,6 +9,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 // PostgreSQL is the root PostgreSQL-backed store. It owns the connection
@@ -51,7 +52,7 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 	}
 	defer conn.Release()
 
-	v1alpha1Migrator := database.NewMigrator(conn.Conn(), V1Alpha1MigratorConfig())
+	v1alpha1Migrator := database.NewMigrator(conn.Conn(), v1alpha1store.V1Alpha1MigratorConfig())
 	if err := v1alpha1Migrator.Migrate(ctx); err != nil {
 		return nil, fmt.Errorf("failed to run v1alpha1 migrations: %w", err)
 	}

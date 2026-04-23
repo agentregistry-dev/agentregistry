@@ -11,8 +11,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 const (
@@ -27,18 +27,18 @@ const (
 	failedScanner = "failing-scanner"
 )
 
-func newTestImporter(t *testing.T, extra ...Scanner) (*Importer, *database.Store, *FindingsStore) {
+func newTestImporter(t *testing.T, extra ...Scanner) (*Importer, *v1alpha1store.Store, *FindingsStore) {
 	t.Helper()
-	pool := database.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
 
-	agents := database.NewStore(pool, agentsTable)
-	stores := map[string]*database.Store{
+	agents := v1alpha1store.NewStore(pool, agentsTable)
+	stores := map[string]*v1alpha1store.Store{
 		v1alpha1.KindAgent:     agents,
-		v1alpha1.KindMCPServer: database.NewStore(pool, mcpTable),
-		v1alpha1.KindSkill:     database.NewStore(pool, skillsTable),
-		v1alpha1.KindPrompt:    database.NewStore(pool, promptsTable),
-		v1alpha1.KindProvider:  database.NewStore(pool, provTable),
-		v1alpha1.KindDeployment: database.NewStore(pool, deployTable),
+		v1alpha1.KindMCPServer: v1alpha1store.NewStore(pool, mcpTable),
+		v1alpha1.KindSkill:     v1alpha1store.NewStore(pool, skillsTable),
+		v1alpha1.KindPrompt:    v1alpha1store.NewStore(pool, promptsTable),
+		v1alpha1.KindProvider:  v1alpha1store.NewStore(pool, provTable),
+		v1alpha1.KindDeployment: v1alpha1store.NewStore(pool, deployTable),
 	}
 	findings := NewFindingsStore(pool)
 	imp, err := New(Config{
