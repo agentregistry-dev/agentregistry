@@ -1,7 +1,7 @@
 # v1alpha1 API Refactor — Review Guide
 
-Branch: `refactor/v1alpha1-types` (at `6f910f2`, +14 commits since last guide revision at `5e64cec`)
-Scope: **75 commits**, +15.6k / −36.2k LOC across 230 files — **net ~20.7k LOC removed**. Unit tests: green on every package except ones currently under active merge-conflict resolution with `main`. Integration tests green for every shipped lane.
+Branch: `refactor/v1alpha1-types` (at `2ea85e4`)
+Scope: **95 commits**, ~16.5k LOC added / ~36.3k deleted across ~240 files — **net ~19.8k LOC removed**. Unit tests: 0 FAIL across the entire tree. Integration tests: 0 FAIL across every package. Lint: `golangci-lint run` green after `--fix` pass except 2 nestif complexity warnings in `ApplyPatch` (acceptable).
 Epic: replace the five-layer type stack (`kinds.Document` → `Spec` → wire DTO → `Record` → JSONB blob) with one Kubernetes-style `ar.dev/v1alpha1` envelope that propagates unchanged from YAML → HTTP → Go client → service → DB.
 
 ---
@@ -28,18 +28,17 @@ Epic: replace the five-layer type stack (`kinds.Document` → `Spec` → wire DT
 │  ✔ Opaque list cursors      (base64 + 400 on malformed)     Group 20               │
 │  ✔ EnvelopeFromRaw hoist    (shared MCP + HTTP)             Group 21               │
 │  ✔ Declarative client port  (`709a23d`, deprecated stubs removed) Group 22         │
-├──────────────────────── CURRENT CHECKOUT / NEXT UP ─────────────────────────────────┤
-│  ✔ Merge origin/main complete                                                       │
-│  ✔ ProviderMetadata → annotations landed in current checkout                        │
-│  ✔ DatabaseFactory Pool() promotion landed in current checkout                      │
-│  ✔ ListOpts.ExtraWhere / ExtraArgs landed in current checkout                       │
-│  ⚙ Enterprise E0 revert + redo against the new OSS HEAD                             │
-├───────────────────────── PENDING (after merge or separate) ─────────────────────────┤
+│  ✔ P1s + A2 seams           (ProviderMetadata, Pool(), ExtraWhere) Group 22        │
+│  ✔ Review-pass hardening    (single-tx ApplyPatch, UpsertOpts,
+│                              types split, openDatabase)     Group 23               │
+│  ✔ Generic README surface   (`Spec.Readme` + subresource routes + correct ordering)│
+├───────────────────────── PENDING (separate work) ───────────────────────────────────┤
+│  ◆ Enterprise rebase for Upsert signature change (commit `24762c5`)               │
 │  ◆ Workflow CLI envelope cleanup (local manifest compatibility + projection code) │
 │  ◆ Phase 2 KRT reconciler rebase (async sibling of V1Alpha1Coordinator)           │
 │  ◆ UI TypeScript client regen + component fixups                                  │
 │  ◆ Deployment watch/SSE endpoint (logs ported; watch deferred)                    │
-│  ✔ Generic README surface (`Spec.Readme` + subresource routes) landed             │
+│  ◆ Embeddings polish (NOTIFY auto-regen, SSE streaming, extra providers)          │
 │  ◆ Per-platform deployment identities side table                                  │
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -54,17 +53,16 @@ Epic: replace the five-layer type stack (`kinds.Document` → `Spec` → wire DT
 
 > **Group-numbering convention.** Section **headers** below (`Group 1..23`) are review chunks structuring the reading order. References to `Group N` inside **prose** point at the 14 port subsystems tracked in `REBUILD_TRACKER.md` (e.g. subsystem Group 5 = platform adapters, subsystem Group 9 = MCP bridge). Context disambiguates.
 
-## Parallel agent activity (2026-04-22)
+## Branch state (2026-04-23)
 
-This branch is being worked on by multiple agents in parallel. Current state:
-
-| Session | Lane | Status |
-|---|---|---|
-| cd2ac3c6 / **this review guide** | Top-down structural review; landed cleanup commits (Groups 18–23) | Idle, reviewing for merge prep |
-| 019db6c7 | Architecture sweep; landed `709a23d` and the local P1/A2 seam follow-up | Done in current checkout |
-| dfe7395f | Embeddings restore (Group 21) | **Closed** — lane done |
-| 34300023 | Enterprise port on `agentregistry-enterprise/refactor/v1alpha1-port` | Ready to redo E0 against the new OSS seam |
-| sub-agent | Merge `origin/main` into this branch | **Closed** — merge complete |
+| Check | Status |
+|---|---|
+| `go build ./...` | green |
+| `go test -tags=unit -count=1 ./...` | 0 FAIL |
+| `go test -tags=integration -count=1 ./...` | 0 FAIL |
+| `golangci-lint run` | 2 nestif warnings in `store_v1alpha1.go ApplyPatch` (acceptable nested blocks inside the multi-column patch composer) |
+| Sessions that contributed to this state | cd2ac3c6 (review + structural cleanup), 019db6c7 (P1s/A2/declarative-client), dfe7395f (embeddings restore + platforms/utils trim), 34300023 (enterprise port, separate branch), merge sub-agent (origin/main merge). All idle on OSS. |
+| Enterprise port | `agentregistry-enterprise/refactor/v1alpha1-port` at `8f2b1ce`. **Needs a trivial rebase** for the Upsert-labels signature change in `24762c5`. |
 
 ---
 
@@ -476,17 +474,36 @@ Post-review tidy pass on every layer the HTTP surface touches. No behavior chang
 - `apply.go` `preparedDoc` shape — clean alternative to `(result, store, meta, ok)` Go-ism. Pattern worth applying wherever 3+ return values mix with a success flag.
 - `43354da` is pure `git mv`. If you're reading blame on `platforms/local/platform.go` or `platforms/kubernetes/platform.go`, follow through the rename.
 
-### Group 22 — In flight: P1s + RBAC filter hook (019db6c7)
+### Group 22 — P1s + RBAC filter hook (`d0a599b`)
 
-These three seams are now present in the current checkout (not yet called out in a dedicated commit in this guide's original review order).
+Three seams the enterprise port plan was waiting on — landed as part of the big "Land v1alpha1 deployment seams and provider contract port" commit.
 
-| Landed seam | Scope | Current state |
-|-------------|-------|---------------|
-| **P1-1** | `V1Alpha1Coordinator.persistApplyResult` merges `ApplyResult.ProviderMetadata` into `Deployment.Metadata.Annotations` via a new atomic `Store.PatchAnnotations` helper. Integration tests cover metadata persistence and preservation of existing annotations. | Landed in current checkout |
-| **P1-2** | `pkg/registry/database.Store` now exposes `Pool() *pgxpool.Pool`; ad-hoc `interface{ Pool() *pgxpool.Pool }` assertions are gone from `registry_app.go`, and v1alpha1 wiring gates on `db.Pool() != nil`. | Landed in current checkout |
-| **A2** (bundled) | `database.ListOpts` now includes `ExtraWhere string` + `ExtraArgs []any`, with placeholder rebasing so caller fragments can remain `$1..$N` relative to their own args. | Landed in current checkout |
+| Seam | Scope |
+|------|-------|
+| **P1-1** | `V1Alpha1Coordinator.persistApplyResult` merges `ApplyResult.ProviderMetadata` into `Deployment.Metadata.Annotations` via `Store.PatchAnnotations`. Integration tests cover persistence + preservation of existing annotations. |
+| **P1-2** | `pkg/registry/database.Store` exposes `Pool() *pgxpool.Pool`; ad-hoc `interface{ Pool() *pgxpool.Pool }` assertions are gone from `registry_app.go`; v1alpha1 wiring gates on `db.Pool() != nil`. |
+| **A2** | `database.ListOpts` gains `ExtraWhere string` + `ExtraArgs []any` with placeholder rebasing so caller fragments remain `$1..$N` relative to their own args. This is the authz / RBAC / tenancy-filter seam the enterprise Store wrapper uses. |
 
-These seams are the last OSS-side blockers that the enterprise port plan was waiting on. The next move is the enterprise E0 redo against this newer OSS baseline.
+### Group 23 — Review-pass hardening (`2dc4317..2ea85e4`, 7 commits)
+
+Post-review tightening after the big `ebdb837` + `d0a599b` + `709a23d` landings. No behavior change beyond one bug fix; net ~−40 LOC after accounting for new tests.
+
+| Commit | Scope |
+|--------|-------|
+| `2dc4317` | trivia & dead code: `ErrInvalidVersion` → `ErrDuplicateVersion` (name matches reason); delete `ErrMaxVersionsReached` + `ErrStoreNotConfigured` (zero callers); delete `var _ = time.Time{}` sentinel; fix stale `AppOptions` doc; flesh out `mcpAuthnMiddleware` doc; `FindReferrers` gains `FindReferrersOpts{Namespace, LatestOnly, IncludeTerminating}` |
+| `ea68123` | `ListOpts.ExtraWhere` placeholder count validation. Caller-supplied `$N` count must equal `len(ExtraArgs)` or `ErrInvalidExtraWhere` surfaces before reaching pgx. Hardened docstring explicitly warns against `fmt.Sprintf`-ing user input into the fragment (authz surface). 4 table-driven tests. |
+| `4960b94` | `Store.ApplyPatch` single-tx multi-column update. `PatchStatus` / `PatchFinalizers` / `PatchAnnotations` collapse into thin wrappers. Coordinator's `persistApplyResult` / `persistRemoveResult` now make one atomic `ApplyPatch` call instead of 2-3 sequential `Patch*` calls — no more partial-observation windows. |
+| `24762c5` | `Upsert` signature: `labels` positional arg → `UpsertOpts.Labels`. 45 callsites touched across 13 files. Semantic unchanged (labels still fully replace on every upsert). **Enterprise will need a trivial rebase on this one.** |
+| `5edb4b3` | `pkg/types/types.go` split by domain: `types.go` (app-level), `adapter_v1alpha1.go` (gained `ProviderPlatformAdapter`), new `daemon.go` (CLI hooks). Zero caller changes. Package doc added explaining the layout. |
+| `17536a7` | `registry_app.App()` extractions: `openDatabase` (kills `//nolint:nestif`) + `startMCPServer` (28 LOC of inline conditional wiring → one-line call + helper). `fmt.Errorf %v` → `%w` on telemetry init. |
+| `2ea85e4` | `RegisterBuiltins` registers readme subresource before `Register[T]` so the literal `/{name}/readme` path wins over the generic `/{name}/{version}` catch-all at shared depth — fixes `TestResourceRegister_AgentReadmeRoutesAndListProjection` that had been red since `ebdb837`. Bundles golangci-lint --fix artifacts on the touched files. |
+
+**What to pay attention to**
+- `store_v1alpha1.go ApplyPatch` (~lines 276-380) — the new multi-column-in-one-tx patch entry point. Coordinator uses this; KRT will too. Review the SQL composition carefully.
+- `store_v1alpha1.go ListOpts.ExtraWhere` (lines 88-110) — authz-critical docstring. Any wrapper that builds the fragment needs to read this.
+- `registry_app.go openDatabase` — factory wrap + failure cleanup. Flag any changes to Close-on-failure semantics.
+- `types.go` package-level doc comment explains the split so future drift into another dumping ground is less likely.
+- `2ea85e4` is the smallest, highest-signal commit — it's the one ordering-matters bug in the whole branch.
 
 ---
 
@@ -582,8 +599,9 @@ All of these are currently green.
 
 Short list. See `REMAINING.md` for the full version.
 
+- **Enterprise rebase for Upsert signature (`24762c5`).** Labels moved from positional arg into `UpsertOpts.Labels`. Semantic unchanged. Enterprise adapter tests + store wrappers need the arg-list update; no behavior change.
 - **Remaining workflow CLI cleanup.** Local manifest compatibility and duplicated internal projection code still need their final cleanup pass.
 - **Phase 2 KRT reconciler rebase.** Async sibling of `V1Alpha1Coordinator`. Same adapter contract, same `PatchStatus` / `PatchFinalizers` writes, triggered by the status NOTIFY stream instead of HTTP apply.
-- **UI TypeScript client regen + component fixups.** Blocked on Go client finishing — the Go client is already at 352 LOC, so this just needs scheduling.
+- **UI TypeScript client regen + component fixups.** Go client is stable; UI regen just needs scheduling.
 - **Deployment watch / SSE endpoint.** Logs IS ported; watch is not. Open question whether to add it onto the coordinator or let KRT's NOTIFY subscription serve it.
 - **Embeddings polish.** Core pgvector/indexer is back; remaining work is NOTIFY auto-regen, SSE job streaming, and extra providers.
