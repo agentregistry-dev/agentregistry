@@ -26,7 +26,10 @@ func validateSkillSpec(s *SkillSpec) FieldErrors {
 		if pkg.Identifier == "" {
 			errs.Append(fmt.Sprintf("spec.packages[%d].identifier", i), fmt.Errorf("%w", ErrRequiredField))
 		}
-		if pkg.Version == "" {
+		// OCI packages pin version inside identifier ("host/name:tag"); the
+		// OCI registry validator rejects a separate version field, so we
+		// don't require one here either.
+		if pkg.RegistryType != RegistryTypeOCI && pkg.Version == "" {
 			errs.Append(fmt.Sprintf("spec.packages[%d].version", i), fmt.Errorf("%w", ErrRequiredField))
 		}
 	}
