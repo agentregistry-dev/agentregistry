@@ -82,8 +82,19 @@ func ValidateOCI(ctx context.Context, pkg v1alpha1.RegistryPackage, serverName s
 		return fmt.Errorf("invalid OCI reference: %w", err)
 	}
 
-	// Validate that the registry is in the allowlist
+	// Private / dev registries (localhost, 127.0.0.1, [::1]) are the default
+	// target of `arctl build --push` and the registry server itself cannot
+	// reach them anonymously from outside the developer's machine. Skip
+	// allowlist enforcement and ownership validation for these — the
+	// allowlist + label check exist to gate the public catalogue, and
+	// private workflows pre-date that contract.
 	registry := ref.Context().RegistryStr()
+	if isPrivateRegistry(registry) {
+		slog.Info("skipping OCI validation for private registry", "identifier", pkg.Identifier, "registry", registry)
+		return nil
+	}
+
+	// Validate that the registry is in the allowlist
 	if !isAllowedRegistry(registry) {
 		return fmt.Errorf("%w: %s", ErrUnsupportedRegistry, registry)
 	}
@@ -161,5 +172,24 @@ func isAllowedRegistry(registry string) bool {
 		return true
 	}
 
+	return false
+}
+
+// isPrivateRegistry matches registry hosts that are local to the
+// developer's machine (the `arctl build --push` default target). We skip
+// both allowlist enforcement and network-ownership validation for these —
+// the registry is unreachable from outside, and the allowlist exists to
+// gate the public catalogue which private images are not part of.
+func isPrivateRegistry(registry string) bool {
+	// strip :port for the hostname check
+	host := registry
+	if i := strings.LastIndex(host, ":"); i >= 0 && !strings.Contains(host[i+1:], ".") {
+		host = host[:i]
+	}
+	host = strings.TrimPrefix(strings.TrimSuffix(host, "]"), "[") // bracketed IPv6
+	switch host {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	}
 	return false
 }

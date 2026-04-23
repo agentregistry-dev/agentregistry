@@ -1099,6 +1099,7 @@ apiVersion: ar.dev/v1alpha1
 kind: Provider
 metadata:
   name: %s
+  version: "1.0.0"
 spec:
   platform: local
 `, agentName, agentVersion, providerName)
@@ -1111,7 +1112,7 @@ spec:
 	// Each resource must appear in the output as "applied".
 	RequireOutputContains(t, result, "Agent/"+agentName)
 	RequireOutputContains(t, result, "✓")
-	RequireOutputContains(t, result, "provider/"+providerName)
+	RequireOutputContains(t, result, "Provider/"+providerName)
 
 	// Verify agent exists via HTTP.
 	verifyAgentExists(t, regURL, agentName, agentVersion)
@@ -1157,6 +1158,7 @@ apiVersion: ar.dev/v1alpha1
 kind: Provider
 metadata:
   name: %s
+  version: "1.0.0"
 spec:
   platform: local
 `, agentName, agentVersion, providerName)
@@ -1243,7 +1245,7 @@ spec:
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "deploy.yaml", deployYAML)
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "deployment/"+agentName)
+	RequireOutputContains(t, result, "Deployment/"+agentName)
 	RequireOutputContains(t, result, "✓")
 
 	// Step 3: modify the env to create drift.
@@ -1273,7 +1275,7 @@ spec:
 	// Step 4: apply with --force — expect success.
 	result = RunArctl(t, tmpDir, "apply", "-f", driftPath, "--force", "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "deployment/"+agentName)
+	RequireOutputContains(t, result, "Deployment/"+agentName)
 	RequireOutputContains(t, result, "✓")
 }
 

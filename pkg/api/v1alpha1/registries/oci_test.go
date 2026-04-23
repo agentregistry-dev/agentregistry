@@ -92,6 +92,20 @@ func TestValidateOCI_RegistryAllowlist(t *testing.T) {
 			expectError: true,
 			errorMsg:    "unsupported OCI registry",
 		},
+
+		// Private / dev registries are exempt: allowlist check + network
+		// validation are both skipped. `arctl build --push` defaults to
+		// localhost:5001 on the developer's machine.
+		{
+			name:        "localhost with port should pass (validation skipped)",
+			identifier:  "localhost:5001/my/mcp:1.0.0",
+			expectError: false,
+		},
+		{
+			name:        "127.0.0.1 with port should pass (validation skipped)",
+			identifier:  "127.0.0.1:5001/my/mcp:1.0.0",
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {
