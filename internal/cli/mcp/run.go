@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/build"
@@ -295,7 +296,7 @@ func runLocalMCPServer(projectPath string) error {
 	// Load the manifest
 	manifestManager := manifest.NewManager(absPath)
 	if !manifestManager.Exists() {
-		return fmt.Errorf("mcp.yaml not found in %s. Run 'arctl mcp init' first", absPath)
+		return fmt.Errorf("mcp.yaml not found in %s. Run 'arctl init mcp' first", absPath)
 	}
 
 	projectManifest, err := manifestManager.Load()
@@ -325,7 +326,7 @@ func runLocalMCPServer(projectPath string) error {
 	} else {
 		// Only check if image exists when skipping build
 		if err := checkDockerImageExists(imageName); err != nil {
-			return fmt.Errorf("docker image %s not found. Run 'arctl mcp build %s' first or remove --no-build flag\n%w", imageName, projectPath, err)
+			return fmt.Errorf("docker image %s not found. Run 'arctl build %s' first or remove --no-build flag\n%w", imageName, projectPath, err)
 		}
 	}
 
@@ -359,8 +360,10 @@ func runLocalMCPServerWithDocker(manifest *manifest.ProjectManifest, imageName s
 		envValues["HOST"] = "0.0.0.0"
 	}
 
-	// Build docker run command
-	containerName := fmt.Sprintf("arctl-run-%s", manifest.Name)
+	// Build docker run command.
+	// Docker container names only allow [a-zA-Z0-9][a-zA-Z0-9_.-], so we must
+	// sanitize any namespace separators present in MCP names (e.g. "myorg/my-server").
+	containerName := fmt.Sprintf("arctl-run-%s", sanitizeContainerName(manifest.Name))
 	args := []string{
 		"run",
 		"--rm",
@@ -471,7 +474,25 @@ func checkDockerImageExists(imageName string) error {
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("image not found. run `arctl mcp build %s` to build the image", imageName)
+		return fmt.Errorf("image not found. run `arctl build %s` to build the image", imageName)
 	}
 	return nil
+}
+
+// sanitizeContainerName returns a string safe to use as a Docker container
+// name. Docker requires names to match [a-zA-Z0-9][a-zA-Z0-9_.-]+, which rules
+// out the "/" in namespaced MCP names (e.g. "myorg/my-server"). Any character
+// outside the allowed set is replaced with "-".
+func sanitizeContainerName(name string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= 'A' && r <= 'Z',
+			r >= '0' && r <= '9',
+			r == '_', r == '.', r == '-':
+			return r
+		default:
+			return '-'
+		}
+	}, name)
 }

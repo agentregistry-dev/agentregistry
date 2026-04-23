@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/frameworks"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/templates"
@@ -43,6 +44,9 @@ func init() {
 	AddToolCmd.Flags().BoolVarP(&addToolForce, "force", "f", false, "Overwrite existing tool file")
 	AddToolCmd.Flags().BoolVarP(&addToolInteractive, "interactive", "i", false, "Interactive tool creation")
 	AddToolCmd.Flags().StringVar(&addToolDir, "project-dir", "", "Project directory")
+
+	// Hide inherited registry flags that are not used by offline commands.
+	common.HideRegistryFlags(AddToolCmd)
 }
 
 func runAddTool(_ *cobra.Command, args []string) error {

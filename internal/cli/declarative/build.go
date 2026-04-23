@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
 	mcpbuild "github.com/agentregistry-dev/agentregistry/internal/cli/mcp/build"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
@@ -98,6 +99,8 @@ Examples:
 	cmd.Flags().BoolVar(&buildPush, "push", false, "Push the image after building")
 	cmd.Flags().StringVar(&buildPlatform, "platform", "", "Target platform (e.g. linux/amd64, linux/arm64)")
 
+	// build is an offline command — hide inherited registry flags from --help output.
+	common.HideRegistryFlags(cmd)
 	return cmd
 }
 

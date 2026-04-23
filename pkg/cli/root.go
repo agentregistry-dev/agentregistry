@@ -15,7 +15,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/deployment"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp"
-	"github.com/agentregistry-dev/agentregistry/internal/cli/prompt"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/daemon/dockercompose"
@@ -84,7 +83,6 @@ var rootCmd = &cobra.Command{
 		mcp.SetAPIClient(c)
 		agent.SetAPIClient(c)
 		skill.SetAPIClient(c)
-		prompt.SetAPIClient(c)
 		deployment.SetAPIClient(c)
 		cli.SetAPIClient(c)
 		declarative.SetAPIClient(c)
@@ -100,7 +98,6 @@ func init() {
 	rootCmd.AddCommand(mcp.McpCmd)
 	rootCmd.AddCommand(agent.AgentCmd)
 	rootCmd.AddCommand(skill.SkillCmd)
-	rootCmd.AddCommand(prompt.PromptCmd)
 	rootCmd.AddCommand(configure.ConfigureCmd)
 	rootCmd.AddCommand(cli.VersionCmd)
 	rootCmd.AddCommand(cli.ImportCmd)
@@ -175,22 +172,12 @@ var preRunSkipCommands = map[string]map[string]bool{
 		"init":       true,
 		"build":      true,
 	},
-	"agent": {
-		"build": true,
-		"init":  true,
-	},
 	"mcp": {
 		"add-tool": true,
-		"build":    true,
-		"init":     true,
-	},
-	"skill": {
-		"build": true,
-		"init":  true,
 	},
 }
 
-// preRunBehavior returns whether to skip pre-run setup (e.g. agent/mcp/skill init).
+// preRunBehavior returns whether to skip pre-run setup (e.g. init/build, which run locally).
 func preRunBehavior(cmd *cobra.Command) (skipSetup bool) {
 	if cmd == nil {
 		return false

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"slices"
 	"testing"
 
@@ -12,6 +11,10 @@ import (
 func TestCommandTree(t *testing.T) {
 	root := Root()
 
+	// Top-level commands on the current (declarative) CLI surface.
+	// Imperative CRUD subcommands (publish, list, delete, show, init, build
+	// under agent/mcp/skill/prompt) were removed; init/build/apply/get/delete
+	// are now top-level declarative commands.
 	expectedTopLevel := []string{
 		"agent",
 		"apply",
@@ -26,7 +29,6 @@ func TestCommandTree(t *testing.T) {
 		"import",
 		"init",
 		"mcp",
-		"prompt",
 		"skill",
 		"version",
 	}
@@ -47,20 +49,20 @@ func TestCommandTree(t *testing.T) {
 		}
 	}
 
-	// Verify subcommand counts for parent commands
+	// Verify subcommand counts for parent commands with surviving subcommands.
 	expectedSubcmdCounts := map[string]int{
-		// init, build, run, add-skill, add-prompt, add-mcp, publish, delete, list, show
-		"agent": 10,
-		// init, build, add-tool, publish, delete, list, run, show
-		"mcp": 8,
+		// run
+		"agent": 1,
+		// add-tool, run
+		"mcp": 2,
+		// pull
+		"skill": 1,
 		// create, list, show, delete
 		"deployments": 4,
-		// init, build, list, publish, delete, pull, show
-		"skill": 7,
-		// list, publish, delete, show
-		"prompt": 4,
 		// generate
 		"embeddings": 1,
+		// agent, mcp, skill, prompt
+		"init": 4,
 	}
 
 	for _, cmd := range root.Commands() {
@@ -128,118 +130,6 @@ func TestHiddenCommands(t *testing.T) {
 	}
 }
 
-// TestAgentInitFlags verifies flag registration on agent init.
-func TestAgentInitFlags(t *testing.T) {
-	root := Root()
-	agentCmd := findSubcommand(root, "agent")
-	if agentCmd == nil {
-		t.Fatal("agent command not found")
-	}
-	initCmd := findSubcommand(agentCmd, "init")
-	if initCmd == nil {
-		t.Fatal("agent init command not found")
-	}
-
-	tests := []struct {
-		flag     string
-		defValue string
-	}{
-		{"instruction-file", ""},
-		{"model-provider", "Gemini"},
-		{"model-name", "gemini-2.0-flash"},
-		{"description", ""},
-		{"telemetry", ""},
-		{"image", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.flag, func(t *testing.T) {
-			f := initCmd.Flags().Lookup(tt.flag)
-			if f == nil {
-				t.Fatalf("flag --%s not found on agent init", tt.flag)
-				return
-			}
-			if f.DefValue != tt.defValue {
-				t.Errorf("flag --%s default = %q, want %q", tt.flag, f.DefValue, tt.defValue)
-			}
-		})
-	}
-}
-
-// TestSkillPublishFlags verifies flag registration on skill publish.
-func TestSkillPublishFlags(t *testing.T) {
-	root := Root()
-	skillCmd := findSubcommand(root, "skill")
-	if skillCmd == nil {
-		t.Fatal("skill command not found")
-	}
-	publishCmd := findSubcommand(skillCmd, "publish")
-	if publishCmd == nil {
-		t.Fatal("skill publish command not found")
-	}
-
-	tests := []struct {
-		flag     string
-		defValue string
-	}{
-		{"docker-image", ""},
-		{"git", ""},
-		{"version", ""},
-		{"description", ""},
-		{"dry-run", "false"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.flag, func(t *testing.T) {
-			f := publishCmd.Flags().Lookup(tt.flag)
-			if f == nil {
-				t.Fatalf("flag --%s not found on skill publish", tt.flag)
-				return
-			}
-			if f.DefValue != tt.defValue {
-				t.Errorf("flag --%s default = %q, want %q", tt.flag, f.DefValue, tt.defValue)
-			}
-		})
-	}
-}
-
-// TestRequiredFlags verifies that commands with required flags have them marked.
-func TestRequiredFlags(t *testing.T) {
-	root := Root()
-
-	tests := []struct {
-		parent   string
-		command  string
-		required []string
-	}{
-		{"skill", "delete", []string{"version"}},
-		{"agent", "delete", []string{"version"}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.parent+"/"+tt.command, func(t *testing.T) {
-			parentCmd := findSubcommand(root, tt.parent)
-			if parentCmd == nil {
-				t.Fatalf("parent command %q not found", tt.parent)
-			}
-			cmd := findSubcommand(parentCmd, tt.command)
-			if cmd == nil {
-				t.Fatalf("command %q not found under %q", tt.command, tt.parent)
-			}
-			for _, flagName := range tt.required {
-				f := cmd.Flags().Lookup(flagName)
-				if f == nil {
-					t.Errorf("flag --%s not found", flagName)
-					continue
-				}
-				if _, ok := f.Annotations[cobra.BashCompOneRequiredFlag]; !ok {
-					t.Errorf("flag --%s should be marked as required", flagName)
-				}
-			}
-		})
-	}
-}
-
 // TestRootPersistentFlags verifies persistent flags on the root command.
 func TestRootPersistentFlags(t *testing.T) {
 	root := Root()
@@ -250,75 +140,6 @@ func TestRootPersistentFlags(t *testing.T) {
 			f := root.PersistentFlags().Lookup(name)
 			if f == nil {
 				t.Fatalf("persistent flag --%s not found on root command", name)
-			}
-		})
-	}
-}
-
-// TestArgsValidators verifies that commands enforce correct argument counts.
-func TestArgsValidators(t *testing.T) {
-	root := Root()
-
-	tests := []struct {
-		parent  string
-		command string
-		args    int
-		wantErr bool
-	}{
-		// Parent commands accept arbitrary args
-		{"", "agent", 0, false},
-		{"", "mcp", 0, false},
-		{"", "skill", 0, false},
-		// agent init requires exactly 3 args
-		{"agent", "init", 3, false},
-		{"agent", "init", 0, true},
-		{"agent", "init", 2, true},
-		// Commands requiring exactly 1 arg
-		{"agent", "show", 1, false},
-		{"agent", "show", 0, true},
-		{"agent", "delete", 1, false},
-		{"agent", "delete", 0, true},
-		{"agent", "build", 1, false},
-		{"agent", "build", 0, true},
-		{"skill", "publish", 1, false},
-		{"skill", "publish", 0, true},
-		{"mcp", "show", 1, false},
-		{"mcp", "show", 0, true},
-	}
-
-	for _, tt := range tests {
-		name := tt.command
-		if tt.parent != "" {
-			name = tt.parent + "/" + tt.command
-		}
-		t.Run(name+"/"+argsDesc(tt.args, tt.wantErr), func(t *testing.T) {
-			var cmd *cobra.Command
-			if tt.parent == "" {
-				cmd = findSubcommand(root, tt.command)
-			} else {
-				parentCmd := findSubcommand(root, tt.parent)
-				if parentCmd == nil {
-					t.Fatalf("parent command %q not found", tt.parent)
-				}
-				cmd = findSubcommand(parentCmd, tt.command)
-			}
-			if cmd == nil {
-				t.Fatalf("command %q not found", tt.command)
-				return
-			}
-			if cmd.Args == nil {
-				if tt.wantErr {
-					t.Errorf("command %q has no Args validator but expected error with %d args", name, tt.args)
-				}
-				return
-			}
-			args := make([]string, tt.args)
-			for i := range args {
-				args[i] = "test"
-			}
-			err := cmd.Args(cmd, args)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("command %q Args(%d args) error = %v, wantErr %v", name, tt.args, err, tt.wantErr)
 			}
 		})
 	}
@@ -343,12 +164,4 @@ func findSubcommand(parent *cobra.Command, name string) *cobra.Command {
 		}
 	}
 	return nil
-}
-
-// argsDesc returns a short description for test naming.
-func argsDesc(n int, wantErr bool) string {
-	if wantErr {
-		return fmt.Sprintf("rejects_%d_args", n)
-	}
-	return fmt.Sprintf("accepts_%d_args", n)
 }

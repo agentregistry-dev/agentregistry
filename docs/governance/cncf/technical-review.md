@@ -76,7 +76,7 @@ Agentregistry is broadly relevant to any organization building on AI-powered too
 Agentregistry provides two primary interaction surfaces — a CLI (`arctl`) and a Web UI — which map to different stages of the artifact lifecycle and to the two personas (Operators, Developers) described earlier.
 
 _Operators interact primarily through the Web UI and the CLI for governance workflows._
-1. **Import** — Pull AI artifacts (MCP servers, agents, skills) from external sources into the registry. This can be done via the Web UI using the purple `+ Add` button, selecting the artifact type (Agent, MCP Server, or Skill) and providing its metadata, name, description, version, and container image path or repository reference. The CLI `arctl skill publish` and `arctl mcp publish` commands are available for scripted or CI/CD-driven ingestion.
+1. **Import** — Pull AI artifacts (MCP servers, agents, skills) from external sources into the registry. This can be done via the Web UI using the purple `+ Add` button, selecting the artifact type (Agent, MCP Server, or Skill) and providing its metadata, name, description, version, and container image path or repository reference. The CLI `arctl apply -f skill.yaml` and `arctl apply -f mcp.yaml` commands are available for scripted or CI/CD-driven ingestion.
 2. **Review and enrich** — Inspect automatically generated scores and validation metadata in the Web UI's artifact detail views (the Servers, Agents, and Skills views). Operators use this enriched metadata to make approval decisions.
 3. **Curate and publish** — Selectively publish approved artifacts into a curated catalog that developers can access, maintaining end-to-end audit and control from the registry.
 4. **Deploy to environments** — Use `arctl deploy` or the Web UI to promote approved artifacts to target environments (local Docker, Kubernetes clusters).
@@ -86,13 +86,13 @@ _Developers interact primarily through the CLI for day-to-day workflows._
    ```
    curl -fsSL https://raw.githubusercontent.com/agentregistry-dev/agentregistry/main/scripts/get-arctl | bash
    ```
-2. **Discover** — Run `arctl daemon start` first to start the local registry daemon, then use `arctl mcp list` or `arctl list` to browse available artifacts from the registry.
+2. **Discover** — Run `arctl daemon start` first to start the local registry daemon, then use `arctl get mcps` or `arctl list` to browse available artifacts from the registry.
 3. **Configure IDEs** — Generate ready-to-use configuration files for AI-powered IDEs with a single command:
    - `arctl configure claude-desktop`
    - `arctl configure cursor`
    - `arctl configure vscode`
    These commands write the appropriate MCP configuration so the IDE routes tool calls through the agentgateway to the deployed servers.
-4. **Create and publish** — Scaffold new agents, skills, or MCP servers using `arctl agent`, `arctl skill`, or `arctl mcp` subcommands, then publish them back to the registry using the corresponding `publish` subcommand.
+4. **Create and publish** — Scaffold new agents, skills, or MCP servers using `arctl init agent`, `arctl init skill`, or `arctl init mcp`, then publish them back to the registry using `arctl apply -f <resource>.yaml`.
 5. **Run and deploy** — Use `arctl run` to run an artifact locally, and `arctl deploy` to promote it to a target environment. The `arctl show` command retrieves full artifact details from the registry.
 
 **Describe the user experience (UX) and user interface (UI) of the project.**

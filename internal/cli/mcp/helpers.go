@@ -8,41 +8,12 @@ import (
 	"strings"
 
 	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
-	"github.com/spf13/cobra"
 )
 
-// registryFlagNames lists the root-level persistent flags that are irrelevant
-// for commands that operate purely offline (e.g. init, build).
-var registryFlagNames = []string{"registry-url", "registry-token"}
-
-// hideRegistryFlags marks the inherited registry-url and registry-token flags
-// as hidden so they do not appear in the --help output of commands that do not
-// interact with the registry. Multiple commands can be passed at once.
-func hideRegistryFlags(cmds ...*cobra.Command) {
-	for _, cmd := range cmds {
-		original := cmd.HelpFunc()
-		cmd.SetHelpFunc(func(c *cobra.Command, args []string) {
-			for _, name := range registryFlagNames {
-				if f := c.InheritedFlags().Lookup(name); f != nil {
-					f.Hidden = true
-				}
-			}
-			original(c, args)
-		})
-	}
-}
-
-// isServerPublished checks if a server exists in the registry (all entries are visible)
-func isServerPublished(serverName, version string) (bool, error) {
-	if apiClient == nil {
-		return false, errors.New("API client not initialized")
-	}
-
-	server, err := apiClient.GetServerVersion(serverName, version)
-	if err != nil {
-		return false, err
-	}
-	return server != nil, nil
+// fileExists checks if a file exists at the given path.
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // selectServerVersion handles server version selection logic with interactive prompts
@@ -75,7 +46,7 @@ func selectServerVersion(resourceName, requestedVersion string, autoYes bool) (*
 	}
 
 	if len(allVersions) == 0 {
-		return nil, fmt.Errorf("MCP server '%s' not found in registry. Use 'arctl mcp list' to see available servers", resourceName)
+		return nil, fmt.Errorf("MCP server '%s' not found in registry. Use 'arctl get mcpservers' to see available servers", resourceName)
 	}
 
 	// If there are multiple versions, prompt the user (unless --yes is set)

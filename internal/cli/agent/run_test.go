@@ -470,10 +470,10 @@ func TestFilterServersToBuild(t *testing.T) {
 	}
 }
 
-// TestAgentInitRendersDockerComposeWithPort verifies that the agent init flow
+// TestAgentInitRendersDockerComposeWithPort verifies that the scaffold flow
 // (GenerateProject via PythonGenerator) correctly renders docker-compose.yaml
 // with the Port field from AgentConfig. This ensures the {{.Port}} template
-// variable works for the static file written to disk during `arctl agent init`.
+// variable works for the static file written to disk during `arctl init agent`.
 func TestAgentInitRendersDockerComposeWithPort(t *testing.T) {
 	gen := python.NewPythonGenerator()
 	templateBytes, err := gen.ReadTemplateFile("docker-compose.yaml.tmpl")
@@ -495,7 +495,7 @@ func TestAgentInitRendersDockerComposeWithPort(t *testing.T) {
 	}
 
 	if !strings.Contains(rendered, "\"8080:8080\"") {
-		t.Fatalf("expected agent init docker-compose to contain \"8080:8080\", got:\n%s", rendered)
+		t.Fatalf("expected init agent docker-compose to contain \"8080:8080\", got:\n%s", rendered)
 	}
 
 	// Verify that a zero Port value would produce "0:8080" (ensuring the field is used)

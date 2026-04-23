@@ -35,59 +35,61 @@ func TestNormalizeBaseURL(t *testing.T) {
 }
 
 func TestPreRunBehavior(t *testing.T) {
+	// Build a synthetic command tree mirroring the current (declarative) CLI
+	// surface: top-level init/build, agent/run, mcp/{run,add-tool}, skill/pull,
+	// plus helper commands (configure, completion, version).
 	root := &cobra.Command{Use: "arctl"}
 
-	agentCmd := &cobra.Command{Use: "agent"}
+	// Top-level declarative commands (no API client needed).
 	initCmd := &cobra.Command{Use: "init"}
 	buildCmd := &cobra.Command{Use: "build"}
-	listCmd := &cobra.Command{Use: "list"}
-	agentCmd.AddCommand(initCmd)
-	agentCmd.AddCommand(buildCmd)
-	agentCmd.AddCommand(listCmd)
+	// Subcommand of top-level "init" (e.g. arctl init mcp fastmcp-python NAME).
+	initMCPCmd := &cobra.Command{Use: "mcp"}
+	initCmd.AddCommand(initMCPCmd)
+
+	// agent/mcp/skill parents keep only run-time / add-tool / pull children.
+	agentCmd := &cobra.Command{Use: "agent"}
+	agentRunCmd := &cobra.Command{Use: "run"}
+	agentCmd.AddCommand(agentRunCmd)
 
 	mcpCmd := &cobra.Command{Use: "mcp"}
-	mcpInitCmd := &cobra.Command{Use: "init"}
-	mcpBuildCmd := &cobra.Command{Use: "build"}
+	mcpRunCmd := &cobra.Command{Use: "run"}
 	mcpAddToolCmd := &cobra.Command{Use: "add-tool"}
-	mcpCmd.AddCommand(mcpInitCmd)
-	mcpCmd.AddCommand(mcpBuildCmd)
+	mcpCmd.AddCommand(mcpRunCmd)
 	mcpCmd.AddCommand(mcpAddToolCmd)
 
 	skillCmd := &cobra.Command{Use: "skill"}
-	skillInitCmd := &cobra.Command{Use: "init"}
-	skillBuildCmd := &cobra.Command{Use: "build"}
-	skillCmd.AddCommand(skillInitCmd)
-	skillCmd.AddCommand(skillBuildCmd)
-
-	// Subcommand under "mcp init" (e.g. arctl mcp init python mymcp)
-	initPythonCmd := &cobra.Command{Use: "python"}
-	mcpInitCmd.AddCommand(initPythonCmd)
+	skillPullCmd := &cobra.Command{Use: "pull"}
+	skillCmd.AddCommand(skillPullCmd)
 
 	configureCmd := &cobra.Command{Use: "configure"}
 	completionCmd := &cobra.Command{Use: "completion"}
 	zshCompletionCmd := &cobra.Command{Use: "zsh"}
 	completionCmd.AddCommand(zshCompletionCmd)
 	versionCmd := &cobra.Command{Use: "version"}
-	root.AddCommand(agentCmd, mcpCmd, skillCmd, configureCmd, completionCmd, versionCmd)
+	root.AddCommand(initCmd, buildCmd, agentCmd, mcpCmd, skillCmd, configureCmd, completionCmd, versionCmd)
 
 	tests := []struct {
 		name     string
 		cmd      *cobra.Command
 		wantSkip bool
 	}{
-		{"agent init", initCmd, true},
-		{"agent build", buildCmd, true},
-		{"mcp init", mcpInitCmd, true},
-		{"mcp build", mcpBuildCmd, true},
+		// Top-level declarative init/build skip setup (no API client).
+		{"init", initCmd, true},
+		{"build", buildCmd, true},
+		{"init mcp (subcommand of init)", initMCPCmd, true},
+		// mcp add-tool runs locally, no API client.
 		{"mcp add-tool", mcpAddToolCmd, true},
-		{"skill init", skillInitCmd, true},
-		{"skill build", skillBuildCmd, true},
+		// Helper commands skip setup.
 		{"configure", configureCmd, true},
 		{"completion", completionCmd, true},
 		{"completion zsh", zshCompletionCmd, true},
 		{"version", versionCmd, true},
-		{"mcp init python (subcommand of init)", initPythonCmd, true},
-		{"agent list", listCmd, false},
+		// Run/pull/etc. need the API client.
+		{"agent run", agentRunCmd, false},
+		{"mcp run", mcpRunCmd, false},
+		{"skill pull", skillPullCmd, false},
+		// Edge cases.
 		{"nil cmd", nil, false},
 		{"top-level command with parent", agentCmd, false},
 	}

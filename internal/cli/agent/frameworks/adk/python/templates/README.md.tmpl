@@ -29,17 +29,21 @@ change the root instructions.
 1. Build (and optionally push) the container image:
 
    ```bash
-   arctl agent build . --push
+   arctl build . --push
    ```
 
 2. Publish the agent so the registry can serve it to clients:
 
    ```bash
-   arctl agent publish .
+   arctl apply -f agent.yaml
    ```
 
 3. Share the resulting agent link or deploy it to your runtime of choice.
 
-Need MCP servers? Use `arctl agent add-mcp` to append entries to `agent.yaml`
-and re-run the build once you're happy with the configuration.
+Need MCP servers? Edit `agent.yaml` manually to append MCP entries under
+`spec.mcpServers`, then re-apply once you're happy with the configuration:
+
+```bash
+arctl apply -f agent.yaml
+```
 
