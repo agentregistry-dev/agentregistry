@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	k8smeta "k8s.io/apimachinery/pkg/api/meta"
 )
 
 type kubernetesDeploymentAdapter struct {
@@ -47,6 +49,14 @@ func (a *kubernetesDeploymentAdapter) Deploy(ctx context.Context, req *models.De
 		return nil, err
 	}
 	if err := kubernetesApplyPlatformConfig(ctx, provider, cfg, false); err != nil {
+		if isKagentCRDNotFoundError(err) {
+			// Classify as invalid input/precondition so the API can map it to a 4xx,
+			// while preserving the original cause for logging and diagnostics.
+			return nil, errors.Join(
+				database.ErrInvalidInput,
+				fmt.Errorf("kagent CRD not found in cluster — kagent may not be installed or may be partially installed: install from https://kagent.dev: %w", err),
+			)
+		}
 		return nil, fmt.Errorf("apply kubernetes platform config: %w", err)
 	}
 	return &models.DeploymentActionResult{Status: models.DeploymentStatusDeployed}, nil
@@ -151,4 +161,38 @@ func deploymentNamespace(deployment *models.Deployment, provider *models.Provide
 		return namespace
 	}
 	return kubernetesDefaultNamespace()
+}
+
+// isKagentCRDNotFoundError reports whether err indicates that a kagent CRD is not
+// registered in the cluster. It checks two cases:
+//
+//  1. Structured: errors.As reaches a *k8smeta.NoKindMatchError whose Group is
+//     "kagent.dev" and whose Kind is one we actually deploy. This is the expected
+//     path when the REST mapper error propagates unwrapped.
+//
+//  2. Fallback string check: controller-runtime's Apply may wrap the REST mapper
+//     error inside a *k8serrors.StatusError, losing the typed chain. In that case
+//     we inspect the message text. Both substrings must be present to avoid false
+//     positives from unrelated "no matches for kind" errors.
+func isKagentCRDNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// kagentKinds is the set of CRD Kinds we deploy via kagent. Checking Kind
+	// prevents false positives from other kagent.dev CRDs absent due to partial
+	// installs with a different remediation path.
+	kagentKinds := map[string]bool{
+		"Agent":     true,
+		"McpServer": true,
+	}
+
+	var noKind *k8smeta.NoKindMatchError
+	if errors.As(err, &noKind) {
+		return noKind.GroupKind.Group == "kagent.dev" && kagentKinds[noKind.GroupKind.Kind]
+	}
+
+	// Fallback: handle the case where controller-runtime wrapped the REST mapper
+	// error as a StatusError, breaking the typed chain.
+	msg := err.Error()
+	return strings.Contains(msg, "no matches for kind") && strings.Contains(msg, "kagent.dev")
 }
