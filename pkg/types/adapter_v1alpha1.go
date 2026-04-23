@@ -218,3 +218,17 @@ type ProviderAdapter interface {
 	// condition. Idempotent; no side effects beyond parsing.
 	Validate(ctx context.Context, provider *v1alpha1.Provider) error
 }
+
+// ProviderPlatformAdapter defines provider CRUD behavior for a provider
+// platform type. Pre-dates the split between ProviderAdapter (declarative
+// validation) and DeploymentAdapter (Apply/Remove/Logs/Discover);
+// retained for enterprise builds whose provider-side surface is still
+// imperative.
+type ProviderPlatformAdapter interface {
+	Platform() string
+	ListProviders(ctx context.Context) ([]*v1alpha1.Provider, error)
+	CreateProvider(ctx context.Context, provider *v1alpha1.Provider) (*v1alpha1.Provider, error)
+	GetProvider(ctx context.Context, providerID string) (*v1alpha1.Provider, error)
+	UpdateProvider(ctx context.Context, providerID string, provider *v1alpha1.Provider) (*v1alpha1.Provider, error)
+	DeleteProvider(ctx context.Context, providerID string) error
+}
