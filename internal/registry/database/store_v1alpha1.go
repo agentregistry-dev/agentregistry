@@ -62,6 +62,11 @@ type UpsertResult struct {
 // ErrInvalidCursor reports that a list pagination cursor could not be parsed.
 var ErrInvalidCursor = errors.New("v1alpha1 store: invalid cursor")
 
+// ErrInvalidExtraWhere reports that ListOpts.ExtraWhere references more
+// placeholders than ExtraArgs has bind values (or vice versa), which
+// would either be a silent misuse or a runtime pgx error.
+var ErrInvalidExtraWhere = errors.New("v1alpha1 store: ExtraWhere / ExtraArgs placeholder mismatch")
+
 // ListOpts controls paginated list queries.
 type ListOpts struct {
 	// Namespace narrows results to a specific namespace. Empty means "across
@@ -80,12 +85,28 @@ type ListOpts struct {
 	// IncludeTerminating includes rows with deletion_timestamp set. Default
 	// false — callers asking for "alive" rows shouldn't see terminating ones.
 	IncludeTerminating bool
-	// ExtraWhere appends a caller-supplied SQL predicate to the WHERE
-	// clause. Placeholders inside the fragment are numbered relative to
-	// ExtraArgs (for example "namespace = ANY($1)") and are shifted so
-	// numbering continues after the Store's own filters.
+	// ExtraWhere appends a caller-supplied parameterized SQL predicate to
+	// the WHERE clause. It's the RBAC / tenancy / enterprise-filter seam:
+	// the generic Store stays kind-agnostic while a wrapper (e.g. the
+	// enterprise DatabaseFactory) injects authz-derived constraints like
+	// `namespace = ANY($1)`.
+	//
+	// Rules:
+	//   - Placeholders are numbered from `$1` relative to ExtraArgs (so
+	//     the fragment reads naturally on its own). The Store rebases them
+	//     to continue after its own internal $N before executing.
+	//   - The placeholder count in the fragment MUST equal len(ExtraArgs).
+	//     List returns ErrInvalidExtraWhere when they disagree.
+	//   - NEVER interpolate untrusted input into ExtraWhere with
+	//     fmt.Sprintf/string concatenation — always use placeholders with
+	//     ExtraArgs. Doing otherwise is a SQL injection; this is the
+	//     authz surface.
+	//   - The fragment is appended with a leading AND, so a single
+	//     standalone predicate like "deleted_by IS NULL" is fine; don't
+	//     prefix with "AND " yourself.
 	ExtraWhere string
-	// ExtraArgs are the bind parameters for ExtraWhere.
+	// ExtraArgs are the bind parameters for ExtraWhere. Number of entries
+	// MUST equal the distinct placeholder count in ExtraWhere.
 	ExtraArgs []any
 }
 
@@ -502,11 +523,18 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 			len(args)-3, len(args)-2, len(args)-1, len(args),
 		))
 	}
-	if len(opts.ExtraArgs) > 0 {
-		args = append(args, opts.ExtraArgs...)
-	}
-	if opts.ExtraWhere != "" {
-		where = append(where, rebaseSQLPlaceholders(opts.ExtraWhere, len(args)-len(opts.ExtraArgs)))
+	if opts.ExtraWhere != "" || len(opts.ExtraArgs) > 0 {
+		placeholders := countDistinctPlaceholders(opts.ExtraWhere)
+		if placeholders != len(opts.ExtraArgs) {
+			return nil, "", fmt.Errorf("%w: fragment references %d distinct placeholder(s) but %d arg(s) supplied",
+				ErrInvalidExtraWhere, placeholders, len(opts.ExtraArgs))
+		}
+		if len(opts.ExtraArgs) > 0 {
+			args = append(args, opts.ExtraArgs...)
+		}
+		if opts.ExtraWhere != "" {
+			where = append(where, rebaseSQLPlaceholders(opts.ExtraWhere, len(args)-len(opts.ExtraArgs)))
+		}
 	}
 
 	query := fmt.Sprintf(`
@@ -562,6 +590,30 @@ func rebaseSQLPlaceholders(clause string, offset int) string {
 		}
 		return fmt.Sprintf("$%d", n+offset)
 	})
+}
+
+// countDistinctPlaceholders returns the number of distinct `$N` tokens
+// in a SQL fragment, independent of how many times each appears.
+// Used to validate ListOpts.ExtraWhere against ExtraArgs — a fragment
+// of "namespace = ANY($1) AND tenant = $2" has 2 distinct placeholders
+// and requires 2 ExtraArgs. Repeated use of $1 counts once.
+//
+// Does not attempt to exclude `$` inside string literals — a fragment
+// containing a `$N`-looking string literal will over-count. Callers
+// are documented to use only parameterized SQL.
+func countDistinctPlaceholders(clause string) int {
+	if clause == "" {
+		return 0
+	}
+	seen := map[int]struct{}{}
+	for _, m := range sqlPlaceholderPattern.FindAllStringSubmatch(clause, -1) {
+		n, err := strconv.Atoi(m[1])
+		if err != nil {
+			continue
+		}
+		seen[n] = struct{}{}
+	}
+	return len(seen)
 }
 
 func decodeListCursor(token string) (listCursor, error) {

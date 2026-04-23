@@ -292,6 +292,45 @@ func TestV1Alpha1Store_ListExtraWhereRebasesPlaceholders(t *testing.T) {
 	require.NotEqual(t, page1[0].Metadata.Name, page2[0].Metadata.Name)
 }
 
+// TestV1Alpha1Store_ListExtraWhereRejectsMismatch verifies that the
+// Store rejects ExtraWhere / ExtraArgs combinations whose placeholder
+// count doesn't match the arg count, rather than silently executing a
+// wrong query. Prevents SQL injection via accidental mis-parameterized
+// fragments in the RBAC / authz surface.
+func TestV1Alpha1Store_ListExtraWhereRejectsMismatch(t *testing.T) {
+	pool := NewV1Alpha1TestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	cases := []struct {
+		name  string
+		where string
+		args  []any
+	}{
+		{"fragment uses $1 but no args supplied", "name = $1", nil},
+		{"fragment uses $1 $2 but only one arg", "name = $1 AND version = $2", []any{"a"}},
+		{"args supplied but fragment has no placeholder", "is_latest_version", []any{"a"}},
+		{"fragment has two distinct but three args", "name = $1 AND version = $2", []any{"a", "b", "c"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := store.List(ctx, ListOpts{
+				ExtraWhere: tc.where,
+				ExtraArgs:  tc.args,
+			})
+			require.Error(t, err)
+			require.ErrorIs(t, err, ErrInvalidExtraWhere)
+		})
+	}
+
+	// Repeated use of the same placeholder counts once and is valid.
+	_, _, err := store.List(ctx, ListOpts{
+		ExtraWhere: "name = $1 OR version = $1",
+		ExtraArgs:  []any{"x"},
+	})
+	require.NoError(t, err)
+}
+
 func TestV1Alpha1Store_ListCursorPagination(t *testing.T) {
 	pool := NewV1Alpha1TestPool(t)
 	store := NewStore(pool, testTable)
