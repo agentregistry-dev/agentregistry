@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, it, expect, vi } from "vitest"
 import { AgentCard } from "../agent-card"
-import type { AgentResponse } from "@/lib/api/types.gen"
+import type { AgentResponse } from "@/lib/admin-api"
 
 const mockAgent: AgentResponse = {
   agent: {

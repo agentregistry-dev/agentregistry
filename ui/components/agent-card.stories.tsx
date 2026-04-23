@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { AgentCard } from "./agent-card"
-import type { AgentResponse } from "@/lib/api/types.gen"
+import type { AgentResponse } from "@/lib/admin-api"
 
 const mockAgent: AgentResponse = {
   agent: {
