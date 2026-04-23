@@ -78,38 +78,9 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	}
 	authz := auth.Authorizer{Authz: authzProvider}
 
-	// Database selection: use DATABASE_URL="noop" only when you provide the database
-	// entirely via AppOptions.DatabaseFactory (e.g. in-memory or custom backend) and
-	// do not want a real PostgreSQL connection. In that case DatabaseFactory is required.
-	// For normal deployments, set DATABASE_URL to a real Postgres connection string.
-	var db database.Store
-	if cfg.DatabaseURL == "noop" { //nolint:nestif
-		if options.DatabaseFactory == nil {
-			return fmt.Errorf("DATABASE_URL=noop requires DatabaseFactory to be set in AppOptions")
-		}
-		slog.Info("using DatabaseFactory to create database", "mode", "noop")
-		var err error
-		db, err = options.DatabaseFactory(ctx, "", nil, authz)
-		if err != nil {
-			return fmt.Errorf("failed to create database via factory: %w", err)
-		}
-	} else {
-		baseDB, err := internaldb.NewPostgreSQL(dbCtx, cfg.DatabaseURL, authz)
-		if err != nil {
-			return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
-		}
-
-		// Allow implementors to wrap the database and run additional migrations
-		db = baseDB
-		if options.DatabaseFactory != nil {
-			db, err = options.DatabaseFactory(ctx, cfg.DatabaseURL, baseDB, authz)
-			if err != nil {
-				if err := baseDB.Close(); err != nil {
-					slog.Error("error closing base database connection", "error", err)
-				}
-				return fmt.Errorf("failed to create extended database: %w", err)
-			}
-		}
+	db, err := openDatabase(ctx, dbCtx, cfg, options, authz)
+	if err != nil {
+		return err
 	}
 
 	// Store the database instance for later cleanup
@@ -145,7 +116,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 
 	shutdownTelemetry, metrics, err := telemetry.InitMetrics(cfg.Version)
 	if err != nil {
-		return fmt.Errorf("failed to initialize metrics: %v", err)
+		return fmt.Errorf("failed to initialize metrics: %w", err)
 	}
 
 	defer func() {
@@ -170,34 +141,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		options.OnHTTPServerCreated(server)
 	}
 
-	var mcpHTTPServer *http.Server
-	if cfg.MCPPort > 0 && v1alpha1Stores != nil {
-		mcpServer := mcpregistry.NewServer(v1alpha1Stores)
-
-		var handler http.Handler = mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
-			return mcpServer
-		}, &mcp.StreamableHTTPOptions{})
-
-		// Set up authentication middleware if one is configured
-		if authnProvider != nil {
-			handler = mcpAuthnMiddleware(authnProvider)(handler)
-		}
-
-		addr := ":" + strconv.Itoa(int(cfg.MCPPort))
-		mcpHTTPServer = &http.Server{
-			Addr:              addr,
-			Handler:           handler,
-			ReadHeaderTimeout: 10 * time.Second,
-		}
-
-		go func() {
-			slog.Info("MCP HTTP server starting", "address", addr)
-			if err := mcpHTTPServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				slog.Error("failed to start MCP server", "error", err)
-				os.Exit(1)
-			}
-		}()
-	}
+	mcpHTTPServer := startMCPServer(cfg, v1alpha1Stores, authnProvider)
 
 	// Start server in a goroutine so it doesn't block signal handling
 	go func() {
@@ -338,6 +282,89 @@ func buildRouteOptions(
 	}
 
 	return routeOpts
+}
+
+// openDatabase selects and constructs the base Store (plus any
+// DatabaseFactory wrap) and returns it. Two paths:
+//   - DATABASE_URL="noop" requires options.DatabaseFactory to supply the
+//     Store entirely (e.g. in-memory or custom backend). Used by tests
+//     and noop runs.
+//   - Otherwise connect to PostgreSQL; if a DatabaseFactory is set, it
+//     wraps the base pool so implementors can run additional migrations
+//     and layer authz/caching on top.
+//
+// On factory failure the base pool is closed before returning the wrap
+// error so we don't leak connections into the caller's error path.
+func openDatabase(
+	appCtx, dbCtx context.Context,
+	cfg *config.Config,
+	options types.AppOptions,
+	authz auth.Authorizer,
+) (database.Store, error) {
+	if cfg.DatabaseURL == "noop" {
+		if options.DatabaseFactory == nil {
+			return nil, fmt.Errorf("DATABASE_URL=noop requires DatabaseFactory to be set in AppOptions")
+		}
+		slog.Info("using DatabaseFactory to create database", "mode", "noop")
+		db, err := options.DatabaseFactory(appCtx, "", nil, authz)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create database via factory: %w", err)
+		}
+		return db, nil
+	}
+
+	baseDB, err := internaldb.NewPostgreSQL(dbCtx, cfg.DatabaseURL, authz)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to PostgreSQL: %w", err)
+	}
+	if options.DatabaseFactory == nil {
+		return baseDB, nil
+	}
+	wrapped, err := options.DatabaseFactory(appCtx, cfg.DatabaseURL, baseDB, authz)
+	if err != nil {
+		if closeErr := baseDB.Close(); closeErr != nil {
+			slog.Error("error closing base database connection", "error", closeErr)
+		}
+		return nil, fmt.Errorf("failed to create extended database: %w", err)
+	}
+	return wrapped, nil
+}
+
+// startMCPServer wires the MCP HTTP bridge on cfg.MCPPort and launches it
+// in a background goroutine. Returns nil when MCP is disabled (no port
+// configured, or v1alpha1 Stores not wired — MCP is a consumer of the
+// v1alpha1 data model and has nothing to serve without it). The returned
+// *http.Server, when non-nil, should be shut down alongside the main
+// server on quit.
+func startMCPServer(
+	cfg *config.Config,
+	v1alpha1Stores map[string]*internaldb.Store,
+	authnProvider auth.AuthnProvider,
+) *http.Server {
+	if cfg.MCPPort <= 0 || v1alpha1Stores == nil {
+		return nil
+	}
+	mcpServer := mcpregistry.NewServer(v1alpha1Stores)
+	var handler http.Handler = mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
+		return mcpServer
+	}, &mcp.StreamableHTTPOptions{})
+	if authnProvider != nil {
+		handler = mcpAuthnMiddleware(authnProvider)(handler)
+	}
+	addr := ":" + strconv.Itoa(int(cfg.MCPPort))
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	go func() {
+		slog.Info("MCP HTTP server starting", "address", addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("failed to start MCP server", "error", err)
+			os.Exit(1)
+		}
+	}()
+	return srv
 }
 
 // mcpAuthnMiddleware uses the AuthnProvider to attach a session to the

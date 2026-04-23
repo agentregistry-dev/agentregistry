@@ -52,7 +52,7 @@ func seedAgent(t *testing.T, store *database.Store, name string) {
 	t.Helper()
 	spec, err := json.Marshal(v1alpha1.AgentSpec{Title: name, Description: name})
 	require.NoError(t, err)
-	_, err = store.Upsert(context.Background(), "default", name, "v1", spec, nil, database.UpsertOpts{})
+	_, err = store.Upsert(context.Background(), "default", name, "v1", spec, database.UpsertOpts{})
 	require.NoError(t, err)
 }
 

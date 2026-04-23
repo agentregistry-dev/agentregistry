@@ -331,7 +331,7 @@ func TestResourceRegister_ResolverDetectsDanglingRef(t *testing.T) {
 
 	// Seed the one existing MCPServer.
 	_, err := mcpStore.Upsert(context.Background(), "default", "tools", "v1",
-		mustSpec(t, v1alpha1.MCPServerSpec{Title: "T"}), nil, database.UpsertOpts{})
+		mustSpec(t, v1alpha1.MCPServerSpec{Title: "T"}), database.UpsertOpts{})
 	require.NoError(t, err)
 
 	_, api := humatest.New(t)
