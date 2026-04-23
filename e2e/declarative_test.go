@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,22 +33,18 @@ func writeDeclarativeYAML(t *testing.T, dir, filename, content string) string {
 	return path
 }
 
-// splitNS parses a legacy "namespace/name" identifier into (ns, name). Names
-// without a "/" default to the "default" namespace — the server's default.
-func splitNS(fullName string) (string, string) {
-	idx := strings.Index(fullName, "/")
-	if idx < 0 {
-		return "default", fullName
-	}
-	return fullName[:idx], fullName[idx+1:]
-}
-
 // resourceURL builds the v1alpha1-native URL for a single resource version:
 //
-//	{regURL}/namespaces/{ns}/{resource}/{name}/{version}
-func resourceURL(regURL, resource, fullName, version string) string {
-	ns, name := splitNS(fullName)
-	return fmt.Sprintf("%s/namespaces/%s/%s/%s/%s", regURL, ns, resource, name, version)
+//	{regURL}/namespaces/default/{resource}/{name}/{version}
+//
+// Resource names that contain "/" (common for MCPServer identifiers like
+// "e2e-test/decl-mcp-123") are URL-encoded into a single path segment so
+// Huma's router treats them as one {name} parameter. Apply stores these
+// names literally under the default namespace; the CLI itself uses
+// url.PathEscape on delete/get, so the HTTP client must match.
+func resourceURL(regURL, resource, name, version string) string {
+	return fmt.Sprintf("%s/namespaces/default/%s/%s/%s",
+		regURL, resource, url.PathEscape(name), version)
 }
 
 // verifyAgentExists checks that the agent exists in the registry via HTTP GET.
@@ -60,55 +57,62 @@ func verifyAgentExists(t *testing.T, regURL, name, version string) {
 	}
 }
 
+// requireDeleted asserts that the named resource no longer appears as a live
+// row in the registry. Under the v1alpha1 soft-delete contract a DELETE only
+// sets metadata.deletionTimestamp — the row survives until GC picks it up.
+// So "deleted" from an HTTP-client perspective means either:
+//   - 404: the row was hard-deleted by GC, OR
+//   - 200 with metadata.deletionTimestamp != nil: the row is terminating.
+//
+// Either satisfies the test's intent that the delete was recorded.
+func requireDeleted(t *testing.T, regURL, resource, name, version string) {
+	t.Helper()
+	resp, err := http.Get(resourceURL(regURL, resource, name, version))
+	if err != nil {
+		t.Fatalf("GET %s after delete failed: %v", resource, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 404 or 200-terminating for %s %s@%s after delete, got %d",
+			resource, name, version, resp.StatusCode)
+	}
+	var envelope struct {
+		Metadata struct {
+			DeletionTimestamp *string `json:"deletionTimestamp,omitempty"`
+		} `json:"metadata"`
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		t.Fatalf("decode %s response: %v\nbody: %s", resource, err, body)
+	}
+	if envelope.Metadata.DeletionTimestamp == nil {
+		t.Fatalf("expected %s %s@%s to be terminating (deletionTimestamp set) after delete, got live row",
+			resource, name, version)
+	}
+}
+
 // verifyAgentNotFound checks that the agent no longer exists in the registry.
 func verifyAgentNotFound(t *testing.T, regURL, name, version string) {
 	t.Helper()
-	url := resourceURL(regURL, "agents", name, version)
-	client := &http.Client{}
-	resp, err := client.Get(url)
-	if err != nil {
-		t.Fatalf("Failed to GET %s: %v", url, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("Expected agent %s@%s to be deleted (HTTP 404) but got %d", name, version, resp.StatusCode)
-	}
+	requireDeleted(t, regURL, "agents", name, version)
 }
 
 func verifyServerNotFound(t *testing.T, regURL, name, version string) {
 	t.Helper()
-	resp, err := http.Get(resourceURL(regURL, "mcpservers", name, version))
-	if err != nil {
-		t.Fatalf("GET mcp after delete failed: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("expected 404 for mcp %s after delete, got %d", name, resp.StatusCode)
-	}
+	requireDeleted(t, regURL, "mcpservers", name, version)
 }
 
 func verifySkillNotFound(t *testing.T, regURL, name, version string) {
 	t.Helper()
-	resp, err := http.Get(resourceURL(regURL, "skills", name, version))
-	if err != nil {
-		t.Fatalf("GET skill after delete failed: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("expected 404 for skill %s after delete, got %d", name, resp.StatusCode)
-	}
+	requireDeleted(t, regURL, "skills", name, version)
 }
 
 func verifyPromptNotFound(t *testing.T, regURL, name, version string) {
 	t.Helper()
-	resp, err := http.Get(resourceURL(regURL, "prompts", name, version))
-	if err != nil {
-		t.Fatalf("GET prompt after delete failed: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("expected 404 for prompt %s after delete, got %d", name, resp.StatusCode)
-	}
+	requireDeleted(t, regURL, "prompts", name, version)
 }
 
 // verifyServerExists checks that the MCP server exists in the registry via HTTP GET.
@@ -1945,14 +1949,19 @@ func TestDeploymentApply_BadTemplateRef(t *testing.T) {
 	missingName := UniqueAgentName("e2emissing")
 
 	deployYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
-kind: deployment
+kind: Deployment
 metadata:
   name: %s
   version: "0.1.0"
 spec:
-  resourceType: agent
-  providerId: local
-`, missingName)
+  targetRef:
+    kind: Agent
+    name: %s
+    version: "0.1.0"
+  providerRef:
+    kind: Provider
+    name: local
+`, missingName, missingName)
 	deployPath := writeDeclarativeYAML(t, tmpDir, "deployment.yaml", deployYAML)
 
 	result := RunArctl(t, tmpDir, "apply", "-f", deployPath, "--registry-url", regURL)
@@ -1981,6 +1990,8 @@ func TestMCPServer_PackagesShape(t *testing.T) {
 		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
 	})
 
+	// docker.io/library/alpine is the standard public test image used elsewhere
+	// in the v1alpha1 OCI validator tests, so the registry check passes.
 	yaml := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
@@ -1991,10 +2002,10 @@ spec:
   description: "packages-shape round-trip test"
   packages:
     - registryType: oci
-      identifier: ghcr.io/example/mcp:%s
+      identifier: docker.io/library/alpine:latest
       transport:
         type: stdio
-`, serverName, version, version)
+`, serverName, version)
 
 	path := writeDeclarativeYAML(t, tmpDir, "mcp-pkg.yaml", yaml)
 	result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)
@@ -2179,15 +2190,11 @@ spec:
 		"--version", v1, "--registry-url", regURL)
 	RequireSuccess(t, result)
 
-	// v1 gone.
-	resp := RegistryGet(t, resourceURL(regURL, "prompts", promptName, v1))
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Errorf("expected 404 for deleted prompt %s@%s, got %d", promptName, v1, resp.StatusCode)
-	}
+	// v1 gone (soft-deleted — either 404 or 200-with-deletionTimestamp is OK).
+	verifyPromptNotFound(t, regURL, promptName, v1)
 
 	// v2 still there.
-	resp = RegistryGet(t, resourceURL(regURL, "prompts", promptName, v2))
+	resp := RegistryGet(t, resourceURL(regURL, "prompts", promptName, v2))
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {

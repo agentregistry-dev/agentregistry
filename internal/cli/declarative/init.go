@@ -546,14 +546,14 @@ func writeDeclarativeSkillYAML(projectDir, name, ver, description, category, ima
 		},
 	}
 	if image != "" {
-		// Skills use RegistryType "docker" (matching legacy `arctl skill publish`
-		// and the `arctl skill pull` consumer). MCPs use "oci" — different
-		// per-kind convention.
+		// OCI packages under v1alpha1 carry the version pinned in the
+		// identifier — separate version/registryBaseUrl fields are
+		// rejected by the validator. The image string already looks like
+		// `host/name:tag`, which is a valid canonical OCI reference.
 		pkg := v1alpha1.SkillPackage{
-			RegistryType: "docker",
+			RegistryType: v1alpha1.RegistryTypeOCI,
 			Identifier:   image,
-			Version:      ver,
-			Transport:    v1alpha1.TransportProto{Type: "docker"},
+			Transport:    v1alpha1.TransportProto{Type: "stdio"},
 		}
 		skill.Spec.Packages = []v1alpha1.SkillPackage{pkg}
 	}
