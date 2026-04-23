@@ -28,7 +28,6 @@ import (
 )
 
 const (
-	defaultKubernetesProviderID         = "kubernetes-default"
 	kubernetesManagedLabelKey           = "aregistry.ai/managed"
 	kubernetesDeploymentIDLabelKey      = "aregistry.ai/deployment-id"
 	kubernetesDeploymentIDAnnotationKey = "aregistry.ai/deployment-id"

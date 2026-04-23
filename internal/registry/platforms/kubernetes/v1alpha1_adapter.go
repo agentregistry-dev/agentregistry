@@ -240,6 +240,5 @@ func namespaceFromV1Alpha1(deployment *v1alpha1.Deployment, provider *v1alpha1.P
 }
 
 // Compile-time assertion that the kubernetes adapter satisfies the v1alpha1
-// interface. The legacy DeploymentPlatformAdapter assertion lives with the
-// existing wiring; both surfaces coexist during the Group 5 transition.
+// DeploymentAdapter contract.
 var _ types.DeploymentAdapter = (*kubernetesDeploymentAdapter)(nil)

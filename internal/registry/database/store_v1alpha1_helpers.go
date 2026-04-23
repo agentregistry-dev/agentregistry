@@ -1,12 +1,10 @@
 package database
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -157,12 +155,3 @@ func runInTx(ctx context.Context, pool *pgxpool.Pool, fn func(pgx.Tx) error) err
 	}
 	return nil
 }
-
-// join is a package-local strings.Join to avoid importing strings in the
-// main store file; we only need this one helper.
-func join(parts []string, sep string) string { return strings.Join(parts, sep) }
-
-// compileAssertions keeps the unused-import complaint quiet when bytes and
-// pgxpool are referenced indirectly.
-var _ = bytes.Equal
-var _ *pgxpool.Pool

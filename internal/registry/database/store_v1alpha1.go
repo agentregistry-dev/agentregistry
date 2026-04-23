@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -374,7 +375,7 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, version string,
 		// about when the timestamp advances.
 		_, err = tx.Exec(ctx,
 			fmt.Sprintf(`UPDATE %s SET %s WHERE namespace=$1 AND name=$2 AND version=$3`,
-				s.table, join(setClauses, ", ")),
+				s.table, strings.Join(setClauses, ", ")),
 			args...)
 		if err != nil {
 			return fmt.Errorf("apply patch: %w", err)
@@ -544,7 +545,7 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 		       deletion_timestamp, finalizers, created_at, updated_at
 		FROM %s`, s.table)
 	if len(where) > 0 {
-		query += " WHERE " + join(where, " AND ")
+		query += " WHERE " + strings.Join(where, " AND ")
 	}
 	args = append(args, limit+1)
 	query += fmt.Sprintf(" ORDER BY updated_at DESC, namespace DESC, name DESC, version DESC LIMIT $%d", len(args))

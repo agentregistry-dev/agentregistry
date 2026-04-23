@@ -93,17 +93,16 @@ func (a *localDeploymentAdapter) Remove(ctx context.Context, in types.RemoveInpu
 	}, nil
 }
 
-// Logs is not yet implemented for the local adapter's v1alpha1 surface; the
-// legacy GetLogs path returns ErrDeploymentNotSupported for parity. Returns
-// an immediately-closed channel so callers don't block.
+// Logs is not yet implemented for the local adapter. Returns an
+// immediately-closed channel so callers don't block.
 func (a *localDeploymentAdapter) Logs(ctx context.Context, in types.LogsInput) (<-chan types.LogLine, error) {
 	ch := make(chan types.LogLine)
 	close(ch)
 	return ch, nil
 }
 
-// Discover reports no out-of-band local deployments. Matches the legacy
-// Discover behavior (local adapter returns an empty slice).
+// Discover reports no out-of-band local deployments — out-of-band
+// workloads only make sense for remote/hosted platforms.
 func (a *localDeploymentAdapter) Discover(ctx context.Context, in types.DiscoverInput) ([]types.DiscoveryResult, error) {
 	return nil, nil
 }
@@ -156,6 +155,5 @@ func (a *localDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 }
 
 // Compile-time assertion that the local adapter satisfies the v1alpha1
-// interface. The legacy DeploymentPlatformAdapter assertion lives in
-// deployment_adapter_local_test.go / wiring so both surfaces stay pinned.
+// DeploymentAdapter contract.
 var _ types.DeploymentAdapter = (*localDeploymentAdapter)(nil)
