@@ -71,7 +71,7 @@ func ImportBuiltinSeedDataV1Alpha1(ctx context.Context, pool *pgxpool.Pool) erro
 		if err != nil {
 			// Dup-version isn't fatal for seed; the existing row stays
 			// and the next pass picks up any updates.
-			if errors.Is(err, pkgdb.ErrAlreadyExists) || errors.Is(err, pkgdb.ErrInvalidVersion) {
+			if errors.Is(err, pkgdb.ErrAlreadyExists) || errors.Is(err, pkgdb.ErrDuplicateVersion) {
 				slog.Debug("seed: row already present", "name", srv.Name, "version", srv.Version)
 				continue
 			}

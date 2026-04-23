@@ -37,8 +37,10 @@ type DatabaseFactory func(ctx context.Context, databaseURL string, baseStore dat
 // AppOptions contains configuration for the registry app.
 // All fields are optional and allow external developers to extend functionality.
 //
-// This type is defined in pkg/registry and used by both pkg/registry/registry_app.go
-// and internal/registry/registry_app.go to avoid circular dependencies.
+// This type lives in pkg/types (rather than pkg/registry or internal/registry)
+// so that both the public entrypoint (pkg/registry/registry_app.go) and the
+// internal implementation (internal/registry/registry_app.go) can reference
+// it without a cyclic import.
 type AppOptions struct {
 	// DatabaseFactory is an optional function to create a database that adds new functionality.
 	// The factory receives the base database and can run additional migrations.

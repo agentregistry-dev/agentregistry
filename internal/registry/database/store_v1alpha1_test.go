@@ -375,7 +375,7 @@ func TestV1Alpha1Store_FindReferrers(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	results, err := agents.FindReferrers(ctx, "", pattern, false)
+	results, err := agents.FindReferrers(ctx, pattern, FindReferrersOpts{})
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Equal(t, "refs-bar", results[0].Metadata.Name)

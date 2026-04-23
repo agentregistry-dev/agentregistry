@@ -19,13 +19,16 @@ import (
 // Common database errors surfaced by both the v1alpha1 generic Store
 // and any enterprise DatabaseFactory that wraps it.
 var (
-	ErrNotFound           = errors.New("record not found")
-	ErrForbidden          = errors.New("forbidden")
-	ErrAlreadyExists      = errors.New("record already exists")
-	ErrInvalidInput       = errors.New("invalid input")
-	ErrDatabase           = errors.New("database error")
-	ErrInvalidVersion     = errors.New("invalid version: cannot publish duplicate version")
-	ErrMaxVersionsReached = errors.New("maximum number of versions reached (10000): please reach out at https://github.com/modelcontextprotocol/registry to explain your use case")
+	ErrNotFound     = errors.New("record not found")
+	ErrForbidden    = errors.New("forbidden")
+	ErrAlreadyExists = errors.New("record already exists")
+	ErrInvalidInput = errors.New("invalid input")
+	ErrDatabase     = errors.New("database error")
+	// ErrDuplicateVersion is returned when an upsert would publish a
+	// version that already exists (e.g. a re-publish without bumping).
+	// Distinct from v1alpha1.ErrInvalidVersion which covers structural
+	// version-string validation (length, literal "latest", format).
+	ErrDuplicateVersion = errors.New("version already published")
 )
 
 // Store is the root persistence contract AppOptions.DatabaseFactory
@@ -43,6 +46,3 @@ type Store interface {
 	Pool() *pgxpool.Pool
 	Close() error
 }
-
-// ErrStoreNotConfigured is returned by helpers that accept a nil Store.
-var ErrStoreNotConfigured = errors.New("store is not configured")

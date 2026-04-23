@@ -599,25 +599,38 @@ func encodeListCursor(obj *v1alpha1.RawObject) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(payload), nil
 }
 
+// FindReferrersOpts controls the FindReferrers scan.
+type FindReferrersOpts struct {
+	// Namespace, when non-empty, restricts results to a single namespace.
+	Namespace string
+	// LatestOnly, when true, restricts to is_latest_version rows.
+	LatestOnly bool
+	// IncludeTerminating, when true, keeps rows whose deletion_timestamp
+	// is set. Default (false) excludes them — URL-uniqueness and cross-
+	// kind ref checks want to avoid conflicting with a soft-deleted row
+	// that is about to be GC'd.
+	IncludeTerminating bool
+}
+
 // FindReferrers returns rows from this Store's table whose spec JSONB
 // matches pathJSON (via the `@>` containment operator). Callers build the
 // JSONB fragment per-kind (e.g. `{"mcpServers":[{"namespace":"...","name":"...","version":"..."}]}`)
 // and this method stays generic across ResourceRef shapes.
-//
-// Results exclude terminating rows by default. latestOnly further
-// restricts to is_latest_version rows.
-func (s *Store) FindReferrers(ctx context.Context, namespace string, pathJSON json.RawMessage, latestOnly bool) ([]*v1alpha1.RawObject, error) {
+func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opts FindReferrersOpts) ([]*v1alpha1.RawObject, error) {
 	args := []any{[]byte(pathJSON)}
 	query := fmt.Sprintf(`
 		SELECT namespace, name, version, generation, labels, annotations, spec, status,
 		       deletion_timestamp, finalizers, created_at, updated_at
 		FROM %s
-		WHERE spec @> $1::jsonb AND deletion_timestamp IS NULL`, s.table)
-	if namespace != "" {
-		args = append(args, namespace)
+		WHERE spec @> $1::jsonb`, s.table)
+	if !opts.IncludeTerminating {
+		query += " AND deletion_timestamp IS NULL"
+	}
+	if opts.Namespace != "" {
+		args = append(args, opts.Namespace)
 		query += fmt.Sprintf(" AND namespace = $%d", len(args))
 	}
-	if latestOnly {
+	if opts.LatestOnly {
 		query += " AND is_latest_version"
 	}
 	query += " ORDER BY updated_at DESC"
@@ -722,6 +735,3 @@ func pickLatestVersion(versions []string) string {
 	return versions[0]
 }
 
-// Ensure time package is referenced (used implicitly via TIMESTAMPTZ scan
-// target in helpers).
-var _ = time.Time{}

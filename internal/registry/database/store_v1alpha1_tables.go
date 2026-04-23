@@ -161,7 +161,7 @@ func NewV1Alpha1UniqueRemoteURLsChecker(stores map[string]*Store) v1alpha1.Uniqu
 		if err != nil {
 			return fmt.Errorf("unique-remote-urls: encode fragment: %w", err)
 		}
-		refs, err := store.FindReferrers(ctx, "", fragment, false)
+		refs, err := store.FindReferrers(ctx, fragment, FindReferrersOpts{})
 		if err != nil {
 			return fmt.Errorf("unique-remote-urls: scan: %w", err)
 		}

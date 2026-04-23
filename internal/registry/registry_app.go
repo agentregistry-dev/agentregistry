@@ -340,14 +340,18 @@ func buildRouteOptions(
 	return routeOpts
 }
 
-// mcpAuthnMiddleware creates a middleware that uses the AuthnProvider to authenticate requests and add to session context.
-// this session context is used by the db + authz provider to check permissions.
+// mcpAuthnMiddleware uses the AuthnProvider to attach a session to the
+// request context on successful authentication. On auth error or missing
+// session, the request continues with an unauthenticated context — the
+// AuthzProvider downstream decides whether the request is allowed (the
+// OSS default `PublicAuthzProvider` permits read-only access; enterprise
+// authz can reject). Failing-open here is intentional so the MCP bridge
+// works for anonymous `list_servers` / `get_server` traffic while still
+// letting authenticated callers pick up privileged operations.
 func mcpAuthnMiddleware(authn auth.AuthnProvider) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
-
-			// authenticate using the configured provider
 			session, err := authn.Authenticate(ctx, r.Header.Get, r.URL.Query())
 			if err == nil && session != nil {
 				ctx = auth.AuthSessionTo(ctx, session)
