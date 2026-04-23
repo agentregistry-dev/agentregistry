@@ -510,11 +510,12 @@ release-cli: bin/arctl-darwin-amd64.sha256
 release-cli: bin/arctl-darwin-arm64.sha256
 release-cli: bin/arctl-windows-amd64.exe.sha256
 
-GOLANGCI_LINT ?= go tool golangci-lint
+GOLANGCI_LINT ?= $(shell which golangci-lint 2>/dev/null || echo "golangci-lint")
 GOLANGCI_LINT_ARGS ?= --fix
 
 .PHONY: lint
 lint: ## Run golangci-lint linter
+	@command -v $(GOLANGCI_LINT) >/dev/null 2>&1 || { echo "Error: golangci-lint not found. Install: https://golangci-lint.run/welcome/install/"; exit 1; }
 	$(GOLANGCI_LINT) run $(GOLANGCI_LINT_ARGS)
 
 .PHONY: lint-ui
