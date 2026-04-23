@@ -316,54 +316,25 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, version string,
 		args := []any{namespace, name, version}
 
 		if patch.Status != nil {
-			var status v1alpha1.Status
-			if len(statusJSON) > 0 {
-				if err := json.Unmarshal(statusJSON, &status); err != nil {
-					return fmt.Errorf("decode status: %w", err)
-				}
-			}
-			patch.Status(&status)
-			newJSON, err := json.Marshal(status)
+			newJSON, err := buildStatusPatch(statusJSON, patch.Status)
 			if err != nil {
-				return fmt.Errorf("encode status: %w", err)
+				return err
 			}
 			args = append(args, newJSON)
 			setClauses = append(setClauses, fmt.Sprintf("status=$%d", len(args)))
 		}
-
 		if patch.Annotations != nil {
-			annotations := map[string]string{}
-			if len(annotationsJSON) > 0 {
-				if err := json.Unmarshal(annotationsJSON, &annotations); err != nil {
-					return fmt.Errorf("decode annotations: %w", err)
-				}
-			}
-			annotations = patch.Annotations(annotations)
-			if annotations == nil {
-				annotations = map[string]string{}
-			}
-			newJSON, err := json.Marshal(annotations)
+			newJSON, err := buildAnnotationsPatch(annotationsJSON, patch.Annotations)
 			if err != nil {
-				return fmt.Errorf("encode annotations: %w", err)
+				return err
 			}
 			args = append(args, newJSON)
 			setClauses = append(setClauses, fmt.Sprintf("annotations=$%d", len(args)))
 		}
-
 		if patch.Finalizers != nil {
-			var finalizers []string
-			if len(finalizersJSON) > 0 {
-				if err := json.Unmarshal(finalizersJSON, &finalizers); err != nil {
-					return fmt.Errorf("decode finalizers: %w", err)
-				}
-			}
-			finalizers = patch.Finalizers(finalizers)
-			if finalizers == nil {
-				finalizers = []string{}
-			}
-			newJSON, err := json.Marshal(finalizers)
+			newJSON, err := buildFinalizersPatch(finalizersJSON, patch.Finalizers)
 			if err != nil {
-				return fmt.Errorf("encode finalizers: %w", err)
+				return err
 			}
 			args = append(args, newJSON)
 			setClauses = append(setClauses, fmt.Sprintf("finalizers=$%d", len(args)))
@@ -382,6 +353,66 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, version string,
 		}
 		return nil
 	})
+}
+
+// buildStatusPatch decodes the row's current status JSON, applies the
+// caller's mutator, and marshals the result. Returned bytes go into the
+// UPDATE statement in ApplyPatch.
+func buildStatusPatch(current []byte, mutate func(*v1alpha1.Status)) ([]byte, error) {
+	var status v1alpha1.Status
+	if len(current) > 0 {
+		if err := json.Unmarshal(current, &status); err != nil {
+			return nil, fmt.Errorf("decode status: %w", err)
+		}
+	}
+	mutate(&status)
+	out, err := json.Marshal(status)
+	if err != nil {
+		return nil, fmt.Errorf("encode status: %w", err)
+	}
+	return out, nil
+}
+
+// buildAnnotationsPatch decodes the row's current annotations JSON,
+// applies the caller's mutator (nil return → empty map), and marshals
+// the result.
+func buildAnnotationsPatch(current []byte, mutate func(map[string]string) map[string]string) ([]byte, error) {
+	annotations := map[string]string{}
+	if len(current) > 0 {
+		if err := json.Unmarshal(current, &annotations); err != nil {
+			return nil, fmt.Errorf("decode annotations: %w", err)
+		}
+	}
+	annotations = mutate(annotations)
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	out, err := json.Marshal(annotations)
+	if err != nil {
+		return nil, fmt.Errorf("encode annotations: %w", err)
+	}
+	return out, nil
+}
+
+// buildFinalizersPatch decodes the row's current finalizers JSON,
+// applies the caller's mutator (nil return → empty slice), and marshals
+// the result.
+func buildFinalizersPatch(current []byte, mutate func([]string) []string) ([]byte, error) {
+	var finalizers []string
+	if len(current) > 0 {
+		if err := json.Unmarshal(current, &finalizers); err != nil {
+			return nil, fmt.Errorf("decode finalizers: %w", err)
+		}
+	}
+	finalizers = mutate(finalizers)
+	if finalizers == nil {
+		finalizers = []string{}
+	}
+	out, err := json.Marshal(finalizers)
+	if err != nil {
+		return nil, fmt.Errorf("encode finalizers: %w", err)
+	}
+	return out, nil
 }
 
 // PatchStatus is a thin wrapper over ApplyPatch for the single-column
