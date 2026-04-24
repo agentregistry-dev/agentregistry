@@ -6,9 +6,16 @@ info:
 paths:
     /v0/agents:
         get:
-            summary: List Agent across all namespaces
-            operationId: list-agents-all-namespaces
+            summary: List Agent (scoped by ?namespace)
+            operationId: list-agents
             parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
                 - name: limit
                   in: query
                   description: Max items to return (default 50).
@@ -68,6 +75,205 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/ListOutputAgentBody'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/agents/{name}:
+        get:
+            summary: Get the latest version of a Agent
+            operationId: get-latest-agent
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Agent'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/agents/{name}/{version}:
+        get:
+            summary: Get a Agent by name and version
+            operationId: get-agent
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Agent'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        put:
+            summary: Apply a Agent (idempotent upsert)
+            operationId: apply-agent
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/Agent'
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Agent'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        delete:
+            summary: 'Delete a Agent (soft-delete: sets deletionTimestamp)'
+            operationId: delete-agent
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/agents/{name}/readme:
+        get:
+            summary: Get the latest Agent readme
+            operationId: get-latest-agent-readme
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Readme'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/agents/{name}/versions/{version}/readme:
+        get:
+            summary: Get a Agent readme by name and version
+            operationId: get-agent-readme
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Readme'
                 default:
                     description: Error
                     content:
@@ -139,436 +345,16 @@ paths:
                                 $ref: '#/components/schemas/ErrorModel'
     /v0/deployments:
         get:
-            summary: List Deployment across all namespaces
-            operationId: list-deployments-all-namespaces
-            parameters:
-                - name: limit
-                  in: query
-                  description: Max items to return (default 50).
-                  explode: false
-                  schema:
-                    type: integer
-                    description: Max items to return (default 50).
-                    format: int64
-                    default: 50
-                - name: cursor
-                  in: query
-                  description: Opaque pagination cursor.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Opaque pagination cursor.
-                - name: labels
-                  in: query
-                  description: 'Label selector: key=value,key2=value2.'
-                  explode: false
-                  schema:
-                    type: string
-                    description: 'Label selector: key=value,key2=value2.'
-                - name: latestOnly
-                  in: query
-                  description: Only return rows with is_latest_version=true.
-                  explode: false
-                  schema:
-                    type: boolean
-                    description: Only return rows with is_latest_version=true.
-                - name: includeTerminating
-                  in: query
-                  description: Include rows with a deletionTimestamp.
-                  explode: false
-                  schema:
-                    type: boolean
-                    description: Include rows with a deletionTimestamp.
-                - name: semantic
-                  in: query
-                  description: Semantic search query. Returns results ranked by similarity.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Semantic search query. Returns results ranked by similarity.
-                - name: semanticThreshold
-                  in: query
-                  description: Drop results with cosine distance above this threshold (0 = no filter).
-                  explode: false
-                  schema:
-                    type: number
-                    description: Drop results with cosine distance above this threshold (0 = no filter).
-                    format: float
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListOutputDeploymentBody'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/health:
-        get:
-            tags:
-                - health
-            summary: Health check
-            description: Check the health status of the API
-            operationId: get-health-v0
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/HealthBody'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/mcpservers:
-        get:
-            summary: List MCPServer across all namespaces
-            operationId: list-mcpservers-all-namespaces
-            parameters:
-                - name: limit
-                  in: query
-                  description: Max items to return (default 50).
-                  explode: false
-                  schema:
-                    type: integer
-                    description: Max items to return (default 50).
-                    format: int64
-                    default: 50
-                - name: cursor
-                  in: query
-                  description: Opaque pagination cursor.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Opaque pagination cursor.
-                - name: labels
-                  in: query
-                  description: 'Label selector: key=value,key2=value2.'
-                  explode: false
-                  schema:
-                    type: string
-                    description: 'Label selector: key=value,key2=value2.'
-                - name: latestOnly
-                  in: query
-                  description: Only return rows with is_latest_version=true.
-                  explode: false
-                  schema:
-                    type: boolean
-                    description: Only return rows with is_latest_version=true.
-                - name: includeTerminating
-                  in: query
-                  description: Include rows with a deletionTimestamp.
-                  explode: false
-                  schema:
-                    type: boolean
-                    description: Include rows with a deletionTimestamp.
-                - name: semantic
-                  in: query
-                  description: Semantic search query. Returns results ranked by similarity.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Semantic search query. Returns results ranked by similarity.
-                - name: semanticThreshold
-                  in: query
-                  description: Drop results with cosine distance above this threshold (0 = no filter).
-                  explode: false
-                  schema:
-                    type: number
-                    description: Drop results with cosine distance above this threshold (0 = no filter).
-                    format: float
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListOutputMCPServerBody'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/agents:
-        get:
-            summary: List Agent in a namespace
-            operationId: list-agents
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: limit
-                  in: query
-                  description: Max items to return (default 50).
-                  explode: false
-                  schema:
-                    type: integer
-                    description: Max items to return (default 50).
-                    format: int64
-                    default: 50
-                - name: cursor
-                  in: query
-                  description: Opaque pagination cursor.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Opaque pagination cursor.
-                - name: labels
-                  in: query
-                  description: 'Label selector: key=value,key2=value2.'
-                  explode: false
-                  schema:
-                    type: string
-                    description: 'Label selector: key=value,key2=value2.'
-                - name: latestOnly
-                  in: query
-                  description: Only return rows with is_latest_version=true.
-                  explode: false
-                  schema:
-                    type: boolean
-                    description: Only return rows with is_latest_version=true.
-                - name: includeTerminating
-                  in: query
-                  description: Include rows with a deletionTimestamp.
-                  explode: false
-                  schema:
-                    type: boolean
-                    description: Include rows with a deletionTimestamp.
-                - name: semantic
-                  in: query
-                  description: Semantic search query. Returns results ranked by similarity.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Semantic search query. Returns results ranked by similarity.
-                - name: semanticThreshold
-                  in: query
-                  description: Drop results with cosine distance above this threshold (0 = no filter).
-                  explode: false
-                  schema:
-                    type: number
-                    description: Drop results with cosine distance above this threshold (0 = no filter).
-                    format: float
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListOutputAgentBody'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/agents/{name}:
-        get:
-            summary: Get the latest version of a Agent
-            operationId: get-latest-agent
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Agent'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/agents/{name}/{version}:
-        get:
-            summary: Get a Agent by namespace, name, and version
-            operationId: get-agent
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Agent'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-        put:
-            summary: Apply a Agent (idempotent upsert)
-            operationId: apply-agent
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/Agent'
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Agent'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-        delete:
-            summary: 'Delete a Agent (soft-delete: sets deletionTimestamp)'
-            operationId: delete-agent
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "204":
-                    description: No Content
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/agents/{name}/readme:
-        get:
-            summary: Get the latest Agent readme
-            operationId: get-latest-agent-readme
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Readme'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/agents/{name}/versions/{version}/readme:
-        get:
-            summary: Get a Agent readme by namespace, name, and version
-            operationId: get-agent-readme
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Readme'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/deployments:
-        get:
-            summary: List Deployment in a namespace
+            summary: List Deployment (scoped by ?namespace)
             operationId: list-deployments
             parameters:
                 - name: namespace
-                  in: path
-                  required: true
+                  in: query
+                  description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+                  explode: false
                   schema:
                     type: string
+                    description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
                 - name: limit
                   in: query
                   description: Max items to return (default 50).
@@ -634,16 +420,18 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/deployments/{name}:
+    /v0/deployments/{name}:
         get:
             summary: Get the latest version of a Deployment
             operationId: get-latest-deployment
             parameters:
                 - name: namespace
-                  in: path
-                  required: true
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
                   schema:
                     type: string
+                    description: Namespace (internal; defaults to 'default').
                 - name: name
                   in: path
                   required: true
@@ -662,16 +450,18 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/deployments/{name}/{version}:
+    /v0/deployments/{name}/{version}:
         get:
-            summary: Get a Deployment by namespace, name, and version
+            summary: Get a Deployment by name and version
             operationId: get-deployment
             parameters:
                 - name: namespace
-                  in: path
-                  required: true
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
                   schema:
                     type: string
+                    description: Namespace (internal; defaults to 'default').
                 - name: name
                   in: path
                   required: true
@@ -700,10 +490,12 @@ paths:
             operationId: apply-deployment
             parameters:
                 - name: namespace
-                  in: path
-                  required: true
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
                   schema:
                     type: string
+                    description: Namespace (internal; defaults to 'default').
                 - name: name
                   in: path
                   required: true
@@ -737,10 +529,12 @@ paths:
             operationId: delete-deployment
             parameters:
                 - name: namespace
-                  in: path
-                  required: true
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
                   schema:
                     type: string
+                    description: Namespace (internal; defaults to 'default').
                 - name: name
                   in: path
                   required: true
@@ -760,16 +554,38 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/mcpservers:
+    /v0/health:
         get:
-            summary: List MCPServer in a namespace
+            tags:
+                - health
+            summary: Health check
+            description: Check the health status of the API
+            operationId: get-health-v0
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/HealthBody'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/mcpservers:
+        get:
+            summary: List MCPServer (scoped by ?namespace)
             operationId: list-mcpservers
             parameters:
                 - name: namespace
-                  in: path
-                  required: true
+                  in: query
+                  description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+                  explode: false
                   schema:
                     type: string
+                    description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
                 - name: limit
                   in: query
                   description: Max items to return (default 50).
@@ -835,16 +651,18 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/mcpservers/{name}:
+    /v0/mcpservers/{name}:
         get:
             summary: Get the latest version of a MCPServer
             operationId: get-latest-mcpserver
             parameters:
                 - name: namespace
-                  in: path
-                  required: true
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
                   schema:
                     type: string
+                    description: Namespace (internal; defaults to 'default').
                 - name: name
                   in: path
                   required: true
@@ -863,16 +681,18 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/mcpservers/{name}/{version}:
+    /v0/mcpservers/{name}/{version}:
         get:
-            summary: Get a MCPServer by namespace, name, and version
+            summary: Get a MCPServer by name and version
             operationId: get-mcpserver
             parameters:
                 - name: namespace
-                  in: path
-                  required: true
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
                   schema:
                     type: string
+                    description: Namespace (internal; defaults to 'default').
                 - name: name
                   in: path
                   required: true
@@ -901,10 +721,12 @@ paths:
             operationId: apply-mcpserver
             parameters:
                 - name: namespace
-                  in: path
-                  required: true
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
                   schema:
                     type: string
+                    description: Namespace (internal; defaults to 'default').
                 - name: name
                   in: path
                   required: true
@@ -938,10 +760,12 @@ paths:
             operationId: delete-mcpserver
             parameters:
                 - name: namespace
-                  in: path
-                  required: true
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
                   schema:
                     type: string
+                    description: Namespace (internal; defaults to 'default').
                 - name: name
                   in: path
                   required: true
@@ -961,16 +785,18 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/mcpservers/{name}/readme:
+    /v0/mcpservers/{name}/readme:
         get:
             summary: Get the latest MCPServer readme
             operationId: get-latest-mcpserver-readme
             parameters:
                 - name: namespace
-                  in: path
-                  required: true
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
                   schema:
                     type: string
+                    description: Namespace (internal; defaults to 'default').
                 - name: name
                   in: path
                   required: true
@@ -989,741 +815,18 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/mcpservers/{name}/versions/{version}/readme:
+    /v0/mcpservers/{name}/versions/{version}/readme:
         get:
-            summary: Get a MCPServer readme by namespace, name, and version
+            summary: Get a MCPServer readme by name and version
             operationId: get-mcpserver-readme
             parameters:
                 - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Readme'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/prompts:
-        get:
-            summary: List Prompt in a namespace
-            operationId: list-prompts
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: limit
                   in: query
-                  description: Max items to return (default 50).
-                  explode: false
-                  schema:
-                    type: integer
-                    description: Max items to return (default 50).
-                    format: int64
-                    default: 50
-                - name: cursor
-                  in: query
-                  description: Opaque pagination cursor.
+                  description: Namespace (internal; defaults to 'default').
                   explode: false
                   schema:
                     type: string
-                    description: Opaque pagination cursor.
-                - name: labels
-                  in: query
-                  description: 'Label selector: key=value,key2=value2.'
-                  explode: false
-                  schema:
-                    type: string
-                    description: 'Label selector: key=value,key2=value2.'
-                - name: latestOnly
-                  in: query
-                  description: Only return rows with is_latest_version=true.
-                  explode: false
-                  schema:
-                    type: boolean
-                    description: Only return rows with is_latest_version=true.
-                - name: includeTerminating
-                  in: query
-                  description: Include rows with a deletionTimestamp.
-                  explode: false
-                  schema:
-                    type: boolean
-                    description: Include rows with a deletionTimestamp.
-                - name: semantic
-                  in: query
-                  description: Semantic search query. Returns results ranked by similarity.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Semantic search query. Returns results ranked by similarity.
-                - name: semanticThreshold
-                  in: query
-                  description: Drop results with cosine distance above this threshold (0 = no filter).
-                  explode: false
-                  schema:
-                    type: number
-                    description: Drop results with cosine distance above this threshold (0 = no filter).
-                    format: float
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListOutputPromptBody'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/prompts/{name}:
-        get:
-            summary: Get the latest version of a Prompt
-            operationId: get-latest-prompt
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Prompt'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/prompts/{name}/{version}:
-        get:
-            summary: Get a Prompt by namespace, name, and version
-            operationId: get-prompt
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Prompt'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-        put:
-            summary: Apply a Prompt (idempotent upsert)
-            operationId: apply-prompt
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/Prompt'
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Prompt'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-        delete:
-            summary: 'Delete a Prompt (soft-delete: sets deletionTimestamp)'
-            operationId: delete-prompt
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "204":
-                    description: No Content
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/prompts/{name}/readme:
-        get:
-            summary: Get the latest Prompt readme
-            operationId: get-latest-prompt-readme
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Readme'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/prompts/{name}/versions/{version}/readme:
-        get:
-            summary: Get a Prompt readme by namespace, name, and version
-            operationId: get-prompt-readme
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Readme'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/providers:
-        get:
-            summary: List Provider in a namespace
-            operationId: list-providers
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: limit
-                  in: query
-                  description: Max items to return (default 50).
-                  explode: false
-                  schema:
-                    type: integer
-                    description: Max items to return (default 50).
-                    format: int64
-                    default: 50
-                - name: cursor
-                  in: query
-                  description: Opaque pagination cursor.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Opaque pagination cursor.
-                - name: labels
-                  in: query
-                  description: 'Label selector: key=value,key2=value2.'
-                  explode: false
-                  schema:
-                    type: string
-                    description: 'Label selector: key=value,key2=value2.'
-                - name: latestOnly
-                  in: query
-                  description: Only return rows with is_latest_version=true.
-                  explode: false
-                  schema:
-                    type: boolean
-                    description: Only return rows with is_latest_version=true.
-                - name: includeTerminating
-                  in: query
-                  description: Include rows with a deletionTimestamp.
-                  explode: false
-                  schema:
-                    type: boolean
-                    description: Include rows with a deletionTimestamp.
-                - name: semantic
-                  in: query
-                  description: Semantic search query. Returns results ranked by similarity.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Semantic search query. Returns results ranked by similarity.
-                - name: semanticThreshold
-                  in: query
-                  description: Drop results with cosine distance above this threshold (0 = no filter).
-                  explode: false
-                  schema:
-                    type: number
-                    description: Drop results with cosine distance above this threshold (0 = no filter).
-                    format: float
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListOutputProviderBody'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/providers/{name}:
-        get:
-            summary: Get the latest version of a Provider
-            operationId: get-latest-provider
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Provider'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/providers/{name}/{version}:
-        get:
-            summary: Get a Provider by namespace, name, and version
-            operationId: get-provider
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Provider'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-        put:
-            summary: Apply a Provider (idempotent upsert)
-            operationId: apply-provider
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/Provider'
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Provider'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-        delete:
-            summary: 'Delete a Provider (soft-delete: sets deletionTimestamp)'
-            operationId: delete-provider
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "204":
-                    description: No Content
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/skills:
-        get:
-            summary: List Skill in a namespace
-            operationId: list-skills
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: limit
-                  in: query
-                  description: Max items to return (default 50).
-                  explode: false
-                  schema:
-                    type: integer
-                    description: Max items to return (default 50).
-                    format: int64
-                    default: 50
-                - name: cursor
-                  in: query
-                  description: Opaque pagination cursor.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Opaque pagination cursor.
-                - name: labels
-                  in: query
-                  description: 'Label selector: key=value,key2=value2.'
-                  explode: false
-                  schema:
-                    type: string
-                    description: 'Label selector: key=value,key2=value2.'
-                - name: latestOnly
-                  in: query
-                  description: Only return rows with is_latest_version=true.
-                  explode: false
-                  schema:
-                    type: boolean
-                    description: Only return rows with is_latest_version=true.
-                - name: includeTerminating
-                  in: query
-                  description: Include rows with a deletionTimestamp.
-                  explode: false
-                  schema:
-                    type: boolean
-                    description: Include rows with a deletionTimestamp.
-                - name: semantic
-                  in: query
-                  description: Semantic search query. Returns results ranked by similarity.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Semantic search query. Returns results ranked by similarity.
-                - name: semanticThreshold
-                  in: query
-                  description: Drop results with cosine distance above this threshold (0 = no filter).
-                  explode: false
-                  schema:
-                    type: number
-                    description: Drop results with cosine distance above this threshold (0 = no filter).
-                    format: float
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListOutputSkillBody'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/skills/{name}:
-        get:
-            summary: Get the latest version of a Skill
-            operationId: get-latest-skill
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Skill'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/skills/{name}/{version}:
-        get:
-            summary: Get a Skill by namespace, name, and version
-            operationId: get-skill
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Skill'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-        put:
-            summary: Apply a Skill (idempotent upsert)
-            operationId: apply-skill
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/Skill'
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Skill'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-        delete:
-            summary: 'Delete a Skill (soft-delete: sets deletionTimestamp)'
-            operationId: delete-skill
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "204":
-                    description: No Content
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/skills/{name}/readme:
-        get:
-            summary: Get the latest Skill readme
-            operationId: get-latest-skill-readme
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Readme'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/namespaces/{namespace}/skills/{name}/versions/{version}/readme:
-        get:
-            summary: Get a Skill readme by namespace, name, and version
-            operationId: get-skill-readme
-            parameters:
-                - name: namespace
-                  in: path
-                  required: true
-                  schema:
-                    type: string
+                    description: Namespace (internal; defaults to 'default').
                 - name: name
                   in: path
                   required: true
@@ -1769,9 +872,16 @@ paths:
                                 $ref: '#/components/schemas/ErrorModel'
     /v0/prompts:
         get:
-            summary: List Prompt across all namespaces
-            operationId: list-prompts-all-namespaces
+            summary: List Prompt (scoped by ?namespace)
+            operationId: list-prompts
             parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
                 - name: limit
                   in: query
                   description: Max items to return (default 50).
@@ -1837,11 +947,217 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
+    /v0/prompts/{name}:
+        get:
+            summary: Get the latest version of a Prompt
+            operationId: get-latest-prompt
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Prompt'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/prompts/{name}/{version}:
+        get:
+            summary: Get a Prompt by name and version
+            operationId: get-prompt
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Prompt'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        put:
+            summary: Apply a Prompt (idempotent upsert)
+            operationId: apply-prompt
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/Prompt'
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Prompt'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        delete:
+            summary: 'Delete a Prompt (soft-delete: sets deletionTimestamp)'
+            operationId: delete-prompt
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/prompts/{name}/readme:
+        get:
+            summary: Get the latest Prompt readme
+            operationId: get-latest-prompt-readme
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Readme'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/prompts/{name}/versions/{version}/readme:
+        get:
+            summary: Get a Prompt readme by name and version
+            operationId: get-prompt-readme
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Readme'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
     /v0/providers:
         get:
-            summary: List Provider across all namespaces
-            operationId: list-providers-all-namespaces
+            summary: List Provider (scoped by ?namespace)
+            operationId: list-providers
             parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
                 - name: limit
                   in: query
                   description: Max items to return (default 50).
@@ -1901,6 +1217,140 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/ListOutputProviderBody'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/providers/{name}:
+        get:
+            summary: Get the latest version of a Provider
+            operationId: get-latest-provider
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Provider'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/providers/{name}/{version}:
+        get:
+            summary: Get a Provider by name and version
+            operationId: get-provider
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Provider'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        put:
+            summary: Apply a Provider (idempotent upsert)
+            operationId: apply-provider
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/Provider'
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Provider'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        delete:
+            summary: 'Delete a Provider (soft-delete: sets deletionTimestamp)'
+            operationId: delete-provider
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "204":
+                    description: No Content
                 default:
                     description: Error
                     content:
@@ -1960,9 +1410,16 @@ paths:
                                 $ref: '#/components/schemas/ErrorModel'
     /v0/skills:
         get:
-            summary: List Skill across all namespaces
-            operationId: list-skills-all-namespaces
+            summary: List Skill (scoped by ?namespace)
+            operationId: list-skills
             parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
                 - name: limit
                   in: query
                   description: Max items to return (default 50).
@@ -2022,6 +1479,205 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/ListOutputSkillBody'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/skills/{name}:
+        get:
+            summary: Get the latest version of a Skill
+            operationId: get-latest-skill
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Skill'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/skills/{name}/{version}:
+        get:
+            summary: Get a Skill by name and version
+            operationId: get-skill
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Skill'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        put:
+            summary: Apply a Skill (idempotent upsert)
+            operationId: apply-skill
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/Skill'
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Skill'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        delete:
+            summary: 'Delete a Skill (soft-delete: sets deletionTimestamp)'
+            operationId: delete-skill
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/skills/{name}/readme:
+        get:
+            summary: Get the latest Skill readme
+            operationId: get-latest-skill-readme
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Readme'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/skills/{name}/versions/{version}/readme:
+        get:
+            summary: Get a Skill readme by name and version
+            operationId: get-skill-readme
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Readme'
                 default:
                     description: Error
                     content:
@@ -2150,9 +1806,6 @@ components:
                     type: string
                 error:
                     type: string
-                generation:
-                    type: integer
-                    format: int64
                 kind:
                     type: string
                 name:
@@ -2185,9 +1838,6 @@ components:
                     format: date-time
                 message:
                     type: string
-                observedGeneration:
-                    type: integer
-                    format: int64
                 reason:
                     type: string
                 status:
@@ -2620,13 +2270,6 @@ components:
                 deletionTimestamp:
                     type: string
                     format: date-time
-                finalizers:
-                    type: array
-                    items:
-                        type: string
-                generation:
-                    type: integer
-                    format: int64
                 labels:
                     type: object
                     additionalProperties:
@@ -2641,7 +2284,6 @@ components:
                 version:
                     type: string
             required:
-                - namespace
                 - name
         PingBody:
             type: object
@@ -2826,9 +2468,6 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/Condition'
-                observedGeneration:
-                    type: integer
-                    format: int64
         TransportProto:
             type: object
             additionalProperties: false
