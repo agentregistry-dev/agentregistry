@@ -36,7 +36,7 @@ ALTER TABLE v1alpha1.agents
     ADD COLUMN semantic_embedding_checksum     TEXT,
     ADD COLUMN semantic_embedding_generated_at TIMESTAMPTZ;
 
-CREATE INDEX v1alpha1_agents_semantic_embedding_hnsw
+CREATE INDEX IF NOT EXISTS v1alpha1_agents_semantic_embedding_hnsw
     ON v1alpha1.agents USING hnsw (semantic_embedding vector_cosine_ops);
 
 ALTER TABLE v1alpha1.mcp_servers
@@ -47,7 +47,7 @@ ALTER TABLE v1alpha1.mcp_servers
     ADD COLUMN semantic_embedding_checksum     TEXT,
     ADD COLUMN semantic_embedding_generated_at TIMESTAMPTZ;
 
-CREATE INDEX v1alpha1_mcp_servers_semantic_embedding_hnsw
+CREATE INDEX IF NOT EXISTS v1alpha1_mcp_servers_semantic_embedding_hnsw
     ON v1alpha1.mcp_servers USING hnsw (semantic_embedding vector_cosine_ops);
 
 ALTER TABLE v1alpha1.skills
@@ -58,7 +58,7 @@ ALTER TABLE v1alpha1.skills
     ADD COLUMN semantic_embedding_checksum     TEXT,
     ADD COLUMN semantic_embedding_generated_at TIMESTAMPTZ;
 
-CREATE INDEX v1alpha1_skills_semantic_embedding_hnsw
+CREATE INDEX IF NOT EXISTS v1alpha1_skills_semantic_embedding_hnsw
     ON v1alpha1.skills USING hnsw (semantic_embedding vector_cosine_ops);
 
 ALTER TABLE v1alpha1.prompts
@@ -69,7 +69,7 @@ ALTER TABLE v1alpha1.prompts
     ADD COLUMN semantic_embedding_checksum     TEXT,
     ADD COLUMN semantic_embedding_generated_at TIMESTAMPTZ;
 
-CREATE INDEX v1alpha1_prompts_semantic_embedding_hnsw
+CREATE INDEX IF NOT EXISTS v1alpha1_prompts_semantic_embedding_hnsw
     ON v1alpha1.prompts USING hnsw (semantic_embedding vector_cosine_ops);
 
 -- Providers + Deployments don't participate in semantic search today (users

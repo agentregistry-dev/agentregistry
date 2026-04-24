@@ -10,7 +10,7 @@
 --
 -- See design-docs/V1ALPHA1_IMPORTER_ENRICHMENT.md for full rationale.
 
-CREATE TABLE v1alpha1.enrichment_findings (
+CREATE TABLE IF NOT EXISTS v1alpha1.enrichment_findings (
     id          BIGSERIAL PRIMARY KEY,
 
     -- Resource this finding attaches to. (kind, namespace, name, version)
@@ -36,17 +36,17 @@ CREATE TABLE v1alpha1.enrichment_findings (
 );
 
 -- Lookup by resource is the hot path (UI "show findings for this MCPServer").
-CREATE INDEX enrichment_findings_obj
+CREATE INDEX IF NOT EXISTS enrichment_findings_obj
     ON v1alpha1.enrichment_findings (kind, namespace, name, version);
 
 -- Allow "show me all vulnerable rows discovered by OSV across namespace X".
-CREATE INDEX enrichment_findings_source
+CREATE INDEX IF NOT EXISTS enrichment_findings_source
     ON v1alpha1.enrichment_findings (source);
 
 -- "Show me critical findings" queries.
-CREATE INDEX enrichment_findings_severity
+CREATE INDEX IF NOT EXISTS enrichment_findings_severity
     ON v1alpha1.enrichment_findings (severity);
 
 -- Sweep-by-time queries for audits and GC of ancient findings.
-CREATE INDEX enrichment_findings_found_at
+CREATE INDEX IF NOT EXISTS enrichment_findings_found_at
     ON v1alpha1.enrichment_findings (found_at DESC);

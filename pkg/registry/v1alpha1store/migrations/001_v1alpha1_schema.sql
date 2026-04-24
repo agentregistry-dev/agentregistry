@@ -83,7 +83,7 @@ $$ LANGUAGE plpgsql;
 --   created_at, updated_at        — timestamps (trigger-maintained)
 -- -----------------------------------------------------------------------------
 
-CREATE TABLE v1alpha1.agents (
+CREATE TABLE IF NOT EXISTS v1alpha1.agents (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
     version            VARCHAR(255) NOT NULL,
@@ -99,16 +99,16 @@ CREATE TABLE v1alpha1.agents (
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     PRIMARY KEY (namespace, name, version)
 );
-CREATE UNIQUE INDEX v1alpha1_agents_latest_version  ON v1alpha1.agents (namespace, name) WHERE is_latest_version;
-CREATE        INDEX v1alpha1_agents_labels_gin      ON v1alpha1.agents USING GIN (labels);
-CREATE        INDEX v1alpha1_agents_spec_gin        ON v1alpha1.agents USING GIN (spec jsonb_path_ops);
-CREATE        INDEX v1alpha1_agents_updated_at_desc ON v1alpha1.agents (updated_at DESC);
-CREATE        INDEX v1alpha1_agents_terminating    ON v1alpha1.agents (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS v1alpha1_agents_latest_version  ON v1alpha1.agents (namespace, name) WHERE is_latest_version;
+CREATE INDEX IF NOT EXISTS v1alpha1_agents_labels_gin      ON v1alpha1.agents USING GIN (labels);
+CREATE INDEX IF NOT EXISTS v1alpha1_agents_spec_gin        ON v1alpha1.agents USING GIN (spec jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS v1alpha1_agents_updated_at_desc ON v1alpha1.agents (updated_at DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_agents_terminating    ON v1alpha1.agents (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
 
-CREATE TRIGGER agents_set_updated_at  BEFORE UPDATE ON v1alpha1.agents  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
-CREATE TRIGGER agents_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.agents  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_agents_status');
+CREATE OR REPLACE TRIGGER agents_set_updated_at  BEFORE UPDATE ON v1alpha1.agents  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
+CREATE OR REPLACE TRIGGER agents_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.agents  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_agents_status');
 
-CREATE TABLE v1alpha1.mcp_servers (
+CREATE TABLE IF NOT EXISTS v1alpha1.mcp_servers (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
     version            VARCHAR(255) NOT NULL,
@@ -124,15 +124,15 @@ CREATE TABLE v1alpha1.mcp_servers (
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     PRIMARY KEY (namespace, name, version)
 );
-CREATE UNIQUE INDEX v1alpha1_mcp_servers_latest_version  ON v1alpha1.mcp_servers (namespace, name) WHERE is_latest_version;
-CREATE        INDEX v1alpha1_mcp_servers_labels_gin      ON v1alpha1.mcp_servers USING GIN (labels);
-CREATE        INDEX v1alpha1_mcp_servers_spec_gin        ON v1alpha1.mcp_servers USING GIN (spec jsonb_path_ops);
-CREATE        INDEX v1alpha1_mcp_servers_updated_at_desc ON v1alpha1.mcp_servers (updated_at DESC);
-CREATE        INDEX v1alpha1_mcp_servers_terminating    ON v1alpha1.mcp_servers (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
-CREATE TRIGGER mcp_servers_set_updated_at  BEFORE UPDATE ON v1alpha1.mcp_servers  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
-CREATE TRIGGER mcp_servers_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.mcp_servers  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_mcp_servers_status');
+CREATE UNIQUE INDEX IF NOT EXISTS v1alpha1_mcp_servers_latest_version  ON v1alpha1.mcp_servers (namespace, name) WHERE is_latest_version;
+CREATE INDEX IF NOT EXISTS v1alpha1_mcp_servers_labels_gin      ON v1alpha1.mcp_servers USING GIN (labels);
+CREATE INDEX IF NOT EXISTS v1alpha1_mcp_servers_spec_gin        ON v1alpha1.mcp_servers USING GIN (spec jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS v1alpha1_mcp_servers_updated_at_desc ON v1alpha1.mcp_servers (updated_at DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_mcp_servers_terminating    ON v1alpha1.mcp_servers (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
+CREATE OR REPLACE TRIGGER mcp_servers_set_updated_at  BEFORE UPDATE ON v1alpha1.mcp_servers  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
+CREATE OR REPLACE TRIGGER mcp_servers_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.mcp_servers  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_mcp_servers_status');
 
-CREATE TABLE v1alpha1.skills (
+CREATE TABLE IF NOT EXISTS v1alpha1.skills (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
     version            VARCHAR(255) NOT NULL,
@@ -148,15 +148,15 @@ CREATE TABLE v1alpha1.skills (
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     PRIMARY KEY (namespace, name, version)
 );
-CREATE UNIQUE INDEX v1alpha1_skills_latest_version  ON v1alpha1.skills (namespace, name) WHERE is_latest_version;
-CREATE        INDEX v1alpha1_skills_labels_gin      ON v1alpha1.skills USING GIN (labels);
-CREATE        INDEX v1alpha1_skills_spec_gin        ON v1alpha1.skills USING GIN (spec jsonb_path_ops);
-CREATE        INDEX v1alpha1_skills_updated_at_desc ON v1alpha1.skills (updated_at DESC);
-CREATE        INDEX v1alpha1_skills_terminating    ON v1alpha1.skills (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
-CREATE TRIGGER skills_set_updated_at  BEFORE UPDATE ON v1alpha1.skills  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
-CREATE TRIGGER skills_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.skills  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_skills_status');
+CREATE UNIQUE INDEX IF NOT EXISTS v1alpha1_skills_latest_version  ON v1alpha1.skills (namespace, name) WHERE is_latest_version;
+CREATE INDEX IF NOT EXISTS v1alpha1_skills_labels_gin      ON v1alpha1.skills USING GIN (labels);
+CREATE INDEX IF NOT EXISTS v1alpha1_skills_spec_gin        ON v1alpha1.skills USING GIN (spec jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS v1alpha1_skills_updated_at_desc ON v1alpha1.skills (updated_at DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_skills_terminating    ON v1alpha1.skills (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
+CREATE OR REPLACE TRIGGER skills_set_updated_at  BEFORE UPDATE ON v1alpha1.skills  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
+CREATE OR REPLACE TRIGGER skills_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.skills  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_skills_status');
 
-CREATE TABLE v1alpha1.prompts (
+CREATE TABLE IF NOT EXISTS v1alpha1.prompts (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
     version            VARCHAR(255) NOT NULL,
@@ -172,15 +172,15 @@ CREATE TABLE v1alpha1.prompts (
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     PRIMARY KEY (namespace, name, version)
 );
-CREATE UNIQUE INDEX v1alpha1_prompts_latest_version  ON v1alpha1.prompts (namespace, name) WHERE is_latest_version;
-CREATE        INDEX v1alpha1_prompts_labels_gin      ON v1alpha1.prompts USING GIN (labels);
-CREATE        INDEX v1alpha1_prompts_spec_gin        ON v1alpha1.prompts USING GIN (spec jsonb_path_ops);
-CREATE        INDEX v1alpha1_prompts_updated_at_desc ON v1alpha1.prompts (updated_at DESC);
-CREATE        INDEX v1alpha1_prompts_terminating    ON v1alpha1.prompts (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
-CREATE TRIGGER prompts_set_updated_at  BEFORE UPDATE ON v1alpha1.prompts  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
-CREATE TRIGGER prompts_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.prompts  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_prompts_status');
+CREATE UNIQUE INDEX IF NOT EXISTS v1alpha1_prompts_latest_version  ON v1alpha1.prompts (namespace, name) WHERE is_latest_version;
+CREATE INDEX IF NOT EXISTS v1alpha1_prompts_labels_gin      ON v1alpha1.prompts USING GIN (labels);
+CREATE INDEX IF NOT EXISTS v1alpha1_prompts_spec_gin        ON v1alpha1.prompts USING GIN (spec jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS v1alpha1_prompts_updated_at_desc ON v1alpha1.prompts (updated_at DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_prompts_terminating    ON v1alpha1.prompts (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
+CREATE OR REPLACE TRIGGER prompts_set_updated_at  BEFORE UPDATE ON v1alpha1.prompts  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
+CREATE OR REPLACE TRIGGER prompts_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.prompts  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_prompts_status');
 
-CREATE TABLE v1alpha1.providers (
+CREATE TABLE IF NOT EXISTS v1alpha1.providers (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
     version            VARCHAR(255) NOT NULL,
@@ -196,15 +196,15 @@ CREATE TABLE v1alpha1.providers (
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     PRIMARY KEY (namespace, name, version)
 );
-CREATE UNIQUE INDEX v1alpha1_providers_latest_version  ON v1alpha1.providers (namespace, name) WHERE is_latest_version;
-CREATE        INDEX v1alpha1_providers_labels_gin      ON v1alpha1.providers USING GIN (labels);
-CREATE        INDEX v1alpha1_providers_spec_gin        ON v1alpha1.providers USING GIN (spec jsonb_path_ops);
-CREATE        INDEX v1alpha1_providers_updated_at_desc ON v1alpha1.providers (updated_at DESC);
-CREATE        INDEX v1alpha1_providers_terminating    ON v1alpha1.providers (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
-CREATE TRIGGER providers_set_updated_at  BEFORE UPDATE ON v1alpha1.providers  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
-CREATE TRIGGER providers_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.providers  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_providers_status');
+CREATE UNIQUE INDEX IF NOT EXISTS v1alpha1_providers_latest_version  ON v1alpha1.providers (namespace, name) WHERE is_latest_version;
+CREATE INDEX IF NOT EXISTS v1alpha1_providers_labels_gin      ON v1alpha1.providers USING GIN (labels);
+CREATE INDEX IF NOT EXISTS v1alpha1_providers_spec_gin        ON v1alpha1.providers USING GIN (spec jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS v1alpha1_providers_updated_at_desc ON v1alpha1.providers (updated_at DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_providers_terminating    ON v1alpha1.providers (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
+CREATE OR REPLACE TRIGGER providers_set_updated_at  BEFORE UPDATE ON v1alpha1.providers  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
+CREATE OR REPLACE TRIGGER providers_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.providers  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_providers_status');
 
-CREATE TABLE v1alpha1.deployments (
+CREATE TABLE IF NOT EXISTS v1alpha1.deployments (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
     version            VARCHAR(255) NOT NULL,
@@ -220,13 +220,13 @@ CREATE TABLE v1alpha1.deployments (
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     PRIMARY KEY (namespace, name, version)
 );
-CREATE UNIQUE INDEX v1alpha1_deployments_latest_version  ON v1alpha1.deployments (namespace, name) WHERE is_latest_version;
-CREATE        INDEX v1alpha1_deployments_labels_gin      ON v1alpha1.deployments USING GIN (labels);
-CREATE        INDEX v1alpha1_deployments_spec_gin        ON v1alpha1.deployments USING GIN (spec jsonb_path_ops);
-CREATE        INDEX v1alpha1_deployments_updated_at_desc ON v1alpha1.deployments (updated_at DESC);
-CREATE        INDEX v1alpha1_deployments_terminating    ON v1alpha1.deployments (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
-CREATE TRIGGER deployments_set_updated_at  BEFORE UPDATE ON v1alpha1.deployments  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
-CREATE TRIGGER deployments_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.deployments  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_deployments_status');
+CREATE UNIQUE INDEX IF NOT EXISTS v1alpha1_deployments_latest_version  ON v1alpha1.deployments (namespace, name) WHERE is_latest_version;
+CREATE INDEX IF NOT EXISTS v1alpha1_deployments_labels_gin      ON v1alpha1.deployments USING GIN (labels);
+CREATE INDEX IF NOT EXISTS v1alpha1_deployments_spec_gin        ON v1alpha1.deployments USING GIN (spec jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS v1alpha1_deployments_updated_at_desc ON v1alpha1.deployments (updated_at DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_deployments_terminating    ON v1alpha1.deployments (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
+CREATE OR REPLACE TRIGGER deployments_set_updated_at  BEFORE UPDATE ON v1alpha1.deployments  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
+CREATE OR REPLACE TRIGGER deployments_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.deployments  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_deployments_status');
 
 -- -----------------------------------------------------------------------------
 -- Seed: default providers so deployments can reference them out-of-the-box.
