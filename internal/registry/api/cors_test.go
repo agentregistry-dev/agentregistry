@@ -62,26 +62,26 @@ func TestCORSHeaders(t *testing.T) {
 		{
 			name:       "POST request should have CORS headers",
 			method:     http.MethodPost,
-			path:       "/v0/namespaces/default/mcpservers",
+			path:       "/v0/mcpservers",
 			expectCORS: true,
 		},
 		{
 			name:           "OPTIONS preflight request should succeed",
 			method:         http.MethodOptions,
-			path:           "/v0/namespaces/default/mcpservers",
+			path:           "/v0/mcpservers",
 			expectCORS:     true,
 			checkPreflight: true,
 		},
 		{
 			name:       "PUT request should have CORS headers",
 			method:     http.MethodPut,
-			path:       "/v0/namespaces/default/mcpservers/test/v1",
+			path:       "/v0/mcpservers/test/v1",
 			expectCORS: true,
 		},
 		{
 			name:       "DELETE request should have CORS headers",
 			method:     http.MethodDelete,
-			path:       "/v0/namespaces/default/mcpservers/test/v1",
+			path:       "/v0/mcpservers/test/v1",
 			expectCORS: true,
 		},
 	}
@@ -108,7 +108,7 @@ func TestCORSHeaders(t *testing.T) {
 func TestCORSHeaderValues(t *testing.T) {
 	srv := newCORSTestServer(t)
 
-	req := httptest.NewRequest(http.MethodOptions, "/v0/namespaces/default/mcpservers", nil)
+	req := httptest.NewRequest(http.MethodOptions, "/v0/mcpservers", nil)
 	req.Header.Set("Origin", "https://example.com")
 	req.Header.Set("Access-Control-Request-Method", "POST")
 	req.Header.Set("Access-Control-Request-Headers", "Content-Type, Authorization")

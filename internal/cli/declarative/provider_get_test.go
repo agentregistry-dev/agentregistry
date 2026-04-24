@@ -15,18 +15,18 @@ import (
 )
 
 // providerTestServer builds an httptest.Server that serves:
-//   - GET /v0/namespaces/default/providers/{name} → the provider with matching Name (404 otherwise)
+//   - GET /v0/providers/{name} → the provider with matching Name (404 otherwise)
 //
 // Only the routes exercised by `arctl get provider NAME [-o yaml]` are handled.
 func providerTestServer(t *testing.T, providers []v1alpha1.Provider) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/v0/namespaces/default/providers/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v0/providers/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		name := strings.TrimPrefix(r.URL.Path, "/v0/namespaces/default/providers/")
+		name := strings.TrimPrefix(r.URL.Path, "/v0/providers/")
 		for _, p := range providers {
 			if p.Metadata.Name == name {
 				w.Header().Set("Content-Type", "application/json")

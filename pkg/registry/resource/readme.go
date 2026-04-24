@@ -13,12 +13,12 @@ import (
 )
 
 type readmeLatestInput struct {
-	Namespace string `path:"namespace"`
+	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`
 }
 
 type readmeVersionInput struct {
-	Namespace string `path:"namespace"`
+	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`
 	Version   string `path:"version"`
 }
@@ -48,8 +48,10 @@ func RegisterReadme[T v1alpha1.Object](
 		plural = strings.ToLower(cfg.Kind) + "s"
 	}
 	base := strings.TrimRight(cfg.BasePrefix, "/")
-	latestPath := base + "/namespaces/{namespace}/" + plural + "/{name}/readme"
-	versionPath := base + "/namespaces/{namespace}/" + plural + "/{name}/versions/{version}/readme"
+	// Flat URL shape matching the main Register routes; namespace via
+	// ?namespace= query (defaults to "default").
+	latestPath := base + "/" + plural + "/{name}/readme"
+	versionPath := base + "/" + plural + "/{name}/versions/{version}/readme"
 
 	huma.Register(api, huma.Operation{
 		OperationID: "get-latest-" + strings.ToLower(cfg.Kind) + "-readme",
@@ -57,24 +59,26 @@ func RegisterReadme[T v1alpha1.Object](
 		Path:        latestPath,
 		Summary:     fmt.Sprintf("Get the latest %s readme", cfg.Kind),
 	}, func(ctx context.Context, in *readmeLatestInput) (*readmeOutput, error) {
-		row, err := cfg.Store.GetLatest(ctx, in.Namespace, in.Name)
+		ns := resolveNamespace(in.Namespace, false)
+		row, err := cfg.Store.GetLatest(ctx, ns, in.Name)
 		if err != nil {
-			return nil, mapNotFound(err, cfg.Kind, in.Namespace, in.Name, "")
+			return nil, mapNotFound(err, cfg.Kind, ns, in.Name, "")
 		}
-		return readmeResponseFromRow(row, cfg.Kind, in.Namespace, in.Name, "", newObj, readmeOf)
+		return readmeResponseFromRow(row, cfg.Kind, ns, in.Name, "", newObj, readmeOf)
 	})
 
 	huma.Register(api, huma.Operation{
 		OperationID: "get-" + strings.ToLower(cfg.Kind) + "-readme",
 		Method:      http.MethodGet,
 		Path:        versionPath,
-		Summary:     fmt.Sprintf("Get a %s readme by namespace, name, and version", cfg.Kind),
+		Summary:     fmt.Sprintf("Get a %s readme by name and version", cfg.Kind),
 	}, func(ctx context.Context, in *readmeVersionInput) (*readmeOutput, error) {
-		row, err := cfg.Store.Get(ctx, in.Namespace, in.Name, in.Version)
+		ns := resolveNamespace(in.Namespace, false)
+		row, err := cfg.Store.Get(ctx, ns, in.Name, in.Version)
 		if err != nil {
-			return nil, mapNotFound(err, cfg.Kind, in.Namespace, in.Name, in.Version)
+			return nil, mapNotFound(err, cfg.Kind, ns, in.Name, in.Version)
 		}
-		return readmeResponseFromRow(row, cfg.Kind, in.Namespace, in.Name, in.Version, newObj, readmeOf)
+		return readmeResponseFromRow(row, cfg.Kind, ns, in.Name, in.Version, newObj, readmeOf)
 	})
 }
 

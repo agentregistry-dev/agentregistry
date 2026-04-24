@@ -25,9 +25,10 @@ type DeploymentLogsConfig struct {
 }
 
 // deploymentLogsInput is the request body — query flags for the stream +
-// path segments for the deployment identity.
+// path segments for the deployment identity. Namespace rides on the
+// ?namespace= query to match the main resource handler shape.
 type deploymentLogsInput struct {
-	Namespace string `path:"namespace"`
+	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`
 	Version   string `path:"version"`
 	Follow    bool   `query:"follow" doc:"Stream indefinitely until client disconnects."`
@@ -47,7 +48,7 @@ type deploymentLogsOutput struct {
 }
 
 // RegisterDeploymentLogs wires GET
-// {basePrefix}/namespaces/{ns}/deployments/{name}/{version}/logs. The
+// {basePrefix}/deployments/{name}/{version}/logs?namespace=default. The
 // response is a JSON payload of log records drained from
 // coordinator.Logs; follow=true keeps the channel open until the client
 // disconnects (or until the adapter's context is cancelled).
@@ -60,7 +61,7 @@ func RegisterDeploymentLogs(api huma.API, cfg DeploymentLogsConfig) {
 	if cfg.Coordinator == nil || cfg.Store == nil {
 		return
 	}
-	path := cfg.BasePrefix + "/namespaces/{namespace}/deployments/{name}/{version}/logs"
+	path := cfg.BasePrefix + "/deployments/{name}/{version}/logs"
 
 	huma.Register(api, huma.Operation{
 		OperationID: "get-deployment-logs",
@@ -68,10 +69,14 @@ func RegisterDeploymentLogs(api huma.API, cfg DeploymentLogsConfig) {
 		Path:        path,
 		Summary:     "Stream logs from a deployment's runtime workload",
 	}, func(ctx context.Context, in *deploymentLogsInput) (*deploymentLogsOutput, error) {
-		row, err := cfg.Store.Get(ctx, in.Namespace, in.Name, in.Version)
+		ns := in.Namespace
+		if ns == "" {
+			ns = v1alpha1.DefaultNamespace
+		}
+		row, err := cfg.Store.Get(ctx, ns, in.Name, in.Version)
 		if err != nil {
 			if errors.Is(err, pkgdb.ErrNotFound) {
-				return nil, huma.Error404NotFound(fmt.Sprintf("Deployment %q/%q@%q not found", in.Namespace, in.Name, in.Version))
+				return nil, huma.Error404NotFound(fmt.Sprintf("Deployment %q/%q@%q not found", ns, in.Name, in.Version))
 			}
 			return nil, huma.Error500InternalServerError("fetch Deployment", err)
 		}

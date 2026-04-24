@@ -17,8 +17,8 @@ import (
 )
 
 // deploymentTestServer builds an httptest.Server routing:
-//   - GET    /v0/namespaces/default/deployments                → returns `list`
-//   - DELETE /v0/namespaces/default/deployments/{name}/{ver}   → status 204 unless id is in `failIDs`, then 500
+//   - GET    /v0/deployments                → returns `list`
+//   - DELETE /v0/deployments/{name}/{ver}   → status 204 unless id is in `failIDs`, then 500
 //
 // Captures every received DELETE id in order for assertions.
 func deploymentTestServer(t *testing.T, list []v1alpha1.Deployment, failIDs map[string]bool) (*httptest.Server, *[]string) {
@@ -26,7 +26,7 @@ func deploymentTestServer(t *testing.T, list []v1alpha1.Deployment, failIDs map[
 	var mu sync.Mutex
 	deleted := []string{}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/v0/namespaces/default/deployments", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v0/deployments", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			w.Header().Set("Content-Type", "application/json")
@@ -35,12 +35,12 @@ func deploymentTestServer(t *testing.T, list []v1alpha1.Deployment, failIDs map[
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
-	mux.HandleFunc("/v0/namespaces/default/deployments/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v0/deployments/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodDelete {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		path := strings.TrimPrefix(r.URL.Path, "/v0/namespaces/default/deployments/")
+		path := strings.TrimPrefix(r.URL.Path, "/v0/deployments/")
 		parts := strings.Split(path, "/")
 		if len(parts) != 2 {
 			http.Error(w, `{"error":"bad delete path"}`, http.StatusBadRequest)

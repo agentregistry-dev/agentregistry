@@ -52,29 +52,29 @@ func TestResourceRegister_AgentReadmeRoutesAndListProjection(t *testing.T) {
 		},
 	}
 
-	resp := api.Put("/v0/namespaces/default/agents/alice/v1.0.0", body)
+	resp := api.Put("/v0/agents/alice/v1.0.0", body)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
-	resp = api.Get("/v0/namespaces/default/agents/alice/readme")
+	resp = api.Get("/v0/agents/alice/readme")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	var gotReadme v1alpha1.Readme
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotReadme))
 	require.Equal(t, "text/markdown", gotReadme.ContentType)
 	require.Equal(t, "# Alice\n\nLong-form docs.", gotReadme.Content)
 
-	resp = api.Get("/v0/namespaces/default/agents/alice/versions/v1.0.0/readme")
+	resp = api.Get("/v0/agents/alice/versions/v1.0.0/readme")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotReadme))
 	require.Equal(t, "# Alice\n\nLong-form docs.", gotReadme.Content)
 
-	resp = api.Get("/v0/namespaces/default/agents/alice/v1.0.0")
+	resp = api.Get("/v0/agents/alice/v1.0.0")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	var exact v1alpha1.Agent
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &exact))
 	require.NotNil(t, exact.Spec.Readme)
 	require.Equal(t, "# Alice\n\nLong-form docs.", exact.Spec.Readme.Content)
 
-	resp = api.Get("/v0/namespaces/default/agents")
+	resp = api.Get("/v0/agents")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	var list struct {
 		Items []v1alpha1.Agent `json:"items"`
@@ -104,7 +104,7 @@ func TestRegisterBuiltins_LegacyServerReadmeAlias(t *testing.T) {
 		},
 	}
 
-	resp := api.Put("/v0/namespaces/default/mcpservers/fetch/v1.0.0", server)
+	resp := api.Put("/v0/mcpservers/fetch/v1.0.0", server)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
 	resp = api.Get("/v0/servers/fetch/readme")

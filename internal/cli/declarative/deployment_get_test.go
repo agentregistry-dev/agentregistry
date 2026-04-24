@@ -60,7 +60,7 @@ func deploymentFixture(metaName, targetName, version, providerID, resourceType, 
 func deploymentTestServerV1Alpha1(t *testing.T, deployments []v1alpha1.Deployment) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/v0/namespaces/default/deployments", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v0/deployments", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
