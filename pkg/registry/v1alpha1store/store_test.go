@@ -183,6 +183,53 @@ func TestV1Alpha1Store_DeleteSoftAndPromoteLatest(t *testing.T) {
 	require.NoError(t, store.Delete(ctx, testNS, "foo", "v2"))
 }
 
+// TestV1Alpha1Store_UpsertRejectsTerminatingRow guards the Kubernetes-style
+// invariant: once a row is soft-deleted, it cannot be mutated in place via
+// Upsert. Pre-fix behavior was a silent partial-update (ON CONFLICT bumped
+// generation + spec but left deletion_timestamp set, so the row stayed
+// invisible to GetLatest). Now Upsert returns ErrTerminating and the caller
+// must drain finalizers + purge + re-apply to get a live row.
+func TestV1Alpha1Store_UpsertRejectsTerminatingRow(t *testing.T) {
+	pool := NewV1Alpha1TestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	_, err := store.Upsert(ctx, testNS, "term", "v1",
+		mustSpec(t, v1alpha1.AgentSpec{}),
+		UpsertOpts{Finalizers: []string{"cleanup.example/thing"}})
+	require.NoError(t, err)
+
+	// Soft-delete: deletion_timestamp is set but the row survives pending
+	// finalizer drain.
+	require.NoError(t, store.Delete(ctx, testNS, "term", "v1"))
+
+	// Upsert against the terminating row must fail with ErrTerminating —
+	// not silently half-update, and not masquerade as a successful create.
+	_, err = store.Upsert(ctx, testNS, "term", "v1",
+		mustSpec(t, v1alpha1.AgentSpec{Description: "updated"}),
+		UpsertOpts{})
+	require.ErrorIs(t, err, ErrTerminating,
+		"Upsert on a terminating row must reject with ErrTerminating")
+
+	// Correct recovery path: drop the finalizer → GC purges → re-Upsert succeeds.
+	require.NoError(t, store.PatchFinalizers(ctx, testNS, "term", "v1", func([]string) []string { return nil }))
+	purged, err := store.PurgeFinalized(ctx)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, purged)
+
+	res, err := store.Upsert(ctx, testNS, "term", "v1",
+		mustSpec(t, v1alpha1.AgentSpec{Description: "fresh"}),
+		UpsertOpts{})
+	require.NoError(t, err)
+	require.True(t, res.Created, "post-purge Upsert must be treated as a fresh create")
+	require.EqualValues(t, 1, res.Generation, "generation must restart at 1 after purge, not continue from the terminating row")
+
+	obj, err := store.GetLatest(ctx, testNS, "term")
+	require.NoError(t, err)
+	require.Equal(t, "v1", obj.Metadata.Version,
+		"the resurrected row must be visible as latest")
+}
+
 func TestV1Alpha1Store_FinalizerGC(t *testing.T) {
 	pool := NewV1Alpha1TestPool(t)
 	store := NewStore(pool, testTable)

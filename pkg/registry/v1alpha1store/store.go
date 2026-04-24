@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/mod/semver"
 
@@ -67,6 +68,19 @@ var ErrInvalidCursor = errors.New("v1alpha1 store: invalid cursor")
 // placeholders than ExtraArgs has bind values (or vice versa), which
 // would either be a silent misuse or a runtime pgx error.
 var ErrInvalidExtraWhere = errors.New("v1alpha1 store: ExtraWhere / ExtraArgs placeholder mismatch")
+
+// ErrTerminating reports that an Upsert targeted a row whose
+// deletion_timestamp is set — the row is mid-teardown and cannot be
+// mutated until its finalizers drain and the GC pass hard-deletes it.
+// Matches Kubernetes semantics: `kubectl apply` against a terminating
+// object returns 409 AlreadyExists ("object is being deleted; delete and
+// recreate").
+//
+// Callers MUST NOT attempt to resurrect by clearing deletion_timestamp
+// in-place; wait for the row to finalize (the normal finalizer flow) or
+// drop the finalizer explicitly via PatchFinalizers, then re-apply once
+// the row has been purged.
+var ErrTerminating = errors.New("v1alpha1 store: object is terminating")
 
 // ListOpts controls paginated list queries.
 type ListOpts struct {
@@ -176,15 +190,16 @@ func (s *Store) Upsert(ctx context.Context, namespace, name, version string, spe
 			oldGeneration     int64
 			oldFinalizersRaw  []byte
 			oldAnnotationsRaw []byte
+			oldDeletionTS     pgtype.Timestamptz
 			found             bool
 		)
 		err := tx.QueryRow(ctx,
 			fmt.Sprintf(`
-				SELECT spec, generation, finalizers, annotations
+				SELECT spec, generation, finalizers, annotations, deletion_timestamp
 				FROM %s
 				WHERE namespace=$1 AND name=$2 AND version=$3
 				FOR UPDATE`, s.table),
-			namespace, name, version).Scan(&oldSpec, &oldGeneration, &oldFinalizersRaw, &oldAnnotationsRaw)
+			namespace, name, version).Scan(&oldSpec, &oldGeneration, &oldFinalizersRaw, &oldAnnotationsRaw, &oldDeletionTS)
 		switch {
 		case err == nil:
 			found = true
@@ -192,6 +207,15 @@ func (s *Store) Upsert(ctx context.Context, namespace, name, version string, spe
 			found = false
 		default:
 			return fmt.Errorf("load existing: %w", err)
+		}
+
+		// Reject mutations on terminating rows. Mirrors Kubernetes:
+		// `kubectl apply` on an object with deletionTimestamp returns 409.
+		// The correct recovery is to let finalizers drain (or drop them
+		// explicitly via PatchFinalizers) so PurgeFinalized can hard-
+		// delete the row; re-apply succeeds once the row is gone.
+		if found && oldDeletionTS.Valid {
+			return ErrTerminating
 		}
 
 		var newGen int64

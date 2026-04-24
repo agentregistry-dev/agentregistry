@@ -403,6 +403,11 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			upsertOpts.Annotations = meta.Annotations
 		}
 		if _, err := cfg.Store.Upsert(ctx, in.Namespace, in.Name, in.Version, specJSON, upsertOpts); err != nil {
+			if errors.Is(err, v1alpha1store.ErrTerminating) {
+				return nil, huma.Error409Conflict(
+					fmt.Sprintf("%s %s/%s/%s is terminating; wait for finalizers to drain or drop them via PatchFinalizers",
+						kind, in.Namespace, in.Name, in.Version))
+			}
 			return nil, huma.Error500InternalServerError("upsert "+kind, err)
 		}
 

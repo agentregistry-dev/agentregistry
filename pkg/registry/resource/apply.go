@@ -166,7 +166,12 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 	up, err := store.Upsert(ctx, meta.Namespace, meta.Name, meta.Version, specJSON, upsertOpts)
 	if err != nil {
 		res.Status = arv0.ApplyStatusFailed
-		res.Error = "upsert: " + err.Error()
+		if errors.Is(err, v1alpha1store.ErrTerminating) {
+			res.Error = fmt.Sprintf("object %s/%s/%s is terminating; wait for finalizers to drain",
+				meta.Namespace, meta.Name, meta.Version)
+		} else {
+			res.Error = "upsert: " + err.Error()
+		}
 		return res
 	}
 
