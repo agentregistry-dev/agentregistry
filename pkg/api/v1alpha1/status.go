@@ -119,16 +119,11 @@ type statusStore struct {
 // — this helper serializes the full internal shape so reconciler state
 // persists across restarts.
 func MarshalStatusForStorage(s Status) ([]byte, error) {
+	// Condition and conditionStore have identical fields (just different
+	// json tags) so a direct conversion is safe and beats a manual copy.
 	storeConds := make([]conditionStore, len(s.Conditions))
 	for i, c := range s.Conditions {
-		storeConds[i] = conditionStore{
-			Type:               c.Type,
-			Status:             c.Status,
-			Reason:             c.Reason,
-			Message:            c.Message,
-			LastTransitionTime: c.LastTransitionTime,
-			ObservedGeneration: c.ObservedGeneration,
-		}
+		storeConds[i] = conditionStore(c)
 	}
 	return json.Marshal(statusStore{
 		ObservedGeneration: s.ObservedGeneration,
@@ -176,14 +171,7 @@ func UnmarshalStatusFromStorage(data []byte, s *Status) error {
 	}
 	conds := make([]Condition, len(w.Conditions))
 	for i, c := range w.Conditions {
-		conds[i] = Condition{
-			Type:               c.Type,
-			Status:             c.Status,
-			Reason:             c.Reason,
-			Message:            c.Message,
-			LastTransitionTime: c.LastTransitionTime,
-			ObservedGeneration: c.ObservedGeneration,
-		}
+		conds[i] = Condition(c)
 	}
 	*s = Status{
 		ObservedGeneration: w.ObservedGeneration,

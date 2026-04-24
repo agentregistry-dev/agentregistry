@@ -34,11 +34,20 @@ import {
   applyMcpserver as applyMcpserverRaw,
   applyPrompt as applyPromptRaw,
   applySkill as applySkillRaw,
-  listAgentsAllNamespaces as listAgentsAllNamespacesRaw,
-  listMcpserversAllNamespaces as listMcpserversAllNamespacesRaw,
-  listPromptsAllNamespaces as listPromptsAllNamespacesRaw,
-  listSkillsAllNamespaces as listSkillsAllNamespacesRaw,
+  listAgents as listAgentsRaw,
+  listMcpservers as listMcpserversRaw,
+  listPrompts as listPromptsRaw,
+  listSkills as listSkillsRaw,
 } from "@/lib/api/sdk.gen"
+
+// Cross-namespace listing used to be its own endpoint
+// (`/v0/{plural}` returning all namespaces). After the route flatten it
+// merged into the namespaced list with a `?namespace=all` query
+// sentinel; the shim still wants that semantic, so layer it on top of
+// any caller-supplied query.
+function withAllNamespaces<Q extends Record<string, unknown> | undefined>(query: Q): Q {
+  return { namespace: "all", ...(query ?? {}) } as unknown as Q
+}
 
 // ----------------------------------------------------------------------------
 // Old-shape wire types. Each mirrors the legacy `{server: {...}}` /
@@ -90,14 +99,17 @@ export interface PromptResponse {
 // Envelope → legacy-shape adapters.
 // ----------------------------------------------------------------------------
 
+// namespace is now optional in the regen'd ObjectMeta because the wire
+// strips "default" — fall back to "default" so legacy renderers keep
+// composing display IDs the same way.
 function inner<Spec extends object>(
-  meta: { name: string; namespace: string; version?: string; annotations?: Record<string, string>; createdAt?: string },
+  meta: { name: string; namespace?: string; version?: string; annotations?: Record<string, string>; createdAt?: string },
   spec: Spec,
 ): LegacyInner<Spec> {
   return {
     ...spec,
     name: meta.name,
-    namespace: meta.namespace,
+    namespace: meta.namespace ?? "default",
     version: meta.version ?? "",
     publishedAt: meta.createdAt,
     _meta: meta.annotations ?? {},
@@ -141,9 +153,9 @@ interface LegacyListMetadata {
 export async function listServersV0(opts?: LegacyListOpts): Promise<{
   data: { servers: ServerResponse[]; metadata: LegacyListMetadata }
 }> {
-  const { data } = await listMcpserversAllNamespacesRaw({
+  const { data } = await listMcpserversRaw({
     throwOnError: true,
-    query: opts?.query,
+    query: withAllNamespaces(opts?.query),
   })
   return {
     data: {
@@ -156,9 +168,9 @@ export async function listServersV0(opts?: LegacyListOpts): Promise<{
 export async function listSkillsV0(opts?: LegacyListOpts): Promise<{
   data: { skills: SkillResponse[]; metadata: LegacyListMetadata }
 }> {
-  const { data } = await listSkillsAllNamespacesRaw({
+  const { data } = await listSkillsRaw({
     throwOnError: true,
-    query: opts?.query,
+    query: withAllNamespaces(opts?.query),
   })
   return {
     data: {
@@ -171,9 +183,9 @@ export async function listSkillsV0(opts?: LegacyListOpts): Promise<{
 export async function listAgentsV0(opts?: LegacyListOpts): Promise<{
   data: { agents: AgentResponse[]; metadata: LegacyListMetadata }
 }> {
-  const { data } = await listAgentsAllNamespacesRaw({
+  const { data } = await listAgentsRaw({
     throwOnError: true,
-    query: opts?.query,
+    query: withAllNamespaces(opts?.query),
   })
   return {
     data: {
@@ -186,9 +198,9 @@ export async function listAgentsV0(opts?: LegacyListOpts): Promise<{
 export async function listPromptsV0(opts?: LegacyListOpts): Promise<{
   data: { prompts: PromptResponse[]; metadata: LegacyListMetadata }
 }> {
-  const { data } = await listPromptsAllNamespacesRaw({
+  const { data } = await listPromptsRaw({
     throwOnError: true,
-    query: opts?.query,
+    query: withAllNamespaces(opts?.query),
   })
   return {
     data: {
@@ -253,7 +265,7 @@ export async function createServerV0(opts: LegacyCreateOpts<ServerJson>): Promis
   const spec = stripLegacy(opts.body) as McpServerSpec
   const { data } = await applyMcpserverRaw({
     throwOnError: true,
-    path: { namespace, name, version: opts.body.version },
+    path: { name, version: opts.body.version }, query: namespace !== "default" ? { namespace } : undefined,
     body: {
       apiVersion: "agentregistry.solo.io/v1alpha1",
       kind: "MCPServer",
@@ -271,7 +283,7 @@ export async function createSkillV0(opts: LegacyCreateOpts<SkillJson>): Promise<
   const spec = stripLegacy(opts.body) as SkillSpec
   const { data } = await applySkillRaw({
     throwOnError: true,
-    path: { namespace, name, version: opts.body.version },
+    path: { name, version: opts.body.version }, query: namespace !== "default" ? { namespace } : undefined,
     body: {
       apiVersion: "agentregistry.solo.io/v1alpha1",
       kind: "Skill",
@@ -289,7 +301,7 @@ export async function createPromptV0(opts: LegacyCreateOpts<PromptJson>): Promis
   const spec = stripLegacy(opts.body) as PromptSpec
   const { data } = await applyPromptRaw({
     throwOnError: true,
-    path: { namespace, name, version: opts.body.version },
+    path: { name, version: opts.body.version }, query: namespace !== "default" ? { namespace } : undefined,
     body: {
       apiVersion: "agentregistry.solo.io/v1alpha1",
       kind: "Prompt",
@@ -339,7 +351,7 @@ export async function deployServer(opts: { throwOnError?: true; body: DeployServ
   const deploymentName = `${name}-${kind.toLowerCase()}`
   const { data } = await applyDeploymentRaw({
     throwOnError: true,
-    path: { namespace, name: deploymentName, version: opts.body.version },
+    path: { name: deploymentName, version: opts.body.version }, query: namespace !== "default" ? { namespace } : undefined,
     body: {
       apiVersion: "agentregistry.solo.io/v1alpha1",
       kind: "Deployment",

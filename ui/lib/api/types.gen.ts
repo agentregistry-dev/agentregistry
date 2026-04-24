@@ -46,7 +46,6 @@ export type AgentSpec = {
 export type ApplyResult = {
     apiVersion?: string;
     error?: string;
-    generation?: number;
     kind?: string;
     name: string;
     namespace?: string;
@@ -61,7 +60,6 @@ export type ApplyResultsResponse = {
 export type Condition = {
     lastTransitionTime?: string;
     message?: string;
-    observedGeneration?: number;
     reason?: string;
     status: string;
     type: string;
@@ -272,13 +270,11 @@ export type ObjectMeta = {
     };
     createdAt?: string;
     deletionTimestamp?: string;
-    finalizers?: Array<string>;
-    generation?: number;
     labels?: {
         [key: string]: string;
     };
     name: string;
-    namespace: string;
+    namespace?: string;
     updatedAt?: string;
     version?: string;
 };
@@ -372,7 +368,6 @@ export type SkillSpec = {
 
 export type Status = {
     conditions?: Array<Condition>;
-    observedGeneration?: number;
 };
 
 export type TransportProto = {
@@ -394,10 +389,14 @@ export type VersionBody = {
     version: string;
 };
 
-export type ListAgentsAllNamespacesData = {
+export type ListAgentsData = {
     body?: never;
     path?: never;
     query?: {
+        /**
+         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
+         */
+        namespace?: string;
         /**
          * Max items to return (default 50).
          */
@@ -430,23 +429,223 @@ export type ListAgentsAllNamespacesData = {
     url: '/v0/agents';
 };
 
-export type ListAgentsAllNamespacesErrors = {
+export type ListAgentsErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type ListAgentsAllNamespacesError = ListAgentsAllNamespacesErrors[keyof ListAgentsAllNamespacesErrors];
+export type ListAgentsError = ListAgentsErrors[keyof ListAgentsErrors];
 
-export type ListAgentsAllNamespacesResponses = {
+export type ListAgentsResponses = {
     /**
      * OK
      */
     200: ListOutputAgentBody;
 };
 
-export type ListAgentsAllNamespacesResponse = ListAgentsAllNamespacesResponses[keyof ListAgentsAllNamespacesResponses];
+export type ListAgentsResponse = ListAgentsResponses[keyof ListAgentsResponses];
+
+export type GetLatestAgentData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/agents/{name}';
+};
+
+export type GetLatestAgentErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetLatestAgentError = GetLatestAgentErrors[keyof GetLatestAgentErrors];
+
+export type GetLatestAgentResponses = {
+    /**
+     * OK
+     */
+    200: Agent;
+};
+
+export type GetLatestAgentResponse = GetLatestAgentResponses[keyof GetLatestAgentResponses];
+
+export type DeleteAgentData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+        /**
+         * Skip provider-specific teardown and only remove the registry record.
+         */
+        force?: boolean;
+    };
+    url: '/v0/agents/{name}/{version}';
+};
+
+export type DeleteAgentErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type DeleteAgentError = DeleteAgentErrors[keyof DeleteAgentErrors];
+
+export type DeleteAgentResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type DeleteAgentResponse = DeleteAgentResponses[keyof DeleteAgentResponses];
+
+export type GetAgentData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/agents/{name}/{version}';
+};
+
+export type GetAgentErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetAgentError = GetAgentErrors[keyof GetAgentErrors];
+
+export type GetAgentResponses = {
+    /**
+     * OK
+     */
+    200: Agent;
+};
+
+export type GetAgentResponse = GetAgentResponses[keyof GetAgentResponses];
+
+export type ApplyAgentData = {
+    body?: Agent;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/agents/{name}/{version}';
+};
+
+export type ApplyAgentErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ApplyAgentError = ApplyAgentErrors[keyof ApplyAgentErrors];
+
+export type ApplyAgentResponses = {
+    /**
+     * OK
+     */
+    200: Agent;
+};
+
+export type ApplyAgentResponse = ApplyAgentResponses[keyof ApplyAgentResponses];
+
+export type GetLatestAgentReadmeData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/agents/{name}/readme';
+};
+
+export type GetLatestAgentReadmeErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetLatestAgentReadmeError = GetLatestAgentReadmeErrors[keyof GetLatestAgentReadmeErrors];
+
+export type GetLatestAgentReadmeResponses = {
+    /**
+     * OK
+     */
+    200: Readme;
+};
+
+export type GetLatestAgentReadmeResponse = GetLatestAgentReadmeResponses[keyof GetLatestAgentReadmeResponses];
+
+export type GetAgentReadmeData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/agents/{name}/versions/{version}/readme';
+};
+
+export type GetAgentReadmeErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetAgentReadmeError = GetAgentReadmeErrors[keyof GetAgentReadmeErrors];
+
+export type GetAgentReadmeResponses = {
+    /**
+     * OK
+     */
+    200: Readme;
+};
+
+export type GetAgentReadmeResponse = GetAgentReadmeResponses[keyof GetAgentReadmeResponses];
 
 export type DeleteBatchData = {
     body: Blob | File;
@@ -508,10 +707,14 @@ export type ApplyBatchResponses = {
 
 export type ApplyBatchResponse = ApplyBatchResponses[keyof ApplyBatchResponses];
 
-export type ListDeploymentsAllNamespacesData = {
+export type ListDeploymentsData = {
     body?: never;
     path?: never;
     query?: {
+        /**
+         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
+         */
+        namespace?: string;
         /**
          * Max items to return (default 50).
          */
@@ -544,23 +747,158 @@ export type ListDeploymentsAllNamespacesData = {
     url: '/v0/deployments';
 };
 
-export type ListDeploymentsAllNamespacesErrors = {
+export type ListDeploymentsErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type ListDeploymentsAllNamespacesError = ListDeploymentsAllNamespacesErrors[keyof ListDeploymentsAllNamespacesErrors];
+export type ListDeploymentsError = ListDeploymentsErrors[keyof ListDeploymentsErrors];
 
-export type ListDeploymentsAllNamespacesResponses = {
+export type ListDeploymentsResponses = {
     /**
      * OK
      */
     200: ListOutputDeploymentBody;
 };
 
-export type ListDeploymentsAllNamespacesResponse = ListDeploymentsAllNamespacesResponses[keyof ListDeploymentsAllNamespacesResponses];
+export type ListDeploymentsResponse = ListDeploymentsResponses[keyof ListDeploymentsResponses];
+
+export type GetLatestDeploymentData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/deployments/{name}';
+};
+
+export type GetLatestDeploymentErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetLatestDeploymentError = GetLatestDeploymentErrors[keyof GetLatestDeploymentErrors];
+
+export type GetLatestDeploymentResponses = {
+    /**
+     * OK
+     */
+    200: Deployment;
+};
+
+export type GetLatestDeploymentResponse = GetLatestDeploymentResponses[keyof GetLatestDeploymentResponses];
+
+export type DeleteDeploymentData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+        /**
+         * Skip provider-specific teardown and only remove the registry record.
+         */
+        force?: boolean;
+    };
+    url: '/v0/deployments/{name}/{version}';
+};
+
+export type DeleteDeploymentErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type DeleteDeploymentError = DeleteDeploymentErrors[keyof DeleteDeploymentErrors];
+
+export type DeleteDeploymentResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type DeleteDeploymentResponse = DeleteDeploymentResponses[keyof DeleteDeploymentResponses];
+
+export type GetDeploymentData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/deployments/{name}/{version}';
+};
+
+export type GetDeploymentErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetDeploymentError = GetDeploymentErrors[keyof GetDeploymentErrors];
+
+export type GetDeploymentResponses = {
+    /**
+     * OK
+     */
+    200: Deployment;
+};
+
+export type GetDeploymentResponse = GetDeploymentResponses[keyof GetDeploymentResponses];
+
+export type ApplyDeploymentData = {
+    body?: Deployment;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/deployments/{name}/{version}';
+};
+
+export type ApplyDeploymentErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ApplyDeploymentError = ApplyDeploymentErrors[keyof ApplyDeploymentErrors];
+
+export type ApplyDeploymentResponses = {
+    /**
+     * OK
+     */
+    200: Deployment;
+};
+
+export type ApplyDeploymentResponse = ApplyDeploymentResponses[keyof ApplyDeploymentResponses];
 
 export type GetHealthV0Data = {
     body?: never;
@@ -587,10 +925,14 @@ export type GetHealthV0Responses = {
 
 export type GetHealthV0Response = GetHealthV0Responses[keyof GetHealthV0Responses];
 
-export type ListMcpserversAllNamespacesData = {
+export type ListMcpserversData = {
     body?: never;
     path?: never;
     query?: {
+        /**
+         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
+         */
+        namespace?: string;
         /**
          * Max items to return (default 50).
          */
@@ -623,461 +965,6 @@ export type ListMcpserversAllNamespacesData = {
     url: '/v0/mcpservers';
 };
 
-export type ListMcpserversAllNamespacesErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ListMcpserversAllNamespacesError = ListMcpserversAllNamespacesErrors[keyof ListMcpserversAllNamespacesErrors];
-
-export type ListMcpserversAllNamespacesResponses = {
-    /**
-     * OK
-     */
-    200: ListOutputMcpServerBody;
-};
-
-export type ListMcpserversAllNamespacesResponse = ListMcpserversAllNamespacesResponses[keyof ListMcpserversAllNamespacesResponses];
-
-export type ListAgentsData = {
-    body?: never;
-    path: {
-        namespace: string;
-    };
-    query?: {
-        /**
-         * Max items to return (default 50).
-         */
-        limit?: number;
-        /**
-         * Opaque pagination cursor.
-         */
-        cursor?: string;
-        /**
-         * Label selector: key=value,key2=value2.
-         */
-        labels?: string;
-        /**
-         * Only return rows with is_latest_version=true.
-         */
-        latestOnly?: boolean;
-        /**
-         * Include rows with a deletionTimestamp.
-         */
-        includeTerminating?: boolean;
-        /**
-         * Semantic search query. Returns results ranked by similarity.
-         */
-        semantic?: string;
-        /**
-         * Drop results with cosine distance above this threshold (0 = no filter).
-         */
-        semanticThreshold?: number;
-    };
-    url: '/v0/namespaces/{namespace}/agents';
-};
-
-export type ListAgentsErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ListAgentsError = ListAgentsErrors[keyof ListAgentsErrors];
-
-export type ListAgentsResponses = {
-    /**
-     * OK
-     */
-    200: ListOutputAgentBody;
-};
-
-export type ListAgentsResponse = ListAgentsResponses[keyof ListAgentsResponses];
-
-export type GetLatestAgentData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/agents/{name}';
-};
-
-export type GetLatestAgentErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetLatestAgentError = GetLatestAgentErrors[keyof GetLatestAgentErrors];
-
-export type GetLatestAgentResponses = {
-    /**
-     * OK
-     */
-    200: Agent;
-};
-
-export type GetLatestAgentResponse = GetLatestAgentResponses[keyof GetLatestAgentResponses];
-
-export type DeleteAgentData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/agents/{name}/{version}';
-};
-
-export type DeleteAgentErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type DeleteAgentError = DeleteAgentErrors[keyof DeleteAgentErrors];
-
-export type DeleteAgentResponses = {
-    /**
-     * No Content
-     */
-    204: void;
-};
-
-export type DeleteAgentResponse = DeleteAgentResponses[keyof DeleteAgentResponses];
-
-export type GetAgentData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/agents/{name}/{version}';
-};
-
-export type GetAgentErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetAgentError = GetAgentErrors[keyof GetAgentErrors];
-
-export type GetAgentResponses = {
-    /**
-     * OK
-     */
-    200: Agent;
-};
-
-export type GetAgentResponse = GetAgentResponses[keyof GetAgentResponses];
-
-export type ApplyAgentData = {
-    body?: Agent;
-    path: {
-        namespace: string;
-        name: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/agents/{name}/{version}';
-};
-
-export type ApplyAgentErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ApplyAgentError = ApplyAgentErrors[keyof ApplyAgentErrors];
-
-export type ApplyAgentResponses = {
-    /**
-     * OK
-     */
-    200: Agent;
-};
-
-export type ApplyAgentResponse = ApplyAgentResponses[keyof ApplyAgentResponses];
-
-export type GetLatestAgentReadmeData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/agents/{name}/readme';
-};
-
-export type GetLatestAgentReadmeErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetLatestAgentReadmeError = GetLatestAgentReadmeErrors[keyof GetLatestAgentReadmeErrors];
-
-export type GetLatestAgentReadmeResponses = {
-    /**
-     * OK
-     */
-    200: Readme;
-};
-
-export type GetLatestAgentReadmeResponse = GetLatestAgentReadmeResponses[keyof GetLatestAgentReadmeResponses];
-
-export type GetAgentReadmeData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/agents/{name}/versions/{version}/readme';
-};
-
-export type GetAgentReadmeErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetAgentReadmeError = GetAgentReadmeErrors[keyof GetAgentReadmeErrors];
-
-export type GetAgentReadmeResponses = {
-    /**
-     * OK
-     */
-    200: Readme;
-};
-
-export type GetAgentReadmeResponse = GetAgentReadmeResponses[keyof GetAgentReadmeResponses];
-
-export type ListDeploymentsData = {
-    body?: never;
-    path: {
-        namespace: string;
-    };
-    query?: {
-        /**
-         * Max items to return (default 50).
-         */
-        limit?: number;
-        /**
-         * Opaque pagination cursor.
-         */
-        cursor?: string;
-        /**
-         * Label selector: key=value,key2=value2.
-         */
-        labels?: string;
-        /**
-         * Only return rows with is_latest_version=true.
-         */
-        latestOnly?: boolean;
-        /**
-         * Include rows with a deletionTimestamp.
-         */
-        includeTerminating?: boolean;
-        /**
-         * Semantic search query. Returns results ranked by similarity.
-         */
-        semantic?: string;
-        /**
-         * Drop results with cosine distance above this threshold (0 = no filter).
-         */
-        semanticThreshold?: number;
-    };
-    url: '/v0/namespaces/{namespace}/deployments';
-};
-
-export type ListDeploymentsErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ListDeploymentsError = ListDeploymentsErrors[keyof ListDeploymentsErrors];
-
-export type ListDeploymentsResponses = {
-    /**
-     * OK
-     */
-    200: ListOutputDeploymentBody;
-};
-
-export type ListDeploymentsResponse = ListDeploymentsResponses[keyof ListDeploymentsResponses];
-
-export type GetLatestDeploymentData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/deployments/{name}';
-};
-
-export type GetLatestDeploymentErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetLatestDeploymentError = GetLatestDeploymentErrors[keyof GetLatestDeploymentErrors];
-
-export type GetLatestDeploymentResponses = {
-    /**
-     * OK
-     */
-    200: Deployment;
-};
-
-export type GetLatestDeploymentResponse = GetLatestDeploymentResponses[keyof GetLatestDeploymentResponses];
-
-export type DeleteDeploymentData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/deployments/{name}/{version}';
-};
-
-export type DeleteDeploymentErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type DeleteDeploymentError = DeleteDeploymentErrors[keyof DeleteDeploymentErrors];
-
-export type DeleteDeploymentResponses = {
-    /**
-     * No Content
-     */
-    204: void;
-};
-
-export type DeleteDeploymentResponse = DeleteDeploymentResponses[keyof DeleteDeploymentResponses];
-
-export type GetDeploymentData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/deployments/{name}/{version}';
-};
-
-export type GetDeploymentErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetDeploymentError = GetDeploymentErrors[keyof GetDeploymentErrors];
-
-export type GetDeploymentResponses = {
-    /**
-     * OK
-     */
-    200: Deployment;
-};
-
-export type GetDeploymentResponse = GetDeploymentResponses[keyof GetDeploymentResponses];
-
-export type ApplyDeploymentData = {
-    body?: Deployment;
-    path: {
-        namespace: string;
-        name: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/deployments/{name}/{version}';
-};
-
-export type ApplyDeploymentErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ApplyDeploymentError = ApplyDeploymentErrors[keyof ApplyDeploymentErrors];
-
-export type ApplyDeploymentResponses = {
-    /**
-     * OK
-     */
-    200: Deployment;
-};
-
-export type ApplyDeploymentResponse = ApplyDeploymentResponses[keyof ApplyDeploymentResponses];
-
-export type ListMcpserversData = {
-    body?: never;
-    path: {
-        namespace: string;
-    };
-    query?: {
-        /**
-         * Max items to return (default 50).
-         */
-        limit?: number;
-        /**
-         * Opaque pagination cursor.
-         */
-        cursor?: string;
-        /**
-         * Label selector: key=value,key2=value2.
-         */
-        labels?: string;
-        /**
-         * Only return rows with is_latest_version=true.
-         */
-        latestOnly?: boolean;
-        /**
-         * Include rows with a deletionTimestamp.
-         */
-        includeTerminating?: boolean;
-        /**
-         * Semantic search query. Returns results ranked by similarity.
-         */
-        semantic?: string;
-        /**
-         * Drop results with cosine distance above this threshold (0 = no filter).
-         */
-        semanticThreshold?: number;
-    };
-    url: '/v0/namespaces/{namespace}/mcpservers';
-};
-
 export type ListMcpserversErrors = {
     /**
      * Error
@@ -1099,11 +986,15 @@ export type ListMcpserversResponse = ListMcpserversResponses[keyof ListMcpserver
 export type GetLatestMcpserverData = {
     body?: never;
     path: {
-        namespace: string;
         name: string;
     };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/mcpservers/{name}';
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/mcpservers/{name}';
 };
 
 export type GetLatestMcpserverErrors = {
@@ -1127,12 +1018,20 @@ export type GetLatestMcpserverResponse = GetLatestMcpserverResponses[keyof GetLa
 export type DeleteMcpserverData = {
     body?: never;
     path: {
-        namespace: string;
         name: string;
         version: string;
     };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/mcpservers/{name}/{version}';
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+        /**
+         * Skip provider-specific teardown and only remove the registry record.
+         */
+        force?: boolean;
+    };
+    url: '/v0/mcpservers/{name}/{version}';
 };
 
 export type DeleteMcpserverErrors = {
@@ -1156,12 +1055,16 @@ export type DeleteMcpserverResponse = DeleteMcpserverResponses[keyof DeleteMcpse
 export type GetMcpserverData = {
     body?: never;
     path: {
-        namespace: string;
         name: string;
         version: string;
     };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/mcpservers/{name}/{version}';
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/mcpservers/{name}/{version}';
 };
 
 export type GetMcpserverErrors = {
@@ -1185,12 +1088,16 @@ export type GetMcpserverResponse = GetMcpserverResponses[keyof GetMcpserverRespo
 export type ApplyMcpserverData = {
     body?: McpServer;
     path: {
-        namespace: string;
         name: string;
         version: string;
     };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/mcpservers/{name}/{version}';
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/mcpservers/{name}/{version}';
 };
 
 export type ApplyMcpserverErrors = {
@@ -1214,11 +1121,15 @@ export type ApplyMcpserverResponse = ApplyMcpserverResponses[keyof ApplyMcpserve
 export type GetLatestMcpserverReadmeData = {
     body?: never;
     path: {
-        namespace: string;
         name: string;
     };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/mcpservers/{name}/readme';
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/mcpservers/{name}/readme';
 };
 
 export type GetLatestMcpserverReadmeErrors = {
@@ -1242,12 +1153,16 @@ export type GetLatestMcpserverReadmeResponse = GetLatestMcpserverReadmeResponses
 export type GetMcpserverReadmeData = {
     body?: never;
     path: {
-        namespace: string;
         name: string;
         version: string;
     };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/mcpservers/{name}/versions/{version}/readme';
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/mcpservers/{name}/versions/{version}/readme';
 };
 
 export type GetMcpserverReadmeErrors = {
@@ -1267,633 +1182,6 @@ export type GetMcpserverReadmeResponses = {
 };
 
 export type GetMcpserverReadmeResponse = GetMcpserverReadmeResponses[keyof GetMcpserverReadmeResponses];
-
-export type ListPromptsData = {
-    body?: never;
-    path: {
-        namespace: string;
-    };
-    query?: {
-        /**
-         * Max items to return (default 50).
-         */
-        limit?: number;
-        /**
-         * Opaque pagination cursor.
-         */
-        cursor?: string;
-        /**
-         * Label selector: key=value,key2=value2.
-         */
-        labels?: string;
-        /**
-         * Only return rows with is_latest_version=true.
-         */
-        latestOnly?: boolean;
-        /**
-         * Include rows with a deletionTimestamp.
-         */
-        includeTerminating?: boolean;
-        /**
-         * Semantic search query. Returns results ranked by similarity.
-         */
-        semantic?: string;
-        /**
-         * Drop results with cosine distance above this threshold (0 = no filter).
-         */
-        semanticThreshold?: number;
-    };
-    url: '/v0/namespaces/{namespace}/prompts';
-};
-
-export type ListPromptsErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ListPromptsError = ListPromptsErrors[keyof ListPromptsErrors];
-
-export type ListPromptsResponses = {
-    /**
-     * OK
-     */
-    200: ListOutputPromptBody;
-};
-
-export type ListPromptsResponse = ListPromptsResponses[keyof ListPromptsResponses];
-
-export type GetLatestPromptData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/prompts/{name}';
-};
-
-export type GetLatestPromptErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetLatestPromptError = GetLatestPromptErrors[keyof GetLatestPromptErrors];
-
-export type GetLatestPromptResponses = {
-    /**
-     * OK
-     */
-    200: Prompt;
-};
-
-export type GetLatestPromptResponse = GetLatestPromptResponses[keyof GetLatestPromptResponses];
-
-export type DeletePromptData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/prompts/{name}/{version}';
-};
-
-export type DeletePromptErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type DeletePromptError = DeletePromptErrors[keyof DeletePromptErrors];
-
-export type DeletePromptResponses = {
-    /**
-     * No Content
-     */
-    204: void;
-};
-
-export type DeletePromptResponse = DeletePromptResponses[keyof DeletePromptResponses];
-
-export type GetPromptData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/prompts/{name}/{version}';
-};
-
-export type GetPromptErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetPromptError = GetPromptErrors[keyof GetPromptErrors];
-
-export type GetPromptResponses = {
-    /**
-     * OK
-     */
-    200: Prompt;
-};
-
-export type GetPromptResponse = GetPromptResponses[keyof GetPromptResponses];
-
-export type ApplyPromptData = {
-    body?: Prompt;
-    path: {
-        namespace: string;
-        name: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/prompts/{name}/{version}';
-};
-
-export type ApplyPromptErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ApplyPromptError = ApplyPromptErrors[keyof ApplyPromptErrors];
-
-export type ApplyPromptResponses = {
-    /**
-     * OK
-     */
-    200: Prompt;
-};
-
-export type ApplyPromptResponse = ApplyPromptResponses[keyof ApplyPromptResponses];
-
-export type GetLatestPromptReadmeData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/prompts/{name}/readme';
-};
-
-export type GetLatestPromptReadmeErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetLatestPromptReadmeError = GetLatestPromptReadmeErrors[keyof GetLatestPromptReadmeErrors];
-
-export type GetLatestPromptReadmeResponses = {
-    /**
-     * OK
-     */
-    200: Readme;
-};
-
-export type GetLatestPromptReadmeResponse = GetLatestPromptReadmeResponses[keyof GetLatestPromptReadmeResponses];
-
-export type GetPromptReadmeData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/prompts/{name}/versions/{version}/readme';
-};
-
-export type GetPromptReadmeErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetPromptReadmeError = GetPromptReadmeErrors[keyof GetPromptReadmeErrors];
-
-export type GetPromptReadmeResponses = {
-    /**
-     * OK
-     */
-    200: Readme;
-};
-
-export type GetPromptReadmeResponse = GetPromptReadmeResponses[keyof GetPromptReadmeResponses];
-
-export type ListProvidersData = {
-    body?: never;
-    path: {
-        namespace: string;
-    };
-    query?: {
-        /**
-         * Max items to return (default 50).
-         */
-        limit?: number;
-        /**
-         * Opaque pagination cursor.
-         */
-        cursor?: string;
-        /**
-         * Label selector: key=value,key2=value2.
-         */
-        labels?: string;
-        /**
-         * Only return rows with is_latest_version=true.
-         */
-        latestOnly?: boolean;
-        /**
-         * Include rows with a deletionTimestamp.
-         */
-        includeTerminating?: boolean;
-        /**
-         * Semantic search query. Returns results ranked by similarity.
-         */
-        semantic?: string;
-        /**
-         * Drop results with cosine distance above this threshold (0 = no filter).
-         */
-        semanticThreshold?: number;
-    };
-    url: '/v0/namespaces/{namespace}/providers';
-};
-
-export type ListProvidersErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ListProvidersError = ListProvidersErrors[keyof ListProvidersErrors];
-
-export type ListProvidersResponses = {
-    /**
-     * OK
-     */
-    200: ListOutputProviderBody;
-};
-
-export type ListProvidersResponse = ListProvidersResponses[keyof ListProvidersResponses];
-
-export type GetLatestProviderData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/providers/{name}';
-};
-
-export type GetLatestProviderErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetLatestProviderError = GetLatestProviderErrors[keyof GetLatestProviderErrors];
-
-export type GetLatestProviderResponses = {
-    /**
-     * OK
-     */
-    200: Provider;
-};
-
-export type GetLatestProviderResponse = GetLatestProviderResponses[keyof GetLatestProviderResponses];
-
-export type DeleteProviderData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/providers/{name}/{version}';
-};
-
-export type DeleteProviderErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type DeleteProviderError = DeleteProviderErrors[keyof DeleteProviderErrors];
-
-export type DeleteProviderResponses = {
-    /**
-     * No Content
-     */
-    204: void;
-};
-
-export type DeleteProviderResponse = DeleteProviderResponses[keyof DeleteProviderResponses];
-
-export type GetProviderData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/providers/{name}/{version}';
-};
-
-export type GetProviderErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetProviderError = GetProviderErrors[keyof GetProviderErrors];
-
-export type GetProviderResponses = {
-    /**
-     * OK
-     */
-    200: Provider;
-};
-
-export type GetProviderResponse = GetProviderResponses[keyof GetProviderResponses];
-
-export type ApplyProviderData = {
-    body?: Provider;
-    path: {
-        namespace: string;
-        name: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/providers/{name}/{version}';
-};
-
-export type ApplyProviderErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ApplyProviderError = ApplyProviderErrors[keyof ApplyProviderErrors];
-
-export type ApplyProviderResponses = {
-    /**
-     * OK
-     */
-    200: Provider;
-};
-
-export type ApplyProviderResponse = ApplyProviderResponses[keyof ApplyProviderResponses];
-
-export type ListSkillsData = {
-    body?: never;
-    path: {
-        namespace: string;
-    };
-    query?: {
-        /**
-         * Max items to return (default 50).
-         */
-        limit?: number;
-        /**
-         * Opaque pagination cursor.
-         */
-        cursor?: string;
-        /**
-         * Label selector: key=value,key2=value2.
-         */
-        labels?: string;
-        /**
-         * Only return rows with is_latest_version=true.
-         */
-        latestOnly?: boolean;
-        /**
-         * Include rows with a deletionTimestamp.
-         */
-        includeTerminating?: boolean;
-        /**
-         * Semantic search query. Returns results ranked by similarity.
-         */
-        semantic?: string;
-        /**
-         * Drop results with cosine distance above this threshold (0 = no filter).
-         */
-        semanticThreshold?: number;
-    };
-    url: '/v0/namespaces/{namespace}/skills';
-};
-
-export type ListSkillsErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ListSkillsError = ListSkillsErrors[keyof ListSkillsErrors];
-
-export type ListSkillsResponses = {
-    /**
-     * OK
-     */
-    200: ListOutputSkillBody;
-};
-
-export type ListSkillsResponse = ListSkillsResponses[keyof ListSkillsResponses];
-
-export type GetLatestSkillData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/skills/{name}';
-};
-
-export type GetLatestSkillErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetLatestSkillError = GetLatestSkillErrors[keyof GetLatestSkillErrors];
-
-export type GetLatestSkillResponses = {
-    /**
-     * OK
-     */
-    200: Skill;
-};
-
-export type GetLatestSkillResponse = GetLatestSkillResponses[keyof GetLatestSkillResponses];
-
-export type DeleteSkillData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/skills/{name}/{version}';
-};
-
-export type DeleteSkillErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type DeleteSkillError = DeleteSkillErrors[keyof DeleteSkillErrors];
-
-export type DeleteSkillResponses = {
-    /**
-     * No Content
-     */
-    204: void;
-};
-
-export type DeleteSkillResponse = DeleteSkillResponses[keyof DeleteSkillResponses];
-
-export type GetSkillData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/skills/{name}/{version}';
-};
-
-export type GetSkillErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetSkillError = GetSkillErrors[keyof GetSkillErrors];
-
-export type GetSkillResponses = {
-    /**
-     * OK
-     */
-    200: Skill;
-};
-
-export type GetSkillResponse = GetSkillResponses[keyof GetSkillResponses];
-
-export type ApplySkillData = {
-    body?: Skill;
-    path: {
-        namespace: string;
-        name: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/skills/{name}/{version}';
-};
-
-export type ApplySkillErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ApplySkillError = ApplySkillErrors[keyof ApplySkillErrors];
-
-export type ApplySkillResponses = {
-    /**
-     * OK
-     */
-    200: Skill;
-};
-
-export type ApplySkillResponse = ApplySkillResponses[keyof ApplySkillResponses];
-
-export type GetLatestSkillReadmeData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/skills/{name}/readme';
-};
-
-export type GetLatestSkillReadmeErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetLatestSkillReadmeError = GetLatestSkillReadmeErrors[keyof GetLatestSkillReadmeErrors];
-
-export type GetLatestSkillReadmeResponses = {
-    /**
-     * OK
-     */
-    200: Readme;
-};
-
-export type GetLatestSkillReadmeResponse = GetLatestSkillReadmeResponses[keyof GetLatestSkillReadmeResponses];
-
-export type GetSkillReadmeData = {
-    body?: never;
-    path: {
-        namespace: string;
-        name: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/namespaces/{namespace}/skills/{name}/versions/{version}/readme';
-};
-
-export type GetSkillReadmeErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetSkillReadmeError = GetSkillReadmeErrors[keyof GetSkillReadmeErrors];
-
-export type GetSkillReadmeResponses = {
-    /**
-     * OK
-     */
-    200: Readme;
-};
-
-export type GetSkillReadmeResponse = GetSkillReadmeResponses[keyof GetSkillReadmeResponses];
 
 export type PingV0Data = {
     body?: never;
@@ -1920,10 +1208,14 @@ export type PingV0Responses = {
 
 export type PingV0Response = PingV0Responses[keyof PingV0Responses];
 
-export type ListPromptsAllNamespacesData = {
+export type ListPromptsData = {
     body?: never;
     path?: never;
     query?: {
+        /**
+         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
+         */
+        namespace?: string;
         /**
          * Max items to return (default 50).
          */
@@ -1956,28 +1248,232 @@ export type ListPromptsAllNamespacesData = {
     url: '/v0/prompts';
 };
 
-export type ListPromptsAllNamespacesErrors = {
+export type ListPromptsErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type ListPromptsAllNamespacesError = ListPromptsAllNamespacesErrors[keyof ListPromptsAllNamespacesErrors];
+export type ListPromptsError = ListPromptsErrors[keyof ListPromptsErrors];
 
-export type ListPromptsAllNamespacesResponses = {
+export type ListPromptsResponses = {
     /**
      * OK
      */
     200: ListOutputPromptBody;
 };
 
-export type ListPromptsAllNamespacesResponse = ListPromptsAllNamespacesResponses[keyof ListPromptsAllNamespacesResponses];
+export type ListPromptsResponse = ListPromptsResponses[keyof ListPromptsResponses];
 
-export type ListProvidersAllNamespacesData = {
+export type GetLatestPromptData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/prompts/{name}';
+};
+
+export type GetLatestPromptErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetLatestPromptError = GetLatestPromptErrors[keyof GetLatestPromptErrors];
+
+export type GetLatestPromptResponses = {
+    /**
+     * OK
+     */
+    200: Prompt;
+};
+
+export type GetLatestPromptResponse = GetLatestPromptResponses[keyof GetLatestPromptResponses];
+
+export type DeletePromptData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+        /**
+         * Skip provider-specific teardown and only remove the registry record.
+         */
+        force?: boolean;
+    };
+    url: '/v0/prompts/{name}/{version}';
+};
+
+export type DeletePromptErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type DeletePromptError = DeletePromptErrors[keyof DeletePromptErrors];
+
+export type DeletePromptResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type DeletePromptResponse = DeletePromptResponses[keyof DeletePromptResponses];
+
+export type GetPromptData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/prompts/{name}/{version}';
+};
+
+export type GetPromptErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetPromptError = GetPromptErrors[keyof GetPromptErrors];
+
+export type GetPromptResponses = {
+    /**
+     * OK
+     */
+    200: Prompt;
+};
+
+export type GetPromptResponse = GetPromptResponses[keyof GetPromptResponses];
+
+export type ApplyPromptData = {
+    body?: Prompt;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/prompts/{name}/{version}';
+};
+
+export type ApplyPromptErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ApplyPromptError = ApplyPromptErrors[keyof ApplyPromptErrors];
+
+export type ApplyPromptResponses = {
+    /**
+     * OK
+     */
+    200: Prompt;
+};
+
+export type ApplyPromptResponse = ApplyPromptResponses[keyof ApplyPromptResponses];
+
+export type GetLatestPromptReadmeData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/prompts/{name}/readme';
+};
+
+export type GetLatestPromptReadmeErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetLatestPromptReadmeError = GetLatestPromptReadmeErrors[keyof GetLatestPromptReadmeErrors];
+
+export type GetLatestPromptReadmeResponses = {
+    /**
+     * OK
+     */
+    200: Readme;
+};
+
+export type GetLatestPromptReadmeResponse = GetLatestPromptReadmeResponses[keyof GetLatestPromptReadmeResponses];
+
+export type GetPromptReadmeData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/prompts/{name}/versions/{version}/readme';
+};
+
+export type GetPromptReadmeErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetPromptReadmeError = GetPromptReadmeErrors[keyof GetPromptReadmeErrors];
+
+export type GetPromptReadmeResponses = {
+    /**
+     * OK
+     */
+    200: Readme;
+};
+
+export type GetPromptReadmeResponse = GetPromptReadmeResponses[keyof GetPromptReadmeResponses];
+
+export type ListProvidersData = {
     body?: never;
     path?: never;
     query?: {
+        /**
+         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
+         */
+        namespace?: string;
         /**
          * Max items to return (default 50).
          */
@@ -2010,23 +1506,158 @@ export type ListProvidersAllNamespacesData = {
     url: '/v0/providers';
 };
 
-export type ListProvidersAllNamespacesErrors = {
+export type ListProvidersErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type ListProvidersAllNamespacesError = ListProvidersAllNamespacesErrors[keyof ListProvidersAllNamespacesErrors];
+export type ListProvidersError = ListProvidersErrors[keyof ListProvidersErrors];
 
-export type ListProvidersAllNamespacesResponses = {
+export type ListProvidersResponses = {
     /**
      * OK
      */
     200: ListOutputProviderBody;
 };
 
-export type ListProvidersAllNamespacesResponse = ListProvidersAllNamespacesResponses[keyof ListProvidersAllNamespacesResponses];
+export type ListProvidersResponse = ListProvidersResponses[keyof ListProvidersResponses];
+
+export type GetLatestProviderData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/providers/{name}';
+};
+
+export type GetLatestProviderErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetLatestProviderError = GetLatestProviderErrors[keyof GetLatestProviderErrors];
+
+export type GetLatestProviderResponses = {
+    /**
+     * OK
+     */
+    200: Provider;
+};
+
+export type GetLatestProviderResponse = GetLatestProviderResponses[keyof GetLatestProviderResponses];
+
+export type DeleteProviderData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+        /**
+         * Skip provider-specific teardown and only remove the registry record.
+         */
+        force?: boolean;
+    };
+    url: '/v0/providers/{name}/{version}';
+};
+
+export type DeleteProviderErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type DeleteProviderError = DeleteProviderErrors[keyof DeleteProviderErrors];
+
+export type DeleteProviderResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type DeleteProviderResponse = DeleteProviderResponses[keyof DeleteProviderResponses];
+
+export type GetProviderData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/providers/{name}/{version}';
+};
+
+export type GetProviderErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetProviderError = GetProviderErrors[keyof GetProviderErrors];
+
+export type GetProviderResponses = {
+    /**
+     * OK
+     */
+    200: Provider;
+};
+
+export type GetProviderResponse = GetProviderResponses[keyof GetProviderResponses];
+
+export type ApplyProviderData = {
+    body?: Provider;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/providers/{name}/{version}';
+};
+
+export type ApplyProviderErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ApplyProviderError = ApplyProviderErrors[keyof ApplyProviderErrors];
+
+export type ApplyProviderResponses = {
+    /**
+     * OK
+     */
+    200: Provider;
+};
+
+export type ApplyProviderResponse = ApplyProviderResponses[keyof ApplyProviderResponses];
 
 export type GetServerReadmeV0Data = {
     body?: never;
@@ -2083,10 +1714,14 @@ export type GetServerVersionReadmeV0Responses = {
 
 export type GetServerVersionReadmeV0Response = GetServerVersionReadmeV0Responses[keyof GetServerVersionReadmeV0Responses];
 
-export type ListSkillsAllNamespacesData = {
+export type ListSkillsData = {
     body?: never;
     path?: never;
     query?: {
+        /**
+         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
+         */
+        namespace?: string;
         /**
          * Max items to return (default 50).
          */
@@ -2119,23 +1754,223 @@ export type ListSkillsAllNamespacesData = {
     url: '/v0/skills';
 };
 
-export type ListSkillsAllNamespacesErrors = {
+export type ListSkillsErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type ListSkillsAllNamespacesError = ListSkillsAllNamespacesErrors[keyof ListSkillsAllNamespacesErrors];
+export type ListSkillsError = ListSkillsErrors[keyof ListSkillsErrors];
 
-export type ListSkillsAllNamespacesResponses = {
+export type ListSkillsResponses = {
     /**
      * OK
      */
     200: ListOutputSkillBody;
 };
 
-export type ListSkillsAllNamespacesResponse = ListSkillsAllNamespacesResponses[keyof ListSkillsAllNamespacesResponses];
+export type ListSkillsResponse = ListSkillsResponses[keyof ListSkillsResponses];
+
+export type GetLatestSkillData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/skills/{name}';
+};
+
+export type GetLatestSkillErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetLatestSkillError = GetLatestSkillErrors[keyof GetLatestSkillErrors];
+
+export type GetLatestSkillResponses = {
+    /**
+     * OK
+     */
+    200: Skill;
+};
+
+export type GetLatestSkillResponse = GetLatestSkillResponses[keyof GetLatestSkillResponses];
+
+export type DeleteSkillData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+        /**
+         * Skip provider-specific teardown and only remove the registry record.
+         */
+        force?: boolean;
+    };
+    url: '/v0/skills/{name}/{version}';
+};
+
+export type DeleteSkillErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type DeleteSkillError = DeleteSkillErrors[keyof DeleteSkillErrors];
+
+export type DeleteSkillResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type DeleteSkillResponse = DeleteSkillResponses[keyof DeleteSkillResponses];
+
+export type GetSkillData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/skills/{name}/{version}';
+};
+
+export type GetSkillErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetSkillError = GetSkillErrors[keyof GetSkillErrors];
+
+export type GetSkillResponses = {
+    /**
+     * OK
+     */
+    200: Skill;
+};
+
+export type GetSkillResponse = GetSkillResponses[keyof GetSkillResponses];
+
+export type ApplySkillData = {
+    body?: Skill;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/skills/{name}/{version}';
+};
+
+export type ApplySkillErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ApplySkillError = ApplySkillErrors[keyof ApplySkillErrors];
+
+export type ApplySkillResponses = {
+    /**
+     * OK
+     */
+    200: Skill;
+};
+
+export type ApplySkillResponse = ApplySkillResponses[keyof ApplySkillResponses];
+
+export type GetLatestSkillReadmeData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/skills/{name}/readme';
+};
+
+export type GetLatestSkillReadmeErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetLatestSkillReadmeError = GetLatestSkillReadmeErrors[keyof GetLatestSkillReadmeErrors];
+
+export type GetLatestSkillReadmeResponses = {
+    /**
+     * OK
+     */
+    200: Readme;
+};
+
+export type GetLatestSkillReadmeResponse = GetLatestSkillReadmeResponses[keyof GetLatestSkillReadmeResponses];
+
+export type GetSkillReadmeData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/skills/{name}/versions/{version}/readme';
+};
+
+export type GetSkillReadmeErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetSkillReadmeError = GetSkillReadmeErrors[keyof GetSkillReadmeErrors];
+
+export type GetSkillReadmeResponses = {
+    /**
+     * OK
+     */
+    200: Readme;
+};
+
+export type GetSkillReadmeResponse = GetSkillReadmeResponses[keyof GetSkillReadmeResponses];
 
 export type GetVersionV0Data = {
     body?: never;

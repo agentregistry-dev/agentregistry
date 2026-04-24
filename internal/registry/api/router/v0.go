@@ -2,11 +2,10 @@
 package router
 
 import (
+	builtins "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/builtins"
 	v0embeddings "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/embeddings"
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
 	v0ping "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/ping"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
-	builtins "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/builtins"
 	v0version "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/version"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
@@ -19,8 +18,9 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 	"github.com/agentregistry-dev/agentregistry/pkg/importer"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
-	"github.com/danielgtaylor/huma/v2"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/danielgtaylor/huma/v2"
 )
 
 // V1Alpha1Stores is the per-kind Store map used by the v1alpha1

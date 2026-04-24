@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   deleteDeployment,
-  listDeploymentsAllNamespaces,
+  listDeployments,
 } from "@/lib/admin-api"
 import { toFlatDeployment, type FlatDeployment } from "@/lib/deployment-flat"
 import { Input } from "@/components/ui/input"
@@ -86,7 +86,12 @@ export default function DeployedPage() {
   const fetchDeployments = async () => {
     try {
       setError(null)
-      const { data: deployData } = await listDeploymentsAllNamespaces({ throwOnError: true })
+      // Cross-namespace list moved from /v0/deployments (no params) to
+      // /v0/deployments?namespace=all post route flatten.
+      const { data: deployData } = await listDeployments({
+        throwOnError: true,
+        query: { namespace: "all" },
+      })
       setDeployments((deployData.items ?? []).map(toFlatDeployment))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch deployments')
@@ -110,12 +115,16 @@ export default function DeployedPage() {
 
     try {
       setRemoving(true)
+      // Namespace moved off the path onto a query param post-flatten;
+      // omit when it's the implicit default.
       await deleteDeployment({
         path: {
-          namespace: serverToRemove.namespace,
           name: serverToRemove.name,
           version: serverToRemove.version,
         },
+        query: serverToRemove.namespace && serverToRemove.namespace !== "default"
+          ? { namespace: serverToRemove.namespace }
+          : undefined,
         throwOnError: true,
       })
       setDeployments(prev => prev.filter(d => d.id !== serverToRemove.id))
