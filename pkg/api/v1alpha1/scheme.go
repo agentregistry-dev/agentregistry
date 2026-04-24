@@ -258,7 +258,11 @@ func EnvelopeFromRaw[T Object](newObj func() T, raw *RawObject, kind string) (T,
 	out := newObj()
 	out.SetTypeMeta(TypeMeta{APIVersion: GroupVersion, Kind: kind})
 	out.SetMetadata(raw.Metadata)
-	out.SetStatus(raw.Status)
+	if len(raw.Status) > 0 {
+		if err := out.UnmarshalStatus(raw.Status); err != nil {
+			return out, fmt.Errorf("unmarshal status: %w", err)
+		}
+	}
 	if len(raw.Spec) > 0 {
 		if err := out.UnmarshalSpec(raw.Spec); err != nil {
 			return out, fmt.Errorf("unmarshal spec: %w", err)

@@ -59,7 +59,11 @@ func DecodeBytes(reg *Registry, b []byte) ([]*Resource, error) {
 		if err != nil {
 			return nil, err
 		}
-		obj.SetStatus(v1alpha1.Status{})
+		// Clear status before projection — the CLI's declarative view
+		// stamps stale status back onto apply otherwise.
+		if err := obj.UnmarshalStatus(nil); err != nil {
+			return nil, fmt.Errorf("reset status: %w", err)
+		}
 		out = append(out, resourceFromObject(kindDef.Kind, obj))
 	}
 	return out, nil

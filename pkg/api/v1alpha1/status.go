@@ -136,6 +136,31 @@ func MarshalStatusForStorage(s Status) ([]byte, error) {
 	})
 }
 
+// StatusPatcher adapts a typed Status mutator into the opaque-bytes
+// signature that v1alpha1store.PatchOpts.Status / Store.PatchStatus
+// expect. Callers that use the typed v1alpha1.Status schema wrap their
+// SetCondition / ObservedGeneration logic here:
+//
+//	store.PatchStatus(ctx, ns, name, version, v1alpha1.StatusPatcher(
+//	    func(s *v1alpha1.Status) {
+//	        s.ObservedGeneration = gen
+//	        s.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionTrue})
+//	    },
+//	))
+//
+// Kinds with a custom status shape skip this helper and return their
+// own marshaled bytes directly from the PatchStatus callback.
+func StatusPatcher(mutate func(*Status)) func(current json.RawMessage) (json.RawMessage, error) {
+	return func(current json.RawMessage) (json.RawMessage, error) {
+		var s Status
+		if err := UnmarshalStatusFromStorage(current, &s); err != nil {
+			return nil, err
+		}
+		mutate(&s)
+		return MarshalStatusForStorage(s)
+	}
+}
+
 // UnmarshalStatusFromStorage is the read-side inverse of
 // MarshalStatusForStorage: decode a status JSONB payload back into a
 // live Status struct, including the internal-only ObservedGeneration

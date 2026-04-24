@@ -88,11 +88,6 @@ func decodeRow(
 		}
 	}
 
-	var status v1alpha1.Status
-	if err := v1alpha1.UnmarshalStatusFromStorage(statusJSON, &status); err != nil {
-		return nil, fmt.Errorf("decode status: %w", err)
-	}
-
 	var finalizers []string
 	if len(finalizersJSON) > 0 {
 		if err := json.Unmarshal(finalizersJSON, &finalizers); err != nil {
@@ -114,7 +109,7 @@ func decodeRow(
 			Finalizers:        finalizers,
 		},
 		Spec:   json.RawMessage(specJSON),
-		Status: status,
+		Status: json.RawMessage(statusJSON),
 	}, nil
 }
 

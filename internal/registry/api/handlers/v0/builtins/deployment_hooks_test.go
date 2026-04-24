@@ -91,7 +91,11 @@ func TestDeploymentPut_TriggersAdapterApply(t *testing.T) {
 	raw, err := stores[v1alpha1.KindDeployment].Get(t.Context(), "default", "weather-noop", "1")
 	require.NoError(t, err)
 	require.Contains(t, raw.Metadata.Finalizers, noop.FinalizerName, "expected coordinator to add adapter finalizer")
-	ready := raw.Status.GetCondition("Ready")
+	// RawObject.Status is opaque bytes at the envelope layer; decode
+	// with the Status storage codec to inspect conditions.
+	var status v1alpha1.Status
+	require.NoError(t, v1alpha1.UnmarshalStatusFromStorage(raw.Status, &status))
+	ready := status.GetCondition("Ready")
 	require.NotNil(t, ready, "noop.Apply should have written Ready condition")
 	require.Equal(t, v1alpha1.ConditionTrue, ready.Status)
 }

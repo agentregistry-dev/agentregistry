@@ -83,7 +83,11 @@ func RegisterDeploymentLogs(api huma.API, cfg DeploymentLogsConfig) {
 		deployment := &v1alpha1.Deployment{}
 		deployment.SetTypeMeta(v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment})
 		deployment.SetMetadata(row.Metadata)
-		deployment.SetStatus(row.Status)
+		if len(row.Status) > 0 {
+			if err := deployment.UnmarshalStatus(row.Status); err != nil {
+				return nil, huma.Error500InternalServerError("decode Deployment status", err)
+			}
+		}
 		if len(row.Spec) > 0 {
 			if err := deployment.UnmarshalSpec(row.Spec); err != nil {
 				return nil, huma.Error500InternalServerError("decode Deployment spec", err)

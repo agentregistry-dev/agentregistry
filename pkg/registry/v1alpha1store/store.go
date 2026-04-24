@@ -292,15 +292,18 @@ func (s *Store) Upsert(ctx context.Context, namespace, name, version string, spe
 // ApplyPatch. Nil mutators skip the corresponding column entirely; the
 // row's other fields (spec, generation, labels) are never touched.
 //
-//   - Status: callback receives a decoded *Status pointer to mutate in
-//     place (typically via Status.SetCondition).
+//   - Status: opaque-bytes mutator — receives the row's current status
+//     JSONB payload (nil when empty) and returns the replacement. Kinds
+//     that use the typed v1alpha1.Status schema wrap their logic with
+//     v1alpha1.StatusPatcher so the callback keeps its typed shape
+//     while the Store stays schema-agnostic.
 //   - Annotations: callback receives the current annotations map and
 //     returns the replacement. Returning nil clears the map. For
 //     idempotent merges, copy the input + overlay caller keys.
 //   - Finalizers: callback receives the current slice and returns the
 //     replacement. Nil → empty slice.
 type PatchOpts struct {
-	Status      func(*v1alpha1.Status)
+	Status      func(current json.RawMessage) (json.RawMessage, error)
 	Annotations func(map[string]string) map[string]string
 	Finalizers  func([]string) []string
 }
@@ -379,21 +382,18 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, version string,
 	})
 }
 
-// buildStatusPatch decodes the row's current status JSON, applies the
-// caller's mutator, and marshals the result. Returned bytes go into the
-// UPDATE statement in ApplyPatch.
-func buildStatusPatch(current []byte, mutate func(*v1alpha1.Status)) ([]byte, error) {
-	var status v1alpha1.Status
-	if err := v1alpha1.UnmarshalStatusFromStorage(current, &status); err != nil {
-		return nil, fmt.Errorf("decode status: %w", err)
+// buildStatusPatch hands the row's current status JSONB payload to the
+// caller's opaque mutator and returns the replacement bytes. The Store
+// is schema-agnostic here — typed kinds layer their own decode/encode
+// via v1alpha1.StatusPatcher (see v1alpha1/status.go).
+func buildStatusPatch(current []byte, mutate func(json.RawMessage) (json.RawMessage, error)) ([]byte, error) {
+	var in json.RawMessage
+	if len(current) > 0 {
+		in = json.RawMessage(current)
 	}
-	mutate(&status)
-	// MarshalStatusForStorage, not json.Marshal — the default
-	// marshaler hides ObservedGeneration (wire contract), the
-	// storage codec preserves it.
-	out, err := v1alpha1.MarshalStatusForStorage(status)
+	out, err := mutate(in)
 	if err != nil {
-		return nil, fmt.Errorf("encode status: %w", err)
+		return nil, fmt.Errorf("status mutator: %w", err)
 	}
 	return out, nil
 }
@@ -441,8 +441,11 @@ func buildFinalizersPatch(current []byte, mutate func([]string) []string) ([]byt
 }
 
 // PatchStatus is a thin wrapper over ApplyPatch for the single-column
-// status case. See ApplyPatch for the semantics.
-func (s *Store) PatchStatus(ctx context.Context, namespace, name, version string, mutate func(*v1alpha1.Status)) error {
+// status case. The mutator receives the current status JSONB payload as
+// opaque bytes (nil when empty) and returns the replacement. Kinds that
+// bind their status to the typed v1alpha1.Status wrap the callback via
+// v1alpha1.StatusPatcher.
+func (s *Store) PatchStatus(ctx context.Context, namespace, name, version string, mutate func(current json.RawMessage) (json.RawMessage, error)) error {
 	return s.ApplyPatch(ctx, namespace, name, version, PatchOpts{Status: mutate})
 }
 

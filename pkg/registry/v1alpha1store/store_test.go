@@ -122,19 +122,25 @@ func TestV1Alpha1Store_PatchStatusDisjointFromSpec(t *testing.T) {
 	_, err := store.Upsert(ctx, testNS, "foo", "v1", spec, UpsertOpts{})
 	require.NoError(t, err)
 
-	err = store.PatchStatus(ctx, testNS, "foo", "v1", func(s *v1alpha1.Status) {
+	// Store.PatchStatus now takes an opaque-bytes mutator; the typed
+	// Status callback wraps through v1alpha1.StatusPatcher.
+	err = store.PatchStatus(ctx, testNS, "foo", "v1", v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
 		s.ObservedGeneration = 1
 		s.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionTrue, Reason: "Converged"})
-	})
+	}))
 	require.NoError(t, err)
 
 	obj, err := store.Get(ctx, testNS, "foo", "v1")
 	require.NoError(t, err)
 	require.EqualValues(t, 1, obj.Metadata.Generation)
-	require.EqualValues(t, 1, obj.Status.ObservedGeneration)
-	require.Len(t, obj.Status.Conditions, 1)
-	require.Equal(t, "Ready", obj.Status.Conditions[0].Type)
-	require.Equal(t, v1alpha1.ConditionTrue, obj.Status.Conditions[0].Status)
+	// obj.Status is raw bytes at the RawObject layer; decode to the
+	// typed Status via the storage codec to inspect the fields.
+	var status v1alpha1.Status
+	require.NoError(t, v1alpha1.UnmarshalStatusFromStorage(obj.Status, &status))
+	require.EqualValues(t, 1, status.ObservedGeneration)
+	require.Len(t, status.Conditions, 1)
+	require.Equal(t, "Ready", status.Conditions[0].Type)
+	require.Equal(t, v1alpha1.ConditionTrue, status.Conditions[0].Status)
 }
 
 func TestV1Alpha1Store_PatchStatusNotFound(t *testing.T) {
@@ -142,7 +148,7 @@ func TestV1Alpha1Store_PatchStatusNotFound(t *testing.T) {
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
-	err := store.PatchStatus(ctx, testNS, "nope", "v1", func(s *v1alpha1.Status) {})
+	err := store.PatchStatus(ctx, testNS, "nope", "v1", v1alpha1.StatusPatcher(func(*v1alpha1.Status) {}))
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 }
 

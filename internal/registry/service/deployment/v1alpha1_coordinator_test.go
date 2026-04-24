@@ -74,10 +74,15 @@ func TestV1Alpha1Coordinator_ApplyWritesConditionsAndFinalizer(t *testing.T) {
 
 	raw, err := stores[v1alpha1.KindDeployment].Get(ctx, "default", "weather-noop", "1")
 	require.NoError(t, err)
-	require.NotNil(t, raw.Status.GetCondition("Ready"), "noop adapter should have written Ready condition")
+	// RawObject.Status is opaque JSONB bytes; decode via the Status
+	// storage codec to reach the typed Conditions / ObservedGeneration
+	// fields the coordinator writes.
+	var status v1alpha1.Status
+	require.NoError(t, v1alpha1.UnmarshalStatusFromStorage(raw.Status, &status))
+	require.NotNil(t, status.GetCondition("Ready"), "noop adapter should have written Ready condition")
 	require.Contains(t, raw.Metadata.Finalizers, noop.FinalizerName)
 	require.Contains(t, raw.Metadata.Annotations, "platforms.agentregistry.solo.io/noop/applied-at")
-	require.Equal(t, deployment.Metadata.Generation, raw.Status.ObservedGeneration)
+	require.Equal(t, deployment.Metadata.Generation, status.ObservedGeneration)
 }
 
 func TestV1Alpha1Coordinator_ApplyPreservesExistingAnnotations(t *testing.T) {
@@ -120,7 +125,9 @@ func TestV1Alpha1Coordinator_RemoveClearsFinalizer(t *testing.T) {
 	raw, err := stores[v1alpha1.KindDeployment].Get(ctx, "default", "weather-noop", "1")
 	require.NoError(t, err)
 	require.NotContains(t, raw.Metadata.Finalizers, noop.FinalizerName, "Remove should drop adapter finalizer")
-	ready := raw.Status.GetCondition("Ready")
+	var status v1alpha1.Status
+	require.NoError(t, v1alpha1.UnmarshalStatusFromStorage(raw.Status, &status))
+	ready := status.GetCondition("Ready")
 	require.NotNil(t, ready)
 	require.Equal(t, v1alpha1.ConditionFalse, ready.Status)
 }

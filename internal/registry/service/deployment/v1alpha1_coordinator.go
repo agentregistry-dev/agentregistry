@@ -256,12 +256,12 @@ func (c *V1Alpha1Coordinator) persistApplyResult(ctx context.Context, deployment
 	}
 	patch := v1alpha1store.PatchOpts{}
 	if len(result.Conditions) > 0 {
-		patch.Status = func(s *v1alpha1.Status) {
+		patch.Status = v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
 			s.ObservedGeneration = deployment.Metadata.Generation
 			for _, cond := range result.Conditions {
 				s.SetCondition(cond)
 			}
-		}
+		})
 	}
 	if len(result.ProviderMetadata) > 0 {
 		patch.Annotations = func(annotations map[string]string) map[string]string {
@@ -301,12 +301,12 @@ func (c *V1Alpha1Coordinator) persistRemoveResult(ctx context.Context, deploymen
 	}
 	patch := v1alpha1store.PatchOpts{}
 	if len(result.Conditions) > 0 {
-		patch.Status = func(s *v1alpha1.Status) {
+		patch.Status = v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
 			s.ObservedGeneration = deployment.Metadata.Generation
 			for _, cond := range result.Conditions {
 				s.SetCondition(cond)
 			}
-		}
+		})
 	}
 	if len(result.RemoveFinalizers) > 0 {
 		patch.Finalizers = func(finalizers []string) []string {

@@ -127,7 +127,11 @@ func NewV1Alpha1Getter(stores map[string]*v1alpha1store.Store) v1alpha1.GetterFu
 		// dispatch.
 		obj.SetTypeMeta(v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: ref.Kind})
 		obj.SetMetadata(raw.Metadata)
-		obj.SetStatus(raw.Status)
+		if len(raw.Status) > 0 {
+			if err := obj.UnmarshalStatus(raw.Status); err != nil {
+				return nil, fmt.Errorf("decode %s status: %w", ref.Kind, err)
+			}
+		}
 		if len(raw.Spec) > 0 {
 			if err := obj.UnmarshalSpec(raw.Spec); err != nil {
 				return nil, fmt.Errorf("decode %s spec: %w", ref.Kind, err)

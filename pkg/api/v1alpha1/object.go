@@ -112,12 +112,18 @@ func (m ObjectMeta) NamespaceOrDefault() string {
 }
 
 // RawObject is the generic wire envelope used during decode and apply dispatch
-// when the concrete Kind is not yet known. Spec is held as raw JSON bytes;
-// callers route into a typed object via Scheme.Decode / Scheme.DecodeMulti
-// or manually unmarshal Spec into a typed value.
+// when the concrete Kind is not yet known. Spec AND Status are both held as
+// raw JSON bytes so the envelope layer stays agnostic to per-kind schemas:
+// OSS kinds layer a typed v1alpha1.Status (observed-generation + K8s-style
+// conditions) on top; enterprise kinds can ship any JSON shape they like
+// without having to conform to meta.v1 conditions.
+//
+// Callers route into a typed object via Scheme.Decode / Scheme.DecodeMulti
+// (or EnvelopeFromRaw); each kind's UnmarshalStatus is the inverse of the
+// per-kind MarshalStatus and decides how to decode the bytes.
 type RawObject struct {
 	TypeMeta `json:",inline" yaml:",inline"`
 	Metadata ObjectMeta      `json:"metadata" yaml:"metadata"`
 	Spec     json.RawMessage `json:"spec,omitempty" yaml:"spec,omitempty"`
-	Status   Status          `json:"status,omitzero" yaml:"status,omitempty"`
+	Status   json.RawMessage `json:"status,omitempty" yaml:"status,omitempty"`
 }
