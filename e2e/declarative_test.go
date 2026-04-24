@@ -35,7 +35,10 @@ func writeDeclarativeYAML(t *testing.T, dir, filename, content string) string {
 
 // resourceURL builds the v1alpha1-native URL for a single resource version:
 //
-//	{regURL}/namespaces/default/{resource}/{name}/{version}
+//	{regURL}/{resource}/{name}/{version}
+//
+// Namespace is implicit ("default") and elided from the path post-flatten;
+// callers that target a non-default namespace pass `?namespace=...` directly.
 //
 // Resource names that contain "/" (common for MCPServer identifiers like
 // "e2e-test/decl-mcp-123") are URL-encoded into a single path segment so
@@ -43,7 +46,7 @@ func writeDeclarativeYAML(t *testing.T, dir, filename, content string) string {
 // names literally under the default namespace; the CLI itself uses
 // url.PathEscape on delete/get, so the HTTP client must match.
 func resourceURL(regURL, resource, name, version string) string {
-	return fmt.Sprintf("%s/namespaces/default/%s/%s/%s",
+	return fmt.Sprintf("%s/%s/%s/%s",
 		regURL, resource, url.PathEscape(name), version)
 }
 

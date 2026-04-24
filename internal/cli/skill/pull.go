@@ -51,7 +51,7 @@ func runPull(cmd *cobra.Command, args []string) error {
 	printer.PrintInfo(fmt.Sprintf("Pulling skill: %s", skillName))
 
 	// 1. Resolve which version to pull
-	version, err := resolveSkillVersion(skillName, pullVersion)
+	version, err := resolveSkillVersion(cmd.Context(), skillName, pullVersion)
 	if err != nil {
 		return err
 	}
@@ -115,13 +115,16 @@ func runPull(cmd *cobra.Command, args []string) error {
 // If a version is explicitly provided, it is used directly.
 // If only one version exists, that version is selected automatically.
 // If multiple versions exist, the user is prompted to specify one.
-func resolveSkillVersion(skillName, requestedVersion string) (string, error) {
+//
+// ctx flows in from the cobra command so Ctrl-C / parent timeouts cancel
+// the registry list call cleanly.
+func resolveSkillVersion(ctx context.Context, skillName, requestedVersion string) (string, error) {
 	if requestedVersion != "" {
 		return requestedVersion, nil
 	}
 
 	versions, err := client.ListVersionsOfName(
-		context.Background(),
+		ctx,
 		apiClient,
 		v1alpha1.KindSkill,
 		v1alpha1.DefaultNamespace,

@@ -118,6 +118,11 @@ func deploymentToDocument(dep *cliCommon.DeploymentRecord) any {
 		targetKind = v1alpha1.KindMCPServer
 	}
 
+	// metadata is the Deployment row's identity, NOT the target's. Two
+	// deployments of the same target/version against different providers
+	// are distinct rows; collapsing them onto target identity here
+	// (previous behavior) made get-then-apply round-trips clobber the
+	// wrong row and made delete by metadata identity impossible.
 	return struct {
 		APIVersion string                  `json:"apiVersion" yaml:"apiVersion"`
 		Kind       string                  `json:"kind" yaml:"kind"`
@@ -128,8 +133,9 @@ func deploymentToDocument(dep *cliCommon.DeploymentRecord) any {
 		APIVersion: v1alpha1.GroupVersion,
 		Kind:       v1alpha1.KindDeployment,
 		Metadata: v1alpha1.ObjectMeta{
-			Name:    dep.TargetName,
-			Version: dep.TargetVersion,
+			Namespace: dep.Namespace,
+			Name:      dep.Name,
+			Version:   dep.Version,
 		},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef: v1alpha1.ResourceRef{

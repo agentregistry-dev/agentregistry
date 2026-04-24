@@ -28,6 +28,10 @@ type Resource struct {
 // IsEnvelopeYAML reports whether the given bytes look like a declarative
 // ar.dev/v1alpha1 envelope. Malformed YAML returns false so callers can fall
 // back to legacy manifest parsing paths that surface the real error later.
+//
+// Pins on the canonical apiVersion (ar.dev/v1alpha1) — generic K8s-style
+// manifests with an unrelated apiVersion (kagent CRDs, k8s core types, etc.)
+// would otherwise misclassify as envelopes and route to the wrong loader.
 func IsEnvelopeYAML(data []byte) bool {
 	var header struct {
 		APIVersion string `yaml:"apiVersion"`
@@ -36,7 +40,7 @@ func IsEnvelopeYAML(data []byte) bool {
 	if err := yaml.Unmarshal(data, &header); err != nil {
 		return false
 	}
-	return header.APIVersion != "" && header.Kind != ""
+	return header.APIVersion == APIVersion && header.Kind != ""
 }
 
 // DecodeBytes parses one or more declarative YAML documents using the provided registry.
@@ -55,8 +59,11 @@ func DecodeBytes(reg *Registry, b []byte) ([]*Resource, error) {
 		if !ok {
 			return nil, fmt.Errorf("scheme: decoded value does not implement v1alpha1.Object: %T", item)
 		}
-		kindDef, err := reg.Lookup(obj.GetKind())
-		if err != nil {
+		// Lookup is registry-key-only (case-insensitive alias dispatch); we
+		// don't want kindDef.Kind (which is the registry-internal canonical
+		// key, e.g. "agent") leaking into Resource.Kind. Use obj.GetKind()
+		// so downstream consumers see the canonical envelope kind ("Agent").
+		if _, err := reg.Lookup(obj.GetKind()); err != nil {
 			return nil, err
 		}
 		// Clear status before projection — the CLI's declarative view
@@ -64,7 +71,7 @@ func DecodeBytes(reg *Registry, b []byte) ([]*Resource, error) {
 		if err := obj.UnmarshalStatus(nil); err != nil {
 			return nil, fmt.Errorf("reset status: %w", err)
 		}
-		out = append(out, resourceFromObject(kindDef.Kind, obj))
+		out = append(out, resourceFromObject(obj.GetKind(), obj))
 	}
 	return out, nil
 }

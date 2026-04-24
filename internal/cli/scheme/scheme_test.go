@@ -41,7 +41,7 @@ spec:
 	require.NoError(t, err)
 	require.Len(t, resources, 1)
 	assert.Equal(t, "ar.dev/v1alpha1", resources[0].APIVersion)
-	assert.Equal(t, "agent", resources[0].Kind)
+	assert.Equal(t, "Agent", resources[0].Kind)
 	assert.Equal(t, "acme/bot", resources[0].Metadata.Name)
 	assert.Equal(t, "1.0.0", resources[0].Metadata.Version)
 
@@ -75,8 +75,11 @@ spec:
 	resources, err := scheme.DecodeBytes(reg, []byte(input))
 	require.NoError(t, err)
 	require.Len(t, resources, 2)
-	assert.Equal(t, "mcp", resources[0].Kind)
-	assert.Equal(t, "agent", resources[1].Kind)
+	// Resource.Kind carries the canonical envelope Kind (obj.GetKind()),
+	// not the registry-internal lookup key, so downstream callers see
+	// the same string the wire emits.
+	assert.Equal(t, "MCPServer", resources[0].Kind)
+	assert.Equal(t, "Agent", resources[1].Kind)
 }
 
 func TestDecodeBytesMissingKind(t *testing.T) {

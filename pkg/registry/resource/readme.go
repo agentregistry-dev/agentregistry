@@ -60,11 +60,15 @@ func RegisterReadme[T v1alpha1.Object](
 		Summary:     fmt.Sprintf("Get the latest %s readme", cfg.Kind),
 	}, func(ctx context.Context, in *readmeLatestInput) (*readmeOutput, error) {
 		ns := resolveNamespace(in.Namespace, false)
-		row, err := cfg.Store.GetLatest(ctx, ns, in.Name)
+		name, err := unescapePath("name", in.Name)
 		if err != nil {
-			return nil, mapNotFound(err, cfg.Kind, ns, in.Name, "")
+			return nil, err
 		}
-		return readmeResponseFromRow(row, cfg.Kind, ns, in.Name, "", newObj, readmeOf)
+		row, err := cfg.Store.GetLatest(ctx, ns, name)
+		if err != nil {
+			return nil, mapNotFound(err, cfg.Kind, ns, name, "")
+		}
+		return readmeResponseFromRow(row, cfg.Kind, ns, name, "", newObj, readmeOf)
 	})
 
 	huma.Register(api, huma.Operation{
@@ -74,11 +78,19 @@ func RegisterReadme[T v1alpha1.Object](
 		Summary:     fmt.Sprintf("Get a %s readme by name and version", cfg.Kind),
 	}, func(ctx context.Context, in *readmeVersionInput) (*readmeOutput, error) {
 		ns := resolveNamespace(in.Namespace, false)
-		row, err := cfg.Store.Get(ctx, ns, in.Name, in.Version)
+		name, err := unescapePath("name", in.Name)
 		if err != nil {
-			return nil, mapNotFound(err, cfg.Kind, ns, in.Name, in.Version)
+			return nil, err
 		}
-		return readmeResponseFromRow(row, cfg.Kind, ns, in.Name, in.Version, newObj, readmeOf)
+		version, err := unescapePath("version", in.Version)
+		if err != nil {
+			return nil, err
+		}
+		row, err := cfg.Store.Get(ctx, ns, name, version)
+		if err != nil {
+			return nil, mapNotFound(err, cfg.Kind, ns, name, version)
+		}
+		return readmeResponseFromRow(row, cfg.Kind, ns, name, version, newObj, readmeOf)
 	})
 }
 
@@ -98,15 +110,19 @@ func RegisterLegacyServerReadme(api huma.API, basePrefix string, store *v1alpha1
 		Path:        base + "/servers/{serverName}/readme",
 		Summary:     "Get server README",
 	}, func(ctx context.Context, in *legacyServerReadmeLatestInput) (*readmeOutput, error) {
-		row, err := store.GetLatest(ctx, v1alpha1.DefaultNamespace, in.ServerName)
+		serverName, err := unescapePath("serverName", in.ServerName)
 		if err != nil {
-			return nil, mapNotFound(err, v1alpha1.KindMCPServer, v1alpha1.DefaultNamespace, in.ServerName, "")
+			return nil, err
+		}
+		row, err := store.GetLatest(ctx, v1alpha1.DefaultNamespace, serverName)
+		if err != nil {
+			return nil, mapNotFound(err, v1alpha1.KindMCPServer, v1alpha1.DefaultNamespace, serverName, "")
 		}
 		return readmeResponseFromRow(
 			row,
 			v1alpha1.KindMCPServer,
 			v1alpha1.DefaultNamespace,
-			in.ServerName,
+			serverName,
 			"",
 			func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} },
 			func(obj *v1alpha1.MCPServer) *v1alpha1.Readme { return obj.Spec.Readme },
@@ -119,16 +135,24 @@ func RegisterLegacyServerReadme(api huma.API, basePrefix string, store *v1alpha1
 		Path:        base + "/servers/{serverName}/versions/{version}/readme",
 		Summary:     "Get server README for a version",
 	}, func(ctx context.Context, in *legacyServerReadmeVersionInput) (*readmeOutput, error) {
-		row, err := store.Get(ctx, v1alpha1.DefaultNamespace, in.ServerName, in.Version)
+		serverName, err := unescapePath("serverName", in.ServerName)
 		if err != nil {
-			return nil, mapNotFound(err, v1alpha1.KindMCPServer, v1alpha1.DefaultNamespace, in.ServerName, in.Version)
+			return nil, err
+		}
+		version, err := unescapePath("version", in.Version)
+		if err != nil {
+			return nil, err
+		}
+		row, err := store.Get(ctx, v1alpha1.DefaultNamespace, serverName, version)
+		if err != nil {
+			return nil, mapNotFound(err, v1alpha1.KindMCPServer, v1alpha1.DefaultNamespace, serverName, version)
 		}
 		return readmeResponseFromRow(
 			row,
 			v1alpha1.KindMCPServer,
 			v1alpha1.DefaultNamespace,
-			in.ServerName,
-			in.Version,
+			serverName,
+			version,
 			func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} },
 			func(obj *v1alpha1.MCPServer) *v1alpha1.Readme { return obj.Spec.Readme },
 		)

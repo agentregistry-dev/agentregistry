@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -26,6 +27,20 @@ import (
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
+
+// unescapePath URL-decodes a path segment captured by Huma. Resource
+// names allow `/` (DNS-subdomain-style like `ai.exa/exa`) so callers
+// pass them as `%2F`-escaped path segments. Huma keeps the raw path
+// captures, so the handler must unescape before consulting the Store —
+// otherwise rows stored as `ai.exa/exa` are unreachable via GET/DELETE.
+// Returns a 400 on decode failure (malformed escape sequence).
+func unescapePath(field, value string) (string, error) {
+	out, err := url.PathUnescape(value)
+	if err != nil {
+		return "", huma.Error400BadRequest(fmt.Sprintf("invalid %s path segment: %v", field, err))
+	}
+	return out, nil
+}
 
 // Config is the per-kind configuration for Register. Kind / BasePrefix /
 // Store are required; Resolver is optional (enables cross-kind ref
@@ -277,14 +292,18 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		Summary:     fmt.Sprintf("Get the latest version of a %s", kind),
 	}, func(ctx context.Context, in *getLatestInput) (*bodyOutput[T], error) {
 		ns := resolveNamespace(in.Namespace, false)
+		name, err := unescapePath("name", in.Name)
+		if err != nil {
+			return nil, err
+		}
 		if cfg.Authorize != nil {
-			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "get", Kind: kind, Namespace: ns, Name: in.Name}); err != nil {
+			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "get", Kind: kind, Namespace: ns, Name: name}); err != nil {
 				return nil, err
 			}
 		}
-		row, err := cfg.Store.GetLatest(ctx, ns, in.Name)
+		row, err := cfg.Store.GetLatest(ctx, ns, name)
 		if err != nil {
-			return nil, mapNotFound(err, kind, ns, in.Name, "")
+			return nil, mapNotFound(err, kind, ns, name, "")
 		}
 		obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
 		if err != nil {
@@ -301,14 +320,22 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		Summary:     fmt.Sprintf("Get a %s by name and version", kind),
 	}, func(ctx context.Context, in *getInput) (*bodyOutput[T], error) {
 		ns := resolveNamespace(in.Namespace, false)
+		name, err := unescapePath("name", in.Name)
+		if err != nil {
+			return nil, err
+		}
+		version, err := unescapePath("version", in.Version)
+		if err != nil {
+			return nil, err
+		}
 		if cfg.Authorize != nil {
-			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "get", Kind: kind, Namespace: ns, Name: in.Name, Version: in.Version}); err != nil {
+			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "get", Kind: kind, Namespace: ns, Name: name, Version: version}); err != nil {
 				return nil, err
 			}
 		}
-		row, err := cfg.Store.Get(ctx, ns, in.Name, in.Version)
+		row, err := cfg.Store.Get(ctx, ns, name, version)
 		if err != nil {
-			return nil, mapNotFound(err, kind, ns, in.Name, in.Version)
+			return nil, mapNotFound(err, kind, ns, name, version)
 		}
 		obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
 		if err != nil {
@@ -326,6 +353,14 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		DefaultStatus: http.StatusOK,
 	}, func(ctx context.Context, in *putInput[T]) (*bodyOutput[T], error) {
 		ns := resolveNamespace(in.Namespace, false)
+		name, err := unescapePath("name", in.Name)
+		if err != nil {
+			return nil, err
+		}
+		version, err := unescapePath("version", in.Version)
+		if err != nil {
+			return nil, err
+		}
 		body := in.Body
 		if apiVer := body.GetAPIVersion(); apiVer != "" && apiVer != v1alpha1.GroupVersion {
 			return nil, huma.Error400BadRequest(fmt.Sprintf(
@@ -339,10 +374,10 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		if meta.Namespace != "" && meta.Namespace != ns {
 			return nil, huma.Error400BadRequest("metadata.namespace does not match ?namespace=")
 		}
-		if meta.Name != "" && meta.Name != in.Name {
+		if meta.Name != "" && meta.Name != name {
 			return nil, huma.Error400BadRequest("metadata.name does not match path")
 		}
-		if meta.Version != "" && meta.Version != in.Version {
+		if meta.Version != "" && meta.Version != version {
 			return nil, huma.Error400BadRequest("metadata.version does not match path")
 		}
 
@@ -350,8 +385,8 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		// resolved values (clients may omit namespace/name/version in the
 		// body and rely on the path + query).
 		meta.Namespace = ns
-		meta.Name = in.Name
-		meta.Version = in.Version
+		meta.Name = name
+		meta.Version = version
 		body.SetMetadata(*meta)
 
 		// Authorization — cheap, no I/O. Runs after path-stamping so the
@@ -359,7 +394,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		if cfg.Authorize != nil {
 			if err := cfg.Authorize(ctx, AuthorizeInput{
 				Verb: "apply", Kind: kind,
-				Namespace: ns, Name: in.Name, Version: in.Version,
+				Namespace: ns, Name: name, Version: version,
 				Object: body,
 			}); err != nil {
 				return nil, err
@@ -401,16 +436,16 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		if meta.Annotations != nil {
 			upsertOpts.Annotations = meta.Annotations
 		}
-		if _, err := cfg.Store.Upsert(ctx, ns, in.Name, in.Version, specJSON, upsertOpts); err != nil {
+		if _, err := cfg.Store.Upsert(ctx, ns, name, version, specJSON, upsertOpts); err != nil {
 			if errors.Is(err, v1alpha1store.ErrTerminating) {
 				return nil, huma.Error409Conflict(
 					fmt.Sprintf("%s %s/%s/%s is terminating; wait for finalizers to drain or drop them via PatchFinalizers",
-						kind, ns, in.Name, in.Version))
+						kind, ns, name, version))
 			}
 			return nil, huma.Error500InternalServerError("upsert "+kind, err)
 		}
 
-		row, err := cfg.Store.Get(ctx, ns, in.Name, in.Version)
+		row, err := cfg.Store.Get(ctx, ns, name, version)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("read back "+kind, err)
 		}
@@ -428,7 +463,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			// adapter finalizer). Failure to re-read leaves the hook
 			// changes invisible to the caller; degrade to the pre-hook
 			// view rather than fail the already-successful apply.
-			if refreshed, err := cfg.Store.Get(ctx, ns, in.Name, in.Version); err == nil {
+			if refreshed, err := cfg.Store.Get(ctx, ns, name, version); err == nil {
 				if refreshedObj, err := v1alpha1.EnvelopeFromRaw(newObj, refreshed, kind); err == nil {
 					obj = refreshedObj
 				}
@@ -447,10 +482,18 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		DefaultStatus: http.StatusNoContent,
 	}, func(ctx context.Context, in *deleteInput) (*deleteOutput, error) {
 		ns := resolveNamespace(in.Namespace, false)
+		name, err := unescapePath("name", in.Name)
+		if err != nil {
+			return nil, err
+		}
+		version, err := unescapePath("version", in.Version)
+		if err != nil {
+			return nil, err
+		}
 		if cfg.Authorize != nil {
 			if err := cfg.Authorize(ctx, AuthorizeInput{
 				Verb: "delete", Kind: kind,
-				Namespace: ns, Name: in.Name, Version: in.Version,
+				Namespace: ns, Name: name, Version: version,
 			}); err != nil {
 				return nil, err
 			}
@@ -463,9 +506,9 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		runHook := cfg.PostDelete != nil && !in.Force
 		var preDelete T
 		if runHook {
-			row, err := cfg.Store.Get(ctx, ns, in.Name, in.Version)
+			row, err := cfg.Store.Get(ctx, ns, name, version)
 			if err != nil {
-				return nil, mapNotFound(err, kind, ns, in.Name, in.Version)
+				return nil, mapNotFound(err, kind, ns, name, version)
 			}
 			obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
 			if err != nil {
@@ -474,9 +517,9 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			preDelete = obj
 		}
 
-		if err := cfg.Store.Delete(ctx, ns, in.Name, in.Version); err != nil {
+		if err := cfg.Store.Delete(ctx, ns, name, version); err != nil {
 			if errors.Is(err, pkgdb.ErrNotFound) {
-				return nil, mapNotFound(err, kind, ns, in.Name, in.Version)
+				return nil, mapNotFound(err, kind, ns, name, version)
 			}
 			return nil, huma.Error500InternalServerError("delete "+kind, err)
 		}

@@ -245,7 +245,7 @@ status:
 	require.NoError(t, err, "apply decode must tolerate incoming status block")
 	require.Len(t, docs, 1)
 
-	assert.Equal(t, "agent", docs[0].Kind, "decoder canonicalizes Kind to lowercase")
+	assert.Equal(t, "Agent", docs[0].Kind, "decoder preserves the canonical envelope Kind from the YAML")
 	assert.Equal(t, "myagent", docs[0].Metadata.Name)
 	assert.Nil(t, docs[0].Status, "status block on input must be dropped, not preserved")
 }

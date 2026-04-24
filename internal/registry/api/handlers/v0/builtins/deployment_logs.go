@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -41,6 +42,12 @@ type deploymentLogLine struct {
 	Line      string `json:"line"                 doc:"Single log record."`
 }
 
+// maxLogLines caps the response payload in non-follow mode so a chatty
+// adapter can't OOM the server. Picked to keep payloads under ~10 MB
+// at typical log line sizes; bump in lockstep with the SSE port if
+// callers need denser drains.
+const maxLogLines = 10000
+
 type deploymentLogsOutput struct {
 	Body struct {
 		Lines []deploymentLogLine `json:"lines"`
@@ -69,14 +76,34 @@ func RegisterDeploymentLogs(api huma.API, cfg DeploymentLogsConfig) {
 		Path:        path,
 		Summary:     "Stream logs from a deployment's runtime workload",
 	}, func(ctx context.Context, in *deploymentLogsInput) (*deploymentLogsOutput, error) {
+		// follow=true is a streaming hint that this handler can't honor —
+		// huma serializes the full body before responding, so a true
+		// stream would buffer until the channel closes (or never, if the
+		// adapter follows indefinitely) and OOM the process. Reject
+		// upfront with a clear error; SSE/chunked support will land in
+		// a separate endpoint.
+		if in.Follow {
+			return nil, huma.Error400BadRequest("follow=true is not supported on this endpoint; the streaming SSE variant is tracked as a follow-up")
+		}
 		ns := in.Namespace
 		if ns == "" {
 			ns = v1alpha1.DefaultNamespace
 		}
-		row, err := cfg.Store.Get(ctx, ns, in.Name, in.Version)
+		// Names allow `/` so callers must `%2F`-escape them on the wire;
+		// Huma keeps the captures raw, so unescape before consulting
+		// the Store.
+		name, err := url.PathUnescape(in.Name)
+		if err != nil {
+			return nil, huma.Error400BadRequest(fmt.Sprintf("invalid name path segment: %v", err))
+		}
+		version, err := url.PathUnescape(in.Version)
+		if err != nil {
+			return nil, huma.Error400BadRequest(fmt.Sprintf("invalid version path segment: %v", err))
+		}
+		row, err := cfg.Store.Get(ctx, ns, name, version)
 		if err != nil {
 			if errors.Is(err, pkgdb.ErrNotFound) {
-				return nil, huma.Error404NotFound(fmt.Sprintf("Deployment %q/%q@%q not found", ns, in.Name, in.Version))
+				return nil, huma.Error404NotFound(fmt.Sprintf("Deployment %q/%q@%q not found", ns, name, version))
 			}
 			return nil, huma.Error500InternalServerError("fetch Deployment", err)
 		}
@@ -94,9 +121,18 @@ func RegisterDeploymentLogs(api huma.API, cfg DeploymentLogsConfig) {
 			}
 		}
 
+		// Cap unbounded backlogs (tailLines=0 means "all available") at a
+		// fixed ceiling so a noisy adapter can't blow the response up to
+		// arbitrary size. Adapters that respect TailLines stop emitting
+		// past the cap; ones that don't get drained up to the cap and
+		// then we close the loop on our side.
+		tailLines := in.TailLines
+		if tailLines <= 0 || tailLines > maxLogLines {
+			tailLines = maxLogLines
+		}
 		ch, err := cfg.Coordinator.Logs(ctx, deployment, types.LogsInput{
-			Follow:    in.Follow,
-			TailLines: in.TailLines,
+			Follow:    false, // gated above; non-follow only for now
+			TailLines: tailLines,
 		})
 		if err != nil {
 			return nil, huma.Error502BadGateway("adapter logs: " + err.Error())
@@ -109,6 +145,9 @@ func RegisterDeploymentLogs(api huma.API, cfg DeploymentLogsConfig) {
 				Stream:    line.Stream,
 				Line:      line.Line,
 			})
+			if len(out.Body.Lines) >= maxLogLines {
+				break
+			}
 		}
 		return out, nil
 	})

@@ -78,14 +78,18 @@ Examples:
 			}
 
 			out := cmd.OutOrStdout()
+			// r.Kind is the canonical envelope kind (e.g. "Agent",
+			// "MCPServer", "Skill", "Prompt") — not the registry lookup
+			// key. Match on v1alpha1.Kind* constants to stay aligned with
+			// the wire contract.
 			switch r.Kind {
-			case "agent":
+			case v1alpha1.KindAgent:
 				return buildAgent(out, projectDir, r, buildImage, buildPlatform, buildPush)
-			case "mcp":
+			case v1alpha1.KindMCPServer:
 				return buildMCPServer(out, projectDir, r, buildImage, buildPlatform, buildPush)
-			case "skill":
+			case v1alpha1.KindSkill:
 				return buildSkill(out, projectDir, r, buildImage, buildPlatform, buildPush)
-			case "prompt":
+			case v1alpha1.KindPrompt:
 				return fmt.Errorf("prompts have no build step — use 'arctl apply -f %s' directly", yamlFile)
 			default:
 				// Registry validated the kind above; reaching here means a kind that exists in
