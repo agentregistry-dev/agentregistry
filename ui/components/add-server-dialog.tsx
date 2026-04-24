@@ -21,7 +21,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
   const [loading, setLoading] = useState(false)
 
   // Form fields
-  const [schema, setSchema] = useState("2025-10-17")
+  const [schema, setSchema] = useState("https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json")
   const [name, setName] = useState("")
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
@@ -31,11 +31,13 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
   const [repositoryUrl, setRepositoryUrl] = useState("")
 
   // Dynamic fields
-  const [packages, setPackages] = useState<Array<{ identifier: string; version: string; registryType: string; transport: string }>>([])
+  const [packages, setPackages] = useState<Array<{ identifier: string; version: string; registryType: string; transport: string; transportUrl: string }>>([])
   const [remotes, setRemotes] = useState<Array<{ type: string; url: string }>>([])
 
+  const transportRequiresUrl = (transportType: string) => transportType === "sse" || transportType === "streamable-http"
+
   const resetForm = () => {
-    setSchema("2025-10-17")
+    setSchema("https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json")
     setName("")
     setTitle("")
     setDescription("")
@@ -92,23 +94,48 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
       }
 
       if (packages.length > 0) {
-        server.packages = packages
-          .filter(p => p.identifier.trim() && p.version.trim())
-          .map(p => ({
+        const filteredPackages = packages.filter(p => p.identifier.trim() && p.version.trim())
+
+        for (const p of filteredPackages) {
+          const transportType = (p.transport || "stdio").trim()
+          if (transportRequiresUrl(transportType) && !p.transportUrl.trim()) {
+            throw new Error(`Package transport URL is required for ${transportType}`)
+          }
+        }
+
+        server.packages = filteredPackages.map(p => {
+          const transportType = (p.transport || "stdio").trim()
+          const transport = {
+            type: transportType,
+            ...(transportRequiresUrl(transportType) ? { url: p.transportUrl.trim() } : {}),
+          }
+
+          return {
             identifier: p.identifier.trim(),
             version: p.version.trim(),
-            registryType: p.registryType as 'npm' | 'pypi' | 'docker',
-            transport: { type: p.transport || 'stdio' },
-          }))
+            registryType: p.registryType.trim(),
+            transport,
+          }
+        })
       }
 
       if (remotes.length > 0) {
-        server.remotes = remotes
-          .filter(r => r.type.trim())
-          .map(r => ({
-            type: r.type.trim(),
-            url: r.url.trim() || undefined,
-          }))
+        const filteredRemotes = remotes.filter(r => r.type.trim())
+
+        for (const r of filteredRemotes) {
+          const remoteType = r.type.trim()
+          if (transportRequiresUrl(remoteType) && !r.url.trim()) {
+            throw new Error(`Remote URL is required for ${remoteType}`)
+          }
+        }
+
+        server.remotes = filteredRemotes.map(r => {
+          const remoteType = r.type.trim()
+          return {
+            type: remoteType,
+            ...(transportRequiresUrl(remoteType) ? { url: r.url.trim() } : { url: r.url.trim() || undefined }),
+          }
+        })
       }
 
       // Create server
@@ -130,7 +157,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
   }
 
   const addPackage = () => {
-    setPackages([...packages, { identifier: "", version: "", registryType: "npm", transport: "stdio" }])
+    setPackages([...packages, { identifier: "", version: "", registryType: "oci", transport: "stdio", transportUrl: "" }])
   }
 
   const removePackage = (index: number) => {
@@ -297,6 +324,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
                     className="px-3 py-2 border rounded-md bg-background text-foreground border-input focus:outline-none focus:ring-2 focus:ring-ring"
                     disabled={loading}
                   >
+                    <option value="oci">oci</option>
                     <option value="npm">npm</option>
                     <option value="pypi">pypi</option>
                     <option value="docker">docker</option>
@@ -327,6 +355,17 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
                     </label>
                   ))}
                 </div>
+                {transportRequiresUrl(pkg.transport) && (
+                  <div className="pl-2">
+                    <Input
+                      placeholder="Transport URL (required) e.g. http://localhost:8080/mcp"
+                      value={pkg.transportUrl}
+                      onChange={(e) => updatePackage(index, "transportUrl", e.target.value)}
+                      disabled={loading}
+                      className="w-full"
+                    />
+                  </div>
+                )}
               </div>
             ))}
 
@@ -355,15 +394,18 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
 
             {remotes.map((remote, index) => (
               <div key={index} className="flex gap-2 items-start">
-                <Input
-                  placeholder="Type (e.g., sse, stdio)"
+                <select
                   value={remote.type}
                   onChange={(e) => updateRemote(index, "type", e.target.value)}
+                  className="w-40 px-3 py-2 border rounded-md bg-background text-foreground border-input focus:outline-none focus:ring-2 focus:ring-ring"
                   disabled={loading}
-                  className="w-40"
-                />
+                >
+                  <option value="stdio">stdio</option>
+                  <option value="sse">sse</option>
+                  <option value="streamable-http">streamable-http</option>
+                </select>
                 <Input
-                  placeholder="URL (optional)"
+                  placeholder={transportRequiresUrl(remote.type) ? "URL (required)" : "URL (optional)"}
                   value={remote.url}
                   onChange={(e) => updateRemote(index, "url", e.target.value)}
                   disabled={loading}
