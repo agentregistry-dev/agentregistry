@@ -78,19 +78,19 @@ func TestDeploymentPut_TriggersAdapterApply(t *testing.T) {
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
 	}
-	resp := api.Put("/v0/namespaces/default/deployments/weather-noop/1", body)
+	resp := api.Put("/v0/deployments/weather-noop/1", body)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
-	// Response should reflect the PostUpsert status writes.
+	// Response should reflect the PostUpsert status writes. Finalizers
+	// are internal-only — check them at the Store, not the wire.
 	var got v1alpha1.Deployment
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
 	require.NotEmpty(t, got.Status.Conditions, "expected status conditions from coordinator.Apply")
-	require.Contains(t, got.Metadata.Finalizers, noop.FinalizerName, "expected coordinator to add adapter finalizer")
 
-	// Row in DB should match the response.
+	// Row in DB: coordinator's adapter finalizer persisted.
 	raw, err := stores[v1alpha1.KindDeployment].Get(t.Context(), "default", "weather-noop", "1")
 	require.NoError(t, err)
-	require.Contains(t, raw.Metadata.Finalizers, noop.FinalizerName)
+	require.Contains(t, raw.Metadata.Finalizers, noop.FinalizerName, "expected coordinator to add adapter finalizer")
 	ready := raw.Status.GetCondition("Ready")
 	require.NotNil(t, ready, "noop.Apply should have written Ready condition")
 	require.Equal(t, v1alpha1.ConditionTrue, ready.Status)
@@ -109,10 +109,10 @@ func TestDeploymentDelete_TriggersAdapterRemove(t *testing.T) {
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
 	}
-	putResp := api.Put("/v0/namespaces/default/deployments/weather-noop/1", body)
+	putResp := api.Put("/v0/deployments/weather-noop/1", body)
 	require.Equal(t, http.StatusOK, putResp.Code, putResp.Body.String())
 
-	delResp := api.Delete("/v0/namespaces/default/deployments/weather-noop/1")
+	delResp := api.Delete("/v0/deployments/weather-noop/1")
 	require.Equal(t, http.StatusNoContent, delResp.Code, delResp.Body.String())
 
 	// Row should be soft-deleted (DeletionTimestamp set) and the adapter
@@ -135,9 +135,9 @@ func TestDeploymentLogs_EmptyForNoopAdapter(t *testing.T) {
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
 	}
-	require.Equal(t, http.StatusOK, api.Put("/v0/namespaces/default/deployments/weather-noop/1", body).Code)
+	require.Equal(t, http.StatusOK, api.Put("/v0/deployments/weather-noop/1", body).Code)
 
-	resp := api.Get("/v0/namespaces/default/deployments/weather-noop/1/logs")
+	resp := api.Get("/v0/deployments/weather-noop/1/logs")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	var body2 struct {
 		Lines []struct {

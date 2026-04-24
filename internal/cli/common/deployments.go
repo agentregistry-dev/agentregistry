@@ -89,10 +89,10 @@ func DeploymentRecordFromObject(dep *v1alpha1.Deployment) *DeploymentRecord {
 		return nil
 	}
 	return &DeploymentRecord{
-		Namespace:         dep.Metadata.Namespace,
+		Namespace:         dep.Metadata.NamespaceOrDefault(),
 		Name:              dep.Metadata.Name,
 		Version:           dep.Metadata.Version,
-		ID:                DeploymentID(dep.Metadata.Namespace, dep.Metadata.Name, dep.Metadata.Version),
+		ID:                DeploymentID(dep.Metadata.NamespaceOrDefault(), dep.Metadata.Name, dep.Metadata.Version),
 		TargetName:        dep.Spec.TargetRef.Name,
 		TargetVersion:     dep.Spec.TargetRef.Version,
 		ResourceType:      deploymentResourceType(dep.Spec.TargetRef.Kind),

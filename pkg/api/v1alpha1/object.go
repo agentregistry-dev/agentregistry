@@ -20,19 +20,25 @@ const DefaultNamespace = "default"
 
 // ObjectMeta is the metadata block common to every resource.
 //
-// Namespace, Name, Version, Labels, Annotations, and Finalizers are
-// user/controller-set. Generation, CreatedAt, UpdatedAt, and
-// DeletionTimestamp are server-managed: the API ignores them on apply and
-// overwrites them on response. They are exposed in the wire format so
-// clients can observe reconciliation convergence by comparing
-// metadata.generation against status.observedGeneration — the same reason
-// Kubernetes surfaces generation.
+// Namespace, Name, Version, Labels, and Annotations are user-settable.
+// CreatedAt, UpdatedAt, and DeletionTimestamp are server-managed: the API
+// ignores them on apply and overwrites them on response.
 //
-// (Namespace, Name, Version) together form the identity of a resource; that
-// triple is the composite primary key at the database level. Namespace
-// scopes the object, Name identifies it within the namespace, Version is
-// user-set (semver-like or any opaque string). Generation increments on
-// spec mutation only — no-op reapplies preserve generation.
+// Generation and Finalizers are internal coordination primitives —
+// Generation drives reconciler convergence (paired with
+// Status.ObservedGeneration); Finalizers stage safe teardown for
+// reconcilers that need to clean up external state before a row is GC'd.
+// Both are populated from the database row and used by internal Go code
+// (coordinators, adapters, store helpers) but are NOT emitted on the
+// wire: the JSON tag is `-`, so OpenAPI schemas don't reveal them and
+// clients can't set them on apply. If we expose these to users in a
+// future release we'll relax the tags.
+//
+// (Namespace, Name, Version) together form the identity of a resource;
+// that triple is the composite primary key at the database level.
+// Namespace is an internal detail today — it defaults to "default" on
+// apply and is stripped from responses when it equals "default" so the
+// multi-tenant surface stays hidden until we deliberately enable it.
 //
 // Labels vs Annotations (Kubernetes convention):
 //   - Labels are queryable: short key/value pairs, GIN-indexed, used for
@@ -41,35 +47,68 @@ const DefaultNamespace = "default"
 //     state, tool metadata, etc. Not indexed; can carry larger payloads.
 //     Callers read annotations by key; the server never filters on them.
 //
-// DeletionTimestamp + Finalizers implement Kubernetes-style soft delete:
-// Delete sets DeletionTimestamp and leaves the row in place until every
-// finalizer has been removed by its owner. A GC pass hard-deletes rows
-// where DeletionTimestamp != nil AND Finalizers is empty.
+// DeletionTimestamp marks a row as terminating. The soft-delete +
+// finalizer mechanism runs entirely server-side; callers only observe
+// the terminating state via DeletionTimestamp.
 type ObjectMeta struct {
-	Namespace   string            `json:"namespace" yaml:"namespace"`
+	Namespace   string            `json:"namespace,omitempty" yaml:"namespace,omitempty"`
 	Name        string            `json:"name" yaml:"name"`
 	Version     string            `json:"version,omitempty" yaml:"version,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty" yaml:"annotations,omitempty"`
 
-	// Generation is server-managed. Clients MUST NOT set it on apply; the
-	// Store overwrites on every Upsert.
-	Generation int64     `json:"generation,omitempty" yaml:"generation,omitempty"`
+	// Generation is server-managed and internal. Populated from the DB row
+	// for internal Go consumers (coordinators, status reconcilers); hidden
+	// from the wire.
+	Generation int64     `json:"-" yaml:"-"`
 	CreatedAt  time.Time `json:"createdAt,omitzero" yaml:"createdAt,omitempty"`
 	UpdatedAt  time.Time `json:"updatedAt,omitzero" yaml:"updatedAt,omitempty"`
 
 	// DeletionTimestamp is set by the Store when Delete is called. A non-nil
 	// DeletionTimestamp means the object is terminating; callers may still
-	// observe it until Finalizers drains, then it is hard-deleted by GC.
-	// Clients MUST NOT set this on apply.
+	// observe it until the finalizer list drains server-side, then the row
+	// is hard-deleted by GC. Clients MUST NOT set this on apply.
 	DeletionTimestamp *time.Time `json:"deletionTimestamp,omitempty" yaml:"deletionTimestamp,omitempty"`
 
-	// Finalizers are string tokens owned by reconcilers/controllers; each
-	// owner removes its token when its cleanup for this object has finished.
-	// The GC pass requires this slice to be empty before hard-deleting a
-	// terminating row. Clients may add/remove finalizers on apply; the Store
-	// preserves them across spec updates.
-	Finalizers []string `json:"finalizers,omitempty" yaml:"finalizers,omitempty"`
+	// Finalizers are internal coordination tokens owned by reconcilers.
+	// Kept in the struct so internal code (coordinator, adapters) can read
+	// and mutate them, but hidden from the wire — callers can't set
+	// finalizers on apply and never see them in responses.
+	Finalizers []string `json:"-" yaml:"-"`
+}
+
+// objectMetaWire is the marshaling shape used by ObjectMeta.MarshalJSON.
+// Aliased so json.Marshal on the alias doesn't recurse into our custom
+// method.
+type objectMetaWire ObjectMeta
+
+// MarshalJSON strips Namespace when it equals DefaultNamespace so
+// responses don't leak the namespace surface while it remains hidden
+// from the user-facing API. Internal storage always carries the full
+// identity (ns, name, version); this only affects wire rendering.
+//
+// Inbound defaulting (empty → "default") happens at the apply /
+// import pipeline boundary (see resource.prepareApplyDoc and
+// importer.Options.Namespace), not on UnmarshalJSON — callers like
+// the importer need to keep the empty-namespace signal around so they
+// can layer their own default on top.
+func (m ObjectMeta) MarshalJSON() ([]byte, error) {
+	w := objectMetaWire(m)
+	if w.Namespace == DefaultNamespace {
+		w.Namespace = ""
+	}
+	return json.Marshal(w)
+}
+
+// NamespaceOrDefault returns m.Namespace, or DefaultNamespace when the
+// field is empty. Use when building display strings / ids that should
+// read "default/<name>/<version>" even though the wire has elided the
+// namespace.
+func (m ObjectMeta) NamespaceOrDefault() string {
+	if m.Namespace == "" {
+		return DefaultNamespace
+	}
+	return m.Namespace
 }
 
 // RawObject is the generic wire envelope used during decode and apply dispatch

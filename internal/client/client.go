@@ -17,7 +17,9 @@ import (
 )
 
 // Client is a lightweight API client for the agentregistry HTTP surface.
-// Every resource method speaks v1alpha1 at /v0/namespaces/{ns}/{plural}/...
+// Every resource method speaks v1alpha1 at /v0/{plural}/{name}/{version}
+// with ?namespace=<ns> as an optional query param (namespace is hidden
+// from the user-facing API; empty / "default" are elided).
 type Client struct {
 	BaseURL    string
 	httpClient *http.Client
@@ -175,9 +177,9 @@ func (c *Client) GetVersion() (*VersionBody, error) {
 // Generic resource methods — v1alpha1
 // =============================================================================
 
-// ListOpts controls the query parameters on List. Namespace "" means
-// cross-namespace (GET /v0/{plural}); a non-empty namespace scopes to
-// GET /v0/namespaces/{namespace}/{plural}.
+// ListOpts controls the query parameters on List. Namespace "" (empty)
+// scopes to the default namespace; "all" widens to every namespace.
+// Any other value scopes to that exact namespace.
 type ListOpts struct {
 	Namespace          string
 	Labels             string
@@ -193,23 +195,34 @@ type listResponse struct {
 	NextCursor string               `json:"nextCursor,omitempty"`
 }
 
+// namespaceQuery appends ?namespace=<ns> to a path when the namespace
+// is non-empty and non-default; omitting the query defers to the
+// server's default. "all" (the cross-namespace sentinel) only applies
+// to list endpoints.
+func namespaceQuery(namespace string) string {
+	if namespace == "" || namespace == v1alpha1.DefaultNamespace {
+		return ""
+	}
+	return "?namespace=" + url.QueryEscape(namespace)
+}
+
 // Get returns the resource at (kind, namespace, name, version). Returns
 // ErrNotFound when the row doesn't exist.
 func (c *Client) Get(ctx context.Context, kind, namespace, name, version string) (*v1alpha1.RawObject, error) {
-	path := fmt.Sprintf("/namespaces/%s/%s/%s/%s",
-		url.PathEscape(namespace),
+	path := fmt.Sprintf("/%s/%s/%s%s",
 		v1alpha1.PluralFor(kind),
 		url.PathEscape(name),
-		url.PathEscape(version))
+		url.PathEscape(version),
+		namespaceQuery(namespace))
 	return c.getRaw(ctx, path)
 }
 
 // GetLatest returns the is_latest_version row for (kind, namespace, name).
 func (c *Client) GetLatest(ctx context.Context, kind, namespace, name string) (*v1alpha1.RawObject, error) {
-	path := fmt.Sprintf("/namespaces/%s/%s/%s",
-		url.PathEscape(namespace),
+	path := fmt.Sprintf("/%s/%s%s",
 		v1alpha1.PluralFor(kind),
-		url.PathEscape(name))
+		url.PathEscape(name),
+		namespaceQuery(namespace))
 	return c.getRaw(ctx, path)
 }
 
@@ -226,17 +239,16 @@ func (c *Client) getRaw(ctx context.Context, path string) (*v1alpha1.RawObject, 
 	return &out, nil
 }
 
-// List returns rows of kind, paginated. Empty opts.Namespace lists across
-// all namespaces. The returned string is the nextCursor; empty means no
+// List returns rows of kind, paginated. opts.Namespace="" (empty) lists
+// the default namespace; opts.Namespace="all" widens to every
+// namespace. The returned string is the nextCursor; empty means no
 // more pages.
 func (c *Client) List(ctx context.Context, kind string, opts ListOpts) ([]v1alpha1.RawObject, string, error) {
-	var base string
-	if opts.Namespace == "" {
-		base = "/" + v1alpha1.PluralFor(kind)
-	} else {
-		base = fmt.Sprintf("/namespaces/%s/%s", url.PathEscape(opts.Namespace), v1alpha1.PluralFor(kind))
-	}
+	base := "/" + v1alpha1.PluralFor(kind)
 	q := url.Values{}
+	if opts.Namespace != "" {
+		q.Set("namespace", opts.Namespace)
+	}
 	if opts.Limit > 0 {
 		q.Set("limit", fmt.Sprintf("%d", opts.Limit))
 	}
@@ -271,11 +283,11 @@ func (c *Client) List(ctx context.Context, kind string, opts ListOpts) ([]v1alph
 // ErrNotFound when the row doesn't exist. See Store.Delete for the
 // soft-delete + finalizer semantics.
 func (c *Client) Delete(ctx context.Context, kind, namespace, name, version string) error {
-	path := fmt.Sprintf("/namespaces/%s/%s/%s/%s",
-		url.PathEscape(namespace),
+	path := fmt.Sprintf("/%s/%s/%s%s",
 		v1alpha1.PluralFor(kind),
 		url.PathEscape(name),
-		url.PathEscape(version))
+		url.PathEscape(version),
+		namespaceQuery(namespace))
 	req, err := c.newRequest(http.MethodDelete, path)
 	if err != nil {
 		return err

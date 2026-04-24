@@ -13,8 +13,10 @@ type ApplyResult struct {
 	// dry-run, failed. Matches kubectl-style apply output.
 	Status string `json:"status"`
 	// Generation is the server-managed generation after the apply.
-	// Zero for failed, dry-run, or deleted results.
-	Generation int64 `json:"generation,omitempty"`
+	// Populated for internal callers that need the reconciler-
+	// convergence marker; hidden from the wire because generation is
+	// not part of the user-facing API today.
+	Generation int64 `json:"-"`
 	// Error is the failure detail for Status=="failed".
 	Error string `json:"error,omitempty"`
 }

@@ -56,34 +56,38 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 			Image: "ghcr.io/example/alice:1.0.0",
 		},
 	}
-	resp := api.Put("/v0/namespaces/default/agents/alice/v1.0.0", putBody)
+	resp := api.Put("/v0/agents/alice/v1.0.0", putBody)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
 	var gotAgent v1alpha1.Agent
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
 	require.Equal(t, v1alpha1.GroupVersion, gotAgent.APIVersion)
 	require.Equal(t, v1alpha1.KindAgent, gotAgent.Kind)
-	require.Equal(t, "default", gotAgent.Metadata.Namespace)
+	// Wire strips namespace="default"; the client observes empty. Use
+	// NamespaceOrDefault for display / id composition.
+	require.Equal(t, "default", gotAgent.Metadata.NamespaceOrDefault())
 	require.Equal(t, "alice", gotAgent.Metadata.Name)
 	require.Equal(t, "v1.0.0", gotAgent.Metadata.Version)
-	require.EqualValues(t, 1, gotAgent.Metadata.Generation)
+	// Generation is hidden from the wire (json:"-"), so the client decode
+	// sees its zero value. Internal consumers (coordinator, reconcilers)
+	// read the DB column directly.
 	require.Equal(t, "Alice", gotAgent.Spec.Title)
 	require.Equal(t, "platform", gotAgent.Metadata.Labels["team"])
 
 	// GET exact version.
-	resp = api.Get("/v0/namespaces/default/agents/alice/v1.0.0")
+	resp = api.Get("/v0/agents/alice/v1.0.0")
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
 	require.Equal(t, "alice", gotAgent.Metadata.Name)
 
 	// GET latest.
-	resp = api.Get("/v0/namespaces/default/agents/alice")
+	resp = api.Get("/v0/agents/alice")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
 	require.Equal(t, "v1.0.0", gotAgent.Metadata.Version)
 
 	// LIST in namespace with label selector.
-	resp = api.Get("/v0/namespaces/default/agents?labels=team%3Dplatform")
+	resp = api.Get("/v0/agents?labels=team%3Dplatform")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	var list struct {
 		Items      []v1alpha1.Agent `json:"items"`
@@ -99,42 +103,47 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Len(t, list.Items, 1)
 
-	// Re-apply with same spec — generation must stay at 1.
-	resp = api.Put("/v0/namespaces/default/agents/alice/v1.0.0", putBody)
+	// Re-apply with same spec — generation must stay at 1. Generation
+	// is internal-only so the assertion goes through the Store directly
+	// (the wire response omits generation via json:"-").
+	resp = api.Put("/v0/agents/alice/v1.0.0", putBody)
 	require.Equal(t, http.StatusOK, resp.Code)
-	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
-	require.EqualValues(t, 1, gotAgent.Metadata.Generation, "no-op apply preserves generation")
+	row, err := store.Get(t.Context(), "default", "alice", "v1.0.0")
+	require.NoError(t, err)
+	require.EqualValues(t, 1, row.Metadata.Generation, "no-op apply preserves generation")
 
 	// PUT with mutated spec — generation bumps to 2.
 	putBody.Spec.Title = "Alice v2"
-	resp = api.Put("/v0/namespaces/default/agents/alice/v1.0.0", putBody)
+	resp = api.Put("/v0/agents/alice/v1.0.0", putBody)
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
-	require.EqualValues(t, 2, gotAgent.Metadata.Generation)
 	require.Equal(t, "Alice v2", gotAgent.Spec.Title)
+	row, err = store.Get(t.Context(), "default", "alice", "v1.0.0")
+	require.NoError(t, err)
+	require.EqualValues(t, 2, row.Metadata.Generation)
 
 	// DELETE — soft-delete: 204, but the row remains with a deletionTimestamp.
-	resp = api.Delete("/v0/namespaces/default/agents/alice/v1.0.0")
+	resp = api.Delete("/v0/agents/alice/v1.0.0")
 	require.Equal(t, http.StatusNoContent, resp.Code)
 
 	// Default GET excludes terminating rows; GetLatest returns 404.
-	resp = api.Get("/v0/namespaces/default/agents/alice")
+	resp = api.Get("/v0/agents/alice")
 	require.Equal(t, http.StatusNotFound, resp.Code, resp.Body.String())
 
 	// GET on the exact version still finds the terminating row (soft-delete).
-	resp = api.Get("/v0/namespaces/default/agents/alice/v1.0.0")
+	resp = api.Get("/v0/agents/alice/v1.0.0")
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
 	require.NotNil(t, gotAgent.Metadata.DeletionTimestamp)
 
 	// Default list hides terminating rows.
-	resp = api.Get("/v0/namespaces/default/agents")
+	resp = api.Get("/v0/agents")
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Empty(t, list.Items)
 
 	// includeTerminating=true surfaces them.
-	resp = api.Get("/v0/namespaces/default/agents?includeTerminating=true")
+	resp = api.Get("/v0/agents?includeTerminating=true")
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Len(t, list.Items, 1)
@@ -157,25 +166,25 @@ func TestResourceRegister_AgentNamespaceIsolation(t *testing.T) {
 	bodyTeamB.Metadata.Namespace = "team-b"
 	bodyTeamB.Spec.Title = "B's"
 
-	resp := api.Put("/v0/namespaces/team-a/agents/shared/v1", bodyTeamA)
+	resp := api.Put("/v0/agents/shared/v1?namespace=team-a", bodyTeamA)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
-	resp = api.Put("/v0/namespaces/team-b/agents/shared/v1", bodyTeamB)
+	resp = api.Put("/v0/agents/shared/v1?namespace=team-b", bodyTeamB)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
 	// Namespaced GETs resolve the right one.
 	var got v1alpha1.Agent
-	resp = api.Get("/v0/namespaces/team-a/agents/shared/v1")
+	resp = api.Get("/v0/agents/shared/v1?namespace=team-a")
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
 	require.Equal(t, "A's", got.Spec.Title)
 
-	resp = api.Get("/v0/namespaces/team-b/agents/shared/v1")
+	resp = api.Get("/v0/agents/shared/v1?namespace=team-b")
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
 	require.Equal(t, "B's", got.Spec.Title)
 
-	// Cross-namespace list returns both.
-	resp = api.Get("/v0/agents")
+	// Cross-namespace list returns both (?namespace=all widens scope).
+	resp = api.Get("/v0/agents?namespace=all")
 	require.Equal(t, http.StatusOK, resp.Code)
 	var list struct {
 		Items []v1alpha1.Agent `json:"items"`
@@ -184,7 +193,7 @@ func TestResourceRegister_AgentNamespaceIsolation(t *testing.T) {
 	require.Len(t, list.Items, 2)
 
 	// Namespaced list returns one.
-	resp = api.Get("/v0/namespaces/team-a/agents")
+	resp = api.Get("/v0/agents?namespace=team-a")
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Len(t, list.Items, 1)
@@ -204,7 +213,7 @@ func TestResourceRegister_AgentListCursorPagination(t *testing.T) {
 			Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name, Version: "v1"},
 			Spec:     v1alpha1.AgentSpec{Title: name},
 		}
-		resp := api.Put(fmt.Sprintf("/v0/namespaces/default/agents/%s/v1", url.PathEscape(name)), body)
+		resp := api.Put(fmt.Sprintf("/v0/agents/%s/v1", url.PathEscape(name)), body)
 		require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	}
 
@@ -264,7 +273,7 @@ func TestResourceRegister_AgentWrongKindRejected(t *testing.T) {
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "bob", Version: "v1"},
 		Spec:     v1alpha1.AgentSpec{Title: "wrong kind"},
 	}
-	resp := api.Put("/v0/namespaces/default/agents/bob/v1", body)
+	resp := api.Put("/v0/agents/bob/v1", body)
 	require.Equal(t, http.StatusBadRequest, resp.Code, resp.Body.String())
 }
 
@@ -280,7 +289,7 @@ func TestResourceRegister_AgentPathMismatchRejected(t *testing.T) {
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "mismatched", Version: "v1"},
 	}
-	resp := api.Put("/v0/namespaces/default/agents/alice/v1", body)
+	resp := api.Put("/v0/agents/alice/v1", body)
 	require.Equal(t, http.StatusBadRequest, resp.Code, fmt.Sprintf("body=%s", resp.Body.String()))
 }
 
@@ -295,7 +304,7 @@ func TestResourceRegister_ValidationRejectsBadVersion(t *testing.T) {
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "bad", Version: "latest"},
 		Spec:     v1alpha1.AgentSpec{Title: "B"},
 	}
-	resp := api.Put("/v0/namespaces/default/agents/bad/latest", body)
+	resp := api.Put("/v0/agents/bad/latest", body)
 	require.Equal(t, http.StatusBadRequest, resp.Code)
 	require.Contains(t, resp.Body.String(), "metadata.version")
 }
@@ -311,7 +320,7 @@ func TestResourceRegister_ValidationRejectsHTTPWebsite(t *testing.T) {
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "ins", Version: "v1"},
 		Spec:     v1alpha1.AgentSpec{Title: "I", WebsiteURL: "http://example.com"}, // http not allowed
 	}
-	resp := api.Put("/v0/namespaces/default/agents/ins/v1", body)
+	resp := api.Put("/v0/agents/ins/v1", body)
 	require.Equal(t, http.StatusBadRequest, resp.Code)
 	require.Contains(t, resp.Body.String(), "spec.websiteUrl")
 }
@@ -354,7 +363,7 @@ func TestResourceRegister_ResolverDetectsDanglingRef(t *testing.T) {
 			},
 		},
 	}
-	resp := api.Put("/v0/namespaces/default/agents/dangling/v1", body)
+	resp := api.Put("/v0/agents/dangling/v1", body)
 	require.Equal(t, http.StatusBadRequest, resp.Code)
 	require.Contains(t, resp.Body.String(), "spec.mcpServers[1]")
 }
@@ -398,21 +407,21 @@ func TestResourceRegister_UniqueRemoteURLsAcrossAgents(t *testing.T) {
 	sharedURL := "https://api.example.com/shared"
 
 	// First Agent claims the URL — OK.
-	resp := api.Put("/v0/namespaces/default/agents/alice/v1", newAgent("alice", "v1", sharedURL))
+	resp := api.Put("/v0/agents/alice/v1", newAgent("alice", "v1", sharedURL))
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
 	// Same Agent, different version, same URL — OK (same name).
-	resp = api.Put("/v0/namespaces/default/agents/alice/v2", newAgent("alice", "v2", sharedURL))
+	resp = api.Put("/v0/agents/alice/v2", newAgent("alice", "v2", sharedURL))
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
 	// Different Agent, same URL — 409 Conflict.
-	resp = api.Put("/v0/namespaces/default/agents/bob/v1", newAgent("bob", "v1", sharedURL))
+	resp = api.Put("/v0/agents/bob/v1", newAgent("bob", "v1", sharedURL))
 	require.Equal(t, http.StatusConflict, resp.Code, resp.Body.String())
 	require.Contains(t, resp.Body.String(), sharedURL)
 	require.Contains(t, resp.Body.String(), "alice")
 
 	// Different Agent, different URL — OK.
-	resp = api.Put("/v0/namespaces/default/agents/bob/v1", newAgent("bob", "v1", "https://api.example.com/other"))
+	resp = api.Put("/v0/agents/bob/v1", newAgent("bob", "v1", "https://api.example.com/other"))
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 }
 
@@ -442,7 +451,7 @@ func TestResourceRegister_UniqueRemoteURLsPerKind(t *testing.T) {
 			Remotes: []v1alpha1.AgentRemote{{Type: "sse", URL: sharedURL}},
 		},
 	}
-	resp := api.Put("/v0/namespaces/default/agents/shared/v1", agent)
+	resp := api.Put("/v0/agents/shared/v1", agent)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
 	mcp := v1alpha1.MCPServer{
@@ -453,7 +462,7 @@ func TestResourceRegister_UniqueRemoteURLsPerKind(t *testing.T) {
 		},
 	}
 	// Same URL on a different Kind is allowed.
-	resp = api.Put("/v0/namespaces/default/mcpservers/shared/v1", mcp)
+	resp = api.Put("/v0/mcpservers/shared/v1", mcp)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 }
 
@@ -464,34 +473,34 @@ func TestResourceRegister_SoftDeleteFinalizerGC(t *testing.T) {
 	_, api := humatest.New(t)
 	registerAgent(api, store)
 
-	// Apply with a finalizer — finalizers move through metadata.
+	// Create the row via the wire, then set a finalizer through the
+	// Store — finalizers are internal-only now, so HTTP clients can't
+	// seed them; only reconcilers/adapters do, and they own the Store.
 	body := v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-		Metadata: v1alpha1.ObjectMeta{
-			Namespace:  "default",
-			Name:       "fin",
-			Version:    "v1",
-			Finalizers: []string{"cleanup.agentregistry.dev/local-deploy"},
-		},
-		Spec: v1alpha1.AgentSpec{Title: "Fin"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "fin", Version: "v1"},
+		Spec:     v1alpha1.AgentSpec{Title: "Fin"},
 	}
-	resp := api.Put("/v0/namespaces/default/agents/fin/v1", body)
+	resp := api.Put("/v0/agents/fin/v1", body)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
-	var gotAgent v1alpha1.Agent
-	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
-	require.Equal(t, []string{"cleanup.agentregistry.dev/local-deploy"}, gotAgent.Metadata.Finalizers)
+	require.NoError(t, store.PatchFinalizers(t.Context(), "default", "fin", "v1",
+		func([]string) []string { return []string{"cleanup.agentregistry.dev/local-deploy"} }))
 
 	// DELETE sets deletionTimestamp; row remains because finalizers is non-empty.
-	resp = api.Delete("/v0/namespaces/default/agents/fin/v1")
+	resp = api.Delete("/v0/agents/fin/v1")
 	require.Equal(t, http.StatusNoContent, resp.Code)
 
-	// Row is still fetchable with deletionTimestamp set.
-	resp = api.Get("/v0/namespaces/default/agents/fin/v1")
+	// Row is still fetchable with deletionTimestamp set. Finalizers are
+	// hidden from the wire, so assert them via the Store side.
+	resp = api.Get("/v0/agents/fin/v1")
 	require.Equal(t, http.StatusOK, resp.Code)
+	var gotAgent v1alpha1.Agent
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
 	require.NotNil(t, gotAgent.Metadata.DeletionTimestamp)
-	require.Len(t, gotAgent.Metadata.Finalizers, 1)
+	row, err := store.Get(t.Context(), "default", "fin", "v1")
+	require.NoError(t, err)
+	require.Len(t, row.Metadata.Finalizers, 1)
 
 	// GC before finalizer drained: no-op.
 	purged, err := store.PurgeFinalized(t.Context())
@@ -508,6 +517,6 @@ func TestResourceRegister_SoftDeleteFinalizerGC(t *testing.T) {
 	require.EqualValues(t, 1, purged)
 
 	// Final GET: 404.
-	resp = api.Get("/v0/namespaces/default/agents/fin/v1")
+	resp = api.Get("/v0/agents/fin/v1")
 	require.Equal(t, http.StatusNotFound, resp.Code)
 }

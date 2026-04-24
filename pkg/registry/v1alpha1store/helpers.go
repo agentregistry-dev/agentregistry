@@ -89,10 +89,8 @@ func decodeRow(
 	}
 
 	var status v1alpha1.Status
-	if len(statusJSON) > 0 {
-		if err := json.Unmarshal(statusJSON, &status); err != nil {
-			return nil, fmt.Errorf("decode status: %w", err)
-		}
+	if err := v1alpha1.UnmarshalStatusFromStorage(statusJSON, &status); err != nil {
+		return nil, fmt.Errorf("decode status: %w", err)
 	}
 
 	var finalizers []string

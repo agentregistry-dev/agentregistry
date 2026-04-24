@@ -60,7 +60,9 @@ spec:
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Equal(t, "created", results[0].Status)
-	require.EqualValues(t, 1, results[0].Generation)
+	// Generation is internal-only (json:"-") so ApplyResult.Generation
+	// never flows over the wire. Internal assertions go through the
+	// Store directly.
 
 	// Get by exact version.
 	raw, err := c.Get(ctx, v1alpha1.KindAgent, "default", "acme/planner", "v1.0.0")
@@ -68,7 +70,6 @@ spec:
 	require.Equal(t, v1alpha1.KindAgent, raw.Kind)
 	require.Equal(t, "acme/planner", raw.Metadata.Name)
 	require.Equal(t, "v1.0.0", raw.Metadata.Version)
-	require.EqualValues(t, 1, raw.Metadata.Generation)
 
 	// Unmarshal Spec into the typed Agent.
 	var spec v1alpha1.AgentSpec

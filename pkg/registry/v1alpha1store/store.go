@@ -384,13 +384,14 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, version string,
 // UPDATE statement in ApplyPatch.
 func buildStatusPatch(current []byte, mutate func(*v1alpha1.Status)) ([]byte, error) {
 	var status v1alpha1.Status
-	if len(current) > 0 {
-		if err := json.Unmarshal(current, &status); err != nil {
-			return nil, fmt.Errorf("decode status: %w", err)
-		}
+	if err := v1alpha1.UnmarshalStatusFromStorage(current, &status); err != nil {
+		return nil, fmt.Errorf("decode status: %w", err)
 	}
 	mutate(&status)
-	out, err := json.Marshal(status)
+	// MarshalStatusForStorage, not json.Marshal — the default
+	// marshaler hides ObservedGeneration (wire contract), the
+	// storage codec preserves it.
+	out, err := v1alpha1.MarshalStatusForStorage(status)
 	if err != nil {
 		return nil, fmt.Errorf("encode status: %w", err)
 	}

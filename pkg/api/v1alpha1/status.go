@@ -1,6 +1,9 @@
 package v1alpha1
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // ConditionStatus values, matching Kubernetes apimachinery/pkg/apis/meta/v1.
 type ConditionStatus string
@@ -11,28 +14,36 @@ const (
 	ConditionUnknown ConditionStatus = "Unknown"
 )
 
-// Condition describes one facet of a resource's observed state. Modeled after
-// the Kubernetes v1.Condition: Type is the named condition (e.g. "Ready",
-// "Validated", "Published"); Status is True/False/Unknown; Reason is a
-// machine-readable CamelCase token; Message is a human-readable explanation;
-// LastTransitionTime is when Status last flipped; ObservedGeneration is the
-// spec generation this condition was derived from.
+// Condition describes one facet of a resource's observed state. Modeled
+// after Kubernetes v1.Condition: Type is the named condition
+// (e.g. "Ready", "Validated", "Published"); Status is True/False/Unknown;
+// Reason is a machine-readable CamelCase token; Message is a
+// human-readable explanation; LastTransitionTime is when Status last
+// flipped.
+//
+// ObservedGeneration is the spec generation this condition was derived
+// from. Like ObjectMeta.Generation it is an internal reconciler
+// convergence signal — kept on the struct for controllers to read but
+// hidden from the wire so the metadata surface stays minimal.
 type Condition struct {
 	Type               string          `json:"type" yaml:"type"`
 	Status             ConditionStatus `json:"status" yaml:"status"`
 	Reason             string          `json:"reason,omitempty" yaml:"reason,omitempty"`
 	Message            string          `json:"message,omitempty" yaml:"message,omitempty"`
 	LastTransitionTime time.Time       `json:"lastTransitionTime,omitzero" yaml:"lastTransitionTime,omitempty"`
-	ObservedGeneration int64           `json:"observedGeneration,omitempty" yaml:"observedGeneration,omitempty"`
+	ObservedGeneration int64           `json:"-" yaml:"-"`
 }
 
-// Status is the observed-state subresource. ObservedGeneration is the highest
-// metadata.generation any reconciler has acted on; Conditions is the list of
-// fine-grained state facets written by the reconciler and service layer.
-// No Phase roll-up — K8s deprecated it in favor of Conditions, and carrying
-// a string summary encourages downstream string-comparison anti-patterns.
+// Status is the observed-state subresource. ObservedGeneration is the
+// highest metadata.generation any reconciler has acted on; Conditions is
+// the list of fine-grained state facets written by the reconciler and
+// service layer. No Phase roll-up — K8s deprecated it in favor of
+// Conditions, and carrying a string summary encourages downstream
+// string-comparison anti-patterns.
+//
+// ObservedGeneration is internal-only (matches ObjectMeta.Generation).
 type Status struct {
-	ObservedGeneration int64       `json:"observedGeneration,omitempty" yaml:"observedGeneration,omitempty"`
+	ObservedGeneration int64       `json:"-" yaml:"-"`
 	Conditions         []Condition `json:"conditions,omitempty" yaml:"conditions,omitempty"`
 }
 
@@ -78,4 +89,80 @@ func (s *Status) GetCondition(conditionType string) *Condition {
 func (s *Status) IsConditionTrue(conditionType string) bool {
 	c := s.GetCondition(conditionType)
 	return c != nil && c.Status == ConditionTrue
+}
+
+// conditionStore is the on-disk shape of a Condition: identical to
+// Condition except ObservedGeneration is serialized. The store (not
+// the wire) uses this for DB persistence so reconcilers can round-trip
+// their convergence pointer without leaking it into HTTP responses or
+// OpenAPI.
+type conditionStore struct {
+	Type               string          `json:"type"`
+	Status             ConditionStatus `json:"status"`
+	Reason             string          `json:"reason,omitempty"`
+	Message            string          `json:"message,omitempty"`
+	LastTransitionTime time.Time       `json:"lastTransitionTime,omitzero"`
+	ObservedGeneration int64           `json:"observedGeneration,omitempty"`
+}
+
+// statusStore is the on-disk shape of Status. Mirrors Status but with
+// ObservedGeneration and Condition.ObservedGeneration visible to the
+// JSON encoder. See MarshalStatusForStorage / UnmarshalStatusFromStorage.
+type statusStore struct {
+	ObservedGeneration int64            `json:"observedGeneration,omitempty"`
+	Conditions         []conditionStore `json:"conditions,omitempty"`
+}
+
+// MarshalStatusForStorage serializes a Status to JSON suitable for
+// writing to the status JSONB column. Unlike json.Marshal(status) — which
+// honors the `json:"-"` tags that hide ObservedGeneration from the wire
+// — this helper serializes the full internal shape so reconciler state
+// persists across restarts.
+func MarshalStatusForStorage(s Status) ([]byte, error) {
+	storeConds := make([]conditionStore, len(s.Conditions))
+	for i, c := range s.Conditions {
+		storeConds[i] = conditionStore{
+			Type:               c.Type,
+			Status:             c.Status,
+			Reason:             c.Reason,
+			Message:            c.Message,
+			LastTransitionTime: c.LastTransitionTime,
+			ObservedGeneration: c.ObservedGeneration,
+		}
+	}
+	return json.Marshal(statusStore{
+		ObservedGeneration: s.ObservedGeneration,
+		Conditions:         storeConds,
+	})
+}
+
+// UnmarshalStatusFromStorage is the read-side inverse of
+// MarshalStatusForStorage: decode a status JSONB payload back into a
+// live Status struct, including the internal-only ObservedGeneration
+// fields.
+func UnmarshalStatusFromStorage(data []byte, s *Status) error {
+	if len(data) == 0 {
+		*s = Status{}
+		return nil
+	}
+	var w statusStore
+	if err := json.Unmarshal(data, &w); err != nil {
+		return err
+	}
+	conds := make([]Condition, len(w.Conditions))
+	for i, c := range w.Conditions {
+		conds[i] = Condition{
+			Type:               c.Type,
+			Status:             c.Status,
+			Reason:             c.Reason,
+			Message:            c.Message,
+			LastTransitionTime: c.LastTransitionTime,
+			ObservedGeneration: c.ObservedGeneration,
+		}
+	}
+	*s = Status{
+		ObservedGeneration: w.ObservedGeneration,
+		Conditions:         conds,
+	}
+	return nil
 }

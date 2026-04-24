@@ -134,25 +134,53 @@ type AuthorizeInput struct {
 type SemanticSearchFunc func(ctx context.Context, query string) ([]float32, error)
 
 // Input/output wire types. Registered per-kind so OpenAPI schemas stay typed.
+//
+// Namespace is a `query:"namespace"` param (hidden from the user-facing
+// API while the surface stays minimal; empty → "default", "all" → list
+// across every namespace). Defaulting happens in resolveNamespace below
+// so every endpoint sees the same semantics.
+
+// namespaceAll is the query-param sentinel that asks the list endpoint
+// to ignore the namespace scope and return rows from every namespace.
+// Exported via listParams.Namespace == "" (empty string) to the Store.
+const namespaceAll = "all"
+
+// resolveNamespace applies the default-and-sentinel policy for
+// ?namespace= query values: empty → DefaultNamespace, "all" → "" (the
+// Store interprets empty as cross-namespace for list operations).
+// Non-list callers (get/put/delete) still pass "" through as "default"
+// — they never accept "all".
+func resolveNamespace(raw string, allowAll bool) string {
+	if allowAll && raw == namespaceAll {
+		return ""
+	}
+	if raw == "" {
+		return v1alpha1.DefaultNamespace
+	}
+	return raw
+}
 
 type getInput struct {
-	Namespace string `path:"namespace"`
+	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`
 	Version   string `path:"version"`
 }
 
 type getLatestInput struct {
-	Namespace string `path:"namespace"`
+	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`
 }
 
 type deleteInput struct {
-	Namespace string `path:"namespace"`
+	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`
 	Version   string `path:"version"`
 }
 
 type listInput struct {
+	// Namespace scopes the list. Empty / missing → "default";
+	// literal "all" → cross-namespace.
+	Namespace  string `query:"namespace" doc:"Namespace (defaults to 'default'; 'all' lists across all namespaces)."`
 	Limit      int    `query:"limit" doc:"Max items to return (default 50)." default:"50"`
 	Cursor     string `query:"cursor" doc:"Opaque pagination cursor."`
 	Labels     string `query:"labels" doc:"Label selector: key=value,key2=value2."`
@@ -167,22 +195,6 @@ type listInput struct {
 	// Requires the server to be built with embeddings enabled.
 	Semantic          string  `query:"semantic" doc:"Semantic search query. Returns results ranked by similarity."`
 	SemanticThreshold float32 `query:"semanticThreshold" doc:"Drop results with cosine distance above this threshold (0 = no filter)."`
-}
-
-// namespacedListInput is listInput + a namespace path segment. Separate
-// struct because Huma reflects the whole input; a path tag on a
-// cross-namespace list endpoint would make namespace mandatory there.
-// (Tried to collapse via embedding; Huma's body/query schema reflection
-// drops promoted fields, so the duplication stays.)
-type namespacedListInput struct {
-	Namespace          string  `path:"namespace"`
-	Limit              int     `query:"limit" doc:"Max items to return (default 50)." default:"50"`
-	Cursor             string  `query:"cursor" doc:"Opaque pagination cursor."`
-	Labels             string  `query:"labels" doc:"Label selector: key=value,key2=value2."`
-	LatestOnly         bool    `query:"latestOnly" doc:"Only return rows with is_latest_version=true."`
-	IncludeTerminating bool    `query:"includeTerminating" doc:"Include rows with a deletionTimestamp."`
-	Semantic           string  `query:"semantic" doc:"Semantic search query. Returns results ranked by similarity."`
-	SemanticThreshold  float32 `query:"semanticThreshold" doc:"Drop results with cosine distance above this threshold (0 = no filter)."`
 }
 
 type bodyOutput[T v1alpha1.Object] struct {
@@ -201,7 +213,7 @@ type listOutput[T v1alpha1.Object] struct {
 }
 
 type putInput[T v1alpha1.Object] struct {
-	Namespace string `path:"namespace"`
+	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`
 	Version   string `path:"version"`
 	Body      T
@@ -220,49 +232,28 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 	}
 	base := strings.TrimRight(cfg.BasePrefix, "/")
 
-	crossNSList := base + "/" + plural
-	nsList := base + "/namespaces/{namespace}/" + plural
-	nsItem := nsList + "/{name}"
-	nsItemVersion := nsItem + "/{version}"
+	// Flat URL shape: namespace is an internal detail carried as a query
+	// param, not a path segment. Defaults to "default"; a special value
+	// "all" on the list endpoint widens the scope to every namespace.
+	listPath := base + "/" + plural
+	itemPath := listPath + "/{name}"
+	itemVersionPath := itemPath + "/{version}"
 
-	// Cross-namespace list: `/v0/{plural}`.
-	huma.Register(api, huma.Operation{
-		OperationID: "list-" + plural + "-all-namespaces",
-		Method:      http.MethodGet,
-		Path:        crossNSList,
-		Summary:     fmt.Sprintf("List %s across all namespaces", kind),
-	}, func(ctx context.Context, in *listInput) (*listOutput[T], error) {
-		if cfg.Authorize != nil {
-			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "list", Kind: kind}); err != nil {
-				return nil, err
-			}
-		}
-		return runList(ctx, cfg, newObj, listParams{
-			Namespace:          "",
-			Labels:             in.Labels,
-			Limit:              in.Limit,
-			Cursor:             in.Cursor,
-			LatestOnly:         in.LatestOnly,
-			IncludeTerminating: in.IncludeTerminating,
-			Semantic:           in.Semantic,
-			SemanticThreshold:  in.SemanticThreshold,
-		})
-	})
-
-	// Namespaced list: `/v0/namespaces/{ns}/{plural}`.
+	// List: `/v0/{plural}?namespace=default` (or ?namespace=all).
 	huma.Register(api, huma.Operation{
 		OperationID: "list-" + plural,
 		Method:      http.MethodGet,
-		Path:        nsList,
-		Summary:     fmt.Sprintf("List %s in a namespace", kind),
-	}, func(ctx context.Context, in *namespacedListInput) (*listOutput[T], error) {
+		Path:        listPath,
+		Summary:     fmt.Sprintf("List %s (scoped by ?namespace)", kind),
+	}, func(ctx context.Context, in *listInput) (*listOutput[T], error) {
+		ns := resolveNamespace(in.Namespace, true)
 		if cfg.Authorize != nil {
-			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "list", Kind: kind, Namespace: in.Namespace}); err != nil {
+			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "list", Kind: kind, Namespace: ns}); err != nil {
 				return nil, err
 			}
 		}
 		return runList(ctx, cfg, newObj, listParams{
-			Namespace:          in.Namespace,
+			Namespace:          ns,
 			Labels:             in.Labels,
 			Limit:              in.Limit,
 			Cursor:             in.Cursor,
@@ -273,21 +264,22 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		})
 	})
 
-	// Get latest (namespace, name).
+	// Get latest (name only; namespace via query).
 	huma.Register(api, huma.Operation{
 		OperationID: "get-latest-" + strings.ToLower(kind),
 		Method:      http.MethodGet,
-		Path:        nsItem,
+		Path:        itemPath,
 		Summary:     fmt.Sprintf("Get the latest version of a %s", kind),
 	}, func(ctx context.Context, in *getLatestInput) (*bodyOutput[T], error) {
+		ns := resolveNamespace(in.Namespace, false)
 		if cfg.Authorize != nil {
-			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "get", Kind: kind, Namespace: in.Namespace, Name: in.Name}); err != nil {
+			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "get", Kind: kind, Namespace: ns, Name: in.Name}); err != nil {
 				return nil, err
 			}
 		}
-		row, err := cfg.Store.GetLatest(ctx, in.Namespace, in.Name)
+		row, err := cfg.Store.GetLatest(ctx, ns, in.Name)
 		if err != nil {
-			return nil, mapNotFound(err, kind, in.Namespace, in.Name, "")
+			return nil, mapNotFound(err, kind, ns, in.Name, "")
 		}
 		obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
 		if err != nil {
@@ -296,21 +288,22 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		return &bodyOutput[T]{Body: obj}, nil
 	})
 
-	// Get exact (namespace, name, version).
+	// Get exact (name, version; namespace via query).
 	huma.Register(api, huma.Operation{
 		OperationID: "get-" + strings.ToLower(kind),
 		Method:      http.MethodGet,
-		Path:        nsItemVersion,
-		Summary:     fmt.Sprintf("Get a %s by namespace, name, and version", kind),
+		Path:        itemVersionPath,
+		Summary:     fmt.Sprintf("Get a %s by name and version", kind),
 	}, func(ctx context.Context, in *getInput) (*bodyOutput[T], error) {
+		ns := resolveNamespace(in.Namespace, false)
 		if cfg.Authorize != nil {
-			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "get", Kind: kind, Namespace: in.Namespace, Name: in.Name, Version: in.Version}); err != nil {
+			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "get", Kind: kind, Namespace: ns, Name: in.Name, Version: in.Version}); err != nil {
 				return nil, err
 			}
 		}
-		row, err := cfg.Store.Get(ctx, in.Namespace, in.Name, in.Version)
+		row, err := cfg.Store.Get(ctx, ns, in.Name, in.Version)
 		if err != nil {
-			return nil, mapNotFound(err, kind, in.Namespace, in.Name, in.Version)
+			return nil, mapNotFound(err, kind, ns, in.Name, in.Version)
 		}
 		obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
 		if err != nil {
@@ -323,10 +316,11 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 	huma.Register(api, huma.Operation{
 		OperationID:   "apply-" + strings.ToLower(kind),
 		Method:        http.MethodPut,
-		Path:          nsItemVersion,
+		Path:          itemVersionPath,
 		Summary:       fmt.Sprintf("Apply a %s (idempotent upsert)", kind),
 		DefaultStatus: http.StatusOK,
 	}, func(ctx context.Context, in *putInput[T]) (*bodyOutput[T], error) {
+		ns := resolveNamespace(in.Namespace, false)
 		body := in.Body
 		if apiVer := body.GetAPIVersion(); apiVer != "" && apiVer != v1alpha1.GroupVersion {
 			return nil, huma.Error400BadRequest(fmt.Sprintf(
@@ -337,8 +331,8 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 				"kind %q does not match endpoint kind %q", k, kind))
 		}
 		meta := body.GetMetadata()
-		if meta.Namespace != "" && meta.Namespace != in.Namespace {
-			return nil, huma.Error400BadRequest("metadata.namespace does not match path")
+		if meta.Namespace != "" && meta.Namespace != ns {
+			return nil, huma.Error400BadRequest("metadata.namespace does not match ?namespace=")
 		}
 		if meta.Name != "" && meta.Name != in.Name {
 			return nil, huma.Error400BadRequest("metadata.name does not match path")
@@ -347,10 +341,10 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			return nil, huma.Error400BadRequest("metadata.version does not match path")
 		}
 
-		// Stamp path-derived identity into metadata so Validate sees the
+		// Stamp resolved identity into metadata so Validate sees the
 		// resolved values (clients may omit namespace/name/version in the
-		// body and rely on the path).
-		meta.Namespace = in.Namespace
+		// body and rely on the path + query).
+		meta.Namespace = ns
 		meta.Name = in.Name
 		meta.Version = in.Version
 		body.SetMetadata(*meta)
@@ -360,7 +354,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		if cfg.Authorize != nil {
 			if err := cfg.Authorize(ctx, AuthorizeInput{
 				Verb: "apply", Kind: kind,
-				Namespace: in.Namespace, Name: in.Name, Version: in.Version,
+				Namespace: ns, Name: in.Name, Version: in.Version,
 				Object: body,
 			}); err != nil {
 				return nil, err
@@ -402,16 +396,16 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		if meta.Annotations != nil {
 			upsertOpts.Annotations = meta.Annotations
 		}
-		if _, err := cfg.Store.Upsert(ctx, in.Namespace, in.Name, in.Version, specJSON, upsertOpts); err != nil {
+		if _, err := cfg.Store.Upsert(ctx, ns, in.Name, in.Version, specJSON, upsertOpts); err != nil {
 			if errors.Is(err, v1alpha1store.ErrTerminating) {
 				return nil, huma.Error409Conflict(
 					fmt.Sprintf("%s %s/%s/%s is terminating; wait for finalizers to drain or drop them via PatchFinalizers",
-						kind, in.Namespace, in.Name, in.Version))
+						kind, ns, in.Name, in.Version))
 			}
 			return nil, huma.Error500InternalServerError("upsert "+kind, err)
 		}
 
-		row, err := cfg.Store.Get(ctx, in.Namespace, in.Name, in.Version)
+		row, err := cfg.Store.Get(ctx, ns, in.Name, in.Version)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("read back "+kind, err)
 		}
@@ -429,7 +423,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			// adapter finalizer). Failure to re-read leaves the hook
 			// changes invisible to the caller; degrade to the pre-hook
 			// view rather than fail the already-successful apply.
-			if refreshed, err := cfg.Store.Get(ctx, in.Namespace, in.Name, in.Version); err == nil {
+			if refreshed, err := cfg.Store.Get(ctx, ns, in.Name, in.Version); err == nil {
 				if refreshedObj, err := v1alpha1.EnvelopeFromRaw(newObj, refreshed, kind); err == nil {
 					obj = refreshedObj
 				}
@@ -443,14 +437,15 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 	huma.Register(api, huma.Operation{
 		OperationID:   "delete-" + strings.ToLower(kind),
 		Method:        http.MethodDelete,
-		Path:          nsItemVersion,
+		Path:          itemVersionPath,
 		Summary:       fmt.Sprintf("Delete a %s (soft-delete: sets deletionTimestamp)", kind),
 		DefaultStatus: http.StatusNoContent,
 	}, func(ctx context.Context, in *deleteInput) (*deleteOutput, error) {
+		ns := resolveNamespace(in.Namespace, false)
 		if cfg.Authorize != nil {
 			if err := cfg.Authorize(ctx, AuthorizeInput{
 				Verb: "delete", Kind: kind,
-				Namespace: in.Namespace, Name: in.Name, Version: in.Version,
+				Namespace: ns, Name: in.Name, Version: in.Version,
 			}); err != nil {
 				return nil, err
 			}
@@ -460,9 +455,9 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		// still surfaces as 404 via Store.Delete below.
 		var preDelete T
 		if cfg.PostDelete != nil {
-			row, err := cfg.Store.Get(ctx, in.Namespace, in.Name, in.Version)
+			row, err := cfg.Store.Get(ctx, ns, in.Name, in.Version)
 			if err != nil {
-				return nil, mapNotFound(err, kind, in.Namespace, in.Name, in.Version)
+				return nil, mapNotFound(err, kind, ns, in.Name, in.Version)
 			}
 			obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
 			if err != nil {
@@ -471,9 +466,9 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			preDelete = obj
 		}
 
-		if err := cfg.Store.Delete(ctx, in.Namespace, in.Name, in.Version); err != nil {
+		if err := cfg.Store.Delete(ctx, ns, in.Name, in.Version); err != nil {
 			if errors.Is(err, pkgdb.ErrNotFound) {
-				return nil, mapNotFound(err, kind, in.Namespace, in.Name, in.Version)
+				return nil, mapNotFound(err, kind, ns, in.Name, in.Version)
 			}
 			return nil, huma.Error500InternalServerError("delete "+kind, err)
 		}
