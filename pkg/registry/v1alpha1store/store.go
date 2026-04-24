@@ -768,11 +768,17 @@ func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opt
 // The row with the highest valid semver wins; failing that, the most-
 // recently-updated row wins. Terminating rows are ineligible.
 func (s *Store) recomputeLatest(ctx context.Context, tx pgx.Tx, namespace, name string) error {
+	// `version DESC` is the deterministic tie-breaker for the non-semver
+	// fallback path in pickLatestVersion — when two rows share the same
+	// updated_at (possible on batch upserts inside a microsecond), the
+	// winner would otherwise be whichever row the query engine picked
+	// first. Without the tie-breaker, is_latest_version can flip between
+	// concurrent upserts.
 	rows, err := tx.Query(ctx,
 		fmt.Sprintf(`
 			SELECT version FROM %s
 			WHERE namespace=$1 AND name=$2 AND deletion_timestamp IS NULL
-			ORDER BY updated_at DESC`, s.table),
+			ORDER BY updated_at DESC, version DESC`, s.table),
 		namespace, name)
 	if err != nil {
 		return fmt.Errorf("scan versions: %w", err)

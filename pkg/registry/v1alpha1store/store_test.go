@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -483,4 +484,109 @@ func TestV1Alpha1Store_SeededProviders(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(k8s.Spec, &spec))
 	require.Equal(t, v1alpha1.PlatformKubernetes, spec.Platform)
+}
+
+// TestV1Alpha1Store_NotifyPayloadDiscreteFields guards the R2 fix:
+// the status NOTIFY trigger emits (namespace, name, version) as three
+// discrete JSON fields instead of a concatenated "ns/name/version"
+// string. The previous shape was ambiguous when name contained `/`
+// (nameRegex explicitly allows slashes for DNS-subdomain-style names
+// like `ai.exa/exa`). The test uses such a name to confirm the parse
+// survives round-trip unambiguously — any future reconciler / Phase 2
+// KRT consumer can rely on the fields being split correctly.
+func TestV1Alpha1Store_NotifyPayloadDiscreteFields(t *testing.T) {
+	pool := NewV1Alpha1TestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	// Dedicated listener on the agents status channel. Acquire it on a
+	// separate connection so the INSERT inside store.Upsert doesn't race
+	// the LISTEN (LISTEN must be established before the INSERT fires).
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer conn.Release()
+	_, err = conn.Exec(ctx, "LISTEN v1alpha1_agents_status")
+	require.NoError(t, err)
+
+	// Name with `/` — the bomb. Pre-fix, payload was "default/ai.exa/exa/v1"
+	// which splits four ways under strings.Split(id, "/") and consumers
+	// can't tell whether the name was "ai.exa" (+ version "exa/v1") or
+	// "ai.exa/exa" (+ version "v1"). Post-fix the fields are discrete.
+	const nsName = "ai.exa/exa"
+	_, err = store.Upsert(ctx, testNS, nsName, "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "slash"}), UpsertOpts{})
+	require.NoError(t, err)
+
+	// Drain one notification; guard against hangs in CI.
+	waitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	notif, err := conn.Conn().WaitForNotification(waitCtx)
+	require.NoError(t, err, "expected a pg_notify from the INSERT")
+	require.Equal(t, "v1alpha1_agents_status", notif.Channel)
+
+	var payload struct {
+		Op        string `json:"op"`
+		Namespace string `json:"namespace"`
+		Name      string `json:"name"`
+		Version   string `json:"version"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(notif.Payload), &payload),
+		"payload must be JSON with discrete (namespace, name, version) fields")
+	require.Equal(t, "INSERT", payload.Op)
+	require.Equal(t, testNS, payload.Namespace)
+	require.Equal(t, nsName, payload.Name,
+		"name must round-trip intact, including the / character")
+	require.Equal(t, "v1", payload.Version)
+}
+
+// TestV1Alpha1Store_LatestVersionTieBreakDeterministic guards the R6 fix:
+// when two non-semver versions share an identical updated_at (possible
+// on batch upserts inside a single microsecond), recomputeLatest must
+// pick the same winner every time. Pre-fix the ORDER BY was
+// `updated_at DESC` only and the winner was SQL-row-order dependent;
+// post-fix the secondary `version DESC` key makes it deterministic.
+//
+// Force the tie by overwriting both rows' updated_at to an identical
+// value + clearing is_latest_version, then run recomputeLatest directly
+// (internal-package test can reach the unexported helper) so its SELECT
+// actually sees the tied timestamps.
+func TestV1Alpha1Store_LatestVersionTieBreakDeterministic(t *testing.T) {
+	pool := NewV1Alpha1TestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	// Two non-semver versions so pickLatestVersion falls through to
+	// the "most recently updated" branch.
+	_, err := store.Upsert(ctx, testNS, "tie", "snapshot-a", mustSpec(t, v1alpha1.AgentSpec{Title: "A"}), UpsertOpts{})
+	require.NoError(t, err)
+	_, err = store.Upsert(ctx, testNS, "tie", "snapshot-b", mustSpec(t, v1alpha1.AgentSpec{Title: "B"}), UpsertOpts{})
+	require.NoError(t, err)
+
+	// Force identical updated_at + clear is_latest_version so the next
+	// recomputeLatest has to choose from scratch under the tie.
+	_, err = pool.Exec(ctx,
+		`UPDATE `+testTable+` SET updated_at = $1, is_latest_version = false
+		 WHERE namespace=$2 AND name=$3`,
+		time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), testNS, "tie")
+	require.NoError(t, err)
+
+	// Run recomputeLatest directly inside a fresh tx so its SELECT sees
+	// the tied timestamps. Repeat; deterministic tie-break must land on
+	// the same winner every call.
+	var winners []string
+	for i := 0; i < 5; i++ {
+		tx, err := pool.Begin(ctx)
+		require.NoError(t, err)
+		require.NoError(t, store.recomputeLatest(ctx, tx, testNS, "tie"))
+		require.NoError(t, tx.Commit(ctx))
+
+		latest, err := store.GetLatest(ctx, testNS, "tie")
+		require.NoError(t, err)
+		winners = append(winners, latest.Metadata.Version)
+	}
+	for i := 1; i < len(winners); i++ {
+		require.Equal(t, winners[0], winners[i],
+			"recomputeLatest must pick the same winner across repeated reads")
+	}
+	// `version DESC` tie-break → snapshot-b comes out on top.
+	require.Equal(t, "snapshot-b", winners[0], "version DESC tie-break should prefer 'snapshot-b'")
 }
