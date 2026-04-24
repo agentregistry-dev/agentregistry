@@ -175,6 +175,11 @@ type deleteInput struct {
 	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`
 	Version   string `path:"version"`
+	// Force=true skips the kind's PostDelete reconciliation hook
+	// (e.g. provider teardown for Deployment) and only soft-deletes
+	// the row. Useful for orphaned records whose external state is
+	// already gone or unreachable.
+	Force bool `query:"force" doc:"Skip provider-specific teardown and only remove the registry record." default:"false"`
 }
 
 type listInput struct {
@@ -451,10 +456,13 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			}
 		}
 		// Pre-read so PostDelete has the final spec + finalizer set to
-		// work with. Skipped when no hook is registered; a missing row
-		// still surfaces as 404 via Store.Delete below.
+		// work with. Skipped when no hook is registered, when the
+		// caller asked for ?force=true (skip provider teardown — orphan
+		// records / unreachable backends), or when a missing row would
+		// surface as 404 via Store.Delete below.
+		runHook := cfg.PostDelete != nil && !in.Force
 		var preDelete T
-		if cfg.PostDelete != nil {
+		if runHook {
 			row, err := cfg.Store.Get(ctx, ns, in.Name, in.Version)
 			if err != nil {
 				return nil, mapNotFound(err, kind, ns, in.Name, in.Version)
@@ -473,7 +481,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			return nil, huma.Error500InternalServerError("delete "+kind, err)
 		}
 
-		if cfg.PostDelete != nil {
+		if runHook {
 			if err := cfg.PostDelete(ctx, preDelete); err != nil {
 				return nil, huma.Error500InternalServerError(kind+" post-delete", err)
 			}

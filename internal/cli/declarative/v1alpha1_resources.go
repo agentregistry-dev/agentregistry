@@ -39,7 +39,7 @@ func getAny[T v1alpha1.Object](ctx context.Context, kind, name, version string, 
 	return client.GetTyped(ctx, apiClient, kind, v1alpha1.DefaultNamespace, name, version, newObj)
 }
 
-func deleteAny[T v1alpha1.Object](ctx context.Context, kind, name, version string, newObj func() T) error {
+func deleteAny[T v1alpha1.Object](ctx context.Context, kind, name, version string, force bool, newObj func() T) error {
 	targetVersion := version
 	if targetVersion == "" {
 		obj, err := client.GetTyped(ctx, apiClient, kind, v1alpha1.DefaultNamespace, name, "", newObj)
@@ -48,7 +48,7 @@ func deleteAny[T v1alpha1.Object](ctx context.Context, kind, name, version strin
 		}
 		targetVersion = obj.GetMetadata().Version
 	}
-	return apiClient.Delete(ctx, kind, v1alpha1.DefaultNamespace, name, targetVersion)
+	return apiClient.Delete(ctx, kind, v1alpha1.DefaultNamespace, name, targetVersion, client.DeleteOpts{Force: force})
 }
 
 func listDeploymentAny(ctx context.Context) ([]any, error) {
@@ -76,7 +76,7 @@ func getDeploymentByTarget(ctx context.Context, name string) (any, error) {
 	return nil, database.ErrNotFound
 }
 
-func deleteDeploymentByTarget(ctx context.Context, name, version string) error {
+func deleteDeploymentByTarget(ctx context.Context, name, version string, force bool) error {
 	if version == "" {
 		return fmt.Errorf("%w: --version is required when deleting deployments", database.ErrInvalidInput)
 	}
@@ -101,7 +101,7 @@ func deleteDeploymentByTarget(ctx context.Context, name, version string) error {
 
 	var errs []error
 	for _, dep := range matches {
-		if err := apiClient.Delete(ctx, v1alpha1.KindDeployment, dep.Namespace, dep.Name, dep.Version); err != nil {
+		if err := apiClient.Delete(ctx, v1alpha1.KindDeployment, dep.Namespace, dep.Name, dep.Version, client.DeleteOpts{Force: force}); err != nil {
 			errs = append(errs, fmt.Errorf("deleting %s (provider %s): %w", dep.ID, dep.ProviderID, err))
 		}
 	}

@@ -43,8 +43,8 @@ func newCLIRegistry() *scheme.Registry {
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return getAny(context.Background(), v1alpha1.KindAgent, name, "", func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
 		},
-		Delete: func(_ context.Context, name, version string) error {
-			return deleteAny(context.Background(), v1alpha1.KindAgent, name, version, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+		Delete: func(_ context.Context, name, version string, force bool) error {
+			return deleteAny(context.Background(), v1alpha1.KindAgent, name, version, force, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
 		},
 		ListFunc: func(_ context.Context) ([]any, error) {
 			return listLatestAny(context.Background(), v1alpha1.KindAgent, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
@@ -74,8 +74,8 @@ func newCLIRegistry() *scheme.Registry {
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return getAny(context.Background(), v1alpha1.KindMCPServer, name, "", func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
 		},
-		Delete: func(_ context.Context, name, version string) error {
-			return deleteAny(context.Background(), v1alpha1.KindMCPServer, name, version, func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
+		Delete: func(_ context.Context, name, version string, force bool) error {
+			return deleteAny(context.Background(), v1alpha1.KindMCPServer, name, version, force, func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
 		},
 		ListFunc: func(_ context.Context) ([]any, error) {
 			return listLatestAny(context.Background(), v1alpha1.KindMCPServer, func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
@@ -102,8 +102,8 @@ func newCLIRegistry() *scheme.Registry {
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return getAny(context.Background(), v1alpha1.KindSkill, name, "", func() *v1alpha1.Skill { return &v1alpha1.Skill{} })
 		},
-		Delete: func(_ context.Context, name, version string) error {
-			return deleteAny(context.Background(), v1alpha1.KindSkill, name, version, func() *v1alpha1.Skill { return &v1alpha1.Skill{} })
+		Delete: func(_ context.Context, name, version string, force bool) error {
+			return deleteAny(context.Background(), v1alpha1.KindSkill, name, version, force, func() *v1alpha1.Skill { return &v1alpha1.Skill{} })
 		},
 		ListFunc: func(_ context.Context) ([]any, error) {
 			return listLatestAny(context.Background(), v1alpha1.KindSkill, func() *v1alpha1.Skill { return &v1alpha1.Skill{} })
@@ -131,8 +131,8 @@ func newCLIRegistry() *scheme.Registry {
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return getAny(context.Background(), v1alpha1.KindPrompt, name, "", func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} })
 		},
-		Delete: func(_ context.Context, name, version string) error {
-			return deleteAny(context.Background(), v1alpha1.KindPrompt, name, version, func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} })
+		Delete: func(_ context.Context, name, version string, force bool) error {
+			return deleteAny(context.Background(), v1alpha1.KindPrompt, name, version, force, func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} })
 		},
 		ListFunc: func(_ context.Context) ([]any, error) {
 			return listLatestAny(context.Background(), v1alpha1.KindPrompt, func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} })
@@ -159,8 +159,8 @@ func newCLIRegistry() *scheme.Registry {
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return getAny(context.Background(), v1alpha1.KindProvider, name, "", func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
 		},
-		Delete: func(_ context.Context, name, _ string) error {
-			return deleteAny(context.Background(), v1alpha1.KindProvider, name, "", func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
+		Delete: func(_ context.Context, name, _ string, _ bool) error {
+			return deleteAny(context.Background(), v1alpha1.KindProvider, name, "", false, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
 		},
 		ListFunc: func(_ context.Context) ([]any, error) {
 			return listLatestAny(context.Background(), v1alpha1.KindProvider, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
@@ -186,8 +186,8 @@ func newCLIRegistry() *scheme.Registry {
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return getDeploymentByTarget(context.Background(), name)
 		},
-		Delete: func(_ context.Context, name, version string) error {
-			return deleteDeploymentByTarget(context.Background(), name, version)
+		Delete: func(_ context.Context, name, version string, force bool) error {
+			return deleteDeploymentByTarget(context.Background(), name, version, force)
 		},
 		ListFunc: func(_ context.Context) ([]any, error) {
 			return listDeploymentAny(context.Background())

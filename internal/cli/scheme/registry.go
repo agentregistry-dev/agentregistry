@@ -14,7 +14,13 @@ type ListFunc func(context.Context) ([]any, error)
 type RowFunc func(any) []string
 type ToYAMLFunc func(any) any
 type GetFunc func(ctx context.Context, name, version string) (any, error)
-type DeleteFunc func(ctx context.Context, name, version string) error
+
+// DeleteFunc deletes a single (name, version) of the kind. force=true
+// asks the server to skip its PostDelete reconciliation hook (e.g.
+// provider teardown for Deployment); kinds that don't honor force
+// should ignore the flag. The CLI's `arctl delete --force` plumbs
+// through here.
+type DeleteFunc func(ctx context.Context, name, version string, force bool) error
 
 type Kind struct {
 	Kind       string

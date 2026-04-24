@@ -35,11 +35,13 @@ func getItem(k *scheme.Kind, name string) (any, error) {
 }
 
 // deleteItem deletes a single item by (name, version) for the given kind.
-func deleteItem(k *scheme.Kind, name, version string) error {
+// force=true asks the server to skip its PostDelete reconciliation hook
+// (e.g. provider teardown for Deployment).
+func deleteItem(k *scheme.Kind, name, version string, force bool) error {
 	if k.Delete == nil {
 		return fmt.Errorf("delete not supported for kind %q", k.Kind)
 	}
-	return k.Delete(context.Background(), name, version)
+	return k.Delete(context.Background(), name, version, force)
 }
 
 // tableRow returns a []string row for the given item, matching the TableColumns
