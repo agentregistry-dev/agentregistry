@@ -176,5 +176,6 @@ func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stor
 		Resolver:                resolver,
 		RegistryValidator:       registryValidator,
 		UniqueRemoteURLsChecker: uniqueRemoteURLs,
+		Authorizers:             perKind.Authorizers,
 	})
 }

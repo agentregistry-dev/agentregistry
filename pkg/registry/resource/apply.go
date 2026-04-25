@@ -36,6 +36,19 @@ type ApplyConfig struct {
 	// Scheme decodes the incoming YAML/JSON stream. Defaults to
 	// v1alpha1.Default when nil.
 	Scheme *v1alpha1.Scheme
+	// Authorizers, when non-empty, gates each decoded document on apply
+	// against the same per-kind hook the generic resource handler
+	// consults at PUT /v0/{plural}/{name}/{version}. Without this,
+	// /v0/apply (the multi-doc batch endpoint arctl uses) bypasses the
+	// per-kind authz wired through builtins.PerKindHooks. Missing keys
+	// authorize-allow (matches resource.Config.Authorize == nil).
+	//
+	// Each document gets its own AuthorizeInput (Verb="apply", Kind +
+	// Name + Version + Namespace from the decoded metadata) so the
+	// caller can deny per-resource. Errors fail the document; the rest
+	// of the batch continues — same per-doc isolation the upsert path
+	// already has.
+	Authorizers map[string]func(ctx context.Context, in AuthorizeInput) error
 }
 
 // applyInput receives a raw multi-doc YAML stream. RawBody keeps bytes
@@ -242,6 +255,21 @@ func prepareApplyDoc(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object) 
 		meta.Namespace = v1alpha1.DefaultNamespace
 		obj.SetMetadata(*meta)
 		pd.Result.Namespace = meta.Namespace
+	}
+
+	// Per-kind authz fires before validation so a denied apply doesn't
+	// leak validation errors back to the caller. Same semantics as the
+	// resource handler's PUT path.
+	if authz := cfg.Authorizers[kind]; authz != nil {
+		if err := authz(ctx, AuthorizeInput{
+			Verb: "apply", Kind: kind,
+			Namespace: meta.Namespace, Name: meta.Name, Version: meta.Version,
+			Object: obj,
+		}); err != nil {
+			pd.Result.Status = arv0.ApplyStatusFailed
+			pd.Result.Error = "forbidden: " + err.Error()
+			return pd
+		}
 	}
 
 	if err := v1alpha1.ValidateObject(obj); err != nil {
