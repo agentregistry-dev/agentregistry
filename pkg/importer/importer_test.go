@@ -33,11 +33,11 @@ func newTestImporter(t *testing.T, extra ...Scanner) (*Importer, *v1alpha1store.
 
 	agents := v1alpha1store.NewStore(pool, agentsTable)
 	stores := map[string]*v1alpha1store.Store{
-		v1alpha1.KindAgent:     agents,
-		v1alpha1.KindMCPServer: v1alpha1store.NewStore(pool, mcpTable),
-		v1alpha1.KindSkill:     v1alpha1store.NewStore(pool, skillsTable),
-		v1alpha1.KindPrompt:    v1alpha1store.NewStore(pool, promptsTable),
-		v1alpha1.KindProvider:  v1alpha1store.NewStore(pool, provTable),
+		v1alpha1.KindAgent:      agents,
+		v1alpha1.KindMCPServer:  v1alpha1store.NewStore(pool, mcpTable),
+		v1alpha1.KindSkill:      v1alpha1store.NewStore(pool, skillsTable),
+		v1alpha1.KindPrompt:     v1alpha1store.NewStore(pool, promptsTable),
+		v1alpha1.KindProvider:   v1alpha1store.NewStore(pool, provTable),
 		v1alpha1.KindDeployment: v1alpha1store.NewStore(pool, deployTable),
 	}
 	findings := NewFindingsStore(pool)
@@ -186,17 +186,17 @@ spec:
 // fakeScanner produces deterministic output so we can assert merges
 // end-to-end without network dependencies.
 type fakeScanner struct {
-	name       string
-	supports   bool
-	returnErr  error
-	annos      map[string]string
-	labels     map[string]string
-	findings   []Finding
-	callCount  int
+	name      string
+	supports  bool
+	returnErr error
+	annos     map[string]string
+	labels    map[string]string
+	findings  []Finding
+	callCount int
 }
 
-func (f *fakeScanner) Name() string                         { return f.name }
-func (f *fakeScanner) Supports(obj v1alpha1.Object) bool    { return f.supports }
+func (f *fakeScanner) Name() string                      { return f.name }
+func (f *fakeScanner) Supports(obj v1alpha1.Object) bool { return f.supports }
 func (f *fakeScanner) Scan(ctx context.Context, obj v1alpha1.Object) (ScanResult, error) {
 	f.callCount++
 	if f.returnErr != nil {

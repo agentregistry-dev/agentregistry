@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestMCPListServers_HappyPath(t *testing.T) {

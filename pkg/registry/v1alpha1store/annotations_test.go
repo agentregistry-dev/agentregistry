@@ -17,7 +17,7 @@ func TestV1Alpha1Store_AnnotationsRoundTrip(t *testing.T) {
 	ctx := context.Background()
 
 	annotations := map[string]string{
-		"security.agentregistry.solo.io/osv-status": "clean",
+		"security.agentregistry.solo.io/osv-status":    "clean",
 		"internal.agentregistry.solo.io/import-source": "builtin-seed",
 	}
 	_, err := store.Upsert(ctx, testNS, "ann", "v1",

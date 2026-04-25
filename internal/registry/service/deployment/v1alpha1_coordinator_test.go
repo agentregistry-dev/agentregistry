@@ -10,11 +10,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/noop"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
-	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // seedV1Alpha1Fixtures creates a MCPServer + Provider + Deployment row set
