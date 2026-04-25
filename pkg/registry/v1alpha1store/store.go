@@ -125,11 +125,17 @@ type ListOpts struct {
 	ExtraArgs []any
 }
 
+// listCursor is the opaque pagination position for List. The fields
+// mirror the (namespace, name, version, updated_at) sort order used by
+// the underlying query. UpdatedAt rides along as a tiebreaker only —
+// (namespace, name, version) is already unique per table, so it never
+// actually disambiguates rows; it's preserved for symmetry with the
+// SQL predicate so encoding/decoding stay round-trip stable.
 type listCursor struct {
-	UpdatedAt time.Time `json:"updatedAt"`
 	Namespace string    `json:"namespace"`
 	Name      string    `json:"name"`
 	Version   string    `json:"version"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // UpsertOpts carries optional metadata on Upsert. All three maps/slices
@@ -570,9 +576,14 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 		if err != nil {
 			return nil, "", err
 		}
-		args = append(args, cursor.UpdatedAt, cursor.Namespace, cursor.Name, cursor.Version)
+		// Order by stable identity (namespace, name, version) first so a
+		// row's updated_at changing under a concurrent PatchStatus does
+		// not let it skip across pages. (namespace, name, version) is
+		// unique per table, so updated_at as the trailing tiebreaker is
+		// belt-and-braces.
+		args = append(args, cursor.Namespace, cursor.Name, cursor.Version, cursor.UpdatedAt)
 		where = append(where, fmt.Sprintf(
-			"(updated_at, namespace, name, version) < ($%d, $%d, $%d, $%d)",
+			"(namespace, name, version, updated_at) > ($%d, $%d, $%d, $%d)",
 			len(args)-3, len(args)-2, len(args)-1, len(args),
 		))
 	}
@@ -598,7 +609,7 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
 	args = append(args, limit+1)
-	query += fmt.Sprintf(" ORDER BY updated_at DESC, namespace DESC, name DESC, version DESC LIMIT $%d", len(args))
+	query += fmt.Sprintf(" ORDER BY namespace, name, version, updated_at LIMIT $%d", len(args))
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {

@@ -429,6 +429,56 @@ func TestV1Alpha1Store_ListRejectsInvalidCursor(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalidCursor)
 }
 
+// TestV1Alpha1Store_ListCursorStableUnderStatusChurn exercises the
+// reason List orders by (namespace, name, version, updated_at) ASC
+// rather than updated_at DESC: a row whose updated_at moves under a
+// concurrent PatchStatus must not jump pages or get returned twice.
+//
+// Setup: 4 rows, page size 2 → first page returns rows 1+2.
+// Mid-flight: row 1 (already returned on page 1) gets a status patch
+// that bumps its updated_at past every other row's. With identity-first
+// ordering, page 2 still returns rows 3+4 in order — the churned row
+// is anchored by (namespace, name, version) which never changes.
+func TestV1Alpha1Store_ListCursorStableUnderStatusChurn(t *testing.T) {
+	pool := NewV1Alpha1TestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	names := []string{"alpha", "beta", "gamma", "delta"} // lexical order: alpha, beta, delta, gamma
+	for _, n := range names {
+		_, err := store.Upsert(ctx, testNS, n, "v1", mustSpec(t, v1alpha1.AgentSpec{Title: n}), UpsertOpts{})
+		require.NoError(t, err)
+	}
+
+	page1, cursor, err := store.List(ctx, ListOpts{Limit: 2})
+	require.NoError(t, err)
+	require.Len(t, page1, 2)
+	require.Equal(t, "alpha", page1[0].Metadata.Name)
+	require.Equal(t, "beta", page1[1].Metadata.Name)
+
+	// Bump the first row's updated_at via PatchStatus — under the old
+	// updated_at-DESC ordering this row would float to the top of page 2
+	// (returned twice) or knock another row off (page 2 misses a row).
+	require.NoError(t, store.PatchStatus(ctx, testNS, "alpha", "v1", func(json.RawMessage) (json.RawMessage, error) {
+		return json.RawMessage(`{"observedGeneration":1}`), nil
+	}))
+
+	page2, cursor2, err := store.List(ctx, ListOpts{Limit: 2, Cursor: cursor})
+	require.NoError(t, err)
+	require.Empty(t, cursor2)
+	require.Len(t, page2, 2, "page2 must contain exactly the remaining rows")
+	require.Equal(t, "delta", page2[0].Metadata.Name, "identity ordering puts delta before gamma")
+	require.Equal(t, "gamma", page2[1].Metadata.Name)
+
+	seen := map[string]int{}
+	for _, obj := range append(page1, page2...) {
+		seen[obj.Metadata.Name]++
+	}
+	for _, n := range names {
+		require.Equal(t, 1, seen[n], "row %q must appear exactly once across pages", n)
+	}
+}
+
 func TestV1Alpha1Store_PatchAnnotationsPreservesExistingKeys(t *testing.T) {
 	pool := NewV1Alpha1TestPool(t)
 	store := NewStore(pool, testTable)
