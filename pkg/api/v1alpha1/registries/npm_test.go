@@ -2,6 +2,8 @@ package registries_test
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
@@ -9,6 +11,34 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestValidateNPM_RegistryBaseURLOverride locks in @josh-pritchard's
+// requested behavior: a non-canonical RegistryBaseURL must be honored
+// as a private-mirror override, not rejected. Used to bail with
+// "registry type and base URL do not match"; now the validator's HTTP
+// probe is routed to whatever URL the package supplied.
+func TestValidateNPM_RegistryBaseURLOverride(t *testing.T) {
+	const serverName = "io.example/private-server"
+	var probedPath string
+	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		probedPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"mcpName":"` + serverName + `"}`))
+	}))
+	defer mirror.Close()
+
+	err := registries.ValidateNPM(context.Background(),
+		v1alpha1.RegistryPackage{
+			RegistryType:    v1alpha1.RegistryTypeNPM,
+			Identifier:      "my-pkg",
+			Version:         "1.0.0",
+			RegistryBaseURL: mirror.URL,
+		},
+		serverName,
+	)
+	require.NoError(t, err, "non-canonical RegistryBaseURL must be honored as override")
+	require.Equal(t, "/my-pkg/1.0.0", probedPath, "validator must route HTTP probe to the override URL")
+}
 
 func TestValidateNPM_RealPackages(t *testing.T) {
 	ctx := context.Background()

@@ -26,9 +26,11 @@ type PyPIPackageResponse struct {
 
 // ValidatePyPI validates that a PyPI package contains the correct MCP server name
 func ValidatePyPI(ctx context.Context, pkg v1alpha1.RegistryPackage, serverName string) error {
-	// Set default registry base URL if empty
+	// RegistryBaseURL is honored as an override — empty falls back to
+	// the canonical default, non-empty drives the probe directly so
+	// private mirrors (devpi etc.) work without OSS patching.
 	if pkg.RegistryBaseURL == "" {
-		pkg.RegistryBaseURL = v1alpha1.RegistryURLPyPI
+		pkg.RegistryBaseURL = DefaultURLPyPI
 	}
 
 	if pkg.Identifier == "" {
@@ -42,12 +44,6 @@ func ValidatePyPI(ctx context.Context, pkg v1alpha1.RegistryPackage, serverName 
 	// Validate that MCPB-specific fields are not present
 	if pkg.FileSHA256 != "" {
 		return fmt.Errorf("PyPI packages must not have 'fileSha256' field - this is only for MCPB packages")
-	}
-
-	// Validate that the registry base URL matches PyPI exactly
-	if pkg.RegistryBaseURL != v1alpha1.RegistryURLPyPI {
-		return fmt.Errorf("registry type and base URL do not match: '%s' is not valid for registry type '%s'. Expected: %s",
-			pkg.RegistryBaseURL, v1alpha1.RegistryTypePyPI, v1alpha1.RegistryURLPyPI)
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}

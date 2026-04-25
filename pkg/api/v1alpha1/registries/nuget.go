@@ -19,9 +19,11 @@ var (
 
 // ValidateNuGet validates that a NuGet package contains the correct MCP server name
 func ValidateNuGet(ctx context.Context, pkg v1alpha1.RegistryPackage, serverName string) error {
-	// Set default registry base URL if empty
+	// RegistryBaseURL is honored as an override — empty falls back to
+	// the canonical default, non-empty drives the probe directly so
+	// private mirrors (Artifactory etc.) work without OSS patching.
 	if pkg.RegistryBaseURL == "" {
-		pkg.RegistryBaseURL = v1alpha1.RegistryURLNuGet
+		pkg.RegistryBaseURL = DefaultURLNuGet
 	}
 
 	if pkg.Identifier == "" {
@@ -31,12 +33,6 @@ func ValidateNuGet(ctx context.Context, pkg v1alpha1.RegistryPackage, serverName
 	// Validate that MCPB-specific fields are not present
 	if pkg.FileSHA256 != "" {
 		return fmt.Errorf("NuGet packages must not have 'fileSha256' field - this is only for MCPB packages")
-	}
-
-	// Validate that the registry base URL matches NuGet exactly
-	if pkg.RegistryBaseURL != v1alpha1.RegistryURLNuGet {
-		return fmt.Errorf("registry type and base URL do not match: '%s' is not valid for registry type '%s'. Expected: %s",
-			pkg.RegistryBaseURL, v1alpha1.RegistryTypeNuGet, v1alpha1.RegistryURLNuGet)
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}

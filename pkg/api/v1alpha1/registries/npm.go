@@ -24,9 +24,11 @@ type NPMPackageResponse struct {
 
 // ValidateNPM validates that an NPM package contains the correct MCP server name
 func ValidateNPM(ctx context.Context, pkg v1alpha1.RegistryPackage, serverName string) error {
-	// Set default registry base URL if empty
+	// RegistryBaseURL is honored as an override — empty falls back to
+	// the canonical default, non-empty drives the probe directly so
+	// private mirrors (Verdaccio etc.) work without OSS patching.
 	if pkg.RegistryBaseURL == "" {
-		pkg.RegistryBaseURL = v1alpha1.RegistryURLNPM
+		pkg.RegistryBaseURL = DefaultURLNPM
 	}
 
 	if pkg.Identifier == "" {
@@ -44,12 +46,6 @@ func ValidateNPM(ctx context.Context, pkg v1alpha1.RegistryPackage, serverName s
 	// Validate that MCPB-specific fields are not present
 	if pkg.FileSHA256 != "" {
 		return fmt.Errorf("NPM packages must not have 'fileSha256' field")
-	}
-
-	// Validate that the registry base URL matches NPM exactly
-	if pkg.RegistryBaseURL != v1alpha1.RegistryURLNPM {
-		return fmt.Errorf("registry type and base URL do not match: '%s' is not valid for registry type '%s'. Expected: %s",
-			pkg.RegistryBaseURL, v1alpha1.RegistryTypeNPM, v1alpha1.RegistryURLNPM)
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}

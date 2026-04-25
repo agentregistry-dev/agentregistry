@@ -17,16 +17,6 @@ const (
 	RegistryTypeMCPB  = "mcpb"
 )
 
-// Canonical public registry base URLs the validators check
-// RegistryBaseURL against when the field is set explicitly.
-const (
-	RegistryURLNPM    = "https://registry.npmjs.org"
-	RegistryURLPyPI   = "https://pypi.org"
-	RegistryURLNuGet  = "https://api.nuget.org"
-	RegistryURLGitHub = "https://github.com"
-	RegistryURLGitLab = "https://gitlab.com"
-)
-
 // RegistryPackage is the minimal package view a registry validator
 // consumes. AgentPackage, SkillPackage, and MCPPackage each expose
 // these fields; the per-kind ValidateRegistries method converts its

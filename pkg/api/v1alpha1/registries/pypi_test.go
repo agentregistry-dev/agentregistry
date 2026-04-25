@@ -2,6 +2,8 @@ package registries_test
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -10,6 +12,33 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestValidatePyPI_RegistryBaseURLOverride mirrors the NPM override
+// test for PyPI. A package supplying its own RegistryBaseURL routes
+// the JSON-API probe to that mirror without the validator rejecting
+// it for being non-canonical.
+func TestValidatePyPI_RegistryBaseURLOverride(t *testing.T) {
+	const serverName = "io.example/private-server"
+	var probedPath string
+	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		probedPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"info":{"description":"# README\n\nmcp-name: ` + serverName + `\n"}}`))
+	}))
+	defer mirror.Close()
+
+	err := registries.ValidatePyPI(context.Background(),
+		v1alpha1.RegistryPackage{
+			RegistryType:    v1alpha1.RegistryTypePyPI,
+			Identifier:      "my-pkg",
+			Version:         "1.0.0",
+			RegistryBaseURL: mirror.URL,
+		},
+		serverName,
+	)
+	require.NoError(t, err, "non-canonical RegistryBaseURL must be honored as override")
+	require.Equal(t, "/pypi/my-pkg/1.0.0/json", probedPath, "validator must route HTTP probe to the override URL")
+}
 
 func TestValidatePyPI_RealPackages(t *testing.T) {
 	ctx := context.Background()

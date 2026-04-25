@@ -2,6 +2,8 @@ package registries_test
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
@@ -9,6 +11,33 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestValidateNuGet_RegistryBaseURLOverride mirrors the NPM/PyPI
+// override tests. A package supplying its own RegistryBaseURL routes
+// the README probe to that mirror — used to be rejected with
+// "registry type and base URL do not match", now accepted as the
+// private-feed override that operators want.
+func TestValidateNuGet_RegistryBaseURLOverride(t *testing.T) {
+	const serverName = "io.example/private-server"
+	var probedPath string
+	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		probedPath = r.URL.Path
+		_, _ = w.Write([]byte("# README\n\nmcp-name: " + serverName + "\n"))
+	}))
+	defer mirror.Close()
+
+	err := registries.ValidateNuGet(context.Background(),
+		v1alpha1.RegistryPackage{
+			RegistryType:    v1alpha1.RegistryTypeNuGet,
+			Identifier:      "my-pkg",
+			Version:         "1.0.0",
+			RegistryBaseURL: mirror.URL,
+		},
+		serverName,
+	)
+	require.NoError(t, err, "non-canonical RegistryBaseURL must be honored as override")
+	require.Equal(t, "/v3-flatcontainer/my-pkg/1.0.0/readme", probedPath, "validator must route HTTP probe to the override URL")
+}
 
 func TestValidateNuGet_RealPackages(t *testing.T) {
 	ctx := context.Background()
