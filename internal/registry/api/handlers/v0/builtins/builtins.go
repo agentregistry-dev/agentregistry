@@ -21,7 +21,8 @@ type DeploymentHooks struct {
 	PostUpsert func(ctx context.Context, deployment *v1alpha1.Deployment) error
 	// PostDelete runs after a Deployment DELETE sets DeletionTimestamp.
 	// Intended to call coordinator.Remove which tears down runtime
-	// resources + drops the adapter finalizer.
+	// resources + writes the terminal Removed condition. Row lifetime
+	// past this point belongs to the soft-delete + GC pass.
 	PostDelete func(ctx context.Context, deployment *v1alpha1.Deployment) error
 }
 

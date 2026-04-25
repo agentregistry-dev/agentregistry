@@ -71,9 +71,6 @@ func TestK8sV1Alpha1Apply_MCPServerTarget_CreatesResource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	if len(res.AddFinalizers) != 1 || res.AddFinalizers[0] != FinalizerName {
-		t.Fatalf("AddFinalizers = %+v, want [%q]", res.AddFinalizers, FinalizerName)
-	}
 	var progressing *v1alpha1.Condition
 	for i := range res.Conditions {
 		if res.Conditions[i].Type == "Progressing" {
@@ -120,7 +117,7 @@ func TestK8sV1Alpha1Remove_DeletesResourcesByDeploymentID(t *testing.T) {
 		Spec:     v1alpha1.ProviderSpec{Platform: v1alpha1.PlatformKubernetes, Config: map[string]any{"namespace": "kagent"}},
 	}
 	deployment := &v1alpha1.Deployment{
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: deploymentID, Version: "1", Generation: 5, Finalizers: []string{FinalizerName}},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: deploymentID, Version: "1", Generation: 5},
 	}
 
 	res, err := adapter.Remove(context.Background(), adapterpkgtypes.RemoveInput{
@@ -130,8 +127,8 @@ func TestK8sV1Alpha1Remove_DeletesResourcesByDeploymentID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
-	if len(res.RemoveFinalizers) != 1 || res.RemoveFinalizers[0] != FinalizerName {
-		t.Fatalf("RemoveFinalizers = %+v", res.RemoveFinalizers)
+	if len(res.Conditions) == 0 {
+		t.Fatalf("expected at least one condition; got %+v", res.Conditions)
 	}
 
 	// Both seed resources should be gone.

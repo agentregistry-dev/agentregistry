@@ -9,8 +9,9 @@
 //     the expected Apply/Remove/Logs/Discover shape end-to-end
 //
 // Apply immediately writes Conditions = {Ready=True, Reason="NoopComplete"}
-// and adds the "noop.agentregistry.solo.io/cleanup" finalizer. Remove
-// drops the finalizer and flips Ready=False.
+// and a Removed=False annotation timestamp. Remove flips Ready=False with
+// Reason="NoopRemoved". Row lifetime is governed by the soft-delete + GC
+// path; the adapter contributes no finalizer tokens.
 package noop
 
 import (
@@ -21,10 +22,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
-const (
-	Platform      = "noop"
-	FinalizerName = "noop.agentregistry.solo.io/cleanup"
-)
+const Platform = "noop"
 
 // Adapter implements types.DeploymentAdapter with no side effects beyond
 // status reporting. Safe to register in test harnesses; intentionally
@@ -68,11 +66,11 @@ func (a *Adapter) Apply(ctx context.Context, in types.ApplyInput) (*types.ApplyR
 		ProviderMetadata: map[string]string{
 			"platforms.agentregistry.solo.io/noop/applied-at": now.Format(time.RFC3339),
 		},
-		AddFinalizers: []string{FinalizerName},
 	}, nil
 }
 
-// Remove drops the finalizer and reports Ready=False.
+// Remove reports Ready=False once teardown completes; row lifetime is
+// owned by the soft-delete + GC path, not by adapter-returned tokens.
 func (a *Adapter) Remove(ctx context.Context, in types.RemoveInput) (*types.RemoveResult, error) {
 	now := time.Now().UTC()
 	return &types.RemoveResult{
@@ -86,7 +84,6 @@ func (a *Adapter) Remove(ctx context.Context, in types.RemoveInput) (*types.Remo
 				ObservedGeneration: in.Deployment.Metadata.Generation,
 			},
 		},
-		RemoveFinalizers: []string{FinalizerName},
 	}, nil
 }
 

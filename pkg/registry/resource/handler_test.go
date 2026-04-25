@@ -466,53 +466,37 @@ func TestResourceRegister_UniqueRemoteURLsPerKind(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 }
 
-func TestResourceRegister_SoftDeleteFinalizerGC(t *testing.T) {
+func TestResourceRegister_SoftDeleteAndPurge(t *testing.T) {
 	pool := v1alpha1store.NewV1Alpha1TestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
 
-	// Create the row via the wire, then set a finalizer through the
-	// Store — finalizers are internal-only now, so HTTP clients can't
-	// seed them; only reconcilers/adapters do, and they own the Store.
+	// Create the row via the wire.
 	body := v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "fin", Version: "v1"},
-		Spec:     v1alpha1.AgentSpec{Title: "Fin"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "soft", Version: "v1"},
+		Spec:     v1alpha1.AgentSpec{Title: "Soft"},
 	}
-	resp := api.Put("/v0/agents/fin/v1", body)
+	resp := api.Put("/v0/agents/soft/v1", body)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
-	require.NoError(t, store.PatchFinalizers(t.Context(), "default", "fin", "v1",
-		func([]string) []string { return []string{"cleanup.agentregistry.dev/local-deploy"} }))
-
-	// DELETE sets deletionTimestamp; row remains because finalizers is non-empty.
-	resp = api.Delete("/v0/agents/fin/v1")
+	// DELETE sets deletionTimestamp; row remains until GC.
+	resp = api.Delete("/v0/agents/soft/v1")
 	require.Equal(t, http.StatusNoContent, resp.Code)
 
-	// Row is still fetchable with deletionTimestamp set. Finalizers are
-	// hidden from the wire, so assert them via the Store side.
-	resp = api.Get("/v0/agents/fin/v1")
+	// Row is still fetchable with deletionTimestamp set.
+	resp = api.Get("/v0/agents/soft/v1")
 	require.Equal(t, http.StatusOK, resp.Code)
 	var gotAgent v1alpha1.Agent
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
 	require.NotNil(t, gotAgent.Metadata.DeletionTimestamp)
-	row, err := store.Get(t.Context(), "default", "fin", "v1")
-	require.NoError(t, err)
-	require.Len(t, row.Metadata.Finalizers, 1)
 
-	// GC before finalizer drained: no-op.
+	// PurgeFinalized hard-deletes terminating rows (the public API has
+	// no finalizer surface anymore — every soft-deleted row is GC-eligible
+	// once it lands in `finalizers = '[]'`, which is the default).
 	purged, err := store.PurgeFinalized(t.Context())
-	require.NoError(t, err)
-	require.EqualValues(t, 0, purged)
-
-	// Drain the finalizer via Store.PatchFinalizers (reconciler's path).
-	err = store.PatchFinalizers(t.Context(), "default", "fin", "v1", func(f []string) []string { return nil })
-	require.NoError(t, err)
-
-	// GC now hard-deletes the row.
-	purged, err = store.PurgeFinalized(t.Context())
 	require.NoError(t, err)
 	require.EqualValues(t, 1, purged)
 

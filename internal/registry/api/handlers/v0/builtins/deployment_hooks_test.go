@@ -81,16 +81,14 @@ func TestDeploymentPut_TriggersAdapterApply(t *testing.T) {
 	resp := api.Put("/v0/deployments/weather-noop/1", body)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
-	// Response should reflect the PostUpsert status writes. Finalizers
-	// are internal-only — check them at the Store, not the wire.
+	// Response should reflect the PostUpsert status writes.
 	var got v1alpha1.Deployment
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
 	require.NotEmpty(t, got.Status.Conditions, "expected status conditions from coordinator.Apply")
 
-	// Row in DB: coordinator's adapter finalizer persisted.
+	// Row in DB: status JSONB carries the Ready condition.
 	raw, err := stores[v1alpha1.KindDeployment].Get(t.Context(), "default", "weather-noop", "1")
 	require.NoError(t, err)
-	require.Contains(t, raw.Metadata.Finalizers, noop.FinalizerName, "expected coordinator to add adapter finalizer")
 	// RawObject.Status is opaque bytes at the envelope layer; decode
 	// with the Status storage codec to inspect conditions.
 	var status v1alpha1.Status
@@ -103,7 +101,6 @@ func TestDeploymentPut_TriggersAdapterApply(t *testing.T) {
 func TestDeploymentDelete_TriggersAdapterRemove(t *testing.T) {
 	api, stores := seedDeploymentFixtures(t)
 
-	// Seed by PUT so finalizers land.
 	body := v1alpha1.Deployment{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop", Version: "1"},
@@ -119,12 +116,12 @@ func TestDeploymentDelete_TriggersAdapterRemove(t *testing.T) {
 	delResp := api.Delete("/v0/deployments/weather-noop/1")
 	require.Equal(t, http.StatusNoContent, delResp.Code, delResp.Body.String())
 
-	// Row should be soft-deleted (DeletionTimestamp set) and the adapter
-	// finalizer should have been dropped by the coordinator.Remove hook.
+	// Row should be soft-deleted (DeletionTimestamp set). Row lifetime
+	// past this point belongs to the GC pass; the adapter Remove hook
+	// just contributes the Removed condition.
 	raw, err := stores[v1alpha1.KindDeployment].Get(t.Context(), "default", "weather-noop", "1")
 	require.NoError(t, err)
 	require.NotNil(t, raw.Metadata.DeletionTimestamp, "row must be soft-deleted")
-	require.NotContains(t, raw.Metadata.Finalizers, noop.FinalizerName, "coordinator.Remove should drop adapter finalizer")
 }
 
 func TestDeploymentLogs_EmptyForNoopAdapter(t *testing.T) {

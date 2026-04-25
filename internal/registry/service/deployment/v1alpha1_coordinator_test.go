@@ -60,7 +60,7 @@ func seedV1Alpha1Fixtures(t *testing.T) (map[string]*v1alpha1store.Store, *v1alp
 	return stores, deployment
 }
 
-func TestV1Alpha1Coordinator_ApplyWritesConditionsAndFinalizer(t *testing.T) {
+func TestV1Alpha1Coordinator_ApplyWritesConditionsAndAnnotations(t *testing.T) {
 	stores, deployment := seedV1Alpha1Fixtures(t)
 	ctx := context.Background()
 
@@ -80,7 +80,6 @@ func TestV1Alpha1Coordinator_ApplyWritesConditionsAndFinalizer(t *testing.T) {
 	var status v1alpha1.Status
 	require.NoError(t, v1alpha1.UnmarshalStatusFromStorage(raw.Status, &status))
 	require.NotNil(t, status.GetCondition("Ready"), "noop adapter should have written Ready condition")
-	require.Contains(t, raw.Metadata.Finalizers, noop.FinalizerName)
 	require.Contains(t, raw.Metadata.Annotations, "platforms.agentregistry.solo.io/noop/applied-at")
 	require.Equal(t, deployment.Metadata.Generation, status.ObservedGeneration)
 }
@@ -109,7 +108,7 @@ func TestV1Alpha1Coordinator_ApplyPreservesExistingAnnotations(t *testing.T) {
 	require.Contains(t, raw.Metadata.Annotations, "platforms.agentregistry.solo.io/noop/applied-at")
 }
 
-func TestV1Alpha1Coordinator_RemoveClearsFinalizer(t *testing.T) {
+func TestV1Alpha1Coordinator_RemoveWritesRemovedCondition(t *testing.T) {
 	stores, deployment := seedV1Alpha1Fixtures(t)
 	ctx := context.Background()
 
@@ -124,7 +123,6 @@ func TestV1Alpha1Coordinator_RemoveClearsFinalizer(t *testing.T) {
 
 	raw, err := stores[v1alpha1.KindDeployment].Get(ctx, "default", "weather-noop", "1")
 	require.NoError(t, err)
-	require.NotContains(t, raw.Metadata.Finalizers, noop.FinalizerName, "Remove should drop adapter finalizer")
 	var status v1alpha1.Status
 	require.NoError(t, v1alpha1.UnmarshalStatusFromStorage(raw.Status, &status))
 	ready := status.GetCondition("Ready")

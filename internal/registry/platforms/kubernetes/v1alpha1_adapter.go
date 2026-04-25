@@ -13,11 +13,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
-// FinalizerName is the token the kubernetes adapter pins on every
-// Deployment it owns. Remove drops the same token once kagent/kmcp
-// resources have been deleted so PurgeFinalized can hard-delete the row.
-const FinalizerName = "kubernetes.agentregistry.solo.io/cleanup"
-
 // SupportedTargetKinds reports the v1alpha1 Kinds this adapter can
 // deploy: Agent and MCPServer.
 func (a *kubernetesDeploymentAdapter) SupportedTargetKinds() []string {
@@ -68,7 +63,6 @@ func (a *kubernetesDeploymentAdapter) Apply(ctx context.Context, in types.ApplyI
 			LastTransitionTime: now,
 			ObservedGeneration: gen,
 		}},
-		AddFinalizers: []string{FinalizerName},
 	}, nil
 }
 
@@ -101,7 +95,6 @@ func (a *kubernetesDeploymentAdapter) Remove(ctx context.Context, in types.Remov
 			LastTransitionTime: now,
 			ObservedGeneration: gen,
 		}},
-		RemoveFinalizers: []string{FinalizerName},
 	}, nil
 }
 

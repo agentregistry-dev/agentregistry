@@ -157,9 +157,6 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 	}
 
 	upsertOpts := v1alpha1store.UpsertOpts{Labels: meta.Labels}
-	if meta.Finalizers != nil {
-		upsertOpts.Finalizers = meta.Finalizers
-	}
 	if meta.Annotations != nil {
 		upsertOpts.Annotations = meta.Annotations
 	}
@@ -167,7 +164,7 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 	if err != nil {
 		res.Status = arv0.ApplyStatusFailed
 		if errors.Is(err, v1alpha1store.ErrTerminating) {
-			res.Error = fmt.Sprintf("object %s/%s/%s is terminating; wait for finalizers to drain",
+			res.Error = fmt.Sprintf("object %s/%s/%s is terminating; delete + re-apply once GC purges the row",
 				meta.Namespace, meta.Name, meta.Version)
 		} else {
 			res.Error = "upsert: " + err.Error()

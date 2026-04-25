@@ -84,14 +84,6 @@ func TestValidateObjectMeta_RejectsBadLabelKey(t *testing.T) {
 	require.NotEmpty(t, errs)
 }
 
-func TestValidateObjectMeta_RejectsBadFinalizer(t *testing.T) {
-	errs := ValidateObjectMeta(ObjectMeta{
-		Namespace: "default", Name: "x", Version: "v1",
-		Finalizers: []string{"", "has spaces"},
-	})
-	require.Len(t, errs, 2)
-}
-
 // -----------------------------------------------------------------------------
 // AgentSpec
 // -----------------------------------------------------------------------------

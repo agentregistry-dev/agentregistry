@@ -38,21 +38,20 @@ func TestAdapter_ApplyReportsReady(t *testing.T) {
 	require.Equal(t, v1alpha1.ConditionTrue, ready.Status)
 	require.EqualValues(t, 3, ready.ObservedGeneration)
 
-	// Finalizer added.
-	require.Equal(t, []string{FinalizerName}, res.AddFinalizers)
-
 	// ProviderMetadata has the applied-at stamp.
 	require.Contains(t, res.ProviderMetadata, "platforms.agentregistry.solo.io/noop/applied-at")
 }
 
-func TestAdapter_RemoveDropsFinalizer(t *testing.T) {
+// TestAdapter_RemoveReportsRemovedCondition replaces the prior
+// "drops finalizer" assertion: row lifetime is now owned by soft-delete
+// + GC, so Remove only contributes the Conditions update.
+func TestAdapter_RemoveReportsRemovedCondition(t *testing.T) {
 	a := New()
 	dep := &v1alpha1.Deployment{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "d", Version: "v1", Generation: 3},
 	}
 	res, err := a.Remove(context.Background(), types.RemoveInput{Deployment: dep})
 	require.NoError(t, err)
-	require.Equal(t, []string{FinalizerName}, res.RemoveFinalizers)
 	require.Equal(t, v1alpha1.ConditionFalse, res.Conditions[0].Status)
 	require.Equal(t, "Removed", res.Conditions[0].Reason)
 }

@@ -78,7 +78,7 @@ type Config struct {
 	// after a successful Upsert + read-back so the kind can drive
 	// post-persist reconciliation. Deployment uses this to call
 	// V1Alpha1Coordinator.Apply, which dispatches to the platform
-	// adapter and patches status + finalizers.
+	// adapter and patches status.
 	//
 	// Hook errors surface as 500 — the row is already persisted, so a
 	// failure here indicates degraded state the caller should retry.
@@ -86,10 +86,10 @@ type Config struct {
 
 	// PostDelete is optional; when set, the delete handler invokes it
 	// after Store.Delete (which sets DeletionTimestamp). The row still
-	// exists at this point — finalizers keep it around. Deployment uses
-	// this to call V1Alpha1Coordinator.Remove, which tears down runtime
-	// resources and drops its finalizer so PurgeFinalized GC can
-	// hard-delete the row.
+	// exists at this point — the soft-delete + GC pass owns hard
+	// removal. Deployment uses this hook to call
+	// V1Alpha1Coordinator.Remove, which tears down runtime resources
+	// and writes the terminal Removed condition.
 	PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 
 	// SemanticSearch is optional; when set, the list handlers honor
@@ -430,16 +430,13 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			return nil, huma.Error400BadRequest("marshal spec: " + err.Error())
 		}
 		upsertOpts := v1alpha1store.UpsertOpts{Labels: meta.Labels}
-		if meta.Finalizers != nil {
-			upsertOpts.Finalizers = meta.Finalizers
-		}
 		if meta.Annotations != nil {
 			upsertOpts.Annotations = meta.Annotations
 		}
 		if _, err := cfg.Store.Upsert(ctx, ns, name, version, specJSON, upsertOpts); err != nil {
 			if errors.Is(err, v1alpha1store.ErrTerminating) {
 				return nil, huma.Error409Conflict(
-					fmt.Sprintf("%s %s/%s/%s is terminating; wait for finalizers to drain or drop them via PatchFinalizers",
+					fmt.Sprintf("%s %s/%s/%s is terminating; delete + re-apply once GC purges the row",
 						kind, ns, name, version))
 			}
 			return nil, huma.Error500InternalServerError("upsert "+kind, err)
@@ -458,11 +455,12 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			if err := cfg.PostUpsert(ctx, obj); err != nil {
 				return nil, huma.Error500InternalServerError(kind+" post-upsert", err)
 			}
-			// Re-read so the response reflects any status/finalizer writes
-			// the post-upsert hook performed (e.g. Progressing condition,
-			// adapter finalizer). Failure to re-read leaves the hook
-			// changes invisible to the caller; degrade to the pre-hook
-			// view rather than fail the already-successful apply.
+			// Re-read so the response reflects any status / annotation
+			// writes the post-upsert hook performed (e.g. Progressing
+			// condition, adapter applied-at annotation). Failure to
+			// re-read leaves the hook changes invisible to the caller;
+			// degrade to the pre-hook view rather than fail the
+			// already-successful apply.
 			if refreshed, err := cfg.Store.Get(ctx, ns, name, version); err == nil {
 				if refreshedObj, err := v1alpha1.EnvelopeFromRaw(newObj, refreshed, kind); err == nil {
 					obj = refreshedObj
@@ -498,11 +496,11 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 				return nil, err
 			}
 		}
-		// Pre-read so PostDelete has the final spec + finalizer set to
-		// work with. Skipped when no hook is registered, when the
-		// caller asked for ?force=true (skip provider teardown — orphan
-		// records / unreachable backends), or when a missing row would
-		// surface as 404 via Store.Delete below.
+		// Pre-read so PostDelete has the final spec to work with.
+		// Skipped when no hook is registered, when the caller asked
+		// for ?force=true (skip provider teardown — orphan records /
+		// unreachable backends), or when a missing row would surface
+		// as 404 via Store.Delete below.
 		runHook := cfg.PostDelete != nil && !in.Force
 		var preDelete T
 		if runHook {

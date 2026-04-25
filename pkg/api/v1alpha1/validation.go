@@ -18,7 +18,6 @@ var (
 	ErrInvalidVersion      = errors.New("invalid version string")
 	ErrInvalidURL          = errors.New("invalid url")
 	ErrInvalidLabel        = errors.New("invalid label")
-	ErrInvalidFinalizer    = errors.New("invalid finalizer")
 	ErrInvalidRef          = errors.New("invalid resource reference")
 	ErrUnknownPlatform     = errors.New("unknown provider platform")
 	ErrInvalidDesiredState = errors.New("invalid deployment desired state")
@@ -102,9 +101,6 @@ var nameRegex = regexp.MustCompile(`^[a-zA-Z0-9]([-a-zA-Z0-9._/]{0,253}[a-zA-Z0-
 var labelKeyRegex = regexp.MustCompile(`^([a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?/)?[a-zA-Z0-9]([-a-zA-Z0-9._]{0,61}[a-zA-Z0-9])?$`)
 var labelValueRegex = regexp.MustCompile(`^([a-zA-Z0-9]([-a-zA-Z0-9._]{0,61}[a-zA-Z0-9])?)?$`)
 
-// finalizerRegex: mirrors label key format.
-var finalizerRegex = labelKeyRegex
-
 // versionRangeRegex: detects version strings that look like ranges or
 // wildcards rather than concrete versions. Pinned versions like "v1.2.3"
 // or "1.2.3-beta.1" must NOT match.
@@ -116,9 +112,9 @@ const maxVersionLen = 255
 // ObjectMeta validation — shared across every kind.
 // -----------------------------------------------------------------------------
 
-// ValidateObjectMeta checks the namespace/name/version format and label/
-// finalizer shape. Server-managed fields (Generation, CreatedAt,
-// UpdatedAt, DeletionTimestamp) are ignored.
+// ValidateObjectMeta checks the namespace/name/version format and label
+// shape. Server-managed fields (Generation, CreatedAt, UpdatedAt,
+// DeletionTimestamp) are ignored.
 func ValidateObjectMeta(m ObjectMeta) FieldErrors {
 	var errs FieldErrors
 
@@ -149,15 +145,6 @@ func ValidateObjectMeta(m ObjectMeta) FieldErrors {
 		}
 	}
 
-	for i, f := range m.Finalizers {
-		if f == "" {
-			errs.Append(fmt.Sprintf("metadata.finalizers[%d]", i), fmt.Errorf("%w", ErrRequiredField))
-			continue
-		}
-		if !finalizerRegex.MatchString(f) {
-			errs.Append(fmt.Sprintf("metadata.finalizers[%d]", i), fmt.Errorf("%w: %q", ErrInvalidFinalizer, f))
-		}
-	}
 	return errs
 }
 

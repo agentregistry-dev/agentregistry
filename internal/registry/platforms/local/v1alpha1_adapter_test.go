@@ -67,9 +67,6 @@ func TestV1Alpha1Apply_MCPServerTarget_WritesComposeAndMarksProgressing(t *testi
 	if composeUpCalls != 1 {
 		t.Fatalf("composeUp called %d times, want 1", composeUpCalls)
 	}
-	if len(res.AddFinalizers) != 1 || res.AddFinalizers[0] != FinalizerName {
-		t.Fatalf("AddFinalizers = %+v, want [%q]", res.AddFinalizers, FinalizerName)
-	}
 
 	var gotProgressing *v1alpha1.Condition
 	for i := range res.Conditions {
@@ -101,7 +98,7 @@ func TestV1Alpha1Apply_MCPServerTarget_WritesComposeAndMarksProgressing(t *testi
 	}
 }
 
-func TestV1Alpha1Remove_ClearsFinalizerAndCallsComposeDown(t *testing.T) {
+func TestV1Alpha1Remove_CallsComposeDown(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	originalUp := runLocalComposeUp
@@ -126,15 +123,14 @@ func TestV1Alpha1Remove_ClearsFinalizerAndCallsComposeDown(t *testing.T) {
 			Name:       "weather-local",
 			Version:    "1",
 			Generation: 3,
-			Finalizers: []string{FinalizerName},
 		},
 	}
 	res, err := adapter.Remove(context.Background(), types.RemoveInput{Deployment: deployment})
 	if err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
-	if len(res.RemoveFinalizers) != 1 || res.RemoveFinalizers[0] != FinalizerName {
-		t.Fatalf("RemoveFinalizers = %+v, want [%q]", res.RemoveFinalizers, FinalizerName)
+	if len(res.Conditions) == 0 || res.Conditions[0].Type != "Ready" {
+		t.Fatalf("expected Ready condition; got %+v", res.Conditions)
 	}
 	if downCalls != 1 {
 		t.Fatalf("composeDown calls = %d, want 1 (empty services post-remove should trigger down)", downCalls)

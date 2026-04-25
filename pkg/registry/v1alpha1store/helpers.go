@@ -88,12 +88,11 @@ func decodeRow(
 		}
 	}
 
-	var finalizers []string
-	if len(finalizersJSON) > 0 {
-		if err := json.Unmarshal(finalizersJSON, &finalizers); err != nil {
-			return nil, fmt.Errorf("decode finalizers: %w", err)
-		}
-	}
+	// finalizersJSON intentionally not parsed onto ObjectMeta — there
+	// is no public API for finalizers anymore. The DB column is kept
+	// for the orphan-reconciler follow-up; until then, scanRow leaves
+	// it inaccessible from Go callers.
+	_ = finalizersJSON
 
 	return &v1alpha1.RawObject{
 		Metadata: v1alpha1.ObjectMeta{
@@ -106,7 +105,6 @@ func decodeRow(
 			CreatedAt:         createdAt,
 			UpdatedAt:         updatedAt,
 			DeletionTimestamp: deletionTimestamp,
-			Finalizers:        finalizers,
 		},
 		Spec:   json.RawMessage(specJSON),
 		Status: json.RawMessage(statusJSON),

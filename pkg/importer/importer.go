@@ -342,9 +342,6 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 	}
 
 	upsertOpts := v1alpha1store.UpsertOpts{Labels: meta.Labels}
-	if meta.Finalizers != nil {
-		upsertOpts.Finalizers = meta.Finalizers
-	}
 	if meta.Annotations != nil {
 		upsertOpts.Annotations = meta.Annotations
 	}

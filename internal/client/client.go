@@ -291,7 +291,8 @@ type DeleteOpts struct {
 
 // Delete soft-deletes the (kind, namespace, name, version) row. Returns
 // ErrNotFound when the row doesn't exist. See Store.Delete for the
-// soft-delete + finalizer semantics.
+// soft-delete semantics (the row stays visible with DeletionTimestamp
+// set until the GC pass purges it).
 func (c *Client) Delete(ctx context.Context, kind, namespace, name, version string, opts ...DeleteOpts) error {
 	var force bool
 	if len(opts) > 0 {

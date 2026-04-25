@@ -21,16 +21,14 @@ import (
 //     row; reconciler observes NOTIFY.
 //  2. reconciler calls DeploymentAdapter.Apply with the resolved
 //     Target + Provider objects.
-//  3. Apply returns immediately with a Progressing condition and
-//     AddFinalizers = ["<platform>.agentregistry.solo.io/cleanup"].
-//     Adapter spawns its own watch loop to later PatchStatus with
-//     Ready=True when the workload converges.
-//  4. on Deployment delete, Store.Delete sets DeletionTimestamp; row
-//     stays because of the adapter finalizer.
-//  5. reconciler sees DeletionTimestamp, calls DeploymentAdapter.Remove;
-//     adapter tears down + returns RemoveFinalizers with its token.
-//  6. reconciler calls Store.PatchFinalizers; PurgeFinalized GC
-//     hard-deletes the row.
+//  3. Apply returns immediately with a Progressing condition. Adapter
+//     spawns its own watch loop to later PatchStatus with Ready=True
+//     when the workload converges.
+//  4. on Deployment delete, Store.Delete sets DeletionTimestamp; the
+//     reconciler calls DeploymentAdapter.Remove for external-state
+//     teardown. Row lifetime is owned by soft-delete + GC, not by
+//     adapter-returned tokens — Remove is purely an external-state
+//     hook.
 //
 // Apply is ALWAYS ASYNC. Apply returns quickly; convergence is tracked
 // via the adapter's own watch loop writing status. The reconciler
@@ -54,17 +52,16 @@ type DeploymentAdapter interface {
 	//
 	// Idempotent. Safe to call repeatedly with the same input.
 	// Returns the initial conditions to persist (typically
-	// Progressing=True) and any finalizers to add. The adapter's
-	// async watch loop later refines the conditions via PatchStatus.
+	// Progressing=True). The adapter's async watch loop later refines
+	// the conditions via PatchStatus.
 	Apply(ctx context.Context, in ApplyInput) (*ApplyResult, error)
 
 	// Remove tears down runtime resources. Called when:
 	//   - Deployment.Metadata.DeletionTimestamp != nil (soft-delete)
 	//   - Deployment.Spec.DesiredState == "undeployed"
-	// Idempotent: safe to call when nothing exists.
-	// Returns the finalizer tokens to drop once cleanup is complete;
-	// an adapter can return an empty RemoveFinalizers if its teardown
-	// is still in-progress and the reconciler should retry.
+	// Idempotent: safe to call when nothing exists. Row lifetime is
+	// owned by the soft-delete + GC path; the adapter only handles
+	// external-state teardown.
 	Remove(ctx context.Context, in RemoveInput) (*RemoveResult, error)
 
 	// Logs streams runtime logs from the deployed workload. The
@@ -110,7 +107,7 @@ type ApplyInput struct {
 	Getter v1alpha1.GetterFunc
 }
 
-// ApplyResult captures the status + finalizer deltas the reconciler
+// ApplyResult captures the status + annotation deltas the reconciler
 // should persist after Apply.
 type ApplyResult struct {
 	// Conditions to merge into Deployment.Status via
@@ -126,11 +123,6 @@ type ApplyResult struct {
 	// platforms.agentregistry.solo.io/<platform>/*). Callers marshal
 	// to string values since Annotations is map[string]string.
 	ProviderMetadata map[string]string
-
-	// AddFinalizers lists finalizer tokens the adapter wants added
-	// to the Deployment. Standard pattern:
-	// "<platform>.agentregistry.solo.io/cleanup".
-	AddFinalizers []string
 }
 
 // RemoveInput carries the Deployment being torn down plus its resolved
@@ -141,18 +133,15 @@ type RemoveInput struct {
 	Provider   *v1alpha1.Provider
 }
 
-// RemoveResult describes the outcome of a Remove call. If the adapter
-// still has cleanup pending it returns an empty RemoveFinalizers slice
-// (or omits it); the reconciler will retry on the next pass.
+// RemoveResult describes the outcome of a Remove call. The reconciler
+// merges Conditions into Deployment.Status; idempotent re-Remove on a
+// completed teardown is the expected pattern (no separate finalizer
+// drain — soft-delete + GC handle the lifetime).
 type RemoveResult struct {
 	// Conditions to merge into Deployment.Status (typically
 	// Progressing with Reason="Terminating", then Ready=False with
 	// Reason="Removed" on completion).
 	Conditions []v1alpha1.Condition
-
-	// RemoveFinalizers lists adapter-owned finalizer tokens to drop.
-	// Empty means teardown is still in-flight; keep trying.
-	RemoveFinalizers []string
 }
 
 // LogsInput selects a log stream for the deployed workload.

@@ -24,15 +24,12 @@ const DefaultNamespace = "default"
 // CreatedAt, UpdatedAt, and DeletionTimestamp are server-managed: the API
 // ignores them on apply and overwrites them on response.
 //
-// Generation and Finalizers are internal coordination primitives —
-// Generation drives reconciler convergence (paired with
-// Status.ObservedGeneration); Finalizers stage safe teardown for
-// reconcilers that need to clean up external state before a row is GC'd.
-// Both are populated from the database row and used by internal Go code
-// (coordinators, adapters, store helpers) but are NOT emitted on the
-// wire: the JSON tag is `-`, so OpenAPI schemas don't reveal them and
-// clients can't set them on apply. If we expose these to users in a
-// future release we'll relax the tags.
+// Generation is an internal coordination primitive — it drives
+// reconciler convergence (paired with Status.ObservedGeneration). It's
+// populated from the database row and used by internal Go code
+// (coordinators, status reconcilers) but is NOT emitted on the wire:
+// the JSON tag is `-`, so OpenAPI schemas don't reveal it and clients
+// can't set it on apply.
 //
 // (Namespace, Name, Version) together form the identity of a resource;
 // that triple is the composite primary key at the database level.
@@ -47,9 +44,12 @@ const DefaultNamespace = "default"
 //     state, tool metadata, etc. Not indexed; can carry larger payloads.
 //     Callers read annotations by key; the server never filters on them.
 //
-// DeletionTimestamp marks a row as terminating. The soft-delete +
-// finalizer mechanism runs entirely server-side; callers only observe
-// the terminating state via DeletionTimestamp.
+// DeletionTimestamp marks a row as terminating. Soft-delete is
+// server-side: a DELETE call sets DeletionTimestamp and the row is
+// later hard-deleted by the GC pass. There is no user-facing finalizer
+// API; the storage layer retains a `finalizers` column for a future
+// orphan-reconciler hook, but normal apply / delete flow does not
+// populate or drain it.
 type ObjectMeta struct {
 	Namespace   string            `json:"namespace,omitempty" yaml:"namespace,omitempty"`
 	Name        string            `json:"name" yaml:"name"`
@@ -65,16 +65,10 @@ type ObjectMeta struct {
 	UpdatedAt  time.Time `json:"updatedAt,omitzero" yaml:"updatedAt,omitempty"`
 
 	// DeletionTimestamp is set by the Store when Delete is called. A non-nil
-	// DeletionTimestamp means the object is terminating; callers may still
-	// observe it until the finalizer list drains server-side, then the row
-	// is hard-deleted by GC. Clients MUST NOT set this on apply.
+	// DeletionTimestamp means the object is terminating; the row stays
+	// observable via Get until the GC pass purges it. Clients MUST NOT
+	// set this on apply.
 	DeletionTimestamp *time.Time `json:"deletionTimestamp,omitempty" yaml:"deletionTimestamp,omitempty"`
-
-	// Finalizers are internal coordination tokens owned by reconcilers.
-	// Kept in the struct so internal code (coordinator, adapters) can read
-	// and mutate them, but hidden from the wire — callers can't set
-	// finalizers on apply and never see them in responses.
-	Finalizers []string `json:"-" yaml:"-"`
 }
 
 // objectMetaWire is the marshaling shape used by ObjectMeta.MarshalJSON.

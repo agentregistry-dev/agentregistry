@@ -141,18 +141,12 @@ type listCursor struct {
 // managed labels don't survive a user apply unless the apply handler
 // merges them in before calling Upsert.)
 //
-// Finalizers is the desired set of finalizer tokens on the row
-// post-apply; nil means "leave existing finalizers unchanged", while
-// an explicit empty slice means "clear all finalizers". Used by
-// reconcilers that own specific finalizer tokens across Upserts.
-//
 // Annotations is the desired set of annotation key/value pairs on the
 // row post-apply; nil means "leave existing annotations unchanged",
 // while an explicit empty map means "clear all annotations". Used by
 // controllers that add annotations out-of-band with user applies.
 type UpsertOpts struct {
 	Labels      map[string]string
-	Finalizers  []string
 	Annotations map[string]string
 }
 
@@ -160,7 +154,8 @@ type UpsertOpts struct {
 // update, generation bumps iff the marshaled spec bytes differ from what's
 // already stored; no-op re-applies preserve generation. Status is never
 // touched by this call — use PatchStatus for that. Finalizers are
-// preserved across Upserts unless opts.Finalizers is non-nil.
+// preserved across Upserts; mutate them via PatchFinalizers (the
+// orphan-reconciler seam — there's no public Upsert path for finalizers).
 //
 // After the row write, is_latest_version is recomputed across all rows
 // sharing this (namespace, name): the row with the highest semver wins
@@ -233,21 +228,17 @@ func (s *Store) Upsert(ctx context.Context, namespace, name, version string, spe
 		}
 		res.Generation = newGen
 
-		// Finalizer handling: if caller didn't specify, keep the existing
-		// set; otherwise use their explicit slice (which may be empty).
+		// Finalizers preserved verbatim from the existing row (or `[]`
+		// for new rows). The public Upsert API has no `Finalizers`
+		// option anymore — the column is retained for the future
+		// orphan-reconciler hook only. PatchFinalizers (still exported)
+		// is the sole way to mutate it.
 		finalizersJSON := oldFinalizersRaw
 		if !found {
 			finalizersJSON = []byte("[]")
 		}
-		if opts.Finalizers != nil {
-			f, err := json.Marshal(opts.Finalizers)
-			if err != nil {
-				return fmt.Errorf("marshal finalizers: %w", err)
-			}
-			finalizersJSON = f
-		}
 
-		// Annotation handling mirrors finalizers: nil preserves existing,
+		// Annotation handling: nil preserves existing,
 		// non-nil (including empty map) replaces.
 		annotationsJSON := oldAnnotationsRaw
 		if !found {

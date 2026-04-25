@@ -203,8 +203,13 @@ func TestV1Alpha1Store_UpsertRejectsTerminatingRow(t *testing.T) {
 
 	_, err := store.Upsert(ctx, testNS, "term", "v1",
 		mustSpec(t, v1alpha1.AgentSpec{}),
-		UpsertOpts{Finalizers: []string{"cleanup.example/thing"}})
+		UpsertOpts{})
 	require.NoError(t, err)
+
+	// Attach a finalizer out-of-band so soft-delete leaves the row pending
+	// drain. UpsertOpts has no Finalizers field anymore — that's the
+	// orphan-reconciler internal seam, not a public API.
+	require.NoError(t, store.PatchFinalizers(ctx, testNS, "term", "v1", func([]string) []string { return []string{"cleanup.example/thing"} }))
 
 	// Soft-delete: deletion_timestamp is set but the row survives pending
 	// finalizer drain.
@@ -242,27 +247,30 @@ func TestV1Alpha1Store_FinalizerGC(t *testing.T) {
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
-	_, err := store.Upsert(ctx, testNS, "fin", "v1", mustSpec(t, v1alpha1.AgentSpec{}), UpsertOpts{Finalizers: []string{"cleanup.example/thing"}})
+	_, err := store.Upsert(ctx, testNS, "fin", "v1", mustSpec(t, v1alpha1.AgentSpec{}), UpsertOpts{})
 	require.NoError(t, err)
 
-	obj, err := store.Get(ctx, testNS, "fin", "v1")
-	require.NoError(t, err)
-	require.Equal(t, []string{"cleanup.example/thing"}, obj.Metadata.Finalizers)
+	// Attach a finalizer via PatchFinalizers (the only public path now —
+	// UpsertOpts has no Finalizers field). PurgeFinalized respecting the
+	// finalizer is the behavior under test.
+	require.NoError(t, store.PatchFinalizers(ctx, testNS, "fin", "v1", func([]string) []string { return []string{"cleanup.example/thing"} }))
 
 	require.NoError(t, store.Delete(ctx, testNS, "fin", "v1"))
 
-	obj, err = store.Get(ctx, testNS, "fin", "v1")
+	obj, err := store.Get(ctx, testNS, "fin", "v1")
 	require.NoError(t, err)
 	require.NotNil(t, obj.Metadata.DeletionTimestamp)
-	require.Len(t, obj.Metadata.Finalizers, 1)
 
+	// First purge pass: row is soft-deleted but finalizer is non-empty,
+	// so PurgeFinalized must skip it.
 	n, err := store.PurgeFinalized(ctx)
 	require.NoError(t, err)
-	require.EqualValues(t, 0, n)
+	require.EqualValues(t, 0, n, "finalized purge must skip rows with non-empty finalizers")
 
 	err = store.PatchFinalizers(ctx, testNS, "fin", "v1", func(f []string) []string { return nil })
 	require.NoError(t, err)
 
+	// Second purge pass: finalizers drained, row should now be hard-deleted.
 	n, err = store.PurgeFinalized(ctx)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)

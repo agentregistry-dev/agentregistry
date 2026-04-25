@@ -19,13 +19,13 @@ import (
 // implementations. It is the synchronous counterpart to the Phase 2 KRT
 // reconciler — HTTP handlers call it directly after Store.Upsert to drive
 // adapter.Apply / adapter.Remove and thread the results back into the
-// Deployment row via PatchStatus + PatchFinalizers.
+// Deployment row via PatchStatus + annotation merges.
 //
 // Responsibilities:
 //  1. resolve TargetRef + ProviderRef via the supplied GetterFunc.
 //  2. dispatch to the adapter keyed by Provider.Spec.Platform.
-//  3. merge returned conditions into Deployment.Status and returned
-//     finalizer tokens into Deployment.Metadata.Finalizers.
+//  3. merge returned conditions into Deployment.Status and adapter-owned
+//     annotations into Deployment.Metadata.Annotations.
 //  4. surface a structured error when no adapter is registered for a
 //     provider's platform.
 //
@@ -81,7 +81,7 @@ func NewV1Alpha1Coordinator(deps V1Alpha1Dependencies) *V1Alpha1Coordinator {
 //  3. reject the apply if the adapter doesn't support the target Kind.
 //  4. call adapter.Apply with the resolved inputs.
 //  5. merge returned conditions into Deployment.Status via PatchStatus.
-//  6. add finalizer tokens via PatchFinalizers.
+//  6. merge adapter-owned annotations onto Deployment.Metadata.Annotations.
 //
 // Conditions are merged, not replaced — SetCondition dedups by Type and
 // preserves LastTransitionTime when Status is unchanged.
@@ -125,13 +125,13 @@ func (c *V1Alpha1Coordinator) Apply(ctx context.Context, deployment *v1alpha1.De
 }
 
 // Remove tears down a Deployment's runtime resources via the adapter and
-// drops the adapter-owned finalizer tokens from the row. Called after the
-// row's DeletionTimestamp is set (soft-delete path) or when the user
-// flips DesiredState=undeployed.
+// merges the resulting Removed condition into the row's status. Called
+// after the row's DeletionTimestamp is set (soft-delete path) or when
+// the user flips DesiredState=undeployed.
 //
-// Idempotent — calling Remove twice is safe: the adapter returns no
-// finalizers to drop on the second pass and status simply converges to
-// Ready=False again.
+// Idempotent — calling Remove twice is safe: status simply converges to
+// Ready=False again. Row lifetime past this point belongs to the
+// soft-delete + GC pass; the adapter contributes no finalizer tokens.
 func (c *V1Alpha1Coordinator) Remove(ctx context.Context, deployment *v1alpha1.Deployment) error {
 	if deployment == nil {
 		return fmt.Errorf("%w: deployment is required", pkgdb.ErrInvalidInput)
@@ -242,10 +242,14 @@ func (c *V1Alpha1Coordinator) resolveAdapter(platform string) (types.DeploymentA
 	return adapter, nil
 }
 
-// persistApplyResult merges adapter-returned Conditions, ProviderMetadata,
-// and AddFinalizers into the Deployment row in a single atomic patch —
+// persistApplyResult merges adapter-returned Conditions and
+// ProviderMetadata into the Deployment row in a single atomic patch —
 // one observation of the adapter equals one row update, so operators
 // never see partial state (status updated but annotations missing, etc).
+//
+// No finalizer plumbing today: deletion proceeds on the soft-delete +
+// GC path. The orphan-reconciliation follow-up will reintroduce a
+// dedicated mechanism using the retained `finalizers` DB column.
 func (c *V1Alpha1Coordinator) persistApplyResult(ctx context.Context, deployment *v1alpha1.Deployment, result *types.ApplyResult) error {
 	if result == nil {
 		return nil
@@ -272,25 +276,15 @@ func (c *V1Alpha1Coordinator) persistApplyResult(ctx context.Context, deployment
 			return annotations
 		}
 	}
-	if len(result.AddFinalizers) > 0 {
-		patch.Finalizers = func(finalizers []string) []string {
-			for _, f := range result.AddFinalizers {
-				if !slices.Contains(finalizers, f) {
-					finalizers = append(finalizers, f)
-				}
-			}
-			return finalizers
-		}
-	}
 	if err := store.ApplyPatch(ctx, deployment.Metadata.Namespace, deployment.Metadata.Name, deployment.Metadata.Version, patch); err != nil {
 		return fmt.Errorf("persist apply result: %w", err)
 	}
 	return nil
 }
 
-// persistRemoveResult merges adapter-returned Conditions + removes any
-// finalizer tokens the adapter declared done. Applied as a single patch
-// so status and finalizer updates land together.
+// persistRemoveResult merges adapter-returned Conditions for an
+// already-removed deployment. Soft-delete + GC own row lifetime; the
+// adapter's job is purely external-state teardown.
 func (c *V1Alpha1Coordinator) persistRemoveResult(ctx context.Context, deployment *v1alpha1.Deployment, result *types.RemoveResult) error {
 	if result == nil {
 		return nil
@@ -308,16 +302,8 @@ func (c *V1Alpha1Coordinator) persistRemoveResult(ctx context.Context, deploymen
 			}
 		})
 	}
-	if len(result.RemoveFinalizers) > 0 {
-		patch.Finalizers = func(finalizers []string) []string {
-			out := finalizers[:0]
-			for _, f := range finalizers {
-				if !slices.Contains(result.RemoveFinalizers, f) {
-					out = append(out, f)
-				}
-			}
-			return out
-		}
+	if patch.Status == nil && patch.Annotations == nil {
+		return nil
 	}
 	if err := store.ApplyPatch(ctx, deployment.Metadata.Namespace, deployment.Metadata.Name, deployment.Metadata.Version, patch); err != nil {
 		return fmt.Errorf("persist remove result: %w", err)

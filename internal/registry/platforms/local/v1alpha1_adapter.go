@@ -11,11 +11,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
-// FinalizerName is the token the local adapter pins on every Deployment
-// it owns. Remove drops the same token once docker-compose teardown has
-// completed so PurgeFinalized can hard-delete the row.
-const FinalizerName = "local.agentregistry.solo.io/cleanup"
-
 // SupportedTargetKinds reports the v1alpha1 Kinds this adapter can deploy:
 // Agent and MCPServer.
 func (a *localDeploymentAdapter) SupportedTargetKinds() []string {
@@ -61,14 +56,14 @@ func (a *localDeploymentAdapter) Apply(ctx context.Context, in types.ApplyInput)
 			LastTransitionTime: now,
 			ObservedGeneration: gen,
 		}},
-		AddFinalizers: []string{FinalizerName},
 	}, nil
 }
 
-// Remove tears down compose services attributed to this deployment. Idempotent:
-// if no services match the deployment name, the gateway routes are still
-// scrubbed and the method succeeds. Returns the adapter finalizer token for
-// the reconciler to drop from the row.
+// Remove tears down compose services attributed to this deployment.
+// Idempotent: if no services match the deployment name, the gateway
+// routes are still scrubbed and the method succeeds. Row lifetime is
+// owned by the soft-delete + GC path; the adapter only handles
+// external-state teardown.
 func (a *localDeploymentAdapter) Remove(ctx context.Context, in types.RemoveInput) (*types.RemoveResult, error) {
 	if in.Deployment == nil {
 		return nil, fmt.Errorf("remove: deployment is required")
@@ -89,7 +84,6 @@ func (a *localDeploymentAdapter) Remove(ctx context.Context, in types.RemoveInpu
 			LastTransitionTime: now,
 			ObservedGeneration: gen,
 		}},
-		RemoveFinalizers: []string{FinalizerName},
 	}, nil
 }
 
