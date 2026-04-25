@@ -68,6 +68,14 @@ type RouteOptions struct {
 	// handlers register but every admin check short-circuits to allow.
 	Authz auth.Authorizer
 
+	// V1Alpha1PerKindHooks injects per-kind Authorize + ListFilter
+	// callbacks into the generic resource handler. Enterprise builds
+	// thread their RBAC engine through here so reader / publisher /
+	// admin gates fire on the OSS-registered Agent / MCPServer / Skill
+	// / Prompt / Provider / Deployment endpoints. Zero-value matches
+	// the public OSS default (no per-kind gates).
+	V1Alpha1PerKindHooks builtins.PerKindHooks
+
 	// Optional callback for integration-owned route registration.
 	ExtraRoutes func(api huma.API, pathPrefix string)
 }
@@ -95,7 +103,7 @@ func RegisterRoutes(
 	// Deployment reconciliation hooks plug in when the coordinator is
 	// supplied.
 	if len(opts.V1Alpha1Stores) > 0 {
-		registerV1Alpha1Routes(api, pathPrefix, opts.V1Alpha1Stores, opts.V1Alpha1DeploymentCoordinator, opts.V1Alpha1SemanticSearch)
+		registerV1Alpha1Routes(api, pathPrefix, opts.V1Alpha1Stores, opts.V1Alpha1DeploymentCoordinator, opts.V1Alpha1SemanticSearch, opts.V1Alpha1PerKindHooks)
 	}
 
 	// POST /v0/import — runs decoded manifests through the enrichment
@@ -136,7 +144,7 @@ func RegisterRoutes(
 // When coord is non-nil, Deployment PUT/DELETE fire
 // coord.Apply/coord.Remove after the row is persisted so the platform
 // adapter converges runtime state synchronously with the API call.
-func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stores, coord *deploymentsvc.V1Alpha1Coordinator, semantic resource.SemanticSearchFunc) {
+func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stores, coord *deploymentsvc.V1Alpha1Coordinator, semantic resource.SemanticSearchFunc, perKind builtins.PerKindHooks) {
 	resolver := internaldb.NewV1Alpha1Resolver(stores)
 	registryValidator := registries.Dispatcher
 	uniqueRemoteURLs := internaldb.NewV1Alpha1UniqueRemoteURLsChecker(stores)
@@ -149,7 +157,7 @@ func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stor
 
 	// Per-kind CRUD endpoints — one call per built-in kind, hidden
 	// inside builtins.RegisterBuiltins.
-	builtins.RegisterBuiltins(api, basePrefix, stores, resolver, registryValidator, uniqueRemoteURLs, hooks, semantic)
+	builtins.RegisterBuiltins(api, basePrefix, stores, resolver, registryValidator, uniqueRemoteURLs, hooks, semantic, perKind)
 
 	// Deployment-specific endpoints: logs stream (cancel is subsumed
 	// by DesiredState=undeployed + DELETE in the v1alpha1 lifecycle).

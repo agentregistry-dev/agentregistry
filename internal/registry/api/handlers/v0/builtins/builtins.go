@@ -26,6 +26,21 @@ type DeploymentHooks struct {
 	PostDelete func(ctx context.Context, deployment *v1alpha1.Deployment) error
 }
 
+// PerKindHooks groups optional, per-kind callbacks layered on top of
+// the shared per-call config. Wired by enterprise builds that need to
+// inject authorization / filtering per resource kind without forking
+// the OSS builtins registration. Both maps are keyed by canonical
+// Kind name (v1alpha1.KindAgent etc.); missing keys are treated as
+// "no hook for this kind".
+type PerKindHooks struct {
+	// Authorizers gates every read + write operation per kind; see
+	// resource.Config.Authorize for the contract.
+	Authorizers map[string]func(ctx context.Context, in resource.AuthorizeInput) error
+	// ListFilters injects ExtraWhere predicates into list queries per
+	// kind; see resource.Config.ListFilter.
+	ListFilters map[string]func(ctx context.Context, in resource.AuthorizeInput) (string, []any, error)
+}
+
 // RegisterBuiltins wires the namespace-scoped + cross-namespace
 // endpoints for every built-in v1alpha1 Kind against the supplied
 // Stores map (as produced by database.NewV1Alpha1Stores). Each kind
@@ -53,6 +68,7 @@ func RegisterBuiltins(
 	uniqueRemoteURLsChecker v1alpha1.UniqueRemoteURLsFunc,
 	deploymentHooks DeploymentHooks,
 	semanticSearch resource.SemanticSearchFunc,
+	perKind PerKindHooks,
 ) {
 	cfgFor := func(kind string) (resource.Config, bool) {
 		store, ok := stores[kind]
@@ -67,6 +83,8 @@ func RegisterBuiltins(
 			RegistryValidator:       registryValidator,
 			UniqueRemoteURLsChecker: uniqueRemoteURLsChecker,
 			SemanticSearch:          semanticSearch,
+			Authorize:               perKind.Authorizers[kind],
+			ListFilter:              perKind.ListFilters[kind],
 		}, true
 	}
 

@@ -117,6 +117,24 @@ type Config struct {
 	// cross-namespace list, Name and Version are empty; for get-latest,
 	// Version is empty; Object is non-nil only for apply.
 	Authorize func(ctx context.Context, in AuthorizeInput) error
+
+	// ListFilter is optional; when set, list handlers consult it before
+	// querying the store and inject the returned predicate into
+	// ListOpts.ExtraWhere / ExtraArgs. This is the per-row authz seam —
+	// enterprise builds wire it to a per-user RBAC predicate so a
+	// reader without grant for a given resource never sees the row in
+	// the list response, but reads at the row endpoint still 403 via
+	// Authorize.
+	//
+	// Returning a nil error + empty fragment means "no extra filter,
+	// behave like the public default". A non-nil error short-circuits
+	// the list and propagates to the caller (use a huma error to set
+	// the response code; non-huma errors bubble as 500).
+	//
+	// Mirrors the contract on v1alpha1store.ListOpts.ExtraWhere — read
+	// the placeholder + parameterization rules there before wiring a
+	// new caller.
+	ListFilter func(ctx context.Context, in AuthorizeInput) (extraWhere string, extraArgs []any, err error)
 }
 
 // AuthorizeInput is the context passed to Config.Authorize on every handler
@@ -571,6 +589,14 @@ func runList[T v1alpha1.Object](
 			return nil, huma.Error400BadRequest("invalid labels selector: " + err.Error())
 		}
 		opts.LabelSelector = selector
+	}
+	if cfg.ListFilter != nil {
+		extra, extraArgs, err := cfg.ListFilter(ctx, AuthorizeInput{Verb: "list", Kind: cfg.Kind, Namespace: p.Namespace})
+		if err != nil {
+			return nil, err
+		}
+		opts.ExtraWhere = extra
+		opts.ExtraArgs = extraArgs
 	}
 	rows, nextCursor, err := cfg.Store.List(ctx, opts)
 	if err != nil {

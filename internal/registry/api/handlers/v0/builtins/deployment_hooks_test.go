@@ -57,6 +57,7 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha
 			PostDelete: coord.Remove,
 		},
 		nil, // semanticSearch disabled in this test
+		builtins.PerKindHooks{},
 	)
 	builtins.RegisterDeploymentLogs(api, builtins.DeploymentLogsConfig{
 		BasePrefix:  "/v0",

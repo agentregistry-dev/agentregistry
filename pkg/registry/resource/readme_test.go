@@ -90,7 +90,7 @@ func TestRegisterBuiltins_LegacyServerReadmeAlias(t *testing.T) {
 	stores := database.NewV1Alpha1Stores(pool)
 
 	_, api := humatest.New(t)
-	builtins.RegisterBuiltins(api, "/v0", stores, nil, nil, nil, builtins.DeploymentHooks{}, nil)
+	builtins.RegisterBuiltins(api, "/v0", stores, nil, nil, nil, builtins.DeploymentHooks{}, nil, builtins.PerKindHooks{})
 
 	server := v1alpha1.MCPServer{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},

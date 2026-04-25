@@ -25,6 +25,34 @@ import (
 // store.
 type DatabaseFactory func(ctx context.Context, databaseURL string, baseStore database.Store, authz auth.Authorizer) (database.Store, error)
 
+// V1Alpha1AuthorizeInput is the per-call context handed to
+// V1Alpha1Authorizer + V1Alpha1ListFilter callbacks. Mirrors
+// resource.AuthorizeInput field-for-field; declared here to keep
+// AppOptions free of internal-package imports.
+type V1Alpha1AuthorizeInput struct {
+	// Verb is one of "get", "list", "apply", "delete".
+	Verb string
+	// Kind is the canonical Kind name (v1alpha1.KindAgent, etc.).
+	Kind string
+	// Namespace is the URL-scoped namespace; "" for cross-namespace list.
+	Namespace string
+	// Name is the resource name; "" for list verbs.
+	Name string
+	// Version is the resource version; "" for list and get-latest.
+	Version string
+}
+
+// V1Alpha1Authorizer gates a single resource handler invocation. Return
+// nil to allow; a huma error to set the response status; any other
+// error to surface as 500. Wired into resource.Config.Authorize.
+type V1Alpha1Authorizer func(ctx context.Context, in V1Alpha1AuthorizeInput) error
+
+// V1Alpha1ListFilter returns a SQL predicate fragment + bind args to
+// inject into the list query as ListOpts.ExtraWhere / ExtraArgs. Wired
+// into resource.Config.ListFilter. Return ("", nil, nil) for "no
+// filter"; non-nil err short-circuits the list.
+type V1Alpha1ListFilter func(ctx context.Context, in V1Alpha1AuthorizeInput) (extraWhere string, extraArgs []any, err error)
+
 // AppOptions contains configuration for the registry app.
 // All fields are optional and allow external developers to extend
 // functionality.
@@ -50,6 +78,24 @@ type AppOptions struct {
 	// "kubernetes", ...). The reconciler/coordinator looks up by platform
 	// string; enterprise builds inject additional adapters here.
 	DeploymentAdapters map[string]DeploymentAdapter
+
+	// V1Alpha1Authorizers gates every read + write operation on the
+	// generic v1alpha1 resource handler, keyed by canonical Kind name
+	// (v1alpha1.KindAgent, v1alpha1.KindMCPServer, etc.). Enterprise
+	// builds wire their RBAC engine here so reader / publisher / admin
+	// gates fire on the OSS-registered Agent / MCPServer / Skill /
+	// Prompt / Provider / Deployment endpoints. Missing keys behave
+	// like "no per-kind gate" — the resource handler's default permits
+	// the call, with API-level authn middleware still applying.
+	V1Alpha1Authorizers map[string]V1Alpha1Authorizer
+
+	// V1Alpha1ListFilters injects per-kind ExtraWhere predicates into
+	// list queries. Use this for row-level visibility (e.g. RBAC
+	// filtering: a reader without a grant for a given resource never
+	// sees the row in a list response). The (string, []any) tuple is
+	// passed straight through to v1alpha1store.ListOpts.ExtraWhere /
+	// ExtraArgs — see that docstring for placeholder rules.
+	V1Alpha1ListFilters map[string]V1Alpha1ListFilter
 
 	// ExtraRoutes allows external integrations to register additional HTTP
 	// routes using the same API instance and path prefix as OSS core

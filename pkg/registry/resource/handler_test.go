@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -19,6 +20,15 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 )
+
+// mustSpecJSON marshals a kind-specific spec into JSONB for direct
+// Store.Upsert calls in tests that bypass the HTTP path.
+func mustSpecJSON(t *testing.T, v any) json.RawMessage {
+	t.Helper()
+	b, err := json.Marshal(v)
+	require.NoError(t, err)
+	return json.RawMessage(b)
+}
 
 // registerAgent wires the generic resource handler for *v1alpha1.Agent onto
 // the given Huma API, against the supplied Store. It's a test-local helper
@@ -256,6 +266,56 @@ func TestResourceRegister_AgentListRejectsInvalidCursor(t *testing.T) {
 	resp := api.Get("/v0/agents?cursor=not-a-valid-cursor")
 	require.Equal(t, http.StatusBadRequest, resp.Code, resp.Body.String())
 	require.Contains(t, resp.Body.String(), "invalid cursor")
+}
+
+// TestResourceRegister_ListFilter exercises the per-row authz hook by
+// wiring a ListFilter that only returns rows whose name starts with
+// "ok-". Three rows are seeded; the unfiltered list returns all three,
+// the filtered list returns just the two matches.
+func TestResourceRegister_ListFilter(t *testing.T) {
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+
+	for _, name := range []string{"ok-one", "ok-two", "blocked-three"} {
+		_, err := store.Upsert(t.Context(), "default", name, "v1",
+			mustSpecJSON(t, v1alpha1.AgentSpec{Title: name}),
+			v1alpha1store.UpsertOpts{})
+		require.NoError(t, err)
+	}
+
+	// Without filter — sees all three.
+	_, plainAPI := humatest.New(t)
+	registerAgent(plainAPI, store)
+	plainResp := plainAPI.Get("/v0/agents")
+	require.Equal(t, http.StatusOK, plainResp.Code, plainResp.Body.String())
+	var plain struct {
+		Items []v1alpha1.Agent `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(plainResp.Body.Bytes(), &plain))
+	require.Len(t, plain.Items, 3, "no-filter list must return every row")
+
+	// With filter — sees only ok-* rows. The fragment uses
+	// `name LIKE $1` so the rebaser bumps $1 past the Store's internal
+	// placeholders (deletion_timestamp + label predicates) automatically.
+	_, filteredAPI := humatest.New(t)
+	resource.Register[*v1alpha1.Agent](filteredAPI, resource.Config{
+		Kind:       v1alpha1.KindAgent,
+		BasePrefix: "/v0",
+		Store:      store,
+		ListFilter: func(_ context.Context, _ resource.AuthorizeInput) (string, []any, error) {
+			return "name LIKE $1", []any{"ok-%"}, nil
+		},
+	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+	filteredResp := filteredAPI.Get("/v0/agents")
+	require.Equal(t, http.StatusOK, filteredResp.Code, filteredResp.Body.String())
+	var filtered struct {
+		Items []v1alpha1.Agent `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(filteredResp.Body.Bytes(), &filtered))
+	require.Len(t, filtered.Items, 2, "ListFilter must restrict the result set")
+	for _, a := range filtered.Items {
+		require.True(t, strings.HasPrefix(a.Metadata.Name, "ok-"))
+	}
 }
 
 func TestResourceRegister_AgentWrongKindRejected(t *testing.T) {

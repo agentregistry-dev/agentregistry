@@ -19,6 +19,7 @@ import (
 	mcpregistry "github.com/agentregistry-dev/agentregistry/internal/mcp/registryserver"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/builtins"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
@@ -259,10 +260,11 @@ func buildRouteOptions(
 	adapters map[string]types.DeploymentAdapter,
 ) *router.RouteOptions {
 	routeOpts := &router.RouteOptions{
-		ExtraRoutes:      options.ExtraRoutes,
-		Authz:            authz,
-		V1Alpha1Stores:   stores,
-		V1Alpha1Importer: importer,
+		ExtraRoutes:          options.ExtraRoutes,
+		Authz:                authz,
+		V1Alpha1Stores:       stores,
+		V1Alpha1Importer:     importer,
+		V1Alpha1PerKindHooks: builtinPerKindHooks(options),
 	}
 
 	if stores != nil {
@@ -283,6 +285,41 @@ func buildRouteOptions(
 	}
 
 	return routeOpts
+}
+
+// builtinPerKindHooks adapts the AppOptions per-kind authorizer +
+// list-filter maps (which use the public pkg/types signatures) into
+// the internal builtins.PerKindHooks struct (which uses the
+// resource.AuthorizeInput type the generic resource handler
+// dispatches on). Field-for-field copy across the two
+// AuthorizeInput-shaped structs.
+func builtinPerKindHooks(options types.AppOptions) builtins.PerKindHooks {
+	hooks := builtins.PerKindHooks{}
+	if len(options.V1Alpha1Authorizers) > 0 {
+		hooks.Authorizers = make(map[string]func(ctx context.Context, in resource.AuthorizeInput) error, len(options.V1Alpha1Authorizers))
+		for kind, fn := range options.V1Alpha1Authorizers {
+			f := fn
+			hooks.Authorizers[kind] = func(ctx context.Context, in resource.AuthorizeInput) error {
+				return f(ctx, types.V1Alpha1AuthorizeInput{
+					Verb: in.Verb, Kind: in.Kind, Namespace: in.Namespace,
+					Name: in.Name, Version: in.Version,
+				})
+			}
+		}
+	}
+	if len(options.V1Alpha1ListFilters) > 0 {
+		hooks.ListFilters = make(map[string]func(ctx context.Context, in resource.AuthorizeInput) (string, []any, error), len(options.V1Alpha1ListFilters))
+		for kind, fn := range options.V1Alpha1ListFilters {
+			f := fn
+			hooks.ListFilters[kind] = func(ctx context.Context, in resource.AuthorizeInput) (string, []any, error) {
+				return f(ctx, types.V1Alpha1AuthorizeInput{
+					Verb: in.Verb, Kind: in.Kind, Namespace: in.Namespace,
+					Name: in.Name, Version: in.Version,
+				})
+			}
+		}
+	}
+	return hooks
 }
 
 // openDatabase selects and constructs the base Store (plus any
