@@ -643,6 +643,46 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 
 var sqlPlaceholderPattern = regexp.MustCompile(`\$(\d+)`)
 
+// rebaseSQLPlaceholders rewrites every `$N` token in a SQL fragment to
+// `$(N+offset)`, preserving relative ordering. It is the core of the
+// ExtraWhere contract: callers author fragments in their own
+// $1-relative numbering and the Store rebases them to continue past
+// its own internal placeholders before executing.
+//
+// Contract / known limitations:
+//   - `offset` must be ≥ 0. The only production caller derives offset
+//     from `len(args) - len(opts.ExtraArgs)` after appending, which is
+//     always non-negative. Negative offsets that push a placeholder
+//     below 1 produce strings PostgreSQL rejects at parse time
+//     (`$-2`, `$0`); they are not a security concern but they're not
+//     a contract this function honors either.
+//   - The implementation is a pure regex pass over `\$\d+`. It does NOT
+//     parse SQL. `$N`-looking text inside a string literal would be
+//     rebased indistinguishably from a real placeholder, so callers
+//     MUST author ExtraWhere as parameterized SQL — no string literals
+//     containing `$\d+`, no string concatenation of untrusted input.
+//     This is the documented authz seam (see ListOpts.ExtraWhere); the
+//     security boundary is the parameterization rule, not the rewriter.
+//   - `$0` is rebased to `$(offset)`. PostgreSQL rejects `$0` at parse
+//     time anyway, so there's no silent-error path here — a caller
+//     using `$0` will get a SQL error when the query executes, with or
+//     without rebasing.
+//   - Empty `clause` and zero `offset` short-circuit unchanged. This
+//     keeps the no-op happy path allocation-free for callers that
+//     supply ExtraWhere only sometimes.
+//   - strconv.Atoi failures (overflow on extremely long digit runs)
+//     leave the token in place. This is a defense-in-depth fallback;
+//     the caller will get a SQL error on execution from the un-rebased
+//     placeholder, which is the safer failure mode than silently
+//     producing a different number.
+//
+// rebaseSQLPlaceholders is exhaustively fuzz-tested in
+// FuzzRebaseSQLPlaceholders to lock the rebase invariants: for any
+// input with offset ≥ 0, the per-token relative ordering of
+// placeholders is preserved, the token count is preserved, every
+// appearance of `$N` shifts by exactly `offset`, and the
+// non-placeholder bytes of the fragment are byte-identical between
+// input and output.
 func rebaseSQLPlaceholders(clause string, offset int) string {
 	if clause == "" || offset == 0 {
 		return clause
