@@ -122,6 +122,17 @@ type SemanticListOpts struct {
 	IncludeTerminating bool
 	// LabelSelector applies label containment as an extra predicate.
 	LabelSelector map[string]string
+	// ExtraWhere is the authz seam for semantic listing. Same contract
+	// as ListOpts.ExtraWhere: a parameterized SQL predicate authored in
+	// $1-relative numbering, rebased by the Store. Callers MUST NOT
+	// interpolate untrusted input — pass via ExtraArgs.
+	//
+	// Without this seam, ?semantic= would bypass row-level RBAC because
+	// regular ListFilter predicates only flow through ListOpts.ExtraWhere.
+	ExtraWhere string
+	// ExtraArgs are the bind parameters for ExtraWhere. Number of entries
+	// MUST equal the distinct placeholder count in ExtraWhere.
+	ExtraArgs []any
 }
 
 // SemanticList ranks rows by cosine distance (`<=>` operator) from
@@ -165,6 +176,19 @@ func (s *Store) SemanticList(ctx context.Context, opts SemanticListOpts) ([]sema
 	if opts.Threshold > 0 {
 		args = append(args, opts.Threshold)
 		where = append(where, fmt.Sprintf("semantic_embedding <=> $1::vector <= $%d", len(args)))
+	}
+	if opts.ExtraWhere != "" || len(opts.ExtraArgs) > 0 {
+		placeholders := countDistinctPlaceholders(opts.ExtraWhere)
+		if placeholders != len(opts.ExtraArgs) {
+			return nil, fmt.Errorf("%w: fragment references %d distinct placeholder(s) but %d arg(s) supplied",
+				ErrInvalidExtraWhere, placeholders, len(opts.ExtraArgs))
+		}
+		if len(opts.ExtraArgs) > 0 {
+			args = append(args, opts.ExtraArgs...)
+		}
+		if opts.ExtraWhere != "" {
+			where = append(where, rebaseSQLPlaceholders(opts.ExtraWhere, len(args)-len(opts.ExtraArgs)))
+		}
 	}
 
 	args = append(args, limit)

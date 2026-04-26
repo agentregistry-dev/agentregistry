@@ -82,6 +82,18 @@ type Config struct {
 	//
 	// Hook errors surface as 500 — the row is already persisted, so a
 	// failure here indicates degraded state the caller should retry.
+	//
+	// Known limitation (pre-Phase-2-KRT): Store.Upsert commits its own
+	// transaction before the hook fires, so a hook failure leaves the
+	// row persisted with stale Status (whatever the previous reconcile
+	// wrote). The caller sees a 500, but a follow-up GetLatest still
+	// returns the row. Operators have to either:
+	//   1. Retry with a non-trivial spec change so Upsert runs again
+	//      and the hook re-fires, or
+	//   2. Patch Status manually via the platform adapter.
+	// KRT will move this to an asynchronous reconcile loop with a
+	// proper Pending → Failed condition transition; the contract is
+	// pinned by TestRegisterApply_PostUpsertFailureLeavesPersistedRow.
 	PostUpsert func(ctx context.Context, obj v1alpha1.Object) error
 
 	// PostDelete is optional; when set, the delete handler invokes it
@@ -647,6 +659,16 @@ func runSemanticList[T v1alpha1.Object](
 			return nil, huma.Error400BadRequest("invalid labels selector: " + err.Error())
 		}
 		opts.LabelSelector = selector
+	}
+	// Row-level RBAC seam — same as runList. Without this, ?semantic=
+	// would rank denied rows by similarity and leak existence + score.
+	if cfg.ListFilter != nil {
+		extra, extraArgs, err := cfg.ListFilter(ctx, AuthorizeInput{Verb: "list", Kind: cfg.Kind, Namespace: p.Namespace})
+		if err != nil {
+			return nil, err
+		}
+		opts.ExtraWhere = extra
+		opts.ExtraArgs = extraArgs
 	}
 	results, err := cfg.Store.SemanticList(ctx, opts)
 	if err != nil {
