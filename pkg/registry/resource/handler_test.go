@@ -442,7 +442,7 @@ func mustSpec(t *testing.T, spec any) []byte {
 // but multiple versions of the same Agent can.
 func TestResourceRegister_UniqueRemoteURLsAcrossAgents(t *testing.T) {
 	pool := v1alpha1store.NewV1Alpha1TestPool(t)
-	stores := database.NewV1Alpha1Stores(pool)
+	stores := v1alpha1store.NewV1Alpha1Stores(pool)
 
 	checker := database.NewV1Alpha1UniqueRemoteURLsChecker(stores)
 
@@ -489,7 +489,7 @@ func TestResourceRegister_UniqueRemoteURLsAcrossAgents(t *testing.T) {
 // is per-Kind: an Agent and an MCPServer may share a URL.
 func TestResourceRegister_UniqueRemoteURLsPerKind(t *testing.T) {
 	pool := v1alpha1store.NewV1Alpha1TestPool(t)
-	stores := database.NewV1Alpha1Stores(pool)
+	stores := v1alpha1store.NewV1Alpha1Stores(pool)
 	checker := database.NewV1Alpha1UniqueRemoteURLsChecker(stores)
 
 	_, api := humatest.New(t)

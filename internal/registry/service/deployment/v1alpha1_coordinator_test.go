@@ -23,7 +23,7 @@ import (
 func seedV1Alpha1Fixtures(t *testing.T) (map[string]*v1alpha1store.Store, *v1alpha1.Deployment) {
 	t.Helper()
 	pool := v1alpha1store.NewV1Alpha1TestPool(t)
-	stores := internaldb.NewV1Alpha1Stores(pool)
+	stores := v1alpha1store.NewV1Alpha1Stores(pool)
 	ctx := context.Background()
 
 	mcpSpec, err := json.Marshal(v1alpha1.MCPServerSpec{

@@ -27,7 +27,7 @@ import (
 
 // V1Alpha1Stores is the per-kind Store map used by the v1alpha1
 // resource handler, keyed by v1alpha1 Kind name (e.g. "Agent",
-// "MCPServer"). Produced by database.NewV1Alpha1Stores; enterprise
+// "MCPServer"). Produced by v1alpha1store.NewV1Alpha1Stores; enterprise
 // builds may extend the map with additional kinds before passing it
 // in.
 type V1Alpha1Stores = map[string]*v1alpha1store.Store

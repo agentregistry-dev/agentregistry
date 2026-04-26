@@ -10,9 +10,9 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
-	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"gopkg.in/yaml.v3"
@@ -73,7 +73,7 @@ func generateSpec(apiVersion string) *huma.OpenAPI {
 		GitCommit: version.GitCommit,
 		BuildTime: version.BuildDate,
 	}, &router.RouteOptions{
-		V1Alpha1Stores: internaldb.NewV1Alpha1Stores(nil),
+		V1Alpha1Stores: v1alpha1store.NewV1Alpha1Stores(nil),
 	})
 
 	return api.OpenAPI()

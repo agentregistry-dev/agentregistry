@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	builtins "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/builtins"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
@@ -87,7 +86,7 @@ func TestResourceRegister_AgentReadmeRoutesAndListProjection(t *testing.T) {
 
 func TestRegisterBuiltins_LegacyServerReadmeAlias(t *testing.T) {
 	pool := v1alpha1store.NewV1Alpha1TestPool(t)
-	stores := database.NewV1Alpha1Stores(pool)
+	stores := v1alpha1store.NewV1Alpha1Stores(pool)
 
 	_, api := humatest.New(t)
 	builtins.RegisterBuiltins(api, "/v0", stores, nil, nil, nil, nil, builtins.PerKindHooks{})

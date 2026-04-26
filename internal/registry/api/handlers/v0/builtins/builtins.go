@@ -35,7 +35,7 @@ type PerKindHooks struct {
 
 // RegisterBuiltins wires the namespace-scoped + cross-namespace
 // endpoints for every built-in v1alpha1 Kind against the supplied
-// Stores map (as produced by database.NewV1Alpha1Stores). Each kind
+// Stores map (as produced by v1alpha1store.NewV1Alpha1Stores). Each kind
 // shares the same BasePrefix and cross-kind Resolver.
 //
 // Kinds are registered in v1alpha1.BuiltinKinds order so OpenAPI

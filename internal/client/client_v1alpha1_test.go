@@ -16,7 +16,6 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/builtins"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
@@ -28,7 +27,7 @@ import (
 // to end and pins the shape the CLI + UI regen will consume.
 func TestClient_V1Alpha1RoundTrip(t *testing.T) {
 	pool := v1alpha1store.NewV1Alpha1TestPool(t)
-	stores := database.NewV1Alpha1Stores(pool)
+	stores := v1alpha1store.NewV1Alpha1Stores(pool)
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("test", "v1"))
@@ -110,7 +109,7 @@ spec:
 // per-document failure branch at the client level.
 func TestClient_V1Alpha1_ApplyInvalid(t *testing.T) {
 	pool := v1alpha1store.NewV1Alpha1TestPool(t)
-	stores := database.NewV1Alpha1Stores(pool)
+	stores := v1alpha1store.NewV1Alpha1Stores(pool)
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("test", "v1"))
@@ -146,7 +145,7 @@ spec:
 // TestClient_V1Alpha1_NotFound proves the ErrNotFound sentinel path.
 func TestClient_V1Alpha1_NotFound(t *testing.T) {
 	pool := v1alpha1store.NewV1Alpha1TestPool(t)
-	stores := database.NewV1Alpha1Stores(pool)
+	stores := v1alpha1store.NewV1Alpha1Stores(pool)
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("test", "v1"))

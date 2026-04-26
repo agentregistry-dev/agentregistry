@@ -185,7 +185,7 @@ func buildV1Alpha1Bundle(pool *pgxpool.Pool) (map[string]*v1alpha1store.Store, *
 		return nil, nil
 	}
 
-	stores := internaldb.NewV1Alpha1Stores(pool)
+	stores := v1alpha1store.NewV1Alpha1Stores(pool)
 
 	// GITHUB_TOKEN (when set in env) authenticates scanner fetches
 	// against GitHub's contents + repo API to raise the 60 req/hr

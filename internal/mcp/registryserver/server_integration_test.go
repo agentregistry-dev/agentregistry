@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -19,7 +18,7 @@ import (
 func TestMCPListServers_HappyPath(t *testing.T) {
 	ctx := context.Background()
 	pool := v1alpha1store.NewV1Alpha1TestPool(t)
-	stores := internaldb.NewV1Alpha1Stores(pool)
+	stores := v1alpha1store.NewV1Alpha1Stores(pool)
 
 	// Seed a published MCPServer so the MCP tool has something to return.
 	const (
