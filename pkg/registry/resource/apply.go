@@ -49,6 +49,20 @@ type ApplyConfig struct {
 	// of the batch continues — same per-doc isolation the upsert path
 	// already has.
 	Authorizers map[string]func(ctx context.Context, in AuthorizeInput) error
+
+	// PostUpserts mirrors resource.Config.PostUpsert per kind. Without
+	// it, kinds that drive runtime reconciliation through PostUpsert
+	// (e.g. Deployment → V1Alpha1Coordinator.Apply → platform adapter)
+	// are silently skipped when the resource is applied via the batch
+	// endpoint instead of the namespaced PUT. Per-doc errors fail the
+	// individual result; the rest of the batch continues.
+	PostUpserts map[string]func(ctx context.Context, obj v1alpha1.Object) error
+
+	// PostDeletes mirrors resource.Config.PostDelete per kind. Same
+	// rationale as PostUpserts — Deployment delete via batch otherwise
+	// soft-deletes the row but never tears down the platform adapter
+	// state.
+	PostDeletes map[string]func(ctx context.Context, obj v1alpha1.Object) error
 }
 
 // applyInput receives a raw multi-doc YAML stream. RawBody keeps bytes
@@ -194,6 +208,18 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		res.Status = arv0.ApplyStatusUnchanged
 	}
 	res.Generation = up.Generation
+
+	// Post-upsert hook (per kind) — same dispatch the per-kind
+	// handler.go runs after PUT. This is what drives the platform
+	// adapter for Deployment kind; without it a Deployment applied
+	// via batch creates the row but never reconciles to AWS / GCP /
+	// kagent runtime state.
+	if hook := cfg.PostUpserts[obj.GetKind()]; hook != nil {
+		if err := hook(ctx, obj); err != nil {
+			res.Status = arv0.ApplyStatusFailed
+			res.Error = "post-upsert: " + err.Error()
+		}
+	}
 	return res
 }
 
@@ -222,6 +248,17 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 		return res
 	}
 	res.Status = arv0.ApplyStatusDeleted
+
+	// Post-delete hook (per kind) — same dispatch the per-kind
+	// handler.go runs after DELETE. Mirrors PostUpserts above; without
+	// it a Deployment deleted via batch soft-deletes the row but never
+	// tears down adapter state.
+	if hook := cfg.PostDeletes[obj.GetKind()]; hook != nil {
+		if err := hook(ctx, obj); err != nil {
+			res.Status = arv0.ApplyStatusFailed
+			res.Error = "post-delete: " + err.Error()
+		}
+	}
 	return res
 }
 

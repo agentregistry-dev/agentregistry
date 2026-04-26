@@ -2,6 +2,8 @@
 package router
 
 import (
+	"context"
+
 	builtins "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/builtins"
 	v0embeddings "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/embeddings"
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
@@ -170,12 +172,40 @@ func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stor
 	}
 
 	// Multi-doc YAML batch apply at POST {basePrefix}/apply.
-	resource.RegisterApply(api, resource.ApplyConfig{
+	//
+	// PostUpserts / PostDeletes thread the same per-kind reconciliation
+	// hooks the namespaced PUT/DELETE handlers fire — most importantly
+	// the Deployment coordinator, so a Deployment in a multi-doc apply
+	// drives the platform adapter the same way a single-resource apply
+	// would. Without this, batch-applied Deployments create the row
+	// but never reconcile to AWS / GCP / kagent runtime state.
+	applyHooks := resource.ApplyConfig{
 		BasePrefix:              basePrefix,
 		Stores:                  stores,
 		Resolver:                resolver,
 		RegistryValidator:       registryValidator,
 		UniqueRemoteURLsChecker: uniqueRemoteURLs,
 		Authorizers:             perKind.Authorizers,
-	})
+	}
+	if coord != nil {
+		applyHooks.PostUpserts = map[string]func(context.Context, v1alpha1.Object) error{
+			v1alpha1.KindDeployment: func(ctx context.Context, obj v1alpha1.Object) error {
+				dep, ok := obj.(*v1alpha1.Deployment)
+				if !ok {
+					return nil
+				}
+				return coord.Apply(ctx, dep)
+			},
+		}
+		applyHooks.PostDeletes = map[string]func(context.Context, v1alpha1.Object) error{
+			v1alpha1.KindDeployment: func(ctx context.Context, obj v1alpha1.Object) error {
+				dep, ok := obj.(*v1alpha1.Deployment)
+				if !ok {
+					return nil
+				}
+				return coord.Remove(ctx, dep)
+			},
+		}
+	}
+	resource.RegisterApply(api, applyHooks)
 }
