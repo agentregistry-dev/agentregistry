@@ -293,6 +293,68 @@ spec:
 	require.Equal(t, "ok", row.Metadata.Name)
 }
 
+// TestRegisterImport_DeniesKindWithNoAuthorizer pins the
+// defense-in-depth fail-closed: when Authorizers is non-empty (the
+// caller intends to gate writes), a decoded doc whose Kind has no
+// entry in the map must DENY rather than silently allow. The
+// enterprise H2 boot guard already ensures every OSS BuiltinKinds
+// entry has an authorizer; this catches downstream kinds an operator
+// adds without updating the import config.
+//
+// Configures the importer with two kinds (Agent + MCPServer) but
+// only an Agent authorizer. POST an MCPServer doc → fail-closed.
+func TestRegisterImport_DeniesKindWithNoAuthorizer(t *testing.T) {
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	stores := map[string]*v1alpha1store.Store{
+		v1alpha1.KindAgent:     v1alpha1store.NewStore(pool, "v1alpha1.agents"),
+		v1alpha1.KindMCPServer: v1alpha1store.NewStore(pool, "v1alpha1.mcpservers"),
+	}
+	imp, err := importer.New(importer.Config{Stores: stores})
+	require.NoError(t, err)
+
+	// Note: no MCPServer entry — that's the defense-in-depth scenario.
+	authorizers := map[string]func(ctx context.Context, in resource.AuthorizeInput) error{
+		v1alpha1.KindAgent: func(ctx context.Context, in resource.AuthorizeInput) error { return nil },
+	}
+
+	_, api := humatest.New(t)
+	builtins.RegisterImport(api, builtins.ImportConfig{
+		BasePrefix:  "/v0",
+		Importer:    imp,
+		Authorizers: authorizers,
+	})
+
+	yaml := `apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  namespace: default
+  name: anything
+  version: v1
+spec:
+  title: Anything
+`
+	resp := api.Post("/v0/import",
+		"Content-Type: application/yaml",
+		strings.NewReader(yaml))
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
+	var out struct {
+		Results []struct {
+			Status string `json:"status"`
+			Error  string `json:"error"`
+		} `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	require.Len(t, out.Results, 1)
+	require.Equal(t, "failed", out.Results[0].Status)
+	require.Contains(t, out.Results[0].Error, "no authorizer wired for kind",
+		"missing-authorizer must fail closed when Authorizers is non-empty")
+
+	// Row is NOT persisted.
+	_, err = stores[v1alpha1.KindMCPServer].Get(context.Background(), "default", "anything", "v1")
+	require.Error(t, err)
+}
+
 func TestRegisterImport_MultiDocPerDocResults(t *testing.T) {
 	_, _, api := newImportTestServer(t)
 

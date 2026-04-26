@@ -2,6 +2,7 @@ package builtins
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -88,8 +89,15 @@ func RegisterImport(api huma.API, cfg ImportConfig) {
 			opts.PerObjectAuthorize = func(ctx context.Context, obj v1alpha1.Object) error {
 				kind := obj.GetKind()
 				authz, ok := authorizers[kind]
+				// Defense-in-depth: when the caller has wired any
+				// Authorizers, a kind without an entry must DENY
+				// rather than silently allow. The enterprise H2
+				// boot guard already ensures every OSS BuiltinKinds
+				// entry has an authorizer, so this only fires for
+				// downstream kinds the operator added without
+				// updating the import config — fail closed there.
 				if !ok || authz == nil {
-					return nil
+					return huma.Error403Forbidden(fmt.Sprintf("import: no authorizer wired for kind %q", kind))
 				}
 				meta := obj.GetMetadata()
 				return authz(ctx, resource.AuthorizeInput{
