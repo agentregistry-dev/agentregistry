@@ -129,6 +129,34 @@ type AppOptions struct {
 	// V1Alpha1PostDeletes mirror PostUpserts on the delete path.
 	V1Alpha1PostDeletes map[string]V1Alpha1PostDelete
 
+	// V1Alpha1RegistryValidator overrides the per-package registry
+	// validator (the dispatcher consulted on apply / import to confirm
+	// each declared package — npm / pypi / oci / nuget / mcpb — exists
+	// and (for OCI) carries the
+	// `LABEL io.modelcontextprotocol.server.name` ownership annotation
+	// proving the publisher controls the OCI namespace).
+	//
+	// Default (nil) is registries.Dispatcher, which fans out to every
+	// per-registry validator and matches the public-catalogue contract
+	// the upstream modelcontextprotocol/registry project ships. That's
+	// the right behavior for the OSS public catalogue but not for
+	// private enterprise deployments where:
+	//
+	//   - images live in private ECR / GCR / ACR that anonymous fetch
+	//     can't reach;
+	//   - server names aren't claims against a public namespace, so the
+	//     ownership-annotation requirement is moot;
+	//   - synthetic test names mean no public image can satisfy the
+	//     annotation match.
+	//
+	// Pass a custom RegistryValidatorFunc to filter out registry types
+	// the build doesn't want enforced (e.g. wrap registries.Dispatcher
+	// and short-circuit RegistryTypeOCI to nil), or pass an explicit
+	// no-op (`func(...) error { return nil }`) to disable per-package
+	// registry validation entirely. Cross-kind ResourceRef + unique
+	// remote URL checks still run regardless.
+	V1Alpha1RegistryValidator v1alpha1.RegistryValidatorFunc
+
 	// ExtraRoutes allows external integrations to register additional HTTP
 	// routes using the same API instance and path prefix as OSS core
 	// routes.

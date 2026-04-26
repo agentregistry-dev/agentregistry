@@ -104,7 +104,11 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	}
 	maps.Copy(v1alpha1Adapters, options.DeploymentAdapters)
 	pool := db.Pool()
-	v1alpha1Stores, v1alpha1Importer := buildV1Alpha1Bundle(pool)
+	registryValidator := options.V1Alpha1RegistryValidator
+	if registryValidator == nil {
+		registryValidator = registries.Dispatcher
+	}
+	v1alpha1Stores, v1alpha1Importer := buildV1Alpha1Bundle(pool, registryValidator)
 	startBuiltinSeedImport(cfg, pool)
 	startSeedFromImport(cfg, v1alpha1Importer)
 
@@ -179,7 +183,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	return nil
 }
 
-func buildV1Alpha1Bundle(pool *pgxpool.Pool) (map[string]*v1alpha1store.Store, *pkgimporter.Importer) {
+func buildV1Alpha1Bundle(pool *pgxpool.Pool, registryValidator v1alpha1.RegistryValidatorFunc) (map[string]*v1alpha1store.Store, *pkgimporter.Importer) {
 	if pool == nil {
 		slog.Info("v1alpha1 routes disabled: database Pool() is nil (likely noop/DatabaseFactory)")
 		return nil, nil
@@ -199,7 +203,7 @@ func buildV1Alpha1Bundle(pool *pgxpool.Pool) (map[string]*v1alpha1store.Store, *
 			scorecardscanner.New(scorecardscanner.Config{GitHubToken: githubToken}),
 		},
 		Resolver:          internaldb.NewV1Alpha1Resolver(stores),
-		RegistryValidator: registries.Dispatcher,
+		RegistryValidator: registryValidator,
 		UniqueRemoteURLs:  internaldb.NewV1Alpha1UniqueRemoteURLsChecker(stores),
 	})
 	if err != nil {
@@ -261,11 +265,12 @@ func buildRouteOptions(
 	adapters map[string]types.DeploymentAdapter,
 ) *router.RouteOptions {
 	routeOpts := &router.RouteOptions{
-		ExtraRoutes:          options.ExtraRoutes,
-		Authz:                authz,
-		V1Alpha1Stores:       stores,
-		V1Alpha1Importer:     importer,
-		V1Alpha1PerKindHooks: builtinPerKindHooks(options),
+		ExtraRoutes:               options.ExtraRoutes,
+		Authz:                     authz,
+		V1Alpha1Stores:            stores,
+		V1Alpha1Importer:          importer,
+		V1Alpha1PerKindHooks:      builtinPerKindHooks(options),
+		V1Alpha1RegistryValidator: options.V1Alpha1RegistryValidator,
 	}
 
 	if stores != nil {

@@ -79,6 +79,14 @@ type RouteOptions struct {
 	// the public OSS default (no per-kind gates).
 	V1Alpha1PerKindHooks builtins.PerKindHooks
 
+	// V1Alpha1RegistryValidator overrides the per-package registry
+	// validator on the apply / import path. Nil falls back to
+	// registries.Dispatcher, the upstream public-catalogue default.
+	// See types.AppOptions.V1Alpha1RegistryValidator for the full
+	// rationale (private deployments typically swap in a filter that
+	// short-circuits OCI).
+	V1Alpha1RegistryValidator v1alpha1.RegistryValidatorFunc
+
 	// Optional callback for integration-owned route registration.
 	ExtraRoutes func(api huma.API, pathPrefix string)
 }
@@ -106,7 +114,7 @@ func RegisterRoutes(
 	// Deployment reconciliation hooks plug in when the coordinator is
 	// supplied.
 	if len(opts.V1Alpha1Stores) > 0 {
-		registerV1Alpha1Routes(api, pathPrefix, opts.V1Alpha1Stores, opts.V1Alpha1DeploymentCoordinator, opts.V1Alpha1SemanticSearch, opts.V1Alpha1PerKindHooks)
+		registerV1Alpha1Routes(api, pathPrefix, opts.V1Alpha1Stores, opts.V1Alpha1DeploymentCoordinator, opts.V1Alpha1SemanticSearch, opts.V1Alpha1PerKindHooks, opts.V1Alpha1RegistryValidator)
 	}
 
 	// POST /v0/import — runs decoded manifests through the enrichment
@@ -147,9 +155,11 @@ func RegisterRoutes(
 // When coord is non-nil, Deployment PUT/DELETE fire
 // coord.Apply/coord.Remove after the row is persisted so the platform
 // adapter converges runtime state synchronously with the API call.
-func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stores, coord *deploymentsvc.V1Alpha1Coordinator, semantic resource.SemanticSearchFunc, perKind builtins.PerKindHooks) {
+func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stores, coord *deploymentsvc.V1Alpha1Coordinator, semantic resource.SemanticSearchFunc, perKind builtins.PerKindHooks, registryValidator v1alpha1.RegistryValidatorFunc) {
 	resolver := internaldb.NewV1Alpha1Resolver(stores)
-	registryValidator := registries.Dispatcher
+	if registryValidator == nil {
+		registryValidator = registries.Dispatcher
+	}
 	uniqueRemoteURLs := internaldb.NewV1Alpha1UniqueRemoteURLsChecker(stores)
 
 	// When a Deployment coordinator is supplied, install its Apply/Remove
