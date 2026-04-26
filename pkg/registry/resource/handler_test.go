@@ -564,3 +564,63 @@ func TestResourceRegister_SoftDeleteAndPurge(t *testing.T) {
 	resp = api.Get("/v0/agents/fin/v1")
 	require.Equal(t, http.StatusNotFound, resp.Code)
 }
+
+// TestResourceRegister_PostUpsertFailureLeavesPersistedRow pins the
+// documented (pre-Phase-2-KRT) contract: when PostUpsert returns an
+// error, Store.Upsert has already committed and the row is persisted;
+// the caller sees a 500, but a follow-up GetLatest still returns the
+// row with whatever Status the previous reconcile (or zero-value) left.
+//
+// The risk this guards against is silently moving the contract — e.g.
+// adding a "stamp Failed condition / hard-delete the row" branch
+// without updating the godoc on Config.PostUpsert. Tests pin the
+// behavior so future changes are forced through documentation +
+// reviewer awareness.
+func TestResourceRegister_PostUpsertFailureLeavesPersistedRow(t *testing.T) {
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+
+	hookCalls := 0
+	hookErr := fmt.Errorf("simulated platform-adapter failure")
+	_, api := humatest.New(t)
+	resource.Register[*v1alpha1.Agent](api, resource.Config{
+		Kind:       v1alpha1.KindAgent,
+		BasePrefix: "/v0",
+		Store:      store,
+		PostUpsert: func(ctx context.Context, obj v1alpha1.Object) error {
+			hookCalls++
+			return hookErr
+		},
+	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+
+	body := v1alpha1.Agent{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "halfapplied", Version: "v1"},
+		Spec:     v1alpha1.AgentSpec{Title: "Half"},
+	}
+
+	// PUT → 500. Hook fired exactly once.
+	resp := api.Put("/v0/agents/halfapplied/v1", body)
+	require.Equal(t, http.StatusInternalServerError, resp.Code, resp.Body.String())
+	require.Equal(t, 1, hookCalls, "PostUpsert must fire exactly once on the failing apply")
+
+	// Row persists despite the hook failure: subsequent GET returns 200.
+	resp = api.Get("/v0/agents/halfapplied/v1")
+	require.Equal(t, http.StatusOK, resp.Code,
+		"contract: Store.Upsert commits before the hook, so a hook failure leaves the row persisted")
+
+	var got v1alpha1.Agent
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
+	require.Equal(t, "halfapplied", got.Metadata.Name)
+	require.Equal(t, "Half", got.Spec.Title,
+		"spec is the just-applied value — the upsert succeeded under the hood")
+
+	// Re-apply with identical spec: no-op upsert short-circuits the hook.
+	// This pins the operator-trap noted in the godoc — the operator must
+	// bump spec to retrigger the hook.
+	hookCalls = 0
+	resp = api.Put("/v0/agents/halfapplied/v1", body)
+	require.Equal(t, http.StatusOK, resp.Code, "no-op upsert should not re-fire the hook")
+	require.Equal(t, 0, hookCalls,
+		"contract: identical-spec re-apply does not re-run PostUpsert; operator must bump spec")
+}
