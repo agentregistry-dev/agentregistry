@@ -93,7 +93,7 @@ type Config struct {
 	//   2. Patch Status manually via the platform adapter.
 	// KRT will move this to an asynchronous reconcile loop with a
 	// proper Pending → Failed condition transition; the contract is
-	// pinned by TestRegisterApply_PostUpsertFailureLeavesPersistedRow.
+	// pinned by TestResourceRegister_PostUpsertFailureLeavesPersistedRow.
 	PostUpsert func(ctx context.Context, obj v1alpha1.Object) error
 
 	// PostDelete is optional; when set, the delete handler invokes it
