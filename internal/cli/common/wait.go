@@ -1,6 +1,7 @@
 package common
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -19,7 +20,7 @@ func WaitForDeploymentReady(c *client.Client, deploymentID string) error {
 	deadline := time.Now().Add(defaultWaitTimeout)
 
 	for {
-		dep, err := c.GetDeployment(deploymentID)
+		dep, err := FindDeploymentByIDPrefix(context.Background(), c, deploymentID)
 		if err != nil {
 			return fmt.Errorf("polling deployment status: %w", err)
 		}
@@ -31,9 +32,12 @@ func WaitForDeploymentReady(c *client.Client, deploymentID string) error {
 		case "deployed":
 			return nil
 		case "failed":
+			if dep.Error != "" {
+				return fmt.Errorf("deployment failed: %s", dep.Error)
+			}
 			return fmt.Errorf("deployment failed")
-		case "cancelled":
-			return fmt.Errorf("deployment was cancelled")
+		case "undeployed", "terminating":
+			return fmt.Errorf("deployment is %s", dep.Status)
 		}
 
 		if time.Now().After(deadline) {

@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -200,7 +200,7 @@ func TestEnsureOtelCollectorConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
-			manifest := &models.AgentManifest{
+			manifest := &agentmanifest.AgentManifest{
 				Name:              "test-agent",
 				TelemetryEndpoint: tt.telemetry,
 			}
@@ -251,18 +251,17 @@ spec:
   description: "Summarizes documents"
   telemetryEndpoint: "http://localhost:4318/v1/traces"
   mcpServers:
-    - type: registry
-      name: fetch
-      registryServerName: acme/fetch
-      registryServerVersion: "1.0.0"
+    - kind: MCPServer
+      name: acme/fetch
+      version: "1.0.0"
   skills:
-    - name: summarize
-      registrySkillName: acme/summarize
-      registrySkillVersion: "1.0.0"
+    - kind: Skill
+      name: acme/summarize
+      version: "1.0.0"
   prompts:
-    - name: system
-      registryPromptName: acme/system
-      registryPromptVersion: "1.0.0"
+    - kind: Prompt
+      name: acme/system
+      version: "1.0.0"
   repository:
     url: https://github.com/acme/summarizer
     source: github

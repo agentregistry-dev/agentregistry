@@ -4,21 +4,22 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 func TestExtractSkillImageRef(t *testing.T) {
 	tests := []struct {
 		name      string
-		resp      *models.SkillResponse
+		resp      *v1alpha1.Skill
 		wantImage string
 		wantErr   bool
 	}{
 		{
 			name: "docker package",
-			resp: &models.SkillResponse{
-				Skill: models.SkillJSON{
-					Packages: []models.SkillPackageInfo{
+			resp: &v1alpha1.Skill{
+				Spec: v1alpha1.SkillSpec{
+					Packages: []v1alpha1.SkillPackage{
 						{RegistryType: "docker", Identifier: "docker.io/org/skill:1.0.0"},
 					},
 				},
@@ -27,9 +28,9 @@ func TestExtractSkillImageRef(t *testing.T) {
 		},
 		{
 			name: "oci package",
-			resp: &models.SkillResponse{
-				Skill: models.SkillJSON{
-					Packages: []models.SkillPackageInfo{
+			resp: &v1alpha1.Skill{
+				Spec: v1alpha1.SkillSpec{
+					Packages: []v1alpha1.SkillPackage{
 						{RegistryType: "oci", Identifier: "ghcr.io/org/skill:1.2.3"},
 					},
 				},
@@ -38,9 +39,9 @@ func TestExtractSkillImageRef(t *testing.T) {
 		},
 		{
 			name: "missing docker package",
-			resp: &models.SkillResponse{
-				Skill: models.SkillJSON{
-					Packages: []models.SkillPackageInfo{
+			resp: &v1alpha1.Skill{
+				Spec: v1alpha1.SkillSpec{
+					Packages: []v1alpha1.SkillPackage{
 						{RegistryType: "npm", Identifier: "@org/skill"},
 					},
 				},
@@ -100,7 +101,7 @@ func TestNormalizeSkillRegistryURL(t *testing.T) {
 }
 
 func TestResolveSkillSourceImagePassthrough(t *testing.T) {
-	ref := models.SkillRef{
+	ref := agentmanifest.SkillRef{
 		Name:  "local",
 		Image: "docker.io/org/skill:latest",
 	}
@@ -120,19 +121,19 @@ func TestResolveSkillSourceImagePassthrough(t *testing.T) {
 func TestResolveSkillSourceValidation(t *testing.T) {
 	tests := []struct {
 		name       string
-		ref        models.SkillRef
+		ref        agentmanifest.SkillRef
 		errContain string
 	}{
 		{
 			name: "missing image and registry skill name",
-			ref: models.SkillRef{
+			ref: agentmanifest.SkillRef{
 				Name: "missing",
 			},
 			errContain: "one of image or registrySkillName is required",
 		},
 		{
 			name: "both image and registry skill name set",
-			ref: models.SkillRef{
+			ref: agentmanifest.SkillRef{
 				Name:              "invalid-both",
 				Image:             "docker.io/org/skill:latest",
 				RegistrySkillName: "remote-skill",
@@ -157,15 +158,15 @@ func TestResolveSkillSourceValidation(t *testing.T) {
 func TestExtractSkillRepoURL(t *testing.T) {
 	tests := []struct {
 		name    string
-		resp    *models.SkillResponse
+		resp    *v1alpha1.Skill
 		wantURL string
 		wantErr bool
 	}{
 		{
 			name: "git repository",
-			resp: &models.SkillResponse{
-				Skill: models.SkillJSON{
-					Repository: &models.SkillRepository{
+			resp: &v1alpha1.Skill{
+				Spec: v1alpha1.SkillSpec{
+					Repository: &v1alpha1.Repository{
 						Source: "git",
 						URL:    "https://github.com/org/skill/tree/main/skills/my-skill",
 					},
@@ -175,16 +176,16 @@ func TestExtractSkillRepoURL(t *testing.T) {
 		},
 		{
 			name: "no repository",
-			resp: &models.SkillResponse{
-				Skill: models.SkillJSON{},
+			resp: &v1alpha1.Skill{
+				Spec: v1alpha1.SkillSpec{},
 			},
 			wantErr: true,
 		},
 		{
 			name: "non-git source with URL still resolves",
-			resp: &models.SkillResponse{
-				Skill: models.SkillJSON{
-					Repository: &models.SkillRepository{
+			resp: &v1alpha1.Skill{
+				Spec: v1alpha1.SkillSpec{
+					Repository: &v1alpha1.Repository{
 						Source: "svn",
 						URL:    "https://gitlab.com/org/skill",
 					},

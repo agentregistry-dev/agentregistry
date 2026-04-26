@@ -1,4 +1,7 @@
-// Package jobs provides job management for async operations.
+// Package jobs provides job management for async operations. Currently
+// used only by the embeddings indexer but kind-agnostic: any subsystem
+// needing "kick off a long-running operation + poll status / stream
+// progress" can reuse Manager.
 package jobs
 
 import (
@@ -18,7 +21,9 @@ const (
 	JobStatusFailed    JobStatus = "failed"
 )
 
-// JobProgress tracks the progress of a job.
+// JobProgress tracks the progress of a job. The indexer emits one of
+// these per Kind it's processing (agents / mcp_servers / skills /
+// prompts) and an optional overall rollup.
 type JobProgress struct {
 	Total     int `json:"total"`
 	Processed int `json:"processed"`
@@ -27,17 +32,13 @@ type JobProgress struct {
 	Failures  int `json:"failures"`
 }
 
-// JobResult contains the final outcome of a job.
+// JobResult contains the final outcome of a job. Counts are keyed by
+// Kind so the indexer can report "agents: 12 updated, mcp_servers: 5
+// updated" without the jobs package knowing what those Kinds are.
+// Error is populated when the job entered JobStatusFailed.
 type JobResult struct {
-	ServersProcessed int    `json:"serversProcessed,omitempty"`
-	ServersUpdated   int    `json:"serversUpdated,omitempty"`
-	ServersSkipped   int    `json:"serversSkipped,omitempty"`
-	ServerFailures   int    `json:"serverFailures,omitempty"`
-	AgentsProcessed  int    `json:"agentsProcessed,omitempty"`
-	AgentsUpdated    int    `json:"agentsUpdated,omitempty"`
-	AgentsSkipped    int    `json:"agentsSkipped,omitempty"`
-	AgentFailures    int    `json:"agentFailures,omitempty"`
-	Error            string `json:"error,omitempty"`
+	PerKind map[string]JobProgress `json:"perKind,omitempty"`
+	Error   string                 `json:"error,omitempty"`
 }
 
 // Job represents an async job with progress tracking.

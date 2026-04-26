@@ -14,10 +14,10 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/rs/cors"
 
-	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 )
 
@@ -143,12 +143,17 @@ func (s *Server) Mux() *http.ServeMux {
 	return s.mux
 }
 
+// Handler returns the full HTTP handler stack (trailing-slash + CORS
+// around the mux). Useful for tests that need to exercise middleware.
+func (s *Server) Handler() http.Handler {
+	return s.server.Handler
+}
+
 // AuthZ is handled at the DB/service layer, not at the API layer.
 func NewServer(
 	cfg *config.Config,
-	svcs router.RegistryServices,
 	metrics *telemetry.Metrics,
-	versionInfo *apitypes.VersionBody,
+	versionInfo *arv0.VersionBody,
 	customUIHandler http.Handler,
 	authnProvider auth.AuthnProvider,
 	routeOpts *router.RouteOptions,
@@ -171,7 +176,7 @@ func NewServer(
 		}
 	}
 
-	api := router.NewHumaAPI(cfg, svcs, mux, metrics, versionInfo, uiHandler, authnProvider, routeOpts)
+	api := router.NewHumaAPI(cfg, mux, metrics, versionInfo, uiHandler, authnProvider, routeOpts)
 
 	// Configure CORS with permissive settings for public API
 	corsHandler := cors.New(cors.Options{

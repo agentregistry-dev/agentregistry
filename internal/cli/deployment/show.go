@@ -1,6 +1,7 @@
 package deployment
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"slices"
@@ -36,12 +37,7 @@ func runShow(cmd *cobra.Command, args []string) error {
 
 	outputFormat, _ := cmd.Flags().GetString("output")
 
-	fullID, err := resolveDeploymentID(args[0])
-	if err != nil {
-		return err
-	}
-
-	dep, err := apiClient.GetDeployment(fullID)
+	dep, err := cliCommon.FindDeploymentByIDPrefix(context.Background(), apiClient, args[0])
 	if err != nil {
 		return fmt.Errorf("failed to get deployment: %w", err)
 	}
@@ -60,8 +56,8 @@ func runShow(cmd *cobra.Command, args []string) error {
 	t := printer.NewTablePrinter(os.Stdout)
 	t.SetHeaders("Property", "Value")
 	t.AddRow("ID", dep.ID)
-	t.AddRow("Name", dep.ServerName)
-	t.AddRow("Version", dep.Version)
+	t.AddRow("Name", dep.TargetName)
+	t.AddRow("Version", dep.TargetVersion)
 	t.AddRow("Type", dep.ResourceType)
 	t.AddRow("Status", dep.Status)
 	t.AddRow("Origin", dep.Origin)
@@ -71,8 +67,8 @@ func runShow(cmd *cobra.Command, args []string) error {
 		t.AddRow("Error", dep.Error)
 	}
 
-	if !dep.DeployedAt.IsZero() {
-		t.AddRow("Deployed", dep.DeployedAt.Format("2006-01-02 15:04:05 MST"))
+	if !dep.CreatedAt.IsZero() {
+		t.AddRow("Deployed", dep.CreatedAt.Format("2006-01-02 15:04:05 MST"))
 	}
 	if !dep.UpdatedAt.IsZero() {
 		t.AddRow("Updated", dep.UpdatedAt.Format("2006-01-02 15:04:05 MST"))
@@ -85,7 +81,7 @@ func runShow(cmd *cobra.Command, args []string) error {
 	if dep.ProviderID == "local" && dep.Status == "deployed" {
 		switch dep.ResourceType {
 		case "agent":
-			t.AddRow("URL", fmt.Sprintf("http://localhost:%s/agents/%s-%s", cliCommon.DefaultAgentGatewayPort, dep.ServerName, dep.ID))
+			t.AddRow("URL", fmt.Sprintf("http://localhost:%s/agents/%s-%s", cliCommon.DefaultAgentGatewayPort, dep.TargetName, dep.ID))
 		case "mcp":
 			t.AddRow("URL", fmt.Sprintf("http://localhost:%s/mcp", cliCommon.DefaultAgentGatewayPort))
 		}

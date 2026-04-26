@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 // PythonPrompt represents the JSON structure written to prompts.json for the Python agent.
@@ -17,11 +17,11 @@ type PythonPrompt struct {
 	Content string `json:"content"`
 }
 
-// PythonPromptFromResponse extracts the text content from a PromptJSON.
-func PythonPromptFromResponse(name string, prompt *models.PromptJSON) PythonPrompt {
+// PythonPromptFromResponse extracts the text content from a Prompt resource.
+func PythonPromptFromResponse(name string, prompt *v1alpha1.Prompt) PythonPrompt {
 	return PythonPrompt{
 		Name:    name,
-		Content: prompt.Content,
+		Content: prompt.Spec.Content,
 	}
 }
 

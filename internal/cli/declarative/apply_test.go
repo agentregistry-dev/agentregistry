@@ -13,7 +13,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,7 +34,7 @@ spec:
 `
 
 // batchApplyResponse builds a JSON body matching the POST /v0/apply response shape.
-func batchApplyResponse(results []kinds.Result) []byte {
+func batchApplyResponse(results []arv0.ApplyResult) []byte {
 	body, _ := json.Marshal(map[string]any{"results": results})
 	return body
 }
@@ -42,7 +42,7 @@ func batchApplyResponse(results []kinds.Result) []byte {
 // newApplyTestServer creates an httptest.Server that records the last request and
 // replies with the provided batch response. Returns the server and a pointer to the
 // captured request (populated after the first HTTP call).
-func newApplyTestServer(t *testing.T, results []kinds.Result) (*httptest.Server, *http.Request) {
+func newApplyTestServer(t *testing.T, results []arv0.ApplyResult) (*httptest.Server, *http.Request) {
 	t.Helper()
 	captured := &http.Request{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -74,8 +74,8 @@ func writeTempYAML(t *testing.T, content string) string {
 
 // TestApplyPostsToBatchEndpoint verifies that apply sends POST to /v0/apply.
 func TestApplyPostsToBatchEndpoint(t *testing.T) {
-	results := []kinds.Result{
-		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: kinds.StatusApplied},
+	results := []arv0.ApplyResult{
+		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: arv0.ApplyStatusConfigured},
 	}
 	srv, captured := newApplyTestServer(t, results)
 	setupApplyClient(t, srv)
@@ -93,9 +93,9 @@ func TestApplyPostsToBatchEndpoint(t *testing.T) {
 
 // TestApplyPrintsPerResourceStatus verifies stdout contains per-resource lines.
 func TestApplyPrintsPerResourceStatus(t *testing.T) {
-	results := []kinds.Result{
-		{Kind: "agent", Name: "a", Version: "1.0", Status: kinds.StatusApplied},
-		{Kind: "deployment", Name: "x", Status: kinds.StatusFailed, Error: "drift detected"},
+	results := []arv0.ApplyResult{
+		{Kind: "agent", Name: "a", Version: "1.0", Status: arv0.ApplyStatusConfigured},
+		{Kind: "deployment", Name: "x", Status: arv0.ApplyStatusFailed, Error: "drift detected"},
 	}
 	srv, _ := newApplyTestServer(t, results)
 	setupApplyClient(t, srv)
@@ -114,30 +114,10 @@ func TestApplyPrintsPerResourceStatus(t *testing.T) {
 	assert.Contains(t, output, "✗ deployment/x")
 }
 
-// TestApplyForceFlagThreads verifies that --force sets ?force=true on the request.
-func TestApplyForceFlagThreads(t *testing.T) {
-	results := []kinds.Result{
-		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: kinds.StatusApplied},
-	}
-	srv, captured := newApplyTestServer(t, results)
-	setupApplyClient(t, srv)
-
-	var buf bytes.Buffer
-	cmd := declarative.NewApplyCmd()
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
-	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML), "--force"})
-	require.NoError(t, cmd.Execute())
-
-	parsedQuery, err := url.ParseQuery(captured.URL.RawQuery)
-	require.NoError(t, err)
-	assert.Equal(t, "true", parsedQuery.Get("force"), "expected ?force=true in request URL")
-}
-
 // TestApplyReturnsErrorOnAnyFailure verifies a StatusFailed result causes non-zero exit.
 func TestApplyReturnsErrorOnAnyFailure(t *testing.T) {
-	results := []kinds.Result{
-		{Kind: "skill", Name: "my-skill", Status: kinds.StatusFailed, Error: "internal error"},
+	results := []arv0.ApplyResult{
+		{Kind: "skill", Name: "my-skill", Status: arv0.ApplyStatusFailed, Error: "internal error"},
 	}
 	srv, _ := newApplyTestServer(t, results)
 	setupApplyClient(t, srv)
@@ -151,8 +131,8 @@ func TestApplyReturnsErrorOnAnyFailure(t *testing.T) {
 
 // TestApplyDryRunFlag verifies --dry-run sets ?dryRun=true on the request.
 func TestApplyDryRunFlag(t *testing.T) {
-	results := []kinds.Result{
-		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: kinds.StatusApplied},
+	results := []arv0.ApplyResult{
+		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: arv0.ApplyStatusDryRun},
 	}
 	srv, captured := newApplyTestServer(t, results)
 	setupApplyClient(t, srv)
@@ -169,10 +149,10 @@ func TestApplyDryRunFlag(t *testing.T) {
 	assert.Equal(t, "true", parsedQuery.Get("dryRun"), "expected ?dryRun=true in request URL")
 }
 
-// TestApplyNoForceFalseNoise verifies that omitting --force does NOT add ?force=false.
-func TestApplyNoForceFalseNoise(t *testing.T) {
-	results := []kinds.Result{
-		{Kind: "agent", Name: "acme/bot", Status: kinds.StatusApplied},
+// TestApplyNoQueryNoise verifies that omitting dry-run keeps the batch URL clean.
+func TestApplyNoQueryNoise(t *testing.T) {
+	results := []arv0.ApplyResult{
+		{Kind: "agent", Name: "acme/bot", Status: arv0.ApplyStatusConfigured},
 	}
 	srv, captured := newApplyTestServer(t, results)
 	setupApplyClient(t, srv)
@@ -180,8 +160,7 @@ func TestApplyNoForceFalseNoise(t *testing.T) {
 	cmd := declarative.NewApplyCmd()
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML)})
 	require.NoError(t, cmd.Execute())
-
-	assert.Empty(t, captured.URL.RawQuery, "expected no query params when force and dryRun are false")
+	assert.Empty(t, captured.URL.RawQuery, "expected no query params when dryRun is false")
 }
 
 // TestApplyRejectsUnknownKind verifies that an unknown kind fails before hitting the server.
@@ -208,9 +187,9 @@ spec:
 // TestApplyDryRunOutputAnnotated verifies that --dry-run output includes "(dry run)" suffix
 // and reports the status returned by the server (created/configured).
 func TestApplyDryRunOutputAnnotated(t *testing.T) {
-	results := []kinds.Result{
-		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: kinds.StatusCreated},
-		{Kind: "skill", Name: "my-skill", Version: "2.0.0", Status: kinds.StatusConfigured},
+	results := []arv0.ApplyResult{
+		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: arv0.ApplyStatusCreated},
+		{Kind: "skill", Name: "my-skill", Version: "2.0.0", Status: arv0.ApplyStatusConfigured},
 	}
 	srv, _ := newApplyTestServer(t, results)
 	setupApplyClient(t, srv)

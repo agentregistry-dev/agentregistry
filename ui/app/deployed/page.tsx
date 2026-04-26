@@ -4,7 +4,11 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { listDeployments, removeDeployment, Deployment } from "@/lib/admin-api"
+import {
+  deleteDeployment,
+  listDeployments,
+} from "@/lib/admin-api"
+import { toFlatDeployment, type FlatDeployment } from "@/lib/deployment-flat"
 import { Input } from "@/components/ui/input"
 import { Trash2, AlertCircle, Calendar, Package, Copy, Check, Link2, Server, Bot as BotIcon, Search, X } from "lucide-react"
 import {
@@ -51,11 +55,11 @@ function getAgentEndpointUrl(serverName: string, deploymentId: string): string {
 }
 
 export default function DeployedPage() {
-  const [deployments, setDeployments] = useState<Deployment[]>([])
+  const [deployments, setDeployments] = useState<FlatDeployment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [removing, setRemoving] = useState(false)
-  const [serverToRemove, setServerToRemove] = useState<{ id: string, name: string, version: string, resourceType: string } | null>(null)
+  const [serverToRemove, setServerToRemove] = useState<FlatDeployment | null>(null)
   const [copied, setCopied] = useState(false)
   const [copiedAgentId, setCopiedAgentId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
@@ -82,8 +86,13 @@ export default function DeployedPage() {
   const fetchDeployments = async () => {
     try {
       setError(null)
-      const { data: deployData } = await listDeployments({ throwOnError: true })
-      setDeployments(deployData.deployments)
+      // Cross-namespace list moved from /v0/deployments (no params) to
+      // /v0/deployments?namespace=all post route flatten.
+      const { data: deployData } = await listDeployments({
+        throwOnError: true,
+        query: { namespace: "all" },
+      })
+      setDeployments((deployData.items ?? []).map(toFlatDeployment))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch deployments')
     } finally {
@@ -97,8 +106,8 @@ export default function DeployedPage() {
     return () => clearInterval(interval)
   }, [])
 
-  const handleRemove = async (deployment: Deployment) => {
-    setServerToRemove({ id: deployment.id, name: deployment.serverName, version: deployment.version, resourceType: deployment.resourceType })
+  const handleRemove = (deployment: FlatDeployment) => {
+    setServerToRemove(deployment)
   }
 
   const confirmRemove = async () => {
@@ -106,7 +115,18 @@ export default function DeployedPage() {
 
     try {
       setRemoving(true)
-      await removeDeployment({ path: { id: serverToRemove.id }, throwOnError: true })
+      // Namespace moved off the path onto a query param post-flatten;
+      // omit when it's the implicit default.
+      await deleteDeployment({
+        path: {
+          name: serverToRemove.name,
+          version: serverToRemove.version,
+        },
+        query: serverToRemove.namespace && serverToRemove.namespace !== "default"
+          ? { namespace: serverToRemove.namespace }
+          : undefined,
+        throwOnError: true,
+      })
       setDeployments(prev => prev.filter(d => d.id !== serverToRemove.id))
       setServerToRemove(null)
       fetchDeployments()
@@ -136,7 +156,7 @@ export default function DeployedPage() {
 
   const agents = filtered.filter(d => d.resourceType === 'agent')
   const mcpServers = filtered.filter(d => d.resourceType === 'mcp')
-  const runningCount = deployments.filter(d => d.status === 'deployed' || d.status === 'discovered').length
+  const runningCount = deployments.filter(d => d.status === 'deployed').length
 
   return (
     <main className="bg-background">
@@ -319,7 +339,7 @@ export default function DeployedPage() {
           <DialogHeader>
             <DialogTitle>Remove Deployment</DialogTitle>
             <DialogDescription>
-              Are you sure you want to remove <strong>{serverToRemove?.name}</strong> (version {serverToRemove?.version}) ({serverToRemove?.resourceType})?
+              Are you sure you want to remove <strong>{serverToRemove?.serverName}</strong> (version {serverToRemove?.version}) ({serverToRemove?.resourceType})?
               <br /><br />
               This will stop the server and remove it from your deployments. This action cannot be undone.
             </DialogDescription>
@@ -339,8 +359,8 @@ export default function DeployedPage() {
 }
 
 function DeploymentRow({ item, onRemove, removing, copiedAgentId, onCopyAgentUrl, getAgentEndpointUrl }: {
-  item: Deployment
-  onRemove: (d: Deployment) => void
+  item: FlatDeployment
+  onRemove: (d: FlatDeployment) => void
   removing: boolean
   copiedAgentId: string | null
   onCopyAgentUrl: (id: string, url: string) => void
@@ -380,7 +400,7 @@ function DeploymentRow({ item, onRemove, removing, copiedAgentId, onCopyAgentUrl
             <span>{item.origin}</span>
             <span className="flex items-center gap-1">
               <Calendar className="h-3 w-3" />
-              {new Date(item.deployedAt).toLocaleDateString()}
+              {item.deployedAt ? new Date(item.deployedAt).toLocaleDateString() : "—"}
             </span>
             {item.env?.namespace && (
               <span className="font-mono">{item.env.namespace}</span>

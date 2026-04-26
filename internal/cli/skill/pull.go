@@ -1,6 +1,7 @@
 package skill
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
+	"github.com/agentregistry-dev/agentregistry/internal/client"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/spf13/cobra"
 )
@@ -48,14 +51,22 @@ func runPull(cmd *cobra.Command, args []string) error {
 	printer.PrintInfo(fmt.Sprintf("Pulling skill: %s", skillName))
 
 	// 1. Resolve which version to pull
-	version, err := resolveSkillVersion(skillName, pullVersion)
+	version, err := resolveSkillVersion(cmd.Context(), skillName, pullVersion)
 	if err != nil {
 		return err
 	}
 
 	// 2. Fetch skill metadata from registry
 	printer.PrintInfo("Fetching skill metadata from registry...")
-	skillResp, err := apiClient.GetSkillVersion(skillName, version)
+	skillResp, err := client.GetTyped(
+		cmd.Context(),
+		apiClient,
+		v1alpha1.KindSkill,
+		v1alpha1.DefaultNamespace,
+		skillName,
+		version,
+		func() *v1alpha1.Skill { return &v1alpha1.Skill{} },
+	)
 	if err != nil {
 		return fmt.Errorf("failed to fetch skill from registry: %w", err)
 	}
@@ -64,12 +75,12 @@ func runPull(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("skill '%s' version '%s' not found in registry", skillName, version)
 	}
 
-	printer.PrintSuccess(fmt.Sprintf("Found skill: %s (version %s)", skillResp.Skill.Name, skillResp.Skill.Version))
+	printer.PrintSuccess(fmt.Sprintf("Found skill: %s (version %s)", skillResp.Metadata.Name, skillResp.Metadata.Version))
 
 	// 2. Determine source: Docker package or git repository
 	var dockerImage string
-	for _, pkg := range skillResp.Skill.Packages {
-		if pkg.RegistryType == "docker" {
+	for _, pkg := range skillResp.Spec.Packages {
+		if strings.EqualFold(pkg.RegistryType, "docker") || strings.EqualFold(pkg.RegistryType, "oci") {
 			dockerImage = pkg.Identifier
 			break
 		}
@@ -88,8 +99,8 @@ func runPull(cmd *cobra.Command, args []string) error {
 		if err := pullFromDocker(dockerImage, absOutputDir); err != nil {
 			return err
 		}
-	} else if skillResp.Skill.Repository != nil && skillResp.Skill.Repository.Source == "git" {
-		if err := pullFromGit(skillResp.Skill.Repository.URL, absOutputDir); err != nil {
+	} else if skillResp.Spec.Repository != nil && skillResp.Spec.Repository.Source == "git" {
+		if err := pullFromGit(skillResp.Spec.Repository.URL, absOutputDir); err != nil {
 			return err
 		}
 	} else {
@@ -104,12 +115,22 @@ func runPull(cmd *cobra.Command, args []string) error {
 // If a version is explicitly provided, it is used directly.
 // If only one version exists, that version is selected automatically.
 // If multiple versions exist, the user is prompted to specify one.
-func resolveSkillVersion(skillName, requestedVersion string) (string, error) {
+//
+// ctx flows in from the cobra command so Ctrl-C / parent timeouts cancel
+// the registry list call cleanly.
+func resolveSkillVersion(ctx context.Context, skillName, requestedVersion string) (string, error) {
 	if requestedVersion != "" {
 		return requestedVersion, nil
 	}
 
-	versions, err := apiClient.GetSkillVersions(skillName)
+	versions, err := client.ListVersionsOfName(
+		ctx,
+		apiClient,
+		v1alpha1.KindSkill,
+		v1alpha1.DefaultNamespace,
+		skillName,
+		func() *v1alpha1.Skill { return &v1alpha1.Skill{} },
+	)
 	if err != nil {
 		return "", fmt.Errorf("failed to list skill versions: %w", err)
 	}
@@ -119,16 +140,16 @@ func resolveSkillVersion(skillName, requestedVersion string) (string, error) {
 	}
 
 	if len(versions) == 1 {
-		return versions[0].Skill.Version, nil
+		return versions[0].Metadata.Version, nil
 	}
 
 	printer.PrintError(fmt.Sprintf("skill '%s' has %d versions, please specify one with --version:", skillName, len(versions)))
-	for _, v := range versions {
+	for i, v := range versions {
 		latest := ""
-		if v.Meta.Official != nil && v.Meta.Official.IsLatest {
+		if i == 0 {
 			latest = " (latest)"
 		}
-		printer.PrintInfo(fmt.Sprintf("  %s%s", v.Skill.Version, latest))
+		printer.PrintInfo(fmt.Sprintf("  %s%s", v.Metadata.Version, latest))
 	}
 
 	return "", fmt.Errorf("multiple versions available, specify one with --version")

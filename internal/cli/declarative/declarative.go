@@ -2,18 +2,12 @@ package declarative
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"reflect"
 	"time"
 
+	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
-	"github.com/agentregistry-dev/agentregistry/pkg/printer"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
-	v0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 var apiClient *client.Client
@@ -24,68 +18,46 @@ func SetAPIClient(c *client.Client) {
 	apiClient = c
 }
 
-// defaultRegistry is the kinds.Registry used by the declarative CLI for YAML decoding.
-// It is populated at package init time with decode-only (no service) kind entries
-// so that arctl can parse YAML files without a live registry connection.
+// defaultRegistry is the declarative CLI's kind registry. It owns user-facing
+// aliases, table metadata, and list/get/delete dispatch, while YAML decode itself
+// flows through pkg/api/v1alpha1.Scheme.
 var defaultRegistry = newCLIRegistry()
 
-// SetRegistry replaces the default decoding registry. Useful for tests and for
-// enterprise extensions that register additional kinds.
-func SetRegistry(r *kinds.Registry) {
+// SetRegistry replaces the default registry. Useful for tests and enterprise extensions.
+func SetRegistry(r *scheme.Registry) {
 	defaultRegistry = r
 }
 
-// NewCLIRegistry builds a decode-only registry containing the four built-in
-// kinds. Service functions (Apply, Get, Delete) are intentionally omitted here;
-// they are wired by the server-side kind packages (internal/registry/kinds/*).
-// Exported for use in tests that need to restore the default registry.
-func NewCLIRegistry() *kinds.Registry {
+// NewCLIRegistry returns the built-in declarative registry.
+func NewCLIRegistry() *scheme.Registry {
 	return newCLIRegistry()
 }
 
-func newCLIRegistry() *kinds.Registry {
-	reg := kinds.NewRegistry()
-	reg.Register(kinds.Kind{
-		Kind:     "agent",
-		Plural:   "agents",
-		Aliases:  []string{"Agent"},
-		SpecType: reflect.TypeFor[kinds.AgentSpec](),
+func newCLIRegistry() *scheme.Registry {
+	reg := scheme.NewRegistry()
+
+	reg.Register(scheme.Kind{
+		Kind:    "agent",
+		Plural:  "agents",
+		Aliases: []string{"Agent"},
 		Get: func(_ context.Context, name, _ string) (any, error) {
-			return apiClient.GetAgent(name)
+			return getAny(context.Background(), v1alpha1.KindAgent, name, "", func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
 		},
-		Delete: func(_ context.Context, name, version string, _ bool) error {
-			return apiClient.DeleteAgent(name, version)
+		Delete: func(_ context.Context, name, version string, force bool) error {
+			return deleteAny(context.Background(), v1alpha1.KindAgent, name, version, force, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
 		},
-		ListFunc: kinds.MakeListFunc(func() ([]*models.AgentResponse, error) {
-			return apiClient.GetAgents()
-		}),
+		ListFunc: func(_ context.Context) ([]any, error) {
+			return listLatestAny(context.Background(), v1alpha1.KindAgent, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+		},
 		RowFunc: func(item any) []string {
-			a, ok := item.(*models.AgentResponse)
+			agent, ok := item.(*v1alpha1.Agent)
 			if !ok {
 				return []string{"<invalid>"}
 			}
-			return []string{
-				printer.TruncateString(a.Agent.Name, 40),
-				a.Agent.Version,
-				printer.EmptyValueOrDefault(a.Agent.Framework, "<none>"),
-				printer.EmptyValueOrDefault(a.Agent.Language, "<none>"),
-				printer.EmptyValueOrDefault(a.Agent.ModelProvider, "<none>"),
-				printer.TruncateString(printer.EmptyValueOrDefault(a.Agent.ModelName, "<none>"), 30),
-			}
+			return agentRow(agent)
 		},
-		ToResourceFunc: func(item any) *kinds.Document {
-			a, ok := item.(*models.AgentResponse)
-			if !ok {
-				return nil
-			}
-			return &kinds.Document{
-				APIVersion: scheme.APIVersion,
-				Kind:       "Agent",
-				Metadata:   kinds.Metadata{Name: a.Agent.Name, Version: a.Agent.Version},
-				Spec:       marshalToSpec(a.Agent),
-			}
-		},
-		TableColumns: []kinds.Column{
+		ToYAMLFunc: func(item any) any { return item },
+		TableColumns: []scheme.Column{
 			{Header: "NAME"},
 			{Header: "VERSION"},
 			{Header: "FRAMEWORK"},
@@ -94,296 +66,169 @@ func newCLIRegistry() *kinds.Registry {
 			{Header: "MODEL"},
 		},
 	})
-	reg.Register(kinds.Kind{
-		Kind:     "mcp",
-		Plural:   "mcps",
-		Aliases:  []string{"MCPServer", "mcpserver", "mcp-server", "mcpservers"},
-		SpecType: reflect.TypeFor[kinds.MCPSpec](),
+
+	reg.Register(scheme.Kind{
+		Kind:    "mcp",
+		Plural:  "mcps",
+		Aliases: []string{"MCPServer", "mcpserver", "mcp-server", "mcpservers"},
 		Get: func(_ context.Context, name, _ string) (any, error) {
-			return apiClient.GetServer(name)
+			return getAny(context.Background(), v1alpha1.KindMCPServer, name, "", func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
 		},
-		Delete: func(_ context.Context, name, version string, _ bool) error {
-			return apiClient.DeleteMCPServer(name, version)
+		Delete: func(_ context.Context, name, version string, force bool) error {
+			return deleteAny(context.Background(), v1alpha1.KindMCPServer, name, version, force, func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
 		},
-		ListFunc: kinds.MakeListFunc(func() ([]*v0.ServerResponse, error) {
-			return apiClient.GetPublishedServers()
-		}),
+		ListFunc: func(_ context.Context) ([]any, error) {
+			return listLatestAny(context.Background(), v1alpha1.KindMCPServer, func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
+		},
 		RowFunc: func(item any) []string {
-			s, ok := item.(*v0.ServerResponse)
+			server, ok := item.(*v1alpha1.MCPServer)
 			if !ok {
 				return []string{"<invalid>"}
 			}
-			return []string{
-				printer.TruncateString(s.Server.Name, 40),
-				s.Server.Version,
-				printer.TruncateString(printer.EmptyValueOrDefault(s.Server.Description, "<none>"), 60),
-			}
+			return mcpRow(server)
 		},
-		ToResourceFunc: func(item any) *kinds.Document {
-			s, ok := item.(*v0.ServerResponse)
-			if !ok {
-				return nil
-			}
-			return &kinds.Document{
-				APIVersion: scheme.APIVersion,
-				Kind:       "MCPServer",
-				Metadata:   kinds.Metadata{Name: s.Server.Name, Version: s.Server.Version},
-				Spec:       marshalToSpec(s.Server),
-			}
-		},
-		TableColumns: []kinds.Column{
+		ToYAMLFunc: func(item any) any { return item },
+		TableColumns: []scheme.Column{
 			{Header: "NAME"},
 			{Header: "VERSION"},
 			{Header: "DESCRIPTION"},
 		},
 	})
-	reg.Register(kinds.Kind{
-		Kind:     "skill",
-		Plural:   "skills",
-		Aliases:  []string{"Skill"},
-		SpecType: reflect.TypeFor[kinds.SkillSpec](),
+
+	reg.Register(scheme.Kind{
+		Kind:    "skill",
+		Plural:  "skills",
+		Aliases: []string{"Skill"},
 		Get: func(_ context.Context, name, _ string) (any, error) {
-			return apiClient.GetSkill(name)
+			return getAny(context.Background(), v1alpha1.KindSkill, name, "", func() *v1alpha1.Skill { return &v1alpha1.Skill{} })
 		},
-		Delete: func(_ context.Context, name, version string, _ bool) error {
-			return apiClient.DeleteSkill(name, version)
+		Delete: func(_ context.Context, name, version string, force bool) error {
+			return deleteAny(context.Background(), v1alpha1.KindSkill, name, version, force, func() *v1alpha1.Skill { return &v1alpha1.Skill{} })
 		},
-		ListFunc: kinds.MakeListFunc(func() ([]*models.SkillResponse, error) {
-			return apiClient.GetSkills()
-		}),
+		ListFunc: func(_ context.Context) ([]any, error) {
+			return listLatestAny(context.Background(), v1alpha1.KindSkill, func() *v1alpha1.Skill { return &v1alpha1.Skill{} })
+		},
 		RowFunc: func(item any) []string {
-			s, ok := item.(*models.SkillResponse)
+			skill, ok := item.(*v1alpha1.Skill)
 			if !ok {
 				return []string{"<invalid>"}
 			}
-			return []string{
-				printer.TruncateString(s.Skill.Name, 40),
-				s.Skill.Version,
-				printer.EmptyValueOrDefault(s.Skill.Category, "<none>"),
-				printer.TruncateString(printer.EmptyValueOrDefault(s.Skill.Description, "<none>"), 60),
-			}
+			return skillRow(skill)
 		},
-		ToResourceFunc: func(item any) *kinds.Document {
-			s, ok := item.(*models.SkillResponse)
-			if !ok {
-				return nil
-			}
-			return &kinds.Document{
-				APIVersion: scheme.APIVersion,
-				Kind:       "Skill",
-				Metadata:   kinds.Metadata{Name: s.Skill.Name, Version: s.Skill.Version},
-				Spec:       marshalToSpec(s.Skill),
-			}
-		},
-		TableColumns: []kinds.Column{
+		ToYAMLFunc: func(item any) any { return item },
+		TableColumns: []scheme.Column{
 			{Header: "NAME"},
 			{Header: "VERSION"},
 			{Header: "CATEGORY"},
 			{Header: "DESCRIPTION"},
 		},
 	})
-	reg.Register(kinds.Kind{
-		Kind:     "prompt",
-		Plural:   "prompts",
-		Aliases:  []string{"Prompt"},
-		SpecType: reflect.TypeFor[kinds.PromptSpec](),
+
+	reg.Register(scheme.Kind{
+		Kind:    "prompt",
+		Plural:  "prompts",
+		Aliases: []string{"Prompt"},
 		Get: func(_ context.Context, name, _ string) (any, error) {
-			return apiClient.GetPrompt(name)
+			return getAny(context.Background(), v1alpha1.KindPrompt, name, "", func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} })
 		},
-		Delete: func(_ context.Context, name, version string, _ bool) error {
-			return apiClient.DeletePrompt(name, version)
+		Delete: func(_ context.Context, name, version string, force bool) error {
+			return deleteAny(context.Background(), v1alpha1.KindPrompt, name, version, force, func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} })
 		},
-		ListFunc: kinds.MakeListFunc(func() ([]*models.PromptResponse, error) {
-			return apiClient.GetPrompts()
-		}),
+		ListFunc: func(_ context.Context) ([]any, error) {
+			return listLatestAny(context.Background(), v1alpha1.KindPrompt, func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} })
+		},
 		RowFunc: func(item any) []string {
-			p, ok := item.(*models.PromptResponse)
+			prompt, ok := item.(*v1alpha1.Prompt)
 			if !ok {
 				return []string{"<invalid>"}
 			}
-			return []string{
-				printer.TruncateString(p.Prompt.Name, 40),
-				p.Prompt.Version,
-				printer.TruncateString(printer.EmptyValueOrDefault(p.Prompt.Description, "<none>"), 60),
-			}
+			return promptRow(prompt)
 		},
-		ToResourceFunc: func(item any) *kinds.Document {
-			p, ok := item.(*models.PromptResponse)
-			if !ok {
-				return nil
-			}
-			return &kinds.Document{
-				APIVersion: scheme.APIVersion,
-				Kind:       "Prompt",
-				Metadata:   kinds.Metadata{Name: p.Prompt.Name, Version: p.Prompt.Version},
-				Spec:       marshalToSpec(p.Prompt),
-			}
-		},
-		TableColumns: []kinds.Column{
+		ToYAMLFunc: func(item any) any { return item },
+		TableColumns: []scheme.Column{
 			{Header: "NAME"},
 			{Header: "VERSION"},
 			{Header: "DESCRIPTION"},
 		},
 	})
-	reg.Register(kinds.Kind{
-		Kind:     "provider",
-		Plural:   "providers",
-		Aliases:  []string{"Provider"},
-		SpecType: reflect.TypeFor[kinds.ProviderSpec](),
-		TableColumns: []kinds.Column{
-			{Header: "NAME"}, {Header: "PLATFORM"},
-		},
-		ListFunc: kinds.MakeListFunc(func() ([]*models.Provider, error) {
-			return apiClient.GetProviders()
-		}),
-		RowFunc: func(item any) []string {
-			p := item.(*models.Provider)
-			return []string{p.Name, p.Platform}
-		},
-		ToResourceFunc: func(item any) *kinds.Document {
-			p, ok := item.(*models.Provider)
-			if !ok {
-				return nil
-			}
-			return &kinds.Document{
-				APIVersion: scheme.APIVersion,
-				Kind:       "Provider",
-				Metadata:   kinds.Metadata{Name: p.Name},
-				Spec: kinds.ProviderSpec{
-					Platform: p.Platform,
-					Config:   p.Config,
-				},
-			}
-		},
+
+	reg.Register(scheme.Kind{
+		Kind:    "provider",
+		Plural:  "providers",
+		Aliases: []string{"Provider"},
 		Get: func(_ context.Context, name, _ string) (any, error) {
-			return apiClient.GetProvider(name)
+			return getAny(context.Background(), v1alpha1.KindProvider, name, "", func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
 		},
 		Delete: func(_ context.Context, name, _ string, _ bool) error {
-			return apiClient.DeleteProvider(name)
+			return deleteAny(context.Background(), v1alpha1.KindProvider, name, "", false, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
+		},
+		ListFunc: func(_ context.Context) ([]any, error) {
+			return listLatestAny(context.Background(), v1alpha1.KindProvider, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
+		},
+		RowFunc: func(item any) []string {
+			provider, ok := item.(*v1alpha1.Provider)
+			if !ok {
+				return []string{"<invalid>"}
+			}
+			return providerRow(provider)
+		},
+		ToYAMLFunc: func(item any) any { return item },
+		TableColumns: []scheme.Column{
+			{Header: "NAME"},
+			{Header: "PLATFORM"},
 		},
 	})
-	reg.Register(kinds.Kind{
-		Kind:     "deployment",
-		Plural:   "deployments",
-		Aliases:  []string{"Deployment"},
-		SpecType: reflect.TypeFor[kinds.DeploymentSpec](),
-		TableColumns: []kinds.Column{
-			{Header: "ID"}, {Header: "NAME"}, {Header: "VERSION"},
-			{Header: "TYPE"}, {Header: "PROVIDER"}, {Header: "STATUS"},
+
+	reg.Register(scheme.Kind{
+		Kind:    "deployment",
+		Plural:  "deployments",
+		Aliases: []string{"Deployment"},
+		Get: func(_ context.Context, name, _ string) (any, error) {
+			return getDeploymentByTarget(context.Background(), name)
 		},
-		ListFunc: kinds.MakeListFunc(func() ([]*models.Deployment, error) {
-			resp, err := apiClient.GetDeployedServers()
-			if err != nil {
-				return nil, err
-			}
-			result := make([]*models.Deployment, len(resp))
-			copy(result, resp)
-			return result, nil
-		}),
+		Delete: func(_ context.Context, name, version string, force bool) error {
+			return deleteDeploymentByTarget(context.Background(), name, version, force)
+		},
+		ListFunc: func(_ context.Context) ([]any, error) {
+			return listDeploymentAny(context.Background())
+		},
 		RowFunc: func(item any) []string {
-			d := item.(*models.Deployment)
-			return []string{d.ID, d.ServerName, d.Version, d.ResourceType, d.ProviderID, d.Status}
+			deployment, ok := item.(*cliCommon.DeploymentRecord)
+			if !ok {
+				return []string{"<invalid>"}
+			}
+			return deploymentRow(deployment)
 		},
-		ToResourceFunc: func(item any) *kinds.Document {
-			d, ok := item.(*models.Deployment)
+		ToYAMLFunc: func(item any) any {
+			deployment, ok := item.(*cliCommon.DeploymentRecord)
 			if !ok {
 				return nil
 			}
-			// Spec contains only declarative DeploymentSpec fields so the
-			// output round-trips through `arctl apply -f`. Runtime state
-			// goes in .status, which the server-side envelope decoder at
-			// internal/registry/kinds/registry.go:decodeNode silently
-			// ignores on apply.
-			return &kinds.Document{
-				APIVersion: scheme.APIVersion,
-				Kind:       "Deployment",
-				Metadata:   kinds.Metadata{Name: d.ServerName, Version: d.Version},
-				Spec: kinds.DeploymentSpec{
-					ProviderID:     d.ProviderID,
-					ResourceType:   d.ResourceType,
-					Env:            d.Env,
-					ProviderConfig: d.ProviderConfig,
-					PreferRemote:   d.PreferRemote,
-				},
-				Status: deploymentStatus{
-					ID:               d.ID,
-					Phase:            d.Status,
-					Origin:           d.Origin,
-					Error:            d.Error,
-					ProviderMetadata: d.ProviderMetadata,
-					DeployedAt:       d.DeployedAt,
-					UpdatedAt:        d.UpdatedAt,
-				},
-			}
+			return deploymentToDocument(deployment)
 		},
-		Get:    deploymentGetFunc,
-		Delete: deploymentDeleteFunc,
+		TableColumns: []scheme.Column{
+			{Header: "ID"},
+			{Header: "NAME"},
+			{Header: "VERSION"},
+			{Header: "TYPE"},
+			{Header: "PROVIDER"},
+			{Header: "STATUS"},
+		},
 	})
+
 	return reg
 }
 
 // deploymentStatus is the shape emitted under .status when a deployment is
-// rendered as YAML/JSON. Server-managed fields only — the envelope decoder
-// ignores .status on apply, so this is safe to include in get output without
-// breaking round-trips through `arctl apply -f`.
+// rendered as YAML/JSON. This is intentionally a CLI projection rather than the
+// raw v1alpha1.Status conditions block so imperative users keep the compact
+// fields they already consume while apply decode still ignores incoming status.
 type deploymentStatus struct {
-	ID               string            `json:"id,omitempty" yaml:"id,omitempty"`
-	Phase            string            `json:"phase,omitempty" yaml:"phase,omitempty"`
-	Origin           string            `json:"origin,omitempty" yaml:"origin,omitempty"`
-	Error            string            `json:"error,omitempty" yaml:"error,omitempty"`
-	ProviderMetadata models.JSONObject `json:"providerMetadata,omitempty" yaml:"providerMetadata,omitempty"`
-	DeployedAt       time.Time         `json:"deployedAt,omitempty" yaml:"deployedAt,omitempty"`
-	UpdatedAt        time.Time         `json:"updatedAt,omitempty" yaml:"updatedAt,omitempty"`
-}
-
-// deploymentGetFunc returns the first deployment matching ServerName == name.
-// Deployments are keyed by ID but users refer to them by name; a single name
-// can map to multiple deployments (different versions/providers). For `get`
-// we surface the first match — callers that need to disambiguate should use
-// `arctl get deployments` for the full list.
-func deploymentGetFunc(_ context.Context, name, _ string) (any, error) {
-	all, err := apiClient.GetDeployedServers()
-	if err != nil {
-		return nil, err
-	}
-	for _, d := range all {
-		if d != nil && d.ServerName == name {
-			return d, nil
-		}
-	}
-	return nil, database.ErrNotFound
-}
-
-// deploymentDeleteFunc looks up deployments by (name, version) and deletes each match
-// by ID. A non-empty version is required — deployments are identified by
-// (name, version, provider), so omitting version could span multiple versions
-// and cause surprise bulk deletes. The same (name, version) can still map to
-// multiple deployments (one per provider); all of those are removed.
-func deploymentDeleteFunc(_ context.Context, name, version string, force bool) error {
-	if version == "" {
-		return fmt.Errorf("%w: --version is required when deleting deployments", database.ErrInvalidInput)
-	}
-	all, err := apiClient.GetDeployedServers()
-	if err != nil {
-		return fmt.Errorf("listing deployments: %w", err)
-	}
-	var matches []*models.Deployment
-	for _, d := range all {
-		if d == nil {
-			continue
-		}
-		if d.ServerName == name && d.Version == version {
-			matches = append(matches, d)
-		}
-	}
-	if len(matches) == 0 {
-		return database.ErrNotFound
-	}
-	var errs []error
-	for _, d := range matches {
-		if err := apiClient.DeleteDeployment(d.ID, force); err != nil {
-			errs = append(errs, fmt.Errorf("deleting %s (provider %s): %w", d.ID, d.ProviderID, err))
-		}
-	}
-	return errors.Join(errs...)
+	ID               string         `json:"id,omitempty" yaml:"id,omitempty"`
+	Phase            string         `json:"phase,omitempty" yaml:"phase,omitempty"`
+	Origin           string         `json:"origin,omitempty" yaml:"origin,omitempty"`
+	Error            string         `json:"error,omitempty" yaml:"error,omitempty"`
+	ProviderMetadata map[string]any `json:"providerMetadata,omitempty" yaml:"providerMetadata,omitempty"`
+	DeployedAt       time.Time      `json:"deployedAt,omitempty" yaml:"deployedAt,omitempty"`
+	UpdatedAt        time.Time      `json:"updatedAt,omitempty" yaml:"updatedAt,omitempty"`
 }

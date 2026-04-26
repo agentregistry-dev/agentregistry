@@ -1,6 +1,8 @@
 package deployment
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
@@ -8,8 +10,10 @@ import (
 
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	cliUtils "github.com/agentregistry-dev/agentregistry/internal/cli/utils"
+	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/constants"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/spf13/cobra"
 )
 
@@ -107,50 +111,57 @@ func runCreate(cmd *cobra.Command, args []string) error {
 
 	switch resourceType {
 	case "agent":
-		return createAgentDeployment(name, version, envMap, providerID, namespace, wait)
+		return createAgentDeployment(cmd.Context(), name, version, envMap, providerID, namespace, wait)
 	case "mcp":
-		return createMCPDeployment(name, version, envMap, providerID, namespace, preferRemote, wait)
+		return createMCPDeployment(cmd.Context(), name, version, envMap, providerID, namespace, preferRemote, wait)
 	}
 	return nil
 }
 
-func createAgentDeployment(name, version string, envMap map[string]string, providerID, namespace string, wait bool) error {
-	agentModel, err := apiClient.GetAgentVersion(name, version)
+func createAgentDeployment(ctx context.Context, name, version string, envMap map[string]string, providerID, namespace string, wait bool) error {
+	agent, err := client.GetTyped(
+		ctx,
+		apiClient,
+		v1alpha1.KindAgent,
+		v1alpha1.DefaultNamespace,
+		name,
+		resolveRequestedVersion(version),
+		func() *v1alpha1.Agent { return &v1alpha1.Agent{} },
+	)
 	if err != nil {
 		return fmt.Errorf("failed to fetch agent %q: %w", name, err)
 	}
-	if agentModel == nil {
-		return fmt.Errorf("agent not found: %s (version %s)", name, version)
+	if _, err := client.GetTyped(
+		ctx,
+		apiClient,
+		v1alpha1.KindProvider,
+		v1alpha1.DefaultNamespace,
+		providerID,
+		"",
+		func() *v1alpha1.Provider { return &v1alpha1.Provider{} },
+	); err != nil {
+		return fmt.Errorf("failed to fetch provider %q: %w", providerID, err)
 	}
 
-	manifest := &agentModel.Agent.AgentManifest
-
-	if err := validateAPIKey(manifest.ModelProvider, envMap); err != nil {
+	if err := validateAPIKey(agent.Spec.ModelProvider, envMap); err != nil {
 		return err
 	}
 
-	config := buildAgentDeployConfig(manifest, envMap)
+	config := buildAgentDeployConfig(agent, envMap)
 	if namespace != "" {
 		config[constants.EnvKagentNamespace] = namespace
 	}
 
-	if providerID == "local" {
-		deployment, err := apiClient.DeployAgent(name, version, config, providerID)
-		if err != nil {
-			return fmt.Errorf("failed to deploy agent: %w", err)
-		}
-		fmt.Printf("Agent '%s' version '%s' deployed to local provider (providerId=%s)\n", deployment.ServerName, deployment.Version, providerID)
-		return nil
+	deployment := newDeploymentResource(v1alpha1.KindAgent, name, agent.Metadata.Version, providerID, config, false)
+	if err := applyDeploymentResource(ctx, deployment); err != nil {
+		return err
 	}
 
-	deployment, err := apiClient.DeployAgent(name, version, config, providerID)
-	if err != nil {
-		return fmt.Errorf("failed to deploy agent: %w", err)
-	}
+	deploymentID := cliCommon.DeploymentID(deployment.Metadata.Namespace, deployment.Metadata.Name, deployment.Metadata.Version)
 
-	if wait {
-		fmt.Printf("Waiting for agent '%s' to become ready...\n", deployment.ServerName)
-		if err := cliCommon.WaitForDeploymentReady(apiClient, deployment.ID); err != nil {
+	if providerID != "local" && wait {
+		fmt.Printf("Waiting for agent '%s' to become ready...\n", name)
+		if err := cliCommon.WaitForDeploymentReady(apiClient, deploymentID); err != nil {
 			return err
 		}
 	}
@@ -159,25 +170,50 @@ func createAgentDeployment(name, version string, envMap map[string]string, provi
 	if ns == "" {
 		ns = "(default)"
 	}
-	fmt.Printf("Agent '%s' version '%s' deployed to providerId=%s in namespace '%s'\n", deployment.ServerName, deployment.Version, providerID, ns)
+	fmt.Printf("Agent '%s' version '%s' deployed to providerId=%s in namespace '%s' (deployment %s)\n", name, agent.Metadata.Version, providerID, ns, deploymentID)
 	return nil
 }
 
-func createMCPDeployment(name, version string, envMap map[string]string, providerID, namespace string, preferRemote bool, wait bool) error {
-	fmt.Println("\nDeploying server...")
-	deployment, err := apiClient.DeployServer(name, version, envMap, preferRemote, providerID)
+func createMCPDeployment(ctx context.Context, name, version string, envMap map[string]string, providerID, namespace string, preferRemote bool, wait bool) error {
+	server, err := client.GetTyped(
+		ctx,
+		apiClient,
+		v1alpha1.KindMCPServer,
+		v1alpha1.DefaultNamespace,
+		name,
+		resolveRequestedVersion(version),
+		func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} },
+	)
 	if err != nil {
-		return fmt.Errorf("failed to deploy server: %w", err)
+		return fmt.Errorf("failed to fetch server %q: %w", name, err)
+	}
+	if _, err := client.GetTyped(
+		ctx,
+		apiClient,
+		v1alpha1.KindProvider,
+		v1alpha1.DefaultNamespace,
+		providerID,
+		"",
+		func() *v1alpha1.Provider { return &v1alpha1.Provider{} },
+	); err != nil {
+		return fmt.Errorf("failed to fetch provider %q: %w", providerID, err)
 	}
 
+	fmt.Println("\nDeploying server...")
+	deployment := newDeploymentResource(v1alpha1.KindMCPServer, name, server.Metadata.Version, providerID, envMap, preferRemote)
+	if err := applyDeploymentResource(ctx, deployment); err != nil {
+		return err
+	}
+	deploymentID := cliCommon.DeploymentID(deployment.Metadata.Namespace, deployment.Metadata.Name, deployment.Metadata.Version)
+
 	if providerID != "local" && wait {
-		fmt.Printf("Waiting for server '%s' to become ready...\n", deployment.ServerName)
-		if err := cliCommon.WaitForDeploymentReady(apiClient, deployment.ID); err != nil {
+		fmt.Printf("Waiting for server '%s' to become ready...\n", name)
+		if err := cliCommon.WaitForDeploymentReady(apiClient, deploymentID); err != nil {
 			return err
 		}
 	}
 
-	fmt.Printf("\nDeployed %s (%s) with providerId=%s\n", deployment.ServerName, cliCommon.FormatVersionForDisplay(deployment.Version), providerID)
+	fmt.Printf("\nDeployed %s (%s) with providerId=%s (deployment %s)\n", name, cliCommon.FormatVersionForDisplay(server.Metadata.Version), providerID, deploymentID)
 	if namespace != "" {
 		fmt.Printf("Namespace: %s\n", namespace)
 	}
@@ -208,11 +244,15 @@ func validateAPIKey(modelProvider string, extraEnv map[string]string) error {
 }
 
 // buildAgentDeployConfig creates the configuration map with all necessary environment variables.
-func buildAgentDeployConfig(manifest *models.AgentManifest, envOverrides map[string]string) map[string]string {
+func buildAgentDeployConfig(agent *v1alpha1.Agent, envOverrides map[string]string) map[string]string {
 	config := make(map[string]string)
 	maps.Copy(config, envOverrides)
 
-	if envVar, ok := providerAPIKeys[strings.ToLower(manifest.ModelProvider)]; ok && envVar != "" {
+	if agent == nil {
+		return config
+	}
+
+	if envVar, ok := providerAPIKeys[strings.ToLower(agent.Spec.ModelProvider)]; ok && envVar != "" {
 		if _, exists := config[envVar]; !exists {
 			if value := os.Getenv(envVar); value != "" {
 				config[envVar] = value
@@ -220,9 +260,72 @@ func buildAgentDeployConfig(manifest *models.AgentManifest, envOverrides map[str
 		}
 	}
 
-	if manifest.TelemetryEndpoint != "" {
-		config["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = manifest.TelemetryEndpoint
+	if agent.Spec.TelemetryEndpoint != "" {
+		config["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = agent.Spec.TelemetryEndpoint
 	}
 
 	return config
+}
+
+func resolveRequestedVersion(version string) string {
+	if version == "" || version == "latest" {
+		return ""
+	}
+	return version
+}
+
+func newDeploymentResource(targetKind, targetName, targetVersion, providerID string, env map[string]string, preferRemote bool) *v1alpha1.Deployment {
+	return &v1alpha1.Deployment{
+		TypeMeta: v1alpha1.TypeMeta{
+			APIVersion: v1alpha1.GroupVersion,
+			Kind:       v1alpha1.KindDeployment,
+		},
+		Metadata: v1alpha1.ObjectMeta{
+			Namespace: v1alpha1.DefaultNamespace,
+			Name:      cliCommon.DeploymentResourceName(targetName, providerID),
+			Version:   targetVersion,
+		},
+		Spec: v1alpha1.DeploymentSpec{
+			TargetRef: v1alpha1.ResourceRef{
+				Kind:      targetKind,
+				Name:      targetName,
+				Version:   targetVersion,
+				Namespace: v1alpha1.DefaultNamespace,
+			},
+			ProviderRef: v1alpha1.ResourceRef{
+				Kind:      v1alpha1.KindProvider,
+				Name:      providerID,
+				Namespace: v1alpha1.DefaultNamespace,
+			},
+			DesiredState:   v1alpha1.DesiredStateDeployed,
+			Env:            env,
+			PreferRemote:   preferRemote,
+			ProviderConfig: nil,
+		},
+	}
+}
+
+func applyDeploymentResource(ctx context.Context, deployment *v1alpha1.Deployment) error {
+	if deployment == nil {
+		return fmt.Errorf("deployment is nil")
+	}
+
+	body, err := json.Marshal(deployment)
+	if err != nil {
+		return fmt.Errorf("marshal deployment: %w", err)
+	}
+
+	results, err := apiClient.Apply(ctx, body, client.ApplyOpts{})
+	if err != nil {
+		return fmt.Errorf("apply deployment: %w", err)
+	}
+	if len(results) == 0 {
+		return fmt.Errorf("apply deployment: empty response")
+	}
+	for _, result := range results {
+		if result.Status == arv0.ApplyStatusFailed {
+			return fmt.Errorf("apply deployment %s/%s: %s", result.Kind, result.Name, result.Error)
+		}
+	}
+	return nil
 }

@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"time"
 
+	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/manifest"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
 )
 
 // envVarPortPattern matches ${VAR} when used as a port (after a colon).
@@ -22,7 +22,7 @@ const ManifestFileName = "agent.yaml"
 type AgentManifestValidator struct{}
 
 // Validate checks if the agent manifest is valid.
-func (v *AgentManifestValidator) Validate(m *models.AgentManifest) error {
+func (v *AgentManifestValidator) Validate(m *agentmanifest.AgentManifest) error {
 	if m.Name == "" {
 		return fmt.Errorf("agent name is required")
 	}
@@ -64,7 +64,7 @@ func (v *AgentManifestValidator) Validate(m *models.AgentManifest) error {
 	return nil
 }
 
-func validateMcpServer(i int, srv models.McpServerType) error {
+func validateMcpServer(i int, srv agentmanifest.McpServerType) error {
 	if srv.Type == "" {
 		return fmt.Errorf("mcpServers[%d]: type is required", i)
 	}
@@ -87,7 +87,7 @@ func validateMcpServer(i int, srv models.McpServerType) error {
 	}
 }
 
-func validateRemoteMcpServer(i int, srv models.McpServerType) error {
+func validateRemoteMcpServer(i int, srv agentmanifest.McpServerType) error {
 	if srv.URL == "" {
 		return fmt.Errorf("mcpServers[%d]: url is required for type 'remote'", i)
 	}
@@ -109,14 +109,14 @@ func validateRemoteMcpServer(i int, srv models.McpServerType) error {
 	return nil
 }
 
-func validateCommandMcpServer(i int, srv models.McpServerType) error {
+func validateCommandMcpServer(i int, srv agentmanifest.McpServerType) error {
 	if srv.Command == "" && srv.Image == "" && srv.Build == "" {
 		return fmt.Errorf("mcpServers[%d]: at least one of command, image, or build is required for type 'command'", i)
 	}
 	return nil
 }
 
-func validateRegistryMcpServer(i int, srv models.McpServerType) error {
+func validateRegistryMcpServer(i int, srv agentmanifest.McpServerType) error {
 	if srv.RegistryURL == "" {
 		return fmt.Errorf("mcpServers[%d]: registryURL is required for type 'registry'", i)
 	}
@@ -128,7 +128,7 @@ func validateRegistryMcpServer(i int, srv models.McpServerType) error {
 
 // Manager wraps the generic manifest manager for agent manifests.
 type Manager struct {
-	*manifest.Manager[*models.AgentManifest]
+	*manifest.Manager[*agentmanifest.AgentManifest]
 }
 
 // NewManifestManager creates a new agent manifest manager.
@@ -143,14 +143,14 @@ func NewManifestManager(projectRoot string) *Manager {
 }
 
 // Save updates the timestamp and saves the manifest.
-func (m *Manager) Save(man *models.AgentManifest) error {
+func (m *Manager) Save(man *agentmanifest.AgentManifest) error {
 	man.UpdatedAt = time.Now()
 	return m.Manager.Save(man)
 }
 
 // NewProjectManifest creates a new AgentManifest with the given values.
-func NewProjectManifest(agentName, language, framework, modelProvider, modelName, description string, mcpServers []models.McpServerType) *models.AgentManifest {
-	return &models.AgentManifest{
+func NewProjectManifest(agentName, language, framework, modelProvider, modelName, description string, mcpServers []agentmanifest.McpServerType) *agentmanifest.AgentManifest {
+	return &agentmanifest.AgentManifest{
 		Name:          agentName,
 		Language:      language,
 		Framework:     framework,

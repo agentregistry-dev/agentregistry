@@ -1,15 +1,17 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"os"
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
+	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/registry"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 )
 
@@ -30,8 +32,8 @@ func GetDefaultRegistryURL() string {
 }
 
 // ParseAgentManifestServers resolves registry-type MCP servers in an agent manifest, keeping non-registry servers as-is.
-func ParseAgentManifestServers(manifest *models.AgentManifest, verbose bool) ([]models.McpServerType, error) {
-	servers := []models.McpServerType{}
+func ParseAgentManifestServers(manifest *agentmanifest.AgentManifest, verbose bool) ([]agentmanifest.McpServerType, error) {
+	servers := []agentmanifest.McpServerType{}
 
 	if verbose {
 		fmt.Printf("[registry-resolver] Processing %d MCP servers from manifest\n", len(manifest.McpServers))
@@ -73,7 +75,7 @@ func ParseAgentManifestServers(manifest *models.AgentManifest, verbose bool) ([]
 }
 
 // resolveRegistryServer fetches a server from the registry and translates it to a runnable config
-func resolveRegistryServer(mcpServer models.McpServerType, verbose bool) (*models.McpServerType, error) {
+func resolveRegistryServer(mcpServer agentmanifest.McpServerType, verbose bool) (*agentmanifest.McpServerType, error) {
 	registryURL := mcpServer.RegistryURL
 	if registryURL == "" {
 		registryURL = defaultRegistryURL
@@ -203,7 +205,7 @@ func collectEnvOverrides(packages []model.Package) map[string]string {
 
 // ResolveManifestPrompts fetches prompts referenced in the agent manifest from the registry
 // and returns them as PythonPrompt structs ready to be written to prompts.json.
-func ResolveManifestPrompts(manifest *models.AgentManifest, verbose bool) ([]common.PythonPrompt, error) {
+func ResolveManifestPrompts(manifest *agentmanifest.AgentManifest, verbose bool) ([]common.PythonPrompt, error) {
 	if manifest == nil || len(manifest.Prompts) == 0 {
 		return nil, nil
 	}
@@ -236,13 +238,15 @@ func ResolveManifestPrompts(manifest *models.AgentManifest, verbose bool) ([]com
 			clients[registryURL] = apiClient
 		}
 
-		var promptResp *models.PromptResponse
-		var err error
-		if promptVersion != "" {
-			promptResp, err = apiClient.GetPromptVersion(promptName, promptVersion)
-		} else {
-			promptResp, err = apiClient.GetPrompt(promptName)
-		}
+		promptResp, err := client.GetTyped(
+			context.Background(),
+			apiClient,
+			v1alpha1.KindPrompt,
+			v1alpha1.DefaultNamespace,
+			promptName,
+			promptVersion,
+			func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} },
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch prompt %q from registry: %w", promptName, err)
 		}
@@ -252,10 +256,13 @@ func ResolveManifestPrompts(manifest *models.AgentManifest, verbose bool) ([]com
 
 		if verbose {
 			fmt.Printf("[prompt-resolver] [%d] Successfully resolved prompt %q (version=%q, content length=%d)\n",
-				i, ref.Name, promptResp.Prompt.Version, len(promptResp.Prompt.Content))
+				i, ref.Name, promptResp.Metadata.Version, len(promptResp.Spec.Content))
 		}
 
-		resolved = append(resolved, common.PythonPromptFromResponse(ref.Name, &promptResp.Prompt))
+		resolved = append(resolved, common.PythonPrompt{
+			Name:    ref.Name,
+			Content: promptResp.Spec.Content,
+		})
 	}
 
 	if verbose {

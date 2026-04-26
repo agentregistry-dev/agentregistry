@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { PromptCard } from "./prompt-card"
-import type { PromptResponse } from "@/lib/api/types.gen"
+import type { PromptResponse } from "@/lib/admin-api"
 
 const mockPrompt: PromptResponse = {
   prompt: {

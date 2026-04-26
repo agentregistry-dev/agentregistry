@@ -1,376 +1,90 @@
+// Package utils hosts shared helpers used by both the local and kubernetes
+// platform adapters. The primary surface is TranslateMCPServer, which takes
+// a v1alpha1.MCPServerSpec plus runtime overrides and projects it onto the
+// platform-internal *platformtypes.MCPServer that adapters then dispatch.
+//
+// Historically this translator operated on the upstream
+// modelcontextprotocol/registry apiv0.ServerJSON shape, with a projection
+// layer that converted v1alpha1 → ServerJSON. That projection was removed
+// when the refactor landed Scott's directive "everything should be v1alpha1";
+// the translator now speaks v1alpha1 types directly.
 package utils
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"maps"
 	"net"
 	"net/url"
 	"slices"
 	"strconv"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
-	"github.com/agentregistry-dev/agentregistry/internal/constants"
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
-	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
-	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
-	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
-	"github.com/modelcontextprotocol/registry/pkg/model"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
+// DefaultLocalAgentPort is the port kagent-runtime listens on inside the
+// agent container. Kept as a package const so both adapters + tests
+// reference the same value.
 const DefaultLocalAgentPort uint16 = 8080
 
+// MCPServerRunRequest is the input bundle TranslateMCPServer needs. Spec
+// carries the authoritative description of what's being run; the *Values
+// maps carry per-deployment runtime overrides supplied on apply.
 type MCPServerRunRequest struct {
-	RegistryServer *apiv0.ServerJSON
-	DeploymentID   string
-	PreferRemote   bool
-	EnvValues      map[string]string
-	ArgValues      map[string]string
-	HeaderValues   map[string]string
+	// Name is metadata.name of the v1alpha1.MCPServer; used to derive the
+	// platform-internal container/resource name via generateInternalName.
+	Name string
+	// Spec is the v1alpha1 MCPServerSpec authored in the manifest.
+	Spec v1alpha1.MCPServerSpec
+	// DeploymentID is the unique identifier this invocation carries; the
+	// same Spec deployed twice produces two distinct DeploymentIDs and
+	// therefore two distinct platform-internal names.
+	DeploymentID string
+	// PreferRemote biases the translator toward remote transport selection
+	// when both Remotes and Packages are populated. Default (false) picks
+	// package-first when a package is defined.
+	PreferRemote bool
+	// EnvValues, ArgValues, HeaderValues carry per-deployment runtime
+	// overrides. Nil is treated as an empty map.
+	EnvValues    map[string]string
+	ArgValues    map[string]string
+	HeaderValues map[string]string
 }
 
-func ValidateDeploymentRequest(deployment *models.Deployment, allowExisting bool) error {
-	if deployment == nil {
-		return fmt.Errorf("deployment request is required: %w", database.ErrInvalidInput)
-	}
-	if strings.TrimSpace(deployment.ProviderID) == "" {
-		return fmt.Errorf("provider id is required: %w", database.ErrInvalidInput)
-	}
-	if len(deployment.ProviderConfig) > 0 {
-		return fmt.Errorf("providerConfig is not supported for OSS adapters: %w", database.ErrInvalidInput)
-	}
-	if allowExisting {
-		if strings.TrimSpace(deployment.ID) == "" {
-			return fmt.Errorf("deployment id is required: %w", database.ErrInvalidInput)
-		}
-	}
-	return nil
-}
-
-func BuildPlatformMCPServer(
-	ctx context.Context,
-	serverService serversvc.Registry,
-	deployment *models.Deployment,
-	namespace string,
-) (*platformtypes.MCPServer, error) {
-	serverResp, err := serverService.GetServerVersion(ctx, deployment.ServerName, deployment.Version)
-	if err != nil {
-		return nil, fmt.Errorf("load mcp server %s@%s: %w", deployment.ServerName, deployment.Version, err)
-	}
-	envValues, argValues, headerValues := splitDeploymentRuntimeInputs(deployment.Env)
-	server, err := TranslateMCPServer(ctx, &MCPServerRunRequest{
-		RegistryServer: &serverResp.Server,
-		DeploymentID:   deployment.ID,
-		PreferRemote:   deployment.PreferRemote,
-		EnvValues:      envValues,
-		ArgValues:      argValues,
-		HeaderValues:   headerValues,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if namespace != "" && server.Namespace == "" {
-		server.Namespace = namespace
-	}
-	return server, nil
-}
-
-func ResolveAgent(
-	ctx context.Context,
-	serverService serversvc.Registry,
-	agentService agentsvc.Registry,
-	deployment *models.Deployment,
-	namespace string,
-) (*platformtypes.ResolvedAgentConfig, error) {
-	agentResp, err := agentService.GetAgentVersion(ctx, deployment.ServerName, deployment.Version)
-	if err != nil {
-		return nil, fmt.Errorf("load agent %s@%s: %w", deployment.ServerName, deployment.Version, err)
-	}
-	envValues := copyStringMap(deployment.Env)
-	if envValues[constants.EnvKagentNamespace] == "" {
-		if namespace != "" {
-			envValues[constants.EnvKagentNamespace] = namespace
-		} else {
-			// We always need a namespace when deploying to local/docker (kagent-adk requires it)
-			// so even if namespace isn't explicitly provided, we should set it to default.
-			envValues[constants.EnvKagentNamespace] = "default"
-		}
-	}
-	envValues[constants.EnvKagentURL] = "http://localhost"
-	envValues[constants.EnvKagentName] = agentResp.Agent.Name
-	envValues[constants.EnvAgentName] = agentResp.Agent.Name
-	envValues[constants.EnvModelProvider] = agentResp.Agent.ModelProvider
-	envValues[constants.EnvModelName] = agentResp.Agent.ModelName
-
-	// Resolve MCP servers from both new-format DB ref columns and legacy manifest entries.
-	var resolvedServers []*platformtypes.MCPServer
-	var resolvedConfigs []platformtypes.ResolvedMCPServerConfig
-
-	// New declarative path: resolve from DB ref columns (mcp_server_refs).
-	if len(agentResp.MCPServerRefs) > 0 {
-		for _, ref := range agentResp.MCPServerRefs {
-			servers, configs, err := resolveRegistryRef(ctx, serverService, deployment.ID, ref, namespace)
-			if err != nil {
-				return nil, err
-			}
-			resolvedServers = append(resolvedServers, servers...)
-			resolvedConfigs = append(resolvedConfigs, configs...)
-		}
-	}
-
-	// TODO(legacy): remove once declarative API is the only supported path
-	// Legacy path: resolve from embedded manifest McpServers.
-	legacyServers, legacyConfigs, _, err := resolveAgentManifestPlatformMCPServers(ctx, serverService, deployment.ID, &agentResp.Agent.AgentManifest, namespace)
-	if err != nil {
-		return nil, err
-	}
-	// Merge legacy configs, skipping any that conflict with new-format refs by name.
-	// Note: legacyConfigs and legacyServers are not guaranteed to be index-aligned;
-	// some legacy manifest entries (e.g. type:"remote") produce a config without a
-	// corresponding platform server.
-	existingNames := make(map[string]bool, len(resolvedConfigs))
-	for _, c := range resolvedConfigs {
-		existingNames[c.Name] = true
-	}
-	for i, c := range legacyConfigs {
-		if existingNames[c.Name] {
-			continue
-		}
-		if i < len(legacyServers) {
-			resolvedServers = append(resolvedServers, legacyServers[i])
-		}
-		resolvedConfigs = append(resolvedConfigs, c)
-	}
-
-	// Inject resolved MCP config as MCP_SERVERS_CONFIG env var.
-	if len(resolvedConfigs) > 0 {
-		mcpJSON, err := json.Marshal(resolvedConfigs)
-		if err != nil {
-			return nil, fmt.Errorf("marshal MCP servers config: %w", err)
-		}
-		envValues[constants.EnvMCPServersConfig] = string(mcpJSON)
-	}
-
-	skills, err := agentService.ResolveAgentManifestSkills(ctx, &agentResp.Agent.AgentManifest)
-	if err != nil {
-		return nil, err
-	}
-
-	prompts, err := agentService.ResolveAgentManifestPrompts(ctx, &agentResp.Agent.AgentManifest)
-	if err != nil {
-		return nil, err
-	}
-
-	return &platformtypes.ResolvedAgentConfig{
-		Agent: &platformtypes.Agent{
-			Name:               agentResp.Agent.Name,
-			Version:            agentResp.Agent.Version,
-			DeploymentID:       deployment.ID,
-			Deployment:         platformtypes.AgentDeployment{Image: agentResp.Agent.Image, Env: envValues, Port: DefaultLocalAgentPort},
-			ResolvedMCPServers: resolvedConfigs,
-			ResolvedPrompts:    prompts,
-			Skills:             skills,
-		},
-		ResolvedPlatformServers: resolvedServers,
-		ResolvedConfigServers:   resolvedConfigs,
-		ResolvedPrompts:         prompts,
-	}, nil
-}
-
-func resolveAgentManifestPlatformMCPServers(
-	ctx context.Context,
-	serverService serversvc.Registry,
-	deploymentID string,
-	manifest *models.AgentManifest,
-	namespace string,
-) ([]*platformtypes.MCPServer, []platformtypes.ResolvedMCPServerConfig, []common.PythonMCPServer, error) {
-	if manifest == nil {
-		return nil, nil, nil, nil
-	}
-
-	var platformServers []*platformtypes.MCPServer
-	var configServers []platformtypes.ResolvedMCPServerConfig
-	var pythonServers []common.PythonMCPServer
-
-	for _, mcpServer := range manifest.McpServers {
-		switch {
-		case !mcpServer.IsLegacyFormat():
-			// New RegistryRef format: resolved via resolveRegistryRef in ResolveAgent().
-			// Skip here -- these are handled by the mcp_server_refs DB column path.
-			continue
-
-		// TODO(legacy): remove cases below once declarative API is the only supported path
-		case mcpServer.Type == "registry":
-			version := strings.TrimSpace(mcpServer.RegistryServerVersion)
-			if version == "" {
-				version = "latest"
-			}
-
-			serverResp, err := serverService.GetServerVersion(ctx, mcpServer.RegistryServerName, version)
-			if err != nil {
-				return nil, nil, nil, fmt.Errorf("load resolved MCP server %s@%s: %w", mcpServer.RegistryServerName, version, err)
-			}
-
-			platformServer, err := TranslateMCPServer(ctx, &MCPServerRunRequest{
-				RegistryServer: &serverResp.Server,
-				DeploymentID:   deploymentID,
-				PreferRemote:   mcpServer.RegistryServerPreferRemote,
-				EnvValues:      map[string]string{},
-				ArgValues:      map[string]string{},
-				HeaderValues:   map[string]string{},
-			})
-			if err != nil {
-				return nil, nil, nil, err
-			}
-			if namespace != "" && platformServer.Namespace == "" {
-				platformServer.Namespace = namespace
-			}
-			platformServers = append(platformServers, platformServer)
-
-			configServer := resolvedMCPConfigFromRegistryServer(&serverResp.Server, deploymentID, mcpServer.RegistryServerPreferRemote)
-			configServers = append(configServers, configServer)
-			pythonServers = append(pythonServers, common.PythonMCPServer{
-				Name:    configServer.Name,
-				Type:    configServer.Type,
-				URL:     configServer.URL,
-				Headers: configServer.Headers,
-			})
-
-		case mcpServer.Type == "remote":
-			// TODO(legacy): remove once declarative API is the only supported path
-			configServers = append(configServers, platformtypes.ResolvedMCPServerConfig{
-				Name:    mcpServer.Name,
-				Type:    "remote",
-				URL:     mcpServer.URL,
-				Headers: mcpServer.Headers,
-			})
-			// command type: still handled by baked-in _MCP_SERVERS in mcp_tools.py (needs local infra)
-		}
-	}
-
-	return platformServers, configServers, pythonServers, nil
-}
-
-// resolveRegistryRef resolves a RegistryRef to platform MCP servers and config.
-// The transport (remote vs local) is determined by the MCP server's own spec.
-func resolveRegistryRef(
-	ctx context.Context,
-	serverService serversvc.Registry,
-	deploymentID string,
-	ref models.RegistryRef,
-	namespace string,
-) ([]*platformtypes.MCPServer, []platformtypes.ResolvedMCPServerConfig, error) {
-	name := strings.TrimSpace(ref.Name)
-	if name == "" {
-		return nil, nil, fmt.Errorf("MCP server name is required")
-	}
-
-	version := strings.TrimSpace(ref.Version)
-	if version == "" {
-		version = "latest"
-	}
-
-	serverResp, err := serverService.GetServerVersion(ctx, name, version)
-	if err != nil {
-		return nil, nil, fmt.Errorf("resolve MCP server ref %s@%s: %w", name, version, err)
-	}
-
-	// Determine transport preference from server spec: use remote if available.
-	preferRemote := len(serverResp.Server.Remotes) > 0
-
-	platformServer, err := TranslateMCPServer(ctx, &MCPServerRunRequest{
-		RegistryServer: &serverResp.Server,
-		DeploymentID:   deploymentID,
-		PreferRemote:   preferRemote,
-		EnvValues:      map[string]string{},
-		ArgValues:      map[string]string{},
-		HeaderValues:   map[string]string{},
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-	if namespace != "" && platformServer.Namespace == "" {
-		platformServer.Namespace = namespace
-	}
-
-	configServer := resolvedMCPConfigFromRegistryServer(&serverResp.Server, deploymentID, preferRemote)
-
-	return []*platformtypes.MCPServer{platformServer}, []platformtypes.ResolvedMCPServerConfig{configServer}, nil
-}
-
-func resolvedMCPConfigFromRegistryServer(
-	server *apiv0.ServerJSON,
-	deploymentID string,
-	preferRemote bool,
-) platformtypes.ResolvedMCPServerConfig {
-	if server == nil {
-		return platformtypes.ResolvedMCPServerConfig{
-			Name: GenerateInternalNameForDeployment("", deploymentID),
-			Type: "command",
-		}
-	}
-	cfg := platformtypes.ResolvedMCPServerConfig{
-		Name: GenerateInternalNameForDeployment(server.Name, deploymentID),
-		Type: "command",
-	}
-	useRemote := len(server.Remotes) > 0 && (preferRemote || len(server.Packages) == 0)
-	if !useRemote {
-		return cfg
-	}
-	cfg.Type = "remote"
-	cfg.URL = server.Remotes[0].URL
-	if len(server.Remotes[0].Headers) > 0 {
-		headers := make(map[string]string, len(server.Remotes[0].Headers))
-		for _, header := range server.Remotes[0].Headers {
-			headers[header.Name] = header.Value
-		}
-		cfg.Headers = headers
-	}
-	return cfg
-}
-
-var ErrDeploymentNotSupported = errors.New("deployment operation is not supported for this provider platform type")
-
+// TranslateMCPServer maps a v1alpha1 MCPServerSpec onto the platform-internal
+// MCPServer. Remote transport wins when the spec lists remotes and either
+// PreferRemote is true or no packages are defined; package transport wins
+// otherwise.
 func TranslateMCPServer(ctx context.Context, req *MCPServerRunRequest) (*platformtypes.MCPServer, error) {
-	if req == nil || req.RegistryServer == nil {
-		return nil, fmt.Errorf("registry server is required")
+	if req == nil {
+		return nil, fmt.Errorf("mcp server run request is required")
 	}
-	useRemote := len(req.RegistryServer.Remotes) > 0 && (req.PreferRemote || len(req.RegistryServer.Packages) == 0)
-	usePackage := len(req.RegistryServer.Packages) > 0 && (!req.PreferRemote || len(req.RegistryServer.Remotes) == 0)
+
+	useRemote := len(req.Spec.Remotes) > 0 && (req.PreferRemote || len(req.Spec.Packages) == 0)
+	usePackage := len(req.Spec.Packages) > 0 && (!req.PreferRemote || len(req.Spec.Remotes) == 0)
 
 	switch {
 	case useRemote:
-		return translateRemoteMCPServer(
-			ctx,
-			req.RegistryServer,
-			req.DeploymentID,
-			req.HeaderValues,
-		)
+		return translateRemoteMCPServer(ctx, req.Name, req.Spec, req.DeploymentID, req.HeaderValues)
 	case usePackage:
-		return translateLocalMCPServer(
-			ctx,
-			req.RegistryServer,
-			req.DeploymentID,
-			req.EnvValues,
-			req.ArgValues,
-		)
+		return translateLocalMCPServer(ctx, req.Name, req.Spec, req.DeploymentID, req.EnvValues, req.ArgValues)
 	}
 
-	return nil, fmt.Errorf("no valid deployment method found for server: %s", req.RegistryServer.Name)
+	return nil, fmt.Errorf("no valid deployment method found for server: %s", req.Name)
 }
 
+// translateRemoteMCPServer emits a platformtypes.MCPServer configured for
+// remote transport. Header overrides resolve against the remote's header
+// input list with required/default semantics matching the MCP spec.
 func translateRemoteMCPServer(
-	ctx context.Context,
-	registryServer *apiv0.ServerJSON,
+	_ context.Context,
+	serverName string,
+	spec v1alpha1.MCPServerSpec,
 	deploymentID string,
 	headerValues map[string]string,
 ) (*platformtypes.MCPServer, error) {
-	remoteInfo := registryServer.Remotes[0]
+	remoteInfo := spec.Remotes[0]
 
 	headersMap, err := processHeaders(remoteInfo.Headers, headerValues)
 	if err != nil {
@@ -391,7 +105,7 @@ func translateRemoteMCPServer(
 	}
 
 	return &platformtypes.MCPServer{
-		Name:          generateInternalName(registryServer.Name),
+		Name:          generateInternalName(serverName),
 		DeploymentID:  deploymentID,
 		MCPServerType: platformtypes.MCPServerTypeRemote,
 		Remote: &platformtypes.RemoteMCPServer{
@@ -404,34 +118,44 @@ func translateRemoteMCPServer(
 	}, nil
 }
 
+// translateLocalMCPServer emits a platformtypes.MCPServer for package-based
+// local execution. Registry-type dispatch (npm / pypi / oci) picks the base
+// image and command; runtime + package arguments merge with overrides;
+// environment variables resolve required/default values. The transport
+// field inside the package controls whether the runner speaks stdio or
+// http on the far side.
 func translateLocalMCPServer(
-	ctx context.Context,
-	registryServer *apiv0.ServerJSON,
+	_ context.Context,
+	serverName string,
+	spec v1alpha1.MCPServerSpec,
 	deploymentID string,
 	envValues map[string]string,
 	argValues map[string]string,
 ) (*platformtypes.MCPServer, error) {
-	packageInfo := registryServer.Packages[0]
+	pkg := spec.Packages[0]
 
 	var args []string
 	processedArgs := make(map[string]bool)
-	addProcessedArgs := func(modelArgs []model.Argument) {
-		for _, arg := range modelArgs {
+	addProcessedArgs := func(in []v1alpha1.MCPArgument) {
+		for _, arg := range in {
 			processedArgs[arg.Name] = true
 		}
 	}
 
-	args = processArguments(args, packageInfo.RuntimeArguments, argValues)
-	addProcessedArgs(packageInfo.RuntimeArguments)
+	args = processArguments(args, pkg.RuntimeArguments, argValues)
+	addProcessedArgs(pkg.RuntimeArguments)
 
-	config, args, err := GetRegistryConfig(packageInfo, args)
+	config, args, err := GetRegistryConfig(pkg, args)
 	if err != nil {
 		return nil, err
 	}
 
-	args = processArguments(args, packageInfo.PackageArguments, argValues)
-	addProcessedArgs(packageInfo.PackageArguments)
+	args = processArguments(args, pkg.PackageArguments, argValues)
+	addProcessedArgs(pkg.PackageArguments)
 
+	// Any override the spec doesn't declare gets appended at the end as a
+	// raw (name, value) pair so callers can inject one-off flags without
+	// editing the manifest. Ordered deterministically.
 	var extraArgNames []string
 	for argName := range argValues {
 		if !processedArgs[argName] {
@@ -446,7 +170,7 @@ func translateLocalMCPServer(
 		}
 	}
 
-	processedEnvVars, err := processEnvironmentVariables(packageInfo.EnvironmentVariables, envValues)
+	processedEnvVars, err := processEnvironmentVariables(pkg.EnvironmentVariables, envValues)
 	if err != nil {
 		return nil, err
 	}
@@ -460,12 +184,12 @@ func translateLocalMCPServer(
 		transportType platformtypes.TransportType
 		httpTransport *platformtypes.HTTPTransport
 	)
-	switch packageInfo.Transport.Type {
+	switch pkg.Transport.Type {
 	case "stdio":
 		transportType = platformtypes.TransportTypeStdio
 	default:
 		transportType = platformtypes.TransportTypeHTTP
-		u, err := parseURL(packageInfo.Transport.URL)
+		u, err := parseURL(pkg.Transport.URL)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse transport url: %v", err)
 		}
@@ -476,7 +200,7 @@ func translateLocalMCPServer(
 	}
 
 	return &platformtypes.MCPServer{
-		Name:          generateInternalName(registryServer.Name),
+		Name:          generateInternalName(serverName),
 		DeploymentID:  deploymentID,
 		MCPServerType: platformtypes.MCPServerTypeLocal,
 		Local: &platformtypes.LocalMCPServer{
@@ -492,6 +216,7 @@ func translateLocalMCPServer(
 	}, nil
 }
 
+// parsedURL is the narrow shape TranslateMCPServer needs from a transport URL.
 type parsedURL struct {
 	scheme string
 	host   string
@@ -499,6 +224,8 @@ type parsedURL struct {
 	path   string
 }
 
+// parseURL enforces http/https-only and normalizes missing ports to the
+// protocol default.
 func parseURL(rawURL string) (*parsedURL, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -557,6 +284,10 @@ func BuildRemoteMCPURL(remote *platformtypes.RemoteMCPServer) string {
 	return u.String()
 }
 
+// generateInternalName normalizes an MCPServer or Agent name into a
+// platform-safe slug: lowercase, replace any of ~20 common punctuation
+// characters with '-'. Output is safe for Docker, Kubernetes DNS-1123,
+// and agentgateway labels.
 func generateInternalName(server string) string {
 	name := strings.ToLower(strings.ReplaceAll(server, " ", "-"))
 	name = strings.ReplaceAll(name, ".", "-")
@@ -586,6 +317,9 @@ func generateInternalName(server string) string {
 	return name
 }
 
+// GenerateInternalNameForDeployment stamps the deploymentID suffix onto the
+// base internal name so two deployments of the same MCPServer don't collide
+// at the platform level.
 func GenerateInternalNameForDeployment(name, deploymentID string) string {
 	base := generateInternalName(name)
 	deploymentID = strings.TrimSpace(deploymentID)
@@ -595,18 +329,25 @@ func GenerateInternalNameForDeployment(name, deploymentID string) string {
 	return fmt.Sprintf("%s-%s", base, generateInternalName(deploymentID))
 }
 
+// RegistryConfig captures what runtime image + command a package dispatches
+// to. IsOCI toggles container-passthrough (Command is a hint for the runner,
+// Image IS the server).
 type RegistryConfig struct {
 	Image   string
 	Command string
 	IsOCI   bool
 }
 
+// processArguments appends a package's argument list onto the running args
+// slice, resolving overrides by name. Positional args come first, then named
+// args; the caller later appends any extras the override map carries that
+// the spec didn't declare.
 func processArguments(
 	args []string,
-	modelArgs []model.Argument,
+	modelArgs []v1alpha1.MCPArgument,
 	argOverrides map[string]string,
 ) []string {
-	getArgValue := func(arg model.Argument) string {
+	getArgValue := func(arg v1alpha1.MCPArgument) string {
 		if argOverrides != nil {
 			if v, exists := argOverrides[arg.Name]; exists {
 				return v
@@ -619,7 +360,7 @@ func processArguments(
 	}
 
 	for _, arg := range modelArgs {
-		if arg.Type == model.ArgumentTypePositional {
+		if arg.Type == v1alpha1.MCPArgumentTypePositional {
 			value := getArgValue(arg)
 			if value != "" {
 				args = append(args, value)
@@ -627,7 +368,7 @@ func processArguments(
 		}
 	}
 	for _, arg := range modelArgs {
-		if arg.Type == model.ArgumentTypeNamed {
+		if arg.Type == v1alpha1.MCPArgumentTypeNamed {
 			args = append(args, arg.Name)
 			value := getArgValue(arg)
 			if value != "" {
@@ -638,8 +379,13 @@ func processArguments(
 	return args
 }
 
+// processEnvironmentVariables resolves the package's env-var list against
+// supplied overrides. Required env vars with no value anywhere (override,
+// spec value, spec default) surface as an aggregate error listing all
+// missing names. Overrides for env vars the spec didn't declare pass
+// through as-is.
 func processEnvironmentVariables(
-	envVars []model.KeyValueInput,
+	envVars []v1alpha1.MCPKeyValueInput,
 	overrides map[string]string,
 ) (map[string]string, error) {
 	result := make(map[string]string)
@@ -682,8 +428,10 @@ func processEnvironmentVariables(
 	return result, nil
 }
 
+// processHeaders resolves a remote's header input list. Same required/default
+// semantics as processEnvironmentVariables.
 func processHeaders(
-	headers []model.KeyValueInput,
+	headers []v1alpha1.MCPKeyValueInput,
 	headerOverrides map[string]string,
 ) (map[string]string, error) {
 	result := make(map[string]string)
@@ -717,50 +465,61 @@ func processHeaders(
 	return result, nil
 }
 
+// GetRegistryConfig picks the base image + command for a package based on
+// its registry type:
+//   - npm  → node:24-alpine3.21 + `npx -y <id>[@ver]`
+//   - pypi → ghcr.io/astral-sh/uv:debian + `uvx <id>[==ver]`
+//   - oci  → the image is the package identifier itself; the runtime hint
+//     becomes the command if set
+//
+// RuntimeHint on the package overrides the default command if specified.
+// Unsupported registry types return an error.
 func GetRegistryConfig(
-	packageInfo model.Package,
+	pkg v1alpha1.MCPPackage,
 	args []string,
 ) (RegistryConfig, []string, error) {
 	var config RegistryConfig
-	normalizedType := strings.ToLower(string(packageInfo.RegistryType))
+	normalizedType := strings.ToLower(strings.TrimSpace(pkg.RegistryType))
 
 	switch normalizedType {
-	case strings.ToLower(string(model.RegistryTypeNPM)):
+	case v1alpha1.RegistryTypeNPM:
 		config.Image = "node:24-alpine3.21"
-		config.Command = packageInfo.RunTimeHint
+		config.Command = pkg.RuntimeHint
 		if config.Command == "" {
 			config.Command = "npx"
 		}
 		if !slices.Contains(args, "-y") {
 			args = append(args, "-y")
 		}
-		if packageInfo.Version != "" {
-			args = append(args, packageInfo.Identifier+"@"+packageInfo.Version)
+		if pkg.Version != "" {
+			args = append(args, pkg.Identifier+"@"+pkg.Version)
 		} else {
-			args = append(args, packageInfo.Identifier)
+			args = append(args, pkg.Identifier)
 		}
-	case strings.ToLower(string(model.RegistryTypePyPI)):
+	case v1alpha1.RegistryTypePyPI:
 		config.Image = "ghcr.io/astral-sh/uv:debian"
-		config.Command = packageInfo.RunTimeHint
+		config.Command = pkg.RuntimeHint
 		if config.Command == "" {
 			config.Command = "uvx"
 		}
-		if packageInfo.Version != "" {
-			args = append(args, packageInfo.Identifier+"=="+packageInfo.Version)
+		if pkg.Version != "" {
+			args = append(args, pkg.Identifier+"=="+pkg.Version)
 		} else {
-			args = append(args, packageInfo.Identifier)
+			args = append(args, pkg.Identifier)
 		}
-	case strings.ToLower(string(model.RegistryTypeOCI)):
-		config.Image = packageInfo.Identifier
-		config.Command = packageInfo.RunTimeHint
+	case v1alpha1.RegistryTypeOCI:
+		config.Image = pkg.Identifier
+		config.Command = pkg.RuntimeHint
 		config.IsOCI = true
 	default:
-		return RegistryConfig{}, nil, fmt.Errorf("unsupported package registry type: %s", string(packageInfo.RegistryType))
+		return RegistryConfig{}, nil, fmt.Errorf("unsupported package registry type: %s", pkg.RegistryType)
 	}
 
 	return config, args, nil
 }
 
+// EnvMapToStringSlice renders an env map as a sorted ["K=V"] slice —
+// suitable for docker and kubernetes env surfaces.
 func EnvMapToStringSlice(envMap map[string]string) []string {
 	result := make([]string, 0, len(envMap))
 	for key, value := range envMap {
@@ -768,39 +527,4 @@ func EnvMapToStringSlice(envMap map[string]string) []string {
 	}
 	slices.Sort(result)
 	return result
-}
-
-func copyStringMap(input map[string]string) map[string]string {
-	if len(input) == 0 {
-		return map[string]string{}
-	}
-	out := make(map[string]string, len(input))
-	maps.Copy(out, input)
-	return out
-}
-
-func splitDeploymentRuntimeInputs(input map[string]string) (map[string]string, map[string]string, map[string]string) {
-	if len(input) == 0 {
-		return map[string]string{}, map[string]string{}, map[string]string{}
-	}
-	envValues := make(map[string]string, len(input))
-	argValues := map[string]string{}
-	headerValues := map[string]string{}
-	for key, value := range input {
-		switch {
-		case strings.HasPrefix(key, "ARG_"):
-			name := strings.TrimPrefix(key, "ARG_")
-			if name != "" {
-				argValues[name] = value
-			}
-		case strings.HasPrefix(key, "HEADER_"):
-			name := strings.TrimPrefix(key, "HEADER_")
-			if name != "" {
-				headerValues[name] = value
-			}
-		default:
-			envValues[key] = value
-		}
-	}
-	return envValues, argValues, headerValues
 }

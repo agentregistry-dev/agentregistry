@@ -3,8 +3,7 @@ package manifest
 import (
 	"fmt"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
-	"gopkg.in/yaml.v3"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 // loadFromEnvelope decodes declarative envelope YAML into a *ProjectManifest.
@@ -13,25 +12,21 @@ import (
 // zero-value and filled in by kind-specific code paths where needed. The
 // strict validator used by the flat-manifest path is intentionally skipped
 // here because envelope files produced by `arctl init mcp` do not carry a
-// Framework field. This bridge will be removed when the unified K8s-style
-// API refactor rewrites the pipelines to consume v1alpha1 types directly.
+// Framework field.
 func loadFromEnvelope(data []byte) (*ProjectManifest, error) {
-	var doc struct {
-		Metadata kinds.Metadata `yaml:"metadata"`
-		Spec     kinds.MCPSpec  `yaml:"spec"`
-	}
-	if err := yaml.Unmarshal(data, &doc); err != nil {
+	var server v1alpha1.MCPServer
+	if err := v1alpha1.Default.DecodeInto(data, &server); err != nil {
 		return nil, fmt.Errorf("parsing envelope mcp.yaml: %w", err)
 	}
 	out := &ProjectManifest{
-		Name:        doc.Metadata.Name,
-		Version:     doc.Metadata.Version,
-		Description: doc.Spec.Description,
+		Name:        server.Metadata.Name,
+		Version:     server.Metadata.Version,
+		Description: server.Spec.Description,
 	}
 	// Extract the runtime hint from the first OCI package, if present.
-	for _, p := range doc.Spec.Packages {
+	for _, p := range server.Spec.Packages {
 		if p.RegistryType == "oci" {
-			out.RuntimeHint = p.RunTimeHint
+			out.RuntimeHint = p.RuntimeHint
 			break
 		}
 	}

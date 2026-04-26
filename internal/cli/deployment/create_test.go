@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 func TestValidateAPIKey_WithExtraEnv(t *testing.T) {
@@ -86,7 +86,7 @@ func TestValidateAPIKey_WithExtraEnv(t *testing.T) {
 func TestBuildAgentDeployConfig_WithEnvOverrides(t *testing.T) {
 	tests := []struct {
 		name         string
-		manifest     *models.AgentManifest
+		manifest     *v1alpha1.Agent
 		envOverrides map[string]string
 		osEnv        map[string]string
 		wantKeys     map[string]string
@@ -94,16 +94,20 @@ func TestBuildAgentDeployConfig_WithEnvOverrides(t *testing.T) {
 	}{
 		{
 			name: "env override included in config",
-			manifest: &models.AgentManifest{
-				ModelProvider: "gemini",
+			manifest: &v1alpha1.Agent{
+				Spec: v1alpha1.AgentSpec{
+					ModelProvider: "gemini",
+				},
 			},
 			envOverrides: map[string]string{"GOOGLE_API_KEY": "from-flag", "CUSTOM_VAR": "custom-val"},
 			wantKeys:     map[string]string{"GOOGLE_API_KEY": "from-flag", "CUSTOM_VAR": "custom-val"},
 		},
 		{
 			name: "env override takes precedence over os env",
-			manifest: &models.AgentManifest{
-				ModelProvider: "openai",
+			manifest: &v1alpha1.Agent{
+				Spec: v1alpha1.AgentSpec{
+					ModelProvider: "openai",
+				},
 			},
 			osEnv:        map[string]string{"OPENAI_API_KEY": "from-os"},
 			envOverrides: map[string]string{"OPENAI_API_KEY": "from-flag"},
@@ -111,8 +115,10 @@ func TestBuildAgentDeployConfig_WithEnvOverrides(t *testing.T) {
 		},
 		{
 			name: "os env used when no override",
-			manifest: &models.AgentManifest{
-				ModelProvider: "openai",
+			manifest: &v1alpha1.Agent{
+				Spec: v1alpha1.AgentSpec{
+					ModelProvider: "openai",
+				},
 			},
 			osEnv:        map[string]string{"OPENAI_API_KEY": "from-os"},
 			envOverrides: map[string]string{},
@@ -120,17 +126,21 @@ func TestBuildAgentDeployConfig_WithEnvOverrides(t *testing.T) {
 		},
 		{
 			name: "telemetry endpoint included",
-			manifest: &models.AgentManifest{
-				ModelProvider:     "openai",
-				TelemetryEndpoint: "http://otel:4317",
+			manifest: &v1alpha1.Agent{
+				Spec: v1alpha1.AgentSpec{
+					ModelProvider:     "openai",
+					TelemetryEndpoint: "http://otel:4317",
+				},
 			},
 			envOverrides: map[string]string{"OPENAI_API_KEY": "key"},
 			wantKeys:     map[string]string{"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "http://otel:4317", "OPENAI_API_KEY": "key"},
 		},
 		{
 			name: "empty overrides with no os env",
-			manifest: &models.AgentManifest{
-				ModelProvider: "gemini",
+			manifest: &v1alpha1.Agent{
+				Spec: v1alpha1.AgentSpec{
+					ModelProvider: "gemini",
+				},
 			},
 			envOverrides: map[string]string{},
 			wantAbsent:   []string{"GOOGLE_API_KEY"},

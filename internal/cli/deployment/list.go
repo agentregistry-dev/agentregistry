@@ -1,11 +1,12 @@
 package deployment
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/client"
+	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/spf13/cobra"
 )
@@ -43,7 +44,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	providerFilter, _ := cmd.Flags().GetString("provider")
 	outputFormat, _ := cmd.Flags().GetString("output")
 
-	deployments, err := apiClient.GetDeployedServers()
+	deployments, err := cliCommon.ListDeployments(context.Background(), apiClient)
 	if err != nil {
 		return fmt.Errorf("failed to get deployments: %w", err)
 	}
@@ -72,12 +73,12 @@ func runList(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func filterDeployments(deployments []*client.DeploymentResponse, typeFilter, statusFilter, providerFilter string) []*client.DeploymentResponse {
+func filterDeployments(deployments []*cliCommon.DeploymentRecord, typeFilter, statusFilter, providerFilter string) []*cliCommon.DeploymentRecord {
 	typeFilter = strings.ToLower(typeFilter)
 	statusFilter = strings.ToLower(statusFilter)
 	providerFilter = strings.ToLower(providerFilter)
 
-	var filtered []*client.DeploymentResponse
+	var filtered []*cliCommon.DeploymentRecord
 	for _, d := range deployments {
 		if typeFilter != "" && strings.ToLower(d.ResourceType) != typeFilter {
 			continue
@@ -93,29 +94,25 @@ func filterDeployments(deployments []*client.DeploymentResponse, typeFilter, sta
 	return filtered
 }
 
-func printDeploymentsTable(deployments []*client.DeploymentResponse) {
+func printDeploymentsTable(deployments []*cliCommon.DeploymentRecord) {
 	t := printer.NewTablePrinter(os.Stdout)
 	t.SetHeaders("ID", "Name", "Version", "Type", "Provider", "Status", "Age")
 
 	for _, d := range deployments {
 		age := ""
-		if !d.DeployedAt.IsZero() {
-			age = printer.FormatAge(d.DeployedAt)
-		}
-
-		id := truncateID(d.ID)
-		status := effectiveStatus(d)
-		if d.Origin == "discovered" {
-			id = "-"
+		if !d.CreatedAt.IsZero() {
+			age = printer.FormatAge(d.CreatedAt)
+		} else if !d.UpdatedAt.IsZero() {
+			age = printer.FormatAge(d.UpdatedAt)
 		}
 
 		t.AddRow(
-			id,
-			d.ServerName,
-			d.Version,
+			d.ID,
+			d.TargetName,
+			d.TargetVersion,
 			d.ResourceType,
 			d.ProviderID,
-			status,
+			effectiveStatus(d),
 			age,
 		)
 	}
@@ -127,17 +124,6 @@ func printDeploymentsTable(deployments []*client.DeploymentResponse) {
 
 // effectiveStatus returns "discovered" when the deployment was discovered,
 // otherwise returns the raw status. This keeps filtering consistent with display.
-func effectiveStatus(d *client.DeploymentResponse) string {
-	if d.Origin == "discovered" {
-		return "discovered"
-	}
+func effectiveStatus(d *cliCommon.DeploymentRecord) string {
 	return d.Status
-}
-
-// truncateID shows the first 8 characters of a deployment ID for display.
-func truncateID(id string) string {
-	if len(id) > 8 {
-		return id[:8]
-	}
-	return id
 }

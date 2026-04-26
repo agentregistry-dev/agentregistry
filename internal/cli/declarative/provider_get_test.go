@@ -7,10 +7,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +18,7 @@ import (
 //   - GET /v0/providers/{name} → the provider with matching Name (404 otherwise)
 //
 // Only the routes exercised by `arctl get provider NAME [-o yaml]` are handled.
-func providerTestServer(t *testing.T, providers []models.Provider) *httptest.Server {
+func providerTestServer(t *testing.T, providers []v1alpha1.Provider) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v0/providers/", func(w http.ResponseWriter, r *http.Request) {
@@ -29,7 +28,7 @@ func providerTestServer(t *testing.T, providers []models.Provider) *httptest.Ser
 		}
 		name := strings.TrimPrefix(r.URL.Path, "/v0/providers/")
 		for _, p := range providers {
-			if p.Name == name {
+			if p.Metadata.Name == name {
 				w.Header().Set("Content-Type", "application/json")
 				_ = json.NewEncoder(w).Encode(p)
 				return
@@ -42,21 +41,32 @@ func providerTestServer(t *testing.T, providers []models.Provider) *httptest.Ser
 	return srv
 }
 
+func providerFixture(name, platform string, config map[string]any) v1alpha1.Provider {
+	return v1alpha1.Provider{
+		TypeMeta: v1alpha1.TypeMeta{
+			APIVersion: v1alpha1.GroupVersion,
+			Kind:       v1alpha1.KindProvider,
+		},
+		Metadata: v1alpha1.ObjectMeta{
+			Namespace: v1alpha1.DefaultNamespace,
+			Name:      name,
+			Version:   "1.0.0",
+		},
+		Spec: v1alpha1.ProviderSpec{
+			Platform: platform,
+			Config:   config,
+		},
+	}
+}
+
 // (1) `-o yaml` emits the declarative envelope and strips server-managed fields
 // (id, timestamps) so the output round-trips through `arctl apply -f`.
 func TestProviderGet_YAMLOutputRoundTrips(t *testing.T) {
-	providers := []models.Provider{
-		{
-			ID:       "internal-id-123",
-			Name:     "my-kagent",
-			Platform: "kagent",
-			Config: map[string]any{
-				"kagentUrl": "http://kagent-controller.kagent:8083",
-				"namespace": "kagent",
-			},
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		},
+	providers := []v1alpha1.Provider{
+		providerFixture("my-kagent", "kagent", map[string]any{
+			"kagentUrl": "http://kagent-controller.kagent:8083",
+			"namespace": "kagent",
+		}),
 	}
 	srv := providerTestServer(t, providers)
 	setupClientForServer(t, srv)
@@ -77,15 +87,14 @@ func TestProviderGet_YAMLOutputRoundTrips(t *testing.T) {
 	assert.Contains(t, got, "kagentUrl: http://kagent-controller.kagent:8083")
 	assert.Contains(t, got, "namespace: kagent")
 	// Server-managed fields must be stripped.
-	assert.NotContains(t, got, "internal-id-123", "spec must not leak the server-assigned id")
 	assert.NotContains(t, got, "createdAt", "spec must not leak server timestamps")
 	assert.NotContains(t, got, "updatedAt", "spec must not leak server timestamps")
 }
 
 // (2) Table output (default) still works — regression guard for the YAML-only change.
 func TestProviderGet_TableOutput(t *testing.T) {
-	providers := []models.Provider{
-		{ID: "id-1", Name: "my-kagent", Platform: "kagent"},
+	providers := []v1alpha1.Provider{
+		providerFixture("my-kagent", "kagent", nil),
 	}
 	srv := providerTestServer(t, providers)
 	setupClientForServer(t, srv)

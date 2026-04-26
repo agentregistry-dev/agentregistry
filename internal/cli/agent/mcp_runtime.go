@@ -5,14 +5,14 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
+	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
 	agentutils "github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
 )
 
 // TODO: add unit tests for this file.
 
 // hasRegistryServers checks if the manifest has any registry-type MCP servers.
-func hasRegistryServers(manifest *models.AgentManifest) bool {
+func hasRegistryServers(manifest *agentmanifest.AgentManifest) bool {
 	for _, srv := range manifest.McpServers {
 		if srv.Type == "registry" {
 			return true
@@ -21,7 +21,7 @@ func hasRegistryServers(manifest *models.AgentManifest) bool {
 	return false
 }
 
-func resolveMCPServersForRuntime(manifest *models.AgentManifest) ([]models.McpServerType, []common.PythonMCPServer, error) {
+func resolveMCPServersForRuntime(manifest *agentmanifest.AgentManifest) ([]agentmanifest.McpServerType, []common.PythonMCPServer, error) {
 	if manifest == nil {
 		return nil, nil, fmt.Errorf("agent manifest is required")
 	}
@@ -56,7 +56,7 @@ func resolveMCPServersForRuntime(manifest *models.AgentManifest) ([]models.McpSe
 		}
 	}
 
-	var registryResolvedServers []models.McpServerType
+	var registryResolvedServers []agentmanifest.McpServerType
 	for _, srv := range manifest.McpServers {
 		if srv.Type == "command" && strings.HasPrefix(srv.Build, "registry/") {
 			registryResolvedServers = append(registryResolvedServers, srv)

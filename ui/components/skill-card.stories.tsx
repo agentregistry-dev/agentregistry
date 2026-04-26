@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { SkillCard } from "./skill-card"
-import type { SkillResponse } from "@/lib/api/types.gen"
+import type { SkillResponse } from "@/lib/admin-api"
 
 const mockSkill: SkillResponse = {
   skill: {

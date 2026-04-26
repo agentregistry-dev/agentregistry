@@ -1,7 +1,6 @@
 package client
 
 import (
-	"fmt"
 	"testing"
 )
 
@@ -37,7 +36,7 @@ func TestNewClient_BaseURL(t *testing.T) {
 		baseURL string
 		wantURL string
 	}{
-		{"empty defaults to defaultBaseURL", "", defaultBaseURL},
+		{"empty defaults to DefaultBaseURL", "", DefaultBaseURL},
 		{"bare URL gets /v0 appended", "http://localhost:12121", "http://localhost:12121/v0"},
 		{"URL with /v0 unchanged", "http://localhost:12121/v0", "http://localhost:12121/v0"},
 		{"trailing slash normalized", "http://localhost:12121/", "http://localhost:12121/v0"},
@@ -107,29 +106,6 @@ func TestExtractAPIErrorMessage(t *testing.T) {
 			got := extractAPIErrorMessage([]byte(tt.body))
 			if got != tt.want {
 				t.Errorf("extractAPIErrorMessage() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestAsHTTPStatus(t *testing.T) {
-	tests := []struct {
-		name   string
-		errMsg string
-		want   int
-	}{
-		{"parsed API error format", "400 Bad Request: name is required", 400},
-		{"unparsed fallback format", "unexpected status: 404 Not Found, {\"detail\":\"not found\"}", 404},
-		{"500 parsed format", "500 Internal Server Error: something broke", 500},
-		{"contains 404", "something 404 happened", 404},
-		{"contains Not Found", "resource Not Found", 404},
-		{"unknown error", "connection refused", 0},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := fmt.Errorf("%s", tt.errMsg)
-			if got := asHTTPStatus(err); got != tt.want {
-				t.Errorf("asHTTPStatus(%q) = %d, want %d", tt.errMsg, got, tt.want)
 			}
 		})
 	}

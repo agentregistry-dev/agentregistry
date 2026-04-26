@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
 )
 
 //go:embed templates/* templates/agent/* templates/mcp_server/* dice-agent-instruction.md
@@ -51,7 +51,7 @@ func (g *PythonGenerator) Generate(agentConfig *common.AgentConfig) error {
 		return fmt.Errorf("failed to generate project: %w", err)
 	}
 
-	manifest := &models.AgentManifest{
+	manifest := &agentmanifest.AgentManifest{
 		Name:              agentConfig.Name,
 		Image:             agentConfig.Image,
 		Language:          agentConfig.Language,
