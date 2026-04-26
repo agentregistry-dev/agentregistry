@@ -47,9 +47,10 @@ type RouteOptions struct {
 	// V1Alpha1DeploymentCoordinator drives post-persist reconciliation
 	// for the Deployment kind: PUT → adapter.Apply; DELETE → adapter.Remove.
 	// Constructed alongside V1Alpha1Stores at bootstrap, wired into the
-	// generic resource handler via builtins.DeploymentHooks. Nil disables
-	// Deployment reconciliation — PUT still persists the row, DELETE
-	// still soft-deletes, but no adapter dispatch happens.
+	// generic resource handler as a per-kind PostUpsert/PostDelete hook
+	// for KindDeployment. Nil disables Deployment reconciliation — PUT
+	// still persists the row, DELETE still soft-deletes, but no adapter
+	// dispatch happens.
 	V1Alpha1DeploymentCoordinator *deploymentsvc.V1Alpha1Coordinator
 
 	// V1Alpha1Indexer + V1Alpha1JobManager, when both non-nil, enable
@@ -151,15 +152,40 @@ func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stor
 	registryValidator := registries.Dispatcher
 	uniqueRemoteURLs := internaldb.NewV1Alpha1UniqueRemoteURLsChecker(stores)
 
-	hooks := builtins.DeploymentHooks{}
+	// When a Deployment coordinator is supplied, install its Apply/Remove
+	// as the KindDeployment PostUpsert/PostDelete. Deployment
+	// reconciliation is a reserved seam in the v1alpha1 generic handler:
+	// the coordinator hooks override any caller-supplied Deployment
+	// hook so PUT/DELETE always drive the platform adapter. The same
+	// hook table feeds both the per-kind PUT/DELETE handlers and the
+	// /v0/apply batch path so a Deployment in a multi-doc apply
+	// reconciles identically to a single-resource apply.
 	if coord != nil {
-		hooks.PostUpsert = coord.Apply
-		hooks.PostDelete = coord.Remove
+		if perKind.PostUpserts == nil {
+			perKind.PostUpserts = map[string]func(context.Context, v1alpha1.Object) error{}
+		}
+		if perKind.PostDeletes == nil {
+			perKind.PostDeletes = map[string]func(context.Context, v1alpha1.Object) error{}
+		}
+		perKind.PostUpserts[v1alpha1.KindDeployment] = func(ctx context.Context, obj v1alpha1.Object) error {
+			dep, ok := obj.(*v1alpha1.Deployment)
+			if !ok {
+				return nil
+			}
+			return coord.Apply(ctx, dep)
+		}
+		perKind.PostDeletes[v1alpha1.KindDeployment] = func(ctx context.Context, obj v1alpha1.Object) error {
+			dep, ok := obj.(*v1alpha1.Deployment)
+			if !ok {
+				return nil
+			}
+			return coord.Remove(ctx, dep)
+		}
 	}
 
 	// Per-kind CRUD endpoints — one call per built-in kind, hidden
 	// inside builtins.RegisterBuiltins.
-	builtins.RegisterBuiltins(api, basePrefix, stores, resolver, registryValidator, uniqueRemoteURLs, hooks, semantic, perKind)
+	builtins.RegisterBuiltins(api, basePrefix, stores, resolver, registryValidator, uniqueRemoteURLs, semantic, perKind)
 
 	// Deployment-specific endpoints: logs stream (cancel is subsumed
 	// by DesiredState=undeployed + DELETE in the v1alpha1 lifecycle).
@@ -171,41 +197,18 @@ func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stor
 		})
 	}
 
-	// Multi-doc YAML batch apply at POST {basePrefix}/apply.
-	//
-	// PostUpserts / PostDeletes thread the same per-kind reconciliation
-	// hooks the namespaced PUT/DELETE handlers fire — most importantly
-	// the Deployment coordinator, so a Deployment in a multi-doc apply
-	// drives the platform adapter the same way a single-resource apply
-	// would. Without this, batch-applied Deployments create the row
-	// but never reconcile to AWS / GCP / kagent runtime state.
-	applyHooks := resource.ApplyConfig{
+	// Multi-doc YAML batch apply at POST {basePrefix}/apply shares the
+	// same per-kind hook table populated above, so Deployment reconciliation
+	// and any caller-supplied PostUpsert/PostDelete fire identically on
+	// the batch path.
+	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix:              basePrefix,
 		Stores:                  stores,
 		Resolver:                resolver,
 		RegistryValidator:       registryValidator,
 		UniqueRemoteURLsChecker: uniqueRemoteURLs,
 		Authorizers:             perKind.Authorizers,
-	}
-	if coord != nil {
-		applyHooks.PostUpserts = map[string]func(context.Context, v1alpha1.Object) error{
-			v1alpha1.KindDeployment: func(ctx context.Context, obj v1alpha1.Object) error {
-				dep, ok := obj.(*v1alpha1.Deployment)
-				if !ok {
-					return nil
-				}
-				return coord.Apply(ctx, dep)
-			},
-		}
-		applyHooks.PostDeletes = map[string]func(context.Context, v1alpha1.Object) error{
-			v1alpha1.KindDeployment: func(ctx context.Context, obj v1alpha1.Object) error {
-				dep, ok := obj.(*v1alpha1.Deployment)
-				if !ok {
-					return nil
-				}
-				return coord.Remove(ctx, dep)
-			},
-		}
-	}
-	resource.RegisterApply(api, applyHooks)
+		PostUpserts:             perKind.PostUpserts,
+		PostDeletes:             perKind.PostDeletes,
+	})
 }

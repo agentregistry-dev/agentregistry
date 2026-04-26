@@ -3,6 +3,7 @@
 package builtins_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -52,12 +53,19 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha
 		api, "/v0", stores,
 		database.NewV1Alpha1Resolver(stores),
 		nil, nil,
-		builtins.DeploymentHooks{
-			PostUpsert: coord.Apply,
-			PostDelete: coord.Remove,
-		},
 		nil, // semanticSearch disabled in this test
-		builtins.PerKindHooks{},
+		builtins.PerKindHooks{
+			PostUpserts: map[string]func(context.Context, v1alpha1.Object) error{
+				v1alpha1.KindDeployment: func(ctx context.Context, obj v1alpha1.Object) error {
+					return coord.Apply(ctx, obj.(*v1alpha1.Deployment))
+				},
+			},
+			PostDeletes: map[string]func(context.Context, v1alpha1.Object) error{
+				v1alpha1.KindDeployment: func(ctx context.Context, obj v1alpha1.Object) error {
+					return coord.Remove(ctx, obj.(*v1alpha1.Deployment))
+				},
+			},
+		},
 	)
 	builtins.RegisterDeploymentLogs(api, builtins.DeploymentLogsConfig{
 		BasePrefix:  "/v0",

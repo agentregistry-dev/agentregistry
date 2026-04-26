@@ -32,7 +32,7 @@ func TestClient_V1Alpha1RoundTrip(t *testing.T) {
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("test", "v1"))
-	builtins.RegisterBuiltins(api, "/v0", stores, nil, nil, nil, builtins.DeploymentHooks{}, nil, builtins.PerKindHooks{})
+	builtins.RegisterBuiltins(api, "/v0", stores, nil, nil, nil, nil, builtins.PerKindHooks{})
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
 		Stores:     stores,
@@ -150,7 +150,7 @@ func TestClient_V1Alpha1_NotFound(t *testing.T) {
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("test", "v1"))
-	builtins.RegisterBuiltins(api, "/v0", stores, nil, nil, nil, builtins.DeploymentHooks{}, nil, builtins.PerKindHooks{})
+	builtins.RegisterBuiltins(api, "/v0", stores, nil, nil, nil, nil, builtins.PerKindHooks{})
 
 	ts := httptest.NewServer(mux)
 	defer ts.Close()

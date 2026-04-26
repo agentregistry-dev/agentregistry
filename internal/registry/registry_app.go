@@ -31,6 +31,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 	pkgimporter "github.com/agentregistry-dev/agentregistry/pkg/importer"
 	osvscanner "github.com/agentregistry-dev/agentregistry/pkg/importer/scanners/osv"
@@ -317,6 +318,20 @@ func builtinPerKindHooks(options types.AppOptions) builtins.PerKindHooks {
 					Name: in.Name, Version: in.Version,
 				})
 			}
+		}
+	}
+	// PostUpserts / PostDeletes are already (ctx, v1alpha1.Object) →
+	// error so they pass through verbatim — no adapter needed.
+	if len(options.V1Alpha1PostUpserts) > 0 {
+		hooks.PostUpserts = make(map[string]func(ctx context.Context, obj v1alpha1.Object) error, len(options.V1Alpha1PostUpserts))
+		for kind, fn := range options.V1Alpha1PostUpserts {
+			hooks.PostUpserts[kind] = fn
+		}
+	}
+	if len(options.V1Alpha1PostDeletes) > 0 {
+		hooks.PostDeletes = make(map[string]func(ctx context.Context, obj v1alpha1.Object) error, len(options.V1Alpha1PostDeletes))
+		for kind, fn := range options.V1Alpha1PostDeletes {
+			hooks.PostDeletes[kind] = fn
 		}
 	}
 	return hooks

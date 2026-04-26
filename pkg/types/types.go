@@ -15,6 +15,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/danielgtaylor/huma/v2"
@@ -52,6 +53,18 @@ type V1Alpha1Authorizer func(ctx context.Context, in V1Alpha1AuthorizeInput) err
 // into resource.Config.ListFilter. Return ("", nil, nil) for "no
 // filter"; non-nil err short-circuits the list.
 type V1Alpha1ListFilter func(ctx context.Context, in V1Alpha1AuthorizeInput) (extraWhere string, extraArgs []any, err error)
+
+// V1Alpha1PostUpsert runs after a successful PUT or apply on a v1alpha1
+// resource. Wired into resource.Config.PostUpsert and the matching
+// per-doc apply hook on /v0/apply. Hook errors propagate to the
+// caller (500 on the per-kind PUT path, ApplyStatusFailed on the
+// batch path).
+type V1Alpha1PostUpsert func(ctx context.Context, obj v1alpha1.Object) error
+
+// V1Alpha1PostDelete runs after a successful DELETE on a v1alpha1
+// resource. Wired into resource.Config.PostDelete + the apply
+// batch's per-doc delete hook.
+type V1Alpha1PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 
 // AppOptions contains configuration for the registry app.
 // All fields are optional and allow external developers to extend
@@ -96,6 +109,19 @@ type AppOptions struct {
 	// passed straight through to v1alpha1store.ListOpts.ExtraWhere /
 	// ExtraArgs — see that docstring for placeholder rules.
 	V1Alpha1ListFilters map[string]V1Alpha1ListFilter
+
+	// V1Alpha1PostUpserts run after the generic resource handler PUTs a
+	// row, per kind. Enterprise builds wire this for kinds that need
+	// platform side-effects on apply — Provider apply mirroring spec
+	// into a per-platform sidecar table, for example. Missing keys =
+	// no post-upsert hook for that kind.
+	//
+	// Hook errors fail the request with 500 (the row is already
+	// persisted, so a hook failure indicates degraded state).
+	V1Alpha1PostUpserts map[string]V1Alpha1PostUpsert
+
+	// V1Alpha1PostDeletes mirror PostUpserts on the delete path.
+	V1Alpha1PostDeletes map[string]V1Alpha1PostDelete
 
 	// ExtraRoutes allows external integrations to register additional HTTP
 	// routes using the same API instance and path prefix as OSS core

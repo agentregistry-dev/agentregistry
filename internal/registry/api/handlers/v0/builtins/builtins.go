@@ -10,22 +10,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
-// DeploymentHooks groups post-persist callbacks used by RegisterBuiltins
-// to drive adapter reconciliation on the Deployment kind. Callers supply
-// one instance per registry build — typically wrapping a
-// V1Alpha1Coordinator. Nil hooks are ignored.
-type DeploymentHooks struct {
-	// PostUpsert runs after a Deployment PUT persists the row. Intended
-	// to call coordinator.Apply which resolves refs + dispatches to the
-	// platform adapter + patches status.
-	PostUpsert func(ctx context.Context, deployment *v1alpha1.Deployment) error
-	// PostDelete runs after a Deployment DELETE sets DeletionTimestamp.
-	// Intended to call coordinator.Remove which tears down runtime
-	// resources + writes the terminal Removed condition. Row lifetime
-	// past this point belongs to the soft-delete + GC pass.
-	PostDelete func(ctx context.Context, deployment *v1alpha1.Deployment) error
-}
-
 // PerKindHooks groups optional, per-kind callbacks layered on top of
 // the shared per-call config. Wired by enterprise builds that need to
 // inject authorization / filtering per resource kind without forking
@@ -39,6 +23,14 @@ type PerKindHooks struct {
 	// ListFilters injects ExtraWhere predicates into list queries per
 	// kind; see resource.Config.ListFilter.
 	ListFilters map[string]func(ctx context.Context, in resource.AuthorizeInput) (string, []any, error)
+	// PostUpserts run after a successful PUT; see resource.Config.PostUpsert.
+	// Wired by enterprise builds that need to mirror state into a
+	// platform-specific sidecar table on Provider apply, drive a
+	// reconciler, etc. Missing keys = no post-upsert hook for that kind.
+	PostUpserts map[string]func(ctx context.Context, obj v1alpha1.Object) error
+	// PostDeletes run after a successful DELETE; see
+	// resource.Config.PostDelete. Mirrors PostUpserts above.
+	PostDeletes map[string]func(ctx context.Context, obj v1alpha1.Object) error
 }
 
 // RegisterBuiltins wires the namespace-scoped + cross-namespace
@@ -66,7 +58,6 @@ func RegisterBuiltins(
 	resolver v1alpha1.ResolverFunc,
 	registryValidator v1alpha1.RegistryValidatorFunc,
 	uniqueRemoteURLsChecker v1alpha1.UniqueRemoteURLsFunc,
-	deploymentHooks DeploymentHooks,
 	semanticSearch resource.SemanticSearchFunc,
 	perKind PerKindHooks,
 ) {
@@ -85,6 +76,8 @@ func RegisterBuiltins(
 			SemanticSearch:          semanticSearch,
 			Authorize:               perKind.Authorizers[kind],
 			ListFilter:              perKind.ListFilters[kind],
+			PostUpsert:              perKind.PostUpserts[kind],
+			PostDelete:              perKind.PostDeletes[kind],
 		}, true
 	}
 
@@ -125,16 +118,6 @@ func RegisterBuiltins(
 		case v1alpha1.KindProvider:
 			resource.Register[*v1alpha1.Provider](api, cfg, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
 		case v1alpha1.KindDeployment:
-			if deploymentHooks.PostUpsert != nil {
-				cfg.PostUpsert = func(ctx context.Context, obj v1alpha1.Object) error {
-					return deploymentHooks.PostUpsert(ctx, obj.(*v1alpha1.Deployment))
-				}
-			}
-			if deploymentHooks.PostDelete != nil {
-				cfg.PostDelete = func(ctx context.Context, obj v1alpha1.Object) error {
-					return deploymentHooks.PostDelete(ctx, obj.(*v1alpha1.Deployment))
-				}
-			}
 			resource.Register[*v1alpha1.Deployment](api, cfg, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
 		}
 	}
