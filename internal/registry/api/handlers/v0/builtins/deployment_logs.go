@@ -12,6 +12,7 @@ import (
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
@@ -23,6 +24,16 @@ type DeploymentLogsConfig struct {
 	BasePrefix  string
 	Store       *v1alpha1store.Store
 	Coordinator *deploymentsvc.V1Alpha1Coordinator
+	// Authorize gates the request the same way the regular Deployment
+	// GET handler does. nil means no gate. Logs leak runtime
+	// stdout/stderr — frequently containing PII or secrets — so a
+	// missing hook would let any authenticated caller read any
+	// tenant's deployment logs regardless of role grants.
+	//
+	// Wire from PerKindHooks.Authorizers[KindDeployment] at router
+	// boot. Verb is "get" so role mappings line up with the regular
+	// Deployment GET handler.
+	Authorize func(ctx context.Context, in resource.AuthorizeInput) error
 }
 
 // deploymentLogsInput is the request body — query flags for the stream +
@@ -99,6 +110,14 @@ func RegisterDeploymentLogs(api huma.API, cfg DeploymentLogsConfig) {
 		version, err := url.PathUnescape(in.Version)
 		if err != nil {
 			return nil, huma.Error400BadRequest(fmt.Sprintf("invalid version path segment: %v", err))
+		}
+		if cfg.Authorize != nil {
+			if err := cfg.Authorize(ctx, resource.AuthorizeInput{
+				Verb: "get", Kind: v1alpha1.KindDeployment,
+				Namespace: ns, Name: name, Version: version,
+			}); err != nil {
+				return nil, err
+			}
 		}
 		row, err := cfg.Store.Get(ctx, ns, name, version)
 		if err != nil {

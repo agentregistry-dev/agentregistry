@@ -9,12 +9,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/builtins"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/importer"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
@@ -204,6 +206,91 @@ func TestRegisterImport_NilImporterSkipsRegistration(t *testing.T) {
 		"Content-Type: application/yaml",
 		strings.NewReader(importAgentYAML))
 	require.Equal(t, http.StatusNotFound, resp.Code, "nil Importer should skip route registration")
+}
+
+// TestRegisterImport_PerDocAuthorize pins the per-kind RBAC invariant
+// for POST /v0/import: each decoded document fires Authorize before
+// Upsert. Without this, the import endpoint would be a write-bypass
+// for any kind the Importer accepts (denied users could create or
+// replace rows by routing writes through this endpoint).
+//
+// Multi-doc batch: deny "secret" Agent → that doc fails with
+// Status=failed; "ok" Agent succeeds. Mirrors the per-doc-failure
+// pattern in pkg/registry/resource/apply.go.
+func TestRegisterImport_PerDocAuthorize(t *testing.T) {
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	stores := map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents}
+
+	imp, err := importer.New(importer.Config{Stores: stores})
+	require.NoError(t, err)
+
+	authorizers := map[string]func(ctx context.Context, in resource.AuthorizeInput) error{
+		v1alpha1.KindAgent: func(ctx context.Context, in resource.AuthorizeInput) error {
+			if in.Name == "secret" {
+				return huma.Error403Forbidden("denied")
+			}
+			return nil
+		},
+	}
+
+	_, api := humatest.New(t)
+	builtins.RegisterImport(api, builtins.ImportConfig{
+		BasePrefix:  "/v0",
+		Importer:    imp,
+		Authorizers: authorizers,
+	})
+
+	yaml := `apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  namespace: default
+  name: secret
+  version: v1
+spec:
+  title: Secret
+---
+apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  namespace: default
+  name: ok
+  version: v1
+spec:
+  title: Ok
+`
+	resp := api.Post("/v0/import",
+		"Content-Type: application/yaml",
+		strings.NewReader(yaml))
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
+	var out struct {
+		Results []struct {
+			Name   string `json:"name"`
+			Status string `json:"status"`
+			Error  string `json:"error"`
+		} `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	require.Len(t, out.Results, 2)
+
+	// Denied doc → failed; error mentions authorize so operators can
+	// distinguish from validation failures.
+	require.Equal(t, "secret", out.Results[0].Name)
+	require.Equal(t, "failed", out.Results[0].Status)
+	require.Contains(t, out.Results[0].Error, "authorize")
+
+	// Allowed doc → created.
+	require.Equal(t, "ok", out.Results[1].Name)
+	require.Equal(t, "created", out.Results[1].Status)
+
+	// Denied row was NOT persisted.
+	_, err = agents.Get(context.Background(), "default", "secret", "v1")
+	require.Error(t, err)
+	// Allowed row IS persisted.
+	row, err := agents.Get(context.Background(), "default", "ok", "v1")
+	require.NoError(t, err)
+	require.Equal(t, "ok", row.Metadata.Name)
 }
 
 func TestRegisterImport_MultiDocPerDocResults(t *testing.T) {

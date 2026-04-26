@@ -46,6 +46,24 @@ type Options struct {
 	// and as the AnnoLastScannedBy annotation. Defaults to
 	// "importer-cli" when blank.
 	ScannedBy string
+
+	// PerObjectAuthorize, when non-nil, is invoked once per decoded
+	// object after validation + ref/registry/remote-URL checks but
+	// BEFORE Upsert. A non-nil error fails the per-doc
+	// ImportResult with Status=ImportStatusFailed; the rest of the
+	// stream still runs.
+	//
+	// HTTP callers (POST /v0/import) wire this from the same
+	// PerKindHooks.Authorizers map the regular apply path consults so
+	// the import surface enforces the same per-kind RBAC. Nil is the
+	// CLI / seed-from-disk default (admin context, no per-call gate).
+	//
+	// Object identity is fully populated by the time this fires —
+	// metadata.namespace has been defaulted, validation has passed,
+	// labels/annotations from scanners are NOT yet applied (those run
+	// only on enrich + after authz, so an authz failure can't leak
+	// scanner-derived state).
+	PerObjectAuthorize func(ctx context.Context, obj v1alpha1.Object) error
 }
 
 // ImportResult is the per-object outcome of Importer.Import. One
@@ -319,6 +337,19 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 		res.Status = ImportStatusFailed
 		res.Error = "remote urls: " + err.Error()
 		return res
+	}
+
+	// Per-object authz gate. Mirrors the apply pipeline's Authorize
+	// call (pkg/registry/resource/apply.go:prepareApplyDoc). Wired by
+	// the HTTP /v0/import handler from PerKindHooks.Authorizers so
+	// callers without role grants for a kind can't bypass per-kind
+	// RBAC by routing writes through the import endpoint.
+	if opts.PerObjectAuthorize != nil {
+		if err := opts.PerObjectAuthorize(ctx, obj); err != nil {
+			res.Status = ImportStatusFailed
+			res.Error = "authorize: " + err.Error()
+			return res
+		}
 	}
 
 	// Enrichment: mutate obj's annotations/labels in place, accumulate

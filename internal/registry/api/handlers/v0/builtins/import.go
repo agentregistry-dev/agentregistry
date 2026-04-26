@@ -7,7 +7,9 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/importer"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 )
 
 // ImportConfig wires POST {BasePrefix}/import. Importer is the
@@ -17,6 +19,17 @@ import (
 type ImportConfig struct {
 	BasePrefix string
 	Importer   *importer.Importer
+	// Authorizers is the same per-kind authz map the regular apply
+	// pipeline consults. When set, every decoded document is
+	// authorized before Upsert via importer.Options.PerObjectAuthorize;
+	// a deny on any kind makes that doc fail with Status=failed
+	// without aborting the rest of the batch (matches the
+	// per-doc-failure pattern in pkg/registry/resource/apply.go).
+	//
+	// Without this map, POST /v0/import is a write-bypass for any
+	// kind the Importer accepts — denied users could create / replace
+	// rows by routing writes through this endpoint.
+	Authorizers map[string]func(ctx context.Context, in resource.AuthorizeInput) error
 }
 
 // importInput is the HTTP input for POST /import. RawBody carries
@@ -68,6 +81,22 @@ func RegisterImport(api huma.API, cfg ImportConfig) {
 				if name != "" {
 					opts.WhichScans = append(opts.WhichScans, name)
 				}
+			}
+		}
+		if len(cfg.Authorizers) > 0 {
+			authorizers := cfg.Authorizers
+			opts.PerObjectAuthorize = func(ctx context.Context, obj v1alpha1.Object) error {
+				kind := obj.GetKind()
+				authz, ok := authorizers[kind]
+				if !ok || authz == nil {
+					return nil
+				}
+				meta := obj.GetMetadata()
+				return authz(ctx, resource.AuthorizeInput{
+					Verb: "apply", Kind: kind,
+					Namespace: meta.Namespace, Name: meta.Name, Version: meta.Version,
+					Object: obj,
+				})
 			}
 		}
 

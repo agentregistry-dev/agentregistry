@@ -3,7 +3,9 @@
 package resource_test
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -116,4 +118,118 @@ func TestRegisterBuiltins_LegacyServerReadmeAlias(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
 	require.Equal(t, "# Fetch\n\nServer docs.", got.Content)
+}
+
+// TestRegisterReadme_RespectsAuthorize pins the row-level RBAC
+// invariant for the readme subresource: a deny on (Kind, Name) at the
+// regular GET handler MUST also block the readme path. Without this
+// gate, an enterprise tenant could read README content (markdown body
+// frequently containing setup instructions, internal hostnames,
+// contact info) for resources they don't have grants for.
+func TestRegisterReadme_RespectsAuthorize(t *testing.T) {
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+
+	_, api := humatest.New(t)
+	cfg := resource.Config{
+		Kind:       v1alpha1.KindAgent,
+		BasePrefix: "/v0",
+		Store:      store,
+		// Deny readme reads of the secret agent; allow everyone else.
+		Authorize: func(ctx context.Context, in resource.AuthorizeInput) error {
+			if in.Verb == "get" && in.Name == "secret" {
+				return huma.Error403Forbidden(fmt.Sprintf("denied: %s/%s", in.Kind, in.Name))
+			}
+			return nil
+		},
+	}
+	newObj := func() *v1alpha1.Agent { return &v1alpha1.Agent{} }
+	resource.RegisterReadme[*v1alpha1.Agent](api, cfg, newObj, func(obj *v1alpha1.Agent) *v1alpha1.Readme {
+		return obj.Spec.Readme
+	})
+	resource.Register[*v1alpha1.Agent](api, cfg, newObj)
+
+	// Direct Store.Upsert bypasses the authorizer for seeding — we
+	// only want to test the readme path's gate, not whether PUT
+	// itself respects authz (covered elsewhere).
+	specJSON, err := json.Marshal(v1alpha1.AgentSpec{
+		Title:  "Secret",
+		Readme: &v1alpha1.Readme{ContentType: "text/markdown", Content: "internal-only"},
+	})
+	require.NoError(t, err)
+	_, err = store.Upsert(t.Context(), "default", "secret", "v1", specJSON, v1alpha1store.UpsertOpts{})
+	require.NoError(t, err)
+
+	publicSpecJSON, err := json.Marshal(v1alpha1.AgentSpec{
+		Title:  "Public",
+		Readme: &v1alpha1.Readme{ContentType: "text/markdown", Content: "public docs"},
+	})
+	require.NoError(t, err)
+	_, err = store.Upsert(t.Context(), "default", "public", "v1", publicSpecJSON, v1alpha1store.UpsertOpts{})
+	require.NoError(t, err)
+
+	// Latest readme — denied row 403.
+	resp := api.Get("/v0/agents/secret/readme")
+	require.Equal(t, http.StatusForbidden, resp.Code,
+		"latest readme must respect Authorize: %s", resp.Body.String())
+
+	// Versioned readme — denied row 403.
+	resp = api.Get("/v0/agents/secret/versions/v1/readme")
+	require.Equal(t, http.StatusForbidden, resp.Code,
+		"versioned readme must respect Authorize: %s", resp.Body.String())
+
+	// Allowed row still served.
+	resp = api.Get("/v0/agents/public/readme")
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	var got v1alpha1.Readme
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
+	require.Equal(t, "public docs", got.Content)
+}
+
+// TestRegisterReadme_LegacyServerReadmeRespectsAuthorize pins the
+// same invariant for the legacy `/v0/servers/{name}/readme` path. The
+// legacy alias predates the generic readme subresource and bypasses
+// the regular routing, so it carries its own authz gate.
+func TestRegisterReadme_LegacyServerReadmeRespectsAuthorize(t *testing.T) {
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.mcpservers")
+
+	_, api := humatest.New(t)
+	cfg := resource.Config{
+		Kind:       v1alpha1.KindMCPServer,
+		BasePrefix: "/v0",
+		Store:      store,
+		Authorize: func(ctx context.Context, in resource.AuthorizeInput) error {
+			if in.Verb == "get" && in.Name == "secret-server" {
+				return huma.Error403Forbidden("denied")
+			}
+			return nil
+		},
+	}
+	resource.RegisterLegacyServerReadme(api, cfg)
+
+	specJSON, err := json.Marshal(v1alpha1.MCPServerSpec{
+		Title:  "Secret",
+		Readme: &v1alpha1.Readme{ContentType: "text/markdown", Content: "internal"},
+	})
+	require.NoError(t, err)
+	_, err = store.Upsert(t.Context(), v1alpha1.DefaultNamespace, "secret-server", "v1", specJSON, v1alpha1store.UpsertOpts{})
+	require.NoError(t, err)
+
+	publicSpecJSON, err := json.Marshal(v1alpha1.MCPServerSpec{
+		Title:  "Public",
+		Readme: &v1alpha1.Readme{ContentType: "text/markdown", Content: "public"},
+	})
+	require.NoError(t, err)
+	_, err = store.Upsert(t.Context(), v1alpha1.DefaultNamespace, "public-server", "v1", publicSpecJSON, v1alpha1store.UpsertOpts{})
+	require.NoError(t, err)
+
+	resp := api.Get("/v0/servers/secret-server/readme")
+	require.Equal(t, http.StatusForbidden, resp.Code, resp.Body.String())
+
+	resp = api.Get("/v0/servers/secret-server/versions/v1/readme")
+	require.Equal(t, http.StatusForbidden, resp.Code, resp.Body.String())
+
+	resp = api.Get("/v0/servers/public-server/readme")
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 }

@@ -119,10 +119,13 @@ func RegisterRoutes(
 
 	// POST /v0/import — runs decoded manifests through the enrichment
 	// pipeline (validate + scanners + findings-write) before Upsert.
+	// Authorizers wires the same per-kind RBAC the regular apply path
+	// uses; without it the import endpoint would be a write-bypass.
 	if opts.V1Alpha1Importer != nil {
 		builtins.RegisterImport(api, builtins.ImportConfig{
-			BasePrefix: pathPrefix,
-			Importer:   opts.V1Alpha1Importer,
+			BasePrefix:  pathPrefix,
+			Importer:    opts.V1Alpha1Importer,
+			Authorizers: opts.V1Alpha1PerKindHooks.Authorizers,
 		})
 	}
 
@@ -204,6 +207,7 @@ func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stor
 			BasePrefix:  basePrefix,
 			Store:       stores[v1alpha1.KindDeployment],
 			Coordinator: coord,
+			Authorize:   perKind.Authorizers[v1alpha1.KindDeployment],
 		})
 	}
 

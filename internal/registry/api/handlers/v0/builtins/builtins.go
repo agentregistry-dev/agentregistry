@@ -102,7 +102,7 @@ func RegisterBuiltins(
 				return obj.Spec.Readme
 			})
 			resource.Register[*v1alpha1.MCPServer](api, cfg, newObj)
-			resource.RegisterLegacyServerReadme(api, basePrefix, cfg.Store)
+			resource.RegisterLegacyServerReadme(api, cfg)
 		case v1alpha1.KindSkill:
 			newObj := func() *v1alpha1.Skill { return &v1alpha1.Skill{} }
 			resource.RegisterReadme[*v1alpha1.Skill](api, cfg, newObj, func(obj *v1alpha1.Skill) *v1alpha1.Readme {

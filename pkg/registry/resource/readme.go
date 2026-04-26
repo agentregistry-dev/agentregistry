@@ -9,7 +9,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 type readmeLatestInput struct {
@@ -37,6 +36,12 @@ type readmeOutput struct {
 }
 
 // RegisterReadme wires generic readme subresource routes for one kind.
+//
+// cfg.Authorize, when non-nil, gates each handler the same way the
+// regular Register routes do — without it, a deny on (Kind, Name) at
+// the row level would still leak markdown body via the readme
+// subresource. Verb is "get" so role mappings line up with the
+// regular GET handler.
 func RegisterReadme[T v1alpha1.Object](
 	api huma.API,
 	cfg Config,
@@ -64,6 +69,11 @@ func RegisterReadme[T v1alpha1.Object](
 		if err != nil {
 			return nil, err
 		}
+		if cfg.Authorize != nil {
+			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "get", Kind: cfg.Kind, Namespace: ns, Name: name}); err != nil {
+				return nil, err
+			}
+		}
 		row, err := cfg.Store.GetLatest(ctx, ns, name)
 		if err != nil {
 			return nil, mapNotFound(err, cfg.Kind, ns, name, "")
@@ -86,6 +96,11 @@ func RegisterReadme[T v1alpha1.Object](
 		if err != nil {
 			return nil, err
 		}
+		if cfg.Authorize != nil {
+			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "get", Kind: cfg.Kind, Namespace: ns, Name: name, Version: version}); err != nil {
+				return nil, err
+			}
+		}
 		row, err := cfg.Store.Get(ctx, ns, name, version)
 		if err != nil {
 			return nil, mapNotFound(err, cfg.Kind, ns, name, version)
@@ -97,12 +112,17 @@ func RegisterReadme[T v1alpha1.Object](
 // RegisterLegacyServerReadme preserves the historical MCP-server-specific
 // readme endpoints while downstream UIs migrate to the generic namespaced
 // shape.
-func RegisterLegacyServerReadme(api huma.API, basePrefix string, store *v1alpha1store.Store) {
-	if store == nil {
+//
+// Takes the same Config the MCPServer Register call uses so the legacy
+// path enforces the same Authorize gate. cfg.Store must point at the
+// MCPServer store; cfg.Kind is ignored (the legacy path is always
+// KindMCPServer at namespace=default).
+func RegisterLegacyServerReadme(api huma.API, cfg Config) {
+	if cfg.Store == nil {
 		return
 	}
 
-	base := strings.TrimRight(basePrefix, "/")
+	base := strings.TrimRight(cfg.BasePrefix, "/")
 
 	huma.Register(api, huma.Operation{
 		OperationID: "get-server-readme-v0",
@@ -114,7 +134,15 @@ func RegisterLegacyServerReadme(api huma.API, basePrefix string, store *v1alpha1
 		if err != nil {
 			return nil, err
 		}
-		row, err := store.GetLatest(ctx, v1alpha1.DefaultNamespace, serverName)
+		if cfg.Authorize != nil {
+			if err := cfg.Authorize(ctx, AuthorizeInput{
+				Verb: "get", Kind: v1alpha1.KindMCPServer,
+				Namespace: v1alpha1.DefaultNamespace, Name: serverName,
+			}); err != nil {
+				return nil, err
+			}
+		}
+		row, err := cfg.Store.GetLatest(ctx, v1alpha1.DefaultNamespace, serverName)
 		if err != nil {
 			return nil, mapNotFound(err, v1alpha1.KindMCPServer, v1alpha1.DefaultNamespace, serverName, "")
 		}
@@ -143,7 +171,15 @@ func RegisterLegacyServerReadme(api huma.API, basePrefix string, store *v1alpha1
 		if err != nil {
 			return nil, err
 		}
-		row, err := store.Get(ctx, v1alpha1.DefaultNamespace, serverName, version)
+		if cfg.Authorize != nil {
+			if err := cfg.Authorize(ctx, AuthorizeInput{
+				Verb: "get", Kind: v1alpha1.KindMCPServer,
+				Namespace: v1alpha1.DefaultNamespace, Name: serverName, Version: version,
+			}); err != nil {
+				return nil, err
+			}
+		}
+		row, err := cfg.Store.Get(ctx, v1alpha1.DefaultNamespace, serverName, version)
 		if err != nil {
 			return nil, mapNotFound(err, v1alpha1.KindMCPServer, v1alpha1.DefaultNamespace, serverName, version)
 		}
