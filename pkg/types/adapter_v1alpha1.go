@@ -190,20 +190,37 @@ type DiscoveryResult struct {
 // Provider adapter.
 // -----------------------------------------------------------------------------
 
-// ProviderPlatformAdapter defines provider CRUD behavior for a provider
-// platform type. Enterprise builds register one adapter per cloud
-// platform (GCP, AWS, Kagent, etc.) via AppOptions.ProviderPlatforms.
+// ProviderPlatformAdapter is the per-platform side-effect hook fired
+// after a Provider PUT/DELETE on the v1alpha1 generic resource
+// handler. The v1alpha1 store is the source of truth for the
+// Provider row itself; the adapter exists purely to reconcile any
+// per-platform sidecar state (e.g. enterprise's aws_connections /
+// gcp_connections / kagent_connections rows) so downstream lookups
+// — gateway credential resolution, platform-specific deploy paths —
+// can read those tables consistently.
 //
-// NOTE: OSS currently does not consume AppOptions.ProviderPlatforms —
-// the v1alpha1 generic resource handler serves provider CRUD uniformly
-// across kinds via the Store. The field is retained so enterprise
-// assignments continue to compile while the extension point is
-// redesigned (tracked as a REMAINING.md follow-up).
+// One adapter per platform discriminator (provider.Spec.Platform).
+// Enterprise builds register adapters via AppOptions.ProviderPlatforms;
+// the registry app maps that into per-kind PostUpsert/PostDelete on
+// KindProvider, dispatching by Spec.Platform.
+//
+// Hook errors propagate back to the API caller (500 on the per-kind
+// PUT path; ApplyStatusFailed on the batch path) — the v1alpha1 row
+// is already persisted, so a hook failure indicates degraded sidecar
+// state.
 type ProviderPlatformAdapter interface {
+	// Platform returns the discriminator string that matches
+	// provider.Spec.Platform ("aws", "gcp", "kagent", ...).
 	Platform() string
-	ListProviders(ctx context.Context) ([]*v1alpha1.Provider, error)
-	CreateProvider(ctx context.Context, provider *v1alpha1.Provider) (*v1alpha1.Provider, error)
-	GetProvider(ctx context.Context, providerID string) (*v1alpha1.Provider, error)
-	UpdateProvider(ctx context.Context, providerID string, provider *v1alpha1.Provider) (*v1alpha1.Provider, error)
-	DeleteProvider(ctx context.Context, providerID string) error
+
+	// ApplyProvider runs after the v1alpha1 store has persisted a
+	// Provider on PUT or batch apply. Must be idempotent — re-apply
+	// with rotated config must converge sidecar state, not error.
+	ApplyProvider(ctx context.Context, provider *v1alpha1.Provider) error
+
+	// RemoveProvider runs after the v1alpha1 store has soft-deleted a
+	// Provider. providerID is the metadata.name (the v1alpha1 row's
+	// stable identity). Must tolerate missing sidecar rows for
+	// idempotency.
+	RemoveProvider(ctx context.Context, providerID string) error
 }

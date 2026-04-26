@@ -334,6 +334,59 @@ func builtinPerKindHooks(options types.AppOptions) builtins.PerKindHooks {
 			hooks.PostDeletes[kind] = fn
 		}
 	}
+	// ProviderPlatforms map dispatches the KindProvider PostUpsert /
+	// PostDelete by Spec.Platform → adapter. A Provider whose platform
+	// has no registered adapter is a no-op (matches the OSS default
+	// where AppOptions.ProviderPlatforms is empty). When both an
+	// explicit V1Alpha1PostUpserts[KindProvider] and ProviderPlatforms
+	// are present, the dispatcher chains: caller hook first, then the
+	// platform adapter.
+	if len(options.ProviderPlatforms) > 0 {
+		adapters := make(map[string]types.ProviderPlatformAdapter, len(options.ProviderPlatforms))
+		for platform, adapter := range options.ProviderPlatforms {
+			adapters[platform] = adapter
+		}
+		if hooks.PostUpserts == nil {
+			hooks.PostUpserts = map[string]func(ctx context.Context, obj v1alpha1.Object) error{}
+		}
+		if hooks.PostDeletes == nil {
+			hooks.PostDeletes = map[string]func(ctx context.Context, obj v1alpha1.Object) error{}
+		}
+		callerUpsert := hooks.PostUpserts[v1alpha1.KindProvider]
+		callerDelete := hooks.PostDeletes[v1alpha1.KindProvider]
+		hooks.PostUpserts[v1alpha1.KindProvider] = func(ctx context.Context, obj v1alpha1.Object) error {
+			if callerUpsert != nil {
+				if err := callerUpsert(ctx, obj); err != nil {
+					return err
+				}
+			}
+			provider, ok := obj.(*v1alpha1.Provider)
+			if !ok || provider == nil {
+				return nil
+			}
+			adapter, ok := adapters[provider.Spec.Platform]
+			if !ok {
+				return nil
+			}
+			return adapter.ApplyProvider(ctx, provider)
+		}
+		hooks.PostDeletes[v1alpha1.KindProvider] = func(ctx context.Context, obj v1alpha1.Object) error {
+			if callerDelete != nil {
+				if err := callerDelete(ctx, obj); err != nil {
+					return err
+				}
+			}
+			provider, ok := obj.(*v1alpha1.Provider)
+			if !ok || provider == nil {
+				return nil
+			}
+			adapter, ok := adapters[provider.Spec.Platform]
+			if !ok {
+				return nil
+			}
+			return adapter.RemoveProvider(ctx, provider.Metadata.Name)
+		}
+	}
 	return hooks
 }
 

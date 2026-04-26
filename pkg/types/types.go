@@ -82,8 +82,14 @@ type AppOptions struct {
 	// database.
 	DatabaseFactory DatabaseFactory
 
-	// ProviderPlatforms registers adapters for provider CRUD by provider
-	// platform type.
+	// ProviderPlatforms registers per-platform PostUpsert/PostDelete
+	// hooks for the KindProvider resource handler, keyed by
+	// Provider.Spec.Platform ("aws", "gcp", "kagent", ...). Used by
+	// enterprise builds to mirror Provider apply/delete into a
+	// platform-specific sidecar table (aws_connections,
+	// gcp_connections, kagent_connections, etc.). Missing platforms =
+	// no sidecar reconciliation for that platform — the v1alpha1
+	// Provider row still persists.
 	ProviderPlatforms map[string]ProviderPlatformAdapter
 
 	// DeploymentAdapters registers v1alpha1 DeploymentAdapter
