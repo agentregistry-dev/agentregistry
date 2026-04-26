@@ -343,51 +343,54 @@ func builtinPerKindHooks(options types.AppOptions) builtins.PerKindHooks {
 	// platform adapter.
 	if len(options.ProviderPlatforms) > 0 {
 		adapters := make(map[string]types.ProviderPlatformAdapter, len(options.ProviderPlatforms))
-		for platform, adapter := range options.ProviderPlatforms {
-			adapters[platform] = adapter
-		}
+		maps.Copy(adapters, options.ProviderPlatforms)
 		if hooks.PostUpserts == nil {
 			hooks.PostUpserts = map[string]func(ctx context.Context, obj v1alpha1.Object) error{}
 		}
 		if hooks.PostDeletes == nil {
 			hooks.PostDeletes = map[string]func(ctx context.Context, obj v1alpha1.Object) error{}
 		}
-		callerUpsert := hooks.PostUpserts[v1alpha1.KindProvider]
-		callerDelete := hooks.PostDeletes[v1alpha1.KindProvider]
-		hooks.PostUpserts[v1alpha1.KindProvider] = func(ctx context.Context, obj v1alpha1.Object) error {
-			if callerUpsert != nil {
-				if err := callerUpsert(ctx, obj); err != nil {
-					return err
-				}
-			}
-			provider, ok := obj.(*v1alpha1.Provider)
-			if !ok || provider == nil {
-				return nil
-			}
-			adapter, ok := adapters[provider.Spec.Platform]
-			if !ok {
-				return nil
-			}
-			return adapter.ApplyProvider(ctx, provider)
-		}
-		hooks.PostDeletes[v1alpha1.KindProvider] = func(ctx context.Context, obj v1alpha1.Object) error {
-			if callerDelete != nil {
-				if err := callerDelete(ctx, obj); err != nil {
-					return err
-				}
-			}
-			provider, ok := obj.(*v1alpha1.Provider)
-			if !ok || provider == nil {
-				return nil
-			}
-			adapter, ok := adapters[provider.Spec.Platform]
-			if !ok {
-				return nil
-			}
-			return adapter.RemoveProvider(ctx, provider.Metadata.Name)
-		}
+		hooks.PostUpserts[v1alpha1.KindProvider] = providerPlatformDispatcher(
+			hooks.PostUpserts[v1alpha1.KindProvider], adapters,
+			func(ctx context.Context, p *v1alpha1.Provider, a types.ProviderPlatformAdapter) error {
+				return a.ApplyProvider(ctx, p)
+			},
+		)
+		hooks.PostDeletes[v1alpha1.KindProvider] = providerPlatformDispatcher(
+			hooks.PostDeletes[v1alpha1.KindProvider], adapters,
+			func(ctx context.Context, p *v1alpha1.Provider, a types.ProviderPlatformAdapter) error {
+				return a.RemoveProvider(ctx, p.Metadata.Name)
+			},
+		)
 	}
 	return hooks
+}
+
+// providerPlatformDispatcher wraps a (kind=Provider) hook so the caller
+// hook (if any) runs first, then dispatches to the per-platform adapter
+// matching provider.Spec.Platform. A Provider with no registered
+// adapter is a no-op so the hook stays safe for partial wiring.
+func providerPlatformDispatcher(
+	caller func(ctx context.Context, obj v1alpha1.Object) error,
+	adapters map[string]types.ProviderPlatformAdapter,
+	dispatch func(ctx context.Context, p *v1alpha1.Provider, a types.ProviderPlatformAdapter) error,
+) func(ctx context.Context, obj v1alpha1.Object) error {
+	return func(ctx context.Context, obj v1alpha1.Object) error {
+		if caller != nil {
+			if err := caller(ctx, obj); err != nil {
+				return err
+			}
+		}
+		provider, ok := obj.(*v1alpha1.Provider)
+		if !ok || provider == nil {
+			return nil
+		}
+		adapter, ok := adapters[provider.Spec.Platform]
+		if !ok {
+			return nil
+		}
+		return dispatch(ctx, provider, adapter)
+	}
 }
 
 // openDatabase selects and constructs the base Store (plus any
