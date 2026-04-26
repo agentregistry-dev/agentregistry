@@ -1986,17 +1986,6 @@ spec:
 // emitted by `arctl init mcp`). Apply must preserve the packages block and
 // -o yaml must render it cleanly on the way out.
 func TestMCPServer_PackagesShape(t *testing.T) {
-	// The v1alpha1 OCI registry validator enforces ownership by fetching
-	// the image manifest and checking that the image carries an
-	// `io.modelcontextprotocol.server.name` label matching the MCPServer's
-	// name. No publicly-available image will satisfy this check against a
-	// randomly-generated test server name. Covering this path requires
-	// pre-publishing a purpose-built image to an accessible registry,
-	// which is out of scope for an e2e apply round-trip test.
-	// Unit coverage for the packages-shape round-trip lives under
-	// pkg/api/v1alpha1 (Marshal/Unmarshal tests).
-	t.Skip("covered by v1alpha1 Marshal/Unmarshal tests; e2e path blocked by OCI ownership validator")
-
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	serverName := "user/" + UniqueNameWithPrefix("e2epkg")
@@ -2006,6 +1995,13 @@ func TestMCPServer_PackagesShape(t *testing.T) {
 		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
 	})
 
+	// localhost:5001 lands in the validator's private-registry exemption
+	// (allowlist + ownership annotation skipped) so the apply succeeds
+	// without requiring a per-run OCI image push. The OCI ownership
+	// path itself is covered by pkg/api/v1alpha1/registries unit tests;
+	// what this e2e exercises is the spec.packages YAML round-trip
+	// through apply → get -o yaml.
+	imageRef := "localhost:5001/example/mcp:" + version
 	yaml := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
@@ -2016,10 +2012,10 @@ spec:
   description: "packages-shape round-trip test"
   packages:
     - registryType: oci
-      identifier: docker.io/library/alpine:latest
+      identifier: %s
       transport:
         type: stdio
-`, serverName, version)
+`, serverName, version, imageRef)
 
 	path := writeDeclarativeYAML(t, tmpDir, "mcp-pkg.yaml", yaml)
 	result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)
@@ -2031,7 +2027,7 @@ spec:
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "packages:")
 	RequireOutputContains(t, result, "registryType: oci")
-	RequireOutputContains(t, result, "ghcr.io/example/mcp:")
+	RequireOutputContains(t, result, imageRef)
 	RequireOutputContains(t, result, "type: stdio")
 	// Exclusive shape — must not leak a remotes or repository block.
 	if strings.Contains(result.Stdout, "remotes:") {
