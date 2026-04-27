@@ -1,4 +1,10 @@
-package builtins
+// Package deploymentlogs owns the Deployment logs subresource:
+// `/v0/deployments/{name}/{version}/logs`. Drains
+// adapter.Logs through the V1Alpha1Coordinator and returns the captured
+// lines as JSON. The endpoint is bound to one specific kind
+// (Deployment); the rest of the v1alpha1 CRUD surface lives in
+// v1alpha1crud.
+package deploymentlogs
 
 import (
 	"context"
@@ -17,10 +23,10 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
-// DeploymentLogsConfig bundles the inputs for RegisterDeploymentLogs. The
-// coordinator drives adapter.Logs; the store fetches the Deployment row so
-// the endpoint can reject 404s early.
-type DeploymentLogsConfig struct {
+// Config bundles the inputs for Register. The coordinator drives
+// adapter.Logs; the store fetches the Deployment row so the endpoint
+// can reject 404s early.
+type Config struct {
 	BasePrefix  string
 	Store       *v1alpha1store.Store
 	Coordinator *deploymentsvc.V1Alpha1Coordinator
@@ -65,7 +71,7 @@ type deploymentLogsOutput struct {
 	}
 }
 
-// RegisterDeploymentLogs wires GET
+// Register wires GET
 // {basePrefix}/deployments/{name}/{version}/logs?namespace=default. The
 // response is a JSON payload of log records drained from
 // coordinator.Logs; follow=true keeps the channel open until the client
@@ -75,7 +81,7 @@ type deploymentLogsOutput struct {
 // kubernetes/local adapters still return closed channels. When real log
 // streaming lands upstream, swap this for an SSE/chunked handler at the
 // same path without touching the coordinator surface.
-func RegisterDeploymentLogs(api huma.API, cfg DeploymentLogsConfig) {
+func Register(api huma.API, cfg Config) {
 	if cfg.Coordinator == nil || cfg.Store == nil {
 		return
 	}

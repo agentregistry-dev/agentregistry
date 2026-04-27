@@ -1,6 +1,6 @@
 //go:build integration
 
-package builtins_test
+package deploymentlogs_test
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/stretchr/testify/require"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/builtins"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentlogs"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/noop"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
@@ -47,7 +47,7 @@ func TestRegisterDeploymentLogs_RespectsAuthorize(t *testing.T) {
 	}
 
 	_, api := humatest.New(t)
-	builtins.RegisterDeploymentLogs(api, builtins.DeploymentLogsConfig{
+	deploymentlogs.Register(api, deploymentlogs.Config{
 		BasePrefix:  "/v0",
 		Store:       deployments,
 		Coordinator: coord,
@@ -84,7 +84,7 @@ func TestRegisterDeploymentLogs_NilAuthorizeAllowsThrough(t *testing.T) {
 	})
 
 	_, api := humatest.New(t)
-	builtins.RegisterDeploymentLogs(api, builtins.DeploymentLogsConfig{
+	deploymentlogs.Register(api, deploymentlogs.Config{
 		BasePrefix:  "/v0",
 		Store:       deployments,
 		Coordinator: coord,

@@ -1,6 +1,6 @@
 //go:build integration
 
-package builtins_test
+package v1alpha1crud_test
 
 import (
 	"context"
@@ -11,7 +11,8 @@ import (
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/stretchr/testify/require"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/builtins"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentlogs"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/v1alpha1crud"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/noop"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
@@ -49,12 +50,12 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha
 	})
 
 	_, api := humatest.New(t)
-	builtins.RegisterBuiltins(
+	v1alpha1crud.Register(
 		api, "/v0", stores,
 		database.NewV1Alpha1Resolver(stores),
 		nil, nil,
 		nil, // semanticSearch disabled in this test
-		builtins.PerKindHooks{
+		v1alpha1crud.PerKindHooks{
 			PostUpserts: map[string]func(context.Context, v1alpha1.Object) error{
 				v1alpha1.KindDeployment: func(ctx context.Context, obj v1alpha1.Object) error {
 					return coord.Apply(ctx, obj.(*v1alpha1.Deployment))
@@ -67,7 +68,7 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha
 			},
 		},
 	)
-	builtins.RegisterDeploymentLogs(api, builtins.DeploymentLogsConfig{
+	deploymentlogs.Register(api, deploymentlogs.Config{
 		BasePrefix:  "/v0",
 		Store:       stores[v1alpha1.KindDeployment],
 		Coordinator: coord,

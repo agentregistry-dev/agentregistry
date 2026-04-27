@@ -1,17 +1,21 @@
-// Package builtins wires the v1alpha1 HTTP handlers for every
-// first-party Kind shipped by this repo (Agent, MCPServer, Skill,
-// Prompt, Provider, Deployment). Per-kind registration is a single
-// `register(...)` call in bindings.go's init(); resource.Register
+// Package v1alpha1crud wires the generic CRUD HTTP handlers for every
+// first-party v1alpha1 Kind shipped by this repo (Agent, MCPServer,
+// Skill, Prompt, Provider, Deployment). Per-kind registration is a
+// single `register(...)` call in bindings.go's init(); resource.Register
 // handles every per-kind quirk internally (readme subresource
 // auto-detected via v1alpha1.ObjectWithReadme; per-kind authz / list
 // filtering / post-upsert / post-delete threaded through PerKindHooks).
 //
-// "Builtins" means OSS-shipped first-party kinds. Extension kinds
-// added by enterprise builds or downstream consumers do NOT register
-// here — they wire their own resource.Register[T] call from
-// AppOptions.ExtraRoutes (see pkg/types/types.go) so the OSS package
-// stays first-party-only.
-package builtins
+// Scope: only the per-kind CRUD surface (`/v0/{plural}/{name}/{version}`
+// + the readme subresource for kinds that have one). Other v1alpha1
+// HTTP endpoints live in sibling packages — `/v0/import` in
+// importpipeline, `/v0/deployments/{name}/{version}/logs` in
+// deploymentlogs.
+//
+// First-party only: enterprise extension kinds (e.g. Role) do NOT
+// register here — they wire their own resource.Register[T] call from
+// AppOptions.ExtraRoutes (see pkg/types/types.go).
+package v1alpha1crud
 
 import (
 	"context"
@@ -26,9 +30,9 @@ import (
 // PerKindHooks groups optional, per-kind callbacks layered on top of
 // the shared per-call config. Wired by enterprise builds that need to
 // inject authorization / filtering per resource kind without forking
-// the OSS builtins registration. Both maps are keyed by canonical
-// Kind name (v1alpha1.KindAgent etc.); missing keys are treated as
-// "no hook for this kind".
+// the OSS registration. Both maps are keyed by canonical Kind name
+// (v1alpha1.KindAgent etc.); missing keys are treated as "no hook
+// for this kind".
 type PerKindHooks struct {
 	// Authorizers gates every read + write operation per kind; see
 	// resource.Config.Authorize for the contract.
@@ -46,20 +50,19 @@ type PerKindHooks struct {
 	PostDeletes map[string]func(ctx context.Context, obj v1alpha1.Object) error
 }
 
-// RegisterBuiltins wires the namespace-scoped + cross-namespace
-// endpoints for every built-in v1alpha1 Kind against the supplied
-// Stores map (as produced by v1alpha1store.NewV1Alpha1Stores). Each kind
-// shares the same BasePrefix and cross-kind Resolver.
+// Register wires the namespace-scoped + cross-namespace list endpoints
+// for every built-in v1alpha1 Kind against the supplied Stores map (as
+// produced by v1alpha1store.NewV1Alpha1Stores). Each kind shares the
+// same BasePrefix and cross-kind Resolver.
 //
 // Iteration order is fixed by v1alpha1.BuiltinKinds so OpenAPI output
-// stays stable across builds. Kinds in BuiltinKinds with no Store entry
-// or no registered Binding are silently skipped; callers that want
-// strict behavior should validate the maps ahead of the call.
+// stays stable across builds. Kinds in BuiltinKinds with no Store
+// entry or no registered binding are silently skipped; callers that
+// want strict behavior should validate the maps ahead of the call.
 //
-// Per-kind registration lives in agent.go / mcp_server.go / etc.; this
-// function is purely a dispatch loop. Adding a new kind means adding a
-// new file with its own init() — no central switch to update.
-func RegisterBuiltins(
+// Adding a new kind: append to v1alpha1.BuiltinKinds and add one
+// `register(...)` call in bindings.go's init().
+func Register(
 	api huma.API,
 	basePrefix string,
 	stores map[string]*v1alpha1store.Store,

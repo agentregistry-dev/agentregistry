@@ -1,6 +1,6 @@
 //go:build integration
 
-package builtins_test
+package importpipeline_test
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/stretchr/testify/require"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/builtins"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/importpipeline"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/importer"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
@@ -57,7 +57,7 @@ func newImportTestServer(t *testing.T, scanners ...importer.Scanner) (*v1alpha1s
 	require.NoError(t, err)
 
 	_, api := humatest.New(t)
-	builtins.RegisterImport(api, builtins.ImportConfig{
+	importpipeline.Register(api, importpipeline.Config{
 		BasePrefix: "/v0",
 		Importer:   imp,
 	})
@@ -197,7 +197,7 @@ func TestRegisterImport_InvalidYAMLSurfacesAsFailedResult(t *testing.T) {
 
 func TestRegisterImport_NilImporterSkipsRegistration(t *testing.T) {
 	_, api := humatest.New(t)
-	builtins.RegisterImport(api, builtins.ImportConfig{
+	importpipeline.Register(api, importpipeline.Config{
 		BasePrefix: "/v0",
 		Importer:   nil,
 	})
@@ -235,7 +235,7 @@ func TestRegisterImport_PerDocAuthorize(t *testing.T) {
 	}
 
 	_, api := humatest.New(t)
-	builtins.RegisterImport(api, builtins.ImportConfig{
+	importpipeline.Register(api, importpipeline.Config{
 		BasePrefix:  "/v0",
 		Importer:    imp,
 		Authorizers: authorizers,
@@ -318,7 +318,7 @@ func TestRegisterImport_DeniesKindWithNoAuthorizer(t *testing.T) {
 	}
 
 	_, api := humatest.New(t)
-	builtins.RegisterImport(api, builtins.ImportConfig{
+	importpipeline.Register(api, importpipeline.Config{
 		BasePrefix:  "/v0",
 		Importer:    imp,
 		Authorizers: authorizers,

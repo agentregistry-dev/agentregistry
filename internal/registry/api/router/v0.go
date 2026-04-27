@@ -4,10 +4,12 @@ package router
 import (
 	"context"
 
-	builtins "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/builtins"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentlogs"
 	v0embeddings "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/embeddings"
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/importpipeline"
 	v0ping "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/ping"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/v1alpha1crud"
 	v0version "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/version"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
@@ -79,7 +81,7 @@ type RouteOptions struct {
 	// admin gates fire on the OSS-registered Agent / MCPServer / Skill
 	// / Prompt / Provider / Deployment endpoints. Zero-value matches
 	// the public OSS default (no per-kind gates).
-	V1Alpha1PerKindHooks builtins.PerKindHooks
+	V1Alpha1PerKindHooks v1alpha1crud.PerKindHooks
 
 	// V1Alpha1RegistryValidator overrides the per-package registry
 	// validator on the apply / import path. Nil falls back to
@@ -124,7 +126,7 @@ func RegisterRoutes(
 	// Authorizers wires the same per-kind RBAC the regular apply path
 	// uses; without it the import endpoint would be a write-bypass.
 	if opts.V1Alpha1Importer != nil {
-		builtins.RegisterImport(api, builtins.ImportConfig{
+		importpipeline.Register(api, importpipeline.Config{
 			BasePrefix:  pathPrefix,
 			Importer:    opts.V1Alpha1Importer,
 			Authorizers: opts.V1Alpha1PerKindHooks.Authorizers,
@@ -161,7 +163,7 @@ func RegisterRoutes(
 // When coord is non-nil, Deployment PUT/DELETE fire
 // coord.Apply/coord.Remove after the row is persisted so the platform
 // adapter converges runtime state synchronously with the API call.
-func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stores, coord *deploymentsvc.V1Alpha1Coordinator, semantic resource.SemanticSearchFunc, perKind builtins.PerKindHooks, registryValidator v1alpha1.RegistryValidatorFunc) {
+func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stores, coord *deploymentsvc.V1Alpha1Coordinator, semantic resource.SemanticSearchFunc, perKind v1alpha1crud.PerKindHooks, registryValidator v1alpha1.RegistryValidatorFunc) {
 	resolver := internaldb.NewV1Alpha1Resolver(stores)
 	if registryValidator == nil {
 		registryValidator = registries.Dispatcher
@@ -200,13 +202,13 @@ func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stor
 	}
 
 	// Per-kind CRUD endpoints — one call per built-in kind, hidden
-	// inside builtins.RegisterBuiltins.
-	builtins.RegisterBuiltins(api, basePrefix, stores, resolver, registryValidator, uniqueRemoteURLs, semantic, perKind)
+	// inside v1alpha1crud.Register.
+	v1alpha1crud.Register(api, basePrefix, stores, resolver, registryValidator, uniqueRemoteURLs, semantic, perKind)
 
 	// Deployment-specific endpoints: logs stream (cancel is subsumed
 	// by DesiredState=undeployed + DELETE in the v1alpha1 lifecycle).
 	if coord != nil {
-		builtins.RegisterDeploymentLogs(api, builtins.DeploymentLogsConfig{
+		deploymentlogs.Register(api, deploymentlogs.Config{
 			BasePrefix:  basePrefix,
 			Store:       stores[v1alpha1.KindDeployment],
 			Coordinator: coord,

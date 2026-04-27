@@ -18,7 +18,7 @@ import (
 
 	mcpregistry "github.com/agentregistry-dev/agentregistry/internal/mcp/registryserver"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/builtins"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/v1alpha1crud"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
@@ -269,7 +269,7 @@ func buildRouteOptions(
 		Authz:                     authz,
 		V1Alpha1Stores:            stores,
 		V1Alpha1Importer:          importer,
-		V1Alpha1PerKindHooks:      builtinPerKindHooks(options),
+		V1Alpha1PerKindHooks:      crudPerKindHooks(options),
 		V1Alpha1RegistryValidator: options.V1Alpha1RegistryValidator,
 	}
 
@@ -293,14 +293,14 @@ func buildRouteOptions(
 	return routeOpts
 }
 
-// builtinPerKindHooks adapts the AppOptions per-kind authorizer +
+// crudPerKindHooks adapts the AppOptions per-kind authorizer +
 // list-filter maps (which use the public pkg/types signatures) into
-// the internal builtins.PerKindHooks struct (which uses the
+// the internal v1alpha1crud.PerKindHooks struct (which uses the
 // resource.AuthorizeInput type the generic resource handler
 // dispatches on). Field-for-field copy across the two
 // AuthorizeInput-shaped structs.
-func builtinPerKindHooks(options types.AppOptions) builtins.PerKindHooks {
-	hooks := builtins.PerKindHooks{}
+func crudPerKindHooks(options types.AppOptions) v1alpha1crud.PerKindHooks {
+	hooks := v1alpha1crud.PerKindHooks{}
 	if len(options.V1Alpha1Authorizers) > 0 {
 		hooks.Authorizers = make(map[string]func(ctx context.Context, in resource.AuthorizeInput) error, len(options.V1Alpha1Authorizers))
 		for kind, fn := range options.V1Alpha1Authorizers {

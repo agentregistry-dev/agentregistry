@@ -1,4 +1,15 @@
-package builtins
+// Package importpipeline owns POST /v0/import — the multi-doc YAML
+// import endpoint that runs each decoded document through the
+// pre-constructed importer.Importer (validation + scanner enrichment
+// + Upsert) and returns per-document results.
+//
+// Distinct from the per-kind CRUD bindings in v1alpha1crud and from
+// the in-package POST /v0/apply (pkg/registry/resource): apply
+// short-circuits to plain Upsert without scanner runs, while
+// importpipeline always passes through the importer's enrichment
+// pipeline so scanner annotations + findings rows land alongside
+// the persisted spec.
+package importpipeline
 
 import (
 	"context"
@@ -13,11 +24,11 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 )
 
-// ImportConfig wires POST {BasePrefix}/import. Importer is the
+// Config wires POST {BasePrefix}/import. Importer is the
 // pre-constructed importer.Importer (scanners + findings store +
 // resolver injected at server boot); the handler forwards request
 // bytes + query-derived Options into it.
-type ImportConfig struct {
+type Config struct {
 	BasePrefix string
 	Importer   *importer.Importer
 	// Authorizers is the same per-kind authz map the regular apply
@@ -52,7 +63,7 @@ type importOutput struct {
 	}
 }
 
-// RegisterImport wires POST {BasePrefix}/import.
+// Register wires POST {BasePrefix}/import.
 //
 // Mirrors the apply endpoint's body + per-doc-results semantics but
 // runs through the full Importer pipeline so scanner-produced
@@ -60,7 +71,7 @@ type importOutput struct {
 //
 // No-ops (returns without registering) when cfg.Importer is nil —
 // servers without the v1alpha1 Stores wired also skip the Importer.
-func RegisterImport(api huma.API, cfg ImportConfig) {
+func Register(api huma.API, cfg Config) {
 	if cfg.Importer == nil {
 		return
 	}
