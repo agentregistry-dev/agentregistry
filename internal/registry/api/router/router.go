@@ -129,7 +129,10 @@ func handle404(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// NewHumaAPI creates a new Huma API with all routes registered
+// NewHumaAPI creates a new Huma API with all routes registered.
+// Returns an error when RegisterRoutes rejects the supplied
+// RouteOptions (e.g. V1Alpha1Stores missing).
+//
 // Note: authz is handled at the DB/service layer, not at the API layer.
 func NewHumaAPI(
 	cfg *config.Config,
@@ -139,7 +142,7 @@ func NewHumaAPI(
 	uiHandler http.Handler,
 	authnProvider auth.AuthnProvider,
 	routeOpts *RouteOptions,
-) huma.API {
+) (huma.API, error) {
 	// Create Huma API configuration
 	humaConfig := huma.DefaultConfig("Official MCP Registry", "1.0.0")
 	humaConfig.Info.Description = "A community driven registry service for Model Context Protocol (MCP) servers.\n\n[GitHub repository](https://github.com/modelcontextprotocol/registry) | [Documentation](https://github.com/modelcontextprotocol/registry/tree/main/docs)"
@@ -203,7 +206,9 @@ func NewHumaAPI(
 	))
 
 	// Register all API routes under /v0
-	RegisterRoutes(api, cfg, metrics, versionInfo, routeOpts)
+	if err := RegisterRoutes(api, cfg, metrics, versionInfo, routeOpts); err != nil {
+		return nil, err
+	}
 
 	// Add /metrics for Prometheus metrics using promhttp
 	mux.Handle("/metrics", metrics.PrometheusHandler())
@@ -240,5 +245,5 @@ func NewHumaAPI(
 			handle404(w, r)
 		})
 	}
-	return api
+	return api, nil
 }

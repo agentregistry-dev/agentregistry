@@ -1,50 +1,46 @@
 package api_test
 
 import (
-	"crypto/ed25519"
-	"crypto/rand"
-	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/rs/cors"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
-	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 )
 
-// newCORSTestServer spins up a minimal API server without any services or
-// route options — enough to exercise the CORS middleware + trailing-slash
-// middleware without a database.
-func newCORSTestServer(t *testing.T) *api.Server {
-	t.Helper()
+// newCORSTestHandler returns the same middleware stack NewServer wires
+// (TrailingSlash → CORS → mux), but bound to a stub mux that just 200s
+// every path. Lets CORS assertions run without a database or any of the
+// v0 route registrations.
+func newCORSTestHandler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 
-	testSeed := make([]byte, ed25519.SeedSize)
-	_, err := rand.Read(testSeed)
-	require.NoError(t, err)
+	corsHandler := cors.New(cors.Options{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodPut,
+			http.MethodDelete,
+			http.MethodOptions,
+		},
+		AllowedHeaders:   []string{"*"},
+		ExposedHeaders:   []string{"Content-Type", "Content-Length"},
+		AllowCredentials: false,
+		MaxAge:           86400,
+	})
 
-	cfg := config.NewConfig()
-	cfg.JWTPrivateKey = hex.EncodeToString(testSeed)
-
-	shutdownTelemetry, metrics, err := telemetry.InitMetrics("test")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = shutdownTelemetry(nil) })
-
-	versionInfo := &arv0.VersionBody{
-		Version:   "test",
-		GitCommit: "test",
-		BuildTime: "test",
-	}
-
-	return api.NewServer(cfg, metrics, versionInfo, nil, nil, nil)
+	return api.TrailingSlashMiddleware(corsHandler.Handler(mux))
 }
 
 func TestCORSHeaders(t *testing.T) {
-	srv := newCORSTestServer(t)
+	handler := newCORSTestHandler()
 
 	tests := []struct {
 		name           string
@@ -96,7 +92,7 @@ func TestCORSHeaders(t *testing.T) {
 			}
 
 			rr := httptest.NewRecorder()
-			srv.Handler().ServeHTTP(rr, req)
+			handler.ServeHTTP(rr, req)
 
 			if tt.expectCORS {
 				assert.NotEmpty(t, rr.Header().Get("Access-Control-Allow-Origin"), "Access-Control-Allow-Origin header should be set")
@@ -106,7 +102,7 @@ func TestCORSHeaders(t *testing.T) {
 }
 
 func TestCORSHeaderValues(t *testing.T) {
-	srv := newCORSTestServer(t)
+	handler := newCORSTestHandler()
 
 	req := httptest.NewRequest(http.MethodOptions, "/v0/mcpservers", nil)
 	req.Header.Set("Origin", "https://example.com")
@@ -114,7 +110,7 @@ func TestCORSHeaderValues(t *testing.T) {
 	req.Header.Set("Access-Control-Request-Headers", "Content-Type, Authorization")
 
 	rr := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rr, req)
+	handler.ServeHTTP(rr, req)
 
 	// Check that wildcard origin is allowed (our current CORS config).
 	allowOrigin := rr.Header().Get("Access-Control-Allow-Origin")

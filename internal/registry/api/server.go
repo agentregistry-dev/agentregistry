@@ -150,6 +150,8 @@ func (s *Server) Handler() http.Handler {
 }
 
 // AuthZ is handled at the DB/service layer, not at the API layer.
+// Returns an error when route registration rejects the supplied
+// RouteOptions (e.g. V1Alpha1Stores missing).
 func NewServer(
 	cfg *config.Config,
 	metrics *telemetry.Metrics,
@@ -157,7 +159,7 @@ func NewServer(
 	customUIHandler http.Handler,
 	authnProvider auth.AuthnProvider,
 	routeOpts *router.RouteOptions,
-) *Server {
+) (*Server, error) {
 	// Create HTTP mux and Huma API
 	mux := http.NewServeMux()
 
@@ -176,7 +178,10 @@ func NewServer(
 		}
 	}
 
-	api := router.NewHumaAPI(cfg, mux, metrics, versionInfo, uiHandler, authnProvider, routeOpts)
+	api, err := router.NewHumaAPI(cfg, mux, metrics, versionInfo, uiHandler, authnProvider, routeOpts)
+	if err != nil {
+		return nil, err
+	}
 
 	// Configure CORS with permissive settings for public API
 	corsHandler := cors.New(cors.Options{
@@ -209,7 +214,7 @@ func NewServer(
 		},
 	}
 
-	return server
+	return server, nil
 }
 
 func (s *Server) Start() error {

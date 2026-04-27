@@ -3,6 +3,7 @@ package router
 
 import (
 	"context"
+	"errors"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentlogs"
 	v0embeddings "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/embeddings"
@@ -34,12 +35,18 @@ import (
 // in.
 type V1Alpha1Stores = map[string]*v1alpha1store.Store
 
-// RouteOptions contains optional services for route registration.
+// RouteOptions contains the services that drive route registration.
+//
+// V1Alpha1Stores is required; everything else is optional and gates a
+// specific feature area (deployments, embeddings, semantic search).
+// RegisterRoutes returns an error if a required field is missing rather
+// than silently no-op'ing — a misconfigured boot fails loud.
 type RouteOptions struct {
-	// V1Alpha1Stores, when non-empty, enables the generic v1alpha1 handler
-	// at `/v0/{plural}/{name}/{version}?namespace={ns}` (namespace is a
-	// query param defaulting to "default"; `?namespace=all` widens list
-	// scope across every namespace).
+	// V1Alpha1Stores is the per-kind v1alpha1store map that drives the
+	// generic CRUD handlers at `/v0/{plural}/{name}/{version}?namespace={ns}`
+	// (namespace is a query param defaulting to "default";
+	// `?namespace=all` widens list scope across every namespace).
+	// REQUIRED — RegisterRoutes errors when this is nil/empty.
 	V1Alpha1Stores V1Alpha1Stores
 
 	// V1Alpha1Importer, when non-nil, enables POST /v0/import. Typically
@@ -95,39 +102,42 @@ type RouteOptions struct {
 	ExtraRoutes func(api huma.API, pathPrefix string)
 }
 
-// RegisterRoutes registers all API routes under /v0.
+// RegisterRoutes registers all API routes under /v0. Required
+// dependencies (RouteOptions itself, V1Alpha1Stores) trigger an
+// error rather than a silent skip so a misconfigured boot fails
+// visibly.
 func RegisterRoutes(
 	api huma.API,
 	cfg *config.Config,
 	metrics *telemetry.Metrics,
 	versionInfo *arv0.VersionBody,
 	opts *RouteOptions,
-) {
+) error {
+	if opts == nil {
+		return errors.New("router: RouteOptions is required")
+	}
+	if len(opts.V1Alpha1Stores) == 0 {
+		return errors.New("router: V1Alpha1Stores is required")
+	}
+
 	pathPrefix := "/v0"
 
 	v0health.RegisterHealthEndpoint(api, pathPrefix, cfg, metrics)
 	v0ping.RegisterPingEndpoint(api, pathPrefix)
 	v0version.RegisterVersionEndpoint(api, pathPrefix, versionInfo)
 
-	if opts == nil {
-		return
-	}
-
-	// v1alpha1 generic routes — wired when V1Alpha1Stores is provided.
-	// Cross-kind dangling-ref detection uses a Store-backed resolver.
-	// Deployment reconciliation hooks plug in when the coordinator is
-	// supplied.
-	if len(opts.V1Alpha1Stores) > 0 {
-		registerV1Alpha1Routes(
-			api,
-			pathPrefix,
-			opts.V1Alpha1Stores,
-			opts.V1Alpha1DeploymentCoordinator,
-			opts.V1Alpha1SemanticSearch,
-			opts.V1Alpha1PerKindHooks,
-			opts.V1Alpha1RegistryValidator,
-		)
-	}
+	// v1alpha1 generic routes. Cross-kind dangling-ref detection uses
+	// a Store-backed resolver. Deployment reconciliation hooks plug in
+	// when the coordinator is supplied.
+	registerV1Alpha1Routes(
+		api,
+		pathPrefix,
+		opts.V1Alpha1Stores,
+		opts.V1Alpha1DeploymentCoordinator,
+		opts.V1Alpha1SemanticSearch,
+		opts.V1Alpha1PerKindHooks,
+		opts.V1Alpha1RegistryValidator,
+	)
 
 	// POST /v0/import — runs decoded manifests through the enrichment
 	// pipeline (validate + scanners + findings-write) before Upsert.
@@ -157,6 +167,7 @@ func RegisterRoutes(
 	if opts.ExtraRoutes != nil {
 		opts.ExtraRoutes(api, pathPrefix)
 	}
+	return nil
 }
 
 // registerV1Alpha1Routes wires the generic resource handler for every
