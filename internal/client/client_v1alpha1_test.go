@@ -31,7 +31,7 @@ func TestClient_V1Alpha1RoundTrip(t *testing.T) {
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("test", "v1"))
-	v1alpha1crud.Register(api, "/v0", stores, nil, nil, nil, nil, v1alpha1crud.PerKindHooks{})
+	v1alpha1crud.Register(api, "/v0", stores, nil, nil, nil, v1alpha1crud.PerKindHooks{})
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
 		Stores:     stores,
@@ -149,7 +149,7 @@ func TestClient_V1Alpha1_NotFound(t *testing.T) {
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("test", "v1"))
-	v1alpha1crud.Register(api, "/v0", stores, nil, nil, nil, nil, v1alpha1crud.PerKindHooks{})
+	v1alpha1crud.Register(api, "/v0", stores, nil, nil, nil, v1alpha1crud.PerKindHooks{})
 
 	ts := httptest.NewServer(mux)
 	defer ts.Close()

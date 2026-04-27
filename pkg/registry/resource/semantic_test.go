@@ -57,7 +57,7 @@ func TestSemanticSearch_ListEndpointRanksByDistance(t *testing.T) {
 
 	stores := map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents}
 	_, api := humatest.New(t)
-	v1alpha1crud.Register(api, "/v0", stores, nil, nil, nil, search, v1alpha1crud.PerKindHooks{})
+	v1alpha1crud.Register(api, "/v0", stores, nil, nil, search, v1alpha1crud.PerKindHooks{})
 
 	resp := api.Get("/v0/agents?semantic=anything")
 	require.Equal(t, 200, resp.Code, resp.Body.String())
@@ -125,7 +125,7 @@ func TestSemanticSearch_RespectsListFilterDenyList(t *testing.T) {
 
 	stores := map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents}
 	_, api := humatest.New(t)
-	v1alpha1crud.Register(api, "/v0", stores, nil, nil, nil, search, v1alpha1crud.PerKindHooks{
+	v1alpha1crud.Register(api, "/v0", stores, nil, nil, search, v1alpha1crud.PerKindHooks{
 		ListFilters: listFilters,
 	})
 
@@ -182,7 +182,7 @@ func TestSemanticSearch_ListFilterScopeNoneReturnsEmpty(t *testing.T) {
 
 	stores := map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents}
 	_, api := humatest.New(t)
-	v1alpha1crud.Register(api, "/v0", stores, nil, nil, nil, search, v1alpha1crud.PerKindHooks{
+	v1alpha1crud.Register(api, "/v0", stores, nil, nil, search, v1alpha1crud.PerKindHooks{
 		ListFilters: listFilters,
 	})
 
@@ -207,7 +207,7 @@ func TestSemanticSearch_ListReturns400WhenDisabled(t *testing.T) {
 	stores := map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents}
 	_, api := humatest.New(t)
 	// SemanticSearch = nil ⇒ `?semantic=` endpoint surface returns 400.
-	v1alpha1crud.Register(api, "/v0", stores, nil, nil, nil, nil, v1alpha1crud.PerKindHooks{})
+	v1alpha1crud.Register(api, "/v0", stores, nil, nil, nil, v1alpha1crud.PerKindHooks{})
 
 	resp := api.Get("/v0/agents?semantic=anything")
 	require.Equal(t, 400, resp.Code)

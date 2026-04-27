@@ -68,7 +68,6 @@ func Register(
 	stores map[string]*v1alpha1store.Store,
 	resolver v1alpha1.ResolverFunc,
 	registryValidator v1alpha1.RegistryValidatorFunc,
-	uniqueRemoteURLsChecker v1alpha1.UniqueRemoteURLsFunc,
 	semanticSearch resource.SemanticSearchFunc,
 	perKind PerKindHooks,
 ) {
@@ -78,17 +77,16 @@ func Register(
 			return resource.Config{}, false
 		}
 		return resource.Config{
-			Kind:                    kind,
-			BasePrefix:              basePrefix,
-			Store:                   store,
-			Resolver:                resolver,
-			RegistryValidator:       registryValidator,
-			UniqueRemoteURLsChecker: uniqueRemoteURLsChecker,
-			SemanticSearch:          semanticSearch,
-			Authorize:               perKind.Authorizers[kind],
-			ListFilter:              perKind.ListFilters[kind],
-			PostUpsert:              perKind.PostUpserts[kind],
-			PostDelete:              perKind.PostDeletes[kind],
+			Kind:              kind,
+			BasePrefix:        basePrefix,
+			Store:             store,
+			Resolver:          resolver,
+			RegistryValidator: registryValidator,
+			SemanticSearch:    semanticSearch,
+			Authorize:         perKind.Authorizers[kind],
+			ListFilter:        perKind.ListFilters[kind],
+			PostUpsert:        perKind.PostUpserts[kind],
+			PostDelete:        perKind.PostDeletes[kind],
 		}, true
 	}
 

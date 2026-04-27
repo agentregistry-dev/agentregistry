@@ -2,7 +2,6 @@ package database
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -98,41 +97,3 @@ func NewV1Alpha1Getter(stores map[string]*v1alpha1store.Store) v1alpha1.GetterFu
 	}
 }
 
-// NewV1Alpha1UniqueRemoteURLsChecker returns a v1alpha1.UniqueRemoteURLsFunc
-// that scans the kind's table via Store.FindReferrers with JSONB
-// containment fragment `{"remotes":[{"url":"<url>"}]}`. Kinds that don't
-// carry Remotes (Prompt, Provider, Deployment) never reach this — their
-// (Object).ValidateUniqueRemoteURLs methods return nil without calling
-// the checker.
-//
-// Search scope is cross-namespace: the URL is a global real-world
-// identifier, not a namespace-scoped one. The namespace parameter on the
-// UniqueRemoteURLsFunc signature is advisory and ignored here.
-//
-// On conflict, returns a plain error naming the conflicting (kind, name)
-// so the surrounding FieldError path captures the remote index.
-func NewV1Alpha1UniqueRemoteURLsChecker(stores map[string]*v1alpha1store.Store) v1alpha1.UniqueRemoteURLsFunc {
-	return func(ctx context.Context, kind, _ /* namespace */, url, excludeName string) error {
-		store, ok := stores[kind]
-		if !ok {
-			return fmt.Errorf("unique-remote-urls: unknown kind %q", kind)
-		}
-		fragment, err := json.Marshal(map[string]any{
-			"remotes": []map[string]string{{"url": url}},
-		})
-		if err != nil {
-			return fmt.Errorf("unique-remote-urls: encode fragment: %w", err)
-		}
-		refs, err := store.FindReferrers(ctx, fragment, v1alpha1store.FindReferrersOpts{})
-		if err != nil {
-			return fmt.Errorf("unique-remote-urls: scan: %w", err)
-		}
-		for _, r := range refs {
-			if r.Metadata.Name == excludeName {
-				continue
-			}
-			return fmt.Errorf("remote url %s is already used by %s %q", url, kind, r.Metadata.Name)
-		}
-		return nil
-	}
-}

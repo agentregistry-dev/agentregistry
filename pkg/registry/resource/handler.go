@@ -68,11 +68,6 @@ type Config struct {
 	// as 400 errors. Leave nil to skip registry validation (tests,
 	// offline imports, air-gapped servers).
 	RegistryValidator v1alpha1.RegistryValidatorFunc
-	// UniqueRemoteURLsChecker is optional; when set, the apply handler
-	// calls obj.ValidateUniqueRemoteURLs with it so two objects of the
-	// same Kind claiming the same remote URL surface as 409 errors.
-	// Leave nil to skip (tests, single-tenant offline setups).
-	UniqueRemoteURLsChecker v1alpha1.UniqueRemoteURLsFunc
 
 	// PostUpsert is optional; when set, the apply handler invokes it
 	// after a successful Upsert + read-back so the kind can drive
@@ -462,13 +457,6 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		// Skipped when no validator is configured.
 		if err := v1alpha1.ValidateObjectRegistries(ctx, body, cfg.RegistryValidator); err != nil {
 			return nil, huma.Error400BadRequest("registries: " + err.Error())
-		}
-
-		// Cross-row remote-URL uniqueness. Optional; skipped when no
-		// checker is configured. 409 Conflict is the right status — the
-		// manifest is structurally valid but conflicts with existing state.
-		if err := v1alpha1.ValidateObjectRemoteURLs(ctx, body, cfg.UniqueRemoteURLsChecker); err != nil {
-			return nil, huma.Error409Conflict("remote urls: " + err.Error())
 		}
 
 		specJSON, err := body.MarshalSpec()

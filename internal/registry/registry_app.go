@@ -204,7 +204,6 @@ func buildV1Alpha1Bundle(pool *pgxpool.Pool, registryValidator v1alpha1.Registry
 		},
 		Resolver:          internaldb.NewV1Alpha1Resolver(stores),
 		RegistryValidator: registryValidator,
-		UniqueRemoteURLs:  internaldb.NewV1Alpha1UniqueRemoteURLsChecker(stores),
 	})
 	if err != nil {
 		slog.Warn("failed to construct v1alpha1 importer; HTTP import + seed-from disabled for this path", "error", err)

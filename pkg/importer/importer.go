@@ -156,12 +156,6 @@ type Importer struct {
 	// or tests. Typical servers pass registries.Dispatcher.
 	registryValidator v1alpha1.RegistryValidatorFunc
 
-	// uniqueRemoteURLs forwards to obj.ValidateUniqueRemoteURLs. A
-	// nil checker skips uniqueness — used in tests and imports of
-	// curated bundles where cross-object conflicts are acceptable.
-	// Typical servers pass database.NewV1Alpha1UniqueRemoteURLsChecker.
-	uniqueRemoteURLs v1alpha1.UniqueRemoteURLsFunc
-
 	logger *slog.Logger
 }
 
@@ -173,7 +167,6 @@ type Config struct {
 	Scheme            *v1alpha1.Scheme
 	Resolver          v1alpha1.ResolverFunc
 	RegistryValidator v1alpha1.RegistryValidatorFunc
-	UniqueRemoteURLs  v1alpha1.UniqueRemoteURLsFunc
 	Logger            *slog.Logger
 }
 
@@ -198,7 +191,6 @@ func New(cfg Config) (*Importer, error) {
 		scheme:            scheme,
 		resolver:          cfg.Resolver,
 		registryValidator: cfg.RegistryValidator,
-		uniqueRemoteURLs:  cfg.UniqueRemoteURLs,
 		logger:            logger,
 	}, nil
 }
@@ -333,12 +325,6 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 		res.Error = "registries: " + err.Error()
 		return res
 	}
-	if err := v1alpha1.ValidateObjectRemoteURLs(ctx, obj, i.uniqueRemoteURLs); err != nil {
-		res.Status = ImportStatusFailed
-		res.Error = "remote urls: " + err.Error()
-		return res
-	}
-
 	// Per-object authz gate. Mirrors the apply pipeline's Authorize
 	// call (pkg/registry/resource/apply.go:prepareApplyDoc). Wired by
 	// the HTTP /v0/import handler from PerKindHooks.Authorizers so

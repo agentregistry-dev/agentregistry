@@ -30,9 +30,6 @@ type ApplyConfig struct {
 	// RegistryValidator is forwarded to each decoded object's
 	// ValidateRegistries. Nil skips external-registry validation.
 	RegistryValidator v1alpha1.RegistryValidatorFunc
-	// UniqueRemoteURLsChecker is forwarded to each decoded object's
-	// ValidateUniqueRemoteURLs. Nil skips the uniqueness check.
-	UniqueRemoteURLsChecker v1alpha1.UniqueRemoteURLsFunc
 	// Scheme decodes the incoming YAML/JSON stream. Defaults to
 	// v1alpha1.Default when nil.
 	Scheme *v1alpha1.Scheme
@@ -338,12 +335,6 @@ func prepareApplyDoc(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object) 
 		pd.Result.Error = "registries: " + err.Error()
 		return pd
 	}
-	if err := v1alpha1.ValidateObjectRemoteURLs(ctx, obj, cfg.UniqueRemoteURLsChecker); err != nil {
-		pd.Result.Status = arv0.ApplyStatusFailed
-		pd.Result.Error = "remote urls: " + err.Error()
-		return pd
-	}
-
 	pd.Ready = true
 	pd.Store = store
 	pd.Meta = meta

@@ -81,11 +81,6 @@ type RegistryValidatable interface {
 	ValidateRegistries(ctx context.Context, v RegistryValidatorFunc) error
 }
 
-// UniqueRemoteURLsValidatable checks the cross-row remote URL invariant.
-type UniqueRemoteURLsValidatable interface {
-	ValidateUniqueRemoteURLs(ctx context.Context, check UniqueRemoteURLsFunc) error
-}
-
 // ValidateObject runs structural validation when obj opts into it.
 func ValidateObject(obj Object) error {
 	if v, ok := any(obj).(StructuralValidator); ok {
@@ -112,18 +107,6 @@ func ValidateObjectRegistries(ctx context.Context, obj Object, v RegistryValidat
 	}
 	if rv, ok := any(obj).(RegistryValidatable); ok {
 		return rv.ValidateRegistries(ctx, v)
-	}
-	return nil
-}
-
-// ValidateObjectRemoteURLs validates remote URL uniqueness when obj exposes
-// remote endpoints.
-func ValidateObjectRemoteURLs(ctx context.Context, obj Object, check UniqueRemoteURLsFunc) error {
-	if check == nil {
-		return nil
-	}
-	if rv, ok := any(obj).(UniqueRemoteURLsValidatable); ok {
-		return rv.ValidateUniqueRemoteURLs(ctx, check)
 	}
 	return nil
 }

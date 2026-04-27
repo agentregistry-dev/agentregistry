@@ -176,8 +176,6 @@ func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stor
 	if registryValidator == nil {
 		registryValidator = registries.Dispatcher
 	}
-	uniqueRemoteURLs := internaldb.NewV1Alpha1UniqueRemoteURLsChecker(stores)
-
 	// When a Deployment coordinator is supplied, install its Apply/Remove
 	// as the KindDeployment PostUpsert/PostDelete. Deployment
 	// reconciliation is a reserved seam in the v1alpha1 generic handler:
@@ -211,7 +209,7 @@ func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stor
 
 	// Per-kind CRUD endpoints — one call per built-in kind, hidden
 	// inside v1alpha1crud.Register.
-	v1alpha1crud.Register(api, basePrefix, stores, resolver, registryValidator, uniqueRemoteURLs, semantic, perKind)
+	v1alpha1crud.Register(api, basePrefix, stores, resolver, registryValidator, semantic, perKind)
 
 	// Deployment-specific endpoints: logs stream (cancel is subsumed
 	// by DesiredState=undeployed + DELETE in the v1alpha1 lifecycle).
@@ -229,13 +227,12 @@ func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stor
 	// and any caller-supplied PostUpsert/PostDelete fire identically on
 	// the batch path.
 	resource.RegisterApply(api, resource.ApplyConfig{
-		BasePrefix:              basePrefix,
-		Stores:                  stores,
-		Resolver:                resolver,
-		RegistryValidator:       registryValidator,
-		UniqueRemoteURLsChecker: uniqueRemoteURLs,
-		Authorizers:             perKind.Authorizers,
-		PostUpserts:             perKind.PostUpserts,
-		PostDeletes:             perKind.PostDeletes,
+		BasePrefix:        basePrefix,
+		Stores:            stores,
+		Resolver:          resolver,
+		RegistryValidator: registryValidator,
+		Authorizers:       perKind.Authorizers,
+		PostUpserts:       perKind.PostUpserts,
+		PostDeletes:       perKind.PostDeletes,
 	})
 }
