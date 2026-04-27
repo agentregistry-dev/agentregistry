@@ -1,3 +1,16 @@
+// Package builtins wires the v1alpha1 HTTP handlers for every
+// first-party Kind shipped by this repo (Agent, MCPServer, Skill,
+// Prompt, Provider, Deployment). Per-kind registration lives in
+// agent.go, mcp_server.go, skill.go, prompt.go, provider.go,
+// deployment.go — each file's init() calls Register with a typed Wire
+// closure that closes over the concrete generic type, so
+// resource.Register[T] / RegisterReadme[T] resolve at compile time.
+//
+// "Builtins" means OSS-shipped first-party kinds. Extension kinds
+// added by enterprise builds or downstream consumers do NOT register
+// here — they wire their own resource.Register[T] call from
+// AppOptions.ExtraRoutes (see pkg/types/types.go) so the OSS package
+// stays first-party-only.
 package builtins
 
 import (
@@ -38,19 +51,14 @@ type PerKindHooks struct {
 // Stores map (as produced by v1alpha1store.NewV1Alpha1Stores). Each kind
 // shares the same BasePrefix and cross-kind Resolver.
 //
-// Kinds are registered in v1alpha1.BuiltinKinds order so OpenAPI
-// output stays stable across builds. Kinds present in BuiltinKinds
-// but missing from stores are silently skipped — callers that want
-// strict behavior should validate the map ahead of the call.
+// Iteration order is fixed by v1alpha1.BuiltinKinds so OpenAPI output
+// stays stable across builds. Kinds in BuiltinKinds with no Store entry
+// or no registered Binding are silently skipped; callers that want
+// strict behavior should validate the maps ahead of the call.
 //
-// Enterprise / downstream builds with additional Kinds should call
-// resource.Register[T] directly for each custom kind; RegisterBuiltins owns
-// only the OSS set.
-//
-// Because Go generics resolve at compile time, the six type
-// parameters must be named explicitly here. Adding a new built-in
-// kind means updating v1alpha1.BuiltinKinds, V1Alpha1TableFor in the
-// database package, AND the switch below.
+// Per-kind registration lives in agent.go / mcp_server.go / etc.; this
+// function is purely a dispatch loop. Adding a new kind means adding a
+// new file with its own init() — no central switch to update.
 func RegisterBuiltins(
 	api huma.API,
 	basePrefix string,
@@ -86,39 +94,10 @@ func RegisterBuiltins(
 		if !ok {
 			continue
 		}
-		switch kind {
-		case v1alpha1.KindAgent:
-			newObj := func() *v1alpha1.Agent { return &v1alpha1.Agent{} }
-			// resource.RegisterReadme before resource.Register so the literal
-			// `/{name}/readme` path wins over the generic
-			// `/{name}/{version}` catch-all when their depths collide.
-			resource.RegisterReadme[*v1alpha1.Agent](api, cfg, newObj, func(obj *v1alpha1.Agent) *v1alpha1.Readme {
-				return obj.Spec.Readme
-			})
-			resource.Register[*v1alpha1.Agent](api, cfg, newObj)
-		case v1alpha1.KindMCPServer:
-			newObj := func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} }
-			resource.RegisterReadme[*v1alpha1.MCPServer](api, cfg, newObj, func(obj *v1alpha1.MCPServer) *v1alpha1.Readme {
-				return obj.Spec.Readme
-			})
-			resource.Register[*v1alpha1.MCPServer](api, cfg, newObj)
-			resource.RegisterLegacyServerReadme(api, cfg)
-		case v1alpha1.KindSkill:
-			newObj := func() *v1alpha1.Skill { return &v1alpha1.Skill{} }
-			resource.RegisterReadme[*v1alpha1.Skill](api, cfg, newObj, func(obj *v1alpha1.Skill) *v1alpha1.Readme {
-				return obj.Spec.Readme
-			})
-			resource.Register[*v1alpha1.Skill](api, cfg, newObj)
-		case v1alpha1.KindPrompt:
-			newObj := func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} }
-			resource.RegisterReadme[*v1alpha1.Prompt](api, cfg, newObj, func(obj *v1alpha1.Prompt) *v1alpha1.Readme {
-				return obj.Spec.Readme
-			})
-			resource.Register[*v1alpha1.Prompt](api, cfg, newObj)
-		case v1alpha1.KindProvider:
-			resource.Register[*v1alpha1.Provider](api, cfg, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
-		case v1alpha1.KindDeployment:
-			resource.Register[*v1alpha1.Deployment](api, cfg, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
+		binding, ok := lookup(kind)
+		if !ok {
+			continue
 		}
+		binding.Wire(api, cfg)
 	}
 }
