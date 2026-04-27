@@ -54,7 +54,7 @@ func runGet(cmd *cobra.Command, args []string) error {
 
 	typeName := args[0]
 
-	k, err := defaultRegistry.Lookup(typeName)
+	k, err := scheme.Lookup(typeName)
 	if err != nil {
 		return err
 	}
@@ -92,7 +92,7 @@ func runGetAll(cmd *cobra.Command, outputFormat string) error {
 		return fmt.Errorf("API client not initialized")
 	}
 
-	allKinds := defaultRegistry.All()
+	allKinds := scheme.All()
 	first := true
 	for _, k := range allKinds {
 		items, err := listItems(k)

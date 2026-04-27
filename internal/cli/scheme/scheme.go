@@ -12,19 +12,6 @@ import (
 // APIVersion is the canonical apiVersion string for arctl declarative YAML files.
 const APIVersion = v1alpha1.GroupVersion
 
-// Resource is the CLI decode result for a single declarative document.
-// Spec is always a pointer to the concrete v1alpha1 spec struct for the decoded kind.
-// Status is intentionally dropped on decode so `get -o yaml | apply -f -` stays
-// apply-safe even when the source YAML contained server-managed status.
-type Resource struct {
-	Object     v1alpha1.Object
-	APIVersion string
-	Kind       string
-	Metadata   v1alpha1.ObjectMeta
-	Spec       any
-	Status     any
-}
-
 // IsEnvelopeYAML reports whether the given bytes look like a declarative
 // ar.dev/v1alpha1 envelope. Malformed YAML returns false so callers can fall
 // back to legacy manifest parsing paths that surface the real error later.
@@ -43,73 +30,42 @@ func IsEnvelopeYAML(data []byte) bool {
 	return header.APIVersion == APIVersion && header.Kind != ""
 }
 
-// DecodeBytes parses one or more declarative YAML documents using the provided registry.
-// Returns an error if any document has an unknown kind or an unparseable spec.
-func DecodeBytes(reg *Registry, b []byte) ([]*Resource, error) {
-	if reg == nil {
-		return nil, fmt.Errorf("scheme: registry is required")
-	}
+// DecodeBytes parses one or more declarative YAML documents into typed
+// v1alpha1.Object envelopes. Returns an error if any document has an
+// unknown kind or fails to decode.
+//
+// Status is reset to nil before returning so `arctl get -o yaml | apply
+// -f -` stays apply-safe even when the source YAML contained
+// server-managed status.
+func DecodeBytes(b []byte) ([]v1alpha1.Object, error) {
 	decoded, err := v1alpha1.Default.DecodeMulti(b)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]*Resource, 0, len(decoded))
+	out := make([]v1alpha1.Object, 0, len(decoded))
 	for _, item := range decoded {
 		obj, ok := item.(v1alpha1.Object)
 		if !ok {
 			return nil, fmt.Errorf("scheme: decoded value does not implement v1alpha1.Object: %T", item)
 		}
-		// Lookup is registry-key-only (case-insensitive alias dispatch); we
-		// don't want kindDef.Kind (which is the registry-internal canonical
-		// key, e.g. "agent") leaking into Resource.Kind. Use obj.GetKind()
-		// so downstream consumers see the canonical envelope kind ("Agent").
-		if _, err := reg.Lookup(obj.GetKind()); err != nil {
+		if _, err := Lookup(obj.GetKind()); err != nil {
 			return nil, err
 		}
-		// Clear status before projection — the CLI's declarative view
-		// stamps stale status back onto apply otherwise.
 		if err := obj.UnmarshalStatus(nil); err != nil {
 			return nil, fmt.Errorf("reset status: %w", err)
 		}
-		out = append(out, resourceFromObject(obj.GetKind(), obj))
+		out = append(out, obj)
 	}
 	return out, nil
 }
 
-// DecodeFile reads a YAML file and decodes it using the provided registry.
-func DecodeFile(reg *Registry, path string) ([]*Resource, error) {
+// DecodeFile reads a YAML file and decodes it into v1alpha1.Object envelopes.
+func DecodeFile(path string) ([]v1alpha1.Object, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	return DecodeBytes(reg, b)
-}
-
-func resourceFromObject(kind string, obj v1alpha1.Object) *Resource {
-	resource := &Resource{
-		Object:     obj,
-		APIVersion: obj.GetAPIVersion(),
-		Kind:       kind,
-		Metadata:   *obj.GetMetadata(),
-	}
-
-	switch typed := obj.(type) {
-	case *v1alpha1.Agent:
-		resource.Spec = &typed.Spec
-	case *v1alpha1.MCPServer:
-		resource.Spec = &typed.Spec
-	case *v1alpha1.Skill:
-		resource.Spec = &typed.Spec
-	case *v1alpha1.Prompt:
-		resource.Spec = &typed.Spec
-	case *v1alpha1.Provider:
-		resource.Spec = &typed.Spec
-	case *v1alpha1.Deployment:
-		resource.Spec = &typed.Spec
-	default:
-		resource.Spec = obj
-	}
-	return resource
+	return DecodeBytes(b)
 }
 
 func kindAliasKey(kind string) string {

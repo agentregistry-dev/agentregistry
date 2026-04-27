@@ -240,12 +240,13 @@ status:
   deployedAt: 2026-04-20T10:00:00Z
 `)
 
-	reg := declarative.NewCLIRegistry()
-	docs, err := scheme.DecodeBytes(reg, raw)
+	docs, err := scheme.DecodeBytes(raw)
 	require.NoError(t, err, "apply decode must tolerate incoming status block")
 	require.Len(t, docs, 1)
 
-	assert.Equal(t, "Agent", docs[0].Kind, "decoder preserves the canonical envelope Kind from the YAML")
-	assert.Equal(t, "myagent", docs[0].Metadata.Name)
-	assert.Nil(t, docs[0].Status, "status block on input must be dropped, not preserved")
+	agent, ok := docs[0].(*v1alpha1.Agent)
+	require.True(t, ok, "expected *v1alpha1.Agent, got %T", docs[0])
+	assert.Equal(t, "Agent", agent.GetKind(), "decoder preserves the canonical envelope Kind from the YAML")
+	assert.Equal(t, "myagent", agent.Metadata.Name)
+	assert.Empty(t, agent.Status.Conditions, "status block on input must be dropped, not preserved")
 }

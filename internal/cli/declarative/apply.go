@@ -73,10 +73,8 @@ func runApply(cmd *cobra.Command, dryRun bool) error {
 		}
 
 		// Validate locally via registry decode — catches unknown kinds before sending.
-		if defaultRegistry != nil {
-			if _, err := scheme.DecodeBytes(defaultRegistry, data); err != nil {
-				return fmt.Errorf("parsing %s: %w", path, err)
-			}
+		if _, err := scheme.DecodeBytes(data); err != nil {
+			return fmt.Errorf("parsing %s: %w", path, err)
 		}
 		allData = append(allData, data)
 	}

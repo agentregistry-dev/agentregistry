@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
@@ -11,6 +12,20 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
+
+// deploymentStatus is the shape emitted under .status when a deployment is
+// rendered as YAML/JSON. Intentionally a CLI projection rather than the raw
+// v1alpha1.Status conditions block so imperative users keep the compact fields
+// they already consume while apply decode still ignores incoming status.
+type deploymentStatus struct {
+	ID               string         `json:"id,omitempty" yaml:"id,omitempty"`
+	Phase            string         `json:"phase,omitempty" yaml:"phase,omitempty"`
+	Origin           string         `json:"origin,omitempty" yaml:"origin,omitempty"`
+	Error            string         `json:"error,omitempty" yaml:"error,omitempty"`
+	ProviderMetadata map[string]any `json:"providerMetadata,omitempty" yaml:"providerMetadata,omitempty"`
+	DeployedAt       time.Time      `json:"deployedAt,omitempty" yaml:"deployedAt,omitempty"`
+	UpdatedAt        time.Time      `json:"updatedAt,omitempty" yaml:"updatedAt,omitempty"`
+}
 
 func listLatestAny[T v1alpha1.Object](ctx context.Context, kind string, newObj func() T) ([]any, error) {
 	items, err := client.ListAllTyped(
@@ -33,10 +48,6 @@ func listLatestAny[T v1alpha1.Object](ctx context.Context, kind string, newObj f
 		out = append(out, item)
 	}
 	return out, nil
-}
-
-func getAny[T v1alpha1.Object](ctx context.Context, kind, name, version string, newObj func() T) (any, error) {
-	return client.GetTyped(ctx, apiClient, kind, v1alpha1.DefaultNamespace, name, version, newObj)
 }
 
 func deleteAny[T v1alpha1.Object](ctx context.Context, kind, name, version string, force bool, newObj func() T) error {

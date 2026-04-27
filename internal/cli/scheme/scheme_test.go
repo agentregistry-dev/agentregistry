@@ -1,6 +1,8 @@
 package scheme_test
 
 import (
+	"os"
+	"sync"
 	"testing"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
@@ -9,23 +11,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestRegistry() *scheme.Registry {
-	reg := scheme.NewRegistry()
-	reg.Register(scheme.Kind{
-		Kind:    "agent",
-		Plural:  "agents",
-		Aliases: []string{"Agent"},
+var registerOnce sync.Once
+
+// TestMain registers the two kinds the tests below need against the
+// scheme package-level table. The CLI's declarative package isn't
+// imported here so its init() doesn't fire — these registrations stand
+// alone for the scheme test binary.
+func TestMain(m *testing.M) {
+	registerOnce.Do(func() {
+		scheme.Register(&scheme.Kind{
+			Kind: "agent", Plural: "agents", Aliases: []string{"Agent"},
+		})
+		scheme.Register(&scheme.Kind{
+			Kind: "mcp", Plural: "mcps",
+			Aliases: []string{"MCPServer", "mcpserver", "mcpservers"},
+		})
 	})
-	reg.Register(scheme.Kind{
-		Kind:    "mcp",
-		Plural:  "mcps",
-		Aliases: []string{"MCPServer", "mcpserver", "mcpservers"},
-	})
-	return reg
+	os.Exit(m.Run())
 }
 
 func TestDecodeBytesSingleDoc(t *testing.T) {
-	reg := newTestRegistry()
 	input := `
 apiVersion: ar.dev/v1alpha1
 kind: Agent
@@ -37,22 +42,20 @@ spec:
   description: "A bot"
 `
 
-	resources, err := scheme.DecodeBytes(reg, []byte(input))
+	objs, err := scheme.DecodeBytes([]byte(input))
 	require.NoError(t, err)
-	require.Len(t, resources, 1)
-	assert.Equal(t, "ar.dev/v1alpha1", resources[0].APIVersion)
-	assert.Equal(t, "Agent", resources[0].Kind)
-	assert.Equal(t, "acme/bot", resources[0].Metadata.Name)
-	assert.Equal(t, "1.0.0", resources[0].Metadata.Version)
+	require.Len(t, objs, 1)
 
-	spec, ok := resources[0].Spec.(*v1alpha1.AgentSpec)
-	require.True(t, ok, "expected *v1alpha1.AgentSpec, got %T", resources[0].Spec)
-	assert.Equal(t, "ghcr.io/acme/bot:latest", spec.Image)
-	assert.Nil(t, resources[0].Status)
+	agent, ok := objs[0].(*v1alpha1.Agent)
+	require.True(t, ok, "expected *v1alpha1.Agent, got %T", objs[0])
+	assert.Equal(t, "ar.dev/v1alpha1", agent.GetAPIVersion())
+	assert.Equal(t, "Agent", agent.GetKind())
+	assert.Equal(t, "acme/bot", agent.Metadata.Name)
+	assert.Equal(t, "1.0.0", agent.Metadata.Version)
+	assert.Equal(t, "ghcr.io/acme/bot:latest", agent.Spec.Image)
 }
 
 func TestDecodeBytesMultiDoc(t *testing.T) {
-	reg := newTestRegistry()
 	input := `
 apiVersion: ar.dev/v1alpha1
 kind: MCPServer
@@ -72,18 +75,14 @@ spec:
   image: ghcr.io/acme/bot:latest
 `
 
-	resources, err := scheme.DecodeBytes(reg, []byte(input))
+	objs, err := scheme.DecodeBytes([]byte(input))
 	require.NoError(t, err)
-	require.Len(t, resources, 2)
-	// Resource.Kind carries the canonical envelope Kind (obj.GetKind()),
-	// not the registry-internal lookup key, so downstream callers see
-	// the same string the wire emits.
-	assert.Equal(t, "MCPServer", resources[0].Kind)
-	assert.Equal(t, "Agent", resources[1].Kind)
+	require.Len(t, objs, 2)
+	assert.Equal(t, "MCPServer", objs[0].GetKind())
+	assert.Equal(t, "Agent", objs[1].GetKind())
 }
 
 func TestDecodeBytesMissingKind(t *testing.T) {
-	reg := newTestRegistry()
 	input := `
 apiVersion: ar.dev/v1alpha1
 metadata:
@@ -91,12 +90,11 @@ metadata:
 spec:
   image: ghcr.io/acme/bot:latest
 `
-	_, err := scheme.DecodeBytes(reg, []byte(input))
+	_, err := scheme.DecodeBytes([]byte(input))
 	assert.ErrorContains(t, err, "kind")
 }
 
 func TestDecodeBytesUnknownKind(t *testing.T) {
-	reg := newTestRegistry()
 	input := `
 apiVersion: ar.dev/v1alpha1
 kind: BogusKind
@@ -104,20 +102,21 @@ metadata:
   name: acme/bot
 spec: {}
 `
-	_, err := scheme.DecodeBytes(reg, []byte(input))
+	_, err := scheme.DecodeBytes([]byte(input))
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "BogusKind")
 }
 
 func TestDecodeBytesEmptyInput(t *testing.T) {
-	reg := newTestRegistry()
-	docs, err := scheme.DecodeBytes(reg, []byte(""))
+	objs, err := scheme.DecodeBytes([]byte(""))
 	require.NoError(t, err)
-	assert.Empty(t, docs)
+	assert.Empty(t, objs)
 }
 
+// TestDecodeBytesDropsIncomingStatus pins the contract that the CLI
+// decoder zeroes Status on every doc so `arctl get -o yaml | apply -f -`
+// stays apply-safe even when the source carried server-managed status.
 func TestDecodeBytesDropsIncomingStatus(t *testing.T) {
-	reg := newTestRegistry()
 	input := `
 apiVersion: ar.dev/v1alpha1
 kind: Agent
@@ -132,12 +131,11 @@ status:
       status: "True"
 `
 
-	resources, err := scheme.DecodeBytes(reg, []byte(input))
+	objs, err := scheme.DecodeBytes([]byte(input))
 	require.NoError(t, err)
-	require.Len(t, resources, 1)
-	assert.Nil(t, resources[0].Status)
+	require.Len(t, objs, 1)
 
-	agent, ok := resources[0].Object.(*v1alpha1.Agent)
+	agent, ok := objs[0].(*v1alpha1.Agent)
 	require.True(t, ok)
 	assert.Empty(t, agent.Status.Conditions)
 }

@@ -1,3 +1,14 @@
+// Package scheme is the CLI dispatch layer over v1alpha1: it owns the
+// alias-flexible Kind lookup table (so `arctl get mcp` and `arctl get
+// mcpserver` both resolve), per-kind table-render metadata, and the
+// per-kind cobra→apiClient closures (`Get`, `List`, `Delete`,
+// `ToYAMLFunc`). YAML decode itself flows through pkg/api/v1alpha1.Scheme
+// — this package holds only CLI-specific concerns.
+//
+// Kinds are registered at package init by the declarative package. The
+// table is global, populated once, and never mutated afterwards (no
+// SetRegistry hook — there's no test or enterprise build that needs to
+// swap it). Aliases collide → panic at boot.
 package scheme
 
 import (
@@ -35,17 +46,17 @@ type Kind struct {
 	TableColumns []Column
 }
 
-type Registry struct {
-	byName  map[string]*Kind
-	ordered []*Kind
-}
+var (
+	kindsByAlias = map[string]*Kind{}
+	kindsOrdered []*Kind
+)
 
-func NewRegistry() *Registry {
-	return &Registry{byName: make(map[string]*Kind)}
-}
-
-func (r *Registry) Register(k Kind) {
-	if k.Kind == "" {
+// Register adds a Kind to the global lookup table. Panics if any of
+// Kind / Plural / Aliases collides with an already-registered entry —
+// callers are expected to register at package init, where a panic is
+// the right fail-fast behavior.
+func Register(k *Kind) {
+	if k == nil || k.Kind == "" {
 		panic("scheme.Register: kind is required")
 	}
 
@@ -65,36 +76,34 @@ func (r *Registry) Register(k Kind) {
 		if _, dup := seen[key]; dup {
 			continue
 		}
-		if _, exists := r.byName[key]; exists {
+		if _, exists := kindsByAlias[key]; exists {
 			panic(fmt.Sprintf("scheme.Register: %q already registered", name))
 		}
 		seen[key] = struct{}{}
 	}
 
-	copyKind := k
 	for name := range seen {
-		r.byName[name] = &copyKind
+		kindsByAlias[name] = k
 	}
-	r.ordered = append(r.ordered, &copyKind)
+	kindsOrdered = append(kindsOrdered, k)
 }
 
+// ErrUnknownKind is returned by Lookup when no Kind is registered
+// under the given name or alias.
 var ErrUnknownKind = errors.New("unknown kind")
 
-func (r *Registry) Lookup(name string) (*Kind, error) {
-	if r == nil {
-		return nil, fmt.Errorf("%w %q", ErrUnknownKind, name)
-	}
-	if kind, ok := r.byName[kindAliasKey(name)]; ok {
-		return kind, nil
+// Lookup resolves a user-typed name (canonical Kind, plural, or alias —
+// case-insensitive) to its registered *Kind, or ErrUnknownKind.
+func Lookup(name string) (*Kind, error) {
+	if k, ok := kindsByAlias[kindAliasKey(name)]; ok {
+		return k, nil
 	}
 	return nil, fmt.Errorf("%w %q", ErrUnknownKind, name)
 }
 
-func (r *Registry) All() []*Kind {
-	if r == nil {
-		return nil
-	}
-	out := make([]*Kind, len(r.ordered))
-	copy(out, r.ordered)
+// All returns every registered Kind in registration order.
+func All() []*Kind {
+	out := make([]*Kind, len(kindsOrdered))
+	copy(out, kindsOrdered)
 	return out
 }
