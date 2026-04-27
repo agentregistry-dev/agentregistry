@@ -8,12 +8,13 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
-	"github.com/agentregistry-dev/agentregistry/internal/registry"
 	"github.com/agentregistry-dev/agentregistry/pkg/models"
 	"github.com/modelcontextprotocol/registry/pkg/model"
 )
 
 var defaultRegistryURL = "http://127.0.0.1:12121"
+
+var registryAPIClient *client.Client
 
 // SetDefaultRegistryURL overrides the fallback registry URL used when manifests omit registry_url.
 func SetDefaultRegistryURL(url string) {
@@ -21,6 +22,11 @@ func SetDefaultRegistryURL(url string) {
 		return
 	}
 	defaultRegistryURL = url
+}
+
+// SetRegistryAPIClient stores the authenticated API client for registry resolution.
+func SetRegistryAPIClient(c *client.Client) {
+	registryAPIClient = c
 }
 
 // GetDefaultRegistryURL returns the current default registry URL (without /v0 suffix).
@@ -84,27 +90,42 @@ func resolveRegistryServer(mcpServer models.McpServerType, verbose bool) (*model
 		fmt.Printf("[registry-resolver]   Using specified registry URL: %s\n", registryURL)
 	}
 
-	if verbose {
-		fmt.Printf("[registry-resolver]   Fetching server %q (version=%q) from registry...\n",
-			mcpServer.RegistryServerName, mcpServer.RegistryServerVersion)
+	serverName := mcpServer.RegistryServerName
+	serverVersion := mcpServer.RegistryServerVersion
+	if serverVersion == "" {
+		serverVersion = "latest"
 	}
 
-	client := registry.NewClient()
-	serverEntry, err := client.FetchServer(registryURL, mcpServer.RegistryServerName, mcpServer.RegistryServerVersion)
+	if verbose {
+		fmt.Printf("[registry-resolver]   Fetching server %q (version=%q) from registry...\n",
+			serverName, serverVersion)
+	}
+
+	apiClient := registryAPIClient
+	if apiClient == nil {
+		apiClient = client.NewClient(registryURL, "")
+	}
+
+	serverResp, err := apiClient.GetServerVersion(serverName, serverVersion)
 	if err != nil {
 		if verbose {
 			fmt.Printf("[registry-resolver]   ERROR: Failed to fetch server from registry: %v\n", err)
 		}
-		return nil, fmt.Errorf("failed to fetch server %q from registry: %w", mcpServer.RegistryServerName, err)
+		return nil, fmt.Errorf("failed to fetch server %q from registry: %w", serverName, err)
 	}
+	if serverResp == nil {
+		return nil, fmt.Errorf("server %q (version %q) not found in registry at %s", serverName, serverVersion, registryURL)
+	}
+
+	server := &serverResp.Server
 
 	if verbose {
 		fmt.Printf("[registry-resolver]   Fetched server successfully:\n")
-		fmt.Printf("[registry-resolver]     - Name: %s\n", serverEntry.Server.Name)
-		fmt.Printf("[registry-resolver]     - Version: %s\n", serverEntry.Server.Version)
-		fmt.Printf("[registry-resolver]     - Description: %s\n", serverEntry.Server.Description)
-		fmt.Printf("[registry-resolver]     - Packages count: %d\n", len(serverEntry.Server.Packages))
-		for j, pkg := range serverEntry.Server.Packages {
+		fmt.Printf("[registry-resolver]     - Name: %s\n", server.Name)
+		fmt.Printf("[registry-resolver]     - Version: %s\n", server.Version)
+		fmt.Printf("[registry-resolver]     - Description: %s\n", server.Description)
+		fmt.Printf("[registry-resolver]     - Packages count: %d\n", len(server.Packages))
+		for j, pkg := range server.Packages {
 			fmt.Printf("[registry-resolver]     - Package[%d]: registryType=%q identifier=%q version=%q\n",
 				j, pkg.RegistryType, pkg.Identifier, pkg.Version)
 			if len(pkg.EnvironmentVariables) > 0 {
@@ -114,18 +135,16 @@ func resolveRegistryServer(mcpServer models.McpServerType, verbose bool) (*model
 				}
 			}
 		}
-		if len(serverEntry.Server.Remotes) > 0 {
-			fmt.Printf("[registry-resolver]     - Remotes count: %d\n", len(serverEntry.Server.Remotes))
-			for j, remote := range serverEntry.Server.Remotes {
+		if len(server.Remotes) > 0 {
+			fmt.Printf("[registry-resolver]     - Remotes count: %d\n", len(server.Remotes))
+			for j, remote := range server.Remotes {
 				fmt.Printf("[registry-resolver]     - Remote[%d]: type=%q url=%q\n",
 					j, remote.Type, remote.URL)
 			}
 		}
 	}
 
-	// Collect environment variable overrides from the current environment
-	// This allows users to set required env vars before running
-	envOverrides := collectEnvOverrides(serverEntry.Server.Packages)
+	envOverrides := collectEnvOverrides(server.Packages)
 
 	// Also add user-provided env vars from the manifest (set via TUI or agent.yaml)
 	manifestEnvVars := parseManifestEnvVars(mcpServer.Env)
@@ -156,8 +175,7 @@ func resolveRegistryServer(mcpServer models.McpServerType, verbose bool) (*model
 			mcpServer.RegistryServerPreferRemote)
 	}
 
-	// Translate the registry server spec to a runnable McpServerType
-	translated, err := TranslateRegistryServer(mcpServer.Name, &serverEntry.Server, envOverrides, mcpServer.RegistryServerPreferRemote)
+	translated, err := TranslateRegistryServer(mcpServer.Name, server, envOverrides, mcpServer.RegistryServerPreferRemote)
 	if err != nil {
 		if verbose {
 			fmt.Printf("[registry-resolver]   ERROR: Failed to translate server: %v\n", err)
@@ -212,9 +230,6 @@ func ResolveManifestPrompts(manifest *models.AgentManifest, verbose bool) ([]com
 		fmt.Printf("[prompt-resolver] Processing %d prompts from manifest\n", len(manifest.Prompts))
 	}
 
-	// Cache API clients by registry URL to avoid creating one per prompt.
-	clients := make(map[string]*client.Client)
-
 	var resolved []common.PythonPrompt
 	for i, ref := range manifest.Prompts {
 		registryURL := ref.RegistryURL
@@ -230,10 +245,9 @@ func ResolveManifestPrompts(manifest *models.AgentManifest, verbose bool) ([]com
 				i, ref.Name, promptName, promptVersion, registryURL)
 		}
 
-		apiClient, ok := clients[registryURL]
-		if !ok {
+		apiClient := registryAPIClient
+		if apiClient == nil {
 			apiClient = client.NewClient(registryURL, "")
-			clients[registryURL] = apiClient
 		}
 
 		var promptResp *models.PromptResponse
