@@ -152,8 +152,8 @@ type listOutput[T v1alpha1.Object] struct {
 
 // Deployment note: only read tools (list + get) are exposed via MCP.
 // Create + delete equivalents live on the v1alpha1 apply surface at
-// /v0/namespaces/.../deployments/... — MCP clients that need to deploy
-// should PUT or DELETE against that HTTP path directly.
+// /v0/deployments/{name}/{version}?namespace={ns} — MCP clients that
+// need to deploy should PUT or DELETE against that HTTP path directly.
 
 func addMetaTools(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{

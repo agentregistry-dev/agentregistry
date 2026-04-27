@@ -44,10 +44,10 @@ Every deployment lifecycle operation — launching, undeploying, cancelling — 
 | Operation | HTTP | Required permissions |
 | --- | --- | --- |
 | List | `GET /v0/deployments` | none — filtering delegated to provider implementation |
-| Get | `GET /v0/namespaces/{namespace}/deployments/{name}/{version}` | `Read` on target `{agent,server}:{name}` |
-| Create / update desired state | `PUT /v0/namespaces/{namespace}/deployments/{name}/{version}` | `Read` on `provider:{id}`; `Read` + `Deploy` on target |
-| Delete | `DELETE /v0/namespaces/{namespace}/deployments/{name}/{version}` | `Read` + `Deploy` on target |
-| Logs | `GET /v0/namespaces/{namespace}/deployments/{name}/{version}/logs` | `Read` on target (read-only) |
+| Get | `GET /v0/deployments/{name}/{version}?namespace={namespace}` | `Read` on target `{agent,server}:{name}` |
+| Create / update desired state | `PUT /v0/deployments/{name}/{version}?namespace={namespace}` | `Read` on `provider:{id}`; `Read` + `Deploy` on target |
+| Delete | `DELETE /v0/deployments/{name}/{version}?namespace={namespace}` | `Read` + `Deploy` on target |
+| Logs | `GET /v0/deployments/{name}/{version}/logs?namespace={namespace}` | `Read` on target (read-only) |
 
 Agent deployments additionally invoke `Read` on each referenced `skill:{ref}` and `prompt:{ref}` when the platform adapter resolves the agent's manifest before deploying. These reads run under the caller's session (not a system context), so the user triggering the deployment must have `Read` on every manifest-referenced skill and prompt.
 
@@ -57,7 +57,7 @@ Agent deployments additionally invoke `Read` on each referenced `skill:{ref}` an
 
 | Operation | HTTP | Required permissions | Notes |
 | --- | --- | --- | --- |
-| Apply | `POST /v0/apply` | Per-document; depends on kind and whether the version already exists | Each document dispatches to its kind handler individually; partial failure is allowed. Artifacts (`agent`/`server`/`skill`/`prompt`): `Read` + `Publish` if the version is new, `Read` + `Edit` if it already exists. `provider`: `Read` + `Edit` if it exists, `Read` + `Publish` if new (there is no direct provider update endpoint; apply is the only update path). `deployment`: same as `PUT /v0/namespaces/{namespace}/deployments/{name}/{version}`. |
+| Apply | `POST /v0/apply` | Per-document; depends on kind and whether the version already exists | Each document dispatches to its kind handler individually; partial failure is allowed. Artifacts (`agent`/`server`/`skill`/`prompt`): `Read` + `Publish` if the version is new, `Read` + `Edit` if it already exists. `provider`: `Read` + `Edit` if it exists, `Read` + `Publish` if new (there is no direct provider update endpoint; apply is the only update path). `deployment`: same as `PUT /v0/deployments/{name}/{version}?namespace={namespace}`. |
 | Delete | `DELETE /v0/apply` | Per-document; depends on kind | Artifacts: `Delete` on `{kind}:{name}`. `provider`: `Read` + `Delete` on `provider:{name}`. `deployment`: `Deploy` on target (see Deployments section). |
 
 ## Admin

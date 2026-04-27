@@ -35,7 +35,9 @@ type V1Alpha1Stores = map[string]*v1alpha1store.Store
 // RouteOptions contains optional services for route registration.
 type RouteOptions struct {
 	// V1Alpha1Stores, when non-empty, enables the generic v1alpha1 handler
-	// at `/v0/namespaces/{ns}/{plural}/...`.
+	// at `/v0/{plural}/{name}/{version}?namespace={ns}` (namespace is a
+	// query param defaulting to "default"; `?namespace=all` widens list
+	// scope across every namespace).
 	V1Alpha1Stores V1Alpha1Stores
 
 	// V1Alpha1Importer, when non-nil, enables POST /v0/import. Typically
@@ -148,9 +150,10 @@ func RegisterRoutes(
 }
 
 // registerV1Alpha1Routes wires the generic resource handler for every
-// built-in kind at `{basePrefix}/namespaces/{ns}/{plural}/...` plus
-// cross-namespace list at `{basePrefix}/{plural}`, and the multi-doc
-// apply endpoint at `{basePrefix}/apply`. Cross-kind ResourceRef
+// built-in kind at `{basePrefix}/{plural}/{name}/{version}` (with
+// namespace as a `?namespace={ns}` query param, default "default";
+// `?namespace=all` on list widens scope across every namespace), plus
+// the multi-doc apply endpoint at `{basePrefix}/apply`. Cross-kind ResourceRef
 // existence dispatches through the shared
 // internaldb.NewV1Alpha1Resolver so the router and any server-side
 // Importer both see the same ref-existence semantics.

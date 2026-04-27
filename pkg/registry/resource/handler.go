@@ -1,16 +1,15 @@
 // Package resource provides a single generic HTTP handler wiring for every
-// v1alpha1 kind. One call to Register() binds namespace-scoped and cross-
-// namespace endpoints for a kind, backed by a generic v1alpha1store.Store and a
-// typed envelope T.
+// v1alpha1 kind. One call to Register() binds the per-kind endpoints,
+// backed by a generic v1alpha1store.Store and a typed envelope T.
 //
-// Route shape (Kubernetes-inspired):
+// Route shape (flat; namespace is a query param, defaults to "default";
+// `?namespace=all` widens list scope to every namespace):
 //
-//	GET    {basePrefix}/{pluralKind}                                  list across all namespaces
-//	GET    {basePrefix}/namespaces/{namespace}/{pluralKind}           list in one namespace
-//	GET    {basePrefix}/namespaces/{namespace}/{pluralKind}/{name}    get latest (namespace, name)
-//	GET    {basePrefix}/namespaces/{namespace}/{pluralKind}/{name}/{version}
-//	PUT    {basePrefix}/namespaces/{namespace}/{pluralKind}/{name}/{version}
-//	DELETE {basePrefix}/namespaces/{namespace}/{pluralKind}/{name}/{version}
+//	GET    {basePrefix}/{pluralKind}?namespace={ns}                   list
+//	GET    {basePrefix}/{pluralKind}/{name}?namespace={ns}            get latest
+//	GET    {basePrefix}/{pluralKind}/{name}/{version}?namespace={ns}  get exact version
+//	PUT    {basePrefix}/{pluralKind}/{name}/{version}?namespace={ns}  apply (idempotent upsert)
+//	DELETE {basePrefix}/{pluralKind}/{name}/{version}?namespace={ns}  delete
 package resource
 
 import (
@@ -52,7 +51,8 @@ type Config struct {
 	// "mcpservers"). If empty, defaults to strings.ToLower(Kind) + "s".
 	PluralKind string
 	// BasePrefix is the HTTP route prefix shared across kinds (e.g. "/v0").
-	// Routes extend it with `/{plural}` and `/namespaces/{ns}/{plural}/...`.
+	// Routes extend it with `/{plural}/{name}/{version}`; namespace is
+	// carried as a query param (`?namespace={ns}`, default "default").
 	BasePrefix string
 	// Store is the v1alpha1store.Store bound to this kind's table. Callers
 	// construct one Store per kind; this package does not create them.
