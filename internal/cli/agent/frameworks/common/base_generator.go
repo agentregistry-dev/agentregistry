@@ -31,15 +31,28 @@ type AgentConfig struct {
 	TelemetryEndpoint     string
 	Port                  int
 
+	EnvVars []string
+	InitGit bool
+
+	// McpServers is referenced by the docker-compose / mcp_tools templates
+	// at scaffold time. `arctl init agent` always leaves it empty — MCP
+	// servers are added later via the v1alpha1 envelope (`agent.yaml`'s
+	// spec.mcpServers ResourceRefs) and re-rendered by run.go's
+	// renderComposeFromManifest using its own struct. Field is kept here
+	// purely so the shared template parses against AgentConfig at
+	// scaffold time.
 	McpServers []agentmanifest.McpServerType
-	EnvVars    []string
-	Skills     []agentmanifest.SkillRef
-	InitGit    bool
 }
 
-// HasSkills returns true when the agent has at least one skill configured.
+// HasSkills always returns false for newly scaffolded projects: `arctl init
+// agent` does not seed Skills onto the AgentConfig. The shared
+// docker-compose template references this method, but at scaffold time the
+// branch always renders empty; the runtime path passes its own struct
+// (run.go renderComposeFromManifest) with HasSkills computed off the
+// loaded AgentManifest. Kept as a method so the template parses identically
+// at scaffold time and at runtime.
 func (c AgentConfig) HasSkills() bool {
-	return len(c.Skills) > 0
+	return false
 }
 
 func (c AgentConfig) shouldInitGit() bool {

@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/adk/python"
-	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
@@ -17,28 +16,28 @@ import (
 )
 
 // LoadManifest loads the agent manifest from the project directory.
+// agent.yaml must be a v1alpha1.Agent envelope (apiVersion: ar.dev/v1alpha1,
+// kind: Agent). The legacy flat-AgentManifest on-disk shape is no longer
+// supported — `arctl init agent` writes envelopes, and operators are
+// expected to keep their hand-edited agent.yaml files in the same form.
 func LoadManifest(projectDir string) (*agentmanifest.AgentManifest, error) {
 	path := filepath.Join(projectDir, "agent.yaml")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		// File missing / permission denied — delegate to the legacy manager so
-		// the canonical "<filename> not found in <dir>" error shape is produced
-		// by a single code path. (Legacy manager will re-issue the read and
-		// surface the real os error.)
-		return common.NewManifestManager(projectDir).Load()
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("agent.yaml not found in %s", projectDir)
+		}
+		return nil, fmt.Errorf("reading agent.yaml: %w", err)
 	}
-	if scheme.IsEnvelopeYAML(data) {
-		return loadAgentFromEnvelope(data)
+	if !scheme.IsEnvelopeYAML(data) {
+		return nil, fmt.Errorf("agent.yaml in %s is not a v1alpha1 envelope (expected apiVersion: ar.dev/v1alpha1, kind: Agent)", projectDir)
 	}
-	// Legacy flat-manifest path: decode the bytes we already have, preserving
-	// validator symmetry with the canonical Load() code path.
-	return common.NewManifestManager(projectDir).LoadFromBytes(data)
+	return loadAgentFromEnvelope(data)
 }
 
 // AgentNameFromManifest attempts to read the agent name, falling back to directory name.
 func AgentNameFromManifest(projectDir string) string {
-	manager := common.NewManifestManager(projectDir)
-	manifest, err := manager.Load()
+	manifest, err := LoadManifest(projectDir)
 	if err == nil && manifest != nil && manifest.Name != "" {
 		return manifest.Name
 	}

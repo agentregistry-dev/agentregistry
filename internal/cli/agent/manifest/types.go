@@ -2,96 +2,92 @@ package manifest
 
 import (
 	"strings"
-	"time"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-// RegistryRef is the workflow-local reference shape used by the agent runtime.
-type RegistryRef struct {
-	Name    string `json:"name" yaml:"name"`
-	Version string `json:"version,omitempty" yaml:"version,omitempty"`
-}
-
-// AgentManifest is the workflow/project manifest consumed by the local agent CLI.
-// It intentionally stays internal to the CLI even while the registry API itself
-// speaks v1alpha1 envelopes end-to-end.
+// AgentManifest is the in-memory runtime projection of a v1alpha1.Agent
+// envelope. It is built from the on-disk envelope (see project.LoadManifest)
+// and then handed to the agent CLI's docker-compose / template renderers.
+//
+// The on-disk shape is always the v1alpha1.Agent envelope; this struct is
+// never serialized back to disk. Most fields mirror v1alpha1.AgentSpec
+// directly, but the MCPServer / Skill / Prompt slices carry additional
+// runtime-resolution state that the registry shape doesn't:
+//   - McpServers initially carries Type="registry" entries projected from
+//     v1alpha1.AgentSpec.MCPServers ResourceRefs; the resolver later
+//     translates each into Type="command" or Type="remote" with the
+//     runnable bits filled in (Image/Build/Command/URL/Headers/...).
 type AgentManifest struct {
-	Name              string          `yaml:"agentName" json:"name"`
-	Image             string          `yaml:"image" json:"image"`
-	Language          string          `yaml:"language" json:"language"`
-	Framework         string          `yaml:"framework" json:"framework"`
-	ModelProvider     string          `yaml:"modelProvider" json:"modelProvider"`
-	ModelName         string          `yaml:"modelName" json:"modelName"`
-	Description       string          `yaml:"description" json:"description"`
-	Version           string          `yaml:"version,omitempty" json:"version,omitempty"`
-	TelemetryEndpoint string          `yaml:"telemetryEndpoint,omitempty" json:"telemetryEndpoint,omitempty"`
-	McpServers        []McpServerType `yaml:"mcpServers,omitempty" json:"mcpServers,omitempty"`
-	Skills            []SkillRef      `yaml:"skills,omitempty" json:"skills,omitempty"`
-	Prompts           []PromptRef     `yaml:"prompts,omitempty" json:"prompts,omitempty"`
-	UpdatedAt         time.Time       `yaml:"updatedAt,omitempty" json:"updatedAt,omitempty"`
+	Name              string
+	Image             string
+	Language          string
+	Framework         string
+	ModelProvider     string
+	ModelName         string
+	Description       string
+	Version           string
+	TelemetryEndpoint string
+	McpServers        []McpServerType
+	Skills            []SkillRef
+	Prompts           []PromptRef
 }
 
+// SkillRef is the runtime-side reference for a v1alpha1.Skill the agent
+// depends on. Either Image (a pre-built OCI image — the "local image"
+// shortcut) or RegistrySkillName (registry lookup) must be set; the
+// resolver fills in the rest at run time.
 type SkillRef struct {
-	Name                 string `yaml:"name" json:"name"`
-	Image                string `yaml:"image,omitempty" json:"image,omitempty"`
-	RegistryURL          string `yaml:"registryURL,omitempty" json:"registryURL,omitempty"`
-	RegistrySkillName    string `yaml:"registrySkillName,omitempty" json:"registrySkillName,omitempty"`
-	RegistrySkillVersion string `yaml:"registrySkillVersion,omitempty" json:"registrySkillVersion,omitempty"`
+	Name                 string
+	Image                string
+	RegistryURL          string
+	RegistrySkillName    string
+	RegistrySkillVersion string
 }
 
+// PromptRef is the runtime-side reference for a v1alpha1.Prompt the agent
+// depends on. Resolved against the registry at run time.
 type PromptRef struct {
-	Name                  string `yaml:"name" json:"name"`
-	RegistryURL           string `yaml:"registryURL,omitempty" json:"registryURL,omitempty"`
-	RegistryPromptName    string `yaml:"registryPromptName,omitempty" json:"registryPromptName,omitempty"`
-	RegistryPromptVersion string `yaml:"registryPromptVersion,omitempty" json:"registryPromptVersion,omitempty"`
+	Name                  string
+	RegistryURL           string
+	RegistryPromptName    string
+	RegistryPromptVersion string
 }
 
-// McpServerType represents a single runtime MCP server configuration.
-// New declarative manifests use the compact Name+Version reference; the legacy
-// command/remote/registry fields remain only as an internal workflow shape.
+// McpServerType represents one MCP server entry on the runtime manifest.
+// The Type field is the runtime discriminator:
+//   - "registry" — initial state right after FromV1Alpha1Agent; the resolver
+//     fetches v1alpha1.MCPServer for (RegistryServerName, RegistryServerVersion)
+//     and converts the entry into one of the two terminal forms below.
+//   - "command" — runnable container (Image/Build/Command/Args/Env populated).
+//   - "remote"  — remote MCP endpoint (URL/Headers populated).
+//
+// Templates render the terminal forms; the resolver always replaces
+// "registry" entries before render. Fields are mutually exclusive by Type
+// and not enforced via tag (this struct is never user-serialized).
 type McpServerType struct {
-	Name    string `yaml:"name" json:"name"`
-	Version string `yaml:"version,omitempty" json:"version,omitempty"`
+	Name    string
+	Version string
 
-	Type    string            `yaml:"type,omitempty" json:"type,omitempty"`
-	Image   string            `yaml:"image,omitempty" json:"image,omitempty"`
-	Build   string            `yaml:"build,omitempty" json:"build,omitempty"`
-	Command string            `yaml:"command,omitempty" json:"command,omitempty"`
-	Args    []string          `yaml:"args,omitempty" json:"args,omitempty"`
-	Env     []string          `yaml:"env,omitempty" json:"env,omitempty"`
-	URL     string            `yaml:"url,omitempty" json:"url,omitempty"`
-	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`
+	Type    string
+	Image   string
+	Build   string
+	Command string
+	Args    []string
+	Env     []string
+	URL     string
+	Headers map[string]string
 
-	RegistryURL                string `yaml:"registryURL,omitempty" json:"registryURL,omitempty"`
-	RegistryServerName         string `yaml:"registryServerName,omitempty" json:"registryServerName,omitempty"`
-	RegistryServerVersion      string `yaml:"registryServerVersion,omitempty" json:"registryServerVersion,omitempty"`
-	RegistryServerPreferRemote bool   `yaml:"registryServerPreferRemote,omitempty" json:"registryServerPreferRemote,omitempty"`
+	RegistryURL                string
+	RegistryServerName         string
+	RegistryServerVersion      string
+	RegistryServerPreferRemote bool
 }
 
-func (m *McpServerType) IsLegacyFormat() bool {
-	return m.Type != "" || m.RegistryServerName != ""
-}
-
-func (m *McpServerType) ToRegistryRef() *RegistryRef {
-	if m.IsLegacyFormat() {
-		return nil
-	}
-	return &RegistryRef{Name: m.Name, Version: m.Version}
-}
-
-func (am *AgentManifest) ExtractMCPServerRefs() []RegistryRef {
-	var refs []RegistryRef
-	for _, server := range am.McpServers {
-		if ref := server.ToRegistryRef(); ref != nil {
-			refs = append(refs, *ref)
-		}
-	}
-	return refs
-}
-
-// FromV1Alpha1Agent projects a registry Agent resource onto the workflow-local
-// manifest shape used by the agent runtime.
+// FromV1Alpha1Agent projects a v1alpha1.Agent envelope onto the runtime
+// AgentManifest. MCPServer / Skill / Prompt ResourceRefs are turned into
+// the registry-typed runtime entries that the resolver later expands into
+// fully-runnable form.
 func FromV1Alpha1Agent(agent *v1alpha1.Agent) AgentManifest {
 	if agent == nil {
 		return AgentManifest{}

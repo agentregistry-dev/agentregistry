@@ -298,7 +298,12 @@ spec:
 	assert.Equal(t, "1.0.0", got.Prompts[0].RegistryPromptVersion)
 }
 
-func TestLoadManifest_LegacyFlatFormat(t *testing.T) {
+// TestLoadManifest_RejectsLegacyFlatFormat pins the contract that the
+// flat AgentManifest YAML shape (agentName / image / language at top
+// level, no apiVersion) is no longer accepted on disk. The on-disk
+// manifest must be a v1alpha1.Agent envelope; the legacy decoder was
+// removed alongside the dual-format LoadManifest dispatch.
+func TestLoadManifest_RejectsLegacyFlatFormat(t *testing.T) {
 	dir := t.TempDir()
 	flatYAML := `agentName: legacy
 image: ghcr.io/acme/legacy:v1
@@ -309,12 +314,7 @@ modelName: gemini-2.0-flash
 description: "Legacy flat manifest"
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "agent.yaml"), []byte(flatYAML), 0o644))
-	got, err := LoadManifest(dir)
-	require.NoError(t, err)
-	require.NotNil(t, got)
-
-	assert.Equal(t, "legacy", got.Name)
-	assert.Equal(t, "ghcr.io/acme/legacy:v1", got.Image)
-	assert.Equal(t, "python", got.Language)
-	assert.Equal(t, "adk", got.Framework)
+	_, err := LoadManifest(dir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not a v1alpha1 envelope")
 }
