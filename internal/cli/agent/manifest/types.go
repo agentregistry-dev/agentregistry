@@ -1,55 +1,39 @@
+// Package manifest hosts the runtime projection of a v1alpha1.Agent
+// envelope used by `arctl agent run`. The on-disk shape is always the
+// envelope (decoded by project.LoadAgent); this package builds the
+// in-memory pairing of the envelope with the resolved per-MCP-server
+// runtime data via Resolve, then hands that pairing to the runtime
+// (run.go, project.go templates) for compose / mcp_tools render.
+//
+// The package never serializes anything, never reads or writes
+// agent.yaml, and never duplicates fields that already exist on
+// v1alpha1.Agent. Resolved skills + prompts are NOT projected here:
+// callers iterate agent.Spec.Skills / agent.Spec.Prompts directly,
+// since those refs are passed straight through to the materialize-time
+// fetch helpers (resolveSkillsForRuntime, ResolveManifestPrompts).
 package manifest
 
-import "strings"
+import (
+	"path"
 
-// AgentManifest is the in-memory runtime projection of a v1alpha1.Agent
-// envelope, produced by Resolve. It is never serialized back to disk —
-// the on-disk shape is always the v1alpha1.Agent envelope, decoded
-// upstream by project.LoadAgent.
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+)
+
+// ResolvedAgent pairs a v1alpha1.Agent envelope with the resolved
+// runtime form of its MCPServer refs. The envelope is the source of
+// truth for every other field — name, image, model, skill / prompt
+// refs — and is held by pointer (no copying).
 //
-// Most fields mirror v1alpha1.AgentSpec directly. McpServers carries
-// terminal-form runtime entries (Type="command" or "remote"); Skills /
-// Prompts carry registry-side identity for late resolution at materialize
-// time (image extract, prompt content fetch).
-type AgentManifest struct {
-	Name              string
-	Image             string
-	Language          string
-	Framework         string
-	ModelProvider     string
-	ModelName         string
-	Description       string
-	Version           string
-	TelemetryEndpoint string
-	McpServers        []McpServerType
-	Skills            []SkillRef
-	Prompts           []PromptRef
+// The runtime never mutates Agent; mutations to MCPServers are
+// permitted (run.go's stage step rewrites it for buildable subsets).
+type ResolvedAgent struct {
+	Agent      *v1alpha1.Agent
+	MCPServers []ResolvedMCPServer
 }
 
-// SkillRef is the runtime-side reference for a v1alpha1.Skill the agent
-// depends on. Either Image (a pre-built OCI image — the "local image"
-// shortcut) or RegistrySkillName (registry lookup) must be set; the
-// resolver fills in the rest at run time.
-type SkillRef struct {
-	Name                 string
-	Image                string
-	RegistryURL          string
-	RegistrySkillName    string
-	RegistrySkillVersion string
-}
-
-// PromptRef is the runtime-side reference for a v1alpha1.Prompt the agent
-// depends on. Resolved against the registry at materialize time.
-type PromptRef struct {
-	Name                  string
-	RegistryURL           string
-	RegistryPromptName    string
-	RegistryPromptVersion string
-}
-
-// McpServerType is one terminal-form MCP server entry on the runtime
-// manifest. Resolve always populates entries with Type="command" or
-// Type="remote"; no intermediate "registry" state is ever exposed.
+// ResolvedMCPServer is one terminal-form MCP server entry on the
+// runtime manifest. Resolve always populates entries with Type="command"
+// or Type="remote"; no intermediate "registry" state is ever exposed.
 //
 //   - Type="command": runnable container (Image/Build/Command/Args/Env
 //     populated). Build is "registry/<name>" for npm/PyPI packages that
@@ -58,7 +42,7 @@ type PromptRef struct {
 //   - Type="remote":  remote MCP endpoint (URL/Headers populated).
 //
 // Fields are mutually exclusive by Type. This struct is never user-serialized.
-type McpServerType struct {
+type ResolvedMCPServer struct {
 	Name    string
 	Version string
 
@@ -72,9 +56,17 @@ type McpServerType struct {
 	Headers map[string]string
 }
 
-func localRefName(name string) string {
-	if idx := strings.LastIndex(name, "/"); idx >= 0 {
-		return name[idx+1:]
+// RefBasename returns the path-basename of a v1alpha1.ResourceRef's Name,
+// i.e. "fetch" for "acme/fetch". The runtime uses this when projecting
+// a registry ref onto a local filesystem-safe identifier (skill
+// directory, MCP server compose service name, prompts.json key).
+//
+// Lives next to ResolvedMCPServer because every site that needs a
+// basename — including the local representation of MCPServers — passes
+// through this helper, keeping the basename rule in one place.
+func RefBasename(refName string) string {
+	if refName == "" {
+		return ""
 	}
-	return name
+	return path.Base(refName)
 }

@@ -22,13 +22,13 @@ type resolvedSkillRef struct {
 	repoURL string // Git repository URL (mutually exclusive with image)
 }
 
-func resolveSkillsForRuntime(manifest *agentmanifest.AgentManifest) ([]resolvedSkillRef, error) {
-	if manifest == nil || len(manifest.Skills) == 0 {
+func resolveSkillsForRuntime(skills []v1alpha1.ResourceRef) ([]resolvedSkillRef, error) {
+	if len(skills) == 0 {
 		return nil, nil
 	}
 
-	resolved := make([]resolvedSkillRef, 0, len(manifest.Skills))
-	for _, skill := range manifest.Skills {
+	resolved := make([]resolvedSkillRef, 0, len(skills))
+	for _, skill := range skills {
 		ref, err := resolveSkillSource(skill)
 		if err != nil {
 			return nil, fmt.Errorf("resolve skill %q: %w", skill.Name, err)
@@ -42,32 +42,24 @@ func resolveSkillsForRuntime(manifest *agentmanifest.AgentManifest) ([]resolvedS
 	return resolved, nil
 }
 
-// resolveSkillSource resolves a SkillRef to either a Docker image or a GitHub
-// repository URL. When the skill is fetched from the registry, Docker/OCI
-// packages are preferred; if none are available, the skill's GitHub repository
-// is used as a fallback.
-func resolveSkillSource(skill agentmanifest.SkillRef) (resolvedSkillRef, error) {
-	image := strings.TrimSpace(skill.Image)
-	registrySkillName := strings.TrimSpace(skill.RegistrySkillName)
-	hasImage := image != ""
-	hasRegistry := registrySkillName != ""
-
-	if !hasImage && !hasRegistry {
-		return resolvedSkillRef{}, fmt.Errorf("one of image or registrySkillName is required")
-	}
-	if hasImage && hasRegistry {
-		return resolvedSkillRef{}, fmt.Errorf("only one of image or registrySkillName may be set")
-	}
-	if hasImage {
-		return resolvedSkillRef{name: skill.Name, image: image}, nil
+// resolveSkillSource resolves a v1alpha1 skill ResourceRef to either a
+// Docker image or a git repository URL. The skill is fetched from the
+// configured registry; OCI packages are preferred, with the skill's git
+// repository as a fallback. The local-side identifier is the basename
+// of ref.Name (e.g. "summarize" for "acme/summarize").
+func resolveSkillSource(skill v1alpha1.ResourceRef) (resolvedSkillRef, error) {
+	registrySkillName := strings.TrimSpace(skill.Name)
+	if registrySkillName == "" {
+		return resolvedSkillRef{}, fmt.Errorf("skill ref has empty name")
 	}
 
-	version := strings.TrimSpace(skill.RegistrySkillVersion)
+	localName := agentmanifest.RefBasename(registrySkillName)
+	version := strings.TrimSpace(skill.Version)
 	if version == "" {
 		version = "latest"
 	}
 
-	skillResp, err := fetchSkillFromRegistry(skill.RegistryURL, registrySkillName, version)
+	skillResp, err := fetchSkillFromRegistry(registrySkillName, version)
 	if err != nil {
 		return resolvedSkillRef{}, err
 	}
@@ -78,7 +70,7 @@ func resolveSkillSource(skill agentmanifest.SkillRef) (resolvedSkillRef, error) 
 	// Prefer Docker/OCI image if available.
 	imageRef, err := extractSkillImageRef(skillResp)
 	if err == nil {
-		return resolvedSkillRef{name: skill.Name, image: imageRef}, nil
+		return resolvedSkillRef{name: localName, image: imageRef}, nil
 	}
 
 	// Fall back to git repository.
@@ -86,7 +78,7 @@ func resolveSkillSource(skill agentmanifest.SkillRef) (resolvedSkillRef, error) 
 	if err != nil {
 		return resolvedSkillRef{}, fmt.Errorf("skill %s (version %s): no docker/oci package or git repository found", registrySkillName, version)
 	}
-	return resolvedSkillRef{name: skill.Name, repoURL: repoURL}, nil
+	return resolvedSkillRef{name: localName, repoURL: repoURL}, nil
 }
 
 // extractSkillRepoURL extracts a git repository URL from a skill response.
@@ -101,56 +93,23 @@ func extractSkillRepoURL(skillResp *v1alpha1.Skill) (string, error) {
 	return "", fmt.Errorf("no git repository found")
 }
 
-func fetchSkillFromRegistry(registryURL, skillName, version string) (*v1alpha1.Skill, error) {
-	// Use the default configured API client when registry URL is omitted.
-	if strings.TrimSpace(registryURL) == "" {
-		if apiClient == nil {
-			return nil, fmt.Errorf("API client not initialized")
-		}
-		return fetchTypedSkill(context.Background(), apiClient, skillName, version)
+func fetchSkillFromRegistry(skillName, version string) (*v1alpha1.Skill, error) {
+	if apiClient == nil {
+		return nil, fmt.Errorf("API client not initialized")
 	}
-
-	baseURL, err := normalizeSkillRegistryURL(registryURL)
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO: DI the client.
-	client := arclient.NewClient(baseURL, "")
-	resp, err := fetchTypedSkill(context.Background(), client, skillName, version)
-	if err != nil {
-		return nil, fmt.Errorf("fetch skill %q version %q from %s: %w", skillName, version, baseURL, err)
-	}
-	return resp, nil
-}
-
-func fetchTypedSkill(ctx context.Context, c *arclient.Client, skillName, version string) (*v1alpha1.Skill, error) {
 	targetVersion := strings.TrimSpace(version)
 	if strings.EqualFold(targetVersion, "latest") {
 		targetVersion = ""
 	}
 	return arclient.GetTyped(
-		ctx,
-		c,
+		context.Background(),
+		apiClient,
 		v1alpha1.KindSkill,
 		v1alpha1.DefaultNamespace,
 		skillName,
 		targetVersion,
 		func() *v1alpha1.Skill { return &v1alpha1.Skill{} },
 	)
-}
-
-func normalizeSkillRegistryURL(registryURL string) (string, error) {
-	trimmed := strings.TrimSpace(registryURL)
-	if trimmed == "" {
-		return "", fmt.Errorf("registry URL is required")
-	}
-
-	trimmed = strings.TrimSuffix(trimmed, "/")
-	if strings.HasSuffix(trimmed, "/v0") {
-		return trimmed, nil
-	}
-	return trimmed + "/v0", nil
 }
 
 func extractSkillImageRef(skillResp *v1alpha1.Skill) (string, error) {

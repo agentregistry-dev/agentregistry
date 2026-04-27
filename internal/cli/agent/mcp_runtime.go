@@ -5,16 +5,16 @@ import (
 	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
 )
 
-// pythonServersFromManifest projects the resolved MCP server entries on a
-// runtime AgentManifest into the JSON shape the python mcp_tools template
-// consumes (mcp-servers.json, loaded at agent startup).
-func pythonServersFromManifest(manifest *agentmanifest.AgentManifest) []common.PythonMCPServer {
-	if manifest == nil || len(manifest.McpServers) == 0 {
+// pythonServersFromResolved projects the resolved MCP server entries
+// into the JSON shape the python mcp_tools template consumes
+// (mcp-servers.json, loaded at agent startup).
+func pythonServersFromResolved(servers []agentmanifest.ResolvedMCPServer) []common.PythonMCPServer {
+	if len(servers) == 0 {
 		return nil
 	}
 
-	out := make([]common.PythonMCPServer, 0, len(manifest.McpServers))
-	for _, srv := range manifest.McpServers {
+	out := make([]common.PythonMCPServer, 0, len(servers))
+	for _, srv := range servers {
 		entry := common.PythonMCPServer{
 			Name: srv.Name,
 			Type: srv.Type,

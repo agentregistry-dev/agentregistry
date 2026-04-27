@@ -11,35 +11,27 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-// Resolve projects a v1alpha1.Agent envelope onto the runtime AgentManifest,
-// fetching each MCPServer ResourceRef from the registry and translating it
-// into a runnable McpServerType (Type="command" or Type="remote") inline.
-// The result has no registry-typed entries — every McpServerType is in
-// terminal form ready for template render.
+// Resolve pairs a v1alpha1.Agent envelope with the resolved runtime
+// form of its MCPServer refs. For each entry in agent.Spec.MCPServers
+// it fetches the v1alpha1.MCPServer envelope from the registry,
+// translates it via TranslateMCPServer, and produces a
+// ResolvedMCPServer (Type="command" or Type="remote") with the bits
+// the runtime templates need to render docker-compose + mcp_tools.
 //
-// Skill and Prompt refs are projected as RegistryRef-bearing entries; the
-// runtime resolves those at materialize time (resolveSkillsForRuntime,
-// ResolveManifestPrompts) since their resolution involves heavier IO
-// (image extraction, content fetch) that the runtime does on demand.
+// Skill and Prompt refs are NOT resolved here — they're materialized
+// later (resolveSkillsForRuntime, ResolveManifestPrompts) since their
+// resolution involves heavier IO (image extraction, content fetch).
+// Callers read agent.Spec.Skills / agent.Spec.Prompts directly when
+// they need the refs.
 //
 // Network calls are performed via apiClient. When agent has no MCPServer
 // refs, no network calls are made.
-func Resolve(ctx context.Context, apiClient *client.Client, agent *v1alpha1.Agent) (*AgentManifest, error) {
+func Resolve(ctx context.Context, apiClient *client.Client, agent *v1alpha1.Agent) (*ResolvedAgent, error) {
 	if agent == nil {
 		return nil, fmt.Errorf("agent envelope is required")
 	}
 
-	manifest := &AgentManifest{
-		Name:              agent.Metadata.Name,
-		Image:             agent.Spec.Image,
-		Language:          agent.Spec.Language,
-		Framework:         agent.Spec.Framework,
-		ModelProvider:     agent.Spec.ModelProvider,
-		ModelName:         agent.Spec.ModelName,
-		Description:       agent.Spec.Description,
-		Version:           agent.Metadata.Version,
-		TelemetryEndpoint: agent.Spec.TelemetryEndpoint,
-	}
+	resolved := &ResolvedAgent{Agent: agent}
 
 	for _, ref := range agent.Spec.MCPServers {
 		if apiClient == nil {
@@ -61,39 +53,23 @@ func Resolve(ctx context.Context, apiClient *client.Client, agent *v1alpha1.Agen
 			return nil, fmt.Errorf("MCP server %q (version %q) not found in registry", ref.Name, ref.Version)
 		}
 
-		entry, err := translateMCPServer(localRefName(ref.Name), serverObj)
+		entry, err := translateMCPServer(RefBasename(ref.Name), serverObj)
 		if err != nil {
 			return nil, fmt.Errorf("translate MCP server %q: %w", ref.Name, err)
 		}
-		manifest.McpServers = append(manifest.McpServers, *entry)
+		resolved.MCPServers = append(resolved.MCPServers, *entry)
 	}
 
-	for _, ref := range agent.Spec.Skills {
-		manifest.Skills = append(manifest.Skills, SkillRef{
-			Name:                 localRefName(ref.Name),
-			RegistrySkillName:    ref.Name,
-			RegistrySkillVersion: ref.Version,
-		})
-	}
-
-	for _, ref := range agent.Spec.Prompts {
-		manifest.Prompts = append(manifest.Prompts, PromptRef{
-			Name:                  localRefName(ref.Name),
-			RegistryPromptName:    ref.Name,
-			RegistryPromptVersion: ref.Version,
-		})
-	}
-
-	return manifest, nil
+	return resolved, nil
 }
 
-// translateMCPServer converts a v1alpha1.MCPServer envelope into a runnable
-// McpServerType. Terminal form: Type is always "command" or "remote".
+// translateMCPServer converts a v1alpha1.MCPServer envelope into a
+// ResolvedMCPServer. Terminal form: Type is always "command" or "remote".
 //
 // Environment-variable overrides from the local OS env are layered onto
 // values declared on the MCPServer's package(s) so the agent runtime can
 // supply credentials at run time without modifying the registry resource.
-func translateMCPServer(name string, server *v1alpha1.MCPServer) (*McpServerType, error) {
+func translateMCPServer(name string, server *v1alpha1.MCPServer) (*ResolvedMCPServer, error) {
 	spec := server.Spec
 	if len(spec.Remotes) == 0 && len(spec.Packages) == 0 {
 		return nil, fmt.Errorf("server has no remotes or packages")
@@ -124,7 +100,7 @@ func translateMCPServer(name string, server *v1alpha1.MCPServer) (*McpServerType
 		for _, header := range translated.Remote.Headers {
 			headers[header.Name] = header.Value
 		}
-		return &McpServerType{
+		return &ResolvedMCPServer{
 			Type:    "remote",
 			Name:    name,
 			URL:     spec.Remotes[0].URL,
@@ -144,7 +120,7 @@ func translateMCPServer(name string, server *v1alpha1.MCPServer) (*McpServerType
 				buildPath = "registry/" + name
 			}
 		}
-		return &McpServerType{
+		return &ResolvedMCPServer{
 			Type:    "command",
 			Name:    name,
 			Image:   translated.Local.Deployment.Image,

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -200,9 +200,9 @@ func TestEnsureOtelCollectorConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
-			manifest := &agentmanifest.AgentManifest{
-				Name:              "test-agent",
-				TelemetryEndpoint: tt.telemetry,
+			agent := &v1alpha1.Agent{
+				Metadata: v1alpha1.ObjectMeta{Name: "test-agent"},
+				Spec:     v1alpha1.AgentSpec{TelemetryEndpoint: tt.telemetry},
 			}
 
 			configPath := filepath.Join(dir, "otel-collector-config.yaml")
@@ -212,7 +212,7 @@ func TestEnsureOtelCollectorConfig(t *testing.T) {
 				}
 			}
 
-			err := EnsureOtelCollectorConfig(dir, manifest, false)
+			err := EnsureOtelCollectorConfig(dir, agent, false)
 			if err != nil {
 				t.Fatalf("EnsureOtelCollectorConfig() error = %v", err)
 			}
