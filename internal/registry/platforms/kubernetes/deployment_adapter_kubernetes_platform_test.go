@@ -12,7 +12,9 @@ import (
 	v1alpha2 "github.com/kagent-dev/kagent/go/api/v1alpha2"
 	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	k8smeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -719,5 +721,100 @@ func TestKubernetesDeploymentScopedName_TruncatesLongBaseButPreservesSuffix(t *t
 	}
 	if !strings.HasSuffix(got, "-2d6d0c54") {
 		t.Fatalf("expected uuid short suffix to be preserved, got %s", got)
+	}
+}
+
+func TestIsKagentCRDNotFoundError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		// --- Typed path (errors.As reaches NoKindMatchError) ---
+		{
+			name: "typed/Agent CRD missing",
+			err: &k8smeta.NoKindMatchError{
+				GroupKind:        schema.GroupKind{Group: "kagent.dev", Kind: "Agent"},
+				SearchedVersions: []string{"v1alpha2"},
+			},
+			want: true,
+		},
+		{
+			name: "typed/McpServer CRD missing",
+			err: &k8smeta.NoKindMatchError{
+				GroupKind:        schema.GroupKind{Group: "kagent.dev", Kind: "McpServer"},
+				SearchedVersions: []string{"v1alpha2"},
+			},
+			want: true,
+		},
+		{
+			name: "typed/wrapped by kubernetesApplyResource",
+			err: fmt.Errorf("failed to apply Agent myagent-0-1-0: %w", &k8smeta.NoKindMatchError{
+				GroupKind:        schema.GroupKind{Group: "kagent.dev", Kind: "Agent"},
+				SearchedVersions: []string{"v1alpha2"},
+			}),
+			want: true,
+		},
+		{
+			name: "typed/kagent.dev group but unknown Kind - partial install",
+			err: &k8smeta.NoKindMatchError{
+				GroupKind:        schema.GroupKind{Group: "kagent.dev", Kind: "UnknownKind"},
+				SearchedVersions: []string{"v1alpha2"},
+			},
+			want: false,
+		},
+		{
+			name: "typed/different group",
+			err: &k8smeta.NoKindMatchError{
+				GroupKind:        schema.GroupKind{Group: "other.io", Kind: "Agent"},
+				SearchedVersions: []string{"v1"},
+			},
+			want: false,
+		},
+		{
+			name: "typed/group contains kagent.dev as substring but is not equal",
+			err: &k8smeta.NoKindMatchError{
+				GroupKind:        schema.GroupKind{Group: "not-kagent.dev", Kind: "Agent"},
+				SearchedVersions: []string{"v1alpha2"},
+			},
+			want: false,
+		},
+
+		// --- Fallback string path (StatusError wrapping breaks typed chain) ---
+		{
+			name: "fallback/StatusError-style wrapping preserves message text",
+			err:  fmt.Errorf(`no matches for kind "Agent" in version "kagent.dev/v1alpha2"`),
+			want: true,
+		},
+		{
+			name: "fallback/no matches for kind but unrelated group",
+			err:  fmt.Errorf(`no matches for kind "Foo" in version "other.io/v1"`),
+			want: false,
+		},
+		{
+			name: "fallback/contains kagent.dev but not the kind-match phrase",
+			err:  fmt.Errorf("connection refused to kagent.dev endpoint"),
+			want: false,
+		},
+
+		// --- Negative cases ---
+		{
+			name: "unrelated error",
+			err:  fmt.Errorf("context deadline exceeded"),
+			want: false,
+		},
+		{
+			name: "nil error",
+			err:  nil,
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isKagentCRDNotFoundError(tt.err); got != tt.want {
+				t.Errorf("isKagentCRDNotFoundError(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
 	}
 }
