@@ -1,3 +1,18 @@
+// Package common holds the agent-project scaffolder shared between
+// language/framework-specific generators (today: ADK Python). It is
+// not part of the v1alpha1 wire model and never reads or writes
+// agent.yaml — the on-disk manifest is a v1alpha1.Agent envelope
+// owned by internal/cli/declarative + internal/cli/agent/project.
+//
+// The scaffolder takes an AgentConfig (the user's `arctl init agent`
+// inputs) and renders a starter project tree (Dockerfile,
+// pyproject.toml, agent.py, docker-compose.yaml, README, ...) into a
+// fresh directory. After scaffolding, init.go overwrites agent.yaml
+// with the canonical v1alpha1 envelope, and the scaffolder is never
+// invoked again — `arctl agent run`'s template re-renders go through
+// internal/cli/agent/project, which feeds the live AgentManifest into
+// the runtime-shared subset of the same templates (docker-compose,
+// mcp_tools).
 package common
 
 import (
@@ -10,7 +25,11 @@ import (
 	"text/template"
 )
 
-// AgentConfig captures the data required to render an agent project from templates.
+// AgentConfig is the input bundle for the project scaffolder. It is
+// purely a render-time DTO for `arctl init agent`'s template tree; it
+// does NOT model an agent's runtime state and shares no fields with
+// v1alpha1.Agent / AgentManifest. Mutating an AgentConfig has no effect
+// on any registry resource.
 type AgentConfig struct {
 	Name        string
 	Version     string
@@ -33,26 +52,22 @@ type AgentConfig struct {
 	InitGit bool
 }
 
-// McpServers is referenced by the docker-compose / mcp_tools templates at
-// scaffold time. `arctl init agent` never adds MCP servers — they're
-// declared on the v1alpha1 agent.yaml spec.mcpServers ResourceRefs and
-// resolved by manifest.Resolve when `arctl agent run` re-renders the
-// compose file. Always returns nil so the shared template's range body
-// is a no-op at scaffold time.
-func (c AgentConfig) McpServers() []struct{} {
-	return nil
-}
+// McpServers + HasSkills are no-op render shims, NOT data.
+//
+// `docker-compose.yaml.tmpl` and `mcp_tools.py.tmpl` are shared between
+// two render entrypoints: `arctl init agent` (against AgentConfig at
+// scaffold time, no MCP servers / skills declared yet) and `arctl
+// agent run` (against an anonymous struct carrying the resolved
+// AgentManifest at runtime). text/template requires both `.McpServers`
+// and `.HasSkills` to resolve regardless of which struct it's called
+// against, so AgentConfig exposes them as methods that always return
+// the empty values the scaffold-time render expects. Move the runtime
+// fields into AgentConfig and the meaning of these methods will silently
+// change — keep them as method-shaped zero-value shims.
 
-// HasSkills always returns false for newly scaffolded projects: `arctl init
-// agent` does not seed Skills onto the AgentConfig. The shared
-// docker-compose template references this method, but at scaffold time the
-// branch always renders empty; the runtime path passes its own struct
-// (run.go renderComposeFromManifest) with HasSkills computed off the
-// loaded AgentManifest. Kept as a method so the template parses identically
-// at scaffold time and at runtime.
-func (c AgentConfig) HasSkills() bool {
-	return false
-}
+func (c AgentConfig) McpServers() []struct{} { return nil }
+
+func (c AgentConfig) HasSkills() bool { return false }
 
 func (c AgentConfig) shouldInitGit() bool {
 	return c.InitGit
