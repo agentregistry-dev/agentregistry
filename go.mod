@@ -16,12 +16,10 @@ require (
 	github.com/kagent-dev/kagent/go v0.0.0-20260304171409-232ca4ff4a82
 	github.com/kagent-dev/kmcp v0.2.7
 	github.com/modelcontextprotocol/go-sdk v1.4.0
-	github.com/modelcontextprotocol/registry v1.3.7
 	github.com/muesli/reflow v0.3.0
 	github.com/ossf/scorecard/v4 v4.13.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/rs/cors v1.11.1
-	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stoewer/go-strcase v1.3.1
 	github.com/stretchr/testify v1.11.1
@@ -265,7 +263,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/mattn/go-shellwords v1.0.12 // indirect
 	github.com/mgechev/revive v1.13.0 // indirect
-	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/moby/buildkit v0.12.2 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect

@@ -10,9 +10,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
-	"github.com/agentregistry-dev/agentregistry/internal/registry"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	"github.com/modelcontextprotocol/registry/pkg/model"
 )
 
 var defaultRegistryURL = "http://127.0.0.1:12121"
@@ -39,6 +37,9 @@ func ParseAgentManifestServers(manifest *agentmanifest.AgentManifest, verbose bo
 		fmt.Printf("[registry-resolver] Processing %d MCP servers from manifest\n", len(manifest.McpServers))
 	}
 
+	// Cache one typed client per registry URL across the manifest.
+	clients := make(map[string]*client.Client)
+
 	for i, mcpServer := range manifest.McpServers {
 		switch mcpServer.Type {
 		case "registry":
@@ -46,8 +47,7 @@ func ParseAgentManifestServers(manifest *agentmanifest.AgentManifest, verbose bo
 				fmt.Printf("[registry-resolver] [%d] Resolving registry server: name=%q registryServerName=%q version=%q registryURL=%q preferRemote=%v\n",
 					i, mcpServer.Name, mcpServer.RegistryServerName, mcpServer.RegistryServerVersion, mcpServer.RegistryURL, mcpServer.RegistryServerPreferRemote)
 			}
-			// Fetch server spec from registry and translate to command/remote type
-			translatedServer, err := resolveRegistryServer(mcpServer, verbose)
+			translatedServer, err := resolveRegistryServer(mcpServer, clients, verbose)
 			if err != nil {
 				if verbose {
 					fmt.Printf("[registry-resolver] [%d] FAILED to resolve registry server %q: %v\n", i, mcpServer.Name, err)
@@ -74,8 +74,9 @@ func ParseAgentManifestServers(manifest *agentmanifest.AgentManifest, verbose bo
 	return servers, nil
 }
 
-// resolveRegistryServer fetches a server from the registry and translates it to a runnable config
-func resolveRegistryServer(mcpServer agentmanifest.McpServerType, verbose bool) (*agentmanifest.McpServerType, error) {
+// resolveRegistryServer fetches a v1alpha1.MCPServer from the registry and
+// translates it to a runnable McpServerType.
+func resolveRegistryServer(mcpServer agentmanifest.McpServerType, clients map[string]*client.Client, verbose bool) (*agentmanifest.McpServerType, error) {
 	registryURL := mcpServer.RegistryURL
 	if registryURL == "" {
 		registryURL = defaultRegistryURL
@@ -91,22 +92,38 @@ func resolveRegistryServer(mcpServer agentmanifest.McpServerType, verbose bool) 
 			mcpServer.RegistryServerName, mcpServer.RegistryServerVersion)
 	}
 
-	client := registry.NewClient()
-	serverEntry, err := client.FetchServer(registryURL, mcpServer.RegistryServerName, mcpServer.RegistryServerVersion)
+	apiClient, ok := clients[registryURL]
+	if !ok {
+		apiClient = client.NewClient(registryURL, "")
+		clients[registryURL] = apiClient
+	}
+
+	server, err := client.GetTyped(
+		context.Background(),
+		apiClient,
+		v1alpha1.KindMCPServer,
+		v1alpha1.DefaultNamespace,
+		mcpServer.RegistryServerName,
+		mcpServer.RegistryServerVersion,
+		func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} },
+	)
 	if err != nil {
 		if verbose {
 			fmt.Printf("[registry-resolver]   ERROR: Failed to fetch server from registry: %v\n", err)
 		}
 		return nil, fmt.Errorf("failed to fetch server %q from registry: %w", mcpServer.RegistryServerName, err)
 	}
+	if server == nil {
+		return nil, fmt.Errorf("server %q not found in registry at %s", mcpServer.RegistryServerName, registryURL)
+	}
 
 	if verbose {
 		fmt.Printf("[registry-resolver]   Fetched server successfully:\n")
-		fmt.Printf("[registry-resolver]     - Name: %s\n", serverEntry.Server.Name)
-		fmt.Printf("[registry-resolver]     - Version: %s\n", serverEntry.Server.Version)
-		fmt.Printf("[registry-resolver]     - Description: %s\n", serverEntry.Server.Description)
-		fmt.Printf("[registry-resolver]     - Packages count: %d\n", len(serverEntry.Server.Packages))
-		for j, pkg := range serverEntry.Server.Packages {
+		fmt.Printf("[registry-resolver]     - Name: %s\n", server.Metadata.Name)
+		fmt.Printf("[registry-resolver]     - Version: %s\n", server.Metadata.Version)
+		fmt.Printf("[registry-resolver]     - Description: %s\n", server.Spec.Description)
+		fmt.Printf("[registry-resolver]     - Packages count: %d\n", len(server.Spec.Packages))
+		for j, pkg := range server.Spec.Packages {
 			fmt.Printf("[registry-resolver]     - Package[%d]: registryType=%q identifier=%q version=%q\n",
 				j, pkg.RegistryType, pkg.Identifier, pkg.Version)
 			if len(pkg.EnvironmentVariables) > 0 {
@@ -116,9 +133,9 @@ func resolveRegistryServer(mcpServer agentmanifest.McpServerType, verbose bool) 
 				}
 			}
 		}
-		if len(serverEntry.Server.Remotes) > 0 {
-			fmt.Printf("[registry-resolver]     - Remotes count: %d\n", len(serverEntry.Server.Remotes))
-			for j, remote := range serverEntry.Server.Remotes {
+		if len(server.Spec.Remotes) > 0 {
+			fmt.Printf("[registry-resolver]     - Remotes count: %d\n", len(server.Spec.Remotes))
+			for j, remote := range server.Spec.Remotes {
 				fmt.Printf("[registry-resolver]     - Remote[%d]: type=%q url=%q\n",
 					j, remote.Type, remote.URL)
 			}
@@ -126,10 +143,10 @@ func resolveRegistryServer(mcpServer agentmanifest.McpServerType, verbose bool) 
 	}
 
 	// Collect environment variable overrides from the current environment
-	// This allows users to set required env vars before running
-	envOverrides := collectEnvOverrides(serverEntry.Server.Packages)
+	// for any env vars the package declares.
+	envOverrides := collectEnvOverrides(server.Spec.Packages)
 
-	// Also add user-provided env vars from the manifest (set via TUI or agent.yaml)
+	// Layer manifest-supplied env overrides (TUI / agent.yaml) on top.
 	manifestEnvVars := parseManifestEnvVars(mcpServer.Env)
 	maps.Copy(envOverrides, manifestEnvVars)
 
@@ -137,7 +154,6 @@ func resolveRegistryServer(mcpServer agentmanifest.McpServerType, verbose bool) 
 		if len(envOverrides) > 0 {
 			fmt.Printf("[registry-resolver]   Collected %d environment variable overrides (from environment and manifest):\n", len(envOverrides))
 			for k, v := range envOverrides {
-				// Mask the value for security (unless it's a variable reference)
 				maskedValue := v
 				if !strings.HasPrefix(v, "${") {
 					if len(v) > 4 {
@@ -158,8 +174,7 @@ func resolveRegistryServer(mcpServer agentmanifest.McpServerType, verbose bool) 
 			mcpServer.RegistryServerPreferRemote)
 	}
 
-	// Translate the registry server spec to a runnable McpServerType
-	translated, err := TranslateRegistryServer(mcpServer.Name, &serverEntry.Server, envOverrides, mcpServer.RegistryServerPreferRemote)
+	translated, err := TranslateRegistryServer(mcpServer.Name, server, envOverrides, mcpServer.RegistryServerPreferRemote)
 	if err != nil {
 		if verbose {
 			fmt.Printf("[registry-resolver]   ERROR: Failed to translate server: %v\n", err)
@@ -187,9 +202,9 @@ func resolveRegistryServer(mcpServer agentmanifest.McpServerType, verbose bool) 
 	return translated, nil
 }
 
-// collectEnvOverrides gathers environment variable values from the current environment
-// for any env vars defined in the package specs
-func collectEnvOverrides(packages []model.Package) map[string]string {
+// collectEnvOverrides gathers environment variable values from the current
+// environment for any env vars declared on the package specs.
+func collectEnvOverrides(packages []v1alpha1.MCPPackage) map[string]string {
 	overrides := make(map[string]string)
 
 	for _, pkg := range packages {
