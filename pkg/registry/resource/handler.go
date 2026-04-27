@@ -87,10 +87,16 @@ type Config struct {
 	// transaction before the hook fires, so a hook failure leaves the
 	// row persisted with stale Status (whatever the previous reconcile
 	// wrote). The caller sees a 500, but a follow-up GetLatest still
-	// returns the row. Operators have to either:
-	//   1. Retry with a non-trivial spec change so Upsert runs again
-	//      and the hook re-fires, or
-	//   2. Patch Status manually via the platform adapter.
+	// returns the row.
+	//
+	// The hook re-fires on every PUT — including identical-spec
+	// re-applies that are a no-op at the Store layer — because the
+	// handler unconditionally invokes PostUpsert after Upsert
+	// returns, without consulting the upsert change-status. This is
+	// the operator-friendly retry path: a transient platform-adapter
+	// failure clears as soon as the operator re-applies (or a periodic
+	// CI re-apply succeeds), without forcing a spec bump.
+	//
 	// KRT will move this to an asynchronous reconcile loop with a
 	// proper Pending → Failed condition transition; the contract is
 	// pinned by TestResourceRegister_PostUpsertFailureLeavesPersistedRow.

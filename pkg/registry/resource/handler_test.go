@@ -615,12 +615,27 @@ func TestResourceRegister_PostUpsertFailureLeavesPersistedRow(t *testing.T) {
 	require.Equal(t, "Half", got.Spec.Title,
 		"spec is the just-applied value — the upsert succeeded under the hood")
 
-	// Re-apply with identical spec: no-op upsert short-circuits the hook.
-	// This pins the operator-trap noted in the godoc — the operator must
-	// bump spec to retrigger the hook.
+	// Re-apply with identical spec: the no-op upsert at the Store
+	// layer does NOT short-circuit PostUpsert — the handler fires
+	// the hook unconditionally after Upsert returns. This is the
+	// operator-friendly retry path: a transient platform-adapter
+	// failure clears as soon as a re-apply succeeds, with no spec
+	// bump required. Pin the behavior so a future "skip hook on
+	// no-op" optimization has to update the godoc + this test.
 	hookCalls = 0
 	resp = api.Put("/v0/agents/halfapplied/v1", body)
-	require.Equal(t, http.StatusOK, resp.Code, "no-op upsert should not re-fire the hook")
-	require.Equal(t, 0, hookCalls,
-		"contract: identical-spec re-apply does not re-run PostUpsert; operator must bump spec")
+	require.Equal(t, http.StatusInternalServerError, resp.Code,
+		"identical-spec re-apply still fires the hook (and 500s if the hook still errors)")
+	require.Equal(t, 1, hookCalls,
+		"contract: hook re-fires on every PUT, including no-op upserts; this is the retry path")
+
+	// Now make the hook succeed and re-apply: success path returns 200,
+	// hook fired again (third call total, counter=1 since reset), row
+	// readable through the regular GET.
+	hookErr = nil
+	hookCalls = 0
+	resp = api.Put("/v0/agents/halfapplied/v1", body)
+	require.Equal(t, http.StatusOK, resp.Code,
+		"once the platform-adapter clears, identical-spec re-apply succeeds without a spec bump")
+	require.Equal(t, 1, hookCalls)
 }

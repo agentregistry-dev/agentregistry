@@ -192,7 +192,7 @@ func TestRegisterReadme_RespectsAuthorize(t *testing.T) {
 // the regular routing, so it carries its own authz gate.
 func TestRegisterReadme_LegacyServerReadmeRespectsAuthorize(t *testing.T) {
 	pool := v1alpha1store.NewV1Alpha1TestPool(t)
-	store := v1alpha1store.NewStore(pool, "v1alpha1.mcpservers")
+	store := v1alpha1store.NewStore(pool, v1alpha1store.V1Alpha1TableFor[v1alpha1.KindMCPServer])
 
 	_, api := humatest.New(t)
 	cfg := resource.Config{
