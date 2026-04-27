@@ -3,6 +3,7 @@
 package resource_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -147,4 +148,56 @@ spec:
 	require.Len(t, out.Results, 1)
 	require.Equal(t, arv0.ApplyStatusFailed, out.Results[0].Status)
 	require.Contains(t, out.Results[0].Error, "metadata.version")
+}
+
+// TestRegisterApply_DeniesKindWithNoAuthorizer pins the apply-side
+// fail-closed contract: when ApplyConfig.Authorizers is non-empty
+// (i.e. authz is wired) but the doc's kind has no entry, the doc
+// fails with "no authorizer wired" rather than silently authorizing.
+//
+// Mirrors the import-handler N1 fix in `f8682fb`. Without this, an
+// operator who misconfigures PerKindHooks — wires an authorizer for
+// some kinds but forgets others — would silently bypass authz on the
+// /v0/apply path for the missing kinds.
+func TestRegisterApply_DeniesKindWithNoAuthorizer(t *testing.T) {
+	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	mcps := v1alpha1store.NewStore(pool, "v1alpha1.mcp_servers")
+
+	_, api := humatest.New(t)
+	resource.RegisterApply(api, resource.ApplyConfig{
+		BasePrefix: "/v0",
+		Stores: map[string]*v1alpha1store.Store{
+			v1alpha1.KindAgent:     agents,
+			v1alpha1.KindMCPServer: mcps,
+		},
+		// Authorizers wired for Agent only; MCPServer intentionally absent.
+		Authorizers: map[string]func(context.Context, resource.AuthorizeInput) error{
+			v1alpha1.KindAgent: func(_ context.Context, _ resource.AuthorizeInput) error { return nil },
+		},
+	})
+
+	yaml := []byte(`apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  namespace: default
+  name: should-be-denied
+  version: v1
+spec:
+  title: Should be denied
+`)
+	resp := api.Post("/v0/apply", "Content-Type: application/yaml", strings.NewReader(string(yaml)))
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
+	var out struct {
+		Results []arv0.ApplyResult `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	require.Len(t, out.Results, 1)
+	require.Equal(t, arv0.ApplyStatusFailed, out.Results[0].Status)
+	require.Contains(t, out.Results[0].Error, `no authorizer wired for kind "MCPServer"`)
+
+	// And the row didn't land in the store.
+	_, err := mcps.Get(t.Context(), "default", "should-be-denied", "v1")
+	require.Error(t, err, "fail-closed must short-circuit before Upsert")
 }

@@ -297,7 +297,21 @@ func prepareApplyDoc(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object) 
 	// Per-kind authz fires before validation so a denied apply doesn't
 	// leak validation errors back to the caller. Same semantics as the
 	// resource handler's PUT path.
-	if authz := cfg.Authorizers[kind]; authz != nil {
+	//
+	// Defense-in-depth: when any Authorizers are wired, a kind without
+	// an entry must DENY rather than silently allow. The enterprise H2
+	// boot guard already ensures every OSS BuiltinKinds entry has an
+	// authorizer when authz is enabled, so this only fires for
+	// downstream kinds the operator added without updating PerKindHooks
+	// — fail closed there. Mirrors the same fail-closed contract on the
+	// import handler (`f8682fb`).
+	if len(cfg.Authorizers) > 0 {
+		authz, ok := cfg.Authorizers[kind]
+		if !ok || authz == nil {
+			pd.Result.Status = arv0.ApplyStatusFailed
+			pd.Result.Error = fmt.Sprintf("forbidden: no authorizer wired for kind %q", kind)
+			return pd
+		}
 		if err := authz(ctx, AuthorizeInput{
 			Verb: "apply", Kind: kind,
 			Namespace: meta.Namespace, Name: meta.Name, Version: meta.Version,
