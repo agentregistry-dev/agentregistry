@@ -82,9 +82,6 @@ type deploymentLogsOutput struct {
 // streaming lands upstream, swap this for an SSE/chunked handler at the
 // same path without touching the coordinator surface.
 func Register(api huma.API, cfg Config) {
-	if cfg.Coordinator == nil || cfg.Store == nil {
-		return
-	}
 	path := cfg.BasePrefix + "/deployments/{name}/{version}/logs"
 
 	huma.Register(api, huma.Operation{

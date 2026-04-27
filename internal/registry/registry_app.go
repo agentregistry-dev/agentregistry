@@ -457,7 +457,7 @@ func startMCPServer(
 	v1alpha1Stores map[string]*v1alpha1store.Store,
 	authnProvider auth.AuthnProvider,
 ) *http.Server {
-	if cfg.MCPPort <= 0 || v1alpha1Stores == nil {
+	if cfg.MCPPort <= 0 {
 		return nil
 	}
 	mcpServer := mcpregistry.NewServer(v1alpha1Stores)

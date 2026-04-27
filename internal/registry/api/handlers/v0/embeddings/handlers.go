@@ -66,10 +66,10 @@ type Config struct {
 // Register wires POST + GET under {BasePrefix}/embeddings/index.
 // Callers pass BasePrefix="/v0". Authz defaults to a permissive public
 // provider when zero-valued so existing OSS deployments keep working.
+//
+// Caller is responsible for not invoking Register unless Indexer +
+// Manager are both wired — the router gates on that already.
 func Register(api huma.API, cfg Config) {
-	if cfg.Indexer == nil || cfg.Manager == nil {
-		return
-	}
 	if cfg.Authz.Authz == nil {
 		cfg.Authz = auth.Authorizer{Authz: auth.NewPublicAuthzProvider(nil)}
 	}

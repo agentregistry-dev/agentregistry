@@ -69,12 +69,9 @@ type importOutput struct {
 // runs through the full Importer pipeline so scanner-produced
 // annotations, labels, and findings land alongside the Upsert.
 //
-// No-ops (returns without registering) when cfg.Importer is nil —
-// servers without the v1alpha1 Stores wired also skip the Importer.
+// Caller is responsible for not invoking Register unless cfg.Importer
+// is wired — the router gates on that already.
 func Register(api huma.API, cfg Config) {
-	if cfg.Importer == nil {
-		return
-	}
 	huma.Register(api, huma.Operation{
 		OperationID: "import-batch",
 		Method:      http.MethodPost,
