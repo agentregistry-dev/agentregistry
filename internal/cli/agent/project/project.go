@@ -13,14 +13,18 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-// LoadManifest loads the agent manifest from the project directory.
+// LoadAgent decodes the on-disk v1alpha1.Agent envelope at <projectDir>/agent.yaml.
 // agent.yaml must be a v1alpha1.Agent envelope (apiVersion: ar.dev/v1alpha1,
 // kind: Agent). The legacy flat-AgentManifest on-disk shape is no longer
 // supported — `arctl init agent` writes envelopes, and operators are
 // expected to keep their hand-edited agent.yaml files in the same form.
-func LoadManifest(projectDir string) (*agentmanifest.AgentManifest, error) {
+//
+// LoadAgent is offline-only; the registry-side resolution of MCP server
+// refs into runnable form is done by manifest.Resolve.
+func LoadAgent(projectDir string) (*v1alpha1.Agent, error) {
 	path := filepath.Join(projectDir, "agent.yaml")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -32,14 +36,18 @@ func LoadManifest(projectDir string) (*agentmanifest.AgentManifest, error) {
 	if !scheme.IsEnvelopeYAML(data) {
 		return nil, fmt.Errorf("agent.yaml in %s is not a v1alpha1 envelope (expected apiVersion: ar.dev/v1alpha1, kind: Agent)", projectDir)
 	}
-	return loadAgentFromEnvelope(data)
+	var agent v1alpha1.Agent
+	if err := v1alpha1.Default.DecodeInto(data, &agent); err != nil {
+		return nil, fmt.Errorf("parsing envelope agent.yaml: %w", err)
+	}
+	return &agent, nil
 }
 
 // AgentNameFromManifest attempts to read the agent name, falling back to directory name.
 func AgentNameFromManifest(projectDir string) string {
-	manifest, err := LoadManifest(projectDir)
-	if err == nil && manifest != nil && manifest.Name != "" {
-		return manifest.Name
+	agent, err := LoadAgent(projectDir)
+	if err == nil && agent != nil && agent.Metadata.Name != "" {
+		return agent.Metadata.Name
 	}
 	return filepath.Base(projectDir)
 }

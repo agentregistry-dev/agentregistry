@@ -10,10 +10,8 @@ from google.adk.tools.base_toolset import ToolPredicate
 from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StreamableHTTPConnectionParams
 
 
-# TODO(legacy): remove _MCP_SERVERS once declarative API is the only supported path
 _MCP_SERVERS = [
 {{- range .McpServers }}
-{{- if ne .Type "registry" }}
     {
         "name": "{{ .Name }}",
         "type": "{{ .Type }}",
@@ -28,7 +26,6 @@ _MCP_SERVERS = [
         {{- end }}
         {{- end }}
     },
-{{- end }}
 {{- end }}
 ]
 

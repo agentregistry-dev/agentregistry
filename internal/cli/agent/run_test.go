@@ -10,146 +10,94 @@ import (
 	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
 )
 
-func TestHasRegistryServers(t *testing.T) {
+func TestHasBuildableServers(t *testing.T) {
 	tests := []struct {
-		name     string
-		manifest *agentmanifest.AgentManifest
-		want     bool
+		name string
+		in   []agentmanifest.McpServerType
+		want bool
 	}{
 		{
-			name: "no MCP servers",
-			manifest: &agentmanifest.AgentManifest{
-				Name:       "test-agent",
-				McpServers: nil,
+			name: "nil",
+			in:   nil,
+			want: false,
+		},
+		{
+			name: "command with OCI image (no build)",
+			in: []agentmanifest.McpServerType{
+				{Type: "command", Name: "oci", Image: "ghcr.io/x/y:1"},
 			},
 			want: false,
 		},
 		{
-			name: "empty MCP servers list",
-			manifest: &agentmanifest.AgentManifest{
-				Name:       "test-agent",
-				McpServers: []agentmanifest.McpServerType{},
+			name: "remote only",
+			in: []agentmanifest.McpServerType{
+				{Type: "remote", Name: "rem", URL: "https://example.com/mcp"},
 			},
 			want: false,
 		},
 		{
-			name: "only command type servers",
-			manifest: &agentmanifest.AgentManifest{
-				Name: "test-agent",
-				McpServers: []agentmanifest.McpServerType{
-					{Type: "command", Name: "server1"},
-					{Type: "command", Name: "server2"},
-				},
-			},
-			want: false,
-		},
-		{
-			name: "only remote type servers",
-			manifest: &agentmanifest.AgentManifest{
-				Name: "test-agent",
-				McpServers: []agentmanifest.McpServerType{
-					{Type: "remote", Name: "server1"},
-				},
-			},
-			want: false,
-		},
-		{
-			name: "has one registry server",
-			manifest: &agentmanifest.AgentManifest{
-				Name: "test-agent",
-				McpServers: []agentmanifest.McpServerType{
-					{Type: "registry", Name: "server1"},
-				},
+			name: "command with registry build",
+			in: []agentmanifest.McpServerType{
+				{Type: "command", Name: "npm", Build: "registry/npm"},
 			},
 			want: true,
 		},
 		{
-			name: "mixed types with registry server",
-			manifest: &agentmanifest.AgentManifest{
-				Name: "test-agent",
-				McpServers: []agentmanifest.McpServerType{
-					{Type: "command", Name: "cmd-server"},
-					{Type: "registry", Name: "reg-server"},
-					{Type: "remote", Name: "remote-server"},
-				},
-			},
-			want: true,
-		},
-		{
-			name: "registry server in middle of list",
-			manifest: &agentmanifest.AgentManifest{
-				Name: "test-agent",
-				McpServers: []agentmanifest.McpServerType{
-					{Type: "command", Name: "server1"},
-					{Type: "command", Name: "server2"},
-					{Type: "registry", Name: "server3"},
-					{Type: "command", Name: "server4"},
-				},
+			name: "mixed: one buildable",
+			in: []agentmanifest.McpServerType{
+				{Type: "command", Name: "oci", Image: "ghcr.io/x/y:1"},
+				{Type: "command", Name: "npm", Build: "registry/npm"},
+				{Type: "remote", Name: "rem", URL: "https://example.com/mcp"},
 			},
 			want: true,
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := hasRegistryServers(tt.manifest)
+			got := hasBuildableServers(tt.in)
 			if got != tt.want {
-				t.Errorf("hasRegistryServers() = %v, want %v", got, tt.want)
+				t.Errorf("hasBuildableServers() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestResolveMCPServersForRuntime(t *testing.T) {
+func TestPythonServersFromManifest(t *testing.T) {
 	tests := []struct {
-		name         string
-		manifest     *agentmanifest.AgentManifest
-		wantErr      bool
-		wantResolved int
-		wantConfig   int
+		name string
+		in   *agentmanifest.AgentManifest
+		want []common.PythonMCPServer
 	}{
 		{
-			name:     "nil manifest",
-			manifest: nil,
-			wantErr:  true,
+			name: "nil manifest",
+			in:   nil,
+			want: nil,
 		},
 		{
-			name: "no registry servers",
-			manifest: &agentmanifest.AgentManifest{
-				Name: "test-agent",
+			name: "remote + command",
+			in: &agentmanifest.AgentManifest{
+				Name: "a",
 				McpServers: []agentmanifest.McpServerType{
 					{Type: "command", Name: "cmd"},
-					{Type: "remote", Name: "remote"},
+					{Type: "remote", Name: "rem", URL: "https://example.com", Headers: map[string]string{"x-api-key": "k"}},
 				},
 			},
-			wantResolved: 0,
-			wantConfig:   0,
-		},
-		{
-			name: "empty mcp servers",
-			manifest: &agentmanifest.AgentManifest{
-				Name:       "test-agent",
-				McpServers: []agentmanifest.McpServerType{},
+			want: []common.PythonMCPServer{
+				{Name: "cmd", Type: "command"},
+				{Name: "rem", Type: "remote", URL: "https://example.com", Headers: map[string]string{"x-api-key": "k"}},
 			},
-			wantResolved: 0,
-			wantConfig:   0,
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolved, config, err := resolveMCPServersForRuntime(tt.manifest)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("resolveMCPServersForRuntime() error = %v, wantErr %v", err, tt.wantErr)
+			got := pythonServersFromManifest(tt.in)
+			if len(got) != len(tt.want) {
+				t.Fatalf("len = %d, want %d", len(got), len(tt.want))
 			}
-			if tt.wantErr {
-				return
-			}
-			if len(resolved) != tt.wantResolved {
-				t.Fatalf("resolveMCPServersForRuntime() resolved count = %d, want %d", len(resolved), tt.wantResolved)
-			}
-			if len(config) != tt.wantConfig {
-				t.Fatalf("resolveMCPServersForRuntime() config count = %d, want %d", len(config), tt.wantConfig)
+			for i := range got {
+				if got[i].Name != tt.want[i].Name || got[i].Type != tt.want[i].Type {
+					t.Errorf("entry[%d] mismatch: got %+v want %+v", i, got[i], tt.want[i])
+				}
 			}
 		})
 	}

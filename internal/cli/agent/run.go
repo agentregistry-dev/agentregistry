@@ -84,23 +84,27 @@ func runRun(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to resolve agent %q: %w", target, err)
 	}
-	manifest := manifestFromAgent(agentModel)
+	manifest, err := agentmanifest.Resolve(cmd.Context(), apiClient, agentModel)
+	if err != nil {
+		return fmt.Errorf("failed to resolve agent runtime manifest: %w", err)
+	}
 	version := agentModel.Metadata.Version
-	return runFromManifest(cmd.Context(), &manifest, version, nil, envMap)
+	return runFromManifest(cmd.Context(), manifest, version, nil, envMap)
 }
 
-func manifestFromAgent(agent *v1alpha1.Agent) agentmanifest.AgentManifest {
-	return agentmanifest.FromV1Alpha1Agent(agent)
-}
-
-// runFromDirectory runs an agent from a local project directory. It resolves
-// registry-type MCP servers at runtime, regenerating folders for servers that
-// may have already been created during their initial add-cmd invocation. This
-// redundancy is acceptable but could be optimized in the future.
+// runFromDirectory runs an agent from a local project directory. The on-disk
+// agent.yaml is decoded as a v1alpha1.Agent envelope and immediately resolved
+// against the registry (manifest.Resolve) so every MCP server entry arrives
+// in terminal form (Type="command" or Type="remote") before any project
+// regeneration happens.
 func runFromDirectory(ctx context.Context, projectDir string, envMap map[string]string) error {
-	manifest, err := project.LoadManifest(projectDir)
+	agent, err := project.LoadAgent(projectDir)
 	if err != nil {
 		return fmt.Errorf("failed to load agent.yaml: %w", err)
+	}
+	manifest, err := agentmanifest.Resolve(ctx, apiClient, agent)
+	if err != nil {
+		return fmt.Errorf("failed to resolve agent runtime manifest: %w", err)
 	}
 
 	resolvedSkills, err := resolveSkillsForRuntime(manifest)
@@ -120,18 +124,15 @@ func runFromDirectory(ctx context.Context, projectDir string, envMap map[string]
 		return fmt.Errorf("failed to clean registry directory: %w", err)
 	}
 
-	registryResolvedServers, serversForConfig, err := resolveMCPServersForRuntime(manifest)
-	if err != nil {
-		return fmt.Errorf("failed to resolve MCP servers from agent manifest: %w", err)
-	}
-	if len(registryResolvedServers) > 0 {
-		tmpManifest := *manifest
-		tmpManifest.McpServers = registryResolvedServers
-		// create directories and build images for the registry-resolved servers
-		if err := project.EnsureMcpServerDirectories(projectDir, &tmpManifest, verbose); err != nil {
+	// Build directories + Dockerfiles for command-type servers that came
+	// from npm/PyPI packages (Build="registry/<name>"). OCI images flow
+	// straight through to docker-compose without local build setup.
+	if hasBuildableServers(manifest.McpServers) {
+		if err := project.EnsureMcpServerDirectories(projectDir, manifest, verbose); err != nil {
 			return fmt.Errorf("failed to create MCP server directories: %w", err)
 		}
 	}
+	serversForConfig := pythonServersFromManifest(manifest)
 
 	// Always clean before run; only write config when we have resolved registry servers to persist.
 	if err := common.RefreshMCPConfig(
@@ -198,10 +199,13 @@ func hasManifestPrompts(manifest *agentmanifest.AgentManifest) bool {
 	return len(manifest.Prompts) > 0
 }
 
-// runFromManifest runs an agent based on a manifest, with optional pre-resolved data.
-// When overrides is non-nil (from runFromDirectory), the working directory is already
-// prepared. Otherwise, this function resolves all runtime dependencies first.
-// EnvMap contains --env KEY=VALUE overrides (e.g. API keys) and is used for validation and compose process env.
+// runFromManifest runs an agent based on a fully-resolved manifest, with
+// optional pre-resolved data. When overrides is non-nil (from
+// runFromDirectory), the working directory is already prepared. Otherwise
+// this function builds a temp work dir, lays out any buildable MCP server
+// directories, and stages the prompts / mcp config the runtime needs.
+// EnvMap contains --env KEY=VALUE overrides (e.g. API keys) and is used
+// for validation and compose process env.
 func runFromManifest(ctx context.Context, manifest *agentmanifest.AgentManifest, version string, overrides *runContext, envMap map[string]string) error {
 	if manifest == nil {
 		return fmt.Errorf("agent manifest is required")
@@ -216,12 +220,9 @@ func runFromManifest(ctx context.Context, manifest *agentmanifest.AgentManifest,
 	var cleanupWorkDir bool
 
 	if overrides != nil {
-		if verbose {
-			fmt.Println("[registry-resolve] Using pre-resolved overrides from runFromDirectory")
-		}
 		workDir = overrides.workDir
 	} else {
-		workDir, cleanupWorkDir, err = resolveManifestDependencies(manifest, version)
+		workDir, cleanupWorkDir, err = stageManifestRuntime(ctx, manifest, version)
 		if err != nil {
 			return err
 		}
@@ -247,39 +248,39 @@ type runContext struct {
 	workDir string
 }
 
-// resolveManifestDependencies resolves all runtime dependencies for a manifest-based
-// run: registry MCP servers, skills, telemetry config, and prompts.
-// Returns the working directory and whether it should be cleaned up after the run.
-func resolveManifestDependencies(manifest *agentmanifest.AgentManifest, version string) (string, bool, error) {
-	var workDir string
-	var cleanup bool
-	var serversForConfig []common.PythonMCPServer
+// stageManifestRuntime sets up the temporary work directory the runtime
+// needs: builds Docker images for command-type MCP servers shipped as
+// npm/PyPI packages (Build="registry/..."), materializes skill artifacts,
+// renders the otel collector config, and stages mcp-servers.json +
+// prompts.json. The caller (runFromManifest) cleans up the returned
+// workDir when cleanup==true.
+//
+// Manifest is expected to be fully resolved (every McpServerType is
+// terminal: Type="command" or Type="remote"); manifest.Resolve at load
+// time guarantees this.
+func stageManifestRuntime(ctx context.Context, manifest *agentmanifest.AgentManifest, version string) (string, bool, error) {
+	tmpDir, err := os.MkdirTemp("", "arctl-agent-run-*")
+	if err != nil {
+		return "", false, fmt.Errorf("failed to create temporary directory: %w", err)
+	}
+	cleanup := true
+	workDir := tmpDir
 
-	if hasRegistryServers(manifest) {
-		var err error
-		workDir, serversForConfig, err = resolveAndBuildRegistryServers(manifest)
-		if err != nil {
-			return "", false, err
+	serversToBuild := filterServersToBuild(manifest.McpServers)
+	if len(serversToBuild) > 0 {
+		stagedManifest := *manifest
+		stagedManifest.McpServers = serversToBuild
+		if err := project.EnsureMcpServerDirectories(workDir, &stagedManifest, verbose); err != nil {
+			return "", false, fmt.Errorf("failed to create mcp server directories: %w", err)
 		}
-		cleanup = true
-	} else if verbose {
-		fmt.Println("[registry-resolve] No registry-type MCP servers found in manifest")
+		if err := buildRegistryResolvedServers(workDir, &stagedManifest, verbose); err != nil {
+			return "", false, fmt.Errorf("failed to build registry server images: %w", err)
+		}
 	}
 
 	resolvedSkills, err := resolveSkillsForRuntime(manifest)
 	if err != nil {
 		return "", false, fmt.Errorf("failed to resolve skills from agent manifest: %w", err)
-	}
-	if len(resolvedSkills) > 0 && workDir == "" {
-		tmpDir, err := os.MkdirTemp("", "arctl-skill-resolve-*")
-		if err != nil {
-			return "", false, fmt.Errorf("failed to create temporary directory for skills: %w", err)
-		}
-		workDir = tmpDir
-		cleanup = true
-		if verbose {
-			fmt.Printf("[skill-resolve] Created temporary directory: %s\n", tmpDir)
-		}
 	}
 	if err := materializeSkillsForRuntime(
 		resolvedSkills,
@@ -295,13 +296,13 @@ func resolveManifestDependencies(manifest *agentmanifest.AgentManifest, version 
 
 	if err := common.RefreshMCPConfig(
 		&common.MCPConfigTarget{BaseDir: workDir, AgentName: manifest.Name, Version: version},
-		serversForConfig,
+		pythonServersFromManifest(manifest),
 		verbose,
 	); err != nil {
 		return "", false, err
 	}
 
-	promptsForConfig, err := resolvePrompts(manifest)
+	promptsForConfig, err := resolvePrompts(ctx, manifest)
 	if err != nil {
 		return "", false, err
 	}
@@ -316,102 +317,33 @@ func resolveManifestDependencies(manifest *agentmanifest.AgentManifest, version 
 	return workDir, cleanup, nil
 }
 
-// resolveAndBuildRegistryServers resolves registry-type MCP servers from the manifest,
-// builds Docker images for servers that need it, and returns a temp working directory
-// along with server configurations for mcp-servers.json.
-func resolveAndBuildRegistryServers(manifest *agentmanifest.AgentManifest) (string, []common.PythonMCPServer, error) {
-	if verbose {
-		fmt.Println("[registry-resolve] Detected registry-type MCP servers in manifest (runFromManifest path)")
-		fmt.Printf("[registry-resolve] Total MCP servers in manifest: %d\n", len(manifest.McpServers))
-		for i, srv := range manifest.McpServers {
-			fmt.Printf("[registry-resolve]   [%d] name=%q type=%q registryServerName=%q registryURL=%q version=%q\n",
-				i, srv.Name, srv.Type, srv.RegistryServerName, srv.RegistryURL, srv.RegistryServerVersion)
+// hasBuildableServers reports whether any McpServer entry on the manifest
+// requires a local Docker build (npm/PyPI package translated to Build
+// path "registry/<name>"). OCI images flow through to docker-compose
+// without a build setup.
+func hasBuildableServers(servers []agentmanifest.McpServerType) bool {
+	for _, srv := range servers {
+		if srv.Type == "command" && strings.HasPrefix(srv.Build, "registry/") {
+			return true
 		}
 	}
-
-	if verbose {
-		fmt.Println("[registry-resolve] Starting resolution of registry servers...")
-	}
-	servers, err := agentutils.ParseAgentManifestServers(manifest, verbose)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to parse agent manifest mcp servers: %w", err)
-	}
-	manifest.McpServers = servers
-
-	if verbose {
-		fmt.Printf("[registry-resolve] Resolution complete. Total servers after resolution: %d\n", len(manifest.McpServers))
-		for i, srv := range manifest.McpServers {
-			fmt.Printf("[registry-resolve]   [%d] name=%q type=%q build=%q image=%q command=%q\n",
-				i, srv.Name, srv.Type, srv.Build, srv.Image, srv.Command)
-		}
-	}
-
-	serversToBuild := filterServersToBuild(manifest.McpServers)
-
-	tmpDir, err := os.MkdirTemp("", "arctl-registry-resolve-*")
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to create temporary directory: %w", err)
-	}
-	if verbose {
-		fmt.Printf("[registry-resolve] Created temporary directory: %s\n", tmpDir)
-	}
-
-	if len(serversToBuild) > 0 { //nolint:nestif
-		if verbose {
-			fmt.Printf("[registry-resolve] %d registry-resolved servers require directory setup and build\n", len(serversToBuild))
-		}
-
-		tmpManifest := *manifest
-		tmpManifest.McpServers = serversToBuild
-
-		if verbose {
-			fmt.Println("[registry-resolve] Creating MCP server directories...")
-		}
-		if err := project.EnsureMcpServerDirectories(tmpDir, &tmpManifest, verbose); err != nil {
-			return "", nil, fmt.Errorf("failed to create mcp server directories: %w", err)
-		}
-
-		if verbose {
-			fmt.Println("[registry-resolve] Building registry-resolved server images...")
-		}
-		if err := buildRegistryResolvedServers(tmpDir, &tmpManifest, verbose); err != nil {
-			return "", nil, fmt.Errorf("failed to build registry server images: %w", err)
-		}
-	} else if verbose {
-		fmt.Println("[registry-resolve] No registry-resolved command servers to build (OCI images only)")
-	}
-
-	serversForConfig := common.PythonServersFromManifest(manifest)
-	if verbose {
-		fmt.Printf("[registry-resolve] Created %d server configurations for MCP config (includes OCI servers)\n", len(serversForConfig))
-	}
-
-	return tmpDir, serversForConfig, nil
+	return false
 }
 
-// filterServersToBuild separates servers that need building (npm/pypi) from those
-// that don't (OCI images).
+// filterServersToBuild returns the subset of MCP server entries that need
+// a local Docker build.
 func filterServersToBuild(servers []agentmanifest.McpServerType) []agentmanifest.McpServerType {
 	var result []agentmanifest.McpServerType
 	for _, srv := range servers {
 		if srv.Type == "command" && strings.HasPrefix(srv.Build, "registry/") {
 			result = append(result, srv)
-			if verbose {
-				fmt.Printf("[registry-resolve] Including server %q for build (type=command, build=%q)\n", srv.Name, srv.Build)
-			}
-		} else if verbose {
-			if srv.Type == "command" && srv.Build == "" && srv.Image != "" {
-				fmt.Printf("[registry-resolve] Skipping server %q for build (OCI image %q ready to use)\n", srv.Name, srv.Image)
-			} else {
-				fmt.Printf("[registry-resolve] Skipping server %q for build (type=%q, build=%q)\n", srv.Name, srv.Type, srv.Build)
-			}
 		}
 	}
 	return result
 }
 
 // resolvePrompts resolves prompt references from the manifest into configurations.
-func resolvePrompts(manifest *agentmanifest.AgentManifest) ([]common.PythonPrompt, error) {
+func resolvePrompts(_ context.Context, manifest *agentmanifest.AgentManifest) ([]common.PythonPrompt, error) {
 	if !hasManifestPrompts(manifest) {
 		return nil, nil
 	}

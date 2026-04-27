@@ -1,23 +1,16 @@
 package manifest
 
-import (
-	"strings"
-
-	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-)
+import "strings"
 
 // AgentManifest is the in-memory runtime projection of a v1alpha1.Agent
-// envelope. It is built from the on-disk envelope (see project.LoadManifest)
-// and then handed to the agent CLI's docker-compose / template renderers.
+// envelope, produced by Resolve. It is never serialized back to disk —
+// the on-disk shape is always the v1alpha1.Agent envelope, decoded
+// upstream by project.LoadAgent.
 //
-// The on-disk shape is always the v1alpha1.Agent envelope; this struct is
-// never serialized back to disk. Most fields mirror v1alpha1.AgentSpec
-// directly, but the MCPServer / Skill / Prompt slices carry additional
-// runtime-resolution state that the registry shape doesn't:
-//   - McpServers initially carries Type="registry" entries projected from
-//     v1alpha1.AgentSpec.MCPServers ResourceRefs; the resolver later
-//     translates each into Type="command" or Type="remote" with the
-//     runnable bits filled in (Image/Build/Command/URL/Headers/...).
+// Most fields mirror v1alpha1.AgentSpec directly. McpServers carries
+// terminal-form runtime entries (Type="command" or "remote"); Skills /
+// Prompts carry registry-side identity for late resolution at materialize
+// time (image extract, prompt content fetch).
 type AgentManifest struct {
 	Name              string
 	Image             string
@@ -46,7 +39,7 @@ type SkillRef struct {
 }
 
 // PromptRef is the runtime-side reference for a v1alpha1.Prompt the agent
-// depends on. Resolved against the registry at run time.
+// depends on. Resolved against the registry at materialize time.
 type PromptRef struct {
 	Name                  string
 	RegistryURL           string
@@ -54,17 +47,17 @@ type PromptRef struct {
 	RegistryPromptVersion string
 }
 
-// McpServerType represents one MCP server entry on the runtime manifest.
-// The Type field is the runtime discriminator:
-//   - "registry" — initial state right after FromV1Alpha1Agent; the resolver
-//     fetches v1alpha1.MCPServer for (RegistryServerName, RegistryServerVersion)
-//     and converts the entry into one of the two terminal forms below.
-//   - "command" — runnable container (Image/Build/Command/Args/Env populated).
-//   - "remote"  — remote MCP endpoint (URL/Headers populated).
+// McpServerType is one terminal-form MCP server entry on the runtime
+// manifest. Resolve always populates entries with Type="command" or
+// Type="remote"; no intermediate "registry" state is ever exposed.
 //
-// Templates render the terminal forms; the resolver always replaces
-// "registry" entries before render. Fields are mutually exclusive by Type
-// and not enforced via tag (this struct is never user-serialized).
+//   - Type="command": runnable container (Image/Build/Command/Args/Env
+//     populated). Build is "registry/<name>" for npm/PyPI packages that
+//     must be built into a Docker image at run time; empty for OCI images
+//     that are pulled directly.
+//   - Type="remote":  remote MCP endpoint (URL/Headers populated).
+//
+// Fields are mutually exclusive by Type. This struct is never user-serialized.
 type McpServerType struct {
 	Name    string
 	Version string
@@ -77,60 +70,6 @@ type McpServerType struct {
 	Env     []string
 	URL     string
 	Headers map[string]string
-
-	RegistryURL                string
-	RegistryServerName         string
-	RegistryServerVersion      string
-	RegistryServerPreferRemote bool
-}
-
-// FromV1Alpha1Agent projects a v1alpha1.Agent envelope onto the runtime
-// AgentManifest. MCPServer / Skill / Prompt ResourceRefs are turned into
-// the registry-typed runtime entries that the resolver later expands into
-// fully-runnable form.
-func FromV1Alpha1Agent(agent *v1alpha1.Agent) AgentManifest {
-	if agent == nil {
-		return AgentManifest{}
-	}
-
-	manifest := AgentManifest{
-		Name:              agent.Metadata.Name,
-		Image:             agent.Spec.Image,
-		Language:          agent.Spec.Language,
-		Framework:         agent.Spec.Framework,
-		ModelProvider:     agent.Spec.ModelProvider,
-		ModelName:         agent.Spec.ModelName,
-		Description:       agent.Spec.Description,
-		Version:           agent.Metadata.Version,
-		TelemetryEndpoint: agent.Spec.TelemetryEndpoint,
-	}
-
-	for _, ref := range agent.Spec.MCPServers {
-		manifest.McpServers = append(manifest.McpServers, McpServerType{
-			Name:                       localRefName(ref.Name),
-			Version:                    ref.Version,
-			Type:                       "registry",
-			RegistryServerName:         ref.Name,
-			RegistryServerVersion:      ref.Version,
-			RegistryServerPreferRemote: false,
-		})
-	}
-	for _, ref := range agent.Spec.Skills {
-		manifest.Skills = append(manifest.Skills, SkillRef{
-			Name:                 localRefName(ref.Name),
-			RegistrySkillName:    ref.Name,
-			RegistrySkillVersion: ref.Version,
-		})
-	}
-	for _, ref := range agent.Spec.Prompts {
-		manifest.Prompts = append(manifest.Prompts, PromptRef{
-			Name:                  localRefName(ref.Name),
-			RegistryPromptName:    ref.Name,
-			RegistryPromptVersion: ref.Version,
-		})
-	}
-
-	return manifest
 }
 
 func localRefName(name string) string {

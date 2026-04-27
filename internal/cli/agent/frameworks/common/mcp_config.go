@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 
-	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
 )
 
@@ -75,35 +74,3 @@ func RefreshMCPConfig(target *MCPConfigTarget, servers []PythonMCPServer, verbos
 	return nil
 }
 
-// PythonServersFromManifest converts resolved MCP servers in a manifest into Python MCP server structs.
-// Registry-type servers are skipped because they are not directly runnable.
-func PythonServersFromManifest(manifest *agentmanifest.AgentManifest) []PythonMCPServer {
-	if manifest == nil || len(manifest.McpServers) == 0 {
-		return nil
-	}
-
-	var mcpServers []PythonMCPServer
-	for _, srv := range manifest.McpServers {
-		if srv.Type == "registry" {
-			continue
-		}
-
-		pythonServer := PythonMCPServer{
-			Name: srv.Name,
-			Type: srv.Type,
-		}
-
-		if srv.Type == "remote" {
-			pythonServer.URL = srv.URL
-			if len(srv.Headers) > 0 {
-				pythonServer.Headers = srv.Headers
-			}
-		}
-		// For command type, the Python code constructs URL as f"http://{server_name}:3000/mcp"
-		// so we do not set URL here.
-
-		mcpServers = append(mcpServers, pythonServer)
-	}
-
-	return mcpServers
-}

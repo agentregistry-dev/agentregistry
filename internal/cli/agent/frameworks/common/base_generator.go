@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
-
-	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
 )
 
 // AgentConfig captures the data required to render an agent project from templates.
@@ -33,15 +31,16 @@ type AgentConfig struct {
 
 	EnvVars []string
 	InitGit bool
+}
 
-	// McpServers is referenced by the docker-compose / mcp_tools templates
-	// at scaffold time. `arctl init agent` always leaves it empty — MCP
-	// servers are added later via the v1alpha1 envelope (`agent.yaml`'s
-	// spec.mcpServers ResourceRefs) and re-rendered by run.go's
-	// renderComposeFromManifest using its own struct. Field is kept here
-	// purely so the shared template parses against AgentConfig at
-	// scaffold time.
-	McpServers []agentmanifest.McpServerType
+// McpServers is referenced by the docker-compose / mcp_tools templates at
+// scaffold time. `arctl init agent` never adds MCP servers — they're
+// declared on the v1alpha1 agent.yaml spec.mcpServers ResourceRefs and
+// resolved by manifest.Resolve when `arctl agent run` re-renders the
+// compose file. Always returns nil so the shared template's range body
+// is a no-op at scaffold time.
+func (c AgentConfig) McpServers() []struct{} {
+	return nil
 }
 
 // HasSkills always returns false for newly scaffolded projects: `arctl init
