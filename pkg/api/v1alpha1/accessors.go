@@ -49,6 +49,23 @@ type Object interface {
 	UnmarshalStatus(data json.RawMessage) error
 }
 
+// ObjectWithReadme is the optional capability interface the generic
+// resource handler queries to decide whether to wire a kind's readme
+// subresource (`/v0/{plural}/{name}/readme` and the version-pinned
+// variant). Kinds whose Spec carries a long-form `readme` field
+// implement it; kinds without (Provider, Deployment, Role) do not, and
+// the readme routes simply don't register for them. Callers should
+// rely on this presence-or-absence sentinel rather than Object's main
+// interface so kinds without a readme don't carry a stub `GetReadme()`
+// method that always returns nil.
+//
+// GetReadme may return nil even on implementing kinds (the user
+// hasn't filled in the field yet); the handler treats nil as a 404.
+type ObjectWithReadme interface {
+	Object
+	GetReadme() *Readme
+}
+
 // StructuralValidator runs zero-I/O validation on an envelope.
 type StructuralValidator interface {
 	Validate() error
@@ -131,6 +148,7 @@ func (a *Agent) MarshalStatus() (json.RawMessage, error) { return MarshalStatusF
 func (a *Agent) UnmarshalStatus(data json.RawMessage) error {
 	return UnmarshalStatusFromStorage(data, &a.Status)
 }
+func (a *Agent) GetReadme() *Readme { return a.Spec.Readme }
 
 func (m *MCPServer) GetMetadata() *ObjectMeta { return &m.Metadata }
 func (m *MCPServer) SetMetadata(meta ObjectMeta) {
@@ -146,6 +164,7 @@ func (m *MCPServer) MarshalStatus() (json.RawMessage, error) {
 func (m *MCPServer) UnmarshalStatus(data json.RawMessage) error {
 	return UnmarshalStatusFromStorage(data, &m.Status)
 }
+func (m *MCPServer) GetReadme() *Readme { return m.Spec.Readme }
 
 func (s *Skill) GetMetadata() *ObjectMeta { return &s.Metadata }
 func (s *Skill) SetMetadata(meta ObjectMeta) {
@@ -159,6 +178,7 @@ func (s *Skill) MarshalStatus() (json.RawMessage, error) { return MarshalStatusF
 func (s *Skill) UnmarshalStatus(data json.RawMessage) error {
 	return UnmarshalStatusFromStorage(data, &s.Status)
 }
+func (s *Skill) GetReadme() *Readme { return s.Spec.Readme }
 
 func (p *Prompt) GetMetadata() *ObjectMeta { return &p.Metadata }
 func (p *Prompt) SetMetadata(meta ObjectMeta) {
@@ -172,6 +192,7 @@ func (p *Prompt) MarshalStatus() (json.RawMessage, error) { return MarshalStatus
 func (p *Prompt) UnmarshalStatus(data json.RawMessage) error {
 	return UnmarshalStatusFromStorage(data, &p.Status)
 }
+func (p *Prompt) GetReadme() *Readme { return p.Spec.Readme }
 
 func (p *Provider) GetMetadata() *ObjectMeta { return &p.Metadata }
 func (p *Provider) SetMetadata(meta ObjectMeta) {

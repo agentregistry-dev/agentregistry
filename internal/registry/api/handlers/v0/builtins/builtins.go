@@ -1,10 +1,10 @@
 // Package builtins wires the v1alpha1 HTTP handlers for every
 // first-party Kind shipped by this repo (Agent, MCPServer, Skill,
-// Prompt, Provider, Deployment). Per-kind registration lives in
-// agent.go, mcp_server.go, skill.go, prompt.go, provider.go,
-// deployment.go — each file's init() calls Register with a typed Wire
-// closure that closes over the concrete generic type, so
-// resource.Register[T] / RegisterReadme[T] resolve at compile time.
+// Prompt, Provider, Deployment). Per-kind registration is a single
+// `register(...)` call in bindings.go's init(); resource.Register
+// handles every per-kind quirk internally (readme subresource
+// auto-detected via v1alpha1.ObjectWithReadme; per-kind authz / list
+// filtering / post-upsert / post-delete threaded through PerKindHooks).
 //
 // "Builtins" means OSS-shipped first-party kinds. Extension kinds
 // added by enterprise builds or downstream consumers do NOT register
@@ -94,10 +94,10 @@ func RegisterBuiltins(
 		if !ok {
 			continue
 		}
-		binding, ok := lookup(kind)
+		wire, ok := bindings[kind]
 		if !ok {
 			continue
 		}
-		binding.Wire(api, cfg)
+		wire(api, cfg)
 	}
 }

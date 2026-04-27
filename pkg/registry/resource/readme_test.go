@@ -13,33 +13,27 @@ import (
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/stretchr/testify/require"
 
-	builtins "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/builtins"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
-func registerAgentWithReadme(api huma.API, store *v1alpha1store.Store) {
-	cfg := resource.Config{
-		Kind:       v1alpha1.KindAgent,
-		BasePrefix: "/v0",
-		Store:      store,
-	}
-	newObj := func() *v1alpha1.Agent { return &v1alpha1.Agent{} }
-	// Readme routes first: the literal `/{name}/readme` needs to beat
-	// the generic `/{name}/{version}` route at the shared depth.
-	resource.RegisterReadme[*v1alpha1.Agent](api, cfg, newObj, func(obj *v1alpha1.Agent) *v1alpha1.Readme {
-		return obj.Spec.Readme
-	})
-	resource.Register[*v1alpha1.Agent](api, cfg, newObj)
-}
-
+// TestResourceRegister_AgentReadmeRoutesAndListProjection pins the
+// auto-registered readme subresource: when the kind's typed envelope
+// implements v1alpha1.ObjectWithReadme (Agent / MCPServer / Skill /
+// Prompt do; Provider / Deployment do not), Register wires
+// `/{plural}/{name}/readme` and the version-pinned variant inline.
+// Callers don't pass a separate readme accessor.
 func TestResourceRegister_AgentReadmeRoutesAndListProjection(t *testing.T) {
 	pool := v1alpha1store.NewV1Alpha1TestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
-	registerAgentWithReadme(api, store)
+	resource.Register(api, resource.Config{
+		Kind:       v1alpha1.KindAgent,
+		BasePrefix: "/v0",
+		Store:      store,
+	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
 
 	body := v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
@@ -86,38 +80,31 @@ func TestResourceRegister_AgentReadmeRoutesAndListProjection(t *testing.T) {
 	require.Empty(t, list.Items[0].Spec.Readme.Content, "list responses must strip heavy readme bodies")
 }
 
-func TestRegisterBuiltins_LegacyServerReadmeAlias(t *testing.T) {
+// TestRegister_NoReadmeRoutesForReadmeLessKinds pins that
+// Provider / Deployment — which do NOT implement ObjectWithReadme —
+// have no readme routes registered. A GET against the readme path 404s
+// from Huma's router (no operation registered) rather than reaching the
+// handler.
+func TestRegister_NoReadmeRoutesForReadmeLessKinds(t *testing.T) {
 	pool := v1alpha1store.NewV1Alpha1TestPool(t)
-	stores := v1alpha1store.NewV1Alpha1Stores(pool)
+	store := v1alpha1store.NewStore(pool, v1alpha1store.V1Alpha1TableFor[v1alpha1.KindProvider])
 
 	_, api := humatest.New(t)
-	builtins.RegisterBuiltins(api, "/v0", stores, nil, nil, nil, nil, builtins.PerKindHooks{})
+	resource.Register(api, resource.Config{
+		Kind:       v1alpha1.KindProvider,
+		BasePrefix: "/v0",
+		Store:      store,
+	}, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
 
-	server := v1alpha1.MCPServer{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},
-		Metadata: v1alpha1.ObjectMeta{Namespace: v1alpha1.DefaultNamespace, Name: "fetch", Version: "v1.0.0"},
-		Spec: v1alpha1.MCPServerSpec{
-			Title: "Fetch",
-			Readme: &v1alpha1.Readme{
-				ContentType: "text/markdown",
-				Content:     "# Fetch\n\nServer docs.",
-			},
-		},
-	}
+	// Seed a row so the absence of a readme route is the failure mode,
+	// not "row missing".
+	specJSON, err := json.Marshal(v1alpha1.ProviderSpec{Platform: "test"})
+	require.NoError(t, err)
+	_, err = store.Upsert(t.Context(), v1alpha1.DefaultNamespace, "p1", "v1", specJSON, v1alpha1store.UpsertOpts{})
+	require.NoError(t, err)
 
-	resp := api.Put("/v0/mcpservers/fetch/v1.0.0", server)
-	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
-
-	resp = api.Get("/v0/servers/fetch/readme")
-	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
-	var got v1alpha1.Readme
-	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
-	require.Equal(t, "# Fetch\n\nServer docs.", got.Content)
-
-	resp = api.Get("/v0/servers/fetch/versions/v1.0.0/readme")
-	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
-	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
-	require.Equal(t, "# Fetch\n\nServer docs.", got.Content)
+	resp := api.Get("/v0/providers/p1/readme")
+	require.Equal(t, http.StatusNotFound, resp.Code, resp.Body.String())
 }
 
 // TestRegisterReadme_RespectsAuthorize pins the row-level RBAC
@@ -143,11 +130,7 @@ func TestRegisterReadme_RespectsAuthorize(t *testing.T) {
 			return nil
 		},
 	}
-	newObj := func() *v1alpha1.Agent { return &v1alpha1.Agent{} }
-	resource.RegisterReadme[*v1alpha1.Agent](api, cfg, newObj, func(obj *v1alpha1.Agent) *v1alpha1.Readme {
-		return obj.Spec.Readme
-	})
-	resource.Register[*v1alpha1.Agent](api, cfg, newObj)
+	resource.Register(api, cfg, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
 
 	// Direct Store.Upsert bypasses the authorizer for seeding — we
 	// only want to test the readme path's gate, not whether PUT
@@ -184,52 +167,4 @@ func TestRegisterReadme_RespectsAuthorize(t *testing.T) {
 	var got v1alpha1.Readme
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
 	require.Equal(t, "public docs", got.Content)
-}
-
-// TestRegisterReadme_LegacyServerReadmeRespectsAuthorize pins the
-// same invariant for the legacy `/v0/servers/{name}/readme` path. The
-// legacy alias predates the generic readme subresource and bypasses
-// the regular routing, so it carries its own authz gate.
-func TestRegisterReadme_LegacyServerReadmeRespectsAuthorize(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
-	store := v1alpha1store.NewStore(pool, v1alpha1store.V1Alpha1TableFor[v1alpha1.KindMCPServer])
-
-	_, api := humatest.New(t)
-	cfg := resource.Config{
-		Kind:       v1alpha1.KindMCPServer,
-		BasePrefix: "/v0",
-		Store:      store,
-		Authorize: func(ctx context.Context, in resource.AuthorizeInput) error {
-			if in.Verb == "get" && in.Name == "secret-server" {
-				return huma.Error403Forbidden("denied")
-			}
-			return nil
-		},
-	}
-	resource.RegisterLegacyServerReadme(api, cfg)
-
-	specJSON, err := json.Marshal(v1alpha1.MCPServerSpec{
-		Title:  "Secret",
-		Readme: &v1alpha1.Readme{ContentType: "text/markdown", Content: "internal"},
-	})
-	require.NoError(t, err)
-	_, err = store.Upsert(t.Context(), v1alpha1.DefaultNamespace, "secret-server", "v1", specJSON, v1alpha1store.UpsertOpts{})
-	require.NoError(t, err)
-
-	publicSpecJSON, err := json.Marshal(v1alpha1.MCPServerSpec{
-		Title:  "Public",
-		Readme: &v1alpha1.Readme{ContentType: "text/markdown", Content: "public"},
-	})
-	require.NoError(t, err)
-	_, err = store.Upsert(t.Context(), v1alpha1.DefaultNamespace, "public-server", "v1", publicSpecJSON, v1alpha1store.UpsertOpts{})
-	require.NoError(t, err)
-
-	resp := api.Get("/v0/servers/secret-server/readme")
-	require.Equal(t, http.StatusForbidden, resp.Code, resp.Body.String())
-
-	resp = api.Get("/v0/servers/secret-server/versions/v1/readme")
-	require.Equal(t, http.StatusForbidden, resp.Code, resp.Body.String())
-
-	resp = api.Get("/v0/servers/public-server/readme")
-	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 }
