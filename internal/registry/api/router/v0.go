@@ -118,7 +118,15 @@ func RegisterRoutes(
 	// Deployment reconciliation hooks plug in when the coordinator is
 	// supplied.
 	if len(opts.V1Alpha1Stores) > 0 {
-		registerV1Alpha1Routes(api, pathPrefix, opts.V1Alpha1Stores, opts.V1Alpha1DeploymentCoordinator, opts.V1Alpha1SemanticSearch, opts.V1Alpha1PerKindHooks, opts.V1Alpha1RegistryValidator)
+		registerV1Alpha1Routes(
+			api,
+			pathPrefix,
+			opts.V1Alpha1Stores,
+			opts.V1Alpha1DeploymentCoordinator,
+			opts.V1Alpha1SemanticSearch,
+			opts.V1Alpha1PerKindHooks,
+			opts.V1Alpha1RegistryValidator,
+		)
 	}
 
 	// POST /v0/import — runs decoded manifests through the enrichment

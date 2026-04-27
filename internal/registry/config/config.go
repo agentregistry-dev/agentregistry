@@ -41,9 +41,7 @@ type Config struct {
 }
 
 // EmbeddingsConfig captures configuration needed to generate embeddings.
-// Resurrected from the cruft-sweep commit (58401c7) that dropped it when
-// the indexer stack was removed; brought back to drive the v1alpha1
-// embeddings restore. Enabled=false keeps the indexer dormant and the
+// Enabled=false keeps the indexer dormant and the
 // semantic_embedding columns NULL on every row.
 type EmbeddingsConfig struct {
 	Enabled       bool   `env:"EMBEDDINGS_ENABLED" envDefault:"false"`
