@@ -186,12 +186,17 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 }
 
 func buildStoresAndImporter(pool *pgxpool.Pool, registryValidator v1alpha1.RegistryValidatorFunc) (map[string]*v1alpha1store.Store, *pkgimporter.Importer) {
-	if pool == nil {
-		slog.Info("v1alpha1 routes disabled: database Pool() is nil (likely noop/DatabaseFactory)")
-		return nil, nil
-	}
-
 	stores := v1alpha1store.NewStores(pool)
+
+	// pool == nil is the noop/DatabaseFactory path used by gen-openapi
+	// and the release-openapi make target. Routes still register so the
+	// generated OpenAPI captures every endpoint, but actual queries
+	// would crash on the nil pool — that's fine because the noop path
+	// never serves real traffic.
+	if pool == nil {
+		slog.Info("v1alpha1 routes registered against nil pool: query path will panic if exercised (likely noop/DatabaseFactory)")
+		return stores, nil
+	}
 
 	// GITHUB_TOKEN (when set in env) authenticates scanner fetches
 	// against GitHub's contents + repo API to raise the 60 req/hr
