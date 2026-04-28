@@ -115,7 +115,10 @@ func ensureTemplate(ctx context.Context, adminConn *pgx.Conn) error {
 	}
 	defer func() { _ = templateConn.Close(ctx) }()
 
-	mig := pkgdb.NewMigrator(templateConn, MigratorConfig())
+	// Tests always apply the embeddings migration so the embeddings
+	// integration suite can exercise the schema. Production gates this
+	// via cfg.Embeddings.Enabled — see NewPostgreSQL.
+	mig := pkgdb.NewMigrator(templateConn, MigratorConfig(true))
 	if err := mig.Migrate(ctx); err != nil {
 		return fmt.Errorf("apply v1alpha1 migrations: %w", err)
 	}

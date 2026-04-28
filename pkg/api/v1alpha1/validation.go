@@ -115,7 +115,32 @@ const maxVersionLen = 255
 // ValidateObjectMeta checks the namespace/name/version format and label
 // shape. Server-managed fields (Generation, CreatedAt, UpdatedAt,
 // DeletionTimestamp) are ignored.
+//
+// Use this for kinds where multiple coexisting versions of the same
+// (namespace, name) carry meaning — Agent, MCPServer, Skill, Prompt
+// (publishable artifacts). For kinds whose versioning is semantically
+// empty (Provider is a connection handle, Deployment is a runtime
+// binding), call ValidateObjectMetaUnversioned instead so callers
+// aren't forced to fabricate a placeholder version string.
 func ValidateObjectMeta(m ObjectMeta) FieldErrors {
+	errs := validateObjectMetaCommon(m)
+	if err := validateVersion(m.Version); err != nil {
+		errs.Append("metadata.version", err)
+	}
+	return errs
+}
+
+// ValidateObjectMetaUnversioned is ValidateObjectMeta minus the
+// version-required check. Kinds whose identity is fully captured by
+// (namespace, name) — Provider, Deployment — call this so users
+// don't have to make up a placeholder version. The storage layer
+// still requires a version string in the 3-tuple PK, but kinds opting
+// in here treat it as opaque (typically the constant "1").
+func ValidateObjectMetaUnversioned(m ObjectMeta) FieldErrors {
+	return validateObjectMetaCommon(m)
+}
+
+func validateObjectMetaCommon(m ObjectMeta) FieldErrors {
 	var errs FieldErrors
 
 	switch {
@@ -130,10 +155,6 @@ func ValidateObjectMeta(m ObjectMeta) FieldErrors {
 		errs.Append("metadata.name", fmt.Errorf("%w", ErrRequiredField))
 	case !nameRegex.MatchString(m.Name):
 		errs.Append("metadata.name", fmt.Errorf("%w: %q", ErrInvalidFormat, m.Name))
-	}
-
-	if err := validateVersion(m.Version); err != nil {
-		errs.Append("metadata.version", err)
 	}
 
 	for key, val := range m.Labels {

@@ -17,6 +17,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/noop"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
@@ -126,12 +127,13 @@ func TestDeploymentDelete_TriggersAdapterRemove(t *testing.T) {
 	delResp := api.Delete("/v0/deployments/weather-noop/1")
 	require.Equal(t, http.StatusNoContent, delResp.Code, delResp.Body.String())
 
-	// Row should be soft-deleted (DeletionTimestamp set). Row lifetime
-	// past this point belongs to the GC pass; the adapter Remove hook
-	// just contributes the Removed condition.
-	raw, err := stores[v1alpha1.KindDeployment].Get(t.Context(), "default", "weather-noop", "1")
-	require.NoError(t, err)
-	require.NotNil(t, raw.Metadata.DeletionTimestamp, "row must be soft-deleted")
+	// Deployment carries no finalizers, so DELETE hard-deletes the row
+	// after Coordinator.Remove fires the adapter teardown. Re-apply
+	// with the same identity then succeeds without an ErrTerminating
+	// race — see commit fixing josh-pritchard's PR #455 report
+	// "Soft-delete blocks re-apply for every v1alpha1 kind."
+	_, err := stores[v1alpha1.KindDeployment].Get(t.Context(), "default", "weather-noop", "1")
+	require.ErrorIs(t, err, pkgdb.ErrNotFound, "finalizer-free row must hard-delete")
 }
 
 func TestDeploymentLogs_EmptyForNoopAdapter(t *testing.T) {

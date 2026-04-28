@@ -40,6 +40,18 @@ type MigratorConfig struct {
 	// EnsureTable creates the schema_migrations table if it doesn't exist.
 	// Set to true for OSS (creates table), false for extensions (assumes it exists from OSS).
 	EnsureTable bool
+	// Skip is an optional filter the migrator consults for each
+	// discovered migration. Returning true skips the version entirely
+	// — it isn't applied and isn't recorded as applied. Used to gate
+	// optional features (e.g. pgvector embeddings) on a runtime flag
+	// so a default install doesn't drag in unused extension prereqs.
+	//
+	// version is the pre-offset version parsed from the filename
+	// (e.g. 3 for `003_embeddings.sql`), so callers don't need to know
+	// VersionOffset to write the predicate.
+	//
+	// nil applies every migration found.
+	Skip func(version int) bool
 }
 
 // Migrator handles database migrations.
@@ -123,6 +135,15 @@ func (m *Migrator) loadMigrations() ([]Migration, error) {
 		version, err := strconv.Atoi(parts[0])
 		if err != nil {
 			m.logger.Error("skipping migration file with invalid version", "name", name)
+			continue
+		}
+
+		// Skip filter — runtime-feature-gated migrations (e.g. pgvector
+		// embeddings) opt out of the install set when the matching
+		// runtime flag is off, so the schema requirement matches the
+		// actual feature surface.
+		if m.config.Skip != nil && m.config.Skip(version) {
+			m.logger.Debug("skipping migration filtered by Skip", "name", name, "version", version)
 			continue
 		}
 

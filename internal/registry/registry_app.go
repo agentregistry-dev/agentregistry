@@ -433,7 +433,7 @@ func openDatabase(
 		return db, nil
 	}
 
-	baseDB, err := internaldb.NewPostgreSQL(dbCtx, cfg.DatabaseURL, authz)
+	baseDB, err := internaldb.NewPostgreSQL(dbCtx, cfg.DatabaseURL, authz, cfg.Embeddings.Enabled)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to PostgreSQL: %w", err)
 	}

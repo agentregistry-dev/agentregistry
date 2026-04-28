@@ -92,14 +92,13 @@ spec:
 	require.NoError(t, err)
 	require.Len(t, items, 1)
 
-	// Delete → row flips to terminating (soft-delete). GetLatest stops
-	// seeing it because recomputeLatest excludes terminating rows; the
-	// exact-version Get still returns the row with deletionTimestamp set.
+	// Delete → finalizer-free Agent hard-deletes immediately. Both
+	// GetLatest and the exact-version Get return ErrNotFound; the row
+	// is gone, not soft-deleted.
 	require.NoError(t, c.Delete(ctx, v1alpha1.KindAgent, "default", "acme/planner", "v1.0.0"))
 
-	raw, err = c.Get(ctx, v1alpha1.KindAgent, "default", "acme/planner", "v1.0.0")
-	require.NoError(t, err)
-	require.NotNil(t, raw.Metadata.DeletionTimestamp)
+	_, err = c.Get(ctx, v1alpha1.KindAgent, "default", "acme/planner", "v1.0.0")
+	require.ErrorIs(t, err, client.ErrNotFound)
 
 	_, err = c.GetLatest(ctx, v1alpha1.KindAgent, "default", "acme/planner")
 	require.ErrorIs(t, err, client.ErrNotFound)

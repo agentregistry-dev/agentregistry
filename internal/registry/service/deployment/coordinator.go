@@ -283,8 +283,15 @@ func (c *Coordinator) persistApplyResult(ctx context.Context, deployment *v1alph
 }
 
 // persistRemoveResult merges adapter-returned Conditions for an
-// already-removed deployment. Soft-delete + GC own row lifetime; the
-// adapter's job is purely external-state teardown.
+// already-removed deployment. The hook fires from the Delete
+// PostDelete path, which now hard-deletes finalizer-free rows
+// synchronously — so the row may already be gone by the time we get
+// here, in which case there's nothing to patch and ErrNotFound is the
+// expected (not failure) outcome. Adapters that want their teardown
+// status reflected on the row should attach a finalizer at apply time,
+// drain it after teardown, and let PurgeFinalized hard-delete on the
+// next pass — the soft-delete branch leaves the row visible long
+// enough for the patch to land.
 func (c *Coordinator) persistRemoveResult(ctx context.Context, deployment *v1alpha1.Deployment, result *types.RemoveResult) error {
 	if result == nil {
 		return nil
@@ -306,6 +313,12 @@ func (c *Coordinator) persistRemoveResult(ctx context.Context, deployment *v1alp
 		return nil
 	}
 	if err := store.ApplyPatch(ctx, deployment.Metadata.Namespace, deployment.Metadata.Name, deployment.Metadata.Version, patch); err != nil {
+		if errors.Is(err, pkgdb.ErrNotFound) {
+			// Row already hard-deleted (finalizer-free fast path) — no
+			// place to record the Removed condition. Adapter teardown
+			// already ran successfully; this is a clean exit.
+			return nil
+		}
 		return fmt.Errorf("persist remove result: %w", err)
 	}
 	return nil

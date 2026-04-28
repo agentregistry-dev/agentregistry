@@ -131,31 +131,31 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 2, row.Metadata.Generation)
 
-	// DELETE — soft-delete: 204, but the row remains with a deletionTimestamp.
+	// DELETE — finalizer-free row hard-deletes immediately. (The
+	// soft-delete + drain dance only kicks in for finalizer-bearing
+	// rows; see TestResourceRegister_DeleteHardDeletesFinalizerFree.)
 	resp = api.Delete("/v0/agents/alice/v1.0.0")
 	require.Equal(t, http.StatusNoContent, resp.Code)
 
-	// Default GET excludes terminating rows; GetLatest returns 404.
+	// GetLatest returns 404 — row is gone.
 	resp = api.Get("/v0/agents/alice")
 	require.Equal(t, http.StatusNotFound, resp.Code, resp.Body.String())
 
-	// GET on the exact version still finds the terminating row (soft-delete).
+	// GET on the exact version returns 404 too.
 	resp = api.Get("/v0/agents/alice/v1.0.0")
-	require.Equal(t, http.StatusOK, resp.Code)
-	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
-	require.NotNil(t, gotAgent.Metadata.DeletionTimestamp)
+	require.Equal(t, http.StatusNotFound, resp.Code)
 
-	// Default list hides terminating rows.
+	// List is empty.
 	resp = api.Get("/v0/agents")
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Empty(t, list.Items)
 
-	// includeTerminating=true surfaces them.
+	// includeTerminating=true also empty since there's no terminating row.
 	resp = api.Get("/v0/agents?includeTerminating=true")
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
-	require.Len(t, list.Items, 1)
+	require.Empty(t, list.Items)
 }
 
 func TestResourceRegister_AgentNamespaceIsolation(t *testing.T) {
@@ -436,7 +436,13 @@ func mustSpec(t *testing.T, spec any) []byte {
 	return b
 }
 
-func TestResourceRegister_SoftDeleteAndPurge(t *testing.T) {
+// TestResourceRegister_DeleteHardDeletesFinalizerFree pins the K8s
+// fast-path: rows with no finalizers hard-delete synchronously on
+// DELETE. Without it, "DELETE then PUT same identity" hits
+// ErrTerminating until the (currently non-existent) GC purges the row.
+// Reported by josh-pritchard on PR #455 ("Soft-delete blocks re-apply
+// for every v1alpha1 kind"); fixed at the Store layer.
+func TestResourceRegister_DeleteHardDeletesFinalizerFree(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
@@ -452,27 +458,26 @@ func TestResourceRegister_SoftDeleteAndPurge(t *testing.T) {
 	resp := api.Put("/v0/agents/soft/v1", body)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
-	// DELETE sets deletionTimestamp; row remains until GC.
+	// DELETE on a finalizer-free row hard-deletes immediately.
 	resp = api.Delete("/v0/agents/soft/v1")
 	require.Equal(t, http.StatusNoContent, resp.Code)
 
-	// Row is still fetchable with deletionTimestamp set.
+	// GET returns 404 — row is gone, not terminating.
 	resp = api.Get("/v0/agents/soft/v1")
-	require.Equal(t, http.StatusOK, resp.Code)
-	var gotAgent v1alpha1.Agent
-	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
-	require.NotNil(t, gotAgent.Metadata.DeletionTimestamp)
-
-	// PurgeFinalized hard-deletes terminating rows (the public API has
-	// no finalizer surface anymore — every soft-deleted row is GC-eligible
-	// once it lands in `finalizers = '[]'`, which is the default).
-	purged, err := store.PurgeFinalized(t.Context())
-	require.NoError(t, err)
-	require.EqualValues(t, 1, purged)
-
-	// Final GET: 404.
-	resp = api.Get("/v0/agents/fin/v1")
 	require.Equal(t, http.StatusNotFound, resp.Code)
+
+	// Re-apply with the same (name, version) succeeds — no
+	// "object is terminating" race since the row is fully removed.
+	resp = api.Put("/v0/agents/soft/v1", body)
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
+	// Generation is server-managed (json:"-") so it doesn't appear on
+	// the wire; check directly against the store. A re-applied row
+	// after hard-delete is a fresh create, so generation resets to 1.
+	row, err := store.Get(t.Context(), "default", "soft", "v1")
+	require.NoError(t, err)
+	require.EqualValues(t, 1, row.Metadata.Generation,
+		"re-apply after hard-delete must reset generation to 1")
 }
 
 // TestResourceRegister_PostUpsertFailureLeavesPersistedRow pins the

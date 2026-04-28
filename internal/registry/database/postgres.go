@@ -23,7 +23,13 @@ type PostgreSQL struct {
 // NewPostgreSQL opens a pool against connectionURI, runs the v1alpha1
 // migrations against it, and returns a *PostgreSQL ready for use by the
 // generic v1alpha1 Store.
-func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authorizer) (*PostgreSQL, error) {
+//
+// embeddingsEnabled gates the pgvector migration. When false, the
+// 003_embeddings.sql migration is skipped so a vanilla PostgreSQL
+// install (no pgvector extension) succeeds — semantic search /
+// indexing remains unavailable until the flag flips on, at which
+// point the migration applies on next boot.
+func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authorizer, embeddingsEnabled bool) (*PostgreSQL, error) {
 	config, err := pgxpool.ParseConfig(connectionURI)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse PostgreSQL config: %w", err)
@@ -50,7 +56,7 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 	}
 	defer conn.Release()
 
-	v1alpha1Migrator := database.NewMigrator(conn.Conn(), v1alpha1store.MigratorConfig())
+	v1alpha1Migrator := database.NewMigrator(conn.Conn(), v1alpha1store.MigratorConfig(embeddingsEnabled))
 	if err := v1alpha1Migrator.Migrate(ctx); err != nil {
 		return nil, fmt.Errorf("failed to run v1alpha1 migrations: %w", err)
 	}

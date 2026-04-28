@@ -5,15 +5,29 @@ import (
 	"fmt"
 )
 
+// Validate runs Deployment's structural checks.
+//
+// Deployment is unversioned: it's a runtime binding ("deploy resource X
+// to provider Y"). The thing being deployed already carries its own
+// version via spec.targetRef.version; the Deployment row's own
+// metadata.version doesn't track anything observable. (namespace, name)
+// is the identity; callers pin metadata.version to a constant ("1").
 func (d *Deployment) Validate() error {
 	var errs FieldErrors
-	errs = append(errs, ValidateObjectMeta(d.Metadata)...)
+	errs = append(errs, ValidateObjectMetaUnversioned(d.Metadata)...)
 	errs = append(errs, validateDeploymentSpec(&d.Spec)...)
 	if len(errs) == 0 {
 		return nil
 	}
 	return errs
 }
+
+// DefaultMetadataVersion satisfies MetadataVersionDefaulter so YAML
+// manifests for Deployment can omit metadata.version. The constant
+// "1" goes into the (namespace, name, version) PK; the thing being
+// deployed already carries its own semantic version via
+// spec.targetRef.version.
+func (d *Deployment) DefaultMetadataVersion() string { return "1" }
 
 // ResolveRefs checks that TargetRef and ProviderRef both resolve. The
 // referenced objects must live in the referenced namespace; when

@@ -164,7 +164,14 @@ func TestStore_GetNotFound(t *testing.T) {
 	require.True(t, errors.Is(err, pkgdb.ErrNotFound))
 }
 
-func TestStore_DeleteSoftAndPromoteLatest(t *testing.T) {
+// TestStore_DeleteFinalizerFreeHardDeletes pins the K8s-style fast
+// path: a row with no finalizers hard-deletes synchronously rather
+// than going through soft-delete + GC. Without this, "arctl delete X"
+// followed by "arctl apply X" hits ErrTerminating until the (currently
+// non-existent) periodic GC purges the row, blocking re-apply
+// indefinitely. Reported by josh-pritchard on PR #455:
+// "Soft-delete blocks re-apply for every v1alpha1 kind."
+func TestStore_DeleteFinalizerFreeHardDeletes(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -176,18 +183,65 @@ func TestStore_DeleteSoftAndPromoteLatest(t *testing.T) {
 
 	require.NoError(t, store.Delete(ctx, testNS, "foo", "v2"))
 
+	// is_latest_version recomputes off the surviving live rows.
 	latest, err := store.GetLatest(ctx, testNS, "foo")
 	require.NoError(t, err)
 	require.Equal(t, "v1", latest.Metadata.Version)
 
-	v2, err := store.Get(ctx, testNS, "foo", "v2")
-	require.NoError(t, err)
-	require.NotNil(t, v2.Metadata.DeletionTimestamp)
-
-	err = store.Delete(ctx, testNS, "foo", "v99")
+	// v2 is gone — not soft-deleted, fully removed.
+	_, err = store.Get(ctx, testNS, "foo", "v2")
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 
-	require.NoError(t, store.Delete(ctx, testNS, "foo", "v2"))
+	// Re-apply with the same identity is a fresh row, generation 1.
+	res, err := store.Upsert(ctx, testNS, "foo", "v2", mustSpec(t, v1alpha1.AgentSpec{Title: "reborn"}), UpsertOpts{})
+	require.NoError(t, err)
+	require.True(t, res.Created, "re-applied row must be a fresh create after hard-delete")
+	require.EqualValues(t, 1, res.Generation)
+
+	// Deleting a missing version still errors.
+	err = store.Delete(ctx, testNS, "foo", "v99")
+	require.ErrorIs(t, err, pkgdb.ErrNotFound)
+}
+
+// TestStore_DeleteWithFinalizersSoftDeletes pins the slower path:
+// rows that carry finalizers go through the K8s soft-delete dance —
+// deletion_timestamp set, row stays visible to Get, finalizer must
+// drain before PurgeFinalized actually removes the row. Re-apply
+// before the drain returns ErrTerminating.
+func TestStore_DeleteWithFinalizersSoftDeletes(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	_, err := store.Upsert(ctx, testNS, "foo", "v1", mustSpec(t, v1alpha1.AgentSpec{}), UpsertOpts{})
+	require.NoError(t, err)
+
+	// Attach a finalizer out-of-band so Delete takes the soft-delete branch.
+	require.NoError(t, store.PatchFinalizers(ctx, testNS, "foo", "v1",
+		func([]string) []string { return []string{"finalizer.example.com"} }))
+
+	require.NoError(t, store.Delete(ctx, testNS, "foo", "v1"))
+
+	// Row stays visible — terminating, but not gone.
+	row, err := store.Get(ctx, testNS, "foo", "v1")
+	require.NoError(t, err)
+	require.NotNil(t, row.Metadata.DeletionTimestamp)
+
+	// Re-apply against the terminating row is rejected.
+	_, err = store.Upsert(ctx, testNS, "foo", "v1", mustSpec(t, v1alpha1.AgentSpec{}), UpsertOpts{})
+	require.ErrorIs(t, err, ErrTerminating)
+
+	// Drain the finalizer + PurgeFinalized → row is gone, re-apply
+	// becomes a fresh create.
+	require.NoError(t, store.PatchFinalizers(ctx, testNS, "foo", "v1",
+		func([]string) []string { return nil }))
+	purged, err := store.PurgeFinalized(ctx)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, purged, int64(1))
+
+	res, err := store.Upsert(ctx, testNS, "foo", "v1", mustSpec(t, v1alpha1.AgentSpec{}), UpsertOpts{})
+	require.NoError(t, err)
+	require.True(t, res.Created)
 }
 
 // TestStore_UpsertRejectsTerminatingRow guards the Kubernetes-style
@@ -307,12 +361,17 @@ func TestStore_List(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, teamAOwnerX, 1)
 
+	// Attach a finalizer so the next Delete takes the soft-delete branch
+	// rather than the finalizer-free fast-path (which hard-deletes).
+	require.NoError(t, store.PatchFinalizers(ctx, "team-a", "a", "v1",
+		func([]string) []string { return []string{"finalizer.example.com"} }))
 	require.NoError(t, store.Delete(ctx, "team-a", "a", "v1"))
 
 	alive, _, err := store.List(ctx, ListOpts{})
 	require.NoError(t, err)
 	require.Len(t, alive, 2)
 
+	// IncludeTerminating exposes the soft-deleted row.
 	withTerm, _, err := store.List(ctx, ListOpts{IncludeTerminating: true})
 	require.NoError(t, err)
 	require.Len(t, withTerm, 3)

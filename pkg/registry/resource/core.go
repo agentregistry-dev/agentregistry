@@ -80,6 +80,23 @@ func applyCore(
 	meta := obj.GetMetadata()
 	kind := obj.GetKind()
 
+	// Stamp default metadata.version for kinds that opt out of the
+	// version-required validator (Provider, Deployment) — see
+	// v1alpha1.MetadataVersionDefaulter. Without this, a YAML manifest
+	// for an unversioned kind could pass Validate but fail at the
+	// store's `version != ""` check since the 3-tuple PK still
+	// requires it. Stamping here keeps the path uniform: every kind
+	// reaches Upsert with a non-empty version regardless of whether
+	// the caller supplied one.
+	if meta.Version == "" {
+		if defaulter, ok := obj.(v1alpha1.MetadataVersionDefaulter); ok {
+			if def := defaulter.DefaultMetadataVersion(); def != "" {
+				meta.Version = def
+				obj.SetMetadata(*meta)
+			}
+		}
+	}
+
 	if opts.Authorize != nil {
 		if err := opts.Authorize(ctx, AuthorizeInput{
 			Verb: "apply", Kind: kind,

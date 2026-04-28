@@ -485,44 +485,92 @@ func (s *Store) GetLatest(ctx context.Context, namespace, name string) (*v1alpha
 	return scanRow(row)
 }
 
-// Delete soft-deletes a single row: it sets deletion_timestamp to NOW()
-// without removing the row. Callers with finalizers will see the
-// terminating row until they remove their finalizer via PatchFinalizers;
-// GC (PurgeFinalized) hard-deletes rows whose finalizers slice is empty
-// AND deletion_timestamp is set.
+// Delete removes a single row. Finalizer-bearing rows go through
+// soft-delete (deletion_timestamp set, row stays visible until
+// finalizers drain via PatchFinalizers, then PurgeFinalized hard-deletes).
+// Rows with no finalizers hard-delete immediately — matches Kubernetes,
+// where a finalizer-free object is gone the moment the API server
+// processes the DELETE call.
+//
+// The fast-path matters in practice: Deployment / Provider / Role /
+// most kinds today carry no finalizers, so without it `arctl delete X`
+// then `arctl apply X` would race the (currently non-existent)
+// background GC and hit ErrTerminating until something else purged the
+// row. With the fast-path, delete-then-reapply just works for the
+// common case while the soft-delete + drain dance is preserved for
+// kinds that actually use finalizers.
 //
 // On success, recomputes is_latest_version across surviving non-
 // terminating rows for this (namespace, name). Returns pkgdb.ErrNotFound
 // if the row doesn't exist.
 func (s *Store) Delete(ctx context.Context, namespace, name, version string) error {
 	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx,
+		var (
+			finalizersRaw []byte
+			deletionTS    pgtype.Timestamptz
+		)
+		err := tx.QueryRow(ctx,
 			fmt.Sprintf(`
-				UPDATE %s SET deletion_timestamp = NOW()
+				SELECT finalizers, deletion_timestamp
+				FROM %s
 				WHERE namespace=$1 AND name=$2 AND version=$3
-				  AND deletion_timestamp IS NULL`, s.table),
-			namespace, name, version)
+				FOR UPDATE`, s.table),
+			namespace, name, version).Scan(&finalizersRaw, &deletionTS)
 		if err != nil {
-			return fmt.Errorf("mark terminating: %w", err)
-		}
-		if tag.RowsAffected() == 0 {
-			// Either the row doesn't exist or it's already terminating.
-			// Distinguish so callers get a useful error.
-			var exists bool
-			err := tx.QueryRow(ctx,
-				fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %s WHERE namespace=$1 AND name=$2 AND version=$3)", s.table),
-				namespace, name, version).Scan(&exists)
-			if err != nil {
-				return fmt.Errorf("check existence: %w", err)
-			}
-			if !exists {
+			if errors.Is(err, pgx.ErrNoRows) {
 				return pkgdb.ErrNotFound
 			}
-			// Already terminating — idempotent delete, no further action.
+			return fmt.Errorf("load row: %w", err)
+		}
+
+		// Finalizer-free → hard-delete immediately. Same logic
+		// PurgeFinalized would run on a separate GC pass; collapsing it
+		// into Delete avoids the "object is terminating; delete + re-apply
+		// once GC purges the row" race that blocks re-apply with no GC
+		// running.
+		hasFinalizers, err := jsonArrayNonEmpty(finalizersRaw)
+		if err != nil {
+			return fmt.Errorf("inspect finalizers: %w", err)
+		}
+		if !hasFinalizers {
+			if _, err := tx.Exec(ctx,
+				fmt.Sprintf(`DELETE FROM %s WHERE namespace=$1 AND name=$2 AND version=$3`, s.table),
+				namespace, name, version); err != nil {
+				return fmt.Errorf("hard delete: %w", err)
+			}
+			return s.recomputeLatest(ctx, tx, namespace, name)
+		}
+
+		// Already terminating with finalizers attached — idempotent
+		// delete, no further action.
+		if deletionTS.Valid {
 			return nil
+		}
+
+		// Soft-delete: row has finalizers, mark terminating and wait
+		// for them to drain.
+		if _, err := tx.Exec(ctx,
+			fmt.Sprintf(`UPDATE %s SET deletion_timestamp = NOW()
+			             WHERE namespace=$1 AND name=$2 AND version=$3`, s.table),
+			namespace, name, version); err != nil {
+			return fmt.Errorf("mark terminating: %w", err)
 		}
 		return s.recomputeLatest(ctx, tx, namespace, name)
 	})
+}
+
+// jsonArrayNonEmpty reports whether raw decodes to a JSON array with
+// at least one element. Used by Delete to distinguish finalizer-free
+// rows (hard-delete fast path) from rows that need soft-delete + drain.
+func jsonArrayNonEmpty(raw []byte) (bool, error) {
+	if len(raw) == 0 {
+		return false, nil
+	}
+	var arr []json.RawMessage
+	if err := json.Unmarshal(raw, &arr); err != nil {
+		return false, err
+	}
+	return len(arr) > 0, nil
 }
 
 // PurgeFinalized hard-deletes rows whose deletion_timestamp is set AND
