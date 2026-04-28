@@ -153,8 +153,8 @@ type AppOptions struct {
 	// the build doesn't want enforced (e.g. wrap registries.Dispatcher
 	// and short-circuit RegistryTypeOCI to nil), or pass an explicit
 	// no-op (`func(...) error { return nil }`) to disable per-package
-	// registry validation entirely. Cross-kind ResourceRef + unique
-	// remote URL checks still run regardless.
+	// registry validation entirely. Cross-kind ResourceRef checks still
+	// run regardless.
 	V1Alpha1RegistryValidator v1alpha1.RegistryValidatorFunc
 
 	// ExtraRoutes allows external integrations to register additional HTTP
