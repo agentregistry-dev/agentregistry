@@ -13,11 +13,11 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
-func TestImportBuiltinSeedDataV1Alpha1_Populates(t *testing.T) {
+func TestImportBuiltinSeedData_Populates(t *testing.T) {
 	pool := v1alpha1store.NewV1Alpha1TestPool(t)
 	ctx := context.Background()
 
-	require.NoError(t, ImportBuiltinSeedDataV1Alpha1(ctx, pool))
+	require.NoError(t, ImportBuiltinSeedData(ctx, pool))
 
 	store := v1alpha1store.NewStore(pool, "v1alpha1.mcp_servers")
 
@@ -35,11 +35,11 @@ func TestImportBuiltinSeedDataV1Alpha1_Populates(t *testing.T) {
 	require.Equal(t, len(rows), len(withLabel))
 }
 
-func TestImportBuiltinSeedDataV1Alpha1_Idempotent(t *testing.T) {
+func TestImportBuiltinSeedData_Idempotent(t *testing.T) {
 	pool := v1alpha1store.NewV1Alpha1TestPool(t)
 	ctx := context.Background()
 
-	require.NoError(t, ImportBuiltinSeedDataV1Alpha1(ctx, pool))
+	require.NoError(t, ImportBuiltinSeedData(ctx, pool))
 
 	store := v1alpha1store.NewStore(pool, "v1alpha1.mcp_servers")
 	rows, _, err := store.List(ctx, v1alpha1store.ListOpts{Limit: 1000})
@@ -58,18 +58,18 @@ func TestImportBuiltinSeedDataV1Alpha1_Idempotent(t *testing.T) {
 	gen := sample.Metadata.Generation
 
 	// Re-seed — generation must not change (spec bytes unchanged ⇒ no bump).
-	require.NoError(t, ImportBuiltinSeedDataV1Alpha1(ctx, pool))
+	require.NoError(t, ImportBuiltinSeedData(ctx, pool))
 
 	reread, err := store.Get(ctx, sample.Metadata.Namespace, sample.Metadata.Name, sample.Metadata.Version)
 	require.NoError(t, err)
 	require.Equal(t, gen, reread.Metadata.Generation, "re-seed must not bump generation")
 }
 
-func TestImportBuiltinSeedDataV1Alpha1_SpecStructure(t *testing.T) {
+func TestImportBuiltinSeedData_SpecStructure(t *testing.T) {
 	pool := v1alpha1store.NewV1Alpha1TestPool(t)
 	ctx := context.Background()
 
-	require.NoError(t, ImportBuiltinSeedDataV1Alpha1(ctx, pool))
+	require.NoError(t, ImportBuiltinSeedData(ctx, pool))
 
 	store := v1alpha1store.NewStore(pool, "v1alpha1.mcp_servers")
 	rows, _, err := store.List(ctx, v1alpha1store.ListOpts{Limit: 500})

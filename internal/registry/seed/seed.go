@@ -19,9 +19,8 @@ import (
 //go:embed seed.json
 var builtinSeedData []byte
 
-// ImportBuiltinSeedDataV1Alpha1 populates the v1alpha1.mcp_servers table
-// from the embedded seed.json corpus on first boot. Intended as the
-// v1alpha1 replacement for ImportBuiltinSeedData (legacy).
+// ImportBuiltinSeedData populates the v1alpha1.mcp_servers table from
+// the embedded seed.json corpus on first boot.
 //
 // Idempotent: each row is Upserted in the "default" namespace under its
 // (name, version) identity. Re-running on a populated DB bumps nothing
@@ -33,8 +32,8 @@ var builtinSeedData []byte
 // vocabulary differences (e.g. `repository.source=github`) that the
 // v1alpha1 validator intentionally rejects for user-authored content.
 // Server-curated seed does not go through user-validation.
-func ImportBuiltinSeedDataV1Alpha1(ctx context.Context, pool *pgxpool.Pool) error {
-	servers, err := loadSeedDataV1Alpha1(builtinSeedData)
+func ImportBuiltinSeedData(ctx context.Context, pool *pgxpool.Pool) error {
+	servers, err := loadSeedData(builtinSeedData)
 	if err != nil {
 		return fmt.Errorf("parse seed: %w", err)
 	}
@@ -165,11 +164,9 @@ type seedPackage struct {
 	Transport       seedTransport `json:"transport"`
 }
 
-// loadSeedDataV1Alpha1 decodes seed.json into the narrower shape used
-// by the v1alpha1 seeder. Separate from loadSeedData (which decodes
-// into the legacy apiv0.ServerJSON) so the legacy ImportBuiltinSeedData
-// can keep running untouched while we port.
-func loadSeedDataV1Alpha1(data []byte) ([]*seedServerJSON, error) {
+// loadSeedData decodes seed.json into the narrower shape used by the
+// seeder.
+func loadSeedData(data []byte) ([]*seedServerJSON, error) {
 	var servers []*seedServerJSON
 	if err := json.Unmarshal(data, &servers); err != nil {
 		return nil, fmt.Errorf("failed to parse seed data: %w", err)

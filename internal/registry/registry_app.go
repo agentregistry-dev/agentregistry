@@ -235,7 +235,7 @@ func startBuiltinSeedImport(cfg *config.Config, pool *pgxpool.Pool) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 		ctx = auth.WithSystemContext(ctx)
-		if err := seed.ImportBuiltinSeedDataV1Alpha1(ctx, pool); err != nil {
+		if err := seed.ImportBuiltinSeedData(ctx, pool); err != nil {
 			slog.Error("failed to import builtin seed data (v1alpha1)", "error", err)
 		}
 	}()
