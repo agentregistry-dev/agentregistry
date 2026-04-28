@@ -422,7 +422,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			return nil, huma.Error400BadRequest("metadata.version does not match path")
 		}
 
-		// Stamp resolved identity into metadata so Validate sees the
+		// Stamp resolved identity into metadata so applyCore sees the
 		// resolved values (clients may omit namespace/name/version in the
 		// body and rely on the path + query).
 		meta.Namespace = ns
@@ -430,52 +430,20 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		meta.Version = version
 		body.SetMetadata(*meta)
 
-		// Authorization — cheap, no I/O. Runs after path-stamping so the
-		// hook sees the fully-resolved identity and spec on the Object.
-		if cfg.Authorize != nil {
-			if err := cfg.Authorize(ctx, AuthorizeInput{
-				Verb: "apply", Kind: kind,
-				Namespace: ns, Name: name, Version: version,
-				Object: body,
-			}); err != nil {
-				return nil, err
-			}
+		if _, ae := applyCore(ctx, cfg.Store, body, applyOpts{
+			Authorize:         cfg.Authorize,
+			Resolver:          cfg.Resolver,
+			RegistryValidator: cfg.RegistryValidator,
+			PostUpsert:        cfg.PostUpsert,
+		}, false); ae != nil {
+			return nil, mapApplyErrorToHuma(ae, kind, ns, name, version)
 		}
 
-		// Structural validation first — cheap, no I/O.
-		if err := v1alpha1.ValidateObject(body); err != nil {
-			return nil, huma.Error400BadRequest("validation: " + err.Error())
-		}
-
-		// Ref resolution — optional, cross-kind. Skipped when no resolver
-		// is configured (e.g. kinds whose spec carries no ResourceRefs).
-		if err := v1alpha1.ResolveObjectRefs(ctx, body, cfg.Resolver); err != nil {
-			return nil, huma.Error400BadRequest("refs: " + err.Error())
-		}
-
-		// External-registry validation — optional, network-heavy.
-		// Skipped when no validator is configured.
-		if err := v1alpha1.ValidateObjectRegistries(ctx, body, cfg.RegistryValidator); err != nil {
-			return nil, huma.Error400BadRequest("registries: " + err.Error())
-		}
-
-		specJSON, err := body.MarshalSpec()
-		if err != nil {
-			return nil, huma.Error400BadRequest("marshal spec: " + err.Error())
-		}
-		upsertOpts := v1alpha1store.UpsertOpts{Labels: meta.Labels}
-		if meta.Annotations != nil {
-			upsertOpts.Annotations = meta.Annotations
-		}
-		if _, err := cfg.Store.Upsert(ctx, ns, name, version, specJSON, upsertOpts); err != nil {
-			if errors.Is(err, v1alpha1store.ErrTerminating) {
-				return nil, huma.Error409Conflict(
-					fmt.Sprintf("%s %s/%s/%s is terminating; delete + re-apply once GC purges the row",
-						kind, ns, name, version))
-			}
-			return nil, huma.Error500InternalServerError("upsert "+kind, err)
-		}
-
+		// Read back so the response reflects the stored identity (assigned
+		// generation, default'd metadata) plus any status / annotation
+		// writes the PostUpsert hook performed. Failure to re-read after a
+		// successful apply degrades to a 500 rather than swallowing the
+		// already-persisted change silently.
 		row, err := cfg.Store.Get(ctx, ns, name, version)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("read back "+kind, err)
@@ -484,24 +452,6 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		if err != nil {
 			return nil, huma.Error500InternalServerError("decode "+kind, err)
 		}
-
-		if cfg.PostUpsert != nil {
-			if err := cfg.PostUpsert(ctx, obj); err != nil {
-				return nil, huma.Error500InternalServerError(kind+" post-upsert", err)
-			}
-			// Re-read so the response reflects any status / annotation
-			// writes the post-upsert hook performed (e.g. Progressing
-			// condition, adapter applied-at annotation). Failure to
-			// re-read leaves the hook changes invisible to the caller;
-			// degrade to the pre-hook view rather than fail the
-			// already-successful apply.
-			if refreshed, err := cfg.Store.Get(ctx, ns, name, version); err == nil {
-				if refreshedObj, err := v1alpha1.EnvelopeFromRaw(newObj, refreshed, kind); err == nil {
-					obj = refreshedObj
-				}
-			}
-		}
-
 		return &bodyOutput[T]{Body: obj}, nil
 	})
 
@@ -522,21 +472,13 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		if err != nil {
 			return nil, err
 		}
-		if cfg.Authorize != nil {
-			if err := cfg.Authorize(ctx, AuthorizeInput{
-				Verb: "delete", Kind: kind,
-				Namespace: ns, Name: name, Version: version,
-			}); err != nil {
-				return nil, err
-			}
-		}
+
 		// Pre-read so PostDelete has the final spec to work with.
-		// Skipped when no hook is registered, when the caller asked
+		// Skipped when no hook is registered or when the caller asked
 		// for ?force=true (skip provider teardown — orphan records /
-		// unreachable backends), or when a missing row would surface
-		// as 404 via Store.Delete below.
+		// unreachable backends).
+		var preDelete v1alpha1.Object
 		runHook := cfg.PostDelete != nil && !in.Force
-		var preDelete T
 		if runHook {
 			row, err := cfg.Store.Get(ctx, ns, name, version)
 			if err != nil {
@@ -549,20 +491,55 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			preDelete = obj
 		}
 
-		if err := cfg.Store.Delete(ctx, ns, name, version); err != nil {
-			if errors.Is(err, pkgdb.ErrNotFound) {
-				return nil, mapNotFound(err, kind, ns, name, version)
-			}
-			return nil, huma.Error500InternalServerError("delete "+kind, err)
+		dopts := deleteOpts{
+			Authorize:       cfg.Authorize,
+			PreDeleteObject: preDelete,
 		}
-
 		if runHook {
-			if err := cfg.PostDelete(ctx, preDelete); err != nil {
-				return nil, huma.Error500InternalServerError(kind+" post-delete", err)
-			}
+			dopts.PostDelete = cfg.PostDelete
+		}
+		if ae := deleteCore(ctx, cfg.Store, kind, ns, name, version, dopts); ae != nil {
+			return nil, mapApplyErrorToHuma(ae, kind, ns, name, version)
 		}
 		return &deleteOutput{}, nil
 	})
+}
+
+// mapApplyErrorToHuma translates the stage-tagged applyError surface
+// from applyCore / deleteCore into the huma error shape the
+// single-resource handlers emit. Mirrors the per-stage HTTP-status
+// policy that used to be inlined in each closure.
+func mapApplyErrorToHuma(ae *applyError, kind, ns, name, version string) error {
+	switch ae.Stage {
+	case stageAuth:
+		// Auth callbacks already return huma errors; propagate.
+		return ae.Err
+	case stageValidation:
+		return huma.Error400BadRequest("validation: " + ae.Err.Error())
+	case stageRefs:
+		return huma.Error400BadRequest("refs: " + ae.Err.Error())
+	case stageRegistries:
+		return huma.Error400BadRequest("registries: " + ae.Err.Error())
+	case stageMarshal:
+		return huma.Error400BadRequest("marshal spec: " + ae.Err.Error())
+	case stageUpsert:
+		if ae.Terminating {
+			return huma.Error409Conflict(fmt.Sprintf(
+				"%s %s/%s/%s is terminating; delete + re-apply once GC purges the row",
+					kind, ns, name, version))
+		}
+		return huma.Error500InternalServerError("upsert "+kind, ae.Err)
+	case stagePostUpsert:
+		return huma.Error500InternalServerError(kind+" post-upsert", ae.Err)
+	case stageDelete:
+		if ae.NotFound {
+			return mapNotFound(ae.Err, kind, ns, name, version)
+		}
+		return huma.Error500InternalServerError("delete "+kind, ae.Err)
+	case stagePostDelete:
+		return huma.Error500InternalServerError(kind+" post-delete", ae.Err)
+	}
+	return huma.Error500InternalServerError(kind+" "+string(ae.Stage), ae.Err)
 }
 
 // listParams bundles the query parameters the list endpoints accept.

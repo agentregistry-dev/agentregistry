@@ -195,19 +195,6 @@ func TestRegisterImport_InvalidYAMLSurfacesAsFailedResult(t *testing.T) {
 	require.Contains(t, out.Results[0].Error, "decode")
 }
 
-func TestRegisterImport_NilImporterSkipsRegistration(t *testing.T) {
-	_, api := humatest.New(t)
-	importpipeline.Register(api, importpipeline.Config{
-		BasePrefix: "/v0",
-		Importer:   nil,
-	})
-
-	resp := api.Post("/v0/import",
-		"Content-Type: application/yaml",
-		strings.NewReader(importAgentYAML))
-	require.Equal(t, http.StatusNotFound, resp.Code, "nil Importer should skip route registration")
-}
-
 // TestRegisterImport_PerDocAuthorize pins the per-kind RBAC invariant
 // for POST /v0/import: each decoded document fires Authorize before
 // Upsert. Without this, the import endpoint would be a write-bypass

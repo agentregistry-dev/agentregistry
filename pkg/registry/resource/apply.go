@@ -2,7 +2,6 @@ package resource
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -10,7 +9,6 @@ import (
 
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
@@ -147,55 +145,35 @@ func runApplyBatch(ctx context.Context, cfg ApplyConfig, scheme *v1alpha1.Scheme
 	return out
 }
 
-// preparedDoc is the outcome of prepareApplyDoc: either a shortcut Result
-// (populated with Status="failed" + Error) when a validation step rejected
-// the document, or a Store + ObjectMeta ready for Upsert/Delete when
-// validation passed. Exactly one of Ready / Result populated.
-type preparedDoc struct {
-	Result arv0.ApplyResult
-	Ready  bool
-	Store  *v1alpha1store.Store
-	Meta   *v1alpha1.ObjectMeta
-}
-
-// applyOne runs a single document through validation + ResolveRefs +
-// Store.Upsert (skipping Upsert on dryRun). Never errors; encodes any
-// failure into the returned ApplyResult.
+// applyOne runs a single document through the shared apply pipeline.
+// Never errors; encodes any failure into the returned ApplyResult.
 func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
-	pd := prepareApplyDoc(ctx, cfg, obj)
-	if !pd.Ready {
-		return pd.Result
+	store, meta, ae := resolveBatchTarget(cfg, obj, "apply")
+	res := arv0.ApplyResult{
+		APIVersion: obj.GetAPIVersion(),
+		Kind:       obj.GetKind(),
+		Namespace:  meta.Namespace,
+		Name:       meta.Name,
+		Version:    meta.Version,
 	}
-	res, store, meta := pd.Result, pd.Store, pd.Meta
+	if ae != nil {
+		return failResult(res, ae)
+	}
+
+	up, ae := applyCore(ctx, store, obj, applyOpts{
+		Authorize:         batchAuthorize(cfg, obj.GetKind()),
+		Resolver:          cfg.Resolver,
+		RegistryValidator: cfg.RegistryValidator,
+		PostUpsert:        cfg.PostUpserts[obj.GetKind()],
+	}, dryRun)
+	if ae != nil {
+		return failResult(res, ae)
+	}
 
 	if dryRun {
 		res.Status = arv0.ApplyStatusDryRun
 		return res
 	}
-
-	specJSON, err := obj.MarshalSpec()
-	if err != nil {
-		res.Status = arv0.ApplyStatusFailed
-		res.Error = "marshal spec: " + err.Error()
-		return res
-	}
-
-	upsertOpts := v1alpha1store.UpsertOpts{Labels: meta.Labels}
-	if meta.Annotations != nil {
-		upsertOpts.Annotations = meta.Annotations
-	}
-	up, err := store.Upsert(ctx, meta.Namespace, meta.Name, meta.Version, specJSON, upsertOpts)
-	if err != nil {
-		res.Status = arv0.ApplyStatusFailed
-		if errors.Is(err, v1alpha1store.ErrTerminating) {
-			res.Error = fmt.Sprintf("object %s/%s/%s is terminating; delete + re-apply once GC purges the row",
-				meta.Namespace, meta.Name, meta.Version)
-		} else {
-			res.Error = "upsert: " + err.Error()
-		}
-		return res
-	}
-
 	switch {
 	case up.Created:
 		res.Status = arv0.ApplyStatusCreated
@@ -205,138 +183,122 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		res.Status = arv0.ApplyStatusUnchanged
 	}
 	res.Generation = up.Generation
-
-	// Post-upsert hook (per kind) — same dispatch the per-kind
-	// handler.go runs after PUT. This is what drives the platform
-	// adapter for Deployment kind; without it a Deployment applied
-	// via batch creates the row but never reconciles to AWS / GCP /
-	// kagent runtime state.
-	if hook := cfg.PostUpserts[obj.GetKind()]; hook != nil {
-		if err := hook(ctx, obj); err != nil {
-			res.Status = arv0.ApplyStatusFailed
-			res.Error = "post-upsert: " + err.Error()
-		}
-	}
 	return res
 }
 
-// deleteOne runs a single document through validation (so 400-style
-// errors still surface) and then Store.Delete. Missing rows return
-// Status="failed" rather than a silent success.
+// deleteOne runs a single document through Authorize + Store.Delete +
+// PostDelete. No validation: deleting a row should not require its spec
+// to validate. The PostDelete hook receives the decoded body verbatim
+// — batch callers expecting hook input matching the persisted row
+// should re-apply before deleting.
 func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
-	pd := prepareApplyDoc(ctx, cfg, obj)
-	if !pd.Ready {
-		return pd.Result
+	store, meta, ae := resolveBatchTarget(cfg, obj, "delete")
+	res := arv0.ApplyResult{
+		APIVersion: obj.GetAPIVersion(),
+		Kind:       obj.GetKind(),
+		Namespace:  meta.Namespace,
+		Name:       meta.Name,
+		Version:    meta.Version,
 	}
-	res, store, meta := pd.Result, pd.Store, pd.Meta
+	if ae != nil {
+		return failResult(res, ae)
+	}
 
 	if dryRun {
 		res.Status = arv0.ApplyStatusDryRun
 		return res
 	}
 
-	if err := store.Delete(ctx, meta.Namespace, meta.Name, meta.Version); err != nil {
-		res.Status = arv0.ApplyStatusFailed
-		if errors.Is(err, pkgdb.ErrNotFound) {
-			res.Error = fmt.Sprintf("not found: %s/%s/%s", meta.Namespace, meta.Name, meta.Version)
-		} else {
-			res.Error = "delete: " + err.Error()
-		}
-		return res
+	dopts := deleteOpts{
+		Authorize:       batchAuthorize(cfg, obj.GetKind()),
+		PostDelete:      cfg.PostDeletes[obj.GetKind()],
+		PreDeleteObject: obj,
+	}
+	if ae := deleteCore(ctx, store, obj.GetKind(), meta.Namespace, meta.Name, meta.Version, dopts); ae != nil {
+		return failResult(res, ae)
 	}
 	res.Status = arv0.ApplyStatusDeleted
-
-	// Post-delete hook (per kind) — same dispatch the per-kind
-	// handler.go runs after DELETE. Mirrors PostUpserts above; without
-	// it a Deployment deleted via batch soft-deletes the row but never
-	// tears down adapter state.
-	if hook := cfg.PostDeletes[obj.GetKind()]; hook != nil {
-		if err := hook(ctx, obj); err != nil {
-			res.Status = arv0.ApplyStatusFailed
-			res.Error = "post-delete: " + err.Error()
-		}
-	}
 	return res
 }
 
-// prepareApplyDoc runs the common namespace-default + validate + refs +
-// registries + uniqueness pipeline. On success returns a preparedDoc
-// with Ready=true + Store + Meta. On failure returns Ready=false and
-// Result populated with Status=failed + Error; caller returns it
-// unchanged.
-func prepareApplyDoc(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object) preparedDoc {
+// resolveBatchTarget looks up the per-kind store and applies the
+// "default to default-namespace" + fail-closed authz-map invariants.
+// Returns a non-nil applyError on a missing kind / missing authorizer
+// so the caller can short-circuit the document. The returned meta is
+// the namespace-defaulted view (caller must SetMetadata if needed —
+// applyCore re-reads metadata after authorize so the defaulting is
+// enough as long as we mutate the obj here too).
+func resolveBatchTarget(cfg ApplyConfig, obj v1alpha1.Object, verb string) (*v1alpha1store.Store, v1alpha1.ObjectMeta, *applyError) {
 	kind := obj.GetKind()
 	meta := obj.GetMetadata()
 
-	pd := preparedDoc{
-		Result: arv0.ApplyResult{
-			APIVersion: obj.GetAPIVersion(),
-			Kind:       kind,
-			Namespace:  meta.Namespace,
-			Name:       meta.Name,
-			Version:    meta.Version,
-		},
-	}
-
 	store, ok := cfg.Stores[kind]
 	if !ok || store == nil {
-		pd.Result.Status = arv0.ApplyStatusFailed
-		pd.Result.Error = fmt.Sprintf("unknown or unconfigured kind %q", kind)
-		return pd
+		return nil, *meta, &applyError{
+			Stage: applyStage(verb),
+			Err:   fmt.Errorf("unknown or unconfigured kind %q", kind),
+		}
 	}
 
+	// Default namespace before authorize/applyCore see it. The handler.go
+	// PUT path stamps namespace from the URL; the batch path has only the
+	// YAML body to look at, so default explicitly here.
 	if meta.Namespace == "" {
 		meta.Namespace = v1alpha1.DefaultNamespace
 		obj.SetMetadata(*meta)
-		pd.Result.Namespace = meta.Namespace
 	}
 
-	// Per-kind authz fires before validation so a denied apply doesn't
-	// leak validation errors back to the caller. Same semantics as the
-	// resource handler's PUT path.
-	//
 	// Defense-in-depth: when any Authorizers are wired, a kind without
 	// an entry must DENY rather than silently allow. The enterprise H2
 	// boot guard already ensures every OSS BuiltinKinds entry has an
-	// authorizer when authz is enabled, so this only fires for
-	// downstream kinds the operator added without updating PerKindHooks
-	// — fail closed there. Mirrors the same fail-closed contract on the
-	// import handler (`f8682fb`).
+	// authorizer when authz is enabled, so this only fires for downstream
+	// kinds the operator added without updating PerKindHooks — fail
+	// closed there. Mirrors the same contract on the import handler.
 	if len(cfg.Authorizers) > 0 {
-		authz, ok := cfg.Authorizers[kind]
-		if !ok || authz == nil {
-			pd.Result.Status = arv0.ApplyStatusFailed
-			pd.Result.Error = fmt.Sprintf("forbidden: no authorizer wired for kind %q", kind)
-			return pd
-		}
-		if err := authz(ctx, AuthorizeInput{
-			Verb: "apply", Kind: kind,
-			Namespace: meta.Namespace, Name: meta.Name, Version: meta.Version,
-			Object: obj,
-		}); err != nil {
-			pd.Result.Status = arv0.ApplyStatusFailed
-			pd.Result.Error = "forbidden: " + err.Error()
-			return pd
+		if authz, ok := cfg.Authorizers[kind]; !ok || authz == nil {
+			return nil, *meta, &applyError{
+				Stage: stageAuth,
+				Err:   fmt.Errorf("forbidden: no authorizer wired for kind %q", kind),
+			}
 		}
 	}
 
-	if err := v1alpha1.ValidateObject(obj); err != nil {
-		pd.Result.Status = arv0.ApplyStatusFailed
-		pd.Result.Error = "validation: " + err.Error()
-		return pd
+	return store, *meta, nil
+}
+
+// batchAuthorize returns the per-kind authz callback wrapped to match
+// applyCore's Authorize signature. Returns nil when no authorizers are
+// wired (the OSS-default permissive path).
+func batchAuthorize(cfg ApplyConfig, kind string) func(ctx context.Context, in AuthorizeInput) error {
+	if len(cfg.Authorizers) == 0 {
+		return nil
 	}
-	if err := v1alpha1.ResolveObjectRefs(ctx, obj, cfg.Resolver); err != nil {
-		pd.Result.Status = arv0.ApplyStatusFailed
-		pd.Result.Error = "refs: " + err.Error()
-		return pd
+	return cfg.Authorizers[kind]
+}
+
+// failResult populates the ApplyResult with the stage-tagged error
+// surface batch callers expect (Status="failed", Error="<stage>: <err>"
+// or a stage-specific friendlier message).
+func failResult(res arv0.ApplyResult, ae *applyError) arv0.ApplyResult {
+	res.Status = arv0.ApplyStatusFailed
+	switch ae.Stage {
+	case stageAuth:
+		res.Error = "forbidden: " + ae.Err.Error()
+	case stageUpsert:
+		if ae.Terminating {
+			res.Error = fmt.Sprintf("object %s/%s/%s is terminating; delete + re-apply once GC purges the row",
+				res.Namespace, res.Name, res.Version)
+		} else {
+			res.Error = "upsert: " + ae.Err.Error()
+		}
+	case stageDelete:
+		if ae.NotFound {
+			res.Error = fmt.Sprintf("not found: %s/%s/%s", res.Namespace, res.Name, res.Version)
+		} else {
+			res.Error = "delete: " + ae.Err.Error()
+		}
+	default:
+		res.Error = ae.Error()
 	}
-	if err := v1alpha1.ValidateObjectRegistries(ctx, obj, cfg.RegistryValidator); err != nil {
-		pd.Result.Status = arv0.ApplyStatusFailed
-		pd.Result.Error = "registries: " + err.Error()
-		return pd
-	}
-	pd.Ready = true
-	pd.Store = store
-	pd.Meta = meta
-	return pd
+	return res
 }
