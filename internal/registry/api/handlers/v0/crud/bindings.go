@@ -1,4 +1,4 @@
-package v1alpha1crud
+package crud
 
 import (
 	"fmt"

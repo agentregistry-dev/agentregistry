@@ -10,7 +10,7 @@ import (
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/importpipeline"
 	v0ping "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/ping"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/v1alpha1crud"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/crud"
 	v0version "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/version"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
@@ -88,7 +88,7 @@ type RouteOptions struct {
 	// admin gates fire on the OSS-registered Agent / MCPServer / Skill
 	// / Prompt / Provider / Deployment endpoints. Zero-value matches
 	// the public OSS default (no per-kind gates).
-	PerKindHooks v1alpha1crud.PerKindHooks
+	PerKindHooks crud.PerKindHooks
 
 	// RegistryValidator overrides the per-package registry
 	// validator on the apply / import path. Nil falls back to
@@ -181,7 +181,7 @@ func RegisterRoutes(
 // When coord is non-nil, Deployment PUT/DELETE fire
 // coord.Apply/coord.Remove after the row is persisted so the platform
 // adapter converges runtime state synchronously with the API call.
-func registerV1Alpha1Routes(api huma.API, basePrefix string, stores Stores, coord *deploymentsvc.Coordinator, semantic resource.SemanticSearchFunc, perKind v1alpha1crud.PerKindHooks, registryValidator v1alpha1.RegistryValidatorFunc) {
+func registerV1Alpha1Routes(api huma.API, basePrefix string, stores Stores, coord *deploymentsvc.Coordinator, semantic resource.SemanticSearchFunc, perKind crud.PerKindHooks, registryValidator v1alpha1.RegistryValidatorFunc) {
 	resolver := internaldb.NewResolver(stores)
 	if registryValidator == nil {
 		registryValidator = registries.Dispatcher
@@ -218,8 +218,8 @@ func registerV1Alpha1Routes(api huma.API, basePrefix string, stores Stores, coor
 	}
 
 	// Per-kind CRUD endpoints — one call per built-in kind, hidden
-	// inside v1alpha1crud.Register.
-	v1alpha1crud.Register(api, basePrefix, stores, resolver, registryValidator, semantic, perKind)
+	// inside crud.Register.
+	crud.Register(api, basePrefix, stores, resolver, registryValidator, semantic, perKind)
 
 	// Deployment-specific endpoints: logs stream (cancel is subsumed
 	// by DesiredState=undeployed + DELETE in the v1alpha1 lifecycle).

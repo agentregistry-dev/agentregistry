@@ -1,6 +1,6 @@
 //go:build integration
 
-package v1alpha1crud_test
+package crud_test
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentlogs"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/v1alpha1crud"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/crud"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/noop"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
@@ -50,12 +50,12 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha
 	})
 
 	_, api := humatest.New(t)
-	v1alpha1crud.Register(
+	crud.Register(
 		api, "/v0", stores,
 		database.NewResolver(stores),
 		nil, // registryValidator
 		nil, // semanticSearch disabled in this test
-		v1alpha1crud.PerKindHooks{
+		crud.PerKindHooks{
 			PostUpserts: map[string]func(context.Context, v1alpha1.Object) error{
 				v1alpha1.KindDeployment: func(ctx context.Context, obj v1alpha1.Object) error {
 					return coord.Apply(ctx, obj.(*v1alpha1.Deployment))

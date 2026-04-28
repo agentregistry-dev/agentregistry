@@ -35,7 +35,7 @@ type ApplyConfig struct {
 	// against the same per-kind hook the generic resource handler
 	// consults at PUT /v0/{plural}/{name}/{version}. Without this,
 	// /v0/apply (the multi-doc batch endpoint arctl uses) bypasses the
-	// per-kind authz wired through v1alpha1crud.PerKindHooks. Missing keys
+	// per-kind authz wired through crud.PerKindHooks. Missing keys
 	// authorize-allow (matches resource.Config.Authorize == nil).
 	//
 	// Each document gets its own AuthorizeInput (Verb="apply", Kind +

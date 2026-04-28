@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/internal/client"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/v1alpha1crud"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/crud"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
@@ -31,7 +31,7 @@ func TestClient_V1Alpha1RoundTrip(t *testing.T) {
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("test", "v1"))
-	v1alpha1crud.Register(api, "/v0", stores, nil, nil, nil, v1alpha1crud.PerKindHooks{})
+	crud.Register(api, "/v0", stores, nil, nil, nil, crud.PerKindHooks{})
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
 		Stores:     stores,
@@ -149,7 +149,7 @@ func TestClient_V1Alpha1_NotFound(t *testing.T) {
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("test", "v1"))
-	v1alpha1crud.Register(api, "/v0", stores, nil, nil, nil, v1alpha1crud.PerKindHooks{})
+	crud.Register(api, "/v0", stores, nil, nil, nil, crud.PerKindHooks{})
 
 	ts := httptest.NewServer(mux)
 	defer ts.Close()

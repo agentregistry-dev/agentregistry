@@ -1,11 +1,8 @@
 // Package registryserver exposes the agentregistry over MCP so Claude +
 // other MCP clients can list and fetch resources as typed tools.
 //
-// Every tool reads through the v1alpha1 generic Store — the legacy
-// per-kind service registries are gone as of Group 9. Structured outputs
-// are v1alpha1 envelopes (apiVersion/kind/metadata/spec/status); tool
-// names are preserved so existing Claude conversations keep working even
-// as the output shape changes.
+// Every tool reads through the v1alpha1 generic Store. Structured
+// outputs are v1alpha1 envelopes (apiVersion/kind/metadata/spec/status).
 package registryserver
 
 import (
@@ -123,10 +120,8 @@ func addKindTools[T v1alpha1.Object](server *mcp.Server, store *v1alpha1store.St
 	})
 }
 
-// listInput is the shared shape for list_* tools. Kept narrow — the
-// legacy UpdatedSince / SemanticSearch filters are omitted until the
-// corresponding Store features land (Group 8). Search is a case-
-// insensitive substring filter applied server-side against
+// listInput is the shared shape for list_* tools. Search is a
+// case-insensitive substring filter applied server-side against
 // metadata.name after Store.List returns a page.
 type listInput struct {
 	Namespace string `json:"namespace,omitempty" doc:"Filter by namespace (empty = all namespaces)"`

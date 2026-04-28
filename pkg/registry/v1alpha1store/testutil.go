@@ -19,18 +19,13 @@ import (
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
-// NewTestPool spins up a fresh database with only the v1alpha1
-// schema applied (no legacy OSS migrations, no pgvector) and returns a
-// connection pool scoped to it. Each test gets its own DB, cleaned up on
-// t.Cleanup.
+// NewTestPool spins up a fresh database with the v1alpha1 schema
+// applied and returns a connection pool scoped to it. Each test gets
+// its own DB, cleaned up on t.Cleanup.
 //
-// Isolated from the legacy NewTestDB helper because the legacy template DB
-// has migrations 001-010 applied and those migrations create conflicting
-// tables. Using a distinct template name (`agent_registry_v1alpha1_template`)
-// keeps v1alpha1 tests independent.
-//
-// Requires PostgreSQL on localhost:5432 — tests skip when it's unavailable,
-// matching the legacy helper's behavior.
+// Uses a `agent_registry_v1alpha1_template` template DB to amortize
+// migration cost across tests. Requires PostgreSQL on localhost:5432;
+// tests skip when it's unavailable.
 func NewTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 

@@ -17,10 +17,8 @@ import (
 // generate an MCPServer's semantic embedding. Deterministic across runs
 // so the checksum can gate idempotent re-index passes.
 //
-// Ported from the legacy BuildServerEmbeddingPayload which operated on
-// upstream apiv0.ServerJSON. The payload shape preserves the same field
-// set minus the old _meta.publisherProvided blob (v1alpha1 has no
-// equivalent; enrichment annotations aren't part of the search payload).
+// Enrichment annotations are intentionally excluded from the payload
+// — they're scanner output, not user-authored search-relevant content.
 func BuildMCPServerEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.MCPServerSpec) string {
 	var parts []string
 	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version, spec.WebsiteURL)

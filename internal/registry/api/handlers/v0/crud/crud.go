@@ -15,7 +15,7 @@
 // First-party only: enterprise extension kinds (e.g. Role) do NOT
 // register here — they wire their own resource.Register[T] call from
 // AppOptions.ExtraRoutes (see pkg/types/types.go).
-package v1alpha1crud
+package crud
 
 import (
 	"context"

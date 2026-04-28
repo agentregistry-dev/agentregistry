@@ -3,7 +3,7 @@
 // adapter.Logs through the Coordinator and returns the captured
 // lines as JSON. The endpoint is bound to one specific kind
 // (Deployment); the rest of the v1alpha1 CRUD surface lives in
-// v1alpha1crud.
+// crud.
 package deploymentlogs
 
 import (

@@ -10,7 +10,7 @@ import (
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/stretchr/testify/require"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/v1alpha1crud"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/crud"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
@@ -57,7 +57,7 @@ func TestSemanticSearch_ListEndpointRanksByDistance(t *testing.T) {
 
 	stores := map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents}
 	_, api := humatest.New(t)
-	v1alpha1crud.Register(api, "/v0", stores, nil, nil, search, v1alpha1crud.PerKindHooks{})
+	crud.Register(api, "/v0", stores, nil, nil, search, crud.PerKindHooks{})
 
 	resp := api.Get("/v0/agents?semantic=anything")
 	require.Equal(t, 200, resp.Code, resp.Body.String())
@@ -125,7 +125,7 @@ func TestSemanticSearch_RespectsListFilterDenyList(t *testing.T) {
 
 	stores := map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents}
 	_, api := humatest.New(t)
-	v1alpha1crud.Register(api, "/v0", stores, nil, nil, search, v1alpha1crud.PerKindHooks{
+	crud.Register(api, "/v0", stores, nil, nil, search, crud.PerKindHooks{
 		ListFilters: listFilters,
 	})
 
@@ -182,7 +182,7 @@ func TestSemanticSearch_ListFilterScopeNoneReturnsEmpty(t *testing.T) {
 
 	stores := map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents}
 	_, api := humatest.New(t)
-	v1alpha1crud.Register(api, "/v0", stores, nil, nil, search, v1alpha1crud.PerKindHooks{
+	crud.Register(api, "/v0", stores, nil, nil, search, crud.PerKindHooks{
 		ListFilters: listFilters,
 	})
 
@@ -207,7 +207,7 @@ func TestSemanticSearch_ListReturns400WhenDisabled(t *testing.T) {
 	stores := map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents}
 	_, api := humatest.New(t)
 	// SemanticSearch = nil ⇒ `?semantic=` endpoint surface returns 400.
-	v1alpha1crud.Register(api, "/v0", stores, nil, nil, nil, v1alpha1crud.PerKindHooks{})
+	crud.Register(api, "/v0", stores, nil, nil, nil, crud.PerKindHooks{})
 
 	resp := api.Get("/v0/agents?semantic=anything")
 	require.Equal(t, 400, resp.Code)
