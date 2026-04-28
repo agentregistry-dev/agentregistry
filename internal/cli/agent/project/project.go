@@ -16,11 +16,9 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-// LoadAgent decodes the on-disk v1alpha1.Agent envelope at <projectDir>/agent.yaml.
-// agent.yaml must be a v1alpha1.Agent envelope (apiVersion: ar.dev/v1alpha1,
-// kind: Agent). The legacy flat-AgentManifest on-disk shape is no longer
-// supported — `arctl init agent` writes envelopes, and operators are
-// expected to keep their hand-edited agent.yaml files in the same form.
+// LoadAgent decodes the on-disk v1alpha1.Agent envelope at
+// <projectDir>/agent.yaml. The file must carry apiVersion: ar.dev/v1alpha1
+// and kind: Agent.
 //
 // LoadAgent is offline-only; the registry-side resolution of MCP server
 // refs into runnable form is done by manifest.Resolve.

@@ -1,9 +1,7 @@
 package v1alpha1
 
 // ResourceRef is a typed reference to another resource in the registry.
-// It replaces the legacy inline resource definitions (McpServerType with
-// Type/Command/Args/URL/Headers/Image/Build, RegistrySkillName, etc.) —
-// every reference is now {Kind, Namespace, Name, Version}.
+// Every reference is {Kind, Namespace, Name, Version}.
 //
 // Namespace is optional: blank means "same namespace as the referencing
 // object" (the common case). Version is optional: blank means "resolve to

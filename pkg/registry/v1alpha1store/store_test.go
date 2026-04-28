@@ -25,7 +25,7 @@ func mustSpec(t *testing.T, spec any) json.RawMessage {
 	return b
 }
 
-func TestV1Alpha1Store_UpsertCreatesRow(t *testing.T) {
+func TestStore_UpsertCreatesRow(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -46,7 +46,7 @@ func TestV1Alpha1Store_UpsertCreatesRow(t *testing.T) {
 	require.False(t, obj.Metadata.CreatedAt.IsZero())
 }
 
-func TestV1Alpha1Store_UpsertNoOpPreservesGeneration(t *testing.T) {
+func TestStore_UpsertNoOpPreservesGeneration(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -62,7 +62,7 @@ func TestV1Alpha1Store_UpsertNoOpPreservesGeneration(t *testing.T) {
 	require.EqualValues(t, 1, res.Generation)
 }
 
-func TestV1Alpha1Store_UpsertBumpsGenerationOnSpecChange(t *testing.T) {
+func TestStore_UpsertBumpsGenerationOnSpecChange(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -83,7 +83,7 @@ func TestV1Alpha1Store_UpsertBumpsGenerationOnSpecChange(t *testing.T) {
 	require.EqualValues(t, 2, obj.Metadata.Generation)
 }
 
-func TestV1Alpha1Store_LatestVersionSemverToggle(t *testing.T) {
+func TestStore_LatestVersionSemverToggle(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -98,7 +98,7 @@ func TestV1Alpha1Store_LatestVersionSemverToggle(t *testing.T) {
 	require.Equal(t, "v2.0.0", latest.Metadata.Version, "v2.0.0 is highest semver")
 }
 
-func TestV1Alpha1Store_LatestVersionFallbackOnInvalidSemver(t *testing.T) {
+func TestStore_LatestVersionFallbackOnInvalidSemver(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -113,7 +113,7 @@ func TestV1Alpha1Store_LatestVersionFallbackOnInvalidSemver(t *testing.T) {
 	require.Equal(t, "gamma", latest.Metadata.Version, "last-upserted non-semver wins")
 }
 
-func TestV1Alpha1Store_PatchStatusDisjointFromSpec(t *testing.T) {
+func TestStore_PatchStatusDisjointFromSpec(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -143,7 +143,7 @@ func TestV1Alpha1Store_PatchStatusDisjointFromSpec(t *testing.T) {
 	require.Equal(t, v1alpha1.ConditionTrue, status.Conditions[0].Status)
 }
 
-func TestV1Alpha1Store_PatchStatusNotFound(t *testing.T) {
+func TestStore_PatchStatusNotFound(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -152,7 +152,7 @@ func TestV1Alpha1Store_PatchStatusNotFound(t *testing.T) {
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 }
 
-func TestV1Alpha1Store_GetNotFound(t *testing.T) {
+func TestStore_GetNotFound(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -164,7 +164,7 @@ func TestV1Alpha1Store_GetNotFound(t *testing.T) {
 	require.True(t, errors.Is(err, pkgdb.ErrNotFound))
 }
 
-func TestV1Alpha1Store_DeleteSoftAndPromoteLatest(t *testing.T) {
+func TestStore_DeleteSoftAndPromoteLatest(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -190,13 +190,13 @@ func TestV1Alpha1Store_DeleteSoftAndPromoteLatest(t *testing.T) {
 	require.NoError(t, store.Delete(ctx, testNS, "foo", "v2"))
 }
 
-// TestV1Alpha1Store_UpsertRejectsTerminatingRow guards the Kubernetes-style
+// TestStore_UpsertRejectsTerminatingRow guards the Kubernetes-style
 // invariant: once a row is soft-deleted, it cannot be mutated in place via
 // Upsert. Pre-fix behavior was a silent partial-update (ON CONFLICT bumped
 // generation + spec but left deletion_timestamp set, so the row stayed
 // invisible to GetLatest). Now Upsert returns ErrTerminating and the caller
 // must drain finalizers + purge + re-apply to get a live row.
-func TestV1Alpha1Store_UpsertRejectsTerminatingRow(t *testing.T) {
+func TestStore_UpsertRejectsTerminatingRow(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -242,7 +242,7 @@ func TestV1Alpha1Store_UpsertRejectsTerminatingRow(t *testing.T) {
 		"the resurrected row must be visible as latest")
 }
 
-func TestV1Alpha1Store_FinalizerGC(t *testing.T) {
+func TestStore_FinalizerGC(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -279,7 +279,7 @@ func TestV1Alpha1Store_FinalizerGC(t *testing.T) {
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 }
 
-func TestV1Alpha1Store_List(t *testing.T) {
+func TestStore_List(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -318,7 +318,7 @@ func TestV1Alpha1Store_List(t *testing.T) {
 	require.Len(t, withTerm, 3)
 }
 
-func TestV1Alpha1Store_ListExtraWhereRebasesPlaceholders(t *testing.T) {
+func TestStore_ListExtraWhereRebasesPlaceholders(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -353,12 +353,12 @@ func TestV1Alpha1Store_ListExtraWhereRebasesPlaceholders(t *testing.T) {
 	require.NotEqual(t, page1[0].Metadata.Name, page2[0].Metadata.Name)
 }
 
-// TestV1Alpha1Store_ListExtraWhereRejectsMismatch verifies that the
+// TestStore_ListExtraWhereRejectsMismatch verifies that the
 // Store rejects ExtraWhere / ExtraArgs combinations whose placeholder
 // count doesn't match the arg count, rather than silently executing a
 // wrong query. Prevents SQL injection via accidental mis-parameterized
 // fragments in the RBAC / authz surface.
-func TestV1Alpha1Store_ListExtraWhereRejectsMismatch(t *testing.T) {
+func TestStore_ListExtraWhereRejectsMismatch(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -392,7 +392,7 @@ func TestV1Alpha1Store_ListExtraWhereRejectsMismatch(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestV1Alpha1Store_ListCursorPagination(t *testing.T) {
+func TestStore_ListCursorPagination(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -421,7 +421,7 @@ func TestV1Alpha1Store_ListCursorPagination(t *testing.T) {
 	require.Len(t, seen, 3)
 }
 
-func TestV1Alpha1Store_ListRejectsInvalidCursor(t *testing.T) {
+func TestStore_ListRejectsInvalidCursor(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 
@@ -429,7 +429,7 @@ func TestV1Alpha1Store_ListRejectsInvalidCursor(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalidCursor)
 }
 
-// TestV1Alpha1Store_ListCursorStableUnderStatusChurn exercises the
+// TestStore_ListCursorStableUnderStatusChurn exercises the
 // reason List orders by (namespace, name, version, updated_at) ASC
 // rather than updated_at DESC: a row whose updated_at moves under a
 // concurrent PatchStatus must not jump pages or get returned twice.
@@ -439,7 +439,7 @@ func TestV1Alpha1Store_ListRejectsInvalidCursor(t *testing.T) {
 // that bumps its updated_at past every other row's. With identity-first
 // ordering, page 2 still returns rows 3+4 in order — the churned row
 // is anchored by (namespace, name, version) which never changes.
-func TestV1Alpha1Store_ListCursorStableUnderStatusChurn(t *testing.T) {
+func TestStore_ListCursorStableUnderStatusChurn(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -479,7 +479,7 @@ func TestV1Alpha1Store_ListCursorStableUnderStatusChurn(t *testing.T) {
 	}
 }
 
-func TestV1Alpha1Store_PatchAnnotationsPreservesExistingKeys(t *testing.T) {
+func TestStore_PatchAnnotationsPreservesExistingKeys(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -503,7 +503,7 @@ func TestV1Alpha1Store_PatchAnnotationsPreservesExistingKeys(t *testing.T) {
 	}, obj.Metadata.Annotations)
 }
 
-func TestV1Alpha1Store_FindReferrers(t *testing.T) {
+func TestStore_FindReferrers(t *testing.T) {
 	pool := NewTestPool(t)
 	agents := NewStore(pool, "v1alpha1.agents")
 	ctx := context.Background()
@@ -531,7 +531,7 @@ func TestV1Alpha1Store_FindReferrers(t *testing.T) {
 	require.Equal(t, "refs-bar", results[0].Metadata.Name)
 }
 
-func TestV1Alpha1Store_SeededProviders(t *testing.T) {
+func TestStore_SeededProviders(t *testing.T) {
 	pool := NewTestPool(t)
 	providers := NewStore(pool, "v1alpha1.providers")
 	ctx := context.Background()
@@ -550,7 +550,7 @@ func TestV1Alpha1Store_SeededProviders(t *testing.T) {
 	require.Equal(t, v1alpha1.PlatformKubernetes, spec.Platform)
 }
 
-// TestV1Alpha1Store_NotifyPayloadDiscreteFields guards the R2 fix:
+// TestStore_NotifyPayloadDiscreteFields guards the R2 fix:
 // the status NOTIFY trigger emits (namespace, name, version) as three
 // discrete JSON fields instead of a concatenated "ns/name/version"
 // string. The previous shape was ambiguous when name contained `/`
@@ -558,7 +558,7 @@ func TestV1Alpha1Store_SeededProviders(t *testing.T) {
 // like `ai.exa/exa`). The test uses such a name to confirm the parse
 // survives round-trip unambiguously — any future reconciler / Phase 2
 // KRT consumer can rely on the fields being split correctly.
-func TestV1Alpha1Store_NotifyPayloadDiscreteFields(t *testing.T) {
+func TestStore_NotifyPayloadDiscreteFields(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -602,7 +602,7 @@ func TestV1Alpha1Store_NotifyPayloadDiscreteFields(t *testing.T) {
 	require.Equal(t, "v1", payload.Version)
 }
 
-// TestV1Alpha1Store_LatestVersionTieBreakDeterministic guards the R6 fix:
+// TestStore_LatestVersionTieBreakDeterministic guards the R6 fix:
 // when two non-semver versions share an identical updated_at (possible
 // on batch upserts inside a single microsecond), recomputeLatest must
 // pick the same winner every time. Pre-fix the ORDER BY was
@@ -613,7 +613,7 @@ func TestV1Alpha1Store_NotifyPayloadDiscreteFields(t *testing.T) {
 // value + clearing is_latest_version, then run recomputeLatest directly
 // (internal-package test can reach the unexported helper) so its SELECT
 // actually sees the tied timestamps.
-func TestV1Alpha1Store_LatestVersionTieBreakDeterministic(t *testing.T) {
+func TestStore_LatestVersionTieBreakDeterministic(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()

@@ -11,7 +11,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-func TestV1Alpha1Store_AnnotationsRoundTrip(t *testing.T) {
+func TestStore_AnnotationsRoundTrip(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -30,7 +30,7 @@ func TestV1Alpha1Store_AnnotationsRoundTrip(t *testing.T) {
 	require.Equal(t, "builtin-seed", obj.Metadata.Annotations["internal.agentregistry.solo.io/import-source"])
 }
 
-func TestV1Alpha1Store_AnnotationsPreservedOnNilUpsert(t *testing.T) {
+func TestStore_AnnotationsPreservedOnNilUpsert(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -51,7 +51,7 @@ func TestV1Alpha1Store_AnnotationsPreservedOnNilUpsert(t *testing.T) {
 	require.Equal(t, "team-a", obj.Metadata.Annotations["owner"])
 }
 
-func TestV1Alpha1Store_AnnotationsClearedOnEmptyMap(t *testing.T) {
+func TestStore_AnnotationsClearedOnEmptyMap(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()

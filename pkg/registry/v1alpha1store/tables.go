@@ -6,7 +6,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-// V1Alpha1TableFor is the canonical mapping from v1alpha1 Kind name to
+// TableFor is the canonical mapping from v1alpha1 Kind name to
 // its backing table in the dedicated `v1alpha1.*` PostgreSQL schema.
 // Callers that need a *Store should prefer NewStores below
 // rather than constructing one per kind.
@@ -15,7 +15,7 @@ import (
 // v1alpha1.Scheme.Register should extend their own copy of this map
 // rather than mutating this one; the OSS side treats it as effectively
 // const after init.
-var V1Alpha1TableFor = map[string]string{
+var TableFor = map[string]string{
 	v1alpha1.KindAgent:      "v1alpha1.agents",
 	v1alpha1.KindMCPServer:  "v1alpha1.mcp_servers",
 	v1alpha1.KindSkill:      "v1alpha1.skills",
@@ -35,12 +35,11 @@ var V1Alpha1TableFor = map[string]string{
 func NewStores(pool *pgxpool.Pool) map[string]*Store {
 	out := make(map[string]*Store, len(v1alpha1.BuiltinKinds))
 	for _, kind := range v1alpha1.BuiltinKinds {
-		table, ok := V1Alpha1TableFor[kind]
+		table, ok := TableFor[kind]
 		if !ok {
-			// Impossible unless BuiltinKinds and V1Alpha1TableFor drift
-			// out of sync — guarded by the kinds_table_test.go matrix
-			// test rather than a panic here.
-			continue
+			// BuiltinKinds and TableFor must stay in sync — a missing
+			// table here is a coding error, not a runtime condition.
+			panic("v1alpha1store: no table registered for kind " + kind)
 		}
 		out[kind] = NewStore(pool, table)
 	}

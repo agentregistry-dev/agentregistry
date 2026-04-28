@@ -32,7 +32,7 @@ func TestVectorLiteral(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestV1Alpha1Store_SetEmbedding_RoundTrip(t *testing.T) {
+func TestStore_SetEmbedding_RoundTrip(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -60,7 +60,7 @@ func TestV1Alpha1Store_SetEmbedding_RoundTrip(t *testing.T) {
 	require.False(t, meta.GeneratedAt.IsZero())
 }
 
-func TestV1Alpha1Store_GetEmbeddingMetadata_NilWhenMissing(t *testing.T) {
+func TestStore_GetEmbeddingMetadata_NilWhenMissing(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -75,7 +75,7 @@ func TestV1Alpha1Store_GetEmbeddingMetadata_NilWhenMissing(t *testing.T) {
 	require.Nil(t, meta)
 }
 
-func TestV1Alpha1Store_GetEmbeddingMetadata_ErrNotFound(t *testing.T) {
+func TestStore_GetEmbeddingMetadata_ErrNotFound(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -84,7 +84,7 @@ func TestV1Alpha1Store_GetEmbeddingMetadata_ErrNotFound(t *testing.T) {
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 }
 
-func TestV1Alpha1Store_SetEmbedding_ErrNotFound(t *testing.T) {
+func TestStore_SetEmbedding_ErrNotFound(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -95,7 +95,7 @@ func TestV1Alpha1Store_SetEmbedding_ErrNotFound(t *testing.T) {
 	require.True(t, errors.Is(err, pkgdb.ErrNotFound))
 }
 
-func TestV1Alpha1Store_SemanticList_RanksByDistance(t *testing.T) {
+func TestStore_SemanticList_RanksByDistance(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -135,7 +135,7 @@ func TestV1Alpha1Store_SemanticList_RanksByDistance(t *testing.T) {
 	require.InDelta(t, 2.0, results[2].Score, 1e-4)
 }
 
-func TestV1Alpha1Store_SemanticList_ThresholdFilter(t *testing.T) {
+func TestStore_SemanticList_ThresholdFilter(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -160,7 +160,7 @@ func TestV1Alpha1Store_SemanticList_ThresholdFilter(t *testing.T) {
 	require.Equal(t, "exact", results[0].Object.Metadata.Name)
 }
 
-func TestV1Alpha1Store_SemanticList_SkipsRowsWithoutEmbedding(t *testing.T) {
+func TestStore_SemanticList_SkipsRowsWithoutEmbedding(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
@@ -184,7 +184,7 @@ func TestV1Alpha1Store_SemanticList_SkipsRowsWithoutEmbedding(t *testing.T) {
 	require.Equal(t, "with-emb", results[0].Object.Metadata.Name)
 }
 
-func TestV1Alpha1Store_SemanticList_LatestOnly(t *testing.T) {
+func TestStore_SemanticList_LatestOnly(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()

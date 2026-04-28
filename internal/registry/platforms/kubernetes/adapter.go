@@ -113,9 +113,8 @@ func (a *kubernetesDeploymentAdapter) Remove(ctx context.Context, in types.Remov
 	}, nil
 }
 
-// Logs is not yet implemented for the kubernetes adapter's v1alpha1 surface;
-// the legacy GetLogs path returned ErrDeploymentNotSupported for parity.
-// Returns an immediately-closed channel so callers don't block.
+// Logs is not yet implemented for the kubernetes adapter. Returns an
+// immediately-closed channel so callers don't block.
 func (a *kubernetesDeploymentAdapter) Logs(ctx context.Context, in types.LogsInput) (<-chan types.LogLine, error) {
 	ch := make(chan types.LogLine)
 	close(ch)
@@ -123,12 +122,11 @@ func (a *kubernetesDeploymentAdapter) Logs(ctx context.Context, in types.LogsInp
 }
 
 // Discover enumerates unmanaged kagent/kmcp workloads in the provider's
-// namespace and returns them as DiscoveryResult entries. The Syncer (OSS or
-// enterprise) persists these into the discovered_kubernetes table.
+// namespace and returns them as DiscoveryResult entries. The Syncer (OSS
+// or enterprise) persists these into the discovered_kubernetes table.
 //
-// Uses the same "managed" label check as the legacy discovery path — rows
-// carrying aregistry.ai/managed=true are skipped because they correspond to
-// existing Deployment rows.
+// Rows carrying aregistry.ai/managed=true are skipped because they
+// already correspond to existing Deployment rows.
 func (a *kubernetesDeploymentAdapter) Discover(ctx context.Context, in types.DiscoverInput) ([]types.DiscoveryResult, error) {
 	namespace := kubernetesProviderNamespace(in.Provider)
 

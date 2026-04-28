@@ -22,9 +22,7 @@ type PostgreSQL struct {
 
 // NewPostgreSQL opens a pool against connectionURI, runs the v1alpha1
 // migrations against it, and returns a *PostgreSQL ready for use by the
-// generic v1alpha1 Store. The legacy public.* tables are no longer
-// migrated — every domain the server speaks in production lives under
-// the v1alpha1 schema.
+// generic v1alpha1 Store.
 func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authorizer) (*PostgreSQL, error) {
 	config, err := pgxpool.ParseConfig(connectionURI)
 	if err != nil {
@@ -52,7 +50,7 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 	}
 	defer conn.Release()
 
-	v1alpha1Migrator := database.NewMigrator(conn.Conn(), v1alpha1store.V1Alpha1MigratorConfig())
+	v1alpha1Migrator := database.NewMigrator(conn.Conn(), v1alpha1store.MigratorConfig())
 	if err := v1alpha1Migrator.Migrate(ctx); err != nil {
 		return nil, fmt.Errorf("failed to run v1alpha1 migrations: %w", err)
 	}

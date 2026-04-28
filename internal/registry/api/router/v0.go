@@ -129,7 +129,7 @@ func RegisterRoutes(
 	// v1alpha1 generic routes. Cross-kind dangling-ref detection uses
 	// a Store-backed resolver. Deployment reconciliation hooks plug in
 	// when the coordinator is supplied.
-	registerV1Alpha1Routes(
+	registerKindRoutes(
 		api,
 		pathPrefix,
 		opts.Stores,
@@ -169,7 +169,7 @@ func RegisterRoutes(
 	return nil
 }
 
-// registerV1Alpha1Routes wires the generic resource handler for every
+// registerKindRoutes wires the generic resource handler for every
 // built-in kind at `{basePrefix}/{plural}/{name}/{version}` (with
 // namespace as a `?namespace={ns}` query param, default "default";
 // `?namespace=all` on list widens scope across every namespace), plus
@@ -181,7 +181,7 @@ func RegisterRoutes(
 // When coord is non-nil, Deployment PUT/DELETE fire
 // coord.Apply/coord.Remove after the row is persisted so the platform
 // adapter converges runtime state synchronously with the API call.
-func registerV1Alpha1Routes(api huma.API, basePrefix string, stores Stores, coord *deploymentsvc.Coordinator, semantic resource.SemanticSearchFunc, perKind crud.PerKindHooks, registryValidator v1alpha1.RegistryValidatorFunc) {
+func registerKindRoutes(api huma.API, basePrefix string, stores Stores, coord *deploymentsvc.Coordinator, semantic resource.SemanticSearchFunc, perKind crud.PerKindHooks, registryValidator v1alpha1.RegistryValidatorFunc) {
 	resolver := internaldb.NewResolver(stores)
 	if registryValidator == nil {
 		registryValidator = registries.Dispatcher

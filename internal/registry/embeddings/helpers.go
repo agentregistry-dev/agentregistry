@@ -29,7 +29,6 @@ func BuildMCPServerEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.MCPS
 }
 
 // BuildAgentEmbeddingPayload assembles the canonical text for an Agent.
-// Mirrors the legacy BuildAgentEmbeddingPayload shape on v1alpha1 types.
 func BuildAgentEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.AgentSpec) string {
 	var parts []string
 	appendIf(&parts,

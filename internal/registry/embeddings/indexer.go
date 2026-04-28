@@ -117,11 +117,10 @@ func NewIndexer(cfg IndexerConfig) (*Indexer, error) {
 	}, nil
 }
 
-// Run executes one indexing pass. Fan-out across Kinds is sequential —
-// the legacy indexer used the same model because OpenAI rate limits
-// would serialize parallel calls anyway. Errors on a single row bump
-// Failures and move on; a transport-level provider error halts the
-// pass and returns a partial result.
+// Run executes one indexing pass. Fan-out across Kinds is sequential
+// because OpenAI rate limits would serialize parallel calls anyway.
+// Errors on a single row bump Failures and move on; a transport-level
+// provider error halts the pass and returns a partial result.
 func (i *Indexer) Run(ctx context.Context, opts IndexOptions, onProgress ProgressCallback) (*IndexResult, error) {
 	res := &IndexResult{Stats: map[string]IndexStats{}}
 

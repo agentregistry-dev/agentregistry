@@ -51,10 +51,7 @@ func (g *PythonGenerator) Generate(agentConfig *common.AgentConfig) error {
 	}
 
 	// agent.yaml is written by the caller (cmd/init.go's
-	// writeDeclarativeAgentYAML) using the v1alpha1.Agent envelope —
-	// the on-disk shape. The legacy flat-AgentManifest write that used
-	// to live here was redundant: init.go overwrote it on the next
-	// line, and no other code path expects the flat shape on disk.
+	// writeDeclarativeAgentYAML) using the v1alpha1.Agent envelope.
 
 	if err := relocateAgentPackage(agentConfig.Directory, projectPackageDir); err != nil {
 		return err

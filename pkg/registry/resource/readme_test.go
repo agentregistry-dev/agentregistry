@@ -87,7 +87,7 @@ func TestResourceRegister_AgentReadmeRoutesAndListProjection(t *testing.T) {
 // handler.
 func TestRegister_NoReadmeRoutesForReadmeLessKinds(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, v1alpha1store.V1Alpha1TableFor[v1alpha1.KindProvider])
+	store := v1alpha1store.NewStore(pool, v1alpha1store.TableFor[v1alpha1.KindProvider])
 
 	_, api := humatest.New(t)
 	resource.Register(api, resource.Config{

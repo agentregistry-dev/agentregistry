@@ -3,11 +3,8 @@
 // returns when input is malformed, a row is missing, etc., and the thin
 // Store interface that AppOptions.DatabaseFactory wraps.
 //
-// Everything kind-specific (per-table Store interfaces, filters, readme
-// blobs, embedding metadata) was retired alongside the legacy public.*
-// schema — production code reads and writes v1alpha1 envelopes via the
-// generic internal/registry/database.Store against the v1alpha1.*
-// schema.
+// Production code reads and writes v1alpha1 envelopes via the generic
+// v1alpha1store.Store against the v1alpha1.* PostgreSQL schema.
 package database
 
 import (

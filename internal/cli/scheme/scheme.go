@@ -13,8 +13,8 @@ import (
 const APIVersion = v1alpha1.GroupVersion
 
 // IsEnvelopeYAML reports whether the given bytes look like a declarative
-// ar.dev/v1alpha1 envelope. Malformed YAML returns false so callers can fall
-// back to legacy manifest parsing paths that surface the real error later.
+// ar.dev/v1alpha1 envelope. Malformed YAML returns false so callers can
+// surface the real parse error from a downstream loader.
 //
 // Pins on the canonical apiVersion (ar.dev/v1alpha1) — generic K8s-style
 // manifests with an unrelated apiVersion (kagent CRDs, k8s core types, etc.)

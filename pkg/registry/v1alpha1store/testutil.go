@@ -39,7 +39,7 @@ func NewTestPool(t *testing.T) *pgxpool.Pool {
 	}
 	defer func() { _ = adminConn.Close(ctx) }()
 
-	if err := ensureV1Alpha1Template(ctx, adminConn); err != nil {
+	if err := ensureTemplate(ctx, adminConn); err != nil {
 		t.Fatalf("ensure v1alpha1 template: %v", err)
 	}
 
@@ -75,10 +75,10 @@ func NewTestPool(t *testing.T) *pgxpool.Pool {
 
 const v1alpha1TemplateDBName = "agent_registry_v1alpha1_template"
 
-// ensureV1Alpha1Template creates (idempotently) a template database with the
+// ensureTemplate creates (idempotently) a template database with the
 // v1alpha1 migrations applied. Uses pg_advisory_lock to serialize concurrent
 // test processes.
-func ensureV1Alpha1Template(ctx context.Context, adminConn *pgx.Conn) error {
+func ensureTemplate(ctx context.Context, adminConn *pgx.Conn) error {
 	const lockKey int64 = 0x76316131 // "v1a1"
 	if _, err := adminConn.Exec(ctx, "SELECT pg_advisory_lock($1)", lockKey); err != nil {
 		return fmt.Errorf("acquire advisory lock: %w", err)
@@ -115,7 +115,7 @@ func ensureV1Alpha1Template(ctx context.Context, adminConn *pgx.Conn) error {
 	}
 	defer func() { _ = templateConn.Close(ctx) }()
 
-	mig := pkgdb.NewMigrator(templateConn, V1Alpha1MigratorConfig())
+	mig := pkgdb.NewMigrator(templateConn, MigratorConfig())
 	if err := mig.Migrate(ctx); err != nil {
 		return fmt.Errorf("apply v1alpha1 migrations: %w", err)
 	}
