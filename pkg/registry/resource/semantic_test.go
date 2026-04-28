@@ -26,7 +26,7 @@ func zeroPadVec(values ...float32) []float32 {
 }
 
 func TestSemanticSearch_ListEndpointRanksByDistance(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 	ctx := context.Background()
 
@@ -92,7 +92,7 @@ func TestSemanticSearch_ListEndpointRanksByDistance(t *testing.T) {
 // similarity to the query for denied rows. Regression-pin commit
 // added to runSemanticList ListFilter wiring.
 func TestSemanticSearch_RespectsListFilterDenyList(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 	ctx := context.Background()
 
@@ -156,7 +156,7 @@ func TestSemanticSearch_RespectsListFilterDenyList(t *testing.T) {
 // RoleProvider ScopeNone path enterprise emits when a principal has
 // no permissions for a kind.
 func TestSemanticSearch_ListFilterScopeNoneReturnsEmpty(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 	ctx := context.Background()
 
@@ -201,7 +201,7 @@ func TestSemanticSearch_ListFilterScopeNoneReturnsEmpty(t *testing.T) {
 }
 
 func TestSemanticSearch_ListReturns400WhenDisabled(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	stores := map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents}

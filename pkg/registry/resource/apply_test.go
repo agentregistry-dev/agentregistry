@@ -19,7 +19,7 @@ import (
 )
 
 func TestRegisterApply_MultiDocRoundTrip(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 	mcps := v1alpha1store.NewStore(pool, "v1alpha1.mcp_servers")
 
@@ -76,7 +76,7 @@ spec:
 }
 
 func TestRegisterApply_PerDocFailureDoesntAbortBatch(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
@@ -120,7 +120,7 @@ spec:
 }
 
 func TestRegisterApply_ValidationFailsPerDoc(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
@@ -160,7 +160,7 @@ spec:
 // some kinds but forgets others — would silently bypass authz on the
 // /v0/apply path for the missing kinds.
 func TestRegisterApply_DeniesKindWithNoAuthorizer(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 	mcps := v1alpha1store.NewStore(pool, "v1alpha1.mcp_servers")
 

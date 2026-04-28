@@ -26,8 +26,8 @@ import (
 // resource handler backed by a test DB. Proves the wire contract end
 // to end and pins the shape the CLI + UI regen will consume.
 func TestClient_V1Alpha1RoundTrip(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
-	stores := v1alpha1store.NewV1Alpha1Stores(pool)
+	pool := v1alpha1store.NewTestPool(t)
+	stores := v1alpha1store.NewStores(pool)
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("test", "v1"))
@@ -108,8 +108,8 @@ spec:
 // TestClient_V1Alpha1_ApplyInvalid covers the apply pipeline's
 // per-document failure branch at the client level.
 func TestClient_V1Alpha1_ApplyInvalid(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
-	stores := v1alpha1store.NewV1Alpha1Stores(pool)
+	pool := v1alpha1store.NewTestPool(t)
+	stores := v1alpha1store.NewStores(pool)
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("test", "v1"))
@@ -144,8 +144,8 @@ spec:
 
 // TestClient_V1Alpha1_NotFound proves the ErrNotFound sentinel path.
 func TestClient_V1Alpha1_NotFound(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
-	stores := v1alpha1store.NewV1Alpha1Stores(pool)
+	pool := v1alpha1store.NewTestPool(t)
+	stores := v1alpha1store.NewStores(pool)
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("test", "v1"))

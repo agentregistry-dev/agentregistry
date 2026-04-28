@@ -229,7 +229,7 @@ func (i *Indexer) indexRow(ctx context.Context, b KindBinding, row *v1alpha1.Raw
 // kind that participates in semantic search: Agent, MCPServer, Skill,
 // Prompt. Providers + Deployments are omitted (see 003 migration
 // rationale). Pass the Stores map returned by
-// v1alpha1store.NewV1Alpha1Stores(pool) as kindStores.
+// v1alpha1store.NewStores(pool) as kindStores.
 func DefaultBindings(kindStores map[string]*v1alpha1store.Store) ([]KindBinding, error) {
 	required := []string{
 		v1alpha1.KindAgent,

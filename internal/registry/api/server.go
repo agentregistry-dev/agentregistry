@@ -151,7 +151,7 @@ func (s *Server) Handler() http.Handler {
 
 // AuthZ is handled at the DB/service layer, not at the API layer.
 // Returns an error when route registration rejects the supplied
-// RouteOptions (e.g. V1Alpha1Stores missing).
+// RouteOptions (e.g. Stores missing).
 func NewServer(
 	cfg *config.Config,
 	metrics *telemetry.Metrics,

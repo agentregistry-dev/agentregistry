@@ -29,14 +29,14 @@ import (
 // covers because the surface streams runtime output rather than just
 // declared spec content.
 func TestRegisterDeploymentLogs_RespectsAuthorize(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
-	stores := v1alpha1store.NewV1Alpha1Stores(pool)
+	pool := v1alpha1store.NewTestPool(t)
+	stores := v1alpha1store.NewStores(pool)
 	deployments := stores[v1alpha1.KindDeployment]
 
-	coord := deploymentsvc.NewV1Alpha1Coordinator(deploymentsvc.V1Alpha1Dependencies{
+	coord := deploymentsvc.NewCoordinator(deploymentsvc.Dependencies{
 		Stores:   stores,
 		Adapters: map[string]types.DeploymentAdapter{noop.Platform: noop.New()},
-		Getter:   internaldb.NewV1Alpha1Getter(stores),
+		Getter:   internaldb.NewGetter(stores),
 	})
 
 	authorize := func(ctx context.Context, in resource.AuthorizeInput) error {
@@ -73,14 +73,14 @@ func TestRegisterDeploymentLogs_RespectsAuthorize(t *testing.T) {
 // router-level auth"). Mostly a guard against a refactor that
 // silently flips the default to deny.
 func TestRegisterDeploymentLogs_NilAuthorizeAllowsThrough(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
-	stores := v1alpha1store.NewV1Alpha1Stores(pool)
+	pool := v1alpha1store.NewTestPool(t)
+	stores := v1alpha1store.NewStores(pool)
 	deployments := stores[v1alpha1.KindDeployment]
 
-	coord := deploymentsvc.NewV1Alpha1Coordinator(deploymentsvc.V1Alpha1Dependencies{
+	coord := deploymentsvc.NewCoordinator(deploymentsvc.Dependencies{
 		Stores:   stores,
 		Adapters: map[string]types.DeploymentAdapter{noop.Platform: noop.New()},
-		Getter:   internaldb.NewV1Alpha1Getter(stores),
+		Getter:   internaldb.NewGetter(stores),
 	})
 
 	_, api := humatest.New(t)

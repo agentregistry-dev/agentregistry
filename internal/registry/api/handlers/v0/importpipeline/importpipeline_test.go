@@ -43,7 +43,7 @@ func (s *stubScanner) Scan(ctx context.Context, obj v1alpha1.Object) (importer.S
 
 func newImportTestServer(t *testing.T, scanners ...importer.Scanner) (*v1alpha1store.Store, *importer.FindingsStore, humatest.TestAPI) {
 	t.Helper()
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 	stores := map[string]*v1alpha1store.Store{
 		v1alpha1.KindAgent: agents,
@@ -205,7 +205,7 @@ func TestRegisterImport_InvalidYAMLSurfacesAsFailedResult(t *testing.T) {
 // Status=failed; "ok" Agent succeeds. Mirrors the per-doc-failure
 // pattern in pkg/registry/resource/apply.go.
 func TestRegisterImport_PerDocAuthorize(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 	stores := map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents}
 
@@ -291,7 +291,7 @@ spec:
 // Configures the importer with two kinds (Agent + MCPServer) but
 // only an Agent authorizer. POST an MCPServer doc → fail-closed.
 func TestRegisterImport_DeniesKindWithNoAuthorizer(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	stores := map[string]*v1alpha1store.Store{
 		v1alpha1.KindAgent:     v1alpha1store.NewStore(pool, "v1alpha1.agents"),
 		v1alpha1.KindMCPServer: v1alpha1store.NewStore(pool, "v1alpha1.mcpservers"),

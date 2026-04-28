@@ -80,7 +80,7 @@ func indexOf(haystack, needle string) int {
 }
 
 func TestIndexer_IndexesAgentsAndSkipsOnChecksumMatch(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, agentsTable)
 	ctx := context.Background()
 
@@ -116,7 +116,7 @@ func TestIndexer_IndexesAgentsAndSkipsOnChecksumMatch(t *testing.T) {
 }
 
 func TestIndexer_ForceRegeneratesAll(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, agentsTable)
 	ctx := context.Background()
 
@@ -146,7 +146,7 @@ func TestIndexer_ForceRegeneratesAll(t *testing.T) {
 }
 
 func TestIndexer_DryRunSkipsStoreWrites(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, agentsTable)
 	ctx := context.Background()
 
@@ -178,7 +178,7 @@ func TestIndexer_DryRunSkipsStoreWrites(t *testing.T) {
 }
 
 func TestIndexer_ProviderErrorIncrementsFailures(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, agentsTable)
 	ctx := context.Background()
 
@@ -209,7 +209,7 @@ func TestIndexer_ProviderErrorIncrementsFailures(t *testing.T) {
 }
 
 func TestIndexer_ProgressCallbackInvoked(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, agentsTable)
 	ctx := context.Background()
 
@@ -240,7 +240,7 @@ func TestIndexer_ProgressCallbackInvoked(t *testing.T) {
 }
 
 func TestIndexer_KindsFilter(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, agentsTable)
 	mcpStore := v1alpha1store.NewStore(pool, "v1alpha1.mcp_servers")
 	ctx := context.Background()

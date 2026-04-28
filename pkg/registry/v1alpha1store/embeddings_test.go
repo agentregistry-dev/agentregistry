@@ -33,7 +33,7 @@ func TestVectorLiteral(t *testing.T) {
 }
 
 func TestV1Alpha1Store_SetEmbedding_RoundTrip(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -61,7 +61,7 @@ func TestV1Alpha1Store_SetEmbedding_RoundTrip(t *testing.T) {
 }
 
 func TestV1Alpha1Store_GetEmbeddingMetadata_NilWhenMissing(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -76,7 +76,7 @@ func TestV1Alpha1Store_GetEmbeddingMetadata_NilWhenMissing(t *testing.T) {
 }
 
 func TestV1Alpha1Store_GetEmbeddingMetadata_ErrNotFound(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -85,7 +85,7 @@ func TestV1Alpha1Store_GetEmbeddingMetadata_ErrNotFound(t *testing.T) {
 }
 
 func TestV1Alpha1Store_SetEmbedding_ErrNotFound(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -96,7 +96,7 @@ func TestV1Alpha1Store_SetEmbedding_ErrNotFound(t *testing.T) {
 }
 
 func TestV1Alpha1Store_SemanticList_RanksByDistance(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -136,7 +136,7 @@ func TestV1Alpha1Store_SemanticList_RanksByDistance(t *testing.T) {
 }
 
 func TestV1Alpha1Store_SemanticList_ThresholdFilter(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -161,7 +161,7 @@ func TestV1Alpha1Store_SemanticList_ThresholdFilter(t *testing.T) {
 }
 
 func TestV1Alpha1Store_SemanticList_SkipsRowsWithoutEmbedding(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -185,7 +185,7 @@ func TestV1Alpha1Store_SemanticList_SkipsRowsWithoutEmbedding(t *testing.T) {
 }
 
 func TestV1Alpha1Store_SemanticList_LatestOnly(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 

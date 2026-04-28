@@ -10,7 +10,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
-// NewV1Alpha1Resolver returns a v1alpha1.ResolverFunc that dispatches
+// NewResolver returns a v1alpha1.ResolverFunc that dispatches
 // cross-kind ResourceRef existence checks against the supplied
 // Stores map. Consumers: the router wires one into its apply
 // handler; the Importer consumes one during per-object ResolveRefs.
@@ -18,7 +18,7 @@ import (
 // Dangling references return v1alpha1.ErrDanglingRef so callers can
 // distinguish "row missing" from "database unavailable"; unknown
 // kinds return wrapped v1alpha1.ErrInvalidRef.
-func NewV1Alpha1Resolver(stores map[string]*v1alpha1store.Store) v1alpha1.ResolverFunc {
+func NewResolver(stores map[string]*v1alpha1store.Store) v1alpha1.ResolverFunc {
 	return func(ctx context.Context, ref v1alpha1.ResourceRef) error {
 		store, ok := stores[ref.Kind]
 		if !ok {
@@ -40,7 +40,7 @@ func NewV1Alpha1Resolver(stores map[string]*v1alpha1store.Store) v1alpha1.Resolv
 	}
 }
 
-// NewV1Alpha1Getter returns a v1alpha1.GetterFunc that dispatches a
+// NewGetter returns a v1alpha1.GetterFunc that dispatches a
 // cross-kind ResourceRef fetch against the supplied Stores map and
 // decodes the RawObject into its typed envelope via v1alpha1.Default.
 // Consumers: reconcilers / platform adapters that need the referenced
@@ -48,7 +48,7 @@ func NewV1Alpha1Resolver(stores map[string]*v1alpha1store.Store) v1alpha1.Resolv
 //
 // Dangling references return v1alpha1.ErrDanglingRef; unknown kinds
 // return wrapped v1alpha1.ErrInvalidRef.
-func NewV1Alpha1Getter(stores map[string]*v1alpha1store.Store) v1alpha1.GetterFunc {
+func NewGetter(stores map[string]*v1alpha1store.Store) v1alpha1.GetterFunc {
 	return func(ctx context.Context, ref v1alpha1.ResourceRef) (v1alpha1.Object, error) {
 		store, ok := stores[ref.Kind]
 		if !ok {

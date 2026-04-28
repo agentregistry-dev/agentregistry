@@ -73,7 +73,7 @@ func generateSpec(apiVersion string) *huma.OpenAPI {
 		GitCommit: version.GitCommit,
 		BuildTime: version.BuildDate,
 	}, &router.RouteOptions{
-		V1Alpha1Stores: v1alpha1store.NewV1Alpha1Stores(nil),
+		Stores: v1alpha1store.NewStores(nil),
 	}); err != nil {
 		panic(fmt.Sprintf("router.RegisterRoutes: %v", err))
 	}

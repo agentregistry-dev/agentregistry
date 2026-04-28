@@ -72,7 +72,7 @@ type Config struct {
 	// PostUpsert is optional; when set, the apply handler invokes it
 	// after a successful Upsert + read-back so the kind can drive
 	// post-persist reconciliation. Deployment uses this to call
-	// V1Alpha1Coordinator.Apply, which dispatches to the platform
+	// Coordinator.Apply, which dispatches to the platform
 	// adapter and patches status.
 	//
 	// Hook errors surface as 500 — the row is already persisted, so a
@@ -101,7 +101,7 @@ type Config struct {
 	// after Store.Delete (which sets DeletionTimestamp). The row still
 	// exists at this point — the soft-delete + GC pass owns hard
 	// removal. Deployment uses this hook to call
-	// V1Alpha1Coordinator.Remove, which tears down runtime resources
+	// Coordinator.Remove, which tears down runtime resources
 	// and writes the terminal Removed condition.
 	PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 

@@ -45,7 +45,7 @@ func registerAgent(api huma.API, store *v1alpha1store.Store) {
 func TestResourceRegister_AgentCRUD(t *testing.T) {
 	t.Helper()
 
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
@@ -159,7 +159,7 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 }
 
 func TestResourceRegister_AgentNamespaceIsolation(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
@@ -210,7 +210,7 @@ func TestResourceRegister_AgentNamespaceIsolation(t *testing.T) {
 }
 
 func TestResourceRegister_AgentListCursorPagination(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
@@ -256,7 +256,7 @@ func TestResourceRegister_AgentListCursorPagination(t *testing.T) {
 }
 
 func TestResourceRegister_AgentListRejectsInvalidCursor(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
@@ -272,7 +272,7 @@ func TestResourceRegister_AgentListRejectsInvalidCursor(t *testing.T) {
 // "ok-". Three rows are seeded; the unfiltered list returns all three,
 // the filtered list returns just the two matches.
 func TestResourceRegister_ListFilter(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	for _, name := range []string{"ok-one", "ok-two", "blocked-three"} {
@@ -320,7 +320,7 @@ func TestResourceRegister_ListFilter(t *testing.T) {
 func TestResourceRegister_AgentWrongKindRejected(t *testing.T) {
 	t.Helper()
 
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
@@ -338,7 +338,7 @@ func TestResourceRegister_AgentWrongKindRejected(t *testing.T) {
 
 func TestResourceRegister_AgentPathMismatchRejected(t *testing.T) {
 	t.Helper()
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
@@ -353,7 +353,7 @@ func TestResourceRegister_AgentPathMismatchRejected(t *testing.T) {
 }
 
 func TestResourceRegister_ValidationRejectsBadVersion(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -369,7 +369,7 @@ func TestResourceRegister_ValidationRejectsBadVersion(t *testing.T) {
 }
 
 func TestResourceRegister_ValidationRejectsHTTPWebsite(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -385,7 +385,7 @@ func TestResourceRegister_ValidationRejectsHTTPWebsite(t *testing.T) {
 }
 
 func TestResourceRegister_ResolverDetectsDanglingRef(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	agentStore := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 	mcpStore := v1alpha1store.NewStore(pool, "v1alpha1.mcp_servers")
 
@@ -437,7 +437,7 @@ func mustSpec(t *testing.T, spec any) []byte {
 }
 
 func TestResourceRegister_SoftDeleteAndPurge(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
@@ -487,7 +487,7 @@ func TestResourceRegister_SoftDeleteAndPurge(t *testing.T) {
 // behavior so future changes are forced through documentation +
 // reviewer awareness.
 func TestResourceRegister_PostUpsertFailureLeavesPersistedRow(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	hookCalls := 0

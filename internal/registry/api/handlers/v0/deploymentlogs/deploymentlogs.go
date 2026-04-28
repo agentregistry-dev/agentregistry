@@ -1,6 +1,6 @@
 // Package deploymentlogs owns the Deployment logs subresource:
 // `/v0/deployments/{name}/{version}/logs`. Drains
-// adapter.Logs through the V1Alpha1Coordinator and returns the captured
+// adapter.Logs through the Coordinator and returns the captured
 // lines as JSON. The endpoint is bound to one specific kind
 // (Deployment); the rest of the v1alpha1 CRUD surface lives in
 // v1alpha1crud.
@@ -29,7 +29,7 @@ import (
 type Config struct {
 	BasePrefix  string
 	Store       *v1alpha1store.Store
-	Coordinator *deploymentsvc.V1Alpha1Coordinator
+	Coordinator *deploymentsvc.Coordinator
 	// Authorize gates the request the same way the regular Deployment
 	// GET handler does. nil means no gate. Logs leak runtime
 	// stdout/stderr — frequently containing PII or secrets — so a

@@ -29,7 +29,7 @@ const (
 
 func newTestImporter(t *testing.T, extra ...Scanner) (*Importer, *v1alpha1store.Store, *FindingsStore) {
 	t.Helper()
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 
 	agents := v1alpha1store.NewStore(pool, agentsTable)
 	stores := map[string]*v1alpha1store.Store{

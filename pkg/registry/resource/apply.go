@@ -47,7 +47,7 @@ type ApplyConfig struct {
 
 	// PostUpserts mirrors resource.Config.PostUpsert per kind. Without
 	// it, kinds that drive runtime reconciliation through PostUpsert
-	// (e.g. Deployment → V1Alpha1Coordinator.Apply → platform adapter)
+	// (e.g. Deployment → Coordinator.Apply → platform adapter)
 	// are silently skipped when the resource is applied via the batch
 	// endpoint instead of the namespaced PUT. Per-doc errors fail the
 	// individual result; the rest of the batch continues.

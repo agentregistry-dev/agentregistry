@@ -19,7 +19,7 @@ import (
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
-// NewV1Alpha1TestPool spins up a fresh database with only the v1alpha1
+// NewTestPool spins up a fresh database with only the v1alpha1
 // schema applied (no legacy OSS migrations, no pgvector) and returns a
 // connection pool scoped to it. Each test gets its own DB, cleaned up on
 // t.Cleanup.
@@ -31,7 +31,7 @@ import (
 //
 // Requires PostgreSQL on localhost:5432 — tests skip when it's unavailable,
 // matching the legacy helper's behavior.
-func NewV1Alpha1TestPool(t *testing.T) *pgxpool.Pool {
+func NewTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

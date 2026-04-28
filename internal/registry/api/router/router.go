@@ -131,7 +131,7 @@ func handle404(w http.ResponseWriter, r *http.Request) {
 
 // NewHumaAPI creates a new Huma API with all routes registered.
 // Returns an error when RegisterRoutes rejects the supplied
-// RouteOptions (e.g. V1Alpha1Stores missing).
+// RouteOptions (e.g. Stores missing).
 //
 // Note: authz is handled at the DB/service layer, not at the API layer.
 func NewHumaAPI(

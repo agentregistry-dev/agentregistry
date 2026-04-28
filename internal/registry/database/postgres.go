@@ -13,7 +13,7 @@ import (
 )
 
 // PostgreSQL is the root PostgreSQL-backed store. It owns the connection
-// pool; per-kind v1alpha1 access happens via NewV1Alpha1Stores against
+// pool; per-kind v1alpha1 access happens via NewStores against
 // db.Pool().
 type PostgreSQL struct {
 	pool  *pgxpool.Pool

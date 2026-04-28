@@ -97,19 +97,19 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	// v1alpha1 DeploymentAdapter map consumed by the coordinator below.
 	// Built OSS-side from the local + kubernetes ports; enterprise extends
 	// via AppOptions.DeploymentAdapters.
-	v1alpha1Adapters := map[string]types.DeploymentAdapter{
+	deploymentAdapters := map[string]types.DeploymentAdapter{
 		"local":      local.NewLocalDeploymentAdapter(cfg.RuntimeDir, cfg.AgentGatewayPort),
 		"kubernetes": kubernetes.NewKubernetesDeploymentAdapter(),
 	}
-	maps.Copy(v1alpha1Adapters, options.DeploymentAdapters)
+	maps.Copy(deploymentAdapters, options.DeploymentAdapters)
 	pool := db.Pool()
-	registryValidator := options.V1Alpha1RegistryValidator
+	registryValidator := options.RegistryValidator
 	if registryValidator == nil {
 		registryValidator = registries.Dispatcher
 	}
-	v1alpha1Stores, v1alpha1Importer := buildV1Alpha1Bundle(pool, registryValidator)
+	stores, importer := buildStoresAndImporter(pool, registryValidator)
 	startBuiltinSeedImport(cfg, pool)
-	startSeedFromImport(cfg, v1alpha1Importer)
+	startSeedFromImport(cfg, importer)
 
 	slog.Info("starting agentregistry", "version", version.Version, "commit", version.GitCommit)
 
@@ -131,7 +131,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		}
 	}()
 
-	routeOpts := buildRouteOptions(cfg, options, authz, v1alpha1Stores, v1alpha1Importer, v1alpha1Adapters)
+	routeOpts := buildRouteOptions(cfg, options, authz, stores, importer, deploymentAdapters)
 
 	// Initialize HTTP server
 	baseServer, err := api.NewServer(cfg, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts)
@@ -150,7 +150,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		options.OnHTTPServerCreated(server)
 	}
 
-	mcpHTTPServer := startMCPServer(cfg, v1alpha1Stores, authnProvider)
+	mcpHTTPServer := startMCPServer(cfg, stores, authnProvider)
 
 	// Start server in a goroutine so it doesn't block signal handling
 	go func() {
@@ -185,13 +185,13 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	return nil
 }
 
-func buildV1Alpha1Bundle(pool *pgxpool.Pool, registryValidator v1alpha1.RegistryValidatorFunc) (map[string]*v1alpha1store.Store, *pkgimporter.Importer) {
+func buildStoresAndImporter(pool *pgxpool.Pool, registryValidator v1alpha1.RegistryValidatorFunc) (map[string]*v1alpha1store.Store, *pkgimporter.Importer) {
 	if pool == nil {
 		slog.Info("v1alpha1 routes disabled: database Pool() is nil (likely noop/DatabaseFactory)")
 		return nil, nil
 	}
 
-	stores := v1alpha1store.NewV1Alpha1Stores(pool)
+	stores := v1alpha1store.NewStores(pool)
 
 	// GITHUB_TOKEN (when set in env) authenticates scanner fetches
 	// against GitHub's contents + repo API to raise the 60 req/hr
@@ -204,7 +204,7 @@ func buildV1Alpha1Bundle(pool *pgxpool.Pool, registryValidator v1alpha1.Registry
 			osvscanner.New(osvscanner.Config{GitHubToken: githubToken}),
 			scorecardscanner.New(scorecardscanner.Config{GitHubToken: githubToken}),
 		},
-		Resolver:          internaldb.NewV1Alpha1Resolver(stores),
+		Resolver:          internaldb.NewResolver(stores),
 		RegistryValidator: registryValidator,
 	})
 	if err != nil {
@@ -241,20 +241,20 @@ func startBuiltinSeedImport(cfg *config.Config, pool *pgxpool.Pool) {
 	}()
 }
 
-func startSeedFromImport(cfg *config.Config, v1alpha1Importer *pkgimporter.Importer) {
+func startSeedFromImport(cfg *config.Config, importer *pkgimporter.Importer) {
 	// Import seed data if seed source is provided. Requires the
 	// v1alpha1 Importer; backends without Pool() support can't seed
 	// from disk in the new model.
 	if cfg.SeedFrom == "" {
 		return
 	}
-	if v1alpha1Importer == nil {
+	if importer == nil {
 		slog.Warn("--seed-from requested but v1alpha1 importer unavailable; skipping", "seed_from", cfg.SeedFrom)
 		return
 	}
 
 	slog.Info("importing data in the background", "seed_from", cfg.SeedFrom)
-	go runSeedFromImport(cfg, v1alpha1Importer)
+	go runSeedFromImport(cfg, importer)
 }
 
 func buildRouteOptions(
@@ -268,17 +268,17 @@ func buildRouteOptions(
 	routeOpts := &router.RouteOptions{
 		ExtraRoutes:               options.ExtraRoutes,
 		Authz:                     authz,
-		V1Alpha1Stores:            stores,
-		V1Alpha1Importer:          importer,
-		V1Alpha1PerKindHooks:      crudPerKindHooks(options),
-		V1Alpha1RegistryValidator: options.V1Alpha1RegistryValidator,
+		Stores:            stores,
+		Importer:          importer,
+		PerKindHooks:      crudPerKindHooks(options),
+		RegistryValidator: options.RegistryValidator,
 	}
 
 	if stores != nil {
-		routeOpts.V1Alpha1DeploymentCoordinator = deploymentsvc.NewV1Alpha1Coordinator(deploymentsvc.V1Alpha1Dependencies{
+		routeOpts.DeploymentCoordinator = deploymentsvc.NewCoordinator(deploymentsvc.Dependencies{
 			Stores:   stores,
 			Adapters: adapters,
-			Getter:   internaldb.NewV1Alpha1Getter(stores),
+			Getter:   internaldb.NewGetter(stores),
 		})
 	}
 
@@ -302,24 +302,24 @@ func buildRouteOptions(
 // AuthorizeInput-shaped structs.
 func crudPerKindHooks(options types.AppOptions) v1alpha1crud.PerKindHooks {
 	hooks := v1alpha1crud.PerKindHooks{}
-	if len(options.V1Alpha1Authorizers) > 0 {
-		hooks.Authorizers = make(map[string]func(ctx context.Context, in resource.AuthorizeInput) error, len(options.V1Alpha1Authorizers))
-		for kind, fn := range options.V1Alpha1Authorizers {
+	if len(options.Authorizers) > 0 {
+		hooks.Authorizers = make(map[string]func(ctx context.Context, in resource.AuthorizeInput) error, len(options.Authorizers))
+		for kind, fn := range options.Authorizers {
 			f := fn
 			hooks.Authorizers[kind] = func(ctx context.Context, in resource.AuthorizeInput) error {
-				return f(ctx, types.V1Alpha1AuthorizeInput{
+				return f(ctx, types.AuthorizeInput{
 					Verb: in.Verb, Kind: in.Kind, Namespace: in.Namespace,
 					Name: in.Name, Version: in.Version,
 				})
 			}
 		}
 	}
-	if len(options.V1Alpha1ListFilters) > 0 {
-		hooks.ListFilters = make(map[string]func(ctx context.Context, in resource.AuthorizeInput) (string, []any, error), len(options.V1Alpha1ListFilters))
-		for kind, fn := range options.V1Alpha1ListFilters {
+	if len(options.ListFilters) > 0 {
+		hooks.ListFilters = make(map[string]func(ctx context.Context, in resource.AuthorizeInput) (string, []any, error), len(options.ListFilters))
+		for kind, fn := range options.ListFilters {
 			f := fn
 			hooks.ListFilters[kind] = func(ctx context.Context, in resource.AuthorizeInput) (string, []any, error) {
-				return f(ctx, types.V1Alpha1AuthorizeInput{
+				return f(ctx, types.AuthorizeInput{
 					Verb: in.Verb, Kind: in.Kind, Namespace: in.Namespace,
 					Name: in.Name, Version: in.Version,
 				})
@@ -328,15 +328,15 @@ func crudPerKindHooks(options types.AppOptions) v1alpha1crud.PerKindHooks {
 	}
 	// PostUpserts / PostDeletes are already (ctx, v1alpha1.Object) →
 	// error so they pass through verbatim — no adapter needed.
-	if len(options.V1Alpha1PostUpserts) > 0 {
-		hooks.PostUpserts = make(map[string]func(ctx context.Context, obj v1alpha1.Object) error, len(options.V1Alpha1PostUpserts))
-		for kind, fn := range options.V1Alpha1PostUpserts {
+	if len(options.PostUpserts) > 0 {
+		hooks.PostUpserts = make(map[string]func(ctx context.Context, obj v1alpha1.Object) error, len(options.PostUpserts))
+		for kind, fn := range options.PostUpserts {
 			hooks.PostUpserts[kind] = fn
 		}
 	}
-	if len(options.V1Alpha1PostDeletes) > 0 {
-		hooks.PostDeletes = make(map[string]func(ctx context.Context, obj v1alpha1.Object) error, len(options.V1Alpha1PostDeletes))
-		for kind, fn := range options.V1Alpha1PostDeletes {
+	if len(options.PostDeletes) > 0 {
+		hooks.PostDeletes = make(map[string]func(ctx context.Context, obj v1alpha1.Object) error, len(options.PostDeletes))
+		for kind, fn := range options.PostDeletes {
 			hooks.PostDeletes[kind] = fn
 		}
 	}
@@ -344,7 +344,7 @@ func crudPerKindHooks(options types.AppOptions) v1alpha1crud.PerKindHooks {
 	// PostDelete by Spec.Platform → adapter. A Provider whose platform
 	// has no registered adapter is a no-op (matches the OSS default
 	// where AppOptions.ProviderPlatforms is empty). When both an
-	// explicit V1Alpha1PostUpserts[KindProvider] and ProviderPlatforms
+	// explicit PostUpserts[KindProvider] and ProviderPlatforms
 	// are present, the dispatcher chains: caller hook first, then the
 	// platform adapter.
 	if len(options.ProviderPlatforms) > 0 {
@@ -453,13 +453,13 @@ func openDatabase(
 // server on quit.
 func startMCPServer(
 	cfg *config.Config,
-	v1alpha1Stores map[string]*v1alpha1store.Store,
+	stores map[string]*v1alpha1store.Store,
 	authnProvider auth.AuthnProvider,
 ) *http.Server {
 	if cfg.MCPPort <= 0 {
 		return nil
 	}
-	mcpServer := mcpregistry.NewServer(v1alpha1Stores)
+	mcpServer := mcpregistry.NewServer(stores)
 	var handler http.Handler = mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
 		return mcpServer
 	}, &mcp.StreamableHTTPOptions{})
@@ -521,13 +521,13 @@ func setupLogging(levelStr string) {
 }
 
 // runSeedFromImport drives the cfg.SeedFrom import in the background
-// via the v1alpha1 Importer. Caller guarantees v1alpha1Importer != nil.
-func runSeedFromImport(cfg *config.Config, v1alpha1Importer *pkgimporter.Importer) {
+// via the v1alpha1 Importer. Caller guarantees importer != nil.
+func runSeedFromImport(cfg *config.Config, importer *pkgimporter.Importer) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	ctx = auth.WithSystemContext(ctx)
 
-	results, err := v1alpha1Importer.Import(ctx, pkgimporter.Options{
+	results, err := importer.Import(ctx, pkgimporter.Options{
 		Path:   cfg.SeedFrom,
 		Enrich: cfg.EnrichServerData,
 	})
@@ -594,8 +594,8 @@ func wireEmbeddings(cfg *config.Config, stores map[string]*v1alpha1store.Store, 
 		return
 	}
 
-	routeOpts.V1Alpha1Indexer = idx
-	routeOpts.V1Alpha1SemanticSearch = makeSemanticSearchFunc(provider, cfg.Embeddings.Dimensions)
+	routeOpts.Indexer = idx
+	routeOpts.SemanticSearch = makeSemanticSearchFunc(provider, cfg.Embeddings.Dimensions)
 	slog.Info("embeddings indexer + semantic search enabled",
 		"provider", cfg.Embeddings.Provider,
 		"model", cfg.Embeddings.Model)

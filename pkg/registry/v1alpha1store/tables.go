@@ -8,7 +8,7 @@ import (
 
 // V1Alpha1TableFor is the canonical mapping from v1alpha1 Kind name to
 // its backing table in the dedicated `v1alpha1.*` PostgreSQL schema.
-// Callers that need a *Store should prefer NewV1Alpha1Stores below
+// Callers that need a *Store should prefer NewStores below
 // rather than constructing one per kind.
 //
 // Enterprise builds that register additional kinds via
@@ -24,7 +24,7 @@ var V1Alpha1TableFor = map[string]string{
 	v1alpha1.KindDeployment: "v1alpha1.deployments",
 }
 
-// NewV1Alpha1Stores builds one *Store per built-in v1alpha1 Kind, bound
+// NewStores builds one *Store per built-in v1alpha1 Kind, bound
 // to its canonical table. The returned map is keyed by Kind name (e.g.
 // "Agent", "MCPServer") and is the single input the router/apply/
 // importer layers take — they never look up tables by string literal
@@ -32,7 +32,7 @@ var V1Alpha1TableFor = map[string]string{
 //
 // Iterates v1alpha1.BuiltinKinds so registration order stays stable
 // across builds (important for OpenAPI output).
-func NewV1Alpha1Stores(pool *pgxpool.Pool) map[string]*Store {
+func NewStores(pool *pgxpool.Pool) map[string]*Store {
 	out := make(map[string]*Store, len(v1alpha1.BuiltinKinds))
 	for _, kind := range v1alpha1.BuiltinKinds {
 		table, ok := V1Alpha1TableFor[kind]

@@ -25,7 +25,7 @@ import (
 // `/{plural}/{name}/readme` and the version-pinned variant inline.
 // Callers don't pass a separate readme accessor.
 func TestResourceRegister_AgentReadmeRoutesAndListProjection(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
@@ -86,7 +86,7 @@ func TestResourceRegister_AgentReadmeRoutesAndListProjection(t *testing.T) {
 // from Huma's router (no operation registered) rather than reaching the
 // handler.
 func TestRegister_NoReadmeRoutesForReadmeLessKinds(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, v1alpha1store.V1Alpha1TableFor[v1alpha1.KindProvider])
 
 	_, api := humatest.New(t)
@@ -114,7 +114,7 @@ func TestRegister_NoReadmeRoutesForReadmeLessKinds(t *testing.T) {
 // frequently containing setup instructions, internal hostnames,
 // contact info) for resources they don't have grants for.
 func TestRegisterReadme_RespectsAuthorize(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)

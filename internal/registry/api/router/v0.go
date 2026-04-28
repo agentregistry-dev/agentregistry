@@ -27,83 +27,83 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
-// V1Alpha1Stores is the per-kind Store map used by the v1alpha1
+// Stores is the per-kind Store map used by the v1alpha1
 // resource handler, keyed by v1alpha1 Kind name (e.g. "Agent",
-// "MCPServer"). Produced by v1alpha1store.NewV1Alpha1Stores; enterprise
+// "MCPServer"). Produced by v1alpha1store.NewStores; enterprise
 // builds may extend the map with additional kinds before passing it
 // in.
-type V1Alpha1Stores = map[string]*v1alpha1store.Store
+type Stores = map[string]*v1alpha1store.Store
 
 // RouteOptions contains the services that drive route registration.
 //
-// V1Alpha1Stores is required; everything else is optional and gates a
+// Stores is required; everything else is optional and gates a
 // specific feature area (deployments, embeddings, semantic search).
 // RegisterRoutes returns an error if a required field is missing rather
 // than silently no-op'ing — a misconfigured boot fails loud.
 type RouteOptions struct {
-	// V1Alpha1Stores is the per-kind v1alpha1store map that drives the
+	// Stores is the per-kind v1alpha1store map that drives the
 	// generic CRUD handlers at `/v0/{plural}/{name}/{version}?namespace={ns}`
 	// (namespace is a query param defaulting to "default";
 	// `?namespace=all` widens list scope across every namespace).
 	// REQUIRED — RegisterRoutes errors when this is nil/empty.
-	V1Alpha1Stores V1Alpha1Stores
+	Stores Stores
 
-	// V1Alpha1Importer, when non-nil, enables POST /v0/import. Typically
-	// constructed alongside V1Alpha1Stores at bootstrap with the OSS
+	// Importer, when non-nil, enables POST /v0/import. Typically
+	// constructed alongside Stores at bootstrap with the OSS
 	// scanner set (OSV + Scorecard) + a FindingsStore bound to the
 	// same pool.
-	V1Alpha1Importer *importer.Importer
+	Importer *importer.Importer
 
-	// V1Alpha1DeploymentCoordinator drives post-persist reconciliation
+	// DeploymentCoordinator drives post-persist reconciliation
 	// for the Deployment kind: PUT → adapter.Apply; DELETE → adapter.Remove.
-	// Constructed alongside V1Alpha1Stores at bootstrap, wired into the
+	// Constructed alongside Stores at bootstrap, wired into the
 	// generic resource handler as a per-kind PostUpsert/PostDelete hook
 	// for KindDeployment. Nil disables Deployment reconciliation — PUT
 	// still persists the row, DELETE still soft-deletes, but no adapter
 	// dispatch happens.
-	V1Alpha1DeploymentCoordinator *deploymentsvc.V1Alpha1Coordinator
+	DeploymentCoordinator *deploymentsvc.Coordinator
 
-	// V1Alpha1Indexer, when non-nil, enables POST /v0/embeddings/index +
+	// Indexer, when non-nil, enables POST /v0/embeddings/index +
 	// GET /v0/embeddings/index/{jobId}. Constructed at bootstrap only
 	// when AGENT_REGISTRY_EMBEDDINGS_ENABLED is set and a provider is
 	// reachable; nil disables the endpoints. The in-process job tracker
 	// is owned by the embeddings handler — there's no shared job
 	// manager concept across the API.
-	V1Alpha1Indexer *embeddings.Indexer
+	Indexer *embeddings.Indexer
 
-	// V1Alpha1SemanticSearch, when non-nil, enables
+	// SemanticSearch, when non-nil, enables
 	// `?semantic=<q>&semanticThreshold=<f>` on list endpoints. The
 	// func embeds the query string and returns the vector; the list
 	// handler then routes through Store.SemanticList.
-	V1Alpha1SemanticSearch resource.SemanticSearchFunc
+	SemanticSearch resource.SemanticSearchFunc
 
 	// Authz gates admin-scope handlers (e.g. embeddings indexing) on
 	// an API level. Nil falls back to the public provider so the
 	// handlers register but every admin check short-circuits to allow.
 	Authz auth.Authorizer
 
-	// V1Alpha1PerKindHooks injects per-kind Authorize + ListFilter
+	// PerKindHooks injects per-kind Authorize + ListFilter
 	// callbacks into the generic resource handler. Enterprise builds
 	// thread their RBAC engine through here so reader / publisher /
 	// admin gates fire on the OSS-registered Agent / MCPServer / Skill
 	// / Prompt / Provider / Deployment endpoints. Zero-value matches
 	// the public OSS default (no per-kind gates).
-	V1Alpha1PerKindHooks v1alpha1crud.PerKindHooks
+	PerKindHooks v1alpha1crud.PerKindHooks
 
-	// V1Alpha1RegistryValidator overrides the per-package registry
+	// RegistryValidator overrides the per-package registry
 	// validator on the apply / import path. Nil falls back to
 	// registries.Dispatcher, the upstream public-catalogue default.
-	// See types.AppOptions.V1Alpha1RegistryValidator for the full
+	// See types.AppOptions.RegistryValidator for the full
 	// rationale (private deployments typically swap in a filter that
 	// short-circuits OCI).
-	V1Alpha1RegistryValidator v1alpha1.RegistryValidatorFunc
+	RegistryValidator v1alpha1.RegistryValidatorFunc
 
 	// Optional callback for integration-owned route registration.
 	ExtraRoutes func(api huma.API, pathPrefix string)
 }
 
 // RegisterRoutes registers all API routes under /v0. Required
-// dependencies (RouteOptions itself, V1Alpha1Stores) trigger an
+// dependencies (RouteOptions itself, Stores) trigger an
 // error rather than a silent skip so a misconfigured boot fails
 // visibly.
 func RegisterRoutes(
@@ -116,8 +116,8 @@ func RegisterRoutes(
 	if opts == nil {
 		return errors.New("router: RouteOptions is required")
 	}
-	if len(opts.V1Alpha1Stores) == 0 {
-		return errors.New("router: V1Alpha1Stores is required")
+	if len(opts.Stores) == 0 {
+		return errors.New("router: Stores is required")
 	}
 
 	pathPrefix := "/v0"
@@ -132,22 +132,22 @@ func RegisterRoutes(
 	registerV1Alpha1Routes(
 		api,
 		pathPrefix,
-		opts.V1Alpha1Stores,
-		opts.V1Alpha1DeploymentCoordinator,
-		opts.V1Alpha1SemanticSearch,
-		opts.V1Alpha1PerKindHooks,
-		opts.V1Alpha1RegistryValidator,
+		opts.Stores,
+		opts.DeploymentCoordinator,
+		opts.SemanticSearch,
+		opts.PerKindHooks,
+		opts.RegistryValidator,
 	)
 
 	// POST /v0/import — runs decoded manifests through the enrichment
 	// pipeline (validate + scanners + findings-write) before Upsert.
 	// Authorizers wires the same per-kind RBAC the regular apply path
 	// uses; without it the import endpoint would be a write-bypass.
-	if opts.V1Alpha1Importer != nil {
+	if opts.Importer != nil {
 		importpipeline.Register(api, importpipeline.Config{
 			BasePrefix:  pathPrefix,
-			Importer:    opts.V1Alpha1Importer,
-			Authorizers: opts.V1Alpha1PerKindHooks.Authorizers,
+			Importer:    opts.Importer,
+			Authorizers: opts.PerKindHooks.Authorizers,
 		})
 	}
 
@@ -155,10 +155,10 @@ func RegisterRoutes(
 	// present. Authz gates admin-only operations; when zero-valued it
 	// falls through to the public provider which allows every check,
 	// matching the historical OSS default.
-	if opts.V1Alpha1Indexer != nil {
+	if opts.Indexer != nil {
 		v0embeddings.Register(api, v0embeddings.Config{
 			BasePrefix: pathPrefix,
-			Indexer:    opts.V1Alpha1Indexer,
+			Indexer:    opts.Indexer,
 			Authz:      opts.Authz,
 		})
 	}
@@ -175,14 +175,14 @@ func RegisterRoutes(
 // `?namespace=all` on list widens scope across every namespace), plus
 // the multi-doc apply endpoint at `{basePrefix}/apply`. Cross-kind ResourceRef
 // existence dispatches through the shared
-// internaldb.NewV1Alpha1Resolver so the router and any server-side
+// internaldb.NewResolver so the router and any server-side
 // Importer both see the same ref-existence semantics.
 //
 // When coord is non-nil, Deployment PUT/DELETE fire
 // coord.Apply/coord.Remove after the row is persisted so the platform
 // adapter converges runtime state synchronously with the API call.
-func registerV1Alpha1Routes(api huma.API, basePrefix string, stores V1Alpha1Stores, coord *deploymentsvc.V1Alpha1Coordinator, semantic resource.SemanticSearchFunc, perKind v1alpha1crud.PerKindHooks, registryValidator v1alpha1.RegistryValidatorFunc) {
-	resolver := internaldb.NewV1Alpha1Resolver(stores)
+func registerV1Alpha1Routes(api huma.API, basePrefix string, stores Stores, coord *deploymentsvc.Coordinator, semantic resource.SemanticSearchFunc, perKind v1alpha1crud.PerKindHooks, registryValidator v1alpha1.RegistryValidatorFunc) {
+	resolver := internaldb.NewResolver(stores)
 	if registryValidator == nil {
 		registryValidator = registries.Dispatcher
 	}

@@ -26,8 +26,8 @@ import (
 // API + the underlying stores for assertions.
 func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha1store.Store) {
 	t.Helper()
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
-	stores := v1alpha1store.NewV1Alpha1Stores(pool)
+	pool := v1alpha1store.NewTestPool(t)
+	stores := v1alpha1store.NewStores(pool)
 	ctx := t.Context()
 
 	mcpSpec, err := json.Marshal(v1alpha1.MCPServerSpec{
@@ -43,16 +43,16 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha
 	_, err = stores[v1alpha1.KindProvider].Upsert(ctx, "default", "noop-provider", "1", providerSpec, v1alpha1store.UpsertOpts{})
 	require.NoError(t, err)
 
-	coord := deploymentsvc.NewV1Alpha1Coordinator(deploymentsvc.V1Alpha1Dependencies{
+	coord := deploymentsvc.NewCoordinator(deploymentsvc.Dependencies{
 		Stores:   stores,
 		Adapters: map[string]types.DeploymentAdapter{noop.Platform: noop.New()},
-		Getter:   database.NewV1Alpha1Getter(stores),
+		Getter:   database.NewGetter(stores),
 	})
 
 	_, api := humatest.New(t)
 	v1alpha1crud.Register(
 		api, "/v0", stores,
-		database.NewV1Alpha1Resolver(stores),
+		database.NewResolver(stores),
 		nil, // registryValidator
 		nil, // semanticSearch disabled in this test
 		v1alpha1crud.PerKindHooks{

@@ -14,7 +14,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
-// V1Alpha1Coordinator is the v1alpha1-native orchestrator that glues the
+// Coordinator is the v1alpha1-native orchestrator that glues the
 // generic v1alpha1store.Store to the set of registered DeploymentAdapter
 // implementations. It is the synchronous counterpart to the Phase 2 KRT
 // reconciler — HTTP handlers call it directly after Store.Upsert to drive
@@ -32,16 +32,16 @@ import (
 // Coordinator is NOT responsible for Upserting the Deployment row — that
 // happens upstream at the apply handler. Coordinator.Apply MUST be called
 // only after the row is persisted so status writes land on a real row.
-type V1Alpha1Coordinator struct {
+type Coordinator struct {
 	stores   map[string]*v1alpha1store.Store
 	adapters map[string]types.DeploymentAdapter
 	getter   v1alpha1.GetterFunc
 }
 
-// V1Alpha1Dependencies bundles the coordinator's inputs.
-type V1Alpha1Dependencies struct {
+// Dependencies bundles the coordinator's inputs.
+type Dependencies struct {
 	// Stores is the per-Kind generic Store map — output of
-	// internaldb.NewV1Alpha1Stores.
+	// internaldb.NewStores.
 	Stores map[string]*v1alpha1store.Store
 	// Adapters is the platform → adapter map. Coordinator looks up by
 	// Provider.Spec.Platform; unmapped platforms surface
@@ -53,18 +53,18 @@ type V1Alpha1Dependencies struct {
 	Getter v1alpha1.GetterFunc
 }
 
-// NewV1Alpha1Coordinator constructs a coordinator from its dependencies.
+// NewCoordinator constructs a coordinator from its dependencies.
 // Stores and Adapters must be non-nil (empty maps are fine for tests that
 // never dispatch); Getter may be nil if the caller knows no nested-ref
 // resolution is needed.
-func NewV1Alpha1Coordinator(deps V1Alpha1Dependencies) *V1Alpha1Coordinator {
+func NewCoordinator(deps Dependencies) *Coordinator {
 	if deps.Stores == nil {
 		deps.Stores = map[string]*v1alpha1store.Store{}
 	}
 	if deps.Adapters == nil {
 		deps.Adapters = map[string]types.DeploymentAdapter{}
 	}
-	return &V1Alpha1Coordinator{
+	return &Coordinator{
 		stores:   deps.Stores,
 		adapters: deps.Adapters,
 		getter:   deps.Getter,
@@ -85,7 +85,7 @@ func NewV1Alpha1Coordinator(deps V1Alpha1Dependencies) *V1Alpha1Coordinator {
 //
 // Conditions are merged, not replaced — SetCondition dedups by Type and
 // preserves LastTransitionTime when Status is unchanged.
-func (c *V1Alpha1Coordinator) Apply(ctx context.Context, deployment *v1alpha1.Deployment) error {
+func (c *Coordinator) Apply(ctx context.Context, deployment *v1alpha1.Deployment) error {
 	if deployment == nil {
 		return fmt.Errorf("%w: deployment is required", pkgdb.ErrInvalidInput)
 	}
@@ -132,7 +132,7 @@ func (c *V1Alpha1Coordinator) Apply(ctx context.Context, deployment *v1alpha1.De
 // Idempotent — calling Remove twice is safe: status simply converges to
 // Ready=False again. Row lifetime past this point belongs to the
 // soft-delete + GC pass; the adapter contributes no finalizer tokens.
-func (c *V1Alpha1Coordinator) Remove(ctx context.Context, deployment *v1alpha1.Deployment) error {
+func (c *Coordinator) Remove(ctx context.Context, deployment *v1alpha1.Deployment) error {
 	if deployment == nil {
 		return fmt.Errorf("%w: deployment is required", pkgdb.ErrInvalidInput)
 	}
@@ -158,7 +158,7 @@ func (c *V1Alpha1Coordinator) Remove(ctx context.Context, deployment *v1alpha1.D
 
 // Logs streams logs from the deployed workload. Returns an
 // UnsupportedDeploymentPlatformError if no adapter matches the provider.
-func (c *V1Alpha1Coordinator) Logs(ctx context.Context, deployment *v1alpha1.Deployment, in types.LogsInput) (<-chan types.LogLine, error) {
+func (c *Coordinator) Logs(ctx context.Context, deployment *v1alpha1.Deployment, in types.LogsInput) (<-chan types.LogLine, error) {
 	if deployment == nil {
 		return nil, fmt.Errorf("%w: deployment is required", pkgdb.ErrInvalidInput)
 	}
@@ -177,7 +177,7 @@ func (c *V1Alpha1Coordinator) Logs(ctx context.Context, deployment *v1alpha1.Dep
 // Discover enumerates out-of-band workloads for the supplied Provider.
 // Empty slice + nil error means the adapter found nothing; mismatched
 // platforms surface UnsupportedDeploymentPlatformError.
-func (c *V1Alpha1Coordinator) Discover(ctx context.Context, provider *v1alpha1.Provider) ([]types.DiscoveryResult, error) {
+func (c *Coordinator) Discover(ctx context.Context, provider *v1alpha1.Provider) ([]types.DiscoveryResult, error) {
 	if provider == nil {
 		return nil, fmt.Errorf("%w: provider is required", pkgdb.ErrInvalidInput)
 	}
@@ -192,7 +192,7 @@ func (c *V1Alpha1Coordinator) Discover(ctx context.Context, provider *v1alpha1.P
 // inherit from the Deployment's namespace — same rule as v1alpha1 Object
 // ResolveRefs so a deployment targeting `Agent alice` in the same
 // namespace works without repeating the namespace literal.
-func (c *V1Alpha1Coordinator) resolveTarget(ctx context.Context, deployment *v1alpha1.Deployment) (v1alpha1.Object, error) {
+func (c *Coordinator) resolveTarget(ctx context.Context, deployment *v1alpha1.Deployment) (v1alpha1.Object, error) {
 	ref := deployment.Spec.TargetRef
 	if ref.Namespace == "" {
 		ref.Namespace = deployment.Metadata.Namespace
@@ -210,7 +210,7 @@ func (c *V1Alpha1Coordinator) resolveTarget(ctx context.Context, deployment *v1a
 // resolveProvider fetches the Deployment.Spec.ProviderRef with the same
 // blank-namespace inheritance rule as resolveTarget, then type-asserts to
 // *v1alpha1.Provider.
-func (c *V1Alpha1Coordinator) resolveProvider(ctx context.Context, deployment *v1alpha1.Deployment) (*v1alpha1.Provider, error) {
+func (c *Coordinator) resolveProvider(ctx context.Context, deployment *v1alpha1.Deployment) (*v1alpha1.Provider, error) {
 	ref := deployment.Spec.ProviderRef
 	if ref.Namespace == "" {
 		ref.Namespace = deployment.Metadata.Namespace
@@ -230,7 +230,7 @@ func (c *V1Alpha1Coordinator) resolveProvider(ctx context.Context, deployment *v
 // string. Returns a sentinel UnsupportedDeploymentPlatformError so callers
 // (MCP tool surface, HTTP handler) can discriminate "no adapter" from
 // transient plumbing errors.
-func (c *V1Alpha1Coordinator) resolveAdapter(platform string) (types.DeploymentAdapter, error) {
+func (c *Coordinator) resolveAdapter(platform string) (types.DeploymentAdapter, error) {
 	normalized := strings.ToLower(strings.TrimSpace(platform))
 	if normalized == "" {
 		return nil, fmt.Errorf("%w: provider platform is empty", pkgdb.ErrInvalidInput)
@@ -250,7 +250,7 @@ func (c *V1Alpha1Coordinator) resolveAdapter(platform string) (types.DeploymentA
 // No finalizer plumbing today: deletion proceeds on the soft-delete +
 // GC path. The orphan-reconciliation follow-up will reintroduce a
 // dedicated mechanism using the retained `finalizers` DB column.
-func (c *V1Alpha1Coordinator) persistApplyResult(ctx context.Context, deployment *v1alpha1.Deployment, result *types.ApplyResult) error {
+func (c *Coordinator) persistApplyResult(ctx context.Context, deployment *v1alpha1.Deployment, result *types.ApplyResult) error {
 	if result == nil {
 		return nil
 	}
@@ -285,7 +285,7 @@ func (c *V1Alpha1Coordinator) persistApplyResult(ctx context.Context, deployment
 // persistRemoveResult merges adapter-returned Conditions for an
 // already-removed deployment. Soft-delete + GC own row lifetime; the
 // adapter's job is purely external-state teardown.
-func (c *V1Alpha1Coordinator) persistRemoveResult(ctx context.Context, deployment *v1alpha1.Deployment, result *types.RemoveResult) error {
+func (c *Coordinator) persistRemoveResult(ctx context.Context, deployment *v1alpha1.Deployment, result *types.RemoveResult) error {
 	if result == nil {
 		return nil
 	}
@@ -311,7 +311,7 @@ func (c *V1Alpha1Coordinator) persistRemoveResult(ctx context.Context, deploymen
 	return nil
 }
 
-func (c *V1Alpha1Coordinator) deploymentStore() (*v1alpha1store.Store, error) {
+func (c *Coordinator) deploymentStore() (*v1alpha1store.Store, error) {
 	store, ok := c.stores[v1alpha1.KindDeployment]
 	if !ok || store == nil {
 		return nil, errors.New("coordinator: no Deployment store registered")

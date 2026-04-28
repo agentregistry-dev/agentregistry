@@ -22,8 +22,8 @@ import (
 // the store map + the Deployment metadata coordinates.
 func seedV1Alpha1Fixtures(t *testing.T) (map[string]*v1alpha1store.Store, *v1alpha1.Deployment) {
 	t.Helper()
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
-	stores := v1alpha1store.NewV1Alpha1Stores(pool)
+	pool := v1alpha1store.NewTestPool(t)
+	stores := v1alpha1store.NewStores(pool)
 	ctx := context.Background()
 
 	mcpSpec, err := json.Marshal(v1alpha1.MCPServerSpec{
@@ -60,14 +60,14 @@ func seedV1Alpha1Fixtures(t *testing.T) (map[string]*v1alpha1store.Store, *v1alp
 	return stores, deployment
 }
 
-func TestV1Alpha1Coordinator_ApplyWritesConditionsAndAnnotations(t *testing.T) {
+func TestCoordinator_ApplyWritesConditionsAndAnnotations(t *testing.T) {
 	stores, deployment := seedV1Alpha1Fixtures(t)
 	ctx := context.Background()
 
-	coord := NewV1Alpha1Coordinator(V1Alpha1Dependencies{
+	coord := NewCoordinator(Dependencies{
 		Stores:   stores,
 		Adapters: map[string]types.DeploymentAdapter{noop.Platform: noop.New()},
-		Getter:   internaldb.NewV1Alpha1Getter(stores),
+		Getter:   internaldb.NewGetter(stores),
 	})
 
 	require.NoError(t, coord.Apply(ctx, deployment))
@@ -84,7 +84,7 @@ func TestV1Alpha1Coordinator_ApplyWritesConditionsAndAnnotations(t *testing.T) {
 	require.Equal(t, deployment.Metadata.Generation, status.ObservedGeneration)
 }
 
-func TestV1Alpha1Coordinator_ApplyPreservesExistingAnnotations(t *testing.T) {
+func TestCoordinator_ApplyPreservesExistingAnnotations(t *testing.T) {
 	stores, deployment := seedV1Alpha1Fixtures(t)
 	ctx := context.Background()
 
@@ -94,10 +94,10 @@ func TestV1Alpha1Coordinator_ApplyPreservesExistingAnnotations(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	coord := NewV1Alpha1Coordinator(V1Alpha1Dependencies{
+	coord := NewCoordinator(Dependencies{
 		Stores:   stores,
 		Adapters: map[string]types.DeploymentAdapter{noop.Platform: noop.New()},
-		Getter:   internaldb.NewV1Alpha1Getter(stores),
+		Getter:   internaldb.NewGetter(stores),
 	})
 
 	require.NoError(t, coord.Apply(ctx, deployment))
@@ -108,14 +108,14 @@ func TestV1Alpha1Coordinator_ApplyPreservesExistingAnnotations(t *testing.T) {
 	require.Contains(t, raw.Metadata.Annotations, "platforms.agentregistry.solo.io/noop/applied-at")
 }
 
-func TestV1Alpha1Coordinator_RemoveWritesRemovedCondition(t *testing.T) {
+func TestCoordinator_RemoveWritesRemovedCondition(t *testing.T) {
 	stores, deployment := seedV1Alpha1Fixtures(t)
 	ctx := context.Background()
 
-	coord := NewV1Alpha1Coordinator(V1Alpha1Dependencies{
+	coord := NewCoordinator(Dependencies{
 		Stores:   stores,
 		Adapters: map[string]types.DeploymentAdapter{noop.Platform: noop.New()},
-		Getter:   internaldb.NewV1Alpha1Getter(stores),
+		Getter:   internaldb.NewGetter(stores),
 	})
 
 	require.NoError(t, coord.Apply(ctx, deployment))
@@ -130,14 +130,14 @@ func TestV1Alpha1Coordinator_RemoveWritesRemovedCondition(t *testing.T) {
 	require.Equal(t, v1alpha1.ConditionFalse, ready.Status)
 }
 
-func TestV1Alpha1Coordinator_UnsupportedPlatform(t *testing.T) {
+func TestCoordinator_UnsupportedPlatform(t *testing.T) {
 	stores, deployment := seedV1Alpha1Fixtures(t)
 	ctx := context.Background()
 
-	coord := NewV1Alpha1Coordinator(V1Alpha1Dependencies{
+	coord := NewCoordinator(Dependencies{
 		Stores:   stores,
 		Adapters: map[string]types.DeploymentAdapter{}, // empty — no adapter for "noop"
-		Getter:   internaldb.NewV1Alpha1Getter(stores),
+		Getter:   internaldb.NewGetter(stores),
 	})
 
 	err := coord.Apply(ctx, deployment)
@@ -147,17 +147,17 @@ func TestV1Alpha1Coordinator_UnsupportedPlatform(t *testing.T) {
 	require.Equal(t, noop.Platform, unsupported.Platform)
 }
 
-func TestV1Alpha1Coordinator_DanglingTargetRef(t *testing.T) {
+func TestCoordinator_DanglingTargetRef(t *testing.T) {
 	stores, deployment := seedV1Alpha1Fixtures(t)
 	ctx := context.Background()
 
 	// Point the deployment at a MCPServer that doesn't exist.
 	deployment.Spec.TargetRef.Name = "does-not-exist"
 
-	coord := NewV1Alpha1Coordinator(V1Alpha1Dependencies{
+	coord := NewCoordinator(Dependencies{
 		Stores:   stores,
 		Adapters: map[string]types.DeploymentAdapter{noop.Platform: noop.New()},
-		Getter:   internaldb.NewV1Alpha1Getter(stores),
+		Getter:   internaldb.NewGetter(stores),
 	})
 
 	err := coord.Apply(ctx, deployment)
@@ -165,14 +165,14 @@ func TestV1Alpha1Coordinator_DanglingTargetRef(t *testing.T) {
 	require.ErrorIs(t, err, v1alpha1.ErrDanglingRef)
 }
 
-func TestV1Alpha1Coordinator_Discover_ReturnsAdapterResults(t *testing.T) {
+func TestCoordinator_Discover_ReturnsAdapterResults(t *testing.T) {
 	stores, _ := seedV1Alpha1Fixtures(t)
 	ctx := context.Background()
 
-	coord := NewV1Alpha1Coordinator(V1Alpha1Dependencies{
+	coord := NewCoordinator(Dependencies{
 		Stores:   stores,
 		Adapters: map[string]types.DeploymentAdapter{noop.Platform: noop.New()},
-		Getter:   internaldb.NewV1Alpha1Getter(stores),
+		Getter:   internaldb.NewGetter(stores),
 	})
 
 	provider := &v1alpha1.Provider{

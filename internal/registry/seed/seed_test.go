@@ -14,7 +14,7 @@ import (
 )
 
 func TestImportBuiltinSeedData_Populates(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	ctx := context.Background()
 
 	require.NoError(t, ImportBuiltinSeedData(ctx, pool))
@@ -36,7 +36,7 @@ func TestImportBuiltinSeedData_Populates(t *testing.T) {
 }
 
 func TestImportBuiltinSeedData_Idempotent(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	ctx := context.Background()
 
 	require.NoError(t, ImportBuiltinSeedData(ctx, pool))
@@ -66,7 +66,7 @@ func TestImportBuiltinSeedData_Idempotent(t *testing.T) {
 }
 
 func TestImportBuiltinSeedData_SpecStructure(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	ctx := context.Background()
 
 	require.NoError(t, ImportBuiltinSeedData(ctx, pool))

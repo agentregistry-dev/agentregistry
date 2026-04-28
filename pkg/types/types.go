@@ -4,11 +4,11 @@
 // into the registry app lives here.
 //
 // The types are split by domain across files:
-//   - types.go              — AppOptions, Server, HTTPServerFactory,
+//   - types.go     — AppOptions, Server, HTTPServerFactory,
 //     Response/EmptyResponse wrappers
-//   - adapter_v1alpha1.go   — v1alpha1 deployment + provider adapter
-//     surfaces (DeploymentAdapter, ProviderPlatformAdapter)
-//   - daemon.go             — CLI-side daemon + token provider hooks
+//   - adapter.go   — deployment + provider adapter surfaces
+//     (DeploymentAdapter, ProviderPlatformAdapter)
+//   - daemon.go    — CLI-side daemon + token provider hooks
 package types
 
 import (
@@ -26,11 +26,11 @@ import (
 // store.
 type DatabaseFactory func(ctx context.Context, databaseURL string, baseStore database.Store, authz auth.Authorizer) (database.Store, error)
 
-// V1Alpha1AuthorizeInput is the per-call context handed to
-// V1Alpha1Authorizer + V1Alpha1ListFilter callbacks. Mirrors
+// AuthorizeInput is the per-call context handed to
+// Authorizer + ListFilter callbacks. Mirrors
 // resource.AuthorizeInput field-for-field; declared here to keep
 // AppOptions free of internal-package imports.
-type V1Alpha1AuthorizeInput struct {
+type AuthorizeInput struct {
 	// Verb is one of "get", "list", "apply", "delete".
 	Verb string
 	// Kind is the canonical Kind name (v1alpha1.KindAgent, etc.).
@@ -43,28 +43,28 @@ type V1Alpha1AuthorizeInput struct {
 	Version string
 }
 
-// V1Alpha1Authorizer gates a single resource handler invocation. Return
+// Authorizer gates a single resource handler invocation. Return
 // nil to allow; a huma error to set the response status; any other
 // error to surface as 500. Wired into resource.Config.Authorize.
-type V1Alpha1Authorizer func(ctx context.Context, in V1Alpha1AuthorizeInput) error
+type Authorizer func(ctx context.Context, in AuthorizeInput) error
 
-// V1Alpha1ListFilter returns a SQL predicate fragment + bind args to
+// ListFilter returns a SQL predicate fragment + bind args to
 // inject into the list query as ListOpts.ExtraWhere / ExtraArgs. Wired
 // into resource.Config.ListFilter. Return ("", nil, nil) for "no
 // filter"; non-nil err short-circuits the list.
-type V1Alpha1ListFilter func(ctx context.Context, in V1Alpha1AuthorizeInput) (extraWhere string, extraArgs []any, err error)
+type ListFilter func(ctx context.Context, in AuthorizeInput) (extraWhere string, extraArgs []any, err error)
 
-// V1Alpha1PostUpsert runs after a successful PUT or apply on a v1alpha1
+// PostUpsert runs after a successful PUT or apply on a v1alpha1
 // resource. Wired into resource.Config.PostUpsert and the matching
 // per-doc apply hook on /v0/apply. Hook errors propagate to the
 // caller (500 on the per-kind PUT path, ApplyStatusFailed on the
 // batch path).
-type V1Alpha1PostUpsert func(ctx context.Context, obj v1alpha1.Object) error
+type PostUpsert func(ctx context.Context, obj v1alpha1.Object) error
 
-// V1Alpha1PostDelete runs after a successful DELETE on a v1alpha1
+// PostDelete runs after a successful DELETE on a v1alpha1
 // resource. Wired into resource.Config.PostDelete + the apply
 // batch's per-doc delete hook.
-type V1Alpha1PostDelete func(ctx context.Context, obj v1alpha1.Object) error
+type PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 
 // AppOptions contains configuration for the registry app.
 // All fields are optional and allow external developers to extend
@@ -98,7 +98,7 @@ type AppOptions struct {
 	// string; enterprise builds inject additional adapters here.
 	DeploymentAdapters map[string]DeploymentAdapter
 
-	// V1Alpha1Authorizers gates every read + write operation on the
+	// Authorizers gates every read + write operation on the
 	// generic v1alpha1 resource handler, keyed by canonical Kind name
 	// (v1alpha1.KindAgent, v1alpha1.KindMCPServer, etc.). Enterprise
 	// builds wire their RBAC engine here so reader / publisher / admin
@@ -106,17 +106,17 @@ type AppOptions struct {
 	// Prompt / Provider / Deployment endpoints. Missing keys behave
 	// like "no per-kind gate" — the resource handler's default permits
 	// the call, with API-level authn middleware still applying.
-	V1Alpha1Authorizers map[string]V1Alpha1Authorizer
+	Authorizers map[string]Authorizer
 
-	// V1Alpha1ListFilters injects per-kind ExtraWhere predicates into
+	// ListFilters injects per-kind ExtraWhere predicates into
 	// list queries. Use this for row-level visibility (e.g. RBAC
 	// filtering: a reader without a grant for a given resource never
 	// sees the row in a list response). The (string, []any) tuple is
 	// passed straight through to v1alpha1store.ListOpts.ExtraWhere /
 	// ExtraArgs — see that docstring for placeholder rules.
-	V1Alpha1ListFilters map[string]V1Alpha1ListFilter
+	ListFilters map[string]ListFilter
 
-	// V1Alpha1PostUpserts run after the generic resource handler PUTs a
+	// PostUpserts run after the generic resource handler PUTs a
 	// row, per kind. Enterprise builds wire this for kinds that need
 	// platform side-effects on apply — Provider apply mirroring spec
 	// into a per-platform sidecar table, for example. Missing keys =
@@ -124,12 +124,12 @@ type AppOptions struct {
 	//
 	// Hook errors fail the request with 500 (the row is already
 	// persisted, so a hook failure indicates degraded state).
-	V1Alpha1PostUpserts map[string]V1Alpha1PostUpsert
+	PostUpserts map[string]PostUpsert
 
-	// V1Alpha1PostDeletes mirror PostUpserts on the delete path.
-	V1Alpha1PostDeletes map[string]V1Alpha1PostDelete
+	// PostDeletes mirror PostUpserts on the delete path.
+	PostDeletes map[string]PostDelete
 
-	// V1Alpha1RegistryValidator overrides the per-package registry
+	// RegistryValidator overrides the per-package registry
 	// validator (the dispatcher consulted on apply / import to confirm
 	// each declared package — npm / pypi / oci / nuget / mcpb — exists
 	// and (for OCI) carries the
@@ -155,7 +155,7 @@ type AppOptions struct {
 	// no-op (`func(...) error { return nil }`) to disable per-package
 	// registry validation entirely. Cross-kind ResourceRef checks still
 	// run regardless.
-	V1Alpha1RegistryValidator v1alpha1.RegistryValidatorFunc
+	RegistryValidator v1alpha1.RegistryValidatorFunc
 
 	// ExtraRoutes allows external integrations to register additional HTTP
 	// routes using the same API instance and path prefix as OSS core

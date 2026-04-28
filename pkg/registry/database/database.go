@@ -38,7 +38,7 @@ var (
 //
 // The contract is intentionally thin: v1alpha1 consumers reach through
 // Pool() to construct their own generic Stores via
-// internal/registry/v1alpha1store.NewV1Alpha1Stores. Backends without a real
+// internal/registry/v1alpha1store.NewStores. Backends without a real
 // PostgreSQL connection return nil from Pool(); callers must gate any
 // pgx-specific functionality accordingly. Close() releases any pooled
 // resources on shutdown.

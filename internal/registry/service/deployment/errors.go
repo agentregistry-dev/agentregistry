@@ -9,7 +9,7 @@ import (
 )
 
 // UnsupportedDeploymentPlatformError reports that no deployment adapter
-// exists for a provider platform. V1Alpha1Coordinator returns this when
+// exists for a provider platform. Coordinator returns this when
 // the provider's Spec.Platform string has no registered adapter so
 // callers (MCP tool surface, HTTP handler) can distinguish "no adapter"
 // from transient plumbing failures.

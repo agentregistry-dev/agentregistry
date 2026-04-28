@@ -12,7 +12,7 @@ import (
 )
 
 func TestV1Alpha1Store_AnnotationsRoundTrip(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -31,7 +31,7 @@ func TestV1Alpha1Store_AnnotationsRoundTrip(t *testing.T) {
 }
 
 func TestV1Alpha1Store_AnnotationsPreservedOnNilUpsert(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -52,7 +52,7 @@ func TestV1Alpha1Store_AnnotationsPreservedOnNilUpsert(t *testing.T) {
 }
 
 func TestV1Alpha1Store_AnnotationsClearedOnEmptyMap(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 

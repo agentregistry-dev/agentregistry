@@ -26,7 +26,7 @@ func mustSpec(t *testing.T, spec any) json.RawMessage {
 }
 
 func TestV1Alpha1Store_UpsertCreatesRow(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -47,7 +47,7 @@ func TestV1Alpha1Store_UpsertCreatesRow(t *testing.T) {
 }
 
 func TestV1Alpha1Store_UpsertNoOpPreservesGeneration(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -63,7 +63,7 @@ func TestV1Alpha1Store_UpsertNoOpPreservesGeneration(t *testing.T) {
 }
 
 func TestV1Alpha1Store_UpsertBumpsGenerationOnSpecChange(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -84,7 +84,7 @@ func TestV1Alpha1Store_UpsertBumpsGenerationOnSpecChange(t *testing.T) {
 }
 
 func TestV1Alpha1Store_LatestVersionSemverToggle(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -99,7 +99,7 @@ func TestV1Alpha1Store_LatestVersionSemverToggle(t *testing.T) {
 }
 
 func TestV1Alpha1Store_LatestVersionFallbackOnInvalidSemver(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -114,7 +114,7 @@ func TestV1Alpha1Store_LatestVersionFallbackOnInvalidSemver(t *testing.T) {
 }
 
 func TestV1Alpha1Store_PatchStatusDisjointFromSpec(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -144,7 +144,7 @@ func TestV1Alpha1Store_PatchStatusDisjointFromSpec(t *testing.T) {
 }
 
 func TestV1Alpha1Store_PatchStatusNotFound(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -153,7 +153,7 @@ func TestV1Alpha1Store_PatchStatusNotFound(t *testing.T) {
 }
 
 func TestV1Alpha1Store_GetNotFound(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -165,7 +165,7 @@ func TestV1Alpha1Store_GetNotFound(t *testing.T) {
 }
 
 func TestV1Alpha1Store_DeleteSoftAndPromoteLatest(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -197,7 +197,7 @@ func TestV1Alpha1Store_DeleteSoftAndPromoteLatest(t *testing.T) {
 // invisible to GetLatest). Now Upsert returns ErrTerminating and the caller
 // must drain finalizers + purge + re-apply to get a live row.
 func TestV1Alpha1Store_UpsertRejectsTerminatingRow(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -243,7 +243,7 @@ func TestV1Alpha1Store_UpsertRejectsTerminatingRow(t *testing.T) {
 }
 
 func TestV1Alpha1Store_FinalizerGC(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -280,7 +280,7 @@ func TestV1Alpha1Store_FinalizerGC(t *testing.T) {
 }
 
 func TestV1Alpha1Store_List(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -319,7 +319,7 @@ func TestV1Alpha1Store_List(t *testing.T) {
 }
 
 func TestV1Alpha1Store_ListExtraWhereRebasesPlaceholders(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -359,7 +359,7 @@ func TestV1Alpha1Store_ListExtraWhereRebasesPlaceholders(t *testing.T) {
 // wrong query. Prevents SQL injection via accidental mis-parameterized
 // fragments in the RBAC / authz surface.
 func TestV1Alpha1Store_ListExtraWhereRejectsMismatch(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -393,7 +393,7 @@ func TestV1Alpha1Store_ListExtraWhereRejectsMismatch(t *testing.T) {
 }
 
 func TestV1Alpha1Store_ListCursorPagination(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -422,7 +422,7 @@ func TestV1Alpha1Store_ListCursorPagination(t *testing.T) {
 }
 
 func TestV1Alpha1Store_ListRejectsInvalidCursor(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 
 	_, _, err := store.List(context.Background(), ListOpts{Cursor: "not-a-valid-cursor"})
@@ -440,7 +440,7 @@ func TestV1Alpha1Store_ListRejectsInvalidCursor(t *testing.T) {
 // ordering, page 2 still returns rows 3+4 in order — the churned row
 // is anchored by (namespace, name, version) which never changes.
 func TestV1Alpha1Store_ListCursorStableUnderStatusChurn(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -480,7 +480,7 @@ func TestV1Alpha1Store_ListCursorStableUnderStatusChurn(t *testing.T) {
 }
 
 func TestV1Alpha1Store_PatchAnnotationsPreservesExistingKeys(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -504,7 +504,7 @@ func TestV1Alpha1Store_PatchAnnotationsPreservesExistingKeys(t *testing.T) {
 }
 
 func TestV1Alpha1Store_FindReferrers(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	agents := NewStore(pool, "v1alpha1.agents")
 	ctx := context.Background()
 
@@ -532,7 +532,7 @@ func TestV1Alpha1Store_FindReferrers(t *testing.T) {
 }
 
 func TestV1Alpha1Store_SeededProviders(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	providers := NewStore(pool, "v1alpha1.providers")
 	ctx := context.Background()
 
@@ -559,7 +559,7 @@ func TestV1Alpha1Store_SeededProviders(t *testing.T) {
 // survives round-trip unambiguously — any future reconciler / Phase 2
 // KRT consumer can rely on the fields being split correctly.
 func TestV1Alpha1Store_NotifyPayloadDiscreteFields(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
@@ -614,7 +614,7 @@ func TestV1Alpha1Store_NotifyPayloadDiscreteFields(t *testing.T) {
 // (internal-package test can reach the unexported helper) so its SELECT
 // actually sees the tied timestamps.
 func TestV1Alpha1Store_LatestVersionTieBreakDeterministic(t *testing.T) {
-	pool := NewV1Alpha1TestPool(t)
+	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 

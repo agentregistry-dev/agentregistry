@@ -57,7 +57,7 @@ func seedAgent(t *testing.T, store *v1alpha1store.Store, name string) {
 
 func setupHandlerFixture(t *testing.T) (humatest.TestAPI, *v1alpha1store.Store) {
 	t.Helper()
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	seedAgent(t, store, "one")
@@ -155,7 +155,7 @@ func TestHandler_GetJobStatus_ReportsCompletion(t *testing.T) {
 }
 
 func TestHandler_ConflictWhenJobAlreadyRunning(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	for i := 0; i < 50; i++ {
@@ -225,7 +225,7 @@ func TestHandler_JobNotFound(t *testing.T) {
 }
 
 func TestHandler_NonAdmin_Forbidden(t *testing.T) {
-	pool := v1alpha1store.NewV1Alpha1TestPool(t)
+	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 	seedAgent(t, store, "one")
 
