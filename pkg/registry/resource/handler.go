@@ -526,7 +526,7 @@ func mapApplyErrorToHuma(ae *applyError, kind, ns, name, version string) error {
 		if ae.Terminating {
 			return huma.Error409Conflict(fmt.Sprintf(
 				"%s %s/%s/%s is terminating; delete + re-apply once GC purges the row",
-					kind, ns, name, version))
+				kind, ns, name, version))
 		}
 		return huma.Error500InternalServerError("upsert "+kind, ae.Err)
 	case stagePostUpsert:

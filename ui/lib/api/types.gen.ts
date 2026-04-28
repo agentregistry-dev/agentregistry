@@ -1659,61 +1659,6 @@ export type ApplyProviderResponses = {
 
 export type ApplyProviderResponse = ApplyProviderResponses[keyof ApplyProviderResponses];
 
-export type GetServerReadmeV0Data = {
-    body?: never;
-    path: {
-        serverName: string;
-    };
-    query?: never;
-    url: '/v0/servers/{serverName}/readme';
-};
-
-export type GetServerReadmeV0Errors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetServerReadmeV0Error = GetServerReadmeV0Errors[keyof GetServerReadmeV0Errors];
-
-export type GetServerReadmeV0Responses = {
-    /**
-     * OK
-     */
-    200: Readme;
-};
-
-export type GetServerReadmeV0Response = GetServerReadmeV0Responses[keyof GetServerReadmeV0Responses];
-
-export type GetServerVersionReadmeV0Data = {
-    body?: never;
-    path: {
-        serverName: string;
-        version: string;
-    };
-    query?: never;
-    url: '/v0/servers/{serverName}/versions/{version}/readme';
-};
-
-export type GetServerVersionReadmeV0Errors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetServerVersionReadmeV0Error = GetServerVersionReadmeV0Errors[keyof GetServerVersionReadmeV0Errors];
-
-export type GetServerVersionReadmeV0Responses = {
-    /**
-     * OK
-     */
-    200: Readme;
-};
-
-export type GetServerVersionReadmeV0Response = GetServerVersionReadmeV0Responses[keyof GetServerVersionReadmeV0Responses];
-
 export type ListSkillsData = {
     body?: never;
     path?: never;

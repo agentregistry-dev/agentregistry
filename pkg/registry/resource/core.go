@@ -34,15 +34,15 @@ type upsertResult struct {
 type applyStage string
 
 const (
-	stageAuth        applyStage = "auth"
-	stageValidation  applyStage = "validation"
-	stageRefs        applyStage = "refs"
-	stageRegistries  applyStage = "registries"
-	stageMarshal     applyStage = "marshal"
-	stageUpsert      applyStage = "upsert"
-	stagePostUpsert  applyStage = "post-upsert"
-	stageDelete      applyStage = "delete"
-	stagePostDelete  applyStage = "post-delete"
+	stageAuth       applyStage = "auth"
+	stageValidation applyStage = "validation"
+	stageRefs       applyStage = "refs"
+	stageRegistries applyStage = "registries"
+	stageMarshal    applyStage = "marshal"
+	stageUpsert     applyStage = "upsert"
+	stagePostUpsert applyStage = "post-upsert"
+	stageDelete     applyStage = "delete"
+	stagePostDelete applyStage = "post-delete"
 )
 
 // applyError is the typed error applyCore + deleteCore return.

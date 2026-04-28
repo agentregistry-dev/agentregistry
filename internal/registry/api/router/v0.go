@@ -5,12 +5,12 @@ import (
 	"context"
 	"errors"
 
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/crud"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentlogs"
 	v0embeddings "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/embeddings"
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/importpipeline"
 	v0ping "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/ping"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/crud"
 	v0version "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/version"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"

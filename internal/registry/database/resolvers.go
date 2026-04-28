@@ -96,4 +96,3 @@ func NewGetter(stores map[string]*v1alpha1store.Store) v1alpha1.GetterFunc {
 		return obj, nil
 	}
 }
-

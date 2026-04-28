@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

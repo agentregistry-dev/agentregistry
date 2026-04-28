@@ -73,4 +73,3 @@ func RefreshMCPConfig(target *MCPConfigTarget, servers []PythonMCPServer, verbos
 
 	return nil
 }
-

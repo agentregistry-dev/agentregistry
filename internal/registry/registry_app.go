@@ -266,8 +266,8 @@ func buildRouteOptions(
 	adapters map[string]types.DeploymentAdapter,
 ) *router.RouteOptions {
 	routeOpts := &router.RouteOptions{
-		ExtraRoutes:               options.ExtraRoutes,
-		Authz:                     authz,
+		ExtraRoutes:       options.ExtraRoutes,
+		Authz:             authz,
 		Stores:            stores,
 		Importer:          importer,
 		PerKindHooks:      crudPerKindHooks(options),

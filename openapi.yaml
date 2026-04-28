@@ -1397,57 +1397,6 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-    /v0/servers/{serverName}/readme:
-        get:
-            summary: Get server README
-            operationId: get-server-readme-v0
-            parameters:
-                - name: serverName
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Readme'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/servers/{serverName}/versions/{version}/readme:
-        get:
-            summary: Get server README for a version
-            operationId: get-server-version-readme-v0
-            parameters:
-                - name: serverName
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Readme'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
     /v0/skills:
         get:
             summary: List Skill (scoped by ?namespace)
