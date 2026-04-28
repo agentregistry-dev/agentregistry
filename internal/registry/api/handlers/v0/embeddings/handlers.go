@@ -16,8 +16,8 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/embeddings/jobs"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 )
 
@@ -52,29 +52,38 @@ type JobStatusResponse struct {
 	Result   *jobs.JobResult  `json:"result,omitempty"`
 }
 
-// Config bundles the dependencies the handler needs. Registered only
-// when Indexer + Manager are both non-nil. Authz gates admin-only
-// operations (indexing + job status); zero-valued Authz falls through
-// to the public provider which allows every check.
+// Config bundles the dependencies the handler needs. The job manager is
+// owned internally — there's only ever one in-process job tracker for
+// indexing. Authz gates admin-only operations (indexing + job status);
+// zero-valued Authz falls through to the public provider which allows
+// every check.
 type Config struct {
 	BasePrefix string
 	Indexer    *embeddings.Indexer
-	Manager    *jobs.Manager
 	Authz      auth.Authorizer
+}
+
+// runtimeConfig is the internal Config the registered handlers close
+// over. Adds the per-Register-call jobs.Manager that callers don't (and
+// shouldn't) supply — the manager is an embeddings-only concern.
+type runtimeConfig struct {
+	Config
+	Manager *jobs.Manager
 }
 
 // Register wires POST + GET under {BasePrefix}/embeddings/index.
 // Callers pass BasePrefix="/v0". Authz defaults to a permissive public
 // provider when zero-valued so existing OSS deployments keep working.
 //
-// Caller is responsible for not invoking Register unless Indexer +
-// Manager are both wired — the router gates on that already.
+// Caller is responsible for not invoking Register unless cfg.Indexer is
+// wired — the router gates on that already.
 func Register(api huma.API, cfg Config) {
 	if cfg.Authz.Authz == nil {
 		cfg.Authz = auth.Authorizer{Authz: auth.NewPublicAuthzProvider(nil)}
 	}
-	registerIndex(api, cfg)
-	registerStatus(api, cfg)
+	rt := runtimeConfig{Config: cfg, Manager: jobs.NewManager()}
+	registerIndex(api, rt)
+	registerStatus(api, rt)
 }
 
 type indexInput struct {
@@ -85,7 +94,7 @@ type indexOutput struct {
 	Body IndexJobResponse
 }
 
-func registerIndex(api huma.API, cfg Config) {
+func registerIndex(api huma.API, cfg runtimeConfig) {
 	huma.Register(api, huma.Operation{
 		OperationID: "start-embeddings-index",
 		Method:      http.MethodPost,
@@ -132,7 +141,7 @@ func registerIndex(api huma.API, cfg Config) {
 // jobs.Manager. Always marks the job terminal (completed or failed)
 // before returning so callers polling the status endpoint eventually
 // see a final state.
-func runIndex(ctx context.Context, cfg Config, jobID jobs.JobID, opts embeddings.IndexOptions) {
+func runIndex(ctx context.Context, cfg runtimeConfig, jobID jobs.JobID, opts embeddings.IndexOptions) {
 	_ = cfg.Manager.StartJob(jobID)
 
 	res, err := cfg.Indexer.Run(ctx, opts, func(kind string, stats embeddings.IndexStats) {
@@ -174,7 +183,7 @@ type statusOutput struct {
 	Body JobStatusResponse
 }
 
-func registerStatus(api huma.API, cfg Config) {
+func registerStatus(api huma.API, cfg runtimeConfig) {
 	huma.Register(api, huma.Operation{
 		OperationID: "get-embeddings-index-job",
 		Method:      http.MethodGet,

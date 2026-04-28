@@ -23,7 +23,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/kubernetes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/local"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
@@ -596,7 +595,6 @@ func wireEmbeddings(cfg *config.Config, stores map[string]*v1alpha1store.Store, 
 	}
 
 	routeOpts.V1Alpha1Indexer = idx
-	routeOpts.V1Alpha1JobManager = jobs.NewManager()
 	routeOpts.V1Alpha1SemanticSearch = makeSemanticSearchFunc(provider, cfg.Embeddings.Dimensions)
 	slog.Info("embeddings indexer + semantic search enabled",
 		"provider", cfg.Embeddings.Provider,

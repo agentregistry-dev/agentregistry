@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	pkgemb "github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
@@ -56,7 +55,7 @@ func seedAgent(t *testing.T, store *v1alpha1store.Store, name string) {
 	require.NoError(t, err)
 }
 
-func setupHandlerFixture(t *testing.T) (humatest.TestAPI, *v1alpha1store.Store, *jobs.Manager) {
+func setupHandlerFixture(t *testing.T) (humatest.TestAPI, *v1alpha1store.Store) {
 	t.Helper()
 	pool := v1alpha1store.NewV1Alpha1TestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
@@ -83,18 +82,16 @@ func setupHandlerFixture(t *testing.T) (humatest.TestAPI, *v1alpha1store.Store, 
 	})
 	require.NoError(t, err)
 
-	manager := jobs.NewManager()
 	_, api := humatest.New(t)
 	Register(api, Config{
 		BasePrefix: "/v0",
 		Indexer:    indexer,
-		Manager:    manager,
 	})
-	return api, store, manager
+	return api, store
 }
 
 func TestHandler_StartIndexJob_ReturnsJobID(t *testing.T) {
-	api, _, _ := setupHandlerFixture(t)
+	api, _ := setupHandlerFixture(t)
 
 	resp := api.Post("/v0/embeddings/index", strings.NewReader(`{}`))
 	require.Equal(t, 200, resp.Code, resp.Body.String())
@@ -106,7 +103,7 @@ func TestHandler_StartIndexJob_ReturnsJobID(t *testing.T) {
 }
 
 func TestHandler_GetJobStatus_ReportsCompletion(t *testing.T) {
-	api, store, _ := setupHandlerFixture(t)
+	api, store := setupHandlerFixture(t)
 
 	resp := api.Post("/v0/embeddings/index", strings.NewReader(`{}`))
 	require.Equal(t, 200, resp.Code)
@@ -180,9 +177,8 @@ func TestHandler_ConflictWhenJobAlreadyRunning(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	manager := jobs.NewManager()
 	_, api := humatest.New(t)
-	Register(api, Config{BasePrefix: "/v0", Indexer: indexer, Manager: manager})
+	Register(api, Config{BasePrefix: "/v0", Indexer: indexer})
 
 	first := api.Post("/v0/embeddings/index", strings.NewReader(`{}`))
 	require.Equal(t, 200, first.Code)
@@ -223,7 +219,7 @@ func (s *slowProvider) Generate(ctx context.Context, p pkgemb.Payload) (*pkgemb.
 }
 
 func TestHandler_JobNotFound(t *testing.T) {
-	api, _, _ := setupHandlerFixture(t)
+	api, _ := setupHandlerFixture(t)
 	resp := api.Get("/v0/embeddings/index/nope")
 	require.Equal(t, 404, resp.Code)
 }
@@ -244,12 +240,10 @@ func TestHandler_NonAdmin_Forbidden(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	manager := jobs.NewManager()
 	_, api := humatest.New(t)
 	Register(api, Config{
 		BasePrefix: "/v0",
 		Indexer:    indexer,
-		Manager:    manager,
 		Authz:      auth.Authorizer{Authz: denyAdminAuthzProvider{}},
 	})
 

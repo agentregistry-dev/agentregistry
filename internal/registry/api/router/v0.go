@@ -15,7 +15,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
@@ -64,12 +63,13 @@ type RouteOptions struct {
 	// dispatch happens.
 	V1Alpha1DeploymentCoordinator *deploymentsvc.V1Alpha1Coordinator
 
-	// V1Alpha1Indexer + V1Alpha1JobManager, when both non-nil, enable
-	// POST /v0/embeddings/index + GET /v0/embeddings/index/{jobId}.
-	// Constructed at bootstrap only when AGENT_REGISTRY_EMBEDDINGS_ENABLED
-	// is set and a provider is reachable; nil disables the endpoints.
-	V1Alpha1Indexer    *embeddings.Indexer
-	V1Alpha1JobManager *jobs.Manager
+	// V1Alpha1Indexer, when non-nil, enables POST /v0/embeddings/index +
+	// GET /v0/embeddings/index/{jobId}. Constructed at bootstrap only
+	// when AGENT_REGISTRY_EMBEDDINGS_ENABLED is set and a provider is
+	// reachable; nil disables the endpoints. The in-process job tracker
+	// is owned by the embeddings handler — there's no shared job
+	// manager concept across the API.
+	V1Alpha1Indexer *embeddings.Indexer
 
 	// V1Alpha1SemanticSearch, when non-nil, enables
 	// `?semantic=<q>&semanticThreshold=<f>` on list endpoints. The
@@ -151,15 +151,14 @@ func RegisterRoutes(
 		})
 	}
 
-	// Embeddings indexer endpoints — wired only when both the indexer
-	// and job manager are present. Authz gates admin-only operations;
-	// when zero-valued it falls through to the public provider which
-	// allows every check, matching the historical OSS default.
-	if opts.V1Alpha1Indexer != nil && opts.V1Alpha1JobManager != nil {
+	// Embeddings indexer endpoints — wired only when the indexer is
+	// present. Authz gates admin-only operations; when zero-valued it
+	// falls through to the public provider which allows every check,
+	// matching the historical OSS default.
+	if opts.V1Alpha1Indexer != nil {
 		v0embeddings.Register(api, v0embeddings.Config{
 			BasePrefix: pathPrefix,
 			Indexer:    opts.V1Alpha1Indexer,
-			Manager:    opts.V1Alpha1JobManager,
 			Authz:      opts.Authz,
 		})
 	}
