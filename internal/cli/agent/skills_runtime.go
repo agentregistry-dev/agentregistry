@@ -160,4 +160,3 @@ func sanitizeSkillDirName(name string) string {
 	}
 	return out
 }
-

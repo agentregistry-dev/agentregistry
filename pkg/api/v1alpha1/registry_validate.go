@@ -89,4 +89,3 @@ func (m *MCPServer) ValidateRegistries(ctx context.Context, v RegistryValidatorF
 	}
 	return errs
 }
-

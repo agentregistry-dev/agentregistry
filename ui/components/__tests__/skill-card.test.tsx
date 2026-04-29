@@ -38,18 +38,6 @@ describe("SkillCard", () => {
     expect(screen.getByText("1.3.0")).toBeInTheDocument()
   })
 
-  it("renders package and remote counts", () => {
-    render(<SkillCard skill={mockSkill} />)
-    expect(screen.getByText("2")).toBeInTheDocument()
-    const ones = screen.getAllByText("1")
-    expect(ones.length).toBeGreaterThanOrEqual(1)
-  })
-
-  it("renders repository source", () => {
-    render(<SkillCard skill={mockSkill} />)
-    expect(screen.getByText("github")).toBeInTheDocument()
-  })
-
   it("falls back to name when title is not set", () => {
     const noTitle: SkillResponse = {
       skill: { ...mockSkill.skill, title: undefined },

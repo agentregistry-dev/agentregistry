@@ -318,4 +318,3 @@ func TestMCPServerValidate_RejectsBadRemote(t *testing.T) {
 	paths := failedFields(t, m.Validate())
 	require.Contains(t, paths, "spec.remotes[0].url")
 }
-

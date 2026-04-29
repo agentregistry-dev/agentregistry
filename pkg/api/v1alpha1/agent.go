@@ -16,11 +16,11 @@ type Agent struct {
 // reference it here.
 type AgentSpec struct {
 	// Core fields.
-	Title             string  `json:"title,omitempty" yaml:"title,omitempty"`
-	Description       string  `json:"description,omitempty" yaml:"description,omitempty"`
-	Image             string  `json:"image,omitempty" yaml:"image,omitempty"`
-	Language          string  `json:"language,omitempty" yaml:"language,omitempty"`
-	Framework         string  `json:"framework,omitempty" yaml:"framework,omitempty"`
+	Title             string `json:"title,omitempty" yaml:"title,omitempty"`
+	Description       string `json:"description,omitempty" yaml:"description,omitempty"`
+	Image             string `json:"image,omitempty" yaml:"image,omitempty"`
+	Language          string `json:"language,omitempty" yaml:"language,omitempty"`
+	Framework         string `json:"framework,omitempty" yaml:"framework,omitempty"`
 	ModelProvider     string `json:"modelProvider,omitempty" yaml:"modelProvider,omitempty"`
 	ModelName         string `json:"modelName,omitempty" yaml:"modelName,omitempty"`
 	TelemetryEndpoint string `json:"telemetryEndpoint,omitempty" yaml:"telemetryEndpoint,omitempty"`

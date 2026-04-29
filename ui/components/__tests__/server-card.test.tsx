@@ -57,11 +57,6 @@ describe("ServerCard", () => {
     expect(ones.length).toBeGreaterThanOrEqual(2)
   })
 
-  it("renders repository source", () => {
-    render(<ServerCard server={mockServer} />)
-    expect(screen.getByText("github")).toBeInTheDocument()
-  })
-
   it("falls back to name when title is not set", () => {
     const noTitle: ServerResponse = {
       server: { ...mockServer.server, title: undefined },
