@@ -336,14 +336,3 @@ func TestMCPServerValidate_RejectsBadRemote(t *testing.T) {
 	require.Contains(t, paths, "spec.remotes[0].url")
 }
 
-func TestMCPServerValidate_IconRequiresHTTPS(t *testing.T) {
-	bad := "http://example.com/icon.svg"
-	m := &MCPServer{
-		Metadata: ObjectMeta{Namespace: "default", Name: "tools", Version: "v1"},
-		Spec: MCPServerSpec{
-			Icons: []MCPIcon{{Src: bad}},
-		},
-	}
-	paths := failedFields(t, m.Validate())
-	require.Contains(t, paths, "spec.icons[0].src")
-}

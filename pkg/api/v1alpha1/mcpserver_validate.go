@@ -21,16 +21,6 @@ func validateMCPServerSpec(s *MCPServerSpec) FieldErrors {
 		errs.Append("spec."+e.Path, e.Cause)
 	}
 
-	for i, icon := range s.Icons {
-		if icon.Src == "" {
-			errs.Append(fmt.Sprintf("spec.icons[%d].src", i), fmt.Errorf("%w", ErrRequiredField))
-			continue
-		}
-		if err := validateWebsiteURL(icon.Src); err != nil {
-			errs.Append(fmt.Sprintf("spec.icons[%d].src", i), err)
-		}
-	}
-
 	for i, pkg := range s.Packages {
 		if pkg.RegistryType == "" {
 			errs.Append(fmt.Sprintf("spec.packages[%d].registryType", i), fmt.Errorf("%w", ErrRequiredField))
