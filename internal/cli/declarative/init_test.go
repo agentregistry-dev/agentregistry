@@ -421,7 +421,6 @@ func TestInitSkillCmd_BasicScaffold(t *testing.T) {
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "myskill", spec["title"])
-	assert.Equal(t, "general", spec["category"])
 	assert.NotEmpty(t, spec["description"])
 }
 
@@ -437,7 +436,6 @@ func TestInitSkillCmd_CustomFlags(t *testing.T) {
 		"skill", "myskill",
 		"--version", "1.2.0",
 		"--description", "Text summarizer",
-		"--category", "nlp",
 	})
 	require.NoError(t, cmd.Execute())
 
@@ -446,7 +444,6 @@ func TestInitSkillCmd_CustomFlags(t *testing.T) {
 	assert.Equal(t, "1.2.0", metadata["version"])
 
 	spec := m["spec"].(map[string]any)
-	assert.Equal(t, "nlp", spec["category"])
 	assert.Equal(t, "Text summarizer", spec["description"])
 }
 

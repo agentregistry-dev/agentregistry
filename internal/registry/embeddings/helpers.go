@@ -53,7 +53,7 @@ func BuildAgentEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.AgentSpe
 // BuildSkillEmbeddingPayload assembles the canonical text for a Skill.
 func BuildSkillEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.SkillSpec) string {
 	var parts []string
-	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version, spec.WebsiteURL)
+	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version)
 	appendJSON(&parts, spec.Repository)
 	return strings.Join(parts, "\n")
 }

@@ -40,8 +40,7 @@ func init() {
 	scheme.Register(typedKind(
 		"skill", "skills", []string{"Skill"},
 		[]scheme.Column{
-			{Header: "NAME"}, {Header: "VERSION"},
-			{Header: "CATEGORY"}, {Header: "DESCRIPTION"},
+			{Header: "NAME"}, {Header: "VERSION"}, {Header: "DESCRIPTION"},
 		},
 		v1alpha1.KindSkill,
 		func() *v1alpha1.Skill { return &v1alpha1.Skill{} },

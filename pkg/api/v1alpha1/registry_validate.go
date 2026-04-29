@@ -18,10 +18,9 @@ const (
 )
 
 // RegistryPackage is the minimal package view a registry validator
-// consumes. AgentPackage, SkillPackage, and MCPPackage each expose
-// these fields; the per-kind ValidateRegistries method converts its
-// typed slice into this shape and calls the caller-supplied
-// RegistryValidatorFunc.
+// consumes. AgentPackage and MCPPackage each expose these fields; the
+// per-kind ValidateRegistries method converts its typed slice into
+// this shape and calls the caller-supplied RegistryValidatorFunc.
 //
 // Extra fields present only on MCPPackage (RegistryBaseURL,
 // FileSHA256) round-trip through here because the OCI validator
@@ -112,22 +111,3 @@ func (m *MCPServer) ValidateRegistries(ctx context.Context, v RegistryValidatorF
 	return errs
 }
 
-// ValidateRegistries on *Skill converts SkillPackage entries.
-func (s *Skill) ValidateRegistries(ctx context.Context, v RegistryValidatorFunc) error {
-	if v == nil || len(s.Spec.Packages) == 0 {
-		return nil
-	}
-	pkgs := make([]RegistryPackage, len(s.Spec.Packages))
-	for i, p := range s.Spec.Packages {
-		pkgs[i] = RegistryPackage{
-			RegistryType: p.RegistryType,
-			Identifier:   p.Identifier,
-			Version:      p.Version,
-		}
-	}
-	errs := validatePackages(ctx, v, pkgs, s.Metadata.Name, "spec.packages")
-	if len(errs) == 0 {
-		return nil
-	}
-	return errs
-}
