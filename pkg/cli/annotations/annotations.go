@@ -6,9 +6,9 @@ const (
 	AnnotationSkipTokenResolution = "skipTokenResolution"
 
 	// AnnotationOptionalRegistry marks a command as tolerant of an unreachable
-	// registry or unresolvable auth token. Pre-run still runs (so flags, env,
-	// and the OIDC token provider are honored), but failures during token
-	// resolution or the client connectivity check are soft-failed: the command
-	// still gets a client and may handle errors itself.
+	// registry during client setup. Pre-run still runs (so flags, env, and the
+	// OIDC token provider are honored), but only client creation/connectivity
+	// failures are soft-failed: the command still gets a client and may handle
+	// those errors itself. Token resolution failures are still returned.
 	AnnotationOptionalRegistry = "optionalRegistry"
 )
