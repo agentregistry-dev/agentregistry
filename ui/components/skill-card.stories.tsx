@@ -9,8 +9,10 @@ const mockSkill: SkillResponse = {
     description:
       "Analyzes pull requests for code quality, security vulnerabilities, and adherence to best practices. Provides inline suggestions and summary reports.",
     version: "1.3.0",
-    repository: {
-      url: "https://github.com/example/code-review-skill",
+    source: {
+      repository: {
+        url: "https://github.com/example/code-review-skill",
+      },
     },
   },
   _meta: {

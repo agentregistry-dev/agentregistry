@@ -68,12 +68,12 @@ export function SkillCard({ skill, onDelete, showDelete = false, showExternalLin
         </div>
 
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-          {showExternalLinks && skillData.repository?.url && (
+          {showExternalLinks && skillData.source?.repository?.url && (
             <Button
               variant="ghost"
               size="icon"
               className="h-7 w-7"
-              onClick={(e) => { e.stopPropagation(); window.open(skillData.repository?.url || '', '_blank') }}
+              onClick={(e) => { e.stopPropagation(); window.open(skillData.source?.repository?.url || '', '_blank') }}
             >
               <Github className="h-3.5 w-3.5" />
             </Button>

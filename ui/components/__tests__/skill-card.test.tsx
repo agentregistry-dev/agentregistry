@@ -10,8 +10,10 @@ const mockSkill: SkillResponse = {
     title: "Code Review",
     description: "Analyzes pull requests for quality and security.",
     version: "1.3.0",
-    repository: {
-      url: "https://github.com/example/code-review-skill",
+    source: {
+      repository: {
+        url: "https://github.com/example/code-review-skill",
+      },
     },
   },
   _meta: {

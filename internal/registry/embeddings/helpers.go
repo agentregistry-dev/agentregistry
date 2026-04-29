@@ -53,7 +53,7 @@ func BuildAgentEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.AgentSpe
 func BuildSkillEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.SkillSpec) string {
 	var parts []string
 	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version)
-	appendJSON(&parts, spec.Repository)
+	appendJSON(&parts, spec.Source)
 	return strings.Join(parts, "\n")
 }
 

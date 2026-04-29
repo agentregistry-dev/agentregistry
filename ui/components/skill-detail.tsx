@@ -125,19 +125,19 @@ export function SkillDetail({ skill, allVersions: allVersionsProp }: SkillDetail
               <p className="text-[15px] leading-relaxed">{skillData.description}</p>
             </section>
 
-            {skillData.repository?.url && (
+            {skillData.source?.repository?.url && (
               <section>
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Repository</h3>
                 <div className="space-y-1.5 text-sm">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">URL</span>
                     <a
-                      href={skillData.repository.url}
+                      href={skillData.source.repository.url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-primary hover:underline flex items-center gap-1"
                     >
-                      {skillData.repository.url} <ExternalLink className="h-2.5 w-2.5" />
+                      {skillData.source.repository.url} <ExternalLink className="h-2.5 w-2.5" />
                     </a>
                   </div>
                 </div>

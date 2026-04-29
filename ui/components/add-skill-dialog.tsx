@@ -48,8 +48,10 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
         name: name.trim(),
         description: description.trim(),
         version: version.trim(),
-        repository: {
-          url: trimmedRepositoryUrl,
+        source: {
+          repository: {
+            url: trimmedRepositoryUrl,
+          },
         },
       }
 

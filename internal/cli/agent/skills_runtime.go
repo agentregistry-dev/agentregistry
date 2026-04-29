@@ -76,9 +76,10 @@ func extractSkillRepoURL(skillResp *v1alpha1.Skill) (string, error) {
 	if skillResp == nil {
 		return "", fmt.Errorf("skill response is required")
 	}
-	if skillResp.Spec.Repository != nil &&
-		strings.TrimSpace(skillResp.Spec.Repository.URL) != "" {
-		return strings.TrimSpace(skillResp.Spec.Repository.URL), nil
+	if skillResp.Spec.Source != nil &&
+		skillResp.Spec.Source.Repository != nil &&
+		strings.TrimSpace(skillResp.Spec.Source.Repository.URL) != "" {
+		return strings.TrimSpace(skillResp.Spec.Source.Repository.URL), nil
 	}
 	return "", fmt.Errorf("no git repository found")
 }

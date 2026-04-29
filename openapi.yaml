@@ -2069,14 +2069,20 @@ components:
                 - spec
                 - apiVersion
                 - kind
+        SkillSource:
+            type: object
+            additionalProperties: false
+            properties:
+                repository:
+                    $ref: '#/components/schemas/Repository'
         SkillSpec:
             type: object
             additionalProperties: false
             properties:
                 description:
                     type: string
-                repository:
-                    $ref: '#/components/schemas/Repository'
+                source:
+                    $ref: '#/components/schemas/SkillSource'
                 title:
                     type: string
         Status:

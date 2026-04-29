@@ -17,8 +17,10 @@ func TestExtractSkillRepoURL(t *testing.T) {
 			name: "git repository",
 			resp: &v1alpha1.Skill{
 				Spec: v1alpha1.SkillSpec{
-					Repository: &v1alpha1.Repository{
-						URL: "https://github.com/org/skill/tree/main/skills/my-skill",
+					Source: &v1alpha1.SkillSource{
+						Repository: &v1alpha1.Repository{
+							URL: "https://github.com/org/skill/tree/main/skills/my-skill",
+						},
 					},
 				},
 			},
@@ -35,8 +37,10 @@ func TestExtractSkillRepoURL(t *testing.T) {
 			name: "repository with URL resolves",
 			resp: &v1alpha1.Skill{
 				Spec: v1alpha1.SkillSpec{
-					Repository: &v1alpha1.Repository{
-						URL: "https://gitlab.com/org/skill",
+					Source: &v1alpha1.SkillSource{
+						Repository: &v1alpha1.Repository{
+							URL: "https://gitlab.com/org/skill",
+						},
 					},
 				},
 			},

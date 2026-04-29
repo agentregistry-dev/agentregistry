@@ -308,9 +308,13 @@ export type Skill = {
     status?: Status;
 };
 
+export type SkillSource = {
+    repository?: Repository;
+};
+
 export type SkillSpec = {
     description?: string;
-    repository?: Repository;
+    source?: SkillSource;
     title?: string;
 };
 

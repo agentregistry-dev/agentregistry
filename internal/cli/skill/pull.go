@@ -84,8 +84,8 @@ func runPull(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	if skillResp.Spec.Repository != nil && strings.TrimSpace(skillResp.Spec.Repository.URL) != "" {
-		if err := pullFromGit(skillResp.Spec.Repository.URL, absOutputDir); err != nil {
+	if skillResp.Spec.Source != nil && skillResp.Spec.Source.Repository != nil && strings.TrimSpace(skillResp.Spec.Source.Repository.URL) != "" {
+		if err := pullFromGit(skillResp.Spec.Source.Repository.URL, absOutputDir); err != nil {
 			return err
 		}
 	} else {
