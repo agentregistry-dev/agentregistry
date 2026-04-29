@@ -64,4 +64,4 @@ arctl apply -f full-stack.yaml
 arctl get all
 ```
 
-See [`examples/declarative/`](../examples/declarative/) for ready-to-use YAML files, including [`full-stack.yaml`](../examples/declarative/full-stack.yaml) which defines an agent and all its dependencies in a single file.
+See [`examples/`](../examples/) for ready-to-use YAML files, including [`full-stack.yaml`](../examples/full-stack.yaml) which defines an agent and all its dependencies in a single file.
