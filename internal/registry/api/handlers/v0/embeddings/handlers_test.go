@@ -1,31 +1,25 @@
-package embeddings_test
+//go:build integration
+
+package embeddings
 
 import (
 	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/danielgtaylor/huma/v2"
-	"github.com/danielgtaylor/huma/v2/adapters/humago"
-	"github.com/stretchr/testify/assert"
+	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/stretchr/testify/require"
 
-	v0embeddings "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/embeddings"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/jobs"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/service"
+	pkgemb "github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
-// publicAuthz wraps the public provider. IsRegistryAdmin returns true under
-// it, so admin gates pass in tests without a fake session.
-var publicAuthz = auth.Authorizer{Authz: auth.NewPublicAuthzProvider(nil)}
-
-// denyAdminAuthzProvider is a mock provider that refuses IsRegistryAdmin so tests can assert the gate fires.
+// denyAdminAuthzProvider refuses IsRegistryAdmin so tests can assert
+// the admin gate fires.
 type denyAdminAuthzProvider struct{}
 
 func (denyAdminAuthzProvider) Check(context.Context, auth.Session, auth.PermissionAction, auth.Resource) error {
@@ -35,390 +29,229 @@ func (denyAdminAuthzProvider) IsRegistryAdmin(context.Context, auth.Session) boo
 	return false
 }
 
-var denyAdminAuthz = auth.Authorizer{Authz: denyAdminAuthzProvider{}}
-
-type mockIndexer struct {
-	mu       sync.Mutex
-	runFunc  func(ctx context.Context, opts service.IndexOptions, onProgress service.IndexProgressCallback) (*service.IndexResult, error)
-	runCalls []service.IndexOptions
+// fakeProvider returns a deterministic vector so tests don't need
+// network access and can assert progress + result shape precisely.
+type fakeProvider struct {
+	calls int
 }
 
-func (m *mockIndexer) Run(ctx context.Context, opts service.IndexOptions, onProgress service.IndexProgressCallback) (*service.IndexResult, error) {
-	m.mu.Lock()
-	m.runCalls = append(m.runCalls, opts)
-	runFunc := m.runFunc
-	m.mu.Unlock()
-
-	if runFunc != nil {
-		return runFunc(ctx, opts, onProgress)
-	}
-	return &service.IndexResult{}, nil
+func (f *fakeProvider) Generate(ctx context.Context, p pkgemb.Payload) (*pkgemb.Result, error) {
+	f.calls++
+	vec := make([]float32, 1536)
+	vec[0] = 1
+	return &pkgemb.Result{
+		Vector:     vec,
+		Provider:   "fake",
+		Model:      "fake-small",
+		Dimensions: 1536,
+	}, nil
 }
 
-func TestStartIndex_Success(t *testing.T) {
-	mockIdx := &mockIndexer{
-		runFunc: func(ctx context.Context, opts service.IndexOptions, onProgress service.IndexProgressCallback) (*service.IndexResult, error) {
-			return &service.IndexResult{
-				Servers: service.IndexStats{Processed: 5, Updated: 3, Skipped: 2},
-			}, nil
+func seedAgent(t *testing.T, store *v1alpha1store.Store, name string) {
+	t.Helper()
+	spec, err := json.Marshal(v1alpha1.AgentSpec{Title: name, Description: name})
+	require.NoError(t, err)
+	_, err = store.Upsert(context.Background(), "default", name, "v1", spec, v1alpha1store.UpsertOpts{})
+	require.NoError(t, err)
+}
+
+func setupHandlerFixture(t *testing.T) (humatest.TestAPI, *v1alpha1store.Store) {
+	t.Helper()
+	pool := v1alpha1store.NewTestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+
+	seedAgent(t, store, "one")
+	seedAgent(t, store, "two")
+
+	provider := &fakeProvider{}
+	bindings := []pkgemb.KindBinding{{
+		Kind:  v1alpha1.KindAgent,
+		Store: store,
+		BuildPayload: func(row *v1alpha1.RawObject) (string, error) {
+			var spec v1alpha1.AgentSpec
+			if err := json.Unmarshal(row.Spec, &spec); err != nil {
+				return "", err
+			}
+			return pkgemb.BuildAgentEmbeddingPayload(row.Metadata, spec), nil
 		},
-	}
-
-	jobManager := jobs.NewManager()
-	mux := http.NewServeMux()
-	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, publicAuthz)
-
-	body := strings.NewReader(`{}`)
-	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	mux.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var resp v0embeddings.IndexJobResponse
-	err := json.Unmarshal(w.Body.Bytes(), &resp)
+	}}
+	indexer, err := pkgemb.NewIndexer(pkgemb.IndexerConfig{
+		Bindings:   bindings,
+		Provider:   provider,
+		Dimensions: 1536,
+	})
 	require.NoError(t, err)
 
-	assert.NotEmpty(t, resp.JobID)
-	assert.Equal(t, "pending", resp.Status)
+	_, api := humatest.New(t)
+	Register(api, Config{
+		BasePrefix: "/v0",
+		Indexer:    indexer,
+	})
+	return api, store
 }
 
-func TestStartIndex_WithOptions(t *testing.T) {
-	captured := make(chan service.IndexOptions, 1)
-	mockIdx := &mockIndexer{
-		runFunc: func(ctx context.Context, opts service.IndexOptions, onProgress service.IndexProgressCallback) (*service.IndexResult, error) {
-			captured <- opts
-			return &service.IndexResult{}, nil
-		},
+func TestHandler_StartIndexJob_ReturnsJobID(t *testing.T) {
+	api, _ := setupHandlerFixture(t)
+
+	resp := api.Post("/v0/embeddings/index", strings.NewReader(`{}`))
+	require.Equal(t, 200, resp.Code, resp.Body.String())
+
+	var body IndexJobResponse
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
+	require.NotEmpty(t, body.JobID)
+	require.Equal(t, "pending", body.Status)
+}
+
+func TestHandler_GetJobStatus_ReportsCompletion(t *testing.T) {
+	api, store := setupHandlerFixture(t)
+
+	resp := api.Post("/v0/embeddings/index", strings.NewReader(`{}`))
+	require.Equal(t, 200, resp.Code)
+	var start IndexJobResponse
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &start))
+
+	// Poll until terminal — background goroutine writes into the
+	// manager asynchronously.
+	deadline := time.Now().Add(3 * time.Second)
+	var status JobStatusResponse
+	for time.Now().Before(deadline) {
+		got := api.Get("/v0/embeddings/index/" + start.JobID)
+		require.Equal(t, 200, got.Code)
+		require.NoError(t, json.Unmarshal(got.Body.Bytes(), &status))
+		if status.Status == "completed" || status.Status == "failed" {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	require.Equal(t, "completed", status.Status, "result=%+v", status.Result)
+	require.NotNil(t, status.Result)
+	perAgent := status.Result.PerKind[v1alpha1.KindAgent]
+	require.Equal(t, 2, perAgent.Processed)
+	require.Equal(t, 2, perAgent.Updated)
+
+	// Second run against the same rows — checksums match → everything skipped.
+	resp2 := api.Post("/v0/embeddings/index", strings.NewReader(`{}`))
+	require.Equal(t, 200, resp2.Code)
+	var start2 IndexJobResponse
+	require.NoError(t, json.Unmarshal(resp2.Body.Bytes(), &start2))
+
+	deadline = time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		got := api.Get("/v0/embeddings/index/" + start2.JobID)
+		require.NoError(t, json.Unmarshal(got.Body.Bytes(), &status))
+		if status.Status == "completed" || status.Status == "failed" {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	require.Equal(t, "completed", status.Status)
+	require.Equal(t, 2, status.Result.PerKind[v1alpha1.KindAgent].Skipped)
+
+	// Row-side sanity check: embeddings persisted.
+	meta, err := store.GetEmbeddingMetadata(context.Background(), "default", "one", "v1")
+	require.NoError(t, err)
+	require.NotNil(t, meta)
+	require.Equal(t, "fake", meta.Provider)
+}
+
+func TestHandler_ConflictWhenJobAlreadyRunning(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+
+	for i := 0; i < 50; i++ {
+		seedAgent(t, store, "row"+string(rune('a'+i%26))+string(rune('a'+i/26)))
 	}
 
-	jobManager := jobs.NewManager()
-	mux := http.NewServeMux()
-	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
+	// Provider that blocks on each call so we can assert concurrent
+	// start returns 409.
+	blocker := make(chan struct{})
+	sp := slowProvider{block: blocker}
+	indexer, err := pkgemb.NewIndexer(pkgemb.IndexerConfig{
+		Bindings: []pkgemb.KindBinding{{
+			Kind:         v1alpha1.KindAgent,
+			Store:        store,
+			BuildPayload: func(row *v1alpha1.RawObject) (string, error) { return row.Metadata.Name, nil },
+		}},
+		Provider:   &sp,
+		Dimensions: 1536,
+	})
+	require.NoError(t, err)
 
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, publicAuthz)
+	_, api := humatest.New(t)
+	Register(api, Config{BasePrefix: "/v0", Indexer: indexer})
 
-	body := strings.NewReader(`{"batchSize": 50, "force": true, "dryRun": true, "includeServers": true, "includeAgents": true}`)
-	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+	first := api.Post("/v0/embeddings/index", strings.NewReader(`{}`))
+	require.Equal(t, 200, first.Code)
 
-	mux.ServeHTTP(w, req)
+	// Poll until the first job transitions out of pending so Manager
+	// reports it as running.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		var start IndexJobResponse
+		_ = json.Unmarshal(first.Body.Bytes(), &start)
+		got := api.Get("/v0/embeddings/index/" + start.JobID)
+		var st JobStatusResponse
+		_ = json.Unmarshal(got.Body.Bytes(), &st)
+		if st.Status == "running" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
-	assert.Equal(t, http.StatusOK, w.Code)
+	second := api.Post("/v0/embeddings/index", strings.NewReader(`{}`))
+	require.Equal(t, 409, second.Code, second.Body.String())
 
+	close(blocker) // let the first job drain so the test cleans up
+}
+
+type slowProvider struct {
+	block chan struct{}
+}
+
+func (s *slowProvider) Generate(ctx context.Context, p pkgemb.Payload) (*pkgemb.Result, error) {
 	select {
-	case capturedOpts := <-captured:
-		assert.Equal(t, 50, capturedOpts.BatchSize)
-		assert.True(t, capturedOpts.Force)
-		assert.True(t, capturedOpts.DryRun)
-		assert.True(t, capturedOpts.IncludeServers)
-		assert.True(t, capturedOpts.IncludeAgents)
-	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for indexer to be called")
+	case <-s.block:
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
+	vec := make([]float32, 1536)
+	return &pkgemb.Result{Vector: vec, Provider: "slow", Model: "x", Dimensions: 1536}, nil
 }
 
-func TestStartIndex_IndexerNil(t *testing.T) {
-	jobManager := jobs.NewManager()
-	mux := http.NewServeMux()
-	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", nil, jobManager, publicAuthz)
-
-	body := strings.NewReader(`{}`)
-	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	mux.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
-	assert.Contains(t, w.Body.String(), "not configured")
+func TestHandler_JobNotFound(t *testing.T) {
+	api, _ := setupHandlerFixture(t)
+	resp := api.Get("/v0/embeddings/index/nope")
+	require.Equal(t, 404, resp.Code)
 }
 
-func TestStartIndex_StreamTrue(t *testing.T) {
-	mockIdx := &mockIndexer{}
+func TestHandler_NonAdmin_Forbidden(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	seedAgent(t, store, "one")
 
-	jobManager := jobs.NewManager()
-	mux := http.NewServeMux()
-	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, publicAuthz)
-
-	body := strings.NewReader(`{"stream": true}`)
-	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	mux.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "SSE streaming")
-}
-
-func TestStartIndex_JobAlreadyRunning(t *testing.T) {
-	started := make(chan struct{})
-	blockCh := make(chan struct{})
-	mockIdx := &mockIndexer{
-		runFunc: func(ctx context.Context, opts service.IndexOptions, onProgress service.IndexProgressCallback) (*service.IndexResult, error) {
-			close(started)
-			<-blockCh
-			return &service.IndexResult{}, nil
-		},
-	}
-
-	jobManager := jobs.NewManager()
-	mux := http.NewServeMux()
-	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, publicAuthz)
-
-	body1 := strings.NewReader(`{}`)
-	req1 := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body1)
-	req1.Header.Set("Content-Type", "application/json")
-	w1 := httptest.NewRecorder()
-
-	mux.ServeHTTP(w1, req1)
-	assert.Equal(t, http.StatusOK, w1.Code)
-
-	<-started
-
-	body2 := strings.NewReader(`{}`)
-	req2 := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body2)
-	req2.Header.Set("Content-Type", "application/json")
-	w2 := httptest.NewRecorder()
-
-	mux.ServeHTTP(w2, req2)
-
-	assert.Equal(t, http.StatusConflict, w2.Code)
-	assert.Contains(t, w2.Body.String(), "already running")
-
-	close(blockCh)
-}
-
-func TestStartIndex_DefaultsApplied(t *testing.T) {
-	captured := make(chan service.IndexOptions, 1)
-	mockIdx := &mockIndexer{
-		runFunc: func(ctx context.Context, opts service.IndexOptions, onProgress service.IndexProgressCallback) (*service.IndexResult, error) {
-			captured <- opts
-			return &service.IndexResult{}, nil
-		},
-	}
-
-	jobManager := jobs.NewManager()
-	mux := http.NewServeMux()
-	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, publicAuthz)
-
-	body := strings.NewReader(`{}`)
-	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	mux.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	select {
-	case capturedOpts := <-captured:
-		assert.True(t, capturedOpts.IncludeServers)
-		assert.True(t, capturedOpts.IncludeAgents)
-		assert.Equal(t, 100, capturedOpts.BatchSize)
-	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for indexer to be called")
-	}
-}
-
-func TestGetJobStatus_Success(t *testing.T) {
-	mockIdx := &mockIndexer{
-		runFunc: func(ctx context.Context, opts service.IndexOptions, onProgress service.IndexProgressCallback) (*service.IndexResult, error) {
-			return &service.IndexResult{}, nil
-		},
-	}
-
-	jobManager := jobs.NewManager()
-	mux := http.NewServeMux()
-	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, publicAuthz)
-
-	body := strings.NewReader(`{}`)
-	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	mux.ServeHTTP(w, req)
-	require.Equal(t, http.StatusOK, w.Code)
-
-	var createResp v0embeddings.IndexJobResponse
-	err := json.Unmarshal(w.Body.Bytes(), &createResp)
+	indexer, err := pkgemb.NewIndexer(pkgemb.IndexerConfig{
+		Bindings: []pkgemb.KindBinding{{
+			Kind:         v1alpha1.KindAgent,
+			Store:        store,
+			BuildPayload: func(row *v1alpha1.RawObject) (string, error) { return row.Metadata.Name, nil },
+		}},
+		Provider:   &fakeProvider{},
+		Dimensions: 1536,
+	})
 	require.NoError(t, err)
 
-	req2 := httptest.NewRequest(http.MethodGet, "/v0/embeddings/index/"+createResp.JobID, nil)
-	w2 := httptest.NewRecorder()
+	_, api := humatest.New(t)
+	Register(api, Config{
+		BasePrefix: "/v0",
+		Indexer:    indexer,
+		Authz:      auth.Authorizer{Authz: denyAdminAuthzProvider{}},
+	})
 
-	mux.ServeHTTP(w2, req2)
+	// POST is gated.
+	resp := api.Post("/v0/embeddings/index", strings.NewReader(`{}`))
+	require.Equal(t, 403, resp.Code, resp.Body.String())
 
-	assert.Equal(t, http.StatusOK, w2.Code)
-
-	var statusResp v0embeddings.JobStatusResponse
-	err = json.Unmarshal(w2.Body.Bytes(), &statusResp)
-	require.NoError(t, err)
-
-	assert.Equal(t, createResp.JobID, statusResp.JobID)
-	assert.Equal(t, "embeddings-index", statusResp.Type)
-}
-
-func TestGetJobStatus_NotFound(t *testing.T) {
-	mockIdx := &mockIndexer{}
-
-	jobManager := jobs.NewManager()
-	mux := http.NewServeMux()
-	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, publicAuthz)
-
-	req := httptest.NewRequest(http.MethodGet, "/v0/embeddings/index/non-existent-job-id", nil)
-	w := httptest.NewRecorder()
-
-	mux.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusNotFound, w.Code)
-	assert.Contains(t, w.Body.String(), "not found")
-}
-
-func TestGetJobStatus_Completed(t *testing.T) {
-	mockIdx := &mockIndexer{
-		runFunc: func(ctx context.Context, opts service.IndexOptions, onProgress service.IndexProgressCallback) (*service.IndexResult, error) {
-			return &service.IndexResult{
-				Servers: service.IndexStats{Processed: 10, Updated: 5, Skipped: 3, Failures: 2},
-				Agents:  service.IndexStats{Processed: 8, Updated: 4, Skipped: 2, Failures: 2},
-			}, nil
-		},
-	}
-
-	jobManager := jobs.NewManager()
-	mux := http.NewServeMux()
-	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, publicAuthz)
-
-	body := strings.NewReader(`{}`)
-	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	mux.ServeHTTP(w, req)
-	require.Equal(t, http.StatusOK, w.Code)
-
-	var createResp v0embeddings.IndexJobResponse
-	err := json.Unmarshal(w.Body.Bytes(), &createResp)
-	require.NoError(t, err)
-
-	time.Sleep(100 * time.Millisecond)
-
-	req2 := httptest.NewRequest(http.MethodGet, "/v0/embeddings/index/"+createResp.JobID, nil)
-	w2 := httptest.NewRecorder()
-
-	mux.ServeHTTP(w2, req2)
-
-	assert.Equal(t, http.StatusOK, w2.Code)
-
-	var statusResp v0embeddings.JobStatusResponse
-	err = json.Unmarshal(w2.Body.Bytes(), &statusResp)
-	require.NoError(t, err)
-
-	assert.Equal(t, "completed", statusResp.Status)
-	require.NotNil(t, statusResp.Result)
-	assert.Equal(t, 10, statusResp.Result.ServersProcessed)
-	assert.Equal(t, 5, statusResp.Result.ServersUpdated)
-	assert.Equal(t, 8, statusResp.Result.AgentsProcessed)
-	assert.Equal(t, 4, statusResp.Result.AgentsUpdated)
-}
-
-func TestGetJobStatus_Failed(t *testing.T) {
-	mockIdx := &mockIndexer{
-		runFunc: func(ctx context.Context, opts service.IndexOptions, onProgress service.IndexProgressCallback) (*service.IndexResult, error) {
-			return nil, assert.AnError
-		},
-	}
-
-	jobManager := jobs.NewManager()
-	mux := http.NewServeMux()
-	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, publicAuthz)
-
-	body := strings.NewReader(`{}`)
-	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	mux.ServeHTTP(w, req)
-	require.Equal(t, http.StatusOK, w.Code)
-
-	var createResp v0embeddings.IndexJobResponse
-	err := json.Unmarshal(w.Body.Bytes(), &createResp)
-	require.NoError(t, err)
-
-	time.Sleep(100 * time.Millisecond)
-
-	req2 := httptest.NewRequest(http.MethodGet, "/v0/embeddings/index/"+createResp.JobID, nil)
-	w2 := httptest.NewRecorder()
-
-	mux.ServeHTTP(w2, req2)
-
-	assert.Equal(t, http.StatusOK, w2.Code)
-
-	var statusResp v0embeddings.JobStatusResponse
-	err = json.Unmarshal(w2.Body.Bytes(), &statusResp)
-	require.NoError(t, err)
-
-	assert.Equal(t, "failed", statusResp.Status)
-	require.NotNil(t, statusResp.Result)
-	assert.NotEmpty(t, statusResp.Result.Error)
-}
-
-func TestStartIndex_NonAdmin_Forbidden(t *testing.T) {
-	mockIdx := &mockIndexer{}
-	jobManager := jobs.NewManager()
-	mux := http.NewServeMux()
-	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, denyAdminAuthz)
-
-	body := strings.NewReader(`{}`)
-	req := httptest.NewRequest(http.MethodPost, "/v0/embeddings/index", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusForbidden, w.Code)
-	// Indexer must not have been invoked.
-	mockIdx.mu.Lock()
-	callCount := len(mockIdx.runCalls)
-	mockIdx.mu.Unlock()
-	assert.Equal(t, 0, callCount, "indexer must not run when admin gate denies")
-}
-
-func TestJobStatus_NonAdmin_Forbidden(t *testing.T) {
-	mockIdx := &mockIndexer{}
-	jobManager := jobs.NewManager()
-	mux := http.NewServeMux()
-	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-
-	v0embeddings.RegisterEmbeddingsEndpoints(api, "/v0", mockIdx, jobManager, denyAdminAuthz)
-
-	// Any job ID is fine — the gate must fire before GetJob runs.
-	req := httptest.NewRequest(http.MethodGet, "/v0/embeddings/index/any-id", nil)
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusForbidden, w.Code)
+	// GET is also gated (prevents job-existence leaks).
+	resp = api.Get("/v0/embeddings/index/anything")
+	require.Equal(t, 403, resp.Code, resp.Body.String())
 }

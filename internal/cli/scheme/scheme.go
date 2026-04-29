@@ -1,37 +1,77 @@
-// Package scheme is the thin CLI-side wrapper over kinds.Registry decoding.
-// It exists to keep CLI code decoupled from the registry package's fully-qualified
-// type names when reading YAML files.
 package scheme
 
 import (
+	"fmt"
 	"os"
+	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"gopkg.in/yaml.v3"
 )
 
 // APIVersion is the canonical apiVersion string for arctl declarative YAML files.
-// This re-exports models.APIVersion so CLI code does not need to import pkg/models directly.
-const APIVersion = models.APIVersion
+const APIVersion = v1alpha1.GroupVersion
 
-// Resource is an alias for kinds.Document. All CLI code should read doc.Spec via a
-// typed assertion against the per-kind Spec struct (e.g. *agent.Spec).
-type Resource = kinds.Document
-
-// Metadata re-exports kinds.Metadata for CLI callers.
-type Metadata = kinds.Metadata
-
-// DecodeBytes parses one or more YAML documents using the provided registry.
-// Returns an error if any document has an unknown kind or an unparseable spec.
-func DecodeBytes(reg *kinds.Registry, b []byte) ([]*Resource, error) {
-	return reg.DecodeMulti(b)
+// IsEnvelopeYAML reports whether the given bytes look like a declarative
+// ar.dev/v1alpha1 envelope. Malformed YAML returns false so callers can
+// surface the real parse error from a downstream loader.
+//
+// Pins on the canonical apiVersion (ar.dev/v1alpha1) — generic K8s-style
+// manifests with an unrelated apiVersion (kagent CRDs, k8s core types, etc.)
+// would otherwise misclassify as envelopes and route to the wrong loader.
+func IsEnvelopeYAML(data []byte) bool {
+	var header struct {
+		APIVersion string `yaml:"apiVersion"`
+		Kind       string `yaml:"kind"`
+	}
+	if err := yaml.Unmarshal(data, &header); err != nil {
+		return false
+	}
+	return header.APIVersion == APIVersion && header.Kind != ""
 }
 
-// DecodeFile reads a YAML file and decodes it using the provided registry.
-func DecodeFile(reg *kinds.Registry, path string) ([]*Resource, error) {
+// DecodeBytes parses one or more declarative YAML documents into typed
+// v1alpha1.Object envelopes. Returns an error if any document has an
+// unknown kind or fails to decode.
+//
+// Status is reset to nil before returning so `arctl get -o yaml | apply
+// -f -` stays apply-safe even when the source YAML contained
+// server-managed status.
+func DecodeBytes(b []byte) ([]v1alpha1.Object, error) {
+	decoded, err := v1alpha1.Default.DecodeMulti(b)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]v1alpha1.Object, 0, len(decoded))
+	for _, item := range decoded {
+		obj, ok := item.(v1alpha1.Object)
+		if !ok {
+			return nil, fmt.Errorf("scheme: decoded value does not implement v1alpha1.Object: %T", item)
+		}
+		if _, err := Lookup(obj.GetKind()); err != nil {
+			return nil, err
+		}
+		if err := obj.UnmarshalStatus(nil); err != nil {
+			return nil, fmt.Errorf("reset status: %w", err)
+		}
+		out = append(out, obj)
+	}
+	return out, nil
+}
+
+// DecodeFile reads a YAML file and decodes it into v1alpha1.Object envelopes.
+func DecodeFile(path string) ([]v1alpha1.Object, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	return DecodeBytes(reg, b)
+	return DecodeBytes(b)
+}
+
+func kindAliasKey(kind string) string {
+	trimmed := strings.TrimSpace(kind)
+	if trimmed == "" {
+		return ""
+	}
+	return strings.ToLower(trimmed)
 }

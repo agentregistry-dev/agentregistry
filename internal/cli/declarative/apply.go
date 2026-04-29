@@ -7,7 +7,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/spf13/cobra"
 )
 
@@ -23,7 +23,7 @@ func NewApplyCmd() *cobra.Command {
 }
 
 func newApplyCmd() *cobra.Command {
-	var force, dryRun bool
+	var dryRun bool
 	cmd := &cobra.Command{
 		Use:   "apply -f FILE",
 		Short: "Apply one or more resources from a YAML file",
@@ -39,20 +39,18 @@ Examples:
   cat stack.yaml | arctl apply -f -`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runApply(cmd, force, dryRun)
+			return runApply(cmd, dryRun)
 		},
 	}
 	cmd.Flags().StringArrayP("filename", "f", nil,
 		"YAML file to apply (repeatable; use - for stdin)")
 	_ = cmd.MarkFlagRequired("filename")
-	cmd.Flags().BoolVar(&force, "force", false,
-		"Replace drifted deployments (required when drift is detected)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false,
 		"Validate and simulate without mutating state")
 	return cmd
 }
 
-func runApply(cmd *cobra.Command, force, dryRun bool) error {
+func runApply(cmd *cobra.Command, dryRun bool) error {
 	filePaths, err := cmd.Flags().GetStringArray("filename")
 	if err != nil {
 		return fmt.Errorf("getting filename flag: %w", err)
@@ -75,10 +73,8 @@ func runApply(cmd *cobra.Command, force, dryRun bool) error {
 		}
 
 		// Validate locally via registry decode — catches unknown kinds before sending.
-		if defaultRegistry != nil {
-			if _, err := scheme.DecodeBytes(defaultRegistry, data); err != nil {
-				return fmt.Errorf("parsing %s: %w", path, err)
-			}
+		if _, err := scheme.DecodeBytes(data); err != nil {
+			return fmt.Errorf("parsing %s: %w", path, err)
 		}
 		allData = append(allData, data)
 	}
@@ -93,7 +89,6 @@ func runApply(cmd *cobra.Command, force, dryRun bool) error {
 	var anyFailure bool
 	for i, data := range allData {
 		results, err := apiClient.Apply(cmd.Context(), data, client.ApplyOpts{
-			Force:  force,
 			DryRun: dryRun,
 		})
 		if err != nil {
@@ -104,7 +99,7 @@ func runApply(cmd *cobra.Command, force, dryRun bool) error {
 		}
 		printResults(cmd.OutOrStdout(), results, dryRun)
 		for _, r := range results {
-			if r.Status == kinds.StatusFailed {
+			if r.Status == arv0.ApplyStatusFailed {
 				anyFailure = true
 			}
 		}
@@ -116,10 +111,10 @@ func runApply(cmd *cobra.Command, force, dryRun bool) error {
 	return nil
 }
 
-func printResults(out io.Writer, results []kinds.Result, dryRun bool) {
+func printResults(out io.Writer, results []arv0.ApplyResult, dryRun bool) {
 	for _, r := range results {
 		mark := "✓"
-		if r.Status == kinds.StatusFailed {
+		if r.Status == arv0.ApplyStatusFailed {
 			mark = "✗"
 		}
 		fmt.Fprintf(out, "%s %s/%s", mark, r.Kind, r.Name)

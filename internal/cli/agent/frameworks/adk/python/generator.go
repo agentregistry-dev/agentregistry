@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
 )
 
 //go:embed templates/* templates/agent/* templates/mcp_server/* dice-agent-instruction.md
@@ -51,22 +50,8 @@ func (g *PythonGenerator) Generate(agentConfig *common.AgentConfig) error {
 		return fmt.Errorf("failed to generate project: %w", err)
 	}
 
-	manifest := &models.AgentManifest{
-		Name:              agentConfig.Name,
-		Image:             agentConfig.Image,
-		Language:          agentConfig.Language,
-		Framework:         agentConfig.Framework,
-		ModelProvider:     agentConfig.ModelProvider,
-		ModelName:         agentConfig.ModelName,
-		Description:       agentConfig.Description,
-		TelemetryEndpoint: agentConfig.TelemetryEndpoint,
-		McpServers:        agentConfig.McpServers,
-	}
-
-	manager := common.NewManifestManager(agentConfig.Directory)
-	if err := manager.Save(manifest); err != nil {
-		return fmt.Errorf("failed to write agent manifest: %w", err)
-	}
+	// agent.yaml is written by the caller (cmd/init.go's
+	// writeDeclarativeAgentYAML) using the v1alpha1.Agent envelope.
 
 	if err := relocateAgentPackage(agentConfig.Directory, projectPackageDir); err != nil {
 		return err

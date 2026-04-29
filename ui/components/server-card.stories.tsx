@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { ServerCard } from "./server-card"
-import type { ServerResponse } from "@/lib/api/types.gen"
+import type { ServerResponse } from "@/lib/admin-api"
 
 const mockServer: ServerResponse = {
   server: {

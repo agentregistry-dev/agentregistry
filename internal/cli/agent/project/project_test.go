@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/agentregistry-dev/agentregistry/internal/version"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -200,9 +200,9 @@ func TestEnsureOtelCollectorConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
-			manifest := &models.AgentManifest{
-				Name:              "test-agent",
-				TelemetryEndpoint: tt.telemetry,
+			agent := &v1alpha1.Agent{
+				Metadata: v1alpha1.ObjectMeta{Name: "test-agent"},
+				Spec:     v1alpha1.AgentSpec{TelemetryEndpoint: tt.telemetry},
 			}
 
 			configPath := filepath.Join(dir, "otel-collector-config.yaml")
@@ -212,7 +212,7 @@ func TestEnsureOtelCollectorConfig(t *testing.T) {
 				}
 			}
 
-			err := EnsureOtelCollectorConfig(dir, manifest, false)
+			err := EnsureOtelCollectorConfig(dir, agent, false)
 			if err != nil {
 				t.Fatalf("EnsureOtelCollectorConfig() error = %v", err)
 			}
@@ -235,7 +235,7 @@ func TestEnsureOtelCollectorConfig(t *testing.T) {
 	}
 }
 
-func TestLoadManifest_EnvelopeFormat(t *testing.T) {
+func TestLoadAgent_EnvelopeFormat(t *testing.T) {
 	dir := t.TempDir()
 	envelopeYAML := `apiVersion: ar.dev/v1alpha1
 kind: Agent
@@ -251,55 +251,56 @@ spec:
   description: "Summarizes documents"
   telemetryEndpoint: "http://localhost:4318/v1/traces"
   mcpServers:
-    - type: registry
-      name: fetch
-      registryServerName: acme/fetch
-      registryServerVersion: "1.0.0"
+    - kind: MCPServer
+      name: acme/fetch
+      version: "1.0.0"
   skills:
-    - name: summarize
-      registrySkillName: acme/summarize
-      registrySkillVersion: "1.0.0"
+    - kind: Skill
+      name: acme/summarize
+      version: "1.0.0"
   prompts:
-    - name: system
-      registryPromptName: acme/system
-      registryPromptVersion: "1.0.0"
+    - kind: Prompt
+      name: acme/system
+      version: "1.0.0"
   repository:
     url: https://github.com/acme/summarizer
     source: github
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "agent.yaml"), []byte(envelopeYAML), 0o644))
-	got, err := LoadManifest(dir)
+	got, err := LoadAgent(dir)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 
-	assert.Equal(t, "summarizer", got.Name)
-	assert.Equal(t, "1.0.0", got.Version)
-	assert.Equal(t, "ghcr.io/acme/summarizer:v1", got.Image)
-	assert.Equal(t, "python", got.Language)
-	assert.Equal(t, "adk", got.Framework)
-	assert.Equal(t, "gemini", got.ModelProvider)
-	assert.Equal(t, "gemini-2.0-flash", got.ModelName)
-	assert.Equal(t, "Summarizes documents", got.Description)
-	assert.Equal(t, "http://localhost:4318/v1/traces", got.TelemetryEndpoint)
+	// Envelope decode is offline; the runnable runtime form is built
+	// later by manifest.Resolve (which makes registry calls). LoadAgent
+	// only verifies the envelope round-trips into v1alpha1.Agent.
+	assert.Equal(t, "summarizer", got.Metadata.Name)
+	assert.Equal(t, "1.0.0", got.Metadata.Version)
+	assert.Equal(t, "ghcr.io/acme/summarizer:v1", got.Spec.Image)
+	assert.Equal(t, "python", got.Spec.Language)
+	assert.Equal(t, "adk", got.Spec.Framework)
+	assert.Equal(t, "gemini", got.Spec.ModelProvider)
+	assert.Equal(t, "gemini-2.0-flash", got.Spec.ModelName)
 
-	require.Len(t, got.McpServers, 1)
-	assert.Equal(t, "registry", got.McpServers[0].Type)
-	assert.Equal(t, "fetch", got.McpServers[0].Name)
-	assert.Equal(t, "acme/fetch", got.McpServers[0].RegistryServerName)
-	assert.Equal(t, "1.0.0", got.McpServers[0].RegistryServerVersion)
+	require.Len(t, got.Spec.MCPServers, 1)
+	assert.Equal(t, "acme/fetch", got.Spec.MCPServers[0].Name)
+	assert.Equal(t, "1.0.0", got.Spec.MCPServers[0].Version)
 
-	require.Len(t, got.Skills, 1)
-	assert.Equal(t, "summarize", got.Skills[0].Name)
-	assert.Equal(t, "acme/summarize", got.Skills[0].RegistrySkillName)
-	assert.Equal(t, "1.0.0", got.Skills[0].RegistrySkillVersion)
+	require.Len(t, got.Spec.Skills, 1)
+	assert.Equal(t, "acme/summarize", got.Spec.Skills[0].Name)
+	assert.Equal(t, "1.0.0", got.Spec.Skills[0].Version)
 
-	require.Len(t, got.Prompts, 1)
-	assert.Equal(t, "system", got.Prompts[0].Name)
-	assert.Equal(t, "acme/system", got.Prompts[0].RegistryPromptName)
-	assert.Equal(t, "1.0.0", got.Prompts[0].RegistryPromptVersion)
+	require.Len(t, got.Spec.Prompts, 1)
+	assert.Equal(t, "acme/system", got.Spec.Prompts[0].Name)
+	assert.Equal(t, "1.0.0", got.Spec.Prompts[0].Version)
 }
 
-func TestLoadManifest_LegacyFlatFormat(t *testing.T) {
+// TestLoadAgent_RejectsLegacyFlatFormat pins the contract that the
+// flat AgentManifest YAML shape (agentName / image / language at top
+// level, no apiVersion) is no longer accepted on disk. The on-disk
+// manifest must be a v1alpha1.Agent envelope; the legacy decoder was
+// removed alongside the dual-format LoadManifest dispatch.
+func TestLoadAgent_RejectsLegacyFlatFormat(t *testing.T) {
 	dir := t.TempDir()
 	flatYAML := `agentName: legacy
 image: ghcr.io/acme/legacy:v1
@@ -310,12 +311,7 @@ modelName: gemini-2.0-flash
 description: "Legacy flat manifest"
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "agent.yaml"), []byte(flatYAML), 0o644))
-	got, err := LoadManifest(dir)
-	require.NoError(t, err)
-	require.NotNil(t, got)
-
-	assert.Equal(t, "legacy", got.Name)
-	assert.Equal(t, "ghcr.io/acme/legacy:v1", got.Image)
-	assert.Equal(t, "python", got.Language)
-	assert.Equal(t, "adk", got.Framework)
+	_, err := LoadAgent(dir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not a v1alpha1 envelope")
 }

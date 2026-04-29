@@ -8,14 +8,13 @@ import (
 
 	agentframeworks "github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks"
 	agentcommon "github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
-	agentutils "github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	mcpframeworks "github.com/agentregistry-dev/agentregistry/internal/cli/mcp/frameworks"
 	mcptemplates "github.com/agentregistry-dev/agentregistry/internal/cli/mcp/templates"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	skilltemplates "github.com/agentregistry-dev/agentregistry/internal/cli/skill/templates"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/validators"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -189,37 +188,34 @@ func parseNameVersion(s string) (string, string) {
 	return s, "latest"
 }
 
-// localMCPName returns the local name for an MCP server reference.
-// For namespace/name format, returns the name part; otherwise returns as-is.
-func localMCPName(registryName string) string {
-	if i := strings.LastIndex(registryName, "/"); i >= 0 {
-		return registryName[i+1:]
-	}
-	return registryName
-}
-
 // writeDeclarativeAgentYAML writes agent.yaml in the ar.dev/v1alpha1 declarative format.
-// Uses the typed kinds.AgentSpec struct instead of map[string]any to ensure compile-time
-// field validation and consistent YAML key naming.
 func writeDeclarativeAgentYAML(projectDir, name, ver, image, language, framework, modelProvider, modelName, description, gitURL string, mcps, skills, prompts []string) error {
-	registryURL := agentutils.GetDefaultRegistryURL()
-
 	desc := description
 	if desc == "" {
 		desc = fmt.Sprintf("%s agent", name)
 	}
 
-	spec := kinds.AgentSpec{
-		Image:         image,
-		Language:      language,
-		Framework:     framework,
-		ModelProvider: modelProvider,
-		ModelName:     modelName,
-		Description:   desc,
+	agent := v1alpha1.Agent{
+		TypeMeta: v1alpha1.TypeMeta{
+			APIVersion: scheme.APIVersion,
+			Kind:       v1alpha1.KindAgent,
+		},
+		Metadata: v1alpha1.ObjectMeta{
+			Name:    name,
+			Version: ver,
+		},
+		Spec: v1alpha1.AgentSpec{
+			Image:         image,
+			Language:      language,
+			Framework:     framework,
+			ModelProvider: modelProvider,
+			ModelName:     modelName,
+			Description:   desc,
+		},
 	}
 
 	if gitURL != "" {
-		spec.Repository = &kinds.AgentRepository{
+		agent.Spec.Repository = &v1alpha1.Repository{
 			URL:    gitURL,
 			Source: "git",
 		}
@@ -227,48 +223,32 @@ func writeDeclarativeAgentYAML(projectDir, name, ver, image, language, framework
 
 	for _, raw := range mcps {
 		serverName, mcpVer := parseNameVersion(raw)
-		spec.McpServers = append(spec.McpServers, kinds.AgentMcpServer{
-			Type:                  "registry",
-			Name:                  localMCPName(serverName),
-			RegistryURL:           registryURL,
-			RegistryServerName:    serverName,
-			RegistryServerVersion: mcpVer,
+		agent.Spec.MCPServers = append(agent.Spec.MCPServers, v1alpha1.ResourceRef{
+			Kind:    v1alpha1.KindMCPServer,
+			Name:    serverName,
+			Version: mcpVer,
 		})
 	}
 
 	for _, raw := range skills {
 		skillName, skillVer := parseNameVersion(raw)
-		spec.Skills = append(spec.Skills, kinds.AgentSkillRef{
-			Name:                 skillName,
-			RegistryURL:          registryURL,
-			RegistrySkillName:    skillName,
-			RegistrySkillVersion: skillVer,
+		agent.Spec.Skills = append(agent.Spec.Skills, v1alpha1.ResourceRef{
+			Kind:    v1alpha1.KindSkill,
+			Name:    skillName,
+			Version: skillVer,
 		})
 	}
 
 	for _, raw := range prompts {
 		promptName, promptVer := parseNameVersion(raw)
-		spec.Prompts = append(spec.Prompts, kinds.AgentPromptRef{
-			Name:                  promptName,
-			RegistryURL:           registryURL,
-			RegistryPromptName:    promptName,
-			RegistryPromptVersion: promptVer,
+		agent.Spec.Prompts = append(agent.Spec.Prompts, v1alpha1.ResourceRef{
+			Kind:    v1alpha1.KindPrompt,
+			Name:    promptName,
+			Version: promptVer,
 		})
 	}
 
-	doc := struct {
-		APIVersion string          `yaml:"apiVersion"`
-		Kind       string          `yaml:"kind"`
-		Metadata   kinds.Metadata  `yaml:"metadata"`
-		Spec       kinds.AgentSpec `yaml:"spec"`
-	}{
-		APIVersion: scheme.APIVersion,
-		Kind:       "Agent",
-		Metadata:   kinds.Metadata{Name: name, Version: ver},
-		Spec:       spec,
-	}
-
-	b, err := yaml.Marshal(doc)
+	b, err := yaml.Marshal(agent)
 	if err != nil {
 		return err
 	}
@@ -438,32 +418,30 @@ func writeDeclarativeMCPYAML(projectDir, name, ver, image, description string) e
 		desc = fmt.Sprintf("%s MCP server", shortName)
 	}
 
-	spec := kinds.MCPSpec{
-		Title:       shortName,
-		Description: desc,
-		Packages: []kinds.MCPPackage{
-			{
-				RegistryType: "oci",
-				Identifier:   image,
-				Version:      ver,
-				Transport:    kinds.MCPTransport{Type: "stdio"},
+	server := v1alpha1.MCPServer{
+		TypeMeta: v1alpha1.TypeMeta{
+			APIVersion: scheme.APIVersion,
+			Kind:       v1alpha1.KindMCPServer,
+		},
+		Metadata: v1alpha1.ObjectMeta{
+			Name:    name,
+			Version: ver,
+		},
+		Spec: v1alpha1.MCPServerSpec{
+			Title:       shortName,
+			Description: desc,
+			Packages: []v1alpha1.MCPPackage{
+				{
+					RegistryType: "oci",
+					Identifier:   image,
+					Version:      ver,
+					Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+				},
 			},
 		},
 	}
 
-	doc := struct {
-		APIVersion string         `yaml:"apiVersion"`
-		Kind       string         `yaml:"kind"`
-		Metadata   kinds.Metadata `yaml:"metadata"`
-		Spec       kinds.MCPSpec  `yaml:"spec"`
-	}{
-		APIVersion: scheme.APIVersion,
-		Kind:       "MCPServer",
-		Metadata:   kinds.Metadata{Name: name, Version: ver},
-		Spec:       spec,
-	}
-
-	b, err := yaml.Marshal(doc)
+	b, err := yaml.Marshal(server)
 	if err != nil {
 		return err
 	}
@@ -552,37 +530,35 @@ func writeDeclarativeSkillYAML(projectDir, name, ver, description, category, ima
 		desc = fmt.Sprintf("%s skill", name)
 	}
 
-	spec := kinds.SkillSpec{
-		Title:       name,
-		Category:    category,
-		Description: desc,
+	skill := v1alpha1.Skill{
+		TypeMeta: v1alpha1.TypeMeta{
+			APIVersion: scheme.APIVersion,
+			Kind:       v1alpha1.KindSkill,
+		},
+		Metadata: v1alpha1.ObjectMeta{
+			Name:    name,
+			Version: ver,
+		},
+		Spec: v1alpha1.SkillSpec{
+			Title:       name,
+			Category:    category,
+			Description: desc,
+		},
 	}
 	if image != "" {
-		// Skills use RegistryType "docker" (matching legacy `arctl skill publish`
-		// and the `arctl skill pull` consumer). MCPs use "oci" — different
-		// per-kind convention.
-		pkg := kinds.SkillPackageRef{
-			RegistryType: "docker",
+		// OCI packages under v1alpha1 carry the version pinned in the
+		// identifier — separate version/registryBaseUrl fields are
+		// rejected by the validator. The image string already looks like
+		// `host/name:tag`, which is a valid canonical OCI reference.
+		pkg := v1alpha1.SkillPackage{
+			RegistryType: v1alpha1.RegistryTypeOCI,
 			Identifier:   image,
-			Version:      ver,
+			Transport:    v1alpha1.TransportProto{Type: "stdio"},
 		}
-		pkg.Transport.Type = "docker"
-		spec.Packages = []kinds.SkillPackageRef{pkg}
+		skill.Spec.Packages = []v1alpha1.SkillPackage{pkg}
 	}
 
-	doc := struct {
-		APIVersion string          `yaml:"apiVersion"`
-		Kind       string          `yaml:"kind"`
-		Metadata   kinds.Metadata  `yaml:"metadata"`
-		Spec       kinds.SkillSpec `yaml:"spec"`
-	}{
-		APIVersion: scheme.APIVersion,
-		Kind:       "Skill",
-		Metadata:   kinds.Metadata{Name: name, Version: ver},
-		Spec:       spec,
-	}
-
-	b, err := yaml.Marshal(doc)
+	b, err := yaml.Marshal(skill)
 	if err != nil {
 		return err
 	}
@@ -652,24 +628,22 @@ func writeDeclarativePromptYAML(path, name, ver, description, content string) er
 		desc = fmt.Sprintf("%s prompt", name)
 	}
 
-	spec := kinds.PromptSpec{
-		Description: desc,
-		Content:     content,
+	prompt := v1alpha1.Prompt{
+		TypeMeta: v1alpha1.TypeMeta{
+			APIVersion: scheme.APIVersion,
+			Kind:       v1alpha1.KindPrompt,
+		},
+		Metadata: v1alpha1.ObjectMeta{
+			Name:    name,
+			Version: ver,
+		},
+		Spec: v1alpha1.PromptSpec{
+			Description: desc,
+			Content:     content,
+		},
 	}
 
-	doc := struct {
-		APIVersion string           `yaml:"apiVersion"`
-		Kind       string           `yaml:"kind"`
-		Metadata   kinds.Metadata   `yaml:"metadata"`
-		Spec       kinds.PromptSpec `yaml:"spec"`
-	}{
-		APIVersion: scheme.APIVersion,
-		Kind:       "Prompt",
-		Metadata:   kinds.Metadata{Name: name, Version: ver},
-		Spec:       spec,
-	}
-
-	b, err := yaml.Marshal(doc)
+	b, err := yaml.Marshal(prompt)
 	if err != nil {
 		return err
 	}

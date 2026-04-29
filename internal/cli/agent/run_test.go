@@ -7,149 +7,95 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/adk/python"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-func TestHasRegistryServers(t *testing.T) {
+func TestHasBuildableServers(t *testing.T) {
 	tests := []struct {
-		name     string
-		manifest *models.AgentManifest
-		want     bool
+		name string
+		in   []agentmanifest.ResolvedMCPServer
+		want bool
 	}{
 		{
-			name: "no MCP servers",
-			manifest: &models.AgentManifest{
-				Name:       "test-agent",
-				McpServers: nil,
+			name: "nil",
+			in:   nil,
+			want: false,
+		},
+		{
+			name: "command with OCI image (no build)",
+			in: []agentmanifest.ResolvedMCPServer{
+				{Type: "command", Name: "oci", Image: "ghcr.io/x/y:1"},
 			},
 			want: false,
 		},
 		{
-			name: "empty MCP servers list",
-			manifest: &models.AgentManifest{
-				Name:       "test-agent",
-				McpServers: []models.McpServerType{},
+			name: "remote only",
+			in: []agentmanifest.ResolvedMCPServer{
+				{Type: "remote", Name: "rem", URL: "https://example.com/mcp"},
 			},
 			want: false,
 		},
 		{
-			name: "only command type servers",
-			manifest: &models.AgentManifest{
-				Name: "test-agent",
-				McpServers: []models.McpServerType{
-					{Type: "command", Name: "server1"},
-					{Type: "command", Name: "server2"},
-				},
-			},
-			want: false,
-		},
-		{
-			name: "only remote type servers",
-			manifest: &models.AgentManifest{
-				Name: "test-agent",
-				McpServers: []models.McpServerType{
-					{Type: "remote", Name: "server1"},
-				},
-			},
-			want: false,
-		},
-		{
-			name: "has one registry server",
-			manifest: &models.AgentManifest{
-				Name: "test-agent",
-				McpServers: []models.McpServerType{
-					{Type: "registry", Name: "server1"},
-				},
+			name: "command with registry build",
+			in: []agentmanifest.ResolvedMCPServer{
+				{Type: "command", Name: "npm", Build: "registry/npm"},
 			},
 			want: true,
 		},
 		{
-			name: "mixed types with registry server",
-			manifest: &models.AgentManifest{
-				Name: "test-agent",
-				McpServers: []models.McpServerType{
-					{Type: "command", Name: "cmd-server"},
-					{Type: "registry", Name: "reg-server"},
-					{Type: "remote", Name: "remote-server"},
-				},
-			},
-			want: true,
-		},
-		{
-			name: "registry server in middle of list",
-			manifest: &models.AgentManifest{
-				Name: "test-agent",
-				McpServers: []models.McpServerType{
-					{Type: "command", Name: "server1"},
-					{Type: "command", Name: "server2"},
-					{Type: "registry", Name: "server3"},
-					{Type: "command", Name: "server4"},
-				},
+			name: "mixed: one buildable",
+			in: []agentmanifest.ResolvedMCPServer{
+				{Type: "command", Name: "oci", Image: "ghcr.io/x/y:1"},
+				{Type: "command", Name: "npm", Build: "registry/npm"},
+				{Type: "remote", Name: "rem", URL: "https://example.com/mcp"},
 			},
 			want: true,
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := hasRegistryServers(tt.manifest)
+			got := hasBuildableServers(tt.in)
 			if got != tt.want {
-				t.Errorf("hasRegistryServers() = %v, want %v", got, tt.want)
+				t.Errorf("hasBuildableServers() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestResolveMCPServersForRuntime(t *testing.T) {
+func TestPythonServersFromResolved(t *testing.T) {
 	tests := []struct {
-		name         string
-		manifest     *models.AgentManifest
-		wantErr      bool
-		wantResolved int
-		wantConfig   int
+		name string
+		in   []agentmanifest.ResolvedMCPServer
+		want []common.PythonMCPServer
 	}{
 		{
-			name:     "nil manifest",
-			manifest: nil,
-			wantErr:  true,
+			name: "empty",
+			in:   nil,
+			want: nil,
 		},
 		{
-			name: "no registry servers",
-			manifest: &models.AgentManifest{
-				Name: "test-agent",
-				McpServers: []models.McpServerType{
-					{Type: "command", Name: "cmd"},
-					{Type: "remote", Name: "remote"},
-				},
+			name: "remote + command",
+			in: []agentmanifest.ResolvedMCPServer{
+				{Type: "command", Name: "cmd"},
+				{Type: "remote", Name: "rem", URL: "https://example.com", Headers: map[string]string{"x-api-key": "k"}},
 			},
-			wantResolved: 0,
-			wantConfig:   0,
-		},
-		{
-			name: "empty mcp servers",
-			manifest: &models.AgentManifest{
-				Name:       "test-agent",
-				McpServers: []models.McpServerType{},
+			want: []common.PythonMCPServer{
+				{Name: "cmd", Type: "command"},
+				{Name: "rem", Type: "remote", URL: "https://example.com", Headers: map[string]string{"x-api-key": "k"}},
 			},
-			wantResolved: 0,
-			wantConfig:   0,
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolved, config, err := resolveMCPServersForRuntime(tt.manifest)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("resolveMCPServersForRuntime() error = %v, wantErr %v", err, tt.wantErr)
+			got := pythonServersFromResolved(tt.in)
+			if len(got) != len(tt.want) {
+				t.Fatalf("len = %d, want %d", len(got), len(tt.want))
 			}
-			if tt.wantErr {
-				return
-			}
-			if len(resolved) != tt.wantResolved {
-				t.Fatalf("resolveMCPServersForRuntime() resolved count = %d, want %d", len(resolved), tt.wantResolved)
-			}
-			if len(config) != tt.wantConfig {
-				t.Fatalf("resolveMCPServersForRuntime() config count = %d, want %d", len(config), tt.wantConfig)
+			for i := range got {
+				if got[i].Name != tt.want[i].Name || got[i].Type != tt.want[i].Type {
+					t.Errorf("entry[%d] mismatch: got %+v want %+v", i, got[i], tt.want[i])
+				}
 			}
 		})
 	}
@@ -313,18 +259,29 @@ func TestValidateAPIKey(t *testing.T) {
 	}
 }
 
-func TestRenderComposeFromManifest_WithSkills(t *testing.T) {
-	manifest := &models.AgentManifest{
-		Name:          "test-agent",
-		Image:         "docker.io/org/test-agent:latest",
-		ModelProvider: "openai",
-		ModelName:     "gpt-4o",
-		Skills: []models.SkillRef{
-			{Name: "skill-a", Image: "docker.io/org/skill-a:latest"},
+func resolvedAgentForTest(name, image, modelProvider, modelName string, skills []v1alpha1.ResourceRef) *agentmanifest.ResolvedAgent {
+	return &agentmanifest.ResolvedAgent{
+		Agent: &v1alpha1.Agent{
+			Metadata: v1alpha1.ObjectMeta{Name: name},
+			Spec: v1alpha1.AgentSpec{
+				Image:         image,
+				ModelProvider: modelProvider,
+				ModelName:     modelName,
+				Skills:        skills,
+			},
 		},
 	}
+}
 
-	data, err := renderComposeFromManifest(manifest, "1.2.3", 8080)
+func TestRenderComposeFromManifest_WithSkills(t *testing.T) {
+	resolved := resolvedAgentForTest(
+		"test-agent",
+		"docker.io/org/test-agent:latest",
+		"openai", "gpt-4o",
+		[]v1alpha1.ResourceRef{{Kind: v1alpha1.KindSkill, Name: "skill-a", Version: "1"}},
+	)
+
+	data, err := renderComposeFromManifest(resolved, "1.2.3", 8080)
 	if err != nil {
 		t.Fatalf("renderComposeFromManifest() error = %v", err)
 	}
@@ -342,14 +299,9 @@ func TestRenderComposeFromManifest_WithSkills(t *testing.T) {
 }
 
 func TestRenderComposeFromManifest_WithoutSkills(t *testing.T) {
-	manifest := &models.AgentManifest{
-		Name:          "test-agent",
-		Image:         "docker.io/org/test-agent:latest",
-		ModelProvider: "openai",
-		ModelName:     "gpt-4o",
-	}
+	resolved := resolvedAgentForTest("test-agent", "docker.io/org/test-agent:latest", "openai", "gpt-4o", nil)
 
-	data, err := renderComposeFromManifest(manifest, "1.2.3", 8080)
+	data, err := renderComposeFromManifest(resolved, "1.2.3", 8080)
 	if err != nil {
 		t.Fatalf("renderComposeFromManifest() error = %v", err)
 	}
@@ -364,14 +316,9 @@ func TestRenderComposeFromManifest_WithoutSkills(t *testing.T) {
 }
 
 func TestRenderComposeFromManifest_CustomPort(t *testing.T) {
-	manifest := &models.AgentManifest{
-		Name:          "test-agent",
-		Image:         "docker.io/org/test-agent:latest",
-		ModelProvider: "openai",
-		ModelName:     "gpt-4o",
-	}
+	resolved := resolvedAgentForTest("test-agent", "docker.io/org/test-agent:latest", "openai", "gpt-4o", nil)
 
-	data, err := renderComposeFromManifest(manifest, "1.2.3", 9876)
+	data, err := renderComposeFromManifest(resolved, "1.2.3", 9876)
 	if err != nil {
 		t.Fatalf("renderComposeFromManifest() error = %v", err)
 	}
@@ -398,7 +345,7 @@ func TestFreePort(t *testing.T) {
 func TestFilterServersToBuild(t *testing.T) {
 	tests := []struct {
 		name    string
-		servers []models.McpServerType
+		servers []agentmanifest.ResolvedMCPServer
 		want    []string
 	}{
 		{
@@ -408,12 +355,12 @@ func TestFilterServersToBuild(t *testing.T) {
 		},
 		{
 			name:    "empty servers",
-			servers: []models.McpServerType{},
+			servers: []agentmanifest.ResolvedMCPServer{},
 			want:    nil,
 		},
 		{
 			name: "only registry build servers",
-			servers: []models.McpServerType{
+			servers: []agentmanifest.ResolvedMCPServer{
 				{Type: "command", Name: "srv1", Build: "registry/srv1"},
 				{Type: "command", Name: "srv2", Build: "registry/srv2"},
 			},
@@ -421,7 +368,7 @@ func TestFilterServersToBuild(t *testing.T) {
 		},
 		{
 			name: "only OCI servers",
-			servers: []models.McpServerType{
+			servers: []agentmanifest.ResolvedMCPServer{
 				{Type: "command", Name: "oci1", Image: "ghcr.io/org/oci1:latest"},
 				{Type: "command", Name: "oci2", Image: "ghcr.io/org/oci2:latest"},
 			},
@@ -429,7 +376,7 @@ func TestFilterServersToBuild(t *testing.T) {
 		},
 		{
 			name: "mixed registry build and OCI servers",
-			servers: []models.McpServerType{
+			servers: []agentmanifest.ResolvedMCPServer{
 				{Type: "command", Name: "build-me", Build: "registry/build-me"},
 				{Type: "command", Name: "oci", Image: "ghcr.io/org/oci:latest"},
 				{Type: "command", Name: "also-build", Build: "registry/also-build"},
@@ -438,7 +385,7 @@ func TestFilterServersToBuild(t *testing.T) {
 		},
 		{
 			name: "non-command types are excluded",
-			servers: []models.McpServerType{
+			servers: []agentmanifest.ResolvedMCPServer{
 				{Type: "remote", Name: "remote-srv"},
 				{Type: "registry", Name: "reg-srv"},
 				{Type: "command", Name: "cmd-srv", Build: "registry/cmd-srv"},
@@ -447,7 +394,7 @@ func TestFilterServersToBuild(t *testing.T) {
 		},
 		{
 			name: "command with non-registry build path excluded",
-			servers: []models.McpServerType{
+			servers: []agentmanifest.ResolvedMCPServer{
 				{Type: "command", Name: "local", Build: "./local-dir"},
 				{Type: "command", Name: "reg", Build: "registry/reg"},
 			},

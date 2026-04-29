@@ -33,77 +33,95 @@ func writeDeclarativeYAML(t *testing.T, dir, filename, content string) string {
 	return path
 }
 
+// resourceURL builds the v1alpha1-native URL for a single resource version:
+//
+//	{regURL}/{resource}/{name}/{version}
+//
+// Namespace is implicit ("default") and elided from the path post-flatten;
+// callers that target a non-default namespace pass `?namespace=...` directly.
+//
+// Resource names that contain "/" (common for MCPServer identifiers like
+// "e2e-test/decl-mcp-123") are URL-encoded into a single path segment so
+// Huma's router treats them as one {name} parameter. Apply stores these
+// names literally under the default namespace; the CLI itself uses
+// url.PathEscape on delete/get, so the HTTP client must match.
+func resourceURL(regURL, resource, name, version string) string {
+	return fmt.Sprintf("%s/%s/%s/%s",
+		regURL, resource, url.PathEscape(name), version)
+}
+
 // verifyAgentExists checks that the agent exists in the registry via HTTP GET.
 func verifyAgentExists(t *testing.T, regURL, name, version string) {
 	t.Helper()
-	encoded := strings.ReplaceAll(name, "/", "%2F")
-	url := fmt.Sprintf("%s/agents/%s/versions/%s", regURL, encoded, version)
-	resp := RegistryGet(t, url)
+	resp := RegistryGet(t, resourceURL(regURL, "agents", name, version))
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("Expected agent %s@%s to exist (HTTP 200) but got %d", name, version, resp.StatusCode)
 	}
 }
 
+// requireDeleted asserts that the named resource no longer appears as a live
+// row in the registry. Under the v1alpha1 soft-delete contract a DELETE only
+// sets metadata.deletionTimestamp — the row survives until GC picks it up.
+// So "deleted" from an HTTP-client perspective means either:
+//   - 404: the row was hard-deleted by GC, OR
+//   - 200 with metadata.deletionTimestamp != nil: the row is terminating.
+//
+// Either satisfies the test's intent that the delete was recorded.
+func requireDeleted(t *testing.T, regURL, resource, name, version string) {
+	t.Helper()
+	resp, err := http.Get(resourceURL(regURL, resource, name, version))
+	if err != nil {
+		t.Fatalf("GET %s after delete failed: %v", resource, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 404 or 200-terminating for %s %s@%s after delete, got %d",
+			resource, name, version, resp.StatusCode)
+	}
+	var envelope struct {
+		Metadata struct {
+			DeletionTimestamp *string `json:"deletionTimestamp,omitempty"`
+		} `json:"metadata"`
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		t.Fatalf("decode %s response: %v\nbody: %s", resource, err, body)
+	}
+	if envelope.Metadata.DeletionTimestamp == nil {
+		t.Fatalf("expected %s %s@%s to be terminating (deletionTimestamp set) after delete, got live row",
+			resource, name, version)
+	}
+}
+
 // verifyAgentNotFound checks that the agent no longer exists in the registry.
 func verifyAgentNotFound(t *testing.T, regURL, name, version string) {
 	t.Helper()
-	encoded := strings.ReplaceAll(name, "/", "%2F")
-	url := fmt.Sprintf("%s/agents/%s/versions/%s", regURL, encoded, version)
-	client := &http.Client{}
-	resp, err := client.Get(url)
-	if err != nil {
-		t.Fatalf("Failed to GET %s: %v", url, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("Expected agent %s@%s to be deleted (HTTP 404) but got %d", name, version, resp.StatusCode)
-	}
+	requireDeleted(t, regURL, "agents", name, version)
 }
 
 func verifyServerNotFound(t *testing.T, regURL, name, version string) {
 	t.Helper()
-	encoded := url.PathEscape(name)
-	resp, err := http.Get(fmt.Sprintf("%s/servers/%s/versions/%s", regURL, encoded, version))
-	if err != nil {
-		t.Fatalf("GET mcp after delete failed: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("expected 404 for mcp %s after delete, got %d", name, resp.StatusCode)
-	}
+	requireDeleted(t, regURL, "mcpservers", name, version)
 }
 
 func verifySkillNotFound(t *testing.T, regURL, name, version string) {
 	t.Helper()
-	resp, err := http.Get(fmt.Sprintf("%s/skills/%s/versions/%s", regURL, name, version))
-	if err != nil {
-		t.Fatalf("GET skill after delete failed: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("expected 404 for skill %s after delete, got %d", name, resp.StatusCode)
-	}
+	requireDeleted(t, regURL, "skills", name, version)
 }
 
 func verifyPromptNotFound(t *testing.T, regURL, name, version string) {
 	t.Helper()
-	resp, err := http.Get(fmt.Sprintf("%s/prompts/%s/versions/%s", regURL, name, version))
-	if err != nil {
-		t.Fatalf("GET prompt after delete failed: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("expected 404 for prompt %s after delete, got %d", name, resp.StatusCode)
-	}
+	requireDeleted(t, regURL, "prompts", name, version)
 }
 
 // verifyServerExists checks that the MCP server exists in the registry via HTTP GET.
 func verifyServerExists(t *testing.T, regURL, name, version string) {
 	t.Helper()
-	encoded := strings.ReplaceAll(name, "/", "%2F")
-	url := fmt.Sprintf("%s/servers/%s/versions/%s", regURL, encoded, version)
-	resp := RegistryGet(t, url)
+	resp := RegistryGet(t, resourceURL(regURL, "mcpservers", name, version))
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("Expected server %s@%s to exist (HTTP 200) but got %d", name, version, resp.StatusCode)
@@ -146,8 +164,8 @@ spec:
 	t.Run("apply", func(t *testing.T) {
 		result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 		RequireSuccess(t, result)
-		RequireOutputContains(t, result, "agent/"+agentName)
-		RequireOutputContains(t, result, "applied")
+		RequireOutputContains(t, result, "Agent/"+agentName)
+		RequireOutputContains(t, result, "✓")
 	})
 
 	// Step 2: Verify it exists in the registry.
@@ -223,8 +241,8 @@ spec:
 	// Apply the MCP server.
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "mcp/"+serverName)
-	RequireOutputContains(t, result, "applied")
+	RequireOutputContains(t, result, "MCPServer/"+serverName)
+	RequireOutputContains(t, result, "✓")
 
 	// Verify it exists.
 	verifyServerExists(t, regURL, serverName, version)
@@ -274,9 +292,9 @@ spec:
 
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "mcp/"+serverName)
-	RequireOutputContains(t, result, "agent/"+agentName)
-	RequireOutputContains(t, result, "applied")
+	RequireOutputContains(t, result, "MCPServer/"+serverName)
+	RequireOutputContains(t, result, "Agent/"+agentName)
+	RequireOutputContains(t, result, "✓")
 
 	verifyServerExists(t, regURL, serverName, version)
 	verifyAgentExists(t, regURL, agentName, version)
@@ -368,8 +386,8 @@ func TestDeclarativeInit_Agent(t *testing.T) {
 	// Step 3: apply the generated YAML directly (no edits needed for a simple name).
 	applyResult := RunArctl(t, tmpDir, "apply", "-f", agentYAMLPath, "--registry-url", regURL)
 	RequireSuccess(t, applyResult)
-	RequireOutputContains(t, applyResult, "agent/"+name)
-	RequireOutputContains(t, applyResult, "applied")
+	RequireOutputContains(t, applyResult, "Agent/"+name)
+	RequireOutputContains(t, applyResult, "✓")
 
 	// Step 4: verify it exists in the registry.
 	verifyAgentExists(t, regURL, name, version)
@@ -443,8 +461,8 @@ func TestDeclarativeInit_Skill(t *testing.T) {
 	// Step 3: apply to the registry.
 	applyResult := RunArctl(t, tmpDir, "apply", "-f", skillYAMLPath, "--registry-url", regURL)
 	RequireSuccess(t, applyResult)
-	RequireOutputContains(t, applyResult, "skill/"+name)
-	RequireOutputContains(t, applyResult, "applied")
+	RequireOutputContains(t, applyResult, "Skill/"+name)
+	RequireOutputContains(t, applyResult, "✓")
 }
 
 // TestDeclarativeInit_Prompt verifies arctl init prompt generates the correct
@@ -484,8 +502,8 @@ func TestDeclarativeInit_Prompt(t *testing.T) {
 	// Step 3: apply to the registry.
 	applyResult := RunArctl(t, tmpDir, "apply", "-f", promptYAMLPath, "--registry-url", regURL)
 	RequireSuccess(t, applyResult)
-	RequireOutputContains(t, applyResult, "prompt/"+name)
-	RequireOutputContains(t, applyResult, "applied")
+	RequireOutputContains(t, applyResult, "Prompt/"+name)
+	RequireOutputContains(t, applyResult, "✓")
 }
 
 // --- build tests ---
@@ -658,14 +676,14 @@ spec:
 	// First apply — creates the resource.
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "agent/"+agentName)
-	RequireOutputContains(t, result, "applied")
+	RequireOutputContains(t, result, "Agent/"+agentName)
+	RequireOutputContains(t, result, "✓")
 
 	// Second apply — same file, must not fail.
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "agent/"+agentName)
-	RequireOutputContains(t, result, "applied")
+	RequireOutputContains(t, result, "Agent/"+agentName)
+	RequireOutputContains(t, result, "✓")
 
 	// Resource should still exist after both applies.
 	verifyAgentExists(t, regURL, agentName, version)
@@ -675,8 +693,7 @@ spec:
 // returns the description field from the response body.
 func fetchAgentDescription(t *testing.T, regURL, name, version string) string {
 	t.Helper()
-	encoded := strings.ReplaceAll(name, "/", "%2F")
-	url := fmt.Sprintf("%s/agents/%s/versions/%s", regURL, encoded, version)
+	url := resourceURL(regURL, "agents", name, version)
 	client := &http.Client{}
 	resp, err := client.Get(url)
 	if err != nil {
@@ -691,14 +708,14 @@ func fetchAgentDescription(t *testing.T, regURL, name, version string) string {
 		t.Fatalf("Failed to read response body: %v", err)
 	}
 	var result struct {
-		Agent struct {
+		Spec struct {
 			Description string `json:"description"`
-		} `json:"agent"`
+		} `json:"spec"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
 		t.Fatalf("Failed to decode agent response: %v\nBody: %s", err, body)
 	}
-	return result.Agent.Description
+	return result.Spec.Description
 }
 
 // TestDeclarativeApply_Update verifies that applying an agent YAML with a
@@ -734,8 +751,8 @@ spec:
 
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "agent/"+agentName)
-	RequireOutputContains(t, result, "applied")
+	RequireOutputContains(t, result, "Agent/"+agentName)
+	RequireOutputContains(t, result, "✓")
 	verifyAgentExists(t, regURL, agentName, version)
 
 	desc := fetchAgentDescription(t, regURL, agentName, version)
@@ -801,14 +818,14 @@ spec:
 	// First apply — creates.
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "mcp/"+serverName)
-	RequireOutputContains(t, result, "applied")
+	RequireOutputContains(t, result, "MCPServer/"+serverName)
+	RequireOutputContains(t, result, "✓")
 
 	// Second apply — must succeed (no error like "version already exists").
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "mcp/"+serverName)
-	RequireOutputContains(t, result, "applied")
+	RequireOutputContains(t, result, "MCPServer/"+serverName)
+	RequireOutputContains(t, result, "✓")
 
 	verifyServerExists(t, regURL, serverName, version)
 }
@@ -840,17 +857,16 @@ spec:
 
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "skill/"+skillName)
-	RequireOutputContains(t, result, "applied")
+	RequireOutputContains(t, result, "Skill/"+skillName)
+	RequireOutputContains(t, result, "✓")
 
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "skill/"+skillName)
-	RequireOutputContains(t, result, "applied")
+	RequireOutputContains(t, result, "Skill/"+skillName)
+	RequireOutputContains(t, result, "✓")
 
 	// Verify it exists.
-	encoded := strings.ReplaceAll(skillName, "/", "%2F")
-	resp := RegistryGet(t, fmt.Sprintf("%s/skills/%s/versions/%s", regURL, encoded, version))
+	resp := RegistryGet(t, resourceURL(regURL, "skills", skillName, version))
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected skill %s@%s to exist after idempotent apply, got HTTP %d", skillName, version, resp.StatusCode)
@@ -884,16 +900,15 @@ spec:
 
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "prompt/"+promptName)
-	RequireOutputContains(t, result, "applied")
+	RequireOutputContains(t, result, "Prompt/"+promptName)
+	RequireOutputContains(t, result, "✓")
 
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "prompt/"+promptName)
-	RequireOutputContains(t, result, "applied")
+	RequireOutputContains(t, result, "Prompt/"+promptName)
+	RequireOutputContains(t, result, "✓")
 
-	encoded := strings.ReplaceAll(promptName, "/", "%2F")
-	resp := RegistryGet(t, fmt.Sprintf("%s/prompts/%s/versions/%s", regURL, encoded, version))
+	resp := RegistryGet(t, resourceURL(regURL, "prompts", promptName, version))
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected prompt %s@%s to exist after idempotent apply, got HTTP %d", promptName, version, resp.StatusCode)
@@ -949,7 +964,7 @@ func TestApplyDeployment_HTTPIdempotent(t *testing.T) {
 
 	// Use POST /v0/apply with a deployment YAML body (PUT sub-resource endpoint was removed).
 	applyURL := fmt.Sprintf("%s/apply", regURL)
-	deployYAML := fmt.Sprintf(`kind: deployment
+	deployYAML := fmt.Sprintf(`kind: Deployment
 metadata:
   name: %s
   version: latest
@@ -992,25 +1007,32 @@ spec:
 		return applyResp.Results[0].Status
 	}
 
+	// isApplySuccess matches the kubectl-style verbs the server emits for a
+	// successful apply: "created", "configured", "unchanged". (The failure
+	// verb is "failed".)
+	isApplySuccess := func(s string) bool {
+		return s == "created" || s == "configured" || s == "unchanged"
+	}
+
 	// First apply — creates the deployment.
 	status1 := doApply(t)
 	t.Logf("first apply: status=%s", status1)
-	if status1 != "applied" {
-		t.Fatalf("first apply: expected status 'applied', got %q", status1)
+	if !isApplySuccess(status1) {
+		t.Fatalf("first apply: expected success status, got %q", status1)
 	}
 
 	// Second apply — must succeed (idempotent no-op once deployed).
 	status2 := doApply(t)
 	t.Logf("second apply: status=%s", status2)
-	if status2 != "applied" {
-		t.Fatalf("second apply: expected status 'applied', got %q", status2)
+	if !isApplySuccess(status2) {
+		t.Fatalf("second apply: expected success status, got %q", status2)
 	}
 
 	// Third apply — same expectation.
 	status3 := doApply(t)
 	t.Logf("third apply: status=%s", status3)
-	if status3 != "applied" {
-		t.Fatalf("third apply: expected status 'applied', got %q", status3)
+	if !isApplySuccess(status3) {
+		t.Fatalf("third apply: expected success status, got %q", status3)
 	}
 
 	// Verify only one deployment exists for this agent in deploy list.
@@ -1077,9 +1099,10 @@ spec:
   modelName: gemini-2.0-flash
 ---
 apiVersion: ar.dev/v1alpha1
-kind: provider
+kind: Provider
 metadata:
   name: %s
+  version: "1.0.0"
 spec:
   platform: local
 `, agentName, agentVersion, providerName)
@@ -1090,9 +1113,9 @@ spec:
 	RequireSuccess(t, result)
 
 	// Each resource must appear in the output as "applied".
-	RequireOutputContains(t, result, "agent/"+agentName)
-	RequireOutputContains(t, result, "applied")
-	RequireOutputContains(t, result, "provider/"+providerName)
+	RequireOutputContains(t, result, "Agent/"+agentName)
+	RequireOutputContains(t, result, "✓")
+	RequireOutputContains(t, result, "Provider/"+providerName)
 
 	// Verify agent exists via HTTP.
 	verifyAgentExists(t, regURL, agentName, agentVersion)
@@ -1135,9 +1158,10 @@ spec:
   modelName: gemini-2.0-flash
 ---
 apiVersion: ar.dev/v1alpha1
-kind: provider
+kind: Provider
 metadata:
   name: %s
+  version: "1.0.0"
 spec:
   platform: local
 `, agentName, agentVersion, providerName)
@@ -1147,14 +1171,14 @@ spec:
 	// First apply — creates both resources.
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "agent/"+agentName)
-	RequireOutputContains(t, result, "applied")
+	RequireOutputContains(t, result, "Agent/"+agentName)
+	RequireOutputContains(t, result, "✓")
 
 	// Second apply — same file, must not fail (upsert semantics).
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "agent/"+agentName)
-	RequireOutputContains(t, result, "applied")
+	RequireOutputContains(t, result, "Agent/"+agentName)
+	RequireOutputContains(t, result, "✓")
 
 	// Both resources must still exist after both applies.
 	verifyAgentExists(t, regURL, agentName, agentVersion)
@@ -1212,7 +1236,7 @@ func TestBatchApply_DriftRequiresForce(t *testing.T) {
 
 	// Step 2: apply the initial deployment YAML (no env).
 	deployYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
-kind: deployment
+kind: Deployment
 metadata:
   name: %s
   version: "%s"
@@ -1224,12 +1248,12 @@ spec:
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "deploy.yaml", deployYAML)
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "deployment/"+agentName)
-	RequireOutputContains(t, result, "applied")
+	RequireOutputContains(t, result, "Deployment/"+agentName)
+	RequireOutputContains(t, result, "✓")
 
 	// Step 3: modify the env to create drift.
 	driftYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
-kind: deployment
+kind: Deployment
 metadata:
   name: %s
   version: "%s"
@@ -1254,8 +1278,8 @@ spec:
 	// Step 4: apply with --force — expect success.
 	result = RunArctl(t, tmpDir, "apply", "-f", driftPath, "--force", "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "deployment/"+agentName)
-	RequireOutputContains(t, result, "applied")
+	RequireOutputContains(t, result, "Deployment/"+agentName)
+	RequireOutputContains(t, result, "✓")
 }
 
 // TestBatchApply_DeleteFile verifies that arctl delete -f <file> deletes all
@@ -1290,7 +1314,7 @@ spec:
 	// Step 1: apply.
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "agent/"+agentName)
+	RequireOutputContains(t, result, "Agent/"+agentName)
 	verifyAgentExists(t, regURL, agentName, agentVersion)
 
 	// Step 2: delete -f — sends DELETE /v0/apply.
@@ -1329,8 +1353,8 @@ spec:
 	t.Run("apply", func(t *testing.T) {
 		result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 		RequireSuccess(t, result)
-		RequireOutputContains(t, result, "mcp/"+serverName)
-		RequireOutputContains(t, result, "applied")
+		RequireOutputContains(t, result, "MCPServer/"+serverName)
+		RequireOutputContains(t, result, "✓")
 	})
 
 	t.Run("verify_exists", func(t *testing.T) {
@@ -1399,12 +1423,12 @@ spec:
 	t.Run("apply", func(t *testing.T) {
 		result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 		RequireSuccess(t, result)
-		RequireOutputContains(t, result, "skill/"+skillName)
-		RequireOutputContains(t, result, "applied")
+		RequireOutputContains(t, result, "Skill/"+skillName)
+		RequireOutputContains(t, result, "✓")
 	})
 
 	t.Run("verify_exists", func(t *testing.T) {
-		resp, err := http.Get(fmt.Sprintf("%s/skills/%s/versions/%s", regURL, skillName, version))
+		resp, err := http.Get(resourceURL(regURL, "skills", skillName, version))
 		if err != nil {
 			t.Fatalf("GET skill failed: %v", err)
 		}
@@ -1476,12 +1500,12 @@ spec:
 	t.Run("apply", func(t *testing.T) {
 		result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 		RequireSuccess(t, result)
-		RequireOutputContains(t, result, "prompt/"+promptName)
-		RequireOutputContains(t, result, "applied")
+		RequireOutputContains(t, result, "Prompt/"+promptName)
+		RequireOutputContains(t, result, "✓")
 	})
 
 	t.Run("verify_exists", func(t *testing.T) {
-		resp, err := http.Get(fmt.Sprintf("%s/prompts/%s/versions/%s", regURL, promptName, version))
+		resp, err := http.Get(resourceURL(regURL, "prompts", promptName, version))
 		if err != nil {
 			t.Fatalf("GET prompt failed: %v", err)
 		}
@@ -1772,26 +1796,27 @@ func TestDeclarativeInit_AgentWithRefs(t *testing.T) {
 		t.Fatalf("spec missing or wrong type in generated agent.yaml: %v", m["spec"])
 	}
 
+	// The v1alpha1 scaffolder emits ResourceRef entries: {kind, name, version}.
 	// mcpServers — two registry refs, @version parsed correctly.
 	mcps, ok := spec["mcpServers"].([]any)
 	if !ok || len(mcps) != 2 {
 		t.Fatalf("expected 2 mcpServers, got %v", spec["mcpServers"])
 	}
 	for i, expected := range []struct {
-		registryName, registryVersion string
+		name, version string
 	}{
 		{"acme/fetch", "1.0.0"},
 		{"acme/time", "2.0.0"},
 	} {
 		entry, _ := mcps[i].(map[string]any)
-		if entry["type"] != "registry" {
-			t.Errorf("mcpServers[%d]: expected type=registry, got %v", i, entry["type"])
+		if entry["kind"] != "MCPServer" {
+			t.Errorf("mcpServers[%d]: expected kind=MCPServer, got %v", i, entry["kind"])
 		}
-		if entry["registryServerName"] != expected.registryName {
-			t.Errorf("mcpServers[%d]: registryServerName expected %q, got %v", i, expected.registryName, entry["registryServerName"])
+		if entry["name"] != expected.name {
+			t.Errorf("mcpServers[%d]: name expected %q, got %v", i, expected.name, entry["name"])
 		}
-		if entry["registryServerVersion"] != expected.registryVersion {
-			t.Errorf("mcpServers[%d]: registryServerVersion expected %q, got %v", i, expected.registryVersion, entry["registryServerVersion"])
+		if entry["version"] != expected.version {
+			t.Errorf("mcpServers[%d]: version expected %q, got %v", i, expected.version, entry["version"])
 		}
 	}
 
@@ -1801,17 +1826,20 @@ func TestDeclarativeInit_AgentWithRefs(t *testing.T) {
 		t.Fatalf("expected 2 skills, got %v", spec["skills"])
 	}
 	for i, expected := range []struct {
-		registryName, registryVersion string
+		name, version string
 	}{
 		{"summarize", "1.0.0"},
 		{"refine", "latest"},
 	} {
 		entry, _ := skills[i].(map[string]any)
-		if entry["registrySkillName"] != expected.registryName {
-			t.Errorf("skills[%d]: registrySkillName expected %q, got %v", i, expected.registryName, entry["registrySkillName"])
+		if entry["kind"] != "Skill" {
+			t.Errorf("skills[%d]: expected kind=Skill, got %v", i, entry["kind"])
 		}
-		if entry["registrySkillVersion"] != expected.registryVersion {
-			t.Errorf("skills[%d]: registrySkillVersion expected %q, got %v", i, expected.registryVersion, entry["registrySkillVersion"])
+		if entry["name"] != expected.name {
+			t.Errorf("skills[%d]: name expected %q, got %v", i, expected.name, entry["name"])
+		}
+		if entry["version"] != expected.version {
+			t.Errorf("skills[%d]: version expected %q, got %v", i, expected.version, entry["version"])
 		}
 	}
 
@@ -1821,11 +1849,14 @@ func TestDeclarativeInit_AgentWithRefs(t *testing.T) {
 		t.Fatalf("expected 1 prompt, got %v", spec["prompts"])
 	}
 	entry, _ := prompts[0].(map[string]any)
-	if entry["registryPromptName"] != "sys-prompt" {
-		t.Errorf("prompts[0]: registryPromptName expected %q, got %v", "sys-prompt", entry["registryPromptName"])
+	if entry["kind"] != "Prompt" {
+		t.Errorf("prompts[0]: expected kind=Prompt, got %v", entry["kind"])
 	}
-	if entry["registryPromptVersion"] != "1.0.0" {
-		t.Errorf("prompts[0]: registryPromptVersion expected %q, got %v", "1.0.0", entry["registryPromptVersion"])
+	if entry["name"] != "sys-prompt" {
+		t.Errorf("prompts[0]: name expected %q, got %v", "sys-prompt", entry["name"])
+	}
+	if entry["version"] != "1.0.0" {
+		t.Errorf("prompts[0]: version expected %q, got %v", "1.0.0", entry["version"])
 	}
 }
 
@@ -1871,7 +1902,7 @@ func TestDeploymentGet_YAMLIncludesStatus(t *testing.T) {
 		filepath.Join(agentDir, "agent.yaml"), "--registry-url", regURL))
 
 	deployYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
-kind: deployment
+kind: Deployment
 metadata:
   name: %s
   version: "%s"
@@ -1923,14 +1954,19 @@ func TestDeploymentApply_BadTemplateRef(t *testing.T) {
 	missingName := UniqueAgentName("e2emissing")
 
 	deployYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
-kind: deployment
+kind: Deployment
 metadata:
   name: %s
   version: "0.1.0"
 spec:
-  resourceType: agent
-  providerId: local
-`, missingName)
+  targetRef:
+    kind: Agent
+    name: %s
+    version: "0.1.0"
+  providerRef:
+    kind: Provider
+    name: local
+`, missingName, missingName)
 	deployPath := writeDeclarativeYAML(t, tmpDir, "deployment.yaml", deployYAML)
 
 	result := RunArctl(t, tmpDir, "apply", "-f", deployPath, "--registry-url", regURL)
@@ -1959,6 +1995,13 @@ func TestMCPServer_PackagesShape(t *testing.T) {
 		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
 	})
 
+	// localhost:5001 lands in the validator's private-registry exemption
+	// (allowlist + ownership annotation skipped) so the apply succeeds
+	// without requiring a per-run OCI image push. The OCI ownership
+	// path itself is covered by pkg/api/v1alpha1/registries unit tests;
+	// what this e2e exercises is the spec.packages YAML round-trip
+	// through apply → get -o yaml.
+	imageRef := "localhost:5001/example/mcp:" + version
 	yaml := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
@@ -1969,23 +2012,22 @@ spec:
   description: "packages-shape round-trip test"
   packages:
     - registryType: oci
-      identifier: ghcr.io/example/mcp:%s
-      version: "%s"
+      identifier: %s
       transport:
         type: stdio
-`, serverName, version, version, version)
+`, serverName, version, imageRef)
 
 	path := writeDeclarativeYAML(t, tmpDir, "mcp-pkg.yaml", yaml)
 	result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "mcp/"+serverName)
+	RequireOutputContains(t, result, "MCPServer/"+serverName)
 
 	// Verify the packages block round-trips through -o yaml.
 	result = RunArctl(t, tmpDir, "get", "mcp", serverName, "-o", "yaml", "--registry-url", regURL)
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "packages:")
 	RequireOutputContains(t, result, "registryType: oci")
-	RequireOutputContains(t, result, "ghcr.io/example/mcp:")
+	RequireOutputContains(t, result, imageRef)
 	RequireOutputContains(t, result, "type: stdio")
 	// Exclusive shape — must not leak a remotes or repository block.
 	if strings.Contains(result.Stdout, "remotes:") {
@@ -2027,7 +2069,7 @@ spec:
 	path := writeDeclarativeYAML(t, tmpDir, "mcp-remote.yaml", yaml)
 	result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "mcp/"+serverName)
+	RequireOutputContains(t, result, "MCPServer/"+serverName)
 
 	result = RunArctl(t, tmpDir, "get", "mcp", serverName, "-o", "yaml", "--registry-url", regURL)
 	RequireSuccess(t, result)
@@ -2068,7 +2110,7 @@ spec:
 	path := writeDeclarativeYAML(t, tmpDir, "mcp-repo.yaml", yaml)
 	result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "mcp/"+serverName)
+	RequireOutputContains(t, result, "MCPServer/"+serverName)
 
 	result = RunArctl(t, tmpDir, "get", "mcp", serverName, "-o", "yaml", "--registry-url", regURL)
 	RequireSuccess(t, result)
@@ -2117,7 +2159,7 @@ spec:
 		path := writeDeclarativeYAML(t, tmpDir, fmt.Sprintf("p-%s.yaml", tc.version), yaml)
 		result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)
 		RequireSuccess(t, result)
-		RequireOutputContains(t, result, "prompt/"+promptName)
+		RequireOutputContains(t, result, "Prompt/"+promptName)
 	}
 
 	// Both versions queryable via HTTP (declarative `arctl get` has no
@@ -2127,27 +2169,29 @@ spec:
 	for _, tc := range []struct {
 		version, wantContent string
 	}{{v1, v1Content}, {v2, v2Content}} {
-		resp := RegistryGet(t, fmt.Sprintf("%s/prompts/%s/versions/%s", regURL, promptName, tc.version))
+		resp := RegistryGet(t, resourceURL(regURL, "prompts", promptName, tc.version))
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("GET prompt %s@%s: expected 200, got %d: %s", promptName, tc.version, resp.StatusCode, body)
 		}
 		var decoded struct {
-			Prompt struct {
-				Content string `json:"content"`
+			Metadata struct {
 				Version string `json:"version"`
-			} `json:"prompt"`
+			} `json:"metadata"`
+			Spec struct {
+				Content string `json:"content"`
+			} `json:"spec"`
 		}
 		if err := json.Unmarshal(body, &decoded); err != nil {
 			t.Fatalf("decoding prompt response: %v\nbody: %s", err, body)
 		}
-		if decoded.Prompt.Version != tc.version {
-			t.Errorf("prompt %s: got version %q, want %q", promptName, decoded.Prompt.Version, tc.version)
+		if decoded.Metadata.Version != tc.version {
+			t.Errorf("prompt %s: got version %q, want %q", promptName, decoded.Metadata.Version, tc.version)
 		}
-		if !strings.Contains(decoded.Prompt.Content, tc.wantContent) {
+		if !strings.Contains(decoded.Spec.Content, tc.wantContent) {
 			t.Errorf("prompt %s@%s: expected %q in content, got %q",
-				promptName, tc.version, tc.wantContent, decoded.Prompt.Content)
+				promptName, tc.version, tc.wantContent, decoded.Spec.Content)
 		}
 	}
 
@@ -2156,15 +2200,11 @@ spec:
 		"--version", v1, "--registry-url", regURL)
 	RequireSuccess(t, result)
 
-	// v1 gone.
-	resp := RegistryGet(t, fmt.Sprintf("%s/prompts/%s/versions/%s", regURL, promptName, v1))
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Errorf("expected 404 for deleted prompt %s@%s, got %d", promptName, v1, resp.StatusCode)
-	}
+	// v1 gone (soft-deleted — either 404 or 200-with-deletionTimestamp is OK).
+	verifyPromptNotFound(t, regURL, promptName, v1)
 
 	// v2 still there.
-	resp = RegistryGet(t, fmt.Sprintf("%s/prompts/%s/versions/%s", regURL, promptName, v2))
+	resp := RegistryGet(t, resourceURL(regURL, "prompts", promptName, v2))
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -2221,23 +2261,23 @@ spec:
 	// Fetch via HTTP — declarative `arctl get` has no --version flag.
 	// Decode the JSON response so content comparisons are against the
 	// unescaped stored string, not its JSON-encoded form.
-	resp := RegistryGet(t, fmt.Sprintf("%s/prompts/%s/versions/%s", regURL, promptName, version))
+	resp := RegistryGet(t, resourceURL(regURL, "prompts", promptName, version))
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 for prompt %s@%s, got %d: %s", promptName, version, resp.StatusCode, body)
 	}
 	var decoded struct {
-		Prompt struct {
+		Spec struct {
 			Content string `json:"content"`
-		} `json:"prompt"`
+		} `json:"spec"`
 	}
 	if err := json.Unmarshal(body, &decoded); err != nil {
 		t.Fatalf("decoding prompt response: %v\nbody: %s", err, body)
 	}
 	for _, line := range expectedLines {
-		if !strings.Contains(decoded.Prompt.Content, line) {
-			t.Errorf("line missing from stored content: %q\nfull content: %q", line, decoded.Prompt.Content)
+		if !strings.Contains(decoded.Spec.Content, line) {
+			t.Errorf("line missing from stored content: %q\nfull content: %q", line, decoded.Spec.Content)
 		}
 	}
 }

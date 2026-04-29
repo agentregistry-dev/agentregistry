@@ -37,28 +37,27 @@ These four kinds share the same endpoint shape. `{kind}` = `agent` | `server` | 
 
 ## Deployments
 
-Deployments are identified by an opaque `{id}` but authz always evaluates against the underlying artifact (`server` or `agent`) the deployment references. Artifact kind is inferred from the deployment row's `ResourceType`.
+Deployments are identified by `{namespace}/{name}/{version}` and authz always evaluates against the underlying artifact (`server` or `agent`) the deployment references. Artifact kind is inferred from `Deployment.Spec.TargetRef.Kind`.
 
 Every deployment lifecycle operation — launching, undeploying, cancelling — gates on `Deploy` against the underlying artifact. The `Delete` verb is reserved for deleting the artifact itself (e.g. `DELETE /v0/servers/{name}/versions/{v}`), not tearing down a running deployment of it.
 
 | Operation | HTTP | Required permissions |
 | --- | --- | --- |
 | List | `GET /v0/deployments` | none — filtering delegated to provider implementation |
-| Get | `GET /v0/deployments/{id}` | `Read` on target `{agent,server}:{name}` |
-| Create | `POST /v0/deployments` | `Read` on `provider:{id}`; `Read` + `Deploy` on target |
-| Delete | `DELETE /v0/deployments/{id}` | `Read` + `Deploy` on target |
-| Cancel | `POST /v0/deployments/{id}/cancel` | `Read` + `Deploy` on target |
-| Logs | `GET /v0/deployments/{id}/logs` | `Read` on target (read-only) |
+| Get | `GET /v0/deployments/{name}/{version}?namespace={namespace}` | `Read` on target `{agent,server}:{name}` |
+| Create / update desired state | `PUT /v0/deployments/{name}/{version}?namespace={namespace}` | `Read` on `provider:{id}`; `Read` + `Deploy` on target |
+| Delete | `DELETE /v0/deployments/{name}/{version}?namespace={namespace}` | `Read` + `Deploy` on target |
+| Logs | `GET /v0/deployments/{name}/{version}/logs?namespace={namespace}` | `Read` on target (read-only) |
 
 Agent deployments additionally invoke `Read` on each referenced `skill:{ref}` and `prompt:{ref}` when the platform adapter resolves the agent's manifest before deploying. These reads run under the caller's session (not a system context), so the user triggering the deployment must have `Read` on every manifest-referenced skill and prompt.
 
-**Partial permissions leave stale `Failed` rows.** The DB deployment row is written (status `Deploying`) inside `CreateManagedDeploymentRecord` before the adapter resolves manifest references. A missing `Read` on any skill/prompt fails inside `adapter.Deploy`, which returns `auth.ErrForbidden` → caller gets 403, but the row is then patched to status `Failed` (under system context) and left in the DB. No platform resources are created.
+**Partial permissions leave stale `Failed` rows.** The Deployment resource row is written before the adapter resolves manifest references. A missing `Read` on any skill/prompt fails inside adapter apply, the caller gets 403, and the row is then patched to a failed condition under system context. No platform resources are created.
 
 ## Batch (apply)
 
 | Operation | HTTP | Required permissions | Notes |
 | --- | --- | --- | --- |
-| Apply | `POST /v0/apply` | Per-document; depends on kind and whether the version already exists | Each document dispatches to its kind handler individually; partial failure is allowed. Artifacts (`agent`/`server`/`skill`/`prompt`): `Read` + `Publish` if the version is new, `Read` + `Edit` if it already exists. `provider`: `Read` + `Edit` if it exists, `Read` + `Publish` if new (there is no direct provider update endpoint; apply is the only update path). `deployment`: same as `POST /v0/deployments`. |
+| Apply | `POST /v0/apply` | Per-document; depends on kind and whether the version already exists | Each document dispatches to its kind handler individually; partial failure is allowed. Artifacts (`agent`/`server`/`skill`/`prompt`): `Read` + `Publish` if the version is new, `Read` + `Edit` if it already exists. `provider`: `Read` + `Edit` if it exists, `Read` + `Publish` if new (there is no direct provider update endpoint; apply is the only update path). `deployment`: same as `PUT /v0/deployments/{name}/{version}?namespace={namespace}`. |
 | Delete | `DELETE /v0/apply` | Per-document; depends on kind | Artifacts: `Delete` on `{kind}:{name}`. `provider`: `Read` + `Delete` on `provider:{name}`. `deployment`: `Deploy` on target (see Deployments section). |
 
 ## Admin

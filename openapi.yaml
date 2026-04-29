@@ -6,467 +6,213 @@ info:
 paths:
     /v0/agents:
         get:
-            tags:
-                - agents
-            summary: List Agentic agents
-            description: Get a paginated list of Agentic agents from the registry
-            operationId: list-agents-v0
+            summary: List Agent (scoped by ?namespace)
+            operationId: list-agents
             parameters:
-                - name: cursor
+                - name: namespace
                   in: query
-                  description: Pagination cursor
+                  description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
                   explode: false
                   schema:
                     type: string
-                    description: Pagination cursor
-                    examples:
-                        - agent-cursor-123
-                  example: agent-cursor-123
+                    description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
                 - name: limit
                   in: query
-                  description: Number of items per page
+                  description: Max items to return (default 50).
                   explode: false
                   schema:
                     type: integer
-                    description: Number of items per page
+                    description: Max items to return (default 50).
                     format: int64
-                    default: 30
-                    examples:
-                        - 50
-                    minimum: 1
-                    maximum: 100
-                  example: 50
-                - name: updated_since
+                    default: 50
+                - name: cursor
                   in: query
-                  description: Filter agents updated since timestamp (RFC3339 datetime)
+                  description: Opaque pagination cursor.
                   explode: false
                   schema:
                     type: string
-                    description: Filter agents updated since timestamp (RFC3339 datetime)
-                    examples:
-                        - "2025-08-07T13:15:04.280Z"
-                  example: "2025-08-07T13:15:04.280Z"
-                - name: search
+                    description: Opaque pagination cursor.
+                - name: labels
                   in: query
-                  description: Search agents by name (substring match)
+                  description: 'Label selector: key=value,key2=value2.'
                   explode: false
                   schema:
                     type: string
-                    description: Search agents by name (substring match)
-                    examples:
-                        - filesystem
-                  example: filesystem
-                - name: version
+                    description: 'Label selector: key=value,key2=value2.'
+                - name: latestOnly
                   in: query
-                  description: Filter by version ('latest' for latest version, or an exact version like '1.2.3')
-                  explode: false
-                  schema:
-                    type: string
-                    description: Filter by version ('latest' for latest version, or an exact version like '1.2.3')
-                    examples:
-                        - latest
-                  example: latest
-                - name: semantic_search
-                  in: query
-                  description: Use semantic search for the search term
+                  description: Only return rows with is_latest_version=true.
                   explode: false
                   schema:
                     type: boolean
-                    description: Use semantic search for the search term
-                - name: semantic_threshold
+                    description: Only return rows with is_latest_version=true.
+                - name: includeTerminating
                   in: query
-                  description: Optional maximum cosine distance when semantic_search is enabled
+                  description: Include rows with a deletionTimestamp.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Include rows with a deletionTimestamp.
+                - name: semantic
+                  in: query
+                  description: Semantic search query. Returns results ranked by similarity.
+                  explode: false
+                  schema:
+                    type: string
+                    description: Semantic search query. Returns results ranked by similarity.
+                - name: semanticThreshold
+                  in: query
+                  description: Drop results with cosine distance above this threshold (0 = no filter).
                   explode: false
                   schema:
                     type: number
-                    description: Optional maximum cosine distance when semantic_search is enabled
-                    format: double
+                    description: Drop results with cosine distance above this threshold (0 = no filter).
+                    format: float
             responses:
                 "200":
                     description: OK
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/AgentListResponse'
+                                $ref: '#/components/schemas/ListOutputAgentBody'
                 default:
                     description: Error
                     content:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-        post:
-            tags:
-                - agents
-            summary: Create or update agent
-            description: Create a new Agentic agent in the registry or update an existing one. Resources are immediately visible after creation.
-            operationId: create-agent-v0
+    /v0/agents/{name}:
+        get:
+            summary: Get the latest version of a Agent
+            operationId: get-latest-agent
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Agent'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/agents/{name}/{version}:
+        get:
+            summary: Get a Agent by name and version
+            operationId: get-agent
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Agent'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        put:
+            summary: Apply a Agent (idempotent upsert)
+            operationId: apply-agent
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
             requestBody:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/AgentJSON'
-                required: true
+                            $ref: '#/components/schemas/Agent'
             responses:
                 "200":
                     description: OK
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/AgentResponse'
+                                $ref: '#/components/schemas/Agent'
                 default:
                     description: Error
                     content:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-    /v0/agents/{agentName}/versions:
-        get:
-            tags:
-                - agents
-            summary: Get all versions of an Agentic agent
-            description: Get all available versions for a specific Agentic agent
-            operationId: get-agent-versions-v0
+        delete:
+            summary: 'Delete a Agent (soft-delete: sets deletionTimestamp)'
+            operationId: delete-agent
             parameters:
-                - name: agentName
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
                   in: path
-                  description: URL-encoded agent name
                   required: true
                   schema:
                     type: string
-                    description: URL-encoded agent name
-                    examples:
-                        - com.example%2Fmy-agent
-                  example: com.example%2Fmy-agent
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/AgentListResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/agents/{agentName}/versions/{version}:
-        get:
-            tags:
-                - agents
-            summary: Get specific Agentic agent version
-            description: Get detailed information about a specific version of an Agentic agent. Use the special version 'latest' to get the latest version.
-            operationId: get-agent-version-v0
-            parameters:
-                - name: agentName
-                  in: path
-                  description: URL-encoded agent name
-                  required: true
-                  schema:
-                    type: string
-                    description: URL-encoded agent name
-                    examples:
-                        - com.example%2Fmy-agent
-                  example: com.example%2Fmy-agent
                 - name: version
                   in: path
-                  description: URL-encoded agent version
                   required: true
                   schema:
                     type: string
-                    description: URL-encoded agent version
-                    examples:
-                        - 1.0.0
-                  example: 1.0.0
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/AgentResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-        delete:
-            tags:
-                - agents
-            summary: Delete an agent version (admin)
-            description: Permanently delete a specific agent version from the registry. Admin only.
-            operationId: delete-agent-version-v0
-            parameters:
-                - name: agentName
-                  in: path
-                  description: URL-encoded agent name
-                  required: true
-                  schema:
-                    type: string
-                    description: URL-encoded agent name
-                    examples:
-                        - com.example%2Fmy-agent
-                  example: com.example%2Fmy-agent
-                - name: version
-                  in: path
-                  description: URL-encoded agent version
-                  required: true
-                  schema:
-                    type: string
-                    description: URL-encoded agent version
-                    examples:
-                        - 1.0.0
-                  example: 1.0.0
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/EmptyResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/apply:
-        post:
-            tags:
-                - apply
-            summary: Apply one or more resources
-            operationId: apply
-            parameters:
                 - name: force
                   in: query
-                  description: Force overwrite even when the resource has drifted
+                  description: Skip provider-specific teardown and only remove the registry record.
                   explode: false
                   schema:
                     type: boolean
-                    description: Force overwrite even when the resource has drifted
-                - name: dryRun
-                  in: query
-                  description: Validate without persisting changes
-                  explode: false
-                  schema:
-                    type: boolean
-                    description: Validate without persisting changes
-            requestBody:
-                content:
-                    application/yaml:
-                        schema:
-                            type: string
-                            format: binary
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ApplyOutputBody'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-        delete:
-            tags:
-                - apply
-            summary: Delete one or more resources by YAML document
-            operationId: delete-apply
-            parameters:
-                - name: force
-                  in: query
-                  description: Force overwrite even when the resource has drifted
-                  explode: false
-                  schema:
-                    type: boolean
-                    description: Force overwrite even when the resource has drifted
-                - name: dryRun
-                  in: query
-                  description: Validate without persisting changes
-                  explode: false
-                  schema:
-                    type: boolean
-                    description: Validate without persisting changes
-            requestBody:
-                content:
-                    application/yaml:
-                        schema:
-                            type: string
-                            format: binary
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ApplyOutputBody'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/deployments:
-        get:
-            tags:
-                - deployments
-            summary: List deployed resources
-            description: Retrieve all deployed resources (MCP servers, agents) with their configurations. Optionally filter by resource type.
-            operationId: list-deployments
-            parameters:
-                - name: platform
-                  in: query
-                  description: Filter by provider platform type (matches registered provider platforms)
-                  explode: false
-                  schema:
-                    type: string
-                    description: Filter by provider platform type (matches registered provider platforms)
-                    examples:
-                        - local
-                  example: local
-                - name: providerId
-                  in: query
-                  description: Filter by provider instance ID
-                  explode: false
-                  schema:
-                    type: string
-                    description: Filter by provider instance ID
-                - name: resourceType
-                  in: query
-                  description: Filter by resource type (mcp, agent)
-                  explode: false
-                  schema:
-                    type: string
-                    description: Filter by resource type (mcp, agent)
-                    examples:
-                        - mcp
-                    enum:
-                        - mcp
-                        - agent
-                  example: mcp
-                - name: status
-                  in: query
-                  description: Filter by deployment status
-                  explode: false
-                  schema:
-                    type: string
-                    description: Filter by deployment status
-                - name: origin
-                  in: query
-                  description: Filter by deployment origin (managed, discovered)
-                  explode: false
-                  schema:
-                    type: string
-                    description: Filter by deployment origin (managed, discovered)
-                    enum:
-                        - managed
-                        - discovered
-                - name: resourceName
-                  in: query
-                  description: Case-insensitive substring filter on resource name
-                  explode: false
-                  schema:
-                    type: string
-                    description: Case-insensitive substring filter on resource name
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/DeploymentsListResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-        post:
-            tags:
-                - deployments
-            summary: Deploy a resource
-            description: Deploy a resource (MCP server or agent) with deployment env vars (`env`) and optional provider-specific settings (`providerConfig`). Defaults to MCP server if resourceType is not specified.
-            operationId: deploy-server
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/DeploymentRequest'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Deployment'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/deployments/{id}:
-        get:
-            tags:
-                - deployments
-            summary: Get deployment details
-            description: Retrieve details for a specific deployment by ID
-            operationId: get-deployment
-            parameters:
-                - name: id
-                  in: path
-                  description: Deployment ID
-                  required: true
-                  schema:
-                    type: string
-                    description: Deployment ID
-                    examples:
-                        - 6b7ce4ab-ec3d-4789-95f4-8be5fac2e6be
-                  example: 6b7ce4ab-ec3d-4789-95f4-8be5fac2e6be
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Deployment'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-        delete:
-            tags:
-                - deployments
-            summary: Remove a deployed resource
-            description: Remove a deployment by ID
-            operationId: remove-deployment
-            parameters:
-                - name: id
-                  in: path
-                  description: Deployment ID
-                  required: true
-                  schema:
-                    type: string
-                    description: Deployment ID
-                    examples:
-                        - 6b7ce4ab-ec3d-4789-95f4-8be5fac2e6be
-                  example: 6b7ce4ab-ec3d-4789-95f4-8be5fac2e6be
-                - name: force
-                  in: query
-                  description: Skip provider-specific teardown and only remove the deployment record
-                  explode: false
-                  schema:
-                    type: boolean
-                    description: Skip provider-specific teardown and only remove the deployment record
+                    description: Skip provider-specific teardown and only remove the registry record.
                     default: false
             responses:
                 "204":
@@ -477,58 +223,347 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-    /v0/deployments/{id}/cancel:
-        post:
-            tags:
-                - deployments
-            summary: Cancel deployment
-            description: Cancel a deployment when supported by the provider
-            operationId: cancel-deployment
-            parameters:
-                - name: id
-                  in: path
-                  description: Deployment ID
-                  required: true
-                  schema:
-                    type: string
-                    description: Deployment ID
-                    examples:
-                        - 6b7ce4ab-ec3d-4789-95f4-8be5fac2e6be
-                  example: 6b7ce4ab-ec3d-4789-95f4-8be5fac2e6be
-            responses:
-                "204":
-                    description: No Content
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/deployments/{id}/logs:
+    /v0/agents/{name}/readme:
         get:
-            tags:
-                - deployments
-            summary: Get deployment logs
-            description: Get logs for async deployments when supported by the provider
-            operationId: get-deployment-logs
+            summary: Get the latest Agent readme
+            operationId: get-latest-agent-readme
             parameters:
-                - name: id
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
                   in: path
-                  description: Deployment ID
                   required: true
                   schema:
                     type: string
-                    description: Deployment ID
-                    examples:
-                        - 6b7ce4ab-ec3d-4789-95f4-8be5fac2e6be
-                  example: 6b7ce4ab-ec3d-4789-95f4-8be5fac2e6be
             responses:
                 "200":
                     description: OK
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/DeploymentLogsBody'
+                                $ref: '#/components/schemas/Readme'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/agents/{name}/versions/{version}/readme:
+        get:
+            summary: Get a Agent readme by name and version
+            operationId: get-agent-readme
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Readme'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/apply:
+        post:
+            summary: Apply a multi-doc YAML stream of v1alpha1 resources
+            operationId: apply-batch
+            parameters:
+                - name: dryRun
+                  in: query
+                  description: Run validation and enrichment without mutating the store. Defaults to false.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Run validation and enrichment without mutating the store. Defaults to false.
+            requestBody:
+                content:
+                    application/yaml:
+                        schema:
+                            type: string
+                            format: binary
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApplyResultsResponse'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        delete:
+            summary: Delete v1alpha1 resources identified by a multi-doc YAML stream
+            operationId: delete-batch
+            parameters:
+                - name: dryRun
+                  in: query
+                  description: Run validation and enrichment without mutating the store. Defaults to false.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Run validation and enrichment without mutating the store. Defaults to false.
+            requestBody:
+                content:
+                    application/yaml:
+                        schema:
+                            type: string
+                            format: binary
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApplyResultsResponse'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/deployments:
+        get:
+            summary: List Deployment (scoped by ?namespace)
+            operationId: list-deployments
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+                - name: limit
+                  in: query
+                  description: Max items to return (default 50).
+                  explode: false
+                  schema:
+                    type: integer
+                    description: Max items to return (default 50).
+                    format: int64
+                    default: 50
+                - name: cursor
+                  in: query
+                  description: Opaque pagination cursor.
+                  explode: false
+                  schema:
+                    type: string
+                    description: Opaque pagination cursor.
+                - name: labels
+                  in: query
+                  description: 'Label selector: key=value,key2=value2.'
+                  explode: false
+                  schema:
+                    type: string
+                    description: 'Label selector: key=value,key2=value2.'
+                - name: latestOnly
+                  in: query
+                  description: Only return rows with is_latest_version=true.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Only return rows with is_latest_version=true.
+                - name: includeTerminating
+                  in: query
+                  description: Include rows with a deletionTimestamp.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Include rows with a deletionTimestamp.
+                - name: semantic
+                  in: query
+                  description: Semantic search query. Returns results ranked by similarity.
+                  explode: false
+                  schema:
+                    type: string
+                    description: Semantic search query. Returns results ranked by similarity.
+                - name: semanticThreshold
+                  in: query
+                  description: Drop results with cosine distance above this threshold (0 = no filter).
+                  explode: false
+                  schema:
+                    type: number
+                    description: Drop results with cosine distance above this threshold (0 = no filter).
+                    format: float
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOutputDeploymentBody'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/deployments/{name}:
+        get:
+            summary: Get the latest version of a Deployment
+            operationId: get-latest-deployment
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Deployment'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/deployments/{name}/{version}:
+        get:
+            summary: Get a Deployment by name and version
+            operationId: get-deployment
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Deployment'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        put:
+            summary: Apply a Deployment (idempotent upsert)
+            operationId: apply-deployment
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/Deployment'
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Deployment'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        delete:
+            summary: 'Delete a Deployment (soft-delete: sets deletionTimestamp)'
+            operationId: delete-deployment
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: force
+                  in: query
+                  description: Skip provider-specific teardown and only remove the registry record.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Skip provider-specific teardown and only remove the registry record.
+                    default: false
+            responses:
+                "204":
+                    description: No Content
                 default:
                     description: Error
                     content:
@@ -549,6 +584,290 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/HealthBody'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/mcpservers:
+        get:
+            summary: List MCPServer (scoped by ?namespace)
+            operationId: list-mcpservers
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+                - name: limit
+                  in: query
+                  description: Max items to return (default 50).
+                  explode: false
+                  schema:
+                    type: integer
+                    description: Max items to return (default 50).
+                    format: int64
+                    default: 50
+                - name: cursor
+                  in: query
+                  description: Opaque pagination cursor.
+                  explode: false
+                  schema:
+                    type: string
+                    description: Opaque pagination cursor.
+                - name: labels
+                  in: query
+                  description: 'Label selector: key=value,key2=value2.'
+                  explode: false
+                  schema:
+                    type: string
+                    description: 'Label selector: key=value,key2=value2.'
+                - name: latestOnly
+                  in: query
+                  description: Only return rows with is_latest_version=true.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Only return rows with is_latest_version=true.
+                - name: includeTerminating
+                  in: query
+                  description: Include rows with a deletionTimestamp.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Include rows with a deletionTimestamp.
+                - name: semantic
+                  in: query
+                  description: Semantic search query. Returns results ranked by similarity.
+                  explode: false
+                  schema:
+                    type: string
+                    description: Semantic search query. Returns results ranked by similarity.
+                - name: semanticThreshold
+                  in: query
+                  description: Drop results with cosine distance above this threshold (0 = no filter).
+                  explode: false
+                  schema:
+                    type: number
+                    description: Drop results with cosine distance above this threshold (0 = no filter).
+                    format: float
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOutputMCPServerBody'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/mcpservers/{name}:
+        get:
+            summary: Get the latest version of a MCPServer
+            operationId: get-latest-mcpserver
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MCPServer'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/mcpservers/{name}/{version}:
+        get:
+            summary: Get a MCPServer by name and version
+            operationId: get-mcpserver
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MCPServer'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        put:
+            summary: Apply a MCPServer (idempotent upsert)
+            operationId: apply-mcpserver
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/MCPServer'
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MCPServer'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        delete:
+            summary: 'Delete a MCPServer (soft-delete: sets deletionTimestamp)'
+            operationId: delete-mcpserver
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: force
+                  in: query
+                  description: Skip provider-specific teardown and only remove the registry record.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Skip provider-specific teardown and only remove the registry record.
+                    default: false
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/mcpservers/{name}/readme:
+        get:
+            summary: Get the latest MCPServer readme
+            operationId: get-latest-mcpserver-readme
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Readme'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/mcpservers/{name}/versions/{version}/readme:
+        get:
+            summary: Get a MCPServer readme by name and version
+            operationId: get-mcpserver-readme
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Readme'
                 default:
                     description: Error
                     content:
@@ -577,170 +896,179 @@ paths:
                                 $ref: '#/components/schemas/ErrorModel'
     /v0/prompts:
         get:
-            tags:
-                - prompts
-            summary: List prompts
-            description: Get a paginated list of prompts from the registry
-            operationId: list-prompts-v0
+            summary: List Prompt (scoped by ?namespace)
+            operationId: list-prompts
             parameters:
-                - name: cursor
+                - name: namespace
                   in: query
-                  description: Pagination cursor
+                  description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
                   explode: false
                   schema:
                     type: string
-                    description: Pagination cursor
-                    examples:
-                        - prompt-cursor-123
-                  example: prompt-cursor-123
+                    description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
                 - name: limit
                   in: query
-                  description: Number of items per page
+                  description: Max items to return (default 50).
                   explode: false
                   schema:
                     type: integer
-                    description: Number of items per page
+                    description: Max items to return (default 50).
                     format: int64
-                    default: 30
-                    examples:
-                        - 50
-                    minimum: 1
-                    maximum: 100
-                  example: 50
-                - name: updated_since
+                    default: 50
+                - name: cursor
                   in: query
-                  description: Filter prompts updated since timestamp (RFC3339 datetime)
+                  description: Opaque pagination cursor.
                   explode: false
                   schema:
                     type: string
-                    description: Filter prompts updated since timestamp (RFC3339 datetime)
-                    examples:
-                        - "2025-08-07T13:15:04.280Z"
-                  example: "2025-08-07T13:15:04.280Z"
-                - name: search
+                    description: Opaque pagination cursor.
+                - name: labels
                   in: query
-                  description: Search prompts by name (substring match)
+                  description: 'Label selector: key=value,key2=value2.'
                   explode: false
                   schema:
                     type: string
-                    description: Search prompts by name (substring match)
-                    examples:
-                        - code-review
-                  example: code-review
-                - name: version
+                    description: 'Label selector: key=value,key2=value2.'
+                - name: latestOnly
                   in: query
-                  description: Filter by version ('latest' for latest version, or an exact version like '1.2.3')
+                  description: Only return rows with is_latest_version=true.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Only return rows with is_latest_version=true.
+                - name: includeTerminating
+                  in: query
+                  description: Include rows with a deletionTimestamp.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Include rows with a deletionTimestamp.
+                - name: semantic
+                  in: query
+                  description: Semantic search query. Returns results ranked by similarity.
                   explode: false
                   schema:
                     type: string
-                    description: Filter by version ('latest' for latest version, or an exact version like '1.2.3')
-                    examples:
-                        - latest
-                  example: latest
+                    description: Semantic search query. Returns results ranked by similarity.
+                - name: semanticThreshold
+                  in: query
+                  description: Drop results with cosine distance above this threshold (0 = no filter).
+                  explode: false
+                  schema:
+                    type: number
+                    description: Drop results with cosine distance above this threshold (0 = no filter).
+                    format: float
             responses:
                 "200":
                     description: OK
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/PromptListResponse'
+                                $ref: '#/components/schemas/ListOutputPromptBody'
                 default:
                     description: Error
                     content:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-        post:
-            tags:
-                - prompts
-            summary: Create or update prompt
-            description: Create a new prompt in the registry or update an existing one. Resources are immediately visible after creation.
-            operationId: create-prompt-v0
+    /v0/prompts/{name}:
+        get:
+            summary: Get the latest version of a Prompt
+            operationId: get-latest-prompt
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Prompt'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/prompts/{name}/{version}:
+        get:
+            summary: Get a Prompt by name and version
+            operationId: get-prompt
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Prompt'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        put:
+            summary: Apply a Prompt (idempotent upsert)
+            operationId: apply-prompt
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
             requestBody:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/PromptJSON'
-                required: true
+                            $ref: '#/components/schemas/Prompt'
             responses:
                 "200":
                     description: OK
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/PromptResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/prompts/{promptName}/versions:
-        get:
-            tags:
-                - prompts
-            summary: Get all versions of a prompt
-            description: Get all available versions for a specific prompt
-            operationId: get-prompt-versions-v0
-            parameters:
-                - name: promptName
-                  in: path
-                  description: Prompt name (letters, digits, hyphens, underscores)
-                  required: true
-                  schema:
-                    type: string
-                    description: Prompt name (letters, digits, hyphens, underscores)
-                    examples:
-                        - my-prompt
-                  example: my-prompt
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/PromptListResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/prompts/{promptName}/versions/{version}:
-        get:
-            tags:
-                - prompts
-            summary: Get specific prompt version
-            description: Get detailed information about a specific version of a prompt. Use the special version 'latest' to get the latest version.
-            operationId: get-prompt-version-v0
-            parameters:
-                - name: promptName
-                  in: path
-                  description: Prompt name (letters, digits, hyphens, underscores)
-                  required: true
-                  schema:
-                    type: string
-                    description: Prompt name (letters, digits, hyphens, underscores)
-                    examples:
-                        - my-prompt
-                  example: my-prompt
-                - name: version
-                  in: path
-                  description: URL-encoded prompt version
-                  required: true
-                  schema:
-                    type: string
-                    description: URL-encoded prompt version
-                    examples:
-                        - 1.0.0
-                  example: 1.0.0
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/PromptResponse'
+                                $ref: '#/components/schemas/Prompt'
                 default:
                     description: Error
                     content:
@@ -748,154 +1076,34 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
         delete:
-            tags:
-                - prompts
-            summary: Delete a prompt version
-            description: Permanently delete a specific prompt version from the registry.
-            operationId: delete-prompt-version-v0
+            summary: 'Delete a Prompt (soft-delete: sets deletionTimestamp)'
+            operationId: delete-prompt
             parameters:
-                - name: promptName
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
                   in: path
-                  description: Prompt name (letters, digits, hyphens, underscores)
                   required: true
                   schema:
                     type: string
-                    description: Prompt name (letters, digits, hyphens, underscores)
-                    examples:
-                        - my-prompt
-                  example: my-prompt
                 - name: version
                   in: path
-                  description: URL-encoded prompt version
                   required: true
                   schema:
                     type: string
-                    description: URL-encoded prompt version
-                    examples:
-                        - 1.0.0
-                  example: 1.0.0
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/EmptyResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/providers:
-        get:
-            tags:
-                - providers
-            summary: List providers
-            description: List configured deployment target providers.
-            operationId: list-providers
-            parameters:
-                - name: platform
+                - name: force
                   in: query
-                  description: Filter providers by platform type
+                  description: Skip provider-specific teardown and only remove the registry record.
                   explode: false
                   schema:
-                    type: string
-                    description: Filter providers by platform type
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ProvidersListResponseBody'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-        post:
-            tags:
-                - providers
-            summary: Create provider
-            description: Create a deployment target provider for a specific platform type.
-            operationId: create-provider
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/CreateProviderInput'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Provider'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/providers/{providerId}:
-        get:
-            tags:
-                - providers
-            summary: Get provider
-            description: Get a provider by ID.
-            operationId: get-provider
-            parameters:
-                - name: providerId
-                  in: path
-                  description: Provider ID
-                  required: true
-                  schema:
-                    type: string
-                    description: Provider ID
-                - name: platform
-                  in: query
-                  description: Provider platform hint (optional)
-                  explode: false
-                  schema:
-                    type: string
-                    description: Provider platform hint (optional)
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Provider'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-        delete:
-            tags:
-                - providers
-            summary: Delete provider
-            description: Delete a provider by ID.
-            operationId: delete-provider
-            parameters:
-                - name: providerId
-                  in: path
-                  description: Provider ID
-                  required: true
-                  schema:
-                    type: string
-                    description: Provider ID
-                - name: platform
-                  in: query
-                  description: Provider platform hint (optional)
-                  explode: false
-                  schema:
-                    type: string
-                    description: Provider platform hint (optional)
+                    type: boolean
+                    description: Skip provider-specific teardown and only remove the registry record.
+                    default: false
             responses:
                 "204":
                     description: No Content
@@ -905,227 +1113,246 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-    /v0/servers:
+    /v0/prompts/{name}/readme:
         get:
-            tags:
-                - servers
-            summary: List MCP servers
-            description: Get a paginated list of MCP servers from the registry
-            operationId: list-servers-v0
+            summary: Get the latest Prompt readme
+            operationId: get-latest-prompt-readme
             parameters:
-                - name: cursor
+                - name: namespace
                   in: query
-                  description: Pagination cursor
+                  description: Namespace (internal; defaults to 'default').
                   explode: false
                   schema:
                     type: string
-                    description: Pagination cursor
-                    examples:
-                        - server-cursor-123
-                  example: server-cursor-123
-                - name: limit
-                  in: query
-                  description: Number of items per page
-                  explode: false
-                  schema:
-                    type: integer
-                    description: Number of items per page
-                    format: int64
-                    default: 30
-                    examples:
-                        - 50
-                    minimum: 1
-                    maximum: 100
-                  example: 50
-                - name: updated_since
-                  in: query
-                  description: Filter servers updated since timestamp (RFC3339 datetime)
-                  explode: false
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
                   schema:
                     type: string
-                    description: Filter servers updated since timestamp (RFC3339 datetime)
-                    examples:
-                        - "2025-08-07T13:15:04.280Z"
-                  example: "2025-08-07T13:15:04.280Z"
-                - name: search
-                  in: query
-                  description: Search servers by name (substring match)
-                  explode: false
-                  schema:
-                    type: string
-                    description: Search servers by name (substring match)
-                    examples:
-                        - filesystem
-                  example: filesystem
-                - name: version
-                  in: query
-                  description: Filter by version ('latest' for latest version, or an exact version like '1.2.3')
-                  explode: false
-                  schema:
-                    type: string
-                    description: Filter by version ('latest' for latest version, or an exact version like '1.2.3')
-                    examples:
-                        - latest
-                  example: latest
-                - name: semantic_search
-                  in: query
-                  description: Use semantic search for the search term (hybrid with substring filter when search is set)
-                  explode: false
-                  schema:
-                    type: boolean
-                    description: Use semantic search for the search term (hybrid with substring filter when search is set)
-                    default: false
-                - name: semantic_threshold
-                  in: query
-                  description: Optional maximum distance for semantic matches (cosine distance)
-                  explode: false
-                  schema:
-                    type: number
-                    description: Optional maximum distance for semantic matches (cosine distance)
-                    format: double
             responses:
                 "200":
                     description: OK
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/ServerListResponse'
+                                $ref: '#/components/schemas/Readme'
                 default:
                     description: Error
                     content:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-        post:
-            tags:
-                - servers
-            summary: Create or update MCP server
-            description: Create a new MCP server in the registry or update an existing one. Resources are immediately visible after creation.
-            operationId: create-server-v0
+    /v0/prompts/{name}/versions/{version}/readme:
+        get:
+            summary: Get a Prompt readme by name and version
+            operationId: get-prompt-readme
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Readme'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/providers:
+        get:
+            summary: List Provider (scoped by ?namespace)
+            operationId: list-providers
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+                - name: limit
+                  in: query
+                  description: Max items to return (default 50).
+                  explode: false
+                  schema:
+                    type: integer
+                    description: Max items to return (default 50).
+                    format: int64
+                    default: 50
+                - name: cursor
+                  in: query
+                  description: Opaque pagination cursor.
+                  explode: false
+                  schema:
+                    type: string
+                    description: Opaque pagination cursor.
+                - name: labels
+                  in: query
+                  description: 'Label selector: key=value,key2=value2.'
+                  explode: false
+                  schema:
+                    type: string
+                    description: 'Label selector: key=value,key2=value2.'
+                - name: latestOnly
+                  in: query
+                  description: Only return rows with is_latest_version=true.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Only return rows with is_latest_version=true.
+                - name: includeTerminating
+                  in: query
+                  description: Include rows with a deletionTimestamp.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Include rows with a deletionTimestamp.
+                - name: semantic
+                  in: query
+                  description: Semantic search query. Returns results ranked by similarity.
+                  explode: false
+                  schema:
+                    type: string
+                    description: Semantic search query. Returns results ranked by similarity.
+                - name: semanticThreshold
+                  in: query
+                  description: Drop results with cosine distance above this threshold (0 = no filter).
+                  explode: false
+                  schema:
+                    type: number
+                    description: Drop results with cosine distance above this threshold (0 = no filter).
+                    format: float
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOutputProviderBody'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/providers/{name}:
+        get:
+            summary: Get the latest version of a Provider
+            operationId: get-latest-provider
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Provider'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/providers/{name}/{version}:
+        get:
+            summary: Get a Provider by name and version
+            operationId: get-provider
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Provider'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        put:
+            summary: Apply a Provider (idempotent upsert)
+            operationId: apply-provider
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
             requestBody:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/ServerJSON'
-                required: true
+                            $ref: '#/components/schemas/Provider'
             responses:
                 "200":
                     description: OK
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/ServerResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/servers/{serverName}/readme:
-        get:
-            tags:
-                - servers
-            summary: Get server README
-            description: Fetch the README markdown document for the latest version of a server
-            operationId: get-server-readme-v0
-            parameters:
-                - name: serverName
-                  in: path
-                  description: URL-encoded server name
-                  required: true
-                  schema:
-                    type: string
-                    description: URL-encoded server name
-                    examples:
-                        - com.example%2Fmy-server
-                  example: com.example%2Fmy-server
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ServerReadmeResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/servers/{serverName}/versions:
-        get:
-            tags:
-                - servers
-            summary: Get all versions of an MCP server
-            description: Get all available versions for a specific MCP server
-            operationId: get-server-versions-v0
-            parameters:
-                - name: serverName
-                  in: path
-                  description: URL-encoded server name
-                  required: true
-                  schema:
-                    type: string
-                    description: URL-encoded server name
-                    examples:
-                        - com.example%2Fmy-server
-                  example: com.example%2Fmy-server
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ServerListResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/servers/{serverName}/versions/{version}:
-        get:
-            tags:
-                - servers
-            summary: Get specific MCP server version
-            description: Get detailed information about a specific version of an MCP server. Set 'all=true' query parameter to get all versions.
-            operationId: get-server-version-v0
-            parameters:
-                - name: serverName
-                  in: path
-                  description: URL-encoded server name
-                  required: true
-                  schema:
-                    type: string
-                    description: URL-encoded server name
-                    examples:
-                        - com.example%2Fmy-server
-                  example: com.example%2Fmy-server
-                - name: version
-                  in: path
-                  description: URL-encoded server version
-                  required: true
-                  schema:
-                    type: string
-                    description: URL-encoded server version
-                    examples:
-                        - 1.0.0
-                  example: 1.0.0
-                - name: all
-                  in: query
-                  description: If true, return all versions of the server instead of a single version
-                  explode: false
-                  schema:
-                    type: boolean
-                    description: If true, return all versions of the server instead of a single version
-                    default: false
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ServerListResponse'
+                                $ref: '#/components/schemas/Provider'
                 default:
                     description: Error
                     content:
@@ -1133,157 +1360,37 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
         delete:
-            tags:
-                - servers
-                - admin
-            summary: Delete MCP server version
-            description: Permanently delete an MCP server version from the registry.
-            operationId: delete-server-version-v0
+            summary: 'Delete a Provider (soft-delete: sets deletionTimestamp)'
+            operationId: delete-provider
             parameters:
-                - name: serverName
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
                   in: path
-                  description: URL-encoded server name
                   required: true
                   schema:
                     type: string
-                    description: URL-encoded server name
-                    examples:
-                        - com.example%2Fmy-server
-                  example: com.example%2Fmy-server
                 - name: version
                   in: path
-                  description: URL-encoded server version
                   required: true
                   schema:
                     type: string
-                    description: URL-encoded server version
-                    examples:
-                        - 1.0.0
-                  example: 1.0.0
-                - name: all
+                - name: force
                   in: query
-                  description: If true, return all versions of the server instead of a single version
+                  description: Skip provider-specific teardown and only remove the registry record.
                   explode: false
                   schema:
                     type: boolean
-                    description: If true, return all versions of the server instead of a single version
+                    description: Skip provider-specific teardown and only remove the registry record.
                     default: false
             responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/EmptyResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-        patch:
-            tags:
-                - servers
-                - admin
-            summary: Edit MCP server
-            description: Update a specific version of an existing MCP server (admin only). Use PUT for idempotent apply (create-or-update).
-            operationId: edit-server-v0
-            parameters:
-                - name: serverName
-                  in: path
-                  description: URL-encoded server name
-                  required: true
-                  schema:
-                    type: string
-                    description: URL-encoded server name
-                    examples:
-                        - com.example%2Fmy-server
-                  example: com.example%2Fmy-server
-                - name: version
-                  in: path
-                  description: URL-encoded version to edit
-                  required: true
-                  schema:
-                    type: string
-                    description: URL-encoded version to edit
-                    examples:
-                        - 1.0.0
-                  example: 1.0.0
-                - name: status
-                  in: query
-                  description: New status for the server (active, deprecated, deleted)
-                  explode: false
-                  schema:
-                    type: string
-                    description: New status for the server (active, deprecated, deleted)
-                    enum:
-                        - active
-                        - deprecated
-                        - deleted
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/ServerJSON'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ServerResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-            security:
-                - bearer: []
-    /v0/servers/{serverName}/versions/{version}/readme:
-        get:
-            tags:
-                - servers
-            summary: Get server README for a version
-            description: Fetch the README markdown document for a specific server version
-            operationId: get-server-version-readme-v0
-            parameters:
-                - name: serverName
-                  in: path
-                  description: URL-encoded server name
-                  required: true
-                  schema:
-                    type: string
-                    description: URL-encoded server name
-                    examples:
-                        - com.example%2Fmy-server
-                  example: com.example%2Fmy-server
-                - name: version
-                  in: path
-                  description: URL-encoded server version
-                  required: true
-                  schema:
-                    type: string
-                    description: URL-encoded server version
-                    examples:
-                        - 1.0.0
-                  example: 1.0.0
-                - name: all
-                  in: query
-                  description: If true, return all versions of the server instead of a single version
-                  explode: false
-                  schema:
-                    type: boolean
-                    description: If true, return all versions of the server instead of a single version
-                    default: false
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ServerReadmeResponse'
+                "204":
+                    description: No Content
                 default:
                     description: Error
                     content:
@@ -1292,170 +1399,179 @@ paths:
                                 $ref: '#/components/schemas/ErrorModel'
     /v0/skills:
         get:
-            tags:
-                - skills
-            summary: List Agentic skills
-            description: Get a paginated list of Agentic skills from the registry
-            operationId: list-skills-v0
+            summary: List Skill (scoped by ?namespace)
+            operationId: list-skills
             parameters:
-                - name: cursor
+                - name: namespace
                   in: query
-                  description: Pagination cursor
+                  description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
                   explode: false
                   schema:
                     type: string
-                    description: Pagination cursor
-                    examples:
-                        - skill-cursor-123
-                  example: skill-cursor-123
+                    description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
                 - name: limit
                   in: query
-                  description: Number of items per page
+                  description: Max items to return (default 50).
                   explode: false
                   schema:
                     type: integer
-                    description: Number of items per page
+                    description: Max items to return (default 50).
                     format: int64
-                    default: 30
-                    examples:
-                        - 50
-                    minimum: 1
-                    maximum: 100
-                  example: 50
-                - name: updated_since
+                    default: 50
+                - name: cursor
                   in: query
-                  description: Filter skills updated since timestamp (RFC3339 datetime)
+                  description: Opaque pagination cursor.
                   explode: false
                   schema:
                     type: string
-                    description: Filter skills updated since timestamp (RFC3339 datetime)
-                    examples:
-                        - "2025-08-07T13:15:04.280Z"
-                  example: "2025-08-07T13:15:04.280Z"
-                - name: search
+                    description: Opaque pagination cursor.
+                - name: labels
                   in: query
-                  description: Search skills by name (substring match)
+                  description: 'Label selector: key=value,key2=value2.'
                   explode: false
                   schema:
                     type: string
-                    description: Search skills by name (substring match)
-                    examples:
-                        - filesystem
-                  example: filesystem
-                - name: version
+                    description: 'Label selector: key=value,key2=value2.'
+                - name: latestOnly
                   in: query
-                  description: Filter by version ('latest' for latest version, or an exact version like '1.2.3')
+                  description: Only return rows with is_latest_version=true.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Only return rows with is_latest_version=true.
+                - name: includeTerminating
+                  in: query
+                  description: Include rows with a deletionTimestamp.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Include rows with a deletionTimestamp.
+                - name: semantic
+                  in: query
+                  description: Semantic search query. Returns results ranked by similarity.
                   explode: false
                   schema:
                     type: string
-                    description: Filter by version ('latest' for latest version, or an exact version like '1.2.3')
-                    examples:
-                        - latest
-                  example: latest
+                    description: Semantic search query. Returns results ranked by similarity.
+                - name: semanticThreshold
+                  in: query
+                  description: Drop results with cosine distance above this threshold (0 = no filter).
+                  explode: false
+                  schema:
+                    type: number
+                    description: Drop results with cosine distance above this threshold (0 = no filter).
+                    format: float
             responses:
                 "200":
                     description: OK
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/SkillListResponse'
+                                $ref: '#/components/schemas/ListOutputSkillBody'
                 default:
                     description: Error
                     content:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-        post:
-            tags:
-                - skills
-            summary: Create or update skill
-            description: Create a new Agentic skill in the registry or update an existing one. Resources are immediately visible after creation.
-            operationId: create-skill-v0
+    /v0/skills/{name}:
+        get:
+            summary: Get the latest version of a Skill
+            operationId: get-latest-skill
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Skill'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/skills/{name}/{version}:
+        get:
+            summary: Get a Skill by name and version
+            operationId: get-skill
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Skill'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        put:
+            summary: Apply a Skill (idempotent upsert)
+            operationId: apply-skill
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
             requestBody:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/SkillJSON'
-                required: true
+                            $ref: '#/components/schemas/Skill'
             responses:
                 "200":
                     description: OK
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/SkillResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/skills/{skillName}/versions:
-        get:
-            tags:
-                - skills
-            summary: Get all versions of an Agentic skill
-            description: Get all available versions for a specific Agentic skill
-            operationId: get-skill-versions-v0
-            parameters:
-                - name: skillName
-                  in: path
-                  description: URL-encoded skill name
-                  required: true
-                  schema:
-                    type: string
-                    description: URL-encoded skill name
-                    examples:
-                        - com.example%2Fmy-skill
-                  example: com.example%2Fmy-skill
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/SkillListResponse'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/skills/{skillName}/versions/{version}:
-        get:
-            tags:
-                - skills
-            summary: Get specific Agentic skill version
-            description: Get detailed information about a specific version of an Agentic skill. Use the special version 'latest' to get the latest version.
-            operationId: get-skill-version-v0
-            parameters:
-                - name: skillName
-                  in: path
-                  description: URL-encoded skill name
-                  required: true
-                  schema:
-                    type: string
-                    description: URL-encoded skill name
-                    examples:
-                        - com.example%2Fmy-skill
-                  example: com.example%2Fmy-skill
-                - name: version
-                  in: path
-                  description: URL-encoded skill version
-                  required: true
-                  schema:
-                    type: string
-                    description: URL-encoded skill version
-                    examples:
-                        - 1.0.0
-                  example: 1.0.0
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/SkillResponse'
+                                $ref: '#/components/schemas/Skill'
                 default:
                     description: Error
                     content:
@@ -1463,39 +1579,102 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
         delete:
-            tags:
-                - skills
-            summary: Delete skill version
-            description: Permanently delete a specific skill version from the registry.
-            operationId: delete-skill-version-v0
+            summary: 'Delete a Skill (soft-delete: sets deletionTimestamp)'
+            operationId: delete-skill
             parameters:
-                - name: skillName
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
                   in: path
-                  description: URL-encoded skill name
                   required: true
                   schema:
                     type: string
-                    description: URL-encoded skill name
-                    examples:
-                        - com.example%2Fmy-skill
-                  example: com.example%2Fmy-skill
                 - name: version
                   in: path
-                  description: URL-encoded skill version
                   required: true
                   schema:
                     type: string
-                    description: URL-encoded skill version
-                    examples:
-                        - 1.0.0
-                  example: 1.0.0
+                - name: force
+                  in: query
+                  description: Skip provider-specific teardown and only remove the registry record.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Skip provider-specific teardown and only remove the registry record.
+                    default: false
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/skills/{name}/readme:
+        get:
+            summary: Get the latest Skill readme
+            operationId: get-latest-skill-readme
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
             responses:
                 "200":
                     description: OK
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/EmptyResponse'
+                                $ref: '#/components/schemas/Readme'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/skills/{name}/versions/{version}/readme:
+        get:
+            summary: Get a Skill readme by name and version
+            operationId: get-skill-readme
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Readme'
                 default:
                     description: Error
                     content:
@@ -1524,7 +1703,53 @@ paths:
                                 $ref: '#/components/schemas/ErrorModel'
 components:
     schemas:
-        AgentJSON:
+        Agent:
+            type: object
+            additionalProperties: false
+            properties:
+                apiVersion:
+                    type: string
+                kind:
+                    type: string
+                metadata:
+                    $ref: '#/components/schemas/ObjectMeta'
+                spec:
+                    $ref: '#/components/schemas/AgentSpec'
+                status:
+                    $ref: '#/components/schemas/Status'
+            required:
+                - metadata
+                - spec
+                - apiVersion
+                - kind
+        AgentPackage:
+            type: object
+            additionalProperties: false
+            properties:
+                identifier:
+                    type: string
+                registryType:
+                    type: string
+                transport:
+                    $ref: '#/components/schemas/TransportProto'
+                version:
+                    type: string
+            required:
+                - registryType
+                - identifier
+                - version
+                - transport
+        AgentRemote:
+            type: object
+            additionalProperties: false
+            properties:
+                type:
+                    type: string
+                url:
+                    type: string
+            required:
+                - type
+        AgentSpec:
             type: object
             additionalProperties: false
             properties:
@@ -1539,407 +1764,127 @@ components:
                 mcpServers:
                     type: array
                     items:
-                        $ref: '#/components/schemas/McpServerType'
+                        $ref: '#/components/schemas/ResourceRef'
                 modelName:
                     type: string
                 modelProvider:
                     type: string
-                name:
-                    type: string
                 packages:
                     type: array
                     items:
-                        $ref: '#/components/schemas/AgentPackageInfo'
+                        $ref: '#/components/schemas/AgentPackage'
                 prompts:
                     type: array
                     items:
-                        $ref: '#/components/schemas/PromptRef'
+                        $ref: '#/components/schemas/ResourceRef'
+                readme:
+                    $ref: '#/components/schemas/Readme'
                 remotes:
                     type: array
                     items:
-                        $ref: '#/components/schemas/Transport'
+                        $ref: '#/components/schemas/AgentRemote'
                 repository:
-                    description: Optional repository metadata for the agent source code.
                     $ref: '#/components/schemas/Repository'
                 skills:
                     type: array
                     items:
-                        $ref: '#/components/schemas/SkillRef'
-                status:
-                    type: string
+                        $ref: '#/components/schemas/ResourceRef'
                 telemetryEndpoint:
                     type: string
                 title:
                     type: string
-                updatedAt:
-                    type: string
-                    format: date-time
-                version:
-                    type: string
                 websiteUrl:
                     type: string
-            required:
-                - version
-                - name
-                - image
-                - language
-                - framework
-                - modelProvider
-                - modelName
-                - description
-        AgentListResponse:
+        ApplyResult:
             type: object
             additionalProperties: false
             properties:
-                agents:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/AgentResponse'
-                metadata:
-                    $ref: '#/components/schemas/AgentMetadata'
-            required:
-                - agents
-                - metadata
-        AgentMetadata:
-            type: object
-            additionalProperties: false
-            properties:
-                count:
-                    type: integer
-                    format: int64
-                nextCursor:
+                apiVersion:
                     type: string
-            required:
-                - count
-        AgentPackageInfo:
-            type: object
-            additionalProperties: false
-            properties:
-                identifier:
+                error:
                     type: string
-                registryType:
+                kind:
                     type: string
-                transport:
-                    $ref: '#/components/schemas/AgentPackageInfoTransportStruct'
+                name:
+                    type: string
+                namespace:
+                    type: string
+                status:
+                    type: string
                 version:
                     type: string
             required:
-                - registryType
-                - identifier
-                - version
-                - transport
-        AgentPackageInfoTransportStruct:
-            type: object
-            additionalProperties: false
-            properties:
-                type:
-                    type: string
-            required:
-                - type
-        AgentRegistryExtensions:
-            type: object
-            additionalProperties: false
-            properties:
-                isLatest:
-                    type: boolean
-                publishedAt:
-                    type: string
-                    format: date-time
-                status:
-                    type: string
-                updatedAt:
-                    type: string
-                    format: date-time
-            required:
+                - name
                 - status
-                - publishedAt
-                - updatedAt
-                - isLatest
-        AgentResponse:
-            type: object
-            additionalProperties: false
-            properties:
-                _meta:
-                    $ref: '#/components/schemas/AgentResponseMeta'
-                agent:
-                    $ref: '#/components/schemas/AgentJSON'
-                mcpServerRefs:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/RegistryRef'
-                promptRefs:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/RegistryRef'
-                skillRefs:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/RegistryRef'
-            required:
-                - agent
-                - _meta
-        AgentResponseMeta:
-            type: object
-            additionalProperties: false
-            properties:
-                aregistry.ai/deployments:
-                    $ref: '#/components/schemas/ResourceDeploymentsMeta'
-                aregistry.ai/semantic:
-                    $ref: '#/components/schemas/AgentSemanticMeta'
-                io.modelcontextprotocol.registry/official:
-                    $ref: '#/components/schemas/AgentRegistryExtensions'
-        AgentSemanticMeta:
-            type: object
-            additionalProperties: false
-            properties:
-                score:
-                    type: number
-                    format: double
-            required:
-                - score
-        ApplyOutputBody:
+        ApplyResultsResponse:
             type: object
             additionalProperties: false
             properties:
                 results:
                     type: array
                     items:
-                        $ref: '#/components/schemas/Result'
+                        $ref: '#/components/schemas/ApplyResult'
             required:
                 - results
-        Argument:
+        Condition:
             type: object
             additionalProperties: false
             properties:
-                choices:
-                    type: array
-                    description: A list of possible values for the input. If provided, the user must select one of these values.
-                    items:
-                        type: string
-                default:
+                lastTransitionTime:
                     type: string
-                    description: The default value for the input. This should be a valid value for the input. If you want to provide input examples or guidance, use the placeholder field instead.
-                description:
+                    format: date-time
+                message:
                     type: string
-                    description: A description of the input, which clients can use to provide context to the user.
-                format:
+                reason:
                     type: string
-                    description: Specifies the input format. Supported values include filepath, which should be interpreted as a file on the user's filesystem.
-                    enum:
-                        - string
-                        - number
-                        - boolean
-                        - filepath
-                isRepeated:
-                    type: boolean
-                    description: Whether the argument can be repeated multiple times.
-                isRequired:
-                    type: boolean
-                    description: Whether the input is required
-                isSecret:
-                    type: boolean
-                    description: Indicates whether the input is a secret value (e.g., password, token). If true, clients should handle the value securely.
-                name:
+                status:
                     type: string
-                    description: The flag name (for named arguments), including any leading dashes. Empty for positional arguments.
-                    examples:
-                        - --port
-                placeholder:
-                    type: string
-                    description: A placeholder for the input to be displaying during configuration. This is used to provide examples or guidance about the expected form or content of the input.
                 type:
                     type: string
-                    description: 'Argument type: ''positional'' or ''named'''
-                    examples:
-                        - positional
-                value:
-                    type: string
-                    description: The value for the input. If this is not set, the user may be prompted to provide a value. Identifiers wrapped in {curly_braces} will be replaced with the corresponding properties from the input variables map.
-                valueHint:
-                    type: string
-                    description: An identifier for positional arguments. Used in transport URL variable substitution.
-                    examples:
-                        - file_path
-                variables:
-                    type: object
-                    description: A map of variable names to their values. Keys in the input value that are wrapped in {curly_braces} will be replaced with the corresponding variable values.
-                    additionalProperties:
-                        $ref: '#/components/schemas/Input'
             required:
                 - type
-        CreateProviderInput:
-            type: object
-            additionalProperties: false
-            properties:
-                config:
-                    type: object
-                    additionalProperties: {}
-                id:
-                    type: string
-                name:
-                    type: string
-                platform:
-                    type: string
-            required:
-                - name
-                - platform
+                - status
         Deployment:
             type: object
             additionalProperties: false
             properties:
-                deployedAt:
+                apiVersion:
                     type: string
-                    format: date-time
+                kind:
+                    type: string
+                metadata:
+                    $ref: '#/components/schemas/ObjectMeta'
+                spec:
+                    $ref: '#/components/schemas/DeploymentSpec'
+                status:
+                    $ref: '#/components/schemas/Status'
+            required:
+                - metadata
+                - spec
+                - apiVersion
+                - kind
+        DeploymentSpec:
+            type: object
+            additionalProperties: false
+            properties:
+                desiredState:
+                    type: string
                 env:
                     type: object
                     additionalProperties:
                         type: string
-                error:
-                    type: string
-                id:
-                    type: string
-                origin:
-                    type: string
                 preferRemote:
                     type: boolean
                 providerConfig:
                     type: object
                     additionalProperties: {}
-                providerId:
-                    type: string
-                providerMetadata:
-                    type: object
-                    additionalProperties: {}
-                resourceType:
-                    type: string
-                serverName:
-                    type: string
-                status:
-                    type: string
-                updatedAt:
-                    type: string
-                    format: date-time
-                version:
-                    type: string
+                providerRef:
+                    $ref: '#/components/schemas/ResourceRef'
+                targetRef:
+                    $ref: '#/components/schemas/ResourceRef'
             required:
-                - id
-                - serverName
-                - version
-                - resourceType
-                - status
-                - origin
-                - env
-                - preferRemote
-                - deployedAt
-                - updatedAt
-        DeploymentLogsBody:
-            type: object
-            additionalProperties: false
-            properties:
-                deploymentId:
-                    type: string
-                logs:
-                    type: array
-                    items:
-                        type: string
-                status:
-                    type: string
-            required:
-                - deploymentId
-                - status
-                - logs
-        DeploymentRequest:
-            type: object
-            additionalProperties: false
-            properties:
-                env:
-                    type: object
-                    description: Deployment environment variables.
-                    additionalProperties:
-                        type: string
-                preferRemote:
-                    type: boolean
-                    description: Prefer remote deployment over local
-                    default: false
-                providerConfig:
-                    type: object
-                    description: Optional provider-specific deployment settings (not env vars).
-                    additionalProperties: {}
-                providerId:
-                    type: string
-                    description: Concrete provider instance ID.
-                resourceType:
-                    type: string
-                    description: Type of resource to deploy (mcp, agent)
-                    default: mcp
-                    examples:
-                        - mcp
-                    enum:
-                        - mcp
-                        - agent
-                serverName:
-                    type: string
-                    description: Server name to deploy
-                    examples:
-                        - io.github.user/weather
-                version:
-                    type: string
-                    description: Version to deploy (use 'latest' for latest version)
-                    default: latest
-                    examples:
-                        - 1.0.0
-            required:
-                - serverName
-                - version
-                - providerId
-        DeploymentSummary:
-            type: object
-            additionalProperties: false
-            properties:
-                deployedAt:
-                    type: string
-                    format: date-time
-                id:
-                    type: string
-                origin:
-                    type: string
-                providerId:
-                    type: string
-                status:
-                    type: string
-                updatedAt:
-                    type: string
-                    format: date-time
-                version:
-                    type: string
-            required:
-                - id
-                - status
-                - origin
-                - deployedAt
-                - updatedAt
-        DeploymentsListResponse:
-            type: object
-            additionalProperties: false
-            properties:
-                deployments:
-                    type: array
-                    description: List of deployed servers
-                    items:
-                        $ref: '#/components/schemas/Deployment'
-            required:
-                - deployments
-        EmptyResponse:
-            type: object
-            additionalProperties: false
-            properties:
-                message:
-                    type: string
-                    description: Success message
-                    examples:
-                        - Operation completed successfully
-            required:
-                - message
+                - targetRef
+                - providerRef
         ErrorDetail:
             type: object
             additionalProperties: false
@@ -2009,224 +1954,334 @@ components:
                         - ok
             required:
                 - status
-        Icon:
+        ListOutputAgentBody:
+            type: object
+            additionalProperties: false
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Agent'
+                nextCursor:
+                    type: string
+                semanticScores:
+                    type: array
+                    items:
+                        type: number
+                        format: float
+            required:
+                - items
+        ListOutputDeploymentBody:
+            type: object
+            additionalProperties: false
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Deployment'
+                nextCursor:
+                    type: string
+                semanticScores:
+                    type: array
+                    items:
+                        type: number
+                        format: float
+            required:
+                - items
+        ListOutputMCPServerBody:
+            type: object
+            additionalProperties: false
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MCPServer'
+                nextCursor:
+                    type: string
+                semanticScores:
+                    type: array
+                    items:
+                        type: number
+                        format: float
+            required:
+                - items
+        ListOutputPromptBody:
+            type: object
+            additionalProperties: false
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Prompt'
+                nextCursor:
+                    type: string
+                semanticScores:
+                    type: array
+                    items:
+                        type: number
+                        format: float
+            required:
+                - items
+        ListOutputProviderBody:
+            type: object
+            additionalProperties: false
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Provider'
+                nextCursor:
+                    type: string
+                semanticScores:
+                    type: array
+                    items:
+                        type: number
+                        format: float
+            required:
+                - items
+        ListOutputSkillBody:
+            type: object
+            additionalProperties: false
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Skill'
+                nextCursor:
+                    type: string
+                semanticScores:
+                    type: array
+                    items:
+                        type: number
+                        format: float
+            required:
+                - items
+        MCPArgument:
+            type: object
+            additionalProperties: false
+            properties:
+                choices:
+                    type: array
+                    items:
+                        type: string
+                default:
+                    type: string
+                description:
+                    type: string
+                format:
+                    type: string
+                isRepeated:
+                    type: boolean
+                isRequired:
+                    type: boolean
+                isSecret:
+                    type: boolean
+                name:
+                    type: string
+                placeholder:
+                    type: string
+                type:
+                    type: string
+                value:
+                    type: string
+                valueHint:
+                    type: string
+                variables:
+                    type: object
+                    additionalProperties:
+                        $ref: '#/components/schemas/MCPInputVariable'
+            required:
+                - type
+        MCPIcon:
             type: object
             additionalProperties: false
             properties:
                 mimeType:
                     type: string
-                    description: 'Optional MIME type override if the source MIME type is missing or generic. Must be one of: image/png, image/jpeg, image/jpg, image/svg+xml, image/webp.'
-                    examples:
-                        - image/png
-                    enum:
-                        - image/png
-                        - image/jpeg
-                        - image/jpg
-                        - image/svg+xml
-                        - image/webp
                 sizes:
                     type: array
-                    description: Optional array of strings that specify sizes at which the icon can be used. Each string should be in WxH format (e.g., '48x48', '96x96') or 'any' for scalable formats like SVG. If not provided, the client should assume that the icon can be used at any size.
                     items:
                         type: string
                 src:
                     type: string
-                    description: A standard URI pointing to an icon resource. Must be an HTTPS URL. Consumers SHOULD take steps to ensure URLs serving icons are from the same domain as the server or a trusted domain. Consumers SHOULD take appropriate precautions when consuming SVGs as they can contain executable JavaScript.
-                    format: uri
-                    examples:
-                        - https://example.com/icon.png
-                    maxLength: 255
                 theme:
                     type: string
-                    description: Optional specifier for the theme this icon is designed for. 'light' indicates the icon is designed to be used with a light background, and 'dark' indicates the icon is designed to be used with a dark background. If not provided, the client should assume the icon can be used with any theme.
-                    enum:
-                        - light
-                        - dark
             required:
                 - src
-        Input:
+        MCPInputVariable:
             type: object
             additionalProperties: false
             properties:
                 choices:
                     type: array
-                    description: A list of possible values for the input. If provided, the user must select one of these values.
                     items:
                         type: string
                 default:
                     type: string
-                    description: The default value for the input. This should be a valid value for the input. If you want to provide input examples or guidance, use the placeholder field instead.
                 description:
                     type: string
-                    description: A description of the input, which clients can use to provide context to the user.
                 format:
                     type: string
-                    description: Specifies the input format. Supported values include filepath, which should be interpreted as a file on the user's filesystem.
-                    enum:
-                        - string
-                        - number
-                        - boolean
-                        - filepath
                 isRequired:
                     type: boolean
-                    description: Whether the input is required
                 isSecret:
                     type: boolean
-                    description: Indicates whether the input is a secret value (e.g., password, token). If true, clients should handle the value securely.
                 placeholder:
                     type: string
-                    description: A placeholder for the input to be displaying during configuration. This is used to provide examples or guidance about the expected form or content of the input.
                 value:
                     type: string
-                    description: The value for the input. If this is not set, the user may be prompted to provide a value. Identifiers wrapped in {curly_braces} will be replaced with the corresponding properties from the input variables map.
-        KeyValueInput:
+        MCPKeyValueInput:
             type: object
             additionalProperties: false
             properties:
                 choices:
                     type: array
-                    description: A list of possible values for the input. If provided, the user must select one of these values.
                     items:
                         type: string
                 default:
                     type: string
-                    description: The default value for the input. This should be a valid value for the input. If you want to provide input examples or guidance, use the placeholder field instead.
                 description:
                     type: string
-                    description: A description of the input, which clients can use to provide context to the user.
                 format:
                     type: string
-                    description: Specifies the input format. Supported values include filepath, which should be interpreted as a file on the user's filesystem.
-                    enum:
-                        - string
-                        - number
-                        - boolean
-                        - filepath
                 isRequired:
                     type: boolean
-                    description: Whether the input is required
                 isSecret:
                     type: boolean
-                    description: Indicates whether the input is a secret value (e.g., password, token). If true, clients should handle the value securely.
                 name:
                     type: string
-                    description: Name of the header or environment variable.
-                    examples:
-                        - SOME_VARIABLE
                 placeholder:
                     type: string
-                    description: A placeholder for the input to be displaying during configuration. This is used to provide examples or guidance about the expected form or content of the input.
                 value:
                     type: string
-                    description: The value for the input. If this is not set, the user may be prompted to provide a value. Identifiers wrapped in {curly_braces} will be replaced with the corresponding properties from the input variables map.
                 variables:
                     type: object
-                    description: A map of variable names to their values. Keys in the input value that are wrapped in {curly_braces} will be replaced with the corresponding variable values.
                     additionalProperties:
-                        $ref: '#/components/schemas/Input'
+                        $ref: '#/components/schemas/MCPInputVariable'
             required:
                 - name
-        McpServerType:
-            type: object
-            additionalProperties: false
-            properties:
-                args:
-                    type: array
-                    items:
-                        type: string
-                build:
-                    type: string
-                command:
-                    type: string
-                env:
-                    type: array
-                    items:
-                        type: string
-                headers:
-                    type: object
-                    additionalProperties:
-                        type: string
-                image:
-                    type: string
-                name:
-                    type: string
-                registryServerName:
-                    type: string
-                registryServerPreferRemote:
-                    type: boolean
-                registryServerVersion:
-                    type: string
-                registryURL:
-                    type: string
-                type:
-                    type: string
-                url:
-                    type: string
-                version:
-                    type: string
-            required:
-                - name
-        Package:
+        MCPPackage:
             type: object
             additionalProperties: false
             properties:
                 environmentVariables:
                     type: array
-                    description: A mapping of environment variables to be set when running the package.
                     items:
-                        $ref: '#/components/schemas/KeyValueInput'
+                        $ref: '#/components/schemas/MCPKeyValueInput'
                 fileSha256:
                     type: string
-                    description: SHA-256 hash of the package file for integrity verification. Required for MCPB packages and optional for other package types. Authors are responsible for generating correct SHA-256 hashes when creating server.json. If present, MCP clients must validate the downloaded file matches the hash before running packages to ensure file integrity.
-                    examples:
-                        - fe333e598595000ae021bd27117db32ec69af6987f507ba7a63c90638ff633ce
-                    pattern: ^[a-f0-9]{64}$
                 identifier:
                     type: string
-                    description: Package identifier - either a package name (for registries) or URL (for direct downloads)
-                    examples:
-                        - '@modelcontextprotocol/server-brave-search'
-                    minLength: 1
                 packageArguments:
                     type: array
-                    description: A list of arguments to be passed to the package's binary.
                     items:
-                        $ref: '#/components/schemas/Argument'
+                        $ref: '#/components/schemas/MCPArgument'
                 registryBaseUrl:
                     type: string
-                    description: Base URL of the package registry
-                    format: uri
-                    examples:
-                        - https://registry.npmjs.org
                 registryType:
                     type: string
-                    description: Registry type indicating how to download packages (e.g., 'npm', 'pypi', 'oci', 'nuget', 'mcpb')
-                    examples:
-                        - npm
-                    minLength: 1
                 runtimeArguments:
                     type: array
-                    description: A list of arguments to be passed to the package's runtime command (such as docker or npx). The runtimeHint field should be provided when runtimeArguments are present.
                     items:
-                        $ref: '#/components/schemas/Argument'
+                        $ref: '#/components/schemas/MCPArgument'
                 runtimeHint:
                     type: string
-                    description: A hint to help clients determine the appropriate runtime for the package. This field should be provided when runtimeArguments are present.
-                    examples:
-                        - npx
                 transport:
-                    description: Transport protocol configuration for the package
-                    $ref: '#/components/schemas/Transport'
+                    $ref: '#/components/schemas/MCPTransport'
                 version:
                     type: string
-                    description: Package version. Must be a specific version. Version ranges are rejected (e.g., '^1.2.3', '~1.2.3', '>=1.2.3', '1.x', '1.*').
-                    examples:
-                        - 1.0.2
-                    minLength: 1
             required:
                 - registryType
                 - identifier
                 - transport
+        MCPServer:
+            type: object
+            additionalProperties: false
+            properties:
+                apiVersion:
+                    type: string
+                kind:
+                    type: string
+                metadata:
+                    $ref: '#/components/schemas/ObjectMeta'
+                spec:
+                    $ref: '#/components/schemas/MCPServerSpec'
+                status:
+                    $ref: '#/components/schemas/Status'
+            required:
+                - metadata
+                - spec
+                - apiVersion
+                - kind
+        MCPServerSpec:
+            type: object
+            additionalProperties: false
+            properties:
+                description:
+                    type: string
+                icons:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MCPIcon'
+                packages:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MCPPackage'
+                readme:
+                    $ref: '#/components/schemas/Readme'
+                remotes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MCPTransport'
+                repository:
+                    $ref: '#/components/schemas/Repository'
+                title:
+                    type: string
+                websiteUrl:
+                    type: string
+        MCPTransport:
+            type: object
+            additionalProperties: false
+            properties:
+                headers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MCPKeyValueInput'
+                type:
+                    type: string
+                url:
+                    type: string
+            required:
+                - type
+        ObjectMeta:
+            type: object
+            additionalProperties: false
+            properties:
+                annotations:
+                    type: object
+                    additionalProperties:
+                        type: string
+                createdAt:
+                    type: string
+                    format: date-time
+                deletionTimestamp:
+                    type: string
+                    format: date-time
+                labels:
+                    type: object
+                    additionalProperties:
+                        type: string
+                name:
+                    type: string
+                namespace:
+                    type: string
+                updatedAt:
+                    type: string
+                    format: date-time
+                version:
+                    type: string
+            required:
+                - name
         PingBody:
             type: object
             additionalProperties: false
@@ -2238,7 +2293,26 @@ components:
                         - true
             required:
                 - pong
-        PromptJSON:
+        Prompt:
+            type: object
+            additionalProperties: false
+            properties:
+                apiVersion:
+                    type: string
+                kind:
+                    type: string
+                metadata:
+                    $ref: '#/components/schemas/ObjectMeta'
+                spec:
+                    $ref: '#/components/schemas/PromptSpec'
+                status:
+                    $ref: '#/components/schemas/Status'
+            required:
+                - metadata
+                - spec
+                - apiVersion
+                - kind
+        PromptSpec:
             type: object
             additionalProperties: false
             properties:
@@ -2246,323 +2320,39 @@ components:
                     type: string
                 description:
                     type: string
-                name:
-                    type: string
-                version:
-                    type: string
-            required:
-                - name
-                - version
-                - content
-        PromptListResponse:
-            type: object
-            additionalProperties: false
-            properties:
-                metadata:
-                    $ref: '#/components/schemas/PromptMetadata'
-                prompts:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/PromptResponse'
-            required:
-                - prompts
-                - metadata
-        PromptMetadata:
-            type: object
-            additionalProperties: false
-            properties:
-                count:
-                    type: integer
-                    format: int64
-                nextCursor:
-                    type: string
-            required:
-                - count
-        PromptRef:
-            type: object
-            additionalProperties: false
-            properties:
-                name:
-                    type: string
-                registryPromptName:
-                    type: string
-                registryPromptVersion:
-                    type: string
-                registryURL:
-                    type: string
-            required:
-                - name
-        PromptRegistryExtensions:
-            type: object
-            additionalProperties: false
-            properties:
-                isLatest:
-                    type: boolean
-                publishedAt:
-                    type: string
-                    format: date-time
-                status:
-                    type: string
-                updatedAt:
-                    type: string
-                    format: date-time
-            required:
-                - status
-                - publishedAt
-                - updatedAt
-                - isLatest
-        PromptResponse:
-            type: object
-            additionalProperties: false
-            properties:
-                _meta:
-                    $ref: '#/components/schemas/PromptResponseMeta'
-                prompt:
-                    $ref: '#/components/schemas/PromptJSON'
-            required:
-                - prompt
-                - _meta
-        PromptResponseMeta:
-            type: object
-            additionalProperties: false
-            properties:
-                io.modelcontextprotocol.registry/official:
-                    $ref: '#/components/schemas/PromptRegistryExtensions'
+                readme:
+                    $ref: '#/components/schemas/Readme'
         Provider:
+            type: object
+            additionalProperties: false
+            properties:
+                apiVersion:
+                    type: string
+                kind:
+                    type: string
+                metadata:
+                    $ref: '#/components/schemas/ObjectMeta'
+                spec:
+                    $ref: '#/components/schemas/ProviderSpec'
+                status:
+                    $ref: '#/components/schemas/Status'
+            required:
+                - metadata
+                - spec
+                - apiVersion
+                - kind
+        ProviderSpec:
             type: object
             additionalProperties: false
             properties:
                 config:
                     type: object
                     additionalProperties: {}
-                createdAt:
-                    type: string
-                    format: date-time
-                id:
-                    type: string
-                name:
-                    type: string
                 platform:
                     type: string
-                updatedAt:
-                    type: string
-                    format: date-time
             required:
-                - id
-                - name
                 - platform
-                - createdAt
-                - updatedAt
-        ProvidersListResponseBody:
-            type: object
-            additionalProperties: false
-            properties:
-                count:
-                    type: integer
-                    format: int64
-                providers:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/Provider'
-            required:
-                - providers
-                - count
-        RegistryExtensions:
-            type: object
-            additionalProperties: false
-            properties:
-                isLatest:
-                    type: boolean
-                    description: Whether this is the latest version of the server
-                publishedAt:
-                    type: string
-                    description: Timestamp when the server was first published to the registry
-                    format: date-time
-                status:
-                    type: string
-                    description: Server lifecycle status
-                    enum:
-                        - active
-                        - deprecated
-                        - deleted
-                updatedAt:
-                    type: string
-                    description: Timestamp when the server entry was last updated
-                    format: date-time
-            required:
-                - status
-                - publishedAt
-                - isLatest
-        RegistryRef:
-            type: object
-            additionalProperties: false
-            properties:
-                name:
-                    type: string
-                version:
-                    type: string
-            required:
-                - name
-        Repository:
-            type: object
-            additionalProperties: false
-            properties:
-                id:
-                    type: string
-                    description: 'Repository identifier from the hosting service (e.g., GitHub repo ID). Owned and determined by the source forge. Should remain stable across repository renames and may be used to detect repository resurrection attacks - if a repository is deleted and recreated, the ID should change. For GitHub, use: gh api repos/<owner>/<repo> --jq ''.id'''
-                    examples:
-                        - b94b5f7e-c7c6-d760-2c78-a5e9b8a5b8c9
-                source:
-                    type: string
-                    description: Repository hosting service identifier. Used by registries to determine validation and API access methods.
-                    examples:
-                        - github
-                subfolder:
-                    type: string
-                    description: Optional relative path from repository root to the server location within a monorepo or nested package structure. Must be a clean relative path.
-                    examples:
-                        - src/everything
-                url:
-                    type: string
-                    description: Repository URL for browsing source code. Should support both web browsing and git clone operations.
-                    format: uri
-                    examples:
-                        - https://github.com/modelcontextprotocol/servers
-        ResourceDeploymentsMeta:
-            type: object
-            additionalProperties: false
-            properties:
-                count:
-                    type: integer
-                    format: int64
-                deployments:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/DeploymentSummary'
-            required:
-                - deployments
-                - count
-        Result:
-            type: object
-            additionalProperties: false
-            properties:
-                error:
-                    type: string
-                kind:
-                    type: string
-                name:
-                    type: string
-                status:
-                    type: string
-                version:
-                    type: string
-            required:
-                - kind
-                - name
-                - status
-        ServerJSON:
-            type: object
-            additionalProperties: false
-            properties:
-                $schema:
-                    type: string
-                    description: JSON Schema URI for this server.json format
-                    format: uri
-                    examples:
-                        - https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json
-                    minLength: 1
-                _meta:
-                    description: Extension metadata using reverse DNS namespacing for vendor-specific data
-                    $ref: '#/components/schemas/ServerMeta'
-                description:
-                    type: string
-                    description: Clear human-readable explanation of server functionality.
-                    examples:
-                        - MCP server providing weather data and forecasts via OpenWeatherMap API
-                    minLength: 1
-                    maxLength: 100
-                icons:
-                    type: array
-                    description: Optional set of sized icons that the client can display in a user interface.
-                    items:
-                        $ref: '#/components/schemas/Icon'
-                name:
-                    type: string
-                    description: Server name in reverse-DNS format. Must contain exactly one forward slash separating namespace from server name.
-                    examples:
-                        - io.github.user/weather
-                    minLength: 3
-                    maxLength: 200
-                    pattern: ^[a-zA-Z0-9.-]+/[a-zA-Z0-9._-]+$
-                packages:
-                    type: array
-                    description: Array of package configurations
-                    items:
-                        $ref: '#/components/schemas/Package'
-                remotes:
-                    type: array
-                    description: Array of remote configurations
-                    items:
-                        $ref: '#/components/schemas/Transport'
-                repository:
-                    description: Optional repository metadata for the MCP server source code.
-                    $ref: '#/components/schemas/Repository'
-                title:
-                    type: string
-                    description: Optional human-readable title or display name for the MCP server.
-                    examples:
-                        - Weather API
-                    minLength: 1
-                    maxLength: 100
-                version:
-                    type: string
-                    description: Version string for this server. SHOULD follow semantic versioning.
-                    examples:
-                        - 1.0.2
-                websiteUrl:
-                    type: string
-                    description: Optional URL to the server's homepage, documentation, or project website.
-                    format: uri
-                    examples:
-                        - https://modelcontextprotocol.io/examples
-            required:
-                - $schema
-                - name
-                - description
-                - version
-        ServerListResponse:
-            type: object
-            additionalProperties: false
-            properties:
-                metadata:
-                    $ref: '#/components/schemas/ServerMetadata'
-                servers:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/ServerResponse'
-            required:
-                - servers
-                - metadata
-        ServerMeta:
-            type: object
-            additionalProperties: false
-            properties:
-                io.modelcontextprotocol.registry/publisher-provided:
-                    type: object
-                    description: Publisher-provided metadata for downstream registries
-                    additionalProperties: {}
-        ServerMetadata:
-            type: object
-            additionalProperties: false
-            properties:
-                count:
-                    type: integer
-                    format: int64
-                nextCursor:
-                    type: string
-            required:
-                - count
-        ServerReadmeResponse:
+        Readme:
             type: object
             additionalProperties: false
             properties:
@@ -2570,110 +2360,57 @@ components:
                     type: string
                 contentType:
                     type: string
-                fetchedAt:
+                encoding:
                     type: string
-                    format: date-time
-                sha256:
+                source:
                     type: string
-                sizeBytes:
-                    type: integer
-                    format: int64
-                version:
-                    type: string
-            required:
-                - content
-                - contentType
-                - sizeBytes
-                - sha256
-                - version
-                - fetchedAt
-        ServerResponse:
+        Repository:
             type: object
             additionalProperties: false
             properties:
-                _meta:
-                    $ref: '#/components/schemas/ServerResponseMeta'
-                server:
-                    $ref: '#/components/schemas/ServerJSON'
-            required:
-                - server
-                - _meta
-        ServerResponseMeta:
-            type: object
-            additionalProperties: false
-            properties:
-                aregistry.ai/deployments:
-                    $ref: '#/components/schemas/ResourceDeploymentsMeta'
-                aregistry.ai/semantic:
-                    $ref: '#/components/schemas/ServerSemanticMeta'
-                io.modelcontextprotocol.registry/official:
-                    $ref: '#/components/schemas/RegistryExtensions'
-        ServerSemanticMeta:
-            type: object
-            additionalProperties: false
-            properties:
-                score:
-                    type: number
-                    format: double
-            required:
-                - score
-        SkillJSON:
-            type: object
-            additionalProperties: false
-            properties:
-                category:
+                id:
                     type: string
-                description:
+                source:
+                    type: string
+                subfolder:
+                    type: string
+                url:
+                    type: string
+        ResourceRef:
+            type: object
+            additionalProperties: false
+            properties:
+                kind:
                     type: string
                 name:
                     type: string
-                packages:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/SkillPackageInfo'
-                remotes:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/SkillRemoteInfo'
-                repository:
-                    $ref: '#/components/schemas/SkillRepository'
-                status:
-                    type: string
-                title:
+                namespace:
                     type: string
                 version:
                     type: string
-                websiteUrl:
-                    type: string
             required:
+                - kind
                 - name
-                - description
-                - version
-        SkillListResponse:
+        Skill:
             type: object
             additionalProperties: false
             properties:
-                metadata:
-                    $ref: '#/components/schemas/SkillMetadata'
-                skills:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/SkillResponse'
-            required:
-                - skills
-                - metadata
-        SkillMetadata:
-            type: object
-            additionalProperties: false
-            properties:
-                count:
-                    type: integer
-                    format: int64
-                nextCursor:
+                apiVersion:
                     type: string
+                kind:
+                    type: string
+                metadata:
+                    $ref: '#/components/schemas/ObjectMeta'
+                spec:
+                    $ref: '#/components/schemas/SkillSpec'
+                status:
+                    $ref: '#/components/schemas/Status'
             required:
-                - count
-        SkillPackageInfo:
+                - metadata
+                - spec
+                - apiVersion
+                - kind
+        SkillPackage:
             type: object
             additionalProperties: false
             properties:
@@ -2682,7 +2419,7 @@ components:
                 registryType:
                     type: string
                 transport:
-                    $ref: '#/components/schemas/SkillPackageInfoTransportStruct'
+                    $ref: '#/components/schemas/TransportProto'
                 version:
                     type: string
             required:
@@ -2690,104 +2427,50 @@ components:
                 - identifier
                 - version
                 - transport
-        SkillPackageInfoTransportStruct:
-            type: object
-            additionalProperties: false
-            properties:
-                type:
-                    type: string
-            required:
-                - type
-        SkillRef:
-            type: object
-            additionalProperties: false
-            properties:
-                image:
-                    type: string
-                name:
-                    type: string
-                registrySkillName:
-                    type: string
-                registrySkillVersion:
-                    type: string
-                registryURL:
-                    type: string
-            required:
-                - name
-        SkillRegistryExtensions:
-            type: object
-            additionalProperties: false
-            properties:
-                isLatest:
-                    type: boolean
-                publishedAt:
-                    type: string
-                    format: date-time
-                status:
-                    type: string
-                updatedAt:
-                    type: string
-                    format: date-time
-            required:
-                - status
-                - publishedAt
-                - updatedAt
-                - isLatest
-        SkillRemoteInfo:
+        SkillRemote:
             type: object
             additionalProperties: false
             properties:
                 url:
                     type: string
-            required:
-                - url
-        SkillRepository:
+        SkillSpec:
             type: object
             additionalProperties: false
             properties:
-                source:
+                category:
                     type: string
-                url:
+                description:
                     type: string
-            required:
-                - url
-                - source
-        SkillResponse:
-            type: object
-            additionalProperties: false
-            properties:
-                _meta:
-                    $ref: '#/components/schemas/SkillResponseMeta'
-                skill:
-                    $ref: '#/components/schemas/SkillJSON'
-            required:
-                - skill
-                - _meta
-        SkillResponseMeta:
-            type: object
-            additionalProperties: false
-            properties:
-                io.modelcontextprotocol.registry/official:
-                    $ref: '#/components/schemas/SkillRegistryExtensions'
-        Transport:
-            type: object
-            additionalProperties: false
-            properties:
-                headers:
+                packages:
                     type: array
-                    description: HTTP headers for streamable-http or sse transports
                     items:
-                        $ref: '#/components/schemas/KeyValueInput'
+                        $ref: '#/components/schemas/SkillPackage'
+                readme:
+                    $ref: '#/components/schemas/Readme'
+                remotes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillRemote'
+                repository:
+                    $ref: '#/components/schemas/Repository'
+                title:
+                    type: string
+                websiteUrl:
+                    type: string
+        Status:
+            type: object
+            additionalProperties: false
+            properties:
+                conditions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Condition'
+        TransportProto:
+            type: object
+            additionalProperties: false
+            properties:
                 type:
                     type: string
-                    description: Transport type (stdio, streamable-http, or sse)
-                    examples:
-                        - stdio
-                url:
-                    type: string
-                    description: URL for streamable-http or sse transports
-                    examples:
-                        - https://api.example.com/mcp
             required:
                 - type
         VersionBody:

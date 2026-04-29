@@ -14,10 +14,10 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/rs/cors"
 
-	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 )
 
@@ -143,16 +143,23 @@ func (s *Server) Mux() *http.ServeMux {
 	return s.mux
 }
 
+// Handler returns the full HTTP handler stack (trailing-slash + CORS
+// around the mux). Useful for tests that need to exercise middleware.
+func (s *Server) Handler() http.Handler {
+	return s.server.Handler
+}
+
 // AuthZ is handled at the DB/service layer, not at the API layer.
+// Returns an error when route registration rejects the supplied
+// RouteOptions (e.g. Stores missing).
 func NewServer(
 	cfg *config.Config,
-	svcs router.RegistryServices,
 	metrics *telemetry.Metrics,
-	versionInfo *apitypes.VersionBody,
+	versionInfo *arv0.VersionBody,
 	customUIHandler http.Handler,
 	authnProvider auth.AuthnProvider,
 	routeOpts *router.RouteOptions,
-) *Server {
+) (*Server, error) {
 	// Create HTTP mux and Huma API
 	mux := http.NewServeMux()
 
@@ -171,7 +178,10 @@ func NewServer(
 		}
 	}
 
-	api := router.NewHumaAPI(cfg, svcs, mux, metrics, versionInfo, uiHandler, authnProvider, routeOpts)
+	api, err := router.NewHumaAPI(cfg, mux, metrics, versionInfo, uiHandler, authnProvider, routeOpts)
+	if err != nil {
+		return nil, err
+	}
 
 	// Configure CORS with permissive settings for public API
 	corsHandler := cors.New(cors.Options{
@@ -204,7 +214,7 @@ func NewServer(
 		},
 	}
 
-	return server
+	return server, nil
 }
 
 func (s *Server) Start() error {

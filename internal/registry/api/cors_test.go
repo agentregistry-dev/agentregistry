@@ -1,70 +1,46 @@
 package api_test
 
 import (
-	"crypto/ed25519"
-	"crypto/rand"
-	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/rs/cors"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api"
-	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
-	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
-	promptsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/prompt"
-	providersvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/provider"
-	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
-	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 )
 
+// newCORSTestHandler returns the same middleware stack NewServer wires
+// (TrailingSlash → CORS → mux), but bound to a stub mux that just 200s
+// every path. Lets CORS assertions run without a database or any of the
+// v0 route registrations.
+func newCORSTestHandler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	corsHandler := cors.New(cors.Options{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodPut,
+			http.MethodDelete,
+			http.MethodOptions,
+		},
+		AllowedHeaders:   []string{"*"},
+		ExposedHeaders:   []string{"Content-Type", "Content-Length"},
+		AllowCredentials: false,
+		MaxAge:           86400,
+	})
+
+	return api.TrailingSlashMiddleware(corsHandler.Handler(mux))
+}
+
 func TestCORSHeaders(t *testing.T) {
-	// Create test config with JWT private key
-	testSeed := make([]byte, ed25519.SeedSize)
-	_, err := rand.Read(testSeed)
-	require.NoError(t, err)
-
-	cfg := config.NewConfig()
-	if err != nil {
-		t.Fatalf("failed to load config: %v", err)
-	}
-	cfg.JWTPrivateKey = hex.EncodeToString(testSeed)
-
-	// Create test services
-	db := database.NewTestDB(t)
-	serverService := serversvc.New(serversvc.Dependencies{StoreDB: db, Config: cfg})
-	agentService := agentsvc.New(agentsvc.Dependencies{StoreDB: db, Config: cfg})
-	skillService := skillsvc.New(skillsvc.Dependencies{StoreDB: db})
-	promptService := promptsvc.New(promptsvc.Dependencies{StoreDB: db})
-	providerService := providersvc.New(providersvc.Dependencies{StoreDB: db})
-	deploymentService := deploymentsvc.New(deploymentsvc.Dependencies{StoreDB: db})
-
-	shutdownTelemetry, metrics, err := telemetry.InitMetrics("test")
-	require.NoError(t, err)
-	defer func() { _ = shutdownTelemetry(nil) }()
-
-	versionInfo := &apitypes.VersionBody{
-		Version:   "test",
-		GitCommit: "test",
-		BuildTime: "test",
-	}
-
-	// Create server
-	_ = api.NewServer(cfg, router.RegistryServices{
-		Server:     serverService,
-		Agent:      agentService,
-		Skill:      skillService,
-		Prompt:     promptService,
-		Provider:   providerService,
-		Deployment: deploymentService,
-	}, metrics, versionInfo, nil, nil, nil)
+	handler := newCORSTestHandler()
 
 	tests := []struct {
 		name           string
@@ -82,26 +58,26 @@ func TestCORSHeaders(t *testing.T) {
 		{
 			name:       "POST request should have CORS headers",
 			method:     http.MethodPost,
-			path:       "/v0/servers",
+			path:       "/v0/mcpservers",
 			expectCORS: true,
 		},
 		{
 			name:           "OPTIONS preflight request should succeed",
 			method:         http.MethodOptions,
-			path:           "/v0/servers",
+			path:           "/v0/mcpservers",
 			expectCORS:     true,
 			checkPreflight: true,
 		},
 		{
 			name:       "PUT request should have CORS headers",
 			method:     http.MethodPut,
-			path:       "/v0/servers/test",
+			path:       "/v0/mcpservers/test/v1",
 			expectCORS: true,
 		},
 		{
 			name:       "DELETE request should have CORS headers",
 			method:     http.MethodDelete,
-			path:       "/v0/servers/test",
+			path:       "/v0/mcpservers/test/v1",
 			expectCORS: true,
 		},
 	}
@@ -109,115 +85,41 @@ func TestCORSHeaders(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(tt.method, tt.path, nil)
-
-			// Add origin header to trigger CORS
 			req.Header.Set("Origin", "https://example.com")
-
-			// For preflight requests, add required headers
-			if tt.method == http.MethodOptions {
-				req.Header.Set("Access-Control-Request-Method", "POST")
+			if tt.checkPreflight {
+				req.Header.Set("Access-Control-Request-Method", "GET")
 				req.Header.Set("Access-Control-Request-Headers", "Content-Type")
 			}
 
-			w := httptest.NewRecorder()
-
-			// Get the handler from the server (we need to access it through reflection or make it public)
-			// For now, we'll create a minimal test by checking the middleware directly
-
-			// Create a simple handler to wrap
-			handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				w.WriteHeader(http.StatusOK)
-			})
-
-			// We can't easily access the server's handler, so let's test the CORS behavior
-			// by making an actual request through the test server
-			// This is a bit of a hack but works for integration testing
-
-			// Instead, let's verify CORS headers are present
-			handler.ServeHTTP(w, req)
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
 
 			if tt.expectCORS {
-				// Note: This test is simplified. In a real scenario, we'd need to
-				// actually use the server's handler which includes the CORS middleware.
-				// For now, this tests the basic structure.
-
-				// The rs/cors library should add these headers automatically
-				// We'll verify this in integration tests or by making real HTTP requests
-				t.Log("CORS headers should be present (verified via integration tests)")
-			}
-
-			if tt.checkPreflight {
-				// Preflight responses should return 200 or 204
-				assert.Contains(t, []int{http.StatusOK, http.StatusNoContent}, w.Code)
+				assert.NotEmpty(t, rr.Header().Get("Access-Control-Allow-Origin"), "Access-Control-Allow-Origin header should be set")
 			}
 		})
 	}
 }
 
 func TestCORSHeaderValues(t *testing.T) {
-	// Create test config with JWT private key
-	testSeed := make([]byte, ed25519.SeedSize)
-	_, err := rand.Read(testSeed)
-	require.NoError(t, err)
+	handler := newCORSTestHandler()
 
-	cfg := config.NewConfig()
-	cfg.JWTPrivateKey = hex.EncodeToString(testSeed)
+	req := httptest.NewRequest(http.MethodOptions, "/v0/mcpservers", nil)
+	req.Header.Set("Origin", "https://example.com")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	req.Header.Set("Access-Control-Request-Headers", "Content-Type, Authorization")
 
-	// Create test services
-	db := database.NewTestDB(t)
-	serverService := serversvc.New(serversvc.Dependencies{StoreDB: db, Config: cfg})
-	agentService := agentsvc.New(agentsvc.Dependencies{StoreDB: db, Config: cfg})
-	skillService := skillsvc.New(skillsvc.Dependencies{StoreDB: db})
-	promptService := promptsvc.New(promptsvc.Dependencies{StoreDB: db})
-	providerService := providersvc.New(providersvc.Dependencies{StoreDB: db})
-	deploymentService := deploymentsvc.New(deploymentsvc.Dependencies{StoreDB: db})
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
 
-	shutdownTelemetry, metrics, err := telemetry.InitMetrics("test")
-	require.NoError(t, err)
-	defer func() { _ = shutdownTelemetry(nil) }()
+	// Check that wildcard origin is allowed (our current CORS config).
+	allowOrigin := rr.Header().Get("Access-Control-Allow-Origin")
+	assert.Equal(t, "*", allowOrigin, "should allow any origin with wildcard")
 
-	versionInfo := &apitypes.VersionBody{
-		Version:   "test",
-		GitCommit: "test",
-		BuildTime: "test",
+	// Check that common methods are exposed (allowed methods header may or
+	// may not be echoed depending on middleware; assert only when set).
+	allowMethods := rr.Header().Get("Access-Control-Allow-Methods")
+	if allowMethods != "" {
+		assert.Contains(t, allowMethods, "POST")
 	}
-
-	// Create server
-	_ = api.NewServer(cfg, router.RegistryServices{
-		Server:     serverService,
-		Agent:      agentService,
-		Skill:      skillService,
-		Prompt:     promptService,
-		Provider:   providerService,
-		Deployment: deploymentService,
-	}, metrics, versionInfo, nil, nil, nil)
-
-	// Test that CORS is configured with correct values
-	// This is more of a documentation test to ensure we know what CORS settings we use
-
-	t.Run("CORS should allow all origins", func(t *testing.T) {
-		// AllowedOrigins: []string{"*"}
-		// This is tested via integration tests
-		t.Log("CORS allows all origins (*)")
-	})
-
-	t.Run("CORS should allow standard HTTP methods", func(t *testing.T) {
-		// AllowedMethods: GET, POST, PUT, DELETE, OPTIONS
-		t.Log("CORS allows GET, POST, PUT, DELETE, OPTIONS")
-	})
-
-	t.Run("CORS should allow all headers", func(t *testing.T) {
-		// AllowedHeaders: []string{"*"}
-		t.Log("CORS allows all headers (*)")
-	})
-
-	t.Run("CORS should not allow credentials with wildcard origin", func(t *testing.T) {
-		// AllowCredentials: false (required when origin is *)
-		t.Log("CORS does not allow credentials (required for wildcard origin)")
-	})
-
-	t.Run("CORS should set max age to 24 hours", func(t *testing.T) {
-		// MaxAge: 86400 (24 hours)
-		t.Log("CORS max age is 86400 seconds (24 hours)")
-	})
 }

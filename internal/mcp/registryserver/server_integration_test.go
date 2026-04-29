@@ -1,52 +1,43 @@
+//go:build integration
+
 package registryserver
 
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
-	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
-	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
-	skillsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/skill"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
-	"github.com/modelcontextprotocol/registry/pkg/model"
 )
 
 func TestMCPListServers_HappyPath(t *testing.T) {
 	ctx := context.Background()
-	db := database.NewTestDB(t)
-	cfg := &config.Config{EnableRegistryValidation: false}
-	serverService := serversvc.New(serversvc.Dependencies{StoreDB: db, Config: cfg})
-	agentService := agentsvc.New(agentsvc.Dependencies{StoreDB: db, Config: cfg})
-	skillService := skillsvc.New(skillsvc.Dependencies{StoreDB: db})
-	deploymentService := deploymentsvc.New(deploymentsvc.Dependencies{StoreDB: db})
+	pool := v1alpha1store.NewTestPool(t)
+	stores := v1alpha1store.NewStores(pool)
 
-	// Seed a published server so the MCP tool can return it.
+	// Seed a published MCPServer so the MCP tool has something to return.
 	const (
-		serverName    = "com.example/echo"
-		serverVersion = "1.0.0"
+		serverNamespace = "default"
+		serverName      = "echo"
+		serverVersion   = "1.0.0"
 	)
-	_, err := serverService.PublishServer(ctx, &apiv0.ServerJSON{
-		Schema:      model.CurrentSchemaURL,
-		Name:        serverName,
+	spec, err := json.Marshal(v1alpha1.MCPServerSpec{
 		Description: "Echo test server",
-		Version:     serverVersion,
+		Remotes: []v1alpha1.MCPTransport{
+			{Type: "streamable-http", URL: "https://echo.example/mcp"},
+		},
 	})
-	if err != nil && strings.Contains(err.Error(), "vector") {
-		t.Skip("pgvector extension not available in local Postgres; skipping MCP integration test")
-	}
+	require.NoError(t, err)
+	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, serverNamespace, serverName, serverVersion, spec, v1alpha1store.UpsertOpts{})
 	require.NoError(t, err, "seed server")
 
-	// Wire up MCP server and client over in-memory transports.
-	server := NewServer(serverService, agentService, skillService, deploymentService)
+	// Wire up MCP server + client over in-memory transports.
+	server := NewServer(stores)
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 
 	serverSession, err := server.Connect(ctx, serverTransport, nil)
@@ -60,7 +51,7 @@ func TestMCPListServers_HappyPath(t *testing.T) {
 	require.NoError(t, err, "connect MCP client")
 	defer func() { _ = clientSession.Close() }()
 
-	// Call list_servers and decode structured output.
+	// list_servers returns v1alpha1 envelopes.
 	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "list_servers",
 		Arguments: map[string]any{"limit": 10},
@@ -68,13 +59,35 @@ func TestMCPListServers_HappyPath(t *testing.T) {
 	require.NoError(t, err, "call list_servers")
 	require.NotNil(t, res.StructuredContent, "structured output present")
 
-	var out apiv0.ServerListResponse
+	var out struct {
+		Items      []v1alpha1.MCPServer `json:"items"`
+		NextCursor string               `json:"nextCursor,omitempty"`
+		Count      int                  `json:"count"`
+	}
 	raw, err := json.Marshal(res.StructuredContent)
 	require.NoError(t, err, "marshal structured output")
-	require.NoError(t, json.Unmarshal(raw, &out), "unmarshal to ServerListResponse")
+	require.NoError(t, json.Unmarshal(raw, &out), "unmarshal list output")
 
-	require.Len(t, out.Servers, 1)
-	assert.Equal(t, serverName, out.Servers[0].Server.Name)
-	assert.Equal(t, serverVersion, out.Servers[0].Server.Version)
-	assert.Equal(t, "Echo test server", out.Servers[0].Server.Description)
+	require.Len(t, out.Items, 1)
+	got := out.Items[0]
+	assert.Equal(t, v1alpha1.GroupVersion, got.APIVersion)
+	assert.Equal(t, v1alpha1.KindMCPServer, got.Kind)
+	assert.Equal(t, serverName, got.Metadata.Name)
+	assert.Equal(t, serverVersion, got.Metadata.Version)
+	assert.Equal(t, "Echo test server", got.Spec.Description)
+
+	// get_server returns a single v1alpha1 envelope.
+	getRes, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "get_server",
+		Arguments: map[string]any{"name": serverName, "version": serverVersion},
+	})
+	require.NoError(t, err, "call get_server")
+	require.NotNil(t, getRes.StructuredContent)
+
+	var gotOne v1alpha1.MCPServer
+	raw, err = json.Marshal(getRes.StructuredContent)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(raw, &gotOne))
+	assert.Equal(t, serverName, gotOne.Metadata.Name)
+	assert.Equal(t, "Echo test server", gotOne.Spec.Description)
 }

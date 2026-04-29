@@ -4,233 +4,86 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
-export type AgentJson = {
-    description: string;
-    framework: string;
-    image: string;
-    language: string;
-    mcpServers?: Array<McpServerType>;
-    modelName: string;
-    modelProvider: string;
-    name: string;
-    packages?: Array<AgentPackageInfo>;
-    prompts?: Array<PromptRef>;
-    remotes?: Array<Transport>;
-    /**
-     * Optional repository metadata for the agent source code.
-     */
+export type Agent = {
+    apiVersion: string;
+    kind: string;
+    metadata: ObjectMeta;
+    spec: AgentSpec;
+    status?: Status;
+};
+
+export type AgentPackage = {
+    identifier: string;
+    registryType: string;
+    transport: TransportProto;
+    version: string;
+};
+
+export type AgentRemote = {
+    type: string;
+    url?: string;
+};
+
+export type AgentSpec = {
+    description?: string;
+    framework?: string;
+    image?: string;
+    language?: string;
+    mcpServers?: Array<ResourceRef>;
+    modelName?: string;
+    modelProvider?: string;
+    packages?: Array<AgentPackage>;
+    prompts?: Array<ResourceRef>;
+    readme?: Readme;
+    remotes?: Array<AgentRemote>;
     repository?: Repository;
-    skills?: Array<SkillRef>;
-    status?: string;
+    skills?: Array<ResourceRef>;
     telemetryEndpoint?: string;
     title?: string;
-    updatedAt?: string;
-    version: string;
     websiteUrl?: string;
 };
 
-export type AgentListResponse = {
-    agents: Array<AgentResponse>;
-    metadata: AgentMetadata;
-};
-
-export type AgentMetadata = {
-    count: number;
-    nextCursor?: string;
-};
-
-export type AgentPackageInfo = {
-    identifier: string;
-    registryType: string;
-    transport: AgentPackageInfoTransportStruct;
-    version: string;
-};
-
-export type AgentPackageInfoTransportStruct = {
-    type: string;
-};
-
-export type AgentRegistryExtensions = {
-    isLatest: boolean;
-    publishedAt: string;
-    status: string;
-    updatedAt: string;
-};
-
-export type AgentResponse = {
-    _meta: AgentResponseMeta;
-    agent: AgentJson;
-    mcpServerRefs?: Array<RegistryRef>;
-    promptRefs?: Array<RegistryRef>;
-    skillRefs?: Array<RegistryRef>;
-};
-
-export type AgentResponseMeta = {
-    'aregistry.ai/deployments'?: ResourceDeploymentsMeta;
-    'aregistry.ai/semantic'?: AgentSemanticMeta;
-    'io.modelcontextprotocol.registry/official'?: AgentRegistryExtensions;
-};
-
-export type AgentSemanticMeta = {
-    score: number;
-};
-
-export type ApplyOutputBody = {
-    results: Array<Result>;
-};
-
-export type Argument = {
-    /**
-     * A list of possible values for the input. If provided, the user must select one of these values.
-     */
-    choices?: Array<string>;
-    /**
-     * The default value for the input. This should be a valid value for the input. If you want to provide input examples or guidance, use the placeholder field instead.
-     */
-    default?: string;
-    /**
-     * A description of the input, which clients can use to provide context to the user.
-     */
-    description?: string;
-    /**
-     * Specifies the input format. Supported values include filepath, which should be interpreted as a file on the user's filesystem.
-     */
-    format?: 'string' | 'number' | 'boolean' | 'filepath';
-    /**
-     * Whether the argument can be repeated multiple times.
-     */
-    isRepeated?: boolean;
-    /**
-     * Whether the input is required
-     */
-    isRequired?: boolean;
-    /**
-     * Indicates whether the input is a secret value (e.g., password, token). If true, clients should handle the value securely.
-     */
-    isSecret?: boolean;
-    /**
-     * The flag name (for named arguments), including any leading dashes. Empty for positional arguments.
-     */
-    name?: string;
-    /**
-     * A placeholder for the input to be displaying during configuration. This is used to provide examples or guidance about the expected form or content of the input.
-     */
-    placeholder?: string;
-    /**
-     * Argument type: 'positional' or 'named'
-     */
-    type: string;
-    /**
-     * The value for the input. If this is not set, the user may be prompted to provide a value. Identifiers wrapped in {curly_braces} will be replaced with the corresponding properties from the input variables map.
-     */
-    value?: string;
-    /**
-     * An identifier for positional arguments. Used in transport URL variable substitution.
-     */
-    valueHint?: string;
-    /**
-     * A map of variable names to their values. Keys in the input value that are wrapped in {curly_braces} will be replaced with the corresponding variable values.
-     */
-    variables?: {
-        [key: string]: Input;
-    };
-};
-
-export type CreateProviderInput = {
-    config?: {
-        [key: string]: unknown;
-    };
-    id?: string;
-    name: string;
-    platform: string;
-};
-
-export type Deployment = {
-    deployedAt: string;
-    env: {
-        [key: string]: string;
-    };
+export type ApplyResult = {
+    apiVersion?: string;
     error?: string;
-    id: string;
-    origin: string;
-    preferRemote: boolean;
-    providerConfig?: {
-        [key: string]: unknown;
-    };
-    providerId?: string;
-    providerMetadata?: {
-        [key: string]: unknown;
-    };
-    resourceType: string;
-    serverName: string;
+    kind?: string;
+    name: string;
+    namespace?: string;
     status: string;
-    updatedAt: string;
-    version: string;
-};
-
-export type DeploymentLogsBody = {
-    deploymentId: string;
-    logs: Array<string>;
-    status: string;
-};
-
-export type DeploymentRequest = {
-    /**
-     * Deployment environment variables.
-     */
-    env?: {
-        [key: string]: string;
-    };
-    /**
-     * Prefer remote deployment over local
-     */
-    preferRemote?: boolean;
-    /**
-     * Optional provider-specific deployment settings (not env vars).
-     */
-    providerConfig?: {
-        [key: string]: unknown;
-    };
-    /**
-     * Concrete provider instance ID.
-     */
-    providerId: string;
-    /**
-     * Type of resource to deploy (mcp, agent)
-     */
-    resourceType?: 'mcp' | 'agent';
-    /**
-     * Server name to deploy
-     */
-    serverName: string;
-    /**
-     * Version to deploy (use 'latest' for latest version)
-     */
-    version: string;
-};
-
-export type DeploymentSummary = {
-    deployedAt: string;
-    id: string;
-    origin: string;
-    providerId?: string;
-    status: string;
-    updatedAt: string;
     version?: string;
 };
 
-export type DeploymentsListResponse = {
-    /**
-     * List of deployed servers
-     */
-    deployments: Array<Deployment>;
+export type ApplyResultsResponse = {
+    results: Array<ApplyResult>;
 };
 
-export type EmptyResponse = {
-    /**
-     * Success message
-     */
-    message: string;
+export type Condition = {
+    lastTransitionTime?: string;
+    message?: string;
+    reason?: string;
+    status: string;
+    type: string;
+};
+
+export type Deployment = {
+    apiVersion: string;
+    kind: string;
+    metadata: ObjectMeta;
+    spec: DeploymentSpec;
+    status?: Status;
+};
+
+export type DeploymentSpec = {
+    desiredState?: string;
+    env?: {
+        [key: string]: string;
+    };
+    preferRemote?: boolean;
+    providerConfig?: {
+        [key: string]: unknown;
+    };
+    providerRef: ResourceRef;
+    targetRef: ResourceRef;
 };
 
 export type ErrorDetail = {
@@ -286,164 +139,143 @@ export type HealthBody = {
     status: string;
 };
 
-export type Icon = {
-    /**
-     * Optional MIME type override if the source MIME type is missing or generic. Must be one of: image/png, image/jpeg, image/jpg, image/svg+xml, image/webp.
-     */
-    mimeType?: 'image/png' | 'image/jpeg' | 'image/jpg' | 'image/svg+xml' | 'image/webp';
-    /**
-     * Optional array of strings that specify sizes at which the icon can be used. Each string should be in WxH format (e.g., '48x48', '96x96') or 'any' for scalable formats like SVG. If not provided, the client should assume that the icon can be used at any size.
-     */
-    sizes?: Array<string>;
-    /**
-     * A standard URI pointing to an icon resource. Must be an HTTPS URL. Consumers SHOULD take steps to ensure URLs serving icons are from the same domain as the server or a trusted domain. Consumers SHOULD take appropriate precautions when consuming SVGs as they can contain executable JavaScript.
-     */
-    src: string;
-    /**
-     * Optional specifier for the theme this icon is designed for. 'light' indicates the icon is designed to be used with a light background, and 'dark' indicates the icon is designed to be used with a dark background. If not provided, the client should assume the icon can be used with any theme.
-     */
-    theme?: 'light' | 'dark';
+export type ListOutputAgentBody = {
+    items: Array<Agent>;
+    nextCursor?: string;
+    semanticScores?: Array<number>;
 };
 
-export type Input = {
-    /**
-     * A list of possible values for the input. If provided, the user must select one of these values.
-     */
-    choices?: Array<string>;
-    /**
-     * The default value for the input. This should be a valid value for the input. If you want to provide input examples or guidance, use the placeholder field instead.
-     */
-    default?: string;
-    /**
-     * A description of the input, which clients can use to provide context to the user.
-     */
-    description?: string;
-    /**
-     * Specifies the input format. Supported values include filepath, which should be interpreted as a file on the user's filesystem.
-     */
-    format?: 'string' | 'number' | 'boolean' | 'filepath';
-    /**
-     * Whether the input is required
-     */
-    isRequired?: boolean;
-    /**
-     * Indicates whether the input is a secret value (e.g., password, token). If true, clients should handle the value securely.
-     */
-    isSecret?: boolean;
-    /**
-     * A placeholder for the input to be displaying during configuration. This is used to provide examples or guidance about the expected form or content of the input.
-     */
-    placeholder?: string;
-    /**
-     * The value for the input. If this is not set, the user may be prompted to provide a value. Identifiers wrapped in {curly_braces} will be replaced with the corresponding properties from the input variables map.
-     */
-    value?: string;
+export type ListOutputDeploymentBody = {
+    items: Array<Deployment>;
+    nextCursor?: string;
+    semanticScores?: Array<number>;
 };
 
-export type KeyValueInput = {
-    /**
-     * A list of possible values for the input. If provided, the user must select one of these values.
-     */
+export type ListOutputMcpServerBody = {
+    items: Array<McpServer>;
+    nextCursor?: string;
+    semanticScores?: Array<number>;
+};
+
+export type ListOutputPromptBody = {
+    items: Array<Prompt>;
+    nextCursor?: string;
+    semanticScores?: Array<number>;
+};
+
+export type ListOutputProviderBody = {
+    items: Array<Provider>;
+    nextCursor?: string;
+    semanticScores?: Array<number>;
+};
+
+export type ListOutputSkillBody = {
+    items: Array<Skill>;
+    nextCursor?: string;
+    semanticScores?: Array<number>;
+};
+
+export type McpArgument = {
     choices?: Array<string>;
-    /**
-     * The default value for the input. This should be a valid value for the input. If you want to provide input examples or guidance, use the placeholder field instead.
-     */
     default?: string;
-    /**
-     * A description of the input, which clients can use to provide context to the user.
-     */
     description?: string;
-    /**
-     * Specifies the input format. Supported values include filepath, which should be interpreted as a file on the user's filesystem.
-     */
-    format?: 'string' | 'number' | 'boolean' | 'filepath';
-    /**
-     * Whether the input is required
-     */
+    format?: string;
+    isRepeated?: boolean;
     isRequired?: boolean;
-    /**
-     * Indicates whether the input is a secret value (e.g., password, token). If true, clients should handle the value securely.
-     */
     isSecret?: boolean;
-    /**
-     * Name of the header or environment variable.
-     */
-    name: string;
-    /**
-     * A placeholder for the input to be displaying during configuration. This is used to provide examples or guidance about the expected form or content of the input.
-     */
+    name?: string;
     placeholder?: string;
-    /**
-     * The value for the input. If this is not set, the user may be prompted to provide a value. Identifiers wrapped in {curly_braces} will be replaced with the corresponding properties from the input variables map.
-     */
+    type: string;
     value?: string;
-    /**
-     * A map of variable names to their values. Keys in the input value that are wrapped in {curly_braces} will be replaced with the corresponding variable values.
-     */
+    valueHint?: string;
     variables?: {
-        [key: string]: Input;
+        [key: string]: McpInputVariable;
     };
 };
 
-export type McpServerType = {
-    args?: Array<string>;
-    build?: string;
-    command?: string;
-    env?: Array<string>;
-    headers?: {
-        [key: string]: string;
-    };
-    image?: string;
+export type McpIcon = {
+    mimeType?: string;
+    sizes?: Array<string>;
+    src: string;
+    theme?: string;
+};
+
+export type McpInputVariable = {
+    choices?: Array<string>;
+    default?: string;
+    description?: string;
+    format?: string;
+    isRequired?: boolean;
+    isSecret?: boolean;
+    placeholder?: string;
+    value?: string;
+};
+
+export type McpKeyValueInput = {
+    choices?: Array<string>;
+    default?: string;
+    description?: string;
+    format?: string;
+    isRequired?: boolean;
+    isSecret?: boolean;
     name: string;
-    registryServerName?: string;
-    registryServerPreferRemote?: boolean;
-    registryServerVersion?: string;
-    registryURL?: string;
-    type?: string;
-    url?: string;
+    placeholder?: string;
+    value?: string;
+    variables?: {
+        [key: string]: McpInputVariable;
+    };
+};
+
+export type McpPackage = {
+    environmentVariables?: Array<McpKeyValueInput>;
+    fileSha256?: string;
+    identifier: string;
+    packageArguments?: Array<McpArgument>;
+    registryBaseUrl?: string;
+    registryType: string;
+    runtimeArguments?: Array<McpArgument>;
+    runtimeHint?: string;
+    transport: McpTransport;
     version?: string;
 };
 
-export type Package = {
-    /**
-     * A mapping of environment variables to be set when running the package.
-     */
-    environmentVariables?: Array<KeyValueInput>;
-    /**
-     * SHA-256 hash of the package file for integrity verification. Required for MCPB packages and optional for other package types. Authors are responsible for generating correct SHA-256 hashes when creating server.json. If present, MCP clients must validate the downloaded file matches the hash before running packages to ensure file integrity.
-     */
-    fileSha256?: string;
-    /**
-     * Package identifier - either a package name (for registries) or URL (for direct downloads)
-     */
-    identifier: string;
-    /**
-     * A list of arguments to be passed to the package's binary.
-     */
-    packageArguments?: Array<Argument>;
-    /**
-     * Base URL of the package registry
-     */
-    registryBaseUrl?: string;
-    /**
-     * Registry type indicating how to download packages (e.g., 'npm', 'pypi', 'oci', 'nuget', 'mcpb')
-     */
-    registryType: string;
-    /**
-     * A list of arguments to be passed to the package's runtime command (such as docker or npx). The runtimeHint field should be provided when runtimeArguments are present.
-     */
-    runtimeArguments?: Array<Argument>;
-    /**
-     * A hint to help clients determine the appropriate runtime for the package. This field should be provided when runtimeArguments are present.
-     */
-    runtimeHint?: string;
-    /**
-     * Transport protocol configuration for the package
-     */
-    transport: Transport;
-    /**
-     * Package version. Must be a specific version. Version ranges are rejected (e.g., '^1.2.3', '~1.2.3', '>=1.2.3', '1.x', '1.*').
-     */
+export type McpServer = {
+    apiVersion: string;
+    kind: string;
+    metadata: ObjectMeta;
+    spec: McpServerSpec;
+    status?: Status;
+};
+
+export type McpServerSpec = {
+    description?: string;
+    icons?: Array<McpIcon>;
+    packages?: Array<McpPackage>;
+    readme?: Readme;
+    remotes?: Array<McpTransport>;
+    repository?: Repository;
+    title?: string;
+    websiteUrl?: string;
+};
+
+export type McpTransport = {
+    headers?: Array<McpKeyValueInput>;
+    type: string;
+    url?: string;
+};
+
+export type ObjectMeta = {
+    annotations?: {
+        [key: string]: string;
+    };
+    createdAt?: string;
+    deletionTimestamp?: string;
+    labels?: {
+        [key: string]: string;
+    };
+    name: string;
+    namespace?: string;
+    updatedAt?: string;
     version?: string;
 };
 
@@ -454,288 +286,92 @@ export type PingBody = {
     pong: boolean;
 };
 
-export type PromptJson = {
-    content: string;
+export type Prompt = {
+    apiVersion: string;
+    kind: string;
+    metadata: ObjectMeta;
+    spec: PromptSpec;
+    status?: Status;
+};
+
+export type PromptSpec = {
+    content?: string;
     description?: string;
-    name: string;
-    version: string;
-};
-
-export type PromptListResponse = {
-    metadata: PromptMetadata;
-    prompts: Array<PromptResponse>;
-};
-
-export type PromptMetadata = {
-    count: number;
-    nextCursor?: string;
-};
-
-export type PromptRef = {
-    name: string;
-    registryPromptName?: string;
-    registryPromptVersion?: string;
-    registryURL?: string;
-};
-
-export type PromptRegistryExtensions = {
-    isLatest: boolean;
-    publishedAt: string;
-    status: string;
-    updatedAt: string;
-};
-
-export type PromptResponse = {
-    _meta: PromptResponseMeta;
-    prompt: PromptJson;
-};
-
-export type PromptResponseMeta = {
-    'io.modelcontextprotocol.registry/official'?: PromptRegistryExtensions;
+    readme?: Readme;
 };
 
 export type Provider = {
+    apiVersion: string;
+    kind: string;
+    metadata: ObjectMeta;
+    spec: ProviderSpec;
+    status?: Status;
+};
+
+export type ProviderSpec = {
     config?: {
         [key: string]: unknown;
     };
-    createdAt: string;
-    id: string;
-    name: string;
     platform: string;
-    updatedAt: string;
 };
 
-export type ProvidersListResponseBody = {
-    count: number;
-    providers: Array<Provider>;
-};
-
-export type RegistryExtensions = {
-    /**
-     * Whether this is the latest version of the server
-     */
-    isLatest: boolean;
-    /**
-     * Timestamp when the server was first published to the registry
-     */
-    publishedAt: string;
-    /**
-     * Server lifecycle status
-     */
-    status: 'active' | 'deprecated' | 'deleted';
-    /**
-     * Timestamp when the server entry was last updated
-     */
-    updatedAt?: string;
-};
-
-export type RegistryRef = {
-    name: string;
-    version?: string;
+export type Readme = {
+    content?: string;
+    contentType?: string;
+    encoding?: string;
+    source?: string;
 };
 
 export type Repository = {
-    /**
-     * Repository identifier from the hosting service (e.g., GitHub repo ID). Owned and determined by the source forge. Should remain stable across repository renames and may be used to detect repository resurrection attacks - if a repository is deleted and recreated, the ID should change. For GitHub, use: gh api repos/<owner>/<repo> --jq '.id'
-     */
     id?: string;
-    /**
-     * Repository hosting service identifier. Used by registries to determine validation and API access methods.
-     */
     source?: string;
-    /**
-     * Optional relative path from repository root to the server location within a monorepo or nested package structure. Must be a clean relative path.
-     */
     subfolder?: string;
-    /**
-     * Repository URL for browsing source code. Should support both web browsing and git clone operations.
-     */
     url?: string;
 };
 
-export type ResourceDeploymentsMeta = {
-    count: number;
-    deployments: Array<DeploymentSummary>;
-};
-
-export type Result = {
-    error?: string;
+export type ResourceRef = {
     kind: string;
     name: string;
-    status: string;
+    namespace?: string;
     version?: string;
 };
 
-export type ServerJson = {
-    /**
-     * JSON Schema URI for this server.json format
-     */
-    $schema: string;
-    /**
-     * Extension metadata using reverse DNS namespacing for vendor-specific data
-     */
-    _meta?: ServerMeta;
-    /**
-     * Clear human-readable explanation of server functionality.
-     */
-    description: string;
-    /**
-     * Optional set of sized icons that the client can display in a user interface.
-     */
-    icons?: Array<Icon>;
-    /**
-     * Server name in reverse-DNS format. Must contain exactly one forward slash separating namespace from server name.
-     */
-    name: string;
-    /**
-     * Array of package configurations
-     */
-    packages?: Array<Package>;
-    /**
-     * Array of remote configurations
-     */
-    remotes?: Array<Transport>;
-    /**
-     * Optional repository metadata for the MCP server source code.
-     */
-    repository?: Repository;
-    /**
-     * Optional human-readable title or display name for the MCP server.
-     */
-    title?: string;
-    /**
-     * Version string for this server. SHOULD follow semantic versioning.
-     */
-    version: string;
-    /**
-     * Optional URL to the server's homepage, documentation, or project website.
-     */
-    websiteUrl?: string;
+export type Skill = {
+    apiVersion: string;
+    kind: string;
+    metadata: ObjectMeta;
+    spec: SkillSpec;
+    status?: Status;
 };
 
-export type ServerListResponse = {
-    metadata: ServerMetadata;
-    servers: Array<ServerResponse>;
-};
-
-export type ServerMeta = {
-    /**
-     * Publisher-provided metadata for downstream registries
-     */
-    'io.modelcontextprotocol.registry/publisher-provided'?: {
-        [key: string]: unknown;
-    };
-};
-
-export type ServerMetadata = {
-    count: number;
-    nextCursor?: string;
-};
-
-export type ServerReadmeResponse = {
-    content: string;
-    contentType: string;
-    fetchedAt: string;
-    sha256: string;
-    sizeBytes: number;
-    version: string;
-};
-
-export type ServerResponse = {
-    _meta: ServerResponseMeta;
-    server: ServerJson;
-};
-
-export type ServerResponseMeta = {
-    'aregistry.ai/deployments'?: ResourceDeploymentsMeta;
-    'aregistry.ai/semantic'?: ServerSemanticMeta;
-    'io.modelcontextprotocol.registry/official'?: RegistryExtensions;
-};
-
-export type ServerSemanticMeta = {
-    score: number;
-};
-
-export type SkillJson = {
-    category?: string;
-    description: string;
-    name: string;
-    packages?: Array<SkillPackageInfo>;
-    remotes?: Array<SkillRemoteInfo>;
-    repository?: SkillRepository;
-    status?: string;
-    title?: string;
-    version: string;
-    websiteUrl?: string;
-};
-
-export type SkillListResponse = {
-    metadata: SkillMetadata;
-    skills: Array<SkillResponse>;
-};
-
-export type SkillMetadata = {
-    count: number;
-    nextCursor?: string;
-};
-
-export type SkillPackageInfo = {
+export type SkillPackage = {
     identifier: string;
     registryType: string;
-    transport: SkillPackageInfoTransportStruct;
+    transport: TransportProto;
     version: string;
 };
 
-export type SkillPackageInfoTransportStruct = {
-    type: string;
-};
-
-export type SkillRef = {
-    image?: string;
-    name: string;
-    registrySkillName?: string;
-    registrySkillVersion?: string;
-    registryURL?: string;
-};
-
-export type SkillRegistryExtensions = {
-    isLatest: boolean;
-    publishedAt: string;
-    status: string;
-    updatedAt: string;
-};
-
-export type SkillRemoteInfo = {
-    url: string;
-};
-
-export type SkillRepository = {
-    source: string;
-    url: string;
-};
-
-export type SkillResponse = {
-    _meta: SkillResponseMeta;
-    skill: SkillJson;
-};
-
-export type SkillResponseMeta = {
-    'io.modelcontextprotocol.registry/official'?: SkillRegistryExtensions;
-};
-
-export type Transport = {
-    /**
-     * HTTP headers for streamable-http or sse transports
-     */
-    headers?: Array<KeyValueInput>;
-    /**
-     * Transport type (stdio, streamable-http, or sse)
-     */
-    type: string;
-    /**
-     * URL for streamable-http or sse transports
-     */
+export type SkillRemote = {
     url?: string;
+};
+
+export type SkillSpec = {
+    category?: string;
+    description?: string;
+    packages?: Array<SkillPackage>;
+    readme?: Readme;
+    remotes?: Array<SkillRemote>;
+    repository?: Repository;
+    title?: string;
+    websiteUrl?: string;
+};
+
+export type Status = {
+    conditions?: Array<Condition>;
+};
+
+export type TransportProto = {
+    type: string;
 };
 
 export type VersionBody = {
@@ -753,279 +389,360 @@ export type VersionBody = {
     version: string;
 };
 
-export type ListAgentsV0Data = {
+export type ListAgentsData = {
     body?: never;
     path?: never;
     query?: {
         /**
-         * Pagination cursor
+         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
          */
-        cursor?: string;
+        namespace?: string;
         /**
-         * Number of items per page
+         * Max items to return (default 50).
          */
         limit?: number;
         /**
-         * Filter agents updated since timestamp (RFC3339 datetime)
+         * Opaque pagination cursor.
          */
-        updated_since?: string;
+        cursor?: string;
         /**
-         * Search agents by name (substring match)
+         * Label selector: key=value,key2=value2.
          */
-        search?: string;
+        labels?: string;
         /**
-         * Filter by version ('latest' for latest version, or an exact version like '1.2.3')
+         * Only return rows with is_latest_version=true.
          */
-        version?: string;
+        latestOnly?: boolean;
         /**
-         * Use semantic search for the search term
+         * Include rows with a deletionTimestamp.
          */
-        semantic_search?: boolean;
+        includeTerminating?: boolean;
         /**
-         * Optional maximum cosine distance when semantic_search is enabled
+         * Semantic search query. Returns results ranked by similarity.
          */
-        semantic_threshold?: number;
+        semantic?: string;
+        /**
+         * Drop results with cosine distance above this threshold (0 = no filter).
+         */
+        semanticThreshold?: number;
     };
     url: '/v0/agents';
 };
 
-export type ListAgentsV0Errors = {
+export type ListAgentsErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type ListAgentsV0Error = ListAgentsV0Errors[keyof ListAgentsV0Errors];
+export type ListAgentsError = ListAgentsErrors[keyof ListAgentsErrors];
 
-export type ListAgentsV0Responses = {
+export type ListAgentsResponses = {
     /**
      * OK
      */
-    200: AgentListResponse;
+    200: ListOutputAgentBody;
 };
 
-export type ListAgentsV0Response = ListAgentsV0Responses[keyof ListAgentsV0Responses];
+export type ListAgentsResponse = ListAgentsResponses[keyof ListAgentsResponses];
 
-export type CreateAgentV0Data = {
-    body: AgentJson;
-    path?: never;
-    query?: never;
-    url: '/v0/agents';
-};
-
-export type CreateAgentV0Errors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type CreateAgentV0Error = CreateAgentV0Errors[keyof CreateAgentV0Errors];
-
-export type CreateAgentV0Responses = {
-    /**
-     * OK
-     */
-    200: AgentResponse;
-};
-
-export type CreateAgentV0Response = CreateAgentV0Responses[keyof CreateAgentV0Responses];
-
-export type GetAgentVersionsV0Data = {
+export type GetLatestAgentData = {
     body?: never;
     path: {
-        /**
-         * URL-encoded agent name
-         */
-        agentName: string;
+        name: string;
     };
-    query?: never;
-    url: '/v0/agents/{agentName}/versions';
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/agents/{name}';
 };
 
-export type GetAgentVersionsV0Errors = {
+export type GetLatestAgentErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type GetAgentVersionsV0Error = GetAgentVersionsV0Errors[keyof GetAgentVersionsV0Errors];
+export type GetLatestAgentError = GetLatestAgentErrors[keyof GetLatestAgentErrors];
 
-export type GetAgentVersionsV0Responses = {
+export type GetLatestAgentResponses = {
     /**
      * OK
      */
-    200: AgentListResponse;
+    200: Agent;
 };
 
-export type GetAgentVersionsV0Response = GetAgentVersionsV0Responses[keyof GetAgentVersionsV0Responses];
+export type GetLatestAgentResponse = GetLatestAgentResponses[keyof GetLatestAgentResponses];
 
-export type DeleteAgentVersionV0Data = {
+export type DeleteAgentData = {
     body?: never;
     path: {
-        /**
-         * URL-encoded agent name
-         */
-        agentName: string;
-        /**
-         * URL-encoded agent version
-         */
+        name: string;
         version: string;
     };
-    query?: never;
-    url: '/v0/agents/{agentName}/versions/{version}';
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+        /**
+         * Skip provider-specific teardown and only remove the registry record.
+         */
+        force?: boolean;
+    };
+    url: '/v0/agents/{name}/{version}';
 };
 
-export type DeleteAgentVersionV0Errors = {
+export type DeleteAgentErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type DeleteAgentVersionV0Error = DeleteAgentVersionV0Errors[keyof DeleteAgentVersionV0Errors];
+export type DeleteAgentError = DeleteAgentErrors[keyof DeleteAgentErrors];
 
-export type DeleteAgentVersionV0Responses = {
+export type DeleteAgentResponses = {
     /**
-     * OK
+     * No Content
      */
-    200: EmptyResponse;
+    204: void;
 };
 
-export type DeleteAgentVersionV0Response = DeleteAgentVersionV0Responses[keyof DeleteAgentVersionV0Responses];
+export type DeleteAgentResponse = DeleteAgentResponses[keyof DeleteAgentResponses];
 
-export type GetAgentVersionV0Data = {
+export type GetAgentData = {
     body?: never;
     path: {
-        /**
-         * URL-encoded agent name
-         */
-        agentName: string;
-        /**
-         * URL-encoded agent version
-         */
+        name: string;
         version: string;
     };
-    query?: never;
-    url: '/v0/agents/{agentName}/versions/{version}';
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/agents/{name}/{version}';
 };
 
-export type GetAgentVersionV0Errors = {
+export type GetAgentErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type GetAgentVersionV0Error = GetAgentVersionV0Errors[keyof GetAgentVersionV0Errors];
+export type GetAgentError = GetAgentErrors[keyof GetAgentErrors];
 
-export type GetAgentVersionV0Responses = {
+export type GetAgentResponses = {
     /**
      * OK
      */
-    200: AgentResponse;
+    200: Agent;
 };
 
-export type GetAgentVersionV0Response = GetAgentVersionV0Responses[keyof GetAgentVersionV0Responses];
+export type GetAgentResponse = GetAgentResponses[keyof GetAgentResponses];
 
-export type DeleteApplyData = {
+export type ApplyAgentData = {
+    body?: Agent;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/agents/{name}/{version}';
+};
+
+export type ApplyAgentErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ApplyAgentError = ApplyAgentErrors[keyof ApplyAgentErrors];
+
+export type ApplyAgentResponses = {
+    /**
+     * OK
+     */
+    200: Agent;
+};
+
+export type ApplyAgentResponse = ApplyAgentResponses[keyof ApplyAgentResponses];
+
+export type GetLatestAgentReadmeData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/agents/{name}/readme';
+};
+
+export type GetLatestAgentReadmeErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetLatestAgentReadmeError = GetLatestAgentReadmeErrors[keyof GetLatestAgentReadmeErrors];
+
+export type GetLatestAgentReadmeResponses = {
+    /**
+     * OK
+     */
+    200: Readme;
+};
+
+export type GetLatestAgentReadmeResponse = GetLatestAgentReadmeResponses[keyof GetLatestAgentReadmeResponses];
+
+export type GetAgentReadmeData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/agents/{name}/versions/{version}/readme';
+};
+
+export type GetAgentReadmeErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetAgentReadmeError = GetAgentReadmeErrors[keyof GetAgentReadmeErrors];
+
+export type GetAgentReadmeResponses = {
+    /**
+     * OK
+     */
+    200: Readme;
+};
+
+export type GetAgentReadmeResponse = GetAgentReadmeResponses[keyof GetAgentReadmeResponses];
+
+export type DeleteBatchData = {
     body: Blob | File;
     path?: never;
     query?: {
         /**
-         * Force overwrite even when the resource has drifted
-         */
-        force?: boolean;
-        /**
-         * Validate without persisting changes
+         * Run validation and enrichment without mutating the store. Defaults to false.
          */
         dryRun?: boolean;
     };
     url: '/v0/apply';
 };
 
-export type DeleteApplyErrors = {
+export type DeleteBatchErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type DeleteApplyError = DeleteApplyErrors[keyof DeleteApplyErrors];
+export type DeleteBatchError = DeleteBatchErrors[keyof DeleteBatchErrors];
 
-export type DeleteApplyResponses = {
+export type DeleteBatchResponses = {
     /**
      * OK
      */
-    200: ApplyOutputBody;
+    200: ApplyResultsResponse;
 };
 
-export type DeleteApplyResponse = DeleteApplyResponses[keyof DeleteApplyResponses];
+export type DeleteBatchResponse = DeleteBatchResponses[keyof DeleteBatchResponses];
 
-export type ApplyData = {
+export type ApplyBatchData = {
     body: Blob | File;
     path?: never;
     query?: {
         /**
-         * Force overwrite even when the resource has drifted
-         */
-        force?: boolean;
-        /**
-         * Validate without persisting changes
+         * Run validation and enrichment without mutating the store. Defaults to false.
          */
         dryRun?: boolean;
     };
     url: '/v0/apply';
 };
 
-export type ApplyErrors = {
+export type ApplyBatchErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type ApplyError = ApplyErrors[keyof ApplyErrors];
+export type ApplyBatchError = ApplyBatchErrors[keyof ApplyBatchErrors];
 
-export type ApplyResponses = {
+export type ApplyBatchResponses = {
     /**
      * OK
      */
-    200: ApplyOutputBody;
+    200: ApplyResultsResponse;
 };
 
-export type ApplyResponse = ApplyResponses[keyof ApplyResponses];
+export type ApplyBatchResponse = ApplyBatchResponses[keyof ApplyBatchResponses];
 
 export type ListDeploymentsData = {
     body?: never;
     path?: never;
     query?: {
         /**
-         * Filter by provider platform type (matches registered provider platforms)
+         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
          */
-        platform?: string;
+        namespace?: string;
         /**
-         * Filter by provider instance ID
+         * Max items to return (default 50).
          */
-        providerId?: string;
+        limit?: number;
         /**
-         * Filter by resource type (mcp, agent)
+         * Opaque pagination cursor.
          */
-        resourceType?: 'mcp' | 'agent';
+        cursor?: string;
         /**
-         * Filter by deployment status
+         * Label selector: key=value,key2=value2.
          */
-        status?: string;
+        labels?: string;
         /**
-         * Filter by deployment origin (managed, discovered)
+         * Only return rows with is_latest_version=true.
          */
-        origin?: 'managed' | 'discovered';
+        latestOnly?: boolean;
         /**
-         * Case-insensitive substring filter on resource name
+         * Include rows with a deletionTimestamp.
          */
-        resourceName?: string;
+        includeTerminating?: boolean;
+        /**
+         * Semantic search query. Returns results ranked by similarity.
+         */
+        semantic?: string;
+        /**
+         * Drop results with cosine distance above this threshold (0 = no filter).
+         */
+        semanticThreshold?: number;
     };
     url: '/v0/deployments';
 };
@@ -1043,81 +760,93 @@ export type ListDeploymentsResponses = {
     /**
      * OK
      */
-    200: DeploymentsListResponse;
+    200: ListOutputDeploymentBody;
 };
 
 export type ListDeploymentsResponse = ListDeploymentsResponses[keyof ListDeploymentsResponses];
 
-export type DeployServerData = {
-    body: DeploymentRequest;
-    path?: never;
-    query?: never;
-    url: '/v0/deployments';
+export type GetLatestDeploymentData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/deployments/{name}';
 };
 
-export type DeployServerErrors = {
+export type GetLatestDeploymentErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type DeployServerError = DeployServerErrors[keyof DeployServerErrors];
+export type GetLatestDeploymentError = GetLatestDeploymentErrors[keyof GetLatestDeploymentErrors];
 
-export type DeployServerResponses = {
+export type GetLatestDeploymentResponses = {
     /**
      * OK
      */
     200: Deployment;
 };
 
-export type DeployServerResponse = DeployServerResponses[keyof DeployServerResponses];
+export type GetLatestDeploymentResponse = GetLatestDeploymentResponses[keyof GetLatestDeploymentResponses];
 
-export type RemoveDeploymentData = {
+export type DeleteDeploymentData = {
     body?: never;
     path: {
-        /**
-         * Deployment ID
-         */
-        id: string;
+        name: string;
+        version: string;
     };
     query?: {
         /**
-         * Skip provider-specific teardown and only remove the deployment record
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+        /**
+         * Skip provider-specific teardown and only remove the registry record.
          */
         force?: boolean;
     };
-    url: '/v0/deployments/{id}';
+    url: '/v0/deployments/{name}/{version}';
 };
 
-export type RemoveDeploymentErrors = {
+export type DeleteDeploymentErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type RemoveDeploymentError = RemoveDeploymentErrors[keyof RemoveDeploymentErrors];
+export type DeleteDeploymentError = DeleteDeploymentErrors[keyof DeleteDeploymentErrors];
 
-export type RemoveDeploymentResponses = {
+export type DeleteDeploymentResponses = {
     /**
      * No Content
      */
     204: void;
 };
 
-export type RemoveDeploymentResponse = RemoveDeploymentResponses[keyof RemoveDeploymentResponses];
+export type DeleteDeploymentResponse = DeleteDeploymentResponses[keyof DeleteDeploymentResponses];
 
 export type GetDeploymentData = {
     body?: never;
     path: {
-        /**
-         * Deployment ID
-         */
-        id: string;
+        name: string;
+        version: string;
     };
-    query?: never;
-    url: '/v0/deployments/{id}';
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/deployments/{name}/{version}';
 };
 
 export type GetDeploymentErrors = {
@@ -1138,65 +867,38 @@ export type GetDeploymentResponses = {
 
 export type GetDeploymentResponse = GetDeploymentResponses[keyof GetDeploymentResponses];
 
-export type CancelDeploymentData = {
-    body?: never;
+export type ApplyDeploymentData = {
+    body?: Deployment;
     path: {
-        /**
-         * Deployment ID
-         */
-        id: string;
+        name: string;
+        version: string;
     };
-    query?: never;
-    url: '/v0/deployments/{id}/cancel';
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/deployments/{name}/{version}';
 };
 
-export type CancelDeploymentErrors = {
+export type ApplyDeploymentErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type CancelDeploymentError = CancelDeploymentErrors[keyof CancelDeploymentErrors];
+export type ApplyDeploymentError = ApplyDeploymentErrors[keyof ApplyDeploymentErrors];
 
-export type CancelDeploymentResponses = {
-    /**
-     * No Content
-     */
-    204: void;
-};
-
-export type CancelDeploymentResponse = CancelDeploymentResponses[keyof CancelDeploymentResponses];
-
-export type GetDeploymentLogsData = {
-    body?: never;
-    path: {
-        /**
-         * Deployment ID
-         */
-        id: string;
-    };
-    query?: never;
-    url: '/v0/deployments/{id}/logs';
-};
-
-export type GetDeploymentLogsErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetDeploymentLogsError = GetDeploymentLogsErrors[keyof GetDeploymentLogsErrors];
-
-export type GetDeploymentLogsResponses = {
+export type ApplyDeploymentResponses = {
     /**
      * OK
      */
-    200: DeploymentLogsBody;
+    200: Deployment;
 };
 
-export type GetDeploymentLogsResponse = GetDeploymentLogsResponses[keyof GetDeploymentLogsResponses];
+export type ApplyDeploymentResponse = ApplyDeploymentResponses[keyof ApplyDeploymentResponses];
 
 export type GetHealthV0Data = {
     body?: never;
@@ -1223,6 +925,264 @@ export type GetHealthV0Responses = {
 
 export type GetHealthV0Response = GetHealthV0Responses[keyof GetHealthV0Responses];
 
+export type ListMcpserversData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
+         */
+        namespace?: string;
+        /**
+         * Max items to return (default 50).
+         */
+        limit?: number;
+        /**
+         * Opaque pagination cursor.
+         */
+        cursor?: string;
+        /**
+         * Label selector: key=value,key2=value2.
+         */
+        labels?: string;
+        /**
+         * Only return rows with is_latest_version=true.
+         */
+        latestOnly?: boolean;
+        /**
+         * Include rows with a deletionTimestamp.
+         */
+        includeTerminating?: boolean;
+        /**
+         * Semantic search query. Returns results ranked by similarity.
+         */
+        semantic?: string;
+        /**
+         * Drop results with cosine distance above this threshold (0 = no filter).
+         */
+        semanticThreshold?: number;
+    };
+    url: '/v0/mcpservers';
+};
+
+export type ListMcpserversErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ListMcpserversError = ListMcpserversErrors[keyof ListMcpserversErrors];
+
+export type ListMcpserversResponses = {
+    /**
+     * OK
+     */
+    200: ListOutputMcpServerBody;
+};
+
+export type ListMcpserversResponse = ListMcpserversResponses[keyof ListMcpserversResponses];
+
+export type GetLatestMcpserverData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/mcpservers/{name}';
+};
+
+export type GetLatestMcpserverErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetLatestMcpserverError = GetLatestMcpserverErrors[keyof GetLatestMcpserverErrors];
+
+export type GetLatestMcpserverResponses = {
+    /**
+     * OK
+     */
+    200: McpServer;
+};
+
+export type GetLatestMcpserverResponse = GetLatestMcpserverResponses[keyof GetLatestMcpserverResponses];
+
+export type DeleteMcpserverData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+        /**
+         * Skip provider-specific teardown and only remove the registry record.
+         */
+        force?: boolean;
+    };
+    url: '/v0/mcpservers/{name}/{version}';
+};
+
+export type DeleteMcpserverErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type DeleteMcpserverError = DeleteMcpserverErrors[keyof DeleteMcpserverErrors];
+
+export type DeleteMcpserverResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type DeleteMcpserverResponse = DeleteMcpserverResponses[keyof DeleteMcpserverResponses];
+
+export type GetMcpserverData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/mcpservers/{name}/{version}';
+};
+
+export type GetMcpserverErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetMcpserverError = GetMcpserverErrors[keyof GetMcpserverErrors];
+
+export type GetMcpserverResponses = {
+    /**
+     * OK
+     */
+    200: McpServer;
+};
+
+export type GetMcpserverResponse = GetMcpserverResponses[keyof GetMcpserverResponses];
+
+export type ApplyMcpserverData = {
+    body?: McpServer;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/mcpservers/{name}/{version}';
+};
+
+export type ApplyMcpserverErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ApplyMcpserverError = ApplyMcpserverErrors[keyof ApplyMcpserverErrors];
+
+export type ApplyMcpserverResponses = {
+    /**
+     * OK
+     */
+    200: McpServer;
+};
+
+export type ApplyMcpserverResponse = ApplyMcpserverResponses[keyof ApplyMcpserverResponses];
+
+export type GetLatestMcpserverReadmeData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/mcpservers/{name}/readme';
+};
+
+export type GetLatestMcpserverReadmeErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetLatestMcpserverReadmeError = GetLatestMcpserverReadmeErrors[keyof GetLatestMcpserverReadmeErrors];
+
+export type GetLatestMcpserverReadmeResponses = {
+    /**
+     * OK
+     */
+    200: Readme;
+};
+
+export type GetLatestMcpserverReadmeResponse = GetLatestMcpserverReadmeResponses[keyof GetLatestMcpserverReadmeResponses];
+
+export type GetMcpserverReadmeData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/mcpservers/{name}/versions/{version}/readme';
+};
+
+export type GetMcpserverReadmeErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetMcpserverReadmeError = GetMcpserverReadmeErrors[keyof GetMcpserverReadmeErrors];
+
+export type GetMcpserverReadmeResponses = {
+    /**
+     * OK
+     */
+    200: Readme;
+};
+
+export type GetMcpserverReadmeResponse = GetMcpserverReadmeResponses[keyof GetMcpserverReadmeResponses];
+
 export type PingV0Data = {
     body?: never;
     path?: never;
@@ -1248,183 +1208,300 @@ export type PingV0Responses = {
 
 export type PingV0Response = PingV0Responses[keyof PingV0Responses];
 
-export type ListPromptsV0Data = {
+export type ListPromptsData = {
     body?: never;
     path?: never;
     query?: {
         /**
-         * Pagination cursor
+         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
          */
-        cursor?: string;
+        namespace?: string;
         /**
-         * Number of items per page
+         * Max items to return (default 50).
          */
         limit?: number;
         /**
-         * Filter prompts updated since timestamp (RFC3339 datetime)
+         * Opaque pagination cursor.
          */
-        updated_since?: string;
+        cursor?: string;
         /**
-         * Search prompts by name (substring match)
+         * Label selector: key=value,key2=value2.
          */
-        search?: string;
+        labels?: string;
         /**
-         * Filter by version ('latest' for latest version, or an exact version like '1.2.3')
+         * Only return rows with is_latest_version=true.
          */
-        version?: string;
+        latestOnly?: boolean;
+        /**
+         * Include rows with a deletionTimestamp.
+         */
+        includeTerminating?: boolean;
+        /**
+         * Semantic search query. Returns results ranked by similarity.
+         */
+        semantic?: string;
+        /**
+         * Drop results with cosine distance above this threshold (0 = no filter).
+         */
+        semanticThreshold?: number;
     };
     url: '/v0/prompts';
 };
 
-export type ListPromptsV0Errors = {
+export type ListPromptsErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type ListPromptsV0Error = ListPromptsV0Errors[keyof ListPromptsV0Errors];
+export type ListPromptsError = ListPromptsErrors[keyof ListPromptsErrors];
 
-export type ListPromptsV0Responses = {
+export type ListPromptsResponses = {
     /**
      * OK
      */
-    200: PromptListResponse;
+    200: ListOutputPromptBody;
 };
 
-export type ListPromptsV0Response = ListPromptsV0Responses[keyof ListPromptsV0Responses];
+export type ListPromptsResponse = ListPromptsResponses[keyof ListPromptsResponses];
 
-export type CreatePromptV0Data = {
-    body: PromptJson;
-    path?: never;
-    query?: never;
-    url: '/v0/prompts';
-};
-
-export type CreatePromptV0Errors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type CreatePromptV0Error = CreatePromptV0Errors[keyof CreatePromptV0Errors];
-
-export type CreatePromptV0Responses = {
-    /**
-     * OK
-     */
-    200: PromptResponse;
-};
-
-export type CreatePromptV0Response = CreatePromptV0Responses[keyof CreatePromptV0Responses];
-
-export type GetPromptVersionsV0Data = {
+export type GetLatestPromptData = {
     body?: never;
     path: {
-        /**
-         * Prompt name (letters, digits, hyphens, underscores)
-         */
-        promptName: string;
+        name: string;
     };
-    query?: never;
-    url: '/v0/prompts/{promptName}/versions';
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/prompts/{name}';
 };
 
-export type GetPromptVersionsV0Errors = {
+export type GetLatestPromptErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type GetPromptVersionsV0Error = GetPromptVersionsV0Errors[keyof GetPromptVersionsV0Errors];
+export type GetLatestPromptError = GetLatestPromptErrors[keyof GetLatestPromptErrors];
 
-export type GetPromptVersionsV0Responses = {
+export type GetLatestPromptResponses = {
     /**
      * OK
      */
-    200: PromptListResponse;
+    200: Prompt;
 };
 
-export type GetPromptVersionsV0Response = GetPromptVersionsV0Responses[keyof GetPromptVersionsV0Responses];
+export type GetLatestPromptResponse = GetLatestPromptResponses[keyof GetLatestPromptResponses];
 
-export type DeletePromptVersionV0Data = {
+export type DeletePromptData = {
     body?: never;
     path: {
-        /**
-         * Prompt name (letters, digits, hyphens, underscores)
-         */
-        promptName: string;
-        /**
-         * URL-encoded prompt version
-         */
+        name: string;
         version: string;
     };
-    query?: never;
-    url: '/v0/prompts/{promptName}/versions/{version}';
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+        /**
+         * Skip provider-specific teardown and only remove the registry record.
+         */
+        force?: boolean;
+    };
+    url: '/v0/prompts/{name}/{version}';
 };
 
-export type DeletePromptVersionV0Errors = {
+export type DeletePromptErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type DeletePromptVersionV0Error = DeletePromptVersionV0Errors[keyof DeletePromptVersionV0Errors];
+export type DeletePromptError = DeletePromptErrors[keyof DeletePromptErrors];
 
-export type DeletePromptVersionV0Responses = {
+export type DeletePromptResponses = {
     /**
-     * OK
+     * No Content
      */
-    200: EmptyResponse;
+    204: void;
 };
 
-export type DeletePromptVersionV0Response = DeletePromptVersionV0Responses[keyof DeletePromptVersionV0Responses];
+export type DeletePromptResponse = DeletePromptResponses[keyof DeletePromptResponses];
 
-export type GetPromptVersionV0Data = {
+export type GetPromptData = {
     body?: never;
     path: {
-        /**
-         * Prompt name (letters, digits, hyphens, underscores)
-         */
-        promptName: string;
-        /**
-         * URL-encoded prompt version
-         */
+        name: string;
         version: string;
     };
-    query?: never;
-    url: '/v0/prompts/{promptName}/versions/{version}';
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/prompts/{name}/{version}';
 };
 
-export type GetPromptVersionV0Errors = {
+export type GetPromptErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type GetPromptVersionV0Error = GetPromptVersionV0Errors[keyof GetPromptVersionV0Errors];
+export type GetPromptError = GetPromptErrors[keyof GetPromptErrors];
 
-export type GetPromptVersionV0Responses = {
+export type GetPromptResponses = {
     /**
      * OK
      */
-    200: PromptResponse;
+    200: Prompt;
 };
 
-export type GetPromptVersionV0Response = GetPromptVersionV0Responses[keyof GetPromptVersionV0Responses];
+export type GetPromptResponse = GetPromptResponses[keyof GetPromptResponses];
+
+export type ApplyPromptData = {
+    body?: Prompt;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/prompts/{name}/{version}';
+};
+
+export type ApplyPromptErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ApplyPromptError = ApplyPromptErrors[keyof ApplyPromptErrors];
+
+export type ApplyPromptResponses = {
+    /**
+     * OK
+     */
+    200: Prompt;
+};
+
+export type ApplyPromptResponse = ApplyPromptResponses[keyof ApplyPromptResponses];
+
+export type GetLatestPromptReadmeData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/prompts/{name}/readme';
+};
+
+export type GetLatestPromptReadmeErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetLatestPromptReadmeError = GetLatestPromptReadmeErrors[keyof GetLatestPromptReadmeErrors];
+
+export type GetLatestPromptReadmeResponses = {
+    /**
+     * OK
+     */
+    200: Readme;
+};
+
+export type GetLatestPromptReadmeResponse = GetLatestPromptReadmeResponses[keyof GetLatestPromptReadmeResponses];
+
+export type GetPromptReadmeData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/prompts/{name}/versions/{version}/readme';
+};
+
+export type GetPromptReadmeErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetPromptReadmeError = GetPromptReadmeErrors[keyof GetPromptReadmeErrors];
+
+export type GetPromptReadmeResponses = {
+    /**
+     * OK
+     */
+    200: Readme;
+};
+
+export type GetPromptReadmeResponse = GetPromptReadmeResponses[keyof GetPromptReadmeResponses];
 
 export type ListProvidersData = {
     body?: never;
     path?: never;
     query?: {
         /**
-         * Filter providers by platform type
+         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
          */
-        platform?: string;
+        namespace?: string;
+        /**
+         * Max items to return (default 50).
+         */
+        limit?: number;
+        /**
+         * Opaque pagination cursor.
+         */
+        cursor?: string;
+        /**
+         * Label selector: key=value,key2=value2.
+         */
+        labels?: string;
+        /**
+         * Only return rows with is_latest_version=true.
+         */
+        latestOnly?: boolean;
+        /**
+         * Include rows with a deletionTimestamp.
+         */
+        includeTerminating?: boolean;
+        /**
+         * Semantic search query. Returns results ranked by similarity.
+         */
+        semantic?: string;
+        /**
+         * Drop results with cosine distance above this threshold (0 = no filter).
+         */
+        semanticThreshold?: number;
     };
     url: '/v0/providers';
 };
@@ -1442,51 +1519,60 @@ export type ListProvidersResponses = {
     /**
      * OK
      */
-    200: ProvidersListResponseBody;
+    200: ListOutputProviderBody;
 };
 
 export type ListProvidersResponse = ListProvidersResponses[keyof ListProvidersResponses];
 
-export type CreateProviderData = {
-    body: CreateProviderInput;
-    path?: never;
-    query?: never;
-    url: '/v0/providers';
+export type GetLatestProviderData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/providers/{name}';
 };
 
-export type CreateProviderErrors = {
+export type GetLatestProviderErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type CreateProviderError = CreateProviderErrors[keyof CreateProviderErrors];
+export type GetLatestProviderError = GetLatestProviderErrors[keyof GetLatestProviderErrors];
 
-export type CreateProviderResponses = {
+export type GetLatestProviderResponses = {
     /**
      * OK
      */
     200: Provider;
 };
 
-export type CreateProviderResponse = CreateProviderResponses[keyof CreateProviderResponses];
+export type GetLatestProviderResponse = GetLatestProviderResponses[keyof GetLatestProviderResponses];
 
 export type DeleteProviderData = {
     body?: never;
     path: {
-        /**
-         * Provider ID
-         */
-        providerId: string;
+        name: string;
+        version: string;
     };
     query?: {
         /**
-         * Provider platform hint (optional)
+         * Namespace (internal; defaults to 'default').
          */
-        platform?: string;
+        namespace?: string;
+        /**
+         * Skip provider-specific teardown and only remove the registry record.
+         */
+        force?: boolean;
     };
-    url: '/v0/providers/{providerId}';
+    url: '/v0/providers/{name}/{version}';
 };
 
 export type DeleteProviderErrors = {
@@ -1510,18 +1596,16 @@ export type DeleteProviderResponse = DeleteProviderResponses[keyof DeleteProvide
 export type GetProviderData = {
     body?: never;
     path: {
-        /**
-         * Provider ID
-         */
-        providerId: string;
+        name: string;
+        version: string;
     };
     query?: {
         /**
-         * Provider platform hint (optional)
+         * Namespace (internal; defaults to 'default').
          */
-        platform?: string;
+        namespace?: string;
     };
-    url: '/v0/providers/{providerId}';
+    url: '/v0/providers/{name}/{version}';
 };
 
 export type GetProviderErrors = {
@@ -1542,469 +1626,296 @@ export type GetProviderResponses = {
 
 export type GetProviderResponse = GetProviderResponses[keyof GetProviderResponses];
 
-export type ListServersV0Data = {
+export type ApplyProviderData = {
+    body?: Provider;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/providers/{name}/{version}';
+};
+
+export type ApplyProviderErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ApplyProviderError = ApplyProviderErrors[keyof ApplyProviderErrors];
+
+export type ApplyProviderResponses = {
+    /**
+     * OK
+     */
+    200: Provider;
+};
+
+export type ApplyProviderResponse = ApplyProviderResponses[keyof ApplyProviderResponses];
+
+export type ListSkillsData = {
     body?: never;
     path?: never;
     query?: {
         /**
-         * Pagination cursor
+         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
          */
-        cursor?: string;
+        namespace?: string;
         /**
-         * Number of items per page
+         * Max items to return (default 50).
          */
         limit?: number;
         /**
-         * Filter servers updated since timestamp (RFC3339 datetime)
-         */
-        updated_since?: string;
-        /**
-         * Search servers by name (substring match)
-         */
-        search?: string;
-        /**
-         * Filter by version ('latest' for latest version, or an exact version like '1.2.3')
-         */
-        version?: string;
-        /**
-         * Use semantic search for the search term (hybrid with substring filter when search is set)
-         */
-        semantic_search?: boolean;
-        /**
-         * Optional maximum distance for semantic matches (cosine distance)
-         */
-        semantic_threshold?: number;
-    };
-    url: '/v0/servers';
-};
-
-export type ListServersV0Errors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ListServersV0Error = ListServersV0Errors[keyof ListServersV0Errors];
-
-export type ListServersV0Responses = {
-    /**
-     * OK
-     */
-    200: ServerListResponse;
-};
-
-export type ListServersV0Response = ListServersV0Responses[keyof ListServersV0Responses];
-
-export type CreateServerV0Data = {
-    body: ServerJson;
-    path?: never;
-    query?: never;
-    url: '/v0/servers';
-};
-
-export type CreateServerV0Errors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type CreateServerV0Error = CreateServerV0Errors[keyof CreateServerV0Errors];
-
-export type CreateServerV0Responses = {
-    /**
-     * OK
-     */
-    200: ServerResponse;
-};
-
-export type CreateServerV0Response = CreateServerV0Responses[keyof CreateServerV0Responses];
-
-export type GetServerReadmeV0Data = {
-    body?: never;
-    path: {
-        /**
-         * URL-encoded server name
-         */
-        serverName: string;
-    };
-    query?: never;
-    url: '/v0/servers/{serverName}/readme';
-};
-
-export type GetServerReadmeV0Errors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetServerReadmeV0Error = GetServerReadmeV0Errors[keyof GetServerReadmeV0Errors];
-
-export type GetServerReadmeV0Responses = {
-    /**
-     * OK
-     */
-    200: ServerReadmeResponse;
-};
-
-export type GetServerReadmeV0Response = GetServerReadmeV0Responses[keyof GetServerReadmeV0Responses];
-
-export type GetServerVersionsV0Data = {
-    body?: never;
-    path: {
-        /**
-         * URL-encoded server name
-         */
-        serverName: string;
-    };
-    query?: never;
-    url: '/v0/servers/{serverName}/versions';
-};
-
-export type GetServerVersionsV0Errors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetServerVersionsV0Error = GetServerVersionsV0Errors[keyof GetServerVersionsV0Errors];
-
-export type GetServerVersionsV0Responses = {
-    /**
-     * OK
-     */
-    200: ServerListResponse;
-};
-
-export type GetServerVersionsV0Response = GetServerVersionsV0Responses[keyof GetServerVersionsV0Responses];
-
-export type DeleteServerVersionV0Data = {
-    body?: never;
-    path: {
-        /**
-         * URL-encoded server name
-         */
-        serverName: string;
-        /**
-         * URL-encoded server version
-         */
-        version: string;
-    };
-    query?: {
-        /**
-         * If true, return all versions of the server instead of a single version
-         */
-        all?: boolean;
-    };
-    url: '/v0/servers/{serverName}/versions/{version}';
-};
-
-export type DeleteServerVersionV0Errors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type DeleteServerVersionV0Error = DeleteServerVersionV0Errors[keyof DeleteServerVersionV0Errors];
-
-export type DeleteServerVersionV0Responses = {
-    /**
-     * OK
-     */
-    200: EmptyResponse;
-};
-
-export type DeleteServerVersionV0Response = DeleteServerVersionV0Responses[keyof DeleteServerVersionV0Responses];
-
-export type GetServerVersionV0Data = {
-    body?: never;
-    path: {
-        /**
-         * URL-encoded server name
-         */
-        serverName: string;
-        /**
-         * URL-encoded server version
-         */
-        version: string;
-    };
-    query?: {
-        /**
-         * If true, return all versions of the server instead of a single version
-         */
-        all?: boolean;
-    };
-    url: '/v0/servers/{serverName}/versions/{version}';
-};
-
-export type GetServerVersionV0Errors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetServerVersionV0Error = GetServerVersionV0Errors[keyof GetServerVersionV0Errors];
-
-export type GetServerVersionV0Responses = {
-    /**
-     * OK
-     */
-    200: ServerListResponse;
-};
-
-export type GetServerVersionV0Response = GetServerVersionV0Responses[keyof GetServerVersionV0Responses];
-
-export type EditServerV0Data = {
-    body: ServerJson;
-    path: {
-        /**
-         * URL-encoded server name
-         */
-        serverName: string;
-        /**
-         * URL-encoded version to edit
-         */
-        version: string;
-    };
-    query?: {
-        /**
-         * New status for the server (active, deprecated, deleted)
-         */
-        status?: 'active' | 'deprecated' | 'deleted';
-    };
-    url: '/v0/servers/{serverName}/versions/{version}';
-};
-
-export type EditServerV0Errors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type EditServerV0Error = EditServerV0Errors[keyof EditServerV0Errors];
-
-export type EditServerV0Responses = {
-    /**
-     * OK
-     */
-    200: ServerResponse;
-};
-
-export type EditServerV0Response = EditServerV0Responses[keyof EditServerV0Responses];
-
-export type GetServerVersionReadmeV0Data = {
-    body?: never;
-    path: {
-        /**
-         * URL-encoded server name
-         */
-        serverName: string;
-        /**
-         * URL-encoded server version
-         */
-        version: string;
-    };
-    query?: {
-        /**
-         * If true, return all versions of the server instead of a single version
-         */
-        all?: boolean;
-    };
-    url: '/v0/servers/{serverName}/versions/{version}/readme';
-};
-
-export type GetServerVersionReadmeV0Errors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetServerVersionReadmeV0Error = GetServerVersionReadmeV0Errors[keyof GetServerVersionReadmeV0Errors];
-
-export type GetServerVersionReadmeV0Responses = {
-    /**
-     * OK
-     */
-    200: ServerReadmeResponse;
-};
-
-export type GetServerVersionReadmeV0Response = GetServerVersionReadmeV0Responses[keyof GetServerVersionReadmeV0Responses];
-
-export type ListSkillsV0Data = {
-    body?: never;
-    path?: never;
-    query?: {
-        /**
-         * Pagination cursor
+         * Opaque pagination cursor.
          */
         cursor?: string;
         /**
-         * Number of items per page
+         * Label selector: key=value,key2=value2.
          */
-        limit?: number;
+        labels?: string;
         /**
-         * Filter skills updated since timestamp (RFC3339 datetime)
+         * Only return rows with is_latest_version=true.
          */
-        updated_since?: string;
+        latestOnly?: boolean;
         /**
-         * Search skills by name (substring match)
+         * Include rows with a deletionTimestamp.
          */
-        search?: string;
+        includeTerminating?: boolean;
         /**
-         * Filter by version ('latest' for latest version, or an exact version like '1.2.3')
+         * Semantic search query. Returns results ranked by similarity.
          */
-        version?: string;
+        semantic?: string;
+        /**
+         * Drop results with cosine distance above this threshold (0 = no filter).
+         */
+        semanticThreshold?: number;
     };
     url: '/v0/skills';
 };
 
-export type ListSkillsV0Errors = {
+export type ListSkillsErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type ListSkillsV0Error = ListSkillsV0Errors[keyof ListSkillsV0Errors];
+export type ListSkillsError = ListSkillsErrors[keyof ListSkillsErrors];
 
-export type ListSkillsV0Responses = {
+export type ListSkillsResponses = {
     /**
      * OK
      */
-    200: SkillListResponse;
+    200: ListOutputSkillBody;
 };
 
-export type ListSkillsV0Response = ListSkillsV0Responses[keyof ListSkillsV0Responses];
+export type ListSkillsResponse = ListSkillsResponses[keyof ListSkillsResponses];
 
-export type CreateSkillV0Data = {
-    body: SkillJson;
-    path?: never;
-    query?: never;
-    url: '/v0/skills';
-};
-
-export type CreateSkillV0Errors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type CreateSkillV0Error = CreateSkillV0Errors[keyof CreateSkillV0Errors];
-
-export type CreateSkillV0Responses = {
-    /**
-     * OK
-     */
-    200: SkillResponse;
-};
-
-export type CreateSkillV0Response = CreateSkillV0Responses[keyof CreateSkillV0Responses];
-
-export type GetSkillVersionsV0Data = {
+export type GetLatestSkillData = {
     body?: never;
     path: {
-        /**
-         * URL-encoded skill name
-         */
-        skillName: string;
+        name: string;
     };
-    query?: never;
-    url: '/v0/skills/{skillName}/versions';
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/skills/{name}';
 };
 
-export type GetSkillVersionsV0Errors = {
+export type GetLatestSkillErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type GetSkillVersionsV0Error = GetSkillVersionsV0Errors[keyof GetSkillVersionsV0Errors];
+export type GetLatestSkillError = GetLatestSkillErrors[keyof GetLatestSkillErrors];
 
-export type GetSkillVersionsV0Responses = {
+export type GetLatestSkillResponses = {
     /**
      * OK
      */
-    200: SkillListResponse;
+    200: Skill;
 };
 
-export type GetSkillVersionsV0Response = GetSkillVersionsV0Responses[keyof GetSkillVersionsV0Responses];
+export type GetLatestSkillResponse = GetLatestSkillResponses[keyof GetLatestSkillResponses];
 
-export type DeleteSkillVersionV0Data = {
+export type DeleteSkillData = {
     body?: never;
     path: {
-        /**
-         * URL-encoded skill name
-         */
-        skillName: string;
-        /**
-         * URL-encoded skill version
-         */
+        name: string;
         version: string;
     };
-    query?: never;
-    url: '/v0/skills/{skillName}/versions/{version}';
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+        /**
+         * Skip provider-specific teardown and only remove the registry record.
+         */
+        force?: boolean;
+    };
+    url: '/v0/skills/{name}/{version}';
 };
 
-export type DeleteSkillVersionV0Errors = {
+export type DeleteSkillErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type DeleteSkillVersionV0Error = DeleteSkillVersionV0Errors[keyof DeleteSkillVersionV0Errors];
+export type DeleteSkillError = DeleteSkillErrors[keyof DeleteSkillErrors];
 
-export type DeleteSkillVersionV0Responses = {
+export type DeleteSkillResponses = {
     /**
-     * OK
+     * No Content
      */
-    200: EmptyResponse;
+    204: void;
 };
 
-export type DeleteSkillVersionV0Response = DeleteSkillVersionV0Responses[keyof DeleteSkillVersionV0Responses];
+export type DeleteSkillResponse = DeleteSkillResponses[keyof DeleteSkillResponses];
 
-export type GetSkillVersionV0Data = {
+export type GetSkillData = {
     body?: never;
     path: {
-        /**
-         * URL-encoded skill name
-         */
-        skillName: string;
-        /**
-         * URL-encoded skill version
-         */
+        name: string;
         version: string;
     };
-    query?: never;
-    url: '/v0/skills/{skillName}/versions/{version}';
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/skills/{name}/{version}';
 };
 
-export type GetSkillVersionV0Errors = {
+export type GetSkillErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type GetSkillVersionV0Error = GetSkillVersionV0Errors[keyof GetSkillVersionV0Errors];
+export type GetSkillError = GetSkillErrors[keyof GetSkillErrors];
 
-export type GetSkillVersionV0Responses = {
+export type GetSkillResponses = {
     /**
      * OK
      */
-    200: SkillResponse;
+    200: Skill;
 };
 
-export type GetSkillVersionV0Response = GetSkillVersionV0Responses[keyof GetSkillVersionV0Responses];
+export type GetSkillResponse = GetSkillResponses[keyof GetSkillResponses];
+
+export type ApplySkillData = {
+    body?: Skill;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/skills/{name}/{version}';
+};
+
+export type ApplySkillErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ApplySkillError = ApplySkillErrors[keyof ApplySkillErrors];
+
+export type ApplySkillResponses = {
+    /**
+     * OK
+     */
+    200: Skill;
+};
+
+export type ApplySkillResponse = ApplySkillResponses[keyof ApplySkillResponses];
+
+export type GetLatestSkillReadmeData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/skills/{name}/readme';
+};
+
+export type GetLatestSkillReadmeErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetLatestSkillReadmeError = GetLatestSkillReadmeErrors[keyof GetLatestSkillReadmeErrors];
+
+export type GetLatestSkillReadmeResponses = {
+    /**
+     * OK
+     */
+    200: Readme;
+};
+
+export type GetLatestSkillReadmeResponse = GetLatestSkillReadmeResponses[keyof GetLatestSkillReadmeResponses];
+
+export type GetSkillReadmeData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/skills/{name}/versions/{version}/readme';
+};
+
+export type GetSkillReadmeErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetSkillReadmeError = GetSkillReadmeErrors[keyof GetSkillReadmeErrors];
+
+export type GetSkillReadmeResponses = {
+    /**
+     * OK
+     */
+    200: Readme;
+};
+
+export type GetSkillReadmeResponse = GetSkillReadmeResponses[keyof GetSkillReadmeResponses];
 
 export type GetVersionV0Data = {
     body?: never;

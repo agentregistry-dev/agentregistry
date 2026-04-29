@@ -1,0 +1,111 @@
+package v1alpha1
+
+// MCPServer is the typed envelope for kind=MCPServer resources.
+type MCPServer struct {
+	TypeMeta `json:",inline" yaml:",inline"`
+	Metadata ObjectMeta    `json:"metadata" yaml:"metadata"`
+	Spec     MCPServerSpec `json:"spec" yaml:"spec"`
+	Status   Status        `json:"status,omitzero" yaml:"status,omitempty"`
+}
+
+// MCPServerSpec is the MCP server's declarative body. Field names mirror the
+// upstream modelcontextprotocol/registry ServerJSON shape structurally for
+// familiarity, but this type is not wire-compatible with upstream — we've
+// dropped the $schema field and treat this as our own shape.
+type MCPServerSpec struct {
+	Title       string      `json:"title,omitempty" yaml:"title,omitempty"`
+	Description string      `json:"description,omitempty" yaml:"description,omitempty"`
+	WebsiteURL  string      `json:"websiteUrl,omitempty" yaml:"websiteUrl,omitempty"`
+	Readme      *Readme     `json:"readme,omitempty" yaml:"readme,omitempty"`
+	Repository  *Repository `json:"repository,omitempty" yaml:"repository,omitempty"`
+	Icons       []MCPIcon   `json:"icons,omitempty" yaml:"icons,omitempty"`
+
+	// Packages describes the ways this server can be run locally (stdio,
+	// command, container). Each entry carries its own runtime/args/env.
+	Packages []MCPPackage `json:"packages,omitempty" yaml:"packages,omitempty"`
+
+	// Remotes describes reachable remote transports (HTTP, SSE).
+	Remotes []MCPTransport `json:"remotes,omitempty" yaml:"remotes,omitempty"`
+}
+
+// MCPIcon describes an icon associated with an MCP server.
+type MCPIcon struct {
+	Src      string   `json:"src" yaml:"src"`
+	MimeType *string  `json:"mimeType,omitempty" yaml:"mimeType,omitempty"`
+	Sizes    []string `json:"sizes,omitempty" yaml:"sizes,omitempty"`
+	Theme    *string  `json:"theme,omitempty" yaml:"theme,omitempty"`
+}
+
+// MCPTransport describes a transport endpoint — used both inside MCPPackage
+// (to tag a package's preferred transport) and as a top-level remote target.
+type MCPTransport struct {
+	Type    string             `json:"type" yaml:"type"`
+	URL     string             `json:"url,omitempty" yaml:"url,omitempty"`
+	Headers []MCPKeyValueInput `json:"headers,omitempty" yaml:"headers,omitempty"`
+}
+
+// MCPPackage is a runnable distribution of the MCP server (stdio binary,
+// container image, npm package, etc.).
+type MCPPackage struct {
+	RegistryType         string             `json:"registryType" yaml:"registryType"`
+	RegistryBaseURL      string             `json:"registryBaseUrl,omitempty" yaml:"registryBaseUrl,omitempty"`
+	Identifier           string             `json:"identifier" yaml:"identifier"`
+	Version              string             `json:"version,omitempty" yaml:"version,omitempty"`
+	FileSHA256           string             `json:"fileSha256,omitempty" yaml:"fileSha256,omitempty"`
+	RuntimeHint          string             `json:"runtimeHint,omitempty" yaml:"runtimeHint,omitempty"`
+	Transport            MCPTransport       `json:"transport" yaml:"transport"`
+	RuntimeArguments     []MCPArgument      `json:"runtimeArguments,omitempty" yaml:"runtimeArguments,omitempty"`
+	PackageArguments     []MCPArgument      `json:"packageArguments,omitempty" yaml:"packageArguments,omitempty"`
+	EnvironmentVariables []MCPKeyValueInput `json:"environmentVariables,omitempty" yaml:"environmentVariables,omitempty"`
+}
+
+// MCPInputVariable describes a parameterizable value referenced from
+// MCPArgument.Variables or MCPKeyValueInput.Variables.
+type MCPInputVariable struct {
+	Description string   `json:"description,omitempty" yaml:"description,omitempty"`
+	IsRequired  bool     `json:"isRequired,omitempty" yaml:"isRequired,omitempty"`
+	Format      string   `json:"format,omitempty" yaml:"format,omitempty"`
+	Value       string   `json:"value,omitempty" yaml:"value,omitempty"`
+	IsSecret    bool     `json:"isSecret,omitempty" yaml:"isSecret,omitempty"`
+	Default     string   `json:"default,omitempty" yaml:"default,omitempty"`
+	Placeholder string   `json:"placeholder,omitempty" yaml:"placeholder,omitempty"`
+	Choices     []string `json:"choices,omitempty" yaml:"choices,omitempty"`
+}
+
+// MCPArgument.Type values. Kept as string literals to match the YAML wire
+// format; platform translators compare against these.
+const (
+	MCPArgumentTypePositional = "positional"
+	MCPArgumentTypeNamed      = "named"
+)
+
+// MCPArgument is a positional or named argument passed to a package's runtime.
+type MCPArgument struct {
+	Type        string                      `json:"type" yaml:"type"`
+	Name        string                      `json:"name,omitempty" yaml:"name,omitempty"`
+	ValueHint   string                      `json:"valueHint,omitempty" yaml:"valueHint,omitempty"`
+	IsRepeated  bool                        `json:"isRepeated,omitempty" yaml:"isRepeated,omitempty"`
+	Description string                      `json:"description,omitempty" yaml:"description,omitempty"`
+	IsRequired  bool                        `json:"isRequired,omitempty" yaml:"isRequired,omitempty"`
+	Format      string                      `json:"format,omitempty" yaml:"format,omitempty"`
+	Value       string                      `json:"value,omitempty" yaml:"value,omitempty"`
+	IsSecret    bool                        `json:"isSecret,omitempty" yaml:"isSecret,omitempty"`
+	Default     string                      `json:"default,omitempty" yaml:"default,omitempty"`
+	Placeholder string                      `json:"placeholder,omitempty" yaml:"placeholder,omitempty"`
+	Choices     []string                    `json:"choices,omitempty" yaml:"choices,omitempty"`
+	Variables   map[string]MCPInputVariable `json:"variables,omitempty" yaml:"variables,omitempty"`
+}
+
+// MCPKeyValueInput represents an environment variable or HTTP header input.
+type MCPKeyValueInput struct {
+	Name        string                      `json:"name" yaml:"name"`
+	Description string                      `json:"description,omitempty" yaml:"description,omitempty"`
+	IsRequired  bool                        `json:"isRequired,omitempty" yaml:"isRequired,omitempty"`
+	Format      string                      `json:"format,omitempty" yaml:"format,omitempty"`
+	Value       string                      `json:"value,omitempty" yaml:"value,omitempty"`
+	IsSecret    bool                        `json:"isSecret,omitempty" yaml:"isSecret,omitempty"`
+	Default     string                      `json:"default,omitempty" yaml:"default,omitempty"`
+	Placeholder string                      `json:"placeholder,omitempty" yaml:"placeholder,omitempty"`
+	Choices     []string                    `json:"choices,omitempty" yaml:"choices,omitempty"`
+	Variables   map[string]MCPInputVariable `json:"variables,omitempty" yaml:"variables,omitempty"`
+}

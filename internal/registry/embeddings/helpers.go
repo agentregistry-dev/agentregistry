@@ -8,71 +8,79 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
-	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/semantic"
 )
 
-// BuildServerEmbeddingPayload converts a server document into the canonical text payload
-// used for semantic embeddings. The payload deliberately combines all metadata that
-// describes the resource so checksum comparisons stay stable across systems.
-func BuildServerEmbeddingPayload(server *apiv0.ServerJSON) string {
-	if server == nil {
-		return ""
-	}
-
+// BuildMCPServerEmbeddingPayload assembles the canonical text used to
+// generate an MCPServer's semantic embedding. Deterministic across runs
+// so the checksum can gate idempotent re-index passes.
+//
+// Enrichment annotations are intentionally excluded from the payload
+// — they're scanner output, not user-authored search-relevant content.
+func BuildMCPServerEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.MCPServerSpec) string {
 	var parts []string
-	appendIf(&parts, server.Name, server.Title, server.Description, server.Version, server.WebsiteURL)
-	appendJSON(&parts, server.Repository)
-	appendJSONArray(&parts, server.Packages)
-	appendJSONArray(&parts, server.Remotes)
-
-	if server.Meta != nil && server.Meta.PublisherProvided != nil {
-		appendJSON(&parts, server.Meta.PublisherProvided)
-	}
-
+	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version, spec.WebsiteURL)
+	appendJSON(&parts, spec.Repository)
+	appendJSON(&parts, spec.Packages)
+	appendJSON(&parts, spec.Remotes)
 	return strings.Join(parts, "\n")
 }
 
-// BuildAgentEmbeddingPayload mirrors BuildServerEmbeddingPayload but for AgentJSON entries.
-func BuildAgentEmbeddingPayload(agent *models.AgentJSON) string {
-	if agent == nil {
-		return ""
-	}
-
+// BuildAgentEmbeddingPayload assembles the canonical text for an Agent.
+func BuildAgentEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.AgentSpec) string {
 	var parts []string
 	appendIf(&parts,
-		agent.Name,
-		agent.Title,
-		agent.Description,
-		agent.Version,
-		agent.WebsiteURL,
-		agent.Language,
-		agent.Framework,
-		agent.ModelProvider,
-		agent.ModelName,
-		agent.Image,
+		meta.Name,
+		spec.Title,
+		spec.Description,
+		meta.Version,
+		spec.WebsiteURL,
+		spec.Language,
+		spec.Framework,
+		spec.ModelProvider,
+		spec.ModelName,
+		spec.Image,
 	)
-	appendJSONArray(&parts, agent.McpServers)
-	appendJSON(&parts, agent.Repository)
-	appendJSONArray(&parts, agent.Packages)
-	appendJSONArray(&parts, agent.Remotes)
-
+	appendJSON(&parts, spec.MCPServers)
+	appendJSON(&parts, spec.Skills)
+	appendJSON(&parts, spec.Prompts)
+	appendJSON(&parts, spec.Repository)
 	return strings.Join(parts, "\n")
 }
 
-// PayloadChecksum returns the deterministic checksum for an embedding payload.
+// BuildSkillEmbeddingPayload assembles the canonical text for a Skill.
+func BuildSkillEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.SkillSpec) string {
+	var parts []string
+	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version, spec.WebsiteURL)
+	appendJSON(&parts, spec.Repository)
+	return strings.Join(parts, "\n")
+}
+
+// BuildPromptEmbeddingPayload assembles the canonical text for a Prompt.
+// Content is the interesting signal — include it verbatim so queries that
+// match against prompt text actually find the prompt.
+func BuildPromptEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.PromptSpec) string {
+	var parts []string
+	appendIf(&parts, meta.Name, spec.Description, meta.Version, spec.Content)
+	return strings.Join(parts, "\n")
+}
+
+// PayloadChecksum returns the deterministic checksum for an embedding
+// payload. Callers use it as SemanticEmbedding.Checksum so the indexer
+// can skip rows whose payload hasn't changed since the last index pass.
 func PayloadChecksum(payload string) string {
 	sum := sha256.Sum256([]byte(payload))
 	return hex.EncodeToString(sum[:])
 }
 
-// GenerateSemanticEmbedding transforms the provided payload into a SemanticEmbedding
-// by invoking the configured provider. The payload must be non-empty.
-// When expectedDimensions > 0, the provider output is validated against it.
-func GenerateSemanticEmbedding(ctx context.Context, provider Provider, payload string, expectedDimensions int) (*database.SemanticEmbedding, error) {
+// GenerateSemanticEmbedding runs the provider against the supplied
+// payload and returns a fully-populated SemanticEmbedding ready for
+// Store.SetEmbedding. The payload must be non-empty; when
+// expectedDimensions > 0 the provider output is validated against it
+// so schema mismatches surface early rather than at DB-write time.
+func GenerateSemanticEmbedding(ctx context.Context, provider Provider, payload string, expectedDimensions int) (*semantic.SemanticEmbedding, error) {
 	if provider == nil {
 		return nil, errors.New("embedding provider is not configured")
 	}
@@ -93,18 +101,16 @@ func GenerateSemanticEmbedding(ctx context.Context, provider Provider, payload s
 		return nil, fmt.Errorf("embedding dimensions mismatch: expected %d, got %d", expectedDimensions, dims)
 	}
 
-	generated := result.GeneratedAt
-	if generated.IsZero() {
-		generated = time.Now().UTC()
-	}
+	// result.GeneratedAt is ignored here — Store.SetEmbedding stamps
+	// semantic_embedding_generated_at with NOW() at write time, making
+	// the provider's local timestamp redundant.
 
-	return &database.SemanticEmbedding{
+	return &semantic.SemanticEmbedding{
 		Vector:     result.Vector,
 		Provider:   result.Provider,
 		Model:      result.Model,
 		Dimensions: dims,
 		Checksum:   PayloadChecksum(payload),
-		Generated:  generated,
 	}, nil
 }
 
@@ -120,14 +126,7 @@ func appendJSON(parts *[]string, value any) {
 	if value == nil {
 		return
 	}
-	if data, err := json.Marshal(value); err == nil && len(data) > 0 {
+	if data, err := json.Marshal(value); err == nil && len(data) > 0 && string(data) != "null" {
 		*parts = append(*parts, string(data))
 	}
-}
-
-func appendJSONArray(parts *[]string, value any) {
-	if value == nil {
-		return
-	}
-	appendJSON(parts, value)
 }

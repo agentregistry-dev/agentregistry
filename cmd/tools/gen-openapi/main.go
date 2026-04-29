@@ -10,8 +10,9 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"gopkg.in/yaml.v3"
@@ -66,11 +67,16 @@ func generateSpec(apiVersion string) *huma.OpenAPI {
 
 	// Register all routes. Services and metrics are nil because they are only
 	// captured in handler closures and invoked at request time, not during
-	// route registration. Pass an empty KindRegistry so the batch apply
-	// endpoints (POST/DELETE /v0/apply) are included in the generated spec.
-	router.RegisterRoutes(api, cfg, router.RegistryServices{}, nil, nil, &router.RouteOptions{
-		KindRegistry: kinds.NewRegistry(),
-	})
+	// route registration.
+	if err := router.RegisterRoutes(api, cfg, nil, &arv0.VersionBody{
+		Version:   apiVersion,
+		GitCommit: version.GitCommit,
+		BuildTime: version.BuildDate,
+	}, &router.RouteOptions{
+		Stores: v1alpha1store.NewStores(nil),
+	}); err != nil {
+		panic(fmt.Sprintf("router.RegisterRoutes: %v", err))
+	}
 
 	return api.OpenAPI()
 }

@@ -9,38 +9,43 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/adk/python"
-	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
+	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-// LoadManifest loads the agent manifest from the project directory.
-func LoadManifest(projectDir string) (*models.AgentManifest, error) {
+// LoadAgent decodes the on-disk v1alpha1.Agent envelope at
+// <projectDir>/agent.yaml. The file must carry apiVersion: ar.dev/v1alpha1
+// and kind: Agent.
+//
+// LoadAgent is offline-only; the registry-side resolution of MCP server
+// refs into runnable form is done by manifest.Resolve.
+func LoadAgent(projectDir string) (*v1alpha1.Agent, error) {
 	path := filepath.Join(projectDir, "agent.yaml")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		// File missing / permission denied — delegate to the legacy manager so
-		// the canonical "<filename> not found in <dir>" error shape is produced
-		// by a single code path. (Legacy manager will re-issue the read and
-		// surface the real os error.)
-		return common.NewManifestManager(projectDir).Load()
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("agent.yaml not found in %s", projectDir)
+		}
+		return nil, fmt.Errorf("reading agent.yaml: %w", err)
 	}
-	if kinds.IsEnvelopeYAML(data) {
-		return loadAgentFromEnvelope(data)
+	if !scheme.IsEnvelopeYAML(data) {
+		return nil, fmt.Errorf("agent.yaml in %s is not a v1alpha1 envelope (expected apiVersion: ar.dev/v1alpha1, kind: Agent)", projectDir)
 	}
-	// Legacy flat-manifest path: decode the bytes we already have, preserving
-	// validator symmetry with the canonical Load() code path.
-	return common.NewManifestManager(projectDir).LoadFromBytes(data)
+	var agent v1alpha1.Agent
+	if err := v1alpha1.Default.DecodeInto(data, &agent); err != nil {
+		return nil, fmt.Errorf("parsing envelope agent.yaml: %w", err)
+	}
+	return &agent, nil
 }
 
 // AgentNameFromManifest attempts to read the agent name, falling back to directory name.
 func AgentNameFromManifest(projectDir string) string {
-	manager := common.NewManifestManager(projectDir)
-	manifest, err := manager.Load()
-	if err == nil && manifest != nil && manifest.Name != "" {
-		return manifest.Name
+	agent, err := LoadAgent(projectDir)
+	if err == nil && agent != nil && agent.Metadata.Name != "" {
+		return agent.Metadata.Name
 	}
 	return filepath.Base(projectDir)
 }
@@ -73,13 +78,14 @@ func defaultRegistry() string {
 	return registry
 }
 
-// RegenerateMcpTools updates the generated mcp_tools.py file based on manifest state.
-func RegenerateMcpTools(projectDir string, manifest *models.AgentManifest, verbose bool) error {
-	if manifest == nil || manifest.Name == "" {
+// RegenerateMcpTools updates the generated mcp_tools.py file based on the
+// resolved MCP server set on the runtime manifest.
+func RegenerateMcpTools(projectDir string, resolved *agentmanifest.ResolvedAgent, verbose bool) error {
+	if resolved == nil || resolved.Agent == nil || resolved.Agent.Metadata.Name == "" {
 		return fmt.Errorf("manifest missing name")
 	}
 
-	agentPackageDir := filepath.Join(projectDir, manifest.Name)
+	agentPackageDir := filepath.Join(projectDir, resolved.Agent.Metadata.Name)
 	if _, err := os.Stat(agentPackageDir); err != nil {
 		// Not an ADK layout; nothing to do.
 		return nil
@@ -92,9 +98,9 @@ func RegenerateMcpTools(projectDir string, manifest *models.AgentManifest, verbo
 	}
 
 	rendered, err := gen.RenderTemplate(string(templateBytes), struct {
-		McpServers []models.McpServerType
+		McpServers []agentmanifest.ResolvedMCPServer
 	}{
-		McpServers: manifest.McpServers,
+		McpServers: resolved.MCPServers,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to render mcp_tools template: %w", err)
@@ -111,12 +117,12 @@ func RegenerateMcpTools(projectDir string, manifest *models.AgentManifest, verbo
 }
 
 // RegeneratePromptsLoader updates the generated prompts_loader.py file.
-func RegeneratePromptsLoader(projectDir string, manifest *models.AgentManifest, verbose bool) error {
-	if manifest == nil || manifest.Name == "" {
+func RegeneratePromptsLoader(projectDir string, resolved *agentmanifest.ResolvedAgent, verbose bool) error {
+	if resolved == nil || resolved.Agent == nil || resolved.Agent.Metadata.Name == "" {
 		return fmt.Errorf("manifest missing name")
 	}
 
-	agentPackageDir := filepath.Join(projectDir, manifest.Name)
+	agentPackageDir := filepath.Join(projectDir, resolved.Agent.Metadata.Name)
 	if _, err := os.Stat(agentPackageDir); err != nil {
 		// Not an ADK layout; nothing to do.
 		return nil
@@ -140,13 +146,14 @@ func RegeneratePromptsLoader(projectDir string, manifest *models.AgentManifest, 
 }
 
 // RegenerateDockerCompose rewrites docker-compose.yaml using the embedded template.
-func RegenerateDockerCompose(projectDir string, manifest *models.AgentManifest, version string, verbose bool) error {
-	if manifest == nil {
-		return fmt.Errorf("manifest is required")
+func RegenerateDockerCompose(projectDir string, resolved *agentmanifest.ResolvedAgent, version string, verbose bool) error {
+	if resolved == nil || resolved.Agent == nil {
+		return fmt.Errorf("resolved agent is required")
 	}
+	agent := resolved.Agent
 
-	envVars := EnvVarsFromManifest(manifest)
-	image := ConstructImageName("", manifest.Image, manifest.Name)
+	envVars := EnvVarsFromMCPServers(resolved.MCPServers)
+	image := ConstructImageName("", agent.Spec.Image, agent.Metadata.Name)
 	gen := python.NewPythonGenerator()
 	templateBytes, err := gen.ReadTemplateFile("docker-compose.yaml.tmpl")
 	if err != nil {
@@ -166,18 +173,18 @@ func RegenerateDockerCompose(projectDir string, manifest *models.AgentManifest, 
 		TelemetryEndpoint string
 		HasSkills         bool
 		EnvVars           []string
-		McpServers        []models.McpServerType
+		McpServers        []agentmanifest.ResolvedMCPServer
 	}{
-		Name:              manifest.Name,
+		Name:              agent.Metadata.Name,
 		Version:           sanitizedVersion,
 		Image:             image,
 		Port:              8080,
-		ModelProvider:     manifest.ModelProvider,
-		ModelName:         manifest.ModelName,
-		TelemetryEndpoint: manifest.TelemetryEndpoint,
-		HasSkills:         len(manifest.Skills) > 0,
+		ModelProvider:     agent.Spec.ModelProvider,
+		ModelName:         agent.Spec.ModelName,
+		TelemetryEndpoint: agent.Spec.TelemetryEndpoint,
+		HasSkills:         len(agent.Spec.Skills) > 0,
 		EnvVars:           envVars,
-		McpServers:        manifest.McpServers,
+		McpServers:        resolved.MCPServers,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to render docker-compose: %w", err)
@@ -194,12 +201,12 @@ func RegenerateDockerCompose(projectDir string, manifest *models.AgentManifest, 
 	return nil
 }
 
-// EnsureOtelCollectorConfig generates the OpenTelemetry collector config file
-// when the manifest has a telemetryEndpoint but the file is missing. This
-// handles the case where a user manually adds telemetryEndpoint to agent.yaml
-// without having the scaffold generate the collector config file.
-func EnsureOtelCollectorConfig(projectDir string, manifest *models.AgentManifest, verbose bool) error {
-	if manifest.TelemetryEndpoint == "" {
+// EnsureOtelCollectorConfig generates the OpenTelemetry collector config
+// file when the agent has a telemetryEndpoint but the file is missing.
+// Handles the case where a user manually adds telemetryEndpoint to
+// agent.yaml without having the scaffold generate the collector config.
+func EnsureOtelCollectorConfig(projectDir string, agent *v1alpha1.Agent, verbose bool) error {
+	if agent == nil || agent.Spec.TelemetryEndpoint == "" {
 		return nil
 	}
 
@@ -225,12 +232,9 @@ func EnsureOtelCollectorConfig(projectDir string, manifest *models.AgentManifest
 	return nil
 }
 
-// EnvVarsFromManifest extracts environment variables referenced in MCP headers.
-func EnvVarsFromManifest(manifest *models.AgentManifest) []string {
-	return extractEnvVarsFromHeaders(manifest.McpServers)
-}
-
-func extractEnvVarsFromHeaders(servers []models.McpServerType) []string {
+// EnvVarsFromMCPServers extracts ${VAR} references from remote-MCP-server
+// headers so the runtime can pass them through to docker-compose.
+func EnvVarsFromMCPServers(servers []agentmanifest.ResolvedMCPServer) []string {
 	envSet := map[string]struct{}{}
 	re := regexp.MustCompile(`\$\{([^}]+)\}`)
 
@@ -272,11 +276,7 @@ type mcpTarget struct {
 // EnsureMcpServerDirectories creates config.yaml and Dockerfile for command-type MCP servers.
 // For registry-resolved servers, srv.Build contains the folder path (e.g., "registry/<name>").
 // For locally-defined servers, srv.Build is empty and srv.Name is used as the folder.
-func EnsureMcpServerDirectories(projectDir string, manifest *models.AgentManifest, verbose bool) error {
-	if manifest == nil {
-		return nil
-	}
-
+func EnsureMcpServerDirectories(projectDir string, servers []agentmanifest.ResolvedMCPServer, verbose bool) error {
 	// Clean up registry/ folder to ensure fresh state for registry-resolved servers.
 	// This prevents stale configs from previous runs with different resolved registries.
 	if err := CleanupRegistryDir(projectDir, verbose); err != nil {
@@ -285,7 +285,7 @@ func EnsureMcpServerDirectories(projectDir string, manifest *models.AgentManifes
 
 	gen := python.NewPythonGenerator()
 
-	for _, srv := range manifest.McpServers {
+	for _, srv := range servers {
 		// Skip remote type servers as they don't need local directories
 		if srv.Type != "command" {
 			continue

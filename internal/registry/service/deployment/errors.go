@@ -1,9 +1,37 @@
 package deployment
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"strings"
 
-// ErrDeploymentDrift is returned by ApplyAgentDeployment and ApplyServerDeployment
-// when the caller's desired env/providerConfig/preferRemote differs from a healthy
-// existing deployment and force is not set. Callers should wrap this with %w so
-// downstream code can detect it via errors.Is.
-var ErrDeploymentDrift = errors.New("deployment config differs from existing; use force to replace")
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+)
+
+// UnsupportedDeploymentPlatformError reports that no deployment adapter
+// exists for a provider platform. Coordinator returns this when
+// the provider's Spec.Platform string has no registered adapter so
+// callers (MCP tool surface, HTTP handler) can distinguish "no adapter"
+// from transient plumbing failures.
+type UnsupportedDeploymentPlatformError struct {
+	Platform string
+}
+
+func (e *UnsupportedDeploymentPlatformError) Error() string {
+	platform := strings.TrimSpace(e.Platform)
+	if platform == "" {
+		platform = "unknown"
+	}
+	return fmt.Sprintf("unsupported deployment platform: %s", platform)
+}
+
+func (e *UnsupportedDeploymentPlatformError) Unwrap() error {
+	return database.ErrInvalidInput
+}
+
+// IsUnsupportedDeploymentPlatformError reports whether err wraps an
+// UnsupportedDeploymentPlatformError.
+func IsUnsupportedDeploymentPlatformError(err error) bool {
+	var target *UnsupportedDeploymentPlatformError
+	return errors.As(err, &target)
+}

@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, it, expect, vi } from "vitest"
 import { SkillCard } from "../skill-card"
-import type { SkillResponse } from "@/lib/api/types.gen"
+import type { SkillResponse } from "@/lib/admin-api"
 
 const mockSkill: SkillResponse = {
   skill: {

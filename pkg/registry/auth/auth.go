@@ -84,11 +84,6 @@ func AuthnMiddleware(authn AuthnProvider, options ...MiddlewareOption) func(ctx 
 			return
 		}
 
-		if authn == nil {
-			// No auth provider configured, skip authentication
-			next(ctx)
-			return
-		}
 		url := ctx.URL()
 		session, err := authn.Authenticate(ctx.Context(), ctx.Header, url.Query())
 		if err != nil {

@@ -1,18 +1,16 @@
 package declarative
 
 // kinds_dispatch.go provides per-kind implementations of List, Get, TableRow, and
-// ToResource for the declarative CLI commands (get/delete). All dispatch is driven
-// by function fields on kinds.Kind (ListFunc, RowFunc, ToResourceFunc), eliminating
+// YAML conversion for the declarative CLI commands (get/delete). All dispatch is driven
+// by function fields on scheme.Kind, eliminating
 // per-kind switch statements.
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
 )
 
 // errNotListable is returned by listItems for kinds that do not support list operations.
@@ -21,7 +19,7 @@ import (
 var errNotListable = errors.New("list not supported for this kind")
 
 // listItems fetches all items for the given kind using its registered ListFunc.
-func listItems(k *kinds.Kind) ([]any, error) {
+func listItems(k *scheme.Kind) ([]any, error) {
 	if k.ListFunc == nil {
 		return nil, fmt.Errorf("%w: %q", errNotListable, k.Kind)
 	}
@@ -29,7 +27,7 @@ func listItems(k *kinds.Kind) ([]any, error) {
 }
 
 // getItem fetches a single item by name for the given kind.
-func getItem(k *kinds.Kind, name string) (any, error) {
+func getItem(k *scheme.Kind, name string) (any, error) {
 	if k.Get == nil {
 		return nil, fmt.Errorf("get not supported for kind %q", k.Kind)
 	}
@@ -37,7 +35,9 @@ func getItem(k *kinds.Kind, name string) (any, error) {
 }
 
 // deleteItem deletes a single item by (name, version) for the given kind.
-func deleteItem(k *kinds.Kind, name, version string, force bool) error {
+// force=true asks the server to skip its PostDelete reconciliation hook
+// (e.g. provider teardown for Deployment).
+func deleteItem(k *scheme.Kind, name, version string, force bool) error {
 	if k.Delete == nil {
 		return fmt.Errorf("delete not supported for kind %q", k.Kind)
 	}
@@ -46,7 +46,7 @@ func deleteItem(k *kinds.Kind, name, version string, force bool) error {
 
 // tableRow returns a []string row for the given item, matching the TableColumns
 // registered in the kinds registry.
-func tableRow(k *kinds.Kind, item any) []string {
+func tableRow(k *scheme.Kind, item any) []string {
 	if k.RowFunc != nil {
 		return k.RowFunc(item)
 	}
@@ -54,7 +54,7 @@ func tableRow(k *kinds.Kind, item any) []string {
 }
 
 // tableColumns returns the column header strings for the given kind.
-func tableColumns(k *kinds.Kind) []string {
+func tableColumns(k *scheme.Kind) []string {
 	headers := make([]string, len(k.TableColumns))
 	for i, col := range k.TableColumns {
 		headers[i] = col.Header
@@ -62,36 +62,16 @@ func tableColumns(k *kinds.Kind) []string {
 	return headers
 }
 
-// toResource converts an HTTP-client response item to a scheme.Resource (= kinds.Document)
-// suitable for YAML/JSON output.
-func toResource(k *kinds.Kind, item any) *scheme.Resource {
-	if k.ToResourceFunc != nil {
-		return k.ToResourceFunc(item)
+// toYAMLValue converts an item to the YAML/JSON value shown by `arctl get -o yaml|json`.
+func toYAMLValue(k *scheme.Kind, item any) any {
+	if k.ToYAMLFunc != nil {
+		return k.ToYAMLFunc(item)
 	}
 	return nil
 }
 
-// cleanServerFields removes server-managed fields that should not appear in the spec block.
-func cleanServerFields(spec map[string]any) {
-	delete(spec, "name")
-	delete(spec, "version")
-	delete(spec, "updatedAt")
-	delete(spec, "status")
-	delete(spec, "publishedAt")
-}
-
-// marshalToSpec is a helper that marshals an item to JSON and back to map[string]any,
-// then strips server-managed fields.
-func marshalToSpec(item any) map[string]any {
-	b, _ := json.Marshal(item)
-	var spec map[string]any
-	_ = json.Unmarshal(b, &spec)
-	cleanServerFields(spec)
-	return spec
-}
-
 // kindPlural returns the plural display name for a kind, used in "No X found." messages.
-func kindPlural(k *kinds.Kind) string {
+func kindPlural(k *scheme.Kind) string {
 	if k.Plural != "" {
 		return k.Plural
 	}

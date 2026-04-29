@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -54,7 +54,7 @@ func runGet(cmd *cobra.Command, args []string) error {
 
 	typeName := args[0]
 
-	k, err := defaultRegistry.Lookup(typeName)
+	k, err := scheme.Lookup(typeName)
 	if err != nil {
 		return err
 	}
@@ -92,7 +92,7 @@ func runGetAll(cmd *cobra.Command, outputFormat string) error {
 		return fmt.Errorf("API client not initialized")
 	}
 
-	allKinds := defaultRegistry.All()
+	allKinds := scheme.All()
 	first := true
 	for _, k := range allKinds {
 		items, err := listItems(k)
@@ -122,10 +122,10 @@ func runGetAll(cmd *cobra.Command, outputFormat string) error {
 }
 
 // printItem renders a single item.
-func printItem(cmd *cobra.Command, k *kinds.Kind, item any, outputFormat string) error {
+func printItem(cmd *cobra.Command, k *scheme.Kind, item any, outputFormat string) error {
 	switch outputFormat {
 	case "yaml":
-		r := toResource(k, item)
+		r := toYAMLValue(k, item)
 		if r == nil {
 			return fmt.Errorf("failed to convert %s to YAML", k.Kind)
 		}
@@ -141,11 +141,11 @@ func printItem(cmd *cobra.Command, k *kinds.Kind, item any, outputFormat string)
 }
 
 // printItems renders a list of items.
-func printItems(cmd *cobra.Command, k *kinds.Kind, items []any, outputFormat string) error {
+func printItems(cmd *cobra.Command, k *scheme.Kind, items []any, outputFormat string) error {
 	switch outputFormat {
 	case "yaml":
 		for i, item := range items {
-			r := toResource(k, item)
+			r := toYAMLValue(k, item)
 			if r == nil {
 				continue
 			}

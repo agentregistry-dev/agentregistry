@@ -5,12 +5,12 @@ import (
 	"net/http"
 	"strings"
 
-	apitypes "github.com/agentregistry-dev/agentregistry/internal/registry/api/apitypes"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 )
 
-type VersionBody = apitypes.VersionBody
+type VersionBody = arv0.VersionBody
 
 func RegisterVersionEndpoint(api huma.API, pathPrefix string, versionInfo *VersionBody) {
 	huma.Register(api, huma.Operation{

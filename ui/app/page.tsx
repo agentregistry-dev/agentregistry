@@ -330,7 +330,7 @@ export default function AdminPage() {
         (s) =>
           s.server.name.toLowerCase().includes(query) ||
           s.server.title?.toLowerCase().includes(query) ||
-          s.server.description.toLowerCase().includes(query)
+          s.server.description?.toLowerCase().includes(query)
       )
     }
 
@@ -377,12 +377,12 @@ export default function AdminPage() {
       setFilteredSkills(groupedSkills.filter((s) =>
         s.skill.name.toLowerCase().includes(query) ||
         s.skill.title?.toLowerCase().includes(query) ||
-        s.skill.description.toLowerCase().includes(query)
+        s.skill.description?.toLowerCase().includes(query)
       ))
       setFilteredAgents(groupedAgents.filter(({agent}) =>
         agent.name?.toLowerCase().includes(query) ||
         agent.modelProvider?.toLowerCase().includes(query) ||
-        agent.description.toLowerCase().includes(query)
+        agent.description?.toLowerCase().includes(query)
       ))
       setFilteredPrompts(groupedPrompts.filter(({prompt}) =>
         prompt.name?.toLowerCase().includes(query) ||

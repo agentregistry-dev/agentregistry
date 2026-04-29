@@ -5,214 +5,18 @@ import (
 	"testing"
 
 	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
-	agentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/agent"
-	serversvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/server"
-	"github.com/agentregistry-dev/agentregistry/pkg/models"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
-	apiv0 "github.com/modelcontextprotocol/registry/pkg/api/v0"
-	"github.com/modelcontextprotocol/registry/pkg/model"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
-
-type fakePlatformRuntimeRegistry struct {
-	agentResp         *models.AgentResponse
-	getAgentFn        func(ctx context.Context, agentName, version string) (*models.AgentResponse, error)
-	resolveSkillsFn   func(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error)
-	resolvePromptsFn  func(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.ResolvedPrompt, error)
-	getServerByVerFn  func(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error)
-	getProviderByIDFn func(ctx context.Context, providerID string) (*models.Provider, error)
-}
-
-func (f *fakePlatformRuntimeRegistry) ListServers(context.Context, *database.ServerFilter, string, int) ([]*apiv0.ServerResponse, string, error) {
-	return nil, "", nil
-}
-
-func (f *fakePlatformRuntimeRegistry) GetServer(ctx context.Context, serverName string) (*apiv0.ServerResponse, error) {
-	if f.getServerByVerFn != nil {
-		return f.getServerByVerFn(ctx, serverName, "")
-	}
-	return nil, database.ErrNotFound
-}
-
-func (f *fakePlatformRuntimeRegistry) GetProvider(ctx context.Context, providerID string) (*models.Provider, error) {
-	if f.getProviderByIDFn != nil {
-		return f.getProviderByIDFn(ctx, providerID)
-	}
-	return nil, database.ErrNotFound
-}
-
-func (f *fakePlatformRuntimeRegistry) GetServerVersion(ctx context.Context, serverName, version string) (*apiv0.ServerResponse, error) {
-	if f.getServerByVerFn != nil {
-		return f.getServerByVerFn(ctx, serverName, version)
-	}
-	return nil, database.ErrNotFound
-}
-
-func (f *fakePlatformRuntimeRegistry) GetServerVersions(context.Context, string) ([]*apiv0.ServerResponse, error) {
-	return nil, nil
-}
-
-func (f *fakePlatformRuntimeRegistry) PublishServer(ctx context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
-	if req == nil {
-		return nil, database.ErrInvalidInput
-	}
-	return &apiv0.ServerResponse{Server: *req}, nil
-}
-
-func (f *fakePlatformRuntimeRegistry) UpdateServer(ctx context.Context, serverName, version string, req *apiv0.ServerJSON, newStatus *string) (*apiv0.ServerResponse, error) {
-	_ = serverName
-	_ = version
-	_ = newStatus
-	return f.PublishServer(ctx, req)
-}
-
-func (f *fakePlatformRuntimeRegistry) SetServerReadme(context.Context, string, string, []byte, string) error {
-	return nil
-}
-
-func (f *fakePlatformRuntimeRegistry) GetLatestServerReadme(context.Context, string) (*database.ServerReadme, error) {
-	return nil, database.ErrNotFound
-}
-
-func (f *fakePlatformRuntimeRegistry) GetServerReadme(context.Context, string, string) (*database.ServerReadme, error) {
-	return nil, database.ErrNotFound
-}
-
-func (f *fakePlatformRuntimeRegistry) DeleteServer(context.Context, string, string) error {
-	return nil
-}
-
-func (f *fakePlatformRuntimeRegistry) SetServerEmbedding(context.Context, string, string, *database.SemanticEmbedding) error {
-	return nil
-}
-
-func (f *fakePlatformRuntimeRegistry) GetServerEmbeddingMetadata(context.Context, string, string) (*database.SemanticEmbeddingMetadata, error) {
-	return nil, database.ErrNotFound
-}
-
-func (f *fakePlatformRuntimeRegistry) ListAgents(context.Context, *database.AgentFilter, string, int) ([]*models.AgentResponse, string, error) {
-	if f.agentResp != nil {
-		return []*models.AgentResponse{f.agentResp}, "", nil
-	}
-	return nil, "", nil
-}
-
-func (f *fakePlatformRuntimeRegistry) GetAgent(ctx context.Context, agentName string) (*models.AgentResponse, error) {
-	if f.getAgentFn != nil {
-		return f.getAgentFn(ctx, agentName, "")
-	}
-	if f.agentResp != nil {
-		return f.agentResp, nil
-	}
-	return nil, database.ErrNotFound
-}
-
-func (f *fakePlatformRuntimeRegistry) GetAgentVersion(ctx context.Context, agentName, version string) (*models.AgentResponse, error) {
-	if f.getAgentFn != nil {
-		return f.getAgentFn(ctx, agentName, version)
-	}
-	if f.agentResp != nil {
-		return f.agentResp, nil
-	}
-	return nil, database.ErrNotFound
-}
-
-func (f *fakePlatformRuntimeRegistry) GetAgentVersions(context.Context, string) ([]*models.AgentResponse, error) {
-	if f.agentResp != nil {
-		return []*models.AgentResponse{f.agentResp}, nil
-	}
-	return nil, nil
-}
-
-func (f *fakePlatformRuntimeRegistry) PublishAgent(context.Context, *models.AgentJSON) (*models.AgentResponse, error) {
-	if f.agentResp != nil {
-		return f.agentResp, nil
-	}
-	return nil, database.ErrInvalidInput
-}
-
-func (f *fakePlatformRuntimeRegistry) DeleteAgent(context.Context, string, string) error {
-	return nil
-}
-
-func (f *fakePlatformRuntimeRegistry) SetAgentEmbedding(context.Context, string, string, *database.SemanticEmbedding) error {
-	return nil
-}
-
-func (f *fakePlatformRuntimeRegistry) GetAgentEmbeddingMetadata(context.Context, string, string) (*database.SemanticEmbeddingMetadata, error) {
-	return nil, database.ErrNotFound
-}
-
-func (f *fakePlatformRuntimeRegistry) ResolveAgentManifestSkills(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.AgentSkillRef, error) {
-	if f.resolveSkillsFn != nil {
-		return f.resolveSkillsFn(ctx, manifest)
-	}
-	return nil, nil
-}
-
-func (f *fakePlatformRuntimeRegistry) ResolveAgentManifestPrompts(ctx context.Context, manifest *models.AgentManifest) ([]platformtypes.ResolvedPrompt, error) {
-	if f.resolvePromptsFn != nil {
-		return f.resolvePromptsFn(ctx, manifest)
-	}
-	return nil, nil
-}
-
-func (f *fakePlatformRuntimeRegistry) ApplyServer(_ context.Context, req *apiv0.ServerJSON) (*apiv0.ServerResponse, error) {
-	return &apiv0.ServerResponse{Server: *req}, nil
-}
-
-func (f *fakePlatformRuntimeRegistry) ApplyAgent(_ context.Context, req *models.AgentJSON) (*models.AgentResponse, error) {
-	return &models.AgentResponse{Agent: *req}, nil
-}
-
-func newPlatformRuntimeServices(registry *fakePlatformRuntimeRegistry) (serversvc.Registry, agentsvc.Registry) {
-	return registry, registry
-}
-
-func TestSplitDeploymentRuntimeInputs(t *testing.T) {
-	envValues, argValues, headerValues := splitDeploymentRuntimeInputs(map[string]string{
-		"FOO":                  "bar",
-		"ARG_--token":          "abc123",
-		"HEADER_Authorization": "Bearer secret",
-		"ARG_":                 "ignored",
-		"HEADER_":              "ignored",
-	})
-
-	if got := envValues["FOO"]; got != "bar" {
-		t.Fatalf("env FOO = %q, want %q", got, "bar")
-	}
-	if got := argValues["--token"]; got != "abc123" {
-		t.Fatalf("arg --token = %q, want %q", got, "abc123")
-	}
-	if got := headerValues["Authorization"]; got != "Bearer secret" {
-		t.Fatalf("header Authorization = %q, want %q", got, "Bearer secret")
-	}
-	if _, ok := argValues[""]; ok {
-		t.Fatal("expected empty arg name to be ignored")
-	}
-	if _, ok := headerValues[""]; ok {
-		t.Fatal("expected empty header name to be ignored")
-	}
-}
 
 func TestTranslateMCPServerRemoteAppliesHeaderOverridesAndDefaults(t *testing.T) {
 	server, err := TranslateMCPServer(context.Background(), &MCPServerRunRequest{
-		RegistryServer: &apiv0.ServerJSON{
-			Name: "remote server",
-			Remotes: []model.Transport{{
+		Name: "remote server",
+		Spec: v1alpha1.MCPServerSpec{
+			Remotes: []v1alpha1.MCPTransport{{
 				URL: "https://example.com/mcp",
-				Headers: []model.KeyValueInput{
-					{
-						Name: "Authorization",
-						InputWithVariables: model.InputWithVariables{
-							Input: model.Input{IsRequired: true},
-						},
-					},
-					{
-						Name: "X-Trace",
-						InputWithVariables: model.InputWithVariables{
-							Input: model.Input{Default: "trace-default"},
-						},
-					},
+				Headers: []v1alpha1.MCPKeyValueInput{
+					{Name: "Authorization", IsRequired: true},
+					{Name: "X-Trace", Default: "trace-default"},
 				},
 			}},
 		},
@@ -245,45 +49,27 @@ func TestTranslateMCPServerRemoteAppliesHeaderOverridesAndDefaults(t *testing.T)
 
 func TestTranslateMCPServerLocalIncludesOverridesAndExtraArgs(t *testing.T) {
 	server, err := TranslateMCPServer(context.Background(), &MCPServerRunRequest{
-		RegistryServer: &apiv0.ServerJSON{
-			Name: "test/server",
-			Packages: []model.Package{{
-				RegistryType: model.RegistryTypeNPM,
+		Name: "test/server",
+		Spec: v1alpha1.MCPServerSpec{
+			Packages: []v1alpha1.MCPPackage{{
+				RegistryType: v1alpha1.RegistryTypeNPM,
 				Identifier:   "@test/server",
 				Version:      "1.2.3",
-				RuntimeArguments: []model.Argument{
-					{
-						Name: "--token",
-						Type: model.ArgumentTypeNamed,
-						InputWithVariables: model.InputWithVariables{
-							Input: model.Input{Default: "default-token"},
-						},
-					},
+				RuntimeArguments: []v1alpha1.MCPArgument{{
+					Name:    "--token",
+					Type:    v1alpha1.MCPArgumentTypeNamed,
+					Default: "default-token",
+				}},
+				PackageArguments: []v1alpha1.MCPArgument{{
+					Name:  "--mode",
+					Type:  v1alpha1.MCPArgumentTypeNamed,
+					Value: "safe",
+				}},
+				EnvironmentVariables: []v1alpha1.MCPKeyValueInput{
+					{Name: "API_KEY", IsRequired: true},
+					{Name: "OPTIONAL", Default: "fallback"},
 				},
-				PackageArguments: []model.Argument{
-					{
-						Name: "--mode",
-						Type: model.ArgumentTypeNamed,
-						InputWithVariables: model.InputWithVariables{
-							Input: model.Input{Value: "safe"},
-						},
-					},
-				},
-				EnvironmentVariables: []model.KeyValueInput{
-					{
-						Name: "API_KEY",
-						InputWithVariables: model.InputWithVariables{
-							Input: model.Input{IsRequired: true},
-						},
-					},
-					{
-						Name: "OPTIONAL",
-						InputWithVariables: model.InputWithVariables{
-							Input: model.Input{Default: "fallback"},
-						},
-					},
-				},
-				Transport: model.Transport{
+				Transport: v1alpha1.MCPTransport{
 					Type: "http",
 					URL:  "http://localhost:7777/mcp",
 				},
@@ -324,100 +110,6 @@ func TestTranslateMCPServerLocalIncludesOverridesAndExtraArgs(t *testing.T) {
 	}
 	if server.Local.HTTP == nil || server.Local.HTTP.Port != 7777 || server.Local.HTTP.Path != "/mcp" {
 		t.Fatalf("unexpected HTTP transport: %+v", server.Local.HTTP)
-	}
-}
-
-func TestResolveAgentDefaultsLocalPort(t *testing.T) {
-	registry := &fakePlatformRuntimeRegistry{agentResp: &models.AgentResponse{
-		Agent: models.AgentJSON{
-			AgentManifest: models.AgentManifest{
-				Name:          "planner",
-				ModelProvider: "openai",
-				ModelName:     "gpt-4o",
-			},
-			Version: "1.0.0",
-		},
-	}}
-	serverService, agentService := newPlatformRuntimeServices(registry)
-
-	resolved, err := ResolveAgent(context.Background(), serverService, agentService, &models.Deployment{
-		ID:         "dep-123",
-		ServerName: "planner",
-		Version:    "1.0.0",
-		Env:        map[string]string{},
-	}, "")
-	if err != nil {
-		t.Fatalf("ResolveAgent() unexpected error: %v", err)
-	}
-	if resolved.Agent.Deployment.Port != DefaultLocalAgentPort {
-		t.Fatalf("port = %d, want %d", resolved.Agent.Deployment.Port, DefaultLocalAgentPort)
-	}
-}
-
-func TestResolveAgentNamespaceDefaulting(t *testing.T) {
-	newRegistry := func() *fakePlatformRuntimeRegistry {
-		return &fakePlatformRuntimeRegistry{agentResp: &models.AgentResponse{
-			Agent: models.AgentJSON{
-				AgentManifest: models.AgentManifest{
-					Name:          "planner",
-					ModelProvider: "openai",
-					ModelName:     "gpt-4o",
-				},
-				Version: "1.0.0",
-			},
-		}}
-	}
-
-	tests := []struct {
-		name          string
-		namespace     string
-		deploymentEnv map[string]string
-		wantNamespace string
-	}{
-		{
-			name:          "defaults to 'default' when namespace param is empty",
-			namespace:     "",
-			deploymentEnv: map[string]string{},
-			wantNamespace: "default",
-		},
-		{
-			name:          "uses explicit namespace param",
-			namespace:     "production",
-			deploymentEnv: map[string]string{},
-			wantNamespace: "production",
-		},
-		{
-			name:          "deployment env KAGENT_NAMESPACE takes priority over namespace param",
-			namespace:     "staging",
-			deploymentEnv: map[string]string{"KAGENT_NAMESPACE": "from-env"},
-			wantNamespace: "from-env",
-		},
-		{
-			name:          "deployment env KAGENT_NAMESPACE takes priority over default",
-			namespace:     "",
-			deploymentEnv: map[string]string{"KAGENT_NAMESPACE": "from-env"},
-			wantNamespace: "from-env",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			registry := newRegistry()
-			serverService, agentService := newPlatformRuntimeServices(registry)
-			resolved, err := ResolveAgent(context.Background(), serverService, agentService, &models.Deployment{
-				ID:         "dep-123",
-				ServerName: "planner",
-				Version:    "1.0.0",
-				Env:        tt.deploymentEnv,
-			}, tt.namespace)
-			if err != nil {
-				t.Fatalf("ResolveAgent() unexpected error: %v", err)
-			}
-			got := resolved.Agent.Deployment.Env["KAGENT_NAMESPACE"]
-			if got != tt.wantNamespace {
-				t.Errorf("KAGENT_NAMESPACE = %q, want %q", got, tt.wantNamespace)
-			}
-		})
 	}
 }
 

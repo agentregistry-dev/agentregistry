@@ -5,7 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/kinds"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/spf13/cobra"
 )
 
@@ -74,10 +75,8 @@ func deleteFromFile(cmd *cobra.Command, filename string) error {
 	}
 
 	// Validate locally so unknown kinds fail before hitting the network.
-	if defaultRegistry != nil {
-		if _, err := defaultRegistry.DecodeMulti(data); err != nil {
-			return fmt.Errorf("parsing %s: %w", filename, err)
-		}
+	if _, err := scheme.DecodeBytes(data); err != nil {
+		return fmt.Errorf("parsing %s: %w", filename, err)
 	}
 
 	if apiClient == nil {
@@ -92,7 +91,7 @@ func deleteFromFile(cmd *cobra.Command, filename string) error {
 	printResults(cmd.OutOrStdout(), results, false)
 
 	for _, r := range results {
-		if r.Status == kinds.StatusFailed {
+		if r.Status == arv0.ApplyStatusFailed {
 			return fmt.Errorf("one or more resources failed to delete")
 		}
 	}
@@ -101,7 +100,7 @@ func deleteFromFile(cmd *cobra.Command, filename string) error {
 
 // deleteResource performs an explicit per-kind delete using the registry to resolve the kind.
 func deleteResource(cmd *cobra.Command, typeName, name, version string, force bool) error {
-	k, err := defaultRegistry.Lookup(typeName)
+	k, err := scheme.Lookup(typeName)
 	if err != nil {
 		return err
 	}

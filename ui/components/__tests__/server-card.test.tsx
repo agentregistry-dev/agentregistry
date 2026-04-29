@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, it, expect, vi } from "vitest"
 import { ServerCard } from "../server-card"
-import type { ServerResponse } from "@/lib/api/types.gen"
+import type { ServerResponse } from "@/lib/admin-api"
 
 const mockServer: ServerResponse = {
   server: {
