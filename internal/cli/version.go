@@ -35,7 +35,10 @@ var VersionCmd = &cobra.Command{
 	Short: "Show version information",
 	Long:  `Displays the version of arctl.`,
 	Annotations: map[string]string{
+		// the registry server information is optional
 		annotations.AnnotationOptionalRegistry: "true",
+		// the /version endpoint is public
+		annotations.AnnotationSkipTokenResolution: "true",
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		output := versionOutput{
