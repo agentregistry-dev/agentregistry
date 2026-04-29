@@ -12,14 +12,7 @@ const mockSkill: SkillResponse = {
     version: "1.3.0",
     repository: {
       url: "https://github.com/example/code-review-skill",
-      source: "github",
     },
-    websiteUrl: "https://example.com/code-review",
-    packages: [
-      { identifier: "code-review-core", registryType: "npm", version: "1.3.0", transport: { type: "stdio" } },
-      { identifier: "code-review-cli", registryType: "npm", version: "1.3.0", transport: { type: "stdio" } },
-    ],
-    remotes: [{ url: "https://remote.example.com/code-review" }],
   },
   _meta: {
     "io.modelcontextprotocol.registry/official": {

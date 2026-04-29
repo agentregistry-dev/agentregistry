@@ -155,17 +155,6 @@ export function ServerCard({ server, onDelete, onDeploy, showDelete = false, sho
               <Github className="h-3.5 w-3.5" aria-hidden="true" />
             </Button>
           )}
-          {showExternalLinks && serverData.websiteUrl && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={(e) => { e.stopPropagation(); window.open(serverData.websiteUrl, '_blank') }}
-              aria-label="Visit website"
-            >
-              <Globe className="h-3.5 w-3.5" aria-hidden="true" />
-            </Button>
-          )}
           {showDelete && onDelete && (
             <Button
               variant="ghost"

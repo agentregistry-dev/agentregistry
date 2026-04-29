@@ -25,7 +25,6 @@ export type AgentSpec = {
     skills?: Array<ResourceRef>;
     telemetryEndpoint?: string;
     title?: string;
-    websiteUrl?: string;
 };
 
 export type ApplyResult = {
@@ -231,7 +230,6 @@ export type McpServerSpec = {
     remotes?: Array<McpTransport>;
     repository?: Repository;
     title?: string;
-    websiteUrl?: string;
 };
 
 export type McpTransport = {

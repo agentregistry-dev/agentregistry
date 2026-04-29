@@ -164,18 +164,6 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
                 {formatDate(official.publishedAt)}
               </span>
             )}
-            {serverData.websiteUrl && (
-              <a
-                href={serverData.websiteUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-2.5 py-1 bg-muted rounded text-sm hover:bg-muted/80 transition-colors text-primary"
-              >
-                <Globe className="h-3 w-3" />
-                Website
-                <ExternalLink className="h-2.5 w-2.5" />
-              </a>
-            )}
           </div>
 
           {/* Tabs */}

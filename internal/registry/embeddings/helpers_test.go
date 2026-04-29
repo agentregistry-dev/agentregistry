@@ -18,7 +18,6 @@ func TestBuildMCPServerEmbeddingPayload_StableAcrossRuns(t *testing.T) {
 	spec := v1alpha1.MCPServerSpec{
 		Title:       "Foo",
 		Description: "demo server",
-		WebsiteURL:  "https://example.com",
 	}
 	a := BuildMCPServerEmbeddingPayload(meta, spec)
 	b := BuildMCPServerEmbeddingPayload(meta, spec)

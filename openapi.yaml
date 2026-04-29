@@ -1496,8 +1496,6 @@ components:
                     type: string
                 title:
                     type: string
-                websiteUrl:
-                    type: string
         ApplyResult:
             type: object
             additionalProperties: false
@@ -1917,8 +1915,6 @@ components:
                 repository:
                     $ref: '#/components/schemas/Repository'
                 title:
-                    type: string
-                websiteUrl:
                     type: string
         MCPTransport:
             type: object

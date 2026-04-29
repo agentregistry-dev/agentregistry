@@ -21,7 +21,7 @@ import (
 // — they're scanner output, not user-authored search-relevant content.
 func BuildMCPServerEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.MCPServerSpec) string {
 	var parts []string
-	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version, spec.WebsiteURL)
+	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version)
 	appendJSON(&parts, spec.Repository)
 	appendJSON(&parts, spec.Packages)
 	appendJSON(&parts, spec.Remotes)
@@ -36,7 +36,6 @@ func BuildAgentEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.AgentSpe
 		spec.Title,
 		spec.Description,
 		meta.Version,
-		spec.WebsiteURL,
 		spec.Language,
 		spec.Framework,
 		spec.ModelProvider,

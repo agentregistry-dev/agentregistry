@@ -16,7 +16,6 @@ func (m *MCPServer) Validate() error {
 func validateMCPServerSpec(s *MCPServerSpec) FieldErrors {
 	var errs FieldErrors
 	errs.Append("spec.title", validateTitle(s.Title))
-	errs.Append("spec.websiteUrl", validateWebsiteURL(s.WebsiteURL))
 	for _, e := range validateRepository(s.Repository) {
 		errs.Append("spec."+e.Path, e.Cause)
 	}

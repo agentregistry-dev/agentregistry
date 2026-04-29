@@ -25,7 +25,6 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [version, setVersion] = useState("")
-  const [websiteUrl, setWebsiteUrl] = useState("")
   const [repositoryUrl, setRepositoryUrl] = useState("")
 
   // Dynamic fields
@@ -38,7 +37,6 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
     setTitle("")
     setDescription("")
     setVersion("")
-    setWebsiteUrl("")
     setRepositoryUrl("")
     setPackages([])
     setRemotes([])
@@ -76,10 +74,6 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
 
       if (title.trim()) {
         server.title = title.trim()
-      }
-
-      if (websiteUrl.trim()) {
-        server.websiteUrl = websiteUrl.trim()
       }
 
       if (repositoryUrl.trim()) {
@@ -218,18 +212,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="websiteUrl">Website URL</Label>
-              <Input
-                id="websiteUrl"
-                placeholder="https://example.com"
-                value={websiteUrl}
-                onChange={(e) => setWebsiteUrl(e.target.value)}
-                disabled={loading}
-              />
-            </div>
-
+          <div className="grid grid-cols-1 gap-4">
             <div className="space-y-2">
               <Label htmlFor="repositoryUrl">Repository URL</Label>
               <div className="flex gap-2">

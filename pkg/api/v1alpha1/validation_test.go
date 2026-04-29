@@ -113,17 +113,6 @@ func TestAgentValidate_RejectsWrongRefKind(t *testing.T) {
 	require.Contains(t, paths, "spec.mcpServers[0].kind")
 }
 
-func TestAgentValidate_RejectsBadWebsiteURL(t *testing.T) {
-	for _, bad := range []string{"http://example.com", "not-a-url", "ftp://example.com"} {
-		a := &Agent{
-			Metadata: ObjectMeta{Namespace: "default", Name: "a", Version: "v1"},
-			Spec:     AgentSpec{WebsiteURL: bad},
-		}
-		paths := failedFields(t, a.Validate())
-		require.Contains(t, paths, "spec.websiteUrl", "url %q should fail", bad)
-	}
-}
-
 func TestAgentValidate_AcceptsBlankOptionalFields(t *testing.T) {
 	a := &Agent{
 		Metadata: ObjectMeta{Namespace: "default", Name: "minimal", Version: "v1"},
@@ -136,13 +125,11 @@ func TestAgentValidate_AccumulatesErrors(t *testing.T) {
 	a := &Agent{
 		Metadata: ObjectMeta{Namespace: "default", Name: "a", Version: "v1"},
 		Spec: AgentSpec{
-			Title:      "   ", // whitespace only
-			WebsiteURL: "ftp://x",
+			Title: "   ", // whitespace only
 		},
 	}
 	paths := failedFields(t, a.Validate())
 	require.Contains(t, paths, "spec.title")
-	require.Contains(t, paths, "spec.websiteUrl")
 }
 
 func TestAgentResolveRefs_OK(t *testing.T) {

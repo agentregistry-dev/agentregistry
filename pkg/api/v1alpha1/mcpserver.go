@@ -15,7 +15,6 @@ type MCPServer struct {
 type MCPServerSpec struct {
 	Title       string      `json:"title,omitempty" yaml:"title,omitempty"`
 	Description string      `json:"description,omitempty" yaml:"description,omitempty"`
-	WebsiteURL  string      `json:"websiteUrl,omitempty" yaml:"websiteUrl,omitempty"`
 	Repository  *Repository `json:"repository,omitempty" yaml:"repository,omitempty"`
 
 	// Packages describes the ways this server can be run locally (stdio,
