@@ -3,13 +3,13 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/semver"
 
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
+	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
 )
 
 var apiClient *client.Client
@@ -34,6 +34,9 @@ var VersionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show version information",
 	Long:  `Displays the version of arctl.`,
+	Annotations: map[string]string{
+		annotations.AnnotationOptionalRegistry: "true",
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		output := versionOutput{
 			ArctlVersion: version.Version,
@@ -41,14 +44,7 @@ var VersionCmd = &cobra.Command{
 			BuildDate:    version.BuildDate,
 		}
 
-		// version command can run without root pre-run (#375), so the API client
-		// may be nil. bild a best-effort client from env vars for server lookup.
-		c := apiClient
-		if c == nil {
-			c = client.NewClient(os.Getenv("ARCTL_API_BASE_URL"), os.Getenv("ARCTL_API_TOKEN"))
-		}
-
-		serverVersion, err := c.GetVersion()
+		serverVersion, err := apiClient.GetVersion()
 		if err == nil {
 			output.ServerVersion = serverVersion.Version
 			output.ServerGitCommit = serverVersion.GitCommit

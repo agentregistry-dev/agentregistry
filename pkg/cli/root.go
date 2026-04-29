@@ -17,17 +17,10 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
+	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
 	"github.com/agentregistry-dev/agentregistry/pkg/daemon/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/spf13/cobra"
-)
-
-const (
-	// AnnotationSkipTokenResolution can be set on a cobra.Command's Annotations map to skip
-	// CLI token resolution during pre-run setup.
-	// The command will still get an API client, just without an auth token.
-	// Child commands inherit this from their parents.
-	AnnotationSkipTokenResolution = "skipTokenResolution"
 )
 
 // ClientFactory creates an API client for the given base URL and token.
@@ -162,13 +155,14 @@ func normalizeBaseURL(raw string) string {
 	return "http://" + trimmed
 }
 
-// preRunSkipCommands defines which commands skip pre-run setup (no API client needed).
+// preRunSkipCommands defines which commands skip pre-run setup entirely.
+// For commands that should only skip segments of the pre-run, use the
+// annotations in [annotations.go](/pkg/cli/annotations/annotations.go) instead.
 // Key: parent name; value: set of subcommand names that skip setup.
 var preRunSkipCommands = map[string]map[string]bool{
 	"arctl": {
 		"completion": true,
 		"configure":  true,
-		"version":    true,
 		"init":       true,
 		"build":      true,
 	},
@@ -194,12 +188,14 @@ func preRunBehavior(cmd *cobra.Command) (skipSetup bool) {
 	return false
 }
 
-// shouldSkipTokenResolution checks the command and its ancestors for the AnnotationSkipTokenResolution annotation.
-// The nearest (most specific) annotation wins: a child can override a parent's setting.
-func shouldSkipTokenResolution(cmd *cobra.Command) bool {
+// hasAnnotation returns true if the command or any of its ancestors has the given
+// annotation key set to "true" (case-insensitive).
+// The nearest (most specific) annotation wins, so a child can override a parent's
+// setting. Returns false if cmd is nil.
+func hasAnnotation(cmd *cobra.Command, key string) bool {
 	for c := cmd; c != nil; c = c.Parent() {
-		if v, ok := c.Annotations[AnnotationSkipTokenResolution]; ok {
-			return v == "true"
+		if v, ok := c.Annotations[key]; ok {
+			return strings.ToLower(v) == "true"
 		}
 	}
 	return false
@@ -208,12 +204,11 @@ func shouldSkipTokenResolution(cmd *cobra.Command) bool {
 // preRunSetup resolves the API token and creates the API client.
 func preRunSetup(ctx context.Context, cmd *cobra.Command, baseURL, token string) (*client.Client, error) {
 	// Get authentication token if no token override was provided
-	if token == "" && cliOptions.TokenProviderFactory != nil && !shouldSkipTokenResolution(cmd) {
+	if token == "" && cliOptions.TokenProviderFactory != nil && !hasAnnotation(cmd, annotations.AnnotationSkipTokenResolution) {
 		resolvedToken, err := resolveAuthToken(ctx, cmd, cliOptions.TokenProviderFactory)
 		if err != nil {
 			return nil, err
 		}
-
 		token = resolvedToken
 	}
 
@@ -231,6 +226,11 @@ func preRunSetup(ctx context.Context, cmd *cobra.Command, baseURL, token string)
 	}
 	c, err := factory(ctx, baseURL, token)
 	if err != nil {
+		if hasAnnotation(cmd, annotations.AnnotationOptionalRegistry) {
+			// Soft-fail: skip the connectivity check and return an
+			// unverified client.
+			return client.NewClient(baseURL, token), nil
+		}
 		return nil, fmt.Errorf("registry unreachable at %s: %w", baseURL, err)
 	}
 	return c, nil
