@@ -433,7 +433,8 @@ func TestPreRunSetup(t *testing.T) {
 	})
 
 	// optional-registry annotation: pre-run still resolves token + URL, but
-	// soft-fails when the token provider errors or the registry is unreachable.
+	// only soft-fails for registry connectivity/client creation failures;
+	// token resolution errors must still propagate.
 	optionalRegistryCmd := &cobra.Command{
 		Use:         "version",
 		Annotations: map[string]string{annotations.AnnotationOptionalRegistry: "true"},
