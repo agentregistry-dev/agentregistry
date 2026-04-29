@@ -18,9 +18,9 @@ const (
 )
 
 // RegistryPackage is the minimal package view a registry validator
-// consumes. AgentPackage and MCPPackage each expose these fields; the
-// per-kind ValidateRegistries method converts its typed slice into
-// this shape and calls the caller-supplied RegistryValidatorFunc.
+// consumes. MCPPackage exposes these fields; the per-kind
+// ValidateRegistries method converts its typed slice into this shape
+// and calls the caller-supplied RegistryValidatorFunc.
 //
 // Extra fields present only on MCPPackage (RegistryBaseURL,
 // FileSHA256) round-trip through here because the OCI validator
@@ -67,29 +67,8 @@ func validatePackages(
 	return errs
 }
 
-// ValidateRegistries on *Agent converts AgentPackage entries to
-// RegistryPackage and runs each through v.
-func (a *Agent) ValidateRegistries(ctx context.Context, v RegistryValidatorFunc) error {
-	if v == nil || len(a.Spec.Packages) == 0 {
-		return nil
-	}
-	pkgs := make([]RegistryPackage, len(a.Spec.Packages))
-	for i, p := range a.Spec.Packages {
-		pkgs[i] = RegistryPackage{
-			RegistryType: p.RegistryType,
-			Identifier:   p.Identifier,
-			Version:      p.Version,
-		}
-	}
-	errs := validatePackages(ctx, v, pkgs, a.Metadata.Name, "spec.packages")
-	if len(errs) == 0 {
-		return nil
-	}
-	return errs
-}
-
 // ValidateRegistries on *MCPServer converts MCPPackage entries
-// (richer than AgentPackage: includes RegistryBaseURL + FileSHA256).
+// (includes RegistryBaseURL + FileSHA256).
 func (m *MCPServer) ValidateRegistries(ctx context.Context, v RegistryValidatorFunc) error {
 	if v == nil || len(m.Spec.Packages) == 0 {
 		return nil

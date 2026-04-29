@@ -138,15 +138,11 @@ func TestAgentValidate_AccumulatesErrors(t *testing.T) {
 		Spec: AgentSpec{
 			Title:      "   ", // whitespace only
 			WebsiteURL: "ftp://x",
-			Packages: []AgentPackage{
-				{}, // missing registryType, identifier, version
-			},
 		},
 	}
 	paths := failedFields(t, a.Validate())
 	require.Contains(t, paths, "spec.title")
 	require.Contains(t, paths, "spec.websiteUrl")
-	require.Contains(t, paths, "spec.packages[0].registryType")
 }
 
 func TestAgentResolveRefs_OK(t *testing.T) {

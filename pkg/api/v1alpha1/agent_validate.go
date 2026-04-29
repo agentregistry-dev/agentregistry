@@ -106,29 +106,5 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 		}
 	}
 
-	for i, pkg := range s.Packages {
-		if pkg.RegistryType == "" {
-			errs.Append(fmt.Sprintf("spec.packages[%d].registryType", i), fmt.Errorf("%w", ErrRequiredField))
-		}
-		if pkg.Identifier == "" {
-			errs.Append(fmt.Sprintf("spec.packages[%d].identifier", i), fmt.Errorf("%w", ErrRequiredField))
-		}
-		// OCI packages pin version inside identifier ("host/name:tag"); the
-		// OCI registry validator rejects a separate version field, so we
-		// don't require one here either.
-		if pkg.RegistryType != RegistryTypeOCI && pkg.Version == "" {
-			errs.Append(fmt.Sprintf("spec.packages[%d].version", i), fmt.Errorf("%w", ErrRequiredField))
-		}
-	}
-
-	for i, r := range s.Remotes {
-		if r.Type == "" {
-			errs.Append(fmt.Sprintf("spec.remotes[%d].type", i), fmt.Errorf("%w", ErrRequiredField))
-		}
-		if err := validateWebsiteURL(r.URL); err != nil {
-			errs.Append(fmt.Sprintf("spec.remotes[%d].url", i), err)
-		}
-	}
-
 	return errs
 }
