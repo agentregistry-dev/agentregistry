@@ -21,11 +21,10 @@ type AgentSpec struct {
 	Image             string  `json:"image,omitempty" yaml:"image,omitempty"`
 	Language          string  `json:"language,omitempty" yaml:"language,omitempty"`
 	Framework         string  `json:"framework,omitempty" yaml:"framework,omitempty"`
-	ModelProvider     string  `json:"modelProvider,omitempty" yaml:"modelProvider,omitempty"`
-	ModelName         string  `json:"modelName,omitempty" yaml:"modelName,omitempty"`
-	TelemetryEndpoint string  `json:"telemetryEndpoint,omitempty" yaml:"telemetryEndpoint,omitempty"`
-	WebsiteURL        string  `json:"websiteUrl,omitempty" yaml:"websiteUrl,omitempty"`
-	Readme            *Readme `json:"readme,omitempty" yaml:"readme,omitempty"`
+	ModelProvider     string `json:"modelProvider,omitempty" yaml:"modelProvider,omitempty"`
+	ModelName         string `json:"modelName,omitempty" yaml:"modelName,omitempty"`
+	TelemetryEndpoint string `json:"telemetryEndpoint,omitempty" yaml:"telemetryEndpoint,omitempty"`
+	WebsiteURL        string `json:"websiteUrl,omitempty" yaml:"websiteUrl,omitempty"`
 
 	Repository *Repository `json:"repository,omitempty" yaml:"repository,omitempty"`
 
