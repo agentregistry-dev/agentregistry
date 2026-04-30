@@ -8,7 +8,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Package, ExternalLink, GitBranch, Star, Github, Globe, Trash2, ShieldCheck, BadgeCheck, Play } from "lucide-react"
+import { Package, ExternalLink, Star, Github, Trash2, ShieldCheck, BadgeCheck, Play } from "lucide-react"
 
 interface ServerCardProps {
   server: ServerResponse

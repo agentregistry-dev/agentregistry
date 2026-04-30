@@ -24,8 +24,6 @@ import {
   Package,
   Calendar,
   ExternalLink,
-  GitBranch,
-  Globe,
   Code,
   Server,
   Link,

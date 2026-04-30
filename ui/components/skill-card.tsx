@@ -8,7 +8,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Package, ExternalLink, GitBranch, Github, Globe, Trash2, Zap } from "lucide-react"
+import { Github, Trash2, Zap } from "lucide-react"
 
 interface SkillCardProps {
   skill: SkillResponse

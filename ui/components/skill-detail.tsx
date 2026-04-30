@@ -7,12 +7,9 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
-  Package,
   Calendar,
   ExternalLink,
-  Globe,
   Code,
-  Link,
   Zap,
   Copy,
   Check,
@@ -125,24 +122,28 @@ export function SkillDetail({ skill, allVersions: allVersionsProp }: SkillDetail
               <p className="text-[15px] leading-relaxed">{skillData.description}</p>
             </section>
 
-            {skillData.source?.repository?.url && (
-              <section>
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Repository</h3>
-                <div className="space-y-1.5 text-sm">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">URL</span>
-                    <a
-                      href={skillData.source.repository.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline flex items-center gap-1"
-                    >
-                      {skillData.source.repository.url} <ExternalLink className="h-2.5 w-2.5" />
-                    </a>
+            {(() => {
+              const repoUrl = skillData.source?.repository?.url
+              if (!repoUrl) return null
+              return (
+                <section>
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Repository</h3>
+                  <div className="space-y-1.5 text-sm">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">URL</span>
+                      <a
+                        href={repoUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline flex items-center gap-1"
+                      >
+                        {repoUrl} <ExternalLink className="h-2.5 w-2.5" />
+                      </a>
+                    </div>
                   </div>
-                </div>
-              </section>
-            )}
+                </section>
+              )
+            })()}
           </TabsContent>
 
           <TabsContent value="raw">
