@@ -260,10 +260,6 @@ func buildAgentDeployConfig(agent *v1alpha1.Agent, envOverrides map[string]strin
 		}
 	}
 
-	if agent.Spec.TelemetryEndpoint != "" {
-		config["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = agent.Spec.TelemetryEndpoint
-	}
-
 	return config
 }
 

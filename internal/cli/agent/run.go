@@ -169,10 +169,6 @@ func runFromDirectory(ctx context.Context, projectDir string, envMap map[string]
 		}
 	}
 
-	if err := project.EnsureOtelCollectorConfig(projectDir, agent, verbose); err != nil {
-		return err
-	}
-
 	if err := project.RegenerateDockerCompose(projectDir, resolved, "", verbose); err != nil {
 		return fmt.Errorf("failed to refresh docker-compose.yaml: %w", err)
 	}
@@ -283,10 +279,6 @@ func stageManifestRuntime(_ context.Context, resolved *agentmanifest.ResolvedAge
 		return "", false, fmt.Errorf("failed to materialize skills: %w", err)
 	}
 
-	if err := project.EnsureOtelCollectorConfig(workDir, agent, verbose); err != nil {
-		return "", false, err
-	}
-
 	if err := common.RefreshMCPConfig(
 		&common.MCPConfigTarget{BaseDir: workDir, AgentName: agent.Metadata.Name, Version: version},
 		pythonServersFromResolved(resolved.MCPServers),
@@ -386,16 +378,15 @@ func renderComposeFromManifest(resolved *agentmanifest.ResolvedAgent, version st
 		EnvVars           []string
 		McpServers        []agentmanifest.ResolvedMCPServer
 	}{
-		Name:              agent.Metadata.Name,
-		Version:           sanitizedVersion,
-		Image:             image,
-		Port:              hostPort,
-		ModelProvider:     agent.Spec.ModelProvider,
-		ModelName:         agent.Spec.ModelName,
-		TelemetryEndpoint: agent.Spec.TelemetryEndpoint,
-		HasSkills:         len(agent.Spec.Skills) > 0,
-		EnvVars:           project.EnvVarsFromMCPServers(resolved.MCPServers),
-		McpServers:        resolved.MCPServers,
+		Name:          agent.Metadata.Name,
+		Version:       sanitizedVersion,
+		Image:         image,
+		Port:          hostPort,
+		ModelProvider: agent.Spec.ModelProvider,
+		ModelName:     agent.Spec.ModelName,
+		HasSkills:     len(agent.Spec.Skills) > 0,
+		EnvVars:       project.EnvVarsFromMCPServers(resolved.MCPServers),
+		McpServers:    resolved.MCPServers,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to render docker-compose template: %w", err)

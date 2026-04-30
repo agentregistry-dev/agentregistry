@@ -1789,8 +1789,6 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/ResourceRef'
-                telemetryEndpoint:
-                    type: string
                 title:
                     type: string
                 websiteUrl:
@@ -1882,6 +1880,8 @@ components:
                     $ref: '#/components/schemas/ResourceRef'
                 targetRef:
                     $ref: '#/components/schemas/ResourceRef'
+                telemetryEndpoint:
+                    type: string
             required:
                 - targetRef
                 - providerRef

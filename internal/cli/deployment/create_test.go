@@ -125,17 +125,6 @@ func TestBuildAgentDeployConfig_WithEnvOverrides(t *testing.T) {
 			wantKeys:     map[string]string{"OPENAI_API_KEY": "from-os"},
 		},
 		{
-			name: "telemetry endpoint included",
-			manifest: &v1alpha1.Agent{
-				Spec: v1alpha1.AgentSpec{
-					ModelProvider:     "openai",
-					TelemetryEndpoint: "http://otel:4317",
-				},
-			},
-			envOverrides: map[string]string{"OPENAI_API_KEY": "key"},
-			wantKeys:     map[string]string{"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "http://otel:4317", "OPENAI_API_KEY": "key"},
-		},
-		{
 			name: "empty overrides with no os env",
 			manifest: &v1alpha1.Agent{
 				Spec: v1alpha1.AgentSpec{
