@@ -23,15 +23,17 @@ func newDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete (TYPE NAME | -f FILE)",
 		Short: "Delete a registry resource version",
-		Long: `Delete a specific version of a registry resource.
+		Long: `Delete a registry resource.
 
 File mode (declarative): reads resources from the YAML file and sends DELETE /v0/apply.
   arctl delete -f agent.yaml
 
-Explicit mode: specify type, name, and --version directly.
-  arctl delete TYPE NAME --version VERSION
+Explicit mode: specify type and name. --version is optional and defaults to the latest version.
+  arctl delete TYPE NAME [--version VERSION]
 
-TYPE must be one of: agent, mcp, skill, prompt
+For deployments, --version is required.
+
+TYPE must be one of: agent, mcp, skill, prompt, deployment
 (plural and uppercase forms also accepted)`,
 		Example: `  arctl delete -f my-agent/agent.yaml
   arctl delete -f my-server/mcp.yaml
@@ -42,7 +44,7 @@ TYPE must be one of: agent, mcp, skill, prompt
 		RunE:         runDeclarativeDelete,
 	}
 	cmd.Flags().StringP("filename", "f", "", "YAML file to read resources from")
-	cmd.Flags().String("version", "", "Version to delete (required in explicit mode)")
+	cmd.Flags().String("version", "", "Version to delete (defaults to the latest version; required for deployments)")
 	cmd.Flags().Bool("force", false, "Skip provider-specific teardown and only remove the registry record (deployments only)")
 	return cmd
 }

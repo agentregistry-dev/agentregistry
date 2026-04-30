@@ -8,8 +8,7 @@ spec:
   category: nlp
   description: "Summarizes long text into concise form"
   packages:
-    - registryType: docker
+    - registryType: oci
       identifier: ghcr.io/acme/summarize-skill:1.0.0
-      version: "1.0.0"
       transport:
-        type: stdio                             # docker containers communicate via stdio
+        type: stdio                             # OCI containers communicate via stdio

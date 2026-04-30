@@ -434,7 +434,6 @@ func writeDeclarativeMCPYAML(projectDir, name, ver, image, description string) e
 				{
 					RegistryType: "oci",
 					Identifier:   image,
-					Version:      ver,
 					Transport:    v1alpha1.MCPTransport{Type: "stdio"},
 				},
 			},
