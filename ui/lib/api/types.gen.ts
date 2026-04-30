@@ -23,7 +23,6 @@ export type AgentSpec = {
     prompts?: Array<ResourceRef>;
     repository?: Repository;
     skills?: Array<ResourceRef>;
-    telemetryEndpoint?: string;
     title?: string;
 };
 
@@ -68,6 +67,7 @@ export type DeploymentSpec = {
     };
     providerRef: ResourceRef;
     targetRef: ResourceRef;
+    telemetryEndpoint?: string;
 };
 
 export type ErrorDetail = {
