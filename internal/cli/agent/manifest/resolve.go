@@ -37,30 +37,69 @@ func Resolve(ctx context.Context, apiClient *client.Client, agent *v1alpha1.Agen
 		if apiClient == nil {
 			return nil, fmt.Errorf("registry client not initialized; cannot resolve MCP server ref %q", ref.Name)
 		}
-		serverObj, err := client.GetTyped(
-			ctx,
-			apiClient,
-			v1alpha1.KindMCPServer,
-			v1alpha1.DefaultNamespace,
-			ref.Name,
-			ref.Version,
-			func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} },
-		)
-		if err != nil {
-			return nil, fmt.Errorf("fetch MCP server %q (version %q): %w", ref.Name, ref.Version, err)
+		kind := ref.Kind
+		if kind == "" {
+			kind = v1alpha1.KindMCPServer
 		}
-		if serverObj == nil {
-			return nil, fmt.Errorf("MCP server %q (version %q) not found in registry", ref.Name, ref.Version)
+		switch kind {
+		case v1alpha1.KindMCPServer:
+			serverObj, err := client.GetTyped(
+				ctx, apiClient,
+				v1alpha1.KindMCPServer, v1alpha1.DefaultNamespace, ref.Name, ref.Version,
+				func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} },
+			)
+			if err != nil {
+				return nil, fmt.Errorf("fetch MCP server %q (version %q): %w", ref.Name, ref.Version, err)
+			}
+			if serverObj == nil {
+				return nil, fmt.Errorf("MCP server %q (version %q) not found in registry", ref.Name, ref.Version)
+			}
+			entry, err := translateMCPServer(RefBasename(ref.Name), serverObj)
+			if err != nil {
+				return nil, fmt.Errorf("translate MCP server %q: %w", ref.Name, err)
+			}
+			resolved.MCPServers = append(resolved.MCPServers, *entry)
+		case v1alpha1.KindRemoteMCPServer:
+			remoteObj, err := client.GetTyped(
+				ctx, apiClient,
+				v1alpha1.KindRemoteMCPServer, v1alpha1.DefaultNamespace, ref.Name, ref.Version,
+				func() *v1alpha1.RemoteMCPServer { return &v1alpha1.RemoteMCPServer{} },
+			)
+			if err != nil {
+				return nil, fmt.Errorf("fetch RemoteMCPServer %q (version %q): %w", ref.Name, ref.Version, err)
+			}
+			if remoteObj == nil {
+				return nil, fmt.Errorf("RemoteMCPServer %q (version %q) not found in registry", ref.Name, ref.Version)
+			}
+			entry, err := translateRemoteMCPServerRef(RefBasename(ref.Name), remoteObj)
+			if err != nil {
+				return nil, fmt.Errorf("translate RemoteMCPServer %q: %w", ref.Name, err)
+			}
+			resolved.MCPServers = append(resolved.MCPServers, *entry)
+		default:
+			return nil, fmt.Errorf("unsupported MCP server ref kind %q for ref %q", ref.Kind, ref.Name)
 		}
-
-		entry, err := translateMCPServer(RefBasename(ref.Name), serverObj)
-		if err != nil {
-			return nil, fmt.Errorf("translate MCP server %q: %w", ref.Name, err)
-		}
-		resolved.MCPServers = append(resolved.MCPServers, *entry)
 	}
 
 	return resolved, nil
+}
+
+// translateRemoteMCPServerRef projects a v1alpha1.RemoteMCPServer onto a
+// ResolvedMCPServer with Type="remote".
+func translateRemoteMCPServerRef(name string, server *v1alpha1.RemoteMCPServer) (*ResolvedMCPServer, error) {
+	if server.Spec.Remote.URL == "" {
+		return nil, fmt.Errorf("remote has no URL")
+	}
+	headers := make(map[string]string, len(server.Spec.Remote.Headers))
+	for _, h := range server.Spec.Remote.Headers {
+		headers[h.Name] = h.Value
+	}
+	return &ResolvedMCPServer{
+		Type:    "remote",
+		Name:    name,
+		URL:     server.Spec.Remote.URL,
+		Headers: headers,
+	}, nil
 }
 
 // translateMCPServer converts a v1alpha1.MCPServer envelope into a

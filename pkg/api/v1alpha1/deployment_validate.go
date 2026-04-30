@@ -60,8 +60,11 @@ func (d *Deployment) ResolveRefs(ctx context.Context, resolver ResolverFunc) err
 func validateDeploymentSpec(s *DeploymentSpec) FieldErrors {
 	var errs FieldErrors
 
-	// TargetRef: required, must name an Agent or MCPServer.
-	for _, e := range validateRef(s.TargetRef, KindAgent, KindMCPServer) {
+	// TargetRef: required. Accepts the bundled lifecycle kinds (Agent,
+	// MCPServer) and their pre-deployed peers (RemoteAgent, RemoteMCPServer).
+	// Adapters dispatch on Kind: bundled goes through container/process
+	// lifecycle; remote variants do thin pass-through registration.
+	for _, e := range validateRef(s.TargetRef, KindAgent, KindMCPServer, KindRemoteAgent, KindRemoteMCPServer) {
 		errs.Append("spec.targetRef."+e.Path, e.Cause)
 	}
 	// ProviderRef: required, must name a Provider.

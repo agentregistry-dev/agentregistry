@@ -56,7 +56,7 @@ type MCPServer struct {
 	Name          string           `json:"name"`
 	DeploymentID  string           `json:"deploymentId,omitempty"`
 	MCPServerType MCPServerType    `json:"mcpServerType"`
-	Remote        *RemoteMCPServer `json:"remote,omitempty"`
+	Remote        *RemoteMCPTarget `json:"remote,omitempty"`
 	Local         *LocalMCPServer  `json:"local,omitempty"`
 	Namespace     string           `json:"namespace,omitempty"`
 }
@@ -68,7 +68,11 @@ const (
 	MCPServerTypeLocal  MCPServerType = "local"
 )
 
-type RemoteMCPServer struct {
+// RemoteMCPTarget is the platform-internal DTO describing a remote MCP
+// endpoint (parsed URL components + headers). Renamed from RemoteMCPServer
+// to disambiguate from the v1alpha1.RemoteMCPServer kind and the
+// kagent.dev/v1alpha2.RemoteMCPServer CRD.
+type RemoteMCPTarget struct {
 	Scheme  string
 	Host    string
 	Port    uint32

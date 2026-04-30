@@ -108,7 +108,7 @@ func translateRemoteMCPServer(
 		Name:          generateInternalName(serverName),
 		DeploymentID:  deploymentID,
 		MCPServerType: platformtypes.MCPServerTypeRemote,
-		Remote: &platformtypes.RemoteMCPServer{
+		Remote: &platformtypes.RemoteMCPTarget{
 			Scheme:  u.scheme,
 			Host:    u.host,
 			Port:    u.port,
@@ -258,9 +258,9 @@ func parseURL(rawURL string) (*parsedURL, error) {
 	}, nil
 }
 
-// BuildRemoteMCPURL constructs a well-formed URL from a RemoteMCPServer,
+// BuildRemoteMCPURL constructs a well-formed URL from a RemoteMCPTarget,
 // handling IPv6 bracketing and standard-port omission.
-func BuildRemoteMCPURL(remote *platformtypes.RemoteMCPServer) string {
+func BuildRemoteMCPURL(remote *platformtypes.RemoteMCPTarget) string {
 	scheme := remote.Scheme
 	if scheme == "" {
 		scheme = "http"

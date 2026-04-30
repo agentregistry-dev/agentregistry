@@ -27,7 +27,11 @@ func (a *Agent) ResolveRefs(ctx context.Context, resolver ResolverFunc) error {
 	}
 	var errs FieldErrors
 	for i, ref := range a.Spec.MCPServers {
-		ref.Kind = KindMCPServer // normalize so the resolver always sees the expected kind
+		// Default empty Kind to MCPServer; explicit Kind (e.g. RemoteMCPServer)
+		// is preserved so the resolver fetches the right kind.
+		if ref.Kind == "" {
+			ref.Kind = KindMCPServer
+		}
 		if ref.Namespace == "" {
 			ref.Namespace = a.Metadata.Namespace
 		}
@@ -65,15 +69,17 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 		errs.Append("spec."+e.Path, e.Cause)
 	}
 	for i, ref := range s.MCPServers {
-		// References within Agent.Spec default Kind=MCPServer; reject
-		// mismatches to catch authoring mistakes early.
+		// References within Agent.Spec default Kind=MCPServer; explicit
+		// Kind=RemoteMCPServer is also accepted (the agent points at an
+		// already-running endpoint instead of a bundled template).
 		kind := ref.Kind
 		if kind == "" {
 			kind = KindMCPServer
 		}
-		if kind != KindMCPServer {
+		if kind != KindMCPServer && kind != KindRemoteMCPServer {
 			errs.Append(fmt.Sprintf("spec.mcpServers[%d].kind", i),
-				fmt.Errorf("%w: must be %q, got %q", ErrInvalidRef, KindMCPServer, ref.Kind))
+				fmt.Errorf("%w: must be %q or %q, got %q",
+					ErrInvalidRef, KindMCPServer, KindRemoteMCPServer, ref.Kind))
 		}
 		for _, e := range validateRef(ref) {
 			errs.Append(fmt.Sprintf("spec.mcpServers[%d].%s", i, e.Path), e.Cause)
