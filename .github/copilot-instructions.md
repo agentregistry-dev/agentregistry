@@ -10,5 +10,6 @@ The `report_progress` tool is the **only** way to update an existing PR's descri
 
 Whenever you make meaningful progress on a task:
 1. Call `report_progress` with an accurate `prDescription` that follows `.github/PULL_REQUEST_TEMPLATE.md`.
-2. Populate every required section of the template (Description, Change Type, Changelog).
-3. Do **not** consider the task complete until the PR description has been updated via `report_progress`.
+2. Use the **exact top-level headings** from the template: `# Description`, `# Change Type`, `# Changelog`. The CI labeler enforces a `# Description` section (single `#`) and will fail if `##` headings are used or the section is missing.
+3. Populate every required section of the template (Description, Change Type, Changelog).
+4. Do **not** consider the task complete until the PR description has been updated via `report_progress`.
