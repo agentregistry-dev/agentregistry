@@ -168,7 +168,7 @@ Supported languages:  python (for adk)`,
 	cmd.Flags().StringVar(&initVersion, "version", "0.1.0", "Initial version")
 	cmd.Flags().StringVar(&initDescription, "description", "", "Agent description")
 	cmd.Flags().StringVar(&initModelProvider, "model-provider", "Gemini", "Model provider (OpenAI, Anthropic, Gemini, AzureOpenAI, Agentgateway)")
-	cmd.Flags().StringVar(&initModelName, "model-name", "gemini-2.0-flash", "Model name")
+	cmd.Flags().StringVar(&initModelName, "model-name", "gemini-2.5-flash", "Model name")
 	cmd.Flags().StringVar(&initImage, "image", "", "Docker image (default: localhost:5001/<name>:latest)")
 	cmd.Flags().StringVar(&initGit, "git", "", "Git repository URL (GitHub, GitLab, Bitbucket)")
 	cmd.Flags().StringArrayVar(&initMCPs, "mcp", nil, "Registry MCP server to reference: name[@version] (repeatable)")
@@ -303,7 +303,7 @@ func defaultInitModelName(provider string) (string, bool) {
 	case "anthropic":
 		return "claude-3-5-sonnet", true
 	case "gemini":
-		return "gemini-2.0-flash", true
+		return "gemini-2.5-flash", true
 	case "azureopenai":
 		return "your-deployment-name", true
 	default:
@@ -433,7 +433,6 @@ func writeDeclarativeMCPYAML(projectDir, name, ver, image, description string) e
 				{
 					RegistryType: "oci",
 					Identifier:   image,
-					Version:      ver,
 					Transport:    v1alpha1.MCPTransport{Type: "stdio"},
 				},
 			},
