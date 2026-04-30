@@ -78,12 +78,6 @@ func (c AgentConfig) ShouldSkipPath(path string) bool {
 	if strings.HasPrefix(path, "mcp_server") {
 		return true
 	}
-	// Skip the legacy OTLP collector config — local telemetry UX is
-	// being redesigned; the deployed agent gets OTel via
-	// Deployment.Spec.TelemetryEndpoint.
-	if path == "otel-collector-config.yaml" {
-		return true
-	}
 	return false
 }
 
