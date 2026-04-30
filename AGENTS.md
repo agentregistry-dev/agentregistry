@@ -444,6 +444,19 @@ When working with this codebase, AI assistants should:
 
 ---
 
+## Pull Requests
+
+When creating or updating a pull request in this repo, use `.github/PULL_REQUEST_TEMPLATE.md` as the source of truth for the PR body.
+
+- Populate every required section in the template.
+- Include at least one `/kind ...` entry in the Change Type section.
+- Fill the `release-note` block exactly as required by the template. If no release note applies, write `NONE`.
+- When the PR is intended to close an issue, include `Fixes #<issue>` in the description so GitHub links the issue correctly.
+
+If an agent opens a PR without following the template, it should update the PR body before considering the task complete.
+
+---
+
 ## Code Review Checklist
 
 - [ ] Database access only through database layer or authorizer
