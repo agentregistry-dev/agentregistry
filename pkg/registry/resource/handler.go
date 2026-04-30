@@ -105,13 +105,6 @@ type Config struct {
 	// and writes the terminal Removed condition.
 	PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 
-	// SemanticSearch is optional; when set, the list handlers honor
-	// `?semantic=<q>` + `?semanticThreshold=<f>` query params by
-	// embedding the query string via this func and routing the result
-	// through Store.SemanticList. Nil disables semantic search (the
-	// query params return 400).
-	SemanticSearch SemanticSearchFunc
-
 	// Authorize is optional; when set, every read and write handler
 	// (get / list / apply / delete) invokes it as an access gate before
 	// touching the store. Return nil to allow; return a huma error
@@ -174,11 +167,6 @@ type AuthorizeInput struct {
 	Object v1alpha1.Object
 }
 
-// SemanticSearchFunc embeds a query string into a vector usable with
-// Store.SemanticList. Constructed at bootstrap by wrapping an
-// embeddings.Provider. nil disables `?semantic=` on list endpoints.
-type SemanticSearchFunc func(ctx context.Context, query string) ([]float32, error)
-
 // Input/output wire types. Registered per-kind so OpenAPI schemas stay typed.
 //
 // Namespace is a `query:"namespace"` param (hidden from the user-facing
@@ -239,13 +227,6 @@ type listInput struct {
 	// IncludeTerminating surfaces soft-deleted rows (deletionTimestamp != nil)
 	// which are hidden by default.
 	IncludeTerminating bool `query:"includeTerminating" doc:"Include rows with a deletionTimestamp."`
-	// Semantic, when non-empty, switches the list to semantic-search
-	// mode: the query string is embedded via the server's provider,
-	// results are ranked by cosine distance from the query vector,
-	// and each item carries a score in listOutput.SemanticScores.
-	// Requires the server to be built with embeddings enabled.
-	Semantic          string  `query:"semantic" doc:"Semantic search query. Returns results ranked by similarity."`
-	SemanticThreshold float32 `query:"semanticThreshold" doc:"Drop results with cosine distance above this threshold (0 = no filter)."`
 }
 
 type bodyOutput[T v1alpha1.Object] struct {
@@ -256,10 +237,6 @@ type listOutput[T v1alpha1.Object] struct {
 	Body struct {
 		Items      []T    `json:"items"`
 		NextCursor string `json:"nextCursor,omitempty"`
-		// SemanticScores is populated only when the list was ranked by
-		// a `?semantic=<q>` query. Aligned with Items by index; score
-		// is the cosine distance from the query vector (lower = closer).
-		SemanticScores []float32 `json:"semanticScores,omitempty"`
 	}
 }
 
@@ -310,8 +287,6 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			Cursor:             in.Cursor,
 			LatestOnly:         in.LatestOnly,
 			IncludeTerminating: in.IncludeTerminating,
-			Semantic:           in.Semantic,
-			SemanticThreshold:  in.SemanticThreshold,
 		})
 	})
 
@@ -534,8 +509,8 @@ func mapApplyErrorToHuma(ae *applyError, kind, ns, name, version string) error {
 
 // listParams bundles the query parameters the list endpoints accept.
 // Shared across the cross-namespace and namespace-scoped list flows so
-// adding a new parameter (semantic, threshold, future filters) touches
-// one place instead of two call sites.
+// adding a new parameter (future filters) touches one place instead of
+// two call sites.
 type listParams struct {
 	Namespace          string
 	Labels             string
@@ -543,22 +518,13 @@ type listParams struct {
 	Cursor             string
 	LatestOnly         bool
 	IncludeTerminating bool
-	Semantic           string
-	SemanticThreshold  float32
 }
 
 // runList is the shared list body used by both the cross-namespace and
 // namespace-scoped list endpoints. Namespace="" means "across all namespaces".
-// When p.Semantic is non-empty and cfg.SemanticSearch is set, the list
-// routes through Store.SemanticList and returns items ranked by cosine
-// distance with SemanticScores populated.
 func runList[T v1alpha1.Object](
 	ctx context.Context, cfg Config, newObj func() T, p listParams,
 ) (*listOutput[T], error) {
-	if p.Semantic != "" {
-		return runSemanticList(ctx, cfg, newObj, p)
-	}
-
 	opts := v1alpha1store.ListOpts{
 		Namespace:          p.Namespace,
 		Limit:              p.Limit,
@@ -599,64 +565,6 @@ func runList[T v1alpha1.Object](
 	out := &listOutput[T]{}
 	out.Body.Items = items
 	out.Body.NextCursor = nextCursor
-	return out, nil
-}
-
-// runSemanticList handles `?semantic=<q>` ranking via the configured
-// SemanticSearchFunc + Store.SemanticList. Disabled endpoints (nil
-// SemanticSearch) return 400.
-func runSemanticList[T v1alpha1.Object](
-	ctx context.Context, cfg Config, newObj func() T, p listParams,
-) (*listOutput[T], error) {
-	if cfg.SemanticSearch == nil {
-		return nil, huma.Error400BadRequest("semantic search is not enabled on this server")
-	}
-	vec, err := cfg.SemanticSearch(ctx, p.Semantic)
-	if err != nil {
-		return nil, huma.Error500InternalServerError("embed query: "+err.Error(), err)
-	}
-	opts := v1alpha1store.SemanticListOpts{
-		Query:              vec,
-		Threshold:          p.SemanticThreshold,
-		Limit:              p.Limit,
-		Namespace:          p.Namespace,
-		LatestOnly:         p.LatestOnly,
-		IncludeTerminating: p.IncludeTerminating,
-	}
-	if p.Labels != "" {
-		selector, err := parseLabelSelector(p.Labels)
-		if err != nil {
-			return nil, huma.Error400BadRequest("invalid labels selector: " + err.Error())
-		}
-		opts.LabelSelector = selector
-	}
-	// Row-level RBAC seam — same as runList. Without this, ?semantic=
-	// would rank denied rows by similarity and leak existence + score.
-	if cfg.ListFilter != nil {
-		extra, extraArgs, err := cfg.ListFilter(ctx, AuthorizeInput{Verb: "list", Kind: cfg.Kind, Namespace: p.Namespace})
-		if err != nil {
-			return nil, err
-		}
-		opts.ExtraWhere = extra
-		opts.ExtraArgs = extraArgs
-	}
-	results, err := cfg.Store.SemanticList(ctx, opts)
-	if err != nil {
-		return nil, huma.Error500InternalServerError("semantic list "+cfg.Kind, err)
-	}
-	items := make([]T, 0, len(results))
-	scores := make([]float32, 0, len(results))
-	for _, r := range results {
-		obj, err := v1alpha1.EnvelopeFromRaw(newObj, r.Object, cfg.Kind)
-		if err != nil {
-			return nil, huma.Error500InternalServerError("decode "+cfg.Kind, err)
-		}
-		items = append(items, obj)
-		scores = append(scores, r.Score)
-	}
-	out := &listOutput[T]{}
-	out.Body.Items = items
-	out.Body.SemanticScores = scores
 	return out, nil
 }
 

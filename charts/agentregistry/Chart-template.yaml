@@ -1,6 +1,6 @@
 apiVersion: v2
 name: agentregistry
-description: Production-grade Helm chart for Agent Registry -- deploy, secure, and scale the open-source platform for curating and managing AI agents, MCP servers, and skills on Kubernetes with bundled PostgreSQL/pgvector
+description: Production-grade Helm chart for Agent Registry -- deploy, secure, and scale the open-source platform for curating and managing AI agents, MCP servers, and skills on Kubernetes with bundled PostgreSQL
 type: application
 version: ${CHART_VERSION}
 appVersion: "${CHART_VERSION}"

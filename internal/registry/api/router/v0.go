@@ -7,21 +7,18 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/crud"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentlogs"
-	v0embeddings "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/embeddings"
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/importpipeline"
 	v0ping "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/ping"
 	v0version "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/version"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 	"github.com/agentregistry-dev/agentregistry/pkg/importer"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/danielgtaylor/huma/v2"
@@ -37,7 +34,7 @@ type Stores = map[string]*v1alpha1store.Store
 // RouteOptions contains the services that drive route registration.
 //
 // Stores is required; everything else is optional and gates a
-// specific feature area (deployments, embeddings, semantic search).
+// specific feature area (deployments, import).
 // RegisterRoutes returns an error if a required field is missing rather
 // than silently no-op'ing — a misconfigured boot fails loud.
 type RouteOptions struct {
@@ -62,25 +59,6 @@ type RouteOptions struct {
 	// still persists the row, DELETE still soft-deletes, but no adapter
 	// dispatch happens.
 	DeploymentCoordinator *deploymentsvc.Coordinator
-
-	// Indexer, when non-nil, enables POST /v0/embeddings/index +
-	// GET /v0/embeddings/index/{jobId}. Constructed at bootstrap only
-	// when AGENT_REGISTRY_EMBEDDINGS_ENABLED is set and a provider is
-	// reachable; nil disables the endpoints. The in-process job tracker
-	// is owned by the embeddings handler — there's no shared job
-	// manager concept across the API.
-	Indexer *embeddings.Indexer
-
-	// SemanticSearch, when non-nil, enables
-	// `?semantic=<q>&semanticThreshold=<f>` on list endpoints. The
-	// func embeds the query string and returns the vector; the list
-	// handler then routes through Store.SemanticList.
-	SemanticSearch resource.SemanticSearchFunc
-
-	// Authz gates admin-scope handlers (e.g. embeddings indexing) on
-	// an API level. Nil falls back to the public provider so the
-	// handlers register but every admin check short-circuits to allow.
-	Authz auth.Authorizer
 
 	// PerKindHooks injects per-kind Authorize + ListFilter
 	// callbacks into the generic resource handler. Enterprise builds
@@ -134,7 +112,6 @@ func RegisterRoutes(
 		pathPrefix,
 		opts.Stores,
 		opts.DeploymentCoordinator,
-		opts.SemanticSearch,
 		opts.PerKindHooks,
 		opts.RegistryValidator,
 	)
@@ -148,18 +125,6 @@ func RegisterRoutes(
 			BasePrefix:  pathPrefix,
 			Importer:    opts.Importer,
 			Authorizers: opts.PerKindHooks.Authorizers,
-		})
-	}
-
-	// Embeddings indexer endpoints — wired only when the indexer is
-	// present. Authz gates admin-only operations; when zero-valued it
-	// falls through to the public provider which allows every check,
-	// matching the historical OSS default.
-	if opts.Indexer != nil {
-		v0embeddings.Register(api, v0embeddings.Config{
-			BasePrefix: pathPrefix,
-			Indexer:    opts.Indexer,
-			Authz:      opts.Authz,
 		})
 	}
 
@@ -181,7 +146,7 @@ func RegisterRoutes(
 // When coord is non-nil, Deployment PUT/DELETE fire
 // coord.Apply/coord.Remove after the row is persisted so the platform
 // adapter converges runtime state synchronously with the API call.
-func registerKindRoutes(api huma.API, basePrefix string, stores Stores, coord *deploymentsvc.Coordinator, semantic resource.SemanticSearchFunc, perKind crud.PerKindHooks, registryValidator v1alpha1.RegistryValidatorFunc) {
+func registerKindRoutes(api huma.API, basePrefix string, stores Stores, coord *deploymentsvc.Coordinator, perKind crud.PerKindHooks, registryValidator v1alpha1.RegistryValidatorFunc) {
 	resolver := internaldb.NewResolver(stores)
 	if registryValidator == nil {
 		registryValidator = registries.Dispatcher
@@ -219,7 +184,7 @@ func registerKindRoutes(api huma.API, basePrefix string, stores Stores, coord *d
 
 	// Per-kind CRUD endpoints — one call per built-in kind, hidden
 	// inside crud.Register.
-	crud.Register(api, basePrefix, stores, resolver, registryValidator, semantic, perKind)
+	crud.Register(api, basePrefix, stores, resolver, registryValidator, perKind)
 
 	// Deployment-specific endpoints: logs stream (cancel is subsumed
 	// by DesiredState=undeployed + DELETE in the v1alpha1 lifecycle).
