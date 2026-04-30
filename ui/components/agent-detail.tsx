@@ -196,9 +196,6 @@ export function AgentDetail({ agent, allVersions: allVersionsProp }: AgentDetail
                   {agentData.repository.url}
                   <ExternalLink className="h-3 w-3" />
                 </a>
-                {agentData.repository.source && (
-                  <p className="text-xs text-muted-foreground mt-1">Source: {agentData.repository.source}</p>
-                )}
               </section>
             )}
 

@@ -9,17 +9,11 @@ const mockSkill: SkillResponse = {
     description:
       "Analyzes pull requests for code quality, security vulnerabilities, and adherence to best practices. Provides inline suggestions and summary reports.",
     version: "1.3.0",
-    category: "development",
-    repository: {
-      url: "https://github.com/example/code-review-skill",
-      source: "github",
+    source: {
+      repository: {
+        url: "https://github.com/example/code-review-skill",
+      },
     },
-    websiteUrl: "https://example.com/code-review",
-    packages: [
-      { identifier: "code-review-core", registryType: "npm", version: "1.3.0", transport: { type: "stdio" } },
-      { identifier: "code-review-cli", registryType: "npm", version: "1.3.0", transport: { type: "stdio" } },
-    ],
-    remotes: [{ url: "https://remote.example.com/code-review" }],
   },
   _meta: {
     "io.modelcontextprotocol.registry/official": {

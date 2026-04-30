@@ -55,7 +55,7 @@ func TestInitAgentCmd_BasicScaffold(t *testing.T) {
 	assert.Equal(t, "adk", spec["framework"])
 	assert.Equal(t, "python", spec["language"])
 	assert.Equal(t, "gemini", spec["modelProvider"])
-	assert.Equal(t, "gemini-2.0-flash", spec["modelName"])
+	assert.Equal(t, "gemini-2.5-flash", spec["modelName"])
 	assert.NotEmpty(t, spec["image"])
 	assert.NotEmpty(t, spec["description"])
 }
@@ -154,7 +154,6 @@ func TestInitAgentCmd_GitRepository(t *testing.T) {
 	repo, ok := spec["repository"].(map[string]any)
 	require.True(t, ok, "repository should be present in spec")
 	assert.Equal(t, "https://github.com/acme/mybot", repo["url"])
-	assert.Equal(t, "git", repo["source"])
 }
 
 func TestInitAgentCmd_NoGitRepository(t *testing.T) {
@@ -421,7 +420,6 @@ func TestInitSkillCmd_BasicScaffold(t *testing.T) {
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "myskill", spec["title"])
-	assert.Equal(t, "general", spec["category"])
 	assert.NotEmpty(t, spec["description"])
 }
 
@@ -437,7 +435,6 @@ func TestInitSkillCmd_CustomFlags(t *testing.T) {
 		"skill", "myskill",
 		"--version", "1.2.0",
 		"--description", "Text summarizer",
-		"--category", "nlp",
 	})
 	require.NoError(t, cmd.Execute())
 
@@ -446,7 +443,6 @@ func TestInitSkillCmd_CustomFlags(t *testing.T) {
 	assert.Equal(t, "1.2.0", metadata["version"])
 
 	spec := m["spec"].(map[string]any)
-	assert.Equal(t, "nlp", spec["category"])
 	assert.Equal(t, "Text summarizer", spec["description"])
 }
 

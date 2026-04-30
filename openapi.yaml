@@ -223,71 +223,6 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-    /v0/agents/{name}/readme:
-        get:
-            summary: Get the latest Agent readme
-            operationId: get-latest-agent-readme
-            parameters:
-                - name: namespace
-                  in: query
-                  description: Namespace (internal; defaults to 'default').
-                  explode: false
-                  schema:
-                    type: string
-                    description: Namespace (internal; defaults to 'default').
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Readme'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/agents/{name}/versions/{version}/readme:
-        get:
-            summary: Get a Agent readme by name and version
-            operationId: get-agent-readme
-            parameters:
-                - name: namespace
-                  in: query
-                  description: Namespace (internal; defaults to 'default').
-                  explode: false
-                  schema:
-                    type: string
-                    description: Namespace (internal; defaults to 'default').
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Readme'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
     /v0/apply:
         post:
             summary: Apply a multi-doc YAML stream of v1alpha1 resources
@@ -809,71 +744,6 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-    /v0/mcpservers/{name}/readme:
-        get:
-            summary: Get the latest MCPServer readme
-            operationId: get-latest-mcpserver-readme
-            parameters:
-                - name: namespace
-                  in: query
-                  description: Namespace (internal; defaults to 'default').
-                  explode: false
-                  schema:
-                    type: string
-                    description: Namespace (internal; defaults to 'default').
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Readme'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/mcpservers/{name}/versions/{version}/readme:
-        get:
-            summary: Get a MCPServer readme by name and version
-            operationId: get-mcpserver-readme
-            parameters:
-                - name: namespace
-                  in: query
-                  description: Namespace (internal; defaults to 'default').
-                  explode: false
-                  schema:
-                    type: string
-                    description: Namespace (internal; defaults to 'default').
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Readme'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
     /v0/ping:
         get:
             tags:
@@ -1107,71 +977,6 @@ paths:
             responses:
                 "204":
                     description: No Content
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/prompts/{name}/readme:
-        get:
-            summary: Get the latest Prompt readme
-            operationId: get-latest-prompt-readme
-            parameters:
-                - name: namespace
-                  in: query
-                  description: Namespace (internal; defaults to 'default').
-                  explode: false
-                  schema:
-                    type: string
-                    description: Namespace (internal; defaults to 'default').
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Readme'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/prompts/{name}/versions/{version}/readme:
-        get:
-            summary: Get a Prompt readme by name and version
-            operationId: get-prompt-readme
-            parameters:
-                - name: namespace
-                  in: query
-                  description: Namespace (internal; defaults to 'default').
-                  explode: false
-                  schema:
-                    type: string
-                    description: Namespace (internal; defaults to 'default').
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Readme'
                 default:
                     description: Error
                     content:
@@ -1616,71 +1421,6 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-    /v0/skills/{name}/readme:
-        get:
-            summary: Get the latest Skill readme
-            operationId: get-latest-skill-readme
-            parameters:
-                - name: namespace
-                  in: query
-                  description: Namespace (internal; defaults to 'default').
-                  explode: false
-                  schema:
-                    type: string
-                    description: Namespace (internal; defaults to 'default').
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Readme'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-    /v0/skills/{name}/versions/{version}/readme:
-        get:
-            summary: Get a Skill readme by name and version
-            operationId: get-skill-readme
-            parameters:
-                - name: namespace
-                  in: query
-                  description: Namespace (internal; defaults to 'default').
-                  explode: false
-                  schema:
-                    type: string
-                    description: Namespace (internal; defaults to 'default').
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Readme'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
     /v0/version:
         get:
             tags:
@@ -1722,33 +1462,6 @@ components:
                 - spec
                 - apiVersion
                 - kind
-        AgentPackage:
-            type: object
-            additionalProperties: false
-            properties:
-                identifier:
-                    type: string
-                registryType:
-                    type: string
-                transport:
-                    $ref: '#/components/schemas/TransportProto'
-                version:
-                    type: string
-            required:
-                - registryType
-                - identifier
-                - version
-                - transport
-        AgentRemote:
-            type: object
-            additionalProperties: false
-            properties:
-                type:
-                    type: string
-                url:
-                    type: string
-            required:
-                - type
         AgentSpec:
             type: object
             additionalProperties: false
@@ -1769,20 +1482,10 @@ components:
                     type: string
                 modelProvider:
                     type: string
-                packages:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/AgentPackage'
                 prompts:
                     type: array
                     items:
                         $ref: '#/components/schemas/ResourceRef'
-                readme:
-                    $ref: '#/components/schemas/Readme'
-                remotes:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/AgentRemote'
                 repository:
                     $ref: '#/components/schemas/Repository'
                 skills:
@@ -1790,8 +1493,6 @@ components:
                     items:
                         $ref: '#/components/schemas/ResourceRef'
                 title:
-                    type: string
-                websiteUrl:
                     type: string
         ApplyResult:
             type: object
@@ -2092,22 +1793,6 @@ components:
                         $ref: '#/components/schemas/MCPInputVariable'
             required:
                 - type
-        MCPIcon:
-            type: object
-            additionalProperties: false
-            properties:
-                mimeType:
-                    type: string
-                sizes:
-                    type: array
-                    items:
-                        type: string
-                src:
-                    type: string
-                theme:
-                    type: string
-            required:
-                - src
         MCPInputVariable:
             type: object
             additionalProperties: false
@@ -2219,16 +1904,10 @@ components:
             properties:
                 description:
                     type: string
-                icons:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/MCPIcon'
                 packages:
                     type: array
                     items:
                         $ref: '#/components/schemas/MCPPackage'
-                readme:
-                    $ref: '#/components/schemas/Readme'
                 remotes:
                     type: array
                     items:
@@ -2236,8 +1915,6 @@ components:
                 repository:
                     $ref: '#/components/schemas/Repository'
                 title:
-                    type: string
-                websiteUrl:
                     type: string
         MCPTransport:
             type: object
@@ -2320,8 +1997,6 @@ components:
                     type: string
                 description:
                     type: string
-                readme:
-                    $ref: '#/components/schemas/Readme'
         Provider:
             type: object
             additionalProperties: false
@@ -2352,26 +2027,10 @@ components:
                     type: string
             required:
                 - platform
-        Readme:
-            type: object
-            additionalProperties: false
-            properties:
-                content:
-                    type: string
-                contentType:
-                    type: string
-                encoding:
-                    type: string
-                source:
-                    type: string
         Repository:
             type: object
             additionalProperties: false
             properties:
-                id:
-                    type: string
-                source:
-                    type: string
                 subfolder:
                     type: string
                 url:
@@ -2410,52 +2069,21 @@ components:
                 - spec
                 - apiVersion
                 - kind
-        SkillPackage:
+        SkillSource:
             type: object
             additionalProperties: false
             properties:
-                identifier:
-                    type: string
-                registryType:
-                    type: string
-                transport:
-                    $ref: '#/components/schemas/TransportProto'
-                version:
-                    type: string
-            required:
-                - registryType
-                - identifier
-                - version
-                - transport
-        SkillRemote:
-            type: object
-            additionalProperties: false
-            properties:
-                url:
-                    type: string
+                repository:
+                    $ref: '#/components/schemas/Repository'
         SkillSpec:
             type: object
             additionalProperties: false
             properties:
-                category:
-                    type: string
                 description:
                     type: string
-                packages:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/SkillPackage'
-                readme:
-                    $ref: '#/components/schemas/Readme'
-                remotes:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/SkillRemote'
-                repository:
-                    $ref: '#/components/schemas/Repository'
+                source:
+                    $ref: '#/components/schemas/SkillSource'
                 title:
-                    type: string
-                websiteUrl:
                     type: string
         Status:
             type: object
@@ -2465,14 +2093,6 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/Condition'
-        TransportProto:
-            type: object
-            additionalProperties: false
-            properties:
-                type:
-                    type: string
-            required:
-                - type
         VersionBody:
             type: object
             additionalProperties: false

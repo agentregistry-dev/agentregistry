@@ -16,19 +16,8 @@ func (m *MCPServer) Validate() error {
 func validateMCPServerSpec(s *MCPServerSpec) FieldErrors {
 	var errs FieldErrors
 	errs.Append("spec.title", validateTitle(s.Title))
-	errs.Append("spec.websiteUrl", validateWebsiteURL(s.WebsiteURL))
 	for _, e := range validateRepository(s.Repository) {
 		errs.Append("spec."+e.Path, e.Cause)
-	}
-
-	for i, icon := range s.Icons {
-		if icon.Src == "" {
-			errs.Append(fmt.Sprintf("spec.icons[%d].src", i), fmt.Errorf("%w", ErrRequiredField))
-			continue
-		}
-		if err := validateWebsiteURL(icon.Src); err != nil {
-			errs.Append(fmt.Sprintf("spec.icons[%d].src", i), err)
-		}
 	}
 
 	for i, pkg := range s.Packages {
