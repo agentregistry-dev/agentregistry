@@ -9,9 +9,9 @@
 -- shape identical across every kind so the generic Store works without
 -- per-kind branching.
 --
--- Data split (existing rows in v1alpha1.mcp_servers whose spec carries a
--- non-empty `remotes` array) is performed by a separate boot-time data
--- migration; this file only creates the table.
+-- This migration only creates the table. Existing pre-v1alpha1 demo data is
+-- intentionally not translated; operators should start this API shape from a
+-- fresh database.
 
 CREATE TABLE IF NOT EXISTS v1alpha1.remote_mcp_servers (
     namespace          VARCHAR(255) NOT NULL,

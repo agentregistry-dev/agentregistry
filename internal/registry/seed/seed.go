@@ -123,8 +123,8 @@ func upsertSeedMCPServer(
 }
 
 // upsertSeedRemoteMCPServer materializes one entry from srv.Remotes as a
-// sibling RemoteMCPServer row. The naming rule mirrors the boot-time
-// migration so re-runs land on the same identity.
+// sibling RemoteMCPServer row. The naming rule is stable so re-runs land on
+// the same identity.
 func upsertSeedRemoteMCPServer(
 	ctx context.Context,
 	store *v1alpha1store.Store,

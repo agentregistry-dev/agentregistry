@@ -174,7 +174,7 @@ func (a *kubernetesDeploymentAdapter) Discover(ctx context.Context, in types.Dis
 				continue
 			}
 			out = append(out, types.DiscoveryResult{
-				TargetKind: v1alpha1.KindMCPServer,
+				TargetKind: v1alpha1.KindRemoteMCPServer,
 				Namespace:  remote.Namespace,
 				Name:       remote.Name,
 			})
