@@ -277,8 +277,6 @@ database:
     # -- External PostgreSQL connection string.
     # -- When set, Agent Registry connects here instead of the bundled instance. The bundled pod (if enabled) still deploys but is unused; the init container is skipped.
     url: ""
-    # -- Enable features that require a pgvector-capable PostgreSQL instance. e.g. vector schema migrations, embeddings and semantic search.
-    vectorEnabled: false
     # -- Bundled PostgreSQL — dev/eval only.
     bundled:
       # -- Deploy a PostgreSQL instance alongside Agent Registry

@@ -53,21 +53,6 @@ paths:
                   schema:
                     type: boolean
                     description: Include rows with a deletionTimestamp.
-                - name: semantic
-                  in: query
-                  description: Semantic search query. Returns results ranked by similarity.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Semantic search query. Returns results ranked by similarity.
-                - name: semanticThreshold
-                  in: query
-                  description: Drop results with cosine distance above this threshold (0 = no filter).
-                  explode: false
-                  schema:
-                    type: number
-                    description: Drop results with cosine distance above this threshold (0 = no filter).
-                    format: float
             responses:
                 "200":
                     description: OK
@@ -400,21 +385,6 @@ paths:
                   schema:
                     type: boolean
                     description: Include rows with a deletionTimestamp.
-                - name: semantic
-                  in: query
-                  description: Semantic search query. Returns results ranked by similarity.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Semantic search query. Returns results ranked by similarity.
-                - name: semanticThreshold
-                  in: query
-                  description: Drop results with cosine distance above this threshold (0 = no filter).
-                  explode: false
-                  schema:
-                    type: number
-                    description: Drop results with cosine distance above this threshold (0 = no filter).
-                    format: float
             responses:
                 "200":
                     description: OK
@@ -639,21 +609,6 @@ paths:
                   schema:
                     type: boolean
                     description: Include rows with a deletionTimestamp.
-                - name: semantic
-                  in: query
-                  description: Semantic search query. Returns results ranked by similarity.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Semantic search query. Returns results ranked by similarity.
-                - name: semanticThreshold
-                  in: query
-                  description: Drop results with cosine distance above this threshold (0 = no filter).
-                  explode: false
-                  schema:
-                    type: number
-                    description: Drop results with cosine distance above this threshold (0 = no filter).
-                    format: float
             responses:
                 "200":
                     description: OK
@@ -943,21 +898,6 @@ paths:
                   schema:
                     type: boolean
                     description: Include rows with a deletionTimestamp.
-                - name: semantic
-                  in: query
-                  description: Semantic search query. Returns results ranked by similarity.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Semantic search query. Returns results ranked by similarity.
-                - name: semanticThreshold
-                  in: query
-                  description: Drop results with cosine distance above this threshold (0 = no filter).
-                  explode: false
-                  schema:
-                    type: number
-                    description: Drop results with cosine distance above this threshold (0 = no filter).
-                    format: float
             responses:
                 "200":
                     description: OK
@@ -1227,21 +1167,6 @@ paths:
                   schema:
                     type: boolean
                     description: Include rows with a deletionTimestamp.
-                - name: semantic
-                  in: query
-                  description: Semantic search query. Returns results ranked by similarity.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Semantic search query. Returns results ranked by similarity.
-                - name: semanticThreshold
-                  in: query
-                  description: Drop results with cosine distance above this threshold (0 = no filter).
-                  explode: false
-                  schema:
-                    type: number
-                    description: Drop results with cosine distance above this threshold (0 = no filter).
-                    format: float
             responses:
                 "200":
                     description: OK
@@ -1446,21 +1371,6 @@ paths:
                   schema:
                     type: boolean
                     description: Include rows with a deletionTimestamp.
-                - name: semantic
-                  in: query
-                  description: Semantic search query. Returns results ranked by similarity.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Semantic search query. Returns results ranked by similarity.
-                - name: semanticThreshold
-                  in: query
-                  description: Drop results with cosine distance above this threshold (0 = no filter).
-                  explode: false
-                  schema:
-                    type: number
-                    description: Drop results with cosine distance above this threshold (0 = no filter).
-                    format: float
             responses:
                 "200":
                     description: OK
@@ -1964,11 +1874,6 @@ components:
                         $ref: '#/components/schemas/Agent'
                 nextCursor:
                     type: string
-                semanticScores:
-                    type: array
-                    items:
-                        type: number
-                        format: float
             required:
                 - items
         ListOutputDeploymentBody:
@@ -1981,11 +1886,6 @@ components:
                         $ref: '#/components/schemas/Deployment'
                 nextCursor:
                     type: string
-                semanticScores:
-                    type: array
-                    items:
-                        type: number
-                        format: float
             required:
                 - items
         ListOutputMCPServerBody:
@@ -1998,11 +1898,6 @@ components:
                         $ref: '#/components/schemas/MCPServer'
                 nextCursor:
                     type: string
-                semanticScores:
-                    type: array
-                    items:
-                        type: number
-                        format: float
             required:
                 - items
         ListOutputPromptBody:
@@ -2015,11 +1910,6 @@ components:
                         $ref: '#/components/schemas/Prompt'
                 nextCursor:
                     type: string
-                semanticScores:
-                    type: array
-                    items:
-                        type: number
-                        format: float
             required:
                 - items
         ListOutputProviderBody:
@@ -2032,11 +1922,6 @@ components:
                         $ref: '#/components/schemas/Provider'
                 nextCursor:
                     type: string
-                semanticScores:
-                    type: array
-                    items:
-                        type: number
-                        format: float
             required:
                 - items
         ListOutputSkillBody:
@@ -2049,11 +1934,6 @@ components:
                         $ref: '#/components/schemas/Skill'
                 nextCursor:
                     type: string
-                semanticScores:
-                    type: array
-                    items:
-                        type: number
-                        format: float
             required:
                 - items
         MCPArgument:

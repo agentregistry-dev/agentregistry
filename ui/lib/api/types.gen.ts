@@ -142,37 +142,31 @@ export type HealthBody = {
 export type ListOutputAgentBody = {
     items: Array<Agent>;
     nextCursor?: string;
-    semanticScores?: Array<number>;
 };
 
 export type ListOutputDeploymentBody = {
     items: Array<Deployment>;
     nextCursor?: string;
-    semanticScores?: Array<number>;
 };
 
 export type ListOutputMcpServerBody = {
     items: Array<McpServer>;
     nextCursor?: string;
-    semanticScores?: Array<number>;
 };
 
 export type ListOutputPromptBody = {
     items: Array<Prompt>;
     nextCursor?: string;
-    semanticScores?: Array<number>;
 };
 
 export type ListOutputProviderBody = {
     items: Array<Provider>;
     nextCursor?: string;
-    semanticScores?: Array<number>;
 };
 
 export type ListOutputSkillBody = {
     items: Array<Skill>;
     nextCursor?: string;
-    semanticScores?: Array<number>;
 };
 
 export type McpArgument = {
@@ -417,14 +411,6 @@ export type ListAgentsData = {
          * Include rows with a deletionTimestamp.
          */
         includeTerminating?: boolean;
-        /**
-         * Semantic search query. Returns results ranked by similarity.
-         */
-        semantic?: string;
-        /**
-         * Drop results with cosine distance above this threshold (0 = no filter).
-         */
-        semanticThreshold?: number;
     };
     url: '/v0/agents';
 };
@@ -735,14 +721,6 @@ export type ListDeploymentsData = {
          * Include rows with a deletionTimestamp.
          */
         includeTerminating?: boolean;
-        /**
-         * Semantic search query. Returns results ranked by similarity.
-         */
-        semantic?: string;
-        /**
-         * Drop results with cosine distance above this threshold (0 = no filter).
-         */
-        semanticThreshold?: number;
     };
     url: '/v0/deployments';
 };
@@ -953,14 +931,6 @@ export type ListMcpserversData = {
          * Include rows with a deletionTimestamp.
          */
         includeTerminating?: boolean;
-        /**
-         * Semantic search query. Returns results ranked by similarity.
-         */
-        semantic?: string;
-        /**
-         * Drop results with cosine distance above this threshold (0 = no filter).
-         */
-        semanticThreshold?: number;
     };
     url: '/v0/mcpservers';
 };
@@ -1236,14 +1206,6 @@ export type ListPromptsData = {
          * Include rows with a deletionTimestamp.
          */
         includeTerminating?: boolean;
-        /**
-         * Semantic search query. Returns results ranked by similarity.
-         */
-        semantic?: string;
-        /**
-         * Drop results with cosine distance above this threshold (0 = no filter).
-         */
-        semanticThreshold?: number;
     };
     url: '/v0/prompts';
 };
@@ -1494,14 +1456,6 @@ export type ListProvidersData = {
          * Include rows with a deletionTimestamp.
          */
         includeTerminating?: boolean;
-        /**
-         * Semantic search query. Returns results ranked by similarity.
-         */
-        semantic?: string;
-        /**
-         * Drop results with cosine distance above this threshold (0 = no filter).
-         */
-        semanticThreshold?: number;
     };
     url: '/v0/providers';
 };
@@ -1687,14 +1641,6 @@ export type ListSkillsData = {
          * Include rows with a deletionTimestamp.
          */
         includeTerminating?: boolean;
-        /**
-         * Semantic search query. Returns results ranked by similarity.
-         */
-        semantic?: string;
-        /**
-         * Drop results with cosine distance above this threshold (0 = no filter).
-         */
-        semanticThreshold?: number;
     };
     url: '/v0/skills';
 };
