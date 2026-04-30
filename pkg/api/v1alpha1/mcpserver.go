@@ -15,22 +15,11 @@ type MCPServer struct {
 type MCPServerSpec struct {
 	Title       string      `json:"title,omitempty" yaml:"title,omitempty"`
 	Description string      `json:"description,omitempty" yaml:"description,omitempty"`
-	WebsiteURL  string      `json:"websiteUrl,omitempty" yaml:"websiteUrl,omitempty"`
-	Readme      *Readme     `json:"readme,omitempty" yaml:"readme,omitempty"`
 	Repository  *Repository `json:"repository,omitempty" yaml:"repository,omitempty"`
-	Icons       []MCPIcon   `json:"icons,omitempty" yaml:"icons,omitempty"`
 
 	// Packages describes the ways this server can be run locally (stdio,
 	// command, container). Each entry carries its own runtime/args/env.
 	Packages []MCPPackage `json:"packages,omitempty" yaml:"packages,omitempty"`
-}
-
-// MCPIcon describes an icon associated with an MCP server.
-type MCPIcon struct {
-	Src      string   `json:"src" yaml:"src"`
-	MimeType *string  `json:"mimeType,omitempty" yaml:"mimeType,omitempty"`
-	Sizes    []string `json:"sizes,omitempty" yaml:"sizes,omitempty"`
-	Theme    *string  `json:"theme,omitempty" yaml:"theme,omitempty"`
 }
 
 // MCPTransport describes a transport endpoint — used both inside MCPPackage

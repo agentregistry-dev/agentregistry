@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ApplyAgentData, ApplyAgentErrors, ApplyAgentResponses, ApplyBatchData, ApplyBatchErrors, ApplyBatchResponses, ApplyDeploymentData, ApplyDeploymentErrors, ApplyDeploymentResponses, ApplyMcpserverData, ApplyMcpserverErrors, ApplyMcpserverResponses, ApplyPromptData, ApplyPromptErrors, ApplyPromptResponses, ApplyProviderData, ApplyProviderErrors, ApplyProviderResponses, ApplyRemotemcpserverData, ApplyRemotemcpserverErrors, ApplyRemotemcpserverResponses, ApplySkillData, ApplySkillErrors, ApplySkillResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteBatchData, DeleteBatchErrors, DeleteBatchResponses, DeleteDeploymentData, DeleteDeploymentErrors, DeleteDeploymentResponses, DeleteMcpserverData, DeleteMcpserverErrors, DeleteMcpserverResponses, DeletePromptData, DeletePromptErrors, DeletePromptResponses, DeleteProviderData, DeleteProviderErrors, DeleteProviderResponses, DeleteRemotemcpserverData, DeleteRemotemcpserverErrors, DeleteRemotemcpserverResponses, DeleteSkillData, DeleteSkillErrors, DeleteSkillResponses, GetAgentData, GetAgentErrors, GetAgentReadmeData, GetAgentReadmeErrors, GetAgentReadmeResponses, GetAgentResponses, GetDeploymentData, GetDeploymentErrors, GetDeploymentResponses, GetHealthV0Data, GetHealthV0Errors, GetHealthV0Responses, GetLatestAgentData, GetLatestAgentErrors, GetLatestAgentReadmeData, GetLatestAgentReadmeErrors, GetLatestAgentReadmeResponses, GetLatestAgentResponses, GetLatestDeploymentData, GetLatestDeploymentErrors, GetLatestDeploymentResponses, GetLatestMcpserverData, GetLatestMcpserverErrors, GetLatestMcpserverReadmeData, GetLatestMcpserverReadmeErrors, GetLatestMcpserverReadmeResponses, GetLatestMcpserverResponses, GetLatestPromptData, GetLatestPromptErrors, GetLatestPromptReadmeData, GetLatestPromptReadmeErrors, GetLatestPromptReadmeResponses, GetLatestPromptResponses, GetLatestProviderData, GetLatestProviderErrors, GetLatestProviderResponses, GetLatestRemotemcpserverData, GetLatestRemotemcpserverErrors, GetLatestRemotemcpserverResponses, GetLatestSkillData, GetLatestSkillErrors, GetLatestSkillReadmeData, GetLatestSkillReadmeErrors, GetLatestSkillReadmeResponses, GetLatestSkillResponses, GetMcpserverData, GetMcpserverErrors, GetMcpserverReadmeData, GetMcpserverReadmeErrors, GetMcpserverReadmeResponses, GetMcpserverResponses, GetPromptData, GetPromptErrors, GetPromptReadmeData, GetPromptReadmeErrors, GetPromptReadmeResponses, GetPromptResponses, GetProviderData, GetProviderErrors, GetProviderResponses, GetRemotemcpserverData, GetRemotemcpserverErrors, GetRemotemcpserverResponses, GetSkillData, GetSkillErrors, GetSkillReadmeData, GetSkillReadmeErrors, GetSkillReadmeResponses, GetSkillResponses, GetVersionV0Data, GetVersionV0Errors, GetVersionV0Responses, ListAgentsData, ListAgentsErrors, ListAgentsResponses, ListDeploymentsData, ListDeploymentsErrors, ListDeploymentsResponses, ListMcpserversData, ListMcpserversErrors, ListMcpserversResponses, ListPromptsData, ListPromptsErrors, ListPromptsResponses, ListProvidersData, ListProvidersErrors, ListProvidersResponses, ListRemotemcpserversData, ListRemotemcpserversErrors, ListRemotemcpserversResponses, ListSkillsData, ListSkillsErrors, ListSkillsResponses, PingV0Data, PingV0Errors, PingV0Responses } from './types.gen';
+import type { ApplyAgentData, ApplyAgentErrors, ApplyAgentResponses, ApplyBatchData, ApplyBatchErrors, ApplyBatchResponses, ApplyDeploymentData, ApplyDeploymentErrors, ApplyDeploymentResponses, ApplyMcpserverData, ApplyMcpserverErrors, ApplyMcpserverResponses, ApplyPromptData, ApplyPromptErrors, ApplyPromptResponses, ApplyProviderData, ApplyProviderErrors, ApplyProviderResponses, ApplyRemotemcpserverData, ApplyRemotemcpserverErrors, ApplyRemotemcpserverResponses, ApplySkillData, ApplySkillErrors, ApplySkillResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteBatchData, DeleteBatchErrors, DeleteBatchResponses, DeleteDeploymentData, DeleteDeploymentErrors, DeleteDeploymentResponses, DeleteMcpserverData, DeleteMcpserverErrors, DeleteMcpserverResponses, DeletePromptData, DeletePromptErrors, DeletePromptResponses, DeleteProviderData, DeleteProviderErrors, DeleteProviderResponses, DeleteRemotemcpserverData, DeleteRemotemcpserverErrors, DeleteRemotemcpserverResponses, DeleteSkillData, DeleteSkillErrors, DeleteSkillResponses, GetAgentData, GetAgentErrors, GetAgentResponses, GetDeploymentData, GetDeploymentErrors, GetDeploymentResponses, GetHealthV0Data, GetHealthV0Errors, GetHealthV0Responses, GetLatestAgentData, GetLatestAgentErrors, GetLatestAgentResponses, GetLatestDeploymentData, GetLatestDeploymentErrors, GetLatestDeploymentResponses, GetLatestMcpserverData, GetLatestMcpserverErrors, GetLatestMcpserverResponses, GetLatestPromptData, GetLatestPromptErrors, GetLatestPromptResponses, GetLatestProviderData, GetLatestProviderErrors, GetLatestProviderResponses, GetLatestRemotemcpserverData, GetLatestRemotemcpserverErrors, GetLatestRemotemcpserverResponses, GetLatestSkillData, GetLatestSkillErrors, GetLatestSkillResponses, GetMcpserverData, GetMcpserverErrors, GetMcpserverResponses, GetPromptData, GetPromptErrors, GetPromptResponses, GetProviderData, GetProviderErrors, GetProviderResponses, GetRemotemcpserverData, GetRemotemcpserverErrors, GetRemotemcpserverResponses, GetSkillData, GetSkillErrors, GetSkillResponses, GetVersionV0Data, GetVersionV0Errors, GetVersionV0Responses, ListAgentsData, ListAgentsErrors, ListAgentsResponses, ListDeploymentsData, ListDeploymentsErrors, ListDeploymentsResponses, ListMcpserversData, ListMcpserversErrors, ListMcpserversResponses, ListPromptsData, ListPromptsErrors, ListPromptsResponses, ListProvidersData, ListProvidersErrors, ListProvidersResponses, ListRemotemcpserversData, ListRemotemcpserversErrors, ListRemotemcpserversResponses, ListSkillsData, ListSkillsErrors, ListSkillsResponses, PingV0Data, PingV0Errors, PingV0Responses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -49,16 +49,6 @@ export const applyAgent = <ThrowOnError extends boolean = false>(options: Option
         ...options.headers
     }
 });
-
-/**
- * Get the latest Agent readme
- */
-export const getLatestAgentReadme = <ThrowOnError extends boolean = false>(options: Options<GetLatestAgentReadmeData, ThrowOnError>) => (options.client ?? client).get<GetLatestAgentReadmeResponses, GetLatestAgentReadmeErrors, ThrowOnError>({ url: '/v0/agents/{name}/readme', ...options });
-
-/**
- * Get a Agent readme by name and version
- */
-export const getAgentReadme = <ThrowOnError extends boolean = false>(options: Options<GetAgentReadmeData, ThrowOnError>) => (options.client ?? client).get<GetAgentReadmeResponses, GetAgentReadmeErrors, ThrowOnError>({ url: '/v0/agents/{name}/versions/{version}/readme', ...options });
 
 /**
  * Delete v1alpha1 resources identified by a multi-doc YAML stream
@@ -158,16 +148,6 @@ export const applyMcpserver = <ThrowOnError extends boolean = false>(options: Op
 });
 
 /**
- * Get the latest MCPServer readme
- */
-export const getLatestMcpserverReadme = <ThrowOnError extends boolean = false>(options: Options<GetLatestMcpserverReadmeData, ThrowOnError>) => (options.client ?? client).get<GetLatestMcpserverReadmeResponses, GetLatestMcpserverReadmeErrors, ThrowOnError>({ url: '/v0/mcpservers/{name}/readme', ...options });
-
-/**
- * Get a MCPServer readme by name and version
- */
-export const getMcpserverReadme = <ThrowOnError extends boolean = false>(options: Options<GetMcpserverReadmeData, ThrowOnError>) => (options.client ?? client).get<GetMcpserverReadmeResponses, GetMcpserverReadmeErrors, ThrowOnError>({ url: '/v0/mcpservers/{name}/versions/{version}/readme', ...options });
-
-/**
  * Ping
  *
  * Simple ping endpoint
@@ -205,16 +185,6 @@ export const applyPrompt = <ThrowOnError extends boolean = false>(options: Optio
         ...options.headers
     }
 });
-
-/**
- * Get the latest Prompt readme
- */
-export const getLatestPromptReadme = <ThrowOnError extends boolean = false>(options: Options<GetLatestPromptReadmeData, ThrowOnError>) => (options.client ?? client).get<GetLatestPromptReadmeResponses, GetLatestPromptReadmeErrors, ThrowOnError>({ url: '/v0/prompts/{name}/readme', ...options });
-
-/**
- * Get a Prompt readme by name and version
- */
-export const getPromptReadme = <ThrowOnError extends boolean = false>(options: Options<GetPromptReadmeData, ThrowOnError>) => (options.client ?? client).get<GetPromptReadmeResponses, GetPromptReadmeErrors, ThrowOnError>({ url: '/v0/prompts/{name}/versions/{version}/readme', ...options });
 
 /**
  * List Provider (scoped by ?namespace)
@@ -311,16 +281,6 @@ export const applySkill = <ThrowOnError extends boolean = false>(options: Option
         ...options.headers
     }
 });
-
-/**
- * Get the latest Skill readme
- */
-export const getLatestSkillReadme = <ThrowOnError extends boolean = false>(options: Options<GetLatestSkillReadmeData, ThrowOnError>) => (options.client ?? client).get<GetLatestSkillReadmeResponses, GetLatestSkillReadmeErrors, ThrowOnError>({ url: '/v0/skills/{name}/readme', ...options });
-
-/**
- * Get a Skill readme by name and version
- */
-export const getSkillReadme = <ThrowOnError extends boolean = false>(options: Options<GetSkillReadmeData, ThrowOnError>) => (options.client ?? client).get<GetSkillReadmeResponses, GetSkillReadmeErrors, ThrowOnError>({ url: '/v0/skills/{name}/versions/{version}/readme', ...options });
 
 /**
  * Get version information

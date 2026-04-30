@@ -21,7 +21,7 @@ import (
 // — they're scanner output, not user-authored search-relevant content.
 func BuildMCPServerEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.MCPServerSpec) string {
 	var parts []string
-	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version, spec.WebsiteURL)
+	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version)
 	appendJSON(&parts, spec.Repository)
 	appendJSON(&parts, spec.Packages)
 	return strings.Join(parts, "\n")
@@ -43,7 +43,6 @@ func BuildAgentEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.AgentSpe
 		spec.Title,
 		spec.Description,
 		meta.Version,
-		spec.WebsiteURL,
 		spec.Language,
 		spec.Framework,
 		spec.ModelProvider,
@@ -60,8 +59,8 @@ func BuildAgentEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.AgentSpe
 // BuildSkillEmbeddingPayload assembles the canonical text for a Skill.
 func BuildSkillEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.SkillSpec) string {
 	var parts []string
-	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version, spec.WebsiteURL)
-	appendJSON(&parts, spec.Repository)
+	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version)
+	appendJSON(&parts, spec.Source)
 	return strings.Join(parts, "\n")
 }
 

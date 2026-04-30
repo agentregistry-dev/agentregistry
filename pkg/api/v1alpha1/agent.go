@@ -16,16 +16,14 @@ type Agent struct {
 // reference it here.
 type AgentSpec struct {
 	// Core fields.
-	Title             string  `json:"title,omitempty" yaml:"title,omitempty"`
-	Description       string  `json:"description,omitempty" yaml:"description,omitempty"`
-	Image             string  `json:"image,omitempty" yaml:"image,omitempty"`
-	Language          string  `json:"language,omitempty" yaml:"language,omitempty"`
-	Framework         string  `json:"framework,omitempty" yaml:"framework,omitempty"`
-	ModelProvider     string  `json:"modelProvider,omitempty" yaml:"modelProvider,omitempty"`
-	ModelName         string  `json:"modelName,omitempty" yaml:"modelName,omitempty"`
-	TelemetryEndpoint string  `json:"telemetryEndpoint,omitempty" yaml:"telemetryEndpoint,omitempty"`
-	WebsiteURL        string  `json:"websiteUrl,omitempty" yaml:"websiteUrl,omitempty"`
-	Readme            *Readme `json:"readme,omitempty" yaml:"readme,omitempty"`
+	Title             string `json:"title,omitempty" yaml:"title,omitempty"`
+	Description       string `json:"description,omitempty" yaml:"description,omitempty"`
+	Image             string `json:"image,omitempty" yaml:"image,omitempty"`
+	Language          string `json:"language,omitempty" yaml:"language,omitempty"`
+	Framework         string `json:"framework,omitempty" yaml:"framework,omitempty"`
+	ModelProvider     string `json:"modelProvider,omitempty" yaml:"modelProvider,omitempty"`
+	ModelName         string `json:"modelName,omitempty" yaml:"modelName,omitempty"`
+	TelemetryEndpoint string `json:"telemetryEndpoint,omitempty" yaml:"telemetryEndpoint,omitempty"`
 
 	Repository *Repository `json:"repository,omitempty" yaml:"repository,omitempty"`
 
@@ -35,22 +33,4 @@ type AgentSpec struct {
 	MCPServers []ResourceRef `json:"mcpServers,omitempty" yaml:"mcpServers,omitempty"`
 	Skills     []ResourceRef `json:"skills,omitempty" yaml:"skills,omitempty"`
 	Prompts    []ResourceRef `json:"prompts,omitempty" yaml:"prompts,omitempty"`
-
-	// Distribution metadata.
-	Packages []AgentPackage `json:"packages,omitempty" yaml:"packages,omitempty"`
-}
-
-// AgentPackage describes a distributable package of the agent (e.g. an OCI
-// image or npm package reference).
-type AgentPackage struct {
-	RegistryType string         `json:"registryType" yaml:"registryType"`
-	Identifier   string         `json:"identifier" yaml:"identifier"`
-	Version      string         `json:"version" yaml:"version"`
-	Transport    TransportProto `json:"transport" yaml:"transport"`
-}
-
-// AgentRemote describes a remote endpoint at which the agent is reachable.
-type AgentRemote struct {
-	Type string `json:"type" yaml:"type"`
-	URL  string `json:"url,omitempty" yaml:"url,omitempty"`
 }

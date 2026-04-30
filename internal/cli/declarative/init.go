@@ -168,7 +168,7 @@ Supported languages:  python (for adk)`,
 	cmd.Flags().StringVar(&initVersion, "version", "0.1.0", "Initial version")
 	cmd.Flags().StringVar(&initDescription, "description", "", "Agent description")
 	cmd.Flags().StringVar(&initModelProvider, "model-provider", "Gemini", "Model provider (OpenAI, Anthropic, Gemini, AzureOpenAI, Agentgateway)")
-	cmd.Flags().StringVar(&initModelName, "model-name", "gemini-2.0-flash", "Model name")
+	cmd.Flags().StringVar(&initModelName, "model-name", "gemini-2.5-flash", "Model name")
 	cmd.Flags().StringVar(&initImage, "image", "", "Docker image (default: localhost:5001/<name>:latest)")
 	cmd.Flags().StringVar(&initGit, "git", "", "Git repository URL (GitHub, GitLab, Bitbucket)")
 	cmd.Flags().StringArrayVar(&initMCPs, "mcp", nil, "Registry MCP server to reference: name[@version] (repeatable)")
@@ -216,8 +216,7 @@ func writeDeclarativeAgentYAML(projectDir, name, ver, image, language, framework
 
 	if gitURL != "" {
 		agent.Spec.Repository = &v1alpha1.Repository{
-			URL:    gitURL,
-			Source: "git",
+			URL: gitURL,
 		}
 	}
 
@@ -304,7 +303,7 @@ func defaultInitModelName(provider string) (string, bool) {
 	case "anthropic":
 		return "claude-3-5-sonnet", true
 	case "gemini":
-		return "gemini-2.0-flash", true
+		return "gemini-2.5-flash", true
 	case "azureopenai":
 		return "your-deployment-name", true
 	default:
@@ -434,7 +433,6 @@ func writeDeclarativeMCPYAML(projectDir, name, ver, image, description string) e
 				{
 					RegistryType: "oci",
 					Identifier:   image,
-					Version:      ver,
 					Transport:    v1alpha1.MCPTransport{Type: "stdio"},
 				},
 			},
@@ -455,8 +453,6 @@ func newInitSkillCmd() *cobra.Command {
 	var (
 		initVersion     string
 		initDescription string
-		initCategory    string
-		initImage       string
 	)
 
 	cmd := &cobra.Command{
@@ -468,7 +464,7 @@ containing a declarative skill.yaml (ar.dev/v1alpha1) and source stubs.
 The generated skill.yaml can be applied directly:
   arctl apply -f NAME/skill.yaml`,
 		Example: `  arctl init skill my-skill
-  arctl init skill my-skill --category nlp --description "Text summarizer"`,
+  arctl init skill my-skill --description "Text summarizer"`,
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -476,15 +472,6 @@ The generated skill.yaml can be applied directly:
 
 			if err := validators.ValidateSkillName(name); err != nil {
 				return fmt.Errorf("invalid skill name: %w", err)
-			}
-
-			image := initImage
-			if image == "" {
-				registry := strings.TrimSuffix(version.DockerRegistry, "/")
-				if registry == "" {
-					registry = "localhost:5001"
-				}
-				image = fmt.Sprintf("%s/%s:latest", registry, name)
 			}
 
 			cwd, err := os.Getwd()
@@ -501,16 +488,14 @@ The generated skill.yaml can be applied directly:
 				return fmt.Errorf("generating skill project: %w", err)
 			}
 
-			if err := writeDeclarativeSkillYAML(projectDir, name, initVersion, initDescription, initCategory, image); err != nil {
+			if err := writeDeclarativeSkillYAML(projectDir, name, initVersion, initDescription); err != nil {
 				return fmt.Errorf("writing declarative skill.yaml: %w", err)
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "✓ Successfully created skill: %s\n", name)
 			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "  1. cd %s\n", name)
-			fmt.Fprintf(cmd.OutOrStdout(), "  2. (Optional) Build and push the image if developing locally:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "     arctl build . --push\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "  3. Publish the skill to the registry:\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "  2. Publish the skill to the registry:\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "     arctl apply -f skill.yaml\n")
 			return nil
 		},
@@ -518,13 +503,11 @@ The generated skill.yaml can be applied directly:
 
 	cmd.Flags().StringVar(&initVersion, "version", "0.1.0", "Initial version")
 	cmd.Flags().StringVar(&initDescription, "description", "", "Skill description")
-	cmd.Flags().StringVar(&initCategory, "category", "general", "Skill category (e.g. nlp, general)")
-	cmd.Flags().StringVar(&initImage, "image", "", "Docker image (default: localhost:5001/<name>:latest)")
 
 	return cmd
 }
 
-func writeDeclarativeSkillYAML(projectDir, name, ver, description, category, image string) error {
+func writeDeclarativeSkillYAML(projectDir, name, ver, description string) error {
 	desc := description
 	if desc == "" {
 		desc = fmt.Sprintf("%s skill", name)
@@ -541,21 +524,8 @@ func writeDeclarativeSkillYAML(projectDir, name, ver, description, category, ima
 		},
 		Spec: v1alpha1.SkillSpec{
 			Title:       name,
-			Category:    category,
 			Description: desc,
 		},
-	}
-	if image != "" {
-		// OCI packages under v1alpha1 carry the version pinned in the
-		// identifier — separate version/registryBaseUrl fields are
-		// rejected by the validator. The image string already looks like
-		// `host/name:tag`, which is a valid canonical OCI reference.
-		pkg := v1alpha1.SkillPackage{
-			RegistryType: v1alpha1.RegistryTypeOCI,
-			Identifier:   image,
-			Transport:    v1alpha1.TransportProto{Type: "stdio"},
-		}
-		skill.Spec.Packages = []v1alpha1.SkillPackage{pkg}
 	}
 
 	b, err := yaml.Marshal(skill)

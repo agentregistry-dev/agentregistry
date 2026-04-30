@@ -180,13 +180,10 @@ func seedServerToMCPSpec(s *seedServerJSON) (v1alpha1.MCPServerSpec, error) {
 	spec := v1alpha1.MCPServerSpec{
 		Description: s.Description,
 		Title:       s.Title,
-		WebsiteURL:  s.WebsiteURL,
 	}
 	if s.Repository != nil {
 		spec.Repository = &v1alpha1.Repository{
 			URL:       s.Repository.URL,
-			Source:    s.Repository.Source,
-			ID:        s.Repository.ID,
 			Subfolder: s.Repository.Subfolder,
 		}
 	}

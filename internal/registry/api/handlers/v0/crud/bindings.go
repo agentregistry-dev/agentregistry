@@ -17,10 +17,9 @@ import (
 // and the typed closure is exactly that.
 //
 // The generic resource.Register handles every per-kind quirk
-// internally — readme subresource auto-registers when T implements
-// v1alpha1.ObjectWithReadme; per-kind authz / list filtering /
-// post-upsert / post-delete flow through resource.Config. There are
-// no remaining bespoke per-kind code paths in this package.
+// internally — per-kind authz / list filtering / post-upsert /
+// post-delete flow through resource.Config. There are no remaining
+// bespoke per-kind code paths in this package.
 var bindings = map[string]func(api huma.API, cfg resource.Config){}
 
 func register[T v1alpha1.Object](kind string, newObj func() T) {

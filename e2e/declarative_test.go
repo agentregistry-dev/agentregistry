@@ -1416,7 +1416,6 @@ metadata:
   version: "%s"
 spec:
   description: "Skill round-trip test"
-  category: nlp
 `, skillName, version)
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "skill.yaml", skillYAML)
 
@@ -2104,7 +2103,6 @@ spec:
   description: "repository-shape round-trip test"
   repository:
     url: https://github.com/agentregistry-dev/testmcpserver
-    source: git
 `, serverName, version)
 
 	path := writeDeclarativeYAML(t, tmpDir, "mcp-repo.yaml", yaml)
@@ -2115,7 +2113,6 @@ spec:
 	result = RunArctl(t, tmpDir, "get", "mcp", serverName, "-o", "yaml", "--registry-url", regURL)
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "repository:")
-	RequireOutputContains(t, result, "source: git")
 	RequireOutputContains(t, result, "github.com/agentregistry-dev/testmcpserver")
 	if strings.Contains(result.Stdout, "packages:") {
 		t.Errorf("repository-shape MCP unexpectedly has packages block:\n%s", result.Stdout)
@@ -2310,7 +2307,6 @@ metadata:
   version: "%s"
 spec:
   description: "skill v1 for delete-promotes-latest test"
-  category: nlp
 `, skillName, v1)
 	RequireSuccess(t, RunArctl(t, tmpDir, "apply", "-f",
 		writeDeclarativeYAML(t, tmpDir, "skill-v1.yaml", yamlV1),
@@ -2324,7 +2320,6 @@ metadata:
   version: "%s"
 spec:
   description: "skill v2 for delete-promotes-latest test"
-  category: nlp
 `, skillName, v2)
 	RequireSuccess(t, RunArctl(t, tmpDir, "apply", "-f",
 		writeDeclarativeYAML(t, tmpDir, "skill-v2.yaml", yamlV2),
