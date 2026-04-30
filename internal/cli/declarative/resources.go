@@ -228,6 +228,30 @@ func providerRow(provider *v1alpha1.Provider) []string {
 	return []string{provider.Metadata.Name, provider.Spec.Platform}
 }
 
+func remoteMCPServerRow(r *v1alpha1.RemoteMCPServer) []string {
+	if r == nil {
+		return []string{"<invalid>"}
+	}
+	return []string{
+		printer.TruncateString(r.Metadata.Name, 40),
+		r.Metadata.Version,
+		printer.EmptyValueOrDefault(r.Spec.Remote.Type, "<none>"),
+		printer.TruncateString(printer.EmptyValueOrDefault(r.Spec.Remote.URL, "<none>"), 60),
+	}
+}
+
+func remoteAgentRow(r *v1alpha1.RemoteAgent) []string {
+	if r == nil {
+		return []string{"<invalid>"}
+	}
+	return []string{
+		printer.TruncateString(r.Metadata.Name, 40),
+		r.Metadata.Version,
+		printer.EmptyValueOrDefault(r.Spec.Remote.Type, "<none>"),
+		printer.TruncateString(printer.EmptyValueOrDefault(r.Spec.Remote.URL, "<none>"), 60),
+	}
+}
+
 func deploymentRow(dep *cliCommon.DeploymentRecord) []string {
 	if dep == nil {
 		return []string{"<invalid>"}

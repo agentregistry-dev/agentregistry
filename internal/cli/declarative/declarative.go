@@ -64,6 +64,26 @@ func init() {
 		providerRow,
 	))
 
+	scheme.Register(typedKind(
+		"remote-mcp", "remote-mcps", []string{
+			"RemoteMCPServer", "remotemcpserver", "remote-mcp-server", "remotemcpservers",
+		},
+		[]scheme.Column{{Header: "NAME"}, {Header: "VERSION"}, {Header: "TYPE"}, {Header: "URL"}},
+		v1alpha1.KindRemoteMCPServer,
+		func() *v1alpha1.RemoteMCPServer { return &v1alpha1.RemoteMCPServer{} },
+		remoteMCPServerRow,
+	))
+
+	scheme.Register(typedKind(
+		"remote-agent", "remote-agents", []string{
+			"RemoteAgent", "remoteagent", "remoteagents",
+		},
+		[]scheme.Column{{Header: "NAME"}, {Header: "VERSION"}, {Header: "TYPE"}, {Header: "URL"}},
+		v1alpha1.KindRemoteAgent,
+		func() *v1alpha1.RemoteAgent { return &v1alpha1.RemoteAgent{} },
+		remoteAgentRow,
+	))
+
 	// Deployment is registered manually because its Get/Delete dispatch
 	// does NOT key on the v1alpha1 metadata identity (namespace/name/
 	// version). Users address deployments by the underlying target's name
