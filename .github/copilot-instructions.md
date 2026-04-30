@@ -13,3 +13,5 @@ Whenever you make meaningful progress on a task:
 2. Use the **exact top-level headings** from the template: `# Description`, `# Change Type`, `# Changelog`. The CI labeler enforces a `# Description` section (single `#`) and will fail if `##` headings are used or the section is missing.
 3. Populate every required section of the template (Description, Change Type, Changelog).
 4. Do **not** consider the task complete until the PR description has been updated via `report_progress`.
+
+> **Important:** The `prDescription` you pass to `report_progress` becomes the literal GitHub PR body. Always start it with `# Description` (not `## Description`) so the CI labeler can find the required section.
