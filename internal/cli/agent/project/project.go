@@ -175,15 +175,16 @@ func RegenerateDockerCompose(projectDir string, resolved *agentmanifest.Resolved
 		EnvVars           []string
 		McpServers        []agentmanifest.ResolvedMCPServer
 	}{
-		Name:          agent.Metadata.Name,
-		Version:       sanitizedVersion,
-		Image:         image,
-		Port:          8080,
-		ModelProvider: agent.Spec.ModelProvider,
-		ModelName:     agent.Spec.ModelName,
-		HasSkills:     len(agent.Spec.Skills) > 0,
-		EnvVars:       envVars,
-		McpServers:    resolved.MCPServers,
+		Name:              agent.Metadata.Name,
+		Version:           sanitizedVersion,
+		Image:             image,
+		Port:              8080,
+		ModelProvider:     agent.Spec.ModelProvider,
+		ModelName:         agent.Spec.ModelName,
+		TelemetryEndpoint: strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")),
+		HasSkills:         len(agent.Spec.Skills) > 0,
+		EnvVars:           envVars,
+		McpServers:        resolved.MCPServers,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to render docker-compose: %w", err)
