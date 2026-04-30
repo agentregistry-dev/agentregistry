@@ -1397,6 +1397,444 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
+    /v0/remoteagents:
+        get:
+            summary: List RemoteAgent (scoped by ?namespace)
+            operationId: list-remoteagents
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+                - name: limit
+                  in: query
+                  description: Max items to return (default 50).
+                  explode: false
+                  schema:
+                    type: integer
+                    description: Max items to return (default 50).
+                    format: int64
+                    default: 50
+                - name: cursor
+                  in: query
+                  description: Opaque pagination cursor.
+                  explode: false
+                  schema:
+                    type: string
+                    description: Opaque pagination cursor.
+                - name: labels
+                  in: query
+                  description: 'Label selector: key=value,key2=value2.'
+                  explode: false
+                  schema:
+                    type: string
+                    description: 'Label selector: key=value,key2=value2.'
+                - name: latestOnly
+                  in: query
+                  description: Only return rows with is_latest_version=true.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Only return rows with is_latest_version=true.
+                - name: includeTerminating
+                  in: query
+                  description: Include rows with a deletionTimestamp.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Include rows with a deletionTimestamp.
+                - name: semantic
+                  in: query
+                  description: Semantic search query. Returns results ranked by similarity.
+                  explode: false
+                  schema:
+                    type: string
+                    description: Semantic search query. Returns results ranked by similarity.
+                - name: semanticThreshold
+                  in: query
+                  description: Drop results with cosine distance above this threshold (0 = no filter).
+                  explode: false
+                  schema:
+                    type: number
+                    description: Drop results with cosine distance above this threshold (0 = no filter).
+                    format: float
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOutputRemoteAgentBody'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/remoteagents/{name}:
+        get:
+            summary: Get the latest version of a RemoteAgent
+            operationId: get-latest-remoteagent
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteAgent'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/remoteagents/{name}/{version}:
+        get:
+            summary: Get a RemoteAgent by name and version
+            operationId: get-remoteagent
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteAgent'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        put:
+            summary: Apply a RemoteAgent (idempotent upsert)
+            operationId: apply-remoteagent
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RemoteAgent'
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteAgent'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        delete:
+            summary: 'Delete a RemoteAgent (soft-delete: sets deletionTimestamp)'
+            operationId: delete-remoteagent
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: force
+                  in: query
+                  description: Skip provider-specific teardown and only remove the registry record.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Skip provider-specific teardown and only remove the registry record.
+                    default: false
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/remotemcpservers:
+        get:
+            summary: List RemoteMCPServer (scoped by ?namespace)
+            operationId: list-remotemcpservers
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+                - name: limit
+                  in: query
+                  description: Max items to return (default 50).
+                  explode: false
+                  schema:
+                    type: integer
+                    description: Max items to return (default 50).
+                    format: int64
+                    default: 50
+                - name: cursor
+                  in: query
+                  description: Opaque pagination cursor.
+                  explode: false
+                  schema:
+                    type: string
+                    description: Opaque pagination cursor.
+                - name: labels
+                  in: query
+                  description: 'Label selector: key=value,key2=value2.'
+                  explode: false
+                  schema:
+                    type: string
+                    description: 'Label selector: key=value,key2=value2.'
+                - name: latestOnly
+                  in: query
+                  description: Only return rows with is_latest_version=true.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Only return rows with is_latest_version=true.
+                - name: includeTerminating
+                  in: query
+                  description: Include rows with a deletionTimestamp.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Include rows with a deletionTimestamp.
+                - name: semantic
+                  in: query
+                  description: Semantic search query. Returns results ranked by similarity.
+                  explode: false
+                  schema:
+                    type: string
+                    description: Semantic search query. Returns results ranked by similarity.
+                - name: semanticThreshold
+                  in: query
+                  description: Drop results with cosine distance above this threshold (0 = no filter).
+                  explode: false
+                  schema:
+                    type: number
+                    description: Drop results with cosine distance above this threshold (0 = no filter).
+                    format: float
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOutputRemoteMCPServerBody'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/remotemcpservers/{name}:
+        get:
+            summary: Get the latest version of a RemoteMCPServer
+            operationId: get-latest-remotemcpserver
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteMCPServer'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/remotemcpservers/{name}/{version}:
+        get:
+            summary: Get a RemoteMCPServer by name and version
+            operationId: get-remotemcpserver
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteMCPServer'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        put:
+            summary: Apply a RemoteMCPServer (idempotent upsert)
+            operationId: apply-remotemcpserver
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RemoteMCPServer'
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteMCPServer'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        delete:
+            summary: 'Delete a RemoteMCPServer (soft-delete: sets deletionTimestamp)'
+            operationId: delete-remotemcpserver
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: force
+                  in: query
+                  description: Skip provider-specific teardown and only remove the registry record.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Skip provider-specific teardown and only remove the registry record.
+                    default: false
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
     /v0/skills:
         get:
             summary: List Skill (scoped by ?namespace)
@@ -1779,10 +2217,6 @@ components:
                         $ref: '#/components/schemas/ResourceRef'
                 readme:
                     $ref: '#/components/schemas/Readme'
-                remotes:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/AgentRemote'
                 repository:
                     $ref: '#/components/schemas/Repository'
                 skills:
@@ -1873,8 +2307,6 @@ components:
                     type: object
                     additionalProperties:
                         type: string
-                preferRemote:
-                    type: boolean
                 providerConfig:
                     type: object
                     additionalProperties: {}
@@ -2030,6 +2462,40 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/Provider'
+                nextCursor:
+                    type: string
+                semanticScores:
+                    type: array
+                    items:
+                        type: number
+                        format: float
+            required:
+                - items
+        ListOutputRemoteAgentBody:
+            type: object
+            additionalProperties: false
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RemoteAgent'
+                nextCursor:
+                    type: string
+                semanticScores:
+                    type: array
+                    items:
+                        type: number
+                        format: float
+            required:
+                - items
+        ListOutputRemoteMCPServerBody:
+            type: object
+            additionalProperties: false
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RemoteMCPServer'
                 nextCursor:
                     type: string
                 semanticScores:
@@ -2229,10 +2695,6 @@ components:
                         $ref: '#/components/schemas/MCPPackage'
                 readme:
                     $ref: '#/components/schemas/Readme'
-                remotes:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/MCPTransport'
                 repository:
                     $ref: '#/components/schemas/Repository'
                 title:
@@ -2363,6 +2825,64 @@ components:
                 encoding:
                     type: string
                 source:
+                    type: string
+        RemoteAgent:
+            type: object
+            additionalProperties: false
+            properties:
+                apiVersion:
+                    type: string
+                kind:
+                    type: string
+                metadata:
+                    $ref: '#/components/schemas/ObjectMeta'
+                spec:
+                    $ref: '#/components/schemas/RemoteAgentSpec'
+                status:
+                    $ref: '#/components/schemas/Status'
+            required:
+                - metadata
+                - spec
+                - apiVersion
+                - kind
+        RemoteAgentSpec:
+            type: object
+            additionalProperties: false
+            properties:
+                description:
+                    type: string
+                remote:
+                    $ref: '#/components/schemas/AgentRemote'
+                title:
+                    type: string
+        RemoteMCPServer:
+            type: object
+            additionalProperties: false
+            properties:
+                apiVersion:
+                    type: string
+                kind:
+                    type: string
+                metadata:
+                    $ref: '#/components/schemas/ObjectMeta'
+                spec:
+                    $ref: '#/components/schemas/RemoteMCPServerSpec'
+                status:
+                    $ref: '#/components/schemas/Status'
+            required:
+                - metadata
+                - spec
+                - apiVersion
+                - kind
+        RemoteMCPServerSpec:
+            type: object
+            additionalProperties: false
+            properties:
+                description:
+                    type: string
+                remote:
+                    $ref: '#/components/schemas/MCPTransport'
+                title:
                     type: string
         Repository:
             type: object

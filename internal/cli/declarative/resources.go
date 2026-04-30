@@ -160,7 +160,6 @@ func deploymentToDocument(dep *cliCommon.DeploymentRecord) any {
 			},
 			Env:            dep.Env,
 			ProviderConfig: dep.ProviderConfig,
-			PreferRemote:   dep.PreferRemote,
 		},
 		Status: deploymentStatus{
 			ID:               dep.ID,

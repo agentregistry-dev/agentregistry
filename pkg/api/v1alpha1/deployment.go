@@ -35,5 +35,4 @@ type DeploymentSpec struct {
 	DesiredState   string            `json:"desiredState,omitempty" yaml:"desiredState,omitempty"`
 	Env            map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
 	ProviderConfig map[string]any    `json:"providerConfig,omitempty" yaml:"providerConfig,omitempty"`
-	PreferRemote   bool              `json:"preferRemote,omitempty" yaml:"preferRemote,omitempty"`
 }

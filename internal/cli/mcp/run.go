@@ -102,13 +102,12 @@ func runMCPServerWithPlatform(ctx context.Context, server *v1alpha1.MCPServer) e
 		return fmt.Errorf("failed to parse headers: %w", err)
 	}
 
+	_ = headerValues
 	runRequest := &platformutils.MCPServerRunRequest{
-		Name:         server.Metadata.Name,
-		Spec:         server.Spec,
-		PreferRemote: false,
-		EnvValues:    envValues,
-		ArgValues:    argValues,
-		HeaderValues: headerValues,
+		Name:      server.Metadata.Name,
+		Spec:      server.Spec,
+		EnvValues: envValues,
+		ArgValues: argValues,
 	}
 
 	// Generate a random platform working directory name and project name.

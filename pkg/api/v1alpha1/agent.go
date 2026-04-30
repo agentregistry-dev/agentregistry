@@ -38,7 +38,6 @@ type AgentSpec struct {
 
 	// Distribution metadata.
 	Packages []AgentPackage `json:"packages,omitempty" yaml:"packages,omitempty"`
-	Remotes  []AgentRemote  `json:"remotes,omitempty" yaml:"remotes,omitempty"`
 }
 
 // AgentPackage describes a distributable package of the agent (e.g. an OCI

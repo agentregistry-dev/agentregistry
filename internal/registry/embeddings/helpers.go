@@ -24,7 +24,22 @@ func BuildMCPServerEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.MCPS
 	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version, spec.WebsiteURL)
 	appendJSON(&parts, spec.Repository)
 	appendJSON(&parts, spec.Packages)
-	appendJSON(&parts, spec.Remotes)
+	return strings.Join(parts, "\n")
+}
+
+// BuildRemoteMCPServerEmbeddingPayload assembles the canonical text for a
+// RemoteMCPServer (already-running endpoint).
+func BuildRemoteMCPServerEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.RemoteMCPServerSpec) string {
+	var parts []string
+	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version, spec.Remote.URL, spec.Remote.Type)
+	return strings.Join(parts, "\n")
+}
+
+// BuildRemoteAgentEmbeddingPayload assembles the canonical text for a
+// RemoteAgent (already-running endpoint).
+func BuildRemoteAgentEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.RemoteAgentSpec) string {
+	var parts []string
+	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version, spec.Remote.URL, spec.Remote.Type)
 	return strings.Join(parts, "\n")
 }
 

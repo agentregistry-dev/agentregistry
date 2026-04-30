@@ -8,22 +8,23 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-func TestTranslateMCPServerRemoteAppliesHeaderOverridesAndDefaults(t *testing.T) {
-	server, err := TranslateMCPServer(context.Background(), &MCPServerRunRequest{
+func TestTranslateRemoteMCPServerAppliesHeaderOverridesAndDefaults(t *testing.T) {
+	server, err := TranslateRemoteMCPServer(context.Background(), &RemoteMCPServerRunRequest{
 		Name: "remote server",
-		Spec: v1alpha1.MCPServerSpec{
-			Remotes: []v1alpha1.MCPTransport{{
-				URL: "https://example.com/mcp",
+		Spec: v1alpha1.RemoteMCPServerSpec{
+			Remote: v1alpha1.MCPTransport{
+				Type: "streamable-http",
+				URL:  "https://example.com/mcp",
 				Headers: []v1alpha1.MCPKeyValueInput{
 					{Name: "Authorization", IsRequired: true},
 					{Name: "X-Trace", Default: "trace-default"},
 				},
-			}},
+			},
 		},
 		HeaderValues: map[string]string{"Authorization": "Bearer token"},
 	})
 	if err != nil {
-		t.Fatalf("TranslateMCPServer() unexpected error: %v", err)
+		t.Fatalf("TranslateRemoteMCPServer() unexpected error: %v", err)
 	}
 	if server.MCPServerType != "remote" {
 		t.Fatalf("MCPServerType = %q, want remote", server.MCPServerType)

@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/agentregistry-dev/agentregistry/internal/client"
+	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
 	platformutils "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
@@ -102,16 +103,18 @@ func translateRemoteMCPServerRef(name string, server *v1alpha1.RemoteMCPServer) 
 	}, nil
 }
 
-// translateMCPServer converts a v1alpha1.MCPServer envelope into a
-// ResolvedMCPServer. Terminal form: Type is always "command" or "remote".
+// translateMCPServer converts a bundled v1alpha1.MCPServer envelope into a
+// ResolvedMCPServer with Type="command". Remote endpoints are resolved
+// separately via translateRemoteMCPServerRef when AgentSpec.MCPServers
+// references a RemoteMCPServer kind.
 //
 // Environment-variable overrides from the local OS env are layered onto
 // values declared on the MCPServer's package(s) so the agent runtime can
 // supply credentials at run time without modifying the registry resource.
 func translateMCPServer(name string, server *v1alpha1.MCPServer) (*ResolvedMCPServer, error) {
 	spec := server.Spec
-	if len(spec.Remotes) == 0 && len(spec.Packages) == 0 {
-		return nil, fmt.Errorf("server has no remotes or packages")
+	if len(spec.Packages) == 0 {
+		return nil, fmt.Errorf("server has no packages")
 	}
 
 	envOverrides := collectEnvOverrides(spec.Packages)
@@ -121,7 +124,6 @@ func translateMCPServer(name string, server *v1alpha1.MCPServer) (*ResolvedMCPSe
 	translated, err := platformutils.TranslateMCPServer(context.Background(), &platformutils.MCPServerRunRequest{
 		Name:         server.Metadata.Name,
 		Spec:         spec,
-		PreferRemote: false,
 		EnvValues:    runEnv,
 		ArgValues:    map[string]string{},
 		HeaderValues: map[string]string{},
@@ -130,47 +132,26 @@ func translateMCPServer(name string, server *v1alpha1.MCPServer) (*ResolvedMCPSe
 		return nil, err
 	}
 
-	switch translated.MCPServerType {
-	case "remote":
-		if len(spec.Remotes) == 0 || spec.Remotes[0].URL == "" {
-			return nil, fmt.Errorf("remote has no URL")
-		}
-		headers := make(map[string]string, len(translated.Remote.Headers))
-		for _, header := range translated.Remote.Headers {
-			headers[header.Name] = header.Value
-		}
-		return &ResolvedMCPServer{
-			Type:    "remote",
-			Name:    name,
-			URL:     spec.Remotes[0].URL,
-			Headers: headers,
-		}, nil
-	case "local":
-		if translated.Local == nil {
-			return nil, fmt.Errorf("local translation missing deployment config")
-		}
-		buildPath := ""
-		if len(spec.Packages) > 0 {
-			config, _, err := platformutils.GetRegistryConfig(spec.Packages[0], nil)
-			if err != nil {
-				return nil, err
-			}
-			if !config.IsOCI {
-				buildPath = "registry/" + name
-			}
-		}
-		return &ResolvedMCPServer{
-			Type:    "command",
-			Name:    name,
-			Image:   translated.Local.Deployment.Image,
-			Build:   buildPath,
-			Command: translated.Local.Deployment.Cmd,
-			Args:    translated.Local.Deployment.Args,
-			Env:     platformutils.EnvMapToStringSlice(translated.Local.Deployment.Env),
-		}, nil
-	default:
-		return nil, fmt.Errorf("unsupported translated server type %q", translated.MCPServerType)
+	if translated.MCPServerType != platformtypes.MCPServerTypeLocal || translated.Local == nil {
+		return nil, fmt.Errorf("expected local translation for bundled MCPServer, got %q", translated.MCPServerType)
 	}
+	buildPath := ""
+	config, _, err := platformutils.GetRegistryConfig(spec.Packages[0], nil)
+	if err != nil {
+		return nil, err
+	}
+	if !config.IsOCI {
+		buildPath = "registry/" + name
+	}
+	return &ResolvedMCPServer{
+		Type:    "command",
+		Name:    name,
+		Image:   translated.Local.Deployment.Image,
+		Build:   buildPath,
+		Command: translated.Local.Deployment.Cmd,
+		Args:    translated.Local.Deployment.Args,
+		Env:     platformutils.EnvMapToStringSlice(translated.Local.Deployment.Env),
+	}, nil
 }
 
 // collectEnvOverrides gathers environment variable values from the current

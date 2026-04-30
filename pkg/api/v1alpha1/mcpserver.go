@@ -23,9 +23,6 @@ type MCPServerSpec struct {
 	// Packages describes the ways this server can be run locally (stdio,
 	// command, container). Each entry carries its own runtime/args/env.
 	Packages []MCPPackage `json:"packages,omitempty" yaml:"packages,omitempty"`
-
-	// Remotes describes reachable remote transports (HTTP, SSE).
-	Remotes []MCPTransport `json:"remotes,omitempty" yaml:"remotes,omitempty"`
 }
 
 // MCPIcon describes an icon associated with an MCP server.

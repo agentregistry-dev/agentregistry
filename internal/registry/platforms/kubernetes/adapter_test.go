@@ -44,21 +44,20 @@ func TestK8sV1Alpha1Apply_MCPServerTarget_CreatesResource(t *testing.T) {
 			Config:   map[string]any{"namespace": "kagent"},
 		},
 	}
-	target := &v1alpha1.MCPServer{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},
+	target := &v1alpha1.RemoteMCPServer{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRemoteMCPServer},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather", Version: "1.0.0"},
-		Spec: v1alpha1.MCPServerSpec{
-			Remotes: []v1alpha1.MCPTransport{{Type: "streamable-http", URL: "https://api.weather.example/mcp"}},
+		Spec: v1alpha1.RemoteMCPServerSpec{
+			Remote: v1alpha1.MCPTransport{Type: "streamable-http", URL: "https://api.weather.example/mcp"},
 		},
 	}
 	deployment := &v1alpha1.Deployment{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-kube", Version: "1", Generation: 4},
 		Spec: v1alpha1.DeploymentSpec{
-			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Version: "1.0.0"},
+			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindRemoteMCPServer, Name: "weather", Version: "1.0.0"},
 			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "kube-local", Version: "1"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
-			PreferRemote: true,
 		},
 	}
 

@@ -9,26 +9,25 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-func TestSpecToPlatformMCPServer_RemoteTransport(t *testing.T) {
-	spec := v1alpha1.MCPServerSpec{
+func TestSpecToPlatformRemoteMCPServer_RemoteTransport(t *testing.T) {
+	spec := v1alpha1.RemoteMCPServerSpec{
 		Description: "weather",
-		Remotes: []v1alpha1.MCPTransport{{
+		Remote: v1alpha1.MCPTransport{
 			Type: "streamable-http",
 			URL:  "https://api.weather.example/mcp",
 			Headers: []v1alpha1.MCPKeyValueInput{{
 				Name:  "X-Token",
 				Value: "supersecret",
 			}},
-		}},
+		},
 	}
 	meta := v1alpha1.ObjectMeta{Namespace: "default", Name: "weather", Version: "1.0.0"}
 
-	got, err := SpecToPlatformMCPServer(context.Background(), meta, spec, MCPServerTranslateOpts{
+	got, err := SpecToPlatformRemoteMCPServer(context.Background(), meta, spec, RemoteMCPServerTranslateOpts{
 		DeploymentID: "dep-1",
-		PreferRemote: true,
 	})
 	if err != nil {
-		t.Fatalf("SpecToPlatformMCPServer: %v", err)
+		t.Fatalf("SpecToPlatformRemoteMCPServer: %v", err)
 	}
 	if got.MCPServerType != platformtypes.MCPServerTypeRemote {
 		t.Fatalf("MCPServerType = %q, want %q", got.MCPServerType, platformtypes.MCPServerTypeRemote)

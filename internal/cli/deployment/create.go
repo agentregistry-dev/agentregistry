@@ -38,7 +38,6 @@ func init() {
 	CreateCmd.Flags().String("provider-id", "", "Deployment target provider ID (defaults to local when omitted)")
 	CreateCmd.Flags().String("namespace", "", "Kubernetes namespace for deployment")
 	CreateCmd.Flags().Bool("wait", true, "Wait for the deployment to become ready before returning")
-	CreateCmd.Flags().Bool("prefer-remote", false, "Prefer using a remote source when available")
 	CreateCmd.Flags().StringArrayP("env", "e", []string{}, "Environment variables to set (KEY=VALUE)")
 	CreateCmd.Flags().StringArrayP("arg", "a", []string{}, "Runtime arguments for MCP servers (KEY=VALUE)")
 	CreateCmd.Flags().StringArray("header", []string{}, "HTTP headers for remote MCP servers (KEY=VALUE)")
@@ -65,7 +64,6 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	providerID, _ := cmd.Flags().GetString("provider-id")
 	namespace, _ := cmd.Flags().GetString("namespace")
 	wait, _ := cmd.Flags().GetBool("wait")
-	preferRemote, _ := cmd.Flags().GetBool("prefer-remote")
 	envFlags, _ := cmd.Flags().GetStringArray("env")
 	argFlags, _ := cmd.Flags().GetStringArray("arg")
 	headerFlags, _ := cmd.Flags().GetStringArray("header")
@@ -113,7 +111,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	case "agent":
 		return createAgentDeployment(cmd.Context(), name, version, envMap, providerID, namespace, wait)
 	case "mcp":
-		return createMCPDeployment(cmd.Context(), name, version, envMap, providerID, namespace, preferRemote, wait)
+		return createMCPDeployment(cmd.Context(), name, version, envMap, providerID, namespace, wait)
 	}
 	return nil
 }
@@ -152,7 +150,7 @@ func createAgentDeployment(ctx context.Context, name, version string, envMap map
 		config[constants.EnvKagentNamespace] = namespace
 	}
 
-	deployment := newDeploymentResource(v1alpha1.KindAgent, name, agent.Metadata.Version, providerID, config, false)
+	deployment := newDeploymentResource(v1alpha1.KindAgent, name, agent.Metadata.Version, providerID, config)
 	if err := applyDeploymentResource(ctx, deployment); err != nil {
 		return err
 	}
@@ -174,7 +172,7 @@ func createAgentDeployment(ctx context.Context, name, version string, envMap map
 	return nil
 }
 
-func createMCPDeployment(ctx context.Context, name, version string, envMap map[string]string, providerID, namespace string, preferRemote bool, wait bool) error {
+func createMCPDeployment(ctx context.Context, name, version string, envMap map[string]string, providerID, namespace string, wait bool) error {
 	server, err := client.GetTyped(
 		ctx,
 		apiClient,
@@ -200,7 +198,7 @@ func createMCPDeployment(ctx context.Context, name, version string, envMap map[s
 	}
 
 	fmt.Println("\nDeploying server...")
-	deployment := newDeploymentResource(v1alpha1.KindMCPServer, name, server.Metadata.Version, providerID, envMap, preferRemote)
+	deployment := newDeploymentResource(v1alpha1.KindMCPServer, name, server.Metadata.Version, providerID, envMap)
 	if err := applyDeploymentResource(ctx, deployment); err != nil {
 		return err
 	}
@@ -274,7 +272,7 @@ func resolveRequestedVersion(version string) string {
 	return version
 }
 
-func newDeploymentResource(targetKind, targetName, targetVersion, providerID string, env map[string]string, preferRemote bool) *v1alpha1.Deployment {
+func newDeploymentResource(targetKind, targetName, targetVersion, providerID string, env map[string]string) *v1alpha1.Deployment {
 	return &v1alpha1.Deployment{
 		TypeMeta: v1alpha1.TypeMeta{
 			APIVersion: v1alpha1.GroupVersion,
@@ -299,7 +297,6 @@ func newDeploymentResource(targetKind, targetName, targetVersion, providerID str
 			},
 			DesiredState:   v1alpha1.DesiredStateDeployed,
 			Env:            env,
-			PreferRemote:   preferRemote,
 			ProviderConfig: nil,
 		},
 	}
