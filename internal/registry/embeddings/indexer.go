@@ -225,14 +225,15 @@ func (i *Indexer) indexRow(ctx context.Context, b KindBinding, row *v1alpha1.Raw
 }
 
 // DefaultBindings returns the KindBindings for every v1alpha1 built-in
-// kind that participates in semantic search: Agent, MCPServer, Skill,
-// Prompt. Providers + Deployments are omitted (see 003 migration
-// rationale). Pass the Stores map returned by
+// kind that participates in semantic search: Agent, MCPServer,
+// RemoteMCPServer, Skill, Prompt. Providers + Deployments are omitted
+// (see 003 migration rationale). Pass the Stores map returned by
 // v1alpha1store.NewStores(pool) as kindStores.
 func DefaultBindings(kindStores map[string]*v1alpha1store.Store) ([]KindBinding, error) {
 	required := []string{
 		v1alpha1.KindAgent,
 		v1alpha1.KindMCPServer,
+		v1alpha1.KindRemoteMCPServer,
 		v1alpha1.KindSkill,
 		v1alpha1.KindPrompt,
 	}
@@ -271,6 +272,14 @@ func payloadBuilderFor(kind string) func(*v1alpha1.RawObject) (string, error) {
 				return "", fmt.Errorf("decode mcp server spec: %w", err)
 			}
 			return BuildMCPServerEmbeddingPayload(row.Metadata, spec), nil
+		}
+	case v1alpha1.KindRemoteMCPServer:
+		return func(row *v1alpha1.RawObject) (string, error) {
+			var spec v1alpha1.RemoteMCPServerSpec
+			if err := json.Unmarshal(row.Spec, &spec); err != nil {
+				return "", fmt.Errorf("decode remote mcp server spec: %w", err)
+			}
+			return BuildRemoteMCPServerEmbeddingPayload(row.Metadata, spec), nil
 		}
 	case v1alpha1.KindSkill:
 		return func(row *v1alpha1.RawObject) (string, error) {
