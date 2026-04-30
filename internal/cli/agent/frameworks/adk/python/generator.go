@@ -107,7 +107,4 @@ func printSummary(cfg *common.AgentConfig) {
 	fmt.Printf("   ├── docker-compose.yaml\n")
 	fmt.Printf("   ├── README.md\n")
 	fmt.Printf("   └── .python-version\n")
-	if cfg.TelemetryEndpoint != "" {
-		fmt.Printf("   └── otel-collector-config.yaml\n")
-	}
 }

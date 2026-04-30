@@ -45,7 +45,6 @@ type AgentConfig struct {
 	Language              string
 	KagentADKImageVersion string
 	KagentADKPyVersion    string
-	TelemetryEndpoint     string
 	Port                  int
 
 	EnvVars []string
@@ -79,8 +78,10 @@ func (c AgentConfig) ShouldSkipPath(path string) bool {
 	if strings.HasPrefix(path, "mcp_server") {
 		return true
 	}
-	// Skip OTLP collector config unless telemetry is enabled.
-	if path == "otel-collector-config.yaml" && c.TelemetryEndpoint == "" {
+	// Skip the legacy OTLP collector config — local telemetry UX is
+	// being redesigned; the deployed agent gets OTel via
+	// Deployment.Spec.TelemetryEndpoint.
+	if path == "otel-collector-config.yaml" {
 		return true
 	}
 	return false
