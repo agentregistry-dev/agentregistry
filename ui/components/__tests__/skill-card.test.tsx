@@ -10,16 +10,11 @@ const mockSkill: SkillResponse = {
     title: "Code Review",
     description: "Analyzes pull requests for quality and security.",
     version: "1.3.0",
-    repository: {
-      url: "https://github.com/example/code-review-skill",
-      source: "github",
+    source: {
+      repository: {
+        url: "https://github.com/example/code-review-skill",
+      },
     },
-    websiteUrl: "https://example.com/code-review",
-    packages: [
-      { identifier: "code-review-core", registryType: "npm", version: "1.3.0", transport: { type: "stdio" } },
-      { identifier: "code-review-cli", registryType: "npm", version: "1.3.0", transport: { type: "stdio" } },
-    ],
-    remotes: [{ url: "https://remote.example.com/code-review" }],
   },
   _meta: {
     "io.modelcontextprotocol.registry/official": {
@@ -41,18 +36,6 @@ describe("SkillCard", () => {
     render(<SkillCard skill={mockSkill} />)
     expect(screen.getByText("Analyzes pull requests for quality and security.")).toBeInTheDocument()
     expect(screen.getByText("1.3.0")).toBeInTheDocument()
-  })
-
-  it("renders package and remote counts", () => {
-    render(<SkillCard skill={mockSkill} />)
-    expect(screen.getByText("2")).toBeInTheDocument()
-    const ones = screen.getAllByText("1")
-    expect(ones.length).toBeGreaterThanOrEqual(1)
-  })
-
-  it("renders repository source", () => {
-    render(<SkillCard skill={mockSkill} />)
-    expect(screen.getByText("github")).toBeInTheDocument()
   })
 
   it("falls back to name when title is not set", () => {

@@ -368,22 +368,6 @@ func TestResourceRegister_ValidationRejectsBadVersion(t *testing.T) {
 	require.Contains(t, resp.Body.String(), "metadata.version")
 }
 
-func TestResourceRegister_ValidationRejectsHTTPWebsite(t *testing.T) {
-	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
-	_, api := humatest.New(t)
-	registerAgent(api, store)
-
-	body := v1alpha1.Agent{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "ins", Version: "v1"},
-		Spec:     v1alpha1.AgentSpec{Title: "I", WebsiteURL: "http://example.com"}, // http not allowed
-	}
-	resp := api.Put("/v0/agents/ins/v1", body)
-	require.Equal(t, http.StatusBadRequest, resp.Code)
-	require.Contains(t, resp.Body.String(), "spec.websiteUrl")
-}
-
 func TestResourceRegister_ResolverDetectsDanglingRef(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	agentStore := v1alpha1store.NewStore(pool, "v1alpha1.agents")

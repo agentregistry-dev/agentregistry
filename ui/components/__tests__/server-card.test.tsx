@@ -13,9 +13,7 @@ const mockServer: ServerResponse = {
     version: "3.2.1",
     repository: {
       url: "https://github.com/acme/database-server",
-      source: "github",
     },
-    websiteUrl: "https://acme.dev/database-server",
     packages: [
       {
         registryType: "npm",
@@ -57,11 +55,6 @@ describe("ServerCard", () => {
     // counts are shown as numbers next to icons
     const ones = screen.getAllByText("1")
     expect(ones.length).toBeGreaterThanOrEqual(2)
-  })
-
-  it("renders repository source", () => {
-    render(<ServerCard server={mockServer} />)
-    expect(screen.getByText("github")).toBeInTheDocument()
   })
 
   it("falls back to name when title is not set", () => {

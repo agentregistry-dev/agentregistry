@@ -264,7 +264,6 @@ spec:
       version: "1.0.0"
   repository:
     url: https://github.com/acme/summarizer
-    source: github
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "agent.yaml"), []byte(envelopeYAML), 0o644))
 	got, err := LoadAgent(dir)

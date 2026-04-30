@@ -165,14 +165,6 @@ func mcpSpecPackageIdentifier(obj v1alpha1.Object) string {
 	return ""
 }
 
-// skillSpecPackageIdentifier extracts spec.packages[0].identifier for a Skill resource.
-func skillSpecPackageIdentifier(obj v1alpha1.Object) string {
-	if s, ok := obj.(*v1alpha1.Skill); ok && len(s.Spec.Packages) > 0 {
-		return s.Spec.Packages[0].Identifier
-	}
-	return ""
-}
-
 func buildAgent(out io.Writer, projectDir string, obj v1alpha1.Object, flagImage, platform string, push bool) error {
 	dockerfilePath := filepath.Join(projectDir, "Dockerfile")
 	if _, err := os.Stat(dockerfilePath); err != nil {
@@ -232,7 +224,7 @@ func CheckDockerAvailable() error {
 const skillDockerfile = "FROM scratch\nCOPY . .\n"
 
 func buildSkill(out io.Writer, projectDir string, obj v1alpha1.Object, flagImage, platform string, push bool) error {
-	image := resolveImage(flagImage, skillSpecPackageIdentifier(obj), obj.GetMetadata().Name)
+	image := resolveImage(flagImage, "", obj.GetMetadata().Name)
 
 	fmt.Fprintf(out, "Building skill image: %s\n", image)
 

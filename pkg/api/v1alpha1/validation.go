@@ -220,15 +220,11 @@ func validateTitle(title string) error {
 	return nil
 }
 
-// validateRepository: optional; when set, source must be "git" (only
-// supported source today), URL must parse as https.
+// validateRepository: optional; when set, URL must parse as https.
 func validateRepository(r *Repository) FieldErrors {
 	var errs FieldErrors
 	if r == nil {
 		return errs
-	}
-	if r.Source != "" && r.Source != "git" {
-		errs.Append("repository.source", fmt.Errorf("%w: only %q is supported, got %q", ErrInvalidFormat, "git", r.Source))
 	}
 	if r.URL != "" {
 		if err := validateWebsiteURL(r.URL); err != nil {

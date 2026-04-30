@@ -4,11 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
@@ -22,7 +20,7 @@ var PullCmd = &cobra.Command{
 	Use:   "pull <skill-name> [output-directory]",
 	Short: "Pull a skill from the registry and extract it locally",
 	Long: `Pull a skill from the registry and extract its contents to a local directory.
-Supports skills packaged as Docker images or hosted in Git repositories.
+Supports skills hosted in Git repositories.
 
 If output-directory is not specified, it will be extracted to ./skills/<skill-name>`,
 	Args: cobra.RangeArgs(1, 2),
@@ -77,15 +75,6 @@ func runPull(cmd *cobra.Command, args []string) error {
 
 	printer.PrintSuccess(fmt.Sprintf("Found skill: %s (version %s)", skillResp.Metadata.Name, skillResp.Metadata.Version))
 
-	// 2. Determine source: Docker package or git repository
-	var dockerImage string
-	for _, pkg := range skillResp.Spec.Packages {
-		if strings.EqualFold(pkg.RegistryType, "docker") || strings.EqualFold(pkg.RegistryType, "oci") {
-			dockerImage = pkg.Identifier
-			break
-		}
-	}
-
 	absOutputDir, err := filepath.Abs(outputDir)
 	if err != nil {
 		return fmt.Errorf("failed to resolve output directory: %w", err)
@@ -95,16 +84,12 @@ func runPull(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	if dockerImage != "" {
-		if err := pullFromDocker(dockerImage, absOutputDir); err != nil {
-			return err
-		}
-	} else if skillResp.Spec.Repository != nil && skillResp.Spec.Repository.Source == "git" {
-		if err := pullFromGit(skillResp.Spec.Repository.URL, absOutputDir); err != nil {
+	if skillResp.Spec.Source != nil && skillResp.Spec.Source.Repository != nil && strings.TrimSpace(skillResp.Spec.Source.Repository.URL) != "" {
+		if err := pullFromGit(skillResp.Spec.Source.Repository.URL, absOutputDir); err != nil {
 			return err
 		}
 	} else {
-		return fmt.Errorf("skill has no Docker package or Git repository")
+		return fmt.Errorf("skill has no Git repository")
 	}
 
 	printer.PrintSuccess(fmt.Sprintf("Successfully pulled skill to: %s", absOutputDir))
@@ -153,58 +138,6 @@ func resolveSkillVersion(ctx context.Context, skillName, requestedVersion string
 	}
 
 	return "", fmt.Errorf("multiple versions available, specify one with --version")
-}
-
-// pullFromDocker pulls a skill from a Docker image and extracts its contents.
-func pullFromDocker(dockerImage, absOutputDir string) error {
-	printer.PrintInfo(fmt.Sprintf("Docker image: %s", dockerImage))
-
-	printer.PrintInfo("Pulling Docker image...")
-	pullCmd := exec.Command("docker", "pull", dockerImage)
-	pullCmd.Stdout = os.Stdout
-	pullCmd.Stderr = os.Stderr
-	if err := pullCmd.Run(); err != nil {
-		return fmt.Errorf("failed to pull Docker image: %w", err)
-	}
-
-	printer.PrintInfo(fmt.Sprintf("Extracting skill contents to: %s", absOutputDir))
-
-	// Create a container from the image (without running it)
-	createCmd := exec.Command("docker", "create", "--entrypoint", "/bin/sh", dockerImage, "-c", "echo")
-	createOutput, err := createCmd.CombinedOutput()
-	if err != nil {
-		// If that fails, try without entrypoint override (for images with proper entrypoints)
-		createCmd = exec.Command("docker", "create", dockerImage)
-		createOutput, err = createCmd.CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("failed to create container from image: %w\nOutput: %s", err, string(createOutput))
-		}
-	}
-	containerIDStr := strings.TrimSpace(string(createOutput))
-
-	defer func() {
-		rmCmd := exec.Command("docker", "rm", containerIDStr)
-		_ = rmCmd.Run()
-	}()
-
-	tempDir, err := os.MkdirTemp("", "skill-extract-*")
-	if err != nil {
-		return fmt.Errorf("failed to create temp directory: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
-
-	cpCmd := exec.Command("docker", "cp", containerIDStr+":"+"/.", tempDir)
-	cpCmd.Stderr = os.Stderr
-	if err := cpCmd.Run(); err != nil {
-		return fmt.Errorf("failed to extract contents from container: %w", err)
-	}
-
-	// Copy only non-empty files and folders to the final destination
-	if err := docker.CopyNonEmptyContents(tempDir, absOutputDir); err != nil {
-		return fmt.Errorf("failed to copy non-empty contents: %w", err)
-	}
-
-	return nil
 }
 
 // pullFromGit clones a git repository and copies the skill files to the output directory.
