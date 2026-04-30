@@ -12,15 +12,18 @@ spec:
   description: "An agent that summarizes documents"
   # repository:                 # optional: link to source code
   #   url: https://github.com/acme/summarizer
-  #   source: github            # github | gitlab | bitbucket
+  #   source: git
   # References to other registry resources -- resolved at deploy time:
   # mcpServers:
-  #   - name: acme/fetch        # published via: arctl apply -f mcp.yaml
+  #   - kind: MCPServer
+  #     name: acme/fetch        # published via: arctl apply -f mcp.yaml
   #     version: "1.0.0"
   # skills:
-  #   - name: summarize         # published via: arctl apply -f skill.yaml
+  #   - kind: Skill
+  #     name: summarize         # published via: arctl apply -f skill.yaml
   #     version: "1.0.0"
   # prompts:
-  #   - name: my-prompt         # published via: arctl apply -f prompt.yaml
+  #   - kind: Prompt
+  #     name: my-prompt         # published via: arctl apply -f prompt.yaml
   #     version: "1.0.0"
   # See full-stack.yaml for a complete example with all dependencies.

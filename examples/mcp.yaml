@@ -8,7 +8,7 @@ spec:
   description: "Fetches and extracts content from URLs"
   packages:
     - registryType: oci
-      identifier: ghcr.io/acme/fetch:1.0.0     # version goes in the image tag for OCI
+      identifier: localhost:5001/acme/fetch:1.0.0
       runtimeHint: docker                       # optional: hint for local runtime
       transport:
         type: stdio                             # stdio | sse | streamable-http

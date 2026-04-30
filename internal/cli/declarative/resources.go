@@ -206,7 +206,6 @@ func skillRow(skill *v1alpha1.Skill) []string {
 	return []string{
 		printer.TruncateString(skill.Metadata.Name, 40),
 		skill.Metadata.Version,
-		printer.EmptyValueOrDefault(skill.Spec.Category, "<none>"),
 		printer.TruncateString(printer.EmptyValueOrDefault(skill.Spec.Description, "<none>"), 60),
 	}
 }

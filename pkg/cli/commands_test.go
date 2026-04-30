@@ -22,7 +22,6 @@ func TestCommandTree(t *testing.T) {
 		"configure",
 		"daemon",
 		"delete",
-		"deployments",
 		"get",
 		"init",
 		"mcp",
@@ -54,8 +53,6 @@ func TestCommandTree(t *testing.T) {
 		"mcp": 2,
 		// pull
 		"skill": 1,
-		// create, list, show, delete
-		"deployments": 4,
 	}
 
 	for _, cmd := range root.Commands() {

@@ -113,17 +113,6 @@ func TestAgentValidate_RejectsWrongRefKind(t *testing.T) {
 	require.Contains(t, paths, "spec.mcpServers[0].kind")
 }
 
-func TestAgentValidate_RejectsBadWebsiteURL(t *testing.T) {
-	for _, bad := range []string{"http://example.com", "not-a-url", "ftp://example.com"} {
-		a := &Agent{
-			Metadata: ObjectMeta{Namespace: "default", Name: "a", Version: "v1"},
-			Spec:     AgentSpec{WebsiteURL: bad},
-		}
-		paths := failedFields(t, a.Validate())
-		require.Contains(t, paths, "spec.websiteUrl", "url %q should fail", bad)
-	}
-}
-
 func TestAgentValidate_AcceptsBlankOptionalFields(t *testing.T) {
 	a := &Agent{
 		Metadata: ObjectMeta{Namespace: "default", Name: "minimal", Version: "v1"},
@@ -136,17 +125,11 @@ func TestAgentValidate_AccumulatesErrors(t *testing.T) {
 	a := &Agent{
 		Metadata: ObjectMeta{Namespace: "default", Name: "a", Version: "v1"},
 		Spec: AgentSpec{
-			Title:      "   ", // whitespace only
-			WebsiteURL: "ftp://x",
-			Packages: []AgentPackage{
-				{}, // missing registryType, identifier, version
-			},
+			Title: "   ", // whitespace only
 		},
 	}
 	paths := failedFields(t, a.Validate())
 	require.Contains(t, paths, "spec.title")
-	require.Contains(t, paths, "spec.websiteUrl")
-	require.Contains(t, paths, "spec.packages[0].registryType")
 }
 
 func TestAgentResolveRefs_OK(t *testing.T) {
@@ -334,16 +317,4 @@ func TestMCPServerValidate_RejectsBadRemote(t *testing.T) {
 	}
 	paths := failedFields(t, m.Validate())
 	require.Contains(t, paths, "spec.remotes[0].url")
-}
-
-func TestMCPServerValidate_IconRequiresHTTPS(t *testing.T) {
-	bad := "http://example.com/icon.svg"
-	m := &MCPServer{
-		Metadata: ObjectMeta{Namespace: "default", Name: "tools", Version: "v1"},
-		Spec: MCPServerSpec{
-			Icons: []MCPIcon{{Src: bad}},
-		},
-	}
-	paths := failedFields(t, m.Validate())
-	require.Contains(t, paths, "spec.icons[0].src")
 }

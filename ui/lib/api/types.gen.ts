@@ -12,18 +12,6 @@ export type Agent = {
     status?: Status;
 };
 
-export type AgentPackage = {
-    identifier: string;
-    registryType: string;
-    transport: TransportProto;
-    version: string;
-};
-
-export type AgentRemote = {
-    type: string;
-    url?: string;
-};
-
 export type AgentSpec = {
     description?: string;
     framework?: string;
@@ -32,15 +20,11 @@ export type AgentSpec = {
     mcpServers?: Array<ResourceRef>;
     modelName?: string;
     modelProvider?: string;
-    packages?: Array<AgentPackage>;
     prompts?: Array<ResourceRef>;
-    readme?: Readme;
-    remotes?: Array<AgentRemote>;
     repository?: Repository;
     skills?: Array<ResourceRef>;
     telemetryEndpoint?: string;
     title?: string;
-    websiteUrl?: string;
 };
 
 export type ApplyResult = {
@@ -187,13 +171,6 @@ export type McpArgument = {
     };
 };
 
-export type McpIcon = {
-    mimeType?: string;
-    sizes?: Array<string>;
-    src: string;
-    theme?: string;
-};
-
 export type McpInputVariable = {
     choices?: Array<string>;
     default?: string;
@@ -243,13 +220,10 @@ export type McpServer = {
 
 export type McpServerSpec = {
     description?: string;
-    icons?: Array<McpIcon>;
     packages?: Array<McpPackage>;
-    readme?: Readme;
     remotes?: Array<McpTransport>;
     repository?: Repository;
     title?: string;
-    websiteUrl?: string;
 };
 
 export type McpTransport = {
@@ -291,7 +265,6 @@ export type Prompt = {
 export type PromptSpec = {
     content?: string;
     description?: string;
-    readme?: Readme;
 };
 
 export type Provider = {
@@ -309,16 +282,7 @@ export type ProviderSpec = {
     platform: string;
 };
 
-export type Readme = {
-    content?: string;
-    contentType?: string;
-    encoding?: string;
-    source?: string;
-};
-
 export type Repository = {
-    id?: string;
-    source?: string;
     subfolder?: string;
     url?: string;
 };
@@ -338,34 +302,18 @@ export type Skill = {
     status?: Status;
 };
 
-export type SkillPackage = {
-    identifier: string;
-    registryType: string;
-    transport: TransportProto;
-    version: string;
-};
-
-export type SkillRemote = {
-    url?: string;
+export type SkillSource = {
+    repository?: Repository;
 };
 
 export type SkillSpec = {
-    category?: string;
     description?: string;
-    packages?: Array<SkillPackage>;
-    readme?: Readme;
-    remotes?: Array<SkillRemote>;
-    repository?: Repository;
+    source?: SkillSource;
     title?: string;
-    websiteUrl?: string;
 };
 
 export type Status = {
     conditions?: Array<Condition>;
-};
-
-export type TransportProto = {
-    type: string;
 };
 
 export type VersionBody = {
@@ -567,71 +515,6 @@ export type ApplyAgentResponses = {
 };
 
 export type ApplyAgentResponse = ApplyAgentResponses[keyof ApplyAgentResponses];
-
-export type GetLatestAgentReadmeData = {
-    body?: never;
-    path: {
-        name: string;
-    };
-    query?: {
-        /**
-         * Namespace (internal; defaults to 'default').
-         */
-        namespace?: string;
-    };
-    url: '/v0/agents/{name}/readme';
-};
-
-export type GetLatestAgentReadmeErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetLatestAgentReadmeError = GetLatestAgentReadmeErrors[keyof GetLatestAgentReadmeErrors];
-
-export type GetLatestAgentReadmeResponses = {
-    /**
-     * OK
-     */
-    200: Readme;
-};
-
-export type GetLatestAgentReadmeResponse = GetLatestAgentReadmeResponses[keyof GetLatestAgentReadmeResponses];
-
-export type GetAgentReadmeData = {
-    body?: never;
-    path: {
-        name: string;
-        version: string;
-    };
-    query?: {
-        /**
-         * Namespace (internal; defaults to 'default').
-         */
-        namespace?: string;
-    };
-    url: '/v0/agents/{name}/versions/{version}/readme';
-};
-
-export type GetAgentReadmeErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetAgentReadmeError = GetAgentReadmeErrors[keyof GetAgentReadmeErrors];
-
-export type GetAgentReadmeResponses = {
-    /**
-     * OK
-     */
-    200: Readme;
-};
-
-export type GetAgentReadmeResponse = GetAgentReadmeResponses[keyof GetAgentReadmeResponses];
 
 export type DeleteBatchData = {
     body: Blob | File;
@@ -1088,71 +971,6 @@ export type ApplyMcpserverResponses = {
 
 export type ApplyMcpserverResponse = ApplyMcpserverResponses[keyof ApplyMcpserverResponses];
 
-export type GetLatestMcpserverReadmeData = {
-    body?: never;
-    path: {
-        name: string;
-    };
-    query?: {
-        /**
-         * Namespace (internal; defaults to 'default').
-         */
-        namespace?: string;
-    };
-    url: '/v0/mcpservers/{name}/readme';
-};
-
-export type GetLatestMcpserverReadmeErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetLatestMcpserverReadmeError = GetLatestMcpserverReadmeErrors[keyof GetLatestMcpserverReadmeErrors];
-
-export type GetLatestMcpserverReadmeResponses = {
-    /**
-     * OK
-     */
-    200: Readme;
-};
-
-export type GetLatestMcpserverReadmeResponse = GetLatestMcpserverReadmeResponses[keyof GetLatestMcpserverReadmeResponses];
-
-export type GetMcpserverReadmeData = {
-    body?: never;
-    path: {
-        name: string;
-        version: string;
-    };
-    query?: {
-        /**
-         * Namespace (internal; defaults to 'default').
-         */
-        namespace?: string;
-    };
-    url: '/v0/mcpservers/{name}/versions/{version}/readme';
-};
-
-export type GetMcpserverReadmeErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetMcpserverReadmeError = GetMcpserverReadmeErrors[keyof GetMcpserverReadmeErrors];
-
-export type GetMcpserverReadmeResponses = {
-    /**
-     * OK
-     */
-    200: Readme;
-};
-
-export type GetMcpserverReadmeResponse = GetMcpserverReadmeResponses[keyof GetMcpserverReadmeResponses];
-
 export type PingV0Data = {
     body?: never;
     path?: never;
@@ -1362,71 +1180,6 @@ export type ApplyPromptResponses = {
 };
 
 export type ApplyPromptResponse = ApplyPromptResponses[keyof ApplyPromptResponses];
-
-export type GetLatestPromptReadmeData = {
-    body?: never;
-    path: {
-        name: string;
-    };
-    query?: {
-        /**
-         * Namespace (internal; defaults to 'default').
-         */
-        namespace?: string;
-    };
-    url: '/v0/prompts/{name}/readme';
-};
-
-export type GetLatestPromptReadmeErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetLatestPromptReadmeError = GetLatestPromptReadmeErrors[keyof GetLatestPromptReadmeErrors];
-
-export type GetLatestPromptReadmeResponses = {
-    /**
-     * OK
-     */
-    200: Readme;
-};
-
-export type GetLatestPromptReadmeResponse = GetLatestPromptReadmeResponses[keyof GetLatestPromptReadmeResponses];
-
-export type GetPromptReadmeData = {
-    body?: never;
-    path: {
-        name: string;
-        version: string;
-    };
-    query?: {
-        /**
-         * Namespace (internal; defaults to 'default').
-         */
-        namespace?: string;
-    };
-    url: '/v0/prompts/{name}/versions/{version}/readme';
-};
-
-export type GetPromptReadmeErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetPromptReadmeError = GetPromptReadmeErrors[keyof GetPromptReadmeErrors];
-
-export type GetPromptReadmeResponses = {
-    /**
-     * OK
-     */
-    200: Readme;
-};
-
-export type GetPromptReadmeResponse = GetPromptReadmeResponses[keyof GetPromptReadmeResponses];
 
 export type ListProvidersData = {
     body?: never;
@@ -1797,71 +1550,6 @@ export type ApplySkillResponses = {
 };
 
 export type ApplySkillResponse = ApplySkillResponses[keyof ApplySkillResponses];
-
-export type GetLatestSkillReadmeData = {
-    body?: never;
-    path: {
-        name: string;
-    };
-    query?: {
-        /**
-         * Namespace (internal; defaults to 'default').
-         */
-        namespace?: string;
-    };
-    url: '/v0/skills/{name}/readme';
-};
-
-export type GetLatestSkillReadmeErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetLatestSkillReadmeError = GetLatestSkillReadmeErrors[keyof GetLatestSkillReadmeErrors];
-
-export type GetLatestSkillReadmeResponses = {
-    /**
-     * OK
-     */
-    200: Readme;
-};
-
-export type GetLatestSkillReadmeResponse = GetLatestSkillReadmeResponses[keyof GetLatestSkillReadmeResponses];
-
-export type GetSkillReadmeData = {
-    body?: never;
-    path: {
-        name: string;
-        version: string;
-    };
-    query?: {
-        /**
-         * Namespace (internal; defaults to 'default').
-         */
-        namespace?: string;
-    };
-    url: '/v0/skills/{name}/versions/{version}/readme';
-};
-
-export type GetSkillReadmeErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetSkillReadmeError = GetSkillReadmeErrors[keyof GetSkillReadmeErrors];
-
-export type GetSkillReadmeResponses = {
-    /**
-     * OK
-     */
-    200: Readme;
-};
-
-export type GetSkillReadmeResponse = GetSkillReadmeResponses[keyof GetSkillReadmeResponses];
 
 export type GetVersionV0Data = {
     body?: never;

@@ -252,17 +252,7 @@ type deleteOutput struct{}
 // Register wires the namespace-scoped + cross-namespace list endpoints for
 // kind T. newObj must return a fresh, zero-valued T on each call (e.g.
 // `func() *v1alpha1.Agent { return &v1alpha1.Agent{} }`).
-//
-// If T implements v1alpha1.ObjectWithReadme, the readme subresource
-// routes (`/{plural}/{name}/readme` and the version-pinned variant)
-// register automatically. Kinds without a Readme field on Spec
-// (Provider, Deployment) don't satisfy the interface and skip readme
-// registration silently. Readme routes register first so the literal
-// `/{name}/readme` path beats the generic `/{name}/{version}` route at
-// the shared depth.
 func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
-	maybeRegisterReadmeRoutes(api, cfg, newObj)
-
 	kind := cfg.Kind
 	plural := cfg.PluralKind
 	if plural == "" {
@@ -570,7 +560,6 @@ func runList[T v1alpha1.Object](
 		if err != nil {
 			return nil, huma.Error500InternalServerError("decode "+cfg.Kind, err)
 		}
-		v1alpha1.StripObjectReadmeContent(obj)
 		items = append(items, obj)
 	}
 	out := &listOutput[T]{}

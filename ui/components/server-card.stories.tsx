@@ -12,9 +12,7 @@ const mockServer: ServerResponse = {
     version: "3.2.1",
     repository: {
       url: "https://github.com/acme/database-server",
-      source: "github",
     },
-    websiteUrl: "https://acme.dev/database-server",
     packages: [
       {
         registryType: "npm",

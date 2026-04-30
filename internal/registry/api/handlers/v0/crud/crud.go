@@ -2,13 +2,11 @@
 // first-party v1alpha1 Kind shipped by this repo (Agent, MCPServer,
 // Skill, Prompt, Provider, Deployment). Per-kind registration is a
 // single `register(...)` call in bindings.go's init(); resource.Register
-// handles every per-kind quirk internally (readme subresource
-// auto-detected via v1alpha1.ObjectWithReadme; per-kind authz / list
+// handles every per-kind quirk internally (per-kind authz / list
 // filtering / post-upsert / post-delete threaded through PerKindHooks).
 //
-// Scope: only the per-kind CRUD surface (`/v0/{plural}/{name}/{version}`
-// + the readme subresource for kinds that have one). Other v1alpha1
-// HTTP endpoints live in sibling packages — `/v0/import` in
+// Scope: only the per-kind CRUD surface (`/v0/{plural}/{name}/{version}`).
+// Other v1alpha1 HTTP endpoints live in sibling packages — `/v0/import` in
 // importpipeline, `/v0/deployments/{name}/{version}/logs` in
 // deploymentlogs.
 //
