@@ -54,7 +54,7 @@ spec:
   language: python
   framework: adk
   modelProvider: gemini
-  modelName: gemini-2.0-flash
+  modelName: gemini-2.5-flash
   description: "An agent that summarizes documents using Gemini"
   # References to resources defined above -- resolved from the registry at deploy time.
   mcpServers:
