@@ -2035,10 +2035,10 @@ spec:
 	}
 }
 
-// TestMCPServer_RemotesShape verifies apply → get round-trip for an MCPServer
-// with spec.remotes (unmanaged URL — no image, no build). Used for
-// third-party servers or dev-loop MCPs the user runs themselves.
-func TestMCPServer_RemotesShape(t *testing.T) {
+// TestRemoteMCPServer_RemoteShape verifies apply → get round-trip for a
+// RemoteMCPServer with spec.remote (unmanaged URL — no image, no build). Used
+// for third-party servers or dev-loop MCPs the user runs themselves.
+func TestRemoteMCPServer_RemoteShape(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	// The server's MCP validator requires the namespace of metadata.name to
@@ -2048,36 +2048,36 @@ func TestMCPServer_RemotesShape(t *testing.T) {
 	version := "1.0.0"
 
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "remote-mcp", serverName, "--version", version, "--registry-url", regURL)
 	})
 
 	// The server-side URL validator rejects localhost/private addresses.
 	// Use a public-looking placeholder — the test doesn't actually reach it.
 	yaml := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
-kind: MCPServer
+kind: RemoteMCPServer
 metadata:
   name: %s
   version: "%s"
 spec:
   title: e2e-remotes
   description: "remotes-shape round-trip test"
-  remotes:
-    - type: streamable-http
-      url: https://mcp.example.com/mcp
+  remote:
+    type: streamable-http
+    url: https://mcp.example.com/mcp
 `, serverName, version)
 
 	path := writeDeclarativeYAML(t, tmpDir, "mcp-remote.yaml", yaml)
 	result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "MCPServer/"+serverName)
+	RequireOutputContains(t, result, "RemoteMCPServer/"+serverName)
 
-	result = RunArctl(t, tmpDir, "get", "mcp", serverName, "-o", "yaml", "--registry-url", regURL)
+	result = RunArctl(t, tmpDir, "get", "remote-mcp", serverName, "-o", "yaml", "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "remotes:")
+	RequireOutputContains(t, result, "remote:")
 	RequireOutputContains(t, result, "streamable-http")
 	RequireOutputContains(t, result, "https://mcp.example.com/mcp")
 	if strings.Contains(result.Stdout, "packages:") {
-		t.Errorf("remotes-shape MCP unexpectedly has packages block:\n%s", result.Stdout)
+		t.Errorf("remote-shape MCP unexpectedly has packages block:\n%s", result.Stdout)
 	}
 }
 
