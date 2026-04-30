@@ -2,12 +2,7 @@ package embeddings
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"net/http"
 	"time"
-
-	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 )
 
 // Payload represents the textual input used to generate an embedding.
@@ -25,21 +20,14 @@ type Result struct {
 	GeneratedAt time.Time
 }
 
-// Provider defines the interface every embedding provider must implement.
+// Provider defines the interface every embedding provider must
+// implement. No first-party implementation ships in the tree right
+// now — the OpenAI provider that previously lived here was removed
+// when the public semantic-search surface was retired.
+//
+// TODO(semantic-search): when re-implementing semantic search, add a
+// concrete provider (OpenAI, Voyage, sentence-transformers, etc.) and
+// a Factory that constructs one from config.EmbeddingsConfig.
 type Provider interface {
 	Generate(ctx context.Context, payload Payload) (*Result, error)
-}
-
-// Factory creates a Provider from configuration.
-func Factory(cfg *config.EmbeddingsConfig, httpClient *http.Client) (Provider, error) {
-	if cfg == nil || !cfg.Enabled {
-		return nil, errors.New("embeddings disabled")
-	}
-
-	switch cfg.Provider {
-	case "", "openai":
-		return newOpenAIProvider(cfg, httpClient), nil
-	default:
-		return nil, fmt.Errorf("unsupported embeddings provider %q", cfg.Provider)
-	}
 }

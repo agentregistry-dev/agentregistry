@@ -40,18 +40,19 @@ type Config struct {
 	Embeddings EmbeddingsConfig
 }
 
-// EmbeddingsConfig captures configuration needed to generate embeddings.
-// Enabled=false keeps the indexer dormant and the
-// semantic_embedding columns NULL on every row.
+// EmbeddingsConfig is the runtime gate for the (currently unwired)
+// semantic-search feature. Enabled drives the database migrator's
+// Skip predicate so the pgvector migration only runs when the flag
+// is true; the public HTTP / generated-client surface for semantic
+// search has been removed pending a rebuild.
+//
+// TODO(semantic-search): when re-implementing semantic search, add
+// back the provider/model/dimensions/credentials fields needed to
+// reach an embedding provider, decide on hybrid-search lexical
+// inputs, and gate the public surface (list params, response fields,
+// admin endpoints) on this same flag.
 type EmbeddingsConfig struct {
-	Enabled       bool   `env:"EMBEDDINGS_ENABLED" envDefault:"false"`
-	Provider      string `env:"EMBEDDINGS_PROVIDER" envDefault:"openai"`
-	Model         string `env:"EMBEDDINGS_MODEL" envDefault:"text-embedding-3-small"`
-	Dimensions    int    `env:"EMBEDDINGS_DIMENSIONS" envDefault:"1536"`
-	OpenAIAPIKey  string `env:"OPENAI_API_KEY" envDefault:""`
-	OpenAIBaseURL string `env:"OPENAI_BASE_URL" envDefault:"https://api.openai.com/v1"`
-	OpenAIOrg     string `env:"OPENAI_ORG" envDefault:""`
-	OnPublish     bool   `env:"EMBEDDINGS_ON_PUBLISH" envDefault:"false"`
+	Enabled bool `env:"EMBEDDINGS_ENABLED" envDefault:"false"`
 }
 
 // NewConfig creates a new configuration with default values
