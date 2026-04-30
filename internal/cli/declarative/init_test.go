@@ -56,7 +56,9 @@ func TestInitAgentCmd_BasicScaffold(t *testing.T) {
 	assert.Equal(t, "python", spec["language"])
 	assert.Equal(t, "gemini", spec["modelProvider"])
 	assert.Equal(t, "gemini-2.0-flash", spec["modelName"])
-	assert.NotEmpty(t, spec["image"])
+	source, ok := spec["source"].(map[string]any)
+	require.True(t, ok, "spec.source should be a map")
+	assert.NotEmpty(t, source["image"])
 	assert.NotEmpty(t, spec["description"])
 }
 
@@ -85,7 +87,9 @@ func TestInitAgentCmd_CustomFlags(t *testing.T) {
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "openai", spec["modelProvider"])
 	assert.Equal(t, "gpt-4o", spec["modelName"])
-	assert.Equal(t, "ghcr.io/acme/mybot:v2", spec["image"])
+	source, ok := spec["source"].(map[string]any)
+	require.True(t, ok, "spec.source should be a map")
+	assert.Equal(t, "ghcr.io/acme/mybot:v2", source["image"])
 	assert.Equal(t, "My custom bot", spec["description"])
 }
 
@@ -151,8 +155,10 @@ func TestInitAgentCmd_GitRepository(t *testing.T) {
 
 	m := readAgentYAML(t, tmpDir, "mybot")
 	spec := m["spec"].(map[string]any)
-	repo, ok := spec["repository"].(map[string]any)
-	require.True(t, ok, "repository should be present in spec")
+	source, ok := spec["source"].(map[string]any)
+	require.True(t, ok, "source should be present in spec")
+	repo, ok := source["repository"].(map[string]any)
+	require.True(t, ok, "repository should be present in spec.source")
 	assert.Equal(t, "https://github.com/acme/mybot", repo["url"])
 }
 
@@ -169,7 +175,10 @@ func TestInitAgentCmd_NoGitRepository(t *testing.T) {
 
 	m := readAgentYAML(t, tmpDir, "mybot")
 	spec := m["spec"].(map[string]any)
-	assert.NotContains(t, spec, "repository")
+	source, ok := spec["source"].(map[string]any)
+	if ok {
+		assert.NotContains(t, source, "repository")
+	}
 }
 
 func TestInitAgentCmd_ModelProviderDefaultsModelName(t *testing.T) {
@@ -253,7 +262,9 @@ func TestInitAgentCmd_DefaultImageUsesRegistryName(t *testing.T) {
 
 	m := readAgentYAML(t, tmpDir, "coolbot")
 	spec := m["spec"].(map[string]any)
-	image, _ := spec["image"].(string)
+	source, ok := spec["source"].(map[string]any)
+	require.True(t, ok, "spec.source should be a map")
+	image, _ := source["image"].(string)
 	assert.True(t, strings.HasSuffix(image, "/coolbot:latest"),
 		"default image should end with /<name>:latest, got: %s", image)
 }

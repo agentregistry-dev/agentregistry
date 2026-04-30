@@ -38,7 +38,8 @@ metadata:
   name: acme/bot
   version: "1.0.0"
 spec:
-  image: ghcr.io/acme/bot:latest
+  source:
+    image: ghcr.io/acme/bot:latest
   description: "A bot"
 `
 
@@ -52,7 +53,7 @@ spec:
 	assert.Equal(t, "Agent", agent.GetKind())
 	assert.Equal(t, "acme/bot", agent.Metadata.Name)
 	assert.Equal(t, "1.0.0", agent.Metadata.Version)
-	assert.Equal(t, "ghcr.io/acme/bot:latest", agent.Spec.Image)
+	assert.Equal(t, "ghcr.io/acme/bot:latest", agent.Spec.Source.Image)
 }
 
 func TestDecodeBytesMultiDoc(t *testing.T) {
@@ -72,7 +73,8 @@ metadata:
   version: "1.0.0"
 spec:
   description: "A bot"
-  image: ghcr.io/acme/bot:latest
+  source:
+    image: ghcr.io/acme/bot:latest
 `
 
 	objs, err := scheme.DecodeBytes([]byte(input))
@@ -88,7 +90,8 @@ apiVersion: ar.dev/v1alpha1
 metadata:
   name: acme/bot
 spec:
-  image: ghcr.io/acme/bot:latest
+  source:
+    image: ghcr.io/acme/bot:latest
 `
 	_, err := scheme.DecodeBytes([]byte(input))
 	assert.ErrorContains(t, err, "kind")
@@ -124,7 +127,8 @@ metadata:
   name: acme/bot
   version: "1.0.0"
 spec:
-  image: ghcr.io/acme/bot:latest
+  source:
+    image: ghcr.io/acme/bot:latest
 status:
   conditions:
     - type: Ready
