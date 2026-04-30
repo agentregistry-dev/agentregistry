@@ -211,11 +211,12 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 		return &platformtypes.DesiredState{MCPServers: []*platformtypes.MCPServer{server}}, nil
 	case *v1alpha1.Agent:
 		agent, servers, err := utils.SpecToPlatformAgent(ctx, target.Metadata, target.Spec, utils.AgentTranslateOpts{
-			DeploymentID:  deploymentID,
-			Namespace:     namespace,
-			KagentURL:     "http://kagent-controller.kagent.svc.cluster.local",
-			DeploymentEnv: envValues,
-			Getter:        in.Getter,
+			DeploymentID:      deploymentID,
+			Namespace:         namespace,
+			KagentURL:         "http://kagent-controller.kagent.svc.cluster.local",
+			DeploymentEnv:     envValues,
+			TelemetryEndpoint: in.Deployment.Spec.TelemetryEndpoint,
+			Getter:            in.Getter,
 		})
 		if err != nil {
 			return nil, err

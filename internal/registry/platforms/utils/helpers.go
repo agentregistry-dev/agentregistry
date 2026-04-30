@@ -76,6 +76,10 @@ type AgentTranslateOpts struct {
 	// Use SplitDeploymentRuntimeInputs upstream if the deployment encodes
 	// ARG_/HEADER_ prefixes.
 	DeploymentEnv map[string]string
+	// TelemetryEndpoint is Deployment.Spec.TelemetryEndpoint. When non-empty
+	// it lands as OTEL_EXPORTER_OTLP_ENDPOINT on the agent process. Explicit
+	// entries in DeploymentEnv take precedence.
+	TelemetryEndpoint string
 	// Getter resolves AgentSpec.MCPServers refs to v1alpha1.MCPServer objects.
 	Getter v1alpha1.GetterFunc
 }
@@ -92,6 +96,11 @@ func SpecToPlatformAgent(
 	opts AgentTranslateOpts,
 ) (*platformtypes.Agent, []*platformtypes.MCPServer, error) {
 	envValues := nonNilStringMap(opts.DeploymentEnv)
+	if opts.TelemetryEndpoint != "" {
+		if _, set := envValues["OTEL_EXPORTER_OTLP_ENDPOINT"]; !set {
+			envValues["OTEL_EXPORTER_OTLP_ENDPOINT"] = opts.TelemetryEndpoint
+		}
+	}
 	if envValues[constants.EnvKagentNamespace] == "" {
 		switch {
 		case opts.Namespace != "":

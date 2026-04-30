@@ -160,10 +160,11 @@ func (a *localDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 		return &platformtypes.DesiredState{MCPServers: []*platformtypes.MCPServer{server}}, nil
 	case *v1alpha1.Agent:
 		agent, servers, err := utils.SpecToPlatformAgent(ctx, target.Metadata, target.Spec, utils.AgentTranslateOpts{
-			DeploymentID:  deploymentID,
-			KagentURL:     "http://localhost",
-			DeploymentEnv: envValues,
-			Getter:        in.Getter,
+			DeploymentID:      deploymentID,
+			KagentURL:         "http://localhost",
+			DeploymentEnv:     envValues,
+			TelemetryEndpoint: in.Deployment.Spec.TelemetryEndpoint,
+			Getter:            in.Getter,
 		})
 		if err != nil {
 			return nil, err
