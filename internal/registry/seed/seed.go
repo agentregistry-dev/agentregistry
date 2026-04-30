@@ -59,67 +59,14 @@ func ImportBuiltinSeedData(ctx context.Context, pool *pgxpool.Pool) error {
 			annotations["agentregistry.dev/related-mcpserver"] = srv.Name
 		}
 
-		if hasPackages {
-			spec, err := seedServerToMCPSpec(srv)
-			if err != nil {
-				slog.Warn("seed: failed to translate server", "name", srv.Name, "error", err)
-				continue
-			}
-			specJSON, err := json.Marshal(spec)
-			if err != nil {
-				slog.Warn("seed: marshal spec", "name", srv.Name, "error", err)
-				continue
-			}
-			if _, err = mcpStore.Upsert(ctx,
-				v1alpha1.DefaultNamespace,
-				srv.Name,
-				srv.Version,
-				specJSON,
-				v1alpha1store.UpsertOpts{Labels: labels, Annotations: annotations},
-			); err != nil {
-				if errors.Is(err, pkgdb.ErrAlreadyExists) || errors.Is(err, pkgdb.ErrDuplicateVersion) {
-					slog.Debug("seed: mcp row already present", "name", srv.Name, "version", srv.Version)
-				} else {
-					slog.Warn("seed: mcp upsert failed", "name", srv.Name, "version", srv.Version, "error", err)
-					continue
-				}
-			}
+		if hasPackages && upsertSeedMCPServer(ctx, mcpStore, srv, labels, annotations) {
 			mcpRows++
 		}
 
-		for i, r := range srv.Remotes {
-			remoteName := srv.Name
-			if hasPackages || len(srv.Remotes) > 1 {
-				remoteName = remoteSiblingName(srv.Name, i, len(srv.Remotes))
+		for i := range srv.Remotes {
+			if upsertSeedRemoteMCPServer(ctx, remoteStore, srv, i, labels, annotations) {
+				remoteRows++
 			}
-			spec := v1alpha1.RemoteMCPServerSpec{
-				Title:       srv.Title,
-				Description: srv.Description,
-				Remote: v1alpha1.MCPTransport{
-					Type: r.Type,
-					URL:  r.URL,
-				},
-			}
-			specJSON, err := json.Marshal(spec)
-			if err != nil {
-				slog.Warn("seed: marshal remote spec", "name", remoteName, "error", err)
-				continue
-			}
-			if _, err = remoteStore.Upsert(ctx,
-				v1alpha1.DefaultNamespace,
-				remoteName,
-				srv.Version,
-				specJSON,
-				v1alpha1store.UpsertOpts{Labels: labels, Annotations: annotations},
-			); err != nil {
-				if errors.Is(err, pkgdb.ErrAlreadyExists) || errors.Is(err, pkgdb.ErrDuplicateVersion) {
-					slog.Debug("seed: remote row already present", "name", remoteName, "version", srv.Version)
-				} else {
-					slog.Warn("seed: remote upsert failed", "name", remoteName, "version", srv.Version, "error", err)
-					continue
-				}
-			}
-			remoteRows++
 		}
 	}
 
@@ -137,6 +84,88 @@ func remoteSiblingName(base string, idx, total int) string {
 		return base + "-remote"
 	}
 	return fmt.Sprintf("%s-remote-%d", base, idx)
+}
+
+// upsertSeedMCPServer marshals a seedServerJSON's MCPServer projection and
+// upserts it into mcpStore. Returns true on success (or "row already
+// present", which is benign for seed re-runs).
+func upsertSeedMCPServer(
+	ctx context.Context,
+	store *v1alpha1store.Store,
+	srv *seedServerJSON,
+	labels, annotations map[string]string,
+) bool {
+	spec, err := seedServerToMCPSpec(srv)
+	if err != nil {
+		slog.Warn("seed: failed to translate server", "name", srv.Name, "error", err)
+		return false
+	}
+	specJSON, err := json.Marshal(spec)
+	if err != nil {
+		slog.Warn("seed: marshal spec", "name", srv.Name, "error", err)
+		return false
+	}
+	if _, err = store.Upsert(ctx,
+		v1alpha1.DefaultNamespace,
+		srv.Name,
+		srv.Version,
+		specJSON,
+		v1alpha1store.UpsertOpts{Labels: labels, Annotations: annotations},
+	); err != nil {
+		if errors.Is(err, pkgdb.ErrAlreadyExists) || errors.Is(err, pkgdb.ErrDuplicateVersion) {
+			slog.Debug("seed: mcp row already present", "name", srv.Name, "version", srv.Version)
+			return true
+		}
+		slog.Warn("seed: mcp upsert failed", "name", srv.Name, "version", srv.Version, "error", err)
+		return false
+	}
+	return true
+}
+
+// upsertSeedRemoteMCPServer materializes one entry from srv.Remotes as a
+// sibling RemoteMCPServer row. The naming rule mirrors the boot-time
+// migration so re-runs land on the same identity.
+func upsertSeedRemoteMCPServer(
+	ctx context.Context,
+	store *v1alpha1store.Store,
+	srv *seedServerJSON,
+	idx int,
+	labels, annotations map[string]string,
+) bool {
+	r := srv.Remotes[idx]
+	hasPackages := len(srv.Packages) > 0
+	remoteName := srv.Name
+	if hasPackages || len(srv.Remotes) > 1 {
+		remoteName = remoteSiblingName(srv.Name, idx, len(srv.Remotes))
+	}
+	spec := v1alpha1.RemoteMCPServerSpec{
+		Title:       srv.Title,
+		Description: srv.Description,
+		Remote: v1alpha1.MCPTransport{
+			Type: r.Type,
+			URL:  r.URL,
+		},
+	}
+	specJSON, err := json.Marshal(spec)
+	if err != nil {
+		slog.Warn("seed: marshal remote spec", "name", remoteName, "error", err)
+		return false
+	}
+	if _, err = store.Upsert(ctx,
+		v1alpha1.DefaultNamespace,
+		remoteName,
+		srv.Version,
+		specJSON,
+		v1alpha1store.UpsertOpts{Labels: labels, Annotations: annotations},
+	); err != nil {
+		if errors.Is(err, pkgdb.ErrAlreadyExists) || errors.Is(err, pkgdb.ErrDuplicateVersion) {
+			slog.Debug("seed: remote row already present", "name", remoteName, "version", srv.Version)
+			return true
+		}
+		slog.Warn("seed: remote upsert failed", "name", remoteName, "version", srv.Version, "error", err)
+		return false
+	}
+	return true
 }
 
 // seedServerToMCPSpec translates an upstream ServerJSON (as stored in

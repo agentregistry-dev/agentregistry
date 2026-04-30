@@ -17,6 +17,7 @@ const RELATED_ANNOTATION = "agentregistry.dev/related-mcpserver"
 // bundled sibling. Detail editing lands in a follow-up; this view is
 // catalog-only.
 export default function RemoteResourcesPage() {
+  const [tab, setTab] = useState<"servers" | "agents">("servers")
   const [servers, setServers] = useState<RemoteMcpServer[]>([])
   const [agents, setAgents] = useState<RemoteAgent[]>([])
   const [loading, setLoading] = useState(true)
@@ -68,7 +69,7 @@ export default function RemoteResourcesPage() {
         </div>
       )}
 
-      <Tabs defaultValue="servers" className="w-full">
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "servers" | "agents")} className="w-full">
         <TabsList>
           <TabsTrigger value="servers">
             MCP servers <Badge variant="secondary" className="ml-2">{servers.length}</Badge>

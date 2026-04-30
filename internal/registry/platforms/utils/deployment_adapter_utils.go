@@ -47,8 +47,8 @@ type MCPServerRunRequest struct {
 	DeploymentID string
 	// EnvValues, ArgValues carry per-deployment runtime overrides for the
 	// bundled local server. Nil is treated as an empty map.
-	EnvValues    map[string]string
-	ArgValues    map[string]string
+	EnvValues map[string]string
+	ArgValues map[string]string
 	// HeaderValues is retained on the request struct for callers that
 	// historically passed it through; it is unused by local translation
 	// and ignored. Header overrides for remote endpoints flow through

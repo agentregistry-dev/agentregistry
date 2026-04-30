@@ -23,12 +23,6 @@ const mockServer: ServerResponse = {
         transport: { type: "stdio" },
       },
     ],
-    remotes: [
-      {
-        type: "streamable-http",
-        url: "https://mcp.acme.dev/database",
-      },
-    ],
   },
   _meta: {
     "io.modelcontextprotocol.registry/official": {
@@ -52,11 +46,10 @@ describe("ServerCard", () => {
     expect(screen.getByText("3.2.1")).toBeInTheDocument()
   })
 
-  it("renders package and remote counts", () => {
+  it("renders package count", () => {
     render(<ServerCard server={mockServer} />)
-    // counts are shown as numbers next to icons
-    const ones = screen.getAllByText("1")
-    expect(ones.length).toBeGreaterThanOrEqual(2)
+    // count is shown as a number next to the package icon
+    expect(screen.getAllByText("1").length).toBeGreaterThanOrEqual(1)
   })
 
   it("renders repository source", () => {

@@ -103,13 +103,6 @@ export function ServerCard({ server, onDelete, onDeploy, showDelete = false, sho
               </span>
             )}
 
-            {serverData.remotes && serverData.remotes.length > 0 && (
-              <span className="flex items-center gap-1">
-                <ExternalLink className="h-3 w-3" />
-                {serverData.remotes.length}
-              </span>
-            )}
-
             {serverData.repository?.source && (
               <span className="flex items-center gap-1">
                 <GitBranch className="h-3 w-3" />
