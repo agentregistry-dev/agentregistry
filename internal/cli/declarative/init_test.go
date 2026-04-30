@@ -55,7 +55,7 @@ func TestInitAgentCmd_BasicScaffold(t *testing.T) {
 	assert.Equal(t, "adk", spec["framework"])
 	assert.Equal(t, "python", spec["language"])
 	assert.Equal(t, "gemini", spec["modelProvider"])
-	assert.Equal(t, "gemini-2.0-flash", spec["modelName"])
+	assert.Equal(t, "gemini-2.5-flash", spec["modelName"])
 	assert.NotEmpty(t, spec["image"])
 	assert.NotEmpty(t, spec["description"])
 }
