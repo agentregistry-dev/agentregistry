@@ -46,7 +46,6 @@ func (a *localDeploymentAdapter) SupportedTargetKinds() []string {
 	return []string{
 		v1alpha1.KindAgent,
 		v1alpha1.KindMCPServer,
-		v1alpha1.KindRemoteAgent,
 		v1alpha1.KindRemoteMCPServer,
 	}
 }
@@ -186,9 +185,6 @@ func (a *localDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 			Agents:     []*platformtypes.Agent{agent},
 			MCPServers: servers,
 		}, nil
-	case *v1alpha1.RemoteAgent:
-		_ = target
-		return &platformtypes.DesiredState{}, nil
 	default:
 		return nil, fmt.Errorf("apply: unsupported target kind %q", in.Target.GetKind())
 	}

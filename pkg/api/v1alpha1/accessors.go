@@ -240,18 +240,3 @@ func (r *RemoteMCPServer) MarshalStatus() (json.RawMessage, error) {
 func (r *RemoteMCPServer) UnmarshalStatus(data json.RawMessage) error {
 	return UnmarshalStatusFromStorage(data, &r.Status)
 }
-
-func (r *RemoteAgent) GetMetadata() *ObjectMeta { return &r.Metadata }
-func (r *RemoteAgent) SetMetadata(meta ObjectMeta) {
-	r.Metadata = meta
-}
-func (r *RemoteAgent) MarshalSpec() (json.RawMessage, error) { return json.Marshal(r.Spec) }
-func (r *RemoteAgent) UnmarshalSpec(data json.RawMessage) error {
-	return json.Unmarshal(data, &r.Spec)
-}
-func (r *RemoteAgent) MarshalStatus() (json.RawMessage, error) {
-	return MarshalStatusForStorage(r.Status)
-}
-func (r *RemoteAgent) UnmarshalStatus(data json.RawMessage) error {
-	return UnmarshalStatusFromStorage(data, &r.Status)
-}

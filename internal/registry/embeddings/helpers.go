@@ -35,14 +35,6 @@ func BuildRemoteMCPServerEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha
 	return strings.Join(parts, "\n")
 }
 
-// BuildRemoteAgentEmbeddingPayload assembles the canonical text for a
-// RemoteAgent (already-running endpoint).
-func BuildRemoteAgentEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.RemoteAgentSpec) string {
-	var parts []string
-	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version, spec.Remote.URL, spec.Remote.Type)
-	return strings.Join(parts, "\n")
-}
-
 // BuildAgentEmbeddingPayload assembles the canonical text for an Agent.
 func BuildAgentEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.AgentSpec) string {
 	var parts []string

@@ -1,9 +1,9 @@
 -- 006_split_remotes.sql
 --
 -- One-shot data migration: split MCPServer.spec.remotes into
--- RemoteMCPServer rows and Agent.spec.remotes into RemoteAgent rows;
--- rewrite affected Deployment.spec.targetRef.kind for sources that
--- became remote-only (i.e. were deleted because they had no packages).
+-- RemoteMCPServer rows; rewrite affected Deployment.spec.targetRef.kind for
+-- MCPServers that became remote-only (i.e. were deleted because they had no
+-- packages). Agent.spec.remotes is unsupported and is stripped if present.
 --
 -- Idempotency is provided by the migration runner (schema_migrations
 -- row gate); the SQL itself is also tolerant of replay because it
@@ -81,62 +81,6 @@ WHERE jsonb_array_length(COALESCE(spec->'remotes', '[]'::jsonb)) > 0
 UPDATE v1alpha1.mcp_servers
 SET spec = spec - 'remotes'
 WHERE spec ? 'remotes';
-
--- -----------------------------------------------------------------------------
--- Agent split
--- -----------------------------------------------------------------------------
-
-INSERT INTO v1alpha1.remote_agents (
-    namespace, name, version, generation, labels, annotations,
-    spec, status, is_latest_version, created_at, updated_at
-)
-SELECT
-    a.namespace,
-    CASE
-        WHEN jsonb_array_length(COALESCE(a.spec->'packages', '[]'::jsonb)) = 0
-             AND jsonb_array_length(a.spec->'remotes') = 1
-            THEN a.name
-        WHEN jsonb_array_length(a.spec->'remotes') = 1
-            THEN a.name || '-remote'
-        ELSE a.name || '-remote-' || (r.ord - 1)::text
-    END AS name,
-    a.version,
-    a.generation,
-    a.labels,
-    COALESCE(a.annotations, '{}'::jsonb)
-        || jsonb_build_object('agentregistry.dev/related-agent', a.name),
-    jsonb_strip_nulls(jsonb_build_object(
-        'title',       a.spec->'title',
-        'description', a.spec->'description',
-        'remote',      r.value
-    )),
-    '{}'::jsonb,
-    (a.is_latest_version AND r.ord = 1) AS is_latest_version,
-    a.created_at,
-    a.updated_at
-FROM v1alpha1.agents a,
-     LATERAL jsonb_array_elements(COALESCE(a.spec->'remotes', '[]'::jsonb))
-         WITH ORDINALITY AS r(value, ord)
-WHERE jsonb_array_length(COALESCE(a.spec->'remotes', '[]'::jsonb)) > 0
-ON CONFLICT (namespace, name, version) DO NOTHING;
-
-UPDATE v1alpha1.deployments d
-SET spec = jsonb_set(
-    d.spec,
-    '{targetRef,kind}',
-    to_jsonb('RemoteAgent'::text)
-)
-FROM v1alpha1.agents a
-WHERE d.spec->'targetRef'->>'kind' = 'Agent'
-  AND d.spec->'targetRef'->>'namespace' = a.namespace
-  AND d.spec->'targetRef'->>'name'      = a.name
-  AND COALESCE(d.spec->'targetRef'->>'version', '') IN ('', a.version)
-  AND jsonb_array_length(COALESCE(a.spec->'remotes',  '[]'::jsonb)) > 0
-  AND jsonb_array_length(COALESCE(a.spec->'packages', '[]'::jsonb)) = 0;
-
-DELETE FROM v1alpha1.agents
-WHERE jsonb_array_length(COALESCE(spec->'remotes', '[]'::jsonb)) > 0
-  AND jsonb_array_length(COALESCE(spec->'packages', '[]'::jsonb)) = 0;
 
 UPDATE v1alpha1.agents
 SET spec = spec - 'remotes'

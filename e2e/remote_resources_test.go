@@ -1,7 +1,7 @@
 //go:build e2e
 
-// Tests for the new RemoteMCPServer + RemoteAgent kinds plus the
-// ResourceRef.Kind discriminator on AgentSpec.MCPServers.
+// Tests for the new RemoteMCPServer kind plus the ResourceRef.Kind
+// discriminator on AgentSpec.MCPServers.
 
 package e2e
 
@@ -18,16 +18,6 @@ func verifyRemoteMCPServerExists(t *testing.T, regURL, name, version string) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("Expected RemoteMCPServer %s@%s to exist (HTTP 200) but got %d", name, version, resp.StatusCode)
-	}
-}
-
-// verifyRemoteAgentExists checks that the RemoteAgent exists in the registry via HTTP GET.
-func verifyRemoteAgentExists(t *testing.T, regURL, name, version string) {
-	t.Helper()
-	resp := RegistryGet(t, resourceURL(regURL, "remoteagents", name, version))
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Expected RemoteAgent %s@%s to exist (HTTP 200) but got %d", name, version, resp.StatusCode)
 	}
 }
 
@@ -67,43 +57,6 @@ spec:
 	RequireOutputContains(t, result, "RemoteMCPServer/"+name)
 
 	verifyRemoteMCPServerExists(t, regURL, name, version)
-}
-
-// TestDeclarativeApply_RemoteAgent mirrors the RemoteMCPServer test for
-// the agent variant.
-func TestDeclarativeApply_RemoteAgent(t *testing.T) {
-	regURL := RegistryURL(t)
-	tmpDir := t.TempDir()
-
-	name := UniqueAgentName("decl-remote-agent")
-	version := "0.0.1-e2e"
-
-	RunArctl(t, tmpDir, "delete", "remote-agent", name, "--version", version, "--registry-url", regURL)
-	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "remote-agent", name, "--version", version, "--registry-url", regURL)
-	})
-
-	yaml := fmt.Sprintf(`
-apiVersion: ar.dev/v1alpha1
-kind: RemoteAgent
-metadata:
-  name: %s
-  version: "%s"
-spec:
-  title: E2E Remote Agent
-  description: Hosted agent endpoint for the declarative-apply E2E test
-  remote:
-    type: a2a
-    url: https://example.test/agent
-`, name, version)
-
-	yamlPath := writeDeclarativeYAML(t, tmpDir, "remote-agent.yaml", yaml)
-
-	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
-	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "RemoteAgent/"+name)
-
-	verifyRemoteAgentExists(t, regURL, name, version)
 }
 
 // TestDeclarativeApply_AgentReferencesRemoteMCPServer covers the

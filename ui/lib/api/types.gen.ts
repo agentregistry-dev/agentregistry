@@ -19,11 +19,6 @@ export type AgentPackage = {
     version: string;
 };
 
-export type AgentRemote = {
-    type: string;
-    url?: string;
-};
-
 export type AgentSpec = {
     description?: string;
     framework?: string;
@@ -163,12 +158,6 @@ export type ListOutputPromptBody = {
 
 export type ListOutputProviderBody = {
     items: Array<Provider>;
-    nextCursor?: string;
-    semanticScores?: Array<number>;
-};
-
-export type ListOutputRemoteAgentBody = {
-    items: Array<RemoteAgent>;
     nextCursor?: string;
     semanticScores?: Array<number>;
 };
@@ -329,20 +318,6 @@ export type Readme = {
     contentType?: string;
     encoding?: string;
     source?: string;
-};
-
-export type RemoteAgent = {
-    apiVersion: string;
-    kind: string;
-    metadata: ObjectMeta;
-    spec: RemoteAgentSpec;
-    status?: Status;
-};
-
-export type RemoteAgentSpec = {
-    description?: string;
-    remote?: AgentRemote;
-    title?: string;
 };
 
 export type RemoteMcpServer = {
@@ -1695,199 +1670,6 @@ export type ApplyProviderResponses = {
 };
 
 export type ApplyProviderResponse = ApplyProviderResponses[keyof ApplyProviderResponses];
-
-export type ListRemoteagentsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        /**
-         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
-         */
-        namespace?: string;
-        /**
-         * Max items to return (default 50).
-         */
-        limit?: number;
-        /**
-         * Opaque pagination cursor.
-         */
-        cursor?: string;
-        /**
-         * Label selector: key=value,key2=value2.
-         */
-        labels?: string;
-        /**
-         * Only return rows with is_latest_version=true.
-         */
-        latestOnly?: boolean;
-        /**
-         * Include rows with a deletionTimestamp.
-         */
-        includeTerminating?: boolean;
-        /**
-         * Semantic search query. Returns results ranked by similarity.
-         */
-        semantic?: string;
-        /**
-         * Drop results with cosine distance above this threshold (0 = no filter).
-         */
-        semanticThreshold?: number;
-    };
-    url: '/v0/remoteagents';
-};
-
-export type ListRemoteagentsErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ListRemoteagentsError = ListRemoteagentsErrors[keyof ListRemoteagentsErrors];
-
-export type ListRemoteagentsResponses = {
-    /**
-     * OK
-     */
-    200: ListOutputRemoteAgentBody;
-};
-
-export type ListRemoteagentsResponse = ListRemoteagentsResponses[keyof ListRemoteagentsResponses];
-
-export type GetLatestRemoteagentData = {
-    body?: never;
-    path: {
-        name: string;
-    };
-    query?: {
-        /**
-         * Namespace (internal; defaults to 'default').
-         */
-        namespace?: string;
-    };
-    url: '/v0/remoteagents/{name}';
-};
-
-export type GetLatestRemoteagentErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetLatestRemoteagentError = GetLatestRemoteagentErrors[keyof GetLatestRemoteagentErrors];
-
-export type GetLatestRemoteagentResponses = {
-    /**
-     * OK
-     */
-    200: RemoteAgent;
-};
-
-export type GetLatestRemoteagentResponse = GetLatestRemoteagentResponses[keyof GetLatestRemoteagentResponses];
-
-export type DeleteRemoteagentData = {
-    body?: never;
-    path: {
-        name: string;
-        version: string;
-    };
-    query?: {
-        /**
-         * Namespace (internal; defaults to 'default').
-         */
-        namespace?: string;
-        /**
-         * Skip provider-specific teardown and only remove the registry record.
-         */
-        force?: boolean;
-    };
-    url: '/v0/remoteagents/{name}/{version}';
-};
-
-export type DeleteRemoteagentErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type DeleteRemoteagentError = DeleteRemoteagentErrors[keyof DeleteRemoteagentErrors];
-
-export type DeleteRemoteagentResponses = {
-    /**
-     * No Content
-     */
-    204: void;
-};
-
-export type DeleteRemoteagentResponse = DeleteRemoteagentResponses[keyof DeleteRemoteagentResponses];
-
-export type GetRemoteagentData = {
-    body?: never;
-    path: {
-        name: string;
-        version: string;
-    };
-    query?: {
-        /**
-         * Namespace (internal; defaults to 'default').
-         */
-        namespace?: string;
-    };
-    url: '/v0/remoteagents/{name}/{version}';
-};
-
-export type GetRemoteagentErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetRemoteagentError = GetRemoteagentErrors[keyof GetRemoteagentErrors];
-
-export type GetRemoteagentResponses = {
-    /**
-     * OK
-     */
-    200: RemoteAgent;
-};
-
-export type GetRemoteagentResponse = GetRemoteagentResponses[keyof GetRemoteagentResponses];
-
-export type ApplyRemoteagentData = {
-    body?: RemoteAgent;
-    path: {
-        name: string;
-        version: string;
-    };
-    query?: {
-        /**
-         * Namespace (internal; defaults to 'default').
-         */
-        namespace?: string;
-    };
-    url: '/v0/remoteagents/{name}/{version}';
-};
-
-export type ApplyRemoteagentErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ApplyRemoteagentError = ApplyRemoteagentErrors[keyof ApplyRemoteagentErrors];
-
-export type ApplyRemoteagentResponses = {
-    /**
-     * OK
-     */
-    200: RemoteAgent;
-};
-
-export type ApplyRemoteagentResponse = ApplyRemoteagentResponses[keyof ApplyRemoteagentResponses];
 
 export type ListRemotemcpserversData = {
     body?: never;

@@ -23,7 +23,6 @@ const GroupVersion = "ar.dev/v1alpha1"
 const (
 	KindAgent           = "Agent"
 	KindMCPServer       = "MCPServer"
-	KindRemoteAgent     = "RemoteAgent"
 	KindRemoteMCPServer = "RemoteMCPServer"
 	KindSkill           = "Skill"
 	KindPrompt          = "Prompt"
@@ -40,7 +39,6 @@ const (
 var BuiltinKinds = []string{
 	KindAgent,
 	KindMCPServer,
-	KindRemoteAgent,
 	KindRemoteMCPServer,
 	KindSkill,
 	KindPrompt,

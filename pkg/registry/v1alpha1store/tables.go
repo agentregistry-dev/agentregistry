@@ -18,7 +18,6 @@ import (
 var TableFor = map[string]string{
 	v1alpha1.KindAgent:           "v1alpha1.agents",
 	v1alpha1.KindMCPServer:       "v1alpha1.mcp_servers",
-	v1alpha1.KindRemoteAgent:     "v1alpha1.remote_agents",
 	v1alpha1.KindRemoteMCPServer: "v1alpha1.remote_mcp_servers",
 	v1alpha1.KindSkill:           "v1alpha1.skills",
 	v1alpha1.KindPrompt:          "v1alpha1.prompts",
