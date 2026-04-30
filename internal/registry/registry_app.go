@@ -540,4 +540,3 @@ func runSeedFromImport(cfg *config.Config, importer *pkgimporter.Importer) {
 		"seed_from", cfg.SeedFrom,
 		"total", len(results), "failed", failed)
 }
-

@@ -55,7 +55,6 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha
 		api, "/v0", stores,
 		database.NewResolver(stores),
 		nil, // registryValidator
-		nil, // semanticSearch disabled in this test
 		crud.PerKindHooks{
 			PostUpserts: map[string]func(context.Context, v1alpha1.Object) error{
 				v1alpha1.KindDeployment: func(ctx context.Context, obj v1alpha1.Object) error {
