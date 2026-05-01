@@ -35,10 +35,14 @@ func New() *Adapter { return &Adapter{} }
 // Platform returns "noop".
 func (a *Adapter) Platform() string { return Platform }
 
-// SupportedTargetKinds returns both Agent and MCPServer — the noop
-// adapter declares broad support since it does nothing anyway.
+// SupportedTargetKinds returns the bundled kinds plus RemoteMCPServer — the
+// noop adapter declares broad support since it does nothing anyway.
 func (a *Adapter) SupportedTargetKinds() []string {
-	return []string{v1alpha1.KindAgent, v1alpha1.KindMCPServer}
+	return []string{
+		v1alpha1.KindAgent,
+		v1alpha1.KindMCPServer,
+		v1alpha1.KindRemoteMCPServer,
+	}
 }
 
 // Apply reports synthetic convergence immediately.

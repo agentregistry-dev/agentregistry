@@ -66,7 +66,6 @@ func Register(
 	stores map[string]*v1alpha1store.Store,
 	resolver v1alpha1.ResolverFunc,
 	registryValidator v1alpha1.RegistryValidatorFunc,
-	semanticSearch resource.SemanticSearchFunc,
 	perKind PerKindHooks,
 ) {
 	cfgFor := func(kind string) (resource.Config, bool) {
@@ -80,7 +79,6 @@ func Register(
 			Store:             store,
 			Resolver:          resolver,
 			RegistryValidator: registryValidator,
-			SemanticSearch:    semanticSearch,
 			Authorize:         perKind.Authorizers[kind],
 			ListFilter:        perKind.ListFilters[kind],
 			PostUpsert:        perKind.PostUpserts[kind],

@@ -33,7 +33,11 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha
 
 	mcpSpec, err := json.Marshal(v1alpha1.MCPServerSpec{
 		Description: "noop server",
-		Remotes:     []v1alpha1.MCPTransport{{Type: "streamable-http", URL: "https://example.test/mcp"}},
+		Packages: []v1alpha1.MCPPackage{{
+			RegistryType: v1alpha1.RegistryTypeOCI,
+			Identifier:   "ghcr.io/example/weather:1.0.0",
+			Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+		}},
 	})
 	require.NoError(t, err)
 	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, "default", "weather", "1.0.0", mcpSpec, v1alpha1store.UpsertOpts{})
@@ -55,7 +59,6 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha
 		api, "/v0", stores,
 		database.NewResolver(stores),
 		nil, // registryValidator
-		nil, // semanticSearch disabled in this test
 		crud.PerKindHooks{
 			PostUpserts: map[string]func(context.Context, v1alpha1.Object) error{
 				v1alpha1.KindDeployment: func(ctx context.Context, obj v1alpha1.Object) error {

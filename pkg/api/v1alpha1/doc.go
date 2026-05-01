@@ -21,12 +21,13 @@ const GroupVersion = "ar.dev/v1alpha1"
 
 // Canonical Kind names.
 const (
-	KindAgent      = "Agent"
-	KindMCPServer  = "MCPServer"
-	KindSkill      = "Skill"
-	KindPrompt     = "Prompt"
-	KindDeployment = "Deployment"
-	KindProvider   = "Provider"
+	KindAgent           = "Agent"
+	KindMCPServer       = "MCPServer"
+	KindRemoteMCPServer = "RemoteMCPServer"
+	KindSkill           = "Skill"
+	KindPrompt          = "Prompt"
+	KindDeployment      = "Deployment"
+	KindProvider        = "Provider"
 )
 
 // BuiltinKinds is the stable ordered list of Kind names this package
@@ -38,6 +39,7 @@ const (
 var BuiltinKinds = []string{
 	KindAgent,
 	KindMCPServer,
+	KindRemoteMCPServer,
 	KindSkill,
 	KindPrompt,
 	KindProvider,

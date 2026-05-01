@@ -28,7 +28,11 @@ func seedV1Alpha1Fixtures(t *testing.T) (map[string]*v1alpha1store.Store, *v1alp
 
 	mcpSpec, err := json.Marshal(v1alpha1.MCPServerSpec{
 		Description: "noop mcp server",
-		Remotes:     []v1alpha1.MCPTransport{{Type: "streamable-http", URL: "https://example.test/mcp"}},
+		Packages: []v1alpha1.MCPPackage{{
+			RegistryType: v1alpha1.RegistryTypeOCI,
+			Identifier:   "ghcr.io/example/weather:1.0.0",
+			Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+		}},
 	})
 	require.NoError(t, err)
 	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, "default", "weather", "1.0.0", mcpSpec, v1alpha1store.UpsertOpts{})

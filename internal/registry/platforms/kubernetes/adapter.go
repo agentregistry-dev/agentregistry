@@ -31,7 +31,11 @@ func (a *kubernetesDeploymentAdapter) Platform() string { return "kubernetes" }
 // SupportedTargetKinds reports the v1alpha1 Kinds this adapter can
 // deploy: Agent and MCPServer.
 func (a *kubernetesDeploymentAdapter) SupportedTargetKinds() []string {
-	return []string{v1alpha1.KindAgent, v1alpha1.KindMCPServer}
+	return []string{
+		v1alpha1.KindAgent,
+		v1alpha1.KindMCPServer,
+		v1alpha1.KindRemoteMCPServer,
+	}
 }
 
 // Apply translates + applies kagent/kmcp CRDs onto the provider's cluster.
@@ -170,7 +174,7 @@ func (a *kubernetesDeploymentAdapter) Discover(ctx context.Context, in types.Dis
 				continue
 			}
 			out = append(out, types.DiscoveryResult{
-				TargetKind: v1alpha1.KindMCPServer,
+				TargetKind: v1alpha1.KindRemoteMCPServer,
 				Namespace:  remote.Namespace,
 				Name:       remote.Name,
 			})
@@ -199,10 +203,18 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 	case *v1alpha1.MCPServer:
 		server, err := utils.SpecToPlatformMCPServer(ctx, target.Metadata, target.Spec, utils.MCPServerTranslateOpts{
 			DeploymentID: deploymentID,
-			PreferRemote: in.Deployment.Spec.PreferRemote,
 			Namespace:    namespace,
 			EnvValues:    envValues,
 			ArgValues:    argValues,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &platformtypes.DesiredState{MCPServers: []*platformtypes.MCPServer{server}}, nil
+	case *v1alpha1.RemoteMCPServer:
+		server, err := utils.SpecToPlatformRemoteMCPServer(ctx, target.Metadata, target.Spec, utils.RemoteMCPServerTranslateOpts{
+			DeploymentID: deploymentID,
+			Namespace:    namespace,
 			HeaderValues: headerValues,
 		})
 		if err != nil {
@@ -220,6 +232,7 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 			KagentURL:         "http://kagent-controller.kagent.svc.cluster.local",
 			DeploymentEnv:     envValues,
 			TelemetryEndpoint: telemetryEndpoint,
+			HeaderValues:      headerValues,
 			Getter:            in.Getter,
 		})
 		if err != nil {

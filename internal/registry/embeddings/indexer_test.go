@@ -269,9 +269,35 @@ func TestIndexer_KindsFilter(t *testing.T) {
 	require.Equal(t, 1, res.Stats[v1alpha1.KindMCPServer].Updated)
 }
 
-func TestDefaultBindings_RequiresAllFourKinds(t *testing.T) {
+func TestPayloadBuilderFor_RemoteMCPServer(t *testing.T) {
+	spec := mustSpec(t, v1alpha1.RemoteMCPServerSpec{
+		Title:       "Remote Search",
+		Description: "already running",
+		Remote: v1alpha1.MCPTransport{
+			Type: "streamable-http",
+			URL:  "https://mcp.example.com",
+		},
+	})
+	payload, err := payloadBuilderFor(v1alpha1.KindRemoteMCPServer)(&v1alpha1.RawObject{
+		Metadata: v1alpha1.ObjectMeta{Name: "remote-search", Version: "v2"},
+		Spec:     spec,
+	})
+	require.NoError(t, err)
+	require.Contains(t, payload, "remote-search")
+	require.Contains(t, payload, "Remote Search")
+	require.Contains(t, payload, "already running")
+	require.Contains(t, payload, "streamable-http")
+	require.Contains(t, payload, "https://mcp.example.com")
+}
+
+func TestDefaultBindings_RequiresAllSearchableKinds(t *testing.T) {
+	store := &v1alpha1store.Store{}
 	_, err := DefaultBindings(map[string]*v1alpha1store.Store{
-		v1alpha1.KindAgent: nil,
+		v1alpha1.KindAgent:     store,
+		v1alpha1.KindMCPServer: store,
+		v1alpha1.KindSkill:     store,
+		v1alpha1.KindPrompt:    store,
 	})
 	require.Error(t, err)
+	require.Contains(t, err.Error(), v1alpha1.KindRemoteMCPServer)
 }

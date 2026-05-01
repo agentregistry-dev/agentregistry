@@ -49,7 +49,8 @@ metadata:
   name: summarizer
   version: "1.0.0"
 spec:
-  image: ghcr.io/acme/summarizer:v1.0.0
+  source:
+    image: ghcr.io/acme/summarizer:v1.0.0
   language: python
   framework: adk
   modelProvider: gemini

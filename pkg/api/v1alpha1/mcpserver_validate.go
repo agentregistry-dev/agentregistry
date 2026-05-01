@@ -32,20 +32,5 @@ func validateMCPServerSpec(s *MCPServerSpec) FieldErrors {
 		}
 	}
 
-	for i, r := range s.Remotes {
-		if r.Type == "" {
-			errs.Append(fmt.Sprintf("spec.remotes[%d].type", i), fmt.Errorf("%w", ErrRequiredField))
-		}
-		// Remote URL required for remote transports; stdio packages
-		// shouldn't appear as remotes.
-		if r.URL == "" {
-			errs.Append(fmt.Sprintf("spec.remotes[%d].url", i), fmt.Errorf("%w", ErrRequiredField))
-			continue
-		}
-		if err := validateWebsiteURL(r.URL); err != nil {
-			errs.Append(fmt.Sprintf("spec.remotes[%d].url", i), err)
-		}
-	}
-
 	return errs
 }

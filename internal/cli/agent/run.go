@@ -361,7 +361,11 @@ func renderComposeFromManifest(resolved *agentmanifest.ResolvedAgent, version st
 		return nil, fmt.Errorf("failed to read docker-compose template: %w", err)
 	}
 
-	image := project.ConstructImageName("", agent.Spec.Image, agent.Metadata.Name)
+	var specImage string
+	if agent.Spec.Source != nil {
+		specImage = agent.Spec.Source.Image
+	}
+	image := project.ConstructImageName("", specImage, agent.Metadata.Name)
 
 	// Sanitize version for filesystem use in template
 	sanitizedVersion := utils.SanitizeVersion(version)

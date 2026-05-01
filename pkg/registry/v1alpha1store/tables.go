@@ -16,12 +16,13 @@ import (
 // rather than mutating this one; the OSS side treats it as effectively
 // const after init.
 var TableFor = map[string]string{
-	v1alpha1.KindAgent:      "v1alpha1.agents",
-	v1alpha1.KindMCPServer:  "v1alpha1.mcp_servers",
-	v1alpha1.KindSkill:      "v1alpha1.skills",
-	v1alpha1.KindPrompt:     "v1alpha1.prompts",
-	v1alpha1.KindProvider:   "v1alpha1.providers",
-	v1alpha1.KindDeployment: "v1alpha1.deployments",
+	v1alpha1.KindAgent:           "v1alpha1.agents",
+	v1alpha1.KindMCPServer:       "v1alpha1.mcp_servers",
+	v1alpha1.KindRemoteMCPServer: "v1alpha1.remote_mcp_servers",
+	v1alpha1.KindSkill:           "v1alpha1.skills",
+	v1alpha1.KindPrompt:          "v1alpha1.prompts",
+	v1alpha1.KindProvider:        "v1alpha1.providers",
+	v1alpha1.KindDeployment:      "v1alpha1.deployments",
 }
 
 // NewStores builds one *Store per built-in v1alpha1 Kind, bound

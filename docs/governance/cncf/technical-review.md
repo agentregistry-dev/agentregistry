@@ -104,7 +104,7 @@ _This is described as part of the above answer_
 In production, agentregistry acts as the **control plane** for agentic AI infrastructure — it manages the catalog, governance, and configuration of AI artifacts — while complementary projects handle execution, traffic routing, and deployment. The key integrations are:
 - **agentgateway (Linux Foundation):** The most significant integration. Agentgateway is a reverse proxy purpose-built for AI traffic that provides a single, unified MCP endpoint for all deployed servers. In a production deployment, agentregistry and agentgateway work as a pair, where agentregistry holds the catalog of approved artifacts, while agentgateway receives mCP traffic from AI IDE clients (ie Claude Desktop, Cursor, VS Code) and droutes tools calls to the appropriate backend MCP server.
 - **Kubernetes / Helm:** In production, agentregistry is deployed to a Kubernetes cluster using the published OCI Helm chart (`oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry`). It integrates with standard Kubernetes primitives: Deployments, Services, ConfigMaps, and Secrets (for the JWT private key and database credentials). The Kubernetes Gateway API (`gateway.networking.k8s.io`) is used for agentgateway routing configuration.
-- **PostgreSQL with pgvector:** agentregistry requires PostgreSQL with the pgvector extension as its persistent storage backend. In production, this may be an externally managed PostgreSQL instance. The pgvector extension enables semantic/embedding-based search across the artifact catalog.
+- **PostgreSQL:** agentregistry requires PostgreSQL as its persistent storage backend. In production, this may be an externally managed PostgreSQL instance.
 - **Container registries:** agentregistry integrates with whatever container registry an organization already uses, with no lock-in to a specific image storage backend.
 - **AI-powered IDEs (Claude Desktop, Cursor, VS Code):** agentregistry integrates with AI IDEs not as a runtime dependency, but as a configuration provider. The `arctl configure` command writes MCP configuration files to the developer's local filesystem in the format expected by each IDE. Once configured, the IDE connects directly to the agentgateway; agentregistry is not in the request path at runtime.
 - **Model Context Protocol (MCP):** agentregistry is built around MCP as the core protocol for tool and agent interoperability. MCP servers are the primary artifact type managed by the registry. Compatibility with the MCP specification is foundational to the project's design, and the registry is expected to track and align with MCP specification evolution over time.
@@ -128,20 +128,20 @@ See [`DEVELOPMENT.md`](https://github.com/agentregistry-dev/agentregistry/blob/m
 - **agentgateway (Linux Foundation):** Acts as the data plane, providing a single MCP endpoint for all deployed servers and enforcing policy and observability.
 - **MCP SDK / Model Context Protocol:** Core protocol for tool and agent interoperability.
 - **Kubernetes / Helm:** Deployment and lifecycle management.
-- **PostgreSQL + pgvector:** Metadata persistence and semantic discovery.
+- **PostgreSQL:** Metadata persistence.
 - **Docker / OCI:** Container image format for artifact packaging and distribution.
 - **CI/CD tooling:** `arctl` can be embedded in CI/CD pipelines for artifact publishing workflows.
 
 **Describe the project's architecture requirements for PoC, Development, Test, and Production environments.**
 | Environment | Configuration |
 |---|---|
-| **PoC / Local** | Docker Compose with bundled PostgreSQL/pgvector. Single node. Daemon lifecycle is managed explicitly with `arctl daemon start` / `arctl daemon stop`. |
+| **PoC / Local** | Docker Compose with bundled PostgreSQL. Single node. Daemon lifecycle is managed explicitly with `arctl daemon start` / `arctl daemon stop`. |
 | **Development** | Docker Compose or Kind (local Kubernetes). See `scripts/kind/README.md`. |
-| **Test** | Kubernetes (Kind) with Helm chart and an external PostgreSQL/pgvector instance. |
-| **Production** | Kubernetes cluster with Helm chart (`oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry`). Requires an external, HA PostgreSQL instance with pgvector extension. |
+| **Test** | Kubernetes (Kind) with Helm chart and an external PostgreSQL instance. |
+| **Production** | Kubernetes cluster with Helm chart (`oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry`). Requires an external, HA PostgreSQL instance. |
 
 **Define any specific service dependencies the project relies on.**
-- **PostgreSQL ≥ 16 with pgvector extension:** Required for all environments except local PoC (where it is bundled via Docker Compose). The pgvector extension is required for semantic search capabilities.
+- **PostgreSQL ≥ 16:** Required for all environments except local PoC (where it is bundled via Docker Compose).
 - **Kubernetes (production):** Required for Helm-based deployment.
 - **Docker / container runtime:** Required for running the registry server and related services.
 

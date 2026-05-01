@@ -8,7 +8,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Package, ExternalLink, Star, Github, Trash2, ShieldCheck, BadgeCheck, Play } from "lucide-react"
+import { Package, Star, Github, Trash2, ShieldCheck, BadgeCheck, Play } from "lucide-react"
 
 interface ServerCardProps {
   server: ServerResponse
@@ -94,13 +94,6 @@ export function ServerCard({ server, onDelete, onDeploy, showDelete = false, sho
               <span className="flex items-center gap-1">
                 <Package className="h-3 w-3" />
                 {serverData.packages.length}
-              </span>
-            )}
-
-            {serverData.remotes && serverData.remotes.length > 0 && (
-              <span className="flex items-center gap-1">
-                <ExternalLink className="h-3 w-3" />
-                {serverData.remotes.length}
               </span>
             )}
 

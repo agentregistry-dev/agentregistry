@@ -29,7 +29,6 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
 
   // Dynamic fields
   const [packages, setPackages] = useState<Array<{ identifier: string; version: string; registryType: string; transport: string }>>([])
-  const [remotes, setRemotes] = useState<Array<{ type: string; url: string }>>([])
 
   const resetForm = () => {
     setSchema("2025-10-17")
@@ -39,7 +38,6 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
     setVersion("")
     setRepositoryUrl("")
     setPackages([])
-    setRemotes([])
   }
 
   const handleSubmit = async () => {
@@ -93,15 +91,6 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
           }))
       }
 
-      if (remotes.length > 0) {
-        server.remotes = remotes
-          .filter(r => r.type.trim())
-          .map(r => ({
-            type: r.type.trim(),
-            url: r.url.trim() || undefined,
-          }))
-      }
-
       // Create server
       const { data } = await createServerV0({ body: server, throwOnError: true })
 
@@ -132,20 +121,6 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
     const updated = [...packages]
     updated[index] = { ...updated[index], [field]: value }
     setPackages(updated)
-  }
-
-  const addRemote = () => {
-    setRemotes([...remotes, { type: "sse", url: "" }])
-  }
-
-  const removeRemote = (index: number) => {
-    setRemotes(remotes.filter((_, i) => i !== index))
-  }
-
-  const updateRemote = (index: number, field: string, value: string) => {
-    const updated = [...remotes]
-    updated[index] = { ...updated[index], [field]: value }
-    setRemotes(updated)
   }
 
   return (
@@ -307,56 +282,6 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
             )}
           </div>
 
-          {/* Remotes */}
-          <div className="space-y-4 p-4 border rounded-lg">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-sm">Remotes</h3>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addRemote}
-                disabled={loading}
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Add Remote
-              </Button>
-            </div>
-
-            {remotes.map((remote, index) => (
-              <div key={index} className="flex gap-2 items-start">
-                <Input
-                  placeholder="Type (e.g., sse, stdio)"
-                  value={remote.type}
-                  onChange={(e) => updateRemote(index, "type", e.target.value)}
-                  disabled={loading}
-                  className="w-40"
-                />
-                <Input
-                  placeholder="URL (optional)"
-                  value={remote.url}
-                  onChange={(e) => updateRemote(index, "url", e.target.value)}
-                  disabled={loading}
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeRemote(index)}
-                  disabled={loading}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-
-            {remotes.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-2">
-                No remotes added
-              </p>
-            )}
-          </div>
         </div>
 
         <div className="flex justify-end gap-2">

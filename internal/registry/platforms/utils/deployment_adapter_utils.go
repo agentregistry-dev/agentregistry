@@ -31,6 +31,10 @@ const DefaultLocalAgentPort uint16 = 8080
 // MCPServerRunRequest is the input bundle TranslateMCPServer needs. Spec
 // carries the authoritative description of what's being run; the *Values
 // maps carry per-deployment runtime overrides supplied on apply.
+//
+// MCPServer (the bundled kind) carries Packages; the translator now only
+// produces local transport. RemoteMCPServer is its own kind handled by
+// TranslateRemoteMCPServer.
 type MCPServerRunRequest struct {
 	// Name is metadata.name of the v1alpha1.MCPServer; used to derive the
 	// platform-internal container/resource name via generateInternalName.
@@ -41,74 +45,76 @@ type MCPServerRunRequest struct {
 	// same Spec deployed twice produces two distinct DeploymentIDs and
 	// therefore two distinct platform-internal names.
 	DeploymentID string
-	// PreferRemote biases the translator toward remote transport selection
-	// when both Remotes and Packages are populated. Default (false) picks
-	// package-first when a package is defined.
-	PreferRemote bool
-	// EnvValues, ArgValues, HeaderValues carry per-deployment runtime
-	// overrides. Nil is treated as an empty map.
-	EnvValues    map[string]string
-	ArgValues    map[string]string
+	// EnvValues, ArgValues carry per-deployment runtime overrides for the
+	// bundled local server. Nil is treated as an empty map.
+	EnvValues map[string]string
+	ArgValues map[string]string
+	// HeaderValues is retained on the request struct for callers that
+	// historically passed it through; it is unused by local translation
+	// and ignored. Header overrides for remote endpoints flow through
+	// TranslateRemoteMCPServer instead.
 	HeaderValues map[string]string
 }
 
 // TranslateMCPServer maps a v1alpha1 MCPServerSpec onto the platform-internal
-// MCPServer. Remote transport wins when the spec lists remotes and either
-// PreferRemote is true or no packages are defined; package transport wins
-// otherwise.
+// MCPServer. The kind only carries packages — output is always
+// MCPServerType=local.
 func TranslateMCPServer(ctx context.Context, req *MCPServerRunRequest) (*platformtypes.MCPServer, error) {
 	if req == nil {
 		return nil, fmt.Errorf("mcp server run request is required")
 	}
-
-	useRemote := len(req.Spec.Remotes) > 0 && (req.PreferRemote || len(req.Spec.Packages) == 0)
-	usePackage := len(req.Spec.Packages) > 0 && (!req.PreferRemote || len(req.Spec.Remotes) == 0)
-
-	switch {
-	case useRemote:
-		return translateRemoteMCPServer(ctx, req.Name, req.Spec, req.DeploymentID, req.HeaderValues)
-	case usePackage:
-		return translateLocalMCPServer(ctx, req.Name, req.Spec, req.DeploymentID, req.EnvValues, req.ArgValues)
+	if len(req.Spec.Packages) == 0 {
+		return nil, fmt.Errorf("no valid deployment method found for server: %s (no packages)", req.Name)
 	}
-
-	return nil, fmt.Errorf("no valid deployment method found for server: %s", req.Name)
+	return translateLocalMCPServer(ctx, req.Name, req.Spec, req.DeploymentID, req.EnvValues, req.ArgValues)
 }
 
-// translateRemoteMCPServer emits a platformtypes.MCPServer configured for
-// remote transport. Header overrides resolve against the remote's header
-// input list with required/default semantics matching the MCP spec.
-func translateRemoteMCPServer(
-	_ context.Context,
-	serverName string,
-	spec v1alpha1.MCPServerSpec,
-	deploymentID string,
-	headerValues map[string]string,
-) (*platformtypes.MCPServer, error) {
-	remoteInfo := spec.Remotes[0]
+// RemoteMCPServerRunRequest carries inputs for projecting a v1alpha1
+// RemoteMCPServer onto a platform-internal MCPServer with remote transport.
+type RemoteMCPServerRunRequest struct {
+	// Name is metadata.name of the v1alpha1.RemoteMCPServer; used to derive
+	// the platform-internal resource name via generateInternalName.
+	Name string
+	// Spec is the v1alpha1 RemoteMCPServerSpec authored in the manifest.
+	Spec v1alpha1.RemoteMCPServerSpec
+	// DeploymentID is the unique identifier this invocation carries.
+	DeploymentID string
+	// HeaderValues are per-deployment header overrides resolved against
+	// the remote's declared header inputs.
+	HeaderValues map[string]string
+}
 
-	headersMap, err := processHeaders(remoteInfo.Headers, headerValues)
+// TranslateRemoteMCPServer projects a v1alpha1 RemoteMCPServer onto a
+// platform-internal MCPServer configured for remote transport. Header
+// overrides resolve against the remote's header input list with
+// required/default semantics matching the MCP spec.
+func TranslateRemoteMCPServer(_ context.Context, req *RemoteMCPServerRunRequest) (*platformtypes.MCPServer, error) {
+	if req == nil {
+		return nil, fmt.Errorf("remote mcp server run request is required")
+	}
+	if req.Spec.Remote.URL == "" {
+		return nil, fmt.Errorf("remote mcp server %s has no URL", req.Name)
+	}
+
+	headersMap, err := processHeaders(req.Spec.Remote.Headers, req.HeaderValues)
 	if err != nil {
 		return nil, err
 	}
-
 	headers := make([]platformtypes.HeaderValue, 0, len(headersMap))
 	for k, v := range headersMap {
-		headers = append(headers, platformtypes.HeaderValue{
-			Name:  k,
-			Value: v,
-		})
+		headers = append(headers, platformtypes.HeaderValue{Name: k, Value: v})
 	}
 
-	u, err := parseURL(remoteInfo.URL)
+	u, err := parseURL(req.Spec.Remote.URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse remote server url: %v", err)
 	}
 
 	return &platformtypes.MCPServer{
-		Name:          generateInternalName(serverName),
-		DeploymentID:  deploymentID,
+		Name:          generateInternalName(req.Name),
+		DeploymentID:  req.DeploymentID,
 		MCPServerType: platformtypes.MCPServerTypeRemote,
-		Remote: &platformtypes.RemoteMCPServer{
+		Remote: &platformtypes.RemoteMCPTarget{
 			Scheme:  u.scheme,
 			Host:    u.host,
 			Port:    u.port,
@@ -258,9 +264,9 @@ func parseURL(rawURL string) (*parsedURL, error) {
 	}, nil
 }
 
-// BuildRemoteMCPURL constructs a well-formed URL from a RemoteMCPServer,
+// BuildRemoteMCPURL constructs a well-formed URL from a RemoteMCPTarget,
 // handling IPv6 bracketing and standard-port omission.
-func BuildRemoteMCPURL(remote *platformtypes.RemoteMCPServer) string {
+func BuildRemoteMCPURL(remote *platformtypes.RemoteMCPTarget) string {
 	scheme := remote.Scheme
 	if scheme == "" {
 		scheme = "http"

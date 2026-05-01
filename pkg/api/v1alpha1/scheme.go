@@ -45,6 +45,7 @@ func newDefaultScheme() *Scheme {
 	s := NewScheme()
 	s.MustRegister(KindAgent, AgentSpec{}, func() any { return &Agent{} })
 	s.MustRegister(KindMCPServer, MCPServerSpec{}, func() any { return &MCPServer{} })
+	s.MustRegister(KindRemoteMCPServer, RemoteMCPServerSpec{}, func() any { return &RemoteMCPServer{} })
 	s.MustRegister(KindSkill, SkillSpec{}, func() any { return &Skill{} })
 	s.MustRegister(KindPrompt, PromptSpec{}, func() any { return &Prompt{} })
 	s.MustRegister(KindDeployment, DeploymentSpec{}, func() any { return &Deployment{} })

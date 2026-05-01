@@ -55,6 +55,16 @@ export function Navigation() {
             >
               Deployed
             </Link>
+            <Link
+              href="/remote"
+              className={`relative px-3 py-1.5 text-[15px] font-medium transition-colors ${
+                isActive("/remote")
+                  ? "text-foreground after:absolute after:bottom-[-13px] after:left-1 after:right-1 after:h-[2px] after:bg-primary after:rounded-full"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Remote
+            </Link>
           </div>
 
           <div className="ml-auto">

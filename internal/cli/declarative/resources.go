@@ -160,7 +160,6 @@ func deploymentToDocument(dep *cliCommon.DeploymentRecord) any {
 			},
 			Env:            dep.Env,
 			ProviderConfig: dep.ProviderConfig,
-			PreferRemote:   dep.PreferRemote,
 		},
 		Status: deploymentStatus{
 			ID:               dep.ID,
@@ -226,6 +225,18 @@ func providerRow(provider *v1alpha1.Provider) []string {
 		return []string{"<invalid>"}
 	}
 	return []string{provider.Metadata.Name, provider.Spec.Platform}
+}
+
+func remoteMCPServerRow(r *v1alpha1.RemoteMCPServer) []string {
+	if r == nil {
+		return []string{"<invalid>"}
+	}
+	return []string{
+		printer.TruncateString(r.Metadata.Name, 40),
+		r.Metadata.Version,
+		printer.EmptyValueOrDefault(r.Spec.Remote.Type, "<none>"),
+		printer.TruncateString(printer.EmptyValueOrDefault(r.Spec.Remote.URL, "<none>"), 60),
+	}
 }
 
 func deploymentRow(dep *cliCommon.DeploymentRecord) []string {

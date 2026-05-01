@@ -107,18 +107,6 @@ database:
     urlFile: "/etc/secrets/db-url"
 ```
 
-### Semantic search
-
-Semantic search requires a vector-enabled PostgreSQL instance. Set `database.postgres.vectorEnabled=true` to enable it:
-
-```yaml
-database:
-  postgres:
-    vectorEnabled: true
-```
-
-This enables the `AGENT_REGISTRY_EMBEDDINGS_ENABLED` environment variable on the Agent Registry pod. The bundled database does not include vector support — semantic search will not be available when using it.
-
 ## Secrets
 
 Agent Registry requires a hex-encoded JWT signing key. Provide it directly:

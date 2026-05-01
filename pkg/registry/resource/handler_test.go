@@ -61,8 +61,8 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 			Labels:    map[string]string{"team": "platform"},
 		},
 		Spec: v1alpha1.AgentSpec{
-			Title: "Alice",
-			Image: "ghcr.io/example/alice:1.0.0",
+			Title:  "Alice",
+			Source: &v1alpha1.AgentSource{Image: "ghcr.io/example/alice:1.0.0"},
 		},
 	}
 	resp := api.Put("/v0/agents/alice/v1.0.0", putBody)

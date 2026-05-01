@@ -306,15 +306,13 @@ func TestMCPServerValidate_OK(t *testing.T) {
 	require.NoError(t, m.Validate())
 }
 
-func TestMCPServerValidate_RejectsBadRemote(t *testing.T) {
-	m := &MCPServer{
+func TestRemoteMCPServerValidate_RejectsBadRemote(t *testing.T) {
+	r := &RemoteMCPServer{
 		Metadata: ObjectMeta{Namespace: "default", Name: "tools", Version: "v1"},
-		Spec: MCPServerSpec{
-			Remotes: []MCPTransport{
-				{Type: "streamable-http"}, // missing URL
-			},
+		Spec: RemoteMCPServerSpec{
+			Remote: MCPTransport{Type: "streamable-http"}, // missing URL
 		},
 	}
-	paths := failedFields(t, m.Validate())
-	require.Contains(t, paths, "spec.remotes[0].url")
+	paths := failedFields(t, r.Validate())
+	require.Contains(t, paths, "spec.remote.url")
 }

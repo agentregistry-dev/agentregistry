@@ -12,17 +12,21 @@ export type Agent = {
     status?: Status;
 };
 
+export type AgentSource = {
+    image?: string;
+    repository?: Repository;
+};
+
 export type AgentSpec = {
     description?: string;
     framework?: string;
-    image?: string;
     language?: string;
     mcpServers?: Array<ResourceRef>;
     modelName?: string;
     modelProvider?: string;
     prompts?: Array<ResourceRef>;
-    repository?: Repository;
     skills?: Array<ResourceRef>;
+    source?: AgentSource;
     title?: string;
 };
 
@@ -61,7 +65,6 @@ export type DeploymentSpec = {
     env?: {
         [key: string]: string;
     };
-    preferRemote?: boolean;
     providerConfig?: {
         [key: string]: unknown;
     };
@@ -125,37 +128,36 @@ export type HealthBody = {
 export type ListOutputAgentBody = {
     items: Array<Agent>;
     nextCursor?: string;
-    semanticScores?: Array<number>;
 };
 
 export type ListOutputDeploymentBody = {
     items: Array<Deployment>;
     nextCursor?: string;
-    semanticScores?: Array<number>;
 };
 
 export type ListOutputMcpServerBody = {
     items: Array<McpServer>;
     nextCursor?: string;
-    semanticScores?: Array<number>;
 };
 
 export type ListOutputPromptBody = {
     items: Array<Prompt>;
     nextCursor?: string;
-    semanticScores?: Array<number>;
 };
 
 export type ListOutputProviderBody = {
     items: Array<Provider>;
     nextCursor?: string;
-    semanticScores?: Array<number>;
+};
+
+export type ListOutputRemoteMcpServerBody = {
+    items: Array<RemoteMcpServer>;
+    nextCursor?: string;
 };
 
 export type ListOutputSkillBody = {
     items: Array<Skill>;
     nextCursor?: string;
-    semanticScores?: Array<number>;
 };
 
 export type McpArgument = {
@@ -226,7 +228,6 @@ export type McpServer = {
 export type McpServerSpec = {
     description?: string;
     packages?: Array<McpPackage>;
-    remotes?: Array<McpTransport>;
     repository?: Repository;
     title?: string;
 };
@@ -286,6 +287,20 @@ export type ProviderSpec = {
     };
     platform: string;
     telemetryEndpoint?: string;
+};
+
+export type RemoteMcpServer = {
+    apiVersion: string;
+    kind: string;
+    metadata: ObjectMeta;
+    spec: RemoteMcpServerSpec;
+    status?: Status;
+};
+
+export type RemoteMcpServerSpec = {
+    description?: string;
+    remote: McpTransport;
+    title?: string;
 };
 
 export type Repository = {
@@ -365,14 +380,6 @@ export type ListAgentsData = {
          * Include rows with a deletionTimestamp.
          */
         includeTerminating?: boolean;
-        /**
-         * Semantic search query. Returns results ranked by similarity.
-         */
-        semantic?: string;
-        /**
-         * Drop results with cosine distance above this threshold (0 = no filter).
-         */
-        semanticThreshold?: number;
     };
     url: '/v0/agents';
 };
@@ -618,14 +625,6 @@ export type ListDeploymentsData = {
          * Include rows with a deletionTimestamp.
          */
         includeTerminating?: boolean;
-        /**
-         * Semantic search query. Returns results ranked by similarity.
-         */
-        semantic?: string;
-        /**
-         * Drop results with cosine distance above this threshold (0 = no filter).
-         */
-        semanticThreshold?: number;
     };
     url: '/v0/deployments';
 };
@@ -836,14 +835,6 @@ export type ListMcpserversData = {
          * Include rows with a deletionTimestamp.
          */
         includeTerminating?: boolean;
-        /**
-         * Semantic search query. Returns results ranked by similarity.
-         */
-        semantic?: string;
-        /**
-         * Drop results with cosine distance above this threshold (0 = no filter).
-         */
-        semanticThreshold?: number;
     };
     url: '/v0/mcpservers';
 };
@@ -1054,14 +1045,6 @@ export type ListPromptsData = {
          * Include rows with a deletionTimestamp.
          */
         includeTerminating?: boolean;
-        /**
-         * Semantic search query. Returns results ranked by similarity.
-         */
-        semantic?: string;
-        /**
-         * Drop results with cosine distance above this threshold (0 = no filter).
-         */
-        semanticThreshold?: number;
     };
     url: '/v0/prompts';
 };
@@ -1247,14 +1230,6 @@ export type ListProvidersData = {
          * Include rows with a deletionTimestamp.
          */
         includeTerminating?: boolean;
-        /**
-         * Semantic search query. Returns results ranked by similarity.
-         */
-        semantic?: string;
-        /**
-         * Drop results with cosine distance above this threshold (0 = no filter).
-         */
-        semanticThreshold?: number;
     };
     url: '/v0/providers';
 };
@@ -1412,6 +1387,191 @@ export type ApplyProviderResponses = {
 
 export type ApplyProviderResponse = ApplyProviderResponses[keyof ApplyProviderResponses];
 
+export type ListRemotemcpserversData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
+         */
+        namespace?: string;
+        /**
+         * Max items to return (default 50).
+         */
+        limit?: number;
+        /**
+         * Opaque pagination cursor.
+         */
+        cursor?: string;
+        /**
+         * Label selector: key=value,key2=value2.
+         */
+        labels?: string;
+        /**
+         * Only return rows with is_latest_version=true.
+         */
+        latestOnly?: boolean;
+        /**
+         * Include rows with a deletionTimestamp.
+         */
+        includeTerminating?: boolean;
+    };
+    url: '/v0/remotemcpservers';
+};
+
+export type ListRemotemcpserversErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ListRemotemcpserversError = ListRemotemcpserversErrors[keyof ListRemotemcpserversErrors];
+
+export type ListRemotemcpserversResponses = {
+    /**
+     * OK
+     */
+    200: ListOutputRemoteMcpServerBody;
+};
+
+export type ListRemotemcpserversResponse = ListRemotemcpserversResponses[keyof ListRemotemcpserversResponses];
+
+export type GetLatestRemotemcpserverData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/remotemcpservers/{name}';
+};
+
+export type GetLatestRemotemcpserverErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetLatestRemotemcpserverError = GetLatestRemotemcpserverErrors[keyof GetLatestRemotemcpserverErrors];
+
+export type GetLatestRemotemcpserverResponses = {
+    /**
+     * OK
+     */
+    200: RemoteMcpServer;
+};
+
+export type GetLatestRemotemcpserverResponse = GetLatestRemotemcpserverResponses[keyof GetLatestRemotemcpserverResponses];
+
+export type DeleteRemotemcpserverData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+        /**
+         * Skip provider-specific teardown and only remove the registry record.
+         */
+        force?: boolean;
+    };
+    url: '/v0/remotemcpservers/{name}/{version}';
+};
+
+export type DeleteRemotemcpserverErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type DeleteRemotemcpserverError = DeleteRemotemcpserverErrors[keyof DeleteRemotemcpserverErrors];
+
+export type DeleteRemotemcpserverResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type DeleteRemotemcpserverResponse = DeleteRemotemcpserverResponses[keyof DeleteRemotemcpserverResponses];
+
+export type GetRemotemcpserverData = {
+    body?: never;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/remotemcpservers/{name}/{version}';
+};
+
+export type GetRemotemcpserverErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetRemotemcpserverError = GetRemotemcpserverErrors[keyof GetRemotemcpserverErrors];
+
+export type GetRemotemcpserverResponses = {
+    /**
+     * OK
+     */
+    200: RemoteMcpServer;
+};
+
+export type GetRemotemcpserverResponse = GetRemotemcpserverResponses[keyof GetRemotemcpserverResponses];
+
+export type ApplyRemotemcpserverData = {
+    body?: RemoteMcpServer;
+    path: {
+        name: string;
+        version: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/remotemcpservers/{name}/{version}';
+};
+
+export type ApplyRemotemcpserverErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ApplyRemotemcpserverError = ApplyRemotemcpserverErrors[keyof ApplyRemotemcpserverErrors];
+
+export type ApplyRemotemcpserverResponses = {
+    /**
+     * OK
+     */
+    200: RemoteMcpServer;
+};
+
+export type ApplyRemotemcpserverResponse = ApplyRemotemcpserverResponses[keyof ApplyRemotemcpserverResponses];
+
 export type ListSkillsData = {
     body?: never;
     path?: never;
@@ -1440,14 +1600,6 @@ export type ListSkillsData = {
          * Include rows with a deletionTimestamp.
          */
         includeTerminating?: boolean;
-        /**
-         * Semantic search query. Returns results ranked by similarity.
-         */
-        semantic?: string;
-        /**
-         * Drop results with cosine distance above this threshold (0 = no filter).
-         */
-        semanticThreshold?: number;
     };
     url: '/v0/skills';
 };

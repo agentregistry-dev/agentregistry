@@ -24,13 +24,26 @@ func BuildMCPServerEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.MCPS
 	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version)
 	appendJSON(&parts, spec.Repository)
 	appendJSON(&parts, spec.Packages)
-	appendJSON(&parts, spec.Remotes)
+	return strings.Join(parts, "\n")
+}
+
+// BuildRemoteMCPServerEmbeddingPayload assembles the canonical text for a
+// RemoteMCPServer (already-running endpoint).
+func BuildRemoteMCPServerEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.RemoteMCPServerSpec) string {
+	var parts []string
+	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version, spec.Remote.URL, spec.Remote.Type)
 	return strings.Join(parts, "\n")
 }
 
 // BuildAgentEmbeddingPayload assembles the canonical text for an Agent.
 func BuildAgentEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.AgentSpec) string {
 	var parts []string
+	var sourceImage string
+	var sourceRepo *v1alpha1.Repository
+	if spec.Source != nil {
+		sourceImage = spec.Source.Image
+		sourceRepo = spec.Source.Repository
+	}
 	appendIf(&parts,
 		meta.Name,
 		spec.Title,
@@ -40,12 +53,12 @@ func BuildAgentEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.AgentSpe
 		spec.Framework,
 		spec.ModelProvider,
 		spec.ModelName,
-		spec.Image,
+		sourceImage,
 	)
 	appendJSON(&parts, spec.MCPServers)
 	appendJSON(&parts, spec.Skills)
 	appendJSON(&parts, spec.Prompts)
-	appendJSON(&parts, spec.Repository)
+	appendJSON(&parts, sourceRepo)
 	return strings.Join(parts, "\n")
 }
 

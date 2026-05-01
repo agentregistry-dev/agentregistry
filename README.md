@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="img/agentregistry-logo.png">
-    <source media="(prefers-color-scheme: light)" srcset="img/agentgateway-logo-light.png">
-    <img src="img/agentregistry-logo.png" alt="agentregistry" width="500"/>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/img/agentregistry-logo.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/img/agentgateway-logo-light.png">
+    <img src="docs/img/agentregistry-logo.png" alt="agentregistry" width="500"/>
   </picture>
 </p>
 
@@ -47,7 +47,7 @@ agentregistry puts all of that into a single registry with a CLI and a web UI. Y
 - **Governance without slowing teams down** — centralize curation and publishing without forcing each team to rebuild the process
 
 <p align="center">
-  <img src="img/hero-final.png" alt="agentregistry overview" width="800"/>
+  <img src="docs/img/hero-final.png" alt="agentregistry overview" width="800"/>
 </p>
 
 <table>
@@ -113,7 +113,7 @@ Create, scaffold, and publish the building blocks of your agentic infrastructure
 A browser-based admin interface at `localhost:12121`. Browse the artifact catalog, add MCP servers, skills, and agents, review enrichment scores and metadata, manage deployments, and configure the registry — all without touching the CLI.
 
 <p align="center">
-  <img src="img/arwui.gif" alt="agentregistry Web UI" width="800"/>
+  <img src="docs/img/arwui.gif" alt="agentregistry Web UI" width="800"/>
 </p>
 
 ### Registry
@@ -123,7 +123,6 @@ Curate a shared catalog of MCP servers, agents, skills, and prompts your teams c
 - Publish artifacts to a central registry from npm, PyPI, Docker, OCI, or remote endpoints
 - Discover approved artifacts through the CLI, REST API, or web UI at `localhost:12121`
 - Give teams a consistent source of truth across environments
-- Search by description ("query Postgres", "send Slack messages") instead of exact names — powered by pgvector
 
 ### Curation and Governance
 
@@ -172,7 +171,7 @@ Instead of exposing every MCP server individually, agentgateway acts as an AI-na
 - **Transport flexibility** — Proxy across stdio, SSE, and streamable HTTP transports seamlessly.
 
 <p align="center">
-  <img src="img/arch-diagram.png" alt="agentgateway architecture diagram" width="800"/>
+  <img src="docs/img/arch-diagram.png" alt="agentgateway architecture diagram" width="800"/>
 </p>
 
 When you run `arctl apply -f deployment.yaml`, agentregistry automatically configures the gateway routing so your MCP servers are reachable through the secured proxy. Run `arctl configure cursor` to point your IDE at the gateway endpoint.
@@ -188,8 +187,6 @@ When you run `arctl apply -f deployment.yaml`, agentregistry automatically confi
 | [kgateway](https://github.com/kgateway-dev/kgateway) | Cloud-native API gateway (Envoy + Gateway API) |
 | [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) | Go SDK for building MCP servers |
 | [Model Context Protocol](https://modelcontextprotocol.io/) | The open standard for AI-to-tool communication |
-
-> **Semantic search** requires a PostgreSQL instance with the pgvector extension. It is disabled by default. To enable it, ensure your database has pgvector support and set `AGENT_REGISTRY_DATABASE_VECTOR_ENABLED=true` (docker-compose / `.env`) or `--set database.postgres.vectorEnabled=true` (Helm).
 
 ---
 

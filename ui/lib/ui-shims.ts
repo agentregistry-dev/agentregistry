@@ -315,14 +315,13 @@ export async function createPromptV0(opts: LegacyCreateOpts<PromptJson>): Promis
 // ----------------------------------------------------------------------------
 // deployServer: legacy imperative deploy endpoint replaced by declarative
 // Deployment upsert. Legacy body fields: {serverName, version, env,
-// preferRemote, providerId, resourceType}. Translate to a Deployment envelope.
+// providerId, resourceType}. Translate to a Deployment envelope.
 // ----------------------------------------------------------------------------
 
 export interface DeployServerBody {
   serverName: string
   version: string
   env?: Record<string, string>
-  preferRemote?: boolean
   providerId: string
   resourceType?: "agent" | "mcp" | string
 }
@@ -360,7 +359,6 @@ export async function deployServer(opts: { throwOnError?: true; body: DeployServ
         targetRef: { kind, name, namespace, version: opts.body.version },
         providerRef: { kind: "Provider", name: opts.body.providerId, namespace },
         env: opts.body.env,
-        preferRemote: opts.body.preferRemote,
       },
     },
   })

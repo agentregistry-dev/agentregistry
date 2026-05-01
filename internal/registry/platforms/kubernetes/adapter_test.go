@@ -44,21 +44,20 @@ func TestK8sV1Alpha1Apply_MCPServerTarget_CreatesResource(t *testing.T) {
 			Config:   map[string]any{"namespace": "kagent"},
 		},
 	}
-	target := &v1alpha1.MCPServer{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},
+	target := &v1alpha1.RemoteMCPServer{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRemoteMCPServer},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather", Version: "1.0.0"},
-		Spec: v1alpha1.MCPServerSpec{
-			Remotes: []v1alpha1.MCPTransport{{Type: "streamable-http", URL: "https://api.weather.example/mcp"}},
+		Spec: v1alpha1.RemoteMCPServerSpec{
+			Remote: v1alpha1.MCPTransport{Type: "streamable-http", URL: "https://api.weather.example/mcp"},
 		},
 	}
 	deployment := &v1alpha1.Deployment{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-kube", Version: "1", Generation: 4},
 		Spec: v1alpha1.DeploymentSpec{
-			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Version: "1.0.0"},
+			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindRemoteMCPServer, Name: "weather", Version: "1.0.0"},
 			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "kube-local", Version: "1"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
-			PreferRemote: true,
 		},
 	}
 
@@ -147,7 +146,11 @@ func TestK8sV1Alpha1Remove_DeletesResourcesByDeploymentID(t *testing.T) {
 func TestK8sV1Alpha1SupportedTargetKinds(t *testing.T) {
 	adapter := NewKubernetesDeploymentAdapter()
 	kinds := adapter.SupportedTargetKinds()
-	want := map[string]bool{v1alpha1.KindAgent: false, v1alpha1.KindMCPServer: false}
+	want := map[string]bool{
+		v1alpha1.KindAgent:           false,
+		v1alpha1.KindMCPServer:       false,
+		v1alpha1.KindRemoteMCPServer: false,
+	}
 	for _, k := range kinds {
 		if _, ok := want[k]; ok {
 			want[k] = true
@@ -164,6 +167,9 @@ func TestK8sV1Alpha1Discover_SkipsManagedResources(t *testing.T) {
 	unmanaged := &v1alpha2.Agent{
 		ObjectMeta: metav1.ObjectMeta{Name: "imported", Namespace: "kagent"},
 	}
+	unmanagedRemote := &v1alpha2.RemoteMCPServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "imported-remote", Namespace: "kagent"},
+	}
 	managed := &v1alpha2.Agent{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "owned",
@@ -171,7 +177,14 @@ func TestK8sV1Alpha1Discover_SkipsManagedResources(t *testing.T) {
 			Labels:    map[string]string{kubernetesManagedLabelKey: "true"},
 		},
 	}
-	withFakeKubeClient(t, unmanaged, managed)
+	managedRemote := &v1alpha2.RemoteMCPServer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "owned-remote",
+			Namespace: "kagent",
+			Labels:    map[string]string{kubernetesManagedLabelKey: "true"},
+		},
+	}
+	withFakeKubeClient(t, unmanaged, unmanagedRemote, managed, managedRemote)
 
 	adapter := NewKubernetesDeploymentAdapter()
 	provider := &v1alpha1.Provider{
@@ -182,14 +195,18 @@ func TestK8sV1Alpha1Discover_SkipsManagedResources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if len(results) != 1 {
-		t.Fatalf("expected 1 unmanaged discovery, got %d (%+v)", len(results), results)
+	if len(results) != 2 {
+		t.Fatalf("expected 2 unmanaged discoveries, got %d (%+v)", len(results), results)
 	}
-	if results[0].Name != "imported" {
-		t.Fatalf("expected 'imported', got %q", results[0].Name)
+	byName := map[string]adapterpkgtypes.DiscoveryResult{}
+	for _, result := range results {
+		byName[result.Name] = result
 	}
-	if results[0].TargetKind != v1alpha1.KindAgent {
-		t.Fatalf("TargetKind = %q, want %q", results[0].TargetKind, v1alpha1.KindAgent)
+	if got := byName["imported"].TargetKind; got != v1alpha1.KindAgent {
+		t.Fatalf("agent TargetKind = %q, want %q", got, v1alpha1.KindAgent)
+	}
+	if got := byName["imported-remote"].TargetKind; got != v1alpha1.KindRemoteMCPServer {
+		t.Fatalf("remote TargetKind = %q, want %q", got, v1alpha1.KindRemoteMCPServer)
 	}
 }
 

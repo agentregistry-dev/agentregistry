@@ -9,11 +9,13 @@ const mockAgent: AgentResponse = {
     version: "2.1.0",
     framework: "langchain",
     language: "python",
-    image: "registry.example.com/code-review-agent:2.1.0",
     modelProvider: "openai",
     modelName: "gpt-4o",
-    repository: {
-      url: "https://github.com/example/code-review-agent",
+    source: {
+      image: "registry.example.com/code-review-agent:2.1.0",
+      repository: {
+        url: "https://github.com/example/code-review-agent",
+      },
     },
   },
   _meta: {
@@ -33,7 +35,6 @@ const minimalAgent: AgentResponse = {
     version: "0.1.0",
     framework: "custom",
     language: "go",
-    image: "",
     modelProvider: "",
     modelName: "",
   },

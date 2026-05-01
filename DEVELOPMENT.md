@@ -2,7 +2,7 @@
 
 ## Local Kubernetes Environment
 
-The fastest way to run the full stack locally is with [Kind](https://kind.sigs.k8s.io/). A single `make` target creates the cluster, builds the server image, and installs AgentRegistry via Helm — a PostgreSQL instance with pgvector is bundled and deployed automatically by the Helm chart for local development.
+The fastest way to run the full stack locally is with [Kind](https://kind.sigs.k8s.io/). A single `make` target creates the cluster, builds the server image, and installs AgentRegistry via Helm — a PostgreSQL instance is bundled and deployed automatically by the Helm chart for local development.
 
 ### Prerequisites
 
@@ -24,7 +24,7 @@ This runs two steps in order:
 | Step | Target | What it does |
 |------|--------|-------------|
 | 1 | `create-kind-cluster` | Installs `kind` to `./bin/`, creates Kind cluster + local registry (`localhost:5001`) + MetalLB |
-| 2 | `install-agentregistry` | Builds server image, pushes to local registry, Helm installs AgentRegistry (bundled PostgreSQL with pgvector override for local dev) |
+| 2 | `install-agentregistry` | Builds server image, pushes to local registry, Helm installs AgentRegistry (bundled PostgreSQL for local dev) |
 
 Each target can also be run independently — useful when iterating on code:
 
@@ -110,7 +110,7 @@ The UI is available at `http://localhost:12121`.
 
 # Architecture Overview
 
-**Tech stack:** Go 1.25+ · PostgreSQL + pgvector (pgx) · [Huma](https://huma.rocks/) (OpenAPI) · [Cobra](https://cobra.dev/) (CLI) · Next.js 14 (App Router) · Tailwind CSS · shadcn/ui
+**Tech stack:** Go 1.25+ · PostgreSQL (pgx) · [Huma](https://huma.rocks/) (OpenAPI) · [Cobra](https://cobra.dev/) (CLI) · Next.js 14 (App Router) · Tailwind CSS · shadcn/ui
 
 For a detailed breakdown of layers, conventions, and contribution guidelines see [`AGENTS.md`](AGENTS.md).
 

@@ -20,12 +20,6 @@ const mockServer: ServerResponse = {
         transport: { type: "stdio" },
       },
     ],
-    remotes: [
-      {
-        type: "streamable-http",
-        url: "https://mcp.acme.dev/database",
-      },
-    ],
   },
   _meta: {
     "io.modelcontextprotocol.registry/official": {

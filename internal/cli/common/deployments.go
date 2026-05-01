@@ -29,7 +29,6 @@ type DeploymentRecord struct {
 	Env               map[string]string `json:"env,omitempty"`
 	ProviderConfig    map[string]any    `json:"providerConfig,omitempty"`
 	ProviderMetadata  map[string]any    `json:"providerMetadata,omitempty"`
-	PreferRemote      bool              `json:"preferRemote,omitempty"`
 	Error             string            `json:"error,omitempty"`
 	CreatedAt         time.Time         `json:"deployedAt,omitempty"`
 	UpdatedAt         time.Time         `json:"updatedAt,omitempty"`
@@ -102,7 +101,6 @@ func DeploymentRecordFromObject(dep *v1alpha1.Deployment) *DeploymentRecord {
 		Env:               cloneStringMap(dep.Spec.Env),
 		ProviderConfig:    cloneAnyMap(dep.Spec.ProviderConfig),
 		ProviderMetadata:  deploymentProviderMetadata(dep.Metadata.Annotations),
-		PreferRemote:      dep.Spec.PreferRemote,
 		Error:             deploymentError(dep.Status),
 		CreatedAt:         dep.Metadata.CreatedAt,
 		UpdatedAt:         dep.Metadata.UpdatedAt,

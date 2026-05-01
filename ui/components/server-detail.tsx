@@ -172,9 +172,6 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
               {serverData.packages && serverData.packages.length > 0 && (
                 <TabsTrigger value="packages">Packages</TabsTrigger>
               )}
-              {serverData.remotes && serverData.remotes.length > 0 && (
-                <TabsTrigger value="remotes">Remotes</TabsTrigger>
-              )}
               <TabsTrigger value="raw">Raw</TabsTrigger>
             </TabsList>
 
@@ -431,39 +428,6 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
                 </div>
               ) : (
                 <p className="text-center text-sm text-muted-foreground py-8">No packages defined</p>
-              )}
-            </TabsContent>
-
-            <TabsContent value="remotes" className="space-y-3">
-              {serverData.remotes && serverData.remotes.length > 0 ? (
-                <div className="space-y-3">
-                  {serverData.remotes.map((remote, i) => (
-                    <div key={i} className="p-4 rounded-lg border">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Server className="h-4 w-4 text-primary" />
-                          <h4 className="text-sm font-semibold">Remote {i + 1}</h4>
-                        </div>
-                        <Badge variant="outline" className="text-xs">{remote.type}</Badge>
-                      </div>
-                      {remote.url && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Link className="h-3.5 w-3.5 text-muted-foreground" />
-                          <a
-                            href={remote.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary hover:underline break-all text-xs"
-                          >
-                            {remote.url}
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-center text-sm text-muted-foreground py-8">No remotes defined</p>
               )}
             </TabsContent>
 

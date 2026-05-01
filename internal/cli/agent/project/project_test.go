@@ -177,7 +177,10 @@ metadata:
   name: summarizer
   version: "1.0.0"
 spec:
-  image: ghcr.io/acme/summarizer:v1
+  source:
+    image: ghcr.io/acme/summarizer:v1
+    repository:
+      url: https://github.com/acme/summarizer
   language: python
   framework: adk
   modelProvider: gemini
@@ -195,8 +198,6 @@ spec:
     - kind: Prompt
       name: acme/system
       version: "1.0.0"
-  repository:
-    url: https://github.com/acme/summarizer
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "agent.yaml"), []byte(envelopeYAML), 0o644))
 	got, err := LoadAgent(dir)
@@ -208,7 +209,7 @@ spec:
 	// only verifies the envelope round-trips into v1alpha1.Agent.
 	assert.Equal(t, "summarizer", got.Metadata.Name)
 	assert.Equal(t, "1.0.0", got.Metadata.Version)
-	assert.Equal(t, "ghcr.io/acme/summarizer:v1", got.Spec.Image)
+	assert.Equal(t, "ghcr.io/acme/summarizer:v1", got.Spec.Source.Image)
 	assert.Equal(t, "python", got.Spec.Language)
 	assert.Equal(t, "adk", got.Spec.Framework)
 	assert.Equal(t, "gemini", got.Spec.ModelProvider)

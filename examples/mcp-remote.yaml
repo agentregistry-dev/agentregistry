@@ -1,14 +1,14 @@
 apiVersion: ar.dev/v1alpha1
-kind: MCPServer
+kind: RemoteMCPServer
 metadata:
   name: com.databricks.cloud.workspace/unity-catalog
   version: "1.0.0"
 spec:
   title: Databricks Unity Catalog
   description: "Pre-deployed Unity Catalog MCP server"
-  remotes:
-    - type: streamable-http                     # stdio | sse | streamable-http
-      url: https://workspace.cloud.databricks.com/mcp
-      # headers:                                # optional: HTTP headers (e.g. auth tokens)
-      #   - name: Authorization
-      #     value: Bearer {token}
+  remote:
+    type: streamable-http # sse | streamable-http
+    url: https://workspace.cloud.databricks.com/mcp
+    # headers:                                  # optional: HTTP headers (e.g. auth tokens)
+    #   - name: Authorization
+    #     value: Bearer {token}

@@ -24,14 +24,13 @@ import (
 )
 
 var (
-	runVersion    string
-	runInspector  bool
-	runYes        bool
-	runVerbose    bool
-	runBuildFlag  bool
-	runEnvVars    []string
-	runArgVars    []string
-	runHeaderVars []string
+	runVersion   string
+	runInspector bool
+	runYes       bool
+	runVerbose   bool
+	runBuildFlag bool
+	runEnvVars   []string
+	runArgVars   []string
 )
 
 var RunCmd = &cobra.Command{
@@ -56,7 +55,6 @@ func init() {
 	RunCmd.Flags().BoolVar(&runBuildFlag, "build", true, "Build the MCP server before running")
 	RunCmd.Flags().StringArrayVarP(&runEnvVars, "env", "e", []string{}, "Environment variables (key=value)")
 	RunCmd.Flags().StringArrayVar(&runArgVars, "arg", []string{}, "Runtime arguments (key=value)")
-	RunCmd.Flags().StringArrayVar(&runHeaderVars, "header", []string{}, "Headers for remote servers (key=value)")
 }
 
 func runRun(cmd *cobra.Command, args []string) error {
@@ -97,18 +95,11 @@ func runMCPServerWithPlatform(ctx context.Context, server *v1alpha1.MCPServer) e
 		return fmt.Errorf("failed to parse arguments: %w", err)
 	}
 
-	headerValues, err := parseKeyValuePairs(runHeaderVars)
-	if err != nil {
-		return fmt.Errorf("failed to parse headers: %w", err)
-	}
-
 	runRequest := &platformutils.MCPServerRunRequest{
-		Name:         server.Metadata.Name,
-		Spec:         server.Spec,
-		PreferRemote: false,
-		EnvValues:    envValues,
-		ArgValues:    argValues,
-		HeaderValues: headerValues,
+		Name:      server.Metadata.Name,
+		Spec:      server.Spec,
+		EnvValues: envValues,
+		ArgValues: argValues,
 	}
 
 	// Generate a random platform working directory name and project name.

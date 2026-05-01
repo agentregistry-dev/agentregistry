@@ -34,6 +34,7 @@ func register[T v1alpha1.Object](kind string, newObj func() T) {
 func init() {
 	register(v1alpha1.KindAgent, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
 	register(v1alpha1.KindMCPServer, func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
+	register(v1alpha1.KindRemoteMCPServer, func() *v1alpha1.RemoteMCPServer { return &v1alpha1.RemoteMCPServer{} })
 	register(v1alpha1.KindSkill, func() *v1alpha1.Skill { return &v1alpha1.Skill{} })
 	register(v1alpha1.KindPrompt, func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} })
 	register(v1alpha1.KindProvider, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })

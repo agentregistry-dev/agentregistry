@@ -53,21 +53,6 @@ paths:
                   schema:
                     type: boolean
                     description: Include rows with a deletionTimestamp.
-                - name: semantic
-                  in: query
-                  description: Semantic search query. Returns results ranked by similarity.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Semantic search query. Returns results ranked by similarity.
-                - name: semanticThreshold
-                  in: query
-                  description: Drop results with cosine distance above this threshold (0 = no filter).
-                  explode: false
-                  schema:
-                    type: number
-                    description: Drop results with cosine distance above this threshold (0 = no filter).
-                    format: float
             responses:
                 "200":
                     description: OK
@@ -335,21 +320,6 @@ paths:
                   schema:
                     type: boolean
                     description: Include rows with a deletionTimestamp.
-                - name: semantic
-                  in: query
-                  description: Semantic search query. Returns results ranked by similarity.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Semantic search query. Returns results ranked by similarity.
-                - name: semanticThreshold
-                  in: query
-                  description: Drop results with cosine distance above this threshold (0 = no filter).
-                  explode: false
-                  schema:
-                    type: number
-                    description: Drop results with cosine distance above this threshold (0 = no filter).
-                    format: float
             responses:
                 "200":
                     description: OK
@@ -574,21 +544,6 @@ paths:
                   schema:
                     type: boolean
                     description: Include rows with a deletionTimestamp.
-                - name: semantic
-                  in: query
-                  description: Semantic search query. Returns results ranked by similarity.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Semantic search query. Returns results ranked by similarity.
-                - name: semanticThreshold
-                  in: query
-                  description: Drop results with cosine distance above this threshold (0 = no filter).
-                  explode: false
-                  schema:
-                    type: number
-                    description: Drop results with cosine distance above this threshold (0 = no filter).
-                    format: float
             responses:
                 "200":
                     description: OK
@@ -813,21 +768,6 @@ paths:
                   schema:
                     type: boolean
                     description: Include rows with a deletionTimestamp.
-                - name: semantic
-                  in: query
-                  description: Semantic search query. Returns results ranked by similarity.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Semantic search query. Returns results ranked by similarity.
-                - name: semanticThreshold
-                  in: query
-                  description: Drop results with cosine distance above this threshold (0 = no filter).
-                  explode: false
-                  schema:
-                    type: number
-                    description: Drop results with cosine distance above this threshold (0 = no filter).
-                    format: float
             responses:
                 "200":
                     description: OK
@@ -1032,21 +972,6 @@ paths:
                   schema:
                     type: boolean
                     description: Include rows with a deletionTimestamp.
-                - name: semantic
-                  in: query
-                  description: Semantic search query. Returns results ranked by similarity.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Semantic search query. Returns results ranked by similarity.
-                - name: semanticThreshold
-                  in: query
-                  description: Drop results with cosine distance above this threshold (0 = no filter).
-                  explode: false
-                  schema:
-                    type: number
-                    description: Drop results with cosine distance above this threshold (0 = no filter).
-                    format: float
             responses:
                 "200":
                     description: OK
@@ -1202,6 +1127,210 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
+    /v0/remotemcpservers:
+        get:
+            summary: List RemoteMCPServer (scoped by ?namespace)
+            operationId: list-remotemcpservers
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+                - name: limit
+                  in: query
+                  description: Max items to return (default 50).
+                  explode: false
+                  schema:
+                    type: integer
+                    description: Max items to return (default 50).
+                    format: int64
+                    default: 50
+                - name: cursor
+                  in: query
+                  description: Opaque pagination cursor.
+                  explode: false
+                  schema:
+                    type: string
+                    description: Opaque pagination cursor.
+                - name: labels
+                  in: query
+                  description: 'Label selector: key=value,key2=value2.'
+                  explode: false
+                  schema:
+                    type: string
+                    description: 'Label selector: key=value,key2=value2.'
+                - name: latestOnly
+                  in: query
+                  description: Only return rows with is_latest_version=true.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Only return rows with is_latest_version=true.
+                - name: includeTerminating
+                  in: query
+                  description: Include rows with a deletionTimestamp.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Include rows with a deletionTimestamp.
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOutputRemoteMCPServerBody'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/remotemcpservers/{name}:
+        get:
+            summary: Get the latest version of a RemoteMCPServer
+            operationId: get-latest-remotemcpserver
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteMCPServer'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/remotemcpservers/{name}/{version}:
+        get:
+            summary: Get a RemoteMCPServer by name and version
+            operationId: get-remotemcpserver
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteMCPServer'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        put:
+            summary: Apply a RemoteMCPServer (idempotent upsert)
+            operationId: apply-remotemcpserver
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RemoteMCPServer'
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteMCPServer'
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+        delete:
+            summary: 'Delete a RemoteMCPServer (soft-delete: sets deletionTimestamp)'
+            operationId: delete-remotemcpserver
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: force
+                  in: query
+                  description: Skip provider-specific teardown and only remove the registry record.
+                  explode: false
+                  schema:
+                    type: boolean
+                    description: Skip provider-specific teardown and only remove the registry record.
+                    default: false
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
     /v0/skills:
         get:
             summary: List Skill (scoped by ?namespace)
@@ -1251,21 +1380,6 @@ paths:
                   schema:
                     type: boolean
                     description: Include rows with a deletionTimestamp.
-                - name: semantic
-                  in: query
-                  description: Semantic search query. Returns results ranked by similarity.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Semantic search query. Returns results ranked by similarity.
-                - name: semanticThreshold
-                  in: query
-                  description: Drop results with cosine distance above this threshold (0 = no filter).
-                  explode: false
-                  schema:
-                    type: number
-                    description: Drop results with cosine distance above this threshold (0 = no filter).
-                    format: float
             responses:
                 "200":
                     description: OK
@@ -1462,6 +1576,14 @@ components:
                 - spec
                 - apiVersion
                 - kind
+        AgentSource:
+            type: object
+            additionalProperties: false
+            properties:
+                image:
+                    type: string
+                repository:
+                    $ref: '#/components/schemas/Repository'
         AgentSpec:
             type: object
             additionalProperties: false
@@ -1469,8 +1591,6 @@ components:
                 description:
                     type: string
                 framework:
-                    type: string
-                image:
                     type: string
                 language:
                     type: string
@@ -1486,12 +1606,14 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/ResourceRef'
-                repository:
-                    $ref: '#/components/schemas/Repository'
                 skills:
                     type: array
                     items:
                         $ref: '#/components/schemas/ResourceRef'
+                source:
+                    $ref: '#/components/schemas/AgentSource'
+                telemetryEndpoint:
+                    type: string
                 title:
                     type: string
         ApplyResult:
@@ -1572,8 +1694,6 @@ components:
                     type: object
                     additionalProperties:
                         type: string
-                preferRemote:
-                    type: boolean
                 providerConfig:
                     type: object
                     additionalProperties: {}
@@ -1663,11 +1783,6 @@ components:
                         $ref: '#/components/schemas/Agent'
                 nextCursor:
                     type: string
-                semanticScores:
-                    type: array
-                    items:
-                        type: number
-                        format: float
             required:
                 - items
         ListOutputDeploymentBody:
@@ -1680,11 +1795,6 @@ components:
                         $ref: '#/components/schemas/Deployment'
                 nextCursor:
                     type: string
-                semanticScores:
-                    type: array
-                    items:
-                        type: number
-                        format: float
             required:
                 - items
         ListOutputMCPServerBody:
@@ -1697,11 +1807,6 @@ components:
                         $ref: '#/components/schemas/MCPServer'
                 nextCursor:
                     type: string
-                semanticScores:
-                    type: array
-                    items:
-                        type: number
-                        format: float
             required:
                 - items
         ListOutputPromptBody:
@@ -1714,11 +1819,6 @@ components:
                         $ref: '#/components/schemas/Prompt'
                 nextCursor:
                     type: string
-                semanticScores:
-                    type: array
-                    items:
-                        type: number
-                        format: float
             required:
                 - items
         ListOutputProviderBody:
@@ -1731,11 +1831,18 @@ components:
                         $ref: '#/components/schemas/Provider'
                 nextCursor:
                     type: string
-                semanticScores:
+            required:
+                - items
+        ListOutputRemoteMCPServerBody:
+            type: object
+            additionalProperties: false
+            properties:
+                items:
                     type: array
                     items:
-                        type: number
-                        format: float
+                        $ref: '#/components/schemas/RemoteMCPServer'
+                nextCursor:
+                    type: string
             required:
                 - items
         ListOutputSkillBody:
@@ -1748,11 +1855,6 @@ components:
                         $ref: '#/components/schemas/Skill'
                 nextCursor:
                     type: string
-                semanticScores:
-                    type: array
-                    items:
-                        type: number
-                        format: float
             required:
                 - items
         MCPArgument:
@@ -1906,10 +2008,6 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/MCPPackage'
-                remotes:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/MCPTransport'
                 repository:
                     $ref: '#/components/schemas/Repository'
                 title:
@@ -2027,6 +2125,37 @@ components:
                     type: string
             required:
                 - platform
+        RemoteMCPServer:
+            type: object
+            additionalProperties: false
+            properties:
+                apiVersion:
+                    type: string
+                kind:
+                    type: string
+                metadata:
+                    $ref: '#/components/schemas/ObjectMeta'
+                spec:
+                    $ref: '#/components/schemas/RemoteMCPServerSpec'
+                status:
+                    $ref: '#/components/schemas/Status'
+            required:
+                - metadata
+                - spec
+                - apiVersion
+                - kind
+        RemoteMCPServerSpec:
+            type: object
+            additionalProperties: false
+            properties:
+                description:
+                    type: string
+                remote:
+                    $ref: '#/components/schemas/MCPTransport'
+                title:
+                    type: string
+            required:
+                - remote
         Repository:
             type: object
             additionalProperties: false

@@ -39,6 +39,27 @@ func TestBuildMCPServerEmbeddingPayload_SkipsEmptyFields(t *testing.T) {
 	require.Equal(t, []string{"only-name"}, lines)
 }
 
+func TestBuildRemoteMCPServerEmbeddingPayload_IncludesRemoteEndpoint(t *testing.T) {
+	out := BuildRemoteMCPServerEmbeddingPayload(
+		v1alpha1.ObjectMeta{Name: "remote-search", Version: "v2"},
+		v1alpha1.RemoteMCPServerSpec{
+			Title:       "Remote Search",
+			Description: "already running",
+			Remote: v1alpha1.MCPTransport{
+				Type: "streamable-http",
+				URL:  "https://mcp.example.com",
+			},
+		},
+	)
+
+	require.Contains(t, out, "remote-search")
+	require.Contains(t, out, "Remote Search")
+	require.Contains(t, out, "already running")
+	require.Contains(t, out, "v2")
+	require.Contains(t, out, "streamable-http")
+	require.Contains(t, out, "https://mcp.example.com")
+}
+
 func TestBuildAgentEmbeddingPayload_IncludesModelFields(t *testing.T) {
 	out := BuildAgentEmbeddingPayload(
 		v1alpha1.ObjectMeta{Name: "scorer"},

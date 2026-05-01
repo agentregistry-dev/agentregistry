@@ -11,7 +11,7 @@ import (
 
 func TestScheme_RegisterAllBuiltins(t *testing.T) {
 	got := Default.Kinds()
-	want := []string{"agent", "deployment", "mcpserver", "prompt", "provider", "skill"}
+	want := []string{"agent", "deployment", "mcpserver", "prompt", "provider", "remotemcpserver", "skill"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("built-in kinds = %v, want %v", got, want)
 	}
@@ -38,7 +38,8 @@ metadata:
     owner: core
 spec:
   title: Summarizer
-  image: ghcr.io/example/summarizer:1.0.0
+  source:
+    image: ghcr.io/example/summarizer:1.0.0
   language: go
   modelProvider: openai
   modelName: gpt-4o
@@ -67,8 +68,8 @@ spec:
 	if agent.Metadata.Labels["owner"] != "core" {
 		t.Fatalf("labels mismatch: %+v", agent.Metadata.Labels)
 	}
-	if agent.Spec.Image != "ghcr.io/example/summarizer:1.0.0" {
-		t.Fatalf("spec.image mismatch: %q", agent.Spec.Image)
+	if agent.Spec.Source.Image != "ghcr.io/example/summarizer:1.0.0" {
+		t.Fatalf("spec.source.image mismatch: %q", agent.Spec.Source.Image)
 	}
 	if len(agent.Spec.MCPServers) != 1 ||
 		agent.Spec.MCPServers[0].Kind != KindMCPServer ||
@@ -291,7 +292,7 @@ func TestEncode_RoundTrip_YAML(t *testing.T) {
 		Metadata: ObjectMeta{Name: "rt", Version: "v1", Labels: map[string]string{"k": "v"}},
 		Spec: AgentSpec{
 			Title:      "Round Trip",
-			Image:      "img:tag",
+			Source:     &AgentSource{Image: "img:tag"},
 			MCPServers: []ResourceRef{{Kind: KindMCPServer, Name: "mcp1", Version: "1"}},
 		},
 	}

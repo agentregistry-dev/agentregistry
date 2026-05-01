@@ -57,7 +57,7 @@ func TestKubernetesTranslatePlatformConfig_RemoteMCP(t *testing.T) {
 		MCPServers: []*platformtypes.MCPServer{{
 			Name:          "remote-server",
 			MCPServerType: platformtypes.MCPServerTypeRemote,
-			Remote: &platformtypes.RemoteMCPServer{
+			Remote: &platformtypes.RemoteMCPTarget{
 				Scheme: "https",
 				Host:   "example.com",
 				Port:   8080,
@@ -227,7 +227,7 @@ func TestKubernetesTranslatePlatformConfig_NamespaceConsistency(t *testing.T) {
 						Name:          "remote-mcp",
 						MCPServerType: platformtypes.MCPServerTypeRemote,
 						Namespace:     tt.mcpNamespace,
-						Remote: &platformtypes.RemoteMCPServer{
+						Remote: &platformtypes.RemoteMCPTarget{
 							Scheme: "https",
 							Host:   "remote-mcp.example.com",
 							Port:   8080,
@@ -300,7 +300,7 @@ func TestKubernetesTranslatePlatformConfig_DeploymentIDMetadataAndNaming(t *test
 			DeploymentID:  "dep-mcp-123",
 			MCPServerType: platformtypes.MCPServerTypeRemote,
 			Namespace:     "demo-ns",
-			Remote: &platformtypes.RemoteMCPServer{
+			Remote: &platformtypes.RemoteMCPTarget{
 				Scheme: "http",
 				Host:   "example.com",
 				Port:   80,
