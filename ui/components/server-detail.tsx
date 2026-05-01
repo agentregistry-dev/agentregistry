@@ -181,24 +181,28 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
                 <p className="text-[15px] leading-relaxed">{serverData.description}</p>
               </section>
 
-              {serverData.source?.repository?.url && (
-                <section>
-                  <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Repository</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">URL</span>
-                      <a
-                        href={serverData.source.repository.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-primary hover:underline flex items-center gap-1"
-                      >
-                        {serverData.source.repository.url} <ExternalLink className="h-3 w-3" />
-                      </a>
+              {(() => {
+                const repoUrl = serverData.source?.repository?.url
+                if (!repoUrl) return null
+                return (
+                  <section>
+                    <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Repository</h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">URL</span>
+                        <a
+                          href={repoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-primary hover:underline flex items-center gap-1"
+                        >
+                          {repoUrl} <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </div>
                     </div>
-                  </div>
-                </section>
-              )}
+                  </section>
+                )
+              })()}
             </TabsContent>
 
             <TabsContent value="score" className="space-y-6">
@@ -272,17 +276,21 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
                       </div>
                     )}
                   </div>
-                  {serverData.source?.repository?.url && (
-                    <a
-                      href={serverData.source.repository.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 text-xs text-primary hover:underline mt-3"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      View Repository
-                    </a>
-                  )}
+                  {(() => {
+                    const repoUrl = serverData.source?.repository?.url
+                    if (!repoUrl) return null
+                    return (
+                      <a
+                        href={repoUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 text-xs text-primary hover:underline mt-3"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        View Repository
+                      </a>
+                    )
+                  })()}
                 </section>
               )}
 
@@ -392,10 +400,12 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
             </TabsContent>
 
             <TabsContent value="packages" className="space-y-4">
-              {serverData.source?.package ? (
-                (() => {
-                  const pkg = serverData.source.package
-                  return (
+              {(() => {
+                const pkg = serverData.source?.package
+                if (!pkg) {
+                  return <p className="text-center text-sm text-muted-foreground py-8">No package defined</p>
+                }
+                return (
                     <div className="p-4 rounded-lg border">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
@@ -425,11 +435,8 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
                       <RuntimeArgumentsTable arguments={(pkg as any).runtimeArguments} />
                       <EnvironmentVariablesTable variables={(pkg as any).environmentVariables} />
                     </div>
-                  )
-                })()
-              ) : (
-                <p className="text-center text-sm text-muted-foreground py-8">No package defined</p>
-              )}
+                )
+              })()}
             </TabsContent>
 
             <TabsContent value="raw">

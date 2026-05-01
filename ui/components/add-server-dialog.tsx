@@ -27,8 +27,9 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
   const [version, setVersion] = useState("")
   const [repositoryUrl, setRepositoryUrl] = useState("")
 
-  // Dynamic fields — schema collapsed to a single package per server.
-  const [packages, setPackages] = useState<Array<{ identifier: string; version: string; registryType: string; transport: string }>>([])
+  // Schema collapsed to a single package per server.
+  type PackageDraft = { identifier: string; version: string; registryType: string; transport: string }
+  const [pkg, setPkg] = useState<PackageDraft | null>(null)
 
   const resetForm = () => {
     setSchema("2025-10-17")
@@ -37,7 +38,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
     setDescription("")
     setVersion("")
     setRepositoryUrl("")
-    setPackages([])
+    setPkg(null)
   }
 
   const handleSubmit = async () => {
@@ -80,15 +81,12 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
           url: repositoryUrl.trim(),
         }
       }
-      if (packages.length > 0) {
-        const first = packages.find(p => p.identifier.trim() && p.version.trim())
-        if (first) {
-          source.package = {
-            identifier: first.identifier.trim(),
-            version: first.version.trim(),
-            registryType: first.registryType as 'npm' | 'pypi' | 'docker',
-            transport: { type: first.transport || 'stdio' },
-          }
+      if (pkg && pkg.identifier.trim() && pkg.version.trim()) {
+        source.package = {
+          identifier: pkg.identifier.trim(),
+          version: pkg.version.trim(),
+          registryType: pkg.registryType as 'npm' | 'pypi' | 'docker',
+          transport: { type: pkg.transport || 'stdio' },
         }
       }
       if (source.repository || source.package) {
@@ -114,17 +112,15 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
   }
 
   const addPackage = () => {
-    setPackages([...packages, { identifier: "", version: "", registryType: "npm", transport: "stdio" }])
+    setPkg({ identifier: "", version: "", registryType: "npm", transport: "stdio" })
   }
 
-  const removePackage = (index: number) => {
-    setPackages(packages.filter((_, i) => i !== index))
+  const removePackage = () => {
+    setPkg(null)
   }
 
-  const updatePackage = (index: number, field: string, value: string) => {
-    const updated = [...packages]
-    updated[index] = { ...updated[index], [field]: value }
-    setPackages(updated)
+  const updatePackage = (field: keyof PackageDraft, value: string) => {
+    setPkg(prev => (prev ? { ...prev, [field]: value } : prev))
   }
 
   return (
@@ -216,33 +212,33 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
                 variant="outline"
                 size="sm"
                 onClick={addPackage}
-                disabled={loading || packages.length > 0}
+                disabled={loading || pkg !== null}
               >
                 <Plus className="h-4 w-4 mr-1" />
                 Add Package
               </Button>
             </div>
 
-            {packages.map((pkg, index) => (
-              <div key={index} className="space-y-2 p-3 border rounded-md">
+            {pkg ? (
+              <div className="space-y-2 p-3 border rounded-md">
                 <div className="flex gap-2 items-start">
                   <Input
                     placeholder="Package identifier"
                     value={pkg.identifier}
-                    onChange={(e) => updatePackage(index, "identifier", e.target.value)}
+                    onChange={(e) => updatePackage("identifier", e.target.value)}
                     disabled={loading}
                     className="flex-1"
                   />
                   <Input
                     placeholder="Version"
                     value={pkg.version}
-                    onChange={(e) => updatePackage(index, "version", e.target.value)}
+                    onChange={(e) => updatePackage("version", e.target.value)}
                     disabled={loading}
                     className="w-32"
                   />
                   <select
                     value={pkg.registryType}
-                    onChange={(e) => updatePackage(index, "registryType", e.target.value)}
+                    onChange={(e) => updatePackage("registryType", e.target.value)}
                     className="px-3 py-2 border rounded-md bg-background text-foreground border-input focus:outline-none focus:ring-2 focus:ring-ring"
                     disabled={loading}
                   >
@@ -254,7 +250,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
                     type="button"
                     variant="ghost"
                     size="icon"
-                    onClick={() => removePackage(index)}
+                    onClick={removePackage}
                     disabled={loading}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -266,9 +262,9 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
                     <label key={transport} className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="radio"
-                        name={`transport-${index}`}
+                        name="package-transport"
                         checked={pkg.transport === transport}
-                        onChange={() => updatePackage(index, "transport", transport)}
+                        onChange={() => updatePackage("transport", transport)}
                         disabled={loading}
                         className="border-gray-300"
                       />
@@ -277,9 +273,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
                   ))}
                 </div>
               </div>
-            ))}
-
-            {packages.length === 0 && (
+            ) : (
               <p className="text-sm text-muted-foreground text-center py-2">
                 No package added
               </p>
