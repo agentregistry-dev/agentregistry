@@ -60,8 +60,10 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 	var errs FieldErrors
 
 	errs.Append("spec.title", validateTitle(s.Title))
-	for _, e := range validateRepository(s.Repository) {
-		errs.Append("spec."+e.Path, e.Cause)
+	if s.Source != nil {
+		for _, e := range validateRepository(s.Source.Repository) {
+			errs.Append("spec.source."+e.Path, e.Cause)
+		}
 	}
 	for i, ref := range s.MCPServers {
 		// References within Agent.Spec default Kind=MCPServer; reject

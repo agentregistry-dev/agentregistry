@@ -1372,6 +1372,14 @@ components:
                 - spec
                 - apiVersion
                 - kind
+        AgentSource:
+            type: object
+            additionalProperties: false
+            properties:
+                image:
+                    type: string
+                repository:
+                    $ref: '#/components/schemas/Repository'
         AgentSpec:
             type: object
             additionalProperties: false
@@ -1379,8 +1387,6 @@ components:
                 description:
                     type: string
                 framework:
-                    type: string
-                image:
                     type: string
                 language:
                     type: string
@@ -1396,12 +1402,12 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/ResourceRef'
-                repository:
-                    $ref: '#/components/schemas/Repository'
                 skills:
                     type: array
                     items:
                         $ref: '#/components/schemas/ResourceRef'
+                source:
+                    $ref: '#/components/schemas/AgentSource'
                 telemetryEndpoint:
                     type: string
                 title:

@@ -31,6 +31,12 @@ func BuildMCPServerEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.MCPS
 // BuildAgentEmbeddingPayload assembles the canonical text for an Agent.
 func BuildAgentEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.AgentSpec) string {
 	var parts []string
+	var sourceImage string
+	var sourceRepo *v1alpha1.Repository
+	if spec.Source != nil {
+		sourceImage = spec.Source.Image
+		sourceRepo = spec.Source.Repository
+	}
 	appendIf(&parts,
 		meta.Name,
 		spec.Title,
@@ -40,12 +46,12 @@ func BuildAgentEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.AgentSpe
 		spec.Framework,
 		spec.ModelProvider,
 		spec.ModelName,
-		spec.Image,
+		sourceImage,
 	)
 	appendJSON(&parts, spec.MCPServers)
 	appendJSON(&parts, spec.Skills)
 	appendJSON(&parts, spec.Prompts)
-	appendJSON(&parts, spec.Repository)
+	appendJSON(&parts, sourceRepo)
 	return strings.Join(parts, "\n")
 }
 

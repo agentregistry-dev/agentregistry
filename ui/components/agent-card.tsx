@@ -25,7 +25,8 @@ interface AgentCardProps {
 export function AgentCard({ agent, onDeploy, showDeploy = false, onClick, versionCount }: AgentCardProps) {
   const { agent: agentData, _meta } = agent
   const official = _meta?.['io.modelcontextprotocol.registry/official']
-  const hasImage = !!agentData.image
+  const source = agentData.source
+  const hasImage = !!source?.image
 
   const formatDate = (dateString: string) => {
     try {
@@ -94,9 +95,9 @@ export function AgentCard({ agent, onDeploy, showDeploy = false, onClick, versio
               </span>
             )}
 
-            {agentData.repository?.url && (
+            {source?.repository?.url && (
               <a
-                href={agentData.repository.url}
+                href={source.repository.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 hover:text-primary transition-colors"

@@ -264,7 +264,7 @@ func resolvedAgentForTest(name, image, modelProvider, modelName string, skills [
 		Agent: &v1alpha1.Agent{
 			Metadata: v1alpha1.ObjectMeta{Name: name},
 			Spec: v1alpha1.AgentSpec{
-				Image:         image,
+				Source:        &v1alpha1.AgentSource{Image: image},
 				ModelProvider: modelProvider,
 				ModelName:     modelName,
 				Skills:        skills,

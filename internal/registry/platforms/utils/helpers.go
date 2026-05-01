@@ -150,12 +150,16 @@ func SpecToPlatformAgent(
 		envValues[constants.EnvMCPServersConfig] = string(encoded)
 	}
 
+	var image string
+	if agentSpec.Source != nil {
+		image = agentSpec.Source.Image
+	}
 	agent := &platformtypes.Agent{
 		Name:         agentMeta.Name,
 		Version:      agentMeta.Version,
 		DeploymentID: opts.DeploymentID,
 		Deployment: platformtypes.AgentDeployment{
-			Image: agentSpec.Image,
+			Image: image,
 			Env:   envValues,
 			Port:  DefaultLocalAgentPort,
 		},

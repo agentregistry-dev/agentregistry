@@ -6,7 +6,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-// GitHubRepoFor inspects obj's Spec.Repository and, when the URL
+// GitHubRepoFor inspects obj's repository reference and, when the URL
 // parses as a GitHub repository, returns its (owner, repo) split.
 // Supported kinds: Agent, MCPServer, Skill. Everything else returns
 // ok=false.
@@ -18,8 +18,8 @@ func GitHubRepoFor(obj v1alpha1.Object) (owner, repo string, ok bool) {
 	var url string
 	switch v := obj.(type) {
 	case *v1alpha1.Agent:
-		if v.Spec.Repository != nil {
-			url = v.Spec.Repository.URL
+		if v.Spec.Source != nil && v.Spec.Source.Repository != nil {
+			url = v.Spec.Source.Repository.URL
 		}
 	case *v1alpha1.MCPServer:
 		if v.Spec.Repository != nil {
