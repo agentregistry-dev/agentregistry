@@ -88,11 +88,18 @@ func Resolve(ctx context.Context, apiClient *client.Client, agent *v1alpha1.Agen
 // translateRemoteMCPServerRef projects a v1alpha1.RemoteMCPServer onto a
 // ResolvedMCPServer with Type="remote".
 func translateRemoteMCPServerRef(name string, server *v1alpha1.RemoteMCPServer) (*ResolvedMCPServer, error) {
-	if server.Spec.Remote.URL == "" {
+	translated, err := platformutils.TranslateRemoteMCPServer(context.Background(), &platformutils.RemoteMCPServerRunRequest{
+		Name: server.Metadata.Name,
+		Spec: server.Spec,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if translated.Remote == nil {
 		return nil, fmt.Errorf("remote has no URL")
 	}
-	headers := make(map[string]string, len(server.Spec.Remote.Headers))
-	for _, h := range server.Spec.Remote.Headers {
+	headers := make(map[string]string, len(translated.Remote.Headers))
+	for _, h := range translated.Remote.Headers {
 		headers[h.Name] = h.Value
 	}
 	return &ResolvedMCPServer{

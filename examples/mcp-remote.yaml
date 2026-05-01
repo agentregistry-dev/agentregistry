@@ -7,7 +7,7 @@ spec:
   title: Databricks Unity Catalog
   description: "Pre-deployed Unity Catalog MCP server"
   remote:
-    type: streamable-http                       # sse | streamable-http
+    type: streamable-http # sse | streamable-http
     url: https://workspace.cloud.databricks.com/mcp
     # headers:                                  # optional: HTTP headers (e.g. auth tokens)
     #   - name: Authorization

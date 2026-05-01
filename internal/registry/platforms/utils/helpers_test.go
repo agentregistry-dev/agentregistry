@@ -161,6 +161,64 @@ func TestSpecToPlatformAgent_ResolvesMCPServerRefs(t *testing.T) {
 	}
 }
 
+func TestSpecToPlatformAgent_ResolvesRemoteMCPServerHeaders(t *testing.T) {
+	remote := &v1alpha1.RemoteMCPServer{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRemoteMCPServer},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "remote-tools", Version: "1.0.0"},
+		Spec: v1alpha1.RemoteMCPServerSpec{
+			Remote: v1alpha1.MCPTransport{
+				Type: "streamable-http",
+				URL:  "https://remote.example/mcp",
+				Headers: []v1alpha1.MCPKeyValueInput{
+					{Name: "Authorization", IsRequired: true},
+					{Name: "X-Trace", Default: "trace-default"},
+				},
+			},
+		},
+	}
+	getter := func(ctx context.Context, ref v1alpha1.ResourceRef) (v1alpha1.Object, error) {
+		return remote, nil
+	}
+
+	agent, servers, err := SpecToPlatformAgent(
+		context.Background(),
+		v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Version: "1.0.0"},
+		v1alpha1.AgentSpec{
+			MCPServers: []v1alpha1.ResourceRef{
+				{Kind: v1alpha1.KindRemoteMCPServer, Name: "remote-tools", Version: "1.0.0"},
+			},
+		},
+		AgentTranslateOpts{
+			DeploymentID: "dep-remote",
+			HeaderValues: map[string]string{
+				"Authorization": "Bearer token",
+			},
+			Getter: getter,
+		},
+	)
+	if err != nil {
+		t.Fatalf("SpecToPlatformAgent: %v", err)
+	}
+	if len(servers) != 1 || servers[0].Remote == nil {
+		t.Fatalf("resolved remote servers unexpected: %+v", servers)
+	}
+	headers := map[string]string{}
+	for _, h := range servers[0].Remote.Headers {
+		headers[h.Name] = h.Value
+	}
+	if headers["Authorization"] != "Bearer token" || headers["X-Trace"] != "trace-default" {
+		t.Fatalf("translated headers = %+v", headers)
+	}
+
+	var decoded []platformtypes.ResolvedMCPServerConfig
+	if err := json.Unmarshal([]byte(agent.Deployment.Env["MCP_SERVERS_CONFIG"]), &decoded); err != nil {
+		t.Fatalf("decode MCP_SERVERS_CONFIG: %v", err)
+	}
+	if len(decoded) != 1 || decoded[0].Headers["Authorization"] != "Bearer token" || decoded[0].Headers["X-Trace"] != "trace-default" {
+		t.Fatalf("decoded MCP_SERVERS_CONFIG = %+v", decoded)
+	}
+}
+
 func TestSpecToPlatformAgent_NamespaceOptWinsOverMeta(t *testing.T) {
 	getter := func(ctx context.Context, ref v1alpha1.ResourceRef) (v1alpha1.Object, error) {
 		t.Fatalf("getter should not be called when no refs; got %+v", ref)

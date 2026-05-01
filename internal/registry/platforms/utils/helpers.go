@@ -104,6 +104,9 @@ type AgentTranslateOpts struct {
 	// Use SplitDeploymentRuntimeInputs upstream if the deployment encodes
 	// ARG_/HEADER_ prefixes.
 	DeploymentEnv map[string]string
+	// HeaderValues are per-deployment header overrides for RemoteMCPServer
+	// refs, already split from Deployment.Spec.Env by the adapter.
+	HeaderValues map[string]string
 	// Getter resolves AgentSpec.MCPServers refs to v1alpha1.MCPServer objects.
 	Getter v1alpha1.GetterFunc
 }
@@ -180,12 +183,13 @@ func SpecToPlatformAgent(
 			platformServer, err := SpecToPlatformRemoteMCPServer(ctx, remote.Metadata, remote.Spec, RemoteMCPServerTranslateOpts{
 				DeploymentID: opts.DeploymentID,
 				Namespace:    opts.Namespace,
+				HeaderValues: opts.HeaderValues,
 			})
 			if err != nil {
 				return nil, nil, fmt.Errorf("spec.mcpServers[%d]: %w", i, err)
 			}
 			resolvedServers = append(resolvedServers, platformServer)
-			resolvedConfigs = append(resolvedConfigs, remoteMCPServerConfig(remote.Metadata.Name, remote.Spec, opts.DeploymentID))
+			resolvedConfigs = append(resolvedConfigs, remoteMCPServerConfig(remote.Metadata.Name, remote.Spec, opts.DeploymentID, platformServer))
 		default:
 			return nil, nil, fmt.Errorf("spec.mcpServers[%d]: unsupported ref kind %q", i, normalized.Kind)
 		}
@@ -251,16 +255,18 @@ func mcpServerConfigFromSpec(name string, _ v1alpha1.MCPServerSpec, deploymentID
 }
 
 // remoteMCPServerConfig builds the per-server entry for an agent that
-// references a RemoteMCPServer. Type is always "remote".
-func remoteMCPServerConfig(name string, spec v1alpha1.RemoteMCPServerSpec, deploymentID string) platformtypes.ResolvedMCPServerConfig {
+// references a RemoteMCPServer. Type is always "remote". Headers come from the
+// translated platform server so required/default/override processing matches
+// the platform apply path.
+func remoteMCPServerConfig(name string, spec v1alpha1.RemoteMCPServerSpec, deploymentID string, platformServer *platformtypes.MCPServer) platformtypes.ResolvedMCPServerConfig {
 	cfg := platformtypes.ResolvedMCPServerConfig{
 		Name: GenerateInternalNameForDeployment(name, deploymentID),
 		Type: "remote",
 		URL:  spec.Remote.URL,
 	}
-	if len(spec.Remote.Headers) > 0 {
-		headers := make(map[string]string, len(spec.Remote.Headers))
-		for _, h := range spec.Remote.Headers {
+	if platformServer != nil && platformServer.Remote != nil && len(platformServer.Remote.Headers) > 0 {
+		headers := make(map[string]string, len(platformServer.Remote.Headers))
+		for _, h := range platformServer.Remote.Headers {
 			headers[h.Name] = h.Value
 		}
 		cfg.Headers = headers

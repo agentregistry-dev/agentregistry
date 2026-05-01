@@ -316,10 +316,6 @@ export async function createPromptV0(opts: LegacyCreateOpts<PromptJson>): Promis
 // deployServer: legacy imperative deploy endpoint replaced by declarative
 // Deployment upsert. Legacy body fields: {serverName, version, env,
 // providerId, resourceType}. Translate to a Deployment envelope.
-//
-// `preferRemote` was removed when MCPServer.spec.remotes was extracted into
-// the RemoteMCPServer kind — to deploy a remote endpoint, target the
-// RemoteMCPServer directly via the standard Deployment apply.
 // ----------------------------------------------------------------------------
 
 export interface DeployServerBody {

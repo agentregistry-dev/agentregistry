@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -104,7 +105,7 @@ func TestRemoteMCPServer_Validate(t *testing.T) {
 				}
 				found := false
 				for _, fieldErr := range fe {
-					if fieldErr.Path == tc.wantSub || (len(tc.wantSub) <= len(fieldErr.Path) && fieldErr.Path[:len(tc.wantSub)] == tc.wantSub) {
+					if fieldErr.Path == tc.wantSub || strings.HasPrefix(fieldErr.Path, tc.wantSub) {
 						found = true
 						break
 					}

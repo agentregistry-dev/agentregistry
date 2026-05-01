@@ -2286,6 +2286,8 @@ components:
                     $ref: '#/components/schemas/MCPTransport'
                 title:
                     type: string
+            required:
+                - remote
         Repository:
             type: object
             additionalProperties: false

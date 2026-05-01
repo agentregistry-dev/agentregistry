@@ -201,7 +201,6 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 
 	switch target := in.Target.(type) {
 	case *v1alpha1.MCPServer:
-		_ = headerValues
 		server, err := utils.SpecToPlatformMCPServer(ctx, target.Metadata, target.Spec, utils.MCPServerTranslateOpts{
 			DeploymentID: deploymentID,
 			Namespace:    namespace,
@@ -213,7 +212,6 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 		}
 		return &platformtypes.DesiredState{MCPServers: []*platformtypes.MCPServer{server}}, nil
 	case *v1alpha1.RemoteMCPServer:
-		_, _, headerValues = utils.SplitDeploymentRuntimeInputs(in.Deployment.Spec.Env)
 		server, err := utils.SpecToPlatformRemoteMCPServer(ctx, target.Metadata, target.Spec, utils.RemoteMCPServerTranslateOpts{
 			DeploymentID: deploymentID,
 			Namespace:    namespace,
@@ -229,6 +227,7 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 			Namespace:     namespace,
 			KagentURL:     "http://kagent-controller.kagent.svc.cluster.local",
 			DeploymentEnv: envValues,
+			HeaderValues:  headerValues,
 			Getter:        in.Getter,
 		})
 		if err != nil {

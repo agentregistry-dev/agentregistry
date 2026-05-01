@@ -20,5 +20,5 @@ type RemoteMCPServerSpec struct {
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 
 	// Remote is the connection endpoint of the running server.
-	Remote MCPTransport `json:"remote,omitempty" yaml:"remote,omitempty"`
+	Remote MCPTransport `json:"remote" yaml:"remote"`
 }

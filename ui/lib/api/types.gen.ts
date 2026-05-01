@@ -302,7 +302,7 @@ export type RemoteMcpServer = {
 
 export type RemoteMcpServerSpec = {
     description?: string;
-    remote?: McpTransport;
+    remote: McpTransport;
     title?: string;
 };
 
