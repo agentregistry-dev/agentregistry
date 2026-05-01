@@ -49,25 +49,6 @@ tests:
           path: data.AGENT_REGISTRY_ENABLE_REGISTRY_VALIDATION
           value: "false"
 
-  - it: sets AGENT_REGISTRY_DISABLE_BUILTIN_SEED
-    asserts:
-      - equal:
-          path: data.AGENT_REGISTRY_DISABLE_BUILTIN_SEED
-          value: "true"
-
-  - it: does not include AGENT_REGISTRY_SEED_FROM when seedFrom is empty
-    asserts:
-      - notExists:
-          path: data.AGENT_REGISTRY_SEED_FROM
-
-  - it: includes AGENT_REGISTRY_SEED_FROM when seedFrom is set
-    set:
-      config.seedFrom: "https://example.com/seeds.json"
-    asserts:
-      - equal:
-          path: data.AGENT_REGISTRY_SEED_FROM
-          value: "https://example.com/seeds.json"
-
   - it: overrides serverAddress
     set:
       config.serverAddress: ":9090"

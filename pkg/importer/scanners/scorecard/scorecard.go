@@ -1,9 +1,6 @@
 // Package scorecard implements an OpenSSF Scorecard scanner on the
-// pkg/importer.Scanner interface. The engine wrapper
-// (runScorecardLibrary + setScorecardTokenEnv) was moved here from
-// internal/registry/importer/scorecard_lib.go in the previous commit;
-// this file adds the Scanner struct + Config + result translation
-// that fits the v1alpha1 enrichment surface.
+// pkg/importer.Scanner interface. It runs Scorecard and translates
+// results into the v1alpha1 enrichment surface.
 package scorecard
 
 import (
@@ -265,11 +262,8 @@ func runScorecardLibraryDetailed(ctx context.Context, owner, repo, token string)
 var _ importer.Scanner = (*Scanner)(nil)
 
 // -----------------------------------------------------------------------------
-// Legacy pre-Scanner helpers. runScorecardLibrary +
-// extractScorecardHighlights are removed — Scanner.Scan +
-// pickFindings + runScorecardLibraryDetailed above replace them,
-// and their old caller in the legacy importer was disabled in the
-// rename commit. git blame continuity is via that commit.
+// Scorecard helper kept separate from Scanner.Scan so the API wrapper
+// remains easy to test.
 //
 // setScorecardTokenEnv is kept byte-identical and used by
 // runScorecardLibraryDetailed.

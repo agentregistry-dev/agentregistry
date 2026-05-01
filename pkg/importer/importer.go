@@ -56,7 +56,7 @@ type Options struct {
 	// HTTP callers (POST /v0/import) wire this from the same
 	// PerKindHooks.Authorizers map the regular apply path consults so
 	// the import surface enforces the same per-kind RBAC. Nil is the
-	// CLI / seed-from-disk default (admin context, no per-call gate).
+	// non-HTTP default (admin context, no per-call gate).
 	//
 	// Object identity is fully populated by the time this fires —
 	// metadata.namespace has been defaulted, validation has passed,
@@ -144,9 +144,9 @@ type Importer struct {
 	scheme *v1alpha1.Scheme
 
 	// Resolver forwards to obj.ResolveRefs on each decoded object. A
-	// nil resolver skips ref checking — callers may pass nil when
+	// nil resolver skips ref checking. Callers may pass nil when
 	// importing a set that is allowed to reference objects that don't
-	// exist yet (e.g. seed bundles). Typical servers pass a
+	// exist yet. Typical servers pass a
 	// namespace-aware cross-kind resolver that hits the generic Store.
 	resolver v1alpha1.ResolverFunc
 

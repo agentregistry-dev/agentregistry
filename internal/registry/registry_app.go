@@ -24,7 +24,6 @@ import (
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/kubernetes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/local"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
@@ -107,8 +106,6 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		registryValidator = registries.Dispatcher
 	}
 	stores, importer := buildStoresAndImporter(pool, registryValidator)
-	startBuiltinSeedImport(cfg, pool)
-	startSeedFromImport(cfg, importer)
 
 	slog.Info("starting agentregistry", "version", version.Version, "commit", version.GitCommit)
 
@@ -212,53 +209,13 @@ func buildStoresAndImporter(pool *pgxpool.Pool, registryValidator v1alpha1.Regis
 		RegistryValidator: registryValidator,
 	})
 	if err != nil {
-		slog.Warn("failed to construct v1alpha1 importer; HTTP import + seed-from disabled for this path", "error", err)
+		slog.Warn("failed to construct v1alpha1 importer; HTTP import disabled for this path", "error", err)
 		slog.Info("v1alpha1 routes enabled")
 		return stores, nil
 	}
 
 	slog.Info("v1alpha1 routes enabled")
 	return stores, imp
-}
-
-func startBuiltinSeedImport(cfg *config.Config, pool *pgxpool.Pool) {
-	// Import builtin seed data unless disabled. Writes to v1alpha1.*
-	// tables via the generic Store. Skipped when the underlying DB
-	// returns a nil pool (noop/test backends) — seeding is decorative
-	// for those anyway.
-	if cfg.DisableBuiltinSeed {
-		return
-	}
-	if pool == nil {
-		slog.Info("builtin seed skipped: database Pool() is nil")
-		return
-	}
-
-	slog.Info("importing builtin seed data in the background")
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-		ctx = auth.WithSystemContext(ctx)
-		if err := seed.ImportBuiltinSeedData(ctx, pool); err != nil {
-			slog.Error("failed to import builtin seed data (v1alpha1)", "error", err)
-		}
-	}()
-}
-
-func startSeedFromImport(cfg *config.Config, importer *pkgimporter.Importer) {
-	// Import seed data if seed source is provided. Requires the
-	// v1alpha1 Importer; backends without Pool() support can't seed
-	// from disk in the new model.
-	if cfg.SeedFrom == "" {
-		return
-	}
-	if importer == nil {
-		slog.Warn("--seed-from requested but v1alpha1 importer unavailable; skipping", "seed_from", cfg.SeedFrom)
-		return
-	}
-
-	slog.Info("importing data in the background", "seed_from", cfg.SeedFrom)
-	go runSeedFromImport(cfg, importer)
 }
 
 func buildRouteOptions(
@@ -510,33 +467,4 @@ func setupLogging(levelStr string) {
 	}
 	// set all loggers to the specified level
 	logging.Reset(level)
-}
-
-// runSeedFromImport drives the cfg.SeedFrom import in the background
-// via the v1alpha1 Importer. Caller guarantees importer != nil.
-func runSeedFromImport(cfg *config.Config, importer *pkgimporter.Importer) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-	ctx = auth.WithSystemContext(ctx)
-
-	results, err := importer.Import(ctx, pkgimporter.Options{
-		Path:   cfg.SeedFrom,
-		Enrich: cfg.EnrichServerData,
-	})
-	if err != nil {
-		slog.Error("failed to import seed data (v1alpha1)", "error", err)
-		return
-	}
-	var failed int
-	for _, r := range results {
-		if r.Status == pkgimporter.ImportStatusFailed {
-			failed++
-			slog.Warn("v1alpha1 import failed for document",
-				"source", r.Source, "kind", r.Kind,
-				"name", r.Name, "error", r.Error)
-		}
-	}
-	slog.Info("v1alpha1 import complete",
-		"seed_from", cfg.SeedFrom,
-		"total", len(results), "failed", failed)
 }

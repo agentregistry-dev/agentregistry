@@ -1,10 +1,7 @@
 // Package osv implements the OSV.dev vulnerability scanner as a
-// pkg/importer.Scanner plug-in. The fetch + parse + query logic
-// (parseNPMLockForOSV / parsePipRequirementsForOSV /
-// parseGoModForOSV + queryOSVBatch + fetchRepoContentFile) was
-// moved here from internal/registry/importer/osv_scan.go in the
-// previous commit; this file adds the Scanner struct + Config +
-// result translation that fits the v1alpha1 enrichment surface.
+// pkg/importer.Scanner plug-in. It fetches repository dependency
+// manifests, queries OSV, and translates results into the v1alpha1
+// enrichment surface.
 package osv
 
 import (
@@ -461,17 +458,11 @@ func parseGoModForOSV(data []byte) []osvPackageQuery {
 }
 
 // queryOSVBatch + osvSeverityTotals were the pre-Scanner batch
-// helpers. Scanner.Scan uses queryOSVBatchDetailed above (same
-// request payload, richer per-CVE return) instead. The legacy flow
-// isn't preserved as a callable function because no caller remains
-// after this refactor; git blame continuity is via the rename
-// commit.
+// helpers. Scanner.Scan uses queryOSVBatchDetailed above with the
+// same request payload and a richer per-CVE return.
 
 // fetchRepoContentFile reads a single file from the GitHub contents
-// API. Body is ported from the legacy importer's
-// fetchRepoContentFileWithRename (internal/registry/importer/importer.go)
-// minus the rename-detection retry path, which was specific to the
-// legacy dedup/reimport flow and not required by a scanner invocation.
+// API.
 //
 // The endpoint parameter carries the URL template with literal
 // {owner}/{repo}/{path} placeholders, enabling test-time override.
