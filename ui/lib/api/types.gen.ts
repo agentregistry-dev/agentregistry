@@ -150,7 +150,6 @@ export type ListOutputProviderBody = {
 export type ListOutputRemoteMcpServerBody = {
     items: Array<RemoteMcpServer>;
     nextCursor?: string;
-    semanticScores?: Array<number>;
 };
 
 export type ListOutputSkillBody = {
@@ -1412,14 +1411,6 @@ export type ListRemotemcpserversData = {
          * Include rows with a deletionTimestamp.
          */
         includeTerminating?: boolean;
-        /**
-         * Semantic search query. Returns results ranked by similarity.
-         */
-        semantic?: string;
-        /**
-         * Drop results with cosine distance above this threshold (0 = no filter).
-         */
-        semanticThreshold?: number;
     };
     url: '/v0/remotemcpservers';
 };

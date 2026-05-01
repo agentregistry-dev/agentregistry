@@ -1176,21 +1176,6 @@ paths:
                   schema:
                     type: boolean
                     description: Include rows with a deletionTimestamp.
-                - name: semantic
-                  in: query
-                  description: Semantic search query. Returns results ranked by similarity.
-                  explode: false
-                  schema:
-                    type: string
-                    description: Semantic search query. Returns results ranked by similarity.
-                - name: semanticThreshold
-                  in: query
-                  description: Drop results with cosine distance above this threshold (0 = no filter).
-                  explode: false
-                  schema:
-                    type: number
-                    description: Drop results with cosine distance above this threshold (0 = no filter).
-                    format: float
             responses:
                 "200":
                     description: OK
@@ -1852,11 +1837,6 @@ components:
                         $ref: '#/components/schemas/RemoteMCPServer'
                 nextCursor:
                     type: string
-                semanticScores:
-                    type: array
-                    items:
-                        type: number
-                        format: float
             required:
                 - items
         ListOutputSkillBody:
