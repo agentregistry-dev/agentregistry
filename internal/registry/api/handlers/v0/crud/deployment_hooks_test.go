@@ -11,8 +11,8 @@ import (
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/stretchr/testify/require"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentlogs"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/crud"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentlogs"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/noop"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
@@ -33,11 +33,13 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha
 
 	mcpSpec, err := json.Marshal(v1alpha1.MCPServerSpec{
 		Description: "noop server",
-		Packages: []v1alpha1.MCPPackage{{
-			RegistryType: v1alpha1.RegistryTypeOCI,
-			Identifier:   "ghcr.io/example/weather:1.0.0",
-			Transport:    v1alpha1.MCPTransport{Type: "stdio"},
-		}},
+		Source: &v1alpha1.MCPServerSource{
+			Package: &v1alpha1.MCPPackage{
+				RegistryType: v1alpha1.RegistryTypeOCI,
+				Identifier:   "ghcr.io/example/weather:1.0.0",
+				Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+			},
+		},
 	})
 	require.NoError(t, err)
 	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, "default", "weather", "1.0.0", mcpSpec, v1alpha1store.UpsertOpts{})

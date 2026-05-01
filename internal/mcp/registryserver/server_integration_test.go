@@ -28,11 +28,13 @@ func TestMCPListServers_HappyPath(t *testing.T) {
 	)
 	spec, err := json.Marshal(v1alpha1.MCPServerSpec{
 		Description: "Echo test server",
-		Packages: []v1alpha1.MCPPackage{{
-			RegistryType: v1alpha1.RegistryTypeOCI,
-			Identifier:   "ghcr.io/example/echo:1.0.0",
-			Transport:    v1alpha1.MCPTransport{Type: "stdio"},
-		}},
+		Source: &v1alpha1.MCPServerSource{
+			Package: &v1alpha1.MCPPackage{
+				RegistryType: v1alpha1.RegistryTypeOCI,
+				Identifier:   "ghcr.io/example/echo:1.0.0",
+				Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+			},
+		},
 	})
 	require.NoError(t, err)
 	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, serverNamespace, serverName, serverVersion, spec, v1alpha1store.UpsertOpts{})

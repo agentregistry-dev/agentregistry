@@ -425,9 +425,12 @@ func TestDeclarativeInit_MCP(t *testing.T) {
 		t.Errorf("expected metadata.name %q, got %v", fullName, metadata["name"])
 	}
 	spec, _ := m["spec"].(map[string]any)
-	pkgs, ok := spec["packages"].([]any)
-	if !ok || len(pkgs) == 0 {
-		t.Error("expected spec.packages to be a non-empty list")
+	source, ok := spec["source"].(map[string]any)
+	if !ok {
+		t.Fatal("expected spec.source to be a map")
+	}
+	if _, ok := source["package"].(map[string]any); !ok {
+		t.Error("expected spec.source.package to be a map")
 	}
 }
 
@@ -1991,9 +1994,9 @@ spec:
 }
 
 // TestMCPServer_PackagesShape verifies apply → get → delete round-trip for
-// an MCPServer with spec.packages (OCI image reference, the default form
-// emitted by `arctl init mcp`). Apply must preserve the packages block and
-// -o yaml must render it cleanly on the way out.
+// an MCPServer with spec.source.package (OCI image reference, the default
+// form emitted by `arctl init mcp`). Apply must preserve the source block
+// and -o yaml must render it cleanly on the way out.
 func TestMCPServer_PackagesShape(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
@@ -2008,7 +2011,7 @@ func TestMCPServer_PackagesShape(t *testing.T) {
 	// (allowlist + ownership annotation skipped) so the apply succeeds
 	// without requiring a per-run OCI image push. The OCI ownership
 	// path itself is covered by pkg/api/v1alpha1/registries unit tests;
-	// what this e2e exercises is the spec.packages YAML round-trip
+	// what this e2e exercises is the spec.source.package YAML round-trip
 	// through apply → get -o yaml.
 	imageRef := "localhost:5001/example/mcp:" + version
 	yaml := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
@@ -2019,8 +2022,9 @@ metadata:
 spec:
   title: e2e-packages
   description: "packages-shape round-trip test"
-  packages:
-    - registryType: oci
+  source:
+    package:
+      registryType: oci
       identifier: %s
       transport:
         type: stdio
@@ -2031,14 +2035,14 @@ spec:
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "MCPServer/"+serverName)
 
-	// Verify the packages block round-trips through -o yaml.
+	// Verify the source.package block round-trips through -o yaml.
 	result = RunArctl(t, tmpDir, "get", "mcp", serverName, "-o", "yaml", "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "packages:")
+	RequireOutputContains(t, result, "package:")
 	RequireOutputContains(t, result, "registryType: oci")
 	RequireOutputContains(t, result, imageRef)
 	RequireOutputContains(t, result, "type: stdio")
-	// Exclusive shape — must not leak a remotes or repository block.
+	// Exclusive shape — must not leak a remotes block.
 	if strings.Contains(result.Stdout, "remotes:") {
 		t.Errorf("packages-shape MCP unexpectedly has remotes block:\n%s", result.Stdout)
 	}
@@ -2085,14 +2089,14 @@ spec:
 	RequireOutputContains(t, result, "remote:")
 	RequireOutputContains(t, result, "streamable-http")
 	RequireOutputContains(t, result, "https://mcp.example.com/mcp")
-	if strings.Contains(result.Stdout, "packages:") {
-		t.Errorf("remote-shape MCP unexpectedly has packages block:\n%s", result.Stdout)
+	if strings.Contains(result.Stdout, "source:") {
+		t.Errorf("remote-shape MCP unexpectedly has source block:\n%s", result.Stdout)
 	}
 }
 
 // TestMCPServer_RepositoryShape verifies apply → get round-trip for an
-// MCPServer with spec.repository (git-bundled — built + deployed from
-// source by the provider adapter at deploy time).
+// MCPServer with spec.source.repository (git-bundled — built + deployed
+// from source by the provider adapter at deploy time).
 func TestMCPServer_RepositoryShape(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
@@ -2111,8 +2115,9 @@ metadata:
 spec:
   title: e2e-repository
   description: "repository-shape round-trip test"
-  repository:
-    url: https://github.com/agentregistry-dev/testmcpserver
+  source:
+    repository:
+      url: https://github.com/agentregistry-dev/testmcpserver
 `, serverName, version)
 
 	path := writeDeclarativeYAML(t, tmpDir, "mcp-repo.yaml", yaml)
@@ -2124,8 +2129,8 @@ spec:
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "repository:")
 	RequireOutputContains(t, result, "github.com/agentregistry-dev/testmcpserver")
-	if strings.Contains(result.Stdout, "packages:") {
-		t.Errorf("repository-shape MCP unexpectedly has packages block:\n%s", result.Stdout)
+	if strings.Contains(result.Stdout, "package:") {
+		t.Errorf("repository-shape MCP unexpectedly has package block:\n%s", result.Stdout)
 	}
 	if strings.Contains(result.Stdout, "remotes:") {
 		t.Errorf("repository-shape MCP unexpectedly has remotes block:\n%s", result.Stdout)

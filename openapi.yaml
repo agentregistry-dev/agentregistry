@@ -1996,18 +1996,22 @@ components:
                 - spec
                 - apiVersion
                 - kind
+        MCPServerSource:
+            type: object
+            additionalProperties: false
+            properties:
+                package:
+                    $ref: '#/components/schemas/MCPPackage'
+                repository:
+                    $ref: '#/components/schemas/Repository'
         MCPServerSpec:
             type: object
             additionalProperties: false
             properties:
                 description:
                     type: string
-                packages:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/MCPPackage'
-                repository:
-                    $ref: '#/components/schemas/Repository'
+                source:
+                    $ref: '#/components/schemas/MCPServerSource'
                 title:
                     type: string
         MCPTransport:

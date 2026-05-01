@@ -51,11 +51,13 @@ func TestSpecToPlatformRemoteMCPServer_RemoteTransport(t *testing.T) {
 
 func TestSpecToPlatformMCPServer_OCIPackage(t *testing.T) {
 	spec := v1alpha1.MCPServerSpec{
-		Packages: []v1alpha1.MCPPackage{{
-			RegistryType: "oci",
-			Identifier:   "ghcr.io/example/mcp:v0.1.0",
-			Transport:    v1alpha1.MCPTransport{Type: "stdio"},
-		}},
+		Source: &v1alpha1.MCPServerSource{
+			Package: &v1alpha1.MCPPackage{
+				RegistryType: "oci",
+				Identifier:   "ghcr.io/example/mcp:v0.1.0",
+				Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+			},
+		},
 	}
 	meta := v1alpha1.ObjectMeta{Namespace: "default", Name: "example", Version: "0.1.0"}
 
@@ -73,11 +75,13 @@ func TestSpecToPlatformMCPServer_OCIPackage(t *testing.T) {
 
 func TestSpecToPlatformMCPServer_NamespaceOptOverridesMeta(t *testing.T) {
 	spec := v1alpha1.MCPServerSpec{
-		Packages: []v1alpha1.MCPPackage{{
-			RegistryType: "oci",
-			Identifier:   "ghcr.io/example/mcp:v1",
-			Transport:    v1alpha1.MCPTransport{Type: "stdio"},
-		}},
+		Source: &v1alpha1.MCPServerSource{
+			Package: &v1alpha1.MCPPackage{
+				RegistryType: "oci",
+				Identifier:   "ghcr.io/example/mcp:v1",
+				Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+			},
+		},
 	}
 	meta := v1alpha1.ObjectMeta{Namespace: "team-a", Name: "example", Version: "1.0.0"}
 
@@ -98,11 +102,13 @@ func TestSpecToPlatformAgent_ResolvesMCPServerRefs(t *testing.T) {
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "tools", Version: "1.0.0"},
 		Spec: v1alpha1.MCPServerSpec{
-			Packages: []v1alpha1.MCPPackage{{
-				RegistryType: "oci",
-				Identifier:   "ghcr.io/example/tools:v1",
-				Transport:    v1alpha1.MCPTransport{Type: "stdio"},
-			}},
+			Source: &v1alpha1.MCPServerSource{
+				Package: &v1alpha1.MCPPackage{
+					RegistryType: "oci",
+					Identifier:   "ghcr.io/example/tools:v1",
+					Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+				},
+			},
 		},
 	}
 	var getterCalls []v1alpha1.ResourceRef

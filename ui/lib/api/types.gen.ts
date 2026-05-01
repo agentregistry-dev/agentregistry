@@ -225,10 +225,14 @@ export type McpServer = {
     status?: Status;
 };
 
+export type McpServerSource = {
+    package?: McpPackage;
+    repository?: Repository;
+};
+
 export type McpServerSpec = {
     description?: string;
-    packages?: Array<McpPackage>;
-    repository?: Repository;
+    source?: McpServerSource;
     title?: string;
 };
 

@@ -22,8 +22,8 @@ func GitHubRepoFor(obj v1alpha1.Object) (owner, repo string, ok bool) {
 			url = v.Spec.Source.Repository.URL
 		}
 	case *v1alpha1.MCPServer:
-		if v.Spec.Repository != nil {
-			url = v.Spec.Repository.URL
+		if v.Spec.Source != nil && v.Spec.Source.Repository != nil {
+			url = v.Spec.Source.Repository.URL
 		}
 	case *v1alpha1.Skill:
 		if v.Spec.Source != nil && v.Spec.Source.Repository != nil {

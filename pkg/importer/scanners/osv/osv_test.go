@@ -107,7 +107,9 @@ func newScanner(t *testing.T, gh, osv *httptest.Server) *Scanner {
 func TestSupports_MCPServerWithGitHubRepo(t *testing.T) {
 	obj := &v1alpha1.MCPServer{
 		Spec: v1alpha1.MCPServerSpec{
-			Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			Source: &v1alpha1.MCPServerSource{
+				Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			},
 		},
 	}
 	require.True(t, New(Config{}).Supports(obj))
@@ -135,7 +137,9 @@ func TestSupports_PromptUnsupported(t *testing.T) {
 func TestSupports_NonGitHubRejected(t *testing.T) {
 	obj := &v1alpha1.MCPServer{
 		Spec: v1alpha1.MCPServerSpec{
-			Repository: &v1alpha1.Repository{URL: "https://gitlab.com/org/repo"},
+			Source: &v1alpha1.MCPServerSource{
+				Repository: &v1alpha1.Repository{URL: "https://gitlab.com/org/repo"},
+			},
 		},
 	}
 	require.False(t, New(Config{}).Supports(obj))
@@ -162,7 +166,9 @@ func TestScan_CleanWhenNoManifestsFound(t *testing.T) {
 
 	obj := &v1alpha1.MCPServer{
 		Spec: v1alpha1.MCPServerSpec{
-			Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			Source: &v1alpha1.MCPServerSource{
+				Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			},
 		},
 	}
 	res, err := newScanner(t, gh, osv).Scan(context.Background(), obj)
@@ -178,7 +184,9 @@ func TestScan_CleanWhenNoVulns(t *testing.T) {
 
 	obj := &v1alpha1.MCPServer{
 		Spec: v1alpha1.MCPServerSpec{
-			Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			Source: &v1alpha1.MCPServerSource{
+				Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			},
 		},
 	}
 	res, err := newScanner(t, gh, osv).Scan(context.Background(), obj)
@@ -202,7 +210,9 @@ func TestScan_VulnerableEmitsFindingsAndCounts(t *testing.T) {
 
 	obj := &v1alpha1.MCPServer{
 		Spec: v1alpha1.MCPServerSpec{
-			Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			Source: &v1alpha1.MCPServerSource{
+				Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			},
 		},
 	}
 	res, err := newScanner(t, gh, osv).Scan(context.Background(), obj)
@@ -235,7 +245,9 @@ func TestScan_MultiEcosystemManifests(t *testing.T) {
 
 	obj := &v1alpha1.MCPServer{
 		Spec: v1alpha1.MCPServerSpec{
-			Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			Source: &v1alpha1.MCPServerSource{
+				Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			},
 		},
 	}
 	res, err := newScanner(t, gh, osv).Scan(context.Background(), obj)
@@ -252,7 +264,9 @@ func TestScan_OSVErrorSurfaces(t *testing.T) {
 
 	obj := &v1alpha1.MCPServer{
 		Spec: v1alpha1.MCPServerSpec{
-			Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			Source: &v1alpha1.MCPServerSource{
+				Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			},
 		},
 	}
 	_, err := newScanner(t, gh, osv).Scan(context.Background(), obj)
@@ -271,7 +285,9 @@ func TestScan_GitHubFetchErrorIsNonFatal(t *testing.T) {
 
 	obj := &v1alpha1.MCPServer{
 		Spec: v1alpha1.MCPServerSpec{
-			Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			Source: &v1alpha1.MCPServerSource{
+				Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			},
 		},
 	}
 	res, err := newScanner(t, bad, osv).Scan(context.Background(), obj)

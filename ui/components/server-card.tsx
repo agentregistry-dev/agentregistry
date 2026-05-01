@@ -29,7 +29,8 @@ export function ServerCard({ server, onDelete, onDeploy, showDelete = false, sho
   const publisherMetadata = publisherProvided?.['aregistry.ai/metadata'] as Record<string, any> | undefined
   const githubStars = publisherMetadata?.stars
   const identityData = publisherMetadata?.identity
-  const hasOciPackage = serverData.packages?.some(pkg => pkg.registryType === "oci") ?? false
+  const sourcePackage = serverData.source?.package
+  const hasOciPackage = sourcePackage?.registryType === "oci"
 
   const formatDate = (dateString: string) => {
     try {
@@ -90,10 +91,10 @@ export function ServerCard({ server, onDelete, onDeploy, showDelete = false, sho
               <span>{formatDate(official.publishedAt)}</span>
             )}
 
-            {serverData.packages && serverData.packages.length > 0 && (
+            {sourcePackage && (
               <span className="flex items-center gap-1">
                 <Package className="h-3 w-3" />
-                {serverData.packages.length}
+                1
               </span>
             )}
 
@@ -137,12 +138,12 @@ export function ServerCard({ server, onDelete, onDeploy, showDelete = false, sho
               </Tooltip>
             )
           )}
-          {showExternalLinks && serverData.repository?.url && (
+          {showExternalLinks && serverData.source?.repository?.url && (
             <Button
               variant="ghost"
               size="icon"
               className="h-7 w-7"
-              onClick={(e) => { e.stopPropagation(); window.open(serverData.repository?.url || '', '_blank') }}
+              onClick={(e) => { e.stopPropagation(); window.open(serverData.source?.repository?.url || '', '_blank') }}
               aria-label="View repository"
             >
               <Github className="h-3.5 w-3.5" aria-hidden="true" />

@@ -431,8 +431,8 @@ func writeDeclarativeMCPYAML(projectDir, name, ver, image, description string) e
 		Spec: v1alpha1.MCPServerSpec{
 			Title:       shortName,
 			Description: desc,
-			Packages: []v1alpha1.MCPPackage{
-				{
+			Source: &v1alpha1.MCPServerSource{
+				Package: &v1alpha1.MCPPackage{
 					RegistryType: "oci",
 					Identifier:   image,
 					Transport:    v1alpha1.MCPTransport{Type: "stdio"},

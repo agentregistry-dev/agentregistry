@@ -6,8 +6,9 @@ metadata:
 spec:
   title: Fetch Server
   description: "Fetches and extracts content from URLs"
-  packages:
-    - registryType: oci
+  source:
+    package:
+      registryType: oci
       identifier: localhost:5001/acme/fetch:1.0.0
       runtimeHint: docker                       # optional: hint for local runtime
       transport:

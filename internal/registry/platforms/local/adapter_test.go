@@ -35,11 +35,13 @@ func TestV1Alpha1Apply_MCPServerTarget_WritesComposeAndMarksProgressing(t *testi
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather", Version: "1.0.0"},
 		Spec: v1alpha1.MCPServerSpec{
-			Packages: []v1alpha1.MCPPackage{{
-				RegistryType: "oci",
-				Identifier:   "ghcr.io/example/weather:v1",
-				Transport:    v1alpha1.MCPTransport{Type: "stdio"},
-			}},
+			Source: &v1alpha1.MCPServerSource{
+				Package: &v1alpha1.MCPPackage{
+					RegistryType: "oci",
+					Identifier:   "ghcr.io/example/weather:v1",
+					Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+				},
+			},
 		},
 	}
 	deployment := &v1alpha1.Deployment{
