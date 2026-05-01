@@ -19,8 +19,12 @@ const (
 
 // ProviderSpec describes a deployment target. Platform is the discriminator;
 // Config carries platform-specific configuration that downstream adapters
-// (internal/registry/platforms/...) interpret.
+// (internal/registry/platforms/...) interpret. TelemetryEndpoint, when set,
+// is exported to every Deployment served by this Provider as
+// OTEL_EXPORTER_OTLP_ENDPOINT on the workload — telemetry is a property of
+// where things run, not of an individual Deployment.
 type ProviderSpec struct {
-	Platform string         `json:"platform" yaml:"platform"`
-	Config   map[string]any `json:"config,omitempty" yaml:"config,omitempty"`
+	Platform          string         `json:"platform" yaml:"platform"`
+	Config            map[string]any `json:"config,omitempty" yaml:"config,omitempty"`
+	TelemetryEndpoint string         `json:"telemetryEndpoint,omitempty" yaml:"telemetryEndpoint,omitempty"`
 }

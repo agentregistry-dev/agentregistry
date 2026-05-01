@@ -67,7 +67,6 @@ export type DeploymentSpec = {
     };
     providerRef: ResourceRef;
     targetRef: ResourceRef;
-    telemetryEndpoint?: string;
 };
 
 export type ErrorDetail = {
@@ -286,6 +285,7 @@ export type ProviderSpec = {
         [key: string]: unknown;
     };
     platform: string;
+    telemetryEndpoint?: string;
 };
 
 export type Repository = {

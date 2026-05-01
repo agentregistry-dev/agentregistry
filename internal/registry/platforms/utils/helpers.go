@@ -76,7 +76,7 @@ type AgentTranslateOpts struct {
 	// Use SplitDeploymentRuntimeInputs upstream if the deployment encodes
 	// ARG_/HEADER_ prefixes.
 	DeploymentEnv map[string]string
-	// TelemetryEndpoint is Deployment.Spec.TelemetryEndpoint. When non-empty
+	// TelemetryEndpoint is Provider.Spec.TelemetryEndpoint. When non-empty
 	// it lands as OTEL_EXPORTER_OTLP_ENDPOINT on the agent process. Explicit
 	// entries in DeploymentEnv take precedence.
 	TelemetryEndpoint string

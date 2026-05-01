@@ -158,10 +158,9 @@ func deploymentToDocument(dep *cliCommon.DeploymentRecord) any {
 				Kind: v1alpha1.KindProvider,
 				Name: dep.ProviderID,
 			},
-			Env:               dep.Env,
-			ProviderConfig:    dep.ProviderConfig,
-			PreferRemote:      dep.PreferRemote,
-			TelemetryEndpoint: dep.TelemetryEndpoint,
+			Env:            dep.Env,
+			ProviderConfig: dep.ProviderConfig,
+			PreferRemote:   dep.PreferRemote,
 		},
 		Status: deploymentStatus{
 			ID:               dep.ID,

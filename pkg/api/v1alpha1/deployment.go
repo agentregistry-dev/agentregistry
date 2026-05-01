@@ -30,11 +30,10 @@ const (
 // ProviderRef is required and must name a top-level Provider. The Provider
 // resolves how/where the target is executed (local daemon, kubernetes, etc.).
 type DeploymentSpec struct {
-	TargetRef         ResourceRef       `json:"targetRef" yaml:"targetRef"`
-	ProviderRef       ResourceRef       `json:"providerRef" yaml:"providerRef"`
-	DesiredState      string            `json:"desiredState,omitempty" yaml:"desiredState,omitempty"`
-	Env               map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
-	ProviderConfig    map[string]any    `json:"providerConfig,omitempty" yaml:"providerConfig,omitempty"`
-	PreferRemote      bool              `json:"preferRemote,omitempty" yaml:"preferRemote,omitempty"`
-	TelemetryEndpoint string            `json:"telemetryEndpoint,omitempty" yaml:"telemetryEndpoint,omitempty"`
+	TargetRef      ResourceRef       `json:"targetRef" yaml:"targetRef"`
+	ProviderRef    ResourceRef       `json:"providerRef" yaml:"providerRef"`
+	DesiredState   string            `json:"desiredState,omitempty" yaml:"desiredState,omitempty"`
+	Env            map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
+	ProviderConfig map[string]any    `json:"providerConfig,omitempty" yaml:"providerConfig,omitempty"`
+	PreferRemote   bool              `json:"preferRemote,omitempty" yaml:"preferRemote,omitempty"`
 }

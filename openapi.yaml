@@ -1581,8 +1581,6 @@ components:
                     $ref: '#/components/schemas/ResourceRef'
                 targetRef:
                     $ref: '#/components/schemas/ResourceRef'
-                telemetryEndpoint:
-                    type: string
             required:
                 - targetRef
                 - providerRef
@@ -2024,6 +2022,8 @@ components:
                     type: object
                     additionalProperties: {}
                 platform:
+                    type: string
+                telemetryEndpoint:
                     type: string
             required:
                 - platform
