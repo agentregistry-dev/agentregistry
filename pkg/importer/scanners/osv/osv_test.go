@@ -116,7 +116,9 @@ func TestSupports_MCPServerWithGitHubRepo(t *testing.T) {
 func TestSupports_AgentWithSSHURL(t *testing.T) {
 	obj := &v1alpha1.Agent{
 		Spec: v1alpha1.AgentSpec{
-			Repository: &v1alpha1.Repository{URL: "git@github.com:org/repo.git"},
+			Source: &v1alpha1.AgentSource{
+				Repository: &v1alpha1.Repository{URL: "git@github.com:org/repo.git"},
+			},
 		},
 	}
 	require.True(t, New(Config{}).Supports(obj))

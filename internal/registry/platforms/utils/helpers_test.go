@@ -113,7 +113,7 @@ func TestSpecToPlatformAgent_ResolvesMCPServerRefs(t *testing.T) {
 
 	agentMeta := v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Version: "1.0.0"}
 	agentSpec := v1alpha1.AgentSpec{
-		Image:         "ghcr.io/example/alice:v1",
+		Source:        &v1alpha1.AgentSource{Image: "ghcr.io/example/alice:v1"},
 		ModelProvider: "openai",
 		ModelName:     "gpt-4o",
 		MCPServers: []v1alpha1.ResourceRef{

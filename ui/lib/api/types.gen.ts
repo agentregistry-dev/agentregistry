@@ -12,17 +12,21 @@ export type Agent = {
     status?: Status;
 };
 
+export type AgentSource = {
+    image?: string;
+    repository?: Repository;
+};
+
 export type AgentSpec = {
     description?: string;
     framework?: string;
-    image?: string;
     language?: string;
     mcpServers?: Array<ResourceRef>;
     modelName?: string;
     modelProvider?: string;
     prompts?: Array<ResourceRef>;
-    repository?: Repository;
     skills?: Array<ResourceRef>;
+    source?: AgentSource;
     telemetryEndpoint?: string;
     title?: string;
 };

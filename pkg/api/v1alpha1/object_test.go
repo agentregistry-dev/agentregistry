@@ -56,7 +56,7 @@ func TestRawObject_DecodesSpecAsRawJSON(t *testing.T) {
   "apiVersion": "ar.dev/v1alpha1",
   "kind": "Agent",
   "metadata": { "name": "x" },
-  "spec": { "title": "hi", "image": "img" }
+  "spec": { "title": "hi", "source": { "image": "img" } }
 }`)
 	var raw RawObject
 	if err := json.Unmarshal(doc, &raw); err != nil {
@@ -70,7 +70,7 @@ func TestRawObject_DecodesSpecAsRawJSON(t *testing.T) {
 	if err := json.Unmarshal(raw.Spec, &spec); err != nil {
 		t.Fatalf("spec unmarshal: %v", err)
 	}
-	if spec.Title != "hi" || spec.Image != "img" {
+	if spec.Title != "hi" || spec.Source.Image != "img" {
 		t.Fatalf("spec mismatch: %+v", spec)
 	}
 }

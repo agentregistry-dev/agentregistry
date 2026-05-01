@@ -32,6 +32,7 @@ export function AgentDetail({ agent, allVersions: allVersionsProp }: AgentDetail
 
   const { agent: agentData, _meta } = selectedVersion
   const official = _meta?.['io.modelcontextprotocol.registry/official']
+  const source = agentData.source
 
   const handleVersionChange = (version: string) => {
     const newVersion = allVersions.find(v => v.agent.version === version)
@@ -166,17 +167,17 @@ export function AgentDetail({ agent, allVersions: allVersionsProp }: AgentDetail
               </div>
             </section>
 
-            {agentData.repository?.url && (
+            {source?.repository?.url && (
               <section>
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Repository</h3>
                 <a
-                  href={agentData.repository.url}
+                  href={source.repository.url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 text-sm text-primary hover:underline"
                 >
                   <Github className="h-3.5 w-3.5" />
-                  {agentData.repository.url}
+                  {source.repository.url}
                   <ExternalLink className="h-3 w-3" />
                 </a>
               </section>
@@ -184,26 +185,26 @@ export function AgentDetail({ agent, allVersions: allVersionsProp }: AgentDetail
           </TabsContent>
 
           <TabsContent value="technical" className="space-y-6">
-            {agentData.repository?.url && (
+            {source?.repository?.url && (
               <section>
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Source Repository</h3>
                 <a
-                  href={agentData.repository.url}
+                  href={source.repository.url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 text-sm text-primary hover:underline font-mono"
                 >
-                  {agentData.repository.url}
+                  {source.repository.url}
                   <ExternalLink className="h-3 w-3" />
                 </a>
               </section>
             )}
 
-            {agentData.image && (
+            {source?.image && (
               <section>
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Container Image</h3>
                 <div className="bg-muted p-3 rounded-md">
-                  <code className="text-xs break-all">{agentData.image}</code>
+                  <code className="text-xs break-all">{source.image}</code>
                 </div>
               </section>
             )}

@@ -93,7 +93,7 @@ Examples:
 		},
 	}
 
-	cmd.Flags().StringVar(&buildImage, "image", "", "Docker image tag override (default: from spec.image / spec.packages[0].identifier)")
+	cmd.Flags().StringVar(&buildImage, "image", "", "Docker image tag override (default: from spec.source.image / spec.packages[0].identifier)")
 	cmd.Flags().BoolVar(&buildPush, "push", false, "Push the image after building")
 	cmd.Flags().StringVar(&buildPlatform, "platform", "", "Target platform (e.g. linux/amd64, linux/arm64)")
 
@@ -149,10 +149,10 @@ func resolveImage(flagImage, specImage, name string) string {
 	return defaultImage(name)
 }
 
-// agentSpecImage extracts spec.image for an Agent resource.
+// agentSpecImage extracts spec.source.image for an Agent resource.
 func agentSpecImage(obj v1alpha1.Object) string {
-	if a, ok := obj.(*v1alpha1.Agent); ok {
-		return a.Spec.Image
+	if a, ok := obj.(*v1alpha1.Agent); ok && a.Spec.Source != nil {
+		return a.Spec.Source.Image
 	}
 	return ""
 }

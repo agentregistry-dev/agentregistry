@@ -11,9 +11,11 @@ const mockAgent: AgentResponse = {
     version: "1.0.0",
     framework: "langchain",
     language: "python",
-    image: "registry.example.com/test-agent:latest",
     modelProvider: "openai",
     modelName: "gpt-4",
+    source: {
+      image: "registry.example.com/test-agent:latest",
+    },
   },
   _meta: {
     "io.modelcontextprotocol.registry/official": {
@@ -64,7 +66,6 @@ describe("AgentCard", () => {
         version: "0.1.0",
         framework: "custom",
         language: "go",
-        image: "",
         modelProvider: "",
         modelName: "",
       },

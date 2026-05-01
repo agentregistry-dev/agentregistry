@@ -205,17 +205,19 @@ func writeDeclarativeAgentYAML(projectDir, name, ver, image, language, framework
 			Version: ver,
 		},
 		Spec: v1alpha1.AgentSpec{
-			Image:         image,
 			Language:      language,
 			Framework:     framework,
 			ModelProvider: modelProvider,
 			ModelName:     modelName,
 			Description:   desc,
+			Source: &v1alpha1.AgentSource{
+				Image: image,
+			},
 		},
 	}
 
 	if gitURL != "" {
-		agent.Spec.Repository = &v1alpha1.Repository{
+		agent.Spec.Source.Repository = &v1alpha1.Repository{
 			URL: gitURL,
 		}
 	}
