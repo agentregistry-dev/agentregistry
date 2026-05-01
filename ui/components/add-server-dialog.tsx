@@ -27,7 +27,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
   const [version, setVersion] = useState("")
   const [repositoryUrl, setRepositoryUrl] = useState("")
 
-  // Dynamic fields
+  // Dynamic fields — schema collapsed to a single package per server.
   const [packages, setPackages] = useState<Array<{ identifier: string; version: string; registryType: string; transport: string }>>([])
 
   const resetForm = () => {
@@ -74,21 +74,25 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
         server.title = title.trim()
       }
 
+      const source: NonNullable<ServerJson['source']> = {}
       if (repositoryUrl.trim()) {
-        server.repository = {
+        source.repository = {
           url: repositoryUrl.trim(),
         }
       }
-
       if (packages.length > 0) {
-        server.packages = packages
-          .filter(p => p.identifier.trim() && p.version.trim())
-          .map(p => ({
-            identifier: p.identifier.trim(),
-            version: p.version.trim(),
-            registryType: p.registryType as 'npm' | 'pypi' | 'docker',
-            transport: { type: p.transport || 'stdio' },
-          }))
+        const first = packages.find(p => p.identifier.trim() && p.version.trim())
+        if (first) {
+          source.package = {
+            identifier: first.identifier.trim(),
+            version: first.version.trim(),
+            registryType: first.registryType as 'npm' | 'pypi' | 'docker',
+            transport: { type: first.transport || 'stdio' },
+          }
+        }
+      }
+      if (source.repository || source.package) {
+        server.source = source
       }
 
       // Create server
@@ -203,16 +207,16 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
             </div>
           </div>
 
-          {/* Packages */}
+          {/* Package — only one is published per MCPServer. */}
           <div className="space-y-4 p-4 border rounded-lg">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-sm">Packages</h3>
+              <h3 className="font-semibold text-sm">Package</h3>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={addPackage}
-                disabled={loading}
+                disabled={loading || packages.length > 0}
               >
                 <Plus className="h-4 w-4 mr-1" />
                 Add Package
@@ -277,7 +281,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
 
             {packages.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-2">
-                No packages added
+                No package added
               </p>
             )}
           </div>

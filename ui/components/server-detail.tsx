@@ -169,8 +169,8 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
             <TabsList className="mb-4">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="score">Score</TabsTrigger>
-              {serverData.packages && serverData.packages.length > 0 && (
-                <TabsTrigger value="packages">Packages</TabsTrigger>
+              {serverData.source?.package && (
+                <TabsTrigger value="packages">Package</TabsTrigger>
               )}
               <TabsTrigger value="raw">Raw</TabsTrigger>
             </TabsList>
@@ -181,19 +181,19 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
                 <p className="text-[15px] leading-relaxed">{serverData.description}</p>
               </section>
 
-              {serverData.repository?.url && (
+              {serverData.source?.repository?.url && (
                 <section>
                   <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Repository</h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">URL</span>
                       <a
-                        href={serverData.repository.url}
+                        href={serverData.source.repository.url}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-sm text-primary hover:underline flex items-center gap-1"
                       >
-                        {serverData.repository.url} <ExternalLink className="h-3 w-3" />
+                        {serverData.source.repository.url} <ExternalLink className="h-3 w-3" />
                       </a>
                     </div>
                   </div>
@@ -272,9 +272,9 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
                       </div>
                     )}
                   </div>
-                  {serverData.repository?.url && (
+                  {serverData.source?.repository?.url && (
                     <a
-                      href={serverData.repository.url}
+                      href={serverData.source.repository.url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-1.5 text-xs text-primary hover:underline mt-3"
@@ -392,10 +392,11 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
             </TabsContent>
 
             <TabsContent value="packages" className="space-y-4">
-              {serverData.packages && serverData.packages.length > 0 ? (
-                <div className="space-y-4">
-                  {serverData.packages.map((pkg, i) => (
-                    <div key={i} className="p-4 rounded-lg border">
+              {serverData.source?.package ? (
+                (() => {
+                  const pkg = serverData.source.package
+                  return (
+                    <div className="p-4 rounded-lg border">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <Package className="h-4 w-4 text-primary" />
@@ -424,10 +425,10 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
                       <RuntimeArgumentsTable arguments={(pkg as any).runtimeArguments} />
                       <EnvironmentVariablesTable variables={(pkg as any).environmentVariables} />
                     </div>
-                  ))}
-                </div>
+                  )
+                })()
               ) : (
-                <p className="text-center text-sm text-muted-foreground py-8">No packages defined</p>
+                <p className="text-center text-sm text-muted-foreground py-8">No package defined</p>
               )}
             </TabsContent>
 
