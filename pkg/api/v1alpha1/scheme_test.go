@@ -91,8 +91,9 @@ metadata:
   version: "0.2"
 spec:
   title: GitHub Tools
-  packages:
-    - registryType: oci
+  source:
+    package:
+      registryType: oci
       identifier: ghcr.io/example/mcp-github
       version: "0.2"
       transport:
@@ -106,11 +107,11 @@ spec:
 	if !ok {
 		t.Fatalf("want *MCPServer, got %T", obj)
 	}
-	if len(m.Spec.Packages) != 1 || m.Spec.Packages[0].Identifier != "ghcr.io/example/mcp-github" {
-		t.Fatalf("packages mismatch: %+v", m.Spec.Packages)
+	if m.Spec.Source == nil || m.Spec.Source.Package == nil || m.Spec.Source.Package.Identifier != "ghcr.io/example/mcp-github" {
+		t.Fatalf("source.package mismatch: %+v", m.Spec.Source)
 	}
-	if m.Spec.Packages[0].Transport.Type != "stdio" {
-		t.Fatalf("transport mismatch: %+v", m.Spec.Packages[0].Transport)
+	if m.Spec.Source.Package.Transport.Type != "stdio" {
+		t.Fatalf("transport mismatch: %+v", m.Spec.Source.Package.Transport)
 	}
 }
 

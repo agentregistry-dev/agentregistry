@@ -35,7 +35,9 @@ func TestSupports_GitHubRepos(t *testing.T) {
 	} {
 		obj := &v1alpha1.MCPServer{
 			Spec: v1alpha1.MCPServerSpec{
-				Repository: &v1alpha1.Repository{URL: url},
+				Source: &v1alpha1.MCPServerSource{
+					Repository: &v1alpha1.Repository{URL: url},
+				},
 			},
 		}
 		require.True(t, s.Supports(obj), url)
@@ -46,7 +48,9 @@ func TestSupports_NonGitHubRejected(t *testing.T) {
 	s := New(Config{})
 	obj := &v1alpha1.MCPServer{
 		Spec: v1alpha1.MCPServerSpec{
-			Repository: &v1alpha1.Repository{URL: "https://gitlab.com/org/repo"},
+			Source: &v1alpha1.MCPServerSource{
+				Repository: &v1alpha1.Repository{URL: "https://gitlab.com/org/repo"},
+			},
 		},
 	}
 	require.False(t, s.Supports(obj))
@@ -69,7 +73,9 @@ func TestScan_Aggregate_EmitsScoreBucketAndLabel(t *testing.T) {
 	})
 	obj := &v1alpha1.MCPServer{
 		Spec: v1alpha1.MCPServerSpec{
-			Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			Source: &v1alpha1.MCPServerSource{
+				Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			},
 		},
 	}
 	res, err := s.Scan(context.Background(), obj)
@@ -91,7 +97,9 @@ func TestScan_FailingChecksBecomeFindings(t *testing.T) {
 	})
 	obj := &v1alpha1.MCPServer{
 		Spec: v1alpha1.MCPServerSpec{
-			Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			Source: &v1alpha1.MCPServerSource{
+				Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			},
 		},
 	}
 	res, err := s.Scan(context.Background(), obj)
@@ -122,7 +130,9 @@ func TestScan_HighlightLimitCaps(t *testing.T) {
 	})
 	obj := &v1alpha1.MCPServer{
 		Spec: v1alpha1.MCPServerSpec{
-			Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			Source: &v1alpha1.MCPServerSource{
+				Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			},
 		},
 	}
 	res, err := s.Scan(context.Background(), obj)
@@ -139,7 +149,9 @@ func TestScan_InconclusiveChecksExcluded(t *testing.T) {
 	})
 	obj := &v1alpha1.MCPServer{
 		Spec: v1alpha1.MCPServerSpec{
-			Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			Source: &v1alpha1.MCPServerSource{
+				Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			},
 		},
 	}
 	res, err := s.Scan(context.Background(), obj)
@@ -154,7 +166,9 @@ func TestScan_EngineErrorSurfaces(t *testing.T) {
 	})
 	obj := &v1alpha1.MCPServer{
 		Spec: v1alpha1.MCPServerSpec{
-			Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			Source: &v1alpha1.MCPServerSource{
+				Repository: &v1alpha1.Repository{URL: "https://github.com/org/repo"},
+			},
 		},
 	}
 	_, err := s.Scan(context.Background(), obj)

@@ -296,11 +296,13 @@ func TestMCPServerValidate_OK(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "tools", Version: "v1"},
 		Spec: MCPServerSpec{
 			Title: "Tools",
-			Packages: []MCPPackage{{
-				RegistryType: "oci",
-				Identifier:   "ghcr.io/example/mcp-tools:1.0.0",
-				Transport:    MCPTransport{Type: "stdio"},
-			}},
+			Source: &MCPServerSource{
+				Package: &MCPPackage{
+					RegistryType: "oci",
+					Identifier:   "ghcr.io/example/mcp-tools:1.0.0",
+					Transport:    MCPTransport{Type: "stdio"},
+				},
+			},
 		},
 	}
 	require.NoError(t, m.Validate())

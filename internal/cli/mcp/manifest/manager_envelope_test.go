@@ -20,8 +20,9 @@ metadata:
 spec:
   title: Fetch Server
   description: "Fetches content"
-  packages:
-    - registryType: oci
+  source:
+    package:
+      registryType: oci
       identifier: ghcr.io/acme/fetch:1.0.0
       runtimeHint: docker
       transport:
