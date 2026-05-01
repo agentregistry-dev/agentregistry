@@ -13,15 +13,12 @@ import (
 // Config holds the application configuration
 // See .env.example for more documentation
 type Config struct {
-	ServerAddress      string `env:"SERVER_ADDRESS" envDefault:":8080"`
-	MCPPort            uint16 `env:"MCP_PORT" envDefault:"0"`
-	DatabaseURL        string `env:"DATABASE_URL" envDefault:"postgres://agentregistry:agentregistry@localhost:5432/agentregistry?sslmode=disable"`
-	SeedFrom           string `env:"SEED_FROM" envDefault:""`
-	EnrichServerData   bool   `env:"ENRICH_SERVER_DATA" envDefault:"false"`
-	DisableBuiltinSeed bool   `env:"DISABLE_BUILTIN_SEED" envDefault:"true"`
-	Version            string `env:"VERSION" envDefault:"dev"`
-	JWTPrivateKey      string `env:"JWT_PRIVATE_KEY" envDefault:""`
-	LogLevel           string `env:"LOG_LEVEL" envDefault:"info"`
+	ServerAddress string `env:"SERVER_ADDRESS" envDefault:":8080"`
+	MCPPort       uint16 `env:"MCP_PORT" envDefault:"0"`
+	DatabaseURL   string `env:"DATABASE_URL" envDefault:"postgres://agentregistry:agentregistry@localhost:5432/agentregistry?sslmode=disable"`
+	Version       string `env:"VERSION" envDefault:"dev"`
+	JWTPrivateKey string `env:"JWT_PRIVATE_KEY" envDefault:""`
+	LogLevel      string `env:"LOG_LEVEL" envDefault:"info"`
 
 	// Platform mode: "docker" or "kubernetes". Controls which deployment
 	// provider IDs are available in the UI. Defaults to "kubernetes" so

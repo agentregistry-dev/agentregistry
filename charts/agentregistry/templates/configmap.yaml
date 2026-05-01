@@ -14,7 +14,3 @@ data:
   AGENT_REGISTRY_AGENT_GATEWAY_PORT: {{ .Values.config.agentGatewayPort | quote }}
   AGENT_REGISTRY_MCP_PORT: {{ .Values.config.agentRegistryMcpPort | quote }}
   AGENT_REGISTRY_ENABLE_REGISTRY_VALIDATION: {{ .Values.config.enableRegistryValidation | quote }}
-  AGENT_REGISTRY_DISABLE_BUILTIN_SEED: {{ .Values.config.disableBuiltinSeed | quote }}
-  {{- if .Values.config.seedFrom }}
-  AGENT_REGISTRY_SEED_FROM: {{ .Values.config.seedFrom | quote }}
-  {{- end }}

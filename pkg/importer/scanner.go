@@ -1,7 +1,6 @@
-// Package importer is the v1alpha1-aware successor to
-// internal/registry/importer. It reads user-authored manifest files,
+// Package importer reads user-authored v1alpha1 manifest files,
 // validates them, optionally runs security/health scanners, and writes
-// v1alpha1 rows through the generic database.Store.
+// rows through the generic database.Store.
 //
 // See design-docs/V1ALPHA1_IMPORTER_ENRICHMENT.md for the full design
 // including the Scanner plug-in contract, annotations/labels split,

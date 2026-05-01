@@ -6,9 +6,8 @@ import (
 )
 
 // Registry type identifiers for RegistryPackage.RegistryType. Values
-// match the modelcontextprotocol/registry vocabulary — on-the-wire
-// string literals, not an enum — so existing seed data and
-// manifests round-trip unchanged.
+// match the modelcontextprotocol/registry vocabulary. On-the-wire
+// string literals, not an enum, so manifests round-trip unchanged.
 const (
 	RegistryTypeNPM   = "npm"
 	RegistryTypePyPI  = "pypi"
