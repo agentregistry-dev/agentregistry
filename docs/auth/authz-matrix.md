@@ -60,16 +60,6 @@ Agent deployments additionally invoke `Read` on each referenced `skill:{ref}` an
 | Apply | `POST /v0/apply` | Per-document; depends on kind and whether the version already exists | Each document dispatches to its kind handler individually; partial failure is allowed. Artifacts (`agent`/`server`/`skill`/`prompt`): `Read` + `Publish` if the version is new, `Read` + `Edit` if it already exists. `provider`: `Read` + `Edit` if it exists, `Read` + `Publish` if new (there is no direct provider update endpoint; apply is the only update path). `deployment`: same as `PUT /v0/deployments/{name}/{version}?namespace={namespace}`. |
 | Delete | `DELETE /v0/apply` | Per-document; depends on kind | Artifacts: `Delete` on `{kind}:{name}`. `provider`: `Read` + `Delete` on `provider:{name}`. `deployment`: `Deploy` on target (see Deployments section). |
 
-## Admin
-
-No `(verb, resource)` tuple — the operation is global.
-
-| Operation | HTTP | Required permissions | Notes |
-| --- | --- | --- | --- |
-| Start embedding index | `POST /v0/embeddings/index` | `IsRegistryAdmin` | Job runs under a system session once the caller is admitted. |
-| Stream embedding index | `POST /v0/embeddings/index/stream` | `IsRegistryAdmin` | Registered on the raw mux; authn + admin gate run inline before the job starts. |
-| Get index job status | `GET /v0/embeddings/index/{jobId}` | `IsRegistryAdmin` | Gated to avoid leaking job existence. |
-
 ## Public
 
 | Operation | HTTP |

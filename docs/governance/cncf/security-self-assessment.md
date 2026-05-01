@@ -63,7 +63,7 @@ The rapid growth of AI agents, MCP servers, and skills has created a fragmented 
 
 ### Actors
 
-**Registry Server**: The core Go service exposing the REST API for artifact management. Stores metadata in PostgreSQL with pgvector for semantic search. Handles authentication, authorization, artifact lifecycle, and deployment orchestration.
+**Registry Server**: The core Go service exposing the REST API for artifact management. Stores metadata in PostgreSQL. Handles authentication, authorization, artifact lifecycle, and deployment orchestration.
 
 **CLI (arctl)**: A Go-based command-line interface that communicates with the registry server over HTTP. Supports artifact discovery, publishing, deployment, and configuration of AI-powered IDEs. Manages local daemon lifecycle explicitly via `arctl daemon start`, `arctl daemon stop`, and `arctl daemon status`.
 
@@ -71,7 +71,7 @@ The rapid growth of AI agents, MCP servers, and skills has created a fragmented 
 
 **Agentgateway**: An optional integration with [agentgateway](https://github.com/agentgateway/agentgateway) (Linux Foundation) that acts as a reverse proxy providing a unified MCP endpoint for all deployed servers and enforcing policy and observability.
 
-**PostgreSQL + pgvector**: The persistent storage backend for artifact metadata and vector embeddings that enable semantic discovery and search.
+**PostgreSQL**: The persistent storage backend for artifact metadata.
 
 ### Actions
 
@@ -183,7 +183,7 @@ agentregistry operates within the cloud-native ecosystem as a Kubernetes-native 
 - **Helm**: Deployment and lifecycle management through OCI Helm charts published to `ghcr.io`.
 - **agentgateway (Linux Foundation)**: Acts as the data plane, providing a single MCP endpoint for all deployed servers and enforcing policy and observability.
 - **MCP Ecosystem**: Core alignment with the Model Context Protocol (MCP) specification for AI tool interoperability, supporting MCP servers, agents, and skills as first-class artifacts.
-- **PostgreSQL + pgvector**: Metadata persistence and embedding-based semantic discovery.
+- **PostgreSQL**: Metadata persistence.
 - **Docker / OCI**: Container image format for artifact packaging and distribution.
 - **OSSF Scorecard**: Integrated for dependency health evaluation of ingested artifacts.
 - **CI/CD Tooling**: The `arctl` CLI can be embedded in CI/CD pipelines for artifact publishing workflows.

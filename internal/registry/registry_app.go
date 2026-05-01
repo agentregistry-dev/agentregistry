@@ -22,7 +22,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/embeddings"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/kubernetes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/local"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/seed"
@@ -131,7 +130,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		}
 	}()
 
-	routeOpts := buildRouteOptions(cfg, options, authz, stores, importer, deploymentAdapters)
+	routeOpts := buildRouteOptions(options, stores, importer, deploymentAdapters)
 
 	// Initialize HTTP server
 	baseServer, err := api.NewServer(cfg, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts)
@@ -263,16 +262,13 @@ func startSeedFromImport(cfg *config.Config, importer *pkgimporter.Importer) {
 }
 
 func buildRouteOptions(
-	cfg *config.Config,
 	options types.AppOptions,
-	authz auth.Authorizer,
 	stores map[string]*v1alpha1store.Store,
 	importer *pkgimporter.Importer,
 	adapters map[string]types.DeploymentAdapter,
 ) *router.RouteOptions {
 	routeOpts := &router.RouteOptions{
 		ExtraRoutes:       options.ExtraRoutes,
-		Authz:             authz,
 		Stores:            stores,
 		Importer:          importer,
 		PerKindHooks:      crudPerKindHooks(options),
@@ -285,15 +281,6 @@ func buildRouteOptions(
 			Adapters: adapters,
 			Getter:   internaldb.NewGetter(stores),
 		})
-	}
-
-	// Embeddings pipeline — Provider + Indexer + jobs.Manager + the
-	// `?semantic=<q>` query-embedding func threaded through to the
-	// generic resource handler. Wired only when both v1alpha1 Stores
-	// exist (pgvector schema is a prerequisite) and
-	// AGENT_REGISTRY_EMBEDDINGS_ENABLED=true in config.
-	if stores != nil && cfg.Embeddings.Enabled {
-		wireEmbeddings(cfg, stores, routeOpts)
 	}
 
 	return routeOpts
@@ -552,56 +539,4 @@ func runSeedFromImport(cfg *config.Config, importer *pkgimporter.Importer) {
 	slog.Info("v1alpha1 import complete",
 		"seed_from", cfg.SeedFrom,
 		"total", len(results), "failed", failed)
-}
-
-// makeSemanticSearchFunc wraps an embeddings.Provider into the
-// resource.SemanticSearchFunc shape the list handler expects. Shared
-// by the GET `/v0/{plural}?semantic=<q>` path across all kinds —
-// callers don't care how the vector was produced, just that the
-// provider speaks the same model the indexer used.
-func makeSemanticSearchFunc(provider embeddings.Provider, dimensions int) resource.SemanticSearchFunc {
-	return func(ctx context.Context, query string) ([]float32, error) {
-		emb, err := embeddings.GenerateSemanticEmbedding(ctx, provider, query, dimensions)
-		if err != nil {
-			return nil, err
-		}
-		return emb.Vector, nil
-	}
-}
-
-// wireEmbeddings constructs the Provider + Indexer + jobs.Manager +
-// semantic-search func and plants them on routeOpts. Split from App
-// for readability — each of the three construction steps has an
-// error-log + bail-out path, making the inline code deeply nested.
-// Any construction failure leaves the corresponding routeOpts fields
-// nil so the endpoints + list-handler `?semantic=` return 4xx/503.
-func wireEmbeddings(cfg *config.Config, stores map[string]*v1alpha1store.Store, routeOpts *router.RouteOptions) {
-	provider, err := embeddings.Factory(&cfg.Embeddings, nil)
-	if err != nil {
-		slog.Warn("embeddings enabled but provider factory failed; semantic search + indexing disabled",
-			"error", err)
-		return
-	}
-
-	bindings, err := embeddings.DefaultBindings(stores)
-	if err != nil {
-		slog.Warn("embeddings enabled but DefaultBindings failed", "error", err)
-		return
-	}
-
-	idx, err := embeddings.NewIndexer(embeddings.IndexerConfig{
-		Bindings:   bindings,
-		Provider:   provider,
-		Dimensions: cfg.Embeddings.Dimensions,
-	})
-	if err != nil {
-		slog.Warn("embeddings enabled but Indexer construction failed", "error", err)
-		return
-	}
-
-	routeOpts.Indexer = idx
-	routeOpts.SemanticSearch = makeSemanticSearchFunc(provider, cfg.Embeddings.Dimensions)
-	slog.Info("embeddings indexer + semantic search enabled",
-		"provider", cfg.Embeddings.Provider,
-		"model", cfg.Embeddings.Model)
 }

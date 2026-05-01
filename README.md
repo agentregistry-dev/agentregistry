@@ -123,7 +123,6 @@ Curate a shared catalog of MCP servers, agents, skills, and prompts your teams c
 - Publish artifacts to a central registry from npm, PyPI, Docker, OCI, or remote endpoints
 - Discover approved artifacts through the CLI, REST API, or web UI at `localhost:12121`
 - Give teams a consistent source of truth across environments
-- Search by description ("query Postgres", "send Slack messages") instead of exact names — powered by pgvector
 
 ### Curation and Governance
 
@@ -188,8 +187,6 @@ When you run `arctl apply -f deployment.yaml`, agentregistry automatically confi
 | [kgateway](https://github.com/kgateway-dev/kgateway) | Cloud-native API gateway (Envoy + Gateway API) |
 | [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) | Go SDK for building MCP servers |
 | [Model Context Protocol](https://modelcontextprotocol.io/) | The open standard for AI-to-tool communication |
-
-> **Semantic search** requires a PostgreSQL instance with the pgvector extension. It is disabled by default. To enable it, ensure your database has pgvector support and set `AGENT_REGISTRY_DATABASE_VECTOR_ENABLED=true` (docker-compose / `.env`) or `--set database.postgres.vectorEnabled=true` (Helm).
 
 ---
 
