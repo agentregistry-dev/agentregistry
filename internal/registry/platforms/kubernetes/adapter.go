@@ -65,7 +65,6 @@ func (a *kubernetesDeploymentAdapter) Apply(ctx context.Context, in types.ApplyI
 	}
 
 	now := time.Now().UTC()
-	gen := in.Deployment.Metadata.Generation
 	return &types.ApplyResult{
 		Conditions: []v1alpha1.Condition{{
 			Type:               "Progressing",
@@ -73,14 +72,12 @@ func (a *kubernetesDeploymentAdapter) Apply(ctx context.Context, in types.ApplyI
 			Reason:             "Applied",
 			Message:            "kagent resources reconciled; waiting for rollout",
 			LastTransitionTime: now,
-			ObservedGeneration: gen,
 		}, {
 			Type:               "ProviderConfigured",
 			Status:             v1alpha1.ConditionTrue,
 			Reason:             "KubernetesProvider",
 			Message:            "kubernetes provider reachable",
 			LastTransitionTime: now,
-			ObservedGeneration: gen,
 		}},
 	}, nil
 }
@@ -104,7 +101,6 @@ func (a *kubernetesDeploymentAdapter) Remove(ctx context.Context, in types.Remov
 	}
 
 	now := time.Now().UTC()
-	gen := in.Deployment.Metadata.Generation
 	return &types.RemoveResult{
 		Conditions: []v1alpha1.Condition{{
 			Type:               "Ready",
@@ -112,7 +108,6 @@ func (a *kubernetesDeploymentAdapter) Remove(ctx context.Context, in types.Remov
 			Reason:             "Removed",
 			Message:            "kagent resources deleted",
 			LastTransitionTime: now,
-			ObservedGeneration: gen,
 		}},
 	}, nil
 }

@@ -125,7 +125,6 @@ func TestStore_PatchStatusDisjointFromSpec(t *testing.T) {
 	// Store.PatchStatus now takes an opaque-bytes mutator; the typed
 	// Status callback wraps through v1alpha1.StatusPatcher.
 	err = store.PatchStatus(ctx, testNS, "foo", "v1", v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
-		s.ObservedGeneration = 1
 		s.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionTrue, Reason: "Converged"})
 	}))
 	require.NoError(t, err)
@@ -137,7 +136,6 @@ func TestStore_PatchStatusDisjointFromSpec(t *testing.T) {
 	// typed Status via the storage codec to inspect the fields.
 	var status v1alpha1.Status
 	require.NoError(t, v1alpha1.UnmarshalStatusFromStorage(obj.Status, &status))
-	require.EqualValues(t, 1, status.ObservedGeneration)
 	require.Len(t, status.Conditions, 1)
 	require.Equal(t, "Ready", status.Conditions[0].Type)
 	require.Equal(t, v1alpha1.ConditionTrue, status.Conditions[0].Status)

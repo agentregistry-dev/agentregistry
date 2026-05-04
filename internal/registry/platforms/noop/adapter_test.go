@@ -26,7 +26,7 @@ func TestAdapter_ApplyReportsReady(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, res)
 
-	// Expect Ready=True with ObservedGeneration matching the input.
+	// Expect Ready=True.
 	var ready *v1alpha1.Condition
 	for i := range res.Conditions {
 		if res.Conditions[i].Type == "Ready" {
@@ -36,7 +36,6 @@ func TestAdapter_ApplyReportsReady(t *testing.T) {
 	}
 	require.NotNil(t, ready)
 	require.Equal(t, v1alpha1.ConditionTrue, ready.Status)
-	require.EqualValues(t, 3, ready.ObservedGeneration)
 
 	// ProviderMetadata has the applied-at stamp.
 	require.Contains(t, res.ProviderMetadata, "platforms.agentregistry.solo.io/noop/applied-at")

@@ -76,7 +76,7 @@ func TestK8sV1Alpha1Apply_MCPServerTarget_CreatesResource(t *testing.T) {
 			progressing = &res.Conditions[i]
 		}
 	}
-	if progressing == nil || progressing.Status != v1alpha1.ConditionTrue || progressing.ObservedGeneration != 4 {
+	if progressing == nil || progressing.Status != v1alpha1.ConditionTrue {
 		t.Fatalf("Progressing condition unexpected: %+v", progressing)
 	}
 

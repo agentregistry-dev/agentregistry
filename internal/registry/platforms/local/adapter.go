@@ -72,7 +72,6 @@ func (a *localDeploymentAdapter) Apply(ctx context.Context, in types.ApplyInput)
 	}
 
 	now := time.Now().UTC()
-	gen := in.Deployment.Metadata.Generation
 	return &types.ApplyResult{
 		Conditions: []v1alpha1.Condition{{
 			Type:               "Progressing",
@@ -80,14 +79,12 @@ func (a *localDeploymentAdapter) Apply(ctx context.Context, in types.ApplyInput)
 			Reason:             "Applied",
 			Message:            "docker-compose stack reconciled; waiting for workload convergence",
 			LastTransitionTime: now,
-			ObservedGeneration: gen,
 		}, {
 			Type:               "ProviderConfigured",
 			Status:             v1alpha1.ConditionTrue,
 			Reason:             "LocalProvider",
 			Message:            "local provider ready",
 			LastTransitionTime: now,
-			ObservedGeneration: gen,
 		}},
 	}, nil
 }
@@ -107,7 +104,6 @@ func (a *localDeploymentAdapter) Remove(ctx context.Context, in types.RemoveInpu
 	}
 
 	now := time.Now().UTC()
-	gen := in.Deployment.Metadata.Generation
 	return &types.RemoveResult{
 		Conditions: []v1alpha1.Condition{{
 			Type:               "Ready",
@@ -115,7 +111,6 @@ func (a *localDeploymentAdapter) Remove(ctx context.Context, in types.RemoveInpu
 			Reason:             "Removed",
 			Message:            "docker-compose stack torn down",
 			LastTransitionTime: now,
-			ObservedGeneration: gen,
 		}},
 	}, nil
 }

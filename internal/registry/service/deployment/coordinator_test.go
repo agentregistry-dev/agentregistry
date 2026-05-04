@@ -81,13 +81,12 @@ func TestCoordinator_ApplyWritesConditionsAndAnnotations(t *testing.T) {
 	raw, err := stores[v1alpha1.KindDeployment].Get(ctx, "default", "weather-noop", "1")
 	require.NoError(t, err)
 	// RawObject.Status is opaque JSONB bytes; decode via the Status
-	// storage codec to reach the typed Conditions / ObservedGeneration
-	// fields the coordinator writes.
+	// storage codec to reach the typed Conditions field the coordinator
+	// writes.
 	var status v1alpha1.Status
 	require.NoError(t, v1alpha1.UnmarshalStatusFromStorage(raw.Status, &status))
 	require.NotNil(t, status.GetCondition("Ready"), "noop adapter should have written Ready condition")
 	require.Contains(t, raw.Metadata.Annotations, "platforms.agentregistry.solo.io/noop/applied-at")
-	require.Equal(t, deployment.Metadata.Generation, status.ObservedGeneration)
 }
 
 func TestCoordinator_ApplyPreservesExistingAnnotations(t *testing.T) {

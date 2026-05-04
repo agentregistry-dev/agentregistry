@@ -83,9 +83,6 @@ func TestV1Alpha1Apply_MCPServerTarget_WritesComposeAndMarksProgressing(t *testi
 	if gotProgressing.Status != v1alpha1.ConditionTrue {
 		t.Fatalf("Progressing.Status = %q, want True", gotProgressing.Status)
 	}
-	if gotProgressing.ObservedGeneration != 7 {
-		t.Fatalf("Progressing.ObservedGeneration = %d, want 7", gotProgressing.ObservedGeneration)
-	}
 
 	composePath := filepath.Join(tmpDir, "docker-compose.yaml")
 	if _, err := os.Stat(composePath); err != nil {

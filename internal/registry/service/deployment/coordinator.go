@@ -261,7 +261,6 @@ func (c *Coordinator) persistApplyResult(ctx context.Context, deployment *v1alph
 	patch := v1alpha1store.PatchOpts{}
 	if len(result.Conditions) > 0 {
 		patch.Status = v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
-			s.ObservedGeneration = deployment.Metadata.Generation
 			for _, cond := range result.Conditions {
 				s.SetCondition(cond)
 			}
@@ -303,7 +302,6 @@ func (c *Coordinator) persistRemoveResult(ctx context.Context, deployment *v1alp
 	patch := v1alpha1store.PatchOpts{}
 	if len(result.Conditions) > 0 {
 		patch.Status = v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
-			s.ObservedGeneration = deployment.Metadata.Generation
 			for _, cond := range result.Conditions {
 				s.SetCondition(cond)
 			}

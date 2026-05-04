@@ -24,12 +24,10 @@ const DefaultNamespace = "default"
 // CreatedAt, UpdatedAt, and DeletionTimestamp are server-managed: the API
 // ignores them on apply and overwrites them on response.
 //
-// Generation is an internal coordination primitive — it drives
-// reconciler convergence (paired with Status.ObservedGeneration). It's
-// populated from the database row and used by internal Go code
-// (coordinators, status reconcilers) but is NOT emitted on the wire:
-// the JSON tag is `-`, so OpenAPI schemas don't reveal it and clients
-// can't set it on apply.
+// Generation is an internal coordination primitive populated from the
+// database row and used by internal Go code (coordinators, status
+// reconcilers) but is NOT emitted on the wire: the JSON tag is `-`, so
+// OpenAPI schemas don't reveal it and clients can't set it on apply.
 //
 // (Namespace, Name, Version) together form the identity of a resource;
 // that triple is the composite primary key at the database level.
