@@ -40,6 +40,12 @@ func registerAgent(api huma.API, store *v1alpha1store.Store) {
 	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
 }
 
+func registerAgentWithConfig(api huma.API, cfg resource.Config) {
+	cfg.Kind = v1alpha1.KindAgent
+	cfg.BasePrefix = "/v0"
+	resource.Register[*v1alpha1.Agent](api, cfg, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+}
+
 // newTestPool is defined in database/store_v1alpha1_testutil.go. Each test
 // gets its own isolated DB.
 func TestResourceRegister_AgentCRUD(t *testing.T) {
@@ -156,6 +162,41 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Empty(t, list.Items)
+}
+
+func TestResourceRegister_CreateStagerShortCircuitsProductionUpsert(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	var staged resource.CreateStagerInput
+
+	_, api := humatest.New(t)
+	registerAgentWithConfig(api, resource.Config{
+		Store: store,
+		CreateStager: func(_ context.Context, in resource.CreateStagerInput) (resource.CreateStagerResult, error) {
+			staged = in
+			return resource.CreateStagerResult{Staged: true}, nil
+		},
+	})
+
+	body := v1alpha1.Agent{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
+		Metadata: v1alpha1.ObjectMeta{
+			Namespace: "default",
+			Name:      "pending",
+			Version:   "v1",
+		},
+		Spec: v1alpha1.AgentSpec{Title: "Pending"},
+	}
+	resp := api.Put("/v0/agents/pending/v1", body)
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
+	var got v1alpha1.Agent
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
+	require.Equal(t, "pending", got.Metadata.Name)
+	require.Equal(t, "pending", staged.Name)
+
+	_, err := store.Get(t.Context(), "default", "pending", "v1")
+	require.Error(t, err, "staged PUT must not write the production table")
 }
 
 func TestResourceRegister_AgentNamespaceIsolation(t *testing.T) {

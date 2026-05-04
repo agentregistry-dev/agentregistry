@@ -201,3 +201,45 @@ spec:
 	_, err := mcps.Get(t.Context(), "default", "should-be-denied", "v1")
 	require.Error(t, err, "fail-closed must short-circuit before Upsert")
 }
+
+func TestRegisterApply_CreateStagerShortCircuitsProductionUpsert(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	var staged resource.CreateStagerInput
+
+	_, api := humatest.New(t)
+	resource.RegisterApply(api, resource.ApplyConfig{
+		BasePrefix: "/v0",
+		Stores: map[string]*v1alpha1store.Store{
+			v1alpha1.KindAgent: agents,
+		},
+		CreateStager: func(_ context.Context, in resource.CreateStagerInput) (resource.CreateStagerResult, error) {
+			staged = in
+			return resource.CreateStagerResult{Staged: true}, nil
+		},
+	})
+
+	yaml := []byte(`apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  namespace: default
+  name: pending
+  version: v1
+spec:
+  title: Pending
+`)
+	resp := api.Post("/v0/apply", "Content-Type: application/yaml", strings.NewReader(string(yaml)))
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
+	var out struct {
+		Results []arv0.ApplyResult `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	require.Len(t, out.Results, 1)
+	require.Equal(t, arv0.ApplyStatusStaged, out.Results[0].Status)
+	require.Equal(t, "pending", staged.Name)
+	require.Equal(t, v1alpha1.KindAgent, staged.Kind)
+
+	_, err := agents.Get(t.Context(), "default", "pending", "v1")
+	require.Error(t, err, "staged apply must not write the production table")
+}
