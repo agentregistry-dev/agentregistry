@@ -145,9 +145,7 @@ func applyCore(
 	}
 
 	// Stamp the freshly-assigned generation onto the body so PostUpsert
-	// hooks (e.g. Deployment → Coordinator.Apply, which writes
-	// status.conditions) see the correct value instead of the zero from
-	// the request body.
+	// hooks see the correct value instead of the zero from the request body.
 	if opts.PostUpsert != nil {
 		meta.Generation = up.Generation
 		obj.SetMetadata(*meta)
