@@ -137,7 +137,7 @@ func defaultImage(name string) string {
 
 // resolveImage returns the image to use, in priority order:
 //  1. --image flag
-//  2. specImage (from spec.image or spec.packages[0].identifier)
+//  2. specImage (from spec.source.image or spec.source.package.identifier)
 //  3. default registry/name:latest
 func resolveImage(flagImage, specImage, name string) string {
 	if flagImage != "" {
@@ -157,10 +157,10 @@ func agentSpecImage(obj v1alpha1.Object) string {
 	return ""
 }
 
-// mcpSpecPackageIdentifier extracts spec.packages[0].identifier for an MCPServer resource.
+// mcpSpecPackageIdentifier extracts spec.source.package.identifier for an MCPServer resource.
 func mcpSpecPackageIdentifier(obj v1alpha1.Object) string {
-	if s, ok := obj.(*v1alpha1.MCPServer); ok && len(s.Spec.Packages) > 0 {
-		return s.Spec.Packages[0].Identifier
+	if s, ok := obj.(*v1alpha1.MCPServer); ok && s.Spec.Source != nil && s.Spec.Source.Package != nil {
+		return s.Spec.Source.Package.Identifier
 	}
 	return ""
 }

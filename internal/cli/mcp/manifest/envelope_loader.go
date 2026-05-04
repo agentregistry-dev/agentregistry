@@ -23,11 +23,10 @@ func loadFromEnvelope(data []byte) (*ProjectManifest, error) {
 		Version:     server.Metadata.Version,
 		Description: server.Spec.Description,
 	}
-	// Extract the runtime hint from the first OCI package, if present.
-	for _, p := range server.Spec.Packages {
-		if p.RegistryType == "oci" {
+	// Extract the runtime hint from the bundled OCI package, if present.
+	if server.Spec.Source != nil && server.Spec.Source.Package != nil {
+		if p := server.Spec.Source.Package; p.RegistryType == "oci" {
 			out.RuntimeHint = p.RuntimeHint
-			break
 		}
 	}
 	return out, nil

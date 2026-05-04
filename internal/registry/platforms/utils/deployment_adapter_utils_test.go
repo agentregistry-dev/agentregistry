@@ -52,29 +52,31 @@ func TestTranslateMCPServerLocalIncludesOverridesAndExtraArgs(t *testing.T) {
 	server, err := TranslateMCPServer(context.Background(), &MCPServerRunRequest{
 		Name: "test/server",
 		Spec: v1alpha1.MCPServerSpec{
-			Packages: []v1alpha1.MCPPackage{{
-				RegistryType: v1alpha1.RegistryTypeNPM,
-				Identifier:   "@test/server",
-				Version:      "1.2.3",
-				RuntimeArguments: []v1alpha1.MCPArgument{{
-					Name:    "--token",
-					Type:    v1alpha1.MCPArgumentTypeNamed,
-					Default: "default-token",
-				}},
-				PackageArguments: []v1alpha1.MCPArgument{{
-					Name:  "--mode",
-					Type:  v1alpha1.MCPArgumentTypeNamed,
-					Value: "safe",
-				}},
-				EnvironmentVariables: []v1alpha1.MCPKeyValueInput{
-					{Name: "API_KEY", IsRequired: true},
-					{Name: "OPTIONAL", Default: "fallback"},
+			Source: &v1alpha1.MCPServerSource{
+				Package: &v1alpha1.MCPPackage{
+					RegistryType: v1alpha1.RegistryTypeNPM,
+					Identifier:   "@test/server",
+					Version:      "1.2.3",
+					RuntimeArguments: []v1alpha1.MCPArgument{{
+						Name:    "--token",
+						Type:    v1alpha1.MCPArgumentTypeNamed,
+						Default: "default-token",
+					}},
+					PackageArguments: []v1alpha1.MCPArgument{{
+						Name:  "--mode",
+						Type:  v1alpha1.MCPArgumentTypeNamed,
+						Value: "safe",
+					}},
+					EnvironmentVariables: []v1alpha1.MCPKeyValueInput{
+						{Name: "API_KEY", IsRequired: true},
+						{Name: "OPTIONAL", Default: "fallback"},
+					},
+					Transport: v1alpha1.MCPTransport{
+						Type: "http",
+						URL:  "http://localhost:7777/mcp",
+					},
 				},
-				Transport: v1alpha1.MCPTransport{
-					Type: "http",
-					URL:  "http://localhost:7777/mcp",
-				},
-			}},
+			},
 		},
 		EnvValues: map[string]string{"API_KEY": "secret"},
 		ArgValues: map[string]string{"--token": "override-token", "--extra": "value"},

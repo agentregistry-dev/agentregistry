@@ -32,7 +32,7 @@ const DefaultLocalAgentPort uint16 = 8080
 // carries the authoritative description of what's being run; the *Values
 // maps carry per-deployment runtime overrides supplied on apply.
 //
-// MCPServer (the bundled kind) carries Packages; the translator now only
+// MCPServer (the bundled kind) carries Source.Package; the translator now only
 // produces local transport. RemoteMCPServer is its own kind handled by
 // TranslateRemoteMCPServer.
 type MCPServerRunRequest struct {
@@ -57,14 +57,14 @@ type MCPServerRunRequest struct {
 }
 
 // TranslateMCPServer maps a v1alpha1 MCPServerSpec onto the platform-internal
-// MCPServer. The kind only carries packages — output is always
+// MCPServer. The kind only carries a bundled package — output is always
 // MCPServerType=local.
 func TranslateMCPServer(ctx context.Context, req *MCPServerRunRequest) (*platformtypes.MCPServer, error) {
 	if req == nil {
 		return nil, fmt.Errorf("mcp server run request is required")
 	}
-	if len(req.Spec.Packages) == 0 {
-		return nil, fmt.Errorf("no valid deployment method found for server: %s (no packages)", req.Name)
+	if req.Spec.Source == nil || req.Spec.Source.Package == nil {
+		return nil, fmt.Errorf("no valid deployment method found for server: %s (no package)", req.Name)
 	}
 	return translateLocalMCPServer(ctx, req.Name, req.Spec, req.DeploymentID, req.EnvValues, req.ArgValues)
 }
@@ -138,7 +138,7 @@ func translateLocalMCPServer(
 	envValues map[string]string,
 	argValues map[string]string,
 ) (*platformtypes.MCPServer, error) {
-	pkg := spec.Packages[0]
+	pkg := *spec.Source.Package
 
 	var args []string
 	processedArgs := make(map[string]bool)

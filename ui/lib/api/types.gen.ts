@@ -27,7 +27,6 @@ export type AgentSpec = {
     prompts?: Array<ResourceRef>;
     skills?: Array<ResourceRef>;
     source?: AgentSource;
-    telemetryEndpoint?: string;
     title?: string;
 };
 
@@ -226,10 +225,14 @@ export type McpServer = {
     status?: Status;
 };
 
+export type McpServerSource = {
+    package?: McpPackage;
+    repository?: Repository;
+};
+
 export type McpServerSpec = {
     description?: string;
-    packages?: Array<McpPackage>;
-    repository?: Repository;
+    source?: McpServerSource;
     title?: string;
 };
 
@@ -287,6 +290,7 @@ export type ProviderSpec = {
         [key: string]: unknown;
     };
     platform: string;
+    telemetryEndpoint?: string;
 };
 
 export type RemoteMcpServer = {

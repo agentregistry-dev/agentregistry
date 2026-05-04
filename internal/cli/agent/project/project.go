@@ -168,27 +168,25 @@ func RegenerateDockerCompose(projectDir string, resolved *agentmanifest.Resolved
 	sanitizedVersion := utils.SanitizeVersion(version)
 
 	rendered, err := gen.RenderTemplate(string(templateBytes), struct {
-		Name              string
-		Version           string
-		Image             string
-		Port              int
-		ModelProvider     string
-		ModelName         string
-		TelemetryEndpoint string
-		HasSkills         bool
-		EnvVars           []string
-		McpServers        []agentmanifest.ResolvedMCPServer
+		Name          string
+		Version       string
+		Image         string
+		Port          int
+		ModelProvider string
+		ModelName     string
+		HasSkills     bool
+		EnvVars       []string
+		McpServers    []agentmanifest.ResolvedMCPServer
 	}{
-		Name:              agent.Metadata.Name,
-		Version:           sanitizedVersion,
-		Image:             image,
-		Port:              8080,
-		ModelProvider:     agent.Spec.ModelProvider,
-		ModelName:         agent.Spec.ModelName,
-		TelemetryEndpoint: agent.Spec.TelemetryEndpoint,
-		HasSkills:         len(agent.Spec.Skills) > 0,
-		EnvVars:           envVars,
-		McpServers:        resolved.MCPServers,
+		Name:          agent.Metadata.Name,
+		Version:       sanitizedVersion,
+		Image:         image,
+		Port:          8080,
+		ModelProvider: agent.Spec.ModelProvider,
+		ModelName:     agent.Spec.ModelName,
+		HasSkills:     len(agent.Spec.Skills) > 0,
+		EnvVars:       envVars,
+		McpServers:    resolved.MCPServers,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to render docker-compose: %w", err)
@@ -202,37 +200,6 @@ func RegenerateDockerCompose(projectDir string, resolved *agentmanifest.Resolved
 	if verbose {
 		fmt.Printf("Updated %s\n", target)
 	}
-	return nil
-}
-
-// EnsureOtelCollectorConfig generates the OpenTelemetry collector config
-// file when the agent has a telemetryEndpoint but the file is missing.
-// Handles the case where a user manually adds telemetryEndpoint to
-// agent.yaml without having the scaffold generate the collector config.
-func EnsureOtelCollectorConfig(projectDir string, agent *v1alpha1.Agent, verbose bool) error {
-	if agent == nil || agent.Spec.TelemetryEndpoint == "" {
-		return nil
-	}
-
-	configPath := filepath.Join(projectDir, "otel-collector-config.yaml")
-	if _, err := os.Stat(configPath); err == nil {
-		return nil
-	}
-
-	gen := python.NewPythonGenerator()
-	content, err := gen.ReadTemplateFile("otel-collector-config.yaml")
-	if err != nil {
-		return fmt.Errorf("failed to read otel collector config template: %w", err)
-	}
-
-	if verbose {
-		fmt.Printf("Generating %s (telemetryEndpoint is set but file was missing)\n", configPath)
-	}
-
-	if err := os.WriteFile(configPath, content, 0o644); err != nil {
-		return fmt.Errorf("failed to write otel-collector-config.yaml: %w", err)
-	}
-
 	return nil
 }
 

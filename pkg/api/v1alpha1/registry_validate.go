@@ -6,9 +6,8 @@ import (
 )
 
 // Registry type identifiers for RegistryPackage.RegistryType. Values
-// match the modelcontextprotocol/registry vocabulary — on-the-wire
-// string literals, not an enum — so existing seed data and
-// manifests round-trip unchanged.
+// match the modelcontextprotocol/registry vocabulary. On-the-wire
+// string literals, not an enum, so manifests round-trip unchanged.
 const (
 	RegistryTypeNPM   = "npm"
 	RegistryTypePyPI  = "pypi"
@@ -67,23 +66,21 @@ func validatePackages(
 	return errs
 }
 
-// ValidateRegistries on *MCPServer converts MCPPackage entries
-// (includes RegistryBaseURL + FileSHA256).
+// ValidateRegistries on *MCPServer converts the bundled MCPPackage
+// entry (includes RegistryBaseURL + FileSHA256).
 func (m *MCPServer) ValidateRegistries(ctx context.Context, v RegistryValidatorFunc) error {
-	if v == nil || len(m.Spec.Packages) == 0 {
+	if v == nil || m.Spec.Source == nil || m.Spec.Source.Package == nil {
 		return nil
 	}
-	pkgs := make([]RegistryPackage, len(m.Spec.Packages))
-	for i, p := range m.Spec.Packages {
-		pkgs[i] = RegistryPackage{
-			RegistryType:    p.RegistryType,
-			Identifier:      p.Identifier,
-			Version:         p.Version,
-			RegistryBaseURL: p.RegistryBaseURL,
-			FileSHA256:      p.FileSHA256,
-		}
-	}
-	errs := validatePackages(ctx, v, pkgs, m.Metadata.Name, "spec.packages")
+	p := m.Spec.Source.Package
+	pkgs := []RegistryPackage{{
+		RegistryType:    p.RegistryType,
+		Identifier:      p.Identifier,
+		Version:         p.Version,
+		RegistryBaseURL: p.RegistryBaseURL,
+		FileSHA256:      p.FileSHA256,
+	}}
+	errs := validatePackages(ctx, v, pkgs, m.Metadata.Name, "spec.source.package")
 	if len(errs) == 0 {
 		return nil
 	}

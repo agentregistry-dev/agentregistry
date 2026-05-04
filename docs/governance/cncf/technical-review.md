@@ -46,7 +46,7 @@ _Additional Supported Use Cases:_
 - **IDE configuration generation:** `arctl configure` generates ready-to-use configuration files for Claude Desktop, Cursor, and VS Code, reducing the friction of connecting AI tools to a local or team registry.
 - **Multi-environment artifact deployment:** Artifacts can be deployed to any target environment (local, cloud, Kubernetes) from a single registry, unifying AI infrastructure management across deployment targets.
 - **Artifact enrichment and scoring:** The registry automatically validates and scores ingested artifacts, producing metadata that operators can use to assess safety, quality, and trustworthiness before approving artifacts for developer use.
-- **Local development registry:** Developers can run a full registry locally via Docker Compose for testing and development workflows, with seed data automatically imported on first run.
+- **Local development registry:** Developers can run a full registry locally via Docker Compose for testing and development workflows.
 
 **Explain which use cases have been identified as unsupported by the project.**
 
@@ -146,13 +146,13 @@ See [`DEVELOPMENT.md`](https://github.com/agentregistry-dev/agentregistry/blob/m
 - **Docker / container runtime:** Required for running the registry server and related services.
 
 **Describe the project's High Availability (HA) requirements.**
-The registry server is stateless; HA is achieved by running multiple replicas behind a load balancer in Kubernetes. PostgreSQL HA is the responsibility of the operator (e.g., using CloudNativePG or a managed cloud database service). 
+The registry server is stateless; HA is achieved by running multiple replicas behind a load balancer in Kubernetes. PostgreSQL HA is the responsibility of the operator (e.g., using CloudNativePG or a managed cloud database service).
 
 **Describe how the project has addressed sovereignty.**
 Because agentregistry is self-hosted (no external SaaS dependency for core registry functions), operators retain full control over artifact metadata and deployed registry data within their own infrastructure.
 
 **Describe any compliance requirements addressed by the project.**
-No regulatory or compliance frameworks are currently supported. 
+No regulatory or compliance frameworks are currently supported.
 
 **Describe the project’s release processes, including major, minor and patch releases.**
 
@@ -166,8 +166,8 @@ agentregistry follows semantic versioning (https://semver.org/):
 ## Installation
 
 **Describe how the project is installed and initialized, e.g. a minimal install with a few lines of code or does it require more complex integration and configuration?**
-- _Local install with Docker_: Follow the steps at https://github.com/agentregistry-dev/agentregistry/blob/main/README.md#-local-development 
-- _Kubernetes install with Helm_: Follow the steps at https://github.com/agentregistry-dev/agentregistry/blob/main/README.md#%EF%B8%8F-kubernetes 
+- _Local install with Docker_: Follow the steps at https://github.com/agentregistry-dev/agentregistry/blob/main/README.md#-local-development
+- _Kubernetes install with Helm_: Follow the steps at https://github.com/agentregistry-dev/agentregistry/blob/main/README.md#%EF%B8%8F-kubernetes
 
 
 **How does an adopter test and validate the installation?**

@@ -317,10 +317,10 @@ func TestInitMCPCmd_BasicScaffold(t *testing.T) {
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "myserver", spec["title"])
 	assert.NotEmpty(t, spec["description"])
-	pkgs, ok := spec["packages"].([]any)
-	require.True(t, ok, "spec.packages should be a list")
-	require.Len(t, pkgs, 1)
-	pkg := pkgs[0].(map[string]any)
+	source, ok := spec["source"].(map[string]any)
+	require.True(t, ok, "spec.source should be a map")
+	pkg, ok := source["package"].(map[string]any)
+	require.True(t, ok, "spec.source.package should be a map")
 	assert.Equal(t, "oci", pkg["registryType"])
 	assert.NotEmpty(t, pkg["identifier"])
 }
@@ -348,8 +348,8 @@ func TestInitMCPCmd_CustomFlags(t *testing.T) {
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "My weather server", spec["description"])
-	pkgs := spec["packages"].([]any)
-	pkg := pkgs[0].(map[string]any)
+	source := spec["source"].(map[string]any)
+	pkg := source["package"].(map[string]any)
 	assert.Equal(t, "ghcr.io/acme/myserver:v2", pkg["identifier"])
 }
 
@@ -367,8 +367,8 @@ func TestInitMCPCmd_DefaultImageUsesName(t *testing.T) {
 	// Directory uses just the name part after "/"
 	m := readYAMLFile(t, filepath.Join(tmpDir, "coolserver", "mcp.yaml"))
 	spec := m["spec"].(map[string]any)
-	pkgs := spec["packages"].([]any)
-	pkg := pkgs[0].(map[string]any)
+	source := spec["source"].(map[string]any)
+	pkg := source["package"].(map[string]any)
 	identifier, _ := pkg["identifier"].(string)
 	assert.True(t, strings.HasSuffix(identifier, "/coolserver:latest"),
 		"default image should end with /<name>:latest, got: %s", identifier)

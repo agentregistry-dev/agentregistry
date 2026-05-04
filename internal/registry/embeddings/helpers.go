@@ -22,8 +22,14 @@ import (
 func BuildMCPServerEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.MCPServerSpec) string {
 	var parts []string
 	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version)
-	appendJSON(&parts, spec.Repository)
-	appendJSON(&parts, spec.Packages)
+	var sourceRepo *v1alpha1.Repository
+	var sourcePkg *v1alpha1.MCPPackage
+	if spec.Source != nil {
+		sourceRepo = spec.Source.Repository
+		sourcePkg = spec.Source.Package
+	}
+	appendJSON(&parts, sourceRepo)
+	appendJSON(&parts, sourcePkg)
 	return strings.Join(parts, "\n")
 }
 

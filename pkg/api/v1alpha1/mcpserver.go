@@ -8,18 +8,26 @@ type MCPServer struct {
 	Status   Status        `json:"status,omitzero" yaml:"status,omitempty"`
 }
 
-// MCPServerSpec is the MCP server's declarative body. Field names mirror the
-// upstream modelcontextprotocol/registry ServerJSON shape structurally for
-// familiarity, but this type is not wire-compatible with upstream — we've
-// dropped the $schema field and treat this as our own shape.
+// MCPServerSpec is the MCP server's declarative body.
 type MCPServerSpec struct {
-	Title       string      `json:"title,omitempty" yaml:"title,omitempty"`
-	Description string      `json:"description,omitempty" yaml:"description,omitempty"`
-	Repository  *Repository `json:"repository,omitempty" yaml:"repository,omitempty"`
+	Title       string `json:"title,omitempty" yaml:"title,omitempty"`
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 
-	// Packages describes the ways this server can be run locally (stdio,
-	// command, container). Each entry carries its own runtime/args/env.
-	Packages []MCPPackage `json:"packages,omitempty" yaml:"packages,omitempty"`
+	// Source declares where the bundled MCP server comes from — Package (the
+	// runnable distribution) and/or Repository (the source code).
+	Source *MCPServerSource `json:"source,omitempty" yaml:"source,omitempty"`
+}
+
+// MCPServerSource is the distribution origin of a bundled MCP server —
+// either a published artifact (Package) or a source repository the
+// registry builds from.
+type MCPServerSource struct {
+	// Package is the runnable distribution (stdio binary, container image,
+	// npm package, etc.) of this MCP server.
+	Package *MCPPackage `json:"package,omitempty" yaml:"package,omitempty"`
+
+	// Repository links to the source code the package was built from.
+	Repository *Repository `json:"repository,omitempty" yaml:"repository,omitempty"`
 }
 
 // MCPTransport describes a transport endpoint — used both inside MCPPackage

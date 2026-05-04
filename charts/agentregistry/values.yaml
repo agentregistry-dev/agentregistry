@@ -49,10 +49,6 @@ config:
   agentRegistryMcpPort: "31313"
   # -- Enable input validation on the registry API
   enableRegistryValidation: "false"
-  # -- Disable the builtin seed data import on startup (363 bundled MCP server entries)
-  disableBuiltinSeed: "true"
-  # -- Path or URL to external seed data file (leave empty to disable external seeding)
-  seedFrom: ""
   # -- Name of an existing Secret containing AGENT_REGISTRY_JWT_PRIVATE_KEY. When set, the chart will not create its own JWT secret.
   existingSecret: ""
   # -- Hex-encoded HMAC key for signing JWT tokens (must be valid hex, e.g. "a3f4b2c1..."). Ignored when existingSecret is set.

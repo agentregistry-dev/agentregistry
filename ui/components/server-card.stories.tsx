@@ -10,16 +10,16 @@ const mockServer: ServerResponse = {
     description:
       "A production-ready MCP server that provides read and write access to PostgreSQL databases with connection pooling and query optimization.",
     version: "3.2.1",
-    repository: {
-      url: "https://github.com/acme/database-server",
-    },
-    packages: [
-      {
+    source: {
+      repository: {
+        url: "https://github.com/acme/database-server",
+      },
+      package: {
         registryType: "npm",
         identifier: "@acme/database-server",
         transport: { type: "stdio" },
       },
-    ],
+    },
   },
   _meta: {
     "io.modelcontextprotocol.registry/official": {

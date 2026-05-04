@@ -16,13 +16,12 @@ type Agent struct {
 // reference it here.
 type AgentSpec struct {
 	// Core fields.
-	Title             string `json:"title,omitempty" yaml:"title,omitempty"`
-	Description       string `json:"description,omitempty" yaml:"description,omitempty"`
-	Language          string `json:"language,omitempty" yaml:"language,omitempty"`
-	Framework         string `json:"framework,omitempty" yaml:"framework,omitempty"`
-	ModelProvider     string `json:"modelProvider,omitempty" yaml:"modelProvider,omitempty"`
-	ModelName         string `json:"modelName,omitempty" yaml:"modelName,omitempty"`
-	TelemetryEndpoint string `json:"telemetryEndpoint,omitempty" yaml:"telemetryEndpoint,omitempty"`
+	Title         string `json:"title,omitempty" yaml:"title,omitempty"`
+	Description   string `json:"description,omitempty" yaml:"description,omitempty"`
+	Language      string `json:"language,omitempty" yaml:"language,omitempty"`
+	Framework     string `json:"framework,omitempty" yaml:"framework,omitempty"`
+	ModelProvider string `json:"modelProvider,omitempty" yaml:"modelProvider,omitempty"`
+	ModelName     string `json:"modelName,omitempty" yaml:"modelName,omitempty"`
 
 	// Source declares where the agent comes from — Image (the runtime
 	// container) and/or Repository (the source code).

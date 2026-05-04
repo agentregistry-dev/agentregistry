@@ -116,15 +116,17 @@ func translateRemoteMCPServerRef(name string, server *v1alpha1.RemoteMCPServer) 
 // references a RemoteMCPServer kind.
 //
 // Environment-variable overrides from the local OS env are layered onto
-// values declared on the MCPServer's package(s) so the agent runtime can
-// supply credentials at run time without modifying the registry resource.
+// values declared on the MCPServer's bundled package so the agent runtime
+// can supply credentials at run time without modifying the registry
+// resource.
 func translateMCPServer(name string, server *v1alpha1.MCPServer) (*ResolvedMCPServer, error) {
 	spec := server.Spec
-	if len(spec.Packages) == 0 {
-		return nil, fmt.Errorf("server has no packages")
+	if spec.Source == nil || spec.Source.Package == nil {
+		return nil, fmt.Errorf("server has no package")
 	}
+	pkg := *spec.Source.Package
 
-	envOverrides := collectEnvOverrides(spec.Packages)
+	envOverrides := collectEnvOverrides(pkg)
 	runEnv := make(map[string]string, len(envOverrides))
 	maps.Copy(runEnv, envOverrides)
 
@@ -143,7 +145,7 @@ func translateMCPServer(name string, server *v1alpha1.MCPServer) (*ResolvedMCPSe
 		return nil, fmt.Errorf("expected local translation for bundled MCPServer, got %q", translated.MCPServerType)
 	}
 	buildPath := ""
-	config, _, err := platformutils.GetRegistryConfig(spec.Packages[0], nil)
+	config, _, err := platformutils.GetRegistryConfig(pkg, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -162,15 +164,13 @@ func translateMCPServer(name string, server *v1alpha1.MCPServer) (*ResolvedMCPSe
 }
 
 // collectEnvOverrides gathers environment variable values from the current
-// OS environment for any env vars declared on the package specs. Used so
+// OS environment for any env vars declared on the package spec. Used so
 // the runtime can supply credentials without modifying the registry resource.
-func collectEnvOverrides(packages []v1alpha1.MCPPackage) map[string]string {
+func collectEnvOverrides(pkg v1alpha1.MCPPackage) map[string]string {
 	overrides := make(map[string]string)
-	for _, pkg := range packages {
-		for _, envVar := range pkg.EnvironmentVariables {
-			if value := os.Getenv(envVar.Name); value != "" {
-				overrides[envVar.Name] = value
-			}
+	for _, envVar := range pkg.EnvironmentVariables {
+		if value := os.Getenv(envVar.Name); value != "" {
+			overrides[envVar.Name] = value
 		}
 	}
 	return overrides
