@@ -3,6 +3,7 @@ package plugins
 import (
 	"bytes"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -85,4 +86,55 @@ func envFromVars(vars map[string]string) []string {
 		out = append(out, fmt.Sprintf("ARCTL_VAR_%s=%s", k, v))
 	}
 	return out
+}
+
+// RenderTemplates walks the plugin's templates directory and writes each file
+// to dst. Files ending in `.tmpl` get text/template substitution applied AND
+// the `.tmpl` extension stripped on output. Other files are copied verbatim.
+func RenderTemplates(p *Plugin, dst string, vars map[string]string) error {
+	if p.TemplatesDir == "" {
+		return fmt.Errorf("plugin %q: templatesDir not set", p.Name)
+	}
+	srcRoot := p.TemplatesDir
+	if !filepath.IsAbs(srcRoot) {
+		srcRoot = filepath.Join(p.SourceDir, srcRoot)
+	}
+
+	return filepath.WalkDir(srcRoot, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(srcRoot, path)
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return os.MkdirAll(filepath.Join(dst, rel), 0755)
+		}
+
+		outPath := filepath.Join(dst, rel)
+		isTpl := filepath.Ext(rel) == ".tmpl"
+		if isTpl {
+			outPath = outPath[:len(outPath)-len(".tmpl")]
+		}
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if !isTpl {
+			return os.WriteFile(outPath, data, 0644)
+		}
+
+		t, err := template.New(rel).Option("missingkey=error").Parse(string(data))
+		if err != nil {
+			return fmt.Errorf("parse template %q: %w", rel, err)
+		}
+		f, err := os.Create(outPath)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		return t.Execute(f, vars)
+	})
 }
