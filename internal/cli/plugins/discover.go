@@ -42,3 +42,18 @@ func DiscoverFromDir(root string) ([]*Plugin, error) {
 	}
 	return plugins, nil
 }
+
+// UserPluginsDir returns the user-level plugin directory.
+// Honors XDG_CONFIG_HOME; falls back to ~/.config/arctl/plugins.
+func UserPluginsDir() string {
+	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
+		return filepath.Join(x, "arctl", "plugins")
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".config", "arctl", "plugins")
+}
+
+// ProjectPluginsDir returns the project-local plugin directory under projectRoot.
+func ProjectPluginsDir(projectRoot string) string {
+	return filepath.Join(projectRoot, ".arctl", "plugins")
+}

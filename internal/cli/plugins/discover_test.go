@@ -45,3 +45,19 @@ func TestDiscoverFromDir_MissingRoot(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, plugins, 0)
 }
+
+func TestUserPluginsDir_RespectsXDG(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/custom/cfg")
+	t.Setenv("HOME", "/home/user")
+	assert.Equal(t, "/custom/cfg/arctl/plugins", UserPluginsDir())
+}
+
+func TestUserPluginsDir_FallsBackToHome(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", "/home/user")
+	assert.Equal(t, "/home/user/.config/arctl/plugins", UserPluginsDir())
+}
+
+func TestProjectPluginsDir(t *testing.T) {
+	assert.Equal(t, "/proj/.arctl/plugins", ProjectPluginsDir("/proj"))
+}
