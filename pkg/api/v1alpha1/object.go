@@ -106,7 +106,7 @@ func (m ObjectMeta) NamespaceOrDefault() string {
 // RawObject is the generic wire envelope used during decode and apply dispatch
 // when the concrete Kind is not yet known. Spec AND Status are both held as
 // raw JSON bytes so the envelope layer stays agnostic to per-kind schemas:
-// OSS kinds layer a typed v1alpha1.Status (observed-generation + K8s-style
+// OSS kinds layer a typed v1alpha1.Status (system-assigned version + K8s-style
 // conditions) on top; enterprise kinds can ship any JSON shape they like
 // without having to conform to meta.v1 conditions.
 //

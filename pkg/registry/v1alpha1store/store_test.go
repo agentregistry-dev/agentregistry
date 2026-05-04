@@ -517,7 +517,7 @@ func TestStore_ListCursorStableUnderStatusChurn(t *testing.T) {
 	// updated_at-DESC ordering this row would float to the top of page 2
 	// (returned twice) or knock another row off (page 2 misses a row).
 	require.NoError(t, store.PatchStatus(ctx, testNS, "alpha", "v1", func(json.RawMessage) (json.RawMessage, error) {
-		return json.RawMessage(`{"observedGeneration":1}`), nil
+		return json.RawMessage(`{"version":1}`), nil
 	}))
 
 	page2, cursor2, err := store.List(ctx, ListOpts{Limit: 2, Cursor: cursor})

@@ -24,7 +24,7 @@ func (m *ObjectMeta) SetMetadata(meta ObjectMeta) {
 // Status is intentionally exchanged as json.RawMessage on this interface.
 // The envelope itself stays agnostic to per-kind status schemas:
 //   - OSS kinds currently bind Status to the typed v1alpha1.Status
-//     (observed-generation + K8s-style Conditions) via the accessor
+//     (system-assigned version + K8s-style Conditions) via the accessor
 //     methods below.
 //   - Enterprise kinds can use any shape they like without conforming to
 //     meta.v1 conditions.
