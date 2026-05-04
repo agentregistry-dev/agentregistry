@@ -9,9 +9,9 @@ import (
 type Source int
 
 const (
-	SourceInTree  Source = iota // embedded in the arctl binary
-	SourceProject               // ./.arctl/plugins/<name>/
-	SourceUserHome              // $XDG_CONFIG_HOME/arctl/plugins/<name>/
+	SourceInTree   Source = iota // embedded in the arctl binary
+	SourceProject                // ./.arctl/plugins/<name>/
+	SourceUserHome               // $XDG_CONFIG_HOME/arctl/plugins/<name>/
 )
 
 func (s Source) String() string {
