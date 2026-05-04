@@ -14,7 +14,12 @@
 // object by kind.
 package v1alpha1
 
-import "strings"
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
+)
 
 // GroupVersion is the apiVersion string used by every resource in this package.
 const GroupVersion = "ar.dev/v1alpha1"
@@ -46,12 +51,51 @@ var BuiltinKinds = []string{
 	KindDeployment,
 }
 
-// PluralFor returns the lowercase route-plural for a Kind (e.g.
-// "mcpservers" for KindMCPServer). Mirrors the convention the generic
-// resource handler uses when cfg.PluralKind is empty: ToLower(kind) + "s".
-// Enterprise / downstream builds registering additional kinds whose
-// plural doesn't match this default should expose their own
-// PluralFor helper; OSS callers use this one.
+var (
+	pluralOverridesMu sync.RWMutex
+	pluralOverrides   = map[string]string{}
+)
+
+// RegisterPlural associates kind with the route plural used by the generic
+// resource handlers. It is intended for downstream kinds whose plural does not
+// match the default strings.ToLower(kind)+"s" convention.
+func RegisterPlural(kind, plural string) error {
+	kind = strings.TrimSpace(kind)
+	plural = strings.TrimSpace(plural)
+	if kind == "" {
+		return errors.New("v1alpha1: cannot register plural for empty kind")
+	}
+	if plural == "" {
+		return fmt.Errorf("v1alpha1: cannot register empty plural for kind %q", kind)
+	}
+
+	key := strings.ToLower(kind)
+	pluralOverridesMu.Lock()
+	defer pluralOverridesMu.Unlock()
+	if existing, ok := pluralOverrides[key]; ok && existing != plural {
+		return fmt.Errorf("v1alpha1: plural for kind %q already registered as %q", kind, existing)
+	}
+	pluralOverrides[key] = plural
+	return nil
+}
+
+// MustRegisterPlural is RegisterPlural that panics on error. Use at init.
+func MustRegisterPlural(kind, plural string) {
+	if err := RegisterPlural(kind, plural); err != nil {
+		panic(err)
+	}
+}
+
+// PluralFor returns the route-plural for a Kind (e.g. "mcpservers" for
+// KindMCPServer). By default it mirrors the convention the generic resource
+// handler uses when cfg.PluralKind is empty: ToLower(kind) + "s". Downstream
+// builds can override irregular plurals with RegisterPlural.
 func PluralFor(kind string) string {
+	pluralOverridesMu.RLock()
+	plural, ok := pluralOverrides[strings.ToLower(kind)]
+	pluralOverridesMu.RUnlock()
+	if ok {
+		return plural
+	}
 	return strings.ToLower(kind) + "s"
 }
