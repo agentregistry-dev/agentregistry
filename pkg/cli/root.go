@@ -14,8 +14,10 @@ import (
 	clidaemon "github.com/agentregistry-dev/agentregistry/internal/cli/daemon"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
 	"github.com/agentregistry-dev/agentregistry/pkg/daemon/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
@@ -25,6 +27,29 @@ import (
 // ClientFactory creates an API client for the given base URL and token.
 // Used for testing when nil; production uses client.NewClientWithConfig.
 type ClientFactory func(ctx context.Context, baseURL, token string) (*client.Client, error)
+
+// DeclarativeKind describes a downstream v1alpha1 kind that should be exposed
+// through the generic declarative CLI commands: get, list, and delete.
+type DeclarativeKind struct {
+	// Name is the singular CLI spelling, for example "accesspolicy".
+	Name string
+	// Plural is the plural CLI spelling and route plural, for example
+	// "accesspolicies".
+	Plural string
+	// CanonicalKind is the v1alpha1 kind, for example "AccessPolicy".
+	CanonicalKind string
+	// Aliases are additional accepted CLI spellings.
+	Aliases []string
+	// TableColumns names the columns used by table output. Defaults to
+	// NAME/VERSION when omitted.
+	TableColumns []string
+	// NewObject constructs the concrete v1alpha1 envelope. If omitted, the
+	// object is resolved from v1alpha1.Default using CanonicalKind.
+	NewObject func() v1alpha1.Object
+	// Row renders table output for one object. JSON/YAML output still receives
+	// the typed object directly.
+	Row func(v1alpha1.Object) []string
+}
 
 // CLIOptions configures the CLI behavior.
 // Can be extended for more options (e.g. client factory).
@@ -38,6 +63,10 @@ type CLIOptions struct {
 
 	// ClientFactory creates the API client. If nil, uses client.NewClientWithConfig (requires network).
 	ClientFactory ClientFactory
+
+	// DeclarativeKinds registers downstream v1alpha1 kinds with generic CLI
+	// get/list/delete dispatch.
+	DeclarativeKinds []DeclarativeKind
 }
 
 var (
@@ -49,6 +78,28 @@ var (
 // Configure applies options to the root command (e.g. for tests or alternate entry points).
 func Configure(opts CLIOptions) {
 	cliOptions = opts
+	for _, kind := range opts.DeclarativeKinds {
+		declarative.RegisterExtensionKind(declarative.ExtensionKind{
+			Name:          kind.Name,
+			Plural:        kind.Plural,
+			CanonicalKind: kind.CanonicalKind,
+			Aliases:       kind.Aliases,
+			TableColumns:  declarativeColumns(kind.TableColumns),
+			NewObject:     kind.NewObject,
+			Row:           kind.Row,
+		})
+	}
+}
+
+func declarativeColumns(headers []string) []scheme.Column {
+	if len(headers) == 0 {
+		return nil
+	}
+	columns := make([]scheme.Column, 0, len(headers))
+	for _, header := range headers {
+		columns = append(columns, scheme.Column{Header: header})
+	}
+	return columns
 }
 
 // Root returns the root cobra command. Used by main and tests.

@@ -1,6 +1,7 @@
 package scheme_test
 
 import (
+	"encoding/json"
 	"os"
 	"sync"
 	"testing"
@@ -11,7 +12,39 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var registerOnce sync.Once
+var (
+	registerOnce          sync.Once
+	extensionRegisterOnce sync.Once
+)
+
+type extensionSpec struct {
+	Value string `json:"value" yaml:"value"`
+}
+
+type extensionObject struct {
+	v1alpha1.TypeMeta `json:",inline" yaml:",inline"`
+	Metadata          v1alpha1.ObjectMeta `json:"metadata" yaml:"metadata"`
+	Spec              extensionSpec       `json:"spec" yaml:"spec"`
+	Status            v1alpha1.Status     `json:"status,omitzero" yaml:"status,omitempty"`
+}
+
+func (e *extensionObject) GetMetadata() *v1alpha1.ObjectMeta    { return &e.Metadata }
+func (e *extensionObject) SetMetadata(meta v1alpha1.ObjectMeta) { e.Metadata = meta }
+func (e *extensionObject) Validate() error                      { return nil }
+func (e *extensionObject) MarshalSpec() (json.RawMessage, error) {
+	return json.Marshal(e.Spec)
+}
+func (e *extensionObject) UnmarshalSpec(data json.RawMessage) error {
+	return json.Unmarshal(data, &e.Spec)
+}
+func (e *extensionObject) GetStatus() *v1alpha1.Status      { return &e.Status }
+func (e *extensionObject) SetStatus(status v1alpha1.Status) { e.Status = status }
+func (e *extensionObject) MarshalStatus() (json.RawMessage, error) {
+	return v1alpha1.MarshalStatusForStorage(e.Status)
+}
+func (e *extensionObject) UnmarshalStatus(data json.RawMessage) error {
+	return v1alpha1.UnmarshalStatusFromStorage(data, &e.Status)
+}
 
 // TestMain registers the two kinds the tests below need against the
 // scheme package-level table. The CLI's declarative package isn't
@@ -82,6 +115,27 @@ spec:
 	require.Len(t, objs, 2)
 	assert.Equal(t, "MCPServer", objs[0].GetKind())
 	assert.Equal(t, "Agent", objs[1].GetKind())
+}
+
+func TestDecodeBytesAllowsSchemeRegisteredExtensionKind(t *testing.T) {
+	const extensionKind = "SchemeTestExtension"
+	extensionRegisterOnce.Do(func() {
+		v1alpha1.Default.MustRegister(extensionKind, extensionSpec{}, func() any { return &extensionObject{} })
+	})
+
+	input := `
+apiVersion: ar.dev/v1alpha1
+kind: SchemeTestExtension
+metadata:
+  name: enterprise-only
+  version: "1"
+spec:
+  value: ok
+`
+	objs, err := scheme.DecodeBytes([]byte(input))
+	require.NoError(t, err)
+	require.Len(t, objs, 1)
+	assert.Equal(t, extensionKind, objs[0].GetKind())
 }
 
 func TestDecodeBytesMissingKind(t *testing.T) {
