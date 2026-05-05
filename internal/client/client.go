@@ -239,6 +239,28 @@ func (c *Client) getRaw(ctx context.Context, path string) (*v1alpha1.RawObject, 
 	return &out, nil
 }
 
+// ListVersions returns every non-deleted version row for (kind,
+// namespace, name) by GET'ing /v0/{plural}/{name}/versions. Server
+// returns 404 for legacy (non-versioned-artifact) kinds; callers
+// should branch on that. The endpoint is unpaginated server-side and
+// returns rows with the latest version first.
+func (c *Client) ListVersions(ctx context.Context, kind, namespace, name string) ([]v1alpha1.RawObject, error) {
+	path := fmt.Sprintf("/%s/%s/versions%s",
+		v1alpha1.PluralFor(kind),
+		url.PathEscape(name),
+		namespaceQuery(namespace))
+	req, err := c.newRequest(http.MethodGet, path)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	var resp listResponse
+	if err := c.doJSON(req, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Items, nil
+}
+
 // List returns rows of kind, paginated. opts.Namespace="" (empty) lists
 // the default namespace; opts.Namespace="all" widens to every
 // namespace. The returned string is the nextCursor; empty means no

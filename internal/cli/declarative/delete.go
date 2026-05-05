@@ -38,6 +38,7 @@ TYPE must be one of: agent, mcp, skill, prompt, deployment
 		Example: `  arctl delete -f my-agent/agent.yaml
   arctl delete -f my-server/mcp.yaml
   arctl delete agent acme/summarizer --version 1.0.0
+  arctl delete agent acme/summarizer --all-versions
   arctl delete mcp acme/fetch --version 1.0.0
   arctl delete deployment my-agent --version 1.0.0 --force`,
 		SilenceUsage: true,
@@ -46,26 +47,60 @@ TYPE must be one of: agent, mcp, skill, prompt, deployment
 	cmd.Flags().StringP("filename", "f", "", "YAML file to read resources from")
 	cmd.Flags().String("version", "", "Version to delete (defaults to the latest version; required for deployments)")
 	cmd.Flags().Bool("force", false, "Skip provider-specific teardown and only remove the registry record (deployments only)")
+	cmd.Flags().Bool("all-versions", false, "Delete every version of NAME (versioned-artifact kinds only)")
 	return cmd
 }
 
 func runDeclarativeDelete(cmd *cobra.Command, args []string) error {
 	filename, _ := cmd.Flags().GetString("filename")
 	force, _ := cmd.Flags().GetBool("force")
+	allVersions, _ := cmd.Flags().GetBool("all-versions")
 
 	if filename != "" {
 		if force {
 			return fmt.Errorf("--force cannot be used with -f; it only applies to explicit deployment deletes")
 		}
+		if allVersions {
+			return fmt.Errorf("--all-versions cannot be used with -f")
+		}
 		return deleteFromFile(cmd, filename)
 	}
 
-	// Explicit mode: TYPE NAME [--version VERSION]
+	// Explicit mode: TYPE NAME [--version VERSION | --all-versions]
 	if len(args) != 2 {
 		return fmt.Errorf("explicit mode requires TYPE and NAME arguments (or use -f FILE)")
 	}
 	version, _ := cmd.Flags().GetString("version")
+	if allVersions {
+		if version != "" {
+			return fmt.Errorf("--all-versions and --version are mutually exclusive")
+		}
+		if force {
+			return fmt.Errorf("--force cannot be used with --all-versions")
+		}
+		return deleteAllVersionsResource(cmd, args[0], args[1])
+	}
 	return deleteResource(cmd, args[0], args[1], version, force)
+}
+
+// deleteAllVersionsResource removes every live version of (kind, name) in
+// one server round-trip via DELETE /v0/apply. Errors cleanly when the
+// kind is not a versioned-artifact.
+func deleteAllVersionsResource(cmd *cobra.Command, typeName, name string) error {
+	k, err := scheme.Lookup(typeName)
+	if err != nil {
+		return err
+	}
+	if apiClient == nil {
+		return fmt.Errorf("API client not initialized")
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Deleting all versions of %s %s...\n", k.Kind, name)
+	if err := deleteAllVersions(k, name); err != nil {
+		return fmt.Errorf("failed to delete all versions of %s %q: %w", k.Kind, name, err)
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Deleted: %s/%s (all versions)\n", strings.ToLower(k.Kind), name)
+	return nil
 }
 
 // deleteFromFile reads a YAML file and sends a single DELETE /v0/apply request.

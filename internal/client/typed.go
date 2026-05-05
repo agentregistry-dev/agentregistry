@@ -88,48 +88,29 @@ func ListAllTyped[T v1alpha1.Object](
 	}
 }
 
-// ListVersionsOfName returns every version of one named resource with the
-// latest version first.
+// ListVersionsOfName returns every version of one named resource with
+// the latest version first. Wraps GET /v0/{plural}/{name}/versions and
+// materializes each row into a typed envelope.
 func ListVersionsOfName[T v1alpha1.Object](
 	ctx context.Context,
 	c *Client,
 	kind, namespace, name string,
 	newObj func() T,
 ) ([]T, error) {
-	latest, err := GetTyped(ctx, c, kind, namespace, name, "", newObj)
+	if c == nil {
+		return nil, fmt.Errorf("client is nil")
+	}
+	rows, err := c.ListVersions(ctx, kind, namespace, name)
 	if err != nil {
 		return nil, err
 	}
-
-	items, err := ListAllTyped(
-		ctx,
-		c,
-		kind,
-		ListOpts{
-			Namespace: namespace,
-			Limit:     200,
-		},
-		newObj,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]T, 0, len(items))
-	seen := map[string]bool{}
-
-	latestMD := latest.GetMetadata()
-	out = append(out, latest)
-	seen[latestMD.Version] = true
-
-	for _, item := range items {
-		md := item.GetMetadata()
-		if md.Name != name || seen[md.Version] {
-			continue
+	out := make([]T, 0, len(rows))
+	for i := range rows {
+		obj, err := v1alpha1.EnvelopeFromRaw(newObj, &rows[i], kind)
+		if err != nil {
+			return nil, fmt.Errorf("decode %s row %d: %w", kind, i, err)
 		}
-		seen[md.Version] = true
-		out = append(out, item)
+		out = append(out, obj)
 	}
-
 	return out, nil
 }

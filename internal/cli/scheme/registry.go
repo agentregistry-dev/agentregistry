@@ -33,15 +33,28 @@ type GetFunc func(ctx context.Context, name, version string) (any, error)
 // through here.
 type DeleteFunc func(ctx context.Context, name, version string, force bool) error
 
+// ListVersionsFunc returns every live version row for a single (name).
+// Set only on versioned-artifact kinds (Agent, MCPServer, Skill, etc.).
+// Nil for kinds whose identity is single-version (Deployment, Provider) —
+// callers must check for nil and reject `--all-versions` cleanly.
+type ListVersionsFunc func(ctx context.Context, name string) ([]any, error)
+
+// DeleteAllVersionsFunc soft-deletes every live version of a single
+// (name) in one server round-trip. Set only on versioned-artifact
+// kinds. Nil for kinds whose identity is single-version.
+type DeleteAllVersionsFunc func(ctx context.Context, name string) error
+
 type Kind struct {
-	Kind       string
-	Plural     string
-	Aliases    []string
-	ListFunc   ListFunc
-	RowFunc    RowFunc
-	ToYAMLFunc ToYAMLFunc
-	Get        GetFunc
-	Delete     DeleteFunc
+	Kind              string
+	Plural            string
+	Aliases           []string
+	ListFunc          ListFunc
+	RowFunc           RowFunc
+	ToYAMLFunc        ToYAMLFunc
+	Get               GetFunc
+	Delete            DeleteFunc
+	ListVersions      ListVersionsFunc
+	DeleteAllVersions DeleteAllVersionsFunc
 
 	TableColumns []Column
 }

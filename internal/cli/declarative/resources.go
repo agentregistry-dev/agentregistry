@@ -8,6 +8,7 @@ import (
 
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -48,6 +49,42 @@ func listLatestAny[T v1alpha1.Object](ctx context.Context, kind string, newObj f
 		out = append(out, item)
 	}
 	return out, nil
+}
+
+// listVersionsAny calls the typed ListVersionsOfName helper and erases the
+// concrete envelope type so the dispatch layer's `any`-based table
+// printer can format the rows.
+func listVersionsAny[T v1alpha1.Object](ctx context.Context, kind, name string, newObj func() T) ([]any, error) {
+	items, err := client.ListVersionsOfName(ctx, apiClient, kind, v1alpha1.DefaultNamespace, name, newObj)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		out = append(out, item)
+	}
+	return out, nil
+}
+
+// deleteAllVersionsAny issues a single DELETE /v0/apply with a minimal
+// envelope (apiVersion + kind + metadata.name) — the server's batch
+// path runs Store.DeleteAllVersions for versioned-artifact kinds. Returns
+// an error when any per-result failed, mirroring deleteFromFile's
+// failure surface.
+func deleteAllVersionsAny(ctx context.Context, kind, name string) error {
+	body := fmt.Sprintf("apiVersion: %s\nkind: %s\nmetadata:\n  name: %s\n",
+		v1alpha1.GroupVersion, kind, name)
+	results, err := apiClient.DeleteViaApply(ctx, []byte(body))
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, r := range results {
+		if r.Status == arv0.ApplyStatusFailed {
+			errs = append(errs, fmt.Errorf("%s/%s: %s", r.Kind, r.Name, r.Error))
+		}
+	}
+	return errorsJoin(errs)
 }
 
 func deleteAny[T v1alpha1.Object](ctx context.Context, kind, name, version string, force bool, newObj func() T) error {

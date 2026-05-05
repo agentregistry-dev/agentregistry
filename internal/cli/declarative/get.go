@@ -36,19 +36,25 @@ Examples:
   arctl get mcps
   arctl get agent acme/summarizer
   arctl get agent acme/summarizer -o yaml
+  arctl get agent acme/summarizer --all-versions
   arctl get skills -o json`,
 		Args:         cobra.RangeArgs(1, 2),
 		SilenceUsage: true,
 		RunE:         runGet,
 	}
 	cmd.Flags().StringP("output", "o", "table", "Output format: table, yaml, json")
+	cmd.Flags().Bool("all-versions", false, "List every version of NAME (versioned-artifact kinds only)")
 	return cmd
 }
 
 func runGet(cmd *cobra.Command, args []string) error {
 	outputFormat, _ := cmd.Flags().GetString("output")
+	allVersions, _ := cmd.Flags().GetBool("all-versions")
 
 	if args[0] == "all" {
+		if allVersions {
+			return fmt.Errorf("--all-versions cannot be used with `get all`")
+		}
 		return runGetAll(cmd, outputFormat)
 	}
 
@@ -61,6 +67,22 @@ func runGet(cmd *cobra.Command, args []string) error {
 
 	if apiClient == nil {
 		return fmt.Errorf("API client not initialized")
+	}
+
+	if allVersions {
+		if len(args) != 2 {
+			return fmt.Errorf("--all-versions requires NAME")
+		}
+		name := args[1]
+		items, err := listVersions(k, name)
+		if err != nil {
+			return fmt.Errorf("listing versions of %s %q: %w", k.Kind, name, err)
+		}
+		if len(items) == 0 {
+			fmt.Fprintf(cmd.OutOrStdout(), "No versions of %s %q found.\n", k.Kind, name)
+			return nil
+		}
+		return printItems(cmd, k, items, outputFormat)
 	}
 
 	if len(args) == 2 {

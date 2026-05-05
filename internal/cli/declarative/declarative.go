@@ -151,5 +151,11 @@ func typedKind[T v1alpha1.Object](
 		Delete: func(ctx context.Context, name, version string, force bool) error {
 			return deleteAny(ctx, canonicalKind, name, version, force, newObj)
 		},
+		ListVersions: func(ctx context.Context, name string) ([]any, error) {
+			return listVersionsAny(ctx, canonicalKind, name, newObj)
+		},
+		DeleteAllVersions: func(ctx context.Context, name string) error {
+			return deleteAllVersionsAny(ctx, canonicalKind, name)
+		},
 	}
 }

@@ -44,6 +44,24 @@ func deleteItem(k *scheme.Kind, name, version string, force bool) error {
 	return k.Delete(context.Background(), name, version, force)
 }
 
+// listVersions returns every live version for (kind, name). Errors when
+// the kind is not a versioned-artifact (e.g. legacy deployment).
+func listVersions(k *scheme.Kind, name string) ([]any, error) {
+	if k.ListVersions == nil {
+		return nil, fmt.Errorf("--all-versions not supported for kind %q (resource is not versioned)", k.Kind)
+	}
+	return k.ListVersions(context.Background(), name)
+}
+
+// deleteAllVersions soft-deletes every live version for (kind, name) in
+// one server round-trip. Errors when the kind is not a versioned-artifact.
+func deleteAllVersions(k *scheme.Kind, name string) error {
+	if k.DeleteAllVersions == nil {
+		return fmt.Errorf("--all-versions not supported for kind %q (resource is not versioned)", k.Kind)
+	}
+	return k.DeleteAllVersions(context.Background(), name)
+}
+
 // tableRow returns a []string row for the given item, matching the TableColumns
 // registered in the kinds registry.
 func tableRow(k *scheme.Kind, item any) []string {
