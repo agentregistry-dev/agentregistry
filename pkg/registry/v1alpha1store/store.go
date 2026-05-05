@@ -669,6 +669,47 @@ func (s *Store) Delete(ctx context.Context, namespace, name, version string) err
 	return s.deleteLegacy(ctx, args)
 }
 
+// ListVersions returns every non-deleted version row for (namespace,
+// name), ordered by integer version descending. Versioned-artifact mode
+// only — the legacy deployments table doesn't model "list every
+// version of a logical resource" and reports an error.
+//
+// Returns an empty slice (no error) when no rows exist for the
+// identity: list semantics differ from the single-row Get path. The
+// HTTP layer surfaces empty results as 200 with `{"items": []}`.
+func (s *Store) ListVersions(ctx context.Context, namespace, name string) ([]*v1alpha1.RawObject, error) {
+	if s.legacy {
+		return nil, errors.New("v1alpha1 store: ListVersions is not supported on the legacy deployments table")
+	}
+	if namespace == "" || name == "" {
+		return nil, errors.New("v1alpha1 store: namespace and name are required")
+	}
+	rows, err := s.pool.Query(ctx,
+		fmt.Sprintf(`
+			SELECT %s
+			FROM %s
+			WHERE namespace=$1 AND name=$2 AND deletion_timestamp IS NULL
+			ORDER BY version DESC`, s.selectColumns(), s.table),
+		namespace, name)
+	if err != nil {
+		return nil, fmt.Errorf("list versions: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]*v1alpha1.RawObject, 0, 4)
+	for rows.Next() {
+		obj, err := scanRow(rows, !s.legacy)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, obj)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DeleteAllVersions soft-deletes every live version row for
 // (namespace, name) on a versioned-artifact table. This is the contract
 // of the batch DELETE endpoint: identity is logical, callers cannot pin

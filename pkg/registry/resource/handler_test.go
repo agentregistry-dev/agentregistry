@@ -264,6 +264,59 @@ func TestResourceRegister_AgentListCursorPagination(t *testing.T) {
 	require.Len(t, seen, 3)
 }
 
+// TestResourceRegister_AgentListVersions pins the GET
+// /v0/{plural}/{name}/versions contract: every non-deleted version row
+// for (namespace, name) is returned, ordered by integer version
+// descending. Versioned-artifact-only — the legacy deployment path
+// doesn't expose this endpoint.
+func TestResourceRegister_AgentListVersions(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+
+	_, api := humatest.New(t)
+	registerAgent(api, store)
+
+	body := v1alpha1.Agent{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "foo"},
+		Spec:     v1alpha1.AgentSpec{Title: "v1"},
+	}
+	// Seed via Store directly so the URL-side {version} requirement
+	// doesn't force us to invent a placeholder integer; the endpoint
+	// under test is logical-identity-only.
+	_, err := store.Upsert(t.Context(), &body)
+	require.NoError(t, err)
+	body.Spec.Title = "v2"
+	_, err = store.Upsert(t.Context(), &body)
+	require.NoError(t, err)
+
+	resp := api.Get("/v0/agents/foo/versions")
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
+	var list struct {
+		Items []v1alpha1.Agent `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
+	require.Len(t, list.Items, 2, "both versions should be returned")
+	// Ordering: newest version first.
+	require.Equal(t, "2", list.Items[0].Metadata.Version)
+	require.Equal(t, 2, list.Items[0].Status.Version)
+	require.Equal(t, "v2", list.Items[0].Spec.Title)
+	require.Equal(t, "1", list.Items[1].Metadata.Version)
+	require.Equal(t, 1, list.Items[1].Status.Version)
+	require.Equal(t, "v1", list.Items[1].Spec.Title)
+
+	// Unknown name → 200 with empty items (list semantics: a
+	// nonexistent name is just an empty result set, not an error).
+	resp = api.Get("/v0/agents/missing/versions")
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	var empty struct {
+		Items []v1alpha1.Agent `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &empty))
+	require.Empty(t, empty.Items)
+}
+
 func TestResourceRegister_AgentListRejectsInvalidCursor(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
