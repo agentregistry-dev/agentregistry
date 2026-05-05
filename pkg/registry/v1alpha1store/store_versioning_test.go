@@ -4,6 +4,9 @@ package v1alpha1store_test
 
 import (
 	"context"
+	"fmt"
+	"sort"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -74,4 +77,104 @@ func TestUpsert_LabelChangeOnSameSpec_UpdatesLatest(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, res.Version)
 	require.Equal(t, v1alpha1store.UpsertLabelsUpdated, res.Outcome)
+}
+
+// TestUpsert_ConcurrentSpecs_AssignsSequentialVersions exercises the
+// SELECT ... FOR UPDATE serialization in upsertVersioned. N goroutines
+// race to apply distinct specs against the same (namespace, name);
+// every apply must succeed and the assigned versions must form a dense
+// 1..N sequence with no gaps and no duplicates.
+func TestUpsert_ConcurrentSpecs_AssignsSequentialVersions(t *testing.T) {
+	store := setupAgentStore(t)
+	ctx := context.Background()
+
+	const N = 5
+	var wg sync.WaitGroup
+	versions := make([]int, N)
+	errs := make([]error, N)
+
+	for i := 0; i < N; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			res, err := store.Upsert(ctx, agentObj("race", fmt.Sprintf("model-%d", i), nil))
+			if err == nil {
+				versions[i] = res.Version
+			}
+			errs[i] = err
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		require.NoError(t, err, "goroutine %d", i)
+	}
+
+	sort.Ints(versions)
+	require.Equal(t, []int{1, 2, 3, 4, 5}, versions)
+}
+
+// TestUpsert_AfterTotalDeletion_RestartsAtVersion1 verifies that once
+// every version row for (namespace, name) is removed, the next apply
+// starts numbering from 1 again. The hard-delete path leaves no
+// trailing state to anchor the next MAX(version) lookup against.
+func TestUpsert_AfterTotalDeletion_RestartsAtVersion1(t *testing.T) {
+	store := setupAgentStore(t)
+	ctx := context.Background()
+
+	for i := 0; i < 3; i++ {
+		_, err := store.Upsert(ctx, agentObj("foo", fmt.Sprintf("model-%d", i), nil))
+		require.NoError(t, err)
+	}
+
+	require.NoError(t, store.DeleteAllVersions(ctx, "default", "foo"))
+
+	res, err := store.Upsert(ctx, agentObj("foo", "model-fresh", nil))
+	require.NoError(t, err)
+	require.Equal(t, 1, res.Version)
+	require.Equal(t, v1alpha1store.UpsertCreated, res.Outcome)
+}
+
+// TestDelete_LatestVersion_PromotesNextHighest verifies that deleting
+// the highest version row exposes the next-highest as latest. Versioned
+// rows are hard-deleted, so GetLatest's MAX(version) over surviving
+// rows promotes v2 once v3 is gone.
+func TestDelete_LatestVersion_PromotesNextHighest(t *testing.T) {
+	store := setupAgentStore(t)
+	ctx := context.Background()
+
+	for i := 0; i < 3; i++ {
+		_, err := store.Upsert(ctx, agentObj("foo", fmt.Sprintf("model-%d", i), nil))
+		require.NoError(t, err)
+	}
+
+	require.NoError(t, store.Delete(ctx, "default", "foo", "3"))
+
+	latest, err := store.GetLatest(ctx, "default", "foo")
+	require.NoError(t, err)
+	require.Equal(t, "2", latest.Metadata.Version)
+}
+
+// TestUpsert_IdempotentAcrossRestarts simulates a server restart by
+// constructing a second Store against the same connection pool and
+// re-applying the same spec. The second apply must hit the no-op
+// branch — version stays at 1, outcome is UpsertNoOp — proving the
+// hash-based dedupe is durable across Store lifetimes.
+func TestUpsert_IdempotentAcrossRestarts(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	ctx := context.Background()
+
+	s1 := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	res1, err := s1.Upsert(ctx, agentObj("foo", "model-a", nil))
+	require.NoError(t, err)
+	require.Equal(t, 1, res1.Version)
+	require.Equal(t, v1alpha1store.UpsertCreated, res1.Outcome)
+
+	// Simulate a restart: drop s1, build a fresh Store against the same
+	// underlying database. Re-applying the same spec must dedupe to no-op.
+	s2 := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	res2, err := s2.Upsert(ctx, agentObj("foo", "model-a", nil))
+	require.NoError(t, err)
+	require.Equal(t, 1, res2.Version)
+	require.Equal(t, v1alpha1store.UpsertNoOp, res2.Outcome)
 }
