@@ -41,11 +41,11 @@ paths:
                     description: 'Label selector: key=value,key2=value2.'
                 - name: latestOnly
                   in: query
-                  description: Only return rows with is_latest_version=true.
+                  description: Only return the highest live version per (namespace, name).
                   explode: false
                   schema:
                     type: boolean
-                    description: Only return rows with is_latest_version=true.
+                    description: Only return the highest live version per (namespace, name).
                 - name: includeTerminating
                   in: query
                   description: Include rows with a deletionTimestamp.
@@ -131,45 +131,6 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-        put:
-            summary: Apply a Agent (idempotent upsert)
-            operationId: apply-agent
-            parameters:
-                - name: namespace
-                  in: query
-                  description: Namespace (internal; defaults to 'default').
-                  explode: false
-                  schema:
-                    type: string
-                    description: Namespace (internal; defaults to 'default').
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/Agent'
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Agent'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
         delete:
             summary: 'Delete a Agent (soft-delete: sets deletionTimestamp)'
             operationId: delete-agent
@@ -202,6 +163,36 @@ paths:
             responses:
                 "204":
                     description: No Content
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/agents/{name}/versions:
+        get:
+            summary: List all versions of a Agent
+            operationId: list-versions-agent
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOutputAgentBody'
                 default:
                     description: Error
                     content:
@@ -308,11 +299,11 @@ paths:
                     description: 'Label selector: key=value,key2=value2.'
                 - name: latestOnly
                   in: query
-                  description: Only return rows with is_latest_version=true.
+                  description: Only return the highest live version per (namespace, name).
                   explode: false
                   schema:
                     type: boolean
-                    description: Only return rows with is_latest_version=true.
+                    description: Only return the highest live version per (namespace, name).
                 - name: includeTerminating
                   in: query
                   description: Include rows with a deletionTimestamp.
@@ -532,11 +523,11 @@ paths:
                     description: 'Label selector: key=value,key2=value2.'
                 - name: latestOnly
                   in: query
-                  description: Only return rows with is_latest_version=true.
+                  description: Only return the highest live version per (namespace, name).
                   explode: false
                   schema:
                     type: boolean
-                    description: Only return rows with is_latest_version=true.
+                    description: Only return the highest live version per (namespace, name).
                 - name: includeTerminating
                   in: query
                   description: Include rows with a deletionTimestamp.
@@ -622,45 +613,6 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-        put:
-            summary: Apply a MCPServer (idempotent upsert)
-            operationId: apply-mcpserver
-            parameters:
-                - name: namespace
-                  in: query
-                  description: Namespace (internal; defaults to 'default').
-                  explode: false
-                  schema:
-                    type: string
-                    description: Namespace (internal; defaults to 'default').
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/MCPServer'
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/MCPServer'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
         delete:
             summary: 'Delete a MCPServer (soft-delete: sets deletionTimestamp)'
             operationId: delete-mcpserver
@@ -693,6 +645,36 @@ paths:
             responses:
                 "204":
                     description: No Content
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/mcpservers/{name}/versions:
+        get:
+            summary: List all versions of a MCPServer
+            operationId: list-versions-mcpserver
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOutputMCPServerBody'
                 default:
                     description: Error
                     content:
@@ -756,11 +738,11 @@ paths:
                     description: 'Label selector: key=value,key2=value2.'
                 - name: latestOnly
                   in: query
-                  description: Only return rows with is_latest_version=true.
+                  description: Only return the highest live version per (namespace, name).
                   explode: false
                   schema:
                     type: boolean
-                    description: Only return rows with is_latest_version=true.
+                    description: Only return the highest live version per (namespace, name).
                 - name: includeTerminating
                   in: query
                   description: Include rows with a deletionTimestamp.
@@ -846,45 +828,6 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-        put:
-            summary: Apply a Prompt (idempotent upsert)
-            operationId: apply-prompt
-            parameters:
-                - name: namespace
-                  in: query
-                  description: Namespace (internal; defaults to 'default').
-                  explode: false
-                  schema:
-                    type: string
-                    description: Namespace (internal; defaults to 'default').
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/Prompt'
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Prompt'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
         delete:
             summary: 'Delete a Prompt (soft-delete: sets deletionTimestamp)'
             operationId: delete-prompt
@@ -917,6 +860,36 @@ paths:
             responses:
                 "204":
                     description: No Content
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/prompts/{name}/versions:
+        get:
+            summary: List all versions of a Prompt
+            operationId: list-versions-prompt
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOutputPromptBody'
                 default:
                     description: Error
                     content:
@@ -960,11 +933,11 @@ paths:
                     description: 'Label selector: key=value,key2=value2.'
                 - name: latestOnly
                   in: query
-                  description: Only return rows with is_latest_version=true.
+                  description: Only return the highest live version per (namespace, name).
                   explode: false
                   schema:
                     type: boolean
-                    description: Only return rows with is_latest_version=true.
+                    description: Only return the highest live version per (namespace, name).
                 - name: includeTerminating
                   in: query
                   description: Include rows with a deletionTimestamp.
@@ -1164,11 +1137,11 @@ paths:
                     description: 'Label selector: key=value,key2=value2.'
                 - name: latestOnly
                   in: query
-                  description: Only return rows with is_latest_version=true.
+                  description: Only return the highest live version per (namespace, name).
                   explode: false
                   schema:
                     type: boolean
-                    description: Only return rows with is_latest_version=true.
+                    description: Only return the highest live version per (namespace, name).
                 - name: includeTerminating
                   in: query
                   description: Include rows with a deletionTimestamp.
@@ -1254,45 +1227,6 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-        put:
-            summary: Apply a RemoteMCPServer (idempotent upsert)
-            operationId: apply-remotemcpserver
-            parameters:
-                - name: namespace
-                  in: query
-                  description: Namespace (internal; defaults to 'default').
-                  explode: false
-                  schema:
-                    type: string
-                    description: Namespace (internal; defaults to 'default').
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/RemoteMCPServer'
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/RemoteMCPServer'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
         delete:
             summary: 'Delete a RemoteMCPServer (soft-delete: sets deletionTimestamp)'
             operationId: delete-remotemcpserver
@@ -1325,6 +1259,36 @@ paths:
             responses:
                 "204":
                     description: No Content
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/remotemcpservers/{name}/versions:
+        get:
+            summary: List all versions of a RemoteMCPServer
+            operationId: list-versions-remotemcpserver
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOutputRemoteMCPServerBody'
                 default:
                     description: Error
                     content:
@@ -1368,11 +1332,11 @@ paths:
                     description: 'Label selector: key=value,key2=value2.'
                 - name: latestOnly
                   in: query
-                  description: Only return rows with is_latest_version=true.
+                  description: Only return the highest live version per (namespace, name).
                   explode: false
                   schema:
                     type: boolean
-                    description: Only return rows with is_latest_version=true.
+                    description: Only return the highest live version per (namespace, name).
                 - name: includeTerminating
                   in: query
                   description: Include rows with a deletionTimestamp.
@@ -1458,45 +1422,6 @@ paths:
                         application/problem+json:
                             schema:
                                 $ref: '#/components/schemas/ErrorModel'
-        put:
-            summary: Apply a Skill (idempotent upsert)
-            operationId: apply-skill
-            parameters:
-                - name: namespace
-                  in: query
-                  description: Namespace (internal; defaults to 'default').
-                  explode: false
-                  schema:
-                    type: string
-                    description: Namespace (internal; defaults to 'default').
-                - name: name
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-                - name: version
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/Skill'
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Skill'
-                default:
-                    description: Error
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
         delete:
             summary: 'Delete a Skill (soft-delete: sets deletionTimestamp)'
             operationId: delete-skill
@@ -1529,6 +1454,36 @@ paths:
             responses:
                 "204":
                     description: No Content
+                default:
+                    description: Error
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+    /v0/skills/{name}/versions:
+        get:
+            summary: List all versions of a Skill
+            operationId: list-versions-skill
+            parameters:
+                - name: namespace
+                  in: query
+                  description: Namespace (internal; defaults to 'default').
+                  explode: false
+                  schema:
+                    type: string
+                    description: Namespace (internal; defaults to 'default').
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOutputSkillBody'
                 default:
                     description: Error
                     content:
@@ -2224,6 +2179,9 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/Condition'
+                version:
+                    type: integer
+                    format: int64
         VersionBody:
             type: object
             additionalProperties: false

@@ -9,8 +9,14 @@
 //	GET    {basePrefix}/{pluralKind}/{name}?namespace={ns}            get latest
 //	GET    {basePrefix}/{pluralKind}/{name}/versions?namespace={ns}   list versions of one (versioned-artifact kinds only)
 //	GET    {basePrefix}/{pluralKind}/{name}/{version}?namespace={ns}  get exact version
-//	PUT    {basePrefix}/{pluralKind}/{name}/{version}?namespace={ns}  apply (idempotent upsert)
+//	PUT    {basePrefix}/{pluralKind}/{name}/{version}?namespace={ns}  apply (idempotent upsert; legacy stores only — Provider/Deployment)
 //	DELETE {basePrefix}/{pluralKind}/{name}/{version}?namespace={ns}  delete
+//
+// PUT is registered only for legacy stores (Provider, Deployment) where
+// the {version} URL segment is authoritative. Content-registry kinds
+// (Agent, MCPServer, RemoteMCPServer, Skill, Prompt) assign integer
+// versions system-side and are written exclusively through
+// POST /v0/apply.
 package resource
 
 import (
@@ -420,88 +426,97 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 	})
 
 	// Apply (upsert).
-	huma.Register(api, huma.Operation{
-		OperationID:   "apply-" + strings.ToLower(kind),
-		Method:        http.MethodPut,
-		Path:          itemVersionPath,
-		Summary:       fmt.Sprintf("Apply a %s (idempotent upsert)", kind),
-		DefaultStatus: http.StatusOK,
-	}, func(ctx context.Context, in *putInput[T]) (*bodyOutput[T], error) {
-		ns := resolveNamespace(in.Namespace, false)
-		name, err := unescapePath("name", in.Name)
-		if err != nil {
-			return nil, err
-		}
-		version, err := unescapePath("version", in.Version)
-		if err != nil {
-			return nil, err
-		}
-		if err := validateURLVersion(cfg.Store, version); err != nil {
-			return nil, err
-		}
-		body := in.Body
-		if apiVer := body.GetAPIVersion(); apiVer != "" && apiVer != v1alpha1.GroupVersion {
-			return nil, huma.Error400BadRequest(fmt.Sprintf(
-				"apiVersion %q is not supported; expected %q", apiVer, v1alpha1.GroupVersion))
-		}
-		if k := body.GetKind(); k != "" && k != kind {
-			return nil, huma.Error400BadRequest(fmt.Sprintf(
-				"kind %q does not match endpoint kind %q", k, kind))
-		}
-		meta := body.GetMetadata()
-		if meta.Namespace != "" && meta.Namespace != ns {
-			return nil, huma.Error400BadRequest("metadata.namespace does not match ?namespace=")
-		}
-		if meta.Name != "" && meta.Name != name {
-			return nil, huma.Error400BadRequest("metadata.name does not match path")
-		}
+	//
+	// Direct PUT on the per-kind item URL is only registered for legacy
+	// stores (Provider, Deployment) where the {version} URL segment is
+	// authoritative. Content-registry kinds (Agent, MCPServer,
+	// RemoteMCPServer, Skill, Prompt) assign integer versions
+	// system-side, so the URL {version} segment no longer fits — those
+	// kinds are written exclusively through POST /v0/apply.
+	if !cfg.Store.IsVersionedArtifact() {
+		huma.Register(api, huma.Operation{
+			OperationID:   "apply-" + strings.ToLower(kind),
+			Method:        http.MethodPut,
+			Path:          itemVersionPath,
+			Summary:       fmt.Sprintf("Apply a %s (idempotent upsert)", kind),
+			DefaultStatus: http.StatusOK,
+		}, func(ctx context.Context, in *putInput[T]) (*bodyOutput[T], error) {
+			ns := resolveNamespace(in.Namespace, false)
+			name, err := unescapePath("name", in.Name)
+			if err != nil {
+				return nil, err
+			}
+			version, err := unescapePath("version", in.Version)
+			if err != nil {
+				return nil, err
+			}
+			if err := validateURLVersion(cfg.Store, version); err != nil {
+				return nil, err
+			}
+			body := in.Body
+			if apiVer := body.GetAPIVersion(); apiVer != "" && apiVer != v1alpha1.GroupVersion {
+				return nil, huma.Error400BadRequest(fmt.Sprintf(
+					"apiVersion %q is not supported; expected %q", apiVer, v1alpha1.GroupVersion))
+			}
+			if k := body.GetKind(); k != "" && k != kind {
+				return nil, huma.Error400BadRequest(fmt.Sprintf(
+					"kind %q does not match endpoint kind %q", k, kind))
+			}
+			meta := body.GetMetadata()
+			if meta.Namespace != "" && meta.Namespace != ns {
+				return nil, huma.Error400BadRequest("metadata.namespace does not match ?namespace=")
+			}
+			if meta.Name != "" && meta.Name != name {
+				return nil, huma.Error400BadRequest("metadata.name does not match path")
+			}
 
-		// Stamp resolved identity into metadata so applyCore sees the
-		// resolved values (clients may omit namespace/name in the body
-		// and rely on the path + query). meta.Version is used only by
-		// the legacy deployment Store path; we set it from the URL so
-		// that path has its row identity.
-		meta.Namespace = ns
-		meta.Name = name
-		meta.Version = version
-		body.SetMetadata(*meta)
+			// Stamp resolved identity into metadata so applyCore sees the
+			// resolved values (clients may omit namespace/name in the body
+			// and rely on the path + query). meta.Version is used only by
+			// the legacy deployment Store path; we set it from the URL so
+			// that path has its row identity.
+			meta.Namespace = ns
+			meta.Name = name
+			meta.Version = version
+			body.SetMetadata(*meta)
 
-		up, ae := applyCore(ctx, cfg.Store, body, applyOpts{
-			Authorize:         cfg.Authorize,
-			Resolver:          cfg.Resolver,
-			RegistryValidator: cfg.RegistryValidator,
-			PostUpsert:        cfg.PostUpsert,
-		}, false)
-		if ae != nil {
-			return nil, mapApplyErrorToHuma(ae, kind, ns, name, version)
-		}
+			up, ae := applyCore(ctx, cfg.Store, body, applyOpts{
+				Authorize:         cfg.Authorize,
+				Resolver:          cfg.Resolver,
+				RegistryValidator: cfg.RegistryValidator,
+				PostUpsert:        cfg.PostUpsert,
+			}, false)
+			if ae != nil {
+				return nil, mapApplyErrorToHuma(ae, kind, ns, name, version)
+			}
 
-		// applyCore returns the system-assigned version on the
-		// versioned-artifact path; fall back to the URL version (used
-		// for the legacy deployments path where the URL is
-		// authoritative).
-		var readbackVersion string
-		if cfg.Store.IsVersionedArtifact() {
-			readbackVersion = strconv.Itoa(up.Version)
-		} else {
-			readbackVersion = version
-		}
+			// applyCore returns the system-assigned version on the
+			// versioned-artifact path; fall back to the URL version (used
+			// for the legacy deployments path where the URL is
+			// authoritative).
+			var readbackVersion string
+			if cfg.Store.IsVersionedArtifact() {
+				readbackVersion = strconv.Itoa(up.Version)
+			} else {
+				readbackVersion = version
+			}
 
-		// Read back so the response reflects the stored identity (assigned
-		// generation, default'd metadata) plus any status / annotation
-		// writes the PostUpsert hook performed. Failure to re-read after a
-		// successful apply degrades to a 500 rather than swallowing the
-		// already-persisted change silently.
-		row, err := cfg.Store.Get(ctx, ns, name, readbackVersion)
-		if err != nil {
-			return nil, huma.Error500InternalServerError("read back "+kind, err)
-		}
-		obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
-		if err != nil {
-			return nil, huma.Error500InternalServerError("decode "+kind, err)
-		}
-		return &bodyOutput[T]{Body: obj}, nil
-	})
+			// Read back so the response reflects the stored identity (assigned
+			// generation, default'd metadata) plus any status / annotation
+			// writes the PostUpsert hook performed. Failure to re-read after a
+			// successful apply degrades to a 500 rather than swallowing the
+			// already-persisted change silently.
+			row, err := cfg.Store.Get(ctx, ns, name, readbackVersion)
+			if err != nil {
+				return nil, huma.Error500InternalServerError("read back "+kind, err)
+			}
+			obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
+			if err != nil {
+				return nil, huma.Error500InternalServerError("decode "+kind, err)
+			}
+			return &bodyOutput[T]{Body: obj}, nil
+		})
+	}
 
 	// Delete (soft).
 	huma.Register(api, huma.Operation{
