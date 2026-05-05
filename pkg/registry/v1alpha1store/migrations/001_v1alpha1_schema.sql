@@ -4,16 +4,16 @@
 -- primary key for every kind.
 --
 -- Versioned-artifact tables (agents, mcp_servers, remote_mcp_servers,
--- skills, prompts, providers) are append-only with system-assigned
--- monotonic INTEGER versions. Each row carries a SHA-256 spec_hash so
--- Upsert can recognise an unchanged spec and skip emitting a new
--- version. "Latest" is computed as MAX(version) over the live rows for
--- a (namespace, name); the per-table (namespace, name, version DESC)
--- index serves that lookup.
+-- skills, prompts) are append-only with system-assigned monotonic
+-- INTEGER versions. Each row carries a SHA-256 spec_hash so Upsert can
+-- recognise an unchanged spec and skip emitting a new version. "Latest"
+-- is computed as MAX(version) over the live rows for a (namespace,
+-- name); the per-table (namespace, name, version DESC) index serves
+-- that lookup.
 --
--- Deployments are not versioned-artifact rows — they're lifecycle state
--- and keep the older string-version shape for now (out of scope for the
--- immutable-versioning redesign).
+-- Providers and Deployments are not versioned-artifact rows — they're
+-- infra/lifecycle state and keep the older string-version shape (out of
+-- scope for the immutable-versioning redesign).
 --
 -- All tables live under the dedicated PostgreSQL schema `v1alpha1` so they
 -- coexist with the legacy `public.agents`, `public.servers`, etc. during
@@ -80,8 +80,8 @@ $$ LANGUAGE plpgsql;
 
 -- -----------------------------------------------------------------------------
 -- Versioned-artifact tables: identical shape across agents, mcp_servers,
--- skills, prompts, providers. (remote_mcp_servers shares the shape and is
--- created in 005_remote_resources.sql.)
+-- skills, prompts. (remote_mcp_servers shares the shape and is created
+-- in 005_remote_resources.sql.)
 --
 -- Columns:
 --   namespace, name, version   — composite identity (PK); version is a
@@ -192,33 +192,37 @@ CREATE INDEX IF NOT EXISTS v1alpha1_prompts_terminating       ON v1alpha1.prompt
 CREATE OR REPLACE TRIGGER prompts_set_updated_at  BEFORE UPDATE ON v1alpha1.prompts  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
 CREATE OR REPLACE TRIGGER prompts_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.prompts  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_prompts_status');
 
+-- -----------------------------------------------------------------------------
+-- Providers and Deployments: lifecycle/infra state, NOT versioned artifacts.
+-- Both retain the pre-immutable-versioning shape (string version, generation,
+-- finalizers, is_latest_version). Provider belongs with Deployment as
+-- infra/config — the actual versioned artifacts that get deployed are
+-- Agents/MCPServers/Skills/Prompts/RemoteMCPServers.
+-- -----------------------------------------------------------------------------
+
 CREATE TABLE IF NOT EXISTS v1alpha1.providers (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
-    version            INTEGER      NOT NULL CHECK (version > 0),
+    version            VARCHAR(255) NOT NULL,
+    generation         BIGINT       NOT NULL DEFAULT 1,
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
-    spec_hash          CHAR(64)     NOT NULL,
     status             JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    is_latest_version  BOOLEAN      NOT NULL DEFAULT false,
+    deletion_timestamp TIMESTAMPTZ,
+    finalizers         JSONB        NOT NULL DEFAULT '[]'::jsonb,
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    deletion_timestamp TIMESTAMPTZ,
     PRIMARY KEY (namespace, name, version)
 );
-CREATE INDEX IF NOT EXISTS v1alpha1_providers_name_version_desc ON v1alpha1.providers (namespace, name, version DESC);
-CREATE INDEX IF NOT EXISTS v1alpha1_providers_labels_gin        ON v1alpha1.providers USING GIN (labels);
-CREATE INDEX IF NOT EXISTS v1alpha1_providers_spec_gin          ON v1alpha1.providers USING GIN (spec jsonb_path_ops);
-CREATE INDEX IF NOT EXISTS v1alpha1_providers_updated_at_desc   ON v1alpha1.providers (updated_at DESC);
-CREATE INDEX IF NOT EXISTS v1alpha1_providers_terminating       ON v1alpha1.providers (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS v1alpha1_providers_latest_version  ON v1alpha1.providers (namespace, name) WHERE is_latest_version;
+CREATE INDEX IF NOT EXISTS v1alpha1_providers_labels_gin      ON v1alpha1.providers USING GIN (labels);
+CREATE INDEX IF NOT EXISTS v1alpha1_providers_spec_gin        ON v1alpha1.providers USING GIN (spec jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS v1alpha1_providers_updated_at_desc ON v1alpha1.providers (updated_at DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_providers_terminating    ON v1alpha1.providers (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
 CREATE OR REPLACE TRIGGER providers_set_updated_at  BEFORE UPDATE ON v1alpha1.providers  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
 CREATE OR REPLACE TRIGGER providers_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.providers  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_providers_status');
-
--- -----------------------------------------------------------------------------
--- Deployments: lifecycle state, NOT a versioned artifact. Retains the
--- pre-immutable-versioning shape (string version, generation, finalizers,
--- is_latest_version) until/unless the deployment lifecycle is redesigned.
--- -----------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS v1alpha1.deployments (
     namespace          VARCHAR(255) NOT NULL,
@@ -246,13 +250,11 @@ CREATE OR REPLACE TRIGGER deployments_notify_status   AFTER  INSERT OR UPDATE OR
 
 -- -----------------------------------------------------------------------------
 -- Seed: default providers so deployments can reference them out-of-the-box.
--- Seeded in the `default` namespace at version=1. spec_hash is the SHA-256
--- of the canonical-JSON spec (matches v1alpha1store.SpecHash) so a
--- subsequent Upsert with the same spec is recognised as a no-op.
+-- Seeded in the `default` namespace.
 -- -----------------------------------------------------------------------------
 
-INSERT INTO v1alpha1.providers (namespace, name, version, spec, spec_hash)
+INSERT INTO v1alpha1.providers (namespace, name, version, spec, is_latest_version)
 VALUES
-    ('default', 'local',              1, '{"platform":"local"}'::jsonb,      '4b09aeaab0089f5f8891667b446f5f6a4972f73121a504b0391e6b019e27b074'),
-    ('default', 'kubernetes-default', 1, '{"platform":"kubernetes"}'::jsonb, '1a3bd8c39b73e957bd1960d40cb7824fa3e524112d212eaf0318da5f746e41ca')
+    ('default', 'local',              'v1', '{"platform":"local"}'::jsonb,      true),
+    ('default', 'kubernetes-default', 'v1', '{"platform":"kubernetes"}'::jsonb, true)
 ON CONFLICT (namespace, name, version) DO NOTHING;

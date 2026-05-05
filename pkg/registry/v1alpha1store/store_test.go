@@ -428,12 +428,14 @@ func TestStore_FindReferrers(t *testing.T) {
 
 func TestStore_SeededProviders(t *testing.T) {
 	pool := NewTestPool(t)
-	providers := NewStore(pool, "v1alpha1.providers")
+	// Provider is legacy-mode (string version, is_latest_version flag);
+	// use the NewDeploymentStore constructor.
+	providers := NewDeploymentStore(pool, "v1alpha1.providers")
 	ctx := context.Background()
 
 	local, err := providers.GetLatest(ctx, "default", "local")
 	require.NoError(t, err)
-	require.Equal(t, "1", local.Metadata.Version)
+	require.Equal(t, "v1", local.Metadata.Version)
 
 	var spec v1alpha1.ProviderSpec
 	require.NoError(t, json.Unmarshal(local.Spec, &spec))

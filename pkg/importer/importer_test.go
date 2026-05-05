@@ -37,8 +37,8 @@ func newTestImporter(t *testing.T, extra ...Scanner) (*Importer, *v1alpha1store.
 		v1alpha1.KindMCPServer:  v1alpha1store.NewStore(pool, mcpTable),
 		v1alpha1.KindSkill:      v1alpha1store.NewStore(pool, skillsTable),
 		v1alpha1.KindPrompt:     v1alpha1store.NewStore(pool, promptsTable),
-		v1alpha1.KindProvider:   v1alpha1store.NewStore(pool, provTable),
-		v1alpha1.KindDeployment: v1alpha1store.NewStore(pool, deployTable),
+		v1alpha1.KindProvider:   v1alpha1store.NewDeploymentStore(pool, provTable),
+		v1alpha1.KindDeployment: v1alpha1store.NewDeploymentStore(pool, deployTable),
 	}
 	findings := NewFindingsStore(pool)
 	imp, err := New(Config{

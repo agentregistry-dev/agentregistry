@@ -14,15 +14,12 @@ var KnownPlatforms = map[string]struct{}{
 
 // Validate runs Provider's structural checks.
 //
-// Provider is a versioned-artifact kind in the immutable-versioning
-// model. Its spec describes a connection handle to one execution
-// target — platform identifier, platform-specific config, and an
-// optional telemetry endpoint. A spec change produces a new
-// immutable version row; older versions remain queryable for audit.
-//
-// Bound deployments don't auto-pick up a new Provider version: each
-// consumer must be updated to point at the new version explicitly,
-// so a config rotation can't silently retarget live deployments.
+// Provider is infra/config — it lives alongside Deployment, not in
+// the versioned-artifact set. Its spec describes a connection handle
+// to one execution target: platform identifier, platform-specific
+// config, and an optional telemetry endpoint. (namespace, name) is
+// the identity; metadata.version goes into the legacy 3-tuple PK and
+// is pinned to a constant via DefaultMetadataVersion below.
 func (p *Provider) Validate() error {
 	var errs FieldErrors
 	errs = append(errs, ValidateObjectMeta(p.Metadata)...)
@@ -37,6 +34,14 @@ func (p *Provider) Validate() error {
 	}
 	return errs
 }
+
+// DefaultMetadataVersion satisfies MetadataVersionDefaulter so YAML
+// manifests for Provider can omit metadata.version. The constant "1"
+// goes into the (namespace, name, version) PK; multi-version Provider
+// is not a concept we expose. (The bundled SQL seed inserts under
+// "v1" for legacy reasons — both rows coexist harmlessly under a
+// different version key.)
+func (p *Provider) DefaultMetadataVersion() string { return "1" }
 
 func knownPlatformNames() []string {
 	out := make([]string, 0, len(KnownPlatforms))

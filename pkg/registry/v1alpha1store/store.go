@@ -348,14 +348,15 @@ func (s *Store) upsertVersioned(ctx context.Context, meta *v1alpha1.ObjectMeta, 
 	return result, nil
 }
 
-// upsertLegacy implements the older string-version, in-place semantics for
-// the deployments table. The caller supplies meta.Version explicitly; a
-// re-apply with the same spec is a no-op (no generation today since the
-// new outcome surface doesn't model it), a differing spec replaces the
-// row, and labels/annotations always replace.
+// upsertLegacy implements the older string-version, in-place semantics
+// for the legacy tables (deployments, providers). The caller supplies
+// meta.Version explicitly; a re-apply with the same spec is a no-op
+// (no generation today since the new outcome surface doesn't model
+// it), a differing spec replaces the row, and labels/annotations
+// always replace.
 func (s *Store) upsertLegacy(ctx context.Context, meta *v1alpha1.ObjectMeta, specJSON json.RawMessage) (UpsertResult, error) {
 	if meta.Version == "" {
-		return UpsertResult{}, errors.New("v1alpha1 store: version is required for deployments")
+		return UpsertResult{}, errors.New("v1alpha1 store: version is required for legacy-mode kinds")
 	}
 	labelsJSON, err := canonicalJSONMap(meta.Labels)
 	if err != nil {

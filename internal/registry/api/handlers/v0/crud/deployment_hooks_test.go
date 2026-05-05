@@ -47,7 +47,7 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha
 	require.NoError(t, err)
 
 	_, err = stores[v1alpha1.KindProvider].Upsert(ctx, &v1alpha1.Provider{
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "noop-provider"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "noop-provider", Version: "1"},
 		Spec:     v1alpha1.ProviderSpec{Platform: noop.Platform},
 	})
 	require.NoError(t, err)

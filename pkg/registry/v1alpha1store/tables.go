@@ -31,10 +31,12 @@ var TableFor = map[string]string{
 // importer layers take — they never look up tables by string literal
 // themselves.
 //
-// KindDeployment is bound through NewDeploymentStore (legacy mode);
-// every other built-in kind uses NewStore (versioned-artifact mode).
-// Iterates v1alpha1.BuiltinKinds so registration order stays stable
-// across builds (important for OpenAPI output).
+// KindDeployment and KindProvider are bound through NewDeploymentStore
+// (legacy mode) — both are infra/lifecycle state, not versioned
+// artifacts. Every other built-in kind uses NewStore
+// (versioned-artifact mode). Iterates v1alpha1.BuiltinKinds so
+// registration order stays stable across builds (important for
+// OpenAPI output).
 func NewStores(pool *pgxpool.Pool) map[string]*Store {
 	out := make(map[string]*Store, len(v1alpha1.BuiltinKinds))
 	for _, kind := range v1alpha1.BuiltinKinds {
@@ -44,7 +46,7 @@ func NewStores(pool *pgxpool.Pool) map[string]*Store {
 			// table here is a coding error, not a runtime condition.
 			panic("v1alpha1store: no table registered for kind " + kind)
 		}
-		if kind == v1alpha1.KindDeployment {
+		if kind == v1alpha1.KindDeployment || kind == v1alpha1.KindProvider {
 			out[kind] = NewDeploymentStore(pool, table)
 			continue
 		}
