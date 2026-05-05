@@ -69,7 +69,7 @@ type StructuralValidator interface {
 // stored in the (namespace, name, version) PK. Returning "" defers
 // to the standard "version required" validator.
 //
-// Pair with ValidateObjectMetaUnversioned in the kind's Validate.
+// Pair with ValidateObjectMeta in the kind's Validate.
 type MetadataVersionDefaulter interface {
 	DefaultMetadataVersion() string
 }

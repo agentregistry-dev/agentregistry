@@ -14,7 +14,7 @@ import (
 // is the identity; callers pin metadata.version to a constant ("1").
 func (d *Deployment) Validate() error {
 	var errs FieldErrors
-	errs = append(errs, ValidateObjectMetaUnversioned(d.Metadata)...)
+	errs = append(errs, ValidateObjectMeta(d.Metadata)...)
 	errs = append(errs, validateDeploymentSpec(&d.Spec)...)
 	if len(errs) == 0 {
 		return nil

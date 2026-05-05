@@ -23,7 +23,7 @@ var KnownPlatforms = map[string]struct{}{
 // constant ("1") rather than fabricate semantic versions.
 func (p *Provider) Validate() error {
 	var errs FieldErrors
-	errs = append(errs, ValidateObjectMetaUnversioned(p.Metadata)...)
+	errs = append(errs, ValidateObjectMeta(p.Metadata)...)
 	if p.Spec.Platform == "" {
 		errs.Append("spec.platform", fmt.Errorf("%w", ErrRequiredField))
 	} else if _, ok := KnownPlatforms[p.Spec.Platform]; !ok {

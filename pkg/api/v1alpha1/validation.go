@@ -125,14 +125,6 @@ func ValidateObjectMeta(m ObjectMeta) FieldErrors {
 	return validateObjectMetaCommon(m)
 }
 
-// ValidateObjectMetaUnversioned is retained as an alias for callers
-// that historically distinguished "kinds with a version" from "kinds
-// without". Both paths validate the same thing now. New code should
-// call ValidateObjectMeta directly.
-func ValidateObjectMetaUnversioned(m ObjectMeta) FieldErrors {
-	return validateObjectMetaCommon(m)
-}
-
 func validateObjectMetaCommon(m ObjectMeta) FieldErrors {
 	var errs FieldErrors
 
