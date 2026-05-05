@@ -1,12 +1,12 @@
 package v1alpha1store
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -15,7 +15,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"golang.org/x/mod/semver"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -25,40 +24,73 @@ import (
 // One Store instance is bound to one table; callers construct one per kind
 // (v1alpha1.agents, v1alpha1.mcp_servers, etc.).
 //
-// Identity is (namespace, name, version) across every table. Spec and status
-// are JSONB columns; labels and finalizers are JSONB; generation,
-// deletion_timestamp, created_at, updated_at are columns.
-// is_latest_version is a per-(namespace, name) boolean toggled by Upsert so
-// that at most one row per (namespace, name) carries it — the row with the
-// highest semver wins, falling back to most-recently-updated when semver
-// parse fails.
+// Identity is (namespace, name, version). For versioned-artifact tables
+// (agents, mcp_servers, remote_mcp_servers, skills, prompts, providers)
+// `version` is a system-assigned positive integer; rows are append-only and
+// the row with MAX(version) for a (namespace, name) is "latest". Spec is
+// JSONB with a CHAR(64) spec_hash so Upsert recognises an unchanged spec
+// and short-circuits rather than emitting a redundant new version.
+//
+// Deployments are not versioned-artifact rows — they are lifecycle state and
+// retain the older shape (string version, generation, finalizers,
+// is_latest_version). A Store constructed for the deployments table opts
+// into the legacy code paths via versioned=false.
 //
 // PatchStatus is disjoint from Upsert: it touches only status and
-// updated_at, never generation or spec. Reconcilers use PatchStatus
-// exclusively; apply handlers use Upsert exclusively.
+// updated_at, never spec. Reconcilers use PatchStatus exclusively; apply
+// handlers use Upsert exclusively.
 //
 // Soft delete: Delete sets deletion_timestamp and leaves the row visible
 // to GetLatest/Get/List. GC (PurgeFinalized) removes rows where
-// deletion_timestamp IS NOT NULL AND finalizers = '[]'.
+// deletion_timestamp IS NOT NULL AND finalizers = '[]' (deployments only).
 type Store struct {
-	pool  *pgxpool.Pool
-	table string
+	pool      *pgxpool.Pool
+	table     string
+	versioned bool
 }
 
 // NewStore constructs a Store bound to a single table (e.g.
 // "v1alpha1.agents"). The table must exist in the schema; NewStore does
-// not validate it.
+// not validate it. Tables under v1alpha1.* default to versioned-artifact
+// semantics; the deployments table opts out.
 func NewStore(pool *pgxpool.Pool, table string) *Store {
-	return &Store{pool: pool, table: table}
+	return &Store{pool: pool, table: table, versioned: !isDeploymentsTable(table)}
 }
 
-// UpsertResult describes what happened on Upsert. SpecChanged is true when
-// the incoming spec bytes differ from the existing row's spec (or when the
-// row didn't exist). Generation reflects the final stored value.
+// isDeploymentsTable reports whether the given table follows the legacy
+// shape (string version, generation, finalizers, is_latest_version) rather
+// than the immutable-versioning shape. Today only v1alpha1.deployments
+// stays on the legacy shape; everything else is versioned-artifact.
+func isDeploymentsTable(table string) bool {
+	return table == "v1alpha1.deployments"
+}
+
+// UpsertOutcome categorises what an Upsert call did.
+type UpsertOutcome int
+
+const (
+	// UpsertCreated reports that a new immutable version row was inserted —
+	// either because the (namespace, name) had no rows yet, or the incoming
+	// spec hash differed from the latest live row's.
+	UpsertCreated UpsertOutcome = iota
+	// UpsertNoOp reports that the incoming spec matched the latest live row's
+	// hash and labels/annotations were unchanged. No row was written.
+	UpsertNoOp
+	// UpsertLabelsUpdated reports that the incoming spec matched but
+	// labels and/or annotations differed; the latest row's metadata was
+	// patched in place without bumping the version.
+	UpsertLabelsUpdated
+)
+
+// UpsertResult is the outcome of Upsert.
 type UpsertResult struct {
-	Created     bool
-	SpecChanged bool
-	Generation  int64
+	// Version is the integer version of the live row after the call. For
+	// versioned-artifact tables this is the row's positive monotonic
+	// version. For the legacy deployments path it is the integer parse of
+	// the supplied string version when possible, else 0.
+	Version int
+	// Outcome categorises what the call did. See UpsertOutcome constants.
+	Outcome UpsertOutcome
 }
 
 // ErrInvalidCursor reports that a list pagination cursor could not be parsed.
@@ -75,11 +107,6 @@ var ErrInvalidExtraWhere = errors.New("v1alpha1 store: ExtraWhere / ExtraArgs pl
 // Matches Kubernetes semantics: `kubectl apply` against a terminating
 // object returns 409 AlreadyExists ("object is being deleted; delete and
 // recreate").
-//
-// Callers MUST NOT attempt to resurrect by clearing deletion_timestamp
-// in-place; wait for the row to finalize (the normal finalizer flow) or
-// drop the finalizer explicitly via PatchFinalizers, then re-apply once
-// the row has been purged.
 var ErrTerminating = errors.New("v1alpha1 store: object is terminating")
 
 // ListOpts controls paginated list queries.
@@ -94,8 +121,10 @@ type ListOpts struct {
 	Limit int
 	// Cursor is an opaque pagination token. Empty starts from the beginning.
 	Cursor string
-	// LatestOnly restricts to rows where is_latest_version=true (one per
-	// (namespace, name)).
+	// LatestOnly restricts to the highest-version live row per
+	// (namespace, name). For versioned-artifact tables this resolves via a
+	// MAX(version) filter; for the deployments table it consults the
+	// legacy is_latest_version flag.
 	LatestOnly bool
 	// IncludeTerminating includes rows with deletion_timestamp set. Default
 	// false — callers asking for "alive" rows shouldn't see terminating ones.
@@ -127,10 +156,7 @@ type ListOpts struct {
 
 // listCursor is the opaque pagination position for List. The fields
 // mirror the (namespace, name, version, updated_at) sort order used by
-// the underlying query. UpdatedAt rides along as a tiebreaker only —
-// (namespace, name, version) is already unique per table, so it never
-// actually disambiguates rows; it's preserved for symmetry with the
-// SQL predicate so encoding/decoding stay round-trip stable.
+// the underlying query.
 type listCursor struct {
 	Namespace string    `json:"namespace"`
 	Name      string    `json:"name"`
@@ -138,69 +164,183 @@ type listCursor struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-// UpsertOpts carries optional metadata on Upsert. All three maps/slices
-// describe the desired post-apply state of their respective columns.
+// Upsert applies obj into the Store. Behaviour depends on the table's
+// versioning mode:
 //
-// Labels are the full replacement label set for the row. Apply-style
-// replacement: every Upsert fully overwrites the stored labels. Nil
-// and empty map both produce no labels after the call. (Controller-
-// managed labels don't survive a user apply unless the apply handler
-// merges them in before calling Upsert.)
+//   - Versioned-artifact tables (agents, mcp_servers, etc.) follow
+//     hash-based append-only apply semantics:
+//   - new (namespace, name) → insert at version=1
+//   - same spec_hash as latest live row, same labels+annotations →
+//     no-op, return the latest version
+//   - same spec_hash, different labels or annotations → update labels /
+//     annotations on the latest row in place (no version bump)
+//   - different spec_hash → insert a new row at MAX(version)+1
+//   - The legacy deployments table follows the older
+//     update-in-place semantics: rows are keyed by the caller-supplied
+//     string version and re-applied with the same spec do not bump
+//     anything; differing spec replaces the row.
 //
-// Annotations is the desired set of annotation key/value pairs on the
-// row post-apply; nil means "leave existing annotations unchanged",
-// while an explicit empty map means "clear all annotations". Used by
-// controllers that add annotations out-of-band with user applies.
-type UpsertOpts struct {
-	Labels      map[string]string
-	Annotations map[string]string
-}
-
-// Upsert writes the given object under its (namespace, name, version). On
-// update, generation bumps iff the marshaled spec bytes differ from what's
-// already stored; no-op re-applies preserve generation. Status is never
-// touched by this call — use PatchStatus for that. Finalizers are
-// preserved across Upserts; mutate them via PatchFinalizers (the
-// orphan-reconciler seam — there's no public Upsert path for finalizers).
+// Status is never touched by Upsert — use PatchStatus for that.
 //
-// After the row write, is_latest_version is recomputed across all rows
-// sharing this (namespace, name): the row with the highest semver wins
-// (fallback: most-recently-updated). Terminating rows (deletion_timestamp
-// IS NOT NULL) are excluded from the latest computation. All of this
-// happens inside a single transaction.
-func (s *Store) Upsert(ctx context.Context, namespace, name, version string, specJSON json.RawMessage, opts UpsertOpts) (*UpsertResult, error) {
-	if namespace == "" || name == "" || version == "" {
-		return nil, errors.New("v1alpha1 store: namespace, name, and version are required")
+// Upsert ignores obj.Metadata.Version on the versioned-artifact path; the
+// version is system-assigned. For the deployments path the metadata.version
+// string IS the row's identity and must be supplied by the caller.
+func (s *Store) Upsert(ctx context.Context, obj v1alpha1.Object) (UpsertResult, error) {
+	if obj == nil {
+		return UpsertResult{}, errors.New("v1alpha1 store: nil object")
+	}
+	meta := obj.GetMetadata()
+	if meta == nil || meta.Namespace == "" || meta.Name == "" {
+		return UpsertResult{}, errors.New("v1alpha1 store: namespace and name are required")
+	}
+	specJSON, err := obj.MarshalSpec()
+	if err != nil {
+		return UpsertResult{}, fmt.Errorf("v1alpha1 store: marshal spec: %w", err)
 	}
 	if len(specJSON) == 0 {
-		return nil, errors.New("v1alpha1 store: spec is required")
-	}
-	labels := opts.Labels
-	if labels == nil {
-		labels = map[string]string{}
-	}
-	labelsJSON, err := json.Marshal(labels)
-	if err != nil {
-		return nil, fmt.Errorf("v1alpha1 store: marshal labels: %w", err)
+		return UpsertResult{}, errors.New("v1alpha1 store: spec is required")
 	}
 
-	res := &UpsertResult{}
+	if s.versioned {
+		return s.upsertVersioned(ctx, meta, specJSON)
+	}
+	return s.upsertLegacy(ctx, meta, specJSON)
+}
+
+// upsertVersioned implements the hash-based append-only apply semantics
+// for versioned-artifact tables. See Upsert for the full state machine.
+func (s *Store) upsertVersioned(ctx context.Context, meta *v1alpha1.ObjectMeta, specJSON json.RawMessage) (UpsertResult, error) {
+	incomingHash := SpecHash(specJSON)
+	incomingLabelsJSON, err := canonicalJSONMap(meta.Labels)
+	if err != nil {
+		return UpsertResult{}, fmt.Errorf("v1alpha1 store: marshal labels: %w", err)
+	}
+	incomingAnnotationsJSON, err := canonicalJSONMap(meta.Annotations)
+	if err != nil {
+		return UpsertResult{}, fmt.Errorf("v1alpha1 store: marshal annotations: %w", err)
+	}
+
+	var result UpsertResult
 	err = runInTx(ctx, s.pool, func(tx pgx.Tx) error {
 		var (
-			oldSpec           []byte
-			oldGeneration     int64
-			oldFinalizersRaw  []byte
-			oldAnnotationsRaw []byte
-			oldDeletionTS     pgtype.Timestamptz
-			found             bool
+			latestVersion       int
+			latestHash          string
+			latestLabelsRaw     []byte
+			latestAnnotationRaw []byte
+			latestDeletionTS    pgtype.Timestamptz
+			found               bool
 		)
 		err := tx.QueryRow(ctx,
 			fmt.Sprintf(`
-				SELECT spec, generation, finalizers, annotations, deletion_timestamp
+				SELECT version, spec_hash, labels, annotations, deletion_timestamp
+				FROM %s
+				WHERE namespace=$1 AND name=$2
+				ORDER BY version DESC
+				LIMIT 1
+				FOR UPDATE`, s.table),
+			meta.Namespace, meta.Name).Scan(&latestVersion, &latestHash, &latestLabelsRaw, &latestAnnotationRaw, &latestDeletionTS)
+		switch {
+		case err == nil:
+			found = true
+		case errors.Is(err, pgx.ErrNoRows):
+			found = false
+		default:
+			return fmt.Errorf("load latest: %w", err)
+		}
+
+		// Reject mutations on terminating rows. Mirrors Kubernetes:
+		// `kubectl apply` on an object with deletionTimestamp returns 409.
+		if found && latestDeletionTS.Valid {
+			return ErrTerminating
+		}
+
+		// Branch 1: no prior row → INSERT at version 1.
+		if !found {
+			if _, err := tx.Exec(ctx,
+				fmt.Sprintf(`
+					INSERT INTO %s (namespace, name, version, labels, annotations, spec, spec_hash)
+					VALUES ($1, $2, 1, $3, $4, $5, $6)`, s.table),
+				meta.Namespace, meta.Name, incomingLabelsJSON, incomingAnnotationsJSON, []byte(specJSON), incomingHash); err != nil {
+				return fmt.Errorf("insert v1: %w", err)
+			}
+			result = UpsertResult{Version: 1, Outcome: UpsertCreated}
+			return nil
+		}
+
+		// Branch 2: spec hash matches the latest live row.
+		if incomingHash == latestHash {
+			labelsEqual := equalJSONMap(latestLabelsRaw, incomingLabelsJSON)
+			annotationsEqual := equalJSONMap(latestAnnotationRaw, incomingAnnotationsJSON)
+			if labelsEqual && annotationsEqual {
+				result = UpsertResult{Version: latestVersion, Outcome: UpsertNoOp}
+				return nil
+			}
+			if _, err := tx.Exec(ctx,
+				fmt.Sprintf(`
+					UPDATE %s
+					SET labels = $4, annotations = $5
+					WHERE namespace = $1 AND name = $2 AND version = $3`, s.table),
+				meta.Namespace, meta.Name, latestVersion, incomingLabelsJSON, incomingAnnotationsJSON); err != nil {
+				return fmt.Errorf("update labels: %w", err)
+			}
+			result = UpsertResult{Version: latestVersion, Outcome: UpsertLabelsUpdated}
+			return nil
+		}
+
+		// Branch 3: spec hash differs → append a new row at MAX(version)+1.
+		newVersion := latestVersion + 1
+		if _, err := tx.Exec(ctx,
+			fmt.Sprintf(`
+				INSERT INTO %s (namespace, name, version, labels, annotations, spec, spec_hash)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)`, s.table),
+			meta.Namespace, meta.Name, newVersion, incomingLabelsJSON, incomingAnnotationsJSON, []byte(specJSON), incomingHash); err != nil {
+			return fmt.Errorf("insert new version: %w", err)
+		}
+		result = UpsertResult{Version: newVersion, Outcome: UpsertCreated}
+		return nil
+	})
+	if err != nil {
+		return UpsertResult{}, err
+	}
+	return result, nil
+}
+
+// upsertLegacy implements the older string-version, in-place semantics for
+// the deployments table. The caller supplies meta.Version explicitly; a
+// re-apply with the same spec is a no-op (no generation today since the
+// new outcome surface doesn't model it), a differing spec replaces the
+// row, and labels/annotations always replace.
+func (s *Store) upsertLegacy(ctx context.Context, meta *v1alpha1.ObjectMeta, specJSON json.RawMessage) (UpsertResult, error) {
+	if meta.Version == "" {
+		return UpsertResult{}, errors.New("v1alpha1 store: version is required for deployments")
+	}
+	labelsJSON, err := canonicalJSONMap(meta.Labels)
+	if err != nil {
+		return UpsertResult{}, fmt.Errorf("v1alpha1 store: marshal labels: %w", err)
+	}
+	annotationsJSON, err := canonicalJSONMap(meta.Annotations)
+	if err != nil {
+		return UpsertResult{}, fmt.Errorf("v1alpha1 store: marshal annotations: %w", err)
+	}
+
+	var result UpsertResult
+	err = runInTx(ctx, s.pool, func(tx pgx.Tx) error {
+		var (
+			oldSpec        []byte
+			oldGen         int64
+			oldFinalizers  []byte
+			oldAnnotations []byte
+			oldLabels      []byte
+			oldDeletion   pgtype.Timestamptz
+			found         bool
+		)
+		err := tx.QueryRow(ctx,
+			fmt.Sprintf(`
+				SELECT spec, generation, finalizers, annotations, labels, deletion_timestamp
 				FROM %s
 				WHERE namespace=$1 AND name=$2 AND version=$3
 				FOR UPDATE`, s.table),
-			namespace, name, version).Scan(&oldSpec, &oldGeneration, &oldFinalizersRaw, &oldAnnotationsRaw, &oldDeletionTS)
+			meta.Namespace, meta.Name, meta.Version).Scan(&oldSpec, &oldGen, &oldFinalizers, &oldAnnotations, &oldLabels, &oldDeletion)
 		switch {
 		case err == nil:
 			found = true
@@ -210,52 +350,31 @@ func (s *Store) Upsert(ctx context.Context, namespace, name, version string, spe
 			return fmt.Errorf("load existing: %w", err)
 		}
 
-		// Reject mutations on terminating rows. Mirrors Kubernetes:
-		// `kubectl apply` on an object with deletionTimestamp returns 409.
-		// The correct recovery is to let finalizers drain (or drop them
-		// explicitly via PatchFinalizers) so PurgeFinalized can hard-
-		// delete the row; re-apply succeeds once the row is gone.
-		if found && oldDeletionTS.Valid {
+		if found && oldDeletion.Valid {
 			return ErrTerminating
 		}
 
 		var newGen int64
+		outcome := UpsertNoOp
 		switch {
 		case !found:
 			newGen = 1
-			res.Created = true
-			res.SpecChanged = true
-		case !bytes.Equal(normalizeJSON(oldSpec), normalizeJSON(specJSON)):
-			newGen = oldGeneration + 1
-			res.SpecChanged = true
+			outcome = UpsertCreated
+		case !equalSpecJSON(oldSpec, specJSON):
+			newGen = oldGen + 1
+			outcome = UpsertCreated
 		default:
-			newGen = oldGeneration
-			res.SpecChanged = false
+			newGen = oldGen
+			if !equalJSONMap(oldLabels, labelsJSON) || !equalJSONMap(oldAnnotations, annotationsJSON) {
+				outcome = UpsertLabelsUpdated
+			} else {
+				outcome = UpsertNoOp
+			}
 		}
-		res.Generation = newGen
 
-		// Finalizers preserved verbatim from the existing row (or `[]`
-		// for new rows). The public Upsert API has no `Finalizers`
-		// option anymore — the column is retained for the future
-		// orphan-reconciler hook only. PatchFinalizers (still exported)
-		// is the sole way to mutate it.
-		finalizersJSON := oldFinalizersRaw
+		finalizersJSON := oldFinalizers
 		if !found {
 			finalizersJSON = []byte("[]")
-		}
-
-		// Annotation handling: nil preserves existing,
-		// non-nil (including empty map) replaces.
-		annotationsJSON := oldAnnotationsRaw
-		if !found {
-			annotationsJSON = []byte("{}")
-		}
-		if opts.Annotations != nil {
-			a, err := json.Marshal(opts.Annotations)
-			if err != nil {
-				return fmt.Errorf("marshal annotations: %w", err)
-			}
-			annotationsJSON = a
 		}
 
 		_, err = tx.Exec(ctx,
@@ -269,36 +388,28 @@ func (s *Store) Upsert(ctx context.Context, namespace, name, version string, spe
 				    spec        = EXCLUDED.spec,
 				    finalizers  = EXCLUDED.finalizers
 			`, s.table),
-			namespace, name, version, newGen, labelsJSON, annotationsJSON, []byte(specJSON), finalizersJSON)
+			meta.Namespace, meta.Name, meta.Version, newGen, labelsJSON, annotationsJSON, []byte(specJSON), finalizersJSON)
 		if err != nil {
 			return fmt.Errorf("upsert row: %w", err)
 		}
 
-		if err := s.recomputeLatest(ctx, tx, namespace, name); err != nil {
+		if err := s.recomputeLatestDeployments(ctx, tx, meta.Namespace, meta.Name); err != nil {
 			return fmt.Errorf("recompute latest: %w", err)
 		}
+
+		v, _ := strconv.Atoi(meta.Version)
+		result = UpsertResult{Version: v, Outcome: outcome}
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return UpsertResult{}, err
 	}
-	return res, nil
+	return result, nil
 }
 
 // PatchOpts bundles optional column mutations applied atomically by
 // ApplyPatch. Nil mutators skip the corresponding column entirely; the
-// row's other fields (spec, generation, labels) are never touched.
-//
-//   - Status: opaque-bytes mutator — receives the row's current status
-//     JSONB payload (nil when empty) and returns the replacement. Kinds
-//     that use the typed v1alpha1.Status schema wrap their logic with
-//     v1alpha1.StatusPatcher so the callback keeps its typed shape
-//     while the Store stays schema-agnostic.
-//   - Annotations: callback receives the current annotations map and
-//     returns the replacement. Returning nil clears the map. For
-//     idempotent merges, copy the input + overlay caller keys.
-//   - Finalizers: callback receives the current slice and returns the
-//     replacement. Nil → empty slice.
+// row's other fields are never touched.
 type PatchOpts struct {
 	Status      func(current json.RawMessage) (json.RawMessage, error)
 	Annotations func(map[string]string) map[string]string
@@ -310,30 +421,51 @@ type PatchOpts struct {
 // mutator is nil are left untouched. Returns pkgdb.ErrNotFound if the
 // row doesn't exist.
 //
-// Use this when a caller needs to update more than one column in lockstep
-// — e.g. the deployment coordinator threading adapter output into status,
-// annotations, and finalizers as a single observation.
-//
-// For single-column updates, the PatchStatus / PatchAnnotations /
-// PatchFinalizers wrappers below are thin shortcuts.
+// Finalizers patching is supported only on the deployments table; the
+// versioned-artifact tables don't carry a finalizers column. Calling
+// PatchFinalizers on a versioned-artifact Store returns an error to
+// surface the misconfiguration loudly rather than silently no-op.
 func (s *Store) ApplyPatch(ctx context.Context, namespace, name, version string, patch PatchOpts) error {
 	if patch.Status == nil && patch.Annotations == nil && patch.Finalizers == nil {
 		return nil
 	}
+	if patch.Finalizers != nil && s.versioned {
+		return errors.New("v1alpha1 store: finalizers patching not supported on versioned-artifact tables")
+	}
 	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
-		var statusJSON, annotationsJSON, finalizersJSON []byte
-		err := tx.QueryRow(ctx,
-			fmt.Sprintf(`
-				SELECT status, annotations, finalizers FROM %s
-				WHERE namespace=$1 AND name=$2 AND version=$3
-				FOR UPDATE`, s.table),
-			namespace, name, version,
-		).Scan(&statusJSON, &annotationsJSON, &finalizersJSON)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return pkgdb.ErrNotFound
-		}
-		if err != nil {
-			return fmt.Errorf("load row: %w", err)
+		var (
+			statusJSON      []byte
+			annotationsJSON []byte
+			finalizersJSON  []byte
+		)
+		if s.versioned {
+			err := tx.QueryRow(ctx,
+				fmt.Sprintf(`
+					SELECT status, annotations FROM %s
+					WHERE namespace=$1 AND name=$2 AND version=$3
+					FOR UPDATE`, s.table),
+				namespace, name, version,
+			).Scan(&statusJSON, &annotationsJSON)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return pkgdb.ErrNotFound
+			}
+			if err != nil {
+				return fmt.Errorf("load row: %w", err)
+			}
+		} else {
+			err := tx.QueryRow(ctx,
+				fmt.Sprintf(`
+					SELECT status, annotations, finalizers FROM %s
+					WHERE namespace=$1 AND name=$2 AND version=$3
+					FOR UPDATE`, s.table),
+				namespace, name, version,
+			).Scan(&statusJSON, &annotationsJSON, &finalizersJSON)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return pkgdb.ErrNotFound
+			}
+			if err != nil {
+				return fmt.Errorf("load row: %w", err)
+			}
 		}
 
 		setClauses := make([]string, 0, 3)
@@ -364,11 +496,7 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, version string,
 			setClauses = append(setClauses, fmt.Sprintf("finalizers=$%d", len(args)))
 		}
 
-		// updated_at is maintained by the v1alpha1.set_updated_at() BEFORE
-		// UPDATE trigger, so we don't set it explicitly here. Keeps
-		// PatchAnnotations / PatchStatus / PatchFinalizers consistent
-		// about when the timestamp advances.
-		_, err = tx.Exec(ctx,
+		_, err := tx.Exec(ctx,
 			fmt.Sprintf(`UPDATE %s SET %s WHERE namespace=$1 AND name=$2 AND version=$3`,
 				s.table, strings.Join(setClauses, ", ")),
 			args...)
@@ -380,9 +508,7 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, version string,
 }
 
 // buildStatusPatch hands the row's current status JSONB payload to the
-// caller's opaque mutator and returns the replacement bytes. The Store
-// is schema-agnostic here — typed kinds layer their own decode/encode
-// via v1alpha1.StatusPatcher (see v1alpha1/status.go).
+// caller's opaque mutator and returns the replacement bytes.
 func buildStatusPatch(current []byte, mutate func(json.RawMessage) (json.RawMessage, error)) ([]byte, error) {
 	var in json.RawMessage
 	if len(current) > 0 {
@@ -438,72 +564,113 @@ func buildFinalizersPatch(current []byte, mutate func([]string) []string) ([]byt
 }
 
 // PatchStatus is a thin wrapper over ApplyPatch for the single-column
-// status case. The mutator receives the current status JSONB payload as
-// opaque bytes (nil when empty) and returns the replacement. Kinds that
-// bind their status to the typed v1alpha1.Status wrap the callback via
-// v1alpha1.StatusPatcher.
+// status case.
 func (s *Store) PatchStatus(ctx context.Context, namespace, name, version string, mutate func(current json.RawMessage) (json.RawMessage, error)) error {
 	return s.ApplyPatch(ctx, namespace, name, version, PatchOpts{Status: mutate})
 }
 
 // PatchFinalizers is a thin wrapper over ApplyPatch for the single-
-// column finalizers case. See ApplyPatch for the semantics.
+// column finalizers case. Only valid for the deployments table.
 func (s *Store) PatchFinalizers(ctx context.Context, namespace, name, version string, mutate func([]string) []string) error {
 	return s.ApplyPatch(ctx, namespace, name, version, PatchOpts{Finalizers: mutate})
 }
 
 // PatchAnnotations is a thin wrapper over ApplyPatch for the single-
-// column annotations case. See ApplyPatch for the semantics.
+// column annotations case.
 func (s *Store) PatchAnnotations(ctx context.Context, namespace, name, version string, mutate func(map[string]string) map[string]string) error {
 	return s.ApplyPatch(ctx, namespace, name, version, PatchOpts{Annotations: mutate})
 }
 
 // Get returns a single row by (namespace, name, version), including
 // terminating rows. Returns pkgdb.ErrNotFound if missing.
+//
+// version is parsed as an integer for versioned-artifact tables and
+// passed through verbatim for the deployments table.
 func (s *Store) Get(ctx context.Context, namespace, name, version string) (*v1alpha1.RawObject, error) {
+	args, err := s.identityArgs(namespace, name, version)
+	if err != nil {
+		return nil, err
+	}
 	row := s.pool.QueryRow(ctx,
 		fmt.Sprintf(`
-			SELECT namespace, name, version, generation, labels, annotations, spec, status,
-			       deletion_timestamp, finalizers, created_at, updated_at
+			SELECT %s
 			FROM %s
-			WHERE namespace=$1 AND name=$2 AND version=$3`, s.table),
-		namespace, name, version)
-	return scanRow(row)
+			WHERE namespace=$1 AND name=$2 AND version=$3`, s.selectColumns(), s.table),
+		args...)
+	return scanRow(row, s.versioned)
 }
 
-// GetLatest returns the row where is_latest_version=true for
-// (namespace, name), or pkgdb.ErrNotFound if no live version exists.
-// Terminating rows are excluded from the latest computation.
+// GetLatest returns the highest-version live row for (namespace, name) on
+// versioned-artifact tables, or the is_latest_version row on the
+// deployments table. Returns pkgdb.ErrNotFound if no live version exists.
+// Terminating rows are excluded.
 func (s *Store) GetLatest(ctx context.Context, namespace, name string) (*v1alpha1.RawObject, error) {
-	row := s.pool.QueryRow(ctx,
-		fmt.Sprintf(`
-			SELECT namespace, name, version, generation, labels, annotations, spec, status,
-			       deletion_timestamp, finalizers, created_at, updated_at
+	var query string
+	if s.versioned {
+		query = fmt.Sprintf(`
+			SELECT %s
 			FROM %s
-			WHERE namespace=$1 AND name=$2 AND is_latest_version`, s.table),
-		namespace, name)
-	return scanRow(row)
+			WHERE namespace=$1 AND name=$2 AND deletion_timestamp IS NULL
+			ORDER BY version DESC
+			LIMIT 1`, s.selectColumns(), s.table)
+	} else {
+		query = fmt.Sprintf(`
+			SELECT %s
+			FROM %s
+			WHERE namespace=$1 AND name=$2 AND is_latest_version`, s.selectColumns(), s.table)
+	}
+	row := s.pool.QueryRow(ctx, query, namespace, name)
+	return scanRow(row, s.versioned)
 }
 
-// Delete removes a single row. Finalizer-bearing rows go through
-// soft-delete (deletion_timestamp set, row stays visible until
-// finalizers drain via PatchFinalizers, then PurgeFinalized hard-deletes).
-// Rows with no finalizers hard-delete immediately — matches Kubernetes,
-// where a finalizer-free object is gone the moment the API server
-// processes the DELETE call.
-//
-// The fast-path matters in practice: Deployment / Provider / Role /
-// most kinds today carry no finalizers, so without it `arctl delete X`
-// then `arctl apply X` would race the (currently non-existent)
-// background GC and hit ErrTerminating until something else purged the
-// row. With the fast-path, delete-then-reapply just works for the
-// common case while the soft-delete + drain dance is preserved for
-// kinds that actually use finalizers.
-//
-// On success, recomputes is_latest_version across surviving non-
-// terminating rows for this (namespace, name). Returns pkgdb.ErrNotFound
-// if the row doesn't exist.
+// Delete removes a single row. For deployments, the legacy soft-delete +
+// finalizer drain dance still applies. For versioned-artifact tables,
+// rows have no finalizers — Delete sets deletion_timestamp directly so
+// reads filtered on deletion_timestamp IS NULL stop returning the row;
+// PurgeFinalized hard-deletes terminating versioned-artifact rows on a
+// separate GC pass. Returns pkgdb.ErrNotFound if the row doesn't exist.
 func (s *Store) Delete(ctx context.Context, namespace, name, version string) error {
+	args, err := s.identityArgs(namespace, name, version)
+	if err != nil {
+		return err
+	}
+	if s.versioned {
+		return s.deleteVersioned(ctx, args)
+	}
+	return s.deleteLegacy(ctx, args)
+}
+
+func (s *Store) deleteVersioned(ctx context.Context, args []any) error {
+	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
+		var deletionTS pgtype.Timestamptz
+		err := tx.QueryRow(ctx,
+			fmt.Sprintf(`
+				SELECT deletion_timestamp
+				FROM %s
+				WHERE namespace=$1 AND name=$2 AND version=$3
+				FOR UPDATE`, s.table),
+			args...).Scan(&deletionTS)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return pkgdb.ErrNotFound
+			}
+			return fmt.Errorf("load row: %w", err)
+		}
+
+		// Versioned-artifact tables have no finalizers — hard-delete
+		// immediately. This matches the OSS fast-path for finalizer-free
+		// rows: `arctl delete X` then `arctl apply X` works without any
+		// background GC.
+		if _, err := tx.Exec(ctx,
+			fmt.Sprintf(`DELETE FROM %s WHERE namespace=$1 AND name=$2 AND version=$3`, s.table),
+			args...); err != nil {
+			return fmt.Errorf("hard delete: %w", err)
+		}
+		return nil
+	})
+}
+
+func (s *Store) deleteLegacy(ctx context.Context, args []any) error {
 	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
 		var (
 			finalizersRaw []byte
@@ -515,7 +682,7 @@ func (s *Store) Delete(ctx context.Context, namespace, name, version string) err
 				FROM %s
 				WHERE namespace=$1 AND name=$2 AND version=$3
 				FOR UPDATE`, s.table),
-			namespace, name, version).Scan(&finalizersRaw, &deletionTS)
+			args...).Scan(&finalizersRaw, &deletionTS)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return pkgdb.ErrNotFound
@@ -523,11 +690,6 @@ func (s *Store) Delete(ctx context.Context, namespace, name, version string) err
 			return fmt.Errorf("load row: %w", err)
 		}
 
-		// Finalizer-free → hard-delete immediately. Same logic
-		// PurgeFinalized would run on a separate GC pass; collapsing it
-		// into Delete avoids the "object is terminating; delete + re-apply
-		// once GC purges the row" race that blocks re-apply with no GC
-		// running.
 		hasFinalizers, err := jsonArrayNonEmpty(finalizersRaw)
 		if err != nil {
 			return fmt.Errorf("inspect finalizers: %w", err)
@@ -535,33 +697,28 @@ func (s *Store) Delete(ctx context.Context, namespace, name, version string) err
 		if !hasFinalizers {
 			if _, err := tx.Exec(ctx,
 				fmt.Sprintf(`DELETE FROM %s WHERE namespace=$1 AND name=$2 AND version=$3`, s.table),
-				namespace, name, version); err != nil {
+				args...); err != nil {
 				return fmt.Errorf("hard delete: %w", err)
 			}
-			return s.recomputeLatest(ctx, tx, namespace, name)
+			return s.recomputeLatestDeployments(ctx, tx, args[0].(string), args[1].(string))
 		}
 
-		// Already terminating with finalizers attached — idempotent
-		// delete, no further action.
 		if deletionTS.Valid {
 			return nil
 		}
 
-		// Soft-delete: row has finalizers, mark terminating and wait
-		// for them to drain.
 		if _, err := tx.Exec(ctx,
 			fmt.Sprintf(`UPDATE %s SET deletion_timestamp = NOW()
 			             WHERE namespace=$1 AND name=$2 AND version=$3`, s.table),
-			namespace, name, version); err != nil {
+			args...); err != nil {
 			return fmt.Errorf("mark terminating: %w", err)
 		}
-		return s.recomputeLatest(ctx, tx, namespace, name)
+		return s.recomputeLatestDeployments(ctx, tx, args[0].(string), args[1].(string))
 	})
 }
 
 // jsonArrayNonEmpty reports whether raw decodes to a JSON array with
-// at least one element. Used by Delete to distinguish finalizer-free
-// rows (hard-delete fast path) from rows that need soft-delete + drain.
+// at least one element.
 func jsonArrayNonEmpty(raw []byte) (bool, error) {
 	if len(raw) == 0 {
 		return false, nil
@@ -573,25 +730,32 @@ func jsonArrayNonEmpty(raw []byte) (bool, error) {
 	return len(arr) > 0, nil
 }
 
-// PurgeFinalized hard-deletes rows whose deletion_timestamp is set AND
-// finalizers slice is empty. Intended to be called by a periodic GC
-// worker. Returns the number of rows purged.
+// PurgeFinalized hard-deletes terminating rows. For deployments this
+// requires finalizers to be empty; for versioned-artifact tables there is
+// no finalizers column, so any row past deletion_timestamp is purged.
+// Returns the number of rows purged.
 func (s *Store) PurgeFinalized(ctx context.Context) (int64, error) {
-	tag, err := s.pool.Exec(ctx,
-		fmt.Sprintf(`
+	var query string
+	if s.versioned {
+		query = fmt.Sprintf(`DELETE FROM %s WHERE deletion_timestamp IS NOT NULL`, s.table)
+	} else {
+		query = fmt.Sprintf(`
 			DELETE FROM %s
 			WHERE deletion_timestamp IS NOT NULL
-			  AND finalizers = '[]'::jsonb`, s.table))
+			  AND finalizers = '[]'::jsonb`, s.table)
+	}
+	tag, err := s.pool.Exec(ctx, query)
 	if err != nil {
 		return 0, fmt.Errorf("purge finalized: %w", err)
 	}
 	return tag.RowsAffected(), nil
 }
 
-// List returns rows filtered by opts, ordered by updated_at DESC with
-// stable identity tie-breakers. A pagination cursor is returned when
-// more rows are available; pass it back via ListOpts.Cursor to continue.
-// Terminating rows are excluded unless IncludeTerminating is true.
+// List returns rows filtered by opts, ordered by (namespace, name,
+// version) ASC with updated_at as a stable tiebreaker. Pagination cursor
+// is returned when more rows are available; pass it back via
+// ListOpts.Cursor to continue. Terminating rows are excluded unless
+// IncludeTerminating is true.
 func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject, string, error) {
 	limit := opts.Limit
 	if limit <= 0 {
@@ -606,7 +770,16 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 		where = append(where, fmt.Sprintf("namespace = $%d", len(args)))
 	}
 	if opts.LatestOnly {
-		where = append(where, "is_latest_version")
+		if s.versioned {
+			// Pick the row with MAX(version) per (namespace, name) via a
+			// correlated subquery; the (namespace, name, version DESC)
+			// index serves the lookup efficiently.
+			where = append(where, fmt.Sprintf(
+				"version = (SELECT MAX(version) FROM %s sub WHERE sub.namespace = %s.namespace AND sub.name = %s.name AND sub.deletion_timestamp IS NULL)",
+				s.table, s.table, s.table))
+		} else {
+			where = append(where, "is_latest_version")
+		}
 	}
 	if !opts.IncludeTerminating {
 		where = append(where, "deletion_timestamp IS NULL")
@@ -626,10 +799,12 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 		}
 		// Order by stable identity (namespace, name, version) first so a
 		// row's updated_at changing under a concurrent PatchStatus does
-		// not let it skip across pages. (namespace, name, version) is
-		// unique per table, so updated_at as the trailing tiebreaker is
-		// belt-and-braces.
-		args = append(args, cursor.Namespace, cursor.Name, cursor.Version, cursor.UpdatedAt)
+		// not let it skip across pages.
+		cursorVersion, err := s.cursorVersionArg(cursor.Version)
+		if err != nil {
+			return nil, "", err
+		}
+		args = append(args, cursor.Namespace, cursor.Name, cursorVersion, cursor.UpdatedAt)
 		where = append(where, fmt.Sprintf(
 			"(namespace, name, version, updated_at) > ($%d, $%d, $%d, $%d)",
 			len(args)-3, len(args)-2, len(args)-1, len(args),
@@ -650,9 +825,8 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 	}
 
 	query := fmt.Sprintf(`
-		SELECT namespace, name, version, generation, labels, annotations, spec, status,
-		       deletion_timestamp, finalizers, created_at, updated_at
-		FROM %s`, s.table)
+		SELECT %s
+		FROM %s`, s.selectColumns(), s.table)
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -667,7 +841,7 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 
 	out := make([]*v1alpha1.RawObject, 0, limit)
 	for rows.Next() {
-		obj, err := scanRow(rows)
+		obj, err := scanRow(rows, s.versioned)
 		if err != nil {
 			return nil, "", err
 		}
@@ -692,45 +866,8 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 var sqlPlaceholderPattern = regexp.MustCompile(`\$(\d+)`)
 
 // rebaseSQLPlaceholders rewrites every `$N` token in a SQL fragment to
-// `$(N+offset)`, preserving relative ordering. It is the core of the
-// ExtraWhere contract: callers author fragments in their own
-// $1-relative numbering and the Store rebases them to continue past
-// its own internal placeholders before executing.
-//
-// Contract / known limitations:
-//   - `offset` must be ≥ 0. The only production caller derives offset
-//     from `len(args) - len(opts.ExtraArgs)` after appending, which is
-//     always non-negative. Negative offsets that push a placeholder
-//     below 1 produce strings PostgreSQL rejects at parse time
-//     (`$-2`, `$0`); they are not a security concern but they're not
-//     a contract this function honors either.
-//   - The implementation is a pure regex pass over `\$\d+`. It does NOT
-//     parse SQL. `$N`-looking text inside a string literal would be
-//     rebased indistinguishably from a real placeholder, so callers
-//     MUST author ExtraWhere as parameterized SQL — no string literals
-//     containing `$\d+`, no string concatenation of untrusted input.
-//     This is the documented authz seam (see ListOpts.ExtraWhere); the
-//     security boundary is the parameterization rule, not the rewriter.
-//   - `$0` is rebased to `$(offset)`. PostgreSQL rejects `$0` at parse
-//     time anyway, so there's no silent-error path here — a caller
-//     using `$0` will get a SQL error when the query executes, with or
-//     without rebasing.
-//   - Empty `clause` and zero `offset` short-circuit unchanged. This
-//     keeps the no-op happy path allocation-free for callers that
-//     supply ExtraWhere only sometimes.
-//   - strconv.Atoi failures (overflow on extremely long digit runs)
-//     leave the token in place. This is a defense-in-depth fallback;
-//     the caller will get a SQL error on execution from the un-rebased
-//     placeholder, which is the safer failure mode than silently
-//     producing a different number.
-//
-// rebaseSQLPlaceholders is exhaustively fuzz-tested in
-// FuzzRebaseSQLPlaceholders to lock the rebase invariants: for any
-// input with offset ≥ 0, the per-token relative ordering of
-// placeholders is preserved, the token count is preserved, every
-// appearance of `$N` shifts by exactly `offset`, and the
-// non-placeholder bytes of the fragment are byte-identical between
-// input and output.
+// `$(N+offset)`, preserving relative ordering. Pure regex rewrite — see
+// the existing tests for the contract.
 func rebaseSQLPlaceholders(clause string, offset int) string {
 	if clause == "" || offset == 0 {
 		return clause
@@ -746,13 +883,6 @@ func rebaseSQLPlaceholders(clause string, offset int) string {
 
 // countDistinctPlaceholders returns the number of distinct `$N` tokens
 // in a SQL fragment, independent of how many times each appears.
-// Used to validate ListOpts.ExtraWhere against ExtraArgs — a fragment
-// of "namespace = ANY($1) AND tenant = $2" has 2 distinct placeholders
-// and requires 2 ExtraArgs. Repeated use of $1 counts once.
-//
-// Does not attempt to exclude `$` inside string literals — a fragment
-// containing a `$N`-looking string literal will over-count. Callers
-// are documented to use only parameterized SQL.
 func countDistinctPlaceholders(clause string) int {
 	if clause == "" {
 		return 0
@@ -807,26 +937,22 @@ func encodeListCursor(obj *v1alpha1.RawObject) (string, error) {
 type FindReferrersOpts struct {
 	// Namespace, when non-empty, restricts results to a single namespace.
 	Namespace string
-	// LatestOnly, when true, restricts to is_latest_version rows.
+	// LatestOnly, when true, restricts to the latest live row per
+	// (namespace, name).
 	LatestOnly bool
 	// IncludeTerminating, when true, keeps rows whose deletion_timestamp
-	// is set. Default (false) excludes them — URL-uniqueness and cross-
-	// kind ref checks want to avoid conflicting with a soft-deleted row
-	// that is about to be GC'd.
+	// is set. Default (false) excludes them.
 	IncludeTerminating bool
 }
 
 // FindReferrers returns rows from this Store's table whose spec JSONB
-// matches pathJSON (via the `@>` containment operator). Callers build the
-// JSONB fragment per-kind (e.g. `{"mcpServers":[{"namespace":"...","name":"...","version":"..."}]}`)
-// and this method stays generic across ResourceRef shapes.
+// matches pathJSON (via the `@>` containment operator).
 func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opts FindReferrersOpts) ([]*v1alpha1.RawObject, error) {
 	args := []any{[]byte(pathJSON)}
 	query := fmt.Sprintf(`
-		SELECT namespace, name, version, generation, labels, annotations, spec, status,
-		       deletion_timestamp, finalizers, created_at, updated_at
+		SELECT %s
 		FROM %s
-		WHERE spec @> $1::jsonb`, s.table)
+		WHERE spec @> $1::jsonb`, s.selectColumns(), s.table)
 	if !opts.IncludeTerminating {
 		query += " AND deletion_timestamp IS NULL"
 	}
@@ -835,7 +961,12 @@ func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opt
 		query += fmt.Sprintf(" AND namespace = $%d", len(args))
 	}
 	if opts.LatestOnly {
-		query += " AND is_latest_version"
+		if s.versioned {
+			query += fmt.Sprintf(" AND version = (SELECT MAX(version) FROM %s sub WHERE sub.namespace = %s.namespace AND sub.name = %s.name AND sub.deletion_timestamp IS NULL)",
+				s.table, s.table, s.table)
+		} else {
+			query += " AND is_latest_version"
+		}
 	}
 	query += " ORDER BY updated_at DESC"
 
@@ -847,7 +978,7 @@ func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opt
 
 	out := make([]*v1alpha1.RawObject, 0, 8)
 	for rows.Next() {
-		obj, err := scanRow(rows)
+		obj, err := scanRow(rows, s.versioned)
 		if err != nil {
 			return nil, err
 		}
@@ -856,91 +987,120 @@ func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opt
 	return out, rows.Err()
 }
 
-// recomputeLatest recomputes is_latest_version across all non-terminating
-// rows with the given (namespace, name), inside the supplied transaction.
-// The row with the highest valid semver wins; failing that, the most-
-// recently-updated row wins. Terminating rows are ineligible.
-func (s *Store) recomputeLatest(ctx context.Context, tx pgx.Tx, namespace, name string) error {
-	// `version DESC` is the deterministic tie-breaker for the non-semver
-	// fallback path in pickLatestVersion — when two rows share the same
-	// updated_at (possible on batch upserts inside a microsecond), the
-	// winner would otherwise be whichever row the query engine picked
-	// first. Without the tie-breaker, is_latest_version can flip between
-	// concurrent upserts.
-	rows, err := tx.Query(ctx,
-		fmt.Sprintf(`
-			SELECT version FROM %s
-			WHERE namespace=$1 AND name=$2 AND deletion_timestamp IS NULL
-			ORDER BY updated_at DESC, version DESC`, s.table),
-		namespace, name)
-	if err != nil {
-		return fmt.Errorf("scan versions: %w", err)
+// recomputeLatestDeployments recomputes is_latest_version for the
+// deployments table only. Versioned-artifact tables have no
+// is_latest_version column — latest is MAX(version).
+func (s *Store) recomputeLatestDeployments(ctx context.Context, tx pgx.Tx, namespace, name string) error {
+	if s.versioned {
+		return nil
 	}
-	var versions []string
-	for rows.Next() {
-		var v string
-		if err := rows.Scan(&v); err != nil {
-			rows.Close()
-			return err
-		}
-		versions = append(versions, v)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return err
-	}
-
-	// Clear is_latest_version for this (namespace, name) first so we never
-	// leave stale winners when the only surviving rows are terminating.
-	_, err = tx.Exec(ctx,
+	if _, err := tx.Exec(ctx,
 		fmt.Sprintf(`
 			UPDATE %s SET is_latest_version = false
 			WHERE namespace=$1 AND name=$2 AND is_latest_version`, s.table),
-		namespace, name)
-	if err != nil {
+		namespace, name); err != nil {
 		return fmt.Errorf("clear latest: %w", err)
 	}
-	if len(versions) == 0 {
+	// Pick the most recently updated non-terminating row; deployments
+	// version is a string and there's no semver convention here.
+	var winner string
+	err := tx.QueryRow(ctx,
+		fmt.Sprintf(`
+			SELECT version FROM %s
+			WHERE namespace=$1 AND name=$2 AND deletion_timestamp IS NULL
+			ORDER BY updated_at DESC, version DESC
+			LIMIT 1`, s.table),
+		namespace, name).Scan(&winner)
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
-
-	winner := pickLatestVersion(versions)
-	_, err = tx.Exec(ctx,
+	if err != nil {
+		return fmt.Errorf("scan latest: %w", err)
+	}
+	if _, err := tx.Exec(ctx,
 		fmt.Sprintf(`
 			UPDATE %s SET is_latest_version = true
 			WHERE namespace=$1 AND name=$2 AND version=$3`, s.table),
-		namespace, name, winner)
-	if err != nil {
+		namespace, name, winner); err != nil {
 		return fmt.Errorf("set latest: %w", err)
 	}
 	return nil
 }
 
-// pickLatestVersion returns the highest semver among versions. If no
-// version parses as semver (per golang.org/x/mod/semver which requires a
-// leading 'v'), returns the first element — which, since the caller passes
-// them in updated_at DESC order, is the most-recently-updated.
-//
-// Versions are normalized with a leading 'v' prefix for semver comparison,
-// so "1.2.3" and "v1.2.3" sort identically.
-func pickLatestVersion(versions []string) string {
-	best := ""
-	bestRaw := ""
-	for _, v := range versions {
-		normalized := v
-		if len(normalized) == 0 || normalized[0] != 'v' {
-			normalized = "v" + normalized
+// selectColumns returns the column list emitted by Get/List/FindReferrers
+// queries. Deployments include legacy generation/finalizers columns;
+// versioned-artifact tables emit synthetic placeholders for them so
+// scanRow's column layout stays uniform.
+func (s *Store) selectColumns() string {
+	if s.versioned {
+		return `namespace, name, version, 0::bigint AS generation, labels, annotations, spec, status,
+		       deletion_timestamp, '[]'::jsonb AS finalizers, created_at, updated_at`
+	}
+	return `namespace, name, version, generation, labels, annotations, spec, status,
+		       deletion_timestamp, finalizers, created_at, updated_at`
+}
+
+// identityArgs converts (ns, name, version) into the bind args used by
+// per-row queries. For versioned-artifact tables version is parsed to int.
+func (s *Store) identityArgs(namespace, name, version string) ([]any, error) {
+	if s.versioned {
+		v, err := strconv.Atoi(version)
+		if err != nil || v <= 0 {
+			return nil, fmt.Errorf("v1alpha1 store: invalid integer version %q for table %s", version, s.table)
 		}
-		if !semver.IsValid(normalized) {
-			continue
+		return []any{namespace, name, v}, nil
+	}
+	return []any{namespace, name, version}, nil
+}
+
+// cursorVersionArg parses a cursor's version field into the right SQL
+// type for the Store's table.
+func (s *Store) cursorVersionArg(version string) (any, error) {
+	if s.versioned {
+		v, err := strconv.Atoi(version)
+		if err != nil || v <= 0 {
+			return nil, fmt.Errorf("%w: cursor version %q is not a positive integer", ErrInvalidCursor, version)
 		}
-		if best == "" || semver.Compare(normalized, best) > 0 {
-			best = normalized
-			bestRaw = v
+		return v, nil
+	}
+	return version, nil
+}
+
+// canonicalJSONMap renders m to canonical JSON suitable for an
+// equality-by-bytes comparison after re-marshal. Nil + empty produce
+// `{}` so the contract "no labels" reduces to one normalised form.
+func canonicalJSONMap(m map[string]string) ([]byte, error) {
+	if len(m) == 0 {
+		return []byte(`{}`), nil
+	}
+	return json.Marshal(m)
+}
+
+// equalJSONMap reports whether two JSONB byte slices represent the same
+// {string: string} map. Decodes both sides so that key order, whitespace,
+// and stylistic differences (`null` vs `{}`) don't produce false
+// inequalities.
+func equalJSONMap(existing, incoming []byte) bool {
+	var a, b map[string]string
+	if len(existing) > 0 && string(existing) != "null" {
+		if err := json.Unmarshal(existing, &a); err != nil {
+			return false
 		}
 	}
-	if bestRaw != "" {
-		return bestRaw
+	if len(incoming) > 0 && string(incoming) != "null" {
+		if err := json.Unmarshal(incoming, &b); err != nil {
+			return false
+		}
 	}
-	return versions[0]
+	if len(a) == 0 && len(b) == 0 {
+		return true
+	}
+	return reflect.DeepEqual(a, b)
+}
+
+// equalSpecJSON reports whether two JSON byte slices represent the same
+// canonical spec content. Used by the legacy deployments path to
+// detect spec-no-op apply.
+func equalSpecJSON(existing []byte, incoming json.RawMessage) bool {
+	return SpecHash(existing) == SpecHash(incoming)
 }

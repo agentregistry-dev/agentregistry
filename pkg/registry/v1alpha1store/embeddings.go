@@ -160,7 +160,15 @@ func (s *Store) SemanticList(ctx context.Context, opts SemanticListOpts) ([]sema
 		where = append(where, fmt.Sprintf("namespace = $%d", len(args)))
 	}
 	if opts.LatestOnly {
-		where = append(where, "is_latest_version")
+		if s.versioned {
+			// Versioned-artifact tables don't carry is_latest_version;
+			// pick MAX(version) live row per (namespace, name).
+			where = append(where, fmt.Sprintf(
+				"version = (SELECT MAX(version) FROM %s sub WHERE sub.namespace = %s.namespace AND sub.name = %s.name AND sub.deletion_timestamp IS NULL)",
+				s.table, s.table, s.table))
+		} else {
+			where = append(where, "is_latest_version")
+		}
 	}
 	if !opts.IncludeTerminating {
 		where = append(where, "deletion_timestamp IS NULL")
@@ -193,13 +201,12 @@ func (s *Store) SemanticList(ctx context.Context, opts SemanticListOpts) ([]sema
 
 	args = append(args, limit)
 	query := fmt.Sprintf(`
-		SELECT namespace, name, version, generation, labels, annotations, spec, status,
-		       deletion_timestamp, finalizers, created_at, updated_at,
+		SELECT %s,
 		       semantic_embedding <=> $1::vector AS score
 		FROM %s
 		WHERE %s
 		ORDER BY semantic_embedding <=> $1::vector
-		LIMIT $%d`, s.table, strings.Join(where, " AND "), len(args))
+		LIMIT $%d`, s.selectColumns(), s.table, strings.Join(where, " AND "), len(args))
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -209,7 +216,7 @@ func (s *Store) SemanticList(ctx context.Context, opts SemanticListOpts) ([]sema
 
 	out := make([]semantic.SemanticResult, 0, limit)
 	for rows.Next() {
-		obj, score, err := scanSemanticRow(rows)
+		obj, score, err := scanSemanticRow(rows, s.versioned)
 		if err != nil {
 			return nil, err
 		}
@@ -220,22 +227,32 @@ func (s *Store) SemanticList(ctx context.Context, opts SemanticListOpts) ([]sema
 
 // scanSemanticRow is scanRow + one trailing float column for the distance
 // score. Kept separate so the regular Get/List paths don't take a hit.
-func scanSemanticRow(rows pgx.Rows) (*v1alpha1.RawObject, float32, error) {
+func scanSemanticRow(rows pgx.Rows, versioned bool) (*v1alpha1.RawObject, float32, error) {
 	var (
-		namespace, name, version string
-		generation               int64
-		labelsJSON               []byte
-		annotationsJSON          []byte
-		specJSON                 []byte
-		statusJSON               []byte
-		deletionTimestamp        *time.Time
-		finalizersJSON           []byte
-		createdAt                time.Time
-		updatedAt                time.Time
-		score                    float32
+		namespace         string
+		name              string
+		versionInt        int
+		versionStr        string
+		generation        int64
+		labelsJSON        []byte
+		annotationsJSON   []byte
+		specJSON          []byte
+		statusJSON        []byte
+		deletionTimestamp *time.Time
+		finalizersJSON    []byte
+		createdAt         time.Time
+		updatedAt         time.Time
+		score             float32
 	)
+
+	var versionDest any
+	if versioned {
+		versionDest = &versionInt
+	} else {
+		versionDest = &versionStr
+	}
 	if err := rows.Scan(
-		&namespace, &name, &version, &generation,
+		&namespace, &name, versionDest, &generation,
 		&labelsJSON, &annotationsJSON, &specJSON, &statusJSON,
 		&deletionTimestamp, &finalizersJSON,
 		&createdAt, &updatedAt,
@@ -244,8 +261,13 @@ func scanSemanticRow(rows pgx.Rows) (*v1alpha1.RawObject, float32, error) {
 		return nil, 0, fmt.Errorf("scan semantic row: %w", err)
 	}
 
+	versionRendered := versionStr
+	if versioned {
+		versionRendered = strconv.Itoa(versionInt)
+	}
+
 	obj, err := decodeRow(
-		namespace, name, version, generation,
+		namespace, name, versionRendered, generation,
 		labelsJSON, annotationsJSON, specJSON, statusJSON,
 		deletionTimestamp, finalizersJSON, createdAt, updatedAt,
 	)

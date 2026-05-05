@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -24,15 +25,21 @@ type rowScanner interface {
 // queries) into a v1alpha1.RawObject. Spec and Status are retained as their
 // wire-form representations so callers can unmarshal into typed structs.
 //
+// versioned reflects the Store's table mode and decides whether the
+// version column should be scanned as int or string. Versioned-artifact
+// queries emit a synthetic 0::bigint generation and '[]'::jsonb
+// finalizers so the column layout stays uniform across modes.
+//
 // Column order must match:
 //
 //	namespace, name, version, generation, labels, annotations, spec, status,
 //	deletion_timestamp, finalizers, created_at, updated_at
-func scanRow(row rowScanner) (*v1alpha1.RawObject, error) {
+func scanRow(row rowScanner, versioned bool) (*v1alpha1.RawObject, error) {
 	var (
 		namespace         string
 		name              string
-		version           string
+		versionInt        int
+		versionStr        string
 		generation        int64
 		labelsJSON        []byte
 		annotationsJSON   []byte
@@ -43,8 +50,15 @@ func scanRow(row rowScanner) (*v1alpha1.RawObject, error) {
 		createdAt         time.Time
 		updatedAt         time.Time
 	)
+
+	var versionDest any
+	if versioned {
+		versionDest = &versionInt
+	} else {
+		versionDest = &versionStr
+	}
 	if err := row.Scan(
-		&namespace, &name, &version, &generation,
+		&namespace, &name, versionDest, &generation,
 		&labelsJSON, &annotationsJSON, &specJSON, &statusJSON,
 		&deletionTimestamp, &finalizersJSON,
 		&createdAt, &updatedAt,
@@ -55,8 +69,13 @@ func scanRow(row rowScanner) (*v1alpha1.RawObject, error) {
 		return nil, fmt.Errorf("scan row: %w", err)
 	}
 
+	versionRendered := versionStr
+	if versioned {
+		versionRendered = strconv.Itoa(versionInt)
+	}
+
 	return decodeRow(
-		namespace, name, version, generation,
+		namespace, name, versionRendered, generation,
 		labelsJSON, annotationsJSON, specJSON, statusJSON,
 		deletionTimestamp, finalizersJSON, createdAt, updatedAt,
 	)
@@ -89,9 +108,7 @@ func decodeRow(
 	}
 
 	// finalizersJSON intentionally not parsed onto ObjectMeta — there
-	// is no public API for finalizers anymore. The DB column is kept
-	// for the orphan-reconciler follow-up; until then, scanRow leaves
-	// it inaccessible from Go callers.
+	// is no public API for finalizers anymore.
 	_ = finalizersJSON
 
 	return &v1alpha1.RawObject{
@@ -109,24 +126,6 @@ func decodeRow(
 		Spec:   json.RawMessage(specJSON),
 		Status: json.RawMessage(statusJSON),
 	}, nil
-}
-
-// normalizeJSON re-marshals a JSON document so byte-level equality reflects
-// semantic equality (key order, whitespace). Used by Upsert's spec-change
-// detection so that re-serialized input doesn't falsely bump generation.
-func normalizeJSON(b []byte) []byte {
-	if len(b) == 0 {
-		return nil
-	}
-	var v any
-	if err := json.Unmarshal(b, &v); err != nil {
-		return b
-	}
-	out, err := json.Marshal(v)
-	if err != nil {
-		return b
-	}
-	return out
 }
 
 // runInTx executes fn within a read-committed transaction, committing on nil
