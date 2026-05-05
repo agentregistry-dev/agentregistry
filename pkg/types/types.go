@@ -66,6 +66,29 @@ type PostUpsert func(ctx context.Context, obj v1alpha1.Object) error
 // batch's per-doc delete hook.
 type PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 
+// Auditor receives audit events for state changes that the OSS layer
+// considers significant. The default OSS implementation is a no-op;
+// enterprise plugs in a real audit sink via NewStore options.
+//
+// Audit completeness is enforced at the source: every code path that
+// produces a recordable state change calls into Auditor directly,
+// rather than relying on observers (PostUpsert hooks, etc.) to remember
+// to log.
+type Auditor interface {
+	// ResourceVersionCreated is invoked when Store.Upsert creates a new
+	// immutable version row for a content-registry kind. Provider and
+	// Deployment (legacy mode) do not produce this event.
+	ResourceVersionCreated(ctx context.Context, kind, namespace, name string, version int)
+}
+
+type noopAuditor struct{}
+
+func (noopAuditor) ResourceVersionCreated(ctx context.Context, kind, namespace, name string, version int) {
+}
+
+// NoopAuditor is the default Auditor used when none is plugged in.
+var NoopAuditor Auditor = noopAuditor{}
+
 // AppOptions contains configuration for the registry app.
 // All fields are optional and allow external developers to extend
 // functionality.
