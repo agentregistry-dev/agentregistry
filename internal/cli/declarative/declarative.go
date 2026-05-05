@@ -87,6 +87,11 @@ func init() {
 			return providerRow(provider)
 		},
 		Get: func(ctx context.Context, name, _ string) (any, error) {
+			// Provider is a legacy single-version-identity kind: callers
+			// always get latest. The version arg is intentionally ignored
+			// here; runGet rejects --version for non-content-registry kinds
+			// before dispatch, so this slot can never receive a non-empty
+			// value via the CLI surface.
 			return client.GetTyped(ctx, apiClient, v1alpha1.KindProvider, v1alpha1.DefaultNamespace, name, "", func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
 		},
 		ListFunc: func(ctx context.Context) ([]any, error) {
@@ -109,6 +114,10 @@ func init() {
 		Plural:  "deployments",
 		Aliases: []string{"Deployment"},
 		Get: func(_ context.Context, name, _ string) (any, error) {
+			// Deployment is a legacy single-version-identity kind addressed
+			// by the underlying target's name. The version arg is
+			// intentionally ignored; runGet rejects --version for
+			// non-content-registry kinds before dispatch.
 			return getDeploymentByTarget(context.Background(), name)
 		},
 		Delete: func(_ context.Context, name, version string, force bool) error {
@@ -166,8 +175,8 @@ func typedKind[T v1alpha1.Object](
 			}
 			return row(t)
 		},
-		Get: func(ctx context.Context, name, _ string) (any, error) {
-			return client.GetTyped(ctx, apiClient, canonicalKind, v1alpha1.DefaultNamespace, name, "", newObj)
+		Get: func(ctx context.Context, name, version string) (any, error) {
+			return client.GetTyped(ctx, apiClient, canonicalKind, v1alpha1.DefaultNamespace, name, version, newObj)
 		},
 		ListFunc: func(ctx context.Context) ([]any, error) {
 			return listLatestAny(ctx, canonicalKind, newObj)

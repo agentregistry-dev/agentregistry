@@ -26,12 +26,15 @@ func listItems(k *scheme.Kind) ([]any, error) {
 	return k.ListFunc(context.Background())
 }
 
-// getItem fetches a single item by name for the given kind.
-func getItem(k *scheme.Kind, name string) (any, error) {
+// getItem fetches a single item by name for the given kind. Empty
+// version resolves the latest version; a non-empty version is passed
+// through to the per-kind closure (only meaningful for
+// content-registry kinds — runGet gates the CLI flag accordingly).
+func getItem(k *scheme.Kind, name, version string) (any, error) {
 	if k.Get == nil {
 		return nil, fmt.Errorf("get not supported for kind %q", k.Kind)
 	}
-	return k.Get(context.Background(), name, "")
+	return k.Get(context.Background(), name, version)
 }
 
 // deleteItem deletes a single item by (name, version) for the given kind.

@@ -36,6 +36,7 @@ Examples:
   arctl get mcps
   arctl get agent acme/summarizer
   arctl get agent acme/summarizer -o yaml
+  arctl get agent acme/summarizer --version 1
   arctl get agent acme/summarizer --all-versions
   arctl get skills -o json`,
 		Args:         cobra.RangeArgs(1, 2),
@@ -43,6 +44,7 @@ Examples:
 		RunE:         runGet,
 	}
 	cmd.Flags().StringP("output", "o", "table", "Output format: table, yaml, json")
+	cmd.Flags().String("version", "", "Specific version to fetch (defaults to latest; versioned-artifact kinds only; not allowed with --all-versions)")
 	cmd.Flags().Bool("all-versions", false, "List every version of NAME (versioned-artifact kinds only)")
 	return cmd
 }
@@ -50,10 +52,18 @@ Examples:
 func runGet(cmd *cobra.Command, args []string) error {
 	outputFormat, _ := cmd.Flags().GetString("output")
 	allVersions, _ := cmd.Flags().GetBool("all-versions")
+	version, _ := cmd.Flags().GetString("version")
+
+	if allVersions && version != "" {
+		return fmt.Errorf("--version and --all-versions are mutually exclusive")
+	}
 
 	if args[0] == "all" {
 		if allVersions {
 			return fmt.Errorf("--all-versions cannot be used with `get all`")
+		}
+		if version != "" {
+			return fmt.Errorf("--version cannot be used with `get all`")
 		}
 		return runGetAll(cmd, outputFormat)
 	}
@@ -85,9 +95,21 @@ func runGet(cmd *cobra.Command, args []string) error {
 		return printItems(cmd, k, items, outputFormat)
 	}
 
+	// --version is only meaningful for versioned-artifact (content-registry)
+	// kinds. ListVersions is set exclusively on those kinds via typedKind, so
+	// it's a stable proxy without coupling get.go to v1alpha1's kind table.
+	if version != "" {
+		if len(args) != 2 {
+			return fmt.Errorf("--version requires NAME")
+		}
+		if k.ListVersions == nil {
+			return fmt.Errorf("--version not supported for kind %q (resource is not versioned)", k.Kind)
+		}
+	}
+
 	if len(args) == 2 {
 		name := args[1]
-		item, err := getItem(k, name)
+		item, err := getItem(k, name, version)
 		if err != nil {
 			return fmt.Errorf("getting %s %q: %w", k.Kind, name, err)
 		}

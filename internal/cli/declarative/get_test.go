@@ -1,10 +1,17 @@
 package declarative_test
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
+	"github.com/agentregistry-dev/agentregistry/internal/client"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -77,4 +84,177 @@ func TestDeployment_NoAllVersionsSupport(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, k.ListVersions, "Deployment should not expose ListVersions (legacy kind)")
 	require.Nil(t, k.DeleteAllVersions, "Deployment should not expose DeleteAllVersions (legacy kind)")
+}
+
+// versionGetServer serves GET /v0/agents/{name}/{version} (specific
+// version) and /v0/agents/{name} (latest), returning the configured
+// envelope. capturedPaths records every served path so tests can assert
+// the right endpoint was hit.
+func versionGetServer(t *testing.T, latest, specific v1alpha1.Agent) (*httptest.Server, *[]string) {
+	t.Helper()
+	var (
+		mu       sync.Mutex
+		captured []string
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		captured = append(captured, r.Method+" "+r.URL.Path)
+		mu.Unlock()
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		// /v0/agents/{name-escaped}/{version} → specific
+		// /v0/agents/{name-escaped}            → latest
+		// Path comes in already URL-decoded for matching.
+		w.Header().Set("Content-Type", "application/json")
+		// Distinguish by the trailing path segment count.
+		// Strip "/v0/agents/" prefix.
+		if len(r.URL.Path) > len("/v0/agents/") {
+			rest := r.URL.Path[len("/v0/agents/"):]
+			// rest is e.g. "acme%2Fbot" (latest) or "acme%2Fbot/1" (specific).
+			// Stdlib net/http decodes %2F back to "/" in r.URL.Path, so a name
+			// "acme/bot" appears as literal slashes. We match on whether
+			// there's an extra trailing segment beyond the name.
+			// Easiest: count slashes in rest minus the name's slashes.
+			// In our fixtures the agent name is "acme/bot" (one slash);
+			// specific paths have two slashes.
+			slashes := 0
+			for i := 0; i < len(rest); i++ {
+				if rest[i] == '/' {
+					slashes++
+				}
+			}
+			if slashes >= 2 {
+				_ = json.NewEncoder(w).Encode(specific)
+				return
+			}
+		}
+		_ = json.NewEncoder(w).Encode(latest)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &captured
+}
+
+// TestGet_Version_FetchesSpecificVersion verifies that
+// `arctl get agent NAME --version 1` hits the per-version GET endpoint
+// and renders that version's envelope.
+func TestGet_Version_FetchesSpecificVersion(t *testing.T) {
+	v1 := agentVersionFixture("acme/bot", "1")
+	v2 := agentVersionFixture("acme/bot", "2")
+	srv, captured := versionGetServer(t, v2, v1)
+	setupClientForServer(t, srv)
+
+	out := &bytes.Buffer{}
+	cmd := declarative.NewGetCmd()
+	cmd.SetOut(out)
+	cmd.SetErr(out)
+	cmd.SetArgs([]string{"agent", "acme/bot", "--version", "1", "-o", "json"})
+	require.NoError(t, cmd.Execute())
+
+	var got v1alpha1.Agent
+	require.NoError(t, json.Unmarshal(out.Bytes(), &got))
+	assert.Equal(t, "1", got.Metadata.Version, "expected v1 envelope")
+	assert.Equal(t, "v1", got.Spec.Description, "expected v1's spec description")
+
+	// At least one served call should be the specific-version path.
+	require.NotEmpty(t, *captured)
+	hitSpecific := false
+	for _, p := range *captured {
+		// "GET /v0/agents/acme/bot/1" → 3 slashes after "/v0/agents/".
+		if p == "GET /v0/agents/acme/bot/1" {
+			hitSpecific = true
+		}
+	}
+	assert.True(t, hitSpecific, "expected GET to specific-version path, got %v", *captured)
+}
+
+// TestGet_Version_DefaultsToLatest verifies that omitting --version still
+// hits the latest endpoint (no regression from --version wiring).
+func TestGet_Version_DefaultsToLatest(t *testing.T) {
+	v1 := agentVersionFixture("acme/bot", "1")
+	v2 := agentVersionFixture("acme/bot", "2")
+	srv, captured := versionGetServer(t, v2, v1)
+	setupClientForServer(t, srv)
+
+	out := &bytes.Buffer{}
+	cmd := declarative.NewGetCmd()
+	cmd.SetOut(out)
+	cmd.SetErr(out)
+	cmd.SetArgs([]string{"agent", "acme/bot", "-o", "json"})
+	require.NoError(t, cmd.Execute())
+
+	var got v1alpha1.Agent
+	require.NoError(t, json.Unmarshal(out.Bytes(), &got))
+	assert.Equal(t, "2", got.Metadata.Version, "expected latest (v2) envelope")
+
+	// All served calls should be the latest path (no version segment).
+	for _, p := range *captured {
+		assert.Equal(t, "GET /v0/agents/acme/bot", p,
+			"expected only latest-path GETs, got %v", *captured)
+	}
+}
+
+// TestGet_Version_MutuallyExclusiveWithAllVersions pins the flag-validation
+// guard on runGet.
+func TestGet_Version_MutuallyExclusiveWithAllVersions(t *testing.T) {
+	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
+	t.Cleanup(func() { declarative.SetAPIClient(nil) })
+
+	cmd := declarative.NewGetCmd()
+	cmd.SetArgs([]string{"agent", "acme/bot", "--version", "1", "--all-versions"})
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mutually exclusive")
+}
+
+// TestGet_Version_NotSupportedForProvider pins that --version is rejected
+// for legacy single-version-identity kinds (Provider, Deployment) before
+// any client dispatch happens.
+func TestGet_Version_NotSupportedForProvider(t *testing.T) {
+	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
+	t.Cleanup(func() { declarative.SetAPIClient(nil) })
+
+	cmd := declarative.NewGetCmd()
+	cmd.SetArgs([]string{"provider", "my-kagent", "--version", "1"})
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--version not supported")
+	assert.Contains(t, err.Error(), "provider")
+}
+
+// TestGet_Version_NotSupportedForDeployment is the symmetric assertion
+// for Deployment.
+func TestGet_Version_NotSupportedForDeployment(t *testing.T) {
+	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
+	t.Cleanup(func() { declarative.SetAPIClient(nil) })
+
+	cmd := declarative.NewGetCmd()
+	cmd.SetArgs([]string{"deployment", "summarizer", "--version", "1"})
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--version not supported")
+	assert.Contains(t, err.Error(), "deployment")
+}
+
+// TestGet_Version_RequiresName pins that --version errors when NAME is omitted.
+func TestGet_Version_RequiresName(t *testing.T) {
+	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
+	t.Cleanup(func() { declarative.SetAPIClient(nil) })
+
+	cmd := declarative.NewGetCmd()
+	cmd.SetArgs([]string{"agents", "--version", "1"})
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--version requires NAME")
+}
+
+// TestGet_Version_RejectsGetAll pins that --version is rejected for
+// `arctl get all` (cross-kind list flow).
+func TestGet_Version_RejectsGetAll(t *testing.T) {
+	cmd := declarative.NewGetCmd()
+	cmd.SetArgs([]string{"all", "--version", "1"})
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--version cannot be used with `get all`")
 }
