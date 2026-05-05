@@ -160,7 +160,7 @@ func (s *Store) SemanticList(ctx context.Context, opts SemanticListOpts) ([]sema
 		where = append(where, fmt.Sprintf("namespace = $%d", len(args)))
 	}
 	if opts.LatestOnly {
-		if s.versioned {
+		if !s.legacy {
 			// Versioned-artifact tables don't carry is_latest_version;
 			// pick MAX(version) live row per (namespace, name).
 			where = append(where, fmt.Sprintf(
@@ -216,7 +216,7 @@ func (s *Store) SemanticList(ctx context.Context, opts SemanticListOpts) ([]sema
 
 	out := make([]semantic.SemanticResult, 0, limit)
 	for rows.Next() {
-		obj, score, err := scanSemanticRow(rows, s.versioned)
+		obj, score, err := scanSemanticRow(rows, !s.legacy)
 		if err != nil {
 			return nil, err
 		}

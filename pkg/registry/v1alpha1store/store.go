@@ -24,17 +24,31 @@ import (
 // One Store instance is bound to one table; callers construct one per kind
 // (v1alpha1.agents, v1alpha1.mcp_servers, etc.).
 //
-// Identity is (namespace, name, version). For versioned-artifact tables
-// (agents, mcp_servers, remote_mcp_servers, skills, prompts, providers)
-// `version` is a system-assigned positive integer; rows are append-only and
-// the row with MAX(version) for a (namespace, name) is "latest". Spec is
-// JSONB with a CHAR(64) spec_hash so Upsert recognises an unchanged spec
-// and short-circuits rather than emitting a redundant new version.
+// Store has two modes, picked at construction time:
 //
-// Deployments are not versioned-artifact rows — they are lifecycle state and
-// retain the older shape (string version, generation, finalizers,
-// is_latest_version). A Store constructed for the deployments table opts
-// into the legacy code paths via versioned=false.
+//   - Versioned-artifact mode (the default; produced by NewStore).
+//     Identity is (namespace, name, integer version). Rows are append-only
+//     and the row with MAX(version) for a (namespace, name) is "latest".
+//     Spec is JSONB with a CHAR(64) spec_hash so Upsert recognises an
+//     unchanged spec and short-circuits rather than emitting a redundant
+//     new version. Used for agents, mcp_servers, remote_mcp_servers,
+//     skills, prompts, and providers.
+//
+//   - Legacy-deployment mode (produced by NewDeploymentStore). Identity is
+//     (namespace, name, string version). Rows are mutable; re-applying
+//     the same (namespace, name, version) updates spec in place. Carries
+//     the legacy generation, finalizers, and is_latest_version columns.
+//     Used only for v1alpha1.deployments — Deployment is intentionally
+//     out of scope for the immutable-versioning redesign because it
+//     models lifecycle state ("deploy resource X to provider Y") rather
+//     than an artifact whose history is meaningful to readers.
+//
+// The legacy flag is set ONLY by NewDeploymentStore. The two constructors
+// are mutually exclusive — do not mix tables across modes; do not flip
+// the flag after construction. Adding new kinds means picking
+// versioned-artifact (the default) at registration time; the legacy
+// branch exists only to keep the deployments code path unforked while the
+// rest of the system migrates.
 //
 // PatchStatus is disjoint from Upsert: it touches only status and
 // updated_at, never spec. Reconcilers use PatchStatus exclusively; apply
@@ -44,25 +58,40 @@ import (
 // to GetLatest/Get/List. GC (PurgeFinalized) removes rows where
 // deletion_timestamp IS NOT NULL AND finalizers = '[]' (deployments only).
 type Store struct {
-	pool      *pgxpool.Pool
-	table     string
-	versioned bool
+	pool   *pgxpool.Pool
+	table  string
+	legacy bool
 }
 
-// NewStore constructs a Store bound to a single table (e.g.
-// "v1alpha1.agents"). The table must exist in the schema; NewStore does
-// not validate it. Tables under v1alpha1.* default to versioned-artifact
-// semantics; the deployments table opts out.
+// NewStore constructs a versioned-artifact Store bound to a single table
+// (e.g. "v1alpha1.agents"). The table must exist in the schema; NewStore
+// does not validate it.
+//
+// For the deployments table, use NewDeploymentStore — passing
+// "v1alpha1.deployments" here is a programming error (the row layout
+// differs and the wrong code path will be taken).
 func NewStore(pool *pgxpool.Pool, table string) *Store {
-	return &Store{pool: pool, table: table, versioned: !isDeploymentsTable(table)}
+	return &Store{pool: pool, table: table, legacy: false}
 }
 
-// isDeploymentsTable reports whether the given table follows the legacy
-// shape (string version, generation, finalizers, is_latest_version) rather
-// than the immutable-versioning shape. Today only v1alpha1.deployments
-// stays on the legacy shape; everything else is versioned-artifact.
-func isDeploymentsTable(table string) bool {
-	return table == "v1alpha1.deployments"
+// NewDeploymentStore constructs a legacy-mode Store for the deployments
+// table. The table must exist in the schema; this constructor does not
+// validate it.
+//
+// Deployment is the only kind that opts into the legacy shape today; if
+// a future kind needs the same lifecycle-state semantics, plumb it
+// through here rather than re-introducing a table-name flip.
+func NewDeploymentStore(pool *pgxpool.Pool, table string) *Store {
+	return &Store{pool: pool, table: table, legacy: true}
+}
+
+// IsVersionedArtifact reports whether the Store operates in
+// versioned-artifact mode (integer versions, append-only rows). Returns
+// false for the legacy deployments mode. Callers gate URL-path /
+// metadata.version validation on this — versioned-artifact tables
+// require a positive integer; the deployments table accepts any string.
+func (s *Store) IsVersionedArtifact() bool {
+	return !s.legacy
 }
 
 // UpsertOutcome categorises what an Upsert call did.
@@ -201,7 +230,7 @@ func (s *Store) Upsert(ctx context.Context, obj v1alpha1.Object) (UpsertResult, 
 		return UpsertResult{}, errors.New("v1alpha1 store: spec is required")
 	}
 
-	if s.versioned {
+	if !s.legacy {
 		return s.upsertVersioned(ctx, meta, specJSON)
 	}
 	return s.upsertLegacy(ctx, meta, specJSON)
@@ -429,7 +458,7 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, version string,
 	if patch.Status == nil && patch.Annotations == nil && patch.Finalizers == nil {
 		return nil
 	}
-	if patch.Finalizers != nil && s.versioned {
+	if patch.Finalizers != nil && !s.legacy {
 		return errors.New("v1alpha1 store: finalizers patching not supported on versioned-artifact tables")
 	}
 	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
@@ -438,7 +467,7 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, version string,
 			annotationsJSON []byte
 			finalizersJSON  []byte
 		)
-		if s.versioned {
+		if !s.legacy {
 			err := tx.QueryRow(ctx,
 				fmt.Sprintf(`
 					SELECT status, annotations FROM %s
@@ -597,7 +626,7 @@ func (s *Store) Get(ctx context.Context, namespace, name, version string) (*v1al
 			FROM %s
 			WHERE namespace=$1 AND name=$2 AND version=$3`, s.selectColumns(), s.table),
 		args...)
-	return scanRow(row, s.versioned)
+	return scanRow(row, !s.legacy)
 }
 
 // GetLatest returns the highest-version live row for (namespace, name) on
@@ -606,7 +635,7 @@ func (s *Store) Get(ctx context.Context, namespace, name, version string) (*v1al
 // Terminating rows are excluded.
 func (s *Store) GetLatest(ctx context.Context, namespace, name string) (*v1alpha1.RawObject, error) {
 	var query string
-	if s.versioned {
+	if !s.legacy {
 		query = fmt.Sprintf(`
 			SELECT %s
 			FROM %s
@@ -620,7 +649,7 @@ func (s *Store) GetLatest(ctx context.Context, namespace, name string) (*v1alpha
 			WHERE namespace=$1 AND name=$2 AND is_latest_version`, s.selectColumns(), s.table)
 	}
 	row := s.pool.QueryRow(ctx, query, namespace, name)
-	return scanRow(row, s.versioned)
+	return scanRow(row, !s.legacy)
 }
 
 // Delete removes a single row. For deployments, the legacy soft-delete +
@@ -634,7 +663,7 @@ func (s *Store) Delete(ctx context.Context, namespace, name, version string) err
 	if err != nil {
 		return err
 	}
-	if s.versioned {
+	if !s.legacy {
 		return s.deleteVersioned(ctx, args)
 	}
 	return s.deleteLegacy(ctx, args)
@@ -736,7 +765,7 @@ func jsonArrayNonEmpty(raw []byte) (bool, error) {
 // Returns the number of rows purged.
 func (s *Store) PurgeFinalized(ctx context.Context) (int64, error) {
 	var query string
-	if s.versioned {
+	if !s.legacy {
 		query = fmt.Sprintf(`DELETE FROM %s WHERE deletion_timestamp IS NOT NULL`, s.table)
 	} else {
 		query = fmt.Sprintf(`
@@ -770,7 +799,7 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 		where = append(where, fmt.Sprintf("namespace = $%d", len(args)))
 	}
 	if opts.LatestOnly {
-		if s.versioned {
+		if !s.legacy {
 			// Pick the row with MAX(version) per (namespace, name) via a
 			// correlated subquery; the (namespace, name, version DESC)
 			// index serves the lookup efficiently.
@@ -841,7 +870,7 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 
 	out := make([]*v1alpha1.RawObject, 0, limit)
 	for rows.Next() {
-		obj, err := scanRow(rows, s.versioned)
+		obj, err := scanRow(rows, !s.legacy)
 		if err != nil {
 			return nil, "", err
 		}
@@ -961,7 +990,7 @@ func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opt
 		query += fmt.Sprintf(" AND namespace = $%d", len(args))
 	}
 	if opts.LatestOnly {
-		if s.versioned {
+		if !s.legacy {
 			query += fmt.Sprintf(" AND version = (SELECT MAX(version) FROM %s sub WHERE sub.namespace = %s.namespace AND sub.name = %s.name AND sub.deletion_timestamp IS NULL)",
 				s.table, s.table, s.table)
 		} else {
@@ -978,7 +1007,7 @@ func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opt
 
 	out := make([]*v1alpha1.RawObject, 0, 8)
 	for rows.Next() {
-		obj, err := scanRow(rows, s.versioned)
+		obj, err := scanRow(rows, !s.legacy)
 		if err != nil {
 			return nil, err
 		}
@@ -991,7 +1020,7 @@ func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opt
 // deployments table only. Versioned-artifact tables have no
 // is_latest_version column — latest is MAX(version).
 func (s *Store) recomputeLatestDeployments(ctx context.Context, tx pgx.Tx, namespace, name string) error {
-	if s.versioned {
+	if !s.legacy {
 		return nil
 	}
 	if _, err := tx.Exec(ctx,
@@ -1032,7 +1061,7 @@ func (s *Store) recomputeLatestDeployments(ctx context.Context, tx pgx.Tx, names
 // versioned-artifact tables emit synthetic placeholders for them so
 // scanRow's column layout stays uniform.
 func (s *Store) selectColumns() string {
-	if s.versioned {
+	if !s.legacy {
 		return `namespace, name, version, 0::bigint AS generation, labels, annotations, spec, status,
 		       deletion_timestamp, '[]'::jsonb AS finalizers, created_at, updated_at`
 	}
@@ -1043,7 +1072,7 @@ func (s *Store) selectColumns() string {
 // identityArgs converts (ns, name, version) into the bind args used by
 // per-row queries. For versioned-artifact tables version is parsed to int.
 func (s *Store) identityArgs(namespace, name, version string) ([]any, error) {
-	if s.versioned {
+	if !s.legacy {
 		v, err := strconv.Atoi(version)
 		if err != nil || v <= 0 {
 			return nil, fmt.Errorf("v1alpha1 store: invalid integer version %q for table %s", version, s.table)
@@ -1056,7 +1085,7 @@ func (s *Store) identityArgs(namespace, name, version string) ([]any, error) {
 // cursorVersionArg parses a cursor's version field into the right SQL
 // type for the Store's table.
 func (s *Store) cursorVersionArg(version string) (any, error) {
-	if s.versioned {
+	if !s.legacy {
 		v, err := strconv.Atoi(version)
 		if err != nil || v <= 0 {
 			return nil, fmt.Errorf("%w: cursor version %q is not a positive integer", ErrInvalidCursor, version)
