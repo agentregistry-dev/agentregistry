@@ -136,7 +136,7 @@ func decodeRow(
 	// integer version, so we leave the status payload alone.
 	finalStatus := json.RawMessage(statusJSON)
 	if versioned {
-		merged, err := mergeStatusVersion(statusJSON, versionInt)
+		merged, err := v1alpha1.SetStatusVersionBytes(statusJSON, versionInt)
 		if err != nil {
 			return nil, fmt.Errorf("merge status.version: %w", err)
 		}
@@ -148,19 +148,6 @@ func decodeRow(
 		Spec:     json.RawMessage(specJSON),
 		Status:   finalStatus,
 	}, nil
-}
-
-// mergeStatusVersion sets Status.Version to v on the provided JSONB
-// payload, preserving any other fields (conditions, etc.) that the
-// reconciler wrote. An empty input produces a fresh status with only
-// Version set.
-func mergeStatusVersion(statusJSON []byte, v int) ([]byte, error) {
-	var s v1alpha1.Status
-	if err := v1alpha1.UnmarshalStatusFromStorage(statusJSON, &s); err != nil {
-		return nil, err
-	}
-	s.Version = v
-	return v1alpha1.MarshalStatusForStorage(s)
 }
 
 // runInTx executes fn within a read-committed transaction, committing on nil

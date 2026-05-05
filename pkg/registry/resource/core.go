@@ -163,14 +163,9 @@ func stampStatusVersion(obj v1alpha1.Object, v int) error {
 	if err != nil {
 		return fmt.Errorf("marshal status: %w", err)
 	}
-	var s v1alpha1.Status
-	if err := v1alpha1.UnmarshalStatusFromStorage(current, &s); err != nil {
-		return fmt.Errorf("unmarshal status: %w", err)
-	}
-	s.Version = v
-	patched, err := v1alpha1.MarshalStatusForStorage(s)
+	patched, err := v1alpha1.SetStatusVersionBytes(current, v)
 	if err != nil {
-		return fmt.Errorf("marshal status (patched): %w", err)
+		return fmt.Errorf("set status.version: %w", err)
 	}
 	if err := obj.UnmarshalStatus(patched); err != nil {
 		return fmt.Errorf("apply status: %w", err)

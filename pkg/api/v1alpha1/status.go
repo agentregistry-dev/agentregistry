@@ -143,6 +143,20 @@ func StatusPatcher(mutate func(*Status)) func(current json.RawMessage) (json.Raw
 	}
 }
 
+// SetStatusVersionBytes sets Status.Version on a marshaled status payload,
+// preserving any other status fields. Returns the new payload bytes.
+// Used by the store on read to ensure status.version mirrors the row's
+// version column even if the on-disk status drifted, and by the apply
+// pipeline to stamp the system-assigned version onto the response body.
+func SetStatusVersionBytes(data []byte, v int) ([]byte, error) {
+	var s Status
+	if err := UnmarshalStatusFromStorage(data, &s); err != nil {
+		return nil, err
+	}
+	s.Version = v
+	return MarshalStatusForStorage(s)
+}
+
 // UnmarshalStatusFromStorage is the read-side inverse of
 // MarshalStatusForStorage: decode a status JSONB payload back into a
 // live Status struct.
