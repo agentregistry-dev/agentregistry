@@ -3,6 +3,7 @@ package resource
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -121,16 +122,7 @@ func applyCore(
 		return upsertResult{}, nil
 	}
 
-	specJSON, err := obj.MarshalSpec()
-	if err != nil {
-		return upsertResult{}, &applyError{Stage: stageMarshal, Err: err}
-	}
-
-	upsertOpts := v1alpha1store.UpsertOpts{Labels: meta.Labels}
-	if meta.Annotations != nil {
-		upsertOpts.Annotations = meta.Annotations
-	}
-	up, err := store.Upsert(ctx, meta.Namespace, meta.Name, meta.Version, specJSON, upsertOpts)
+	up, err := store.Upsert(ctx, obj)
 	if err != nil {
 		return upsertResult{}, &applyError{
 			Stage:       stageUpsert,
@@ -138,16 +130,22 @@ func applyCore(
 			Terminating: errors.Is(err, v1alpha1store.ErrTerminating),
 		}
 	}
+	// Translate the new outcome surface back onto the existing pipeline
+	// shape callers consume. A v1 create stays Created; a higher-version
+	// create is the rename of "spec changed → new immutable version" so
+	// PostUpsert observers can tell something material happened.
 	res := upsertResult{
-		Created:     up.Created,
-		SpecChanged: up.SpecChanged,
-		Generation:  up.Generation,
+		Created:     up.Outcome == v1alpha1store.UpsertCreated && up.Version == 1,
+		SpecChanged: up.Outcome == v1alpha1store.UpsertCreated,
+		Generation:  int64(up.Version),
 	}
 
-	// Stamp the freshly-assigned generation onto the body so PostUpsert
-	// hooks see the correct value instead of the zero from the request body.
+	// Stamp the freshly-assigned version onto the body so PostUpsert
+	// hooks see the correct integer version instead of whatever the
+	// caller supplied (versioned-artifact tables ignore caller version).
 	if opts.PostUpsert != nil {
-		meta.Generation = up.Generation
+		meta.Version = strconvItoa(up.Version)
+		meta.Generation = int64(up.Version)
 		obj.SetMetadata(*meta)
 		if err := opts.PostUpsert(ctx, obj); err != nil {
 			return res, &applyError{Stage: stagePostUpsert, Err: err}
@@ -155,6 +153,10 @@ func applyCore(
 	}
 	return res, nil
 }
+
+// strconvItoa is a tiny indirection that keeps the import surface of this
+// file flat — strconv only used in this one spot.
+func strconvItoa(i int) string { return fmt.Sprintf("%d", i) }
 
 // deleteOpts threads the per-kind dependencies into deleteCore. As with
 // applyOpts, every field is optional. PreDeleteObject is the object

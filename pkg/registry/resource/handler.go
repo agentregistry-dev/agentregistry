@@ -223,7 +223,7 @@ type listInput struct {
 	Limit      int    `query:"limit" doc:"Max items to return (default 50)." default:"50"`
 	Cursor     string `query:"cursor" doc:"Opaque pagination cursor."`
 	Labels     string `query:"labels" doc:"Label selector: key=value,key2=value2."`
-	LatestOnly bool   `query:"latestOnly" doc:"Only return rows with is_latest_version=true."`
+	LatestOnly bool   `query:"latestOnly" doc:"Only return the highest live version per (namespace, name)."`
 	// IncludeTerminating surfaces soft-deleted rows (deletionTimestamp != nil)
 	// which are hidden by default.
 	IncludeTerminating bool `query:"includeTerminating" doc:"Include rows with a deletionTimestamp."`
@@ -404,12 +404,22 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			return nil, mapApplyErrorToHuma(ae, kind, ns, name, version)
 		}
 
+		// applyCore stamps the system-assigned version onto meta.Version
+		// for versioned-artifact tables; use it for the read-back so we
+		// fetch the row that was just produced rather than the URL's
+		// (potentially stale) version. For the legacy deployments path
+		// the URL version is authoritative and meta.Version is unchanged.
+		readbackVersion := body.GetMetadata().Version
+		if readbackVersion == "" {
+			readbackVersion = version
+		}
+
 		// Read back so the response reflects the stored identity (assigned
 		// generation, default'd metadata) plus any status / annotation
 		// writes the PostUpsert hook performed. Failure to re-read after a
 		// successful apply degrades to a 500 rather than swallowing the
 		// already-persisted change silently.
-		row, err := cfg.Store.Get(ctx, ns, name, version)
+		row, err := cfg.Store.Get(ctx, ns, name, readbackVersion)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("read back "+kind, err)
 		}

@@ -351,32 +351,28 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 		return res
 	}
 
-	specJSON, err := obj.MarshalSpec()
-	if err != nil {
-		res.Status = ImportStatusFailed
-		res.Error = "marshal spec: " + err.Error()
-		return res
-	}
-
-	upsertOpts := v1alpha1store.UpsertOpts{Labels: meta.Labels}
-	if meta.Annotations != nil {
-		upsertOpts.Annotations = meta.Annotations
-	}
-	up, err := store.Upsert(ctx, meta.Namespace, meta.Name, meta.Version, specJSON, upsertOpts)
+	up, err := store.Upsert(ctx, obj)
 	if err != nil {
 		res.Status = ImportStatusFailed
 		res.Error = "upsert: " + err.Error()
 		return res
 	}
-	switch {
-	case up.Created:
-		res.Status = ImportStatusCreated
-	case up.SpecChanged:
+	switch up.Outcome {
+	case v1alpha1store.UpsertCreated:
+		// Distinguish a true first-version create from a subsequent
+		// version bump using the integer version: v1 is a fresh create,
+		// anything higher is an update of an existing logical resource.
+		if up.Version == 1 {
+			res.Status = ImportStatusCreated
+		} else {
+			res.Status = ImportStatusUpdated
+		}
+	case v1alpha1store.UpsertLabelsUpdated:
 		res.Status = ImportStatusUpdated
 	default:
 		res.Status = ImportStatusUnchanged
 	}
-	res.Generation = up.Generation
+	res.Generation = int64(up.Version)
 
 	i.writeFindings(ctx, obj, opts, pendingFindings, &res)
 	return res

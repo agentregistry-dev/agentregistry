@@ -276,9 +276,10 @@ func TestResourceRegister_ListFilter(t *testing.T) {
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	for _, name := range []string{"ok-one", "ok-two", "blocked-three"} {
-		_, err := store.Upsert(t.Context(), "default", name, "v1",
-			mustSpecJSON(t, v1alpha1.AgentSpec{Title: name}),
-			v1alpha1store.UpsertOpts{})
+		_, err := store.Upsert(t.Context(), &v1alpha1.Agent{
+			Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name},
+			Spec:     v1alpha1.AgentSpec{Title: name},
+		})
 		require.NoError(t, err)
 	}
 
@@ -383,8 +384,10 @@ func TestResourceRegister_ResolverDetectsDanglingRef(t *testing.T) {
 	}
 
 	// Seed the one existing MCPServer.
-	_, err := mcpStore.Upsert(context.Background(), "default", "tools", "v1",
-		mustSpec(t, v1alpha1.MCPServerSpec{Title: "T"}), v1alpha1store.UpsertOpts{})
+	_, err := mcpStore.Upsert(context.Background(), &v1alpha1.MCPServer{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "tools"},
+		Spec:     v1alpha1.MCPServerSpec{Title: "T"},
+	})
 	require.NoError(t, err)
 
 	_, api := humatest.New(t)
