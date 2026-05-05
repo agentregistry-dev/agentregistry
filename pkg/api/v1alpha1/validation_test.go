@@ -225,10 +225,12 @@ func TestDeploymentValidate_RejectsBadDesiredState(t *testing.T) {
 	require.Contains(t, paths, "spec.desiredState")
 }
 
-// Deployment cross-references must pin a positive integer version —
+// Deployment.spec.targetRef must pin a positive integer version —
 // empty / "latest" / semver are rejected because they reintroduce
 // the silent-drift problem the immutable-resource-versioning
-// redesign exists to eliminate. See validateIntegerVersion.
+// redesign exists to eliminate. providerRef is exempt — Provider
+// is infra/config (legacy storage shape) and uses string versions.
+// See validateIntegerVersion.
 func TestDeploymentValidate_RejectsEmptyTargetRefVersion(t *testing.T) {
 	d := &Deployment{
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "1"},
@@ -239,18 +241,6 @@ func TestDeploymentValidate_RejectsEmptyTargetRefVersion(t *testing.T) {
 	}
 	paths := failedFields(t, d.Validate())
 	require.Contains(t, paths, "spec.targetRef.version")
-}
-
-func TestDeploymentValidate_RejectsEmptyProviderRefVersion(t *testing.T) {
-	d := &Deployment{
-		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "1"},
-		Spec: DeploymentSpec{
-			TargetRef:   ResourceRef{Kind: KindAgent, Name: "alice", Version: "1"},
-			ProviderRef: ResourceRef{Kind: KindProvider, Name: "local"}, // no version
-		},
-	}
-	paths := failedFields(t, d.Validate())
-	require.Contains(t, paths, "spec.providerRef.version")
 }
 
 func TestDeploymentValidate_RejectsSemverRefVersion(t *testing.T) {
