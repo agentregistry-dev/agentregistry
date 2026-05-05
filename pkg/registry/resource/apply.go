@@ -2,13 +2,16 @@ package resource
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/danielgtaylor/huma/v2"
 
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
@@ -154,7 +157,6 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		Kind:       obj.GetKind(),
 		Namespace:  meta.Namespace,
 		Name:       meta.Name,
-		Version:    meta.Version,
 	}
 	if ae != nil {
 		return failResult(res, ae)
@@ -182,15 +184,25 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 	default:
 		res.Status = arv0.ApplyStatusUnchanged
 	}
-	res.Generation = up.Generation
+	if store.IsVersionedArtifact() {
+		res.Version = strconv.Itoa(up.Version)
+	} else {
+		res.Version = meta.Version
+	}
 	return res
 }
 
-// deleteOne runs a single document through Authorize + Store.Delete +
-// PostDelete. No validation: deleting a row should not require its spec
-// to validate. The PostDelete hook receives the decoded body verbatim
-// — batch callers expecting hook input matching the persisted row
-// should re-apply before deleting.
+// deleteOne runs a single document through Authorize + the per-mode
+// store delete + PostDelete. No validation: deleting a row should not
+// require its spec to validate. The PostDelete hook receives the
+// decoded body verbatim — batch callers expecting hook input matching
+// the persisted row should re-apply before deleting.
+//
+// Identity is logical (namespace, name) for versioned-artifact kinds:
+// metadata.version on the doc is intentionally ignored, and every live
+// version of the (ns, name) is soft-deleted in one call. The legacy
+// deployment path keeps its single-version delete since deployment
+// rows are mutable rather than append-only.
 func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
 	store, meta, ae := resolveBatchTarget(cfg, obj, "delete")
 	res := arv0.ApplyResult{
@@ -198,7 +210,6 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 		Kind:       obj.GetKind(),
 		Namespace:  meta.Namespace,
 		Name:       meta.Name,
-		Version:    meta.Version,
 	}
 	if ae != nil {
 		return failResult(res, ae)
@@ -209,13 +220,43 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 		return res
 	}
 
-	dopts := deleteOpts{
-		Authorize:       batchAuthorize(cfg, obj.GetKind()),
-		PostDelete:      cfg.PostDeletes[obj.GetKind()],
-		PreDeleteObject: obj,
+	authz := batchAuthorize(cfg, obj.GetKind())
+	if authz != nil {
+		if err := authz(ctx, AuthorizeInput{
+			Verb: "delete", Kind: obj.GetKind(),
+			Namespace: meta.Namespace, Name: meta.Name,
+			Object: obj,
+		}); err != nil {
+			return failResult(res, &applyError{Stage: stageAuth, Err: err})
+		}
 	}
-	if ae := deleteCore(ctx, store, obj.GetKind(), meta.Namespace, meta.Name, meta.Version, dopts); ae != nil {
-		return failResult(res, ae)
+
+	if store.IsVersionedArtifact() {
+		if err := store.DeleteAllVersions(ctx, meta.Namespace, meta.Name); err != nil {
+			return failResult(res, &applyError{
+				Stage:    stageDelete,
+				Err:      err,
+				NotFound: errors.Is(err, pkgdb.ErrNotFound),
+			})
+		}
+	} else {
+		// Legacy deployment path: meta.Version is the row identity
+		// supplied by the caller (default "1" via the
+		// MetadataVersionDefaulter). DeleteCore here keeps the same
+		// authz + delete + PostDelete flow used by the URL handler.
+		if err := store.Delete(ctx, meta.Namespace, meta.Name, meta.Version); err != nil {
+			return failResult(res, &applyError{
+				Stage:    stageDelete,
+				Err:      err,
+				NotFound: errors.Is(err, pkgdb.ErrNotFound),
+			})
+		}
+	}
+
+	if hook := cfg.PostDeletes[obj.GetKind()]; hook != nil {
+		if err := hook(ctx, obj); err != nil {
+			return failResult(res, &applyError{Stage: stagePostDelete, Err: err})
+		}
 	}
 	res.Status = arv0.ApplyStatusDeleted
 	return res
@@ -246,6 +287,22 @@ func resolveBatchTarget(cfg ApplyConfig, obj v1alpha1.Object, verb string) (*v1a
 	if meta.Namespace == "" {
 		meta.Namespace = v1alpha1.DefaultNamespace
 		obj.SetMetadata(*meta)
+	}
+
+	// Default the legacy Deployment store's required string version
+	// when the kind opts in. The decoder rejects metadata.version on
+	// the wire so users never set it themselves; the defaulter
+	// supplies "1" so the deployment delete path has a row identity to
+	// use. Versioned-artifact kinds ignore meta.Version entirely (the
+	// store's DeleteAllVersions doesn't read it), so the defaulter
+	// running for them is harmless.
+	if meta.Version == "" {
+		if defaulter, ok := obj.(v1alpha1.MetadataVersionDefaulter); ok {
+			if def := defaulter.DefaultMetadataVersion(); def != "" {
+				meta.Version = def
+				obj.SetMetadata(*meta)
+			}
+		}
 	}
 
 	// Defense-in-depth: when any Authorizers are wired, a kind without
@@ -286,14 +343,14 @@ func failResult(res arv0.ApplyResult, ae *applyError) arv0.ApplyResult {
 		res.Error = "forbidden: " + ae.Err.Error()
 	case stageUpsert:
 		if ae.Terminating {
-			res.Error = fmt.Sprintf("object %s/%s/%s is terminating; delete + re-apply once GC purges the row",
-				res.Namespace, res.Name, res.Version)
+			res.Error = fmt.Sprintf("object %s/%s is terminating; delete + re-apply once GC purges the row",
+				res.Namespace, res.Name)
 		} else {
 			res.Error = "upsert: " + ae.Err.Error()
 		}
 	case stageDelete:
 		if ae.NotFound {
-			res.Error = fmt.Sprintf("not found: %s/%s/%s", res.Namespace, res.Name, res.Version)
+			res.Error = fmt.Sprintf("not found: %s/%s", res.Namespace, res.Name)
 		} else {
 			res.Error = "delete: " + ae.Err.Error()
 		}

@@ -76,10 +76,12 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 	// NamespaceOrDefault for display / id composition.
 	require.Equal(t, "default", gotAgent.Metadata.NamespaceOrDefault())
 	require.Equal(t, "alice", gotAgent.Metadata.Name)
+	// metadata.version + status.version both carry the system-assigned
+	// integer for versioned-artifact kinds. Status.Version is the
+	// canonical surface for new code; metadata.version is rendered for
+	// legacy clients that haven't migrated.
 	require.Equal(t, "1", gotAgent.Metadata.Version)
-	// Generation is hidden from the wire (json:"-"), so the client decode
-	// sees its zero value. Internal consumers (coordinator, reconcilers)
-	// read the DB column directly.
+	require.Equal(t, 1, gotAgent.Status.Version)
 	require.Equal(t, "Alice", gotAgent.Spec.Title)
 	require.Equal(t, "platform", gotAgent.Metadata.Labels["team"])
 
@@ -94,6 +96,7 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
 	require.Equal(t, "1", gotAgent.Metadata.Version)
+	require.Equal(t, 1, gotAgent.Status.Version)
 
 	// LIST in namespace with label selector.
 	resp = api.Get("/v0/agents?labels=team%3Dplatform")
@@ -129,7 +132,7 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
 	require.Equal(t, "Alice v2", gotAgent.Spec.Title)
-	require.Equal(t, "2", gotAgent.Metadata.Version,
+	require.Equal(t, 2, gotAgent.Status.Version,
 		"spec change appends version 2 (system-assigned, ignores URL path)")
 	latest, err = store.GetLatest(t.Context(), "default", "alice")
 	require.NoError(t, err)

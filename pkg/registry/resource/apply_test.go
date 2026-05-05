@@ -37,7 +37,6 @@ kind: MCPServer
 metadata:
   namespace: default
   name: tools
-  version: "1"
 spec:
   title: Tools
 ---
@@ -46,7 +45,6 @@ kind: Agent
 metadata:
   namespace: default
   name: alice
-  version: "1"
 spec:
   title: Alice
   mcpServers:
@@ -93,7 +91,6 @@ kind: Agent
 metadata:
   namespace: default
   name: good
-  version: "1"
 spec:
   title: Good
 ---
@@ -102,7 +99,6 @@ kind: Skill
 metadata:
   namespace: default
   name: nope
-  version: "1"
 spec:
   title: Nope
 `)
@@ -119,7 +115,12 @@ spec:
 	require.Contains(t, out.Results[1].Error, "unknown or unconfigured kind")
 }
 
-func TestRegisterApply_ValidationFailsPerDoc(t *testing.T) {
+// TestRegisterApply_RejectsUserSuppliedVersion pins the contract that
+// the batch decoder fails any document carrying metadata.version —
+// that field is system-assigned and must not be settable from a
+// manifest. Failures surface as a single batch-level error result
+// (not per-doc) because the decode step short-circuits the stream.
+func TestRegisterApply_RejectsUserSuppliedVersion(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
@@ -134,7 +135,7 @@ kind: Agent
 metadata:
   namespace: default
   name: bad
-  version: latest
+  version: "5"
 spec:
   title: Bad
 `)
@@ -182,7 +183,6 @@ kind: MCPServer
 metadata:
   namespace: default
   name: should-be-denied
-  version: "1"
 spec:
   title: Should be denied
 `)

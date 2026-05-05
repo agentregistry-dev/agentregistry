@@ -408,34 +408,35 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		if meta.Name != "" && meta.Name != name {
 			return nil, huma.Error400BadRequest("metadata.name does not match path")
 		}
-		if meta.Version != "" && meta.Version != version {
-			return nil, huma.Error400BadRequest("metadata.version does not match path")
-		}
 
 		// Stamp resolved identity into metadata so applyCore sees the
-		// resolved values (clients may omit namespace/name/version in the
-		// body and rely on the path + query).
+		// resolved values (clients may omit namespace/name in the body
+		// and rely on the path + query). meta.Version is used only by
+		// the legacy deployment Store path; we set it from the URL so
+		// that path has its row identity.
 		meta.Namespace = ns
 		meta.Name = name
 		meta.Version = version
 		body.SetMetadata(*meta)
 
-		if _, ae := applyCore(ctx, cfg.Store, body, applyOpts{
+		up, ae := applyCore(ctx, cfg.Store, body, applyOpts{
 			Authorize:         cfg.Authorize,
 			Resolver:          cfg.Resolver,
 			RegistryValidator: cfg.RegistryValidator,
 			PostUpsert:        cfg.PostUpsert,
-		}, false); ae != nil {
+		}, false)
+		if ae != nil {
 			return nil, mapApplyErrorToHuma(ae, kind, ns, name, version)
 		}
 
-		// applyCore stamps the system-assigned version onto meta.Version
-		// for versioned-artifact tables; use it for the read-back so we
-		// fetch the row that was just produced rather than the URL's
-		// (potentially stale) version. For the legacy deployments path
-		// the URL version is authoritative and meta.Version is unchanged.
-		readbackVersion := body.GetMetadata().Version
-		if readbackVersion == "" {
+		// applyCore returns the system-assigned version on the
+		// versioned-artifact path; fall back to the URL version (used
+		// for the legacy deployments path where the URL is
+		// authoritative).
+		var readbackVersion string
+		if cfg.Store.IsVersionedArtifact() {
+			readbackVersion = strconv.Itoa(up.Version)
+		} else {
 			readbackVersion = version
 		}
 

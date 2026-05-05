@@ -26,7 +26,10 @@ type applyOpts struct {
 type upsertResult struct {
 	Created     bool
 	SpecChanged bool
-	Generation  int64
+	// Version is the integer version of the row after the apply. The
+	// PUT handler uses this for the read-back URL; the batch handler
+	// returns it on the per-document ApplyResult.
+	Version int
 }
 
 // applyStage tags which step of the pipeline produced an error so
@@ -81,14 +84,14 @@ func applyCore(
 	meta := obj.GetMetadata()
 	kind := obj.GetKind()
 
-	// Stamp default metadata.version for kinds that opt out of the
-	// version-required validator (Provider, Deployment) — see
-	// v1alpha1.MetadataVersionDefaulter. Without this, a YAML manifest
+	// Stamp the legacy Deployment store's required string version
+	// (only the deployment Store reads meta.Version anymore — see
+	// v1alpha1.MetadataVersionDefaulter). Without this, a YAML manifest
 	// for an unversioned kind could pass Validate but fail at the
-	// store's `version != ""` check since the 3-tuple PK still
-	// requires it. Stamping here keeps the path uniform: every kind
-	// reaches Upsert with a non-empty version regardless of whether
-	// the caller supplied one.
+	// store's `version != ""` check since the deployments-table PK is
+	// still 3-tuple. Stamping here keeps the path uniform: every kind
+	// reaches Upsert with a non-empty meta.Version where the legacy
+	// path needs it.
 	if meta.Version == "" {
 		if defaulter, ok := obj.(v1alpha1.MetadataVersionDefaulter); ok {
 			if def := defaulter.DefaultMetadataVersion(); def != "" {
@@ -137,19 +140,19 @@ func applyCore(
 	res := upsertResult{
 		Created:     up.Outcome == v1alpha1store.UpsertCreated && up.Version == 1,
 		SpecChanged: up.Outcome == v1alpha1store.UpsertCreated,
-		Generation:  int64(up.Version),
+		Version:     up.Version,
 	}
 
-	// Stamp the freshly-assigned version onto the body so callers (the
-	// PUT handler's read-back, PostUpsert hook, batch result encoder)
-	// see the integer version the Store actually wrote rather than
-	// whatever string the caller supplied — versioned-artifact tables
-	// ignore caller version on the upsert path. Always stamp so the
-	// downstream code path is uniform whether or not PostUpsert is
-	// wired.
-	meta.Version = strconvItoa(up.Version)
-	meta.Generation = int64(up.Version)
-	obj.SetMetadata(*meta)
+	// Stamp the freshly-assigned version onto the response body so the
+	// PUT handler's read-back picks the integer version the Store
+	// actually wrote rather than whatever the caller supplied via the
+	// URL path — versioned-artifact tables ignore the caller version
+	// on the upsert path. Status.Version is the canonical surface for
+	// the system-assigned integer; write it through Marshal/Unmarshal
+	// so any other status fields the caller already set survive.
+	if err := stampStatusVersion(obj, up.Version); err != nil {
+		return res, &applyError{Stage: stagePostUpsert, Err: err}
+	}
 
 	if opts.PostUpsert != nil {
 		if err := opts.PostUpsert(ctx, obj); err != nil {
@@ -159,9 +162,28 @@ func applyCore(
 	return res, nil
 }
 
-// strconvItoa is a tiny indirection that keeps the import surface of this
-// file flat — strconv only used in this one spot.
-func strconvItoa(i int) string { return fmt.Sprintf("%d", i) }
+// stampStatusVersion sets Status.Version on obj to v while preserving
+// any other status fields. Used after Upsert so the wire response
+// reflects the integer version the Store assigned.
+func stampStatusVersion(obj v1alpha1.Object, v int) error {
+	current, err := obj.MarshalStatus()
+	if err != nil {
+		return fmt.Errorf("marshal status: %w", err)
+	}
+	var s v1alpha1.Status
+	if err := v1alpha1.UnmarshalStatusFromStorage(current, &s); err != nil {
+		return fmt.Errorf("unmarshal status: %w", err)
+	}
+	s.Version = v
+	patched, err := v1alpha1.MarshalStatusForStorage(s)
+	if err != nil {
+		return fmt.Errorf("marshal status (patched): %w", err)
+	}
+	if err := obj.UnmarshalStatus(patched); err != nil {
+		return fmt.Errorf("apply status: %w", err)
+	}
+	return nil
+}
 
 // deleteOpts threads the per-kind dependencies into deleteCore. As with
 // applyOpts, every field is optional. PreDeleteObject is the object
