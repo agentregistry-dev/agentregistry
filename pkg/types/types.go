@@ -211,6 +211,12 @@ type AppOptions struct {
 
 	// AuthzProvider is an optional authorization provider.
 	AuthzProvider auth.AuthzProvider
+
+	// Auditor receives audit events from the v1alpha1 store layer
+	// (e.g. ResourceVersionCreated on Upsert creates). The default OSS
+	// behavior is a no-op; enterprise builds plug in a real audit sink.
+	// If nil, NoopAuditor is used.
+	Auditor Auditor
 }
 
 // Server represents the HTTP server and provides access to the Huma API

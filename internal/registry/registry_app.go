@@ -105,7 +105,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	if registryValidator == nil {
 		registryValidator = registries.Dispatcher
 	}
-	stores, importer := buildStoresAndImporter(pool, registryValidator, options.V1Alpha1StoreTables)
+	stores, importer := buildStoresAndImporter(pool, registryValidator, options.V1Alpha1StoreTables, options.Auditor)
 
 	slog.Info("starting agentregistry", "version", version.Version, "commit", version.GitCommit)
 
@@ -181,14 +181,17 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	return nil
 }
 
-func buildStoresAndImporter(pool *pgxpool.Pool, registryValidator v1alpha1.RegistryValidatorFunc, extraStoreTables map[string]string) (map[string]*v1alpha1store.Store, *pkgimporter.Importer) {
-	stores := v1alpha1store.NewStores(pool)
+func buildStoresAndImporter(pool *pgxpool.Pool, registryValidator v1alpha1.RegistryValidatorFunc, extraStoreTables map[string]string, auditor types.Auditor) (map[string]*v1alpha1store.Store, *pkgimporter.Importer) {
+	if auditor == nil {
+		auditor = types.NoopAuditor
+	}
+	stores := v1alpha1store.NewStores(pool, v1alpha1store.WithAuditor(auditor))
 	for kind, table := range extraStoreTables {
 		if kind == "" || table == "" {
 			slog.Warn("skipping v1alpha1 extra store with empty kind or table", "kind", kind, "table", table)
 			continue
 		}
-		stores[kind] = v1alpha1store.NewStore(pool, table)
+		stores[kind] = v1alpha1store.NewStore(pool, table, v1alpha1store.WithKind(kind), v1alpha1store.WithAuditor(auditor))
 	}
 
 	// pool == nil is the noop/DatabaseFactory path used by gen-openapi
