@@ -37,7 +37,7 @@ kind: MCPServer
 metadata:
   namespace: default
   name: tools
-  version: v1
+  version: "1"
 spec:
   title: Tools
 ---
@@ -46,13 +46,13 @@ kind: Agent
 metadata:
   namespace: default
   name: alice
-  version: v1
+  version: "1"
 spec:
   title: Alice
   mcpServers:
     - kind: MCPServer
       name: tools
-      version: v1
+      version: "1"
 `)
 	resp := api.Post("/v0/apply", "Content-Type: application/yaml", strings.NewReader(string(yaml)))
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
@@ -93,7 +93,7 @@ kind: Agent
 metadata:
   namespace: default
   name: good
-  version: v1
+  version: "1"
 spec:
   title: Good
 ---
@@ -102,7 +102,7 @@ kind: Skill
 metadata:
   namespace: default
   name: nope
-  version: v1
+  version: "1"
 spec:
   title: Nope
 `)
@@ -182,7 +182,7 @@ kind: MCPServer
 metadata:
   namespace: default
   name: should-be-denied
-  version: v1
+  version: "1"
 spec:
   title: Should be denied
 `)
@@ -198,6 +198,6 @@ spec:
 	require.Contains(t, out.Results[0].Error, `no authorizer wired for kind "MCPServer"`)
 
 	// And the row didn't land in the store.
-	_, err := mcps.Get(t.Context(), "default", "should-be-denied", "v1")
+	_, err := mcps.Get(t.Context(), "default", "should-be-denied", "1")
 	require.Error(t, err, "fail-closed must short-circuit before Upsert")
 }

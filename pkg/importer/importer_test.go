@@ -63,7 +63,7 @@ kind: Agent
 metadata:
   namespace: default
   name: demo
-  version: v1.0.0
+  version: "1"
 spec:
   title: Demo Agent
   description: A test agent
@@ -83,7 +83,7 @@ func TestImport_CreatesAgent(t *testing.T) {
 	require.EqualValues(t, 1, r.Generation)
 	require.Equal(t, EnrichmentStatusSkipped, r.EnrichmentStatus)
 
-	obj, err := agents.Get(context.Background(), testNS, "demo", "v1.0.0")
+	obj, err := agents.Get(context.Background(), testNS, "demo", "1")
 	require.NoError(t, err)
 	require.Equal(t, "demo", obj.Metadata.Name)
 }
@@ -111,7 +111,7 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   namespace: default
-  version: v1
+  version: "1"
 spec:
   title: X
 `)
@@ -131,7 +131,7 @@ kind: NotAKind
 metadata:
   namespace: default
   name: x
-  version: v1
+  version: "1"
 spec: {}
 `)
 	results, err := imp.Import(context.Background(), Options{Path: dir})
@@ -152,7 +152,7 @@ func TestImport_DryRunDoesNotWrite(t *testing.T) {
 	require.Len(t, results, 1)
 	require.Equal(t, ImportStatusDryRun, results[0].Status)
 
-	_, err = agents.Get(context.Background(), testNS, "demo", "v1.0.0")
+	_, err = agents.Get(context.Background(), testNS, "demo", "1")
 	require.Error(t, err) // not found
 }
 
@@ -164,7 +164,7 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: noNS
-  version: v1
+  version: "1"
 spec:
   title: no-ns
 `)
@@ -174,7 +174,7 @@ spec:
 	require.Equal(t, ImportStatusCreated, results[0].Status, "error=%s", results[0].Error)
 	require.Equal(t, "team-a", results[0].Namespace)
 
-	obj, err := agents.Get(context.Background(), "team-a", "noNS", "v1")
+	obj, err := agents.Get(context.Background(), "team-a", "noNS", "1")
 	require.NoError(t, err)
 	require.Equal(t, "team-a", obj.Metadata.Namespace)
 }
@@ -236,7 +236,7 @@ func TestImport_EnrichMergesAnnotationsAndFindings(t *testing.T) {
 	require.Equal(t, 1, scanner.callCount)
 
 	// Row carries merged annotations + labels + last-scanned-at.
-	obj, err := agents.Get(context.Background(), testNS, "demo", "v1.0.0")
+	obj, err := agents.Get(context.Background(), testNS, "demo", "1")
 	require.NoError(t, err)
 	require.Equal(t, "clean", obj.Metadata.Annotations[AnnoOSVStatus])
 	require.Equal(t, "clean", obj.Metadata.Labels[AnnoOSVStatus])
@@ -244,7 +244,7 @@ func TestImport_EnrichMergesAnnotationsAndFindings(t *testing.T) {
 	require.Equal(t, defaultScannedBy, obj.Metadata.Annotations[AnnoLastScannedBy])
 
 	// Findings row landed.
-	fs, err := findings.List(context.Background(), v1alpha1.KindAgent, testNS, "demo", "v1.0.0")
+	fs, err := findings.List(context.Background(), v1alpha1.KindAgent, testNS, "demo", "1")
 	require.NoError(t, err)
 	require.Len(t, fs, 1)
 	require.Equal(t, "CVE-2024-0001", fs[0].ID)
@@ -272,7 +272,7 @@ func TestImport_EnrichReplacesFindingsOnRescan(t *testing.T) {
 	_, err = imp.Import(context.Background(), Options{Path: dir, Enrich: true})
 	require.NoError(t, err)
 
-	fs, err := findings.List(context.Background(), v1alpha1.KindAgent, testNS, "demo", "v1.0.0")
+	fs, err := findings.List(context.Background(), v1alpha1.KindAgent, testNS, "demo", "1")
 	require.NoError(t, err)
 	require.Len(t, fs, 1)
 	require.Equal(t, "CVE-2024-NEW", fs[0].ID)
@@ -355,7 +355,7 @@ kind: Agent
 metadata:
   namespace: default
   name: demo2
-  version: v1
+  version: "1"
 spec:
   title: Demo 2
 `)

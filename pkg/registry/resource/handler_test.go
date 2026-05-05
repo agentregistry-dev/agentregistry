@@ -57,7 +57,7 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 		Metadata: v1alpha1.ObjectMeta{
 			Namespace: "default",
 			Name:      "alice",
-			Version:   "v1.0.0",
+			Version:   "1",
 			Labels:    map[string]string{"team": "platform"},
 		},
 		Spec: v1alpha1.AgentSpec{
@@ -65,7 +65,7 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 			Source: &v1alpha1.AgentSource{Image: "ghcr.io/example/alice:1.0.0"},
 		},
 	}
-	resp := api.Put("/v0/agents/alice/v1.0.0", putBody)
+	resp := api.Put("/v0/agents/alice/1", putBody)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
 	var gotAgent v1alpha1.Agent
@@ -76,7 +76,7 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 	// NamespaceOrDefault for display / id composition.
 	require.Equal(t, "default", gotAgent.Metadata.NamespaceOrDefault())
 	require.Equal(t, "alice", gotAgent.Metadata.Name)
-	require.Equal(t, "v1.0.0", gotAgent.Metadata.Version)
+	require.Equal(t, "1", gotAgent.Metadata.Version)
 	// Generation is hidden from the wire (json:"-"), so the client decode
 	// sees its zero value. Internal consumers (coordinator, reconcilers)
 	// read the DB column directly.
@@ -84,7 +84,7 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 	require.Equal(t, "platform", gotAgent.Metadata.Labels["team"])
 
 	// GET exact version.
-	resp = api.Get("/v0/agents/alice/v1.0.0")
+	resp = api.Get("/v0/agents/alice/1")
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
 	require.Equal(t, "alice", gotAgent.Metadata.Name)
@@ -93,7 +93,7 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 	resp = api.Get("/v0/agents/alice")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
-	require.Equal(t, "v1.0.0", gotAgent.Metadata.Version)
+	require.Equal(t, "1", gotAgent.Metadata.Version)
 
 	// LIST in namespace with label selector.
 	resp = api.Get("/v0/agents?labels=team%3Dplatform")
@@ -112,29 +112,35 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Len(t, list.Items, 1)
 
-	// Re-apply with same spec — generation must stay at 1. Generation
-	// is internal-only so the assertion goes through the Store directly
-	// (the wire response omits generation via json:"-").
-	resp = api.Put("/v0/agents/alice/v1.0.0", putBody)
+	// Re-apply with the same spec is a no-op at the Store layer; the
+	// row remains at version 1 and version 2 is never created. Confirm
+	// by reading the latest row.
+	resp = api.Put("/v0/agents/alice/1", putBody)
 	require.Equal(t, http.StatusOK, resp.Code)
-	row, err := store.Get(t.Context(), "default", "alice", "v1.0.0")
+	latest, err := store.GetLatest(t.Context(), "default", "alice")
 	require.NoError(t, err)
-	require.EqualValues(t, 1, row.Metadata.Generation, "no-op apply preserves generation")
+	require.Equal(t, "1", latest.Metadata.Version, "no-op apply must not bump version")
 
-	// PUT with mutated spec — generation bumps to 2.
+	// PUT with mutated spec — versioned-artifact path appends a new
+	// immutable row at version 2; the response reflects the assigned
+	// integer version (system-assigned, ignores the URL path).
 	putBody.Spec.Title = "Alice v2"
-	resp = api.Put("/v0/agents/alice/v1.0.0", putBody)
+	resp = api.Put("/v0/agents/alice/1", putBody)
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
 	require.Equal(t, "Alice v2", gotAgent.Spec.Title)
-	row, err = store.Get(t.Context(), "default", "alice", "v1.0.0")
+	require.Equal(t, "2", gotAgent.Metadata.Version,
+		"spec change appends version 2 (system-assigned, ignores URL path)")
+	latest, err = store.GetLatest(t.Context(), "default", "alice")
 	require.NoError(t, err)
-	require.EqualValues(t, 2, row.Metadata.Generation)
+	require.Equal(t, "2", latest.Metadata.Version)
 
-	// DELETE — finalizer-free row hard-deletes immediately. (The
-	// soft-delete + drain dance only kicks in for finalizer-bearing
-	// rows; see TestResourceRegister_DeleteHardDeletesFinalizerFree.)
-	resp = api.Delete("/v0/agents/alice/v1.0.0")
+	// DELETE — versioned-artifact rows have no finalizers, so DELETE
+	// hard-deletes the targeted version immediately. The version-1 row
+	// remains; only the URL-targeted version is removed.
+	resp = api.Delete("/v0/agents/alice/2")
+	require.Equal(t, http.StatusNoContent, resp.Code)
+	resp = api.Delete("/v0/agents/alice/1")
 	require.Equal(t, http.StatusNoContent, resp.Code)
 
 	// GetLatest returns 404 — row is gone.
@@ -142,7 +148,7 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, resp.Code, resp.Body.String())
 
 	// GET on the exact version returns 404 too.
-	resp = api.Get("/v0/agents/alice/v1.0.0")
+	resp = api.Get("/v0/agents/alice/1")
 	require.Equal(t, http.StatusNotFound, resp.Code)
 
 	// List is empty.
@@ -168,26 +174,26 @@ func TestResourceRegister_AgentNamespaceIsolation(t *testing.T) {
 	// Same name in two different namespaces — no conflict.
 	bodyTeamA := v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "team-a", Name: "shared", Version: "v1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "team-a", Name: "shared", Version: "1"},
 		Spec:     v1alpha1.AgentSpec{Title: "A's"},
 	}
 	bodyTeamB := bodyTeamA
 	bodyTeamB.Metadata.Namespace = "team-b"
 	bodyTeamB.Spec.Title = "B's"
 
-	resp := api.Put("/v0/agents/shared/v1?namespace=team-a", bodyTeamA)
+	resp := api.Put("/v0/agents/shared/1?namespace=team-a", bodyTeamA)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
-	resp = api.Put("/v0/agents/shared/v1?namespace=team-b", bodyTeamB)
+	resp = api.Put("/v0/agents/shared/1?namespace=team-b", bodyTeamB)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
 	// Namespaced GETs resolve the right one.
 	var got v1alpha1.Agent
-	resp = api.Get("/v0/agents/shared/v1?namespace=team-a")
+	resp = api.Get("/v0/agents/shared/1?namespace=team-a")
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
 	require.Equal(t, "A's", got.Spec.Title)
 
-	resp = api.Get("/v0/agents/shared/v1?namespace=team-b")
+	resp = api.Get("/v0/agents/shared/1?namespace=team-b")
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
 	require.Equal(t, "B's", got.Spec.Title)
@@ -219,10 +225,10 @@ func TestResourceRegister_AgentListCursorPagination(t *testing.T) {
 	for _, name := range []string{"one", "two", "three"} {
 		body := v1alpha1.Agent{
 			TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-			Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name, Version: "v1"},
+			Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name, Version: "1"},
 			Spec:     v1alpha1.AgentSpec{Title: name},
 		}
-		resp := api.Put(fmt.Sprintf("/v0/agents/%s/v1", url.PathEscape(name)), body)
+		resp := api.Put(fmt.Sprintf("/v0/agents/%s/1", url.PathEscape(name)), body)
 		require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	}
 
@@ -330,10 +336,10 @@ func TestResourceRegister_AgentWrongKindRejected(t *testing.T) {
 	// Body carries Kind: "Skill" but PUT targets the agents handler.
 	body := v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: "Skill"},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "bob", Version: "v1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "bob", Version: "1"},
 		Spec:     v1alpha1.AgentSpec{Title: "wrong kind"},
 	}
-	resp := api.Put("/v0/agents/bob/v1", body)
+	resp := api.Put("/v0/agents/bob/1", body)
 	require.Equal(t, http.StatusBadRequest, resp.Code, resp.Body.String())
 }
 
@@ -347,12 +353,19 @@ func TestResourceRegister_AgentPathMismatchRejected(t *testing.T) {
 
 	body := v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "mismatched", Version: "v1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "mismatched", Version: "1"},
 	}
-	resp := api.Put("/v0/agents/alice/v1", body)
+	resp := api.Put("/v0/agents/alice/1", body)
 	require.Equal(t, http.StatusBadRequest, resp.Code, fmt.Sprintf("body=%s", resp.Body.String()))
 }
 
+// TestResourceRegister_ValidationRejectsBadVersion pins the URL-path
+// version contract: versioned-artifact kinds (Agent, MCPServer, etc.)
+// require a positive integer in the {version} segment. Anything else —
+// "latest", "v1.0.0", "abc" — is rejected with a 400 before the
+// handler touches the Store. Without the URL-side validator the request
+// falls through to the Store, which surfaces the same rejection but
+// with a less obvious "invalid integer version" error.
 func TestResourceRegister_ValidationRejectsBadVersion(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
@@ -366,7 +379,8 @@ func TestResourceRegister_ValidationRejectsBadVersion(t *testing.T) {
 	}
 	resp := api.Put("/v0/agents/bad/latest", body)
 	require.Equal(t, http.StatusBadRequest, resp.Code)
-	require.Contains(t, resp.Body.String(), "metadata.version")
+	require.Contains(t, resp.Body.String(), "version path segment")
+	require.Contains(t, resp.Body.String(), "must be a positive integer")
 }
 
 func TestResourceRegister_ResolverDetectsDanglingRef(t *testing.T) {
@@ -401,15 +415,15 @@ func TestResourceRegister_ResolverDetectsDanglingRef(t *testing.T) {
 	// Reference a missing MCPServer.
 	body := v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "dangling", Version: "v1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "dangling", Version: "1"},
 		Spec: v1alpha1.AgentSpec{
 			MCPServers: []v1alpha1.ResourceRef{
-				{Kind: v1alpha1.KindMCPServer, Name: "tools", Version: "v1"},
-				{Kind: v1alpha1.KindMCPServer, Name: "missing", Version: "v1"},
+				{Kind: v1alpha1.KindMCPServer, Name: "tools", Version: "1"},
+				{Kind: v1alpha1.KindMCPServer, Name: "missing", Version: "1"},
 			},
 		},
 	}
-	resp := api.Put("/v0/agents/dangling/v1", body)
+	resp := api.Put("/v0/agents/dangling/1", body)
 	require.Equal(t, http.StatusBadRequest, resp.Code)
 	require.Contains(t, resp.Body.String(), "spec.mcpServers[1]")
 }
@@ -439,32 +453,32 @@ func TestResourceRegister_DeleteHardDeletesFinalizerFree(t *testing.T) {
 	// Create the row via the wire.
 	body := v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "soft", Version: "v1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "soft", Version: "1"},
 		Spec:     v1alpha1.AgentSpec{Title: "Soft"},
 	}
-	resp := api.Put("/v0/agents/soft/v1", body)
+	resp := api.Put("/v0/agents/soft/1", body)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
 	// DELETE on a finalizer-free row hard-deletes immediately.
-	resp = api.Delete("/v0/agents/soft/v1")
+	resp = api.Delete("/v0/agents/soft/1")
 	require.Equal(t, http.StatusNoContent, resp.Code)
 
 	// GET returns 404 — row is gone, not terminating.
-	resp = api.Get("/v0/agents/soft/v1")
+	resp = api.Get("/v0/agents/soft/1")
 	require.Equal(t, http.StatusNotFound, resp.Code)
 
 	// Re-apply with the same (name, version) succeeds — no
 	// "object is terminating" race since the row is fully removed.
-	resp = api.Put("/v0/agents/soft/v1", body)
+	// Versioned-artifact rows have no separate generation column; the
+	// row's identity-as-version is the integer assigned at insert time.
+	// A fresh create after hard-delete starts at version 1 again.
+	resp = api.Put("/v0/agents/soft/1", body)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
-	// Generation is server-managed (json:"-") so it doesn't appear on
-	// the wire; check directly against the store. A re-applied row
-	// after hard-delete is a fresh create, so generation resets to 1.
-	row, err := store.Get(t.Context(), "default", "soft", "v1")
+	row, err := store.Get(t.Context(), "default", "soft", "1")
 	require.NoError(t, err)
-	require.EqualValues(t, 1, row.Metadata.Generation,
-		"re-apply after hard-delete must reset generation to 1")
+	require.Equal(t, "1", row.Metadata.Version,
+		"re-apply after hard-delete is a fresh insert at version 1")
 }
 
 // TestResourceRegister_PostUpsertFailureLeavesPersistedRow pins the
@@ -497,17 +511,17 @@ func TestResourceRegister_PostUpsertFailureLeavesPersistedRow(t *testing.T) {
 
 	body := v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "halfapplied", Version: "v1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "halfapplied", Version: "1"},
 		Spec:     v1alpha1.AgentSpec{Title: "Half"},
 	}
 
 	// PUT → 500. Hook fired exactly once.
-	resp := api.Put("/v0/agents/halfapplied/v1", body)
+	resp := api.Put("/v0/agents/halfapplied/1", body)
 	require.Equal(t, http.StatusInternalServerError, resp.Code, resp.Body.String())
 	require.Equal(t, 1, hookCalls, "PostUpsert must fire exactly once on the failing apply")
 
 	// Row persists despite the hook failure: subsequent GET returns 200.
-	resp = api.Get("/v0/agents/halfapplied/v1")
+	resp = api.Get("/v0/agents/halfapplied/1")
 	require.Equal(t, http.StatusOK, resp.Code,
 		"contract: Store.Upsert commits before the hook, so a hook failure leaves the row persisted")
 
@@ -525,7 +539,7 @@ func TestResourceRegister_PostUpsertFailureLeavesPersistedRow(t *testing.T) {
 	// bump required. Pin the behavior so a future "skip hook on
 	// no-op" optimization has to update the godoc + this test.
 	hookCalls = 0
-	resp = api.Put("/v0/agents/halfapplied/v1", body)
+	resp = api.Put("/v0/agents/halfapplied/1", body)
 	require.Equal(t, http.StatusInternalServerError, resp.Code,
 		"identical-spec re-apply still fires the hook (and 500s if the hook still errors)")
 	require.Equal(t, 1, hookCalls,
@@ -536,7 +550,7 @@ func TestResourceRegister_PostUpsertFailureLeavesPersistedRow(t *testing.T) {
 	// readable through the regular GET.
 	hookErr = nil
 	hookCalls = 0
-	resp = api.Put("/v0/agents/halfapplied/v1", body)
+	resp = api.Put("/v0/agents/halfapplied/1", body)
 	require.Equal(t, http.StatusOK, resp.Code,
 		"once the platform-adapter clears, identical-spec re-apply succeeds without a spec bump")
 	require.Equal(t, 1, hookCalls)

@@ -43,14 +43,16 @@ func TestClient_V1Alpha1RoundTrip(t *testing.T) {
 	c := client.NewClient(ts.URL, "")
 	ctx := context.Background()
 
-	// Apply a single-doc YAML → creates the Agent.
+	// Apply a single-doc YAML → creates the Agent. metadata.version is
+	// system-assigned for versioned-artifact kinds; the user-supplied
+	// "1" matches the integer the Store assigns to the first apply.
 	yamlBody := []byte(`
 apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   namespace: default
   name: acme/planner
-  version: v1.0.0
+  version: "1"
 spec:
   title: Planner
   description: planning agent
@@ -64,11 +66,11 @@ spec:
 	// Store directly.
 
 	// Get by exact version.
-	raw, err := c.Get(ctx, v1alpha1.KindAgent, "default", "acme/planner", "v1.0.0")
+	raw, err := c.Get(ctx, v1alpha1.KindAgent, "default", "acme/planner", "1")
 	require.NoError(t, err)
 	require.Equal(t, v1alpha1.KindAgent, raw.Kind)
 	require.Equal(t, "acme/planner", raw.Metadata.Name)
-	require.Equal(t, "v1.0.0", raw.Metadata.Version)
+	require.Equal(t, "1", raw.Metadata.Version)
 
 	// Unmarshal Spec into the typed Agent.
 	var spec v1alpha1.AgentSpec
@@ -78,7 +80,7 @@ spec:
 	// GetLatest returns the same row.
 	latest, err := c.GetLatest(ctx, v1alpha1.KindAgent, "default", "acme/planner")
 	require.NoError(t, err)
-	require.Equal(t, "v1.0.0", latest.Metadata.Version)
+	require.Equal(t, "1", latest.Metadata.Version)
 
 	// List (cross-namespace) returns the one row.
 	items, next, err := c.List(ctx, v1alpha1.KindAgent, client.ListOpts{})
@@ -95,9 +97,9 @@ spec:
 	// Delete → finalizer-free Agent hard-deletes immediately. Both
 	// GetLatest and the exact-version Get return ErrNotFound; the row
 	// is gone, not soft-deleted.
-	require.NoError(t, c.Delete(ctx, v1alpha1.KindAgent, "default", "acme/planner", "v1.0.0"))
+	require.NoError(t, c.Delete(ctx, v1alpha1.KindAgent, "default", "acme/planner", "1"))
 
-	_, err = c.Get(ctx, v1alpha1.KindAgent, "default", "acme/planner", "v1.0.0")
+	_, err = c.Get(ctx, v1alpha1.KindAgent, "default", "acme/planner", "1")
 	require.ErrorIs(t, err, client.ErrNotFound)
 
 	_, err = c.GetLatest(ctx, v1alpha1.KindAgent, "default", "acme/planner")
@@ -130,7 +132,7 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   namespace: default
-  version: v1.0.0
+  version: "1"
 spec:
   title: Missing name
 `)
@@ -155,7 +157,7 @@ func TestClient_V1Alpha1_NotFound(t *testing.T) {
 
 	c := client.NewClient(ts.URL, "")
 
-	_, err := c.Get(context.Background(), v1alpha1.KindAgent, "default", "does-not-exist", "v1")
+	_, err := c.Get(context.Background(), v1alpha1.KindAgent, "default", "does-not-exist", "1")
 	require.Error(t, err)
 	require.True(t, errors.Is(err, client.ErrNotFound))
 }

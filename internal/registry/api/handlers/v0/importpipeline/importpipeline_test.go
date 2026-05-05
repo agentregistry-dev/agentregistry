@@ -69,7 +69,7 @@ kind: Agent
 metadata:
   namespace: default
   name: alice
-  version: v1
+  version: "1"
 spec:
   title: Alice
 `
@@ -96,7 +96,7 @@ func TestRegisterImport_Create(t *testing.T) {
 	require.Equal(t, "Agent", out.Results[0].Kind)
 	require.EqualValues(t, 1, out.Results[0].Generation)
 
-	obj, err := agents.Get(context.Background(), "default", "alice", "v1")
+	obj, err := agents.Get(context.Background(), "default", "alice", "1")
 	require.NoError(t, err)
 	require.Equal(t, "alice", obj.Metadata.Name)
 }
@@ -120,12 +120,12 @@ func TestRegisterImport_EnrichInvokesScanners(t *testing.T) {
 	require.Equal(t, 1, sc.calls)
 
 	// Annotation landed on the row.
-	obj, err := agents.Get(context.Background(), "default", "alice", "v1")
+	obj, err := agents.Get(context.Background(), "default", "alice", "1")
 	require.NoError(t, err)
 	require.Equal(t, "clean", obj.Metadata.Annotations["security.agentregistry.solo.io/fake-status"])
 
 	// Finding landed in the side table.
-	fs, err := findings.List(context.Background(), v1alpha1.KindAgent, "default", "alice", "v1")
+	fs, err := findings.List(context.Background(), v1alpha1.KindAgent, "default", "alice", "1")
 	require.NoError(t, err)
 	require.Len(t, fs, 1)
 	require.Equal(t, "FAKE-1", fs[0].ID)
@@ -171,7 +171,7 @@ func TestRegisterImport_DryRunDoesNotWrite(t *testing.T) {
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
 	require.Equal(t, "dry-run", out.Results[0].Status)
 
-	_, err := agents.Get(context.Background(), "default", "alice", "v1")
+	_, err := agents.Get(context.Background(), "default", "alice", "1")
 	require.Error(t, err) // not found
 }
 
@@ -233,7 +233,7 @@ kind: Agent
 metadata:
   namespace: default
   name: secret
-  version: v1
+  version: "1"
 spec:
   title: Secret
 ---
@@ -242,7 +242,7 @@ kind: Agent
 metadata:
   namespace: default
   name: ok
-  version: v1
+  version: "1"
 spec:
   title: Ok
 `
@@ -272,10 +272,10 @@ spec:
 	require.Equal(t, "created", out.Results[1].Status)
 
 	// Denied row was NOT persisted.
-	_, err = agents.Get(context.Background(), "default", "secret", "v1")
+	_, err = agents.Get(context.Background(), "default", "secret", "1")
 	require.Error(t, err)
 	// Allowed row IS persisted.
-	row, err := agents.Get(context.Background(), "default", "ok", "v1")
+	row, err := agents.Get(context.Background(), "default", "ok", "1")
 	require.NoError(t, err)
 	require.Equal(t, "ok", row.Metadata.Name)
 }
@@ -316,7 +316,7 @@ kind: MCPServer
 metadata:
   namespace: default
   name: anything
-  version: v1
+  version: "1"
 spec:
   title: Anything
 `
@@ -338,7 +338,7 @@ spec:
 		"missing-authorizer must fail closed when Authorizers is non-empty")
 
 	// Row is NOT persisted.
-	_, err = stores[v1alpha1.KindMCPServer].Get(context.Background(), "default", "anything", "v1")
+	_, err = stores[v1alpha1.KindMCPServer].Get(context.Background(), "default", "anything", "1")
 	require.Error(t, err)
 }
 
@@ -351,7 +351,7 @@ kind: Agent
 metadata:
   namespace: default
   name: bob
-  version: v1
+  version: "1"
 spec:
   title: Bob
 `
