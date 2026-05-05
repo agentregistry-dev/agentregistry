@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -251,6 +252,19 @@ func (s *Store) upsertVersioned(ctx context.Context, meta *v1alpha1.ObjectMeta, 
 
 	var result UpsertResult
 	err = runInTx(ctx, s.pool, func(tx pgx.Tx) error {
+		// Serialize concurrent applies for the same (namespace, name).
+		// `SELECT ... FOR UPDATE` is row-level and provides no gap-lock
+		// semantics: goroutines that see "no prior row" all proceed to
+		// INSERT v1, and even goroutines that block on an existing row
+		// see a stale view of MAX(version) after the lock releases.
+		// An advisory transaction lock serializes the entire
+		// (lookup, insert) decision per identity. The lock auto-releases
+		// at COMMIT/ROLLBACK because we use pg_advisory_xact_lock.
+		key := s.advisoryLockKey(s.table, meta.Namespace, meta.Name)
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, key); err != nil {
+			return fmt.Errorf("advisory lock: %w", err)
+		}
+
 		var (
 			latestVersion       int
 			latestHash          string
@@ -1203,4 +1217,21 @@ func equalJSONMap(existing, incoming []byte) bool {
 // detect spec-no-op apply.
 func equalSpecJSON(existing []byte, incoming json.RawMessage) bool {
 	return SpecHash(existing) == SpecHash(incoming)
+}
+
+// advisoryLockKey returns a deterministic 64-bit key for advisory locks
+// scoped to a (table, namespace, name) tuple. Postgres advisory locks
+// take a single bigint key (or a pair of int4s); we hash the composite
+// with FNV-64a — collisions are harmless for serialization correctness
+// (they only cause unrelated identities to occasionally serialize) and
+// the upsert critical section is short, so contention from collisions
+// is negligible in practice.
+func (s *Store) advisoryLockKey(table, ns, name string) int64 {
+	h := fnv.New64a()
+	h.Write([]byte(table))
+	h.Write([]byte{0})
+	h.Write([]byte(ns))
+	h.Write([]byte{0})
+	h.Write([]byte(name))
+	return int64(h.Sum64())
 }
