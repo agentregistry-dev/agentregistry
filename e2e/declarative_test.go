@@ -1961,6 +1961,7 @@ spec:
   providerRef:
     kind: Provider
     name: local
+    version: "1"
 `, missingName, missingName)
 	deployPath := writeDeclarativeYAML(t, tmpDir, "deployment.yaml", deployYAML)
 

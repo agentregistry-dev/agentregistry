@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"context"
 	"fmt"
+	"strconv"
 )
 
 // Validate runs Deployment's structural checks.
@@ -72,6 +73,22 @@ func validateDeploymentSpec(s *DeploymentSpec) FieldErrors {
 		errs.Append("spec.providerRef."+e.Path, e.Cause)
 	}
 
+	// Deployments pin to a concrete (kind, name, version) tuple. The
+	// referenced Agent/MCPServer/RemoteMCPServer/Provider rows live
+	// under integer versions; an empty version (resolves to latest at
+	// reconcile time) or a string-semver value (won't parse against
+	// the integer storage column) reintroduces the silent-drift the
+	// versioned-resource redesign exists to eliminate. Cross-references
+	// between non-Deployment kinds (Agent.spec.mcpServers, etc.) stay
+	// intentionally lenient — empty version there means "use latest at
+	// lookup time" and is acceptable for those kinds.
+	if err := validateIntegerVersion("spec.targetRef", s.TargetRef.Version); err != nil {
+		errs = append(errs, *err)
+	}
+	if err := validateIntegerVersion("spec.providerRef", s.ProviderRef.Version); err != nil {
+		errs = append(errs, *err)
+	}
+
 	switch s.DesiredState {
 	case "", DesiredStateDeployed, DesiredStateUndeployed:
 		// Empty is allowed — defaults to "deployed" at apply-time.
@@ -83,4 +100,32 @@ func validateDeploymentSpec(s *DeploymentSpec) FieldErrors {
 	}
 
 	return errs
+}
+
+// validateIntegerVersion enforces that the version on a Deployment's
+// cross-reference is a non-empty positive integer. Versioned-artifact
+// kinds (Agent, MCPServer, RemoteMCPServer, Provider) are stored under
+// integer versions; a Deployment that wants stable pinning must
+// reference them by their concrete integer version. Empty strings
+// (would resolve to "latest" at reconcile time) and string semver
+// (e.g. "v1.0.0") are rejected because both reintroduce the silent
+// drift the immutable-resource-versioning redesign exists to eliminate.
+//
+// Returns nil on success, or a *FieldError pointing at field+".version"
+// the caller can append directly to its FieldErrors slice.
+func validateIntegerVersion(field, version string) *FieldError {
+	if version == "" {
+		return &FieldError{
+			Path:  field + ".version",
+			Cause: fmt.Errorf("%w: required (positive integer)", ErrRequiredField),
+		}
+	}
+	n, err := strconv.Atoi(version)
+	if err != nil || n <= 0 {
+		return &FieldError{
+			Path:  field + ".version",
+			Cause: fmt.Errorf("%w: must be a positive integer, got %q", ErrInvalidVersion, version),
+		}
+	}
+	return nil
 }

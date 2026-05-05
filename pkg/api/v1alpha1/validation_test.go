@@ -178,10 +178,10 @@ func TestAgentResolveRefs_NilResolverIsNoOp(t *testing.T) {
 
 func TestDeploymentValidate_OK(t *testing.T) {
 	d := &Deployment{
-		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "v1"},
+		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "1"},
 		Spec: DeploymentSpec{
-			TargetRef:    ResourceRef{Kind: KindAgent, Name: "alice", Version: "v1"},
-			ProviderRef:  ResourceRef{Kind: KindProvider, Name: "local", Version: "v1"},
+			TargetRef:    ResourceRef{Kind: KindAgent, Name: "alice", Version: "1"},
+			ProviderRef:  ResourceRef{Kind: KindProvider, Name: "local", Version: "1"},
 			DesiredState: DesiredStateDeployed,
 		},
 	}
@@ -190,10 +190,10 @@ func TestDeploymentValidate_OK(t *testing.T) {
 
 func TestDeploymentValidate_RejectsBadTargetKind(t *testing.T) {
 	d := &Deployment{
-		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "v1"},
+		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "1"},
 		Spec: DeploymentSpec{
-			TargetRef:   ResourceRef{Kind: KindSkill, Name: "skill", Version: "v1"},
-			ProviderRef: ResourceRef{Kind: KindProvider, Name: "local", Version: "v1"},
+			TargetRef:   ResourceRef{Kind: KindSkill, Name: "skill", Version: "1"},
+			ProviderRef: ResourceRef{Kind: KindProvider, Name: "local", Version: "1"},
 		},
 	}
 	paths := failedFields(t, d.Validate())
@@ -202,10 +202,10 @@ func TestDeploymentValidate_RejectsBadTargetKind(t *testing.T) {
 
 func TestDeploymentValidate_RejectsBadProviderKind(t *testing.T) {
 	d := &Deployment{
-		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "v1"},
+		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "1"},
 		Spec: DeploymentSpec{
-			TargetRef:   ResourceRef{Kind: KindAgent, Name: "alice", Version: "v1"},
-			ProviderRef: ResourceRef{Kind: KindAgent, Name: "nope", Version: "v1"},
+			TargetRef:   ResourceRef{Kind: KindAgent, Name: "alice", Version: "1"},
+			ProviderRef: ResourceRef{Kind: KindAgent, Name: "nope", Version: "1"},
 		},
 	}
 	paths := failedFields(t, d.Validate())
@@ -214,15 +214,67 @@ func TestDeploymentValidate_RejectsBadProviderKind(t *testing.T) {
 
 func TestDeploymentValidate_RejectsBadDesiredState(t *testing.T) {
 	d := &Deployment{
-		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "v1"},
+		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "1"},
 		Spec: DeploymentSpec{
-			TargetRef:    ResourceRef{Kind: KindAgent, Name: "alice", Version: "v1"},
-			ProviderRef:  ResourceRef{Kind: KindProvider, Name: "local", Version: "v1"},
+			TargetRef:    ResourceRef{Kind: KindAgent, Name: "alice", Version: "1"},
+			ProviderRef:  ResourceRef{Kind: KindProvider, Name: "local", Version: "1"},
 			DesiredState: "running",
 		},
 	}
 	paths := failedFields(t, d.Validate())
 	require.Contains(t, paths, "spec.desiredState")
+}
+
+// Deployment cross-references must pin a positive integer version —
+// empty / "latest" / semver are rejected because they reintroduce
+// the silent-drift problem the immutable-resource-versioning
+// redesign exists to eliminate. See validateIntegerVersion.
+func TestDeploymentValidate_RejectsEmptyTargetRefVersion(t *testing.T) {
+	d := &Deployment{
+		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "1"},
+		Spec: DeploymentSpec{
+			TargetRef:   ResourceRef{Kind: KindAgent, Name: "alice"}, // no version
+			ProviderRef: ResourceRef{Kind: KindProvider, Name: "local", Version: "1"},
+		},
+	}
+	paths := failedFields(t, d.Validate())
+	require.Contains(t, paths, "spec.targetRef.version")
+}
+
+func TestDeploymentValidate_RejectsEmptyProviderRefVersion(t *testing.T) {
+	d := &Deployment{
+		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "1"},
+		Spec: DeploymentSpec{
+			TargetRef:   ResourceRef{Kind: KindAgent, Name: "alice", Version: "1"},
+			ProviderRef: ResourceRef{Kind: KindProvider, Name: "local"}, // no version
+		},
+	}
+	paths := failedFields(t, d.Validate())
+	require.Contains(t, paths, "spec.providerRef.version")
+}
+
+func TestDeploymentValidate_RejectsSemverRefVersion(t *testing.T) {
+	d := &Deployment{
+		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "1"},
+		Spec: DeploymentSpec{
+			TargetRef:   ResourceRef{Kind: KindAgent, Name: "alice", Version: "v1.0.0"},
+			ProviderRef: ResourceRef{Kind: KindProvider, Name: "local", Version: "1"},
+		},
+	}
+	paths := failedFields(t, d.Validate())
+	require.Contains(t, paths, "spec.targetRef.version")
+}
+
+func TestDeploymentValidate_RejectsZeroIntegerRefVersion(t *testing.T) {
+	d := &Deployment{
+		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "1"},
+		Spec: DeploymentSpec{
+			TargetRef:   ResourceRef{Kind: KindAgent, Name: "alice", Version: "0"},
+			ProviderRef: ResourceRef{Kind: KindProvider, Name: "local", Version: "1"},
+		},
+	}
+	paths := failedFields(t, d.Validate())
+	require.Contains(t, paths, "spec.targetRef.version")
 }
 
 func TestDeploymentResolveRefs_InheritsNamespace(t *testing.T) {
@@ -232,10 +284,10 @@ func TestDeploymentResolveRefs_InheritsNamespace(t *testing.T) {
 		return nil
 	}
 	d := &Deployment{
-		Metadata: ObjectMeta{Namespace: "team-b", Name: "prod", Version: "v1"},
+		Metadata: ObjectMeta{Namespace: "team-b", Name: "prod", Version: "1"},
 		Spec: DeploymentSpec{
-			TargetRef:   ResourceRef{Kind: KindAgent, Name: "alice", Version: "v1"},
-			ProviderRef: ResourceRef{Kind: KindProvider, Name: "local", Version: "v1"},
+			TargetRef:   ResourceRef{Kind: KindAgent, Name: "alice", Version: "1"},
+			ProviderRef: ResourceRef{Kind: KindProvider, Name: "local", Version: "1"},
 		},
 	}
 	require.NoError(t, d.ResolveRefs(context.Background(), resolver))
