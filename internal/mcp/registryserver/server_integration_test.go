@@ -24,20 +24,21 @@ func TestMCPListServers_HappyPath(t *testing.T) {
 	const (
 		serverNamespace = "default"
 		serverName      = "echo"
-		serverVersion   = "1.0.0"
+		serverVersion   = "1"
 	)
-	spec, err := json.Marshal(v1alpha1.MCPServerSpec{
-		Description: "Echo test server",
-		Source: &v1alpha1.MCPServerSource{
-			Package: &v1alpha1.MCPPackage{
-				RegistryType: v1alpha1.RegistryTypeOCI,
-				Identifier:   "ghcr.io/example/echo:1.0.0",
-				Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+	_, err := stores[v1alpha1.KindMCPServer].Upsert(ctx, &v1alpha1.MCPServer{
+		Metadata: v1alpha1.ObjectMeta{Namespace: serverNamespace, Name: serverName},
+		Spec: v1alpha1.MCPServerSpec{
+			Description: "Echo test server",
+			Source: &v1alpha1.MCPServerSource{
+				Package: &v1alpha1.MCPPackage{
+					RegistryType: v1alpha1.RegistryTypeOCI,
+					Identifier:   "ghcr.io/example/echo:1.0.0",
+					Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+				},
 			},
 		},
 	})
-	require.NoError(t, err)
-	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, serverNamespace, serverName, serverVersion, spec, v1alpha1store.UpsertOpts{})
 	require.NoError(t, err, "seed server")
 
 	// Wire up MCP server + client over in-memory transports.

@@ -49,9 +49,10 @@ func (f *fakeProvider) Generate(ctx context.Context, p pkgemb.Payload) (*pkgemb.
 
 func seedAgent(t *testing.T, store *v1alpha1store.Store, name string) {
 	t.Helper()
-	spec, err := json.Marshal(v1alpha1.AgentSpec{Title: name, Description: name})
-	require.NoError(t, err)
-	_, err = store.Upsert(context.Background(), "default", name, "v1", spec, v1alpha1store.UpsertOpts{})
+	_, err := store.Upsert(context.Background(), &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name},
+		Spec:     v1alpha1.AgentSpec{Title: name, Description: name},
+	})
 	require.NoError(t, err)
 }
 

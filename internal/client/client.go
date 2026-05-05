@@ -217,7 +217,7 @@ func (c *Client) Get(ctx context.Context, kind, namespace, name, version string)
 	return c.getRaw(ctx, path)
 }
 
-// GetLatest returns the is_latest_version row for (kind, namespace, name).
+// GetLatest returns the highest-version live row for (kind, namespace, name).
 func (c *Client) GetLatest(ctx context.Context, kind, namespace, name string) (*v1alpha1.RawObject, error) {
 	path := fmt.Sprintf("/%s/%s%s",
 		v1alpha1.PluralFor(kind),

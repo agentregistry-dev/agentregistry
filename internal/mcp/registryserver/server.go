@@ -45,7 +45,7 @@ func NewServer(stores map[string]*v1alpha1store.Store) *mcp.Server {
 		ListName: "list_agents",
 		GetName:  "get_agent",
 		ListDesc: "List published agents as v1alpha1 envelopes with optional namespace / substring-name / version filters.",
-		GetDesc:  "Fetch a published agent as a v1alpha1 envelope (defaults to the is_latest_version row).",
+		GetDesc:  "Fetch a published agent as a v1alpha1 envelope (defaults to the latest live version).",
 		NewObj:   func() *v1alpha1.Agent { return &v1alpha1.Agent{} },
 	})
 	addKindTools(server, stores[v1alpha1.KindMCPServer], kindTools[*v1alpha1.MCPServer]{
@@ -53,7 +53,7 @@ func NewServer(stores map[string]*v1alpha1store.Store) *mcp.Server {
 		ListName: "list_servers",
 		GetName:  "get_server",
 		ListDesc: "List published MCP servers as v1alpha1 envelopes with optional namespace / substring-name / version filters.",
-		GetDesc:  "Fetch a published MCP server as a v1alpha1 envelope (defaults to the is_latest_version row).",
+		GetDesc:  "Fetch a published MCP server as a v1alpha1 envelope (defaults to the latest live version).",
 		NewObj:   func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} },
 	})
 	addKindTools(server, stores[v1alpha1.KindSkill], kindTools[*v1alpha1.Skill]{
@@ -61,7 +61,7 @@ func NewServer(stores map[string]*v1alpha1store.Store) *mcp.Server {
 		ListName: "list_skills",
 		GetName:  "get_skill",
 		ListDesc: "List published skills as v1alpha1 envelopes with optional namespace / substring-name / version filters.",
-		GetDesc:  "Fetch a published skill as a v1alpha1 envelope (defaults to the is_latest_version row).",
+		GetDesc:  "Fetch a published skill as a v1alpha1 envelope (defaults to the latest live version).",
 		NewObj:   func() *v1alpha1.Skill { return &v1alpha1.Skill{} },
 	})
 	addKindTools(server, stores[v1alpha1.KindDeployment], kindTools[*v1alpha1.Deployment]{
@@ -69,7 +69,7 @@ func NewServer(stores map[string]*v1alpha1store.Store) *mcp.Server {
 		ListName: "list_deployments",
 		GetName:  "get_deployment",
 		ListDesc: "List deployments as v1alpha1 envelopes with optional namespace / substring-name / version filters.",
-		GetDesc:  "Fetch a deployment as a v1alpha1 envelope (defaults to the is_latest_version row).",
+		GetDesc:  "Fetch a deployment as a v1alpha1 envelope (defaults to the latest live version).",
 		NewObj:   func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} },
 	})
 	addMetaTools(server)
@@ -128,13 +128,13 @@ type listInput struct {
 	Cursor    string `json:"cursor,omitempty"    doc:"Pagination cursor returned by a previous call"`
 	Limit     int    `json:"limit,omitempty"     doc:"Max items (1-100, default 30)"`
 	Search    string `json:"search,omitempty"    doc:"Case-insensitive substring filter on metadata.name"`
-	Version   string `json:"version,omitempty"   doc:"'latest' to return only the is_latest_version row; empty returns every version"`
+	Version   string `json:"version,omitempty"   doc:"'latest' to return only the highest live version per (namespace, name); empty returns every version"`
 }
 
 type getByRefInput struct {
 	Namespace string `json:"namespace,omitempty" doc:"Namespace (empty defaults to 'default')"`
 	Name      string `json:"name"                doc:"Resource name"    required:"true"`
-	Version   string `json:"version,omitempty"   doc:"Exact version; empty or 'latest' returns the is_latest_version row"`
+	Version   string `json:"version,omitempty"   doc:"Exact version; empty or 'latest' returns the highest live version"`
 }
 
 // listOutput is the generic envelope every list_* tool returns. Items

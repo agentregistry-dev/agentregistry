@@ -31,23 +31,25 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha
 	stores := v1alpha1store.NewStores(pool)
 	ctx := t.Context()
 
-	mcpSpec, err := json.Marshal(v1alpha1.MCPServerSpec{
-		Description: "noop server",
-		Source: &v1alpha1.MCPServerSource{
-			Package: &v1alpha1.MCPPackage{
-				RegistryType: v1alpha1.RegistryTypeOCI,
-				Identifier:   "ghcr.io/example/weather:1.0.0",
-				Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+	_, err := stores[v1alpha1.KindMCPServer].Upsert(ctx, &v1alpha1.MCPServer{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather"},
+		Spec: v1alpha1.MCPServerSpec{
+			Description: "noop server",
+			Source: &v1alpha1.MCPServerSource{
+				Package: &v1alpha1.MCPPackage{
+					RegistryType: v1alpha1.RegistryTypeOCI,
+					Identifier:   "ghcr.io/example/weather:1.0.0",
+					Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+				},
 			},
 		},
 	})
 	require.NoError(t, err)
-	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, "default", "weather", "1.0.0", mcpSpec, v1alpha1store.UpsertOpts{})
-	require.NoError(t, err)
 
-	providerSpec, err := json.Marshal(v1alpha1.ProviderSpec{Platform: noop.Platform})
-	require.NoError(t, err)
-	_, err = stores[v1alpha1.KindProvider].Upsert(ctx, "default", "noop-provider", "1", providerSpec, v1alpha1store.UpsertOpts{})
+	_, err = stores[v1alpha1.KindProvider].Upsert(ctx, &v1alpha1.Provider{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "noop-provider"},
+		Spec:     v1alpha1.ProviderSpec{Platform: noop.Platform},
+	})
 	require.NoError(t, err)
 
 	coord := deploymentsvc.NewCoordinator(deploymentsvc.Dependencies{

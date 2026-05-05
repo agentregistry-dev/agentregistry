@@ -84,8 +84,10 @@ func TestIndexer_IndexesAgentsAndSkipsOnChecksumMatch(t *testing.T) {
 	agents := v1alpha1store.NewStore(pool, agentsTable)
 	ctx := context.Background()
 
-	_, err := agents.Upsert(ctx, testNS, "foo", "v1",
-		mustSpec(t, v1alpha1.AgentSpec{Title: "Foo", Description: "hello"}), v1alpha1store.UpsertOpts{})
+	_, err := agents.Upsert(ctx, &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "foo"},
+		Spec:     v1alpha1.AgentSpec{Title: "Foo", Description: "hello"},
+	})
 	require.NoError(t, err)
 
 	provider := newDeterministicProvider()
@@ -120,8 +122,10 @@ func TestIndexer_ForceRegeneratesAll(t *testing.T) {
 	agents := v1alpha1store.NewStore(pool, agentsTable)
 	ctx := context.Background()
 
-	_, err := agents.Upsert(ctx, testNS, "foo", "v1",
-		mustSpec(t, v1alpha1.AgentSpec{Title: "x"}), v1alpha1store.UpsertOpts{})
+	_, err := agents.Upsert(ctx, &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "foo"},
+		Spec:     v1alpha1.AgentSpec{Title: "x"},
+	})
 	require.NoError(t, err)
 
 	provider := newDeterministicProvider()
@@ -150,8 +154,10 @@ func TestIndexer_DryRunSkipsStoreWrites(t *testing.T) {
 	agents := v1alpha1store.NewStore(pool, agentsTable)
 	ctx := context.Background()
 
-	_, err := agents.Upsert(ctx, testNS, "foo", "v1",
-		mustSpec(t, v1alpha1.AgentSpec{Title: "x"}), v1alpha1store.UpsertOpts{})
+	_, err := agents.Upsert(ctx, &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "foo"},
+		Spec:     v1alpha1.AgentSpec{Title: "x"},
+	})
 	require.NoError(t, err)
 
 	provider := newDeterministicProvider()
@@ -172,7 +178,7 @@ func TestIndexer_DryRunSkipsStoreWrites(t *testing.T) {
 	require.Equal(t, 1, provider.calls)
 
 	// Metadata stays nil because no write landed.
-	meta, err := agents.GetEmbeddingMetadata(ctx, testNS, "foo", "v1")
+	meta, err := agents.GetEmbeddingMetadata(ctx, testNS, "foo", "1")
 	require.NoError(t, err)
 	require.Nil(t, meta)
 }
@@ -183,8 +189,10 @@ func TestIndexer_ProviderErrorIncrementsFailures(t *testing.T) {
 	ctx := context.Background()
 
 	for _, name := range []string{"good", "bad"} {
-		_, err := agents.Upsert(ctx, testNS, name, "v1",
-			mustSpec(t, v1alpha1.AgentSpec{Title: name}), v1alpha1store.UpsertOpts{})
+		_, err := agents.Upsert(ctx, &v1alpha1.Agent{
+			Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: name},
+			Spec:     v1alpha1.AgentSpec{Title: name},
+		})
 		require.NoError(t, err)
 	}
 
@@ -213,8 +221,10 @@ func TestIndexer_ProgressCallbackInvoked(t *testing.T) {
 	agents := v1alpha1store.NewStore(pool, agentsTable)
 	ctx := context.Background()
 
-	_, err := agents.Upsert(ctx, testNS, "foo", "v1",
-		mustSpec(t, v1alpha1.AgentSpec{}), v1alpha1store.UpsertOpts{})
+	_, err := agents.Upsert(ctx, &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "foo"},
+		Spec:     v1alpha1.AgentSpec{},
+	})
 	require.NoError(t, err)
 
 	provider := newDeterministicProvider()
@@ -245,11 +255,15 @@ func TestIndexer_KindsFilter(t *testing.T) {
 	mcpStore := v1alpha1store.NewStore(pool, "v1alpha1.mcp_servers")
 	ctx := context.Background()
 
-	_, err := agents.Upsert(ctx, testNS, "a", "v1",
-		mustSpec(t, v1alpha1.AgentSpec{Title: "a"}), v1alpha1store.UpsertOpts{})
+	_, err := agents.Upsert(ctx, &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "a"},
+		Spec:     v1alpha1.AgentSpec{Title: "a"},
+	})
 	require.NoError(t, err)
-	_, err = mcpStore.Upsert(ctx, testNS, "m", "v1",
-		mustSpec(t, v1alpha1.MCPServerSpec{Title: "m"}), v1alpha1store.UpsertOpts{})
+	_, err = mcpStore.Upsert(ctx, &v1alpha1.MCPServer{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "m"},
+		Spec:     v1alpha1.MCPServerSpec{Title: "m"},
+	})
 	require.NoError(t, err)
 
 	idx, err := NewIndexer(IndexerConfig{
