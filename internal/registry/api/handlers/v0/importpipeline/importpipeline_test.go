@@ -83,17 +83,17 @@ func TestRegisterImport_Create(t *testing.T) {
 
 	var out struct {
 		Results []struct {
-			Status     string `json:"status"`
-			Kind       string `json:"kind"`
-			Name       string `json:"name"`
-			Generation int64  `json:"generation"`
+			Status  string `json:"status"`
+			Kind    string `json:"kind"`
+			Name    string `json:"name"`
+			Version int    `json:"version"`
 		} `json:"results"`
 	}
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
 	require.Len(t, out.Results, 1)
 	require.Equal(t, "created", out.Results[0].Status)
 	require.Equal(t, "Agent", out.Results[0].Kind)
-	require.EqualValues(t, 1, out.Results[0].Generation)
+	require.EqualValues(t, 1, out.Results[0].Version)
 
 	obj, err := agents.Get(context.Background(), "default", "alice", "1")
 	require.NoError(t, err)

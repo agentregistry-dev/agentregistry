@@ -79,7 +79,7 @@ func TestImport_CreatesAgent(t *testing.T) {
 
 	r := results[0]
 	require.Equal(t, ImportStatusCreated, r.Status, "error=%s", r.Error)
-	require.EqualValues(t, 1, r.Generation)
+	require.EqualValues(t, 1, r.Version)
 	require.Equal(t, EnrichmentStatusSkipped, r.EnrichmentStatus)
 
 	obj, err := agents.Get(context.Background(), testNS, "demo", "1")
@@ -98,7 +98,7 @@ func TestImport_ReimportUnchanged(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Equal(t, ImportStatusUnchanged, results[0].Status)
-	require.EqualValues(t, 1, results[0].Generation)
+	require.EqualValues(t, 1, results[0].Version)
 }
 
 func TestImport_InvalidValidationFails(t *testing.T) {

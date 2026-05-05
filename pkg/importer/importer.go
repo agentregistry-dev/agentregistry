@@ -82,7 +82,6 @@ type ImportResult struct {
 	Kind      string `json:"kind,omitempty"`
 	Namespace string `json:"namespace,omitempty"`
 	Name      string `json:"name,omitempty"`
-	Version   string `json:"version,omitempty"`
 
 	// Status is one of "created" | "updated" | "unchanged" | "failed"
 	// | "dry-run". Matches the apply-handler vocabulary.
@@ -101,9 +100,9 @@ type ImportResult struct {
 	// Error is the import-level failure message for Status="failed".
 	Error string `json:"error,omitempty"`
 
-	// Generation is the server-assigned generation after Upsert. Zero
+	// Version is the server-assigned integer version after Upsert. Zero
 	// for failed or dry-run results.
-	Generation int64 `json:"generation,omitempty"`
+	Version int `json:"version,omitempty"`
 }
 
 const (
@@ -312,10 +311,9 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 
 	// Stamp the legacy deployment store's required string version so
 	// non-upsert codepaths (findings.Replace) have a row identity to
-	// thread through. Versioned-artifact kinds will overwrite res.Version
-	// from the assigned integer once Upsert returns.
+	// thread through. Versioned-artifact kinds carry their string row
+	// identity via strconv.Itoa(up.Version) once Upsert returns.
 	v1alpha1.DefaultMetadataVersionIfMissing(obj)
-	res.Version = meta.Version
 
 	if err := v1alpha1.ValidateObject(obj); err != nil {
 		res.Status = ImportStatusFailed
@@ -379,12 +377,16 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 	default:
 		res.Status = ImportStatusUnchanged
 	}
-	res.Generation = int64(up.Version)
+	res.Version = up.Version
+	// findings.Replace needs the string row identity. Versioned-artifact
+	// kinds key by the assigned integer version; legacy deployments key
+	// by the defaulted meta.Version.
+	findingsVersion := meta.Version
 	if store.IsVersionedArtifact() {
-		res.Version = strconv.Itoa(up.Version)
+		findingsVersion = strconv.Itoa(up.Version)
 	}
 
-	i.writeFindings(ctx, obj, opts, pendingFindings, &res, res.Version)
+	i.writeFindings(ctx, obj, opts, pendingFindings, &res, findingsVersion)
 	return res
 }
 
