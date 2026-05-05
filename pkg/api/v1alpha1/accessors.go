@@ -73,6 +73,26 @@ type MetadataVersionDefaulter interface {
 	DefaultMetadataVersion() string
 }
 
+// DefaultMetadataVersionIfMissing stamps the kind's default version onto
+// obj.Metadata.Version when it's empty AND the kind opts in via the
+// MetadataVersionDefaulter interface. No-op for kinds that don't implement
+// the interface or that already have a version. Used by the legacy
+// deployment apply path; versioned-artifact kinds ignore meta.Version.
+func DefaultMetadataVersionIfMissing(obj Object) {
+	meta := obj.GetMetadata()
+	if meta.Version != "" {
+		return
+	}
+	d, ok := obj.(MetadataVersionDefaulter)
+	if !ok {
+		return
+	}
+	if def := d.DefaultMetadataVersion(); def != "" {
+		meta.Version = def
+		obj.SetMetadata(*meta)
+	}
+}
+
 // RefResolver validates cross-resource references for an envelope.
 type RefResolver interface {
 	ResolveRefs(ctx context.Context, resolver ResolverFunc) error

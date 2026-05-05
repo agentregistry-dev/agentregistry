@@ -92,14 +92,7 @@ func applyCore(
 	// still 3-tuple. Stamping here keeps the path uniform: every kind
 	// reaches Upsert with a non-empty meta.Version where the legacy
 	// path needs it.
-	if meta.Version == "" {
-		if defaulter, ok := obj.(v1alpha1.MetadataVersionDefaulter); ok {
-			if def := defaulter.DefaultMetadataVersion(); def != "" {
-				meta.Version = def
-				obj.SetMetadata(*meta)
-			}
-		}
-	}
+	v1alpha1.DefaultMetadataVersionIfMissing(obj)
 
 	if opts.Authorize != nil {
 		if err := opts.Authorize(ctx, AuthorizeInput{

@@ -296,14 +296,7 @@ func resolveBatchTarget(cfg ApplyConfig, obj v1alpha1.Object, verb string) (*v1a
 	// use. Versioned-artifact kinds ignore meta.Version entirely (the
 	// store's DeleteAllVersions doesn't read it), so the defaulter
 	// running for them is harmless.
-	if meta.Version == "" {
-		if defaulter, ok := obj.(v1alpha1.MetadataVersionDefaulter); ok {
-			if def := defaulter.DefaultMetadataVersion(); def != "" {
-				meta.Version = def
-				obj.SetMetadata(*meta)
-			}
-		}
-	}
+	v1alpha1.DefaultMetadataVersionIfMissing(obj)
 
 	// Defense-in-depth: when any Authorizers are wired, a kind without
 	// an entry must DENY rather than silently allow. The enterprise H2

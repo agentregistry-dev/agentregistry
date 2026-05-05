@@ -314,14 +314,7 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 	// non-upsert codepaths (findings.Replace) have a row identity to
 	// thread through. Versioned-artifact kinds will overwrite res.Version
 	// from the assigned integer once Upsert returns.
-	if meta.Version == "" {
-		if defaulter, ok := obj.(v1alpha1.MetadataVersionDefaulter); ok {
-			if def := defaulter.DefaultMetadataVersion(); def != "" {
-				meta.Version = def
-				obj.SetMetadata(*meta)
-			}
-		}
-	}
+	v1alpha1.DefaultMetadataVersionIfMissing(obj)
 	res.Version = meta.Version
 
 	if err := v1alpha1.ValidateObject(obj); err != nil {
