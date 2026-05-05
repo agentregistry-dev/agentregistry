@@ -450,9 +450,6 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			if err != nil {
 				return nil, err
 			}
-			if err := validateURLVersion(cfg.Store, version); err != nil {
-				return nil, err
-			}
 			body := in.Body
 			if apiVer := body.GetAPIVersion(); apiVer != "" && apiVer != v1alpha1.GroupVersion {
 				return nil, huma.Error400BadRequest(fmt.Sprintf(
@@ -472,41 +469,31 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 
 			// Stamp resolved identity into metadata so applyCore sees the
 			// resolved values (clients may omit namespace/name in the body
-			// and rely on the path + query). meta.Version is used only by
-			// the legacy deployment Store path; we set it from the URL so
-			// that path has its row identity.
+			// and rely on the path + query). PUT is registered for legacy
+			// stores only, so the URL {version} is authoritative for the
+			// row identity.
 			meta.Namespace = ns
 			meta.Name = name
 			meta.Version = version
 			body.SetMetadata(*meta)
 
-			up, ae := applyCore(ctx, cfg.Store, body, applyOpts{
+			if _, ae := applyCore(ctx, cfg.Store, body, applyOpts{
 				Authorize:         cfg.Authorize,
 				Resolver:          cfg.Resolver,
 				RegistryValidator: cfg.RegistryValidator,
 				PostUpsert:        cfg.PostUpsert,
-			}, false)
-			if ae != nil {
+			}, false); ae != nil {
 				return nil, mapApplyErrorToHuma(ae, kind, ns, name, version)
 			}
 
-			// applyCore returns the system-assigned version on the
-			// versioned-artifact path; fall back to the URL version (used
-			// for the legacy deployments path where the URL is
-			// authoritative).
-			var readbackVersion string
-			if cfg.Store.IsVersionedArtifact() {
-				readbackVersion = strconv.Itoa(up.Version)
-			} else {
-				readbackVersion = version
-			}
-
-			// Read back so the response reflects the stored identity (assigned
-			// generation, default'd metadata) plus any status / annotation
-			// writes the PostUpsert hook performed. Failure to re-read after a
-			// successful apply degrades to a 500 rather than swallowing the
-			// already-persisted change silently.
-			row, err := cfg.Store.Get(ctx, ns, name, readbackVersion)
+			// Read back so the response reflects the stored identity
+			// (assigned generation, default'd metadata) plus any status /
+			// annotation writes the PostUpsert hook performed. PUT is
+			// legacy-only, so the URL {version} segment is the row's PK
+			// identity. Failure to re-read after a successful apply
+			// degrades to a 500 rather than swallowing the already-
+			// persisted change silently.
+			row, err := cfg.Store.Get(ctx, ns, name, version)
 			if err != nil {
 				return nil, huma.Error500InternalServerError("read back "+kind, err)
 			}

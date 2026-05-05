@@ -26,13 +26,13 @@ const DefaultNamespace = "default"
 // metadata.version on input) and overwrites them on response.
 //
 // Version is the row's PK identifier: a system-assigned integer for
-// versioned-artifact kinds (Agent, MCPServer, Skill, Prompt,
-// RemoteMCPServer, Provider) and an opaque string for the legacy
-// Deployment kind. Versioned-artifact kinds ALSO surface the integer
-// via Status.Version — the canonical source of truth for system-
+// versioned-artifact kinds (Agent, MCPServer, RemoteMCPServer, Skill,
+// Prompt) and an opaque string for the legacy Provider and Deployment
+// kinds. Versioned-artifact kinds ALSO surface the integer via
+// Status.Version — the canonical source of truth for system-
 // assigned versions; metadata.version is rendered for legacy clients
-// (and for Deployment, which has no integer counterpart). New code
-// should read Status.Version for versioned-artifact kinds.
+// (and for Provider/Deployment, which have no integer counterpart).
+// New code should read Status.Version for versioned-artifact kinds.
 //
 // Identity at the database level is (Namespace, Name, Version).
 // Namespace is an internal detail today — it defaults to "default" on

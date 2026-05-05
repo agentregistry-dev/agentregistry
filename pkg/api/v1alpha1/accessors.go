@@ -62,9 +62,9 @@ type StructuralValidator interface {
 // shared apply pipeline calls DefaultMetadataVersion when the request
 // body's metadata.version is empty, so YAML manifests for these
 // kinds don't have to carry a fabricated placeholder version.
-// Versioned-artifact kinds (Agent, MCPServer, Skill, Prompt) ignore
-// meta.Version entirely on the upsert path and do not implement this
-// interface.
+// Versioned-artifact kinds (Agent, MCPServer, RemoteMCPServer, Skill,
+// Prompt) ignore meta.Version entirely on the upsert path and do not
+// implement this interface.
 //
 // Returning a non-empty constant ("1" by convention) is what gets
 // stored in the (namespace, name, version) PK. Returning "" defers

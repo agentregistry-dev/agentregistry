@@ -296,13 +296,14 @@ func resolveBatchTarget(cfg ApplyConfig, obj v1alpha1.Object, verb string) (*v1a
 		obj.SetMetadata(*meta)
 	}
 
-	// Default the legacy Deployment store's required string version
-	// when the kind opts in. The decoder rejects metadata.version on
-	// the wire so users never set it themselves; the defaulter
-	// supplies "1" so the deployment delete path has a row identity to
-	// use. Versioned-artifact kinds ignore meta.Version entirely (the
-	// store's DeleteAllVersions doesn't read it), so the defaulter
-	// running for them is harmless.
+	// Default the legacy Provider/Deployment store's required string
+	// version when the kind opts in via MetadataVersionDefaulter. The
+	// defaulter supplies "1" so the legacy delete path has a row
+	// identity to use when the manifest omits metadata.version.
+	// Versioned-artifact kinds reject metadata.version at decode time
+	// and ignore meta.Version entirely on the upsert/delete path
+	// (the store's DeleteAllVersions doesn't read it), so they don't
+	// implement the interface and this call is a no-op for them.
 	v1alpha1.DefaultMetadataVersionIfMissing(obj)
 
 	// Defense-in-depth: when any Authorizers are wired, a kind without
