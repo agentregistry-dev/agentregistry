@@ -12,7 +12,6 @@ apiVersion: ar.dev/v1alpha1
 kind: RemoteMCPServer
 metadata:
   name: weather
-  version: "1.0.0"
 spec:
   title: Weather (remote)
   description: Hosted weather endpoint

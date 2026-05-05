@@ -112,6 +112,10 @@ func (s *Scheme) Lookup(kind string) (reflect.Type, func() any, bool) {
 // (*Agent, *MCPServer, etc.) routed by its kind field. Unknown kinds return
 // an error. Input may be YAML or JSON — detection is delegated to sigs.k8s.io/yaml.
 func (s *Scheme) Decode(data []byte) (any, error) {
+	if err := rejectSystemMetadata(data); err != nil {
+		return nil, err
+	}
+
 	var raw RawObject
 	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("v1alpha1: decode envelope: %w", err)
@@ -138,6 +142,30 @@ func (s *Scheme) Decode(data []byte) (any, error) {
 		return nil, fmt.Errorf("v1alpha1: decode %s: %w", raw.Kind, err)
 	}
 	return obj, nil
+}
+
+// rejectSystemMetadata fails the decode when a manifest sets fields that
+// are server-assigned. Without this, callers writing
+// `metadata.version: "5"` would assume their value influences the
+// stored row even though the system overwrites it with the
+// MAX(version)+1 it picked. metadata.generation has the same problem
+// (always derived). Surface it as an error at decode time so users
+// can't accidentally encode system state into manifests.
+func rejectSystemMetadata(data []byte) error {
+	var rawWithMeta struct {
+		Metadata map[string]any `yaml:"metadata" json:"metadata"`
+	}
+	if err := yaml.Unmarshal(data, &rawWithMeta); err != nil {
+		// Defer the real parse error to the typed unmarshal below.
+		return nil
+	}
+	if _, ok := rawWithMeta.Metadata["version"]; ok {
+		return errors.New("v1alpha1: metadata.version is system-assigned; remove it from your manifest")
+	}
+	if _, ok := rawWithMeta.Metadata["generation"]; ok {
+		return errors.New("v1alpha1: metadata.generation is system-managed; remove it from your manifest")
+	}
+	return nil
 }
 
 // DecodeMulti parses a YAML stream (possibly containing multiple `---`-

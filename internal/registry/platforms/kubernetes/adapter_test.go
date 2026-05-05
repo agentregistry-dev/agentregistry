@@ -53,7 +53,7 @@ func TestK8sV1Alpha1Apply_MCPServerTarget_CreatesResource(t *testing.T) {
 	}
 	deployment := &v1alpha1.Deployment{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-kube", Version: "1", Generation: 4},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-kube", Version: "1"},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindRemoteMCPServer, Name: "weather", Version: "1.0.0"},
 			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "kube-local", Version: "1"},
@@ -116,7 +116,7 @@ func TestK8sV1Alpha1Remove_DeletesResourcesByDeploymentID(t *testing.T) {
 		Spec:     v1alpha1.ProviderSpec{Platform: v1alpha1.PlatformKubernetes, Config: map[string]any{"namespace": "kagent"}},
 	}
 	deployment := &v1alpha1.Deployment{
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: deploymentID, Version: "1", Generation: 5},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: deploymentID, Version: "1"},
 	}
 
 	res, err := adapter.Remove(context.Background(), adapterpkgtypes.RemoveInput{

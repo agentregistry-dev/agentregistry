@@ -46,7 +46,7 @@ func TestV1Alpha1Apply_MCPServerTarget_WritesComposeAndMarksProgressing(t *testi
 	}
 	deployment := &v1alpha1.Deployment{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-local", Version: "1", Generation: 7},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-local", Version: "1"},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Version: "1.0.0"},
 			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "local", Version: "1"},
@@ -118,10 +118,9 @@ func TestV1Alpha1Remove_CallsComposeDown(t *testing.T) {
 	deployment := &v1alpha1.Deployment{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
 		Metadata: v1alpha1.ObjectMeta{
-			Namespace:  "default",
-			Name:       "weather-local",
-			Version:    "1",
-			Generation: 3,
+			Namespace: "default",
+			Name:      "weather-local",
+			Version:   "1",
 		},
 	}
 	res, err := adapter.Remove(context.Background(), types.RemoveInput{Deployment: deployment})

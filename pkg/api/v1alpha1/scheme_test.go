@@ -33,7 +33,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: summarizer
-  version: "1.0.0"
   labels:
     owner: core
 spec:
@@ -62,7 +61,7 @@ spec:
 	if agent.APIVersion != GroupVersion || agent.Kind != KindAgent {
 		t.Fatalf("envelope mismatch: %+v", agent.TypeMeta)
 	}
-	if agent.Metadata.Name != "summarizer" || agent.Metadata.Version != "1.0.0" {
+	if agent.Metadata.Name != "summarizer" {
 		t.Fatalf("metadata mismatch: %+v", agent.Metadata)
 	}
 	if agent.Metadata.Labels["owner"] != "core" {
@@ -88,7 +87,6 @@ apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
   name: github-tools
-  version: "0.2"
 spec:
   title: GitHub Tools
   source:
@@ -181,6 +179,42 @@ func TestScheme_Decode_RejectsMissingKind(t *testing.T) {
 	}
 }
 
+// TestScheme_Decode_RejectsSystemMetadata pins the contract that
+// system-managed metadata fields (version, generation) cannot be set
+// on the wire — they're server-assigned and the system would silently
+// overwrite them. Surface as decode-time errors so users notice.
+func TestScheme_Decode_RejectsSystemMetadata(t *testing.T) {
+	cases := map[string]string{
+		"version": `apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: x
+  version: "5"
+spec:
+  title: y
+`,
+		"generation": `apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: x
+  generation: 3
+spec:
+  title: y
+`,
+	}
+	for field, doc := range cases {
+		t.Run(field, func(t *testing.T) {
+			_, err := Default.Decode([]byte(doc))
+			if err == nil {
+				t.Fatalf("expected metadata.%s rejection", field)
+			}
+			if !strings.Contains(err.Error(), "metadata."+field) {
+				t.Fatalf("expected error to mention metadata.%s; got %v", field, err)
+			}
+		})
+	}
+}
+
 func TestScheme_DecodeMulti_Stream(t *testing.T) {
 	doc := []byte(`apiVersion: ar.dev/v1alpha1
 kind: Skill
@@ -255,7 +289,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: summarizer
-  version: "1.0.0"
 spec:
   title: Summarizer
 `)
@@ -288,9 +321,13 @@ func TestEncode_RoundTrip_YAML(t *testing.T) {
 	// Empty Namespace survives a round trip — MarshalJSON strips "default"
 	// but UnmarshalJSON intentionally does NOT re-stamp it, so callers
 	// like the importer can layer their own default on top.
+	//
+	// Metadata.Version is server-assigned (the decoder rejects
+	// user-supplied values) so the input here cannot set one. The
+	// equality check below therefore checks an empty-version envelope.
 	original := &Agent{
 		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindAgent},
-		Metadata: ObjectMeta{Name: "rt", Version: "v1", Labels: map[string]string{"k": "v"}},
+		Metadata: ObjectMeta{Name: "rt", Labels: map[string]string{"k": "v"}},
 		Spec: AgentSpec{
 			Title:      "Round Trip",
 			Source:     &AgentSource{Image: "img:tag"},
@@ -319,9 +356,12 @@ func TestEncode_RoundTrip_YAML(t *testing.T) {
 }
 
 func TestEncode_RoundTrip_JSON(t *testing.T) {
+	// Metadata.Version is server-assigned (the decoder rejects
+	// user-supplied values). The input here therefore omits it; the
+	// legacy Deployment Store stamps it internally on apply.
 	original := &Deployment{
 		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindDeployment},
-		Metadata: ObjectMeta{Name: "prod", Version: "1"},
+		Metadata: ObjectMeta{Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:    ResourceRef{Kind: KindAgent, Name: "x", Version: "1"},
 			ProviderRef:  ResourceRef{Kind: KindProvider, Name: "local"},

@@ -28,7 +28,7 @@ func failedFields(t *testing.T, err error) []string {
 // -----------------------------------------------------------------------------
 
 func TestValidateObjectMeta_OK(t *testing.T) {
-	m := ObjectMeta{Namespace: "default", Name: "alice", Version: "v1.0.0"}
+	m := ObjectMeta{Namespace: "default", Name: "alice"}
 	require.Empty(t, ValidateObjectMeta(m))
 }
 
@@ -40,45 +40,24 @@ func TestValidateObjectMeta_RejectsMissing(t *testing.T) {
 	}
 	require.Contains(t, paths, "metadata.namespace")
 	require.Contains(t, paths, "metadata.name")
-	require.Contains(t, paths, "metadata.version")
 }
 
 func TestValidateObjectMeta_RejectsBadNamespace(t *testing.T) {
 	for _, bad := range []string{"UPPER", "has spaces", "has_underscore", "ai.exa/exa", "-leading", "trailing-"} {
-		errs := ValidateObjectMeta(ObjectMeta{Namespace: bad, Name: "x", Version: "v1"})
+		errs := ValidateObjectMeta(ObjectMeta{Namespace: bad, Name: "x"})
 		require.NotEmpty(t, errs, "namespace %q should be invalid", bad)
 	}
 }
 
 func TestValidateObjectMeta_AcceptsDNSStyleName(t *testing.T) {
 	// Names can carry slashes (dns-like). Namespaces cannot.
-	errs := ValidateObjectMeta(ObjectMeta{Namespace: "default", Name: "ai.exa/exa", Version: "v1.0.0"})
+	errs := ValidateObjectMeta(ObjectMeta{Namespace: "default", Name: "ai.exa/exa"})
 	require.Empty(t, errs)
-}
-
-func TestValidateObjectMeta_RejectsVersionLatest(t *testing.T) {
-	errs := ValidateObjectMeta(ObjectMeta{Namespace: "default", Name: "x", Version: "latest"})
-	require.NotEmpty(t, errs)
-	require.ErrorIs(t, errs[0].Cause, ErrInvalidVersion)
-}
-
-func TestValidateObjectMeta_RejectsVersionRange(t *testing.T) {
-	for _, bad := range []string{"^1.0.0", "~1.2", ">=1.0.0", "1.x", "1.0.0 || 2.0.0", "1.0.0, 2.0.0", "*"} {
-		errs := ValidateObjectMeta(ObjectMeta{Namespace: "default", Name: "x", Version: bad})
-		require.NotEmpty(t, errs, "version %q should be rejected", bad)
-	}
-}
-
-func TestValidateObjectMeta_AcceptsPinnedVersions(t *testing.T) {
-	for _, ok := range []string{"1.0.0", "v1.0.0", "v1.2.3-beta.1", "2024.04.17", "abc123"} {
-		errs := ValidateObjectMeta(ObjectMeta{Namespace: "default", Name: "x", Version: ok})
-		require.Empty(t, errs, "version %q should be accepted", ok)
-	}
 }
 
 func TestValidateObjectMeta_RejectsBadLabelKey(t *testing.T) {
 	errs := ValidateObjectMeta(ObjectMeta{
-		Namespace: "default", Name: "x", Version: "v1",
+		Namespace: "default", Name: "x",
 		Labels: map[string]string{"has spaces": "v"},
 	})
 	require.NotEmpty(t, errs)

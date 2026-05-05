@@ -20,17 +20,21 @@ const DefaultNamespace = "default"
 
 // ObjectMeta is the metadata block common to every resource.
 //
-// Namespace, Name, Version, Labels, and Annotations are user-settable.
-// CreatedAt, UpdatedAt, and DeletionTimestamp are server-managed: the API
-// ignores them on apply and overwrites them on response.
+// Namespace, Name, Labels, and Annotations are user-settable. CreatedAt,
+// UpdatedAt, DeletionTimestamp, and Version are server-managed: the API
+// ignores them on apply (the decoder explicitly rejects
+// metadata.version on input) and overwrites them on response.
 //
-// Generation is an internal coordination primitive populated from the
-// database row and used by internal Go code (coordinators, status
-// reconcilers) but is NOT emitted on the wire: the JSON tag is `-`, so
-// OpenAPI schemas don't reveal it and clients can't set it on apply.
+// Version is the row's PK identifier: a system-assigned integer for
+// versioned-artifact kinds (Agent, MCPServer, Skill, Prompt,
+// RemoteMCPServer, Provider) and an opaque string for the legacy
+// Deployment kind. Versioned-artifact kinds ALSO surface the integer
+// via Status.Version — the canonical source of truth for system-
+// assigned versions; metadata.version is rendered for legacy clients
+// (and for Deployment, which has no integer counterpart). New code
+// should read Status.Version for versioned-artifact kinds.
 //
-// (Namespace, Name, Version) together form the identity of a resource;
-// that triple is the composite primary key at the database level.
+// Identity at the database level is (Namespace, Name, Version).
 // Namespace is an internal detail today — it defaults to "default" on
 // apply and is stripped from responses when it equals "default" so the
 // multi-tenant surface stays hidden until we deliberately enable it.
@@ -51,16 +55,19 @@ const DefaultNamespace = "default"
 type ObjectMeta struct {
 	Namespace   string            `json:"namespace,omitempty" yaml:"namespace,omitempty"`
 	Name        string            `json:"name" yaml:"name"`
-	Version     string            `json:"version,omitempty" yaml:"version,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty" yaml:"annotations,omitempty"`
 
-	// Generation is server-managed and internal. Populated from the DB row
-	// for internal Go consumers (coordinators, status reconcilers); hidden
-	// from the wire.
-	Generation int64     `json:"-" yaml:"-"`
-	CreatedAt  time.Time `json:"createdAt,omitzero" yaml:"createdAt,omitempty"`
-	UpdatedAt  time.Time `json:"updatedAt,omitzero" yaml:"updatedAt,omitempty"`
+	// Version is server-assigned (the decoder rejects user-supplied
+	// values). Versioned-artifact kinds populate Status.Version with
+	// the same integer; this field is the legacy Deployment Store's
+	// string identity and the v0 wire shape kept for clients that
+	// don't yet read Status. Apply must not include metadata.version
+	// — the system controls assignment.
+	Version string `json:"version,omitempty" yaml:"version,omitempty"`
+
+	CreatedAt time.Time `json:"createdAt,omitzero" yaml:"createdAt,omitempty"`
+	UpdatedAt time.Time `json:"updatedAt,omitzero" yaml:"updatedAt,omitempty"`
 
 	// DeletionTimestamp is set by the Store when Delete is called. A non-nil
 	// DeletionTimestamp means the object is terminating; the row stays
