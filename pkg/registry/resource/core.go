@@ -140,13 +140,18 @@ func applyCore(
 		Generation:  int64(up.Version),
 	}
 
-	// Stamp the freshly-assigned version onto the body so PostUpsert
-	// hooks see the correct integer version instead of whatever the
-	// caller supplied (versioned-artifact tables ignore caller version).
+	// Stamp the freshly-assigned version onto the body so callers (the
+	// PUT handler's read-back, PostUpsert hook, batch result encoder)
+	// see the integer version the Store actually wrote rather than
+	// whatever string the caller supplied — versioned-artifact tables
+	// ignore caller version on the upsert path. Always stamp so the
+	// downstream code path is uniform whether or not PostUpsert is
+	// wired.
+	meta.Version = strconvItoa(up.Version)
+	meta.Generation = int64(up.Version)
+	obj.SetMetadata(*meta)
+
 	if opts.PostUpsert != nil {
-		meta.Version = strconvItoa(up.Version)
-		meta.Generation = int64(up.Version)
-		obj.SetMetadata(*meta)
 		if err := opts.PostUpsert(ctx, obj); err != nil {
 			return res, &applyError{Stage: stagePostUpsert, Err: err}
 		}

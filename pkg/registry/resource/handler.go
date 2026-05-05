@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -39,6 +40,24 @@ func unescapePath(field, value string) (string, error) {
 		return "", huma.Error400BadRequest(fmt.Sprintf("invalid %s path segment: %v", field, err))
 	}
 	return out, nil
+}
+
+// validateURLVersion enforces the per-mode contract on the {version} URL
+// path segment. Versioned-artifact stores (the default — agents,
+// mcp_servers, etc.) require a positive integer; the legacy deployments
+// store accepts any non-empty string. Returns a 400 huma error when the
+// segment violates the contract so clients see a clean message instead
+// of a 500 from a downstream `strconv.Atoi` failure.
+func validateURLVersion(store *v1alpha1store.Store, version string) error {
+	if !store.IsVersionedArtifact() {
+		return nil
+	}
+	v, err := strconv.Atoi(version)
+	if err != nil || v <= 0 {
+		return huma.Error400BadRequest(
+			fmt.Sprintf("version path segment %q must be a positive integer", version))
+	}
+	return nil
 }
 
 // Config is the per-kind configuration for Register. Kind / BasePrefix /
@@ -334,6 +353,9 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		if err != nil {
 			return nil, err
 		}
+		if err := validateURLVersion(cfg.Store, version); err != nil {
+			return nil, err
+		}
 		if cfg.Authorize != nil {
 			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "get", Kind: kind, Namespace: ns, Name: name, Version: version}); err != nil {
 				return nil, err
@@ -365,6 +387,9 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		}
 		version, err := unescapePath("version", in.Version)
 		if err != nil {
+			return nil, err
+		}
+		if err := validateURLVersion(cfg.Store, version); err != nil {
 			return nil, err
 		}
 		body := in.Body
@@ -445,6 +470,9 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		}
 		version, err := unescapePath("version", in.Version)
 		if err != nil {
+			return nil, err
+		}
+		if err := validateURLVersion(cfg.Store, version); err != nil {
 			return nil, err
 		}
 
