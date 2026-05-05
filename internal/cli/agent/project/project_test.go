@@ -175,7 +175,6 @@ func TestLoadAgent_EnvelopeFormat(t *testing.T) {
 kind: Agent
 metadata:
   name: summarizer
-  version: "1.0.0"
 spec:
   source:
     image: ghcr.io/acme/summarizer:v1
@@ -208,7 +207,6 @@ spec:
 	// later by manifest.Resolve (which makes registry calls). LoadAgent
 	// only verifies the envelope round-trips into v1alpha1.Agent.
 	assert.Equal(t, "summarizer", got.Metadata.Name)
-	assert.Equal(t, "1.0.0", got.Metadata.Version)
 	assert.Equal(t, "ghcr.io/acme/summarizer:v1", got.Spec.Source.Image)
 	assert.Equal(t, "python", got.Spec.Language)
 	assert.Equal(t, "adk", got.Spec.Framework)

@@ -23,7 +23,6 @@ const agentYAML = `apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: acme/bot
-  version: "1.0.0"
 spec:
   image: ghcr.io/acme/bot:latest
   description: "A bot"
@@ -172,7 +171,6 @@ func TestApplyRejectsUnknownKind(t *testing.T) {
 kind: UnknownKind
 metadata:
   name: acme/test
-  version: "1.0.0"
 spec:
   description: "test"
 `

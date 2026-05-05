@@ -63,7 +63,6 @@ kind: Agent
 metadata:
   namespace: default
   name: demo
-  version: "1"
 spec:
   title: Demo Agent
   description: A test agent
@@ -111,7 +110,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   namespace: default
-  version: "1"
 spec:
   title: X
 `)
@@ -131,7 +129,6 @@ kind: NotAKind
 metadata:
   namespace: default
   name: x
-  version: "1"
 spec: {}
 `)
 	results, err := imp.Import(context.Background(), Options{Path: dir})
@@ -164,7 +161,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: noNS
-  version: "1"
 spec:
   title: no-ns
 `)
@@ -355,7 +351,6 @@ kind: Agent
 metadata:
   namespace: default
   name: demo2
-  version: "1"
 spec:
   title: Demo 2
 `)

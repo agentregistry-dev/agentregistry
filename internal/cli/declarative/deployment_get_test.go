@@ -229,7 +229,6 @@ func TestDeploymentApply_IgnoresIncomingStatus(t *testing.T) {
 kind: Agent
 metadata:
   name: myagent
-  version: "1.0.0"
 spec:
   image: ghcr.io/example/myagent:1.0.0
   language: python

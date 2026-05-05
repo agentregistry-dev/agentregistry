@@ -44,15 +44,15 @@ func TestClient_V1Alpha1RoundTrip(t *testing.T) {
 	ctx := context.Background()
 
 	// Apply a single-doc YAML → creates the Agent. metadata.version is
-	// system-assigned for versioned-artifact kinds; the user-supplied
-	// "1" matches the integer the Store assigns to the first apply.
+	// rejected on input (the system assigns the integer); the URL
+	// version "1" matches the integer the Store assigns to the first
+	// apply.
 	yamlBody := []byte(`
 apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   namespace: default
   name: acme/planner
-  version: "1"
 spec:
   title: Planner
   description: planning agent
@@ -61,9 +61,6 @@ spec:
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Equal(t, "created", results[0].Status)
-	// Generation is internal-only (json:"-") so ApplyResult.Generation
-	// never flows over the wire. Internal assertions go through the
-	// Store directly.
 
 	// Get by exact version.
 	raw, err := c.Get(ctx, v1alpha1.KindAgent, "default", "acme/planner", "1")
@@ -132,7 +129,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   namespace: default
-  version: "1"
 spec:
   title: Missing name
 `)

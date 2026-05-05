@@ -69,7 +69,6 @@ kind: Agent
 metadata:
   namespace: default
   name: alice
-  version: "1"
 spec:
   title: Alice
 `
@@ -233,7 +232,6 @@ kind: Agent
 metadata:
   namespace: default
   name: secret
-  version: "1"
 spec:
   title: Secret
 ---
@@ -242,7 +240,6 @@ kind: Agent
 metadata:
   namespace: default
   name: ok
-  version: "1"
 spec:
   title: Ok
 `
@@ -316,7 +313,6 @@ kind: MCPServer
 metadata:
   namespace: default
   name: anything
-  version: "1"
 spec:
   title: Anything
 `
@@ -351,7 +347,6 @@ kind: Agent
 metadata:
   namespace: default
   name: bob
-  version: "1"
 spec:
   title: Bob
 `

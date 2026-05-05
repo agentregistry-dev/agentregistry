@@ -104,7 +104,6 @@ func TestDeleteFileModeRejectsUnknownKind(t *testing.T) {
 kind: UnknownKind
 metadata:
   name: acme/test
-  version: "1.0.0"
 spec:
   description: "test"
 `

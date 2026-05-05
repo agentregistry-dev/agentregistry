@@ -68,7 +68,6 @@ func TestBuildStoresAndImporter_ExtensionKindAppliesThroughBatchEndpoint(t *test
 kind: IntegrationExtension
 metadata:
   name: enterprise-only
-  version: "1"
 spec:
   value: ok
 `)

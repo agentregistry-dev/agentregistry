@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -288,7 +289,6 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 		Kind:             kind,
 		Namespace:        meta.Namespace,
 		Name:             meta.Name,
-		Version:          meta.Version,
 		EnrichmentStatus: EnrichmentStatusSkipped,
 	}
 
@@ -309,6 +309,20 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 		res.Error = fmt.Sprintf("unknown or unconfigured kind %q", kind)
 		return res
 	}
+
+	// Stamp the legacy deployment store's required string version so
+	// non-upsert codepaths (findings.Replace) have a row identity to
+	// thread through. Versioned-artifact kinds will overwrite res.Version
+	// from the assigned integer once Upsert returns.
+	if meta.Version == "" {
+		if defaulter, ok := obj.(v1alpha1.MetadataVersionDefaulter); ok {
+			if def := defaulter.DefaultMetadataVersion(); def != "" {
+				meta.Version = def
+				obj.SetMetadata(*meta)
+			}
+		}
+	}
+	res.Version = meta.Version
 
 	if err := v1alpha1.ValidateObject(obj); err != nil {
 		res.Status = ImportStatusFailed
@@ -373,8 +387,11 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 		res.Status = ImportStatusUnchanged
 	}
 	res.Generation = int64(up.Version)
+	if store.IsVersionedArtifact() {
+		res.Version = strconv.Itoa(up.Version)
+	}
 
-	i.writeFindings(ctx, obj, opts, pendingFindings, &res)
+	i.writeFindings(ctx, obj, opts, pendingFindings, &res, res.Version)
 	return res
 }
 
@@ -383,19 +400,19 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 // (e.g. a mode that only wants annotation summaries); log and move on.
 // Per-source write failures don't roll back the Upsert but downgrade
 // EnrichmentStatus so callers see the detail table may be stale.
-func (i *Importer) writeFindings(ctx context.Context, obj v1alpha1.Object, opts Options, pending map[string][]Finding, res *ImportResult) {
+func (i *Importer) writeFindings(ctx context.Context, obj v1alpha1.Object, opts Options, pending map[string][]Finding, res *ImportResult, version string) {
 	if len(pending) == 0 {
 		return
 	}
 	meta := obj.GetMetadata()
 	if i.findings == nil {
 		i.logger.Warn("findings produced but no FindingsStore configured; dropping",
-			"kind", obj.GetKind(), "name", meta.Name, "version", meta.Version)
+			"kind", obj.GetKind(), "name", meta.Name, "version", version)
 		return
 	}
 	for source, fs := range pending {
 		if err := i.findings.Replace(ctx,
-			obj.GetKind(), meta.Namespace, meta.Name, meta.Version,
+			obj.GetKind(), meta.Namespace, meta.Name, version,
 			source, opts.ScannedBy, fs,
 		); err != nil {
 			res.EnrichmentErrors = append(res.EnrichmentErrors,

@@ -17,7 +17,6 @@ const deploymentYAMLBadTemplate = `apiVersion: ar.dev/v1alpha1
 kind: Deployment
 metadata:
   name: nonexistent-agent
-  version: "0.1.0"
 spec:
   targetRef:
     kind: Agent

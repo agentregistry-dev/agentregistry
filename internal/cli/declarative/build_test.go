@@ -77,7 +77,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Prompt
 metadata:
   name: my-prompt
-  version: 0.1.0
 spec:
   description: A test prompt
   content: You are a helpful assistant.
@@ -98,7 +97,6 @@ apiVersion: ar.dev/v1alpha1
 kind: BogusKind
 metadata:
   name: my-thing
-  version: 0.1.0
 spec:
   description: Unknown
 `)
@@ -118,7 +116,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: my-agent
-  version: 0.1.0
 spec:
   image: localhost:5001/my-agent:latest
   language: python
@@ -144,7 +141,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: my-agent
-  version: 0.1.0
 spec:
   image: localhost:5001/my-agent:latest
   language: python
@@ -158,7 +154,6 @@ apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
   name: my-server
-  version: 0.1.0
 spec:
   title: my-server
   description: test server
@@ -186,7 +181,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: my-agent
-  version: 0.1.0
 spec:
   image: localhost:5001/my-agent:latest
   language: python

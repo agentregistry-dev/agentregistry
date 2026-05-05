@@ -17,11 +17,15 @@ import (
 // generate an MCPServer's semantic embedding. Deterministic across runs
 // so the checksum can gate idempotent re-index passes.
 //
+// Version is intentionally omitted — version 2 of the same MCPServer has
+// no semantic difference from version 1 for search relevance, and the
+// integer version is not user-supplied content to begin with.
+//
 // Enrichment annotations are intentionally excluded from the payload
 // — they're scanner output, not user-authored search-relevant content.
 func BuildMCPServerEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.MCPServerSpec) string {
 	var parts []string
-	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version)
+	appendIf(&parts, meta.Name, spec.Title, spec.Description)
 	var sourceRepo *v1alpha1.Repository
 	var sourcePkg *v1alpha1.MCPPackage
 	if spec.Source != nil {
@@ -37,7 +41,7 @@ func BuildMCPServerEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.MCPS
 // RemoteMCPServer (already-running endpoint).
 func BuildRemoteMCPServerEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.RemoteMCPServerSpec) string {
 	var parts []string
-	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version, spec.Remote.URL, spec.Remote.Type)
+	appendIf(&parts, meta.Name, spec.Title, spec.Description, spec.Remote.URL, spec.Remote.Type)
 	return strings.Join(parts, "\n")
 }
 
@@ -54,7 +58,6 @@ func BuildAgentEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.AgentSpe
 		meta.Name,
 		spec.Title,
 		spec.Description,
-		meta.Version,
 		spec.Language,
 		spec.Framework,
 		spec.ModelProvider,
@@ -71,7 +74,7 @@ func BuildAgentEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.AgentSpe
 // BuildSkillEmbeddingPayload assembles the canonical text for a Skill.
 func BuildSkillEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.SkillSpec) string {
 	var parts []string
-	appendIf(&parts, meta.Name, spec.Title, spec.Description, meta.Version)
+	appendIf(&parts, meta.Name, spec.Title, spec.Description)
 	appendJSON(&parts, spec.Source)
 	return strings.Join(parts, "\n")
 }
@@ -81,7 +84,7 @@ func BuildSkillEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.SkillSpe
 // match against prompt text actually find the prompt.
 func BuildPromptEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.PromptSpec) string {
 	var parts []string
-	appendIf(&parts, meta.Name, spec.Description, meta.Version, spec.Content)
+	appendIf(&parts, meta.Name, spec.Description, spec.Content)
 	return strings.Join(parts, "\n")
 }
 
