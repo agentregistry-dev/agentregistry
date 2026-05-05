@@ -56,14 +56,6 @@ func init() {
 	))
 
 	scheme.Register(typedKind(
-		"provider", "providers", []string{"Provider"},
-		[]scheme.Column{{Header: "NAME"}, {Header: "PLATFORM"}},
-		v1alpha1.KindProvider,
-		func() *v1alpha1.Provider { return &v1alpha1.Provider{} },
-		providerRow,
-	))
-
-	scheme.Register(typedKind(
 		"remote-mcp", "remote-mcps", []string{
 			"RemoteMCPServer", "remotemcpserver", "remote-mcp-server", "remotemcpservers",
 		},
@@ -72,6 +64,38 @@ func init() {
 		func() *v1alpha1.RemoteMCPServer { return &v1alpha1.RemoteMCPServer{} },
 		remoteMCPServerRow,
 	))
+
+	// Provider is registered manually because it is a legacy
+	// (single-version-identity) kind: the server's provider store does not
+	// expose /versions or DeleteAllVersions endpoints. Routing it through
+	// typedKind would advertise --all-versions on its CLI surface and call
+	// endpoints that don't exist. The Get / Delete / List closures match
+	// what typedKind would otherwise produce; ListVersions /
+	// DeleteAllVersions are intentionally omitted so the dispatch layer
+	// rejects --all-versions cleanly.
+	scheme.Register(&scheme.Kind{
+		Kind:         "provider",
+		Plural:       "providers",
+		Aliases:      []string{"Provider"},
+		TableColumns: []scheme.Column{{Header: "NAME"}, {Header: "PLATFORM"}},
+		ToYAMLFunc:   func(item any) any { return item },
+		RowFunc: func(item any) []string {
+			provider, ok := item.(*v1alpha1.Provider)
+			if !ok {
+				return []string{"<invalid>"}
+			}
+			return providerRow(provider)
+		},
+		Get: func(ctx context.Context, name, _ string) (any, error) {
+			return client.GetTyped(ctx, apiClient, v1alpha1.KindProvider, v1alpha1.DefaultNamespace, name, "", func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
+		},
+		ListFunc: func(ctx context.Context) ([]any, error) {
+			return listLatestAny(ctx, v1alpha1.KindProvider, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
+		},
+		Delete: func(ctx context.Context, name, version string, force bool) error {
+			return deleteAny(ctx, v1alpha1.KindProvider, name, version, force, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
+		},
+	})
 
 	// Deployment is registered manually because its Get/Delete dispatch
 	// does NOT key on the v1alpha1 metadata identity (namespace/name/

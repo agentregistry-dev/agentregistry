@@ -54,3 +54,27 @@ func TestGetCmd_RegistryDrivenColumnLookup(t *testing.T) {
 	assert.ErrorContains(t, err, "API client not initialized",
 		"should fail at API client check, not kind lookup")
 }
+
+// TestProvider_NoAllVersionsSupport pins that Provider — a legacy,
+// single-version-identity kind — is registered without ListVersions /
+// DeleteAllVersions closures. The dispatch layer rejects --all-versions
+// when those fields are nil, which is exactly the behavior we want for
+// Provider on this branch (its server store has no /versions endpoint).
+func TestProvider_NoAllVersionsSupport(t *testing.T) {
+	k, err := scheme.Lookup("provider")
+	require.NoError(t, err)
+	require.Nil(t, k.ListVersions, "Provider should not expose ListVersions (legacy kind)")
+	require.Nil(t, k.DeleteAllVersions, "Provider should not expose DeleteAllVersions (legacy kind)")
+}
+
+// TestDeployment_NoAllVersionsSupport is the symmetric assertion for
+// Deployment — also a legacy single-version-identity kind. Already
+// covered by TestGet_AllVersions_DeploymentRejected at the CLI surface
+// but pinning it at the registry shape level guards against an
+// accidental ListVersions wiring regression.
+func TestDeployment_NoAllVersionsSupport(t *testing.T) {
+	k, err := scheme.Lookup("deployment")
+	require.NoError(t, err)
+	require.Nil(t, k.ListVersions, "Deployment should not expose ListVersions (legacy kind)")
+	require.Nil(t, k.DeleteAllVersions, "Deployment should not expose DeleteAllVersions (legacy kind)")
+}

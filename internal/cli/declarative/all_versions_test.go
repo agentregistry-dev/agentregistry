@@ -127,6 +127,22 @@ func TestGet_AllVersions_DeploymentRejected(t *testing.T) {
 	assert.Contains(t, err.Error(), "deployment")
 }
 
+// (3b) `arctl get provider NAME --all-versions` errors cleanly — Provider
+// is a legacy single-version-identity kind whose store has no /versions
+// endpoint. Pin the CLI surface so a future typedKind change can't
+// silently re-expose --all-versions for Provider.
+func TestGet_AllVersions_ProviderRejected(t *testing.T) {
+	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
+	t.Cleanup(func() { declarative.SetAPIClient(nil) })
+
+	cmd := declarative.NewGetCmd()
+	cmd.SetArgs([]string{"provider", "my-kagent", "--all-versions"})
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--all-versions not supported")
+	assert.Contains(t, err.Error(), "provider")
+}
+
 // (4) `arctl get agents --all-versions` (no NAME) errors — the flag
 // requires a NAME argument.
 func TestGet_AllVersions_RequiresName(t *testing.T) {
@@ -206,6 +222,19 @@ func TestDelete_AllVersions_DeploymentRejected(t *testing.T) {
 
 	cmd := declarative.NewDeleteCmd()
 	cmd.SetArgs([]string{"deployment", "summarizer", "--all-versions"})
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--all-versions not supported")
+}
+
+// (7b) `arctl delete provider NAME --all-versions` errors cleanly —
+// Provider has no DeleteAllVersions endpoint server-side.
+func TestDelete_AllVersions_ProviderRejected(t *testing.T) {
+	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
+	t.Cleanup(func() { declarative.SetAPIClient(nil) })
+
+	cmd := declarative.NewDeleteCmd()
+	cmd.SetArgs([]string{"provider", "my-kagent", "--all-versions"})
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--all-versions not supported")
