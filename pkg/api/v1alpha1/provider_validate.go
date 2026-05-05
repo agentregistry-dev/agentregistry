@@ -14,13 +14,15 @@ var KnownPlatforms = map[string]struct{}{
 
 // Validate runs Provider's structural checks.
 //
-// Provider is unversioned: a connection handle to one execution
-// target (an AWS account + role, a kagent cluster, a local daemon).
-// Multiple coexisting versions of the same (namespace, name) carry no
-// meaning — there is no "v1" vs "v2" of the same AWS role — so the
-// (namespace, name) pair is the identity. The storage layer still
-// requires a version string in its 3-tuple PK; callers pin it to a
-// constant ("1") rather than fabricate semantic versions.
+// Provider is a versioned-artifact kind in the immutable-versioning
+// model. Its spec describes a connection handle to one execution
+// target — platform identifier, platform-specific config, and an
+// optional telemetry endpoint. A spec change produces a new
+// immutable version row; older versions remain queryable for audit.
+//
+// Bound deployments don't auto-pick up a new Provider version: each
+// consumer must be updated to point at the new version explicitly,
+// so a config rotation can't silently retarget live deployments.
 func (p *Provider) Validate() error {
 	var errs FieldErrors
 	errs = append(errs, ValidateObjectMeta(p.Metadata)...)
