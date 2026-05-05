@@ -261,13 +261,9 @@ func scanSemanticRow(rows pgx.Rows, versioned bool) (*v1alpha1.RawObject, float3
 		return nil, 0, fmt.Errorf("scan semantic row: %w", err)
 	}
 
-	versionRendered := versionStr
-	if versioned {
-		versionRendered = strconv.Itoa(versionInt)
-	}
-
 	obj, err := decodeRow(
-		namespace, name, versionRendered, generation,
+		versioned,
+		namespace, name, versionInt, versionStr,
 		labelsJSON, annotationsJSON, specJSON, statusJSON,
 		deletionTimestamp, finalizersJSON, createdAt, updatedAt,
 	)

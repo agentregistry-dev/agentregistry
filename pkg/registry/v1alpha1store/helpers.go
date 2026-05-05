@@ -69,13 +69,9 @@ func scanRow(row rowScanner, versioned bool) (*v1alpha1.RawObject, error) {
 		return nil, fmt.Errorf("scan row: %w", err)
 	}
 
-	versionRendered := versionStr
-	if versioned {
-		versionRendered = strconv.Itoa(versionInt)
-	}
-
 	return decodeRow(
-		namespace, name, versionRendered, generation,
+		versioned,
+		namespace, name, versionInt, versionStr,
 		labelsJSON, annotationsJSON, specJSON, statusJSON,
 		deletionTimestamp, finalizersJSON, createdAt, updatedAt,
 	)
@@ -85,9 +81,17 @@ func scanRow(row rowScanner, versioned bool) (*v1alpha1.RawObject, error) {
 // from scanRow so callers that scan extra trailing columns (SemanticList's
 // distance score) can reuse the deserialization without repeating its
 // logic.
+//
+// Both modes populate Metadata.Version: it's the row's PK identifier
+// rendered as a string, so wire clients (CLI, e2e tests) can use it
+// without consulting Status. Versioned-artifact rows additionally fold
+// the integer into Status.Version — the canonical surface new code
+// should read for system-assigned versions. Status.Version stays zero
+// for legacy deployments since they have no integer counterpart.
 func decodeRow(
-	namespace, name, version string,
-	generation int64,
+	versioned bool,
+	namespace, name string,
+	versionInt int, versionStr string,
 	labelsJSON, annotationsJSON, specJSON, statusJSON []byte,
 	deletionTimestamp *time.Time,
 	finalizersJSON []byte,
@@ -111,21 +115,52 @@ func decodeRow(
 	// is no public API for finalizers anymore.
 	_ = finalizersJSON
 
+	meta := v1alpha1.ObjectMeta{
+		Namespace:         namespace,
+		Name:              name,
+		Labels:            labels,
+		Annotations:       annotations,
+		CreatedAt:         createdAt,
+		UpdatedAt:         updatedAt,
+		DeletionTimestamp: deletionTimestamp,
+	}
+	if versioned {
+		meta.Version = strconv.Itoa(versionInt)
+	} else {
+		meta.Version = versionStr
+	}
+
+	// For versioned-artifact rows fold the row's integer version into
+	// the status payload so callers see status.version reflect the
+	// just-read row. Legacy deployment rows have no system-assigned
+	// integer version, so we leave the status payload alone.
+	finalStatus := json.RawMessage(statusJSON)
+	if versioned {
+		merged, err := mergeStatusVersion(statusJSON, versionInt)
+		if err != nil {
+			return nil, fmt.Errorf("merge status.version: %w", err)
+		}
+		finalStatus = merged
+	}
+
 	return &v1alpha1.RawObject{
-		Metadata: v1alpha1.ObjectMeta{
-			Namespace:         namespace,
-			Name:              name,
-			Version:           version,
-			Labels:            labels,
-			Annotations:       annotations,
-			Generation:        generation,
-			CreatedAt:         createdAt,
-			UpdatedAt:         updatedAt,
-			DeletionTimestamp: deletionTimestamp,
-		},
-		Spec:   json.RawMessage(specJSON),
-		Status: json.RawMessage(statusJSON),
+		Metadata: meta,
+		Spec:     json.RawMessage(specJSON),
+		Status:   finalStatus,
 	}, nil
+}
+
+// mergeStatusVersion sets Status.Version to v on the provided JSONB
+// payload, preserving any other fields (conditions, etc.) that the
+// reconciler wrote. An empty input produces a fresh status with only
+// Version set.
+func mergeStatusVersion(statusJSON []byte, v int) ([]byte, error) {
+	var s v1alpha1.Status
+	if err := v1alpha1.UnmarshalStatusFromStorage(statusJSON, &s); err != nil {
+		return nil, err
+	}
+	s.Version = v
+	return v1alpha1.MarshalStatusForStorage(s)
 }
 
 // runInTx executes fn within a read-committed transaction, committing on nil

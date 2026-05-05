@@ -669,6 +669,36 @@ func (s *Store) Delete(ctx context.Context, namespace, name, version string) err
 	return s.deleteLegacy(ctx, args)
 }
 
+// DeleteAllVersions soft-deletes every live version row for
+// (namespace, name) on a versioned-artifact table. This is the contract
+// of the batch DELETE endpoint: identity is logical, callers cannot pin
+// it to a single integer version. Returns pkgdb.ErrNotFound when no
+// live row exists for (namespace, name).
+//
+// Calling on the legacy deployments Store is a programming error; the
+// per-kind Store hands deployment to the single-version Delete path
+// instead.
+func (s *Store) DeleteAllVersions(ctx context.Context, namespace, name string) error {
+	if s.legacy {
+		return errors.New("v1alpha1 store: DeleteAllVersions is not supported on the legacy deployments table")
+	}
+	if namespace == "" || name == "" {
+		return errors.New("v1alpha1 store: namespace and name are required")
+	}
+	tag, err := s.pool.Exec(ctx,
+		fmt.Sprintf(`
+			DELETE FROM %s
+			WHERE namespace=$1 AND name=$2`, s.table),
+		namespace, name)
+	if err != nil {
+		return fmt.Errorf("delete all versions: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return pkgdb.ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) deleteVersioned(ctx context.Context, args []any) error {
 	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
 		var deletionTS pgtype.Timestamptz
