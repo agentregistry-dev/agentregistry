@@ -135,7 +135,8 @@ func TestDeclarativeApply_AgentLifecycle(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	agentName := UniqueAgentName("declagent")
-	version := "0.0.1-e2e"
+	// Server assigns sequential integer versions; first apply → "1".
+	version := "1"
 
 	// Clean up any stale entry from a previous interrupted run.
 	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
@@ -218,7 +219,7 @@ func TestDeclarativeApply_MCPServer(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	serverName := "e2e-test/" + UniqueNameWithPrefix("decl-mcp")
-	version := "0.0.1-e2e"
+	version := "1"
 
 	// Clean up any stale entry.
 	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
@@ -254,7 +255,7 @@ func TestDeclarativeApply_MultiDoc(t *testing.T) {
 
 	serverName := "e2e-test/" + UniqueNameWithPrefix("decl-multi-mcp")
 	agentName := UniqueAgentName("declmultiagent")
-	version := "0.0.1-e2e"
+	version := "1"
 
 	// Clean up.
 	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
@@ -304,7 +305,7 @@ func TestDeclarativeApply_DryRun(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	agentName := UniqueAgentName("decldryrun")
-	version := "0.0.1-e2e"
+	version := "1"
 
 	agentYAML := fmt.Sprintf(`
 apiVersion: ar.dev/v1alpha1
@@ -354,7 +355,7 @@ func TestDeclarativeInit_Agent(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	name := UniqueAgentName("initagent")
-	version := "0.1.0"
+	version := "1"
 
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "agent", name, "--version", version, "--registry-url", regURL)
@@ -436,7 +437,7 @@ func TestDeclarativeInit_Skill(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	name := UniqueNameWithPrefix("initskill")
-	version := "0.1.0"
+	version := "1"
 
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "skill", name, "--version", version, "--registry-url", regURL)
@@ -473,7 +474,7 @@ func TestDeclarativeInit_Prompt(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	name := UniqueNameWithPrefix("initprompt")
-	version := "0.1.0"
+	version := "1"
 
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "prompt", name, "--version", version, "--registry-url", regURL)
@@ -651,7 +652,7 @@ func TestDeclarativeApply_Idempotent(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	agentName := UniqueAgentName("declidempagent")
-	version := "0.0.1-e2e"
+	version := "1"
 
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
@@ -720,19 +721,23 @@ func fetchAgentDescription(t *testing.T, regURL, name, version string) string {
 }
 
 // TestDeclarativeApply_Update verifies that applying an agent YAML with a
-// changed description updates the existing resource in the registry.
+// changed spec creates a new immutable version. Under the immutable-resource-
+// versioning contract, the prior version stays exactly as it was (v1 keeps
+// its original description) and the changed spec lands as v2 with the new
+// description.
 func TestDeclarativeApply_Update(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 
 	agentName := UniqueAgentName("declupdateagent")
-	version := "0.0.1-e2e"
+	v1, v2 := "1", "2"
 
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", v1, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", v2, "--registry-url", regURL)
 	})
 
-	// Step 1: Apply with "v1 description".
+	// Step 1: Apply with "v1 description" — server assigns version 1.
 	v1YAML := fmt.Sprintf(`
 apiVersion: ar.dev/v1alpha1
 kind: Agent
@@ -754,14 +759,15 @@ spec:
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "Agent/"+agentName)
 	RequireOutputContains(t, result, "✓")
-	verifyAgentExists(t, regURL, agentName, version)
+	verifyAgentExists(t, regURL, agentName, v1)
 
-	desc := fetchAgentDescription(t, regURL, agentName, version)
+	desc := fetchAgentDescription(t, regURL, agentName, v1)
 	if desc != "v1 description" {
 		t.Errorf("expected description %q after first apply, got %q", "v1 description", desc)
 	}
 
-	// Step 2: Apply same agent with "v2 description".
+	// Step 2: Apply same agent with "v2 description" — spec changed,
+	// server bumps to version 2.
 	v2YAML := fmt.Sprintf(`
 apiVersion: ar.dev/v1alpha1
 kind: Agent
@@ -782,10 +788,16 @@ spec:
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
 
-	// Step 3: Verify the description was updated.
-	desc = fetchAgentDescription(t, regURL, agentName, version)
+	// Step 3: v2 carries the new description.
+	desc = fetchAgentDescription(t, regURL, agentName, v2)
 	if desc != "v2 description" {
-		t.Errorf("expected description %q after second apply, got %q", "v2 description", desc)
+		t.Errorf("expected description %q at v2, got %q", "v2 description", desc)
+	}
+
+	// Step 4: v1 is immutable — its description must be unchanged.
+	desc = fetchAgentDescription(t, regURL, agentName, v1)
+	if desc != "v1 description" {
+		t.Errorf("v1 must remain immutable: expected %q at v1, got %q", "v1 description", desc)
 	}
 }
 
@@ -798,7 +810,7 @@ func TestDeclarativeApply_MCPServer_Idempotent(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	serverName := "e2e-test/" + UniqueNameWithPrefix("decl-mcp-idemp")
-	version := "0.0.1-e2e"
+	version := "1"
 
 	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
 	t.Cleanup(func() {
@@ -837,7 +849,7 @@ func TestDeclarativeApply_Skill_Idempotent(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	skillName := UniqueNameWithPrefix("decl-skill-idemp")
-	version := "0.0.1-e2e"
+	version := "1"
 
 	RunArctl(t, tmpDir, "delete", "skill", skillName, "--version", version, "--registry-url", regURL)
 	t.Cleanup(func() {
@@ -879,7 +891,7 @@ func TestDeclarativeApply_Prompt_Idempotent(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	promptName := UniqueNameWithPrefix("decl-prompt-idemp")
-	version := "0.0.1-e2e"
+	version := "1"
 
 	RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", version, "--registry-url", regURL)
 	t.Cleanup(func() {
@@ -1067,7 +1079,7 @@ func TestBatchApply_MultiResource(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	agentName := UniqueAgentName("batchagent")
-	agentVersion := "0.0.1-e2e"
+	agentVersion := "1"
 	providerName := "e2e-batch-prov-" + UniqueNameWithPrefix("prov")
 
 	// Pre-clean and register cleanup for both resources.
@@ -1126,7 +1138,7 @@ func TestBatchApply_Idempotent(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	agentName := UniqueAgentName("idempbatch")
-	agentVersion := "0.0.1-e2e"
+	agentVersion := "1"
 	providerName := "e2e-idemp-prov-" + UniqueNameWithPrefix("prov")
 
 	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
@@ -1203,7 +1215,7 @@ func TestBatchApply_DriftRequiresForce(t *testing.T) {
 	tmpDir := t.TempDir()
 	agentName := UniqueAgentName("driftbatch")
 	agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
-	agentVersion := "0.1.0"
+	agentVersion := "1"
 	providerID := "local"
 
 	t.Cleanup(func() {
@@ -1283,7 +1295,7 @@ func TestBatchApply_DeleteFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	agentName := UniqueAgentName("delbatch")
-	agentVersion := "0.0.1-e2e"
+	agentVersion := "1"
 
 	// Ensure clean state before the test.
 	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
@@ -1325,7 +1337,7 @@ func TestDeclarative_MCPRoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	serverName := "e2e-test/" + UniqueNameWithPrefix("mcp-rt")
-	version := "0.0.1-e2e"
+	version := "1"
 
 	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
 	t.Cleanup(func() {
@@ -1393,7 +1405,7 @@ func TestDeclarative_SkillRoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	skillName := UniqueNameWithPrefix("skill-rt")
-	version := "0.0.1-e2e"
+	version := "1"
 
 	RunArctl(t, tmpDir, "delete", "skill", skillName, "--version", version, "--registry-url", regURL)
 	t.Cleanup(func() {
@@ -1468,7 +1480,7 @@ func TestDeclarative_PromptRoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	promptName := UniqueNameWithPrefix("prompt-rt")
-	version := "0.0.1-e2e"
+	version := "1"
 
 	RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", version, "--registry-url", regURL)
 	t.Cleanup(func() {
@@ -1547,7 +1559,7 @@ func TestDeclarative_DeleteFileMultiKind(t *testing.T) {
 	mcpName := "e2e-test/" + UniqueNameWithPrefix("delmulti-mcp")
 	skillName := UniqueNameWithPrefix("delmulti-skill")
 	promptName := UniqueNameWithPrefix("delmulti-prompt")
-	version := "0.0.1-e2e"
+	version := "1"
 
 	// Pre-clean and post-clean via the same declarative command.
 	cleanup := func() {
@@ -1747,7 +1759,7 @@ func TestDeclarativeDelete_NotFound(t *testing.T) {
 
 	result := RunArctl(t, tmpDir,
 		"delete", "prompt", "nonexistent-prompt-xyz-12345",
-		"--version", "1.0.0",
+		"--version", "1",
 		"--registry-url", regURL,
 	)
 	RequireFailure(t, result)
@@ -1863,7 +1875,7 @@ func TestDeploymentGet_YAMLIncludesStatus(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	agentName := UniqueAgentName("e2estatus")
-	version := "0.1.0"
+	version := "1"
 	// Local-provider deploys pull from localhost:5001 (the daemon's private
 	// registry). Scaffold → build+push so the image resolves at deploy time.
 	agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
@@ -1945,7 +1957,7 @@ spec:
   targetRef:
     kind: Agent
     name: %s
-    version: "0.1.0"
+    version: "1"
   providerRef:
     kind: Provider
     name: local
@@ -1972,7 +1984,7 @@ func TestMCPServer_PackagesShape(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	serverName := "user/" + UniqueNameWithPrefix("e2epkg")
-	version := "0.1.0"
+	version := "1"
 
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
@@ -2028,7 +2040,7 @@ func TestRemoteMCPServer_RemoteShape(t *testing.T) {
 	// be the reverse-DNS of the remote URL host. URL below is
 	// https://mcp.example.com/mcp → host mcp.example.com → namespace com.example.mcp.
 	serverName := "com.example.mcp/" + UniqueNameWithPrefix("e2erem")
-	version := "1.0.0"
+	version := "1"
 
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "remote-mcp", serverName, "--version", version, "--registry-url", regURL)
@@ -2070,7 +2082,7 @@ func TestMCPServer_RepositoryShape(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	serverName := "repo/" + UniqueNameWithPrefix("e2erepo")
-	version := "1.0.0"
+	version := "1"
 
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
@@ -2204,7 +2216,7 @@ func TestPrompt_ContentIntegrity(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	promptName := UniqueNameWithPrefix("e2econtent")
-	version := "1.0.0"
+	version := "1"
 	// Distinctive content with special characters that could trip YAML
 	// encoding: multi-line, unicode, leading-whitespace-sensitive list.
 	expectedLines := []string{

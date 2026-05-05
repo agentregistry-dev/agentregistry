@@ -29,7 +29,7 @@ func TestDeclarativeApply_RemoteMCPServer(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	name := "e2e-test/" + UniqueNameWithPrefix("decl-remote-mcp")
-	version := "0.0.1-e2e"
+	version := "1"
 
 	RunArctl(t, tmpDir, "delete", "remote-mcp", name, "--version", version, "--registry-url", regURL)
 	t.Cleanup(func() {
@@ -69,7 +69,7 @@ func TestDeclarativeApply_AgentReferencesRemoteMCPServer(t *testing.T) {
 
 	remoteName := "e2e-test/" + UniqueNameWithPrefix("decl-remote-mcp-ref")
 	agentName := UniqueAgentName("decl-agent-ref-remote")
-	version := "0.0.1-e2e"
+	version := "1"
 
 	RunArctl(t, tmpDir, "delete", "remote-mcp", remoteName, "--version", version, "--registry-url", regURL)
 	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
