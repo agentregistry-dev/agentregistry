@@ -13,6 +13,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // agentObj returns an Agent envelope with the given name + a deterministic
@@ -177,4 +178,90 @@ func TestUpsert_IdempotentAcrossRestarts(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, res2.Version)
 	require.Equal(t, v1alpha1store.UpsertNoOp, res2.Outcome)
+}
+
+// auditEvent captures the args of one Auditor.ResourceVersionCreated call
+// so tests can assert outcome semantics without depending on enterprise
+// audit-sink internals.
+type auditEvent struct {
+	kind, ns, name string
+	version        int
+}
+
+// recordingAuditor is a test-only Auditor that appends every call to
+// an in-memory slice. Not safe for concurrent use; the audit-event
+// tests are single-goroutine.
+type recordingAuditor struct {
+	events []auditEvent
+}
+
+func (r *recordingAuditor) ResourceVersionCreated(_ context.Context, kind, ns, name string, version int) {
+	r.events = append(r.events, auditEvent{kind, ns, name, version})
+}
+
+func setupAgentStoreWithAuditor(t *testing.T, a types.Auditor) *v1alpha1store.Store {
+	t.Helper()
+	pool := v1alpha1store.NewTestPool(t)
+	return v1alpha1store.NewStore(pool, "v1alpha1.agents",
+		v1alpha1store.WithKind(v1alpha1.KindAgent),
+		v1alpha1store.WithAuditor(a),
+	)
+}
+
+func setupProviderStoreWithAuditor(t *testing.T, a types.Auditor) *v1alpha1store.Store {
+	t.Helper()
+	pool := v1alpha1store.NewTestPool(t)
+	return v1alpha1store.NewDeploymentStore(pool, "v1alpha1.providers",
+		v1alpha1store.WithKind(v1alpha1.KindProvider),
+		v1alpha1store.WithAuditor(a),
+	)
+}
+
+// TestUpsert_AuditorCalledOnUpsertCreated verifies the Auditor fires
+// once per immutable version creation and stays silent for no-op /
+// labels-only updates.
+func TestUpsert_AuditorCalledOnUpsertCreated(t *testing.T) {
+	auditor := &recordingAuditor{}
+	store := setupAgentStoreWithAuditor(t, auditor)
+	ctx := context.Background()
+
+	// Branch 1: no prior row → audit event with version=1.
+	_, err := store.Upsert(ctx, agentObj("foo", "model-a", nil))
+	require.NoError(t, err)
+	require.Len(t, auditor.events, 1)
+	require.Equal(t, auditEvent{v1alpha1.KindAgent, "default", "foo", 1}, auditor.events[0])
+
+	// Branch 2 (no-op): same spec, same labels → no event.
+	_, err = store.Upsert(ctx, agentObj("foo", "model-a", nil))
+	require.NoError(t, err)
+	require.Len(t, auditor.events, 1, "UpsertNoOp must not produce an audit event")
+
+	// Branch 2 (labels updated): same spec, different labels → no event.
+	_, err = store.Upsert(ctx, agentObj("foo", "model-a", map[string]string{"env": "prod"}))
+	require.NoError(t, err)
+	require.Len(t, auditor.events, 1, "UpsertLabelsUpdated must not produce an audit event")
+
+	// Branch 3: changed spec → audit event with version=2.
+	_, err = store.Upsert(ctx, agentObj("foo", "model-b", nil))
+	require.NoError(t, err)
+	require.Len(t, auditor.events, 2)
+	require.Equal(t, auditEvent{v1alpha1.KindAgent, "default", "foo", 2}, auditor.events[1])
+}
+
+// TestUpsert_AuditorNotCalledForLegacyKinds verifies the legacy
+// (Provider/Deployment) upsert path does not fire ResourceVersionCreated
+// — those kinds model lifecycle state and are out of scope for the
+// version-creation audit event.
+func TestUpsert_AuditorNotCalledForLegacyKinds(t *testing.T) {
+	auditor := &recordingAuditor{}
+	store := setupProviderStoreWithAuditor(t, auditor)
+	ctx := context.Background()
+
+	_, err := store.Upsert(ctx, &v1alpha1.Provider{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindProvider},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "p1", Version: "1"},
+		Spec:     v1alpha1.ProviderSpec{Platform: v1alpha1.PlatformLocal},
+	})
+	require.NoError(t, err)
+	require.Empty(t, auditor.events, "legacy kinds must not emit ResourceVersionCreated")
 }

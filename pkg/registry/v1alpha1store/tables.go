@@ -37,7 +37,11 @@ var TableFor = map[string]string{
 // (versioned-artifact mode). Iterates v1alpha1.BuiltinKinds so
 // registration order stays stable across builds (important for
 // OpenAPI output).
-func NewStores(pool *pgxpool.Pool) map[string]*Store {
+//
+// The variadic opts are applied to every Store produced. Enterprise
+// callers pass WithAuditor(...) here to plumb a single audit sink
+// across all kinds in one call.
+func NewStores(pool *pgxpool.Pool, opts ...StoreOption) map[string]*Store {
 	out := make(map[string]*Store, len(v1alpha1.BuiltinKinds))
 	for _, kind := range v1alpha1.BuiltinKinds {
 		table, ok := TableFor[kind]
@@ -46,11 +50,16 @@ func NewStores(pool *pgxpool.Pool) map[string]*Store {
 			// table here is a coding error, not a runtime condition.
 			panic("v1alpha1store: no table registered for kind " + kind)
 		}
+		// Prepend WithKind so per-kind audit events name the kind
+		// correctly even if the inbound object's TypeMeta is empty.
+		// Caller-supplied opts win (they appear after WithKind in the
+		// option chain).
+		kindOpts := append([]StoreOption{WithKind(kind)}, opts...)
 		if kind == v1alpha1.KindDeployment || kind == v1alpha1.KindProvider {
-			out[kind] = NewDeploymentStore(pool, table)
+			out[kind] = NewDeploymentStore(pool, table, kindOpts...)
 			continue
 		}
-		out[kind] = NewStore(pool, table)
+		out[kind] = NewStore(pool, table, kindOpts...)
 	}
 	return out
 }

@@ -19,6 +19,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // Store is the single generic persistence layer for every v1alpha1 kind.
@@ -59,9 +60,38 @@ import (
 // to GetLatest/Get/List. GC (PurgeFinalized) removes rows where
 // deletion_timestamp IS NOT NULL AND finalizers = '[]' (deployments only).
 type Store struct {
-	pool   *pgxpool.Pool
-	table  string
-	legacy bool
+	pool    *pgxpool.Pool
+	table   string
+	legacy  bool
+	kind    string
+	auditor types.Auditor
+}
+
+// StoreOption configures an optional Store behaviour at construction
+// time. Options compose; later options override earlier ones for the
+// same field.
+type StoreOption func(*Store)
+
+// WithAuditor plugs a types.Auditor into the Store so every state
+// change the Store considers significant fires the matching audit
+// event after the underlying transaction commits. Default is
+// types.NoopAuditor.
+func WithAuditor(a types.Auditor) StoreOption {
+	return func(s *Store) {
+		if a != nil {
+			s.auditor = a
+		}
+	}
+}
+
+// WithKind tags a Store with the canonical v1alpha1 Kind name (e.g.
+// v1alpha1.KindAgent) so audit events can name the kind without the
+// caller having to set obj.TypeMeta. NewStores sets this for every
+// kind; ad-hoc constructors leave it empty unless the caller passes
+// WithKind explicitly. When unset, the Store falls back to the Kind
+// carried on the inbound object (if any).
+func WithKind(kind string) StoreOption {
+	return func(s *Store) { s.kind = kind }
 }
 
 // NewStore constructs a versioned-artifact Store bound to a single table
@@ -71,8 +101,12 @@ type Store struct {
 // For the deployments table, use NewDeploymentStore — passing
 // "v1alpha1.deployments" here is a programming error (the row layout
 // differs and the wrong code path will be taken).
-func NewStore(pool *pgxpool.Pool, table string) *Store {
-	return &Store{pool: pool, table: table, legacy: false}
+func NewStore(pool *pgxpool.Pool, table string, opts ...StoreOption) *Store {
+	s := &Store{pool: pool, table: table, legacy: false, auditor: types.NoopAuditor}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // NewDeploymentStore constructs a legacy-mode Store for the deployments
@@ -82,8 +116,12 @@ func NewStore(pool *pgxpool.Pool, table string) *Store {
 // Deployment is the only kind that opts into the legacy shape today; if
 // a future kind needs the same lifecycle-state semantics, plumb it
 // through here rather than re-introducing a table-name flip.
-func NewDeploymentStore(pool *pgxpool.Pool, table string) *Store {
-	return &Store{pool: pool, table: table, legacy: true}
+func NewDeploymentStore(pool *pgxpool.Pool, table string, opts ...StoreOption) *Store {
+	s := &Store{pool: pool, table: table, legacy: true, auditor: types.NoopAuditor}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // IsVersionedArtifact reports whether the Store operates in
@@ -232,9 +270,31 @@ func (s *Store) Upsert(ctx context.Context, obj v1alpha1.Object) (UpsertResult, 
 	}
 
 	if !s.legacy {
-		return s.upsertVersioned(ctx, meta, specJSON)
+		res, err := s.upsertVersioned(ctx, meta, specJSON)
+		if err != nil {
+			return res, err
+		}
+		// Fire the audit event AFTER the transaction commits. If the tx
+		// rolls back (err != nil above) the event is suppressed. Branch 2
+		// outcomes (UpsertNoOp, UpsertLabelsUpdated) do not introduce a
+		// new immutable version, so they are not recorded.
+		if res.Outcome == UpsertCreated {
+			s.auditor.ResourceVersionCreated(ctx, s.kindFor(obj), meta.Namespace, meta.Name, res.Version)
+		}
+		return res, nil
 	}
 	return s.upsertLegacy(ctx, meta, specJSON)
+}
+
+// kindFor returns the canonical Kind name to attach to audit events.
+// Prefers the Kind set at construction time (NewStores does this);
+// falls back to the inbound object's TypeMeta.Kind. May be "" when
+// neither is populated (ad-hoc unit-test construction).
+func (s *Store) kindFor(obj v1alpha1.Object) string {
+	if s.kind != "" {
+		return s.kind
+	}
+	return obj.GetKind()
 }
 
 // upsertVersioned implements the hash-based append-only apply semantics
