@@ -2,7 +2,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: summarizer
-  version: "1.0.0"
 spec:
   source:
     image: ghcr.io/acme/summarizer:v1.0.0

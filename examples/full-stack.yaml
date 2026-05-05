@@ -11,7 +11,6 @@ apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
   name: acme/fetch
-  version: "1.0.0"
 spec:
   title: Fetch Server
   description: "Fetches and extracts content from URLs"
@@ -27,7 +26,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Skill
 metadata:
   name: summarize
-  version: "1.0.0"
 spec:
   title: Summarization
   category: nlp
@@ -37,7 +35,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Prompt
 metadata:
   name: summarizer-system-prompt
-  version: "1.0.0"
 spec:
   description: "Default system prompt for summarization agents"
   content: |
@@ -48,7 +45,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: summarizer
-  version: "1.0.0"
 spec:
   source:
     image: ghcr.io/acme/summarizer:v1.0.0
