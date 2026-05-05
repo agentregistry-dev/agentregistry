@@ -179,37 +179,104 @@ func TestScheme_Decode_RejectsMissingKind(t *testing.T) {
 	}
 }
 
-// TestScheme_Decode_RejectsSystemMetadata pins the contract that
-// system-managed metadata fields (version, generation) cannot be set
-// on the wire — they're server-assigned and the system would silently
-// overwrite them. Surface as decode-time errors so users notice.
-func TestScheme_Decode_RejectsSystemMetadata(t *testing.T) {
+// TestScheme_Decode_RejectsSystemMetadataForContentRegistryKinds pins
+// the contract that system-managed metadata fields (version,
+// generation) cannot be set on the wire for content-registry kinds —
+// they're server-assigned and the system would silently overwrite
+// them. Surface as decode-time errors so users notice.
+func TestScheme_Decode_RejectsSystemMetadataForContentRegistryKinds(t *testing.T) {
+	contentKinds := []struct {
+		kind     string
+		specYAML string
+	}{
+		{KindAgent, "  title: y\n"},
+		{KindMCPServer, "  title: y\n"},
+		{KindRemoteMCPServer, "  title: y\n"},
+		{KindSkill, "  title: y\n"},
+		{KindPrompt, "  content: hi\n"},
+	}
+	fields := []struct {
+		name      string
+		metaLine  string
+		errSubstr string
+	}{
+		{"version", `  version: "5"`, "metadata.version"},
+		{"generation", `  generation: 3`, "metadata.generation"},
+	}
+	for _, ck := range contentKinds {
+		for _, f := range fields {
+			t.Run(ck.kind+"/"+f.name, func(t *testing.T) {
+				doc := "apiVersion: ar.dev/v1alpha1\nkind: " + ck.kind + "\nmetadata:\n  name: x\n" + f.metaLine + "\nspec:\n" + ck.specYAML
+				_, err := Default.Decode([]byte(doc))
+				if err == nil {
+					t.Fatalf("expected metadata.%s rejection for %s", f.name, ck.kind)
+				}
+				if !strings.Contains(err.Error(), f.errSubstr) {
+					t.Fatalf("expected error to mention %s; got %v", f.errSubstr, err)
+				}
+			})
+		}
+	}
+}
+
+// TestScheme_Decode_AcceptsSystemMetadataForInfraKinds pins the
+// inverse contract: infra/config kinds (Provider, Deployment) keep
+// their legacy main-branch shape and accept user-supplied
+// metadata.version / metadata.generation. Only the content-registry
+// bucket is subject to the system-assigned rejection.
+func TestScheme_Decode_AcceptsSystemMetadataForInfraKinds(t *testing.T) {
 	cases := map[string]string{
-		"version": `apiVersion: ar.dev/v1alpha1
-kind: Agent
+		"Provider/version": `apiVersion: ar.dev/v1alpha1
+kind: Provider
 metadata:
-  name: x
-  version: "5"
+  name: local
+  version: "1.0.0"
 spec:
-  title: y
+  platform: local
 `,
-		"generation": `apiVersion: ar.dev/v1alpha1
-kind: Agent
+		"Provider/generation": `apiVersion: ar.dev/v1alpha1
+kind: Provider
 metadata:
-  name: x
+  name: local
   generation: 3
 spec:
-  title: y
+  platform: local
+`,
+		"Deployment/version": `apiVersion: ar.dev/v1alpha1
+kind: Deployment
+metadata:
+  name: prod
+  version: "1.0.0"
+spec:
+  targetRef:
+    kind: Agent
+    name: summarizer
+    version: "1"
+  providerRef:
+    kind: Provider
+    name: local
+  desiredState: deployed
+`,
+		"Deployment/generation": `apiVersion: ar.dev/v1alpha1
+kind: Deployment
+metadata:
+  name: prod
+  generation: 3
+spec:
+  targetRef:
+    kind: Agent
+    name: summarizer
+    version: "1"
+  providerRef:
+    kind: Provider
+    name: local
+  desiredState: deployed
 `,
 	}
-	for field, doc := range cases {
-		t.Run(field, func(t *testing.T) {
-			_, err := Default.Decode([]byte(doc))
-			if err == nil {
-				t.Fatalf("expected metadata.%s rejection", field)
-			}
-			if !strings.Contains(err.Error(), "metadata."+field) {
-				t.Fatalf("expected error to mention metadata.%s; got %v", field, err)
+	for name, doc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Default.Decode([]byte(doc)); err != nil {
+				t.Fatalf("expected infra kind to accept system metadata, got %v", err)
 			}
 		})
 	}

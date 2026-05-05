@@ -144,25 +144,49 @@ func (s *Scheme) Decode(data []byte) (any, error) {
 	return obj, nil
 }
 
-// rejectSystemMetadata fails the decode when a manifest sets fields that
-// are server-assigned. Without this, callers writing
-// `metadata.version: "5"` would assume their value influences the
-// stored row even though the system overwrites it with the
-// MAX(version)+1 it picked. metadata.generation has the same problem
-// (always derived). Surface it as an error at decode time so users
-// can't accidentally encode system state into manifests.
+// IsContentRegistryKind reports whether a kind belongs to the
+// content-registry bucket (versioned, immutable, system-assigned
+// integer version). Infra/config kinds (Provider, Deployment, etc.)
+// keep their main legacy shape and accept user-supplied
+// metadata.version / metadata.generation.
+func IsContentRegistryKind(kind string) bool {
+	switch kind {
+	case KindAgent, KindMCPServer, KindRemoteMCPServer, KindSkill, KindPrompt:
+		return true
+	default:
+		return false
+	}
+}
+
+// rejectSystemMetadata fails the decode when a content-registry
+// manifest sets fields that are server-assigned. Without this,
+// callers writing `metadata.version: "5"` would assume their value
+// influences the stored row even though the system overwrites it
+// with the MAX(version)+1 it picked. metadata.generation has the
+// same problem (always derived). Surface it as an error at decode
+// time so users can't accidentally encode system state into
+// manifests.
+//
+// Infra/config kinds (Provider, Deployment, etc.) keep their legacy
+// shape and accept user-supplied metadata.version /
+// metadata.generation, so this rejection only applies to
+// content-registry kinds.
 func rejectSystemMetadata(data []byte) error {
-	var rawWithMeta struct {
+	var raw struct {
+		Kind     string         `yaml:"kind" json:"kind"`
 		Metadata map[string]any `yaml:"metadata" json:"metadata"`
 	}
-	if err := yaml.Unmarshal(data, &rawWithMeta); err != nil {
+	if err := yaml.Unmarshal(data, &raw); err != nil {
 		// Defer the real parse error to the typed unmarshal below.
 		return nil
 	}
-	if _, ok := rawWithMeta.Metadata["version"]; ok {
+	if !IsContentRegistryKind(raw.Kind) {
+		return nil
+	}
+	if _, ok := raw.Metadata["version"]; ok {
 		return errors.New("v1alpha1: metadata.version is system-assigned; remove it from your manifest")
 	}
-	if _, ok := rawWithMeta.Metadata["generation"]; ok {
+	if _, ok := raw.Metadata["generation"]; ok {
 		return errors.New("v1alpha1: metadata.generation is system-managed; remove it from your manifest")
 	}
 	return nil
