@@ -724,11 +724,14 @@ func (s *Store) ListVersions(ctx context.Context, namespace, name string) ([]*v1
 	return out, nil
 }
 
-// DeleteAllVersions soft-deletes every live version row for
-// (namespace, name) on a versioned-artifact table. This is the contract
-// of the batch DELETE endpoint: identity is logical, callers cannot pin
-// it to a single integer version. Returns pkgdb.ErrNotFound when no
-// live row exists for (namespace, name).
+// DeleteAllVersions hard-deletes every version row for (namespace, name)
+// on a versioned-artifact table — the (ns, name) identity is freed
+// entirely so the next apply starts at v1. This is the contract of the
+// batch DELETE endpoint: identity is logical, callers cannot pin it to
+// a single integer version. Per-version soft-delete tracking is
+// unnecessary in versioned-artifact mode because every spec change
+// already produces a fresh immutable row. Returns pkgdb.ErrNotFound
+// when no row exists for (namespace, name).
 //
 // Calling on the legacy deployments Store is a programming error; the
 // per-kind Store hands deployment to the single-version Delete path

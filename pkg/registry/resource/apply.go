@@ -199,8 +199,9 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 // the persisted row should re-apply before deleting.
 //
 // Identity is logical (namespace, name) for versioned-artifact kinds:
-// metadata.version on the doc is intentionally ignored, and every live
-// version of the (ns, name) is soft-deleted in one call. The legacy
+// metadata.version on the doc is intentionally ignored, and every
+// version row for (ns, name) is hard-deleted in one call so the
+// identity is freed and the next apply starts at v1. The legacy
 // deployment path keeps its single-version delete since deployment
 // rows are mutable rather than append-only.
 func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
