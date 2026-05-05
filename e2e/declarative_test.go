@@ -148,7 +148,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: %s
-  version: "%s"
 spec:
   source:
     image: ghcr.io/e2e-test/decl-agent:latest
@@ -157,7 +156,7 @@ spec:
   framework: adk
   modelProvider: gemini
   modelName: gemini-2.0-flash
-`, agentName, version)
+`, agentName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "agent.yaml", agentYAML)
 
@@ -232,10 +231,9 @@ apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
   name: %s
-  version: "%s"
 spec:
   description: "E2E declarative apply test MCP server"
-`, serverName, version)
+`, serverName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "server.yaml", serverYAML)
 
@@ -271,7 +269,6 @@ apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
   name: %s
-  version: "%s"
 spec:
   description: "Multi-doc test MCP server"
 ---
@@ -279,7 +276,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: %s
-  version: "%s"
 spec:
   source:
     image: ghcr.io/e2e-test/multi-agent:latest
@@ -288,7 +284,7 @@ spec:
   framework: adk
   modelProvider: gemini
   modelName: gemini-2.0-flash
-`, serverName, version, agentName, version)
+`, serverName, agentName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "stack.yaml", multiDocYAML)
 
@@ -315,7 +311,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: %s
-  version: "%s"
 spec:
   source:
     image: ghcr.io/e2e-test/dryrun:latest
@@ -324,7 +319,7 @@ spec:
   framework: adk
   modelProvider: gemini
   modelName: gemini-2.0-flash
-`, agentName, version)
+`, agentName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "dryrun.yaml", agentYAML)
 
@@ -667,7 +662,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: %s
-  version: "%s"
 spec:
   source:
     image: ghcr.io/e2e-test/idemp-agent:latest
@@ -676,7 +670,7 @@ spec:
   framework: adk
   modelProvider: gemini
   modelName: gemini-2.0-flash
-`, agentName, version)
+`, agentName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "agent.yaml", agentYAML)
 
@@ -744,7 +738,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: %s
-  version: "%s"
 spec:
   source:
     image: ghcr.io/e2e-test/update-agent:latest
@@ -753,7 +746,7 @@ spec:
   framework: adk
   modelProvider: gemini
   modelName: gemini-2.0-flash
-`, agentName, version)
+`, agentName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "agent.yaml", v1YAML)
 
@@ -774,7 +767,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: %s
-  version: "%s"
 spec:
   source:
     image: ghcr.io/e2e-test/update-agent:latest
@@ -783,7 +775,7 @@ spec:
   framework: adk
   modelProvider: gemini
   modelName: gemini-2.0-flash
-`, agentName, version)
+`, agentName)
 
 	yamlPath = writeDeclarativeYAML(t, tmpDir, "agent.yaml", v2YAML)
 
@@ -818,10 +810,9 @@ apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
   name: %s
-  version: "%s"
 spec:
   description: "Idempotent apply test MCP server"
-`, serverName, version)
+`, serverName)
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "server.yaml", serverYAML)
 
 	// First apply — creates.
@@ -858,10 +849,9 @@ apiVersion: ar.dev/v1alpha1
 kind: Skill
 metadata:
   name: %s
-  version: "%s"
 spec:
   description: "Idempotent apply test skill"
-`, skillName, version)
+`, skillName)
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "skill.yaml", skillYAML)
 
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
@@ -901,10 +891,9 @@ apiVersion: ar.dev/v1alpha1
 kind: Prompt
 metadata:
   name: %s
-  version: "%s"
 spec:
   content: "You are a helpful test assistant."
-`, promptName, version)
+`, promptName)
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "prompt.yaml", promptYAML)
 
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
@@ -976,7 +965,6 @@ func TestApplyDeployment_HTTPIdempotent(t *testing.T) {
 	deployYAML := fmt.Sprintf(`kind: Deployment
 metadata:
   name: %s
-  version: latest
 spec:
   resourceType: agent
   providerId: local
@@ -1098,7 +1086,6 @@ func TestBatchApply_MultiResource(t *testing.T) {
 kind: Agent
 metadata:
   name: %s
-  version: "%s"
 spec:
   source:
     image: ghcr.io/e2e-test/batch-agent:latest
@@ -1112,10 +1099,9 @@ apiVersion: ar.dev/v1alpha1
 kind: Provider
 metadata:
   name: %s
-  version: "1.0.0"
 spec:
   platform: local
-`, agentName, agentVersion, providerName)
+`, agentName, providerName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "multi.yaml", multiYAML)
 
@@ -1158,7 +1144,6 @@ func TestBatchApply_Idempotent(t *testing.T) {
 kind: Agent
 metadata:
   name: %s
-  version: "%s"
 spec:
   source:
     image: ghcr.io/e2e-test/idemp-batch-agent:latest
@@ -1172,10 +1157,9 @@ apiVersion: ar.dev/v1alpha1
 kind: Provider
 metadata:
   name: %s
-  version: "1.0.0"
 spec:
   platform: local
-`, agentName, agentVersion, providerName)
+`, agentName, providerName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "multi.yaml", multiYAML)
 
@@ -1250,11 +1234,10 @@ func TestBatchApply_DriftRequiresForce(t *testing.T) {
 kind: Deployment
 metadata:
   name: %s
-  version: "%s"
 spec:
   providerId: %s
   resourceType: agent
-`, agentName, agentVersion, providerID)
+`, agentName, providerID)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "deploy.yaml", deployYAML)
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
@@ -1267,13 +1250,12 @@ spec:
 kind: Deployment
 metadata:
   name: %s
-  version: "%s"
 spec:
   providerId: %s
   resourceType: agent
   env:
     NEW_VAR: "drift-value"
-`, agentName, agentVersion, providerID)
+`, agentName, providerID)
 
 	driftPath := writeDeclarativeYAML(t, tmpDir, "deploy-drift.yaml", driftYAML)
 
@@ -1310,7 +1292,6 @@ func TestBatchApply_DeleteFile(t *testing.T) {
 kind: Agent
 metadata:
   name: %s
-  version: "%s"
 spec:
   source:
     image: ghcr.io/e2e-test/del-batch-agent:latest
@@ -1319,7 +1300,7 @@ spec:
   framework: adk
   modelProvider: gemini
   modelName: gemini-2.0-flash
-`, agentName, agentVersion)
+`, agentName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "agent.yaml", agentYAML)
 
@@ -1356,10 +1337,9 @@ apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
   name: %s
-  version: "%s"
 spec:
   description: "MCP round-trip test server"
-`, serverName, version)
+`, serverName)
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "server.yaml", serverYAML)
 
 	t.Run("apply", func(t *testing.T) {
@@ -1425,10 +1405,9 @@ apiVersion: ar.dev/v1alpha1
 kind: Skill
 metadata:
   name: %s
-  version: "%s"
 spec:
   description: "Skill round-trip test"
-`, skillName, version)
+`, skillName)
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "skill.yaml", skillYAML)
 
 	t.Run("apply", func(t *testing.T) {
@@ -1501,11 +1480,10 @@ apiVersion: ar.dev/v1alpha1
 kind: Prompt
 metadata:
   name: %s
-  version: "%s"
 spec:
   description: "Prompt round-trip test"
   content: "You are a test assistant."
-`, promptName, version)
+`, promptName)
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "prompt.yaml", promptYAML)
 
 	t.Run("apply", func(t *testing.T) {
@@ -1585,7 +1563,6 @@ func TestDeclarative_DeleteFileMultiKind(t *testing.T) {
 kind: Agent
 metadata:
   name: %s
-  version: "%s"
 spec:
   source:
     image: ghcr.io/e2e-test/delmulti-agent:latest
@@ -1599,7 +1576,6 @@ apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
   name: %s
-  version: "%s"
 spec:
   description: "multi-kind delete test mcp"
 ---
@@ -1607,7 +1583,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Skill
 metadata:
   name: %s
-  version: "%s"
 spec:
   description: "multi-kind delete test skill"
 ---
@@ -1615,11 +1590,10 @@ apiVersion: ar.dev/v1alpha1
 kind: Prompt
 metadata:
   name: %s
-  version: "%s"
 spec:
   description: "multi-kind delete test prompt"
   content: "noop"
-`, agentName, version, mcpName, version, skillName, version, promptName, version)
+`, agentName, mcpName, skillName, promptName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "multi.yaml", multiYAML)
 
@@ -1754,7 +1728,6 @@ func TestDeclarativeApply_InvalidKind(t *testing.T) {
 kind: NotARealKind
 metadata:
   name: e2e-test/invalid-kind
-  version: "0.0.1-e2e"
 spec:
   description: "bogus kind for client-side rejection test"
 `
@@ -1917,11 +1890,10 @@ func TestDeploymentGet_YAMLIncludesStatus(t *testing.T) {
 kind: Deployment
 metadata:
   name: %s
-  version: "%s"
 spec:
   resourceType: agent
   providerId: local
-`, agentName, version)
+`, agentName)
 	deployPath := writeDeclarativeYAML(t, tmpDir, "deployment.yaml", deployYAML)
 	RequireSuccess(t, RunArctl(t, tmpDir, "apply", "-f", deployPath, "--registry-url", regURL))
 
@@ -1969,7 +1941,6 @@ func TestDeploymentApply_BadTemplateRef(t *testing.T) {
 kind: Deployment
 metadata:
   name: %s
-  version: "0.1.0"
 spec:
   targetRef:
     kind: Agent
@@ -2018,7 +1989,6 @@ func TestMCPServer_PackagesShape(t *testing.T) {
 kind: MCPServer
 metadata:
   name: %s
-  version: "%s"
 spec:
   title: e2e-packages
   description: "packages-shape round-trip test"
@@ -2028,7 +1998,7 @@ spec:
       identifier: %s
       transport:
         type: stdio
-`, serverName, version, imageRef)
+`, serverName, imageRef)
 
 	path := writeDeclarativeYAML(t, tmpDir, "mcp-pkg.yaml", yaml)
 	result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)
@@ -2070,14 +2040,13 @@ func TestRemoteMCPServer_RemoteShape(t *testing.T) {
 kind: RemoteMCPServer
 metadata:
   name: %s
-  version: "%s"
 spec:
   title: e2e-remotes
   description: "remotes-shape round-trip test"
   remote:
     type: streamable-http
     url: https://mcp.example.com/mcp
-`, serverName, version)
+`, serverName)
 
 	path := writeDeclarativeYAML(t, tmpDir, "mcp-remote.yaml", yaml)
 	result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)
@@ -2111,14 +2080,13 @@ func TestMCPServer_RepositoryShape(t *testing.T) {
 kind: MCPServer
 metadata:
   name: %s
-  version: "%s"
 spec:
   title: e2e-repository
   description: "repository-shape round-trip test"
   source:
     repository:
       url: https://github.com/agentregistry-dev/testmcpserver
-`, serverName, version)
+`, serverName)
 
 	path := writeDeclarativeYAML(t, tmpDir, "mcp-repo.yaml", yaml)
 	result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)
@@ -2145,7 +2113,9 @@ func TestPrompt_MultipleVersions(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	promptName := UniqueNameWithPrefix("e2emultivprompt")
-	v1, v2 := "1.0.0", "2.0.0"
+	// Server assigns sequential integer versions: first apply → "1",
+	// second apply → "2".
+	v1, v2 := "1", "2"
 	v1Content := "Version 1: You are a helpful assistant."
 	v2Content := "Version 2: You are an expert coding assistant."
 
@@ -2162,12 +2132,11 @@ func TestPrompt_MultipleVersions(t *testing.T) {
 kind: Prompt
 metadata:
   name: %s
-  version: "%s"
 spec:
   description: "multi-version prompt test"
   content: |
     %s
-`, promptName, tc.version, tc.content)
+`, promptName, tc.content)
 		path := writeDeclarativeYAML(t, tmpDir, fmt.Sprintf("p-%s.yaml", tc.version), yaml)
 		result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)
 		RequireSuccess(t, result)
@@ -2255,7 +2224,6 @@ func TestPrompt_ContentIntegrity(t *testing.T) {
 kind: Prompt
 metadata:
   name: %s
-  version: "%s"
 spec:
   description: "content integrity test"
   content: |
@@ -2264,7 +2232,7 @@ spec:
     %s
     %s
     %s
-`, promptName, version,
+`, promptName,
 		expectedLines[0], expectedLines[1], expectedLines[2], expectedLines[3], expectedLines[4])
 
 	path := writeDeclarativeYAML(t, tmpDir, "content.yaml", yaml)
@@ -2306,7 +2274,9 @@ func TestSkill_DeletePromotesLatest(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	skillName := UniqueNameWithPrefix("e2epromoteskill")
-	v1, v2 := "0.0.1", "0.0.2"
+	// Server assigns sequential integer versions: first apply → "1",
+	// second apply → "2".
+	v1, v2 := "1", "2"
 
 	t.Cleanup(func() {
 		// Best-effort cleanup of both versions.
@@ -2319,10 +2289,9 @@ func TestSkill_DeletePromotesLatest(t *testing.T) {
 kind: Skill
 metadata:
   name: %s
-  version: "%s"
 spec:
   description: "skill v1 for delete-promotes-latest test"
-`, skillName, v1)
+`, skillName)
 	RequireSuccess(t, RunArctl(t, tmpDir, "apply", "-f",
 		writeDeclarativeYAML(t, tmpDir, "skill-v1.yaml", yamlV1),
 		"--registry-url", regURL))
@@ -2332,10 +2301,9 @@ spec:
 kind: Skill
 metadata:
   name: %s
-  version: "%s"
 spec:
   description: "skill v2 for delete-promotes-latest test"
-`, skillName, v2)
+`, skillName)
 	RequireSuccess(t, RunArctl(t, tmpDir, "apply", "-f",
 		writeDeclarativeYAML(t, tmpDir, "skill-v2.yaml", yamlV2),
 		"--registry-url", regURL))

@@ -41,14 +41,13 @@ apiVersion: ar.dev/v1alpha1
 kind: RemoteMCPServer
 metadata:
   name: %s
-  version: "%s"
 spec:
   title: E2E Remote MCP Server
   description: Hosted MCP endpoint for the declarative-apply E2E test
   remote:
     type: streamable-http
     url: https://example.test/mcp
-`, name, version)
+`, name)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "remote-mcp.yaml", yaml)
 
@@ -84,7 +83,6 @@ apiVersion: ar.dev/v1alpha1
 kind: RemoteMCPServer
 metadata:
   name: %s
-  version: "%s"
 spec:
   remote:
     type: streamable-http
@@ -94,7 +92,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: %s
-  version: "%s"
 spec:
   image: ghcr.io/e2e-test/agent-ref-remote:latest
   description: Agent that wires in a RemoteMCPServer via Kind discrimination
@@ -106,7 +103,7 @@ spec:
     - kind: RemoteMCPServer
       name: %s
       version: "%s"
-`, remoteName, version, agentName, version, remoteName, version)
+`, remoteName, agentName, remoteName, version)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "stack.yaml", yaml)
 
