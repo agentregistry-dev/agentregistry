@@ -176,12 +176,18 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		res.Status = arv0.ApplyStatusDryRun
 		return res
 	}
-	switch {
-	case up.Created:
+	// Map the Store outcome onto the wire status. Under
+	// versioned-artifact mode every spec change creates a new immutable
+	// row, so UpsertCreated covers both "first apply" (v1) and "spec
+	// changed → new version" (v>1) — both surface as
+	// ApplyStatusCreated. UpsertLabelsUpdated is the same-spec /
+	// changed-metadata case the legacy "configured" status modeled.
+	switch up.Outcome {
+	case v1alpha1store.UpsertCreated:
 		res.Status = arv0.ApplyStatusCreated
-	case up.SpecChanged:
+	case v1alpha1store.UpsertLabelsUpdated:
 		res.Status = arv0.ApplyStatusConfigured
-	default:
+	case v1alpha1store.UpsertNoOp:
 		res.Status = arv0.ApplyStatusUnchanged
 	}
 	if store.IsVersionedArtifact() {

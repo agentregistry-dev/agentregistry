@@ -24,8 +24,9 @@ type applyOpts struct {
 
 // upsertResult is the outcome of a successful applyCore call.
 type upsertResult struct {
-	Created     bool
-	SpecChanged bool
+	// Outcome categorises what the underlying Store.Upsert did. Callers
+	// map this onto their wire status (ApplyStatusCreated, etc.).
+	Outcome v1alpha1store.UpsertOutcome
 	// Version is the integer version of the row after the apply. The
 	// PUT handler uses this for the read-back URL; the batch handler
 	// returns it on the per-document ApplyResult.
@@ -126,14 +127,9 @@ func applyCore(
 			Terminating: errors.Is(err, v1alpha1store.ErrTerminating),
 		}
 	}
-	// Translate the new outcome surface back onto the existing pipeline
-	// shape callers consume. A v1 create stays Created; a higher-version
-	// create is the rename of "spec changed → new immutable version" so
-	// PostUpsert observers can tell something material happened.
 	res := upsertResult{
-		Created:     up.Outcome == v1alpha1store.UpsertCreated && up.Version == 1,
-		SpecChanged: up.Outcome == v1alpha1store.UpsertCreated,
-		Version:     up.Version,
+		Outcome: up.Outcome,
+		Version: up.Version,
 	}
 
 	// Stamp the freshly-assigned version onto the response body so the
