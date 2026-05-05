@@ -1,8 +1,19 @@
 -- v1alpha1 schema: every resource uses the same envelope (apiVersion +
 -- metadata + spec + status). Metadata fields are promoted to real columns;
 -- spec and status stay JSONB. (namespace, name, version) is the composite
--- primary key for every kind. Reverse-lookup queries run off a GIN index on
--- the spec JSONB.
+-- primary key for every kind.
+--
+-- Versioned-artifact tables (agents, mcp_servers, remote_mcp_servers,
+-- skills, prompts, providers) are append-only with system-assigned
+-- monotonic INTEGER versions. Each row carries a SHA-256 spec_hash so
+-- Upsert can recognise an unchanged spec and skip emitting a new
+-- version. "Latest" is computed as MAX(version) over the live rows for
+-- a (namespace, name); the per-table (namespace, name, version DESC)
+-- index serves that lookup.
+--
+-- Deployments are not versioned-artifact rows — they're lifecycle state
+-- and keep the older string-version shape for now (out of scope for the
+-- immutable-versioning redesign).
 --
 -- All tables live under the dedicated PostgreSQL schema `v1alpha1` so they
 -- coexist with the legacy `public.agents`, `public.servers`, etc. during
@@ -68,42 +79,49 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- -----------------------------------------------------------------------------
--- Per-kind tables: identical shape across agents, mcp_servers, skills,
--- prompts, providers, deployments.
+-- Versioned-artifact tables: identical shape across agents, mcp_servers,
+-- skills, prompts, providers. (remote_mcp_servers shares the shape and is
+-- created in 005_remote_resources.sql.)
 --
 -- Columns:
---   namespace, name, version      — composite identity (PK)
---   generation                    — server-managed, bumps on spec mutation
---   labels                        — user-set key/value, GIN-indexed
---   spec                          — JSONB per pkg/api/v1alpha1 typed Spec
---   status                        — JSONB per v1alpha1.Status (ObservedGeneration + Conditions)
---   is_latest_version             — partial unique index per (namespace, name)
---   deletion_timestamp            — server-managed soft-delete marker
---   finalizers                    — reconciler-owned tokens; empty+terminating → GC
---   created_at, updated_at        — timestamps (trigger-maintained)
+--   namespace, name, version   — composite identity (PK); version is a
+--                                positive integer assigned by the store on
+--                                Upsert (MAX(version)+1).
+--   labels, annotations        — user-set key/value JSONB
+--   spec                       — JSONB per pkg/api/v1alpha1 typed Spec
+--   spec_hash                  — SHA-256 hex of the canonical-JSON spec;
+--                                Upsert short-circuits when the incoming
+--                                hash matches the latest live row's hash.
+--   status                     — JSONB per v1alpha1.Status (Status.Version
+--                                mirrors the row's version column).
+--   deletion_timestamp         — server-managed soft-delete marker
+--   created_at, updated_at     — timestamps (trigger-maintained)
+--
+-- Indexes:
+--   PK (namespace, name, version) supports per-version lookups.
+--   (namespace, name, version DESC) serves "give me the latest live row"
+--   queries (MAX(version) + ORDER BY version DESC LIMIT 1).
 -- -----------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS v1alpha1.agents (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
-    version            VARCHAR(255) NOT NULL,
-    generation         BIGINT       NOT NULL DEFAULT 1,
+    version            INTEGER      NOT NULL CHECK (version > 0),
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
+    spec_hash          CHAR(64)     NOT NULL,
     status             JSONB        NOT NULL DEFAULT '{}'::jsonb,
-    is_latest_version  BOOLEAN      NOT NULL DEFAULT false,
-    deletion_timestamp TIMESTAMPTZ,
-    finalizers         JSONB        NOT NULL DEFAULT '[]'::jsonb,
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    deletion_timestamp TIMESTAMPTZ,
     PRIMARY KEY (namespace, name, version)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS v1alpha1_agents_latest_version  ON v1alpha1.agents (namespace, name) WHERE is_latest_version;
-CREATE INDEX IF NOT EXISTS v1alpha1_agents_labels_gin      ON v1alpha1.agents USING GIN (labels);
-CREATE INDEX IF NOT EXISTS v1alpha1_agents_spec_gin        ON v1alpha1.agents USING GIN (spec jsonb_path_ops);
-CREATE INDEX IF NOT EXISTS v1alpha1_agents_updated_at_desc ON v1alpha1.agents (updated_at DESC);
-CREATE INDEX IF NOT EXISTS v1alpha1_agents_terminating    ON v1alpha1.agents (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
+CREATE INDEX IF NOT EXISTS v1alpha1_agents_name_version_desc ON v1alpha1.agents (namespace, name, version DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_agents_labels_gin        ON v1alpha1.agents USING GIN (labels);
+CREATE INDEX IF NOT EXISTS v1alpha1_agents_spec_gin          ON v1alpha1.agents USING GIN (spec jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS v1alpha1_agents_updated_at_desc   ON v1alpha1.agents (updated_at DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_agents_terminating       ON v1alpha1.agents (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
 
 CREATE OR REPLACE TRIGGER agents_set_updated_at  BEFORE UPDATE ON v1alpha1.agents  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
 CREATE OR REPLACE TRIGGER agents_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.agents  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_agents_status');
@@ -111,98 +129,96 @@ CREATE OR REPLACE TRIGGER agents_notify_status   AFTER  INSERT OR UPDATE OR DELE
 CREATE TABLE IF NOT EXISTS v1alpha1.mcp_servers (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
-    version            VARCHAR(255) NOT NULL,
-    generation         BIGINT       NOT NULL DEFAULT 1,
+    version            INTEGER      NOT NULL CHECK (version > 0),
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
+    spec_hash          CHAR(64)     NOT NULL,
     status             JSONB        NOT NULL DEFAULT '{}'::jsonb,
-    is_latest_version  BOOLEAN      NOT NULL DEFAULT false,
-    deletion_timestamp TIMESTAMPTZ,
-    finalizers         JSONB        NOT NULL DEFAULT '[]'::jsonb,
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    deletion_timestamp TIMESTAMPTZ,
     PRIMARY KEY (namespace, name, version)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS v1alpha1_mcp_servers_latest_version  ON v1alpha1.mcp_servers (namespace, name) WHERE is_latest_version;
-CREATE INDEX IF NOT EXISTS v1alpha1_mcp_servers_labels_gin      ON v1alpha1.mcp_servers USING GIN (labels);
-CREATE INDEX IF NOT EXISTS v1alpha1_mcp_servers_spec_gin        ON v1alpha1.mcp_servers USING GIN (spec jsonb_path_ops);
-CREATE INDEX IF NOT EXISTS v1alpha1_mcp_servers_updated_at_desc ON v1alpha1.mcp_servers (updated_at DESC);
-CREATE INDEX IF NOT EXISTS v1alpha1_mcp_servers_terminating    ON v1alpha1.mcp_servers (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
+CREATE INDEX IF NOT EXISTS v1alpha1_mcp_servers_name_version_desc ON v1alpha1.mcp_servers (namespace, name, version DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_mcp_servers_labels_gin        ON v1alpha1.mcp_servers USING GIN (labels);
+CREATE INDEX IF NOT EXISTS v1alpha1_mcp_servers_spec_gin          ON v1alpha1.mcp_servers USING GIN (spec jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS v1alpha1_mcp_servers_updated_at_desc   ON v1alpha1.mcp_servers (updated_at DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_mcp_servers_terminating       ON v1alpha1.mcp_servers (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
 CREATE OR REPLACE TRIGGER mcp_servers_set_updated_at  BEFORE UPDATE ON v1alpha1.mcp_servers  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
 CREATE OR REPLACE TRIGGER mcp_servers_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.mcp_servers  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_mcp_servers_status');
 
 CREATE TABLE IF NOT EXISTS v1alpha1.skills (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
-    version            VARCHAR(255) NOT NULL,
-    generation         BIGINT       NOT NULL DEFAULT 1,
+    version            INTEGER      NOT NULL CHECK (version > 0),
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
+    spec_hash          CHAR(64)     NOT NULL,
     status             JSONB        NOT NULL DEFAULT '{}'::jsonb,
-    is_latest_version  BOOLEAN      NOT NULL DEFAULT false,
-    deletion_timestamp TIMESTAMPTZ,
-    finalizers         JSONB        NOT NULL DEFAULT '[]'::jsonb,
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    deletion_timestamp TIMESTAMPTZ,
     PRIMARY KEY (namespace, name, version)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS v1alpha1_skills_latest_version  ON v1alpha1.skills (namespace, name) WHERE is_latest_version;
-CREATE INDEX IF NOT EXISTS v1alpha1_skills_labels_gin      ON v1alpha1.skills USING GIN (labels);
-CREATE INDEX IF NOT EXISTS v1alpha1_skills_spec_gin        ON v1alpha1.skills USING GIN (spec jsonb_path_ops);
-CREATE INDEX IF NOT EXISTS v1alpha1_skills_updated_at_desc ON v1alpha1.skills (updated_at DESC);
-CREATE INDEX IF NOT EXISTS v1alpha1_skills_terminating    ON v1alpha1.skills (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
+CREATE INDEX IF NOT EXISTS v1alpha1_skills_name_version_desc ON v1alpha1.skills (namespace, name, version DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_skills_labels_gin        ON v1alpha1.skills USING GIN (labels);
+CREATE INDEX IF NOT EXISTS v1alpha1_skills_spec_gin          ON v1alpha1.skills USING GIN (spec jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS v1alpha1_skills_updated_at_desc   ON v1alpha1.skills (updated_at DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_skills_terminating       ON v1alpha1.skills (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
 CREATE OR REPLACE TRIGGER skills_set_updated_at  BEFORE UPDATE ON v1alpha1.skills  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
 CREATE OR REPLACE TRIGGER skills_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.skills  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_skills_status');
 
 CREATE TABLE IF NOT EXISTS v1alpha1.prompts (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
-    version            VARCHAR(255) NOT NULL,
-    generation         BIGINT       NOT NULL DEFAULT 1,
+    version            INTEGER      NOT NULL CHECK (version > 0),
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
+    spec_hash          CHAR(64)     NOT NULL,
     status             JSONB        NOT NULL DEFAULT '{}'::jsonb,
-    is_latest_version  BOOLEAN      NOT NULL DEFAULT false,
-    deletion_timestamp TIMESTAMPTZ,
-    finalizers         JSONB        NOT NULL DEFAULT '[]'::jsonb,
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    deletion_timestamp TIMESTAMPTZ,
     PRIMARY KEY (namespace, name, version)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS v1alpha1_prompts_latest_version  ON v1alpha1.prompts (namespace, name) WHERE is_latest_version;
-CREATE INDEX IF NOT EXISTS v1alpha1_prompts_labels_gin      ON v1alpha1.prompts USING GIN (labels);
-CREATE INDEX IF NOT EXISTS v1alpha1_prompts_spec_gin        ON v1alpha1.prompts USING GIN (spec jsonb_path_ops);
-CREATE INDEX IF NOT EXISTS v1alpha1_prompts_updated_at_desc ON v1alpha1.prompts (updated_at DESC);
-CREATE INDEX IF NOT EXISTS v1alpha1_prompts_terminating    ON v1alpha1.prompts (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
+CREATE INDEX IF NOT EXISTS v1alpha1_prompts_name_version_desc ON v1alpha1.prompts (namespace, name, version DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_prompts_labels_gin        ON v1alpha1.prompts USING GIN (labels);
+CREATE INDEX IF NOT EXISTS v1alpha1_prompts_spec_gin          ON v1alpha1.prompts USING GIN (spec jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS v1alpha1_prompts_updated_at_desc   ON v1alpha1.prompts (updated_at DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_prompts_terminating       ON v1alpha1.prompts (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
 CREATE OR REPLACE TRIGGER prompts_set_updated_at  BEFORE UPDATE ON v1alpha1.prompts  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
 CREATE OR REPLACE TRIGGER prompts_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.prompts  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_prompts_status');
 
 CREATE TABLE IF NOT EXISTS v1alpha1.providers (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
-    version            VARCHAR(255) NOT NULL,
-    generation         BIGINT       NOT NULL DEFAULT 1,
+    version            INTEGER      NOT NULL CHECK (version > 0),
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
+    spec_hash          CHAR(64)     NOT NULL,
     status             JSONB        NOT NULL DEFAULT '{}'::jsonb,
-    is_latest_version  BOOLEAN      NOT NULL DEFAULT false,
-    deletion_timestamp TIMESTAMPTZ,
-    finalizers         JSONB        NOT NULL DEFAULT '[]'::jsonb,
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    deletion_timestamp TIMESTAMPTZ,
     PRIMARY KEY (namespace, name, version)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS v1alpha1_providers_latest_version  ON v1alpha1.providers (namespace, name) WHERE is_latest_version;
-CREATE INDEX IF NOT EXISTS v1alpha1_providers_labels_gin      ON v1alpha1.providers USING GIN (labels);
-CREATE INDEX IF NOT EXISTS v1alpha1_providers_spec_gin        ON v1alpha1.providers USING GIN (spec jsonb_path_ops);
-CREATE INDEX IF NOT EXISTS v1alpha1_providers_updated_at_desc ON v1alpha1.providers (updated_at DESC);
-CREATE INDEX IF NOT EXISTS v1alpha1_providers_terminating    ON v1alpha1.providers (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
+CREATE INDEX IF NOT EXISTS v1alpha1_providers_name_version_desc ON v1alpha1.providers (namespace, name, version DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_providers_labels_gin        ON v1alpha1.providers USING GIN (labels);
+CREATE INDEX IF NOT EXISTS v1alpha1_providers_spec_gin          ON v1alpha1.providers USING GIN (spec jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS v1alpha1_providers_updated_at_desc   ON v1alpha1.providers (updated_at DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_providers_terminating       ON v1alpha1.providers (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
 CREATE OR REPLACE TRIGGER providers_set_updated_at  BEFORE UPDATE ON v1alpha1.providers  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
 CREATE OR REPLACE TRIGGER providers_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.providers  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_providers_status');
+
+-- -----------------------------------------------------------------------------
+-- Deployments: lifecycle state, NOT a versioned artifact. Retains the
+-- pre-immutable-versioning shape (string version, generation, finalizers,
+-- is_latest_version) until/unless the deployment lifecycle is redesigned.
+-- -----------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS v1alpha1.deployments (
     namespace          VARCHAR(255) NOT NULL,
@@ -230,11 +246,13 @@ CREATE OR REPLACE TRIGGER deployments_notify_status   AFTER  INSERT OR UPDATE OR
 
 -- -----------------------------------------------------------------------------
 -- Seed: default providers so deployments can reference them out-of-the-box.
--- Seeded in the `default` namespace.
+-- Seeded in the `default` namespace at version=1. spec_hash is the SHA-256
+-- of the canonical-JSON spec (matches v1alpha1store.SpecHash) so a
+-- subsequent Upsert with the same spec is recognised as a no-op.
 -- -----------------------------------------------------------------------------
 
-INSERT INTO v1alpha1.providers (namespace, name, version, spec, is_latest_version)
+INSERT INTO v1alpha1.providers (namespace, name, version, spec, spec_hash)
 VALUES
-    ('default', 'local',              'v1', '{"platform":"local"}'::jsonb,      true),
-    ('default', 'kubernetes-default', 'v1', '{"platform":"kubernetes"}'::jsonb, true)
+    ('default', 'local',              1, '{"platform":"local"}'::jsonb,      '4b09aeaab0089f5f8891667b446f5f6a4972f73121a504b0391e6b019e27b074'),
+    ('default', 'kubernetes-default', 1, '{"platform":"kubernetes"}'::jsonb, '1a3bd8c39b73e957bd1960d40cb7824fa3e524112d212eaf0318da5f746e41ca')
 ON CONFLICT (namespace, name, version) DO NOTHING;
