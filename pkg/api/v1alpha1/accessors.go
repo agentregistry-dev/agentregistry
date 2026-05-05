@@ -54,15 +54,16 @@ type StructuralValidator interface {
 	Validate() error
 }
 
-// MetadataVersionDefaulter is an optional capability for kinds where
-// metadata.version carries no semantic meaning — Provider (a
-// connection handle to one execution target) and Deployment (a
-// runtime binding). The shared apply pipeline calls
-// DefaultMetadataVersion when the request body's metadata.version is
-// empty, so YAML manifests for these kinds don't have to carry a
-// fabricated placeholder version. Other kinds — Agent, MCPServer,
-// Skill, Prompt — don't implement this interface; their version is
-// real and required.
+// MetadataVersionDefaulter is an optional capability for legacy-mode
+// kinds where the storage layer still requires a non-empty
+// metadata.version in its 3-tuple PK but the field carries no
+// semantic meaning on the wire — currently Deployment only. The
+// shared apply pipeline calls DefaultMetadataVersion when the request
+// body's metadata.version is empty, so YAML manifests for these
+// kinds don't have to carry a fabricated placeholder version.
+// Versioned-artifact kinds (Agent, MCPServer, Skill, Prompt,
+// Provider) ignore meta.Version entirely on the upsert path and do
+// not implement this interface.
 //
 // Returning a non-empty constant ("1" by convention) is what gets
 // stored in the (namespace, name, version) PK. Returning "" defers

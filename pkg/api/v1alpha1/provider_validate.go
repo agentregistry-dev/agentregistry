@@ -36,12 +36,6 @@ func (p *Provider) Validate() error {
 	return errs
 }
 
-// DefaultMetadataVersion satisfies MetadataVersionDefaulter so YAML
-// manifests for Provider can omit metadata.version. The constant "1"
-// goes into the (namespace, name, version) PK; multi-version Provider
-// is not a concept we expose.
-func (p *Provider) DefaultMetadataVersion() string { return "1" }
-
 func knownPlatformNames() []string {
 	out := make([]string, 0, len(KnownPlatforms))
 	for k := range KnownPlatforms {
