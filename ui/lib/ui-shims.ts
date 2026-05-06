@@ -30,10 +30,8 @@ import type {
   SkillSpec,
 } from "@/lib/api/types.gen"
 import {
+  applyBatch as applyBatchRaw,
   applyDeployment as applyDeploymentRaw,
-  applyMcpserver as applyMcpserverRaw,
-  applyPrompt as applyPromptRaw,
-  applySkill as applySkillRaw,
   listAgents as listAgentsRaw,
   listMcpservers as listMcpserversRaw,
   listPrompts as listPromptsRaw,
@@ -258,22 +256,38 @@ function stripLegacy<T extends { name: string; version: string }>(body: T): obje
   return rest
 }
 
+// applySingleDoc wraps a single typed envelope as a JSON body and POSTs
+// it to /v0/apply. Phase 1.5 removed the per-kind PUT routes for
+// content-registry kinds (Agent, MCPServer, RemoteMCPServer, Skill,
+// Prompt) — `applyBatch` is now the only write path. The handler decodes
+// the body via sigs.k8s.io/yaml, which natively accepts JSON, so we can
+// avoid pulling in a YAML serializer for what is always a single
+// document. Throws if the per-doc result reports failure so callers see
+// the same error surface as the old per-kind PUTs.
+async function applySingleDoc<T>(envelope: T & { kind?: string; metadata: { name: string } }): Promise<void> {
+  const json = JSON.stringify(envelope)
+  const body = new Blob([json], { type: "application/yaml" })
+  const { data } = await applyBatchRaw({ throwOnError: true, body })
+  const result = data?.results?.[0]
+  if (!result || result.status === "failed") {
+    const detail = result?.error ?? "no result returned"
+    throw new Error(`apply ${envelope.kind ?? "resource"} ${envelope.metadata.name} failed: ${detail}`)
+  }
+}
+
 export async function createServerV0(opts: LegacyCreateOpts<ServerJson>): Promise<{
   data: ServerResponse
 }> {
   const { namespace, name } = splitName(opts.body.name)
   const spec = stripLegacy(opts.body) as McpServerSpec
-  const { data } = await applyMcpserverRaw({
-    throwOnError: true,
-    path: { name, version: opts.body.version }, query: namespace !== "default" ? { namespace } : undefined,
-    body: {
-      apiVersion: "agentregistry.solo.io/v1alpha1",
-      kind: "MCPServer",
-      metadata: { namespace, name, version: opts.body.version },
-      spec,
-    },
-  })
-  return { data: toServerResponse(data as McpServer) }
+  const envelope: McpServer = {
+    apiVersion: "agentregistry.solo.io/v1alpha1",
+    kind: "MCPServer",
+    metadata: { namespace, name, version: opts.body.version },
+    spec,
+  }
+  await applySingleDoc(envelope)
+  return { data: toServerResponse(envelope) }
 }
 
 export async function createSkillV0(opts: LegacyCreateOpts<SkillJson>): Promise<{
@@ -281,17 +295,14 @@ export async function createSkillV0(opts: LegacyCreateOpts<SkillJson>): Promise<
 }> {
   const { namespace, name } = splitName(opts.body.name)
   const spec = stripLegacy(opts.body) as SkillSpec
-  const { data } = await applySkillRaw({
-    throwOnError: true,
-    path: { name, version: opts.body.version }, query: namespace !== "default" ? { namespace } : undefined,
-    body: {
-      apiVersion: "agentregistry.solo.io/v1alpha1",
-      kind: "Skill",
-      metadata: { namespace, name, version: opts.body.version },
-      spec,
-    },
-  })
-  return { data: toSkillResponse(data as Skill) }
+  const envelope: Skill = {
+    apiVersion: "agentregistry.solo.io/v1alpha1",
+    kind: "Skill",
+    metadata: { namespace, name, version: opts.body.version },
+    spec,
+  }
+  await applySingleDoc(envelope)
+  return { data: toSkillResponse(envelope) }
 }
 
 export async function createPromptV0(opts: LegacyCreateOpts<PromptJson>): Promise<{
@@ -299,17 +310,14 @@ export async function createPromptV0(opts: LegacyCreateOpts<PromptJson>): Promis
 }> {
   const { namespace, name } = splitName(opts.body.name)
   const spec = stripLegacy(opts.body) as PromptSpec
-  const { data } = await applyPromptRaw({
-    throwOnError: true,
-    path: { name, version: opts.body.version }, query: namespace !== "default" ? { namespace } : undefined,
-    body: {
-      apiVersion: "agentregistry.solo.io/v1alpha1",
-      kind: "Prompt",
-      metadata: { namespace, name, version: opts.body.version },
-      spec,
-    },
-  })
-  return { data: toPromptResponse(data as Prompt) }
+  const envelope: Prompt = {
+    apiVersion: "agentregistry.solo.io/v1alpha1",
+    kind: "Prompt",
+    metadata: { namespace, name, version: opts.body.version },
+    spec,
+  }
+  await applySingleDoc(envelope)
+  return { data: toPromptResponse(envelope) }
 }
 
 // ----------------------------------------------------------------------------
