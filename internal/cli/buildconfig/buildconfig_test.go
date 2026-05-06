@@ -1,6 +1,7 @@
 package buildconfig
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -35,4 +36,23 @@ func TestWrite_OverwritesExisting(t *testing.T) {
 
 func TestPath(t *testing.T) {
 	assert.Equal(t, filepath.Join("/proj", "arctl.yaml"), Path("/proj"))
+}
+
+func TestWriteEnvExample_RequiredAndOptional(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, WriteEnvExample(dir, []string{"OPENAI_API_KEY"}, []string{"LOG_LEVEL"}))
+	data, err := os.ReadFile(filepath.Join(dir, ".env.example"))
+	require.NoError(t, err)
+	got := string(data)
+	assert.Contains(t, got, "OPENAI_API_KEY=")
+	assert.Contains(t, got, "# Required")
+	assert.Contains(t, got, "LOG_LEVEL=")
+	assert.Contains(t, got, "# Optional")
+}
+
+func TestWriteEnvExample_NoneOmitsFile(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, WriteEnvExample(dir, nil, nil))
+	_, err := os.Stat(filepath.Join(dir, ".env.example"))
+	assert.True(t, os.IsNotExist(err))
 }
