@@ -67,12 +67,10 @@ func TestBuildAgentEmbeddingPayload_IncludesModelFields(t *testing.T) {
 			Title:         "Scorer",
 			ModelProvider: "openai",
 			ModelName:     "gpt-4o",
-			Framework:     "langchain",
 		},
 	)
 	require.Contains(t, out, "openai")
 	require.Contains(t, out, "gpt-4o")
-	require.Contains(t, out, "langchain")
 }
 
 func TestBuildPromptEmbeddingPayload_IncludesContent(t *testing.T) {

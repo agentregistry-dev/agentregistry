@@ -7,10 +7,7 @@
 //
 // The package never serializes anything, never reads or writes
 // agent.yaml, and never duplicates fields that already exist on
-// v1alpha1.Agent. Resolved skills + prompts are NOT projected here:
-// callers iterate agent.Spec.Skills / agent.Spec.Prompts directly,
-// since those refs are passed straight through to the materialize-time
-// fetch helpers (resolveSkillsForRuntime, ResolveManifestPrompts).
+// v1alpha1.Agent.
 package manifest
 
 import (

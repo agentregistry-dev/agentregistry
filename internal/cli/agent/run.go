@@ -18,7 +18,6 @@ import (
 	agentmanifest "github.com/agentregistry-dev/agentregistry/internal/cli/agent/manifest"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/project"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/tui"
-	agentutils "github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
 	cliUtils "github.com/agentregistry-dev/agentregistry/internal/cli/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
@@ -107,17 +106,9 @@ func runFromDirectory(ctx context.Context, projectDir string, envMap map[string]
 		return fmt.Errorf("failed to resolve agent runtime manifest: %w", err)
 	}
 
-	resolvedSkills, err := resolveSkillsForRuntime(agent.Spec.Skills)
-	if err != nil {
-		return fmt.Errorf("failed to resolve skills from agent manifest: %w", err)
-	}
-	if err := materializeSkillsForRuntime(
-		resolvedSkills,
-		skillsDirForAgentConfig(projectDir, agent.Metadata.Name, ""),
-		verbose,
-	); err != nil {
-		return fmt.Errorf("failed to materialize skills: %w", err)
-	}
+	// Removed in Phase 12: AgentSpec.Skills + .Prompts no longer exist.
+	// The whole arctl agent run path is scheduled for deletion; this file
+	// stays compilable in the meantime by treating skills/prompts as empty.
 
 	// Always clear previously resolved registry artifacts to avoid stale folders.
 	if err := project.CleanupRegistryDir(projectDir, verbose); err != nil {
@@ -143,17 +134,8 @@ func runFromDirectory(ctx context.Context, projectDir string, envMap map[string]
 		return fmt.Errorf("failed to refresh resolved MCP server config: %w", err)
 	}
 
+	// Removed in Phase 12: prompt resolution from AgentSpec.Prompts.
 	var promptsForConfig []common.PythonPrompt
-	if len(agent.Spec.Prompts) > 0 {
-		if verbose {
-			fmt.Printf("[prompt-resolve] Detected %d prompts in manifest\n", len(agent.Spec.Prompts))
-		}
-		resolvedPrompts, err := agentutils.ResolvePromptRefs(agent.Spec.Prompts, verbose)
-		if err != nil {
-			return fmt.Errorf("failed to resolve prompts: %w", err)
-		}
-		promptsForConfig = resolvedPrompts
-	}
 
 	if err := common.RefreshPromptsConfig(
 		&common.MCPConfigTarget{BaseDir: projectDir, AgentName: agent.Metadata.Name},
@@ -176,18 +158,6 @@ func runFromDirectory(ctx context.Context, projectDir string, envMap map[string]
 	return runFromManifest(ctx, resolved, "", &runContext{
 		workDir: projectDir,
 	}, envMap)
-}
-
-func skillsDirForAgentConfig(baseDir, agentName, version string) string {
-	configDir, _ := common.ComputeMCPConfigPath(&common.MCPConfigTarget{
-		BaseDir:   baseDir,
-		AgentName: agentName,
-		Version:   version,
-	})
-	if configDir == "" {
-		return ""
-	}
-	return filepath.Join(configDir, "skills")
 }
 
 // runFromManifest runs an agent based on a fully-resolved manifest, with
@@ -267,17 +237,9 @@ func stageManifestRuntime(_ context.Context, resolved *agentmanifest.ResolvedAge
 		}
 	}
 
-	resolvedSkills, err := resolveSkillsForRuntime(agent.Spec.Skills)
-	if err != nil {
-		return "", false, fmt.Errorf("failed to resolve skills from agent manifest: %w", err)
-	}
-	if err := materializeSkillsForRuntime(
-		resolvedSkills,
-		skillsDirForAgentConfig(workDir, agent.Metadata.Name, version),
-		verbose,
-	); err != nil {
-		return "", false, fmt.Errorf("failed to materialize skills: %w", err)
-	}
+	// Removed in Phase 12: skill + prompt materialization from
+	// AgentSpec.Skills / .Prompts. Whole `arctl agent run` ADK path is
+	// scheduled for deletion in Phase 12.
 
 	if err := common.RefreshMCPConfig(
 		&common.MCPConfigTarget{BaseDir: workDir, AgentName: agent.Metadata.Name, Version: version},
@@ -287,10 +249,7 @@ func stageManifestRuntime(_ context.Context, resolved *agentmanifest.ResolvedAge
 		return "", false, err
 	}
 
-	promptsForConfig, err := resolvePrompts(agent.Spec.Prompts)
-	if err != nil {
-		return "", false, err
-	}
+	var promptsForConfig []common.PythonPrompt
 	if err := common.RefreshPromptsConfig(
 		&common.MCPConfigTarget{BaseDir: workDir, AgentName: agent.Metadata.Name, Version: version},
 		promptsForConfig,
@@ -325,22 +284,6 @@ func filterServersToBuild(servers []agentmanifest.ResolvedMCPServer) []agentmani
 		}
 	}
 	return result
-}
-
-// resolvePrompts resolves prompt ResourceRefs into the runtime's
-// PythonPrompt list (basename keys + content fetched from the registry).
-func resolvePrompts(prompts []v1alpha1.ResourceRef) ([]common.PythonPrompt, error) {
-	if len(prompts) == 0 {
-		return nil, nil
-	}
-	if verbose {
-		fmt.Printf("[prompt-resolve] Detected %d prompts in manifest\n", len(prompts))
-	}
-	out, err := agentutils.ResolvePromptRefs(prompts, verbose)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve prompts: %w", err)
-	}
-	return out, nil
 }
 
 // freePort asks the OS for an available TCP port.
@@ -387,7 +330,7 @@ func renderComposeFromManifest(resolved *agentmanifest.ResolvedAgent, version st
 		Port:          hostPort,
 		ModelProvider: agent.Spec.ModelProvider,
 		ModelName:     agent.Spec.ModelName,
-		HasSkills:     len(agent.Spec.Skills) > 0,
+		HasSkills:     false, // Removed in Phase 12 with the rest of the ADK runtime path.
 		EnvVars:       project.EnvVarsFromMCPServers(resolved.MCPServers),
 		McpServers:    resolved.MCPServers,
 	})

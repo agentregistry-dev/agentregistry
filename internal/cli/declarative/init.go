@@ -134,12 +134,12 @@ Writes:
 				return fmt.Errorf("write .env.example: %w", err)
 			}
 
-			// writeDeclarativeAgentYAML's existing signature is (projectDir, name, ver, image,
-			// language, framework, modelProvider, modelName, description, gitURL, mcps, skills, prompts).
-			// Phase 11 trims unused params; for now pass nil for skills/prompts (no flags exposed).
+			// Skills/Prompts/Language/Framework removed from AgentSpec (Phase 11);
+			// language/framework now live in arctl.yaml only. The declarative
+			// agent.yaml carries only canonical AgentSpec fields.
 			if err := writeDeclarativeAgentYAML(projectDir, name, initVersion, image,
-				plugin.Language, plugin.Framework, initModelProvider, initModelName,
-				initDescription, initGit, initMCPs, nil, nil); err != nil {
+				initModelProvider, initModelName,
+				initDescription, initGit, initMCPs); err != nil {
 				return fmt.Errorf("write agent.yaml: %w", err)
 			}
 
@@ -229,7 +229,7 @@ func parseNameVersion(s string) (string, string) {
 }
 
 // writeDeclarativeAgentYAML writes agent.yaml in the ar.dev/v1alpha1 declarative format.
-func writeDeclarativeAgentYAML(projectDir, name, ver, image, language, framework, modelProvider, modelName, description, gitURL string, mcps, skills, prompts []string) error {
+func writeDeclarativeAgentYAML(projectDir, name, ver, image, modelProvider, modelName, description, gitURL string, mcps []string) error {
 	desc := description
 	if desc == "" {
 		desc = fmt.Sprintf("%s agent", name)
@@ -245,8 +245,6 @@ func writeDeclarativeAgentYAML(projectDir, name, ver, image, language, framework
 			Version: ver,
 		},
 		Spec: v1alpha1.AgentSpec{
-			Language:      language,
-			Framework:     framework,
 			ModelProvider: modelProvider,
 			ModelName:     modelName,
 			Description:   desc,
@@ -268,24 +266,6 @@ func writeDeclarativeAgentYAML(projectDir, name, ver, image, language, framework
 			Kind:    v1alpha1.KindMCPServer,
 			Name:    serverName,
 			Version: mcpVer,
-		})
-	}
-
-	for _, raw := range skills {
-		skillName, skillVer := parseNameVersion(raw)
-		agent.Spec.Skills = append(agent.Spec.Skills, v1alpha1.ResourceRef{
-			Kind:    v1alpha1.KindSkill,
-			Name:    skillName,
-			Version: skillVer,
-		})
-	}
-
-	for _, raw := range prompts {
-		promptName, promptVer := parseNameVersion(raw)
-		agent.Spec.Prompts = append(agent.Spec.Prompts, v1alpha1.ResourceRef{
-			Kind:    v1alpha1.KindPrompt,
-			Name:    promptName,
-			Version: promptVer,
 		})
 	}
 

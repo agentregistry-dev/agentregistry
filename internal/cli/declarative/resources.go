@@ -180,8 +180,6 @@ func agentRow(agent *v1alpha1.Agent) []string {
 	return []string{
 		printer.TruncateString(agent.Metadata.Name, 40),
 		agent.Metadata.Version,
-		printer.EmptyValueOrDefault(agent.Spec.Framework, "<none>"),
-		printer.EmptyValueOrDefault(agent.Spec.Language, "<none>"),
 		printer.EmptyValueOrDefault(agent.Spec.ModelProvider, "<none>"),
 		printer.TruncateString(printer.EmptyValueOrDefault(agent.Spec.ModelName, "<none>"), 30),
 	}

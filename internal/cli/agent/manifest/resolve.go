@@ -19,12 +19,6 @@ import (
 // ResolvedMCPServer (Type="command" or Type="remote") with the bits
 // the runtime templates need to render docker-compose + mcp_tools.
 //
-// Skill and Prompt refs are NOT resolved here — they're materialized
-// later (resolveSkillsForRuntime, ResolveManifestPrompts) since their
-// resolution involves heavier IO (image extraction, content fetch).
-// Callers read agent.Spec.Skills / agent.Spec.Prompts directly when
-// they need the refs.
-//
 // Network calls are performed via apiClient. When agent has no MCPServer
 // refs, no network calls are made.
 func Resolve(ctx context.Context, apiClient *client.Client, agent *v1alpha1.Agent) (*ResolvedAgent, error) {

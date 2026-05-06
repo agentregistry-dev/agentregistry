@@ -40,16 +40,12 @@ spec:
   title: Summarizer
   source:
     image: ghcr.io/example/summarizer:1.0.0
-  language: go
   modelProvider: openai
   modelName: gpt-4o
   mcpServers:
     - kind: MCPServer
       name: github-tools
       version: "0.2"
-  skills:
-    - kind: Skill
-      name: code-review
 `)
 	obj, err := Default.Decode(doc)
 	if err != nil {
@@ -76,9 +72,6 @@ spec:
 		agent.Spec.MCPServers[0].Name != "github-tools" ||
 		agent.Spec.MCPServers[0].Version != "0.2" {
 		t.Fatalf("mcpServers ref mismatch: %+v", agent.Spec.MCPServers)
-	}
-	if len(agent.Spec.Skills) != 1 || agent.Spec.Skills[0].Name != "code-review" {
-		t.Fatalf("skills ref mismatch: %+v", agent.Spec.Skills)
 	}
 }
 

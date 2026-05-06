@@ -138,7 +138,6 @@ func TestAgentResolveRefs_OK(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "a", Version: "v1"},
 		Spec: AgentSpec{
 			MCPServers: []ResourceRef{{Kind: KindMCPServer, Name: "tools", Version: "v1"}},
-			Skills:     []ResourceRef{{Kind: KindSkill, Name: "code-review", Version: "v1"}},
 		},
 	}
 	require.NoError(t, a.ResolveRefs(context.Background(), resolver))

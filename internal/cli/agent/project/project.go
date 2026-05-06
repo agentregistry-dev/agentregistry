@@ -184,7 +184,7 @@ func RegenerateDockerCompose(projectDir string, resolved *agentmanifest.Resolved
 		Port:          8080,
 		ModelProvider: agent.Spec.ModelProvider,
 		ModelName:     agent.Spec.ModelName,
-		HasSkills:     len(agent.Spec.Skills) > 0,
+		HasSkills:     false, // Removed in Phase 12 with the rest of the ADK runtime path.
 		EnvVars:       envVars,
 		McpServers:    resolved.MCPServers,
 	})

@@ -259,7 +259,7 @@ func TestValidateAPIKey(t *testing.T) {
 	}
 }
 
-func resolvedAgentForTest(name, image, modelProvider, modelName string, skills []v1alpha1.ResourceRef) *agentmanifest.ResolvedAgent {
+func resolvedAgentForTest(name, image, modelProvider, modelName string) *agentmanifest.ResolvedAgent {
 	return &agentmanifest.ResolvedAgent{
 		Agent: &v1alpha1.Agent{
 			Metadata: v1alpha1.ObjectMeta{Name: name},
@@ -267,56 +267,17 @@ func resolvedAgentForTest(name, image, modelProvider, modelName string, skills [
 				Source:        &v1alpha1.AgentSource{Image: image},
 				ModelProvider: modelProvider,
 				ModelName:     modelName,
-				Skills:        skills,
 			},
 		},
 	}
 }
 
-func TestRenderComposeFromManifest_WithSkills(t *testing.T) {
-	resolved := resolvedAgentForTest(
-		"test-agent",
-		"docker.io/org/test-agent:latest",
-		"openai", "gpt-4o",
-		[]v1alpha1.ResourceRef{{Kind: v1alpha1.KindSkill, Name: "skill-a", Version: "1"}},
-	)
-
-	data, err := renderComposeFromManifest(resolved, "1.2.3", 8080)
-	if err != nil {
-		t.Fatalf("renderComposeFromManifest() error = %v", err)
-	}
-
-	rendered := string(data)
-	if !strings.Contains(rendered, "KAGENT_SKILLS_FOLDER=/skills") {
-		t.Fatalf("expected rendered compose to include KAGENT_SKILLS_FOLDER")
-	}
-	if !strings.Contains(rendered, "source: ./test-agent/1.2.3/skills") {
-		t.Fatalf("expected rendered compose to include skills bind mount source path")
-	}
-	if !strings.Contains(rendered, "target: /skills") {
-		t.Fatalf("expected rendered compose to include /skills mount target")
-	}
-}
-
-func TestRenderComposeFromManifest_WithoutSkills(t *testing.T) {
-	resolved := resolvedAgentForTest("test-agent", "docker.io/org/test-agent:latest", "openai", "gpt-4o", nil)
-
-	data, err := renderComposeFromManifest(resolved, "1.2.3", 8080)
-	if err != nil {
-		t.Fatalf("renderComposeFromManifest() error = %v", err)
-	}
-
-	rendered := string(data)
-	if strings.Contains(rendered, "KAGENT_SKILLS_FOLDER=/skills") {
-		t.Fatalf("expected rendered compose not to include KAGENT_SKILLS_FOLDER")
-	}
-	if strings.Contains(rendered, "source: ./test-agent/1.2.3/skills") {
-		t.Fatalf("expected rendered compose not to include skills bind mount source path")
-	}
-}
+// TestRenderComposeFromManifest_WithSkills + WithoutSkills removed in
+// Phase 11: AgentSpec.Skills is gone. The whole `arctl agent run` ADK
+// path is scheduled for removal in Phase 12 along with its tests.
 
 func TestRenderComposeFromManifest_CustomPort(t *testing.T) {
-	resolved := resolvedAgentForTest("test-agent", "docker.io/org/test-agent:latest", "openai", "gpt-4o", nil)
+	resolved := resolvedAgentForTest("test-agent", "docker.io/org/test-agent:latest", "openai", "gpt-4o")
 
 	data, err := renderComposeFromManifest(resolved, "1.2.3", 9876)
 	if err != nil {
