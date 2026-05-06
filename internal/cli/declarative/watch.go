@@ -16,7 +16,12 @@ import (
 
 // runWithWatch runs the project under fsnotify; on file changes it restarts
 // the child process after a short debounce. Ignores .git/, .gitignore, .env.
-func runWithWatch(out io.Writer, projectDir string, p *plugins.Plugin, env []string) error {
+//
+// When dryRun is true the watcher itself, the "Watching for changes…" line,
+// and the "Change detected" line still print, but the underlying child
+// process is never started. This is what `arctl run --watch --dry-run`
+// surfaces to tests.
+func runWithWatch(out io.Writer, projectDir string, p *plugins.Plugin, env []string, dryRun bool) error {
 	var current *exec.Cmd
 	startCmd := func() error {
 		if current != nil {
@@ -30,6 +35,10 @@ func runWithWatch(out io.Writer, projectDir string, p *plugins.Plugin, env []str
 		})
 		if err != nil {
 			return err
+		}
+		if dryRun {
+			fmt.Fprintln(out, "(dry-run; skipping exec)")
+			return nil
 		}
 		current = exec.Command(argv[0], argv[1:]...)
 		current.Dir = projectDir

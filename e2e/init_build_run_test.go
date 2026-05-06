@@ -213,7 +213,7 @@ func TestE2E_RunWatch_RebuildsOnFileChange(t *testing.T) {
 	pd := filepath.Join(tmp, "watchtest")
 	require.NoError(t, os.WriteFile(filepath.Join(pd, ".env"), []byte("GOOGLE_API_KEY=stub\n"), 0644))
 
-	cmd := exec.Command("arctl", "run", "--watch", "--dry-run")
+	cmd := exec.Command(arctlBinary(t), "run", "--watch", "--dry-run")
 	cmd.Dir = pd
 	stdout, err := cmd.StdoutPipe()
 	require.NoError(t, err)
