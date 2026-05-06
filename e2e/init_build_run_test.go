@@ -23,7 +23,7 @@ func TestE2E_InitAgent_CreatesExpectedTree(t *testing.T) {
 	RequireSuccess(t, result)
 
 	pd := filepath.Join(tmp, "myagent")
-	for _, f := range []string{"agent.yaml", "arctl.yaml", ".env.example", "Dockerfile", "agent.py"} {
+	for _, f := range []string{"agent.yaml", "arctl.yaml", ".env.example", "Dockerfile", "agent/agent.py"} {
 		_, err := os.Stat(filepath.Join(pd, f))
 		assert.NoError(t, err, "expected %s to exist", f)
 	}
