@@ -6,62 +6,45 @@ Define agents, MCP servers, skills, and prompts as YAML files and manage them wi
 
 ```bash
 arctl init agent adk python summarizer --model-provider gemini --model-name gemini-2.5-flash
-arctl build summarizer/ --push    # optional: build and push Docker image
+arctl build summarizer/ --push      # optional: build and push Docker image
 arctl apply -f summarizer/agent.yaml
 ```
 
-## Resource Types
+## Versioning
 
-| Kind | get | delete |
-|------|-----|--------|
-| `Agent` | `arctl get agents` | `arctl delete agent NAME --version VERSION` |
-| `MCPServer` | `arctl get mcps` | `arctl delete mcp NAME --version VERSION` |
-| `Skill` | `arctl get skills` | `arctl delete skill NAME --version VERSION` |
-| `Prompt` | `arctl get prompts` | `arctl delete prompt NAME --version VERSION` |
-
-## Agents
+Versions are system-assigned monotonic integers. First `apply` of a new name produces `1`; re-applying the same spec is a no-op; a changed spec produces `2`, `3`, …. Older versions are immutable. Deleting every version frees the name.
 
 ```bash
-arctl init agent adk python summarizer --model-provider gemini --model-name gemini-2.5-flash
-arctl build summarizer/ --push    # optional: build and push Docker image
-arctl apply -f summarizer/agent.yaml
-arctl get agent summarizer
-arctl delete agent summarizer --version 0.1.0
+arctl get agent NAME                   # latest
+arctl get agent NAME --version 1       # specific
+arctl get agent NAME --all-versions    # history
+
+arctl delete agent NAME                # latest
+arctl delete agent NAME --version 1    # specific
+arctl delete agent NAME --all-versions # frees the name
 ```
 
-## MCP Servers
+## Resources
+
+The same shape works for every kind — substitute the alias: `agent`, `mcp`, `skill`, `prompt`.
 
 ```bash
-arctl init mcp fastmcp-python acme/my-server
-arctl build my-server/ --push    # optional: build and push Docker image
-arctl apply -f my-server/mcp.yaml
-arctl get mcps
-arctl delete mcp acme/my-server --version 0.1.0
-```
-
-## Skills & Prompts
-
-```bash
-arctl init skill summarize --category nlp
-arctl apply -f summarize/skill.yaml
-arctl get skills
-arctl delete skill summarize --version 0.1.0
-
-arctl init prompt summarizer-system-prompt
-arctl apply -f summarizer-system-prompt.yaml
-arctl get prompts
-arctl delete prompt summarizer-system-prompt --version 0.1.0
+arctl init <kind> <name> [flags]   # scaffold YAML
+arctl build <dir> --push           # optional: build + push image (agent, mcp)
+arctl apply -f <file>.yaml         # publish
+arctl get <kind> <name>            # read
+arctl delete <kind> <name>         # remove
 ```
 
 ## Tips
 
 ```bash
-# Apply multiple resources from one file (separated by ---)
-# Resources are applied in document order — define dependencies before the agent
+# Multi-resource file (separated by ---). Apply order = document order, so
+# define dependencies (MCP servers, skills, prompts) before the agent.
 arctl apply -f full-stack.yaml
 
 # List all resource types at once
 arctl get all
 ```
 
-See [`examples/`](../examples/) for ready-to-use YAML files, including [`full-stack.yaml`](../examples/full-stack.yaml) which defines an agent and all its dependencies in a single file.
+See [`examples/`](../examples/) for ready-to-use YAML, including [`full-stack.yaml`](../examples/full-stack.yaml) — an agent and all its dependencies in one file.

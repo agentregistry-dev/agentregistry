@@ -57,12 +57,12 @@ spec:
   mcpServers:
     - kind: MCPServer
       name: acme/fetch
-      version: "1.0.0"
+      version: "1"
   skills:
     - kind: Skill
       name: summarize
-      version: "1.0.0"
+      version: "1"
   prompts:
     - kind: Prompt
       name: summarizer-system-prompt
-      version: "1.0.0"
+      version: "1"
