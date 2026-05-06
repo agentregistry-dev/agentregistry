@@ -26,13 +26,18 @@ type rowScanner interface {
 //
 // Column order must match:
 //
-//	namespace, name, version, generation, labels, annotations, spec, status,
+//	namespace, name, version, uid, generation, labels, annotations, spec, status,
 //	deletion_timestamp, finalizers, created_at, updated_at
+//
+// `uid` is selected as `uid::text` so it scans into a Go string without
+// requiring a pgtype UUID codec — keeps the column types in this scan
+// path uniformly textual / numeric / timestamptz.
 func scanRow(row rowScanner) (*v1alpha1.RawObject, error) {
 	var (
 		namespace         string
 		name              string
 		version           string
+		uid               string
 		generation        int64
 		labelsJSON        []byte
 		annotationsJSON   []byte
@@ -44,7 +49,7 @@ func scanRow(row rowScanner) (*v1alpha1.RawObject, error) {
 		updatedAt         time.Time
 	)
 	if err := row.Scan(
-		&namespace, &name, &version, &generation,
+		&namespace, &name, &version, &uid, &generation,
 		&labelsJSON, &annotationsJSON, &specJSON, &statusJSON,
 		&deletionTimestamp, &finalizersJSON,
 		&createdAt, &updatedAt,
@@ -56,7 +61,7 @@ func scanRow(row rowScanner) (*v1alpha1.RawObject, error) {
 	}
 
 	return decodeRow(
-		namespace, name, version, generation,
+		namespace, name, version, uid, generation,
 		labelsJSON, annotationsJSON, specJSON, statusJSON,
 		deletionTimestamp, finalizersJSON, createdAt, updatedAt,
 	)
@@ -67,7 +72,7 @@ func scanRow(row rowScanner) (*v1alpha1.RawObject, error) {
 // distance score) can reuse the deserialization without repeating its
 // logic.
 func decodeRow(
-	namespace, name, version string,
+	namespace, name, version, uid string,
 	generation int64,
 	labelsJSON, annotationsJSON, specJSON, statusJSON []byte,
 	deletionTimestamp *time.Time,
@@ -99,6 +104,7 @@ func decodeRow(
 			Namespace:         namespace,
 			Name:              name,
 			Version:           version,
+			UID:               uid,
 			Labels:            labels,
 			Annotations:       annotations,
 			Generation:        generation,

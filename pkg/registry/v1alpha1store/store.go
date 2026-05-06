@@ -54,11 +54,16 @@ func NewStore(pool *pgxpool.Pool, table string) *Store {
 
 // UpsertResult describes what happened on Upsert. SpecChanged is true when
 // the incoming spec bytes differ from the existing row's spec (or when the
-// row didn't exist). Generation reflects the final stored value.
+// row didn't exist). Generation reflects the final stored value. UID is the
+// row's metadata.uid as observed after the write — Postgres assigns it via
+// a column default on first insert and preserves it across re-applies, so
+// callers can treat this as the authoritative server-side identity even on
+// the no-op update path.
 type UpsertResult struct {
 	Created     bool
 	SpecChanged bool
 	Generation  int64
+	UID         string
 }
 
 // ErrInvalidCursor reports that a list pagination cursor could not be parsed.
@@ -258,7 +263,14 @@ func (s *Store) Upsert(ctx context.Context, namespace, name, version string, spe
 			annotationsJSON = a
 		}
 
-		_, err = tx.Exec(ctx,
+		// `uid` is intentionally absent from both the INSERT column list
+		// and the ON CONFLICT DO UPDATE SET list: the column default
+		// (gen_random_uuid()) fires on create, and conflict-update
+		// preserves the existing value — Kubernetes-style read-only
+		// metadata.uid. RETURNING uid::text feeds back whichever path
+		// won so UpsertResult always carries the authoritative value.
+		var uid string
+		err = tx.QueryRow(ctx,
 			fmt.Sprintf(`
 				INSERT INTO %s (namespace, name, version, generation, labels, annotations, spec, finalizers)
 				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -268,11 +280,13 @@ func (s *Store) Upsert(ctx context.Context, namespace, name, version string, spe
 				    annotations = EXCLUDED.annotations,
 				    spec        = EXCLUDED.spec,
 				    finalizers  = EXCLUDED.finalizers
+				RETURNING uid::text
 			`, s.table),
-			namespace, name, version, newGen, labelsJSON, annotationsJSON, []byte(specJSON), finalizersJSON)
+			namespace, name, version, newGen, labelsJSON, annotationsJSON, []byte(specJSON), finalizersJSON).Scan(&uid)
 		if err != nil {
 			return fmt.Errorf("upsert row: %w", err)
 		}
+		res.UID = uid
 
 		if err := s.recomputeLatest(ctx, tx, namespace, name); err != nil {
 			return fmt.Errorf("recompute latest: %w", err)
@@ -463,7 +477,7 @@ func (s *Store) PatchAnnotations(ctx context.Context, namespace, name, version s
 func (s *Store) Get(ctx context.Context, namespace, name, version string) (*v1alpha1.RawObject, error) {
 	row := s.pool.QueryRow(ctx,
 		fmt.Sprintf(`
-			SELECT namespace, name, version, generation, labels, annotations, spec, status,
+			SELECT namespace, name, version, uid::text, generation, labels, annotations, spec, status,
 			       deletion_timestamp, finalizers, created_at, updated_at
 			FROM %s
 			WHERE namespace=$1 AND name=$2 AND version=$3`, s.table),
@@ -477,7 +491,7 @@ func (s *Store) Get(ctx context.Context, namespace, name, version string) (*v1al
 func (s *Store) GetLatest(ctx context.Context, namespace, name string) (*v1alpha1.RawObject, error) {
 	row := s.pool.QueryRow(ctx,
 		fmt.Sprintf(`
-			SELECT namespace, name, version, generation, labels, annotations, spec, status,
+			SELECT namespace, name, version, uid::text, generation, labels, annotations, spec, status,
 			       deletion_timestamp, finalizers, created_at, updated_at
 			FROM %s
 			WHERE namespace=$1 AND name=$2 AND is_latest_version`, s.table),
@@ -650,7 +664,7 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 	}
 
 	query := fmt.Sprintf(`
-		SELECT namespace, name, version, generation, labels, annotations, spec, status,
+		SELECT namespace, name, version, uid::text, generation, labels, annotations, spec, status,
 		       deletion_timestamp, finalizers, created_at, updated_at
 		FROM %s`, s.table)
 	if len(where) > 0 {
@@ -823,7 +837,7 @@ type FindReferrersOpts struct {
 func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opts FindReferrersOpts) ([]*v1alpha1.RawObject, error) {
 	args := []any{[]byte(pathJSON)}
 	query := fmt.Sprintf(`
-		SELECT namespace, name, version, generation, labels, annotations, spec, status,
+		SELECT namespace, name, version, uid::text, generation, labels, annotations, spec, status,
 		       deletion_timestamp, finalizers, created_at, updated_at
 		FROM %s
 		WHERE spec @> $1::jsonb`, s.table)

@@ -80,6 +80,19 @@ func applyCore(
 	meta := obj.GetMetadata()
 	kind := obj.GetKind()
 
+	// Strip caller-supplied metadata.uid before any downstream stage
+	// observes it. UID is server-managed (Postgres assigns it via the
+	// column default on first insert and preserves it across re-applies),
+	// and Authorize/PostUpsert hooks must not be able to see — let alone
+	// branch on — a forged UID. Centralizing the strip here covers every
+	// applyCore caller: the single-resource PUT handler and the multi-doc
+	// batch endpoint alike. Mirrors Kubernetes' read-only metadata.uid.
+	mutated := false
+	if meta.UID != "" {
+		meta.UID = ""
+		mutated = true
+	}
+
 	// Stamp default metadata.version for kinds that opt out of the
 	// version-required validator (Provider, Deployment) — see
 	// v1alpha1.MetadataVersionDefaulter. Without this, a YAML manifest
@@ -92,9 +105,12 @@ func applyCore(
 		if defaulter, ok := obj.(v1alpha1.MetadataVersionDefaulter); ok {
 			if def := defaulter.DefaultMetadataVersion(); def != "" {
 				meta.Version = def
-				obj.SetMetadata(*meta)
+				mutated = true
 			}
 		}
+	}
+	if mutated {
+		obj.SetMetadata(*meta)
 	}
 
 	if opts.Authorize != nil {
