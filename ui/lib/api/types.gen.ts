@@ -339,6 +339,7 @@ export type SkillSpec = {
 
 export type Status = {
     conditions?: Array<Condition>;
+    version?: number;
 };
 
 export type VersionBody = {
@@ -377,7 +378,7 @@ export type ListAgentsData = {
          */
         labels?: string;
         /**
-         * Only return rows with is_latest_version=true.
+         * Only return the highest live version per (namespace, name).
          */
         latestOnly?: boolean;
         /**
@@ -508,11 +509,10 @@ export type GetAgentResponses = {
 
 export type GetAgentResponse = GetAgentResponses[keyof GetAgentResponses];
 
-export type ApplyAgentData = {
-    body?: Agent;
+export type ListVersionsAgentData = {
+    body?: never;
     path: {
         name: string;
-        version: string;
     };
     query?: {
         /**
@@ -520,26 +520,26 @@ export type ApplyAgentData = {
          */
         namespace?: string;
     };
-    url: '/v0/agents/{name}/{version}';
+    url: '/v0/agents/{name}/versions';
 };
 
-export type ApplyAgentErrors = {
+export type ListVersionsAgentErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type ApplyAgentError = ApplyAgentErrors[keyof ApplyAgentErrors];
+export type ListVersionsAgentError = ListVersionsAgentErrors[keyof ListVersionsAgentErrors];
 
-export type ApplyAgentResponses = {
+export type ListVersionsAgentResponses = {
     /**
      * OK
      */
-    200: Agent;
+    200: ListOutputAgentBody;
 };
 
-export type ApplyAgentResponse = ApplyAgentResponses[keyof ApplyAgentResponses];
+export type ListVersionsAgentResponse = ListVersionsAgentResponses[keyof ListVersionsAgentResponses];
 
 export type DeleteBatchData = {
     body: Blob | File;
@@ -622,7 +622,7 @@ export type ListDeploymentsData = {
          */
         labels?: string;
         /**
-         * Only return rows with is_latest_version=true.
+         * Only return the highest live version per (namespace, name).
          */
         latestOnly?: boolean;
         /**
@@ -832,7 +832,7 @@ export type ListMcpserversData = {
          */
         labels?: string;
         /**
-         * Only return rows with is_latest_version=true.
+         * Only return the highest live version per (namespace, name).
          */
         latestOnly?: boolean;
         /**
@@ -963,11 +963,10 @@ export type GetMcpserverResponses = {
 
 export type GetMcpserverResponse = GetMcpserverResponses[keyof GetMcpserverResponses];
 
-export type ApplyMcpserverData = {
-    body?: McpServer;
+export type ListVersionsMcpserverData = {
+    body?: never;
     path: {
         name: string;
-        version: string;
     };
     query?: {
         /**
@@ -975,26 +974,26 @@ export type ApplyMcpserverData = {
          */
         namespace?: string;
     };
-    url: '/v0/mcpservers/{name}/{version}';
+    url: '/v0/mcpservers/{name}/versions';
 };
 
-export type ApplyMcpserverErrors = {
+export type ListVersionsMcpserverErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type ApplyMcpserverError = ApplyMcpserverErrors[keyof ApplyMcpserverErrors];
+export type ListVersionsMcpserverError = ListVersionsMcpserverErrors[keyof ListVersionsMcpserverErrors];
 
-export type ApplyMcpserverResponses = {
+export type ListVersionsMcpserverResponses = {
     /**
      * OK
      */
-    200: McpServer;
+    200: ListOutputMcpServerBody;
 };
 
-export type ApplyMcpserverResponse = ApplyMcpserverResponses[keyof ApplyMcpserverResponses];
+export type ListVersionsMcpserverResponse = ListVersionsMcpserverResponses[keyof ListVersionsMcpserverResponses];
 
 export type PingV0Data = {
     body?: never;
@@ -1042,7 +1041,7 @@ export type ListPromptsData = {
          */
         labels?: string;
         /**
-         * Only return rows with is_latest_version=true.
+         * Only return the highest live version per (namespace, name).
          */
         latestOnly?: boolean;
         /**
@@ -1173,11 +1172,10 @@ export type GetPromptResponses = {
 
 export type GetPromptResponse = GetPromptResponses[keyof GetPromptResponses];
 
-export type ApplyPromptData = {
-    body?: Prompt;
+export type ListVersionsPromptData = {
+    body?: never;
     path: {
         name: string;
-        version: string;
     };
     query?: {
         /**
@@ -1185,26 +1183,26 @@ export type ApplyPromptData = {
          */
         namespace?: string;
     };
-    url: '/v0/prompts/{name}/{version}';
+    url: '/v0/prompts/{name}/versions';
 };
 
-export type ApplyPromptErrors = {
+export type ListVersionsPromptErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type ApplyPromptError = ApplyPromptErrors[keyof ApplyPromptErrors];
+export type ListVersionsPromptError = ListVersionsPromptErrors[keyof ListVersionsPromptErrors];
 
-export type ApplyPromptResponses = {
+export type ListVersionsPromptResponses = {
     /**
      * OK
      */
-    200: Prompt;
+    200: ListOutputPromptBody;
 };
 
-export type ApplyPromptResponse = ApplyPromptResponses[keyof ApplyPromptResponses];
+export type ListVersionsPromptResponse = ListVersionsPromptResponses[keyof ListVersionsPromptResponses];
 
 export type ListProvidersData = {
     body?: never;
@@ -1227,7 +1225,7 @@ export type ListProvidersData = {
          */
         labels?: string;
         /**
-         * Only return rows with is_latest_version=true.
+         * Only return the highest live version per (namespace, name).
          */
         latestOnly?: boolean;
         /**
@@ -1412,7 +1410,7 @@ export type ListRemotemcpserversData = {
          */
         labels?: string;
         /**
-         * Only return rows with is_latest_version=true.
+         * Only return the highest live version per (namespace, name).
          */
         latestOnly?: boolean;
         /**
@@ -1543,11 +1541,10 @@ export type GetRemotemcpserverResponses = {
 
 export type GetRemotemcpserverResponse = GetRemotemcpserverResponses[keyof GetRemotemcpserverResponses];
 
-export type ApplyRemotemcpserverData = {
-    body?: RemoteMcpServer;
+export type ListVersionsRemotemcpserverData = {
+    body?: never;
     path: {
         name: string;
-        version: string;
     };
     query?: {
         /**
@@ -1555,26 +1552,26 @@ export type ApplyRemotemcpserverData = {
          */
         namespace?: string;
     };
-    url: '/v0/remotemcpservers/{name}/{version}';
+    url: '/v0/remotemcpservers/{name}/versions';
 };
 
-export type ApplyRemotemcpserverErrors = {
+export type ListVersionsRemotemcpserverErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type ApplyRemotemcpserverError = ApplyRemotemcpserverErrors[keyof ApplyRemotemcpserverErrors];
+export type ListVersionsRemotemcpserverError = ListVersionsRemotemcpserverErrors[keyof ListVersionsRemotemcpserverErrors];
 
-export type ApplyRemotemcpserverResponses = {
+export type ListVersionsRemotemcpserverResponses = {
     /**
      * OK
      */
-    200: RemoteMcpServer;
+    200: ListOutputRemoteMcpServerBody;
 };
 
-export type ApplyRemotemcpserverResponse = ApplyRemotemcpserverResponses[keyof ApplyRemotemcpserverResponses];
+export type ListVersionsRemotemcpserverResponse = ListVersionsRemotemcpserverResponses[keyof ListVersionsRemotemcpserverResponses];
 
 export type ListSkillsData = {
     body?: never;
@@ -1597,7 +1594,7 @@ export type ListSkillsData = {
          */
         labels?: string;
         /**
-         * Only return rows with is_latest_version=true.
+         * Only return the highest live version per (namespace, name).
          */
         latestOnly?: boolean;
         /**
@@ -1728,11 +1725,10 @@ export type GetSkillResponses = {
 
 export type GetSkillResponse = GetSkillResponses[keyof GetSkillResponses];
 
-export type ApplySkillData = {
-    body?: Skill;
+export type ListVersionsSkillData = {
+    body?: never;
     path: {
         name: string;
-        version: string;
     };
     query?: {
         /**
@@ -1740,26 +1736,26 @@ export type ApplySkillData = {
          */
         namespace?: string;
     };
-    url: '/v0/skills/{name}/{version}';
+    url: '/v0/skills/{name}/versions';
 };
 
-export type ApplySkillErrors = {
+export type ListVersionsSkillErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type ApplySkillError = ApplySkillErrors[keyof ApplySkillErrors];
+export type ListVersionsSkillError = ListVersionsSkillErrors[keyof ListVersionsSkillErrors];
 
-export type ApplySkillResponses = {
+export type ListVersionsSkillResponses = {
     /**
      * OK
      */
-    200: Skill;
+    200: ListOutputSkillBody;
 };
 
-export type ApplySkillResponse = ApplySkillResponses[keyof ApplySkillResponses];
+export type ListVersionsSkillResponse = ListVersionsSkillResponses[keyof ListVersionsSkillResponses];
 
 export type GetVersionV0Data = {
     body?: never;
