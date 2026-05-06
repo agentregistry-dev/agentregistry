@@ -281,7 +281,7 @@ export async function createServerV0(opts: LegacyCreateOpts<ServerJson>): Promis
   const { namespace, name } = splitName(opts.body.name)
   const spec = stripLegacy(opts.body) as McpServerSpec
   const envelope: McpServer = {
-    apiVersion: "agentregistry.solo.io/v1alpha1",
+    apiVersion: "ar.dev/v1alpha1",
     kind: "MCPServer",
     metadata: { namespace, name, version: opts.body.version },
     spec,
@@ -296,7 +296,7 @@ export async function createSkillV0(opts: LegacyCreateOpts<SkillJson>): Promise<
   const { namespace, name } = splitName(opts.body.name)
   const spec = stripLegacy(opts.body) as SkillSpec
   const envelope: Skill = {
-    apiVersion: "agentregistry.solo.io/v1alpha1",
+    apiVersion: "ar.dev/v1alpha1",
     kind: "Skill",
     metadata: { namespace, name, version: opts.body.version },
     spec,
@@ -311,7 +311,7 @@ export async function createPromptV0(opts: LegacyCreateOpts<PromptJson>): Promis
   const { namespace, name } = splitName(opts.body.name)
   const spec = stripLegacy(opts.body) as PromptSpec
   const envelope: Prompt = {
-    apiVersion: "agentregistry.solo.io/v1alpha1",
+    apiVersion: "ar.dev/v1alpha1",
     kind: "Prompt",
     metadata: { namespace, name, version: opts.body.version },
     spec,
@@ -360,7 +360,7 @@ export async function deployServer(opts: { throwOnError?: true; body: DeployServ
     throwOnError: true,
     path: { name: deploymentName, version: opts.body.version }, query: namespace !== "default" ? { namespace } : undefined,
     body: {
-      apiVersion: "agentregistry.solo.io/v1alpha1",
+      apiVersion: "ar.dev/v1alpha1",
       kind: "Deployment",
       metadata: { namespace, name: deploymentName, version: opts.body.version },
       spec: {
