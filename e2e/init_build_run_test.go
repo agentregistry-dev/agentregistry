@@ -5,8 +5,10 @@ package e2e
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -182,4 +184,48 @@ run:
 
 	_, err := os.Stat(filepath.Join(tmp, "fakeproj", "arctl.yaml"))
 	require.NoError(t, err)
+}
+
+func TestE2E_RunWatch_RebuildsOnFileChange(t *testing.T) {
+	tmp := t.TempDir()
+	require.NoError(t, os.Chdir(tmp))
+
+	require.NoError(t, RunArctl(t, tmp, "init", "agent", "watchtest",
+		"--framework", "adk", "--language", "python").Err)
+	pd := filepath.Join(tmp, "watchtest")
+	require.NoError(t, os.WriteFile(filepath.Join(pd, ".env"), []byte("GOOGLE_API_KEY=stub\n"), 0644))
+
+	cmd := exec.Command("arctl", "run", "--watch", "--dry-run")
+	cmd.Dir = pd
+	stdout, err := cmd.StdoutPipe()
+	require.NoError(t, err)
+	require.NoError(t, cmd.Start())
+	defer cmd.Process.Kill()
+
+	// Give it a beat, touch a file, expect to see "Change detected".
+	time.Sleep(500 * time.Millisecond)
+	require.NoError(t, os.WriteFile(filepath.Join(pd, "agent.py"), []byte("# updated"), 0644))
+
+	buf := make([]byte, 4096)
+	deadline := time.Now().Add(5 * time.Second)
+	got := ""
+	for time.Now().Before(deadline) {
+		stdout.Read(buf)
+		got += string(buf)
+		if assert.ObjectsAreEqual(true, contains(got, "Change detected")) {
+			return
+		}
+	}
+	t.Fatalf("expected 'Change detected' within 5s; got:\n%s", got)
+}
+
+func contains(s, sub string) bool {
+	return len(s) >= len(sub) && (s == sub || (func() bool {
+		for i := 0; i+len(sub) <= len(s); i++ {
+			if s[i:i+len(sub)] == sub {
+				return true
+			}
+		}
+		return false
+	}()))
 }
