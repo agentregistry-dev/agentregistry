@@ -13,7 +13,7 @@ import (
 
 func TestRenderArgs_SubstitutesPerArg(t *testing.T) {
 	args := []string{"docker", "build", "-t", "{{.Image}}", "{{.ProjectDir}}"}
-	out, err := RenderArgs(args, map[string]string{
+	out, err := RenderArgs(args, map[string]any{
 		"Image":      "myagent:dev",
 		"ProjectDir": "/path/to/proj",
 	})
@@ -22,7 +22,7 @@ func TestRenderArgs_SubstitutesPerArg(t *testing.T) {
 }
 
 func TestRenderArgs_MissingValueErrors(t *testing.T) {
-	_, err := RenderArgs([]string{"{{.Missing}}"}, map[string]string{})
+	_, err := RenderArgs([]string{"{{.Missing}}"}, map[string]any{})
 	require.Error(t, err)
 }
 
@@ -31,7 +31,7 @@ func TestExec_Smoke(t *testing.T) {
 		t.Skip("posix-only smoke test")
 	}
 	cmd := Command{Command: []string{"echo", "{{.Greeting}}"}}
-	out, err := ExecCapture(cmd, "/tmp", map[string]string{"Greeting": "hello"})
+	out, err := ExecCapture(cmd, "/tmp", map[string]any{"Greeting": "hello"})
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(out, "hello"))
 }
@@ -45,7 +45,7 @@ func TestRenderTemplates_CopiesAndSubstitutes(t *testing.T) {
 
 	dst := t.TempDir()
 	p := &Plugin{TemplatesDir: "./templates", SourceDir: pluginDir}
-	require.NoError(t, RenderTemplates(p, dst, map[string]string{"Name": "myagent"}))
+	require.NoError(t, RenderTemplates(p, dst, map[string]any{"Name": "myagent"}))
 
 	got, err := os.ReadFile(filepath.Join(dst, "agent.py"))
 	require.NoError(t, err)

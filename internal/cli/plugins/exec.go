@@ -12,7 +12,7 @@ import (
 
 // RenderArgs runs Go text/template substitution on each arg independently.
 // Missing values cause an error.
-func RenderArgs(args []string, vars map[string]string) ([]string, error) {
+func RenderArgs(args []string, vars map[string]any) ([]string, error) {
 	out := make([]string, len(args))
 	for i, raw := range args {
 		t, err := template.New("arg").Option("missingkey=error").Parse(raw)
@@ -32,7 +32,7 @@ func RenderArgs(args []string, vars map[string]string) ([]string, error) {
 // substituted into argv. Captures combined stdout+stderr and returns it.
 //
 // Commands run via os/exec with an arg list — never through a shell.
-func ExecCapture(cmd Command, workDir string, vars map[string]string) (string, error) {
+func ExecCapture(cmd Command, workDir string, vars map[string]any) (string, error) {
 	argv, err := resolveArgv(cmd, vars)
 	if err != nil {
 		return "", err
@@ -46,7 +46,7 @@ func ExecCapture(cmd Command, workDir string, vars map[string]string) (string, e
 
 // ExecForeground runs a Command with stdout/stderr forwarded to the current process.
 // Used by arctl run / build for live output.
-func ExecForeground(cmd Command, workDir string, vars map[string]string, extraEnv []string) error {
+func ExecForeground(cmd Command, workDir string, vars map[string]any, extraEnv []string) error {
 	argv, err := resolveArgv(cmd, vars)
 	if err != nil {
 		return err
@@ -60,15 +60,19 @@ func ExecForeground(cmd Command, workDir string, vars map[string]string, extraEn
 	return c.Run()
 }
 
-func resolveArgv(cmd Command, vars map[string]string) ([]string, error) {
+func resolveArgv(cmd Command, vars map[string]any) ([]string, error) {
 	if cmd.Script != "" {
 		path := cmd.Script
 		if !filepath.IsAbs(path) {
 			// Script paths are relative to the plugin's SourceDir, which the
 			// caller must include as PluginDir in vars.
-			pluginDir, ok := vars["PluginDir"]
+			raw, ok := vars["PluginDir"]
 			if !ok {
 				return nil, fmt.Errorf("plugin script %q resolution requires PluginDir var", path)
+			}
+			pluginDir, ok := raw.(string)
+			if !ok {
+				return nil, fmt.Errorf("plugin script %q: PluginDir var must be string", path)
 			}
 			path = filepath.Join(pluginDir, path)
 		}
@@ -80,10 +84,10 @@ func resolveArgv(cmd Command, vars map[string]string) ([]string, error) {
 	return RenderArgs(cmd.Command, vars)
 }
 
-func envFromVars(vars map[string]string) []string {
+func envFromVars(vars map[string]any) []string {
 	out := make([]string, 0, len(vars))
 	for k, v := range vars {
-		out = append(out, fmt.Sprintf("ARCTL_VAR_%s=%s", k, v))
+		out = append(out, fmt.Sprintf("ARCTL_VAR_%s=%v", k, v))
 	}
 	return out
 }
@@ -91,7 +95,7 @@ func envFromVars(vars map[string]string) []string {
 // RenderTemplates walks the plugin's templates directory and writes each file
 // to dst. Files ending in `.tmpl` get text/template substitution applied AND
 // the `.tmpl` extension stripped on output. Other files are copied verbatim.
-func RenderTemplates(p *Plugin, dst string, vars map[string]string) error {
+func RenderTemplates(p *Plugin, dst string, vars map[string]any) error {
 	if p.TemplatesDir == "" {
 		return fmt.Errorf("plugin %q: templatesDir not set", p.Name)
 	}

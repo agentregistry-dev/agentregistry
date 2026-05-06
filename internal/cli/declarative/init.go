@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	agentframeworks "github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks"
-	agentcommon "github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	mcpframeworks "github.com/agentregistry-dev/agentregistry/internal/cli/mcp/frameworks"
 	mcptemplates "github.com/agentregistry-dev/agentregistry/internal/cli/mcp/templates"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/plugins"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	skilltemplates "github.com/agentregistry-dev/agentregistry/internal/cli/skill/templates"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
@@ -66,47 +66,53 @@ func newInitAgentCmd() *cobra.Command {
 		initDescription   string
 		initModelProvider string
 		initModelName     string
+		initFramework     string
+		initLanguage      string
 		initImage         string
 		initGit           string
 		initMCPs          []string
-		initSkills        []string
-		initPrompts       []string
 	)
 
 	cmd := &cobra.Command{
-		Use:   "agent FRAMEWORK LANGUAGE NAME",
-		Short: "Scaffold a new agent project with declarative agent.yaml",
-		Long: `Scaffold a new ADK Python agent project. Creates a project directory
-containing a declarative agent.yaml (ar.dev/v1alpha1), Dockerfile, and source stubs.
+		Use:   "agent NAME",
+		Short: "Scaffold a new agent project",
+		Long: `Scaffold a new agent project.
 
-The generated agent.yaml can be applied directly:
-  arctl apply -f NAME/agent.yaml
-
-Supported frameworks: adk
-Supported languages:  python (for adk)`,
-		Example: `  arctl init agent adk python myagent
-  arctl init agent adk python myagent --model-provider openai --model-name gpt-4o
-  arctl init agent adk python myagent --git https://github.com/acme/myagent
-  arctl init agent adk python myagent --mcp acme/fetch@1.0.0 --skill summarize --prompt system-prompt`,
-		Args:         cobra.ExactArgs(3),
+Picks a framework + language interactively (or via --framework / --language).
+Writes:
+  - agent.yaml — v1alpha1 envelope
+  - arctl.yaml — local build config (framework + language)
+  - .env.example — env vars the chosen plugin needs`,
+		Example: `  arctl init agent myagent
+  arctl init agent myagent --framework adk --language python`,
+		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			framework := strings.ToLower(args[0])
-			language := strings.ToLower(args[1])
-			name := args[2]
-
-			if err := validateInitFrameworkAndLanguage(framework, language); err != nil {
+			name := args[0]
+			if err := validators.ValidateAgentName(name); err != nil {
 				return err
 			}
-			if err := validators.ValidateAgentName(name); err != nil {
-				return fmt.Errorf("invalid agent name: %w", err)
-			}
 
-			modelProvider, err := normalizeInitModelProvider(initModelProvider)
+			cwd, err := os.Getwd()
 			if err != nil {
 				return err
 			}
-			modelName := resolveInitModelName(cmd, modelProvider, initModelName)
+			projectDir := filepath.Join(cwd, name)
+
+			r, err := loadPluginRegistry(projectDir)
+			if err != nil {
+				return err
+			}
+			plugin, err := plugins.Pick(plugins.PickOpts{
+				Registry:       r,
+				Type:           "agent",
+				Framework:      initFramework,
+				Language:       initLanguage,
+				NonInteractive: !isatty(),
+			})
+			if err != nil {
+				return err
+			}
 
 			image := initImage
 			if image == "" {
@@ -117,65 +123,101 @@ Supported languages:  python (for adk)`,
 				image = fmt.Sprintf("%s/%s:latest", registry, name)
 			}
 
-			cwd, err := os.Getwd()
-			if err != nil {
-				return fmt.Errorf("getting working directory: %w", err)
-			}
-			projectDir := filepath.Join(cwd, name)
-
-			// Scaffold all code files (Dockerfile, Python source, etc.) using
-			// the existing framework generator. This also writes a flat agent.yaml
-			// which we overwrite below with the declarative format.
-			generator, err := agentframeworks.NewGenerator(framework, language)
-			if err != nil {
-				return err
-			}
-			agentConfig := &agentcommon.AgentConfig{
-				Name:                  name,
-				Version:               initVersion,
-				Description:           initDescription,
-				Image:                 image,
-				Directory:             projectDir,
-				ModelProvider:         modelProvider,
-				ModelName:             modelName,
-				Framework:             framework,
-				Language:              language,
-				KagentADKImageVersion: "0.8.0-beta6",
-				KagentADKPyVersion:    "0.8.0b6",
-				Port:                  8080,
-				InitGit:               true,
-			}
-			if err := generator.Generate(agentConfig); err != nil {
-				return err
+			vars := agentTemplateVars(name, initVersion, initDescription, initModelProvider, initModelName, image, plugin.SourceDir, projectDir)
+			if err := plugins.RenderTemplates(plugin, projectDir, vars); err != nil {
+				return fmt.Errorf("render templates: %w", err)
 			}
 
-			// Overwrite agent.yaml with the declarative format.
-			if err := writeDeclarativeAgentYAML(projectDir, name, initVersion, image, language, framework, modelProvider, modelName, initDescription, initGit, initMCPs, initSkills, initPrompts); err != nil {
-				return fmt.Errorf("writing declarative agent.yaml: %w", err)
+			cfg := &buildconfig.Config{Framework: plugin.Framework, Language: plugin.Language}
+			if err := buildconfig.Write(projectDir, cfg); err != nil {
+				return fmt.Errorf("write arctl.yaml: %w", err)
+			}
+			if err := buildconfig.WriteEnvExample(projectDir, plugin.Env.Required, plugin.Env.Optional); err != nil {
+				return fmt.Errorf("write .env.example: %w", err)
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "✓ Successfully created agent: %s\n", name)
-			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "  1. cd %s\n", name)
-			fmt.Fprintf(cmd.OutOrStdout(), "  2. (Optional) Build and push the image if developing locally:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "     arctl build . --push\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "  3. Publish the agent to the registry:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "     arctl apply -f agent.yaml\n")
+			// writeDeclarativeAgentYAML's existing signature is (projectDir, name, ver, image,
+			// language, framework, modelProvider, modelName, description, gitURL, mcps, skills, prompts).
+			// Phase 11 trims unused params; for now pass nil for skills/prompts (no flags exposed).
+			if err := writeDeclarativeAgentYAML(projectDir, name, initVersion, image,
+				plugin.Language, plugin.Framework, initModelProvider, initModelName,
+				initDescription, initGit, initMCPs, nil, nil); err != nil {
+				return fmt.Errorf("write agent.yaml: %w", err)
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created %s/ (framework: %s, language: %s)\n", name, plugin.Framework, plugin.Language)
+			fmt.Fprintf(cmd.OutOrStdout(), "  next: cd %s\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "        cp .env.example .env  # then edit\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "        arctl run\n")
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&initVersion, "version", "0.1.0", "Initial version")
 	cmd.Flags().StringVar(&initDescription, "description", "", "Agent description")
-	cmd.Flags().StringVar(&initModelProvider, "model-provider", "Gemini", "Model provider (OpenAI, Anthropic, Gemini, AzureOpenAI, Agentgateway)")
-	cmd.Flags().StringVar(&initModelName, "model-name", "gemini-2.5-flash", "Model name")
-	cmd.Flags().StringVar(&initImage, "image", "", "Docker image (default: localhost:5001/<name>:latest)")
-	cmd.Flags().StringVar(&initGit, "git", "", "Git repository URL (GitHub, GitLab, Bitbucket)")
-	cmd.Flags().StringArrayVar(&initMCPs, "mcp", nil, "Registry MCP server to reference: name[@version] (repeatable)")
-	cmd.Flags().StringArrayVar(&initSkills, "skill", nil, "Registry skill to reference: name[@version] (repeatable)")
-	cmd.Flags().StringArrayVar(&initPrompts, "prompt", nil, "Registry prompt to reference: name[@version] (repeatable)")
-
+	cmd.Flags().StringVar(&initFramework, "framework", "", "Framework (e.g. adk). Skips picker.")
+	cmd.Flags().StringVar(&initLanguage, "language", "", "Language (e.g. python). Skips picker.")
+	cmd.Flags().StringVar(&initModelProvider, "model-provider", "", "Model provider")
+	cmd.Flags().StringVar(&initModelName, "model-name", "", "Model name")
+	cmd.Flags().StringVar(&initImage, "image", "", "Image tag override")
+	cmd.Flags().StringVar(&initGit, "git", "", "Git repository URL")
+	cmd.Flags().StringSliceVar(&initMCPs, "mcp", nil, "MCP server refs (name@version)")
 	return cmd
+}
+
+// agentTemplateVars returns the template-substitution vars for the agent
+// plugin's templates. The in-tree adk-python templates (vendored from the
+// legacy generator) reference fields beyond the canonical Phase-5 set,
+// so we provide safe defaults for those here. Phase 12 simplifies the
+// templates and trims this to the canonical set.
+func agentTemplateVars(name, version, description, modelProvider, modelName, image, pluginDir, projectDir string) map[string]any {
+	mp := strings.ToLower(modelProvider)
+	if mp == "" {
+		mp = "gemini"
+	}
+	mn := modelName
+	if mn == "" {
+		mn = "gemini-2.5-flash"
+	}
+	return map[string]any{
+		"Name":                  name,
+		"Version":               version,
+		"Description":           description,
+		"ModelProvider":         mp,
+		"ModelName":             mn,
+		"Image":                 image,
+		"PluginDir":             pluginDir,
+		"ProjectDir":            projectDir,
+		"Instruction":           "",
+		"KagentADKImageVersion": "0.8.0-beta6",
+		"KagentADKPyVersion":    "0.8.0b6",
+		"Port":                  8080,
+		"EnvVars":               []string{},
+		"McpServers":            []struct{}{},
+		"HasSkills":             false,
+		"Targets":               []struct{}{},
+	}
+}
+
+// loadPluginRegistry centralizes the standard load order for arctl commands.
+func loadPluginRegistry(projectRoot string) (*plugins.Registry, error) {
+	stage, err := os.MkdirTemp("", "arctl-plugins-*")
+	if err != nil {
+		return nil, err
+	}
+	return plugins.LoadAll(plugins.LoadOpts{
+		StageDir:    stage,
+		UserDir:     plugins.UserPluginsDir(),
+		ProjectRoot: projectRoot,
+	})
+}
+
+func isatty() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return (fi.Mode() & os.ModeCharDevice) != 0
 }
 
 // parseNameVersion splits "name@version" into (name, version).
