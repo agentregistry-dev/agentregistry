@@ -153,3 +153,33 @@ func TestE2E_Pull_Agent_ClonesSource(t *testing.T) {
 	_, err := os.Stat(filepath.Join(pullDir, "arctl.yaml"))
 	require.NoError(t, err)
 }
+
+func TestE2E_PluginDiscovery_FromXDG(t *testing.T) {
+	tmp := t.TempDir()
+	xdg := filepath.Join(tmp, "xdg")
+	require.NoError(t, os.MkdirAll(filepath.Join(xdg, "arctl", "plugins", "fakeagent"), 0755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(xdg, "arctl", "plugins", "fakeagent", "plugin.yaml"),
+		[]byte(`apiVersion: arctl.dev/v1
+name: fakeagent
+type: agent
+framework: fake
+language: a
+description: fake plugin
+build:
+  command: ["true"]
+run:
+  command: ["true"]
+`), 0644))
+
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+
+	// init agent picking the fake framework — only possible if the user-level plugin loaded.
+	require.NoError(t, os.Chdir(tmp))
+	result := RunArctl(t, tmp, "init", "agent", "fakeproj",
+		"--framework", "fake", "--language", "a")
+	RequireSuccess(t, result)
+
+	_, err := os.Stat(filepath.Join(tmp, "fakeproj", "arctl.yaml"))
+	require.NoError(t, err)
+}
