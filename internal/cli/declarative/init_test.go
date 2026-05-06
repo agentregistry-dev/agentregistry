@@ -88,6 +88,38 @@ func TestInitMCP_WritesYAMLAndArctl(t *testing.T) {
 
 // ---- init skill ----
 
+func TestInitSkill_StillWorks(t *testing.T) {
+	tmp := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := declarative.NewInitCmd()
+	cmd.SetArgs([]string{"skill", "my-skill"})
+	require.NoError(t, cmd.Execute())
+
+	_, err = os.Stat(filepath.Join(tmp, "my-skill", "skill.yaml"))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(tmp, "my-skill", "SKILL.md"))
+	require.NoError(t, err)
+}
+
+func TestInitPrompt_StillWorks(t *testing.T) {
+	tmp := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := declarative.NewInitCmd()
+	cmd.SetArgs([]string{"prompt", "my-prompt"})
+	require.NoError(t, cmd.Execute())
+
+	_, err = os.Stat(filepath.Join(tmp, "my-prompt.yaml"))
+	require.NoError(t, err)
+}
+
 func TestInitSkillCmd_BasicScaffold(t *testing.T) {
 	tmpDir := t.TempDir()
 	origDir, err := os.Getwd()
