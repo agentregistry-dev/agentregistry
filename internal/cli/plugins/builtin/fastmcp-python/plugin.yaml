@@ -1,0 +1,14 @@
+apiVersion: arctl.dev/v1
+name: fastmcp-python
+type: mcp
+framework: fastmcp
+language: python
+description: FastMCP Python SDK for MCP servers
+templatesDir: ./templates
+env:
+  optional:
+    - LOG_LEVEL
+build:
+  command: ["docker", "build", "-t", "{{.Image}}", "{{.ProjectDir}}"]
+run:
+  command: ["docker", "run", "--rm", "-i", "{{.Image}}"]

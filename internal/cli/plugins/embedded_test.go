@@ -30,3 +30,17 @@ func TestLoadEmbedded_FindsAdkPython(t *testing.T) {
 	assert.Equal(t, "adk", found.Framework)
 	assert.Equal(t, "python", found.Language)
 }
+
+func TestLoadEmbedded_FindsFastmcpPython(t *testing.T) {
+	plugins, err := LoadEmbedded(t.TempDir())
+	require.NoError(t, err)
+	for _, p := range plugins {
+		if p.Name == "fastmcp-python" {
+			assert.Equal(t, "mcp", p.Type)
+			assert.Equal(t, "fastmcp", p.Framework)
+			assert.Equal(t, "python", p.Language)
+			return
+		}
+	}
+	t.Fatal("fastmcp-python not found among embedded plugins")
+}
