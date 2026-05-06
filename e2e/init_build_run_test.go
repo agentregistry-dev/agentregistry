@@ -168,20 +168,29 @@ func TestE2E_Pull_Agent_ClonesSource(t *testing.T) {
 func TestE2E_PluginDiscovery_FromXDG(t *testing.T) {
 	tmp := t.TempDir()
 	xdg := filepath.Join(tmp, "xdg")
-	require.NoError(t, os.MkdirAll(filepath.Join(xdg, "arctl", "plugins", "fakeagent"), 0755))
+	pluginDir := filepath.Join(xdg, "arctl", "plugins", "fakeagent")
+	templatesDir := filepath.Join(pluginDir, "templates")
+	require.NoError(t, os.MkdirAll(templatesDir, 0755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(xdg, "arctl", "plugins", "fakeagent", "plugin.yaml"),
+		filepath.Join(pluginDir, "plugin.yaml"),
 		[]byte(`apiVersion: arctl.dev/v1
 name: fakeagent
 type: agent
 framework: fake
 language: a
 description: fake plugin
+templatesDir: ./templates
 build:
   command: ["true"]
 run:
   command: ["true"]
 `), 0644))
+	// Minimal template tree so init's render step succeeds. agent.yaml is
+	// re-emitted by the declarative writer, so we only need a stub here to
+	// prove the plugin's templates dir is honoured.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(templatesDir, "agent.yaml.tmpl"),
+		[]byte("# stub agent template\nname: {{.Name}}\n"), 0644))
 
 	t.Setenv("XDG_CONFIG_HOME", xdg)
 
