@@ -82,6 +82,12 @@ func TestE2E_RunDryRun_ReadsArctlYAMLAndDispatches(t *testing.T) {
 }
 
 func TestE2E_RunErrors_WhenRequiredEnvMissing(t *testing.T) {
+	// Wipe any required vars from the parent process env so the child
+	// arctl invocation actually sees them as missing. CI runners commonly
+	// inherit GOOGLE_API_KEY, which would otherwise satisfy the check
+	// and turn this into a false negative.
+	t.Setenv("GOOGLE_API_KEY", "")
+
 	tmp := t.TempDir()
 	require.NoError(t, os.Chdir(tmp))
 
