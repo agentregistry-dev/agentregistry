@@ -78,3 +78,35 @@ func TestE2E_RunDryRun_ReadsArctlYAMLAndDispatches(t *testing.T) {
 	assert.Contains(t, result.Stdout, "adk-python")
 	assert.Contains(t, result.Stdout, "(dry-run; skipping exec)")
 }
+
+func TestE2E_RunErrors_WhenRequiredEnvMissing(t *testing.T) {
+	tmp := t.TempDir()
+	require.NoError(t, os.Chdir(tmp))
+
+	require.NoError(t, RunArctl(t, tmp, "init", "agent", "myagent",
+		"--framework", "adk", "--language", "python").Err)
+
+	pd := filepath.Join(tmp, "myagent")
+	// Don't create .env. Required var should trigger an error.
+	require.NoError(t, os.Chdir(pd))
+
+	result := RunArctl(t, pd, "run", "--dry-run")
+	require.NotEqual(t, 0, result.ExitCode)
+	assert.Contains(t, result.Stderr+result.Stdout, "missing required env")
+}
+
+func TestE2E_RunLoadsDotEnv(t *testing.T) {
+	tmp := t.TempDir()
+	require.NoError(t, os.Chdir(tmp))
+
+	require.NoError(t, RunArctl(t, tmp, "init", "agent", "myagent",
+		"--framework", "adk", "--language", "python").Err)
+
+	pd := filepath.Join(tmp, "myagent")
+	require.NoError(t, os.WriteFile(filepath.Join(pd, ".env"), []byte("GOOGLE_API_KEY=stub\n"), 0644))
+	require.NoError(t, os.Chdir(pd))
+
+	result := RunArctl(t, pd, "run", "--dry-run")
+	RequireSuccess(t, result)
+	assert.Contains(t, result.Stdout, "Loaded .env (1 vars)")
+}
