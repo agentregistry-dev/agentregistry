@@ -110,3 +110,24 @@ func TestE2E_RunLoadsDotEnv(t *testing.T) {
 	RequireSuccess(t, result)
 	assert.Contains(t, result.Stdout, "Loaded .env (1 vars)")
 }
+
+func TestE2E_Apply_InjectsArctlLabels(t *testing.T) {
+	regURL := RegistryURL(t) // skip if no registry available
+	tmp := t.TempDir()
+	require.NoError(t, os.Chdir(tmp))
+
+	require.NoError(t, RunArctl(t, tmp, "init", "agent", "labeltest",
+		"--framework", "adk", "--language", "python").Err)
+
+	pd := filepath.Join(tmp, "labeltest")
+	apply := RunArctl(t, pd, "apply", "-f", filepath.Join(pd, "agent.yaml"), "--registry-url", regURL)
+	RequireSuccess(t, apply)
+	assert.Contains(t, apply.Stdout, "Injecting labels")
+	assert.Contains(t, apply.Stdout, "arctl.dev/framework=adk")
+
+	// Read back the registered agent and verify labels are persisted.
+	get := RunArctl(t, pd, "get", "agent", "labeltest", "-o", "yaml", "--registry-url", regURL)
+	RequireSuccess(t, get)
+	assert.Contains(t, get.Stdout, "arctl.dev/framework: adk")
+	assert.Contains(t, get.Stdout, "arctl.dev/language: python")
+}
